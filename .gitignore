@@ -12,6 +12,9 @@ test_size.txt
 test_out.fbx
 test_out_js.fbx
 
+# Local-only archived experiments (kept on disk, not in repo)
+_archive/
+
 # OS
 .DS_Store
 Thumbs.db

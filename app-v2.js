@@ -58,8 +58,24 @@ const state = {
 // needing a build of the bundle that explicitly exports it.
 if (typeof window !== 'undefined') {
   window.state = state;
-  // Expose tree functions for the frozen-rail patch (see index.html patch script)
-  window._appFns = { get rebuildTree() { return rebuildTree; }, get getPart() { return getPart; }, get requestRender() { return requestRender; }, get _treeGroupDescendants() { return _treeGroupDescendants; } };
+  // Expose tree functions for the frozen-rail patch (see index.html patch script).
+  // Also exposes engine handles for stresstest.js (camera/renderer/THREE etc.)
+  // — getters because these module-level lets aren't bound until initRenderer().
+  window._appFns = {
+    get rebuildTree() { return rebuildTree; },
+    get getPart() { return getPart; },
+    get requestRender() { return requestRender; },
+    get _treeGroupDescendants() { return _treeGroupDescendants; },
+    get THREE() { return THREE; },
+    get camera() { return camera; },
+    get renderer() { return renderer; },
+    get controls() { return controls; },
+    get applyPerfMode() { return applyPerfMode; },
+    get applySelectionColors() { return applySelectionColors; },
+    get clearModel() { return clearModel; },
+    get fitToView() { return fitToView; },
+    get reindexParts() { return _reindexParts; },
+  };
 }
 
 // Damping is off (pan/orbit must feel snappy and stop on release), so we only
@@ -1571,22 +1587,30 @@ let _lastTickAt = 0;
 function tick() {
   _lastTickAt = performance.now();
   try {
-    try {
-      // Damping + gizmo drags need ongoing renders. Snapshot camera + target
-      // BEFORE controls.update() so we can detect any motion this frame.
-      _TICK_PREV_POS.copy(camera.position);
-      _TICK_PREV_TGT.copy(controls.target);
-      controls.update();
-      if (camera.position.distanceToSquared(_TICK_PREV_POS) > 1e-12 ||
-          controls.target.distanceToSquared(_TICK_PREV_TGT) > 1e-12) {
-        requestRender();
-      }
-    } catch (e) { _logTickErr('controls', e); }
+    if (!state.renderPaused) {
+      try {
+        // Damping + gizmo drags need ongoing renders. Snapshot camera + target
+        // BEFORE controls.update() so we can detect any motion this frame.
+        // Skipped entirely when renderPaused — avoids the snapshot/compare
+        // every frame during long bake/merge operations.
+        _TICK_PREV_POS.copy(camera.position);
+        _TICK_PREV_TGT.copy(controls.target);
+        controls.update();
+        if (camera.position.distanceToSquared(_TICK_PREV_POS) > 1e-12 ||
+            controls.target.distanceToSquared(_TICK_PREV_TGT) > 1e-12) {
+          requestRender();
+        }
+      } catch (e) { _logTickErr('controls', e); }
+    }
 
     try {
       if (state.autoRotate && state.partsRoot) {
         state.partsRoot.rotation.z += 0.003;
-        state.partsRoot.updateMatrixWorld();
+        // partsRoot.matrixAutoUpdate=false (perf), so updateMatrixWorld alone
+        // would propagate a stale local matrix and the rotation would be a
+        // no-op. Recompose the local matrix from rotation first.
+        state.partsRoot.updateMatrix();
+        state.partsRoot.updateMatrixWorld(true);
         requestRender();
       }
     } catch (e) { _logTickErr('autorotate', e); }
@@ -1975,6 +1999,10 @@ async function buildModelFromMeshes(meshes, hashes, ctrl) {
       }
       if (useColors) inst.instanceColor.needsUpdate = true;
       inst.instanceMatrix.needsUpdate = true;
+      // STEP path uses identity matrices today, but isolate/bake/explode can
+      // mutate them later; computing once here keeps the bounding sphere
+      // honest for any subsequent matrix re-write that calls needsUpdate.
+      inst.computeBoundingSphere?.();
       partsRoot.add(inst);
       g.instanced = inst;
       state.instancedGroups.push(g);
@@ -2326,6 +2354,13 @@ function _autoInstanceFromGLB() {
       p.group = adapterGroup;
     }
     inst.instanceMatrix.needsUpdate = true;
+    // Frustum culling on InstancedMesh tests against geometry.boundingSphere
+    // (centered at local origin). GLB-instance matrices scatter parts across
+    // world space — without an explicit recompute, the entire InstancedMesh
+    // pops out of view at certain camera angles. computeBoundingSphere on
+    // InstancedMesh iterates instance matrices and produces a sphere that
+    // actually encloses every instance.
+    inst.computeBoundingSphere?.();
     state.partsRoot.add(inst);
     state.partsRoot.updateMatrixWorld(true);
     state.instancedGroups.push(adapterGroup);
@@ -3145,6 +3180,13 @@ const _SEL_LINE_MAT_BEHIND = new THREE.LineBasicMaterial({ color: 0x00ddff, tran
 const _FLAG_FILL_MAT = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.22, depthTest: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
 
 function _applySelectionColorsImpl() {
+  // Fast path: nothing selected, nothing flagged-and-shown, no leftover
+  // overlays. Skip the entire teardown + per-part scan. Cuts per-click
+  // overhead on large assemblies where most clicks are empty-space deselects.
+  const hasOverlays = !!(state.activeHighlights && state.activeHighlights.length);
+  const wantsSel    = state.selected && state.selected.size > 0;
+  const wantsFlag   = state.highlightSmall;
+  if (!hasOverlays && !wantsSel && !wantsFlag) return;
   // Tear down previous highlight overlays. Shared materials are NOT disposed
   // (they're reused across renders). The merged selection geometry IS owned
   // here — both LineSegments reference the same buffer, so we dispose once
@@ -7267,6 +7309,73 @@ function wireUI() {
     }
     $('export-modal').classList.add('show');
   });
+
+  // ── Right-sidebar export-data buttons ──────────────────────────────────
+  // CSV export: parts-list dump (name, color, tris, verts, volume, diag,
+  // largest dim, flagged). Useful for BOMs / spreadsheets. Streams to a
+  // Blob so even 100k-part assemblies stay under the single-string limit.
+  $('btn-export-csv')?.addEventListener('click', () => {
+    if (!state.parts.length) { toast('No parts', 'Load a model first', 'warn'); return; }
+    const esc = s => {
+      const v = String(s ?? '');
+      return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+    };
+    const rows = ['name,color_hex,tri_count,vert_count,volume,diag,max_dim,flagged,visible,locked'];
+    for (const p of state.parts) {
+      if (p.deleted) continue;
+      const sm = p.sizeMetrics || {};
+      rows.push([
+        esc(p.name),
+        '#' + p.originalColor.getHexString(),
+        p.triCount | 0,
+        p.vertCount | 0,
+        (sm.vol ?? 0).toFixed(4),
+        (sm.diag ?? 0).toFixed(4),
+        (sm.max ?? 0).toFixed(4),
+        p.flagged ? 1 : 0,
+        p.visible ? 1 : 0,
+        p.locked ? 1 : 0,
+      ].join(','));
+    }
+    const blob = new Blob([rows.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'parts_list.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Exported parts list', `${rows.length - 1} rows`, 'info', 1800);
+  });
+
+  // Selected-as-GLB: temporarily hides non-selected parts, runs the standard
+  // GLB export pipeline (which honours visibleOnly), then restores. Re-using
+  // doExport keeps option handling (scale / axis / origin / draco) consistent
+  // with the main export modal — defaults match the modal's defaults.
+  $('btn-export-selected-glb')?.addEventListener('click', async () => {
+    if (!state.selected || state.selected.size === 0) {
+      toast('Nothing selected', 'Select parts first to export them', 'warn');
+      return;
+    }
+    const snapshot = [];
+    for (const p of state.parts) {
+      if (p.deleted) continue;
+      const wantVisible = state.selected.has(p.partId);
+      if (p.visible !== wantVisible) {
+        snapshot.push({ p, prev: p.visible });
+        p.visible = wantVisible;
+        if (p.mesh) p.mesh.visible = wantVisible;
+      }
+    }
+    try {
+      await doExport({ format: 'glb', merge: false, visibleOnly: true, scale: 1, axis: 'z-up', origin: 'model', draco: false });
+    } finally {
+      for (const s of snapshot) {
+        s.p.visible = s.prev;
+        if (s.p.mesh) s.p.mesh.visible = s.prev;
+      }
+      requestRender();
+    }
+  });
+
   $('vw-solid').addEventListener('click', () => setViewMode('solid'));
   $('vw-wire').addEventListener('click', () => setViewMode('wire'));
   $('vw-xray').addEventListener('click', () => setViewMode('xray'));
