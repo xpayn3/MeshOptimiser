@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STEP Optimizer</title>
+<style>
+:root{
+  --bg:#0a0d12; --bg1:#0f1319; --bg2:#161b24; --bg3:#1d2330; --bg4:#262e3d;
+  --bd:#262d3c; --bd2:#3a4358;
+  --tx:#e6edf3; --tx2:#8b95a7; --tx3:#5a6275;
+  --ac:#6ea8ff; --ac2:#a78bfa; --ok:#34c759; --wn:#fbbf24; --er:#ff6b6b;
+  --sh:0 8px 24px rgba(0,0,0,.45);
+  /* Strong custom easings — built-in `ease`/`ease-out` are too weak. */
+  --ease-out:cubic-bezier(.23,1,.32,1);          /* punchy ease-out for UI exits/entrances */
+  --ease-in-out:cubic-bezier(.77,0,.175,1);      /* on-screen movement */
+  --ease-ios:cubic-bezier(.32,.72,0,1);          /* iOS-feel curve (drawers, switches) */
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font:13px/1.4 -apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;color:var(--tx);background:var(--bg);overflow:hidden;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
+input,select{font:inherit;color:inherit}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:6px;border:2px solid var(--bg1)}
+::-webkit-scrollbar-thumb:hover{background:var(--bd2)}
+
+:root{--side-l-w:280px;--side-r-w:320px}
+#app{display:grid;grid-template-columns:var(--side-l-w) 1fr var(--side-r-w);grid-template-rows:38px 1fr 22px;height:100vh;width:100vw}
+/* Vertical drag handle on the inside edge of each sidebar. Sits in its own
+   grid cell via absolute positioning anchored to the sidebar's edge so it
+   doesn't disturb existing layout. Hover gets a subtle accent so users
+   notice they CAN drag it. */
+.resize-handle{position:absolute;top:0;width:5px;height:100%;cursor:col-resize;z-index:50;background:transparent;transition:background 120ms var(--ease-out)}
+.resize-handle:hover,.resize-handle.dragging{background:rgba(110,168,255,.35)}
+#sidebar-left{position:relative}
+#sidebar-right{position:relative}
+#resize-l{right:-2px}
+#resize-r{left:-2px}
+body.resizing{cursor:col-resize !important;user-select:none}
+body.resizing *{cursor:col-resize !important}
+
+/* Toolbar */
+#tb{grid-column:1/-1;display:flex;align-items:center;height:38px;padding:0 12px;gap:5px;background:linear-gradient(180deg,var(--bg2),var(--bg1));border-bottom:1px solid var(--bd);z-index:10}
+.brand{display:flex;align-items:center;gap:8px}
+/* Right-side brand: sits at the end of the toolbar with the chip on the right
+   and the title/subtitle right-aligned next to it. Margin sits on the left so
+   the brand keeps a small gap from the rightmost stat. */
+.brand-right{margin-left:16px}
+.brand-right .brand-text{text-align:right}
+.brand-mark{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 4px 14px rgba(110,168,255,.35)}
+.brand-mark svg{width:12px;height:12px;stroke:white;fill:none;stroke-width:2}
+/* Lucide placeholders: keep layout stable before lucide.createIcons() runs */
+i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-style:normal}
+.brand h1{font-size:11.5px;font-weight:600;line-height:1.05}
+.brand small{color:var(--tx3);font-size:9.5px;line-height:1.05}
+.tbtn{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);border-radius:5px;font-size:11.5px;line-height:1.2;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out),filter 150ms var(--ease-out)}
+.tbtn:hover{background:var(--bg4);border-color:var(--bd2)}
+.tbtn:active{transform:scale(.97)}
+.tbtn:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.tbtn.primary{background:linear-gradient(180deg,var(--ac),#4f8be5);border-color:transparent;color:white;font-weight:500;box-shadow:0 2px 10px rgba(110,168,255,.25)}
+.tbtn.primary:hover{filter:brightness(1.08)}
+.tbtn:disabled{opacity:.4;cursor:not-allowed}
+.tbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+.spacer{flex:1}
+.divider{width:1px;height:15px;background:var(--bd);margin:0 5px}
+.stat{display:flex;align-items:center;gap:5px;padding:0 8px;color:var(--tx2);font-size:11px;font-variant-numeric:tabular-nums}
+.stat strong{color:var(--tx);font-weight:500}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.dot.warn{background:var(--wn)}.dot.off{background:var(--tx3)}
+
+/* Sidebars */
+.panel{background:var(--bg1);display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
+#sidebar-left{border-right:1px solid var(--bd)}
+#sidebar-right{display:block;border-left:1px solid var(--bd);overflow-y:auto;padding:12px 12px 20px;background:radial-gradient(circle at 80% 0%,rgba(110,168,255,.04),transparent 50%),linear-gradient(180deg,var(--bg1),#0c1017)}
+#sidebar-right .section{flex-shrink:0}
+.section{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);border-radius:12px;margin-bottom:10px;overflow:hidden;backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 rgba(255,255,255,.03),0 4px 16px rgba(0,0,0,.18)}
+.section:last-child{margin-bottom:0}
+.section-h{display:flex;align-items:center;justify-content:space-between;padding:11px 14px 9px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);cursor:pointer;user-select:none}
+.section-h:hover{color:var(--tx)}
+.section-h .chev{transition:transform .2s var(--ease-out);opacity:.7;font-size:14px;line-height:1;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;color:var(--tx2)}
+.section-h:hover .chev{opacity:1;color:var(--tx)}
+.section-h.collapsed .chev{transform:rotate(-90deg)}
+.section-h.collapsed + .section-b{display:none}
+.section-b{padding:2px 18px 14px}
+
+/* Tree */
+#tree{flex:1;overflow-y:auto;overflow-x:auto;padding:4px 0;contain:layout paint}
+.tree-empty{color:var(--tx3);text-align:center;padding:40px 20px;font-size:12px;line-height:1.6}
+.tree-empty svg{width:38px;height:38px;stroke:currentColor;opacity:.4;fill:none;stroke-width:1.5;margin-bottom:10px}
+.tree-search{margin:8px 12px 6px;position:relative}
+.tree-search input{width:100%;padding:7px 10px 7px 28px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12px;outline:none}
+.tree-search input:focus{border-color:var(--ac)}
+.tree-search svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;stroke:var(--tx3);fill:none;stroke-width:2}
+.tree-summary{padding:6px 14px;font-size:11px;color:var(--tx3)}
+.tree-node{display:flex;align-items:center;gap:6px;padding:6px 12px 6px 8px;font-size:12.5px;cursor:pointer;user-select:none;border-left:2px solid transparent;white-space:nowrap;contain:layout style paint;content-visibility:auto;contain-intrinsic-size:0 28px;width:max-content;min-width:100%}
+/* Collapsed-ancestor hide. _toggleGroupCollapseFast flips this class per
+   subtree row instead of rebuilding the DOM — keeps expand/collapse < 10ms
+   on a 9700-node tree (was ~1s on each toggle due to the Lucide icon pass). */
+.tree-node.is-hidden{display:none}
+.tree-node:hover{background:rgba(255,255,255,.03)}
+.tree-node.selected{background:rgba(110,168,255,.12);border-left-color:var(--ac)}
+.tree-node.hidden-vis{opacity:.45}
+.tree-node.flagged{color:var(--wn)}
+.tree-vis{width:18px;height:18px;display:grid;place-items:center;flex-shrink:0;border-radius:4px;opacity:.55}
+.tree-vis:hover{opacity:1;background:rgba(255,255,255,.06)}
+.tree-vis svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+.tree-color{width:10px;height:10px;border-radius:2px;flex-shrink:0;border:1px solid rgba(255,255,255,.1)}
+.tree-label{flex:0 0 auto;white-space:nowrap}
+.tree-meta{color:var(--tx3);font-size:10.5px;flex-shrink:0;font-variant-numeric:tabular-nums}
+/* Right-side icon column (eye + color swatch). Sticky to the scrollport's
+   right edge so the eye/colour controls stay aligned in one column even
+   when long part names push the row content into horizontal scroll. The
+   solid bg + soft fade-in hides the label text that scrolls underneath. */
+.tree-iconcol{position:sticky;right:0;margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;padding:0 10px 0 14px;background:linear-gradient(90deg,rgba(11,15,22,0) 0,var(--bg1) 12px,var(--bg1) 100%);z-index:1;height:100%}
+.tree-badge{display:inline-block;padding:1px 5px;font-size:9.5px;background:rgba(110,168,255,.15);color:var(--ac);border-radius:3px;margin-left:4px}
+.tree-inst{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;font-size:9.5px;background:rgba(167,139,250,.18);color:var(--ac2);border-radius:3px;margin-left:6px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 100ms var(--ease-out),color 100ms var(--ease-out),transform 80ms var(--ease-out)}
+.tree-inst:hover{background:rgba(167,139,250,.32);color:#d8c5ff}
+.tree-inst:active{transform:scale(.92)}
+.tree-inst svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2.2}
+/* ── Properties panel ───────────────────────────────────────────────────── */
+.prop-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;min-height:18px}
+.prop-color{flex-shrink:0;width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.18);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.prop-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
+.prop-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;min-height:14px}
+.prop-bar-wrap{display:flex;align-items:center;gap:8px;margin:8px 0 10px;font-size:11px;color:var(--tx3)}
+.prop-bar-wrap .prop-bar-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3);flex-shrink:0}
+.prop-bar-wrap .prop-bar-icon svg{width:13px;height:13px}
+.prop-bar{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}
+.prop-bar-fill{height:100%;background:var(--ac);border-radius:999px;transition:width 200ms var(--ease-out),background 200ms var(--ease-out)}
+.prop-bar-fill.heavy{background:var(--wn)}
+.prop-bar-fill.very-heavy{background:var(--er)}
+.prop-bar-label{font-variant-numeric:tabular-nums;flex-shrink:0;min-width:62px;text-align:right;color:var(--tx2)}
+.prop-grid{display:grid;grid-template-columns:14px 1fr auto;gap:6px 10px;font-size:12px;font-variant-numeric:tabular-nums;align-items:center}
+.prop-grid .prop-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3)}
+.prop-grid .prop-icon svg{width:13px;height:13px}
+.prop-grid .prop-label{color:var(--tx3)}
+.prop-grid .prop-value{color:var(--tx);font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
+.tree-badge.warn{background:rgba(251,191,36,.15);color:var(--wn)}
+.tree-badge.muted{background:rgba(255,255,255,.08);color:var(--tx3)}
+.tree-badge.danger{background:rgba(255,107,107,.15);color:var(--er)}
+
+/* C4D-style tree: small +/- expand boxes, colored icons, tinted labels.
+   Color coding mirrors how C4D / Maya / 3ds Max signal node types — assemblies
+   warm/orange so subassembly trees pop visually, leaves cool/green so the
+   eye finds the actual geometry quickly. */
+.tree-expand{width:13px;height:13px;display:inline-grid;place-items:center;border:1px solid var(--bd2);border-radius:2px;font-size:11px;line-height:1;cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:ui-monospace,monospace;font-weight:600;user-select:none;transition:border-color 100ms,color 100ms,background 100ms}
+.tree-expand:hover{border-color:var(--ac);color:var(--ac);background:rgba(110,168,255,.08)}
+/* Spacer used in place of the +/- on leaf rows so all icons line up vertically */
+.tree-expand-spacer{width:13px;height:13px;flex-shrink:0}
+
+/* Type icons: lucide stroke icons, sized to match the row height. */
+.tree-typeicon{width:14px;height:14px;display:inline-grid;place-items:center;flex-shrink:0}
+.tree-typeicon svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8}
+.tree-typeicon.asm{color:#f59e0b}      /* warm amber for assemblies */
+.tree-typeicon.part{color:#10b981}     /* emerald for leaves */
+.tree-typeicon.inst{color:#a78bfa}     /* purple for shared-geometry leaves (instances) */
+
+/* Default label color: grey for all rows. Only the selected row gets the
+   accent color, matching the user's request: "orange is only active, else
+   is grey." Icons keep their per-type color so the row type is still
+   distinguishable at a glance — only the text is monochrome by default.   */
+.tree-node .tree-label{color:var(--tx2)}
+.tree-node.selected .tree-label{color:#f59e0b}
+
+/* Real tree lines via inline indent spans — one span per ancestor depth.
+   The vertical line is the span's left border; the bottom span ("elbow")
+   adds a horizontal stub via ::before so it reads as a proper L-connector
+   from the parent's vertical to this row's icon (matches VSCode / Finder /
+   Cinema 4D). Border color is intentionally close to the divider color but
+   slightly brighter so the lines stay visible without dominating. */
+/* Tree lines bridge across rows by extending past the row's vertical
+   padding with negative margins. Without this, each line ends at the
+   padding boundary and leaves a 12px gap between adjacent rows. */
+.tree-line{
+  display:inline-block;
+  width:14px;
+  flex-shrink:0;
+  align-self:stretch;
+  margin-top:-6px;
+  margin-bottom:-6px;
+  position:relative;
+}
+/* Vertical line: pseudo-element positioned at the center of the 14px
+   indent column, NOT the left edge. This aligns the children's verticals
+   with the parent row's +/- button center (the +/- box sits at the start
+   of the parent's content area which is the right edge of its indent
+   column = the same x as the children's vertical-line center). Without
+   this offset the lines sat ~7px left of where they should attach. */
+.tree-line::after{
+  content:'';
+  position:absolute;
+  /* Center of the 14px indent column = 7px. The line is rendered as a 1px
+     border, so left:7 puts the line straddling x=7..8 within the span,
+     which is the visual center. This aligns the children's vertical lines
+     with the parent's +/- button center (the +/- box is 13px wide with
+     1px border on each side; its character center sits at x=6.5 within
+     its column, and our line at x=7 lines up close enough that the 0.5px
+     residual is invisible at standard zoom). */
+  left:7px;
+  top:0;
+  bottom:0;
+  border-left:1px solid #3a4358;
+}
+/* Elbow: horizontal stub at row mid-height connecting the vertical line to
+   the next column's content (icon or +/- box). Starts at the vertical's
+   right edge and extends to the column's right edge. */
+.tree-line.elbow::before{
+  content:'';
+  position:absolute;
+  left:8px;     /* right of the vertical so they connect cleanly */
+  top:50%;
+  width:6px;    /* reaches the right edge of the 14px column */
+  border-top:1px solid #3a4358;
+}
+
+/* Assembly row hover/select bg — subtle amber wash on selection only. */
+.tree-node.is-group{font-weight:500;background:transparent}
+.tree-node.is-group:hover{background:rgba(255,255,255,.03)}
+.tree-node.is-group.selected{background:rgba(245,158,11,.13);border-left-color:#f59e0b}
+
+/* Compact toolbar row under the search input */
+.tree-toolbar{display:flex;gap:3px;padding:0 10px 6px;align-items:center}
+.tree-toolbar #tree-sort{flex:1 1 0;min-width:0;font-size:11px;padding:5px 20px 5px 7px;background-position:right 6px center}
+.tree-icon-btn{flex:0 0 28px;width:28px;height:28px;display:grid;place-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.05);border-radius:5px;color:var(--tx2);cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 120ms var(--ease-out)}
+.tree-icon-btn:hover{color:var(--tx);background:rgba(255,255,255,.1);border-color:var(--bd)}
+.tree-icon-btn:active{transform:scale(.92)}
+.tree-icon-btn.active{color:var(--ac);background:rgba(110,168,255,.12);border-color:rgba(110,168,255,.3)}
+.tree-icon-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+
+/* Group rows in the parts tree */
+.tree-node.is-group{font-weight:600;background:rgba(167,139,250,.05);border-left-color:transparent}
+.tree-node.is-group:hover{background:rgba(167,139,250,.1)}
+.tree-node.is-group.selected{background:rgba(167,139,250,.18);border-left-color:var(--ac2)}
+.tree-chev{width:14px;display:inline-grid;place-items:center;color:var(--tx3);font-size:10px;flex-shrink:0;cursor:pointer;transition:transform .15s}
+.tree-chev:hover{color:var(--tx)}
+.tree-node.collapsed .tree-chev{transform:rotate(-90deg)}
+.tree-folder{flex-shrink:0;color:var(--ac2);font-size:11px;width:14px;display:inline-grid;place-items:center}
+.tree-folder svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+.tree-node.in-group{padding-left:24px}
+.tree-node.in-group .tree-color{margin-left:0}
+.tree-group-actions{display:none;gap:2px;flex-shrink:0}
+.tree-node.is-group:hover .tree-group-actions{display:inline-flex}
+.tree-group-actions button{padding:2px 4px;background:transparent;border:1px solid transparent;border-radius:3px;color:var(--tx3);cursor:pointer;font-size:10px}
+.tree-group-actions button:hover{color:var(--tx);background:rgba(255,255,255,.08);border-color:var(--bd)}
+.tree-group-actions svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+
+/* Right panel controls */
+.field{margin-bottom:14px}
+.field:last-child{margin-bottom:0}
+.field label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--tx2);margin-bottom:7px;font-weight:500}
+.field label .v{color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600}
+.field-help{font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.55}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:rgba(255,255,255,.08);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;background:white;border-radius:50%;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.2);transition:transform .12s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
+.range-row{display:flex;align-items:center;gap:10px}
+.range-row input[type=number]{width:64px;padding:6px 8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx);font-size:12px;font-variant-numeric:tabular-nums;outline:none;text-align:right;-moz-appearance:textfield}
+.range-row input[type=number]::-webkit-outer-spin-button,.range-row input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* Marquee (rubber-band) selection box drawn over the viewport while the user
+   shift- or ctrl-drags. Display toggled via JS by adding/removing .active. */
+#marquee-box{position:fixed;pointer-events:none;z-index:150;border:1px solid var(--ac);background:rgba(110,168,255,.1);box-shadow:0 0 0 1px rgba(0,0,0,.3) inset;border-radius:1px;display:none}
+#marquee-box.active{display:block}
+
+/* Slider — plain native <input type="range"> with a label/value header above.
+   Filled portion = CSS variable `--scrub-pct` updated by JS on input. Trusted
+   browser drag/keyboard/touch behavior; no custom pointer code. */
+.scrub{display:flex;flex-direction:column;gap:6px;padding:2px 0;--scrub-pct:0%}
+.scrub-head{display:flex;align-items:center;justify-content:space-between;gap:10px;line-height:1;min-height:16px}
+.scrub-label{font-size:12px;font-weight:500;color:var(--tx2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
+.scrub-rhs{display:flex;align-items:center;gap:4px;flex-shrink:0;line-height:1}
+.scrub-value{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;color:var(--tx);line-height:1;display:inline-flex;align-items:center;justify-content:flex-end;height:20px;min-width:36px;padding:0 6px;border-radius:4px;cursor:text}
+.scrub-value:hover{background:rgba(255,255,255,.08)}
+.scrub.editing .scrub-value{background:rgba(110,168,255,.14);color:#fff}
+.scrub-input{font:inherit;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;line-height:1;color:#fff;background:rgba(110,168,255,.14);border:1px solid rgba(110,168,255,.5);border-radius:4px;padding:0 6px;height:20px;width:60px;text-align:right;outline:none;font-family:inherit}
+.scrub-input::-webkit-outer-spin-button,.scrub-input::-webkit-inner-spin-button{-webkit-appearance:none}
+.scrub-unit{font-size:11px;color:var(--tx3);letter-spacing:.02em;text-transform:lowercase;font-weight:500;line-height:1}
+/* Native range — track is a thin rounded bar, fill is drawn via background
+   gradient up to --scrub-pct, thumb is a small accent disc. */
+.scrub-range{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;outline:none;cursor:pointer;margin:0;padding:0;display:block}
+.scrub-range::-webkit-slider-runnable-track{box-sizing:border-box;height:4px;border-radius:999px;background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--scrub-pct),rgba(255,255,255,.08) var(--scrub-pct),rgba(255,255,255,.08) 100%);border:none}
+.scrub-range::-moz-range-track{box-sizing:border-box;height:4px;border-radius:999px;background:rgba(255,255,255,.08);border:none}
+.scrub-range::-moz-range-progress{height:4px;border-radius:999px;background:var(--ac)}
+.scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:14px;height:14px;border-radius:50%;background:var(--ac);border:2px solid var(--bg1);margin-top:-7px;box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 1px rgba(110,168,255,.35);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
+.scrub-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ac);border:2px solid var(--bg1);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 1px rgba(110,168,255,.35);cursor:grab}
+.scrub-range:hover::-webkit-slider-thumb{transform:scale(1.1)}
+.scrub-range:hover::-moz-range-thumb{transform:scale(1.1)}
+.scrub-range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(110,168,255,.18)}
+.scrub-range:active::-moz-range-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(110,168,255,.18)}
+.scrub-range:focus-visible::-webkit-slider-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(110,168,255,.35)}
+.scrub-range:focus-visible::-moz-range-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(110,168,255,.35)}
+.mac-sel{width:100%;padding:7px 28px 7px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
+.mac-sel:hover{background-color:rgba(255,255,255,.09)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.05);border-radius:8px;color:var(--tx);font-size:12.5px;font-weight:500;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.15)}
+.btn:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.08)}
+.btn:active{transform:scale(.97);background:rgba(255,255,255,.04)}
+.btn.danger{color:var(--er)}
+.btn.danger:hover{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
+.btn.warn{color:var(--wn)}
+.btn.warn:hover{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25)}
+.btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+
+/* ── Heavy parts (offenders) panel ────────────────────────────────────────
+   One row per part, sorted by triCount desc. Click selects + frames.
+   The density bar fills red→amber→green by tri-density rank so the eye
+   can scan straight to the worst offenders without reading numbers. */
+.off-list{display:flex;flex-direction:column;gap:3px}
+.off-row{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:5px 7px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);border-radius:6px;cursor:pointer;font-size:11.5px;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out)}
+.off-row:hover{background:rgba(110,168,255,.07);border-color:rgba(110,168,255,.18)}
+.off-row.selected{background:rgba(110,168,255,.13);border-color:rgba(110,168,255,.35)}
+.off-rank{color:var(--tx3);font-variant-numeric:tabular-nums;text-align:center;font-size:10.5px}
+.off-mid{display:flex;flex-direction:column;gap:2px;min-width:0}
+.off-name{color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.off-bar{height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden}
+.off-bar-fill{height:100%;border-radius:2px;transition:width 200ms var(--ease-out)}
+.off-tri{color:var(--tx2);font-variant-numeric:tabular-nums;font-size:10.5px;flex-shrink:0}
+.off-empty{display:none}
+.off-list:empty + .off-empty,#offenders-body:has(.off-list:empty) .off-empty{display:block}
+
+/* ── Split preset segmented control ───────────────────────────────────────
+   Three-way segmented control for tolerance presets. Each segment fills
+   1/3 of the row; the active segment gets the accent treatment so the
+   current choice is obvious without reading numbers. */
+.split-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;overflow:hidden;padding:2px}
+.split-preset{padding:6px 2px;background:transparent;color:var(--tx2);font-size:11px;font-weight:500;border:none;border-radius:4px;cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out);white-space:nowrap}
+.split-preset:hover{color:var(--tx);background:rgba(255,255,255,.04)}
+.split-preset.active{background:linear-gradient(180deg,var(--ac),#4f8be5);color:white;box-shadow:0 1px 2px rgba(110,168,255,.25)}
+.split-preview .pv-warn{color:var(--wn)}
+.split-preview .pv-ok{color:var(--ok)}
+.split-advanced summary::marker{color:var(--tx3)}
+.split-advanced[open] summary{color:var(--tx2)}
+.btn-split{display:flex;width:100%}
+.btn-split > .btn{border-top-right-radius:0;border-bottom-right-radius:0;border-right:none}
+.btn-split > .btn-caret{display:inline-flex;align-items:center;justify-content:center;width:26px;flex:0 0 26px;padding:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.05);border-top-left-radius:0;border-bottom-left-radius:0;border-top-right-radius:8px;border-bottom-right-radius:8px;color:var(--tx);cursor:pointer;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
+.btn-split > .btn-caret:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.08)}
+.btn-split > .btn-caret svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:1.6}
+.fit-pop{position:fixed;z-index:9000;min-width:220px;background:rgba(28,32,40,.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5);padding:6px;opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
+.fit-pop.show{opacity:1;transform:translateY(0);pointer-events:auto}
+.fit-pop .fit-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:12.5px;color:var(--tx);cursor:pointer;transition:background 120ms var(--ease-out)}
+.fit-pop .fit-item:hover{background:rgba(255,255,255,.07)}
+.fit-pop .fit-item .fit-hint{margin-left:auto;font-size:10.5px;color:var(--tx3)}
+.fit-pop .fit-sep{height:1px;background:rgba(255,255,255,.06);margin:4px 6px}
+.fit-pop .fit-sliders{padding:8px 10px}
+.fit-pop .fit-sliders label{display:block;font-size:11px;color:var(--tx2);margin:6px 0 2px}
+.fit-pop .fit-sliders input[type=range]{width:100%}
+.fit-pop .fit-sliders .fit-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--tx3)}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:13px;border-top:1px solid rgba(255,255,255,.04);min-width:0}
+.toggle > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.toggle:first-child{border-top:none}
+.toggle label{flex-shrink:0;display:inline-flex;align-items:center;cursor:pointer}
+.toggle .switch{position:relative;width:34px;height:20px;background:rgba(120,128,140,.35);border-radius:10px;transition:background 220ms var(--ease-ios);cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);display:block}
+.toggle .switch::after{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;background:white;border-radius:50%;transition:transform 220ms var(--ease-ios);box-shadow:0 1px 2px rgba(0,0,0,.25),0 2px 6px rgba(0,0,0,.15)}
+.toggle input{display:none}
+.toggle input:checked+.switch{background:var(--ok)}
+.toggle input:checked+.switch::after{transform:translateX(14px)}
+
+/* Viewport */
+#viewport{position:relative;background:var(--bg);overflow:hidden}
+#canvas{display:block;width:100%;height:100%;outline:none}
+#vp-overlay{position:absolute;inset:0;pointer-events:none}
+.vpc{position:absolute;display:flex;gap:4px;pointer-events:auto}
+.vpc.tl{top:12px;left:12px;flex-direction:column}
+.vpc.tr{top:12px;right:12px;flex-direction:column;align-items:flex-end}
+.vpc.br{bottom:12px;right:12px;align-items:flex-end;flex-direction:column}
+.vpc.bl{bottom:12px;left:12px}
+#axis-gizmo{width:56px;height:56px;display:grid;place-items:center;opacity:.75;transition:opacity .15s}
+#axis-gizmo:hover{opacity:1}
+#axis-gizmo svg{width:54px;height:54px;display:block;overflow:visible}
+.axg-handle text{user-select:none;pointer-events:none;font-family:ui-sans-serif,system-ui,sans-serif}
+.axg-handle:hover circle{stroke-width:2.4}
+.vpb{width:32px;height:32px;background:rgba(15,19,25,.7);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:6px;display:grid;place-items:center;color:var(--tx);transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
+.vpb:hover{background:rgba(29,35,48,.85);border-color:var(--bd2);color:var(--ac)}
+.vpb:active{transform:scale(.92)}
+.vpb.active{color:var(--ac);border-color:var(--ac);background:rgba(110,168,255,.1)}
+.vpb svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
+.vp-info{background:rgba(15,19,25,.7);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:6px;padding:7px 11px;font-size:11px;color:var(--tx2);line-height:1.5;font-variant-numeric:tabular-nums;min-width:140px}
+.vp-info strong{color:var(--tx)}
+/* Triangle-count progress bar: 100% = starting tri count, shrinks as the
+   user deletes geometry. Track holds the colorful gradient (green→…→red);
+   a dark mask covers the right portion proportional to how much was
+   deleted, so the visible right edge transitions from red (full) through
+   yellow to green as the user trims geometry. */
+.vp-tribar{position:relative;height:3px;width:100%;background:linear-gradient(90deg,#22c55e 0%,#84cc16 25%,#facc15 50%,#fb923c 75%,#ef4444 100%);border-radius:2px;overflow:hidden;margin:3px 0 5px}
+.vp-tribar-mask{position:absolute;top:0;bottom:0;right:0;width:0;background:rgba(15,19,25,.92);transition:width 220ms ease-out}
+
+/* Settings popover — floats next to the top-right viewport buttons. Mirrors
+   the sidebar `.section-b` layout so existing field/toggle markup drops in
+   unchanged. Hidden by default; JS toggles `.show` and outside-click closes. */
+#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:rgba(15,19,25,.92);border:1px solid var(--bd);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.02) inset;padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-settings-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+#vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.05)}
+#vp-settings-pop .pop-section:last-child{border-bottom:none}
+#vp-settings-pop .pop-section-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:10px}
+
+/* Dropzone */
+#dropzone{position:absolute;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at center,rgba(110,168,255,.04),transparent 60%);pointer-events:auto;transition:background .2s}
+#dropzone.drag-over{background:rgba(110,168,255,.08)}
+#dropzone.drag-over .dz-card{border-color:var(--ac)}
+.dz-card{border:2px dashed var(--bd2);border-radius:14px;padding:50px 70px;text-align:center;background:rgba(15,19,25,.4);backdrop-filter:blur(8px);max-width:480px}
+.dz-card svg.dz-icon{width:50px;height:50px;stroke:var(--ac);fill:none;stroke-width:1.5;margin-bottom:16px}
+.dz-card h2{font-size:17px;margin-bottom:6px;font-weight:600}
+.dz-card p{color:var(--tx2);font-size:12.5px;margin-bottom:18px;line-height:1.55}
+.kbd{display:inline-block;padding:1px 5px;font-size:10px;background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:ui-monospace,monospace}
+
+/* Loader */
+#loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:transparent;z-index:100}
+#loader.show{display:flex}
+.loader-card{width:480px;max-width:90vw;background:var(--bg1);border:1px solid var(--bd);border-radius:14px;padding:18px 20px 16px;box-shadow:var(--sh)}
+.loader-head{display:flex;align-items:center;gap:14px}
+.spinner{width:28px;height:28px;border-radius:50%;border:2.5px solid var(--bg3);border-top-color:var(--ac);animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-text{flex:1;min-width:0}
+#loader-msg{color:var(--tx);font-weight:600;font-size:14px;margin-bottom:2px}
+#loader-sub{color:var(--tx2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#loader-time{color:var(--tx2);font-size:12px;font-variant-numeric:tabular-nums;flex-shrink:0;padding:4px 8px;background:rgba(255,255,255,.04);border-radius:6px}
+.loader-bar{height:6px;background:rgba(255,255,255,.06);border-radius:3px;margin-top:14px;overflow:hidden;position:relative}
+.loader-bar-fill{height:100%;width:35%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:3px;transition:width .3s ease;position:absolute;left:0}
+.loader-bar-fill.indeterminate{animation:slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
+.loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;font:11px/1.55 ui-monospace,Menlo,monospace;color:var(--tx2)}
+.log-line{display:flex;gap:8px}
+.log-time{color:var(--tx3);flex-shrink:0;width:48px}
+.log-msg.ok{color:var(--ok)}.log-msg.warn{color:var(--wn)}.log-msg.err{color:var(--er)}
+.loader-cancel{margin-top:12px;text-align:right}
+.loader-cancel button{padding:6px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx2);font-size:12px;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
+.loader-cancel button:hover{color:var(--er);border-color:rgba(255,107,107,.3)}
+
+/* Status bar */
+#sb{grid-column:1/-1;display:flex;align-items:center;padding:0 12px;background:var(--bg2);border-top:1px solid var(--bd);font-size:10.5px;color:var(--tx3);gap:11px;font-variant-numeric:tabular-nums;line-height:1}
+#sb .item{display:flex;gap:4px;align-items:center}
+#sb strong{color:var(--tx2);font-weight:500}
+#sb .right{margin-left:auto}
+#sb .sb-action{cursor:pointer;padding:2px 8px;border-radius:4px;border:1px solid transparent;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
+#sb .sb-action:hover{background:rgba(255,255,255,.04);border-color:var(--bd);color:var(--tx)}
+#sb .sb-action svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+#sb .sb-action.empty{opacity:.45;cursor:default;pointer-events:none}
+#sb #sb-selected.active{color:var(--ac);background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.30)}
+#sb #sb-selected.active strong{color:var(--ac)}
+#sb #sb-flagged.active{color:var(--wn);background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.30)}
+#sb #sb-flagged.active strong{color:var(--wn)}
+
+/* Modal */
+/* Modal: stays display:grid so .show can drive opacity transitions. The bg
+   keeps pointer-events:none until .show so it doesn't intercept clicks while
+   hidden. Modals stay center-origin (unlike popovers); only translateY+scale
+   sells the entrance — origin stays in the middle. */
+.modal-bg{position:fixed;inset:0;background:rgba(6,8,12,.55);backdrop-filter:blur(10px) saturate(140%);-webkit-backdrop-filter:blur(10px) saturate(140%);display:grid;place-items:center;z-index:200;opacity:0;pointer-events:none;transition:opacity 180ms var(--ease-out)}
+.modal-bg.show{opacity:1;pointer-events:auto}
+.modal{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;width:420px;max-width:90vw;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform 220ms var(--ease-out),opacity 180ms var(--ease-out)}
+.modal-bg.show .modal{transform:translateY(0) scale(1);opacity:1}
+.modal-h{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between}
+.modal-h h3{font-size:14px;font-weight:600}
+.modal-h .x{background:none;border:none;color:var(--tx3);padding:4px}
+.modal-h .x:hover{color:var(--tx)}
+.modal-b{padding:18px 20px}
+.modal-f{padding:14px 20px;border-top:1px solid var(--bd);display:flex;gap:8px;justify-content:flex-end}
+.fmt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.fmt-card{padding:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;cursor:pointer}
+.fmt-card:hover{border-color:var(--bd2)}
+.fmt-card.selected{border-color:var(--ac);background:rgba(110,168,255,.08)}
+.fmt-card .n{font-weight:600;font-size:13px;margin-bottom:2px}
+.fmt-card .d{color:var(--tx2);font-size:11px;line-height:1.4}
+
+/* Toast — top-center compact pill, dark glassmorphism */
+.toasts{position:fixed;top:56px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:5px;z-index:250;pointer-events:none;align-items:center;max-width:90vw}
+/* Toasts use CSS transitions keyed on data-state so a stack of rapidly-added
+   toasts can animate smoothly — keyframes restart from zero on each insert
+   and would jank under load. JS toggles data-state="enter" → "open" → "exit". */
+.toast{display:inline-flex;align-items:center;gap:6px;background:rgba(22,27,36,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.06);padding:6px 14px;border-radius:999px;font-size:12px;line-height:1.35;max-width:480px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 6px 24px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.3);pointer-events:auto;opacity:0;transform:translateY(-8px);transition:opacity 200ms var(--ease-out),transform 200ms var(--ease-out)}
+.toast[data-state="open"]{opacity:1;transform:translateY(0)}
+.toast[data-state="exit"]{opacity:0;transform:translateY(-8px);transition-duration:160ms}
+.toast::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ac);flex-shrink:0}
+.toast.success::before{background:var(--ok)}
+.toast.warn::before{background:var(--wn)}
+.toast.error::before{background:var(--er)}
+.toast .t{font-weight:600;color:var(--tx)}
+.toast .m{color:var(--tx2);font-weight:400;margin-left:4px}
+.toast .m::before{content:'·';color:var(--tx3);margin-right:6px}
+
+/* file:// warning */
+#file-warn{display:none;position:fixed;inset:0;background:transparent;z-index:500;place-items:center;padding:20px}
+#file-warn.show{display:grid}
+#file-warn .card{max-width:540px;background:var(--bg1);border:1px solid var(--bd);border-radius:14px;padding:28px 30px;box-shadow:var(--sh)}
+#file-warn h2{font-size:16px;font-weight:600;margin-bottom:14px}
+#file-warn p{color:var(--tx2);line-height:1.6;font-size:13px;margin-bottom:14px}
+#file-warn code{font-family:ui-monospace,monospace;color:var(--ac)}
+#file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;font-family:ui-monospace,monospace;font-size:12px;color:var(--tx);line-height:1.8}
+
+/* Global Log Console */
+#log-console{position:fixed;left:0;right:0;bottom:28px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:90;transform:translateY(calc(100% + 28px));transition:transform .22s cubic-bezier(.4,0,.2,1);font:11.5px/1.5 ui-monospace,Menlo,monospace}
+#log-console.show{transform:translateY(0)}
+.lc-grip{position:absolute;top:-3px;left:0;right:0;height:6px;cursor:ns-resize;z-index:1}
+.lc-grip:hover{background:rgba(110,168,255,.15)}
+.lc-h{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif}
+.lc-h .lc-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);padding-right:4px}
+.lc-filters{display:flex;gap:3px}
+.lc-pill{padding:3px 9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.05);border-radius:5px;color:var(--tx2);font-size:11px;cursor:pointer;font-variant-numeric:tabular-nums;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out);font-family:inherit}
+.lc-pill:hover{color:var(--tx);background:rgba(255,255,255,.07)}
+.lc-pill:active{transform:scale(.95)}
+.lc-pill.active{color:var(--tx);background:rgba(110,168,255,.12);border-color:rgba(110,168,255,.3)}
+.lc-pill .n{color:var(--tx3);margin-left:4px;font-size:10px}
+.lc-pill.active .n{color:var(--ac)}
+.lc-search{flex:1;max-width:220px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:11.5px;outline:none;font-family:inherit}
+.lc-search:focus{border-color:var(--ac)}
+.lc-spacer{flex:1}
+.lc-icon-btn{width:24px;height:24px;display:grid;place-items:center;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--tx2);cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out)}
+.lc-icon-btn:hover{color:var(--tx);background:rgba(255,255,255,.05);border-color:var(--bd)}
+.lc-icon-btn:active{transform:scale(.92)}
+.lc-icon-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+.lc-icon-btn.active{color:var(--ac)}
+.lc-b{flex:1;overflow-y:auto;padding:4px 0;background:rgba(0,0,0,.18)}
+.lc-row{display:flex;gap:10px;padding:1px 12px;border-left:2px solid transparent;white-space:pre-wrap;word-break:break-word}
+.lc-row:hover{background:rgba(255,255,255,.02)}
+.lc-row.lvl-debug{border-left-color:var(--tx3);color:var(--tx2)}
+.lc-row.lvl-success{border-left-color:var(--ok)}
+.lc-row.lvl-warn{border-left-color:var(--wn);background:rgba(251,191,36,.04)}
+.lc-row.lvl-error{border-left-color:var(--er);background:rgba(255,107,107,.05)}
+.lc-row.lvl-warn .lc-msg{color:var(--wn)}
+.lc-row.lvl-error .lc-msg{color:var(--er)}
+.lc-row.lvl-success .lc-msg{color:var(--ok)}
+.lc-row.lvl-debug .lc-msg{color:var(--tx2)}
+.lc-row.hidden{display:none}
+.lc-time{color:var(--tx3);flex-shrink:0;min-width:80px;font-variant-numeric:tabular-nums}
+.lc-tag{color:var(--ac2);flex-shrink:0}
+.lc-msg{flex:1;color:var(--tx)}
+.lc-empty{padding:30px 20px;text-align:center;color:var(--tx3);font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif}
+
+/* Status bar console toggle */
+#sb-console-btn{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--tx2);font-size:11px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out);margin-left:6px;font-family:inherit}
+#sb-console-btn:hover{color:var(--tx);background:rgba(255,255,255,.04);border-color:var(--bd)}
+#sb-console-btn:active{transform:scale(.95)}
+#sb-console-btn.active{color:var(--ac);background:rgba(110,168,255,.08);border-color:rgba(110,168,255,.25)}
+#sb-console-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+#sb-console-btn .badge{background:var(--er);color:white;font-size:9px;padding:0 4px;border-radius:6px;min-width:14px;text-align:center;font-weight:600;line-height:1.4}
+#sb-console-btn .badge.warn{background:var(--wn);color:black}
+#sb-console-btn .badge.hidden{display:none}
+
+/* ── Custom tooltips ───────────────────────────────────────────────────────
+   Single floating element reused for every hover target. Native browser
+   `title=` tooltips are suppressed by the JS on first hover (the value is
+   moved to data-tip), so there's no double tooltip.
+   The arrow is a 45°-rotated square clipped behind the bubble — paints the
+   correct two edges and matches the bubble's border. The kbd pill highlights
+   keyboard shortcuts parsed out of the original title string (e.g. "Fit (F)"). */
+.tip-pop{
+  position:fixed;z-index:10000;pointer-events:none;
+  background:linear-gradient(180deg,#222a37,#1a2030);
+  border:1px solid var(--bd2);
+  color:var(--tx);
+  padding:6px 10px;border-radius:7px;
+  font:500 11.5px/1.4 -apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
+  letter-spacing:.005em;
+  max-width:280px;
+  box-shadow:0 6px 18px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02) inset;
+  opacity:0;transform:translateY(3px) scale(.97);
+  transition:opacity 110ms var(--ease-out),transform 110ms var(--ease-out);
+}
+.tip-pop.show{opacity:1;transform:translateY(0) scale(1)}
+.tip-pop.wrap{white-space:normal}
+.tip-pop:not(.wrap){white-space:nowrap}
+.tip-pop kbd{
+  display:inline-block;margin-left:7px;padding:1px 6px;
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.1);
+  border-bottom-color:rgba(0,0,0,.35);
+  border-radius:4px;
+  font:600 10px ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color:var(--tx2);
+  vertical-align:1px;
+}
+.tip-pop::before{
+  content:'';position:absolute;width:8px;height:8px;
+  background:#1a2030;
+  border:1px solid var(--bd2);
+  transform:rotate(45deg);
+  left:50%;margin-left:-4px;
+}
+/* default: arrow points down (tooltip above target) */
+.tip-pop::before{bottom:-5px;border-top:none;border-left:none}
+/* below: arrow points up */
+.tip-pop.below::before{bottom:auto;top:-5px;border-bottom:none;border-right:none;background:#222a37}
+/* left/right side variants — shift the arrow off-center toward the anchor */
+.tip-pop[data-arrow="left"]::before{left:14px;margin-left:0}
+.tip-pop[data-arrow="right"]::before{left:auto;right:10px;margin-left:0}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <header id="tb">
+    <button class="tbtn primary" id="btn-open" title="Open a .step / .stp / .glb / .gltf file"><i data-lucide="folder-open"></i>Open STEP File</button>
+    <button class="tbtn" id="btn-fit" disabled title="Frame the whole model in the camera (F)"><i data-lucide="maximize"></i>Fit</button>
+    <button class="tbtn" id="btn-reset" disabled title="Reload the original model — discards all edits (R)"><i data-lucide="rotate-ccw"></i>Revert</button>
+    <div class="divider"></div>
+    <button class="tbtn" id="btn-undo" disabled title="Undo the last destructive action (Ctrl+Z)"><i data-lucide="undo-2"></i>Undo</button>
+    <button class="tbtn" id="btn-redo" disabled title="Redo (Ctrl+Shift+Z / Ctrl+Y)"><i data-lucide="redo-2"></i>Redo</button>
+    <button class="tbtn" id="btn-export" disabled title="Export to GLB / GLTF / OBJ / STL / PLY"><i data-lucide="download"></i>Export</button>
+    <button class="tbtn" id="btn-save-scene" disabled title="Save the current scene (camera, view toggles, hidden/flagged parts, transforms) as a single .glb you can re-open here later or on another machine"><i data-lucide="save"></i>Save Scene</button>
+    <div class="spacer"></div>
+    <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><strong id="renderer-name">—</strong></div>
+    <div class="stat"><span>FPS</span><strong id="fps">0</strong></div>
+    <div class="brand brand-right">
+      <div class="brand-text"><h1>STEP Optimizer</h1><small>WebGPU CAD inspector</small></div>
+      <div class="brand-mark"><i data-lucide="zap"></i></div>
+    </div>
+  </header>
+
+  <aside id="sidebar-left" class="panel">
+    <div id="resize-l" class="resize-handle" title="Drag to resize"></div>
+    <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts..."></div>
+    <div class="tree-toolbar">
+      <select id="tree-sort" class="mac-sel">
+        <option value="load">Load order</option>
+        <option value="name">Name</option>
+        <option value="tricount">Triangles ↓</option>
+        <option value="volume">Volume ↓</option>
+        <option value="size">Bbox diag ↓</option>
+      </select>
+      <button class="tree-icon-btn" id="tree-hide-unsel" title="Hide everything not selected">
+        <i data-lucide="eye-off"></i>
+      </button>
+      <button class="tree-icon-btn" id="tree-show-all" title="Show all parts">
+        <i data-lucide="eye"></i>
+      </button>
+      <button class="tree-icon-btn" id="tree-reveal" title="Reveal selected (S)">
+        <i data-lucide="crosshair"></i>
+      </button>
+      <button class="tree-icon-btn" id="tree-collapse-toggle" title="Expand / collapse all groups">
+        <i data-lucide="chevrons-down-up"></i>
+      </button>
+      <button class="tree-icon-btn" id="tree-flatten" title="Flatten tree — promote every part to the top level (dissolves groups)">
+        <i data-lucide="list"></i>
+      </button>
+      <button class="tree-icon-btn" id="tree-sel-back" title="Previous selection">
+        <i data-lucide="chevron-left"></i>
+      </button>
+      <button class="tree-icon-btn" id="tree-sel-fwd" title="Next selection">
+        <i data-lucide="chevron-right"></i>
+      </button>
+    </div>
+    <div class="tree-summary" id="tree-summary">No model loaded</div>
+    <div id="tree"><div class="tree-empty"><i data-lucide="box"></i><div>No model loaded</div><div style="font-size:11px;margin-top:4px">Open or drop a .step file</div></div></div>
+  </aside>
+
+  <main id="viewport">
+    <canvas id="canvas"></canvas>
+    <div id="vp-overlay">
+      <div class="vpc tl">
+        <button class="vpb" id="vw-solid" data-mode="solid" title="Solid (1)"><i data-lucide="box"></i></button>
+        <button class="vpb" id="vw-wire" data-mode="wire" title="Wireframe (2)"><svg viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v10"/></svg></button>
+        <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
+        <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — colour parts by tri density (4)"><i data-lucide="flame"></i></button>
+        <div style="height:10px"></div>
+        <button class="vpb" id="gz-translate" title="Translate gizmo (W) - select a part first"><i data-lucide="move"></i></button>
+        <button class="vpb" id="gz-rotate" title="Rotate gizmo (E) - select a part first"><i data-lucide="rotate-cw"></i></button>
+        <button class="vpb" id="gz-off" title="Hide gizmo (Q)"><i data-lucide="ban"></i></button>
+      </div>
+      <div class="vpc tr">
+        <button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button>
+        <button class="vpb" id="tg-bbox" title="Toggle bounding boxes for every part"><i data-lucide="square-dashed"></i></button>
+        <button class="vpb" id="tg-axes" title="Toggle world-axis triad"><svg viewBox="0 0 24 24"><path d="M12 22V12L4 8M12 12l8-4M12 12V2"/></svg></button>
+        <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
+        <div id="vp-settings-pop">
+          <div class="pop-section">
+            <div class="pop-section-title">Display</div>
+            <div class="toggle"><span>Auto-rotate</span><label><input type="checkbox" id="toggle-rotate"><span class="switch"></span></label></div>
+            <div class="toggle"><span>Highlight small</span><label><input type="checkbox" id="toggle-highlight" checked><span class="switch"></span></label></div>
+            <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="solid">Solid black</option><option value="white">White</option></select></div>
+          </div>
+          <div class="pop-section">
+            <div class="pop-section-title">Performance</div>
+            <div class="field"><label><span>Quality</span></label>
+              <select id="perf-mode" class="mac-sel">
+                <option value="auto" selected>Auto (adaptive to scene size)</option>
+                <option value="high">High — full DPR, always cull</option>
+                <option value="low">Low — DPR 0.6, for millions of polys</option>
+              </select>
+            </div>
+            <div class="toggle"><span>Auto-instance duplicates</span><label><input type="checkbox" id="toggle-instance" checked><span class="switch"></span></label></div>
+            <div class="toggle"><span>Share materials by color</span><label><input type="checkbox" id="toggle-share-mat" checked><span class="switch"></span></label></div>
+          </div>
+        </div>
+      </div>
+      <div class="vpc br"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
+      <div class="vpc bl"><div id="axis-gizmo" title="Click an axis to align the view"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
+    </div>
+
+    <div id="dropzone">
+      <div class="dz-card">
+        <i data-lucide="upload" class="dz-icon"></i>
+        <h2>Open a STEP or GLB file</h2>
+        <p>Drag and drop a <span style="color:var(--ac)">.step</span>, <span style="color:var(--ac)">.glb</span>, or <span style="color:var(--ac)">.gltf</span>. For huge assemblies (&gt;200 MB), pre-convert with <code style="font-family:ui-monospace,monospace;color:var(--ac)">step2glb.py</code>.</p>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;font-size:11px;color:var(--tx3)">
+          <span><span class="kbd">F</span> Fit</span><span><span class="kbd">1/2/3</span> View modes</span><span><span class="kbd">Del</span> Delete</span><span><span class="kbd">Ctrl+Z</span> Undo</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="loader">
+      <div class="loader-card">
+        <div class="loader-head">
+          <div class="spinner"></div>
+          <div class="loader-text"><div id="loader-msg">Loading…</div><div id="loader-sub"></div></div>
+          <div id="loader-time">0.0s</div>
+        </div>
+        <div class="loader-bar"><div class="loader-bar-fill" id="loader-bar"></div></div>
+        <div id="loader-log" class="loader-log"></div>
+        <div class="loader-cancel" style="display:flex;gap:6px;justify-content:flex-end"><button id="loader-copy-btn" title="Copy the log to clipboard">Copy log</button><button id="loader-cancel-btn" title="Abort the current load / operation">Cancel</button></div>
+      </div>
+    </div>
+  </main>
+
+  <aside id="sidebar-right" class="panel">
+    <div id="resize-r" class="resize-handle" title="Drag to resize"></div>
+
+    <div class="section">
+      <div class="section-h"><span>Properties</span><span class="chev">▾</span></div>
+      <div class="section-b" id="prop-body">
+        <div class="prop-head"><span class="prop-name" style="color:var(--tx3)">No selection</span></div>
+        <div class="prop-tags"></div>
+        <div class="prop-bar-wrap" title="Triangle share of total scene">
+          <span class="prop-bar-icon"><i data-lucide="bar-chart-3"></i></span>
+          <div class="prop-bar"><div class="prop-bar-fill" style="width:0%"></div></div>
+          <span class="prop-bar-label">—</span>
+        </div>
+        <div class="prop-grid">
+          <span class="prop-icon"><i data-lucide="triangle"></i></span><span class="prop-label">Triangles</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="circle-dot"></i></span><span class="prop-label">Vertices</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="box"></i></span><span class="prop-label">Bbox</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="ruler"></i></span><span class="prop-label">Diagonal</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="percent"></i></span><span class="prop-label">% of model</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="package"></i></span><span class="prop-label">Volume</span><strong class="prop-value">—</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Heavy parts</span><span class="chev">▾</span></div>
+      <div class="section-b" id="offenders-body">
+        <div class="off-empty" style="color:var(--tx3);font-size:12px;padding:4px 0">Load a model to see heavy parts.</div>
+        <div class="off-list" id="offenders-list"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Selection &amp; actions</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="btn-row">
+          <button class="btn" id="sel-all" title="Select every visible part (Ctrl+A)">All</button>
+          <button class="btn" id="sel-invert" title="Invert the current selection">Invert</button>
+          <button class="btn" id="sel-clear" title="Deselect everything (Esc)">Clear</button>
+          <button class="btn" id="sel-similar" title="Add parts that share geometry with the current selection">Select similar</button>
+        </div>
+        <div style="height:6px"></div>
+        <div class="btn-row">
+          <button class="btn" id="btn-select-color" title="Select every part that shares a color with the current selection"><i data-lucide="palette"></i>By color</button>
+          <button class="btn" id="btn-select-regex" title="Select every part whose name matches the regex"><i data-lucide="search"></i>By name</button>
+        </div>
+        <div class="field" style="margin-top:6px">
+          <input type="text" id="name-regex" placeholder="screw|bolt|washer" style="width:100%;padding:7px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx);font-size:12.5px;outline:none;">
+        </div>
+
+        <div style="height:10px"></div>
+
+        <div class="btn-row">
+          <div class="btn-split">
+            <button class="btn warn" id="btn-bbox-selected" title="Replace selected parts with the best low-poly proxy: tight box, oriented box, or cylinder"><i data-lucide="square"></i>Smart fit</button>
+            <button class="btn-caret" id="btn-bbox-caret" title="Choose fit mode (force AABB / OBB / cylinder, or thresholds)"><svg viewBox="0 0 10 10"><path d="M2 4l3 3 3-3"/></svg></button>
+          </div>
+          <button class="btn" id="btn-merge-sel" title="Bake selected parts into one BufferGeometry — ideal for STL / 3D printing"><i data-lucide="combine"></i>Merge</button>
+        </div>
+        <div style="height:6px"></div>
+        <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together"><i data-lucide="group"></i>Group selection</button>
+        <div style="height:6px"></div>
+        <div class="btn-row">
+          <button class="btn" id="btn-hide-selected" title="Hide selected parts without deleting them"><i data-lucide="eye-off"></i>Hide</button>
+          <button class="btn" id="btn-isolate" title="Hide every part that is NOT selected"><i data-lucide="eye"></i>Isolate</button>
+        </div>
+        <div style="height:6px"></div>
+        <button class="btn danger" id="btn-delete-sel" title="Permanently remove the selected parts (Del — undoable)"><i data-lucide="trash-2"></i>Delete (<span id="del-sel-count">0</span>)</button>
+
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Size threshold</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="field"><div id="thr-scrub"></div></div>
+        <div class="field"><label><span>Metric</span></label><select id="thr-metric" class="mac-sel"><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select></div>
+        <div class="field-help" id="thr-info">Highlights parts smaller than the threshold.</div>
+        <div style="height:10px"></div>
+        <button class="btn" id="btn-isolate-small" title="Hide every part NOT flagged by the size threshold"><i data-lucide="eye"></i>Isolate flagged</button>
+        <div style="height:6px"></div>
+        <button class="btn" id="btn-show-all" title="Make every hidden part visible again"><i data-lucide="circle-plus"></i>Show all</button>
+        <div style="height:6px"></div>
+        <button class="btn danger" id="btn-delete-small" title="Permanently remove the parts flagged by the size threshold (undoable)"><i data-lucide="trash-2"></i>Delete <span id="btn-delete-small-count">0</span> small parts</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Auto cleanup</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <button class="btn warn" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Remove empty parts</button>
+        <div style="height:6px"></div>
+        <button class="btn warn" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy"></i>Deduplicate geometry</button>
+        <div style="height:6px"></div>
+        <button class="btn warn" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="asterisk"></i>Fix degenerate parts</button>
+        <div style="height:6px"></div>
+        <button class="btn warn" id="btn-clean-empty-groups" title="Remove user groups and hierarchy groups whose members are all deleted or empty"><i data-lucide="folder-x"></i>Delete empty groups</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Filters &amp; flags</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="field"><div id="tri-scrub"></div></div>
+        <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-triangle parts</button>
+        <div style="height:10px"></div>
+        <div class="field"><div id="aspect-scrub"></div></div>
+        <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="minus"></i>Flag thin slivers</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Optimize</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <button class="btn" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="sparkles"></i>Recompute smooth normals</button>
+        <div style="height:6px"></div>
+        <button class="btn" id="btn-recenter" title="Move the model so its bbox center sits at world origin"><i data-lucide="target"></i>Recenter on origin</button>
+        <div style="height:6px"></div>
+        <button class="btn" id="btn-bake-transforms" title="Commit pending gizmo edits permanently into vertex data"><i data-lucide="check"></i>Bake gizmo transforms</button>
+        <div style="height:6px"></div>
+        <button class="btn" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox center (visual position unchanged)"><i data-lucide="crosshair"></i>Center pivot</button>
+        <div style="height:6px"></div>
+        <button class="btn warn" id="btn-bbox-all" title="Smart-fit EVERY part — picks tight box, OBB, or cylinder per part. Heavy poly reduction, lossy."><i data-lucide="square-dashed"></i>Smart-fit all parts</button>
+        <div style="height:6px"></div>
+        <div class="btn-row">
+          <button class="btn warn" id="btn-decimate-sel" title="Reduce triangle count of selected parts using edge-collapse simplification. Lossy."><i data-lucide="triangle-alert"></i>Decimate <span id="dec-sel-count">0</span></button>
+          <select id="decimate-strength" class="mac-sel" title="How much to drop from each selected part" style="flex:0 0 96px;font-size:11px">
+            <option value="0.25">−25%</option>
+            <option value="0.5" selected>−50%</option>
+            <option value="0.75">−75%</option>
+            <option value="0.9">−90%</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Export data</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <button class="btn" id="btn-export-csv" title="Save parts list (name, color, tris, volume, area) as CSV — for BOMs and reports"><i data-lucide="file-spreadsheet"></i>Export parts list (CSV)</button>
+        <div style="height:6px"></div>
+        <button class="btn" id="btn-export-selected-glb" title="Save only the currently selected parts as a GLB"><i data-lucide="download"></i>Export selected as GLB</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Materials</span><span class="chev">▾</span></div>
+      <div class="section-b" id="materials-body">
+        <div style="color:var(--tx3);font-size:12.5px;padding:4px 0">Load a model to see colors / materials.</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Exploded view</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="field"><div id="explode-all-scrub"></div></div>
+        <div class="field"><div id="explode-x-scrub"></div></div>
+        <div class="field"><div id="explode-y-scrub"></div></div>
+        <div class="field"><div id="explode-z-scrub"></div></div>
+        <button class="btn" id="btn-explode-reset" title="Set all explode sliders back to 0">Reset all</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Separate fused meshes</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div style="color:var(--tx3);font-size:11.5px;line-height:1.4;margin:2px 0 10px">
+          Recover individual parts from solids that were merged on export. Two vertices closer than the threshold are treated as the same point.
+        </div>
+        <div class="split-presets" role="group" aria-label="Detection sensitivity">
+          <button class="split-preset" data-eps="0" title="Maximum splits. Trusts the index buffer exactly — never merges. Use if you suspect the source has duplicated boundary vertices.">Strict</button>
+          <button class="split-preset active" data-eps="1e-9" title="Default. Welds only exact-bit duplicates — fixes within-solid sharp-edge duplication without merging adjacent solids.">Tight</button>
+          <button class="split-preset" data-eps="1e-6" title="Welds vertices within 0.0001% of model size — tolerant of small float drift between duplicates.">Normal</button>
+          <button class="split-preset" data-eps="1e-3" title="Welds vertices within 0.1% of model size — intentionally MERGES touching solids. Use when you want fewer, larger parts.">Loose</button>
+        </div>
+        <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:11px;margin:8px 0 6px">≈ — at this model size</div>
+        <div class="field" style="margin-bottom:6px">
+          <label style="display:block;color:var(--tx3);font-size:11px;margin-bottom:3px">Algorithm</label>
+          <select id="split-method" class="mac-sel" style="width:100%">
+            <option value="vertex" title="Default. Connect triangles that share a vertex.">Vertex connectivity</option>
+            <option value="edge" title="Stricter than vertex. Connect only when triangles share a full edge — keeps solids meeting at a point separate.">Edge connectivity</option>
+            <option value="spatial" title="Group by triangle bbox overlap on a 3D grid. Doesn't read the index buffer at all — useful when topology is fused but solids are still spatially separate.">Spatial proximity (AABB)</option>
+            <option value="watertight" title="Find connected sets where every edge has 2 triangles (closed manifold). Most robust for genuine solids, slower.">Watertight regions</option>
+            <option value="hybrid" title="Vertex connectivity first, then re-split any dominant component (>50%) with spatial proximity.">Hybrid (vertex + spatial)</option>
+          </select>
+        </div>
+        <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:11.5px;margin:0 0 10px;min-height:16px">Select a mesh to preview the split.</div>
+        <button class="btn" id="btn-split-selected" title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
+        <div style="height:6px"></div>
+        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts" style="font-size:11.5px;opacity:.85"><i data-lucide="search"></i>Scan whole model</button>
+        <details class="split-advanced" style="margin-top:10px">
+          <summary style="cursor:pointer;color:var(--tx3);font-size:11px;user-select:none;padding:4px 0">Advanced — custom tolerance</summary>
+          <div class="field" style="margin-top:6px"><div id="split-eps-scrub"></div></div>
+        </details>
+      </div>
+    </div>
+
+  </aside>
+
+  <footer id="sb">
+    <div class="item"><strong id="sb-parts">0</strong>parts</div>
+    <div class="item"><strong id="sb-tris">0</strong>triangles</div>
+    <div class="item"><strong id="sb-verts">0</strong>vertices</div>
+    <div class="item"><strong id="sb-mem">0 MB</strong>geom</div>
+    <div class="item"><strong id="sb-draws">0</strong>draws</div>
+    <div class="item sb-action" id="sb-selected" title="Frame the current selection in the viewport (click)"><i data-lucide="mouse-pointer-2"></i><strong id="sb-selected-n">0</strong>selected</div>
+    <div class="item sb-action" id="sb-flagged" title="Isolate flagged parts in the viewport (click)"><i data-lucide="flag"></i><strong id="sb-flagged-n">0</strong>flagged</div>
+    <div class="item right" id="sb-status">Ready</div>
+    <button id="sb-console-btn" title="Toggle log console (`)">
+      <i data-lucide="terminal"></i>
+      <span>Console</span>
+      <span class="badge hidden" id="sb-console-badge">0</span>
+    </button>
+  </footer>
+
+</div>
+
+<div id="log-console">
+  <div class="lc-grip" id="lc-grip"></div>
+  <div class="lc-h">
+    <div class="lc-title">Console</div>
+    <div class="lc-filters" id="lc-filters">
+      <button class="lc-pill active" data-level="all" title="Show messages of every level">All<span class="n" id="lc-n-all">0</span></button>
+      <button class="lc-pill" data-level="info" title="Show only info-level messages">Info<span class="n" id="lc-n-info">0</span></button>
+      <button class="lc-pill" data-level="warn" title="Show only warnings">Warn<span class="n" id="lc-n-warn">0</span></button>
+      <button class="lc-pill" data-level="error" title="Show only errors">Error<span class="n" id="lc-n-error">0</span></button>
+      <button class="lc-pill" data-level="debug" title="Show only debug-level messages">Debug<span class="n" id="lc-n-debug">0</span></button>
+    </div>
+    <input type="text" class="lc-search" id="lc-search" placeholder="Filter…">
+    <div class="lc-spacer"></div>
+    <button class="lc-icon-btn active" id="lc-autoscroll" title="Auto-scroll to newest">
+      <i data-lucide="arrow-down"></i>
+    </button>
+    <button class="lc-icon-btn" id="lc-copy" title="Copy log to clipboard">
+      <i data-lucide="copy"></i>
+    </button>
+    <button class="lc-icon-btn" id="lc-clear" title="Clear log">
+      <i data-lucide="trash-2"></i>
+    </button>
+    <button class="lc-icon-btn" id="lc-close" title="Close (`)">
+      <i data-lucide="x"></i>
+    </button>
+  </div>
+  <div class="lc-b" id="lc-b">
+    <div class="lc-empty" id="lc-empty">No log entries yet.</div>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept=".step,.stp,.STEP,.STP,.glb,.gltf,.GLB,.GLTF" style="display:none">
+
+<div class="modal-bg" id="save-scene-modal">
+  <div class="modal" style="width:420px">
+    <div class="modal-h"><h3>Save scene</h3><button class="x" id="save-scene-close" title="Close (Esc)">✕</button></div>
+    <div class="modal-b">
+      <div class="field" style="margin:0">
+        <label><span>Filename</span></label>
+        <div style="display:flex;align-items:stretch;gap:0">
+          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-right:none;border-radius:7px 0 0 7px;color:var(--tx);font-size:12.5px;outline:none">
+          <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-left:none;border-radius:0 7px 7px 0;color:var(--tx3);font-size:12px">.glb</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-f"><button class="btn" id="save-scene-cancel" style="width:auto;padding:7px 16px" title="Close without saving (Esc)">Cancel</button><button class="tbtn primary" id="save-scene-confirm" title="Choose where to save the .glb">Save…</button></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="export-modal">
+  <div class="modal" style="width:520px">
+    <div class="modal-h"><h3>Export model</h3><button class="x" id="export-close" title="Close (Esc)">✕</button></div>
+    <div class="modal-b">
+      <div class="fmt-grid" id="format-grid">
+        <div class="fmt-card selected" data-fmt="glb"><div class="n">GLB</div><div class="d">Modern, light, single binary file. Best for web AND <strong>Cinema 4D 2026</strong> (native glTF import).</div></div>
+        <div class="fmt-card" data-fmt="gltf"><div class="n">GLTF</div><div class="d">JSON-based glTF 2.0. Maximum compatibility.</div></div>
+        <div class="fmt-card" data-fmt="fbx"><div class="n">FBX</div><div class="d">Binary FBX 7.4 — Blender, Maya, 3ds Max, Houdini, Unreal. Enable ASCII mode below if Houdini rejects the binary. <span style="color:var(--wn)">Cinema 4D: prefer GLB for best results.</span></div></div>
+        <div class="fmt-card" data-fmt="usdz"><div class="n">USDZ</div><div class="d">OpenUSD (Pixar/Apple). Quick Look, Reality Composer, Substance, C4D R26+.</div></div>
+        <div class="fmt-card" data-fmt="obj"><div class="n">OBJ</div><div class="d">Wavefront OBJ. Universal, geometry only.</div></div>
+        <div class="fmt-card" data-fmt="stl"><div class="n">STL</div><div class="d">Binary STL. Standard for 3D printing.</div></div>
+        <div class="fmt-card" data-fmt="ply"><div class="n">PLY</div><div class="d">Polygon File Format. Geometry + colors.</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:10px">
+        <div class="field" style="margin:0">
+          <label><span>Unit scale</span></label>
+          <select id="exp-scale" class="mac-sel">
+            <option value="1" selected>1.0 (no change)</option>
+            <option value="0.001">× 0.001 (mm → m)</option>
+            <option value="0.01">× 0.01 (cm → m)</option>
+            <option value="1000">× 1000 (m → mm)</option>
+            <option value="100">× 100 (m → cm)</option>
+            <option value="25.4">× 25.4 (in → mm)</option>
+            <option value="0.0393701">× 0.0393701 (mm → in)</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label><span>Custom scale</span></label>
+          <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" disabled>
+        </div>
+        <div class="field" style="margin:0">
+          <label><span>Up axis</span></label>
+          <select id="exp-axis" class="mac-sel">
+            <option value="z-up" selected>Z-up (CAD, keep)</option>
+            <option value="y-up">Y-up (Blender, glTF, OBJ)</option>
+          </select>
+        </div>
+        <div class="field" style="margin:0">
+          <label><span>Origin</span></label>
+          <select id="exp-origin" class="mac-sel">
+            <option value="keep" selected>Keep model origin</option>
+            <option value="center">Recenter to bbox center</option>
+            <option value="floor">Center XY, drop to floor (Z=0)</option>
+          </select>
+        </div>
+      </div>
+      <div class="toggle"><span>Merge all parts into one mesh</span><label><input type="checkbox" id="exp-merge"><span class="switch"></span></label></div>
+      <div class="toggle"><span>Visible parts only</span><label><input type="checkbox" id="exp-visible" checked><span class="switch"></span></label></div>
+      <div class="toggle" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only. Slower export and load."><span>Draco compression <span style="color:var(--tx3);font-size:11px;font-weight:400">(GLB only · slower)</span></span><label><input type="checkbox" id="exp-draco"><span class="switch"></span></label></div>
+      <div class="toggle" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII (text) format instead of binary. ~3× larger, but sometimes loads in apps that reject the binary. Try this if Houdini or C4D shows a 'failed to load' error."><span>ASCII FBX <span style="color:var(--tx3);font-size:11px;font-weight:400">(FBX only · try if binary fails)</span></span><label><input type="checkbox" id="exp-fbx-ascii"><span class="switch"></span></label></div>
+      <div id="exp-source-note" style="display:none;margin-top:10px;padding:8px 10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:6px;color:var(--wn);font-size:11.5px;line-height:1.4"></div>
+    </div>
+    <div class="modal-f"><button class="btn" id="export-cancel" style="width:auto;padding:7px 16px" title="Close without exporting (Esc)">Cancel</button><button class="tbtn primary" id="export-confirm" title="Generate the file with the chosen format and options">Export</button></div>
+  </div>
+</div>
+
+<div id="ctx-menu" style="position:fixed;display:none;z-index:300;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;padding:5px 0;min-width:230px;box-shadow:var(--sh);font-size:12.5px;user-select:none"></div>
+
+<div id="marquee-box"></div>
+<div class="toasts" id="toasts"></div>
+
+<div id="file-warn">
+  <div class="card">
+    <h2>This page needs a local server</h2>
+    <p>You opened the file directly with <code>file://</code>. Modern browsers block ES modules and WASM in that mode.</p>
+    <p>Open a terminal in this folder and run:</p>
+    <pre>python serve.py</pre>
+    <p>Or just double-click <code>start.bat</code>. Then open <code>http://localhost:4242</code>.</p>
+  </div>
+</div>
+
+<script>if (location.protocol === 'file:') document.getElementById('file-warn').classList.add('show');</script>
+
+<script>
+// ─── Custom tooltip system ────────────────────────────────────────────────
+// Single floating bubble reused for every hover target. On first hover the
+// element's `title` is moved to `data-tip` so the native browser tooltip is
+// suppressed (otherwise both fire). Re-runs on every hover so dynamically
+// inserted elements (toolbar buttons created by the module script) work too.
+//
+// Recognises a trailing "(K)" or "(Ctrl+Z)" pattern in the source string and
+// renders the shortcut as a styled <kbd> pill at the end of the bubble.
+//
+// Suppress on touch devices: a hover popup that triggers on the first tap is
+// hostile on touchscreens. We gate the show path behind a fine-pointer check.
+(function () {
+  const SHOW_DELAY = 800;            // ms hover before tooltip appears
+  const HIDE_DELAY = 60;             // ms grace period when leaving
+  const finePointer = matchMedia('(pointer: fine)').matches;
+  if (!finePointer) return;          // skip entirely on touch / coarse pointers
+
+  let tipEl = null;
+  let showT = 0, hideT = 0;
+  let currentTarget = null;
+
+  function ensureEl() {
+    if (tipEl) return tipEl;
+    tipEl = document.createElement('div');
+    tipEl.className = 'tip-pop';
+    tipEl.setAttribute('role', 'tooltip');
+    document.body.appendChild(tipEl);
+    return tipEl;
+  }
+
+  function getText(el) {
+    return el.getAttribute('data-tip') || el.getAttribute('title') || '';
+  }
+
+  function render(el, raw) {
+    el.classList.toggle('wrap', raw.length > 36);
+    // Trailing "(K)" or "(Ctrl+Z)" → keyboard pill
+    const m = raw.match(/^(.*?)\s*\(([^)]{1,12})\)\s*$/);
+    el.innerHTML = '';
+    if (m && /[A-Za-z0-9]/.test(m[2])) {
+      el.appendChild(document.createTextNode(m[1].trim()));
+      const kbd = document.createElement('kbd');
+      kbd.textContent = m[2].trim();
+      el.appendChild(kbd);
+    } else {
+      el.textContent = raw;
+    }
+  }
+
+  function position(el, anchor) {
+    const r = anchor.getBoundingClientRect();
+    el.classList.remove('below');
+    el.removeAttribute('data-arrow');
+    // Measure first
+    el.style.left = '0px'; el.style.top = '0px';
+    const tr = el.getBoundingClientRect();
+    let top = r.top - tr.height - 9;
+    let left = r.left + r.width / 2 - tr.width / 2;
+    if (top < 6) {
+      top = r.bottom + 9;
+      el.classList.add('below');
+    }
+    // Clamp horizontally; if we shifted, move the arrow to track the anchor
+    const minLeft = 6;
+    const maxLeft = window.innerWidth - tr.width - 6;
+    if (left < minLeft) {
+      left = minLeft;
+      el.dataset.arrow = 'left';
+    } else if (left > maxLeft) {
+      left = maxLeft;
+      el.dataset.arrow = 'right';
+    }
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+  }
+
+  function show(target) {
+    const raw = getText(target);
+    if (!raw) return;
+    const el = ensureEl();
+    render(el, raw);
+    position(el, target);
+    el.classList.add('show');
+  }
+
+  function hide() {
+    if (tipEl) tipEl.classList.remove('show');
+    currentTarget = null;
+  }
+
+  function onEnter(e) {
+    const t = e.target.closest('[title], [data-tip]');
+    if (!t) return;
+    if (t === currentTarget) return;
+    // Adopt native title to suppress browser's own tooltip exactly once.
+    if (t.hasAttribute('title')) {
+      const v = t.getAttribute('title');
+      if (v && !t.dataset.tip) t.dataset.tip = v;
+      t.removeAttribute('title');
+    }
+    if (!getText(t)) return;
+    currentTarget = t;
+    clearTimeout(hideT);
+    clearTimeout(showT);
+    showT = setTimeout(() => show(t), SHOW_DELAY);
+  }
+
+  function onLeave(e) {
+    if (!currentTarget) return;
+    // Only hide if we actually left the anchor (not a child element).
+    if (e.relatedTarget && currentTarget.contains(e.relatedTarget)) return;
+    clearTimeout(showT);
+    clearTimeout(hideT);
+    hideT = setTimeout(hide, HIDE_DELAY);
+  }
+
+  document.addEventListener('mouseover', onEnter, true);
+  document.addEventListener('mouseout', onLeave, true);
+  // Hide on click / wheel / keydown — anything that signals the user has
+  // moved on. Capture phase so we beat handlers that stop propagation.
+  ['click', 'wheel', 'keydown'].forEach(ev =>
+    document.addEventListener(ev, hide, true));
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('blur', hide);
+})();
+
+// ─── Settings popover (Display + Performance) ────────────────────────────
+// Toggled by the gear button in the top-right viewport stack. Closes on
+// outside click or Esc. Click inside the panel must not close it, so we
+// stop propagation on the panel itself before the document handler runs.
+(function () {
+  const btn = document.getElementById('tg-settings');
+  const pop = document.getElementById('vp-settings-pop');
+  if (!btn || !pop) return;
+  const close = () => { pop.classList.remove('show'); btn.classList.remove('active'); };
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = pop.classList.toggle('show');
+    btn.classList.toggle('active', open);
+  });
+  pop.addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', () => { if (pop.classList.contains('show')) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && pop.classList.contains('show')) close(); });
+})();
+</script>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.172.0/build/three.webgpu.js",
+    "three/webgpu": "https://unpkg.com/three@0.172.0/build/three.webgpu.js",
+    "three/tsl": "https://unpkg.com/three@0.172.0/build/three.webgpu.js",
+    "three/addons/": "https://unpkg.com/three@0.172.0/examples/jsm/",
+    "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.8.3/build/index.module.js"
+  }
+}
+</script>
+<script type="module" src="app-v2.js?v=2026050522-qol5"></script>
+</body>
+</html>
