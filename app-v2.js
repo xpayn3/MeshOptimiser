@@ -395,41 +395,68 @@ function _initScrubberImpl({
 }
 
 let _loaderStart = 0, _loaderTimer = 0;
+// Returns true when the welcome modal is currently up — in that case the
+// loader UI is mirrored into the welcome pane and the standalone #loader
+// is suppressed (Adobe-style integrated splash + loader).
+function _welcomeActive() {
+  const bg = document.getElementById('welcome-modal');
+  return !!(bg && bg.classList.contains('show'));
+}
+
 function setLoader(show, msg='Loading', sub='') {
-  $('loader').classList.toggle('show', show);
+  const inWelcome = _welcomeActive();
+  if (show && inWelcome) {
+    try { _Welcome?.enterLoading(); } catch (_) {}
+  }
+  // Hide the standalone loader card when we're piggybacking on the welcome.
+  $('loader').classList.toggle('show', show && !inWelcome);
   $('loader-msg').textContent = msg;
   $('loader-sub').textContent = sub;
+  const wlMsg = $('wl-msg'); if (wlMsg) wlMsg.textContent = msg;
+  const wlSub = $('wl-sub'); if (wlSub) wlSub.textContent = sub;
+
   if (show) {
     if (!_loaderStart) {
       _loaderStart = performance.now();
       $('loader-log').innerHTML = '';
+      const wlLog = $('wl-log'); if (wlLog) wlLog.innerHTML = '';
       logProgress(msg + (sub ? ' - ' + sub : ''));
       _loaderTimer = setInterval(() => {
         const t = ((performance.now() - _loaderStart) / 1000).toFixed(1);
         $('loader-time').textContent = t + 's';
+        const wlTime = $('wl-time'); if (wlTime) wlTime.textContent = t + 's';
       }, 100);
     } else { logProgress(msg + (sub ? ' - ' + sub : '')); }
   } else {
     clearInterval(_loaderTimer);
     _loaderTimer = 0; _loaderStart = 0;
     setLoaderProgress(null);
+    // Failure / cancel path: load is over but onModelLoaded was never
+    // called (it would have hidden the welcome modal already). Bring the
+    // user back to the picker pane so they can try a different file.
+    if (_welcomeActive()) { try { _Welcome?.enterPick(); } catch (_) {} }
   }
 }
 function setLoaderProgress(pct) {
-  const bar = $('loader-bar');
-  if (pct == null) { bar.classList.add('indeterminate'); bar.style.width = '35%'; }
-  else { bar.classList.remove('indeterminate'); bar.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%'; }
+  const bars = [$('loader-bar'), $('wl-bar')].filter(Boolean);
+  for (const bar of bars) {
+    if (pct == null) { bar.classList.add('indeterminate'); bar.style.width = '35%'; }
+    else { bar.classList.remove('indeterminate'); bar.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%'; }
+  }
 }
 function logProgress(msg, kind='') {
-  const box = $('loader-log');
   const el = ((performance.now() - _loaderStart) / 1000).toFixed(1);
-  const line = document.createElement('div');
-  line.className = 'log-line';
-  line.innerHTML = `<span class="log-time">${el}s</span><span class="log-msg ${kind}">${msg}</span>`;
-  box.appendChild(line);
-  box.scrollTop = box.scrollHeight;
-  while (box.children.length > 80) box.removeChild(box.firstChild);
-  // mirror to global console panel
+  const lineHTML = `<span class="log-time">${el}s</span><span class="log-msg ${kind}">${msg}</span>`;
+  for (const id of ['loader-log', 'wl-log']) {
+    const box = document.getElementById(id);
+    if (!box) continue;
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    line.innerHTML = lineHTML;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+    while (box.children.length > 80) box.removeChild(box.firstChild);
+  }
   const lvl = kind === 'err' ? 'error' : kind === 'warn' ? 'warn' : kind === 'ok' ? 'success' : 'info';
   Log[lvl](msg, { tag: 'loader' });
 }
@@ -739,6 +766,10 @@ function _handleSelectedFile(file) {
     toast('Wrong file type', 'Please choose a .step, .stp, .glb, or .gltf file', 'warn');
     return;
   }
+  // While the welcome modal is up, switch its body to the loading pane so
+  // the user sees progress in-place instead of a separate floating loader.
+  try { if (_welcomeActive()) _Welcome?.enterLoading(); } catch (_) {}
+  try { _Welcome?.pushRecent(file); } catch (_) {}
   if (!_sceneReady) {
     _pendingFile = file;
     // The loader overlay already conveys "wait for engine init" — no toast.
@@ -812,9 +843,657 @@ async function convertStepViaServer(file) {
     // Don't auto-close — user dismisses via Cancel after copying the log
   }
 }
+// ── Welcome modal ────────────────────────────────────────────────────────
+// Shown on first boot and any time the user hits the toolbar's Open button
+// while no model is loaded. Hosts the drop zone + browse button + recent
+// files.
+//
+// File System Access API (showOpenFilePicker) is preferred when available —
+// it returns a FileSystemFileHandle we can persist in IndexedDB so a click
+// on a recent re-opens the same file directly (after a one-time permission
+// re-grant). Firefox / Safari lack the API and fall back to the classic
+// <input type=file>; recents on those browsers re-launch the picker.
+
+const _IDB_NAME = 'stepopt';
+const _IDB_STORE = 'handles';
+function _idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(_IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(_IDB_STORE)) db.createObjectStore(_IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function _idbPut(key, value) {
+  const db = await _idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(_IDB_STORE, 'readwrite');
+    tx.objectStore(_IDB_STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function _idbGet(key) {
+  const db = await _idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(_IDB_STORE, 'readonly');
+    const req = tx.objectStore(_IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function _recKey(name, size) { return name + '|' + size; }
+
+async function _openWithPicker() {
+  if (!window.showOpenFilePicker) {
+    document.getElementById('file-input')?.click();
+    return;
+  }
+  let handle;
+  try {
+    [handle] = await window.showOpenFilePicker({
+      types: [{
+        description: 'STEP / glTF',
+        accept: {
+          'model/step':         ['.step', '.stp'],
+          'model/gltf-binary':  ['.glb'],
+          'model/gltf+json':    ['.gltf'],
+        },
+      }],
+      excludeAcceptAllOption: false,
+      multiple: false,
+    });
+  } catch (e) {
+    if (e?.name !== 'AbortError') console.warn('[STEP] picker failed:', e);
+    return;
+  }
+  let file;
+  try { file = await handle.getFile(); }
+  catch (e) { console.warn('[STEP] handle.getFile failed:', e); return; }
+  try { await _idbPut(_recKey(file.name, file.size), handle); } catch (_) {}
+  _handleSelectedFile(file);
+}
+
+async function _openRecentByKey(key) {
+  if (window.showOpenFilePicker) {
+    try {
+      const handle = await _idbGet(key);
+      if (handle) {
+        const opts = { mode: 'read' };
+        let perm = 'denied';
+        try { perm = await handle.queryPermission(opts); } catch (_) {}
+        if (perm !== 'granted') {
+          try { perm = await handle.requestPermission(opts); } catch (_) {}
+        }
+        if (perm === 'granted') {
+          const file = await handle.getFile();
+          _handleSelectedFile(file);
+          return;
+        }
+      }
+    } catch (e) { console.warn('[STEP] recent open failed:', e); }
+  }
+  toast('Re-pick the file', 'Browser security needs a fresh pick for this file', 'info', 4000);
+  document.getElementById('file-input')?.click();
+}
+
+// ── Preferences (settings persistence) ──────────────────────────────────
+const _Prefs = (() => {
+  const KEY = 'stepopt-prefs';
+  const DEFAULTS = {
+    welcomeOnBoot: true,
+    autoRestoreSession: true,
+    autoFitOnLoad: true,
+    confirmDestructive: true,
+    showFps: true,
+  };
+  function load() {
+    try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); }
+    catch (_) { return { ...DEFAULTS }; }
+  }
+  function save(p) { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch (_) {} }
+  let cur = load();
+  return {
+    get(k) { return cur[k]; },
+    set(k, v) { cur[k] = v; save(cur); },
+    all() { return { ...cur }; },
+    reset() { cur = { ...DEFAULTS }; save(cur); },
+  };
+})();
+
+function _applyShowFps(show) {
+  const el = document.getElementById('fps');
+  const pill = el?.parentElement;
+  if (pill) pill.style.display = show ? '' : 'none';
+}
+
+// ── Settings modal ───────────────────────────────────────────────────────
+// Toolbar gear opens this. Mirrors the existing display/perf controls into
+// one place + adds new behavior toggles persisted via _Prefs. Mirrored
+// controls write back to the original element with a dispatched change so
+// existing handlers keep working.
+const _Settings = (() => {
+  let inited = false;
+  function _section(title, html) {
+    return `<div style="margin-bottom:18px">
+      <div style="font-size:var(--fs-sm);font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3);margin-bottom:6px">${title}</div>
+      ${html}
+    </div>`;
+  }
+  function _toggleRow(id, label, checked, help) {
+    return `<div class="toggle">
+      <span>${label}${help ? `<span style="display:block;color:var(--tx3);font-size:var(--fs-sm);font-weight:400;margin-top:2px;white-space:normal;line-height:1.4">${help}</span>` : ''}</span>
+      <label><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span class="switch"></span></label>
+    </div>`;
+  }
+  function _selectRow(id, label, options, current) {
+    const opts = options.map(([v, l]) => `<option value="${v}"${v === current ? ' selected' : ''}>${l}</option>`).join('');
+    return `<div class="toggle">
+      <span>${label}</span>
+      <select id="${id}" class="mac-sel" style="width:auto;min-width:160px;flex-shrink:0;font-size:var(--fs-md);padding:5px 24px 5px 10px">${opts}</select>
+    </div>`;
+  }
+  function _build() {
+    const body = document.getElementById('settings-body');
+    if (!body) return;
+    const p = _Prefs.all();
+    const bgVal = document.getElementById('bg-mode')?.value || 'dark';
+    const perfVal = document.getElementById('perf-mode')?.value || 'auto';
+    const rot = !!document.getElementById('toggle-rotate')?.checked;
+    const hilite = !!document.getElementById('toggle-highlight')?.checked;
+    const inst = !!document.getElementById('toggle-instance')?.checked;
+    const shareMat = !!document.getElementById('toggle-share-mat')?.checked;
+
+    body.innerHTML =
+      _section('Display',
+        _selectRow('set-bg', 'Background', [
+          ['dark','Dark'], ['grad','Studio gradient'], ['solid','Solid black'], ['white','White'],
+        ], bgVal) +
+        _toggleRow('set-rot', 'Auto-rotate camera', rot) +
+        _toggleRow('set-hilite', 'Highlight small parts', hilite) +
+        _toggleRow('set-show-fps', 'Show FPS counter', p.showFps)
+      ) +
+      _section('Performance',
+        _selectRow('set-perf', 'Quality', [
+          ['auto','Auto (adaptive)'], ['high','High'], ['low','Low (heavy scenes)'],
+        ], perfVal) +
+        _toggleRow('set-inst', 'Auto-instance duplicates', inst) +
+        _toggleRow('set-sharemat', 'Share materials by color', shareMat)
+      ) +
+      _section('Behavior',
+        _toggleRow('set-welcome', 'Welcome screen on boot', p.welcomeOnBoot) +
+        _toggleRow('set-restore', 'Restore last session', p.autoRestoreSession, 'Show a Resume button for your last opened file.') +
+        _toggleRow('set-autofit', 'Auto-fit on load', p.autoFitOnLoad) +
+        _toggleRow('set-confirm', 'Confirm destructive actions', p.confirmDestructive, 'Ask before deletes and other irreversible ops.')
+      ) +
+      _section('Storage', `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 0">
+          <button class="btn" id="set-clear-recents" style="width:auto;padding:7px 14px">Clear recent files</button>
+          <button class="btn" id="set-clear-handles" style="width:auto;padding:7px 14px">Clear file handles</button>
+        </div>
+      `);
+
+    const mirror = (newId, oldId, prop) => {
+      const el = document.getElementById(newId);
+      const target = document.getElementById(oldId);
+      if (!el || !target) return;
+      el.addEventListener('change', () => {
+        target[prop] = el[prop];
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    };
+    mirror('set-bg', 'bg-mode', 'value');
+    mirror('set-perf', 'perf-mode', 'value');
+    mirror('set-rot', 'toggle-rotate', 'checked');
+    mirror('set-hilite', 'toggle-highlight', 'checked');
+    mirror('set-inst', 'toggle-instance', 'checked');
+    mirror('set-sharemat', 'toggle-share-mat', 'checked');
+
+    [
+      ['set-welcome', 'welcomeOnBoot'],
+      ['set-restore', 'autoRestoreSession'],
+      ['set-autofit', 'autoFitOnLoad'],
+      ['set-confirm', 'confirmDestructive'],
+      ['set-show-fps', 'showFps'],
+    ].forEach(([id, key]) => {
+      document.getElementById(id)?.addEventListener('change', e => {
+        _Prefs.set(key, e.target.checked);
+        if (key === 'showFps') _applyShowFps(e.target.checked);
+      });
+    });
+
+    document.getElementById('set-clear-recents')?.addEventListener('click', () => {
+      try { localStorage.removeItem('stepopt-recents'); } catch (_) {}
+      toast('Recents cleared', '', 'success');
+    });
+    document.getElementById('set-clear-handles')?.addEventListener('click', async () => {
+      try {
+        const db = await _idbOpen();
+        await new Promise((res, rej) => {
+          const tx = db.transaction(_IDB_STORE, 'readwrite');
+          tx.objectStore(_IDB_STORE).clear();
+          tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+        });
+        toast('File handles cleared', '', 'success');
+      } catch (e) { toast('Clear failed', e?.message || String(e), 'error'); }
+    });
+  }
+  function _wire() {
+    if (inited) return;
+    inited = true;
+    const bg = document.getElementById('settings-modal');
+    if (!bg) return;
+    document.getElementById('settings-close')?.addEventListener('click', hide);
+    document.getElementById('settings-done')?.addEventListener('click', hide);
+    bg.addEventListener('click', e => { if (e.target === bg) hide(); });
+    document.addEventListener('keydown', e => {
+      if (!bg.classList.contains('show')) return;
+      if (e.key === 'Escape') { e.preventDefault(); hide(); }
+    });
+    document.getElementById('settings-reset')?.addEventListener('click', () => {
+      _Prefs.reset(); _build(); toast('Settings reset', 'Defaults restored', 'success');
+    });
+  }
+  function show() { _wire(); _build(); document.getElementById('settings-modal')?.classList.add('show'); }
+  function hide() { document.getElementById('settings-modal')?.classList.remove('show'); }
+  return { show, hide };
+})();
+
+const _Welcome = (() => {
+  const REC_KEY = 'stepopt-recents';
+  const REC_MAX = 8;
+  let inited = false;
+
+  function _load() {
+    try { return JSON.parse(localStorage.getItem(REC_KEY) || '[]'); }
+    catch (_) { return []; }
+  }
+  function _save(list) {
+    try { localStorage.setItem(REC_KEY, JSON.stringify(list.slice(0, REC_MAX))); }
+    catch (_) {}
+  }
+  function _fmtBytes(n) {
+    if (!Number.isFinite(n)) return '';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+  function _fmtAge(ts) {
+    const d = Math.max(0, Date.now() - ts);
+    const min = 60 * 1000, hr = 60 * min, day = 24 * hr;
+    if (d < min) return 'just now';
+    if (d < hr) return Math.floor(d / min) + 'm ago';
+    if (d < day) return Math.floor(d / hr) + 'h ago';
+    if (d < 7 * day) return Math.floor(d / day) + 'd ago';
+    return new Date(ts).toLocaleDateString();
+  }
+
+  async function _renderRecents() {
+    const box = document.getElementById('welcome-recents');
+    if (!box) return;
+    const list = _load();
+    if (!list.length) {
+      box.innerHTML = `<div style="padding:10px 12px;background:var(--bg2);border-radius:var(--r-md);color:var(--tx3);font-size:var(--fs-md);text-align:center">No recent files yet</div>`;
+      _renderResume(null);
+      return;
+    }
+    // Resume CTA — top recent if its handle is still stored AND the pref is on.
+    if (typeof _Prefs !== 'undefined' && _Prefs.get('autoRestoreSession')) {
+      try {
+        const top = list[0];
+        const handle = await _idbGet(_recKey(top.name, top.size));
+        _renderResume(handle ? top : null);
+      } catch (_) { _renderResume(null); }
+    } else {
+      _renderResume(null);
+    }
+    box.innerHTML = list.map((r, i) => `
+      <button class="welcome-recent" data-idx="${i}" style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);text-align:left;cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out)">
+        <i data-lucide="file" style="width:14px;height:14px;color:var(--tx3);flex-shrink:0"></i>
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-md)">${r.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</span>
+        <span style="color:var(--tx3);font-size:var(--fs-sm);flex-shrink:0">${_fmtBytes(r.size)}</span>
+        <span style="color:var(--tx3);font-size:var(--fs-sm);flex-shrink:0">${_fmtAge(r.ts)}</span>
+      </button>
+    `).join('');
+    box.querySelectorAll('.welcome-recent').forEach(el => {
+      el.addEventListener('mouseenter', () => { el.style.background = 'var(--bg3)'; el.style.borderColor = 'var(--bd2)'; });
+      el.addEventListener('mouseleave', () => { el.style.background = 'var(--bg2)'; el.style.borderColor = 'var(--bd)'; });
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.idx, 10);
+        const rec = _load()[idx];
+        if (!rec) return;
+        _openRecentByKey(_recKey(rec.name, rec.size));
+      });
+    });
+    try { _lucide(); } catch (_) {}
+  }
+
+  function _renderResume(rec) {
+    const slot = document.getElementById('welcome-resume');
+    if (!slot) return;
+    if (!rec) { slot.innerHTML = ''; return; }
+    const safeName = rec.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    slot.innerHTML = `
+      <button id="welcome-resume-btn" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;margin-bottom:14px;background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:var(--r-md);color:var(--tx);text-align:left;cursor:pointer;transition:filter 120ms var(--ease-out)">
+        <i data-lucide="play" style="width:18px;height:18px;color:var(--ac);flex-shrink:0"></i>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:var(--fs-md);font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Resume ${safeName}</span>
+          <span style="display:block;font-size:var(--fs-sm);color:var(--tx2);margin-top:2px">Open the last file you worked on</span>
+        </span>
+        <span style="color:var(--tx3);font-size:var(--fs-sm);flex-shrink:0">${_fmtAge(rec.ts)}</span>
+      </button>`;
+    document.getElementById('welcome-resume-btn')?.addEventListener('click', () => {
+      _openRecentByKey(_recKey(rec.name, rec.size));
+    });
+    document.getElementById('welcome-resume-btn')?.addEventListener('mouseenter', e => { e.currentTarget.style.filter = 'brightness(1.15)'; });
+    document.getElementById('welcome-resume-btn')?.addEventListener('mouseleave', e => { e.currentTarget.style.filter = ''; });
+    try { _lucide(); } catch (_) {}
+  }
+
+  function pushRecent(file) {
+    if (!file || !file.name) return;
+    const list = _load().filter(r => r.name !== file.name);
+    list.unshift({ name: file.name, size: file.size || 0, ts: Date.now() });
+    _save(list);
+  }
+
+  function _wire() {
+    if (inited) return;
+    inited = true;
+    const bg = document.getElementById('welcome-modal');
+    const drop = document.getElementById('welcome-drop');
+    const pick = document.getElementById('welcome-pick');
+    const close = document.getElementById('welcome-close');
+    const input = document.getElementById('file-input');
+    if (!bg || !drop || !pick || !input) return;
+
+    pick.addEventListener('click', () => _openWithPicker());
+    drop.addEventListener('click', e => {
+      // Don't let the browse button bubble into the dropzone click.
+      if (e.target.closest('#welcome-pick')) return;
+      _openWithPicker();
+    });
+    close?.addEventListener('click', hide);
+    bg.addEventListener('click', e => { if (e.target === bg) hide(); });
+    document.addEventListener('keydown', e => {
+      if (!bg.classList.contains('show')) return;
+      if (e.key === 'Escape') { e.preventDefault(); hide(); }
+    });
+
+    drop.addEventListener('dragover', e => {
+      e.preventDefault();
+      drop.style.borderColor = 'var(--ac)';
+      drop.style.background = 'var(--bg3)';
+    });
+    drop.addEventListener('dragleave', () => {
+      drop.style.borderColor = 'var(--bd2)';
+      drop.style.background = 'var(--bg2)';
+    });
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.style.borderColor = 'var(--bd2)';
+      drop.style.background = 'var(--bg2)';
+      const f = e.dataTransfer?.files?.[0];
+      if (f) _handleSelectedFile(f);
+    });
+
+    // Loader pane buttons (Cancel / Copy log) — forward to the existing
+    // standalone-loader handlers so we keep one source of truth for the logic.
+    document.getElementById('wl-cancel-btn')?.addEventListener('click', () => {
+      document.getElementById('loader-cancel-btn')?.click();
+    });
+    document.getElementById('wl-copy-btn')?.addEventListener('click', () => {
+      document.getElementById('loader-copy-btn')?.click();
+    });
+  }
+
+  function _setMode(mode) {
+    const pick = document.getElementById('welcome-pick-pane');
+    const load = document.getElementById('welcome-load-pane');
+    const title = document.getElementById('welcome-title');
+    const closeBtn = document.getElementById('welcome-close');
+    if (mode === 'loading') {
+      if (pick) pick.style.display = 'none';
+      if (load) load.style.display = 'block';
+      if (title) title.textContent = 'Opening file…';
+      if (closeBtn) closeBtn.style.display = 'none';
+    } else {
+      if (pick) pick.style.display = 'block';
+      if (load) load.style.display = 'none';
+      if (title) title.textContent = 'Open a model';
+      if (closeBtn) closeBtn.style.display = '';
+    }
+  }
+  function enterLoading() { _setMode('loading'); }
+  function enterPick() { _setMode('pick'); }
+
+  function show() {
+    _wire();
+    const bg = document.getElementById('welcome-modal');
+    if (!bg) return;
+    _renderRecents();
+    _setMode('pick');
+    bg.classList.add('show');
+  }
+  function hide() {
+    const bg = document.getElementById('welcome-modal');
+    if (bg) bg.classList.remove('show');
+    _setMode('pick'); // reset so next show starts on the picker
+  }
+  function toggle() {
+    const bg = document.getElementById('welcome-modal');
+    if (!bg) return;
+    if (bg.classList.contains('show')) hide(); else show();
+  }
+  return { show, hide, toggle, pushRecent, enterLoading, enterPick };
+})();
+
+// ── Action registry, command palette, shortcuts overlay ────────────────
+const _Actions = (() => {
+  const _click = id => () => document.getElementById(id)?.click();
+  const list = [
+    { id:'open',         group:'File',       label:'Open file…',                 kbd:'Ctrl+O', run: () => _openWithPicker() },
+    { id:'export',       group:'File',       label:'Export model…',              run: _click('btn-export') },
+    { id:'savescene',    group:'File',       label:'Save scene…',                run: _click('btn-save-scene') },
+    { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: _click('btn-fit') },
+    { id:'reset',        group:'View',       label:'Reset camera',               run: _click('btn-reset') },
+    { id:'frameSel',     group:'View',       label:'Frame selection',            run: () => { try { frameSelected(); } catch (_) {} } },
+    { id:'solid',        group:'View',       label:'Solid view',                 kbd:'1', run: () => { try { setViewMode('solid'); } catch (_) {} } },
+    { id:'wire',         group:'View',       label:'Wireframe view',             kbd:'2', run: () => { try { setViewMode('wire'); } catch (_) {} } },
+    { id:'edges',        group:'View',       label:'Edges view',                 kbd:'3', run: () => { try { setViewMode('edges'); } catch (_) {} } },
+    { id:'tgGrid',       group:'View',       label:'Toggle grid',                run: _click('tg-grid') },
+    { id:'tgAxes',       group:'View',       label:'Toggle axes',                run: _click('tg-axes') },
+    { id:'tgBbox',       group:'View',       label:'Toggle bounding boxes',      run: _click('tg-bbox') },
+    { id:'selAll',       group:'Selection',  label:'Select all',                 kbd:'Ctrl+A', run: _click('sel-all') },
+    { id:'selInvert',    group:'Selection',  label:'Invert selection',           run: _click('sel-invert') },
+    { id:'selClear',     group:'Selection',  label:'Clear selection',            kbd:'Esc', run: _click('sel-clear') },
+    { id:'isolate',      group:'Selection',  label:'Isolate selected',           kbd:'S', run: () => { try { isolateSelected(); } catch (_) {} } },
+    { id:'showAll',      group:'Selection',  label:'Show all parts',             run: () => { try { showAllParts(); } catch (_) {} } },
+    { id:'hideUnsel',    group:'Selection',  label:'Hide unselected',            run: () => { try { hideUnselected(); } catch (_) {} } },
+    { id:'reveal',       group:'Selection',  label:'Reveal selected in tree',    kbd:'Shift+S', run: () => { try { revealSelectedInTree(); } catch (_) {} } },
+    { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undo(); } catch (_) {} } },
+    { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', run: () => { try { redo(); } catch (_) {} } },
+    { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', run: () => { if (state.selected.size) deleteParts([...state.selected], 'Deleted via palette'); } },
+    { id:'recenter',     group:'Edit',       label:'Recenter model',             run: _click('btn-recenter') },
+    { id:'group',        group:'Edit',       label:'Group selection',            run: _click('btn-group-sel') },
+    { id:'merge',        group:'Edit',       label:'Merge selection',            run: _click('btn-merge-sel') },
+    { id:'smartFit',     group:'Edit',       label:'Smart-fit selection',        run: _click('btn-bbox-selected') },
+    { id:'smartFitAll',  group:'Edit',       label:'Smart-fit all parts',        run: _click('btn-bbox-all') },
+    { id:'flatten',      group:'Edit',       label:'Advanced flatten…',          run: _click('tree-flatten') },
+    { id:'settings',     group:'App',        label:'Open settings',              kbd:'Ctrl+,', run: () => _Settings.show() },
+    { id:'shortcuts',    group:'App',        label:'Keyboard shortcuts',         kbd:'?', run: () => _Shortcuts.show() },
+    { id:'palette',      group:'App',        label:'Command palette',            kbd:'Ctrl+K', run: () => _CmdK.show() },
+    { id:'console',      group:'App',        label:'Toggle log console',         kbd:'`', run: _click('sb-console-btn') },
+    { id:'welcome',      group:'App',        label:'Open welcome screen',        run: () => _Welcome.show() },
+  ];
+  return { list };
+})();
+
+const _CmdK = (() => {
+  let inited = false;
+  let activeIdx = 0;
+  let visibleItems = [];
+
+  function _score(query, label) {
+    const q = query.toLowerCase().trim();
+    const l = label.toLowerCase();
+    if (!q) return 1;
+    if (l.startsWith(q)) return 100;
+    if (l.includes(q)) return 50;
+    let i = 0;
+    for (const ch of l) { if (ch === q[i]) i++; if (i === q.length) return 25 - (l.length - q.length); }
+    return 0;
+  }
+  function _render(query) {
+    const list = document.getElementById('cmdk-list');
+    if (!list) return;
+    const items = _Actions.list
+      .map(a => ({ a, s: _score(query, a.label) + _score(query, a.group) * 0.3 }))
+      .filter(x => x.s > 0)
+      .sort((x, y) => y.s - x.s)
+      .slice(0, 24)
+      .map(x => x.a);
+    visibleItems = items;
+    if (activeIdx >= items.length) activeIdx = 0;
+    list.innerHTML = items.length === 0
+      ? `<div style="padding:18px;text-align:center;color:var(--tx3);font-size:var(--fs-md)">No matches</div>`
+      : items.map((a, i) => `
+        <div class="cmdk-item${i === activeIdx ? ' active' : ''}" data-idx="${i}" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:var(--fs-md);background:${i === activeIdx ? 'var(--ac-soft)' : 'transparent'}">
+          <span style="color:var(--tx3);font-size:var(--fs-sm);min-width:54px">${a.group}</span>
+          <span style="flex:1;color:var(--tx)">${a.label}</span>
+          ${a.kbd ? `<span style="color:var(--tx3);font-family:ui-monospace,monospace;font-size:var(--fs-sm);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 7px">${a.kbd}</span>` : ''}
+        </div>
+      `).join('');
+    list.querySelectorAll('.cmdk-item').forEach(el => {
+      el.addEventListener('mouseenter', () => {
+        activeIdx = parseInt(el.dataset.idx, 10) || 0;
+        list.querySelectorAll('.cmdk-item').forEach((e, i) => {
+          e.style.background = i === activeIdx ? 'var(--ac-soft)' : 'transparent';
+        });
+      });
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.idx, 10);
+        const it = visibleItems[idx];
+        if (it) { hide(); try { it.run(); } catch (e) { console.warn('[cmdk] run failed:', e); } }
+      });
+    });
+  }
+  function _wire() {
+    if (inited) return;
+    inited = true;
+    const bg = document.getElementById('cmdk-modal');
+    const input = document.getElementById('cmdk-input');
+    if (!bg || !input) return;
+    bg.addEventListener('click', e => { if (e.target === bg) hide(); });
+    input.addEventListener('input', () => { activeIdx = 0; _render(input.value); });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(visibleItems.length - 1, activeIdx + 1); _render(input.value); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(0, activeIdx - 1); _render(input.value); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        const it = visibleItems[activeIdx];
+        if (it) { hide(); try { it.run(); } catch (err) { console.warn('[cmdk] run failed:', err); } }
+      }
+      else if (e.key === 'Escape') { e.preventDefault(); hide(); }
+    });
+  }
+  function show() {
+    _wire();
+    const bg = document.getElementById('cmdk-modal');
+    const input = document.getElementById('cmdk-input');
+    if (!bg || !input) return;
+    input.value = ''; activeIdx = 0; _render('');
+    bg.classList.add('show');
+    setTimeout(() => input.focus(), 30);
+  }
+  function hide() { document.getElementById('cmdk-modal')?.classList.remove('show'); }
+  return { show, hide };
+})();
+
+const _Shortcuts = (() => {
+  let inited = false;
+  function _render() {
+    const body = document.getElementById('shortcuts-body');
+    if (!body) return;
+    const groups = {};
+    for (const a of _Actions.list) {
+      if (!a.kbd) continue;
+      (groups[a.group] = groups[a.group] || []).push(a);
+    }
+    body.innerHTML = Object.entries(groups).map(([g, items]) => `
+      <div style="margin-bottom:14px">
+        <div style="font-size:var(--fs-sm);font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3);margin-bottom:6px">${g}</div>
+        ${items.map(a => `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:var(--fs-md)">
+          <span style="color:var(--tx)">${a.label}</span>
+          <span style="color:var(--tx2);font-family:ui-monospace,monospace;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 8px;font-size:var(--fs-sm)">${a.kbd}</span>
+        </div>`).join('')}
+      </div>
+    `).join('');
+  }
+  function _wire() {
+    if (inited) return;
+    inited = true;
+    const bg = document.getElementById('shortcuts-modal');
+    if (!bg) return;
+    document.getElementById('shortcuts-close')?.addEventListener('click', hide);
+    bg.addEventListener('click', e => { if (e.target === bg) hide(); });
+    document.addEventListener('keydown', e => {
+      if (!bg.classList.contains('show')) return;
+      if (e.key === 'Escape') { e.preventDefault(); hide(); }
+    });
+  }
+  function show() { _wire(); _render(); document.getElementById('shortcuts-modal')?.classList.add('show'); }
+  function hide() { document.getElementById('shortcuts-modal')?.classList.remove('show'); }
+  return { show, hide };
+})();
+
+// Global key bindings: Cmd/Ctrl+K · Cmd/Ctrl+, · ?
+window.addEventListener('keydown', e => {
+  const t = e.target;
+  const inField = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault(); _CmdK.show(); return;
+  }
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === ',') {
+    e.preventDefault(); _Settings.show(); return;
+  }
+  if (!inField && (e.key === '?' || (e.key === '/' && e.shiftKey))) {
+    e.preventDefault(); _Shortcuts.show();
+  }
+}, true);
+
 (function wireEarly() {
   const btn = $('btn-open'), input = $('file-input');
-  btn?.addEventListener('click', () => { console.log('[STEP] Open clicked'); input.click(); });
+  btn?.addEventListener('click', () => {
+    if (state.parts.length === 0) _Welcome.show();
+    else _openWithPicker();
+  });
+  $('btn-settings')?.addEventListener('click', () => _Settings.show());
+  try { _applyShowFps(_Prefs.get('showFps') !== false); } catch(_){}
+  (function wireBrandMenu(){
+    const btn = $('btn-brand'), menu = $('brand-menu');
+    if (!btn || !menu) return;
+    const close = () => { menu.classList.remove('show'); btn.setAttribute('aria-expanded','false'); menu.setAttribute('aria-hidden','true'); };
+    const open  = () => { menu.classList.add('show');    btn.setAttribute('aria-expanded','true');  menu.setAttribute('aria-hidden','false'); };
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      menu.classList.contains('show') ? close() : open();
+    });
+    document.addEventListener('click', e => {
+      if (!menu.classList.contains('show')) return;
+      if (menu.contains(e.target) || btn.contains(e.target)) return;
+      close();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && menu.classList.contains('show')) { close(); btn.focus(); }
+    });
+    $('brand-menu-settings')?.addEventListener('click', () => { close(); _Settings.show(); });
+    $('brand-menu-shortcuts')?.addEventListener('click', () => { close(); try { _CmdK.show(); } catch(_){} });
+  })();
   input?.addEventListener('change', e => {
     const f = e.target.files[0]; e.target.value = '';
     _handleSelectedFile(f);
@@ -975,7 +1654,11 @@ function initScene() {
   scene.add(new THREE.HemisphereLight(0xffffff, 0x303642, 0.55));
   const dir = new THREE.DirectionalLight(0xffffff, 1.2); dir.position.set(80, 60, 100); scene.add(dir);
   const fill = new THREE.DirectionalLight(0xb0c4ff, 0.4); fill.position.set(-80, -40, 60); scene.add(fill);
-  gridHelper = new THREE.GridHelper(200, 40, 0x2a3142, 0x1a2030); gridHelper.rotation.x = Math.PI / 2; scene.add(gridHelper);
+  gridHelper = new THREE.GridHelper(200, 40, 0x3a4358, 0x232938);
+  gridHelper.rotation.x = Math.PI / 2;
+  gridHelper.material.transparent = true;
+  gridHelper.material.opacity = 0.45;
+  scene.add(gridHelper);
   axesHelper = new THREE.AxesHelper(8); scene.add(axesHelper);
   state.partsRoot = new THREE.Group(); state.partsRoot.name = '_partsRoot'; scene.add(state.partsRoot);
   // Mass scenes: partsRoot's local matrix doesn't change unless we rotate or
@@ -2524,7 +3207,9 @@ function clearModel() {
 function onModelLoaded(filename) {
   $('btn-export').disabled = false; $('btn-fit').disabled = false; $('btn-reset').disabled = false;
   const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = false;
-  $('dropzone').style.display = 'none';
+  $('dropzone')?.style && ($('dropzone').style.display = 'none');
+  // Welcome splash auto-dismisses on successful model load.
+  try { _Welcome?.hide(); } catch (_) {}
   setStatus(filename);
 }
 
@@ -2823,6 +3508,36 @@ function _rebuildTreeHierarchical() {
     }
   }
 
+  // ── Ancestor highlight (C4D-style) ───────────────────────────────────
+  // When the user clicks a part (or a group), every ancestor group up to the
+  // root gets a subdued highlight so they can quickly trace the selection
+  // back up the tree. Compute the set once here; each group row later checks
+  // membership and adds an `ancestor-selected` class.
+  const ancestorSelected = new Set();
+  {
+    const byIdAS = new Map();
+    const partNodeByPartId = new Map();
+    for (const n of all) {
+      byIdAS.set(n.id, n);
+      if (n.kind === 'part') partNodeByPartId.set(n.partId, n);
+    }
+    const walkAncestors = (id) => {
+      const cur = byIdAS.get(id);
+      if (!cur) return;
+      let p = cur.parentId != null ? byIdAS.get(cur.parentId) : null;
+      while (p) {
+        if (ancestorSelected.has(p.id)) break;
+        ancestorSelected.add(p.id);
+        p = p.parentId != null ? byIdAS.get(p.parentId) : null;
+      }
+    };
+    for (const partId of (state.selected || [])) {
+      const n = partNodeByPartId.get(partId);
+      if (n) walkAncestors(n.id);
+    }
+    for (const gid of (state.selectedGroupIds || [])) walkAncestors(gid);
+  }
+
   // Build the running ancestor stack as we walk the DFS-ordered list.
   const ancestorStack = []; // group ids of currently-open ancestors
   const partInGroup = new Set();   // parts whose ancestor is collapsed (for shownParts count)
@@ -2874,6 +3589,7 @@ function _rebuildTreeHierarchical() {
         // Re-apply the selected highlight on rebuild so it survives expand /
         // collapse / search filter.
         if (state.selectedGroupIds.has(n.id)) row.classList.add('selected');
+        else if (ancestorSelected.has(n.id)) row.classList.add('ancestor-selected');
         const isCollapsed = collapsed.has(n.id);
         if (isCollapsed) row.classList.add('collapsed');
         // C4D-style row: small +/- box, colored type icon, colored label.
@@ -2892,11 +3608,13 @@ function _rebuildTreeHierarchical() {
         const p = getPart(n.partId);
         row.classList.add('is-part');
         if (state.selected.has(p.partId)) row.classList.add('selected');
-        // Highlight parts whose ancestor group is currently clicked-on so
-        // the user can visually trace the group's contents in the tree.
+        // Subdued highlight for parts whose ancestor group is currently clicked
+        // (so the user can visually trace the group's contents). Different
+        // class so the CSS can paint these rows at half intensity — matches
+        // the C4D pattern of "primary = clicked, secondary = related".
         else if (state.selectedGroupIds && state.selectedGroupIds.size) {
           for (const a of ancestorStack) {
-            if (state.selectedGroupIds.has(a.id)) { row.classList.add('selected'); break; }
+            if (state.selectedGroupIds.has(a.id)) { row.classList.add('ancestor-selected'); break; }
           }
         }
         if (!p.visible) row.classList.add('hidden-vis');
@@ -3080,13 +3798,33 @@ function rebuildTreeSelectionOnly() {
   const treeEl = $('tree');
   if (!treeEl) return;
   const next = state.selected;
-  // Combine explicit group selection with ancestor breadcrumbs so the
-  // highlight reaches all parents of any selected part.
+  // Two tiers of group highlight:
+  //   nextGFull = directly clicked groups → full-intensity yellow (.selected)
+  //   nextGAnc  = ancestors of any selected part/group → subdued (.ancestor-selected)
   const explicitG = state.selectedGroupIds || new Set();
   const ancestorG = _computeAncestorGroupHighlights();
-  const nextG = new Set();
-  for (const x of explicitG) nextG.add(x);
-  for (const x of ancestorG) nextG.add(x);
+  const nextGFull = new Set(explicitG);
+  const nextGAnc = new Set();
+  for (const x of ancestorG) if (!nextGFull.has(x)) nextGAnc.add(x);
+  // Parts whose ancestor group is explicitly clicked also get the subdued
+  // ancestor-selected class so the user can see the group's contents at a
+  // glance without losing the "primary = clicked" cue.
+  // Compute these by walking treeNodes once.
+  const ancestorPartSet = new Set();
+  if (explicitG.size && state.treeNodes && state.treeNodes.length) {
+    const all = state.treeNodes;
+    let depth0 = -1;
+    let activeAncestor = null;
+    const stack = [];
+    for (const n of all) {
+      while (stack.length && stack[stack.length - 1].depth >= n.depth) stack.pop();
+      if (n.kind === 'group') stack.push({ id: n.id, depth: n.depth });
+      else if (n.kind === 'part') {
+        for (const a of stack) if (explicitG.has(a.id)) { ancestorPartSet.add(n.partId); break; }
+      }
+    }
+  }
+
   // Cold path — first call after a tree rebuild; do the full sweep AND seed
   // the cache so subsequent calls hit the fast path.
   if (!_treeSelCache) {
@@ -3098,11 +3836,13 @@ function rebuildTreeSelectionOnly() {
         const id = parseInt(node.dataset.partId, 10);
         const on = next.has(id);
         node.classList.toggle('selected', on);
+        node.classList.toggle('ancestor-selected', !on && ancestorPartSet.has(id));
         if (on) _treeSelCache.add(id);
       } else if (node.dataset.groupId) {
         const gid = parseInt(node.dataset.groupId, 10);
-        const on = nextG.has(gid);
+        const on = nextGFull.has(gid);
         node.classList.toggle('selected', on);
+        node.classList.toggle('ancestor-selected', !on && nextGAnc.has(gid));
         if (on) _treeGroupSelCache.add(gid);
       }
     }
@@ -3121,34 +3861,48 @@ function rebuildTreeSelectionOnly() {
     }
     treeEl._selIndex = idx;
   }
-  // Removed: rows in cache but not in next.
+  // Diff parts. Doing a per-row toggle is the simple correct path for ancestor
+  // updates; cache only tracks the explicit-selected set.
   for (const id of _treeSelCache) {
     if (!next.has(id)) {
       const r = idx.parts.get(id);
-      if (r) r.classList.remove('selected');
+      if (r) {
+        r.classList.remove('selected');
+        r.classList.toggle('ancestor-selected', ancestorPartSet.has(id));
+      }
     }
   }
-  // Added: rows in next but not in cache.
   for (const id of next) {
     if (!_treeSelCache.has(id)) {
       const r = idx.parts.get(id);
-      if (r) r.classList.add('selected');
+      if (r) { r.classList.add('selected'); r.classList.remove('ancestor-selected'); }
     }
   }
+  // Sweep ancestor classes for parts that are unrelated to the new selection
+  // — cheap because parts is bounded by part count and most don't have the class.
+  for (const [id, r] of idx.parts) {
+    if (next.has(id)) continue;
+    r.classList.toggle('ancestor-selected', ancestorPartSet.has(id));
+  }
   for (const gid of _treeGroupSelCache) {
-    if (!nextG.has(gid)) {
+    if (!nextGFull.has(gid)) {
       const r = idx.groups.get(gid);
       if (r) r.classList.remove('selected');
     }
   }
-  for (const gid of nextG) {
+  for (const gid of nextGFull) {
     if (!_treeGroupSelCache.has(gid)) {
       const r = idx.groups.get(gid);
-      if (r) r.classList.add('selected');
+      if (r) { r.classList.add('selected'); r.classList.remove('ancestor-selected'); }
     }
   }
+  // Sweep ancestor classes on group rows — same shape as parts.
+  for (const [gid, r] of idx.groups) {
+    if (nextGFull.has(gid)) continue;
+    r.classList.toggle('ancestor-selected', nextGAnc.has(gid));
+  }
   _treeSelCache = new Set(next);
-  _treeGroupSelCache = new Set(nextG);
+  _treeGroupSelCache = new Set(nextGFull);
 }
 
 // rAF-coalesce the (expensive) selection-highlight rebuild. Marquee drag,
@@ -4344,9 +5098,38 @@ function setViewMode(mode) {
   if (mode === 'mesh') mode = 'solid';
   state.viewMode = mode;
   const apply = (m) => {
-    if (mode === 'solid') { m.wireframe=false; m.transparent=false; m.opacity=1; m.depthWrite=true; }
-    else if (mode === 'wire') { m.wireframe=true; m.transparent=false; m.opacity=1; m.depthWrite=true; }
-    else if (mode === 'xray') { m.wireframe=false; m.transparent=true; m.opacity=0.35; m.depthWrite=false; }
+    if (mode === 'solid') {
+      m.wireframe = false;
+      m.transparent = false; m.opacity = 1; m.depthWrite = true; m.depthTest = true;
+      m.alphaToCoverage = false;
+      m.side = THREE.FrontSide;
+    } else if (mode === 'wire') {
+      m.wireframe = true;
+      m.transparent = false; m.opacity = 1; m.depthWrite = true; m.depthTest = true;
+      m.alphaToCoverage = false;
+      m.side = THREE.FrontSide;
+    } else if (mode === 'xray') {
+      // Additive-blend x-ray. Each surface ADDS its color to the framebuffer;
+      // overlapping surfaces accumulate brightness so dense regions (= inner
+      // structure) actually show up brighter rather than getting overdrawn.
+      //   - transparent=true + AdditiveBlending: addition is commutative, so
+      //     three.js's distance-sort instability across InstancedMesh groups
+      //     can't cause whole meshes to disappear — every surface contributes
+      //     the same amount regardless of draw order.
+      //   - depthTest=false + depthWrite=false: no surface occludes another,
+      //     so internal screws / ribs / inner shells all render.
+      //   - DoubleSide: the back walls of containers contribute brightness
+      //     too, which is what makes hidden interiors readable.
+      // Visual: looks like a glowing volumetric / density render — bright
+      // where many surfaces stack, dim where you're looking through one.
+      m.wireframe = false;
+      m.transparent = true;
+      m.opacity = 0.28;
+      m.depthWrite = false; m.depthTest = false;
+      m.alphaToCoverage = false;
+      m.blending = THREE.AdditiveBlending;
+      m.side = THREE.DoubleSide;
+    }
     m.needsUpdate = true;
   };
   for (const m of state.materialByColor.values()) apply(m);
@@ -6619,6 +7402,26 @@ References:  {
   return new Blob(chunks, { type: 'application/octet-stream' });
 }
 
+// OBJ precision — default JS Number.toString() emits up to 17 significant
+// digits, which roughly doubles file size with no real-world benefit. 6
+// decimals on positions/UVs and 5 on normals is sub-micron at 1 m scale
+// and well below CAD tolerance.
+const _OBJ_POS_DEC = 6;
+const _OBJ_UV_DEC  = 6;
+const _OBJ_NRM_DEC = 5;
+
+// Format a float with up to `d` decimals, stripping trailing zeros and the
+// dangling `.` so we don't pay for digits we didn't need. Avoids "-0".
+function _objFloat(n, d) {
+  if (!isFinite(n) || n === 0) return '0';
+  let s = n.toFixed(d);
+  if (s.indexOf('.') !== -1) {
+    s = s.replace(/0+$/, '');
+    if (s.endsWith('.')) s = s.slice(0, -1);
+  }
+  return s === '-0' ? '0' : s;
+}
+
 function _exportObjStreaming(root, mtlBaseName) {
   const TARGET_CHUNK = 4 * 1024 * 1024;   // 4 MB per string chunk
   // Banner spells out the OBJ format's two structural limitations so a future
@@ -6715,13 +7518,13 @@ function _exportObjStreaming(root, mtlBaseName) {
     const vc = pos.count;
     for (let i = 0; i < vc; i++) {
       tmpV.fromBufferAttribute(pos, i).applyMatrix4(matrix);
-      append('v ' + tmpV.x + ' ' + tmpV.y + ' ' + tmpV.z + '\n');
+      append('v ' + _objFloat(tmpV.x, _OBJ_POS_DEC) + ' ' + _objFloat(tmpV.y, _OBJ_POS_DEC) + ' ' + _objFloat(tmpV.z, _OBJ_POS_DEC) + '\n');
     }
     // uvs
     if (uv) {
       const uc = uv.count;
       for (let i = 0; i < uc; i++) {
-        append('vt ' + uv.getX(i) + ' ' + uv.getY(i) + '\n');
+        append('vt ' + _objFloat(uv.getX(i), _OBJ_UV_DEC) + ' ' + _objFloat(uv.getY(i), _OBJ_UV_DEC) + '\n');
       }
     }
     // normals (apply normal matrix; renormalize)
@@ -6729,7 +7532,7 @@ function _exportObjStreaming(root, mtlBaseName) {
       const nc = nrm.count;
       for (let i = 0; i < nc; i++) {
         tmpN.fromBufferAttribute(nrm, i).applyMatrix3(normalMatrix).normalize();
-        append('vn ' + tmpN.x + ' ' + tmpN.y + ' ' + tmpN.z + '\n');
+        append('vn ' + _objFloat(tmpN.x, _OBJ_NRM_DEC) + ' ' + _objFloat(tmpN.y, _OBJ_NRM_DEC) + ' ' + _objFloat(tmpN.z, _OBJ_NRM_DEC) + '\n');
       }
     }
     // faces — combine all referenced index arrays + format depends on what's
@@ -6793,13 +7596,13 @@ function _exportObjStreaming(root, mtlBaseName) {
     const lines = ['# Exported by STEP Optimizer\n'];
     for (const e of matByHex.values()) {
       lines.push(`newmtl ${e.name}\n`);
-      lines.push(`Kd ${e.r} ${e.g} ${e.b}\n`);
+      lines.push(`Kd ${_objFloat(e.r, 4)} ${_objFloat(e.g, 4)} ${_objFloat(e.b, 4)}\n`);
       lines.push(`Ka 0 0 0\n`);
       lines.push(`Ks 0 0 0\n`);
       lines.push(`d 1\n`);                       // opacity
       lines.push(`illum 2\n`);                   // diffuse + specular
-      lines.push(`Pr ${e.roughness}\n`);
-      lines.push(`Pm ${e.metalness}\n`);
+      lines.push(`Pr ${_objFloat(e.roughness, 3)}\n`);
+      lines.push(`Pm ${_objFloat(e.metalness, 3)}\n`);
     }
     mtlBlob = new Blob(lines, { type: 'text/plain' });
   }
@@ -7312,7 +8115,23 @@ async function doExport({ format, merge, visibleOnly, scale=1, axis='z-up', orig
 function wireUI() {
   new ResizeObserver(onResize).observe($('canvas'));
   $('btn-fit').addEventListener('click', fitToView);
-  $('btn-reset').addEventListener('click', () => { camera.up.set(0,0,1); fitToView(); });
+  $('btn-reset').addEventListener('click', async () => {
+    // No source cached (camera-only mode for legacy state): just reset view.
+    if (!state._sourceFile) { camera.up.set(0,0,1); fitToView(); return; }
+    const editCount = (state.history?.length || 0)
+      + (state.parts?.filter(p => p.deleted).length || 0);
+    const detail = editCount > 0
+      ? `Discards every edit (${editCount} undo entr${editCount === 1 ? 'y' : 'ies'} + deletions, hierarchy changes, colors, merges, splits) and re-parses ${state._sourceFile.name}.`
+      : `Re-parses ${state._sourceFile.name} from scratch.`;
+    const ok = await appConfirm(detail, {
+      title: 'Revert to original model?',
+      okLabel: 'Revert',
+      cancelLabel: 'Keep edits',
+      danger: true,
+    });
+    if (!ok) return;
+    loadGlbFile(state._sourceFile);
+  });
   $('btn-undo').addEventListener('click', () => undoLast());
   $('btn-redo')?.addEventListener('click', () => redoLast());
   $('btn-save-scene')?.addEventListener('click', () => { saveScene(); });
@@ -7746,6 +8565,35 @@ function wireUI() {
     }
   });
 
+  // Double-click the part name in the properties panel to rename — same UX
+  // as the tree. Delegated on #prop-body since refreshPropertiesPanel rewrites
+  // its innerHTML on every selection change.
+  $('prop-body')?.addEventListener('dblclick', e => {
+    const labelEl = e.target.closest('.prop-name');
+    if (!labelEl) return;
+    const ids = [...state.selected];
+    // Multi-select shows "N parts selected" — not a real name, can't rename.
+    if (ids.length !== 1) return;
+    const id = ids[0];
+    const p = getPart(id);
+    if (!p) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.getSelection) try { window.getSelection().removeAllRanges(); } catch (_) {}
+    const hn = (state.treeNodes && state.treeNodes.length)
+      ? state.treeNodes.find(n => n.kind === 'part' && n.partId === id)
+      : null;
+    const seedName = (hn && hn.name) || p.name;
+    _treeInlineRename(labelEl, seedName, (next) => {
+      if (!next || next === seedName) return;
+      p.name = next;
+      if (p.mesh) p.mesh.name = next;
+      if (hn) hn.name = next;
+      rebuildTree();
+      refreshPropertiesPanel();
+    });
+  });
+
   // Size threshold scrubber — quadratic curve so the useful sub-1% range gets
   // most of the bar's horizontal travel.
   const refreshFlaggedRaf = rafCoalesce(refreshFlagged);
@@ -7798,7 +8646,24 @@ function wireUI() {
   $('btn-isolate-small')?.addEventListener('click', isolateFlagged);
 
   $('toggle-rotate').addEventListener('change', e => { state.autoRotate = e.target.checked; requestRender(); });
-  $('toggle-highlight').addEventListener('change', e => { state.highlightSmall = e.target.checked; applySelectionColors(); requestRender(); });
+  $('toggle-highlight').addEventListener('change', e => {
+    state.highlightSmall = e.target.checked;
+    document.getElementById('tree')?.classList.toggle('flag-on', state.highlightSmall);
+    $('tg-hilite')?.classList.toggle('active', state.highlightSmall);
+    applySelectionColors();
+    requestRender();
+  });
+  // Viewport corner toggle mirrors the settings-popup checkbox. Click here
+  // is equivalent to flipping the checkbox — fire 'change' so the handler
+  // above runs once (state, tree class, render).
+  $('tg-hilite')?.addEventListener('click', () => {
+    const cb = $('toggle-highlight');
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  // Initialize the tree's flag-on class + viewport button to match current toggle state at load.
+  document.getElementById('tree')?.classList.toggle('flag-on', !!state.highlightSmall);
+  $('tg-hilite')?.classList.toggle('active', !!$('toggle-highlight')?.checked);
   $('bg-mode').addEventListener('change', e => setBackground(e.target.value));
   $('toggle-instance')?.addEventListener('change', e => { state.autoInstance = e.target.checked; toast('Reload model to apply', 'Auto-instancing decision is at parse time', 'info'); });
   $('toggle-share-mat')?.addEventListener('change', e => { state.shareMaterials = e.target.checked; toast('Reload model to apply', 'Material sharing decision is at parse time', 'info'); });
@@ -8169,6 +9034,10 @@ function _disposeAllBVHs() {
 async function loadGlbFile(file) {
   setLoader(true, 'Reading GLB...', file.name);
   setLoaderProgress(10);
+  // Cache the source File so the toolbar Revert button can re-load it from
+  // scratch. File objects expose arrayBuffer() repeatedly, so the same File
+  // can be parsed again without re-uploading or re-converting from STEP.
+  state._sourceFile = file;
   // Pause renderer BEFORE we start tearing down geometries — WebGPU is
   // pipelining frames, and disposing a BufferGeometry while it's bound to
   // an in-flight draw triggers "data.buffer is undefined" in writeBuffer.
@@ -8376,7 +9245,20 @@ async function loadByUrl(relUrl) {
     const file = new File([new Blob([buf])], fname);
     if (/\.(glb|gltf)$/i.test(fname)) await loadGlbFile(file);
     else await loadStepFile(file);
-  } catch (e) { console.error(e); toast('Auto-load failed', e.message || String(e), 'error', 7000); setLoader(false); }
+  } catch (e) {
+    // Stale ?file= param pointing at a cleaned-up inbox file is the common
+    // case here — silently strip it from the URL and fall back to the
+    // welcome screen instead of nagging with a toast on every reload.
+    console.warn('[autoload] skipped:', e?.message || e);
+    setLoader(false);
+    try {
+      const url = new URL(location.href);
+      if (url.searchParams.has('file')) {
+        url.searchParams.delete('file');
+        history.replaceState(null, '', url.toString());
+      }
+    } catch (_) {}
+  }
 }
 
 async function boot() {
@@ -8423,7 +9305,13 @@ async function boot() {
   setStatus('Ready');
   _sceneReady = true;
   Log.success('Ready', { tag: 'boot' });
-  if (_pendingFile) { const f = _pendingFile; _pendingFile = null; if (/\.(glb|gltf)$/i.test(f.name)) loadGlbFile(f); else convertStepViaServer(f); }
+  if (_pendingFile) {
+    const f = _pendingFile; _pendingFile = null;
+    if (/\.(glb|gltf)$/i.test(f.name)) loadGlbFile(f); else convertStepViaServer(f);
+  } else if (_Prefs?.get?.('welcomeOnBoot') !== false) {
+    // First-run welcome — only when no model is queued AND the pref is on.
+    try { _Welcome.show(); } catch (_) {}
+  }
 }
 boot().catch(e => { console.error('[STEP] Boot failed:', e); try { toast('Init failed', e.message, 'error', 12000); } catch(_){} });
 
@@ -11756,30 +12644,31 @@ function _initCustomSelects() {
       .cs-wrap { position: relative; display: block; }
       .cs-trigger {
         width: 100%; padding: 7px 28px 7px 10px;
-        background: rgba(255,255,255,.06);
-        border: 1px solid rgba(255,255,255,.06);
-        border-radius: 7px; color: var(--tx); font-size: 12.5px;
+        background: var(--s3);
+        border: 1px solid var(--s3);
+        border-radius: var(--r-md); color: var(--tx); font-size: var(--fs-md);
         outline: none; cursor: pointer; text-align: left;
-        font: inherit; font-size: 12.5px;
+        font: inherit; font-size: var(--fs-md);
         background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");
         background-repeat: no-repeat; background-position: right 9px center;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
       }
-      .cs-trigger:hover { background-color: rgba(255,255,255,.09); }
+      .cs-trigger:hover { background-color: var(--s5); }
       .cs-trigger:focus { border-color: var(--ac); }
       .cs-pop {
         position: fixed; z-index: 10000; min-width: 160px;
-        background: var(--bg1); border: 1px solid var(--bd2);
-        border-radius: 10px; padding: 5px 0; box-shadow: var(--sh);
+        background: var(--bg1); border: 1px solid var(--bd);
+        border-radius: var(--r-lg); padding: 5px 0; box-shadow: var(--sh-pop);
         max-height: 320px; overflow-y: auto;
-        animation: cs-fade .12s ease-out;
+        animation: cs-fade .12s var(--ease-out);
       }
       @keyframes cs-fade { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform: translateY(0); } }
       .cs-opt {
         padding: 7px 14px; cursor: pointer; color: var(--tx);
-        font-size: 12.5px; display: flex; align-items: center; gap: 8px;
+        font-size: var(--fs-md); display: flex; align-items: center; gap: 8px;
       }
-      .cs-opt:hover { background: rgba(110,168,255,.12); color: white; }
+      .cs-opt:hover { background: var(--ac-soft); color: white; }
       .cs-opt.cs-sel { color: var(--ac); }
       .cs-opt.cs-sel::before { content: '✓'; opacity: .9; }
       .cs-opt:not(.cs-sel)::before { content: ''; width: 8px; }
@@ -12942,162 +13831,153 @@ const _FlattenDialog = (() => {
     if (document.getElementById('_flat-dlg-style')) return;
     const s = document.createElement('style');
     s.id = '_flat-dlg-style';
+    // Only flatten-specific content classes — chrome (bg, card, header, body,
+    // footer, buttons) reuses the global .modal pattern from index.html.
     s.textContent = `
-      .flat-bg{position:fixed;inset:0;background:transparent;display:none;place-items:center;z-index:300;opacity:0;transition:opacity .18s ease}
-      .flat-bg.show{display:grid;opacity:1}
-      .flat-card{
-        width:min(540px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;
-        background:linear-gradient(180deg,rgba(28,33,44,.96),rgba(18,22,30,.96));
-        border:1px solid rgba(255,255,255,.08);border-radius:16px;
-        box-shadow:0 30px 80px -20px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06) inset,0 -1px 0 rgba(0,0,0,.4) inset;
-        transform:translateY(8px) scale(.97);opacity:0;
-        transition:transform .22s cubic-bezier(.2,.8,.3,1),opacity .18s ease;
-      }
-      .flat-bg.show .flat-card{transform:translateY(0) scale(1);opacity:1}
-      .flat-head{display:flex;align-items:flex-start;gap:14px;padding:22px 22px 0;position:relative}
-      .flat-icon{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:rgba(110,168,255,.12);color:var(--ac);box-shadow:inset 0 0 0 1px rgba(110,168,255,.18)}
-      .flat-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-      .flat-title{font-size:15px;font-weight:600;color:var(--tx);letter-spacing:-.01em;margin-bottom:4px}
-      .flat-sub{color:var(--tx2);font-size:12px;line-height:1.5}
-      .flat-x{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:14px}
-      .flat-x:hover{color:var(--tx);background:rgba(255,255,255,.06)}
-      .flat-body{padding:18px 22px 4px}
-      .flat-section{margin-bottom:14px}
-      .flat-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:8px}
-      .flat-opts{display:flex;flex-direction:column;gap:6px}
-      .flat-opt{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.025);cursor:pointer;transition:background .12s,border-color .12s}
-      .flat-opt:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1)}
-      .flat-opt.active{background:rgba(110,168,255,.1);border-color:rgba(110,168,255,.45)}
-      .flat-opt input{margin:2px 0 0 0;accent-color:var(--ac);cursor:pointer}
-      .flat-opt-text{flex:1;min-width:0}
-      .flat-opt-label{font-size:13px;font-weight:500;color:var(--tx);margin-bottom:2px}
-      .flat-opt-help{font-size:11.5px;color:var(--tx3);line-height:1.45}
-      .flat-row{display:flex;align-items:center;gap:10px;margin-top:8px;padding-left:26px}
-      .flat-row label{font-size:12px;color:var(--tx2)}
-      .flat-row input[type=number]{width:70px;padding:5px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;color:var(--tx);font:inherit;font-size:12.5px;outline:none}
-      .flat-row input[type=number]:focus{border-color:rgba(110,168,255,.5);background:rgba(255,255,255,.06)}
-      .flat-toggles{display:flex;flex-direction:column;gap:6px}
-      .flat-tog{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--tx2);cursor:pointer;padding:5px 0}
-      .flat-tog input{accent-color:var(--ac);cursor:pointer}
-      .flat-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 22px 18px;margin-top:10px;border-top:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.18)}
-      .flat-info{font-size:11.5px;color:var(--tx3);flex:1;min-width:0}
-      .flat-btns{display:flex;gap:8px}
-      .flat-btn{font:inherit;padding:8px 16px;border-radius:8px;border:1px solid transparent;cursor:pointer;font-size:13px;font-weight:500;transition:filter .12s,background .12s,border-color .12s}
-      .flat-btn-cancel{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.06);color:var(--tx2)}
-      .flat-btn-cancel:hover{background:rgba(255,255,255,.08);color:var(--tx)}
-      .flat-btn-ok{background:linear-gradient(180deg,#7ab2ff,#4f8be5);color:#fff;box-shadow:0 4px 14px rgba(110,168,255,.28),inset 0 1px 0 rgba(255,255,255,.18)}
-      .flat-btn-ok:hover{filter:brightness(1.07)}
-      .flat-btn-ok:disabled{opacity:.4;cursor:not-allowed;filter:none}
+      /* Chrome (card, head, body, footer) is provided by _DraggablePopup.
+         Only Advanced flatten content classes live here. */
+      #_flat-dialog .flat-section{margin-bottom:14px}
+      #_flat-dialog .flat-section:last-child{margin-bottom:0}
+      #_flat-dialog .flat-section-title{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:0 0 8px 0}
+      #_flat-dialog .flat-opts{display:flex;flex-direction:column;gap:6px}
+      #_flat-dialog .flat-opt{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);cursor:pointer;transition:background .14s ease,border-color .14s ease}
+      #_flat-dialog .flat-opt:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
+      #_flat-dialog .flat-opt.active{background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.35)}
+      #_flat-dialog .flat-opt input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:2px 0 0 0;transition:border-color .14s ease,background .14s ease}
+      #_flat-dialog .flat-opt input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
+      #_flat-dialog .flat-opt input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
+      #_flat-dialog .flat-opt input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff}
+      #_flat-dialog .flat-opt-text{flex:1;min-width:0}
+      #_flat-dialog .flat-opt-label{font-size:13px;font-weight:500;color:var(--tx);margin-bottom:3px;letter-spacing:-.005em}
+      #_flat-dialog .flat-opt-help{font-size:11.5px;color:var(--tx3);line-height:1.45}
+      #_flat-dialog .flat-opt-help code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ac);background:rgba(0,0,0,.28);padding:0 5px;border-radius:4px;font-size:11px}
+      #_flat-dialog .flat-row{display:flex;align-items:center;gap:8px;margin-top:9px}
+      #_flat-dialog .flat-row label{font-size:11px;color:var(--tx3);font-weight:500;letter-spacing:.005em}
+      #_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      #_flat-dialog .flat-row input[type=number]:focus{border-color:rgba(110,168,255,.55);box-shadow:0 0 0 3px rgba(110,168,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      #_flat-dialog .flat-toggles{display:flex;flex-direction:column;gap:2px}
+      #_flat-dialog .flat-tog{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:7px;transition:background .14s ease,color .14s ease}
+      #_flat-dialog .flat-tog:hover{background:rgba(255,255,255,.03);color:var(--tx)}
+      #_flat-dialog .flat-tog input[type=checkbox]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:4px;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
+      #_flat-dialog .flat-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
+      #_flat-dialog .flat-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
+      #_flat-dialog .flat-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
+      #_flat-dialog .flat-info{font-size:11.5px;color:var(--tx3);flex:1;min-width:0;text-align:left;letter-spacing:.005em}
+      #_flat-dialog .dlg-foot #_flat-ok{box-shadow:0 4px 14px rgba(110,168,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
+      #_flat-dialog .dlg-foot #_flat-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
     `;
     document.head.appendChild(s);
+  }
+
+  function _close(result) {
+    if (!bg) return;
+    bg.classList.remove('show');
+    const f = STATE.resolve; STATE.resolve = null;
+    if (f) f(result);
   }
 
   function _ensure() {
     if (bg) return;
     _injectStyles();
-    bg = document.createElement('div');
-    bg.className = 'flat-bg';
-    bg.id = '_flat-dialog';
-    bg.innerHTML = `
-      <div class="flat-card">
-        <div class="flat-head">
-          <div class="flat-icon"><i data-lucide="list-tree"></i></div>
-          <div>
-            <div class="flat-title">Advanced flatten</div>
-            <div class="flat-sub" id="_flat-sub">Total control over hierarchy collapse — Pixyz style.</div>
-          </div>
-          <button class="flat-x" id="_flat-x" aria-label="Close">✕</button>
-        </div>
-        <div class="flat-body">
-          <div class="flat-section">
-            <div class="flat-section-title">Scope</div>
-            <div class="flat-opts" id="_flat-scope">
-              <label class="flat-opt"><input type="radio" name="flat-scope" value="all" checked>
-                <div class="flat-opt-text">
-                  <div class="flat-opt-label">Whole tree</div>
-                  <div class="flat-opt-help">Operate on every container under the model root.</div>
-                </div></label>
-              <label class="flat-opt"><input type="radio" name="flat-scope" value="selected">
-                <div class="flat-opt-text">
-                  <div class="flat-opt-label">Selected groups only</div>
-                  <div class="flat-opt-help" id="_flat-sel-help">Apply only inside the groups currently selected in the tree.</div>
-                </div></label>
-            </div>
-          </div>
 
-          <div class="flat-section">
-            <div class="flat-section-title">Action</div>
-            <div class="flat-opts" id="_flat-mode">
-              <label class="flat-opt active"><input type="radio" name="flat-mode" value="total" checked>
-                <div class="flat-opt-text">
-                  <div class="flat-opt-label">Total flatten</div>
-                  <div class="flat-opt-help">Dissolve every group inside the scope. All parts become direct children of the scope root.</div>
-                </div></label>
-              <label class="flat-opt"><input type="radio" name="flat-mode" value="keep">
-                <div class="flat-opt-text">
-                  <div class="flat-opt-label">Keep top N levels</div>
-                  <div class="flat-opt-help">Keep N nesting levels from the scope root, dissolve everything deeper.</div>
-                  <div class="flat-row"><label>Levels to keep</label><input type="number" id="_flat-keep" value="1" min="1" max="32" step="1"></div>
-                </div></label>
-              <label class="flat-opt"><input type="radio" name="flat-mode" value="last">
-                <div class="flat-opt-text">
-                  <div class="flat-opt-label">Flatten last level only</div>
-                  <div class="flat-opt-help">Only dissolve the deepest groups (the ones whose children are all parts). Keeps the upper assembly hierarchy intact.</div>
-                </div></label>
-              <label class="flat-opt"><input type="radio" name="flat-mode" value="chains">
-                <div class="flat-opt-text">
-                  <div class="flat-opt-label">Collapse single-child chains</div>
-                  <div class="flat-opt-help">Removes pass-through wrappers like <code>a / b / c / leaf</code> → <code>leaf</code>. Common cleanup for STEP files with redundant assembly nesting.</div>
-                </div></label>
-              <label class="flat-opt"><input type="radio" name="flat-mode" value="ungroup">
-                <div class="flat-opt-text">
-                  <div class="flat-opt-label">Ungroup (dissolve scope itself)</div>
-                  <div class="flat-opt-help">Remove the scope group(s), promoting their children one level up. No-op when scope is whole tree.</div>
-                </div></label>
-            </div>
-          </div>
-
-          <div class="flat-section">
-            <div class="flat-section-title">Options</div>
-            <div class="flat-toggles">
-              <label class="flat-tog"><input type="checkbox" id="_flat-preserve-ug" checked>
-                Preserve user groups (groups you created with “Group selection”)</label>
-              <label class="flat-tog"><input type="checkbox" id="_flat-clean-empty" checked>
-                Remove empty groups left behind</label>
-              <label class="flat-tog"><input type="checkbox" id="_flat-collapse-after">
-                Also collapse single-child chains afterwards</label>
-            </div>
-          </div>
+    const bodyHtml = `
+      <div class="flat-section">
+        <div class="flat-section-title">Scope</div>
+        <div class="flat-opts" id="_flat-scope">
+          <label class="flat-opt"><input type="radio" name="flat-scope" value="all" checked>
+            <div class="flat-opt-text">
+              <div class="flat-opt-label">Whole tree</div>
+              <div class="flat-opt-help">Operate on every container under the model root.</div>
+            </div></label>
+          <label class="flat-opt"><input type="radio" name="flat-scope" value="selected">
+            <div class="flat-opt-text">
+              <div class="flat-opt-label">Selected groups only</div>
+              <div class="flat-opt-help" id="_flat-sel-help">Apply only inside the groups currently selected in the tree.</div>
+            </div></label>
         </div>
-        <div class="flat-foot">
-          <div class="flat-info" id="_flat-info">—</div>
-          <div class="flat-btns">
-            <button class="flat-btn flat-btn-cancel" id="_flat-cancel">Cancel</button>
-            <button class="flat-btn flat-btn-ok" id="_flat-ok">Apply</button>
-          </div>
+      </div>
+
+      <div class="flat-section">
+        <div class="flat-section-title">Action</div>
+        <div class="flat-opts" id="_flat-mode">
+          <label class="flat-opt active"><input type="radio" name="flat-mode" value="total" checked>
+            <div class="flat-opt-text">
+              <div class="flat-opt-label">Total flatten</div>
+              <div class="flat-opt-help">Dissolve every group inside the scope. All parts become direct children of the scope root.</div>
+            </div></label>
+          <label class="flat-opt"><input type="radio" name="flat-mode" value="keep">
+            <div class="flat-opt-text">
+              <div class="flat-opt-label">Keep top N levels</div>
+              <div class="flat-opt-help">Keep N nesting levels from the scope root, dissolve everything deeper.</div>
+              <div class="flat-row"><label>Levels to keep</label><input type="number" id="_flat-keep" value="1" min="1" max="32" step="1"></div>
+            </div></label>
+          <label class="flat-opt"><input type="radio" name="flat-mode" value="last">
+            <div class="flat-opt-text">
+              <div class="flat-opt-label">Flatten last level only</div>
+              <div class="flat-opt-help">Only dissolve the deepest groups (the ones whose children are all parts). Keeps the upper assembly hierarchy intact.</div>
+            </div></label>
+          <label class="flat-opt"><input type="radio" name="flat-mode" value="chains">
+            <div class="flat-opt-text">
+              <div class="flat-opt-label">Collapse single-child chains</div>
+              <div class="flat-opt-help">Removes pass-through wrappers like <code>a / b / c / leaf</code> → <code>leaf</code>. Common cleanup for STEP files with redundant assembly nesting.</div>
+            </div></label>
+          <label class="flat-opt"><input type="radio" name="flat-mode" value="ungroup">
+            <div class="flat-opt-text">
+              <div class="flat-opt-label">Ungroup (dissolve scope itself)</div>
+              <div class="flat-opt-help">Remove the scope group(s), promoting their children one level up. No-op when scope is whole tree.</div>
+            </div></label>
+        </div>
+      </div>
+
+      <div class="flat-section">
+        <div class="flat-section-title">Options</div>
+        <div class="flat-toggles">
+          <label class="flat-tog"><input type="checkbox" id="_flat-preserve-ug" checked>
+            Preserve user groups (groups you created with “Group selection”)</label>
+          <label class="flat-tog"><input type="checkbox" id="_flat-clean-empty" checked>
+            Remove empty groups left behind</label>
+          <label class="flat-tog"><input type="checkbox" id="_flat-collapse-after">
+            Also collapse single-child chains afterwards</label>
         </div>
       </div>`;
-    document.body.appendChild(bg);
-    card = bg.querySelector('.flat-card');
 
-    const close = (result) => {
-      bg.classList.remove('show');
-      const f = STATE.resolve; STATE.resolve = null;
-      if (f) f(result);
-    };
-    bg.querySelector('#_flat-cancel').addEventListener('click', () => close(null));
-    bg.querySelector('#_flat-x').addEventListener('click', () => close(null));
-    bg.addEventListener('click', e => { if (e.target === bg) close(null); });
-    bg.querySelector('#_flat-ok').addEventListener('click', () => close(_collect()));
+    const footHtml = `
+      <div class="flat-info" id="_flat-info">—</div>
+      <div style="display:flex;gap:8px">
+        <button class="dlg-btn dlg-btn-cancel" id="_flat-cancel">Cancel</button>
+        <button class="dlg-btn dlg-btn-ok" id="_flat-ok">Apply</button>
+      </div>`;
+
+    const popup = _DraggablePopup.create({
+      id: '_flat-dialog',
+      title: 'Advanced flatten',
+      subtitle: 'Reduce hierarchy depth · Ctrl+Z reverts',
+      iconName: 'layers',
+      width: 580, height: 720,
+      minWidth: 460, minHeight: 480,
+      bodyHtml,
+      footHtml,
+      bodyScroll: true,
+      onClose: () => _close(null),
+    });
+    bg = popup.el;
+    card = popup.card;
+
+    bg.querySelector('#_flat-cancel').addEventListener('click', () => _close(null));
+    bg.querySelector('#_flat-ok').addEventListener('click', () => _close(_collect()));
+
+    // Ctrl/Cmd+Enter applies. Escape and click-outside are handled by
+    // _DraggablePopup which routes through onClose → _close(null).
     document.addEventListener('keydown', e => {
       if (!bg.classList.contains('show')) return;
-      if (e.key === 'Escape') { e.preventDefault(); close(null); }
-      else if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'INPUT') {
-        e.preventDefault(); close(_collect());
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.target.tagName !== 'INPUT') {
+        e.preventDefault(); _close(_collect());
       }
     }, true);
 
-    // Highlight the active mode card.
+    // Highlight the active option card. Radio change toggles .active on the
+    // closest .flat-opt — gives the whole card a visible accent fill, not
+    // just the radio dot.
     const syncActive = () => {
       bg.querySelectorAll('input[name="flat-mode"]').forEach(r => {
         r.closest('.flat-opt').classList.toggle('active', r.checked);
@@ -13123,24 +14003,26 @@ const _FlattenDialog = (() => {
   }
 
   return {
-    async open({ selectedGroupCount = 0, currentMaxDepth = 0 } = {}) {
+    async open({ selectedGroupCount = 0, currentMaxDepth = 0, selectedNames = [] } = {}) {
       _ensure();
       const help = bg.querySelector('#_flat-sel-help');
       const selOpt = bg.querySelector('input[name="flat-scope"][value="selected"]');
       if (selectedGroupCount > 0) {
-        help.textContent = `Apply only inside the ${selectedGroupCount} group(s) selected in the tree.`;
+        const preview = selectedNames.slice(0, 3).map(n => `“${n}”`).join(', ');
+        const more = selectedNames.length > 3 ? ` + ${selectedNames.length - 3} more` : '';
+        help.innerHTML = `Apply only inside <strong>${selectedGroupCount}</strong> selected group${selectedGroupCount === 1 ? '' : 's'}: ${preview}${more}.`;
         selOpt.disabled = false;
         selOpt.closest('.flat-opt').style.opacity = '1';
         selOpt.checked = true;
         bg.querySelector('input[name="flat-scope"][value="all"]').checked = false;
       } else {
-        help.textContent = 'Select group rows in the tree first to enable scoping.';
+        help.textContent = 'Click a group row in the tree (or shift-click multiple) to enable scoping.';
         selOpt.disabled = true;
         selOpt.closest('.flat-opt').style.opacity = '.5';
         bg.querySelector('input[name="flat-scope"][value="all"]').checked = true;
       }
       bg.querySelector('#_flat-info').textContent =
-        `Tree currently nests ${currentMaxDepth} level${currentMaxDepth === 1 ? '' : 's'} deep.`;
+        `Tree nests ${currentMaxDepth} level${currentMaxDepth === 1 ? '' : 's'} deep. Ctrl+Z undoes any flatten.`;
       bg.querySelectorAll('input[name="flat-mode"]').forEach((r, i) => { r.checked = i === 0; });
       bg.querySelectorAll('input[name="flat-scope"]').forEach(r => r.dispatchEvent(new Event('change', { bubbles: true })));
       _lucide();
@@ -13177,11 +14059,52 @@ function _isUserGroupObj(obj) {
 
 // Reparent every child of `obj` to `obj.parent` (preserving world transform)
 // and remove the now-empty `obj`. Returns true if the dissolve happened.
-function _dissolveContainer(obj) {
+// If `snapshots` is given, push a record sufficient to undo the dissolve:
+// the group's prev parent + local matrix, and each child's prev local matrix
+// (captured BEFORE attach() rewrites them into parent's frame).
+function _dissolveContainer(obj, snapshots) {
   const parent = obj.parent;
   if (!parent) return false;
+  if (snapshots) {
+    snapshots.push({
+      kind: 'dissolve',
+      group: obj,
+      prevParent: parent,
+      prevLocalMatrix: obj.matrix.clone(),
+      prevSiblingIndex: parent.children.indexOf(obj),
+      children: obj.children.map(c => ({ obj: c, prevLocalMatrix: c.matrix.clone() })),
+    });
+  }
+  // Capture obj's slot in parent.children BEFORE attach() shuffles things.
+  // attach() preserves world transform but always appends children to the end
+  // of parent.children — that's why parts visually "jumped to the top/bottom"
+  // during flatten. We move them back to obj's original slot afterwards so the
+  // dissolved children sit in the same place obj used to occupy.
+  const insertAt = parent.children.indexOf(obj);
   const kids = [...obj.children];
   for (const k of kids) parent.attach(k);
+  if (insertAt >= 0 && kids.length) {
+    const tail = parent.children.splice(parent.children.length - kids.length, kids.length);
+    parent.children.splice(insertAt, 0, ...tail);
+  }
+  parent.remove(obj);
+  return true;
+}
+
+// Variant of _dissolveContainer that only removes (no children to reparent).
+// Used by the empty-group cleanup pass.
+function _removeEmptyContainer(obj, snapshots) {
+  const parent = obj.parent;
+  if (!parent) return false;
+  if (snapshots) {
+    snapshots.push({
+      kind: 'remove-empty',
+      group: obj,
+      prevParent: parent,
+      prevLocalMatrix: obj.matrix.clone(),
+      children: [],
+    });
+  }
   parent.remove(obj);
   return true;
 }
@@ -13227,8 +14150,18 @@ async function flattenTree() {
     if (d > currentMaxDepth) currentMaxDepth = d;
   });
 
-  const selectedGroupCount = state.selectedGroupIds ? state.selectedGroupIds.size : 0;
-  const opts = await _FlattenDialog.open({ selectedGroupCount, currentMaxDepth });
+  const selectedIds = state.selectedGroupIds ? Array.from(state.selectedGroupIds) : [];
+  const selectedNames = selectedIds.map(gid => {
+    const node = (state.treeNodes || []).find(n => n.kind === 'group' && n.id === gid);
+    if (node) return node.name || ('Group ' + gid);
+    const ug = (state.userGroups || []).find(g => g.id === gid);
+    return ug ? (ug.name || ('Group ' + gid)) : ('Group ' + gid);
+  });
+  const opts = await _FlattenDialog.open({
+    selectedGroupCount: selectedIds.length,
+    currentMaxDepth,
+    selectedNames,
+  });
   if (!opts) return;
 
   const roots = _flattenScopeRoots(opts.scope);
@@ -13236,18 +14169,32 @@ async function flattenTree() {
 
   state.partsRoot.updateMatrixWorld(true);
 
+  // Snapshot prev userGroups + treeNodes so undo restores the EXACT pre-flatten
+  // structure. Re-walking state.partsRoot post-undo would produce a different
+  // tree (state.partsRoot has wrappers like AuxScene that the original GLB-load
+  // walk skipped), so snapshotting is more reliable than rebuilding.
+  const prevUserGroups = state.userGroups ? state.userGroups.slice() : [];
+  const prevTreeNodes = state.treeNodes ? state.treeNodes.slice() : [];
+
+  // Snapshot every container we touch so undo can rebuild the hierarchy. Threaded
+  // through _runFlattenOps → _flattenByDepth/_flattenLastLevel/etc → _dissolveContainer.
+  const snapshots = [];
+
   let dissolved = 0;
   for (const { root } of roots) {
-    dissolved += _runFlattenOps(root, opts);
+    dissolved += _runFlattenOps(root, opts, snapshots);
   }
 
   if (opts.collapseAfter && opts.mode !== 'chains') {
-    for (const { root } of roots) dissolved += _collapseSingleChildChains(root, opts);
+    for (const { root } of roots) dissolved += _collapseSingleChildChains(root, opts, snapshots);
   }
 
   if (opts.cleanEmpty) {
-    for (const { root } of roots) dissolved += _removeEmptyContainers(root, opts);
+    for (const { root } of roots) dissolved += _removeEmptyContainers(root, opts, snapshots);
   }
+
+  console.log('[flatten] scope=%s mode=%s roots=%d dissolved=%d snapshots=%d',
+    opts.scope, opts.mode, roots.length, dissolved, snapshots.length);
 
   // Drop dead userGroups (their .ref Group is no longer in the scene).
   if (state.userGroups && state.userGroups.length) {
@@ -13255,17 +14202,43 @@ async function flattenTree() {
     state._userGroupCount = state.userGroups.length;
   }
 
-  // Rebuild treeNodes from the live scene.
-  if (opts.mode === 'total' && opts.scope === 'all') {
-    state.treeNodes = [];
-  } else if (typeof _buildHierarchyFromScene === 'function') {
-    const meshToPart = new Map();
-    for (const p of state.parts) { if (p.mesh) meshToPart.set(p.mesh, p); }
-    try { _buildHierarchyFromScene(state.partsRoot, meshToPart); }
-    catch (err) { console.warn('[flatten] hierarchy rebuild failed:', err); state.treeNodes = []; }
+  // Rebuild treeNodes. CRITICAL: scope=all takes the full-rebuild path; scope=selected
+  // patches only the affected subtree in-place. The full rebuild walks state.partsRoot,
+  // which includes scene wrappers (AuxScene, _partsRoot, instanced meshes) that aren't
+  // in the original GLB-load tree — re-running it on a partial change would replace the
+  // whole tree with a different shape and look like "everything went flat".
+  if (opts.scope === 'all') {
+    if (typeof _buildHierarchyFromScene === 'function') {
+      const meshToPart = new Map();
+      for (const p of state.parts) { if (p.mesh) meshToPart.set(p.mesh, p); }
+      try { _buildHierarchyFromScene(state.partsRoot, meshToPart); }
+      catch (err) { console.warn('[flatten] hierarchy rebuild failed:', err); state.treeNodes = []; }
+    }
+  } else {
+    // scope=selected — patch in place per affected root, using the snapshot
+    // list to know which groups got dissolved (we can't probe via live-scene
+    // walk because auto-instanced parts have detached meshes).
+    const dissolvedGroups = new Set();
+    for (const s of snapshots) if (s.group) dissolvedGroups.add(s.group);
+    for (const { root } of roots) _patchTreeNodesForSubtree(root, dissolvedGroups);
   }
-  state.treeCollapsed?.clear?.();
+  // DON'T clear treeCollapsed wholesale — that re-expands every group in the
+  // tree, which makes previously-collapsed siblings of the scope suddenly fill
+  // the viewport and looks like rows "jumped to the top". Drop only the ids of
+  // groups that no longer exist in the rebuilt treeNodes.
+  if (state.treeCollapsed && state.treeCollapsed.size) {
+    const liveIds = new Set();
+    for (const n of (state.treeNodes || [])) if (n.kind === 'group') liveIds.add(n.id);
+    for (const id of [...state.treeCollapsed]) if (!liveIds.has(id)) state.treeCollapsed.delete(id);
+  }
   state.selectedGroupIds?.clear?.();
+
+  // One undo entry covers the whole flatten. Restoring runs snapshots in reverse
+  // (shallowest first) so each group lands back on its prev parent with its
+  // captured children re-attached at their pre-flatten local matrices.
+  if (snapshots.length) {
+    pushUndo({ type: 'flatten', snapshots, prevUserGroups, prevTreeNodes, label: `Flatten (${opts.mode})` });
+  }
 
   // Refresh exact-world snapshots so subsequent gizmo operations don't restore
   // pre-flatten ancestor transforms.
@@ -13290,21 +14263,21 @@ async function flattenTree() {
 }
 
 // Dispatch one flatten action on a given root. Returns count dissolved.
-function _runFlattenOps(root, opts) {
-  if (opts.mode === 'chains') return _collapseSingleChildChains(root, opts);
-  if (opts.mode === 'ungroup') return _ungroupScope(root, opts);
-  if (opts.mode === 'last')    return _flattenLastLevel(root, opts);
+function _runFlattenOps(root, opts, snapshots) {
+  if (opts.mode === 'chains') return _collapseSingleChildChains(root, opts, snapshots);
+  if (opts.mode === 'ungroup') return _ungroupScope(root, opts, snapshots);
+  if (opts.mode === 'last')    return _flattenLastLevel(root, opts, snapshots);
 
   // 'total' and 'keep' share the depth-cutoff approach. Total = keep 0 levels.
   const cutoff = (opts.mode === 'total') ? 0 : Math.max(1, opts.keep | 0);
-  return _flattenByDepth(root, cutoff, opts);
+  return _flattenByDepth(root, cutoff, opts, snapshots);
 }
 
 // Dissolve every container at depth >= cutoff. Depth is measured from `root`
 // — root's direct child containers are depth 0. cutoff = "levels of nesting
 // to keep". cutoff=0 → total flatten (dissolve all). cutoff=1 → keep depth=0,
 // dissolve depth>=1. Deepest-first so reparenting up doesn't lose nodes.
-function _flattenByDepth(root, cutoff, opts) {
+function _flattenByDepth(root, cutoff, opts, snapshots) {
   const containers = _collectContainers(root)
     .filter(c => c.obj !== root)
     .sort((a, b) => b.depth - a.depth);
@@ -13312,7 +14285,7 @@ function _flattenByDepth(root, cutoff, opts) {
   for (const { obj, depth } of containers) {
     if (depth < cutoff) continue;
     if (opts.preserveUserGroups && _isUserGroupObj(obj)) continue;
-    if (_dissolveContainer(obj)) dissolved++;
+    if (_dissolveContainer(obj, snapshots)) dissolved++;
   }
   return dissolved;
 }
@@ -13320,20 +14293,20 @@ function _flattenByDepth(root, cutoff, opts) {
 // Dissolve only "leaf groups" — groups whose direct children are all Meshes.
 // Single pass: repeating would walk up the tree (every group becomes a leaf
 // once its child group dies), and the user explicitly asked for last level only.
-function _flattenLastLevel(root, opts) {
+function _flattenLastLevel(root, opts, snapshots) {
   let dissolved = 0;
   const containers = _collectContainers(root).filter(c => c.obj !== root);
   for (const { obj } of containers) {
     if (!_isLeafGroup(obj)) continue;
     if (opts.preserveUserGroups && _isUserGroupObj(obj)) continue;
-    if (_dissolveContainer(obj)) dissolved++;
+    if (_dissolveContainer(obj, snapshots)) dissolved++;
   }
   return dissolved;
 }
 
 // Collapse every single-child group chain. a/b/c/leaf → leaf.
 // Repeats until stable.
-function _collapseSingleChildChains(root, opts) {
+function _collapseSingleChildChains(root, opts, snapshots) {
   let dissolved = 0;
   for (let pass = 0; pass < 64; pass++) {
     const containers = _collectContainers(root).filter(c => c.obj !== root);
@@ -13341,7 +14314,7 @@ function _collapseSingleChildChains(root, opts) {
     for (const { obj } of containers) {
       if (!_isSingleChildLink(obj)) continue;
       if (opts.preserveUserGroups && _isUserGroupObj(obj)) continue;
-      if (_dissolveContainer(obj)) { dissolved++; dissolvedInPass++; }
+      if (_dissolveContainer(obj, snapshots)) { dissolved++; dissolvedInPass++; }
     }
     if (!dissolvedInPass) break;
   }
@@ -13350,14 +14323,14 @@ function _collapseSingleChildChains(root, opts) {
 
 // Ungroup mode: dissolve the scope root itself (when scope=selected). When
 // scope=all, the scope root is partsRoot — refuse to dissolve it.
-function _ungroupScope(root, opts) {
+function _ungroupScope(root, opts, snapshots) {
   if (root === state.partsRoot) return 0;
   if (opts.preserveUserGroups && _isUserGroupObj(root)) return 0;
-  return _dissolveContainer(root) ? 1 : 0;
+  return _dissolveContainer(root, snapshots) ? 1 : 0;
 }
 
 // Remove containers that ended up with zero children after the action.
-function _removeEmptyContainers(root, opts) {
+function _removeEmptyContainers(root, opts, snapshots) {
   let removed = 0;
   for (let pass = 0; pass < 8; pass++) {
     const containers = _collectContainers(root).filter(c => c.obj !== root);
@@ -13368,16 +14341,1725 @@ function _removeEmptyContainers(root, opts) {
     for (const { obj } of containers) {
       if (obj.children && obj.children.length > 0) continue;
       if (opts.preserveUserGroups && _isUserGroupObj(obj)) continue;
-      const parent = obj.parent;
-      if (!parent) continue;
-      parent.remove(obj);
-      removed++;
-      removedInPass++;
+      if (_removeEmptyContainer(obj, snapshots)) { removed++; removedInPass++; }
     }
     if (!removedInPass) break;
   }
   return removed;
 }
+
+// Update the subtree under `rootObj` in state.treeNodes after a flatten.
+// Doesn't walk the live scene graph — that path can't see auto-instanced parts
+// (their mesh has been removed and their backing InstancedMesh lives at the
+// top of partsRoot, outside any group). Instead we walk the OLD rows and:
+//   1. Drop rows for groups whose obj3d is in `dissolvedGroups`.
+//   2. For every other row, walk the OLD parentId chain past dissolved
+//      ancestors until we hit an alive ancestor — that's the new parent.
+//   3. DFS-reorder by parent so the rendered tree matches the in-place dissolve
+//      ordering (children show up in the slot their old container occupied).
+function _patchTreeNodesForSubtree(rootObj, dissolvedGroups) {
+  const all = state.treeNodes || [];
+  if (!all.length) return;
+  const startIdx = all.findIndex(n => n.kind === 'group' && n.obj3d === rootObj);
+  if (startIdx < 0) return;
+  const baseDepth = all[startIdx].depth;
+  const baseId = all[startIdx].id;
+  let endIdx = all.length;
+  for (let i = startIdx + 1; i < all.length; i++) {
+    if (all[i].depth <= baseDepth) { endIdx = i; break; }
+  }
+
+  const oldRows = all.slice(startIdx, endIdx);
+  const oldRowsById = new Map(oldRows.map(r => [r.id, r]));
+  const isDissolvedRow = r =>
+    r.kind === 'group' && r !== all[startIdx] && r.obj3d && dissolvedGroups && dissolvedGroups.has(r.obj3d);
+
+  // Walk the OLD parentId chain past any dissolved ancestor and return the
+  // closest still-alive id. baseId acts as the floor — we never walk above
+  // the scope root (rootObj's row).
+  function findAliveParent(parentId) {
+    while (parentId != null) {
+      if (parentId === baseId) return baseId;
+      const p = oldRowsById.get(parentId);
+      if (!p) break;
+      if (!isDissolvedRow(p)) return parentId;
+      parentId = p.parentId;
+    }
+    return parentId;
+  }
+
+  // Filter out dissolved group rows; rewrite parentId on every survivor.
+  const survivingRows = [];
+  for (const r of oldRows) {
+    if (isDissolvedRow(r)) continue;
+    if (r !== all[startIdx]) {
+      r.parentId = findAliveParent(r.parentId);
+    }
+    survivingRows.push(r);
+  }
+
+  // DFS-reorder. survivingRows is already in OLD DFS order, so children of a
+  // (now-dissolved) container come right after the dissolved container's
+  // siblings — which matches the in-place sibling order produced by
+  // _dissolveContainer's "splice into the dissolved obj's slot" logic.
+  const childrenMap = new Map();
+  for (const r of survivingRows) {
+    if (r === all[startIdx]) continue;
+    let arr = childrenMap.get(r.parentId);
+    if (!arr) { arr = []; childrenMap.set(r.parentId, arr); }
+    arr.push(r);
+  }
+
+  const ordered = [];
+  function emit(parentId, depth) {
+    const kids = childrenMap.get(parentId);
+    if (!kids) return;
+    for (const k of kids) {
+      k.depth = depth;
+      ordered.push(k);
+      if (k.kind === 'group') emit(k.id, depth + 1);
+    }
+  }
+  all[startIdx].depth = baseDepth;
+  ordered.push(all[startIdx]);
+  emit(baseId, baseDepth + 1);
+
+  all.splice(startIdx, endIdx - startIdx, ...ordered);
+}
+
+// Restore one snapshot. Group goes back to its prev parent with its prev local
+// matrix; each captured child moves back into the group with its prev local
+// matrix (so we don't double-compose ancestor transforms).
+function _restoreFlattenSnapshot(s) {
+  if (!s.prevParent) return;
+  // Insert back at the same sibling index it had pre-dissolve, so the tree's
+  // original child order is preserved on Ctrl+Z.
+  s.prevParent.add(s.group);
+  if (typeof s.prevSiblingIndex === 'number' && s.prevSiblingIndex >= 0) {
+    const arr = s.prevParent.children;
+    const cur = arr.indexOf(s.group);
+    if (cur >= 0 && cur !== s.prevSiblingIndex) {
+      arr.splice(cur, 1);
+      arr.splice(Math.min(s.prevSiblingIndex, arr.length), 0, s.group);
+    }
+  }
+  s.group.matrix.copy(s.prevLocalMatrix);
+  s.group.matrix.decompose(s.group.position, s.group.quaternion, s.group.scale);
+  for (const c of s.children) {
+    if (c.obj.parent && c.obj.parent !== s.group) c.obj.parent.remove(c.obj);
+    s.group.add(c.obj);
+    c.obj.matrix.copy(c.prevLocalMatrix);
+    c.obj.matrix.decompose(c.obj.position, c.obj.quaternion, c.obj.scale);
+  }
+}
+
+// Wrap undoLast to handle 'flatten' ops. Restoring the snapshots in reverse
+// order (shallowest first) puts each group back in its prev parent before
+// any deeper group needs to land inside it.
+const _origUndoLast_flatten = undoLast;
+undoLast = function() {
+  const op = state.history[state.history.length - 1];
+  if (op && op.type === 'flatten') {
+    state.history.pop();
+    for (let i = op.snapshots.length - 1; i >= 0; i--) {
+      _restoreFlattenSnapshot(op.snapshots[i]);
+    }
+    if (op.prevUserGroups) {
+      state.userGroups = op.prevUserGroups.slice();
+      state._userGroupCount = state.userGroups.length;
+    }
+    if (op.prevTreeNodes) {
+      state.treeNodes = op.prevTreeNodes.slice();
+    }
+    for (const p of state.parts) {
+      if (p.mesh) {
+        p.mesh.updateWorldMatrix(true, false);
+        p._exactWorld = p.mesh.matrixWorld.clone();
+      }
+    }
+    invalidateExplodeBaseline();
+    state.redo.push(op);
+    _finalizeUndo({ rebuildTree: true });
+    return;
+  }
+  return _origUndoLast_flatten();
+};
+
+// Redo: re-dissolve in original order. Children that need to move up are
+// already in place from the undo restore — re-running _dissolveContainer
+// (without snapshots) is enough.
+const _origRedoLast_flatten = redoLast;
+redoLast = function() {
+  const op = state.redo[state.redo.length - 1];
+  if (op && op.type === 'flatten') {
+    state.redo.pop();
+    for (const s of op.snapshots) {
+      const parent = s.group.parent;
+      if (!parent) continue;
+      if (s.kind === 'remove-empty') {
+        parent.remove(s.group);
+      } else {
+        const insertAt = parent.children.indexOf(s.group);
+        const kids = [...s.group.children];
+        for (const k of kids) parent.attach(k);
+        if (insertAt >= 0 && kids.length) {
+          const tail = parent.children.splice(parent.children.length - kids.length, kids.length);
+          parent.children.splice(insertAt, 0, ...tail);
+        }
+        parent.remove(s.group);
+      }
+    }
+    if (typeof _buildHierarchyFromScene === 'function') {
+      const meshToPart = new Map();
+      for (const p of state.parts) { if (p.mesh) meshToPart.set(p.mesh, p); }
+      try { _buildHierarchyFromScene(state.partsRoot, meshToPart); } catch {}
+    }
+    state.userGroups = (state.userGroups || []).filter(g => g.ref && g.ref.parent);
+    state._userGroupCount = state.userGroups.length;
+    for (const p of state.parts) {
+      if (p.mesh) {
+        p.mesh.updateWorldMatrix(true, false);
+        p._exactWorld = p.mesh.matrixWorld.clone();
+      }
+    }
+    invalidateExplodeBaseline();
+    state.history.push(op);
+    _finalizeUndo({ rebuildTree: true });
+    return;
+  }
+  return _origRedoLast_flatten();
+};
+
+// =====================================================================
+// BATCH RENAME — Cinema 4D-style token engine + Find/Replace + Presets
+// =====================================================================
+
+// Token engine. Tokens use {NAME(:MODIFIER)*} braces. Literal '{' and '}'
+// escape as '{{' and '}}'. compileTemplate(s) returns { ok, fn(ctx)→string, errors }.
+const _BatchRename = (() => {
+
+  const TOKENS = {
+    name:          ctx => ctx.name ?? '',
+    parent:        ctx => ctx.parent ?? '',
+    ancestors:     (ctx, args) => {
+      const arr = ctx.ancestors || [];
+      const n = args && args[0] ? Math.max(0, parseInt(args[0], 10) | 0) : arr.length;
+      return arr.slice(-n).join('_');
+    },
+    path:          (ctx, args) => {
+      const sep = (args && args[0]) || '/';
+      return (ctx.ancestors || []).join(sep);
+    },
+    depth:         ctx => String(ctx.depth ?? 0),
+    partId:        ctx => String(ctx.partId ?? ''),
+    idx:           ctx => String(ctx.idx ?? 0),
+    counter:       (ctx, args) => {
+      const v = ctx._nextCounter();
+      let pad = 0;
+      if (args && args[0] && /^\d+$/.test(args[0])) pad = args[0].length;
+      return pad > 0 ? String(v).padStart(pad, '0') : String(v);
+    },
+    tris:          ctx => String(ctx.tris ?? 0),
+    verts:         ctx => String(ctx.verts ?? 0),
+    diag:          ctx => (ctx.diag ?? 0).toFixed(2),
+    vol:           ctx => (ctx.vol ?? 0).toFixed(2),
+    max:           ctx => (ctx.max ?? 0).toFixed(2),
+    color:         ctx => ctx.color ?? '',
+    material:      ctx => ctx.color ?? '',
+    hash:          (ctx, args) => {
+      const h = ctx.hash || '';
+      const n = args && args[0] ? parseInt(args[0], 10) | 0 : h.length;
+      return h.slice(0, n);
+    },
+    instanceCount: ctx => String(ctx.instanceCount ?? 0),
+  };
+  const NUMERIC_TOKENS = new Set(['depth', 'partId', 'idx', 'counter', 'tris', 'verts', 'diag', 'vol', 'max', 'instanceCount']);
+
+  const MODIFIERS = {
+    upper:  s => String(s).toUpperCase(),
+    lower:  s => String(s).toLowerCase(),
+    title:  s => String(s).replace(/\b\w/g, c => c.toUpperCase()),
+    snake:  s => String(s).trim().replace(/([a-z])([A-Z])/g, '$1_$2').replace(/[\s\-]+/g, '_').toLowerCase(),
+    kebab:  s => String(s).trim().replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase(),
+    camel:  s => {
+      const parts = String(s).trim().split(/[\s_\-]+/).filter(Boolean);
+      if (!parts.length) return '';
+      return parts[0].toLowerCase() + parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('');
+    },
+    trim:   s => String(s).trim(),
+    strip:  (s, args) => {
+      const sub = (args && args[0]) || '';
+      if (!sub) return s;
+      let out = String(s);
+      while (out.startsWith(sub)) out = out.slice(sub.length);
+      while (out.endsWith(sub))   out = out.slice(0, -sub.length);
+      return out;
+    },
+    slice:  (s, args) => {
+      const a = parseInt(args?.[0] ?? 0, 10) | 0;
+      const b = args?.[1] != null ? parseInt(args[1], 10) | 0 : undefined;
+      return String(s).slice(a, b);
+    },
+    replace: (s, args) => {
+      const raw = args?.[0] || '';
+      const m = /^\/(.*)\/([^\/]*)\/([gimsuy]*)$/.exec(raw);
+      if (!m) return s;
+      try { return String(s).replace(new RegExp(m[1], m[3]), m[2]); }
+      catch { return s; }
+    },
+    pad:    (s, args) => {
+      const n = parseInt(args?.[0] ?? 0, 10) | 0;
+      const c = (args?.[1] || (typeof s === 'number' || /^\d+$/.test(String(s)) ? '0' : ' ')).slice(0, 1);
+      return String(s).padStart(n, c);
+    },
+    round:  (s, args) => {
+      const n = parseInt(args?.[0] ?? 0, 10) | 0;
+      const num = parseFloat(s);
+      if (!Number.isFinite(num)) return s;
+      return num.toFixed(n);
+    },
+    abbrev: (s, args) => {
+      const max = parseInt(args?.[0] ?? 12, 10) | 0;
+      const str = String(s);
+      if (str.length <= max) return str;
+      const half = Math.max(1, Math.floor((max - 1) / 2));
+      return str.slice(0, half) + '…' + str.slice(str.length - (max - 1 - half));
+    },
+    bucket: (s) => {
+      const n = parseFloat(s);
+      if (!Number.isFinite(n)) return String(s);
+      if (n >= 10000) return 'Heavy';
+      if (n >= 1000)  return 'Med';
+      return 'Light';
+    },
+  };
+
+  function _parseModifier(raw, tokenName) {
+    raw = raw.trim();
+    if (!raw) return null;
+    if (/^\d+$/.test(raw)) {
+      if (NUMERIC_TOKENS.has(tokenName) || tokenName === 'counter') return { name: '__sugar_pad__', args: [raw.length] };
+      if (tokenName === 'ancestors' || tokenName === 'path') return { name: '__sugar_lastN__', args: [parseInt(raw, 10)] };
+      return { name: 'slice', args: [0, parseInt(raw, 10)] };
+    }
+    const m = /^([a-zA-Z_]+)(?:\((.*)\))?$/s.exec(raw);
+    if (!m) return null;
+    const name = m[1];
+    const argsStr = (m[2] || '').trim();
+    let args = [];
+    if (argsStr) {
+      if (name === 'replace') args = [argsStr];
+      else args = argsStr.split(',').map(x => x.trim());
+    }
+    return { name, args };
+  }
+
+  function _parseTokenExpr(body) {
+    const parts = [];
+    let buf = '';
+    let parenDepth = 0;
+    for (let i = 0; i < body.length; i++) {
+      const c = body[i];
+      if (c === '(') { parenDepth++; buf += c; continue; }
+      if (c === ')') { parenDepth--; buf += c; continue; }
+      if (c === ':' && parenDepth === 0) { parts.push(buf); buf = ''; continue; }
+      buf += c;
+    }
+    if (buf || parts.length === 0) parts.push(buf);
+    const tName = parts[0].trim();
+    const mods = [];
+    for (let i = 1; i < parts.length; i++) {
+      const mod = _parseModifier(parts[i], tName);
+      if (!mod) return { error: `bad modifier: "${parts[i]}"` };
+      mods.push(mod);
+    }
+    return { token: tName, mods };
+  }
+
+  function compileTemplate(template) {
+    const errors = [];
+    const ops = [];
+    let i = 0;
+    let buf = '';
+    while (i < template.length) {
+      const c = template[i];
+      if (c === '{' && template[i + 1] === '{') { buf += '{'; i += 2; continue; }
+      if (c === '}' && template[i + 1] === '}') { buf += '}'; i += 2; continue; }
+      if (c === '{') {
+        let j = i + 1, depth = 1;
+        while (j < template.length && depth > 0) {
+          if (template[j] === '{') depth++;
+          else if (template[j] === '}') depth--;
+          if (depth > 0) j++;
+        }
+        if (depth !== 0) { errors.push(`Unclosed '{' at position ${i}`); buf += c; i++; continue; }
+        const body = template.slice(i + 1, j);
+        if (buf) { ops.push({ kind: 'lit', text: buf }); buf = ''; }
+        const parsed = _parseTokenExpr(body);
+        if (parsed.error) errors.push(parsed.error);
+        const tName = parsed.token;
+        if (!TOKENS[tName]) errors.push(`Unknown token: "${tName}"`);
+        ops.push({ kind: 'tok', token: tName, mods: parsed.mods || [] });
+        i = j + 1; continue;
+      }
+      buf += c; i++;
+    }
+    if (buf) ops.push({ kind: 'lit', text: buf });
+
+    const fn = (ctx) => {
+      const out = [];
+      for (const op of ops) {
+        if (op.kind === 'lit') { out.push(op.text); continue; }
+        const tFn = TOKENS[op.token];
+        if (!tFn) { out.push(''); continue; }
+        let tokenArgs = [];
+        const remainingMods = [];
+        for (const m of op.mods) {
+          if (m.name === '__sugar_lastN__') tokenArgs = m.args;
+          else if (m.name === '__sugar_pad__') remainingMods.push({ name: 'pad', args: [m.args[0], '0'] });
+          else remainingMods.push(m);
+        }
+        let val = tFn(ctx, tokenArgs);
+        for (const m of remainingMods) {
+          const fnMod = MODIFIERS[m.name];
+          if (!fnMod) continue;
+          val = fnMod(val, m.args);
+        }
+        out.push(val == null ? '' : String(val));
+      }
+      return out.join('');
+    };
+
+    return { ok: errors.length === 0, errors, fn };
+  }
+
+  function makeCounter({ start = 1, step = 1, mode = 'global' } = {}) {
+    const buckets = new Map();
+    let global = start;
+    return {
+      mode,
+      next(bucketKey) {
+        if (mode === 'global' || !bucketKey) { const v = global; global += step; return v; }
+        let v = buckets.get(bucketKey);
+        if (v == null) v = start;
+        buckets.set(bucketKey, v + step);
+        return v;
+      },
+    };
+  }
+
+  function _ancestorNames(treeNode) {
+    if (!treeNode) return [];
+    const all = state.treeNodes || [];
+    const byId = new Map(all.map(n => [n.id, n]));
+    const out = [];
+    let cur = treeNode.parentId != null ? byId.get(treeNode.parentId) : null;
+    while (cur) {
+      out.push(cur.name || '');
+      cur = cur.parentId != null ? byId.get(cur.parentId) : null;
+    }
+    return out.reverse();
+  }
+
+  function gatherCandidates(scope) {
+    const all = state.treeNodes || [];
+    const candByPart = new Map();
+    const candByGroup = new Map();
+
+    function addPart(partId) {
+      if (candByPart.has(partId)) return;
+      const p = getPart(partId);
+      if (!p || p.deleted) return;
+      const tn = all.find(n => n.kind === 'part' && n.partId === partId);
+      const ancestors = _ancestorNames(tn);
+      candByPart.set(partId, {
+        kind: 'part',
+        partId,
+        treeNodeId: tn ? tn.id : null,
+        currentName: (tn && tn.name) || p.name || '',
+        depth: tn ? tn.depth : 0,
+        parent: ancestors[ancestors.length - 1] || '',
+        ancestors,
+        triCount: p.triCount || 0,
+        vertCount: p.vertCount || 0,
+        sizeMetrics: p.sizeMetrics || { diag: 0, vol: 0, max: 0 },
+        color: p.originalColor ? '#' + p.originalColor.getHexString() : '',
+        hash: p.hash || '',
+        instanceCount: tn?.instanceCount || 0,
+        idx: 0,
+      });
+    }
+    function addHierGroup(groupNode) {
+      if (!groupNode || candByGroup.has('h:' + groupNode.id)) return;
+      const ancestors = _ancestorNames(groupNode);
+      candByGroup.set('h:' + groupNode.id, {
+        kind: 'hier-group',
+        treeNodeId: groupNode.id,
+        obj3dRef: groupNode.obj3d || null,
+        currentName: groupNode.name || '',
+        depth: groupNode.depth || 0,
+        parent: ancestors[ancestors.length - 1] || '',
+        ancestors,
+        triCount: 0, vertCount: 0,
+        sizeMetrics: { diag: 0, vol: 0, max: 0 },
+        color: '', hash: '', instanceCount: 0,
+        idx: 0,
+      });
+    }
+    function addUserGroup(g) {
+      if (!g || candByGroup.has('u:' + g.id)) return;
+      candByGroup.set('u:' + g.id, {
+        kind: 'user-group',
+        userGroupId: g.id,
+        obj3dRef: g.ref || null,
+        currentName: g.name || '',
+        depth: 0, parent: '', ancestors: [],
+        triCount: 0, vertCount: 0,
+        sizeMetrics: { diag: 0, vol: 0, max: 0 },
+        color: '', hash: '', instanceCount: g.partIds?.size || 0,
+        idx: 0,
+      });
+    }
+
+    if (scope === 'whole-tree') {
+      for (const p of state.parts) if (!p.deleted) addPart(p.partId);
+      for (const n of all) if (n.kind === 'group') addHierGroup(n);
+      for (const g of (state.userGroups || [])) addUserGroup(g);
+    } else if (scope === 'selected-parts') {
+      for (const id of state.selected) addPart(id);
+    } else if (scope === 'selected-groups') {
+      for (const gid of state.selectedGroupIds) {
+        const tn = all.find(n => n.kind === 'group' && n.id === gid);
+        if (tn) addHierGroup(tn);
+        const ug = (state.userGroups || []).find(g => g.id === gid);
+        if (ug) addUserGroup(ug);
+      }
+    } else if (scope === 'selection-with-children') {
+      for (const id of state.selected) addPart(id);
+      for (const gid of state.selectedGroupIds) {
+        const tn = all.find(n => n.kind === 'group' && n.id === gid);
+        if (tn) addHierGroup(tn);
+        for (const pid of _treeGroupDescendants(gid)) addPart(pid);
+        const ug = (state.userGroups || []).find(g => g.id === gid);
+        if (ug) {
+          addUserGroup(ug);
+          for (const pid of (ug.partIds || [])) addPart(pid);
+        }
+      }
+    } else {
+      for (const id of state.selected) addPart(id);
+      for (const gid of state.selectedGroupIds) {
+        const tn = all.find(n => n.kind === 'group' && n.id === gid);
+        if (tn) addHierGroup(tn);
+        const ug = (state.userGroups || []).find(g => g.id === gid);
+        if (ug) addUserGroup(ug);
+      }
+    }
+
+    const orderMap = new Map();
+    all.forEach((n, i) => {
+      if (n.kind === 'group') orderMap.set('h:' + n.id, i);
+      else if (n.kind === 'part') orderMap.set('p:' + n.partId, i);
+    });
+    const groups = [...candByGroup.values()].sort((a, b) => {
+      const ka = a.kind === 'hier-group' ? orderMap.get('h:' + a.treeNodeId) : Number.MAX_SAFE_INTEGER;
+      const kb = b.kind === 'hier-group' ? orderMap.get('h:' + b.treeNodeId) : Number.MAX_SAFE_INTEGER;
+      return (ka ?? 0) - (kb ?? 0);
+    });
+    const parts = [...candByPart.values()].sort((a, b) => (orderMap.get('p:' + a.partId) ?? 0) - (orderMap.get('p:' + b.partId) ?? 0));
+    const cands = [...groups, ...parts];
+    cands.forEach((c, i) => { c.idx = i; });
+    return cands;
+  }
+
+  function makeFilter(opts) {
+    const checks = [];
+    if (opts.matchRegex) {
+      try { const re = new RegExp(opts.matchRegex, opts.matchCase ? '' : 'i'); checks.push(c => re.test(c.currentName)); }
+      catch { }
+    }
+    if (opts.notMatchRegex) {
+      try { const re = new RegExp(opts.notMatchRegex, opts.matchCase ? '' : 'i'); checks.push(c => !re.test(c.currentName)); }
+      catch { }
+    }
+    if (opts.depthMin != null && Number.isFinite(opts.depthMin)) checks.push(c => c.depth >= opts.depthMin);
+    if (opts.depthMax != null && Number.isFinite(opts.depthMax)) checks.push(c => c.depth <= opts.depthMax);
+    if (opts.trisMin != null && Number.isFinite(opts.trisMin))   checks.push(c => c.triCount >= opts.trisMin);
+    if (opts.trisMax != null && Number.isFinite(opts.trisMax))   checks.push(c => c.triCount <= opts.trisMax);
+    if (opts.kindOnly === 'part')  checks.push(c => c.kind === 'part');
+    if (opts.kindOnly === 'group') checks.push(c => c.kind !== 'part');
+    if (opts.colorEq) {
+      const want = opts.colorEq.toLowerCase();
+      checks.push(c => (c.color || '').toLowerCase() === want);
+    }
+    return cand => checks.every(fn => fn(cand));
+  }
+
+  function applyRule(cand, rule, counter) {
+    if (rule.kind === 'find-replace') {
+      if (!rule.find) return cand.currentName;
+      let re;
+      if (rule.regex) {
+        try { re = new RegExp(rule.find, rule.matchCase ? 'g' : 'gi'); } catch { return cand.currentName; }
+      } else {
+        const escaped = String(rule.find).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        re = new RegExp(escaped, rule.matchCase ? 'g' : 'gi');
+      }
+      return cand.currentName.replace(re, rule.replace || '');
+    }
+    if (rule.kind === 'pattern') {
+      const ctx = {
+        ..._ctxFromCand(cand),
+        _nextCounter: () => counter.next(_counterBucket(cand, counter.mode)),
+      };
+      return rule.fn(ctx);
+    }
+    return cand.currentName;
+  }
+  function _counterBucket(cand, mode) {
+    if (mode === 'parent')   return cand.parent || '';
+    if (mode === 'color')    return cand.color || '';
+    if (mode === 'size') {
+      const d = cand.sizeMetrics?.diag || 0;
+      return d >= 100 ? 'lg' : d >= 10 ? 'md' : 'sm';
+    }
+    return null;
+  }
+  function _ctxFromCand(c) {
+    return {
+      name: c.currentName, parent: c.parent, ancestors: c.ancestors,
+      depth: c.depth, partId: c.partId, idx: c.idx,
+      tris: c.triCount, verts: c.vertCount,
+      diag: c.sizeMetrics?.diag, vol: c.sizeMetrics?.vol, max: c.sizeMetrics?.max,
+      color: c.color, hash: c.hash, instanceCount: c.instanceCount,
+    };
+  }
+
+  function buildPreview(cands, rule, filterFn, counterOpts) {
+    const counter = makeCounter(counterOpts);
+    const rows = [];
+    for (const c of cands) {
+      if (filterFn && !filterFn(c)) {
+        rows.push({ cand: c, oldName: c.currentName, newName: c.currentName, status: 'skipped', reason: 'filtered' });
+        continue;
+      }
+      let next;
+      try { next = applyRule(c, rule, counter); }
+      catch (e) { rows.push({ cand: c, oldName: c.currentName, newName: c.currentName, status: 'error', reason: e.message || 'rule error' }); continue; }
+      if (next == null) next = '';
+      if (next === c.currentName) { rows.push({ cand: c, oldName: c.currentName, newName: next, status: 'unchanged' }); continue; }
+      if (next === '') { rows.push({ cand: c, oldName: c.currentName, newName: next, status: 'error', reason: 'empty name' }); continue; }
+      if (/[\x00-\x1f]/.test(next)) { rows.push({ cand: c, oldName: c.currentName, newName: next, status: 'error', reason: 'control characters' }); continue; }
+      rows.push({ cand: c, oldName: c.currentName, newName: next, status: 'ok' });
+    }
+    const sibKey = new Map();
+    for (const r of rows) if (r.status === 'ok') {
+      const k = (r.cand.parent || '') + ' ' + r.newName;
+      sibKey.set(k, (sibKey.get(k) || 0) + 1);
+    }
+    for (const r of rows) if (r.status === 'ok') {
+      const k = (r.cand.parent || '') + ' ' + r.newName;
+      if (sibKey.get(k) > 1) { r.status = 'warn'; r.reason = 'duplicate sibling'; }
+    }
+    return rows;
+  }
+
+  function commit(rows) {
+    const changes = [];
+    for (const r of rows) {
+      if (r.status !== 'ok' && r.status !== 'warn') continue;
+      const c = r.cand;
+      if (c.kind === 'part') {
+        const p = getPart(c.partId);
+        if (!p) continue;
+        changes.push({ kind: 'part', partId: c.partId, treeNodeId: c.treeNodeId, oldName: p.name, newName: r.newName });
+        p.name = r.newName;
+        if (p.mesh) p.mesh.name = r.newName;
+        if (c.treeNodeId != null) {
+          const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.id === c.treeNodeId);
+          if (tn) tn.name = r.newName;
+        }
+      } else if (c.kind === 'hier-group') {
+        const tn = (state.treeNodes || []).find(n => n.id === c.treeNodeId);
+        if (!tn) continue;
+        changes.push({ kind: 'hier-group', treeNodeId: c.treeNodeId, obj3dRef: tn.obj3d, oldName: tn.name, newName: r.newName });
+        tn.name = r.newName;
+        if (tn.obj3d) tn.obj3d.name = r.newName;
+      } else if (c.kind === 'user-group') {
+        const ug = (state.userGroups || []).find(g => g.id === c.userGroupId);
+        if (!ug) continue;
+        changes.push({ kind: 'user-group', userGroupId: c.userGroupId, oldName: ug.name, newName: r.newName });
+        ug.name = r.newName;
+        if (ug.ref) ug.ref.name = r.newName;
+      }
+    }
+    if (changes.length) {
+      pushUndo({ type: 'batchRename', label: `Rename ${changes.length} item${changes.length === 1 ? '' : 's'}`, changes });
+      rebuildTree();
+      refreshPropertiesPanel?.();
+      requestRender?.();
+      toast?.('Renamed', `${changes.length} item${changes.length === 1 ? '' : 's'} updated`, 'success');
+      Log?.success?.(`Batch rename: ${changes.length} items`, { tag: 'rename' });
+    }
+    return changes.length;
+  }
+
+  const BUILTIN_PRESETS = [
+    { name: 'Strip _geom suffix',     mode: 'find-replace', config: { find: '_geom$',   replace: '', regex: true,  matchCase: false } },
+    { name: 'Strip numeric prefix',   mode: 'find-replace', config: { find: '^\\d+_',   replace: '', regex: true,  matchCase: false } },
+    { name: 'Collapse __ to _',       mode: 'find-replace', config: { find: '__+',      replace: '_', regex: true, matchCase: false } },
+    { name: 'Strip duplicate _NNN',   mode: 'find-replace', config: { find: '_(\\d+)$', replace: '', regex: true,  matchCase: false } },
+    { name: 'Strip _glb_inst_*',      mode: 'find-replace', config: { find: '^_glb_inst_\\d+$', replace: 'instance', regex: true, matchCase: false } },
+    { name: 'Hierarchy flatten',      mode: 'pattern',      config: { template: '{ancestors}_{name}' } },
+    { name: 'Add parent prefix',      mode: 'pattern',      config: { template: '{parent}_{name}' } },
+    { name: 'Sequential within group',mode: 'pattern',      config: { template: '{parent}_{counter:003}', counterMode: 'parent' } },
+    { name: 'Lowercase all',          mode: 'pattern',      config: { template: '{name:lower}' } },
+    { name: 'snake_case all',         mode: 'pattern',      config: { template: '{name:snake}' } },
+    { name: 'Tris bucket prefix',     mode: 'pattern',      config: { template: '{tris:bucket}_{name}' } },
+    { name: 'Hash-tagged name',       mode: 'pattern',      config: { template: '{name}_{hash:6}' } },
+  ];
+
+  function loadUserPresets() {
+    try { return JSON.parse(localStorage.getItem('batchRename.presets.v1') || '[]'); }
+    catch { return []; }
+  }
+  function saveUserPresets(arr) {
+    try { localStorage.setItem('batchRename.presets.v1', JSON.stringify(arr || [])); } catch {}
+  }
+
+  const TOKEN_CATALOG = [
+    { name: 'name',          desc: 'Current name' },
+    { name: 'parent',        desc: 'Immediate parent group name' },
+    { name: 'ancestors',     desc: 'Ancestors joined by _ (or :N for last N)' },
+    { name: 'path',          desc: 'Ancestor path joined by /' },
+    { name: 'depth',         desc: 'Tree depth (root=0)' },
+    { name: 'partId',        desc: 'Numeric part id' },
+    { name: 'idx',           desc: 'Index in candidate list' },
+    { name: 'counter',       desc: 'Sequential counter — :003 to pad' },
+    { name: 'tris',          desc: 'Triangle count' },
+    { name: 'verts',         desc: 'Vertex count' },
+    { name: 'diag',          desc: 'Bounding-box diagonal' },
+    { name: 'vol',           desc: 'Bounding-box volume' },
+    { name: 'max',           desc: 'Largest bbox dimension' },
+    { name: 'color',         desc: 'Material color hex' },
+    { name: 'hash',          desc: 'Geometry hash (:N first N chars)' },
+    { name: 'instanceCount', desc: 'Number of shared instances' },
+  ];
+  const MODIFIER_CATALOG = [
+    { name: 'upper',   desc: 'UPPERCASE' },
+    { name: 'lower',   desc: 'lowercase' },
+    { name: 'title',   desc: 'Title Case' },
+    { name: 'snake',   desc: 'snake_case' },
+    { name: 'kebab',   desc: 'kebab-case' },
+    { name: 'camel',   desc: 'camelCase' },
+    { name: 'trim',    desc: 'Trim whitespace' },
+    { name: 'strip',   desc: 'strip(text)' },
+    { name: 'slice',   desc: 'slice(a,b)' },
+    { name: 'replace', desc: 'replace(/re/repl/flags)' },
+    { name: 'pad',     desc: 'pad(n,c)' },
+    { name: 'round',   desc: 'round(n)' },
+    { name: 'abbrev',  desc: 'abbrev(n)' },
+    { name: 'bucket',  desc: 'Heavy/Med/Light' },
+  ];
+
+  return {
+    compileTemplate, makeCounter, gatherCandidates, makeFilter,
+    applyRule, buildPreview, commit,
+    loadUserPresets, saveUserPresets,
+    BUILTIN_PRESETS, TOKEN_CATALOG, MODIFIER_CATALOG,
+  };
+})();
+
+// =====================================================================
+// _DraggablePopup — shared chrome for floating, draggable, resizable
+// dialogs (Batch Rename, Advanced flatten, future ones).
+// Centralises card chrome (radius, gradient, border, shadow), header
+// (icon + title + subtitle + close), 8-handle resize, drag-from-head,
+// outside-click + Escape to close, and position/size persistence per id.
+// Each instance owns a viewport-positioned card (.dlg-pop) inside a
+// transparent overlay (.dlg-popup). Content lives in .dlg-body and an
+// optional .dlg-foot. Callers wire their own buttons/inputs.
+// =====================================================================
+const _DraggablePopup = (() => {
+  let stylesInjected = false;
+
+  function _injectChromeStyles() {
+    if (stylesInjected) return;
+    stylesInjected = true;
+    const s = document.createElement('style');
+    s.id = '_dlg-popup-style';
+    s.textContent = `
+      .dlg-popup{position:fixed;inset:0;display:none;z-index:300;pointer-events:none}
+      .dlg-popup.show{display:block}
+      .dlg-popup .dlg-pop{
+        position:absolute;
+        max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);
+        background:linear-gradient(180deg,#1a1f2a,#10141c);
+        border:1px solid rgba(255,255,255,.04);
+        border-radius:14px;
+        box-shadow:0 30px 80px -16px rgba(0,0,0,.7),0 8px 24px -8px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);
+        display:flex;flex-direction:column;
+        overflow:hidden;
+        pointer-events:auto;
+        transform:translateY(-8px) scale(.97);
+        opacity:0;
+        transition:transform .22s cubic-bezier(.2,.9,.3,1.1),opacity .16s ease;
+      }
+      .dlg-popup.show .dlg-pop{transform:translateY(0) scale(1);opacity:1}
+      .dlg-popup.dragging .dlg-pop,.dlg-popup.resizing .dlg-pop{transition:none}
+      .dlg-popup.dragging .dlg-pop{cursor:grabbing}
+
+      .dlg-popup .dlg-resize{position:absolute;z-index:2}
+      .dlg-popup .dlg-resize.n{top:-3px;left:12px;right:12px;height:6px;cursor:ns-resize}
+      .dlg-popup .dlg-resize.s{bottom:-3px;left:12px;right:12px;height:6px;cursor:ns-resize}
+      .dlg-popup .dlg-resize.w{left:-3px;top:12px;bottom:12px;width:6px;cursor:ew-resize}
+      .dlg-popup .dlg-resize.e{right:-3px;top:12px;bottom:12px;width:6px;cursor:ew-resize}
+      .dlg-popup .dlg-resize.nw{top:-3px;left:-3px;width:16px;height:16px;cursor:nwse-resize}
+      .dlg-popup .dlg-resize.ne{top:-3px;right:-3px;width:16px;height:16px;cursor:nesw-resize}
+      .dlg-popup .dlg-resize.sw{bottom:-3px;left:-3px;width:16px;height:16px;cursor:nesw-resize}
+      .dlg-popup .dlg-resize.se{bottom:-3px;right:-3px;width:16px;height:16px;cursor:nwse-resize}
+
+      .dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,rgba(110,168,255,.45),rgba(110,168,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+      .dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,rgba(110,168,255,.45),rgba(110,168,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+      .dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,rgba(110,168,255,.45),rgba(110,168,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+      .dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,rgba(110,168,255,.45),rgba(110,168,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+
+      .dlg-popup .dlg-head{display:flex;align-items:center;gap:11px;padding:13px 14px 12px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;position:relative;cursor:grab;user-select:none}
+      .dlg-popup .dlg-head:active{cursor:grabbing}
+      .dlg-popup .dlg-head::after{content:'';position:absolute;left:16px;right:16px;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06) 30%,rgba(255,255,255,.06) 70%,transparent);pointer-events:none}
+      .dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,rgba(110,168,255,.22),rgba(110,168,255,.10));color:var(--ac);box-shadow:inset 0 0 0 1px rgba(110,168,255,.32),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
+      .dlg-popup .dlg-head-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+      .dlg-popup .dlg-head-titles{flex:1;min-width:0}
+      .dlg-popup .dlg-title{font-size:14px;font-weight:600;color:var(--tx);letter-spacing:-.01em;line-height:1.2}
+      .dlg-popup .dlg-sub{font-size:11px;color:var(--tx3);line-height:1.35;margin-top:2px;letter-spacing:.005em}
+      .dlg-popup .dlg-x{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:11px;flex-shrink:0;padding:0;transition:color .14s ease,background .14s ease,transform .14s ease}
+      .dlg-popup .dlg-x:hover{color:var(--tx);background:rgba(255,255,255,.07)}
+      .dlg-popup .dlg-x:active{transform:scale(.92)}
+
+      .dlg-popup .dlg-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+      .dlg-popup .dlg-body[data-scroll="auto"]{overflow-y:auto;padding:14px 16px 16px 16px}
+      .dlg-popup .dlg-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:8px;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .dlg-popup .dlg-foot .dlg-btn{padding:7px 13px;font-size:12px;border-radius:7px}
+    `;
+    document.head.appendChild(s);
+  }
+
+  // Read/write a popup's last position+size from localStorage so reopening
+  // restores it. Re-clamped to the viewport at open time so a stale state
+  // never renders off-screen.
+  function _loadState(key) {
+    try { return JSON.parse(localStorage.getItem('_dlg-pos:' + key) || 'null'); }
+    catch { return null; }
+  }
+  function _saveState(key, card) {
+    try {
+      localStorage.setItem('_dlg-pos:' + key, JSON.stringify({
+        left: card.offsetLeft, top: card.offsetTop,
+        width: card.offsetWidth, height: card.offsetHeight,
+      }));
+    } catch {}
+  }
+
+  function create(opts) {
+    _injectChromeStyles();
+    const {
+      id,
+      title = '',
+      subtitle = '',
+      iconName = '',
+      width = 640, height = 480,
+      minWidth = 360, minHeight = 240,
+      bodyHtml = '',
+      footHtml = null,
+      bodyScroll = false,            // when true, .dlg-body becomes scrollable with default padding
+      persistKey = id,
+      closeOnBackdrop = true,
+      closeOnEscape = true,
+    } = opts;
+
+    if (!id) throw new Error('_DraggablePopup.create: id is required');
+
+    let el = document.getElementById(id);
+    if (el) return _bind(el, opts);
+
+    el = document.createElement('div');
+    el.id = id;
+    el.className = 'dlg-popup';
+    const iconHtml = iconName ? `<div class="dlg-head-icon"><i data-lucide="${iconName}"></i></div>` : '';
+    const subHtml = `<div class="dlg-sub">${subtitle}</div>`;
+    const footMarkup = footHtml != null ? `<div class="dlg-foot">${footHtml}</div>` : '';
+    el.innerHTML = `
+      <div class="dlg-pop">
+        <div class="dlg-resize n"  data-dir="n"></div>
+        <div class="dlg-resize s"  data-dir="s"></div>
+        <div class="dlg-resize w"  data-dir="w"></div>
+        <div class="dlg-resize e"  data-dir="e"></div>
+        <div class="dlg-resize nw" data-dir="nw"></div>
+        <div class="dlg-resize ne" data-dir="ne"></div>
+        <div class="dlg-resize sw" data-dir="sw"></div>
+        <div class="dlg-resize se" data-dir="se"></div>
+        <div class="dlg-head">
+          ${iconHtml}
+          <div class="dlg-head-titles">
+            <div class="dlg-title">${title}</div>
+            ${subHtml}
+          </div>
+          <button class="dlg-x" aria-label="Close">✕</button>
+        </div>
+        <div class="dlg-body"${bodyScroll ? ' data-scroll="auto"' : ''}>${bodyHtml}</div>
+        ${footMarkup}
+      </div>`;
+    document.body.appendChild(el);
+    return _bind(el, opts);
+  }
+
+  function _bind(el, opts) {
+    const {
+      width = 640, height = 480,
+      minWidth = 360, minHeight = 240,
+      persistKey = el.id,
+      closeOnBackdrop = true,
+      closeOnEscape = true,
+      onClose = null,
+    } = opts;
+
+    const card    = el.querySelector('.dlg-pop');
+    const head    = el.querySelector('.dlg-head');
+    const body    = el.querySelector('.dlg-body');
+    const foot    = el.querySelector('.dlg-foot');
+    const titleEl = el.querySelector('.dlg-title');
+    const subEl   = el.querySelector('.dlg-sub');
+    const iconEl  = el.querySelector('.dlg-head-icon');
+    const xBtn    = el.querySelector('.dlg-x');
+
+    const _layout = (state) => {
+      const W = state?.width  ?? width;
+      const H = state?.height ?? height;
+      const cw = Math.min(Math.max(W, minWidth), window.innerWidth - 24);
+      const ch = Math.min(Math.max(H, minHeight), window.innerHeight - 24);
+      card.style.width = cw + 'px';
+      card.style.height = ch + 'px';
+      card.style.minWidth = minWidth + 'px';
+      card.style.minHeight = minHeight + 'px';
+      let L, T;
+      if (state && Number.isFinite(state.left) && Number.isFinite(state.top)) {
+        L = Math.max(4, Math.min(state.left, window.innerWidth - cw - 4));
+        T = Math.max(4, Math.min(state.top,  window.innerHeight - ch - 4));
+      } else {
+        L = Math.round((window.innerWidth - cw) / 2);
+        T = Math.round((window.innerHeight - ch) / 2);
+      }
+      card.style.left = L + 'px';
+      card.style.top  = T + 'px';
+    };
+    _layout(_loadState(persistKey));
+
+    const _hide = () => {
+      el.classList.remove('show');
+      if (onClose) onClose();
+    };
+    const _show = () => {
+      // Re-clamp every open: a previously stored size may exceed the
+      // current viewport (window resize, monitor change), so without this
+      // the popup can render partially off-screen.
+      _layout({
+        left: card.offsetLeft, top: card.offsetTop,
+        width: card.offsetWidth, height: card.offsetHeight,
+      });
+      el.classList.add('show');
+    };
+
+    if (closeOnBackdrop) {
+      el.addEventListener('mousedown', e => {
+        if (!card.contains(e.target)) _hide();
+      });
+    }
+    if (closeOnEscape) {
+      document.addEventListener('keydown', e => {
+        if (!el.classList.contains('show')) return;
+        // Ignore Escape when an in-popup input is mid-IME composition; the
+        // browser will handle it by cancelling composition rather than
+        // dismissing.
+        if (e.isComposing) return;
+        if (e.key === 'Escape') { e.preventDefault(); _hide(); }
+      }, true);
+    }
+    xBtn.addEventListener('click', _hide);
+
+    // Drag from header (excluding close button).
+    let drag = null;
+    head.addEventListener('mousedown', e => {
+      if (e.target.closest('.dlg-x')) return;
+      const r = card.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+      el.classList.add('dragging');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', e => {
+      if (!drag) return;
+      const margin = 4;
+      const w = card.offsetWidth, h = card.offsetHeight;
+      let left = e.clientX - drag.dx;
+      let top  = e.clientY - drag.dy;
+      left = Math.max(margin, Math.min(left, window.innerWidth  - w - margin));
+      top  = Math.max(margin, Math.min(top,  window.innerHeight - h - margin));
+      card.style.left = left + 'px';
+      card.style.top  = top  + 'px';
+    });
+    window.addEventListener('mouseup', () => {
+      if (!drag) return;
+      drag = null;
+      el.classList.remove('dragging');
+      _saveState(persistKey, card);
+    });
+
+    // Resize via 8 handles.
+    let rsz = null;
+    el.querySelectorAll('.dlg-resize').forEach(handle => {
+      handle.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        const r = card.getBoundingClientRect();
+        rsz = {
+          dir: handle.dataset.dir,
+          startX: e.clientX, startY: e.clientY,
+          startL: r.left, startT: r.top,
+          startW: r.width, startH: r.height,
+        };
+        el.classList.add('resizing');
+      });
+    });
+    window.addEventListener('mousemove', e => {
+      if (!rsz) return;
+      const dx = e.clientX - rsz.startX;
+      const dy = e.clientY - rsz.startY;
+      const margin = 4;
+      let L = rsz.startL, T = rsz.startT, W = rsz.startW, H = rsz.startH;
+      if (rsz.dir.includes('e')) W = Math.max(minWidth,  Math.min(rsz.startW + dx, window.innerWidth  - rsz.startL - margin));
+      if (rsz.dir.includes('s')) H = Math.max(minHeight, Math.min(rsz.startH + dy, window.innerHeight - rsz.startT - margin));
+      if (rsz.dir.includes('w')) {
+        const newW = Math.max(minWidth, rsz.startW - dx);
+        L = Math.max(margin, rsz.startL + (rsz.startW - newW));
+        W = newW;
+      }
+      if (rsz.dir.includes('n')) {
+        const newH = Math.max(minHeight, rsz.startH - dy);
+        T = Math.max(margin, rsz.startT + (rsz.startH - newH));
+        H = newH;
+      }
+      card.style.left   = L + 'px';
+      card.style.top    = T + 'px';
+      card.style.width  = W + 'px';
+      card.style.height = H + 'px';
+    });
+    window.addEventListener('mouseup', () => {
+      if (!rsz) return;
+      rsz = null;
+      el.classList.remove('resizing');
+      _saveState(persistKey, card);
+    });
+
+    return {
+      el, card, body, foot, titleEl, subEl, iconEl, xBtn,
+      show: _show, hide: _hide,
+      setTitle: (t) => { titleEl.textContent = t; },
+      setSubtitle: (t) => { if (subEl) subEl.textContent = t == null ? '' : String(t); },
+    };
+  }
+
+  return { create };
+})();
+
+// Modal dialog
+const _BatchRenameDialog = (() => {
+  let bg, card;
+  const STATE = { resolve: null, mode: 'find-replace', debounce: null, candidates: [], previewRows: [] };
+  const E = id => bg && bg.querySelector('#' + id);
+
+  function _injectStyles() {
+    if (document.getElementById('_brn-dlg-style')) return;
+    const s = document.createElement('style');
+    s.id = '_brn-dlg-style';
+    s.textContent = `
+      /* Chrome (card, head, resize, body) is provided by _DraggablePopup.
+         Only Batch Rename content classes live here. */
+      #_brn-dialog .brn-cols{display:flex;flex:1;min-height:0}
+      #_brn-dialog .brn-left{flex:0 0 360px;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.05);min-height:0;overflow:hidden}
+      #_brn-dialog .brn-right{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:rgba(0,0,0,.10)}
+      #_brn-dialog .brn-right-head{padding:13px 16px 9px 16px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);border-bottom:1px solid rgba(255,255,255,.04);flex-shrink:0;background:transparent}
+      .brn-tabs{display:inline-flex;gap:2px;padding:3px;margin:12px 14px 4px 14px;border-radius:8px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.04);box-shadow:inset 0 1px 0 rgba(0,0,0,.20);flex-shrink:0;align-self:flex-start}
+      .brn-tab{all:unset;padding:5px 11px;font-size:12px;color:var(--tx2);border-radius:6px;cursor:pointer;font-weight:500;transition:color .14s ease,background .14s ease,box-shadow .14s ease;letter-spacing:-.005em;text-align:center}
+      .brn-tab:hover{color:var(--tx)}
+      .brn-tab.active{background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.04));color:var(--tx);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 0 0 1px rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.30)}
+      .brn-pane{display:none;flex-direction:column;gap:11px;padding:10px 14px 14px 14px;overflow:auto;flex:1;min-height:0}
+      .brn-pane.active{display:flex}
+      .brn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .brn-row label{font-size:11px;color:var(--tx3);min-width:60px;font-weight:500;letter-spacing:.005em}
+      .brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=text]:focus{border-color:rgba(110,168,255,.55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px rgba(110,168,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=number]:focus{border-color:rgba(110,168,255,.55);box-shadow:0 0 0 3px rgba(110,168,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input::placeholder{color:var(--tx3);opacity:.55}
+      .brn-row select.mac-sel{padding:7px 9px;font-size:12.5px}
+      .brn-tog{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--tx2);cursor:pointer;user-select:none;padding:5px 10px 5px 8px;border-radius:7px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .14s ease,border-color .14s ease,color .14s ease}
+      .brn-tog:hover{background:rgba(255,255,255,.05);color:var(--tx);border-color:rgba(255,255,255,.10)}
+      .brn-tog input[type=checkbox]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:4px;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
+      .brn-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
+      .brn-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
+      .brn-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
+      .brn-tog:has(input[type=checkbox]:checked){background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.30);color:var(--tx)}
+      .brn-tog input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
+      .brn-tog input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
+      .brn-tog input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
+      .brn-tog input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff}
+      .brn-section-title{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:8px 0 6px 0}
+      .brn-presets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+      .brn-preset{all:unset;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.025);cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:border-color .14s ease,background .14s ease,transform .14s ease}
+      .brn-preset:hover{border-color:rgba(110,168,255,.32);background:rgba(110,168,255,.06)}
+      .brn-preset:active{transform:translateY(.5px)}
+      .brn-preset .n{font-size:13px;font-weight:500;color:var(--tx)}
+      .brn-preset .d{font-size:11px;color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .brn-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;background:rgba(0,0,0,.22);border-top:1px solid rgba(255,255,255,.04);font-size:11.5px;color:var(--tx3);flex-shrink:0;flex-wrap:wrap;gap:6px;font-variant-numeric:tabular-nums;letter-spacing:.005em}
+      .brn-summary .ok{color:var(--ok);font-weight:600}
+      .brn-summary .warn{color:var(--wn);font-weight:600}
+      .brn-summary .err{color:var(--er);font-weight:600}
+      .brn-preview{flex:1 1 auto;min-height:0;overflow:auto;background:transparent}
+      .brn-preview-table{width:100%;border-collapse:collapse;font-size:12px;font-family:ui-monospace,monospace}
+      .brn-preview-table tr{border-bottom:1px solid var(--bd)}
+      .brn-preview-table tr.warn{background:rgba(251,191,36,.05)}
+      .brn-preview-table tr.error{background:rgba(255,107,107,.06)}
+      .brn-preview-table tr.unchanged{opacity:.5}
+      .brn-preview-table tr.skipped{opacity:.35}
+      .brn-preview-table td{padding:5px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+      .brn-preview-table td.kind{color:var(--tx3);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;width:60px;font-family:inherit}
+      .brn-preview-table td.arrow{color:var(--tx3);width:24px;text-align:center}
+      .brn-preview-table td.new{color:var(--ac)}
+      .brn-preview-table tr.warn td.new{color:var(--wn)}
+      .brn-preview-table tr.error td.new{color:var(--er)}
+      .brn-preview-table tr.unchanged td.new{color:var(--tx3)}
+      .brn-preview-table tr.skipped td.new{color:var(--tx3)}
+      .brn-preview-table td.reason{color:var(--tx3);font-size:11px;font-family:inherit}
+      .brn-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:8px;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-foot .dlg-btn{padding:7px 13px;font-size:12px;border-radius:7px}
+      .brn-foot #_brn-save{background:transparent;border-color:transparent;color:var(--tx3);padding:7px 4px;font-weight:500}
+      .brn-foot #_brn-save:hover{color:var(--ac);background:transparent;border-color:transparent;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(110,168,255,.5)}
+      .brn-foot #_brn-ok{box-shadow:0 4px 14px rgba(110,168,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
+      .brn-foot #_brn-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
+      .brn-foot #_brn-ok:disabled:hover{filter:grayscale(.3) brightness(.85)}
+      .brn-collapsible{border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);overflow:hidden;flex-shrink:0;transition:border-color .14s ease,background .14s ease}
+      .brn-collapsible:hover{border-color:rgba(255,255,255,.09)}
+      .brn-collapsible.open{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.08)}
+      .brn-collapsible-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;cursor:pointer;font-size:12px;color:var(--tx2);user-select:none;transition:background .12s ease,color .12s ease}
+      .brn-collapsible-h:hover{background:rgba(255,255,255,.025);color:var(--tx)}
+      .brn-collapsible-h strong{color:var(--tx);font-weight:600}
+      .brn-collapsible-h .chev{
+        display:inline-grid;place-items:center;
+        width:18px;height:18px;border-radius:5px;
+        font-size:0;line-height:0;flex-shrink:0;
+        background:rgba(255,255,255,.04);
+        color:var(--tx2);opacity:.85;
+        transition:transform .2s cubic-bezier(.2,.85,.3,1.1),color .14s ease,background .14s ease,opacity .14s ease;
+      }
+      .brn-collapsible-h .chev::before{
+        content:'';width:8px;height:8px;
+        border-right:1.6px solid currentColor;
+        border-bottom:1.6px solid currentColor;
+        transform:translateX(-1px) rotate(-45deg);
+        transition:transform .2s cubic-bezier(.2,.85,.3,1.1);
+      }
+      .brn-collapsible-h:hover .chev{background:rgba(255,255,255,.07);color:var(--tx);opacity:1}
+      .brn-collapsible.open .chev{background:rgba(110,168,255,.15);color:var(--ac);opacity:1}
+      .brn-collapsible.open .chev::before{transform:translateY(-1px) rotate(45deg)}
+      .brn-collapsible-b{display:none;padding:10px 12px 12px 12px;border-top:1px solid rgba(255,255,255,.05);flex-direction:column;gap:8px}
+      .brn-collapsible.open .brn-collapsible-b{display:flex}
+      .brn-token-pop{position:absolute;background:#161b24;border:1px solid rgba(255,255,255,.07);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06);padding:4px;z-index:600;display:none;max-height:280px;overflow:auto;min-width:280px}
+      .brn-token-pop.show{display:block}
+      .brn-token-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:ui-monospace,monospace;font-size:12px;color:var(--tx)}
+      .brn-token-item:hover,.brn-token-item.active{background:var(--ac-soft)}
+      .brn-token-item .desc{color:var(--tx3);font-size:11px;font-family:inherit;font-weight:400}
+      .brn-token-item .tname{font-weight:600;color:var(--ac)}
+      .brn-help{font-size:10.5px;color:var(--tx3);padding-left:68px}
+      .brn-help code{font-family:ui-monospace,monospace;color:var(--ac);background:rgba(0,0,0,.25);padding:0 4px;border-radius:3px}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function _scopeRowHtml() {
+    return `
+      <div class="brn-collapsible open">
+        <div class="brn-collapsible-h"><span><strong>Scope</strong> · what to rename</span><span class="chev">▸</span></div>
+        <div class="brn-collapsible-b">
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="selection" checked>Selection (parts + groups picked in tree)</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="selection-with-children">Selection + descendants</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="selected-parts">Only selected parts</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="selected-groups">Only selected groups</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="whole-tree">Whole tree (every part + every group)</label>
+          </div>
+        </div>
+      </div>`;
+  }
+  function _filtersCollapsibleHtml() {
+    return `
+      <div class="brn-collapsible">
+        <div class="brn-collapsible-h"><span><strong>Apply only if…</strong> (optional filters)</span><span class="chev">▸</span></div>
+        <div class="brn-collapsible-b">
+          <div class="brn-row">
+            <label>Name regex</label>
+            <input type="text" data-filter="matchRegex" data-filter-trigger placeholder="must match (blank = none)">
+          </div>
+          <div class="brn-row">
+            <label>NOT regex</label>
+            <input type="text" data-filter="notMatchRegex" data-filter-trigger placeholder="must NOT match">
+          </div>
+          <div class="brn-row">
+            <label>Color =</label>
+            <input type="text" data-filter="colorEq" data-filter-trigger placeholder="#ff0000" style="max-width:120px;flex:0 0 auto">
+            <label style="margin-left:14px">Kind</label>
+            <select data-filter="kindOnly" data-filter-trigger class="mac-sel" style="max-width:140px">
+              <option value="">any</option><option value="part">parts only</option><option value="group">groups only</option>
+            </select>
+          </div>
+          <div class="brn-row">
+            <label>Depth</label>
+            <input type="number" data-filter="depthMin" data-filter-trigger placeholder="min" style="max-width:80px">
+            <input type="number" data-filter="depthMax" data-filter-trigger placeholder="max" style="max-width:80px">
+            <label style="margin-left:14px">Tris</label>
+            <input type="number" data-filter="trisMin" data-filter-trigger placeholder="min" style="max-width:80px">
+            <input type="number" data-filter="trisMax" data-filter-trigger placeholder="max" style="max-width:80px">
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function _ensure() {
+    if (bg) return;
+    _injectStyles();
+
+    const bodyHtml = `
+      <div class="brn-cols">
+        <div class="brn-left">
+          <div class="brn-tabs">
+            <button class="brn-tab active" data-pane="find">Find &amp; Replace</button>
+            <button class="brn-tab" data-pane="pattern">Pattern</button>
+            <button class="brn-tab" data-pane="presets">Presets</button>
+          </div>
+
+          <div class="brn-pane active" data-pane="find">
+            <div class="brn-row">
+              <label>Find</label>
+              <input type="text" id="_brn-find" placeholder="text or regex">
+            </div>
+            <div class="brn-row" style="padding-left:68px">
+              <label class="brn-tog"><input type="checkbox" id="_brn-regex"> regex</label>
+              <label class="brn-tog"><input type="checkbox" id="_brn-case"> match case</label>
+            </div>
+            <div class="brn-row">
+              <label>Replace</label>
+              <input type="text" id="_brn-replace" placeholder="(use $1 $2 with regex)">
+            </div>
+            ${_filtersCollapsibleHtml()}
+            ${_scopeRowHtml()}
+          </div>
+
+          <div class="brn-pane" data-pane="pattern">
+            <div class="brn-row">
+              <label>Pattern</label>
+              <input type="text" id="_brn-pattern" placeholder="e.g. {parent}_{counter:003}" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="brn-help">
+              Type <code>{</code> for tokens · chain modifiers with <code>:</code>
+            </div>
+            <div class="brn-collapsible">
+              <div class="brn-collapsible-h"><span><strong>Counter</strong></span><span class="chev">▸</span></div>
+              <div class="brn-collapsible-b">
+                <div class="brn-row">
+                  <label>Start</label><input type="number" id="_brn-cnt-start" value="1" step="1">
+                  <label>Step</label><input type="number" id="_brn-cnt-step" value="1" step="1">
+                </div>
+                <div class="brn-row">
+                  <label>Reset per</label>
+                  <select id="_brn-cnt-mode" class="mac-sel">
+                    <option value="global">none</option>
+                    <option value="parent">parent group</option>
+                    <option value="color">color bucket</option>
+                    <option value="size">size bucket</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            ${_filtersCollapsibleHtml()}
+            ${_scopeRowHtml()}
+          </div>
+
+          <div class="brn-pane" data-pane="presets">
+            <div class="brn-section-title">Built-in</div>
+            <div class="brn-presets-grid" id="_brn-presets-builtin"></div>
+            <div class="brn-section-title" style="margin-top:14px">My presets</div>
+            <div class="brn-presets-grid" id="_brn-presets-user"></div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:6px">Build a rule in another tab, then click <em>Save preset…</em> to add it here.</div>
+          </div>
+
+          <div class="brn-foot">
+            <div style="display:flex;gap:8px">
+              <button class="dlg-btn dlg-btn-cancel" id="_brn-save">Save preset…</button>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="dlg-btn dlg-btn-cancel" id="_brn-cancel">Cancel</button>
+              <button class="dlg-btn dlg-btn-ok" id="_brn-ok">Apply</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="brn-right">
+          <div class="brn-right-head">Preview</div>
+          <div class="brn-preview">
+            <table class="brn-preview-table" id="_brn-preview"></table>
+          </div>
+          <div class="brn-summary" id="_brn-summary">No candidates yet</div>
+        </div>
+      </div>`;
+
+    const popup = _DraggablePopup.create({
+      id: '_brn-dialog',
+      title: 'Batch rename',
+      subtitle: '—',
+      iconName: 'signature',
+      width: 880, height: 580,
+      minWidth: 560, minHeight: 380,
+      bodyHtml,
+      onClose: () => _close(null),
+    });
+    bg = popup.el;
+    card = popup.card;
+
+    // Token autocomplete popup is positioned absolute relative to the card.
+    card.insertAdjacentHTML('beforeend', '<div class="brn-token-pop" id="_brn-token-pop"></div>');
+    // Some BR helpers read subtitle via #_brn-sub; expose the helper's .dlg-sub
+    // under that id so the existing _updateScopeSummary code keeps working.
+    popup.subEl.id = '_brn-sub';
+
+    bg.querySelectorAll('.brn-tab').forEach(t => t.addEventListener('click', () => {
+      bg.querySelectorAll('.brn-tab').forEach(x => x.classList.toggle('active', x === t));
+      bg.querySelectorAll('.brn-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === t.dataset.pane));
+      if (t.dataset.pane === 'find') STATE.mode = 'find-replace';
+      else if (t.dataset.pane === 'pattern') STATE.mode = 'pattern';
+      _refreshPreview();
+    }));
+    bg.querySelectorAll('.brn-collapsible-h').forEach(h => h.addEventListener('click', () => {
+      h.parentElement.classList.toggle('open');
+    }));
+
+    const inputs = ['_brn-find','_brn-replace','_brn-regex','_brn-case','_brn-pattern','_brn-cnt-start','_brn-cnt-step','_brn-cnt-mode'];
+    for (const id of inputs) {
+      const el = E(id);
+      if (!el) continue;
+      el.addEventListener('input', _refreshPreview);
+      if (el.tagName === 'SELECT' || el.type === 'checkbox') el.addEventListener('change', _refreshPreview);
+    }
+    bg.querySelectorAll('[data-filter-trigger]').forEach(el => {
+      el.addEventListener('input', _refreshPreview);
+      el.addEventListener('change', _refreshPreview);
+    });
+    bg.querySelectorAll('input[name="_brn-scope"]').forEach(r => r.addEventListener('change', () => {
+      STATE.candidates = _BatchRename.gatherCandidates(_currentScope());
+      _updateScopeSummary();
+      _refreshPreview();
+    }));
+
+    _wireTokenAutocomplete(E('_brn-pattern'));
+
+    E('_brn-cancel').addEventListener('click', () => _close(null));
+    E('_brn-ok').addEventListener('click', _onApply);
+    E('_brn-save').addEventListener('click', _onSavePreset);
+
+    // Ctrl/Cmd+Enter applies. Escape and click-outside are handled by
+    // _DraggablePopup which routes through onClose → _close(null).
+    document.addEventListener('keydown', e => {
+      if (!bg.classList.contains('show')) return;
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); _onApply(); }
+    }, true);
+  }
+
+  function _currentScope() {
+    const r = bg.querySelector('input[name="_brn-scope"]:checked');
+    return r ? r.value : 'selection';
+  }
+  function _currentFilterOpts() {
+    const pane = bg.querySelector('.brn-pane.active');
+    if (!pane) return {};
+    const f = {};
+    pane.querySelectorAll('[data-filter]').forEach(el => {
+      const k = el.dataset.filter;
+      const v = el.value?.trim();
+      if (!v) return;
+      if (['depthMin','depthMax','trisMin','trisMax'].includes(k)) f[k] = parseInt(v, 10);
+      else f[k] = v;
+    });
+    return f;
+  }
+  function _currentRule() {
+    if (STATE.mode === 'find-replace') {
+      return {
+        kind: 'find-replace',
+        find: E('_brn-find').value,
+        replace: E('_brn-replace').value,
+        regex: E('_brn-regex').checked,
+        matchCase: E('_brn-case').checked,
+      };
+    }
+    if (STATE.mode === 'pattern') {
+      const tmpl = E('_brn-pattern').value;
+      const compiled = _BatchRename.compileTemplate(tmpl);
+      return { kind: 'pattern', template: tmpl, fn: compiled.fn, ok: compiled.ok, errors: compiled.errors };
+    }
+    return { kind: 'none' };
+  }
+  function _currentCounter() {
+    return {
+      start: parseInt(E('_brn-cnt-start')?.value, 10) || 1,
+      step:  parseInt(E('_brn-cnt-step')?.value, 10) || 1,
+      mode:  E('_brn-cnt-mode')?.value || 'global',
+    };
+  }
+  function _updateScopeSummary() {
+    const partsCount = STATE.candidates.filter(c => c.kind === 'part').length;
+    const groupsCount = STATE.candidates.filter(c => c.kind !== 'part').length;
+    E('_brn-sub').textContent = `${partsCount} part${partsCount === 1 ? '' : 's'} + ${groupsCount} group${groupsCount === 1 ? '' : 's'} in scope · live preview · Ctrl+Z reverts`;
+  }
+
+  function _refreshPreview() {
+    if (STATE.debounce) clearTimeout(STATE.debounce);
+    STATE.debounce = setTimeout(_doPreview, 80);
+  }
+  function _doPreview() {
+    const rule = _currentRule();
+    const filterFn = _BatchRename.makeFilter(_currentFilterOpts());
+    const cands = STATE.candidates;
+    const rows = (rule.kind === 'pattern' && !rule.ok)
+      ? cands.map(c => ({ cand: c, oldName: c.currentName, newName: c.currentName, status: 'error', reason: rule.errors[0] || 'parse error' }))
+      : _BatchRename.buildPreview(cands, rule, filterFn, _currentCounter());
+    STATE.previewRows = rows;
+    _renderPreview(rows);
+  }
+  function _renderPreview(rows) {
+    const tbl = E('_brn-preview');
+    if (!tbl) return;
+    const summary = { ok: 0, warn: 0, error: 0, unchanged: 0, skipped: 0 };
+    for (const r of rows) summary[r.status] = (summary[r.status] || 0) + 1;
+    // Render all rows. The preview container is `overflow:auto` + capped height,
+    // so the browser only paints rows that scroll into view. innerHTML cost on
+    // a 5000-row table is well under one frame; debounce already prevents
+    // per-keystroke thrash.
+    const html = rows.map(r => {
+      const k = r.cand.kind === 'part' ? 'PART' : r.cand.kind === 'hier-group' ? 'GROUP' : 'UGRP';
+      const reason = r.reason ? `<td class="reason">${escapeHtml(r.reason)}</td>` : '<td class="reason"></td>';
+      return `<tr class="${r.status}">
+        <td class="kind">${k}</td>
+        <td>${escapeHtml(r.oldName)}</td>
+        <td class="arrow">→</td>
+        <td class="new">${escapeHtml(r.newName)}</td>
+        ${reason}
+      </tr>`;
+    }).join('');
+    tbl.innerHTML = html || `<tr><td style="padding:14px 12px;color:var(--tx3)">No candidates in scope. Pick parts or groups in the tree, or change Scope below.</td></tr>`;
+    const sub = E('_brn-summary');
+    if (sub) sub.innerHTML = `
+      <span><span class="ok">${summary.ok} ok</span>${summary.warn ? ` · <span class="warn">${summary.warn} warn</span>` : ''}${summary.error ? ` · <span class="err">${summary.error} error</span>` : ''}${summary.unchanged ? ` · ${summary.unchanged} unchanged` : ''}${summary.skipped ? ` · ${summary.skipped} skipped` : ''}</span>
+      <span style="color:var(--tx3)">${rows.length} total candidate${rows.length === 1 ? '' : 's'}</span>`;
+    const ok = E('_brn-ok');
+    const applyCount = summary.ok + summary.warn;
+    if (ok) {
+      ok.disabled = applyCount === 0 || summary.error > 0;
+      ok.textContent = applyCount > 0 ? `Apply ${applyCount} change${applyCount === 1 ? '' : 's'}` : 'Apply';
+    }
+  }
+
+  function _onApply() {
+    const rows = STATE.previewRows;
+    const okCount = rows.filter(r => r.status === 'ok' || r.status === 'warn').length;
+    if (!okCount) return;
+    const errCount = rows.filter(r => r.status === 'error').length;
+    if (errCount > 0) { toast?.('Cannot apply', `${errCount} row${errCount === 1 ? ' has' : 's have'} errors — fix or filter them out`, 'warn'); return; }
+    const written = _BatchRename.commit(rows);
+    if (written > 0) _close(true);
+  }
+
+  async function _onSavePreset() {
+    const name = await appPrompt('Name this preset:', '', { title: 'Save batch rename preset', okLabel: 'Save' });
+    if (!name) return;
+    const trimmed = String(name).trim();
+    if (!trimmed) { toast?.('Name your preset', '', 'warn'); return; }
+    let preset;
+    if (STATE.mode === 'find-replace') {
+      preset = { name: trimmed, mode: 'find-replace', config: { find: E('_brn-find').value, replace: E('_brn-replace').value, regex: E('_brn-regex').checked, matchCase: E('_brn-case').checked } };
+    } else {
+      preset = { name: trimmed, mode: 'pattern', config: { template: E('_brn-pattern').value, counterMode: E('_brn-cnt-mode').value, counterStart: E('_brn-cnt-start').value, counterStep: E('_brn-cnt-step').value } };
+    }
+    const arr = _BatchRename.loadUserPresets();
+    const exists = arr.findIndex(p => p.name === trimmed);
+    if (exists >= 0) arr[exists] = preset; else arr.push(preset);
+    _BatchRename.saveUserPresets(arr);
+    _renderPresets();
+    toast?.('Preset saved', trimmed, 'success');
+  }
+
+  function _renderPresets() {
+    const builtinEl = E('_brn-presets-builtin');
+    const userEl = E('_brn-presets-user');
+    if (builtinEl) builtinEl.innerHTML = _BatchRename.BUILTIN_PRESETS.map((p, i) => _presetButtonHtml(p, 'b' + i)).join('');
+    const user = _BatchRename.loadUserPresets();
+    if (userEl) userEl.innerHTML = user.length
+      ? user.map((p, i) => _presetButtonHtml(p, 'u' + i, true)).join('')
+      : '<div style="font-size:12px;color:var(--tx3);padding:6px 0">None saved yet.</div>';
+    bg.querySelectorAll('.brn-preset').forEach(b => b.addEventListener('click', () => {
+      const id = b.dataset.id;
+      const isUser = id.startsWith('u');
+      const list = isUser ? _BatchRename.loadUserPresets() : _BatchRename.BUILTIN_PRESETS;
+      const p = list[parseInt(id.slice(1), 10)];
+      if (!p) return;
+      _applyPresetToUI(p);
+    }));
+  }
+  function _presetButtonHtml(p, id, isUser = false) {
+    const subtitle = p.mode === 'find-replace'
+      ? `find: ${p.config.find || '∅'}${p.config.regex ? ' (re)' : ''}`
+      : `template: ${p.config.template || '∅'}`;
+    return `<button class="brn-preset" data-id="${id}">
+      <div class="n">${escapeHtml(p.name)}${isUser ? ' <span style="color:var(--tx3);font-size:10.5px">(yours)</span>' : ''}</div>
+      <div class="d">${escapeHtml(subtitle)}</div>
+    </button>`;
+  }
+  function _applyPresetToUI(preset) {
+    if (preset.mode === 'find-replace') {
+      bg.querySelector('[data-pane="find"].brn-tab').click();
+      E('_brn-find').value = preset.config.find || '';
+      E('_brn-replace').value = preset.config.replace || '';
+      E('_brn-regex').checked = !!preset.config.regex;
+      E('_brn-case').checked = !!preset.config.matchCase;
+    } else {
+      bg.querySelector('[data-pane="pattern"].brn-tab').click();
+      E('_brn-pattern').value = preset.config.template || '';
+      if (preset.config.counterMode) E('_brn-cnt-mode').value = preset.config.counterMode;
+      if (preset.config.counterStart) E('_brn-cnt-start').value = preset.config.counterStart;
+      if (preset.config.counterStep) E('_brn-cnt-step').value = preset.config.counterStep;
+    }
+    _refreshPreview();
+  }
+
+  function _wireTokenAutocomplete(input) {
+    if (!input) return;
+    const pop = E('_brn-token-pop');
+    let activeIdx = 0;
+    let activeList = [];
+
+    const close = () => { pop.classList.remove('show'); activeList = []; activeIdx = 0; };
+    const positionAtCaret = () => {
+      const r = input.getBoundingClientRect();
+      const cardR = card.getBoundingClientRect();
+      pop.style.left = (r.left - cardR.left + 80) + 'px';
+      pop.style.top  = (r.bottom - cardR.top + 4) + 'px';
+    };
+    const showList = (list, kind) => {
+      activeList = list;
+      activeIdx = 0;
+      pop.innerHTML = list.map((t, i) =>
+        `<div class="brn-token-item${i === 0 ? ' active' : ''}" data-i="${i}">
+          <span class="tname">${kind === 'token' ? '{' + t.name + '}' : ':' + t.name}</span>
+          <span class="desc">${escapeHtml(t.desc)}</span>
+        </div>`).join('');
+      pop.querySelectorAll('.brn-token-item').forEach(el => {
+        el.addEventListener('mousedown', e => { e.preventDefault(); _insertToken(el.dataset.i); });
+        el.addEventListener('mouseenter', () => {
+          pop.querySelectorAll('.brn-token-item').forEach(x => x.classList.remove('active'));
+          el.classList.add('active');
+          activeIdx = parseInt(el.dataset.i, 10);
+        });
+      });
+      positionAtCaret();
+      pop.classList.add('show');
+      pop._kind = kind;
+    };
+
+    function _insertToken(idx) {
+      const i = parseInt(idx, 10);
+      const t = activeList[i];
+      if (!t) { close(); return; }
+      const caret = input.selectionStart;
+      const v = input.value;
+      const kind = pop._kind;
+      if (kind === 'token') {
+        let s = caret - 1;
+        while (s >= 0 && v[s] !== '{') s--;
+        if (s < 0) s = caret;
+        const before = v.slice(0, s);
+        const after = v.slice(caret);
+        const next = before + '{' + t.name + '}' + after;
+        input.value = next;
+        const newCaret = (before + '{' + t.name + '}').length;
+        input.setSelectionRange(newCaret, newCaret);
+      } else {
+        const next = v.slice(0, caret) + t.name + v.slice(caret);
+        input.value = next;
+        input.setSelectionRange(caret + t.name.length, caret + t.name.length);
+      }
+      close();
+      input.focus();
+      _refreshPreview();
+    }
+
+    input.addEventListener('input', () => {
+      const caret = input.selectionStart;
+      const v = input.value;
+      let s = caret - 1;
+      while (s >= 0 && v[s] !== '{' && v[s] !== '}') s--;
+      if (s < 0 || v[s] !== '{') { close(); return; }
+      const inside = v.slice(s + 1, caret);
+      const colonIdx = inside.lastIndexOf(':');
+      if (colonIdx === -1) {
+        const prefix = inside;
+        const list = _BatchRename.TOKEN_CATALOG.filter(t => t.name.toLowerCase().startsWith(prefix.toLowerCase()));
+        if (!list.length) { close(); return; }
+        showList(list, 'token');
+      } else {
+        const prefix = inside.slice(colonIdx + 1).replace(/\(.*$/, '');
+        const list = _BatchRename.MODIFIER_CATALOG.filter(t => t.name.toLowerCase().startsWith(prefix.toLowerCase()));
+        if (!list.length) { close(); return; }
+        showList(list, 'mod');
+      }
+    });
+    input.addEventListener('keydown', e => {
+      if (!pop.classList.contains('show')) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const items = pop.querySelectorAll('.brn-token-item');
+        items[activeIdx]?.classList.remove('active');
+        activeIdx = (activeIdx + 1) % items.length;
+        items[activeIdx]?.classList.add('active');
+        items[activeIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const items = pop.querySelectorAll('.brn-token-item');
+        items[activeIdx]?.classList.remove('active');
+        activeIdx = (activeIdx - 1 + items.length) % items.length;
+        items[activeIdx]?.classList.add('active');
+        items[activeIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        _insertToken(activeIdx);
+      } else if (e.key === 'Escape') {
+        e.preventDefault(); e.stopPropagation();
+        close();
+      }
+    }, true);
+    input.addEventListener('blur', () => setTimeout(close, 120));
+  }
+
+  function _close(result) {
+    bg.classList.remove('show');
+    const f = STATE.resolve; STATE.resolve = null;
+    if (f) f(result);
+  }
+
+  return {
+    async open(/* anchorEl ignored — _DraggablePopup persists/restores position */) {
+      _ensure();
+      // Default scope: 'selection' if anything is selected in the tree, else
+      // 'whole-tree' so the popup is useful out of the box — typing in Find
+      // immediately produces preview rows without requiring a prior selection.
+      const hasSelection = (state.selected?.size || 0) + (state.selectedGroupIds?.size || 0) > 0;
+      const defaultScope = hasSelection ? 'selection' : 'whole-tree';
+      bg.querySelectorAll('input[name="_brn-scope"]').forEach(r => { r.checked = (r.value === defaultScope); });
+      STATE.candidates = _BatchRename.gatherCandidates(defaultScope);
+      E('_brn-find').value = '';
+      E('_brn-replace').value = '';
+      E('_brn-pattern').value = '';
+      bg.querySelector('[data-pane="find"].brn-tab').click();
+      _renderPresets();
+      _updateScopeSummary();
+      _refreshPreview();
+      _lucide?.();
+      bg.classList.add('show');
+      setTimeout(() => E('_brn-find')?.focus(), 60);
+      return new Promise(res => { STATE.resolve = res; });
+    },
+  };
+})();
+
+// Undo / redo wrappers for 'batchRename'
+const _origUndoLast_batchRename = undoLast;
+undoLast = function() {
+  const op = state.history[state.history.length - 1];
+  if (op && op.type === 'batchRename') {
+    state.history.pop();
+    for (const ch of op.changes) {
+      if (ch.kind === 'part') {
+        const p = getPart(ch.partId);
+        if (p) { p.name = ch.oldName; if (p.mesh) p.mesh.name = ch.oldName; }
+        if (ch.treeNodeId != null) {
+          const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.id === ch.treeNodeId);
+          if (tn) tn.name = ch.oldName;
+        }
+      } else if (ch.kind === 'hier-group') {
+        const tn = (state.treeNodes || []).find(n => n.id === ch.treeNodeId);
+        if (tn) tn.name = ch.oldName;
+        if (ch.obj3dRef) ch.obj3dRef.name = ch.oldName;
+      } else if (ch.kind === 'user-group') {
+        const ug = (state.userGroups || []).find(g => g.id === ch.userGroupId);
+        if (ug) { ug.name = ch.oldName; if (ug.ref) ug.ref.name = ch.oldName; }
+      }
+    }
+    state.redo.push(op);
+    _finalizeUndo({ rebuildTree: true });
+    return;
+  }
+  return _origUndoLast_batchRename();
+};
+
+const _origRedoLast_batchRename = redoLast;
+redoLast = function() {
+  const op = state.redo[state.redo.length - 1];
+  if (op && op.type === 'batchRename') {
+    state.redo.pop();
+    for (const ch of op.changes) {
+      if (ch.kind === 'part') {
+        const p = getPart(ch.partId);
+        if (p) { p.name = ch.newName; if (p.mesh) p.mesh.name = ch.newName; }
+        if (ch.treeNodeId != null) {
+          const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.id === ch.treeNodeId);
+          if (tn) tn.name = ch.newName;
+        }
+      } else if (ch.kind === 'hier-group') {
+        const tn = (state.treeNodes || []).find(n => n.id === ch.treeNodeId);
+        if (tn) tn.name = ch.newName;
+        if (ch.obj3dRef) ch.obj3dRef.name = ch.newName;
+      } else if (ch.kind === 'user-group') {
+        const ug = (state.userGroups || []).find(g => g.id === ch.userGroupId);
+        if (ug) { ug.name = ch.newName; if (ug.ref) ug.ref.name = ch.newName; }
+      }
+    }
+    state.history.push(op);
+    _finalizeUndo({ rebuildTree: true });
+    return;
+  }
+  return _origRedoLast_batchRename();
+};
+
+// Toolbar wiring + F2 shortcut
+function _openBatchRenameDialog(anchor) { return _BatchRenameDialog.open(anchor); }
+
+const _origWireUI_batchRename = wireUI;
+wireUI = function() {
+  _origWireUI_batchRename();
+  const btn = document.getElementById('tree-batch-rename');
+  btn?.addEventListener('click', () => _openBatchRenameDialog(btn));
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    if (e.key === 'F2') {
+      e.preventDefault();
+      _openBatchRenameDialog(document.getElementById('tree-batch-rename'));
+    }
+  });
+};
 
 const _origWireUI_groups = wireUI;
 wireUI = function() {
@@ -15037,12 +17719,33 @@ setTimeout(() => _dndDecorateTree(), 0);
   const _heatOriginalInstColor = new WeakMap();
   let _heatActive = false;
 
+  // Additive-blend x-ray for heatmap. Order-independent (no transparent sort
+  // means no whole-mesh-disappearing under orbit) and lets dense interior
+  // parts contribute brightness through the outer shell. Opacity ramps with
+  // the bucket index — high-density (red, bad) buckets get more opacity so
+  // the offending parts pop out clearly; low-density (blue, fine) buckets
+  // stay dim so they don't drown the high signal.
+  function _applyXrayFlags(m, bucket = 0) {
+    const rank = bucket / (_HEAT_BUCKETS - 1);          // 0..1, low=cold, high=hot
+    // Linear ramp: 0.18 (cold) → 0.85 (hot). Tunable knobs.
+    const opacity = 0.18 + rank * 0.67;
+    m.transparent     = true;
+    m.opacity         = opacity;
+    m.depthWrite      = false;
+    m.depthTest       = false;
+    m.alphaToCoverage = false;
+    m.blending        = THREE.AdditiveBlending;
+    m.side            = THREE.DoubleSide;
+    m.needsUpdate     = true;
+  }
+
   function _getHeatMat(bucket) {
     let m = _heatMatPool.get(bucket);
     if (m) return m;
     const rank01 = bucket / (_HEAT_BUCKETS - 1);
     const c = _colorForRank(rank01);
     m = new THREE.MeshStandardMaterial({ color: c, metalness: 0.05, roughness: 0.85, side: THREE.DoubleSide });
+    _applyXrayFlags(m, bucket);
     _heatMatPool.set(bucket, m);
     return m;
   }
@@ -15094,6 +17797,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         clone.vertexColors = true;
         clone.userData = clone.userData || {};
         clone.userData._heatClone = true;
+        _applyXrayFlags(clone);
         inst.material = clone;
       }
     }

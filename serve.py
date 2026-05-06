@@ -17,6 +17,19 @@ ROOT = Path(__file__).parent.resolve()
 INBOX = ROOT / "inbox"
 INBOX.mkdir(exist_ok=True)
 
+# step2glb.py needs numpy / OCP / pygltflib, which live in the project's .venv.
+# Users routinely launch `python serve.py` from a global Python that has none of
+# them, so we always prefer the venv's interpreter for the subprocess if it
+# exists. Falls back to whatever's running serve.py.
+def _resolve_python() -> str:
+    if os.name == "nt":
+        candidate = ROOT / ".venv" / "Scripts" / "python.exe"
+    else:
+        candidate = ROOT / ".venv" / "bin" / "python"
+    return str(candidate) if candidate.exists() else sys.executable
+
+PYTHON_BIN = _resolve_python()
+
 # ─── Hard limits / safety knobs ─────────────────────────────────────────────
 # 4 GB upload cap. STEP files for very large CAD assemblies can hit ~1 GB; 4 GB
 # leaves headroom while preventing accidental DoS via runaway uploads.
@@ -131,7 +144,7 @@ def interactive_convert(src: Path) -> Path | None:
     except ValueError: parallel = 0
 
     print()
-    cmd = [sys.executable, str(ROOT / "step2glb.py"), str(src),
+    cmd = [PYTHON_BIN, str(ROOT / "step2glb.py"), str(src),
            "--out", str(dst), "--quality", quality, "--force-colors"]
     # --force-colors guarantees the XCAF reader runs regardless of file size,
     # so the new hierarchical path (assembly tree + instance detection) always
@@ -160,9 +173,15 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
         # --force-colors keeps the XCAF reader on for any size — without it,
         # the in-browser drag of a 300+ MB STEP would silently use the flat
         # plain reader and lose hierarchy/instances/names.
-        cmd = [sys.executable, str(ROOT / "step2glb.py"), str(src_path),
+        cmd = [PYTHON_BIN, str(ROOT / "step2glb.py"), str(src_path),
                "--out", str(dst_path), "--quality", str(quality), "--force-colors"]
         if min_size > 0: cmd += ["--min-size", str(min_size)]
+        # Log which Python interpreter we're calling — makes it obvious in the
+        # browser conversion log when a stale serve.py is still using the
+        # global Python instead of the venv one.
+        with JOBS_LOCK:
+            JOBS[job_id]["log"].append(f"using Python: {PYTHON_BIN}")
+            JOBS[job_id]["message"] = f"using Python: {PYTHON_BIN}"
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, bufsize=1, cwd=ROOT)
         for line in proc.stdout:

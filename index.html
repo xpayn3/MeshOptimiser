@@ -6,12 +6,48 @@
 <title>STEP Optimizer</title>
 <style>
 :root{
+  /* ── Design tokens ──────────────────────────────────────────────────────
+     Single source of truth for the app's visual language. Every component
+     should pull from these; new rgba/hex literals deserve a second look. */
+
+  /* Solid surfaces (base layers) */
   --bg:#0a0d12; --bg1:#0f1319; --bg2:#161b24; --bg3:#1d2330; --bg4:#262e3d;
+
+  /* Translucent surfaces (overlay tints used over varying backgrounds) */
+  --s1:rgba(255,255,255,.025);  /* very subtle fill — section bg */
+  --s2:rgba(255,255,255,.04);   /* base interactive bg — buttons idle */
+  --s3:rgba(255,255,255,.06);   /* inputs, btn idle, popup item idle */
+  --s4:rgba(255,255,255,.08);   /* hover bg, dividers, range track */
+  --s5:rgba(255,255,255,.12);   /* strong hover */
+
+  /* Borders */
   --bd:#262d3c; --bd2:#3a4358;
+  --hairline:rgba(255,255,255,.04);  /* softest divider on dark surfaces */
+
+  /* Text */
   --tx:#e6edf3; --tx2:#8b95a7; --tx3:#5a6275;
+
+  /* Accents / status */
   --ac:#6ea8ff; --ac2:#a78bfa; --ok:#34c759; --wn:#fbbf24; --er:#ff6b6b;
+  --ac-soft:rgba(110,168,255,.10);   /* tint for selected/active states */
+  --ac-line:rgba(110,168,255,.30);   /* tint borders */
+
+  /* Shadows */
   --sh:0 8px 24px rgba(0,0,0,.45);
-  /* Strong custom easings — built-in `ease`/`ease-out` are too weak. */
+  --sh-pop:0 12px 32px rgba(0,0,0,.5);
+
+  /* Radius scale */
+  --r-xs:4px;   /* badges, tiny chips */
+  --r-sm:6px;   /* icon buttons, segmented controls */
+  --r-md:8px;   /* buttons, cards */
+  --r-lg:10px;  /* popups */
+  --r-xl:12px;  /* modals, sections */
+  --r-pill:999px;
+
+  /* Type scale (kept in px, lined up with the existing ramp) */
+  --fs-xs:10.5px; --fs-sm:11.5px; --fs-md:12.5px; --fs-lg:13px; --fs-xl:14px;
+
+  /* Easings — built-in `ease`/`ease-out` are too weak. */
   --ease-out:cubic-bezier(.23,1,.32,1);          /* punchy ease-out for UI exits/entrances */
   --ease-in-out:cubic-bezier(.77,0,.175,1);      /* on-screen movement */
   --ease-ios:cubic-bezier(.32,.72,0,1);          /* iOS-feel curve (drawers, switches) */
@@ -21,10 +57,12 @@ html,body{height:100%}
 body{font:13px/1.4 -apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;color:var(--tx);background:var(--bg);overflow:hidden;-webkit-font-smoothing:antialiased}
 button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
 input,select{font:inherit;color:inherit}
-::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar{width:12px;height:12px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:6px;border:2px solid var(--bg1)}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:7px;border:2px solid var(--bg1);min-height:48px;min-width:48px}
 ::-webkit-scrollbar-thumb:hover{background:var(--bd2)}
+::-webkit-scrollbar-thumb:active{background:var(--ac)}
+::-webkit-scrollbar-corner{background:transparent}
 
 :root{--side-l-w:280px;--side-r-w:320px}
 #app{display:grid;grid-template-columns:var(--side-l-w) 1fr var(--side-r-w);grid-template-rows:38px 1fr 22px;height:100vh;width:100vw}
@@ -42,8 +80,8 @@ body.resizing{cursor:col-resize !important;user-select:none}
 body.resizing *{cursor:col-resize !important}
 
 /* Toolbar */
-#tb{grid-column:1/-1;display:flex;align-items:center;height:38px;padding:0 12px;gap:5px;background:linear-gradient(180deg,var(--bg2),var(--bg1));border-bottom:1px solid var(--bd);z-index:10}
-.brand{display:flex;align-items:center;gap:8px}
+#tb{grid-column:1/-1;display:flex;align-items:center;height:38px;padding:0 12px;gap:5px;background:var(--bg2);border-bottom:1px solid var(--bd);z-index:10}
+.brand{display:flex;align-items:center;gap:8px;position:relative}
 /* Right-side brand: sits at the end of the toolbar with the chip on the right
    and the title/subtitle right-aligned next to it. Margin sits on the left so
    the brand keeps a small gap from the rightmost stat. */
@@ -51,6 +89,37 @@ body.resizing *{cursor:col-resize !important}
 .brand-right .brand-text{text-align:right}
 .brand-mark{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 4px 14px rgba(110,168,255,.35)}
 .brand-mark svg{width:12px;height:12px;stroke:white;fill:none;stroke-width:2}
+/* Brand button — replaces the app-name text. Click to open the brand-menu
+   popover with About / GitHub / version / shortcuts. */
+.brand-btn{all:unset;display:grid;place-items:center;padding:5px;border-radius:8px;cursor:pointer;transition:background 120ms var(--ease-out),transform 120ms var(--ease-out)}
+.brand-btn:hover{background:var(--bg2)}
+.brand-btn:active{transform:scale(.94)}
+.brand-btn:focus-visible{box-shadow:0 0 0 2px var(--ac-line)}
+.brand-btn[aria-expanded="true"] .brand-mark{box-shadow:0 4px 18px rgba(110,168,255,.55),0 0 0 2px var(--ac-line)}
+/* Brand menu — anchored to the brand button on the top-right. Right-aligned
+   transform-origin so it grows out of the button corner. */
+.brand-menu{position:absolute;top:calc(100% + 8px);right:8px;width:300px;background:var(--bg1);border:1px solid var(--bd);border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);padding:8px;z-index:90;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
+.brand-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+.brand-menu-head{display:flex;align-items:center;gap:10px;padding:10px 10px 12px}
+.brand-menu-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 6px 20px rgba(110,168,255,.45);flex:0 0 auto}
+.brand-menu-mark svg{width:18px;height:18px;stroke:white;fill:none;stroke-width:2}
+.brand-menu-titles{flex:1 1 auto;min-width:0}
+.brand-menu-title{font-size:13.5px;font-weight:600;color:var(--tx);line-height:1.15}
+.brand-menu-tagline{font-size:11px;color:var(--tx3);margin-top:2px;line-height:1.15}
+.brand-menu-ver{font-size:10.5px;font-weight:600;color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:2px 7px;letter-spacing:.02em;flex:0 0 auto}
+.brand-menu-about{font-size:11.5px;color:var(--tx2);line-height:1.5;padding:0 10px 4px}
+.brand-menu-sep{height:1px;background:var(--s3);margin:8px 4px}
+.brand-menu-item{all:unset;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--tx);user-select:none;transition:background 80ms,color 80ms;width:calc(100% - 20px)}
+.brand-menu-item:hover,.brand-menu-item:focus-visible{background:var(--ac-soft);outline:none;box-shadow:inset 0 0 0 1px var(--ac-line)}
+.brand-menu-item svg{width:14px;height:14px;stroke:var(--tx2);fill:none;stroke-width:2;flex:0 0 auto}
+.brand-menu-item svg.brand-gh{stroke:none;fill:currentColor;color:var(--tx2)}
+.brand-menu-item:hover svg.brand-gh,.brand-menu-item:focus-visible svg.brand-gh{color:var(--tx)}
+.brand-menu-item:hover svg,.brand-menu-item:focus-visible svg{stroke:var(--tx)}
+.brand-menu-item .lbl{flex:1 1 auto}
+.brand-menu-item .ext{width:12px;height:12px;stroke:var(--tx3);opacity:.7}
+.brand-menu-item .kbd{font-family:var(--mono,ui-monospace,monospace);font-size:10.5px;color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:4px;padding:2px 6px;letter-spacing:.04em}
+.brand-menu-foot{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 10px 4px;font-size:10.5px;color:var(--tx3)}
+.brand-menu-foot .dot{opacity:.5}
 /* Lucide placeholders: keep layout stable before lucide.createIcons() runs */
 i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-style:normal}
 .brand h1{font-size:11.5px;font-weight:600;line-height:1.05}
@@ -67,15 +136,20 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .divider{width:1px;height:15px;background:var(--bd);margin:0 5px}
 .stat{display:flex;align-items:center;gap:5px;padding:0 8px;color:var(--tx2);font-size:11px;font-variant-numeric:tabular-nums}
 .stat strong{color:var(--tx);font-weight:500}
+/* FPS pill — compact rounded badge with a green pulse dot. Color shifts on
+   the dot are driven from JS via .warn / .bad classes. */
+.stat-pill{padding:4px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:999px;gap:6px;line-height:1;white-space:nowrap}
+.stat-pill strong{font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;font-weight:600;color:var(--tx);letter-spacing:.02em;font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums}
+.stat-pill .fps-label{font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:9px;font-weight:600;letter-spacing:.1em;color:var(--tx3);text-transform:uppercase}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
 .dot.warn{background:var(--wn)}.dot.off{background:var(--tx3)}
 
 /* Sidebars */
-.panel{background:var(--bg1);display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
+.panel{background:var(--bg);display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
 #sidebar-left{border-right:1px solid var(--bd)}
-#sidebar-right{display:block;border-left:1px solid var(--bd);overflow-y:auto;padding:12px 12px 20px;background:radial-gradient(circle at 80% 0%,rgba(110,168,255,.04),transparent 50%),linear-gradient(180deg,var(--bg1),#0c1017)}
+#sidebar-right{display:block;border-left:1px solid var(--bd);overflow-y:auto;padding:12px 12px 20px;background:radial-gradient(circle at 80% 0%,rgba(110,168,255,.04),transparent 50%),var(--bg)}
 #sidebar-right .section{flex-shrink:0}
-.section{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);border-radius:12px;margin-bottom:10px;overflow:hidden;backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 rgba(255,255,255,.03),0 4px 16px rgba(0,0,0,.18)}
+.section{background:var(--bg1);border-radius:var(--r-xl);margin-bottom:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.18)}
 .section:last-child{margin-bottom:0}
 .section-h{display:flex;align-items:center;justify-content:space-between;padding:11px 14px 9px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);cursor:pointer;user-select:none}
 .section-h:hover{color:var(--tx)}
@@ -94,19 +168,23 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tree-search input:focus{border-color:var(--ac)}
 .tree-search svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;stroke:var(--tx3);fill:none;stroke-width:2}
 .tree-summary{padding:6px 14px;font-size:11px;color:var(--tx3)}
-.tree-node{display:flex;align-items:center;gap:6px;padding:6px 12px 6px 8px;font-size:12.5px;cursor:pointer;user-select:none;border-left:2px solid transparent;white-space:nowrap;contain:layout style paint;content-visibility:auto;contain-intrinsic-size:0 28px;width:max-content;min-width:100%}
+.tree-node{display:flex;align-items:center;gap:6px;padding:6px 12px 6px 8px;font-size:12.5px;cursor:pointer;user-select:none;border-left:2px solid transparent;white-space:nowrap;contain:layout style paint;min-height:30px;width:max-content;min-width:100%;overflow-anchor:none}
+#tree{overflow-anchor:none}
 /* Collapsed-ancestor hide. _toggleGroupCollapseFast flips this class per
    subtree row instead of rebuilding the DOM — keeps expand/collapse < 10ms
    on a 9700-node tree (was ~1s on each toggle due to the Lucide icon pass). */
 .tree-node.is-hidden{display:none}
 .tree-node:hover{background:rgba(255,255,255,.03)}
-.tree-node.selected{background:rgba(110,168,255,.12);border-left-color:var(--ac)}
+.tree-node.selected{background:transparent;border-left-color:transparent}
 .tree-node.hidden-vis{opacity:.45}
-.tree-node.flagged{color:var(--wn)}
+/* Subtle yellow tint on flagged-small-part rows, only when the
+   "Highlight small" toggle is on. */
+#tree.flag-on .tree-node.flagged{background:rgba(251,191,36,.08);box-shadow:inset 2px 0 0 rgba(251,191,36,.55)}
+#tree.flag-on .tree-node.flagged:hover{background:rgba(251,191,36,.13)}
 .tree-vis{width:18px;height:18px;display:grid;place-items:center;flex-shrink:0;border-radius:4px;opacity:.55}
-.tree-vis:hover{opacity:1;background:rgba(255,255,255,.06)}
+.tree-vis:hover{opacity:1;background:var(--s3)}
 .tree-vis svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
-.tree-color{width:10px;height:10px;border-radius:2px;flex-shrink:0;border:1px solid rgba(255,255,255,.1)}
+.tree-color{width:10px;height:10px;border-radius:2px;flex-shrink:0;border:1px solid var(--s5)}
 .tree-label{flex:0 0 auto;white-space:nowrap}
 .tree-meta{color:var(--tx3);font-size:10.5px;flex-shrink:0;font-variant-numeric:tabular-nums}
 /* Right-side icon column (eye + color swatch). Sticky to the scrollport's
@@ -121,13 +199,13 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tree-inst svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2.2}
 /* ── Properties panel ───────────────────────────────────────────────────── */
 .prop-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;min-height:18px}
-.prop-color{flex-shrink:0;width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.18);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.prop-color{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.18);box-shadow:0 1px 2px rgba(0,0,0,.4)}
 .prop-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
 .prop-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;min-height:14px}
 .prop-bar-wrap{display:flex;align-items:center;gap:8px;margin:8px 0 10px;font-size:11px;color:var(--tx3)}
 .prop-bar-wrap .prop-bar-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3);flex-shrink:0}
 .prop-bar-wrap .prop-bar-icon svg{width:13px;height:13px}
-.prop-bar{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}
+.prop-bar{flex:1;height:6px;background:var(--s3);border-radius:999px;overflow:hidden}
 .prop-bar-fill{height:100%;background:var(--ac);border-radius:999px;transition:width 200ms var(--ease-out),background 200ms var(--ease-out)}
 .prop-bar-fill.heavy{background:var(--wn)}
 .prop-bar-fill.very-heavy{background:var(--er)}
@@ -138,7 +216,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-grid .prop-label{color:var(--tx3)}
 .prop-grid .prop-value{color:var(--tx);font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
 .tree-badge.warn{background:rgba(251,191,36,.15);color:var(--wn)}
-.tree-badge.muted{background:rgba(255,255,255,.08);color:var(--tx3)}
+.tree-badge.muted{background:var(--s4);color:var(--tx3)}
 .tree-badge.danger{background:rgba(255,107,107,.15);color:var(--er)}
 
 /* C4D-style tree: small +/- expand boxes, colored icons, tinted labels.
@@ -163,6 +241,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    distinguishable at a glance — only the text is monochrome by default.   */
 .tree-node .tree-label{color:var(--tx2)}
 .tree-node.selected .tree-label{color:#f59e0b}
+.tree-node.ancestor-selected .tree-label{color:rgba(245,158,11,.5)}
 
 /* Real tree lines via inline indent spans — one span per ancestor depth.
    The vertical line is the span's left border; the bottom span ("elbow")
@@ -201,7 +280,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
   left:7px;
   top:0;
   bottom:0;
-  border-left:1px solid #3a4358;
+  border-left:1px solid var(--bd);
 }
 /* Elbow: horizontal stub at row mid-height connecting the vertical line to
    the next column's content (icon or +/- box). Starts at the vertical's
@@ -212,27 +291,27 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
   left:8px;     /* right of the vertical so they connect cleanly */
   top:50%;
   width:6px;    /* reaches the right edge of the 14px column */
-  border-top:1px solid #3a4358;
+  border-top:1px solid var(--bd);
 }
 
 /* Assembly row hover/select bg — subtle amber wash on selection only. */
 .tree-node.is-group{font-weight:500;background:transparent}
 .tree-node.is-group:hover{background:rgba(255,255,255,.03)}
-.tree-node.is-group.selected{background:rgba(245,158,11,.13);border-left-color:#f59e0b}
+.tree-node.is-group.selected{background:transparent;border-left-color:transparent}
 
 /* Compact toolbar row under the search input */
 .tree-toolbar{display:flex;gap:3px;padding:0 10px 6px;align-items:center}
 .tree-toolbar #tree-sort{flex:1 1 0;min-width:0;font-size:11px;padding:5px 20px 5px 7px;background-position:right 6px center}
-.tree-icon-btn{flex:0 0 28px;width:28px;height:28px;display:grid;place-items:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.05);border-radius:5px;color:var(--tx2);cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 120ms var(--ease-out)}
-.tree-icon-btn:hover{color:var(--tx);background:rgba(255,255,255,.1);border-color:var(--bd)}
+.tree-icon-btn{flex:0 0 28px;width:28px;height:28px;display:grid;place-items:center;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 120ms var(--ease-out)}
+.tree-icon-btn:hover{color:var(--tx);background:var(--bg3);border-color:var(--bd2)}
 .tree-icon-btn:active{transform:scale(.92)}
-.tree-icon-btn.active{color:var(--ac);background:rgba(110,168,255,.12);border-color:rgba(110,168,255,.3)}
+.tree-icon-btn.active{color:var(--ac);background:var(--ac-soft);border-color:var(--ac-line)}
 .tree-icon-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 
 /* Group rows in the parts tree */
 .tree-node.is-group{font-weight:600;background:rgba(167,139,250,.05);border-left-color:transparent}
 .tree-node.is-group:hover{background:rgba(167,139,250,.1)}
-.tree-node.is-group.selected{background:rgba(167,139,250,.18);border-left-color:var(--ac2)}
+.tree-node.is-group.selected{background:rgba(167,139,250,.05);border-left-color:transparent}
 .tree-chev{width:14px;display:inline-grid;place-items:center;color:var(--tx3);font-size:10px;flex-shrink:0;cursor:pointer;transition:transform .15s}
 .tree-chev:hover{color:var(--tx)}
 .tree-node.collapsed .tree-chev{transform:rotate(-90deg)}
@@ -243,7 +322,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tree-group-actions{display:none;gap:2px;flex-shrink:0}
 .tree-node.is-group:hover .tree-group-actions{display:inline-flex}
 .tree-group-actions button{padding:2px 4px;background:transparent;border:1px solid transparent;border-radius:3px;color:var(--tx3);cursor:pointer;font-size:10px}
-.tree-group-actions button:hover{color:var(--tx);background:rgba(255,255,255,.08);border-color:var(--bd)}
+.tree-group-actions button:hover{color:var(--tx);background:var(--s4);border-color:var(--bd)}
 .tree-group-actions svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 
 /* Right panel controls */
@@ -252,11 +331,11 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .field label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--tx2);margin-bottom:7px;font-weight:500}
 .field label .v{color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600}
 .field-help{font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.55}
-input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:rgba(255,255,255,.08);border-radius:2px;outline:none}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(--bg3);border-radius:var(--r-pill);outline:none}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;background:white;border-radius:50%;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.2);transition:transform .12s}
 input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .range-row{display:flex;align-items:center;gap:10px}
-.range-row input[type=number]{width:64px;padding:6px 8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx);font-size:12px;font-variant-numeric:tabular-nums;outline:none;text-align:right;-moz-appearance:textfield}
+.range-row input[type=number]{width:64px;padding:6px 8px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx);font-size:12px;font-variant-numeric:tabular-nums;outline:none;text-align:right;-moz-appearance:textfield}
 .range-row input[type=number]::-webkit-outer-spin-button,.range-row input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 /* Marquee (rubber-band) selection box drawn over the viewport while the user
@@ -267,12 +346,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Slider — plain native <input type="range"> with a label/value header above.
    Filled portion = CSS variable `--scrub-pct` updated by JS on input. Trusted
    browser drag/keyboard/touch behavior; no custom pointer code. */
-.scrub{display:flex;flex-direction:column;gap:6px;padding:2px 0;--scrub-pct:0%}
+.scrub{display:flex;flex-direction:column;gap:10px;padding:2px 0;--scrub-pct:0%}
 .scrub-head{display:flex;align-items:center;justify-content:space-between;gap:10px;line-height:1;min-height:16px}
 .scrub-label{font-size:12px;font-weight:500;color:var(--tx2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
 .scrub-rhs{display:flex;align-items:center;gap:4px;flex-shrink:0;line-height:1}
 .scrub-value{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;color:var(--tx);line-height:1;display:inline-flex;align-items:center;justify-content:flex-end;height:20px;min-width:36px;padding:0 6px;border-radius:4px;cursor:text}
-.scrub-value:hover{background:rgba(255,255,255,.08)}
+.scrub-value:hover{background:var(--s4)}
 .scrub.editing .scrub-value{background:rgba(110,168,255,.14);color:#fff}
 .scrub-input{font:inherit;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;line-height:1;color:#fff;background:rgba(110,168,255,.14);border:1px solid rgba(110,168,255,.5);border-radius:4px;padding:0 6px;height:20px;width:60px;text-align:right;outline:none;font-family:inherit}
 .scrub-input::-webkit-outer-spin-button,.scrub-input::-webkit-inner-spin-button{-webkit-appearance:none}
@@ -280,8 +359,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Native range — track is a thin rounded bar, fill is drawn via background
    gradient up to --scrub-pct, thumb is a small accent disc. */
 .scrub-range{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;outline:none;cursor:pointer;margin:0;padding:0;display:block}
-.scrub-range::-webkit-slider-runnable-track{box-sizing:border-box;height:4px;border-radius:999px;background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--scrub-pct),rgba(255,255,255,.08) var(--scrub-pct),rgba(255,255,255,.08) 100%);border:none}
-.scrub-range::-moz-range-track{box-sizing:border-box;height:4px;border-radius:999px;background:rgba(255,255,255,.08);border:none}
+.scrub-range::-webkit-slider-runnable-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--scrub-pct),var(--bg3) var(--scrub-pct),var(--bg3) 100%);border:none}
+.scrub-range::-moz-range-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:var(--bg3);border:none}
 .scrub-range::-moz-range-progress{height:4px;border-radius:999px;background:var(--ac)}
 .scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:14px;height:14px;border-radius:50%;background:var(--ac);border:2px solid var(--bg1);margin-top:-7px;box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 1px rgba(110,168,255,.35);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
 .scrub-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ac);border:2px solid var(--bg1);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 1px rgba(110,168,255,.35);cursor:grab}
@@ -291,11 +370,11 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .scrub-range:active::-moz-range-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(110,168,255,.18)}
 .scrub-range:focus-visible::-webkit-slider-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(110,168,255,.35)}
 .scrub-range:focus-visible::-moz-range-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(110,168,255,.35)}
-.mac-sel{width:100%;padding:7px 28px 7px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center}
-.mac-sel:hover{background-color:rgba(255,255,255,.09)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.05);border-radius:8px;color:var(--tx);font-size:12.5px;font-weight:500;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 1px 2px rgba(0,0,0,.15)}
-.btn:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.08)}
-.btn:active{transform:scale(.97);background:rgba(255,255,255,.04)}
+.mac-sel{width:100%;padding:7px 28px 7px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
+.mac-sel:hover{background:var(--bg3);border-color:var(--bd2)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:500;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
+.btn:hover{background:var(--bg3);border-color:var(--bd2)}
+.btn:active{transform:scale(.97);background:var(--bg2)}
 .btn.danger{color:var(--er)}
 .btn.danger:hover{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
 .btn.warn{color:var(--wn)}
@@ -309,13 +388,13 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    The density bar fills red→amber→green by tri-density rank so the eye
    can scan straight to the worst offenders without reading numbers. */
 .off-list{display:flex;flex-direction:column;gap:3px}
-.off-row{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:5px 7px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.04);border-radius:6px;cursor:pointer;font-size:11.5px;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out)}
-.off-row:hover{background:rgba(110,168,255,.07);border-color:rgba(110,168,255,.18)}
-.off-row.selected{background:rgba(110,168,255,.13);border-color:rgba(110,168,255,.35)}
+.off-row{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:5px 7px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-sm);transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out)}
+.off-row:hover{background:var(--bg3);border-color:var(--bd2)}
+.off-row.selected{background:var(--ac-soft);border-color:var(--ac-line)}
 .off-rank{color:var(--tx3);font-variant-numeric:tabular-nums;text-align:center;font-size:10.5px}
 .off-mid{display:flex;flex-direction:column;gap:2px;min-width:0}
 .off-name{color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.off-bar{display:block;height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-top:2px;width:100%}
+.off-bar{display:block;height:5px;background:var(--s4);border-radius:3px;overflow:hidden;margin-top:2px;width:100%}
 .off-bar-fill{height:100%;border-radius:3px;transition:width 200ms var(--ease-out);min-width:2px;display:block}
 .off-tri{color:var(--tx2);font-variant-numeric:tabular-nums;font-size:10.5px;flex-shrink:0}
 .off-empty{display:none}
@@ -327,7 +406,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    current choice is obvious without reading numbers. */
 .split-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;overflow:hidden;padding:2px}
 .split-preset{padding:6px 2px;background:transparent;color:var(--tx2);font-size:11px;font-weight:500;border:none;border-radius:4px;cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out);white-space:nowrap}
-.split-preset:hover{color:var(--tx);background:rgba(255,255,255,.04)}
+.split-preset:hover{color:var(--tx);background:var(--hairline)}
 .split-preset.active{background:linear-gradient(180deg,var(--ac),#4f8be5);color:white;box-shadow:0 1px 2px rgba(110,168,255,.25)}
 .split-preview .pv-warn{color:var(--wn)}
 .split-preview .pv-ok{color:var(--ok)}
@@ -335,20 +414,31 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .split-advanced[open] summary{color:var(--tx2)}
 .btn-split{display:flex;width:100%}
 .btn-split > .btn{border-top-right-radius:0;border-bottom-right-radius:0;border-right:none}
-.btn-split > .btn-caret{display:inline-flex;align-items:center;justify-content:center;width:26px;flex:0 0 26px;padding:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.05);border-top-left-radius:0;border-bottom-left-radius:0;border-top-right-radius:8px;border-bottom-right-radius:8px;color:var(--tx);cursor:pointer;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
-.btn-split > .btn-caret:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.08)}
+.btn-split > .btn-caret{display:inline-flex;align-items:center;justify-content:center;width:26px;flex:0 0 26px;padding:0;background:var(--bg2);border:1px solid var(--bd);border-top-left-radius:0;border-bottom-left-radius:0;border-top-right-radius:var(--r-md);border-bottom-right-radius:var(--r-md);color:var(--tx);cursor:pointer;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
+.btn-split > .btn-caret:hover{background:var(--bg3);border-color:var(--bd2)}
 .btn-split > .btn-caret svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:1.6}
+.btn-caret.warn{color:var(--wn)}
+.btn-split > .btn-caret.warn:hover{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25)}
+.btn-caret.danger{color:var(--er)}
+.btn-split > .btn-caret.danger:hover{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
+/* Hover either half of a split button — the other half lights up too. */
+.btn-split:has(> .btn-caret:hover) > .btn,
+.btn-split:has(> .btn:hover) > .btn-caret{background:var(--bg3);border-color:var(--bd2)}
+.btn-split:has(> .btn-caret.warn:hover) > .btn,
+.btn-split:has(> .btn.warn:hover) > .btn-caret{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25)}
+.btn-split:has(> .btn-caret.danger:hover) > .btn,
+.btn-split:has(> .btn.danger:hover) > .btn-caret{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
 .fit-pop{position:fixed;z-index:9000;min-width:220px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5);padding:6px;opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .fit-pop.show{opacity:1;transform:translateY(0);pointer-events:auto}
 .fit-pop .fit-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:12.5px;color:var(--tx);cursor:pointer;transition:background 120ms var(--ease-out)}
 .fit-pop .fit-item:hover{background:rgba(255,255,255,.07)}
 .fit-pop .fit-item .fit-hint{margin-left:auto;font-size:10.5px;color:var(--tx3)}
-.fit-pop .fit-sep{height:1px;background:rgba(255,255,255,.06);margin:4px 6px}
+.fit-pop .fit-sep{height:1px;background:var(--s3);margin:4px 6px}
 .fit-pop .fit-sliders{padding:8px 10px}
 .fit-pop .fit-sliders label{display:block;font-size:11px;color:var(--tx2);margin:6px 0 2px}
-.fit-pop .fit-sliders input[type=range]{width:100%}
+.fit-pop .fit-sliders input[type=range]{width:100%;margin:6px 0 10px}
 .fit-pop .fit-sliders .fit-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--tx3)}
-.toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:13px;border-top:1px solid rgba(255,255,255,.04);min-width:0}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:13px;border-top:1px solid var(--hairline);min-width:0}
 .toggle > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .toggle:first-child{border-top:none}
 .toggle label{flex-shrink:0;display:inline-flex;align-items:center;cursor:pointer}
@@ -391,33 +481,27 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    button to choose a format; the modal then opens for that format's
    options (scale, axis, origin, selected/visible, draco, etc.). */
 .export-wrap{position:relative;display:inline-flex}
-.export-wrap .caret{margin-left:4px;font-size:10px;color:var(--tx2);transition:transform 140ms var(--ease-out)}
+.export-wrap .caret{display:inline-flex;align-items:center;justify-content:center;margin-left:2px;color:var(--tx2);transition:transform 140ms var(--ease-out)}
+.export-wrap .caret svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .export-wrap.open .caret{transform:rotate(180deg)}
 .export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:6px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .export-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-.export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--tx);width:calc(100% - 24px);user-select:none;transition:background 80ms}
-.export-menu-item:hover,.export-menu-item:focus-visible{background:rgba(255,255,255,.06);outline:none}
+.export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--tx);width:calc(100% - 24px);user-select:none;transition:background 80ms,color 80ms}
+.export-menu-item:hover,.export-menu-item:focus-visible{background:var(--ac-soft);color:var(--tx);outline:none;box-shadow:inset 0 0 0 1px var(--ac-line)}
+.export-menu-item:hover .hint,.export-menu-item:focus-visible .hint{color:var(--tx2)}
 .export-menu-item .fmt{font-weight:600;letter-spacing:.02em}
 .export-menu-item .hint{color:var(--tx3);font-size:11px;font-weight:400}
-.export-menu-sep{height:1px;background:rgba(255,255,255,.06);margin:4px 6px}
+.export-menu-sep{height:1px;background:var(--s3);margin:4px 6px}
 
 /* Settings popover — floats next to the top-right viewport buttons. Mirrors
    the sidebar `.section-b` layout so existing field/toggle markup drops in
    unchanged. Hidden by default; JS toggles `.show` and outside-click closes. */
 #vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
 #vp-settings-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-#vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.05)}
+#vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid var(--s2)}
 #vp-settings-pop .pop-section:last-child{border-bottom:none}
 #vp-settings-pop .pop-section-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:10px}
 
-/* Dropzone */
-#dropzone{position:absolute;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at center,rgba(110,168,255,.04),transparent 60%);pointer-events:auto;transition:background .2s}
-#dropzone.drag-over{background:rgba(110,168,255,.08)}
-#dropzone.drag-over .dz-card{border-color:var(--ac)}
-.dz-card{border:2px dashed var(--bd2);border-radius:14px;padding:50px 70px;text-align:center;background:rgba(15,19,25,.4);backdrop-filter:blur(8px);max-width:480px}
-.dz-card svg.dz-icon{width:50px;height:50px;stroke:var(--ac);fill:none;stroke-width:1.5;margin-bottom:16px}
-.dz-card h2{font-size:17px;margin-bottom:6px;font-weight:600}
-.dz-card p{color:var(--tx2);font-size:12.5px;margin-bottom:18px;line-height:1.55}
 .kbd{display:inline-block;padding:1px 5px;font-size:10px;background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:ui-monospace,monospace}
 
 /* Loader */
@@ -430,17 +514,17 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .loader-text{flex:1;min-width:0}
 #loader-msg{color:var(--tx);font-weight:600;font-size:14px;margin-bottom:2px}
 #loader-sub{color:var(--tx2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#loader-time{color:var(--tx2);font-size:12px;font-variant-numeric:tabular-nums;flex-shrink:0;padding:4px 8px;background:rgba(255,255,255,.04);border-radius:6px}
-.loader-bar{height:6px;background:rgba(255,255,255,.06);border-radius:3px;margin-top:14px;overflow:hidden;position:relative}
+#loader-time{color:var(--tx2);font-size:12px;font-variant-numeric:tabular-nums;flex-shrink:0;padding:4px 8px;background:var(--hairline);border-radius:6px}
+.loader-bar{height:6px;background:var(--s3);border-radius:3px;margin-top:14px;overflow:hidden;position:relative}
 .loader-bar-fill{height:100%;width:35%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:3px;transition:width .3s ease;position:absolute;left:0}
 .loader-bar-fill.indeterminate{animation:slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
 @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
-.loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.04);border-radius:7px;padding:8px 10px;font:11px/1.55 ui-monospace,Menlo,monospace;color:var(--tx2)}
+.loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid var(--hairline);border-radius:7px;padding:8px 10px;font:11px/1.55 ui-monospace,Menlo,monospace;color:var(--tx2)}
 .log-line{display:flex;gap:8px}
 .log-time{color:var(--tx3);flex-shrink:0;width:48px}
 .log-msg.ok{color:var(--ok)}.log-msg.warn{color:var(--wn)}.log-msg.err{color:var(--er)}
 .loader-cancel{margin-top:12px;text-align:right}
-.loader-cancel button{padding:6px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx2);font-size:12px;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
+.loader-cancel button{padding:6px 14px;background:var(--s3);border:1px solid var(--s3);border-radius:6px;color:var(--tx2);font-size:12px;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
 .loader-cancel button:hover{color:var(--er);border-color:rgba(255,107,107,.3)}
 
 /* Status bar */
@@ -449,7 +533,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 #sb strong{color:var(--tx2);font-weight:500}
 #sb .right{margin-left:auto}
 #sb .sb-action{cursor:pointer;padding:2px 8px;border-radius:4px;border:1px solid transparent;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
-#sb .sb-action:hover{background:rgba(255,255,255,.04);border-color:var(--bd);color:var(--tx)}
+#sb .sb-action:hover{background:var(--hairline);border-color:var(--bd);color:var(--tx)}
 #sb .sb-action svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 #sb .sb-action.empty{opacity:.45;cursor:default;pointer-events:none}
 #sb #sb-selected.active{color:var(--ac);background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.30)}
@@ -463,11 +547,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    hidden. Modals stay center-origin (unlike popovers); only translateY+scale
    sells the entrance — origin stays in the middle. */
 .modal-bg{position:fixed;inset:0;background:rgba(6,8,12,.55);backdrop-filter:blur(10px) saturate(140%);-webkit-backdrop-filter:blur(10px) saturate(140%);display:grid;place-items:center;z-index:200;opacity:0;pointer-events:none;transition:opacity 180ms var(--ease-out)}
+#cmdk-modal{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none}
 .modal-bg.show{opacity:1;pointer-events:auto}
-.modal{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;width:420px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform 220ms var(--ease-out),opacity 180ms var(--ease-out)}
+.modal{background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-xl);width:420px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform 220ms var(--ease-out),opacity 180ms var(--ease-out)}
 .modal-bg.show .modal{transform:translateY(0) scale(1);opacity:1}
 .modal-h{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
-.modal-h h3{font-size:14px;font-weight:600}
+.modal-h h3{font-size:var(--fs-xl);font-weight:600}
 .modal-h .x{background:none;border:none;color:var(--tx3);padding:4px}
 .modal-h .x:hover{color:var(--tx)}
 .modal-b{padding:18px 20px;flex:1 1 auto;overflow-y:auto;min-height:0}
@@ -512,7 +597,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .lc-h{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif}
 .lc-h .lc-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);padding-right:4px}
 .lc-filters{display:flex;gap:3px}
-.lc-pill{padding:3px 9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.05);border-radius:5px;color:var(--tx2);font-size:11px;cursor:pointer;font-variant-numeric:tabular-nums;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out);font-family:inherit}
+.lc-pill{padding:3px 9px;background:var(--hairline);border:1px solid var(--s2);border-radius:5px;color:var(--tx2);font-size:11px;cursor:pointer;font-variant-numeric:tabular-nums;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out);font-family:inherit}
 .lc-pill:hover{color:var(--tx);background:rgba(255,255,255,.07)}
 .lc-pill:active{transform:scale(.95)}
 .lc-pill.active{color:var(--tx);background:rgba(110,168,255,.12);border-color:rgba(110,168,255,.3)}
@@ -522,7 +607,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .lc-search:focus{border-color:var(--ac)}
 .lc-spacer{flex:1}
 .lc-icon-btn{width:24px;height:24px;display:grid;place-items:center;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--tx2);cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out)}
-.lc-icon-btn:hover{color:var(--tx);background:rgba(255,255,255,.05);border-color:var(--bd)}
+.lc-icon-btn:hover{color:var(--tx);background:var(--s2);border-color:var(--bd)}
 .lc-icon-btn:active{transform:scale(.92)}
 .lc-icon-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .lc-icon-btn.active{color:var(--ac)}
@@ -545,7 +630,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 
 /* Status bar console toggle */
 #sb-console-btn{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--tx2);font-size:11px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out);margin-left:6px;font-family:inherit}
-#sb-console-btn:hover{color:var(--tx);background:rgba(255,255,255,.04);border-color:var(--bd)}
+#sb-console-btn:hover{color:var(--tx);background:var(--hairline);border-color:var(--bd)}
 #sb-console-btn:active{transform:scale(.95)}
 #sb-console-btn.active{color:var(--ac);background:rgba(110,168,255,.08);border-color:rgba(110,168,255,.25)}
 #sb-console-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
@@ -578,7 +663,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .tip-pop kbd{
   display:inline-block;margin-left:7px;padding:1px 6px;
   background:rgba(255,255,255,.07);
-  border:1px solid rgba(255,255,255,.1);
+  border:1px solid var(--s5);
   border-radius:4px;
   font:600 10px ui-monospace,'SFMono-Regular',Menlo,monospace;
   color:var(--tx2);
@@ -592,14 +677,14 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 <div id="app">
 
   <header id="tb">
-    <button class="tbtn primary" id="btn-open" title="Open a .step / .stp / .glb / .gltf file"><i data-lucide="folder-open"></i>Open STEP File</button>
-    <button class="tbtn" id="btn-fit" disabled title="Frame the whole model in the camera (F)"><i data-lucide="maximize"></i>Fit</button>
-    <button class="tbtn" id="btn-reset" disabled title="Reload the original model — discards all edits (R)"><i data-lucide="rotate-ccw"></i>Revert</button>
+    <button class="tbtn primary" id="btn-open"><i data-lucide="folder-open"></i>Open</button>
+    <button class="tbtn" id="btn-fit" disabled><i data-lucide="maximize"></i>Fit</button>
+    <button class="tbtn" id="btn-reset" disabled><i data-lucide="rotate-ccw"></i>Revert</button>
     <div class="divider"></div>
-    <button class="tbtn" id="btn-undo" disabled title="Undo the last destructive action (Ctrl+Z)"><i data-lucide="undo-2"></i>Undo</button>
-    <button class="tbtn" id="btn-redo" disabled title="Redo (Ctrl+Shift+Z / Ctrl+Y)"><i data-lucide="redo-2"></i>Redo</button>
+    <button class="tbtn" id="btn-undo" disabled><i data-lucide="undo-2"></i>Undo</button>
+    <button class="tbtn" id="btn-redo" disabled><i data-lucide="redo-2"></i>Redo</button>
     <div class="export-wrap">
-      <button class="tbtn" id="btn-export" disabled title="Export to GLB / GLTF / OBJ / STL / PLY / CSV"><i data-lucide="download"></i>Export <span class="caret">▾</span></button>
+      <button class="tbtn" id="btn-export" disabled><i data-lucide="download"></i>Export <span class="caret"><i data-lucide="chevron-down"></i></span></button>
       <div id="export-menu" class="export-menu">
         <button class="export-menu-item" data-fmt="glb"><span class="fmt">GLB</span><span class="hint">Best for web &amp; C4D</span></button>
         <button class="export-menu-item" data-fmt="gltf"><span class="fmt">GLTF</span><span class="hint">JSON glTF 2.0</span></button>
@@ -612,13 +697,45 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="export-menu-item" data-fmt="csv"><span class="fmt">CSV</span><span class="hint">Parts list (BOM)</span></button>
       </div>
     </div>
-    <button class="tbtn" id="btn-save-scene" disabled title="Save the current scene (camera, view toggles, hidden/flagged parts, transforms) as a single .glb you can re-open here later or on another machine"><i data-lucide="save"></i>Save Scene</button>
+    <button class="tbtn" id="btn-save-scene" disabled><i data-lucide="save"></i>Save Scene</button>
     <div class="spacer"></div>
-    <div class="stat" id="stat-renderer" title="Click to switch GPU backend (reloads the page)"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="font-size:11.5px;padding:4px 22px 4px 8px;min-width:80px"><option value="webgpu">WebGPU</option><option value="webgl2">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
-    <div class="stat"><span>FPS</span><strong id="fps">0</strong></div>
+    <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="font-size:11.5px;padding:4px 22px 4px 8px;min-width:80px"><option value="webgpu">WebGPU</option><option value="webgl2">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
+    <div class="stat stat-pill"><strong id="fps">0</strong><span class="fps-label">FPS</span></div>
     <div class="brand brand-right">
-      <div class="brand-text"><h1>STEP Optimizer</h1><small>WebGPU CAD inspector</small></div>
-      <div class="brand-mark"><i data-lucide="zap"></i></div>
+      <button class="brand-btn" id="btn-brand" aria-haspopup="menu" aria-expanded="false">
+        <span class="brand-mark"><i data-lucide="zap"></i></span>
+      </button>
+      <div class="brand-menu" id="brand-menu" role="menu" aria-hidden="true">
+        <div class="brand-menu-head">
+          <div class="brand-menu-mark"><i data-lucide="zap"></i></div>
+          <div class="brand-menu-titles">
+            <div class="brand-menu-title">STEP Optimizer</div>
+            <div class="brand-menu-tagline">WebGPU CAD inspector</div>
+          </div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v1.1</div>
+        </div>
+        <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / GLTF models in the browser. Real-time WebGPU rendering, lossless edits and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
+        <div class="brand-menu-sep"></div>
+        <a class="brand-menu-item" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener" role="menuitem">
+          <svg class="brand-gh" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12.02c0 5.09 3.29 9.4 7.86 10.93.58.1.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.3-.51-1.47.11-3.07 0 0 .96-.31 3.16 1.18a10.94 10.94 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.6.23 2.77.11 3.07.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.55C20.21 21.41 23.5 17.1 23.5 12.02 23.5 5.65 18.35.5 12 .5Z"/></svg>
+          <span class="lbl">View on GitHub</span><i class="ext" data-lucide="external-link"></i>
+        </a>
+        <a class="brand-menu-item" href="https://github.com/xpayn3/MeshOptimiser/issues/new" target="_blank" rel="noopener" role="menuitem">
+          <i data-lucide="message-square-warning"></i><span class="lbl">Report an issue</span><i class="ext" data-lucide="external-link"></i>
+        </a>
+        <button class="brand-menu-item" id="brand-menu-shortcuts" role="menuitem">
+          <i data-lucide="command"></i><span class="lbl">Keyboard shortcuts</span><span class="kbd">Ctrl K</span>
+        </button>
+        <button class="brand-menu-item" id="brand-menu-settings" role="menuitem">
+          <i data-lucide="settings"></i><span class="lbl">Settings</span><span class="kbd">Ctrl ,</span>
+        </button>
+        <div class="brand-menu-sep"></div>
+        <div class="brand-menu-foot">
+          <span>MIT License</span>
+          <span class="dot">·</span>
+          <span>Made with WebGPU</span>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -637,6 +754,9 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       </button>
       <button class="tree-icon-btn" id="tree-collapse-toggle" title="Expand / collapse all groups">
         <i data-lucide="chevrons-down-up"></i>
+      </button>
+      <button class="tree-icon-btn" id="tree-batch-rename" title="Batch rename (F2) — token templates, regex find/replace, presets">
+        <i data-lucide="signature"></i>
       </button>
       <button class="tree-icon-btn" id="tree-flatten" title="Advanced flatten — scope, depth, leaves, single-child chains, ungroup">
         <i data-lucide="list-tree"></i>
@@ -669,6 +789,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button>
         <button class="vpb" id="tg-bbox" title="Toggle bounding boxes for every part"><i data-lucide="square-dashed"></i></button>
         <button class="vpb" id="tg-axes" title="Toggle world-axis triad"><svg viewBox="0 0 24 24"><path d="M12 22V12L4 8M12 12l8-4M12 12V2"/></svg></button>
+        <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
         <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
         <div id="vp-settings-pop">
           <div class="pop-section">
@@ -693,17 +814,6 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       </div>
       <div class="vpc br"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
       <div class="vpc bl"><div id="axis-gizmo" title="Click an axis to align the view"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
-    </div>
-
-    <div id="dropzone">
-      <div class="dz-card">
-        <i data-lucide="upload" class="dz-icon"></i>
-        <h2>Open a STEP or GLB file</h2>
-        <p>Drag and drop a <span style="color:var(--ac)">.step</span>, <span style="color:var(--ac)">.glb</span>, or <span style="color:var(--ac)">.gltf</span>. For huge assemblies (&gt;200 MB), pre-convert with <code style="font-family:ui-monospace,monospace;color:var(--ac)">step2glb.py</code>.</p>
-        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;font-size:11px;color:var(--tx3)">
-          <span><span class="kbd">F</span> Fit</span><span><span class="kbd">1/2/3</span> View modes</span><span><span class="kbd">Del</span> Delete</span><span><span class="kbd">Ctrl+Z</span> Undo</span>
-        </div>
-      </div>
     </div>
 
     <div id="loader">
@@ -767,7 +877,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
           <button class="btn" id="btn-select-regex" title="Select every part whose name matches the regex"><i data-lucide="search"></i>By name</button>
         </div>
         <div class="field" style="margin-top:6px">
-          <input type="text" id="name-regex" placeholder="screw|bolt|washer" style="width:100%;padding:7px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx);font-size:12.5px;outline:none;">
+          <input type="text" id="name-regex" placeholder="screw|bolt|washer" style="width:100%;padding:7px 10px;background:var(--s3);border:1px solid var(--s3);border-radius:6px;color:var(--tx);font-size:12.5px;outline:none;">
         </div>
 
         <div style="height:10px"></div>
@@ -775,7 +885,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <div class="btn-row">
           <div class="btn-split">
             <button class="btn warn" id="btn-bbox-selected" title="Replace selected parts with the best low-poly proxy: tight box, oriented box, or cylinder"><i data-lucide="square"></i>Smart fit</button>
-            <button class="btn-caret" id="btn-bbox-caret" title="Choose fit mode (force AABB / OBB / cylinder, or thresholds)"><svg viewBox="0 0 10 10"><path d="M2 4l3 3 3-3"/></svg></button>
+            <button class="btn-caret warn" id="btn-bbox-caret" title="Choose fit mode (force AABB / OBB / cylinder, or thresholds)"><svg viewBox="0 0 10 10"><path d="M2 4l3 3 3-3"/></svg></button>
           </div>
           <button class="btn" id="btn-merge-sel" title="Bake selected parts into one BufferGeometry — ideal for STL / 3D printing"><i data-lucide="combine"></i>Merge</button>
         </div>
@@ -994,8 +1104,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       <div class="field" style="margin:0">
         <label><span>Filename</span></label>
         <div style="display:flex;align-items:stretch;gap:0">
-          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-right:none;border-radius:7px 0 0 7px;color:var(--tx);font-size:12.5px;outline:none">
-          <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-left:none;border-radius:0 7px 7px 0;color:var(--tx3);font-size:12px">.glb</span>
+          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:var(--s3);border:1px solid var(--s3);border-right:none;border-radius:7px 0 0 7px;color:var(--tx);font-size:12.5px;outline:none">
+          <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid var(--s3);border-left:none;border-radius:0 7px 7px 0;color:var(--tx3);font-size:12px">.glb</span>
         </div>
       </div>
     </div>
@@ -1033,7 +1143,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         </div>
         <div class="field" style="margin:0">
           <label><span>Custom scale</span></label>
-          <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" disabled>
+          <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--s3);border:1px solid var(--s3);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" disabled>
         </div>
         <div class="field" style="margin:0">
           <label><span>Up axis</span></label>
@@ -1062,7 +1172,87 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   </div>
 </div>
 
-<div id="ctx-menu" style="position:fixed;display:none;z-index:300;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;padding:5px 0;min-width:230px;box-shadow:var(--sh);font-size:12.5px;user-select:none"></div>
+<div class="modal-bg" id="settings-modal">
+  <div class="modal" style="width:560px">
+    <div class="modal-h">
+      <h3>Settings</h3>
+      <button class="x" id="settings-close" title="Close (Esc)">✕</button>
+    </div>
+    <div class="modal-b" id="settings-body"></div>
+    <div class="modal-f">
+      <button class="btn danger" id="settings-reset" style="width:auto;padding:7px 14px" title="Restore default settings">Reset to defaults</button>
+      <button class="tbtn primary" id="settings-done" style="margin-left:auto">Done</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="shortcuts-modal">
+  <div class="modal" style="width:520px;max-height:80vh">
+    <div class="modal-h">
+      <h3>Keyboard shortcuts</h3>
+      <button class="x" id="shortcuts-close" title="Close (Esc)">✕</button>
+    </div>
+    <div class="modal-b" id="shortcuts-body"></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="cmdk-modal">
+  <div class="modal" style="width:520px;max-height:60vh">
+    <div class="modal-h" style="padding:10px 14px">
+      <input type="text" id="cmdk-input" placeholder="Search actions… (Esc to close)" style="flex:1;background:transparent;border:none;outline:none;color:var(--tx);font-size:var(--fs-xl);font-weight:500" autocomplete="off">
+      <span style="color:var(--tx3);font-size:var(--fs-sm);margin-left:10px"><kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:ui-monospace,monospace;font-size:10px;color:var(--tx2)">↑↓</kbd> <kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:ui-monospace,monospace;font-size:10px;color:var(--tx2)">↵</kbd></span>
+    </div>
+    <div class="modal-b" id="cmdk-list" style="padding:6px"></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="welcome-modal">
+  <div class="modal" style="width:580px">
+    <div class="modal-h">
+      <h3 id="welcome-title">Open a model</h3>
+      <button class="x" id="welcome-close" title="Close (Esc)">✕</button>
+    </div>
+    <div class="modal-b">
+      <div id="welcome-pick-pane">
+        <div id="welcome-resume"></div>
+        <div id="welcome-drop" style="border:2px dashed var(--bd2);border-radius:var(--r-xl);padding:34px 20px;text-align:center;cursor:pointer;background:var(--bg2);transition:border-color 150ms var(--ease-out),background 150ms var(--ease-out)">
+          <i data-lucide="upload" style="width:40px;height:40px;stroke:var(--ac);fill:none;stroke-width:1.5;display:inline-block;margin-bottom:10px"></i>
+          <div style="font-size:var(--fs-xl);font-weight:600;margin-bottom:4px;color:var(--tx)">Open a STEP or GLB file</div>
+          <div style="color:var(--tx2);font-size:var(--fs-md);line-height:1.5;margin-bottom:14px">Drop a <span style="color:var(--ac)">.step</span>, <span style="color:var(--ac)">.stp</span>, <span style="color:var(--ac)">.glb</span>, or <span style="color:var(--ac)">.gltf</span> here, or click to browse.</div>
+          <button class="tbtn primary" id="welcome-pick" style="padding:7px 18px"><i data-lucide="folder-open"></i>Browse…</button>
+        </div>
+
+        <div style="margin-top:18px">
+          <div style="font-size:var(--fs-sm);font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3);margin-bottom:8px">Recent files</div>
+          <div id="welcome-recents" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <div style="margin-top:16px;color:var(--tx3);font-size:var(--fs-sm);line-height:1.5">
+          Huge assemblies (&gt;200 MB) load faster if you pre-convert with <code style="font-family:ui-monospace,monospace;color:var(--ac)">step2glb.py</code>.
+        </div>
+      </div>
+
+      <div id="welcome-load-pane" style="display:none">
+        <div style="display:flex;align-items:center;gap:14px;padding:6px 0 14px">
+          <div class="spinner" style="flex-shrink:0"></div>
+          <div style="flex:1;min-width:0">
+            <div id="wl-msg" style="font-size:var(--fs-lg);font-weight:600;color:var(--tx);margin-bottom:3px">Loading…</div>
+            <div id="wl-sub" style="color:var(--tx3);font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+          </div>
+          <div id="wl-time" style="color:var(--tx3);font-size:var(--fs-sm);font-variant-numeric:tabular-nums;flex-shrink:0">0.0s</div>
+        </div>
+        <div class="loader-bar" style="margin-top:0"><div class="loader-bar-fill" id="wl-bar"></div></div>
+        <div id="wl-log" class="loader-log" style="margin-top:12px;max-height:160px"></div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px">
+          <button id="wl-copy-btn" class="btn" style="width:auto;padding:6px 14px;font-size:var(--fs-sm)" title="Copy the log to clipboard">Copy log</button>
+          <button id="wl-cancel-btn" class="btn" style="width:auto;padding:6px 14px;font-size:var(--fs-sm)" title="Abort the current load">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="ctx-menu" style="position:fixed;display:none;z-index:300;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-lg);padding:5px 0;min-width:230px;box-shadow:var(--sh);font-size:var(--fs-md);user-select:none"></div>
 
 <div id="marquee-box"></div>
 <div class="toasts" id="toasts"></div>
@@ -1239,6 +1429,6 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050522-qol5"></script>
+<script type="module" src="app-v2.js?v=2026050623-fpstoggle1"></script>
 </body>
 </html>
