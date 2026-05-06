@@ -1161,13 +1161,7 @@ const _Welcome = (() => {
     try { localStorage.setItem(REC_KEY, JSON.stringify(list.slice(0, REC_MAX))); }
     catch (_) {}
   }
-  function _fmtBytes(n) {
-    if (!Number.isFinite(n)) return '';
-    if (n < 1024) return n + ' B';
-    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
-    if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
-    return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
-  }
+  const _fmtBytes = n => Number.isFinite(n) ? fmtBytes(n) : '';
   function _fmtAge(ts) {
     const d = Math.max(0, Date.now() - ts);
     const min = 60 * 1000, hr = 60 * min, day = 24 * hr;
@@ -2188,6 +2182,7 @@ function _attachGizmoToParts(parts) {
     ug.ref.updateWorldMatrix(true, false);
     ug.ref.getWorldQuaternion(state.pivot.quaternion);
     state.pivot.updateMatrixWorld();
+    state._pivotOrigParent = null; // ug.ref's parent (partsRoot) is at world origin
     state.pivot.attach(ug.ref);
     state._pivotedGroup = ug.ref;
     state._pivotedGroupId = ug.id;
@@ -2240,6 +2235,14 @@ function _attachGizmoToParts(parts) {
     state.pivot.quaternion.copy(_qWorld);
   }
   state.pivot.updateMatrixWorld();
+  // Track original parent for local-coordinate display (e.g. parts inside
+  // user groups that have a non-origin world position).
+  state._pivotOrigParent = null;
+  for (const p of parts) {
+    if (p.mesh?.parent && p.mesh.parent !== state.pivot) {
+      state._pivotOrigParent = p.mesh.parent; break;
+    }
+  }
   // Re-parent every selected mesh under pivot, preserving world transforms.
   // Because pivot now matches the part's world rotation, the part's local
   // rotation will collapse to (near-)identity after attach — the rotation
@@ -2286,6 +2289,7 @@ function _detachGizmo() {
     state._pivotedGroupId = null;
     state._pivotedParts = null;
     state._pivotedPart = null;
+    state._pivotOrigParent = null;
     return;
   }
   // Per-part path: return every pivoted mesh to partsRoot with its final
@@ -2317,6 +2321,7 @@ function _detachGizmo() {
   }
   state._pivotedParts = null;
   state._pivotedPart = null;
+  state._pivotOrigParent = null;
 }
 
 let _updateGizmoRaf = 0;
@@ -2545,6 +2550,22 @@ function setBackground(mode) {
     renderer.setClearColor(0x0b0e16, 1);
   }
   else if (mode === 'solid') { scene.background = new THREE.Color(0x000000); renderer.setClearColor(0x000000, 1); }
+  else if (mode === 'gray') {
+    // Blender-style neutral viewport: warm mid-grey with a subtle vertical
+    // falloff from slightly lighter at the top to a touch darker at the
+    // bottom. Reads as a flat studio backdrop without the "looking up at
+    // the sky" cool tint of the dark/grad presets — keeps the model's own
+    // colours honest, which is the whole reason you'd pick a neutral grey.
+    const tex = _makeBgTexture((ctx, w, h) => {
+      const lg = ctx.createLinearGradient(0, 0, 0, h);
+      lg.addColorStop(0,    '#4a4a4a');   // slightly lifted top
+      lg.addColorStop(0.55, '#3a3a3a');   // Blender default neutral
+      lg.addColorStop(1,    '#2c2c2c');   // grounded bottom
+      ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
+    }, 1024);
+    scene.background = tex;
+    renderer.setClearColor(0x3a3a3a, 1);
+  }
   else if (mode === 'white') {
     // Soft white studio: very gentle radial vignette so a white backdrop
     // doesn't read as a flat sheet of paper. The tint is barely there.
@@ -4039,7 +4060,6 @@ const _tfTmpVec2 = new THREE.Vector3();
 const _tfTmpEuler = new THREE.Euler();
 const _tfTmpQuat = new THREE.Quaternion();
 const _tfTmpBox = new THREE.Box3();
-const _tfStashQuat = new THREE.Quaternion();
 
 // Compute the size in a frame where obj's WORLD rotation is stripped,
 // so rotating the object (or any ancestor — like the gizmo pivot)
@@ -4129,31 +4149,30 @@ function _transformPanelRefresh() {
   const usingWorld = _hasPivotAncestor(obj);
 
   // Swap the Size column header to "Scale" for groups.
-  const sizeColLabel = document.querySelector('#tform-grid .tform-col-label:last-child');
+  const _allColLabels = document.querySelectorAll('#tform-grid .tform-col-label');
+  const sizeColLabel = _allColLabels[_allColLabels.length - 1] || null;
   if (sizeColLabel) sizeColLabel.textContent = isGroup ? 'Scale' : 'Size';
 
   try {
     if (usingWorld && state.pivot) {
-      // Pivot is the gizmo's hub — at the selection's bbox centre.
-      state.pivot.getWorldPosition(_tfTmpVec);
-    } else if (isGroup) {
-      // Group containers (hierarchy and user) sit at world origin — parts
-      // carry their own positions in partsRoot or pivot. Use the pivot's
-      // world position when a drag is active; otherwise gather the actual
-      // selected meshes to compute the bbox centre. Do NOT traverse obj
-      // (the container is often empty — meshes live in partsRoot).
-      if (state.pivot && (state._pivotedGroup || state._pivotedParts?.length)) {
-        state.pivot.getWorldPosition(_tfTmpVec);
-      } else {
-        _tfTmpBox.makeEmpty();
-        const selParts = [...(state.selected || [])].map(id => (typeof getPart === 'function' ? getPart(id) : null)).filter(p => p?.mesh);
-        for (const p of selParts) { p.mesh.updateWorldMatrix(true, false); _tfTmpBox.expandByObject(p.mesh); }
-        // fallback for user-groups that still hold children under obj
-        if (_tfTmpBox.isEmpty()) { obj.updateWorldMatrix(true, true); obj.traverse(c => { if (c.isMesh) _tfTmpBox.expandByObject(c); }); }
-        if (!_tfTmpBox.isEmpty()) _tfTmpBox.getCenter(_tfTmpVec);
-        else obj.getWorldPosition(_tfTmpVec);
+      // obj is reparented under pivot — show obj's OWN world position (not
+      // the pivot's bbox-center), then convert to original-parent local frame
+      // so the panel displays local coordinates relative to parent.
+      obj.updateWorldMatrix(true, false);
+      obj.getWorldPosition(_tfTmpVec);
+      if (state._pivotOrigParent) {
+        state._pivotOrigParent.updateWorldMatrix(true, false);
+        state._pivotOrigParent.worldToLocal(_tfTmpVec);
       }
+    } else if (target.kind === 'group' && state.pivot && state._pivotedParts?.length) {
+      // Tree group with active gizmo: hn.obj3d is NOT reparented under pivot (only
+      // its child meshes are), so usingWorld=false above. Show pivot world position —
+      // the bbox centroid of the selection — so the panel tracks where content is.
+      state.pivot.getWorldPosition(_tfTmpVec);
     } else {
+      // user-group without gizmo  → ug.ref.position (partsRoot-local / world)
+      // tree group without gizmo  → obj.position (0,0,0 for imported GLTF groups)
+      // part without gizmo        → obj.position (world, since parent = partsRoot)
       _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
     }
     if (Number.isFinite(_tfTmpVec.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(_tfTmpVec.x);
@@ -4166,7 +4185,17 @@ function _transformPanelRefresh() {
   // read obj.rotation directly.
   try {
     const rad2deg = (r) => r * 180 / Math.PI;
-    if (isGroup && !usingWorld) {
+    if (target.kind === 'group' && state.pivot && state._pivotedParts?.length) {
+      // Tree group with active gizmo: show the pivot's own rotation — this is exactly
+      // the rotation applied by the user in the current gizmo session (0 on fresh attach,
+      // updates live during drag). Using any part's world quaternion instead would leak
+      // per-part GLTF orientations across different hierarchy levels.
+      const r = state.pivot.rotation;
+      if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(r.x), 2);
+      if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(r.y), 2);
+      if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(r.z), 2);
+    } else if (isGroup && !usingWorld) {
+      // Group without active gizmo: show the node's own world rotation.
       obj.updateWorldMatrix(true, false);
       obj.getWorldQuaternion(_tfTmpQuat);
       _tfTmpEuler.setFromQuaternion(_tfTmpQuat, obj.rotation.order);
@@ -4243,11 +4272,25 @@ function _wireTransformPanel() {
     try {
       if (axis === 'px' || axis === 'py' || axis === 'pz') {
         if (usePivot) {
-          // Display reads pivot.position; writes go there too so the value
-          // round-trips. Pivot is at scene root so local == world position.
-          if (axis === 'px') state.pivot.position.x = v;
-          if (axis === 'py') state.pivot.position.y = v;
-          if (axis === 'pz') state.pivot.position.z = v;
+          // Value is in parent-local frame. When an original parent is tracked
+          // (e.g. part inside a user group), compute the delta in world space
+          // so the pivot (which lives in scene/partsRoot space) moves correctly.
+          if (state._pivotOrigParent) {
+            obj.updateWorldMatrix(true, false);
+            state._pivotOrigParent.updateWorldMatrix(true, false);
+            const _wOld = new THREE.Vector3();
+            obj.getWorldPosition(_wOld);
+            const _lPos = state._pivotOrigParent.worldToLocal(_wOld.clone());
+            if (axis === 'px') _lPos.x = v;
+            if (axis === 'py') _lPos.y = v;
+            if (axis === 'pz') _lPos.z = v;
+            const _wNew = state._pivotOrigParent.localToWorld(_lPos.clone());
+            state.pivot.position.add(_wNew.sub(_wOld));
+          } else {
+            if (axis === 'px') state.pivot.position.x = v;
+            if (axis === 'py') state.pivot.position.y = v;
+            if (axis === 'pz') state.pivot.position.z = v;
+          }
           state.pivot.updateMatrixWorld(true);
         } else if (isGroup) {
           // No active pivot — for user-groups write directly (ug.ref parents
@@ -6853,19 +6896,21 @@ function setViewMode(mode) {
 // silently drop the shear component and the visible mesh ends up rotated
 // incorrectly. A 1e-5 tolerance accommodates legitimate fp drift from chained
 // matrix multiplies; well-formed models stay below that comfortably.
-const _shearTmpV = new THREE.Vector3();
-const _shearTmpQ = new THREE.Quaternion();
-const _shearTmpS = new THREE.Vector3();
-const _shearTmpM = new THREE.Matrix4();
-function _matrixHasShear(m, eps = 1e-5) {
-  m.decompose(_shearTmpV, _shearTmpQ, _shearTmpS);
-  _shearTmpM.compose(_shearTmpV, _shearTmpQ, _shearTmpS);
-  const a = m.elements, b = _shearTmpM.elements;
-  for (let i = 0; i < 16; i++) {
-    if (Math.abs(a[i] - b[i]) > eps) return true;
-  }
-  return false;
-}
+const _matrixHasShear = (() => {
+  const v = new THREE.Vector3();
+  const q = new THREE.Quaternion();
+  const s = new THREE.Vector3();
+  const recomposed = new THREE.Matrix4();
+  return function _matrixHasShear(m, eps = 1e-5) {
+    m.decompose(v, q, s);
+    recomposed.compose(v, q, s);
+    const a = m.elements, b = recomposed.elements;
+    for (let i = 0; i < 16; i++) {
+      if (Math.abs(a[i] - b[i]) > eps) return true;
+    }
+    return false;
+  };
+})();
 
 function _resolvePartWorldMatrix(p) {
   const out = new THREE.Matrix4();
@@ -11038,9 +11083,66 @@ async function loadFbxFile(file) {
     const buffer = await file.arrayBuffer();
     setLoaderProgress(35);
     setLoader(true, 'Parsing FBX scene...', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
-    const root = new FBXLoader().parse(buffer, '');
+    let root;
+    try {
+      root = new FBXLoader().parse(buffer, '');
+    } catch (e) {
+      // Three's FBXLoader only handles FBX 7000+ (7.0 / 2011 onward). Older
+      // formats — most commonly FileVersion 6100 from pre-2010 exporters —
+      // throw "FBX version not supported". Route them through Assimp (which
+      // we already vendor for the FBX export pipeline) → GLB in memory →
+      // GLTFLoader. Same fallback also catches binary-vs-ASCII confusion
+      // and other parser-level failures.
+      const msg = (e && (e.message || e.toString())) || '';
+      const isVersionMiss = /FBX version not supported|FileVersion: \d+/.test(msg);
+      logProgress(
+        isVersionMiss
+          ? `Legacy FBX detected (${msg.match(/FileVersion: \d+/)?.[0] || 'pre-7.0'}); converting via Assimp…`
+          : `FBX parse failed; retrying via Assimp: ${msg}`,
+        'warn'
+      );
+      setLoader(true, 'Converting legacy FBX via Assimp...', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
+      let glbBytes;
+      try {
+        glbBytes = await _convertAnyToGlbWithAssimp(new Uint8Array(buffer), 'input.fbx');
+      } catch (e2) {
+        // Surface a clean, actionable error rather than the raw Assimp string.
+        throw new Error(
+          `${msg || 'FBX parse failed'}\n\n` +
+          `Assimp fallback also failed: ${e2.message || e2}.\n` +
+          `Try re-exporting the file as FBX 2013+ (binary) from the source DCC, ` +
+          `or convert it with the free Autodesk FBX Converter.`
+        );
+      }
+      setLoader(true, 'Parsing converted scene...', `${(glbBytes.byteLength/1048576).toFixed(1)} MB GLB`);
+      const gltf = await new Promise((resolve, reject) => {
+        try {
+          new GLTFLoader().parse(glbBytes.buffer, '', resolve, reject);
+        } catch (e3) { reject(e3); }
+      });
+      root = gltf.scene;
+    }
     await _ingestSceneRoot(root, file, buffer.byteLength, 'fbx');
   });
+}
+
+// Generic Assimp import: feed any format Assimp can read, get back a GLB.
+// Mirrors _convertGlbWithAssimp but the input direction is open and the
+// target is fixed. Used for legacy-FBX rescue (and reusable for any
+// future "format Three doesn't support but Assimp does" case).
+async function _convertAnyToGlbWithAssimp(inputBytes, fileName) {
+  const ajs = await _getAssimp();
+  const fileList = new ajs.FileList();
+  // Assimp picks the importer from the extension; fall back to .fbx if
+  // the caller didn't supply one.
+  fileList.AddFile(fileName || 'input.fbx', inputBytes);
+  const result = ajs.ConvertFileList(fileList, 'glb2');
+  if (!result.IsSuccess() || result.FileCount() === 0) {
+    let detail = '';
+    try { detail = result.GetErrorString?.() || result.GetError?.() || result.GetErrorCode?.() || ''; } catch (_) {}
+    throw new Error(detail || 'unknown Assimp import error');
+  }
+  return result.GetFile(0).GetContent();
 }
 
 async function loadObjFile(file) {
