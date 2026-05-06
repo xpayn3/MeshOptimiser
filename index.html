@@ -86,8 +86,8 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .section-b{padding:2px 18px 14px}
 
 /* Tree */
-#tree{flex:1;overflow-y:auto;overflow-x:auto;padding:4px 0;contain:layout paint}
-.tree-empty{color:var(--tx3);text-align:center;padding:40px 20px;font-size:12px;line-height:1.6}
+#tree{flex:1;overflow-y:auto;overflow-x:auto;padding:4px 0;contain:layout paint;display:flex;flex-direction:column}
+.tree-empty{color:var(--tx3);text-align:center;padding:20px;font-size:12px;line-height:1.6;flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center}
 .tree-empty svg{width:38px;height:38px;stroke:currentColor;opacity:.4;fill:none;stroke-width:1.5;margin-bottom:10px}
 .tree-search{margin:8px 12px 6px;position:relative}
 .tree-search input{width:100%;padding:7px 10px 7px 28px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12px;outline:none}
@@ -315,8 +315,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .off-rank{color:var(--tx3);font-variant-numeric:tabular-nums;text-align:center;font-size:10.5px}
 .off-mid{display:flex;flex-direction:column;gap:2px;min-width:0}
 .off-name{color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.off-bar{height:3px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden}
-.off-bar-fill{height:100%;border-radius:2px;transition:width 200ms var(--ease-out)}
+.off-bar{display:block;height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;margin-top:2px;width:100%}
+.off-bar-fill{height:100%;border-radius:3px;transition:width 200ms var(--ease-out);min-width:2px;display:block}
 .off-tri{color:var(--tx2);font-variant-numeric:tabular-nums;font-size:10.5px;flex-shrink:0}
 .off-empty{display:none}
 .off-list:empty + .off-empty,#offenders-body:has(.off-list:empty) .off-empty{display:block}
@@ -338,7 +338,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .btn-split > .btn-caret{display:inline-flex;align-items:center;justify-content:center;width:26px;flex:0 0 26px;padding:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.05);border-top-left-radius:0;border-bottom-left-radius:0;border-top-right-radius:8px;border-bottom-right-radius:8px;color:var(--tx);cursor:pointer;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
 .btn-split > .btn-caret:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.08)}
 .btn-split > .btn-caret svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:1.6}
-.fit-pop{position:fixed;z-index:9000;min-width:220px;background:rgba(28,32,40,.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5);padding:6px;opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
+.fit-pop{position:fixed;z-index:9000;min-width:220px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5);padding:6px;opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .fit-pop.show{opacity:1;transform:translateY(0);pointer-events:auto}
 .fit-pop .fit-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:12.5px;color:var(--tx);cursor:pointer;transition:background 120ms var(--ease-out)}
 .fit-pop .fit-item:hover{background:rgba(255,255,255,.07)}
@@ -393,7 +393,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .export-wrap{position:relative;display:inline-flex}
 .export-wrap .caret{margin-left:4px;font-size:10px;color:var(--tx2);transition:transform 140ms var(--ease-out)}
 .export-wrap.open .caret{transform:rotate(180deg)}
-.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;background:rgba(15,19,25,.94);border:1px solid var(--bd);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.02) inset;padding:6px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
+.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:6px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .export-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 .export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--tx);width:calc(100% - 24px);user-select:none;transition:background 80ms}
 .export-menu-item:hover,.export-menu-item:focus-visible{background:rgba(255,255,255,.06);outline:none}
@@ -404,7 +404,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Settings popover — floats next to the top-right viewport buttons. Mirrors
    the sidebar `.section-b` layout so existing field/toggle markup drops in
    unchanged. Hidden by default; JS toggles `.show` and outside-click closes. */
-#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:rgba(15,19,25,.92);border:1px solid var(--bd);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.02) inset;padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
 #vp-settings-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 #vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.05)}
 #vp-settings-pop .pop-section:last-child{border-bottom:none}
@@ -484,7 +484,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Toasts use CSS transitions keyed on data-state so a stack of rapidly-added
    toasts can animate smoothly — keyframes restart from zero on each insert
    and would jank under load. JS toggles data-state="enter" → "open" → "exit". */
-.toast{display:inline-flex;align-items:center;gap:6px;background:rgba(22,27,36,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.06);padding:6px 14px;border-radius:999px;font-size:12px;line-height:1.35;max-width:480px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 6px 24px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.3);pointer-events:auto;opacity:0;transform:translateY(-8px);transition:opacity 200ms var(--ease-out),transform 200ms var(--ease-out)}
+.toast{display:inline-flex;align-items:center;gap:6px;background:var(--bg1);border:1px solid var(--bd);padding:6px 14px;border-radius:999px;font-size:12px;line-height:1.35;max-width:480px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 6px 24px rgba(0,0,0,.45);pointer-events:auto;opacity:0;transform:translateY(-8px);transition:opacity 200ms var(--ease-out),transform 200ms var(--ease-out)}
 .toast[data-state="open"]{opacity:1;transform:translateY(0)}
 .toast[data-state="exit"]{opacity:0;transform:translateY(-8px);transition-duration:160ms}
 .toast::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ac);flex-shrink:0}
@@ -562,44 +562,29 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    keyboard shortcuts parsed out of the original title string (e.g. "Fit (F)"). */
 .tip-pop{
   position:fixed;z-index:10000;pointer-events:none;
-  background:linear-gradient(180deg,#222a37,#1a2030);
+  background:#1a2030;
   border:1px solid var(--bd2);
   color:var(--tx);
-  padding:6px 10px;border-radius:7px;
+  padding:6px 10px;border-radius:8px;
   font:500 11.5px/1.4 -apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
   letter-spacing:.005em;
   max-width:280px;
-  box-shadow:0 6px 18px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02) inset;
-  opacity:0;transform:translateY(3px) scale(.97);
+  opacity:0;transform:translateY(2px);
   transition:opacity 110ms var(--ease-out),transform 110ms var(--ease-out);
 }
-.tip-pop.show{opacity:1;transform:translateY(0) scale(1)}
+.tip-pop.show{opacity:1;transform:translateY(0)}
 .tip-pop.wrap{white-space:normal}
 .tip-pop:not(.wrap){white-space:nowrap}
 .tip-pop kbd{
   display:inline-block;margin-left:7px;padding:1px 6px;
   background:rgba(255,255,255,.07);
   border:1px solid rgba(255,255,255,.1);
-  border-bottom-color:rgba(0,0,0,.35);
   border-radius:4px;
   font:600 10px ui-monospace,'SFMono-Regular',Menlo,monospace;
   color:var(--tx2);
   vertical-align:1px;
 }
-.tip-pop::before{
-  content:'';position:absolute;width:8px;height:8px;
-  background:#1a2030;
-  border:1px solid var(--bd2);
-  transform:rotate(45deg);
-  left:50%;margin-left:-4px;
-}
-/* default: arrow points down (tooltip above target) */
-.tip-pop::before{bottom:-5px;border-top:none;border-left:none}
-/* below: arrow points up */
-.tip-pop.below::before{bottom:auto;top:-5px;border-bottom:none;border-right:none;background:#222a37}
-/* left/right side variants — shift the arrow off-center toward the anchor */
-.tip-pop[data-arrow="left"]::before{left:14px;margin-left:0}
-.tip-pop[data-arrow="right"]::before{left:auto;right:10px;margin-left:0}
+.tip-pop::before{display:none}
 </style>
 </head>
 <body>
@@ -629,7 +614,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
     </div>
     <button class="tbtn" id="btn-save-scene" disabled title="Save the current scene (camera, view toggles, hidden/flagged parts, transforms) as a single .glb you can re-open here later or on another machine"><i data-lucide="save"></i>Save Scene</button>
     <div class="spacer"></div>
-    <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><strong id="renderer-name">—</strong></div>
+    <div class="stat" id="stat-renderer" title="Click to switch GPU backend (reloads the page)"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="font-size:11.5px;padding:4px 22px 4px 8px;min-width:80px"><option value="webgpu">WebGPU</option><option value="webgl2">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
     <div class="stat"><span>FPS</span><strong id="fps">0</strong></div>
     <div class="brand brand-right">
       <div class="brand-text"><h1>STEP Optimizer</h1><small>WebGPU CAD inspector</small></div>
@@ -641,13 +626,6 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
     <div id="resize-l" class="resize-handle" title="Drag to resize"></div>
     <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts..."></div>
     <div class="tree-toolbar">
-      <select id="tree-sort" class="mac-sel">
-        <option value="load">Load order</option>
-        <option value="name">Name</option>
-        <option value="tricount">Triangles ↓</option>
-        <option value="volume">Volume ↓</option>
-        <option value="size">Bbox diag ↓</option>
-      </select>
       <button class="tree-icon-btn" id="tree-hide-unsel" title="Hide everything not selected">
         <i data-lucide="eye-off"></i>
       </button>
@@ -660,8 +638,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       <button class="tree-icon-btn" id="tree-collapse-toggle" title="Expand / collapse all groups">
         <i data-lucide="chevrons-down-up"></i>
       </button>
-      <button class="tree-icon-btn" id="tree-flatten" title="Flatten tree — promote every part to the top level (dissolves groups)">
-        <i data-lucide="list"></i>
+      <button class="tree-icon-btn" id="tree-flatten" title="Advanced flatten — scope, depth, leaves, single-child chains, ungroup">
+        <i data-lucide="list-tree"></i>
       </button>
       <button class="tree-icon-btn" id="tree-sel-back" title="Previous selection">
         <i data-lucide="chevron-left"></i>
@@ -900,7 +878,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       <div class="section-h"><span>Section / Clip</span><span class="chev">▾</span></div>
       <div class="section-b">
         <div style="color:var(--tx3);font-size:11.5px;line-height:1.4;margin:2px 0 10px">
-          Cut the model with a plane to see inside. WebGPU's clipping is unreliable in three r172 — if the cut doesn't appear, append <code>?webgl=1</code> to the URL.
+          Cut the model with a plane to see inside. Uses TSL discardNode — works on both WebGPU and WebGL2 (switch backends via the Renderer dropdown in the top bar).
         </div>
         <div class="field" style="margin-bottom:6px">
           <label style="display:block;color:var(--tx3);font-size:11px;margin-bottom:3px">Axis</label>
@@ -959,8 +937,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   </aside>
 
   <footer id="sb">
-    <div class="item"><strong id="sb-parts">0</strong>parts</div>
-    <div class="item"><strong id="sb-tris">0</strong>triangles</div>
+    <div class="item" style="display:none"><strong id="sb-parts">0</strong>parts</div>
+    <div class="item" style="display:none"><strong id="sb-tris">0</strong>triangles</div>
     <div class="item"><strong id="sb-verts">0</strong>vertices</div>
     <div class="item"><strong id="sb-mem">0 MB</strong>geom</div>
     <div class="item"><strong id="sb-draws">0</strong>draws</div>

@@ -907,8 +907,37 @@ async function initRenderer() {
   // Section/Clip panel; harmless when no planes are set.
   try { if ('localClippingEnabled' in renderer) renderer.localClippingEnabled = true; } catch (_) {}
   $('renderer-name').textContent = name;
-  $('stat-renderer').querySelector('.dot').classList.toggle('warn', name !== 'WebGPU');
+  // Both WebGPU and WebGL2 are first-class user choices via the top-bar
+  // dropdown — neither is a fallback/warning state.
+  $('stat-renderer').querySelector('.dot').classList.remove('warn');
   $('stat-renderer').querySelector('.dot').classList.remove('off');
+
+  // Top-bar renderer switcher. The custom-select widget wraps this <select>
+  // during wireUI() (which runs before initRenderer), so the trigger button
+  // already exists. We have to sync BOTH the underlying select value AND the
+  // trigger button's label — setting sel.value alone doesn't refresh the
+  // visible label because the widget only re-syncs on user-driven changes.
+  try {
+    const sel = $('renderer-select');
+    if (sel) {
+      const want = (name === 'WebGPU') ? 'webgpu' : 'webgl2';
+      sel.value = want;
+      const trigger = $(sel.id + '__btn');
+      const opt = sel.options[sel.selectedIndex];
+      if (trigger && opt) trigger.textContent = opt.textContent.trim();
+      sel.addEventListener('change', () => {
+        const wantWebGL = sel.value === 'webgl2';
+        try {
+          if (wantWebGL) localStorage.setItem('stepopt-force-webgl', '1');
+          else           localStorage.removeItem('stepopt-force-webgl');
+        } catch (_) {}
+        const url = new URL(location.href);
+        if (wantWebGL) url.searchParams.set('webgl', '1');
+        else           url.searchParams.delete('webgl');
+        location.href = url.toString();
+      });
+    }
+  } catch (_) {}
 
   // Hook WebGPU device-lost. Without this, a GPU driver hiccup or OS-level
   // GPU reset (e.g. screen lock + unlock, switching between integrated and
@@ -10054,6 +10083,12 @@ function _treeCollapseAll() {
   rebuildTree();
 }
 
+// Site-wide kill switch for the browser's native right-click menu. Custom
+// context menus (tree nodes, viewport, materials list, etc.) are wired below
+// and continue to receive the event because preventDefault does not stop
+// propagation. Registered at window capture so it runs before everything else.
+window.addEventListener('contextmenu', e => { e.preventDefault(); }, { capture: true });
+
 document.addEventListener('contextmenu', e => {
   const node = e.target.closest('.tree-node');
   if (!node) return;
@@ -11416,28 +11451,85 @@ function _wireExplodeAndClip() {
 }
 
 // ============== Section / Clipping plane ==============
-// Single axis-aligned plane applied to every loaded mesh's material via
-// material.clippingPlanes. Renderer-side localClippingEnabled is flipped on
-// in initRenderer(). The plane equation is positioned along the chosen axis
-// at a fraction of the partsRoot bbox.
+// Approach: TSL discardNode driven by two uniforms (plane normal + signed
+// constant). We can't use material.clippingPlanes — three.js r172's WebGPU
+// pipeline (used by the webgpu build even with forceWebGL) auto-converts
+// MeshStandardMaterial to a node material and silently drops clippingPlanes
+// during the conversion. discardNode is the supported NodeMaterial path:
+// it compiles into the fragment shader once per material and we just
+// animate the uniforms when the slider moves — no shader rebuild.
+//
+// Discard test: dot(positionWorld, normal) + constant < 0
+// where constant = -dot(point, normal). To DISABLE clipping we set
+// constant to a very large positive value so the test is never < 0.
+
+const CLIP_DISABLED_CONSTANT = 1e10;
+
+let _tslCached;
+function _resolveTSL() {
+  if (_tslCached !== undefined) return _tslCached;
+  // The webgpu build of three (the one mapped to "three" in index.html) bundles
+  // TSL nodes as named exports of the THREE namespace. Pick them off there.
+  if (typeof THREE.positionWorld !== 'undefined' && typeof THREE.uniform === 'function') {
+    _tslCached = { positionWorld: THREE.positionWorld, uniform: THREE.uniform };
+  } else {
+    console.warn('[CLIP] TSL primitives not present on THREE namespace — section/clip disabled');
+    _tslCached = null;
+  }
+  return _tslCached;
+}
+
+function _initClipUniforms() {
+  if (state.clipUniforms) return state.clipUniforms;
+  if (state.clipUniforms === null) return null; // tried and failed once
+  const tsl = _resolveTSL();
+  if (!tsl) { state.clipUniforms = null; return null; }
+  state.clipUniforms = {
+    normal: tsl.uniform(new THREE.Vector3(1, 0, 0)),
+    constant: tsl.uniform(CLIP_DISABLED_CONSTANT),
+    positionWorld: tsl.positionWorld,
+  };
+  return state.clipUniforms;
+}
+
+function _attachClipDiscard(material) {
+  if (!material || material._clipAttached) return false;
+  const u = _initClipUniforms();
+  if (!u) return false;
+  try {
+    material.discardNode = u.positionWorld
+      .dot(u.normal)
+      .add(u.constant)
+      .lessThan(0);
+    material._clipAttached = true;
+    material.needsUpdate = true;
+    return true;
+  } catch (e) {
+    console.warn('[CLIP] discardNode attach failed:', e?.message || e);
+    return false;
+  }
+}
 
 function _applyClipToAllMaterials() {
   if (!state.partsRoot) return;
-  const planes = (state.clip && state.clip.enabled) ? [state.clip.plane] : [];
+  _initClipUniforms();
+  let attached = 0, meshCount = 0, matCount = 0;
   state.partsRoot.traverse(obj => {
     if (!obj.isMesh && !obj.isInstancedMesh) return;
+    meshCount++;
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     for (const m of mats) {
       if (!m) continue;
-      m.clippingPlanes = planes;
-      m.clipShadows = true;
-      m.needsUpdate = true;
+      matCount++;
+      if (_attachClipDiscard(m)) attached++;
     }
   });
+  console.log(`[CLIP] discardNode attached to ${attached} new materials (total ${matCount} on ${meshCount} meshes)`);
 }
 
 function updateClipPlane() {
   if (!state.clip || !state.partsRoot) return;
+  const u = _initClipUniforms();
   const box = new THREE.Box3().setFromObject(state.partsRoot);
   if (box.isEmpty()) return;
   const size = box.getSize(new THREE.Vector3());
@@ -11456,6 +11548,15 @@ function updateClipPlane() {
   point[axis] = along;
   state.clip.plane.setFromNormalAndCoplanarPoint(normal, point);
 
+  if (u) {
+    if (state.clip.enabled) {
+      u.normal.value.copy(normal);
+      u.constant.value = -normal.dot(point);
+    } else {
+      u.constant.value = CLIP_DISABLED_CONSTANT;
+    }
+  }
+
   if (state.clip.helper) {
     state.clip.helper.size = Math.max(size.x, size.y, size.z) * 1.2;
     state.clip.helper.visible = state.clip.enabled && state.clip.showHelper;
@@ -11465,10 +11566,11 @@ function updateClipPlane() {
 
 function setClipAxis(axis) {
   if (!state.clip) return;
+  const u = _initClipUniforms();
   if (axis === 'off') {
     state.clip.enabled = false;
     state.clip.axis = 'x';
-    _applyClipToAllMaterials();
+    if (u) u.constant.value = CLIP_DISABLED_CONSTANT;
     if (state.clip.helper) state.clip.helper.visible = false;
     requestRender();
     return;
@@ -11535,7 +11637,8 @@ function _wireClipPlane() {
       sel.dispatchEvent(new Event('change', { bubbles: true }));
     }
     const showCb = $('clip-show-plane'); if (showCb) showCb.checked = false;
-    _applyClipToAllMaterials();
+    const u = _initClipUniforms();
+    if (u) u.constant.value = CLIP_DISABLED_CONSTANT;
     if (state.clip.helper) state.clip.helper.visible = false;
     requestRender();
   });
@@ -11547,6 +11650,7 @@ function _wireClipPlane() {
     }
     requestRender();
   });
+
 }
 
 // ============== UX: frame selected, reveal in tree, custom dropdowns, ctx menus ==============
@@ -12822,18 +12926,291 @@ function _depthFromPartsRoot(obj) {
   return d;
 }
 
-// Pixyz-style depth-aware flatten. Asks the user for a maximum tree depth and
-// dissolves every group container at depth > maxDepth, promoting its children
-// up one level (recursively, deepest first). World transforms are preserved
-// via Object3D.attach.
-//
-//   maxDepth = 0  → completely flat. Every part is a direct child of root.
-//   maxDepth = 1  → keep top-level groups; anything below them is flattened
-//                   so each top group contains only leaves.
-//   maxDepth = 2  → keep up to two nested levels of groups; etc.
-//
-// userGroups (always children of partsRoot, depth 0) survive any maxDepth ≥ 0
-// because their depth is the floor; only their internal nesting collapses.
+// =====================================================================
+// Advanced flatten — Pixyz-style total control over hierarchy collapse.
+// =====================================================================
+// Each operation reduces to: pick a SCOPE (a set of THREE.Group containers
+// to consider), pick an ACTION (which of those to dissolve), then dissolve
+// (reparent children up via attach() to preserve world transform).
+// Everything funnels through _runFlattenOps so finalize / rebuild is shared.
+
+const _FlattenDialog = (() => {
+  let bg, card;
+  const STATE = { resolve: null };
+
+  function _injectStyles() {
+    if (document.getElementById('_flat-dlg-style')) return;
+    const s = document.createElement('style');
+    s.id = '_flat-dlg-style';
+    s.textContent = `
+      .flat-bg{position:fixed;inset:0;background:transparent;display:none;place-items:center;z-index:300;opacity:0;transition:opacity .18s ease}
+      .flat-bg.show{display:grid;opacity:1}
+      .flat-card{
+        width:min(540px,calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:auto;
+        background:linear-gradient(180deg,rgba(28,33,44,.96),rgba(18,22,30,.96));
+        border:1px solid rgba(255,255,255,.08);border-radius:16px;
+        box-shadow:0 30px 80px -20px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06) inset,0 -1px 0 rgba(0,0,0,.4) inset;
+        transform:translateY(8px) scale(.97);opacity:0;
+        transition:transform .22s cubic-bezier(.2,.8,.3,1),opacity .18s ease;
+      }
+      .flat-bg.show .flat-card{transform:translateY(0) scale(1);opacity:1}
+      .flat-head{display:flex;align-items:flex-start;gap:14px;padding:22px 22px 0;position:relative}
+      .flat-icon{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:rgba(110,168,255,.12);color:var(--ac);box-shadow:inset 0 0 0 1px rgba(110,168,255,.18)}
+      .flat-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+      .flat-title{font-size:15px;font-weight:600;color:var(--tx);letter-spacing:-.01em;margin-bottom:4px}
+      .flat-sub{color:var(--tx2);font-size:12px;line-height:1.5}
+      .flat-x{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:14px}
+      .flat-x:hover{color:var(--tx);background:rgba(255,255,255,.06)}
+      .flat-body{padding:18px 22px 4px}
+      .flat-section{margin-bottom:14px}
+      .flat-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin-bottom:8px}
+      .flat-opts{display:flex;flex-direction:column;gap:6px}
+      .flat-opt{display:flex;align-items:flex-start;gap:10px;padding:9px 11px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.025);cursor:pointer;transition:background .12s,border-color .12s}
+      .flat-opt:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.1)}
+      .flat-opt.active{background:rgba(110,168,255,.1);border-color:rgba(110,168,255,.45)}
+      .flat-opt input{margin:2px 0 0 0;accent-color:var(--ac);cursor:pointer}
+      .flat-opt-text{flex:1;min-width:0}
+      .flat-opt-label{font-size:13px;font-weight:500;color:var(--tx);margin-bottom:2px}
+      .flat-opt-help{font-size:11.5px;color:var(--tx3);line-height:1.45}
+      .flat-row{display:flex;align-items:center;gap:10px;margin-top:8px;padding-left:26px}
+      .flat-row label{font-size:12px;color:var(--tx2)}
+      .flat-row input[type=number]{width:70px;padding:5px 8px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;color:var(--tx);font:inherit;font-size:12.5px;outline:none}
+      .flat-row input[type=number]:focus{border-color:rgba(110,168,255,.5);background:rgba(255,255,255,.06)}
+      .flat-toggles{display:flex;flex-direction:column;gap:6px}
+      .flat-tog{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--tx2);cursor:pointer;padding:5px 0}
+      .flat-tog input{accent-color:var(--ac);cursor:pointer}
+      .flat-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:14px 22px 18px;margin-top:10px;border-top:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.18)}
+      .flat-info{font-size:11.5px;color:var(--tx3);flex:1;min-width:0}
+      .flat-btns{display:flex;gap:8px}
+      .flat-btn{font:inherit;padding:8px 16px;border-radius:8px;border:1px solid transparent;cursor:pointer;font-size:13px;font-weight:500;transition:filter .12s,background .12s,border-color .12s}
+      .flat-btn-cancel{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.06);color:var(--tx2)}
+      .flat-btn-cancel:hover{background:rgba(255,255,255,.08);color:var(--tx)}
+      .flat-btn-ok{background:linear-gradient(180deg,#7ab2ff,#4f8be5);color:#fff;box-shadow:0 4px 14px rgba(110,168,255,.28),inset 0 1px 0 rgba(255,255,255,.18)}
+      .flat-btn-ok:hover{filter:brightness(1.07)}
+      .flat-btn-ok:disabled{opacity:.4;cursor:not-allowed;filter:none}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function _ensure() {
+    if (bg) return;
+    _injectStyles();
+    bg = document.createElement('div');
+    bg.className = 'flat-bg';
+    bg.id = '_flat-dialog';
+    bg.innerHTML = `
+      <div class="flat-card">
+        <div class="flat-head">
+          <div class="flat-icon"><i data-lucide="list-tree"></i></div>
+          <div>
+            <div class="flat-title">Advanced flatten</div>
+            <div class="flat-sub" id="_flat-sub">Total control over hierarchy collapse — Pixyz style.</div>
+          </div>
+          <button class="flat-x" id="_flat-x" aria-label="Close">✕</button>
+        </div>
+        <div class="flat-body">
+          <div class="flat-section">
+            <div class="flat-section-title">Scope</div>
+            <div class="flat-opts" id="_flat-scope">
+              <label class="flat-opt"><input type="radio" name="flat-scope" value="all" checked>
+                <div class="flat-opt-text">
+                  <div class="flat-opt-label">Whole tree</div>
+                  <div class="flat-opt-help">Operate on every container under the model root.</div>
+                </div></label>
+              <label class="flat-opt"><input type="radio" name="flat-scope" value="selected">
+                <div class="flat-opt-text">
+                  <div class="flat-opt-label">Selected groups only</div>
+                  <div class="flat-opt-help" id="_flat-sel-help">Apply only inside the groups currently selected in the tree.</div>
+                </div></label>
+            </div>
+          </div>
+
+          <div class="flat-section">
+            <div class="flat-section-title">Action</div>
+            <div class="flat-opts" id="_flat-mode">
+              <label class="flat-opt active"><input type="radio" name="flat-mode" value="total" checked>
+                <div class="flat-opt-text">
+                  <div class="flat-opt-label">Total flatten</div>
+                  <div class="flat-opt-help">Dissolve every group inside the scope. All parts become direct children of the scope root.</div>
+                </div></label>
+              <label class="flat-opt"><input type="radio" name="flat-mode" value="keep">
+                <div class="flat-opt-text">
+                  <div class="flat-opt-label">Keep top N levels</div>
+                  <div class="flat-opt-help">Keep N nesting levels from the scope root, dissolve everything deeper.</div>
+                  <div class="flat-row"><label>Levels to keep</label><input type="number" id="_flat-keep" value="1" min="1" max="32" step="1"></div>
+                </div></label>
+              <label class="flat-opt"><input type="radio" name="flat-mode" value="last">
+                <div class="flat-opt-text">
+                  <div class="flat-opt-label">Flatten last level only</div>
+                  <div class="flat-opt-help">Only dissolve the deepest groups (the ones whose children are all parts). Keeps the upper assembly hierarchy intact.</div>
+                </div></label>
+              <label class="flat-opt"><input type="radio" name="flat-mode" value="chains">
+                <div class="flat-opt-text">
+                  <div class="flat-opt-label">Collapse single-child chains</div>
+                  <div class="flat-opt-help">Removes pass-through wrappers like <code>a / b / c / leaf</code> → <code>leaf</code>. Common cleanup for STEP files with redundant assembly nesting.</div>
+                </div></label>
+              <label class="flat-opt"><input type="radio" name="flat-mode" value="ungroup">
+                <div class="flat-opt-text">
+                  <div class="flat-opt-label">Ungroup (dissolve scope itself)</div>
+                  <div class="flat-opt-help">Remove the scope group(s), promoting their children one level up. No-op when scope is whole tree.</div>
+                </div></label>
+            </div>
+          </div>
+
+          <div class="flat-section">
+            <div class="flat-section-title">Options</div>
+            <div class="flat-toggles">
+              <label class="flat-tog"><input type="checkbox" id="_flat-preserve-ug" checked>
+                Preserve user groups (groups you created with “Group selection”)</label>
+              <label class="flat-tog"><input type="checkbox" id="_flat-clean-empty" checked>
+                Remove empty groups left behind</label>
+              <label class="flat-tog"><input type="checkbox" id="_flat-collapse-after">
+                Also collapse single-child chains afterwards</label>
+            </div>
+          </div>
+        </div>
+        <div class="flat-foot">
+          <div class="flat-info" id="_flat-info">—</div>
+          <div class="flat-btns">
+            <button class="flat-btn flat-btn-cancel" id="_flat-cancel">Cancel</button>
+            <button class="flat-btn flat-btn-ok" id="_flat-ok">Apply</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(bg);
+    card = bg.querySelector('.flat-card');
+
+    const close = (result) => {
+      bg.classList.remove('show');
+      const f = STATE.resolve; STATE.resolve = null;
+      if (f) f(result);
+    };
+    bg.querySelector('#_flat-cancel').addEventListener('click', () => close(null));
+    bg.querySelector('#_flat-x').addEventListener('click', () => close(null));
+    bg.addEventListener('click', e => { if (e.target === bg) close(null); });
+    bg.querySelector('#_flat-ok').addEventListener('click', () => close(_collect()));
+    document.addEventListener('keydown', e => {
+      if (!bg.classList.contains('show')) return;
+      if (e.key === 'Escape') { e.preventDefault(); close(null); }
+      else if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'INPUT') {
+        e.preventDefault(); close(_collect());
+      }
+    }, true);
+
+    // Highlight the active mode card.
+    const syncActive = () => {
+      bg.querySelectorAll('input[name="flat-mode"]').forEach(r => {
+        r.closest('.flat-opt').classList.toggle('active', r.checked);
+      });
+      bg.querySelectorAll('input[name="flat-scope"]').forEach(r => {
+        r.closest('.flat-opt').classList.toggle('active', r.checked);
+      });
+    };
+    bg.addEventListener('change', syncActive);
+    syncActive();
+  }
+
+  function _collect() {
+    const mode = bg.querySelector('input[name="flat-mode"]:checked')?.value || 'total';
+    const scope = bg.querySelector('input[name="flat-scope"]:checked')?.value || 'all';
+    const keep = Math.max(1, parseInt(bg.querySelector('#_flat-keep').value, 10) || 1);
+    return {
+      mode, scope, keep,
+      preserveUserGroups: bg.querySelector('#_flat-preserve-ug').checked,
+      cleanEmpty: bg.querySelector('#_flat-clean-empty').checked,
+      collapseAfter: bg.querySelector('#_flat-collapse-after').checked,
+    };
+  }
+
+  return {
+    async open({ selectedGroupCount = 0, currentMaxDepth = 0 } = {}) {
+      _ensure();
+      const help = bg.querySelector('#_flat-sel-help');
+      const selOpt = bg.querySelector('input[name="flat-scope"][value="selected"]');
+      if (selectedGroupCount > 0) {
+        help.textContent = `Apply only inside the ${selectedGroupCount} group(s) selected in the tree.`;
+        selOpt.disabled = false;
+        selOpt.closest('.flat-opt').style.opacity = '1';
+        selOpt.checked = true;
+        bg.querySelector('input[name="flat-scope"][value="all"]').checked = false;
+      } else {
+        help.textContent = 'Select group rows in the tree first to enable scoping.';
+        selOpt.disabled = true;
+        selOpt.closest('.flat-opt').style.opacity = '.5';
+        bg.querySelector('input[name="flat-scope"][value="all"]').checked = true;
+      }
+      bg.querySelector('#_flat-info').textContent =
+        `Tree currently nests ${currentMaxDepth} level${currentMaxDepth === 1 ? '' : 's'} deep.`;
+      bg.querySelectorAll('input[name="flat-mode"]').forEach((r, i) => { r.checked = i === 0; });
+      bg.querySelectorAll('input[name="flat-scope"]').forEach(r => r.dispatchEvent(new Event('change', { bubbles: true })));
+      _lucide();
+      bg.classList.add('show');
+      return new Promise(res => { STATE.resolve = res; });
+    },
+  };
+})();
+
+// Build the list of THREE.Group containers we'll iterate based on dialog scope.
+// Returns an array of { root, label } where root is a THREE.Object3D under
+// which we'll process containers. If scope='all', returns [{ root: partsRoot }].
+function _flattenScopeRoots(scope) {
+  if (scope !== 'selected') return [{ root: state.partsRoot, label: 'tree' }];
+  const ids = state.selectedGroupIds ? Array.from(state.selectedGroupIds) : [];
+  if (!ids.length) return [];
+  const roots = [];
+  for (const gid of ids) {
+    const node = (state.treeNodes || []).find(n => n.kind === 'group' && n.id === gid);
+    if (node?.obj3d) roots.push({ root: node.obj3d, label: node.name || ('Group ' + gid) });
+    else {
+      // user group fallback
+      const ug = (state.userGroups || []).find(g => g.id === gid);
+      if (ug?.ref) roots.push({ root: ug.ref, label: ug.name || ('Group ' + gid) });
+    }
+  }
+  return roots;
+}
+
+// Is this Object3D one of our user-created groups? Survives `preserveUserGroups`.
+function _isUserGroupObj(obj) {
+  return !!(obj && obj.userData && obj.userData.isUserGroup);
+}
+
+// Reparent every child of `obj` to `obj.parent` (preserving world transform)
+// and remove the now-empty `obj`. Returns true if the dissolve happened.
+function _dissolveContainer(obj) {
+  const parent = obj.parent;
+  if (!parent) return false;
+  const kids = [...obj.children];
+  for (const k of kids) parent.attach(k);
+  parent.remove(obj);
+  return true;
+}
+
+// Walk every non-mesh container under `root`. Collected as
+// { obj, depth } where depth is measured from root (0 = direct children).
+function _collectContainers(root) {
+  const out = [];
+  if (!root) return out;
+  const walk = (obj, depth) => {
+    if (obj !== root && !obj.isMesh) out.push({ obj, depth });
+    if (obj.children) for (const c of obj.children) walk(c, depth + 1);
+  };
+  walk(root, -1);  // root itself yields depth 0 for its direct children
+  return out;
+}
+
+// Test whether a container is a "leaf group" — every direct child is a Mesh.
+function _isLeafGroup(obj) {
+  if (!obj.children?.length) return false;
+  for (const c of obj.children) if (!c.isMesh) return false;
+  return true;
+}
+
+// Test whether a container is a "single-child chain" link — exactly one child.
+function _isSingleChildLink(obj) {
+  return obj.children && obj.children.length === 1;
+}
+
 async function flattenTree() {
   if (!state.parts.length) { toast('No model loaded', '', 'info'); return; }
 
@@ -12842,7 +13219,7 @@ async function flattenTree() {
     (state.treeNodes || []).filter(n => n.kind === 'group').length;
   if (groupCount === 0) { toast('Already flat', 'No groups to dissolve', 'info', 2200); return; }
 
-  // Find the deepest group so the prompt help line shows a useful range.
+  // Find the deepest group so the dialog footer shows a useful range.
   let currentMaxDepth = 0;
   state.partsRoot?.traverse(o => {
     if (o === state.partsRoot || o.isMesh) return;
@@ -12850,63 +13227,36 @@ async function flattenTree() {
     if (d > currentMaxDepth) currentMaxDepth = d;
   });
 
-  const entered = await appPrompt(
-    `Maximum tree depth to keep (0 = completely flat).\n` +
-    `Current deepest group is at depth ${currentMaxDepth}.\n\n` +
-    `Groups deeper than this are dissolved — their contents are promoted up.\n` +
-    `World positions are preserved.`,
-    '0',
-    { title: 'Flatten tree', okLabel: 'Flatten', inputType: 'number', min: 0, max: currentMaxDepth, step: 1 }
-  );
-  if (entered === null) return;            // user cancelled
-  const maxDepth = Math.max(0, parseInt(entered, 10) || 0);
-  if (!Number.isFinite(maxDepth)) { toast('Invalid depth', 'Enter a non-negative integer', 'warn'); return; }
-  if (maxDepth >= currentMaxDepth) { toast('Nothing to flatten', `Tree is already ≤ ${maxDepth} deep`, 'info', 2200); return; }
+  const selectedGroupCount = state.selectedGroupIds ? state.selectedGroupIds.size : 0;
+  const opts = await _FlattenDialog.open({ selectedGroupCount, currentMaxDepth });
+  if (!opts) return;
+
+  const roots = _flattenScopeRoots(opts.scope);
+  if (!roots.length) { toast('Nothing in scope', 'No groups selected to flatten', 'warn'); return; }
 
   state.partsRoot.updateMatrixWorld(true);
 
-  // 1. Collect every non-mesh container under partsRoot with its depth.
-  //    Skip InstancedMesh (it's a mesh in three.js terms) and partsRoot.
-  const containers = [];
-  state.partsRoot.traverse(o => {
-    if (o === state.partsRoot) return;
-    if (o.isMesh) return;
-    containers.push({ obj: o, depth: _depthFromPartsRoot(o) });
-  });
-
-  // 2. Process deepest-first so when we reach a parent, its over-depth
-  //    descendants have already been flattened into it. Reparent each
-  //    over-depth container's THREE.js children up to its parent (preserving
-  //    world via attach), then remove the now-empty container.
-  containers.sort((a, b) => b.depth - a.depth);
-
   let dissolved = 0;
-  for (const { obj, depth } of containers) {
-    if (depth <= maxDepth) continue;
-    const parent = obj.parent;
-    if (!parent) continue;
-    // Snapshot — attach() mutates obj.children as it pulls items out.
-    const kids = [...obj.children];
-    for (const k of kids) parent.attach(k);
-    parent.remove(obj);
-    dissolved++;
+  for (const { root } of roots) {
+    dissolved += _runFlattenOps(root, opts);
   }
 
-  // 3. Drop dead userGroups (their .ref Group is no longer in the scene)
-  //    and decrement counter.
+  if (opts.collapseAfter && opts.mode !== 'chains') {
+    for (const { root } of roots) dissolved += _collapseSingleChildChains(root, opts);
+  }
+
+  if (opts.cleanEmpty) {
+    for (const { root } of roots) dissolved += _removeEmptyContainers(root, opts);
+  }
+
+  // Drop dead userGroups (their .ref Group is no longer in the scene).
   if (state.userGroups && state.userGroups.length) {
     state.userGroups = state.userGroups.filter(g => g.ref && g.ref.parent);
     state._userGroupCount = state.userGroups.length;
   }
 
-  // 4. Rebuild treeNodes from the live scene. _buildHierarchyFromScene was
-  //    written for GLB load but it's pure-functional over the scene graph —
-  //    feed it a fresh meshToPart map and partsRoot, and it produces a
-  //    correct treeNodes array for the post-flatten state.
-  if (maxDepth === 0) {
-    // Total flatten — clear treeNodes so rebuildTree falls into its flat path
-    // (no group rows at all). Faster and visually cleaner than emitting a
-    // single-root tree with N leaves.
+  // Rebuild treeNodes from the live scene.
+  if (opts.mode === 'total' && opts.scope === 'all') {
     state.treeNodes = [];
   } else if (typeof _buildHierarchyFromScene === 'function') {
     const meshToPart = new Map();
@@ -12914,29 +13264,119 @@ async function flattenTree() {
     try { _buildHierarchyFromScene(state.partsRoot, meshToPart); }
     catch (err) { console.warn('[flatten] hierarchy rebuild failed:', err); state.treeNodes = []; }
   }
-  // Stale collapse-state references group ids that no longer exist.
   state.treeCollapsed?.clear?.();
+  state.selectedGroupIds?.clear?.();
 
-  // 5. Refresh exact-world snapshots so subsequent gizmo operations don't
-  //    restore the old (pre-flatten) ancestor transforms.
+  // Refresh exact-world snapshots so subsequent gizmo operations don't restore
+  // pre-flatten ancestor transforms.
   for (const p of state.parts) {
     if (p.mesh) {
       p.mesh.updateWorldMatrix(true, false);
       p._exactWorld = p.mesh.matrixWorld.clone();
     }
   }
-  // Flatten reparents every mesh — mesh.position is no longer in the same
-  // frame _origPos was captured in. Drop the cache so the next explode
-  // recaptures from the post-flatten positions.
   invalidateExplodeBaseline();
 
   rebuildTree();
   requestRender();
-  const detail = maxDepth === 0
-    ? `${dissolved} group${dissolved === 1 ? '' : 's'} dissolved, every part at top level`
-    : `kept ${maxDepth} level${maxDepth === 1 ? '' : 's'}, dissolved ${dissolved} deeper group${dissolved === 1 ? '' : 's'}`;
-  toast('Tree flattened', detail, 'success');
-  Log.success(`Flatten depth=${maxDepth}: ${dissolved} groups dissolved`, { tag: 'tree' });
+
+  const modeLabel = {
+    total: 'total flatten', keep: `kept ${opts.keep} level${opts.keep === 1 ? '' : 's'}`,
+    last: 'flattened last level', chains: 'collapsed chains', ungroup: 'ungrouped scope',
+  }[opts.mode] || opts.mode;
+  const scopeLabel = opts.scope === 'selected' ? `${roots.length} selected` : 'whole tree';
+  toast('Tree flattened', `${modeLabel} on ${scopeLabel} — ${dissolved} group${dissolved === 1 ? '' : 's'} dissolved`, 'success');
+  Log.success(`Flatten ${opts.mode} scope=${opts.scope}: ${dissolved} dissolved`, { tag: 'tree' });
+}
+
+// Dispatch one flatten action on a given root. Returns count dissolved.
+function _runFlattenOps(root, opts) {
+  if (opts.mode === 'chains') return _collapseSingleChildChains(root, opts);
+  if (opts.mode === 'ungroup') return _ungroupScope(root, opts);
+  if (opts.mode === 'last')    return _flattenLastLevel(root, opts);
+
+  // 'total' and 'keep' share the depth-cutoff approach. Total = keep 0 levels.
+  const cutoff = (opts.mode === 'total') ? 0 : Math.max(1, opts.keep | 0);
+  return _flattenByDepth(root, cutoff, opts);
+}
+
+// Dissolve every container at depth >= cutoff. Depth is measured from `root`
+// — root's direct child containers are depth 0. cutoff = "levels of nesting
+// to keep". cutoff=0 → total flatten (dissolve all). cutoff=1 → keep depth=0,
+// dissolve depth>=1. Deepest-first so reparenting up doesn't lose nodes.
+function _flattenByDepth(root, cutoff, opts) {
+  const containers = _collectContainers(root)
+    .filter(c => c.obj !== root)
+    .sort((a, b) => b.depth - a.depth);
+  let dissolved = 0;
+  for (const { obj, depth } of containers) {
+    if (depth < cutoff) continue;
+    if (opts.preserveUserGroups && _isUserGroupObj(obj)) continue;
+    if (_dissolveContainer(obj)) dissolved++;
+  }
+  return dissolved;
+}
+
+// Dissolve only "leaf groups" — groups whose direct children are all Meshes.
+// Single pass: repeating would walk up the tree (every group becomes a leaf
+// once its child group dies), and the user explicitly asked for last level only.
+function _flattenLastLevel(root, opts) {
+  let dissolved = 0;
+  const containers = _collectContainers(root).filter(c => c.obj !== root);
+  for (const { obj } of containers) {
+    if (!_isLeafGroup(obj)) continue;
+    if (opts.preserveUserGroups && _isUserGroupObj(obj)) continue;
+    if (_dissolveContainer(obj)) dissolved++;
+  }
+  return dissolved;
+}
+
+// Collapse every single-child group chain. a/b/c/leaf → leaf.
+// Repeats until stable.
+function _collapseSingleChildChains(root, opts) {
+  let dissolved = 0;
+  for (let pass = 0; pass < 64; pass++) {
+    const containers = _collectContainers(root).filter(c => c.obj !== root);
+    let dissolvedInPass = 0;
+    for (const { obj } of containers) {
+      if (!_isSingleChildLink(obj)) continue;
+      if (opts.preserveUserGroups && _isUserGroupObj(obj)) continue;
+      if (_dissolveContainer(obj)) { dissolved++; dissolvedInPass++; }
+    }
+    if (!dissolvedInPass) break;
+  }
+  return dissolved;
+}
+
+// Ungroup mode: dissolve the scope root itself (when scope=selected). When
+// scope=all, the scope root is partsRoot — refuse to dissolve it.
+function _ungroupScope(root, opts) {
+  if (root === state.partsRoot) return 0;
+  if (opts.preserveUserGroups && _isUserGroupObj(root)) return 0;
+  return _dissolveContainer(root) ? 1 : 0;
+}
+
+// Remove containers that ended up with zero children after the action.
+function _removeEmptyContainers(root, opts) {
+  let removed = 0;
+  for (let pass = 0; pass < 8; pass++) {
+    const containers = _collectContainers(root).filter(c => c.obj !== root);
+    let removedInPass = 0;
+    // Process deepest first so a parent that becomes empty after its child is
+    // removed gets cleaned in the next pass.
+    containers.sort((a, b) => b.depth - a.depth);
+    for (const { obj } of containers) {
+      if (obj.children && obj.children.length > 0) continue;
+      if (opts.preserveUserGroups && _isUserGroupObj(obj)) continue;
+      const parent = obj.parent;
+      if (!parent) continue;
+      parent.remove(obj);
+      removed++;
+      removedInPass++;
+    }
+    if (!removedInPass) break;
+  }
+  return removed;
 }
 
 const _origWireUI_groups = wireUI;
