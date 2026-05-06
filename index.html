@@ -464,14 +464,14 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    sells the entrance — origin stays in the middle. */
 .modal-bg{position:fixed;inset:0;background:rgba(6,8,12,.55);backdrop-filter:blur(10px) saturate(140%);-webkit-backdrop-filter:blur(10px) saturate(140%);display:grid;place-items:center;z-index:200;opacity:0;pointer-events:none;transition:opacity 180ms var(--ease-out)}
 .modal-bg.show{opacity:1;pointer-events:auto}
-.modal{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;width:420px;max-width:90vw;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform 220ms var(--ease-out),opacity 180ms var(--ease-out)}
+.modal{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;width:420px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform 220ms var(--ease-out),opacity 180ms var(--ease-out)}
 .modal-bg.show .modal{transform:translateY(0) scale(1);opacity:1}
-.modal-h{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between}
+.modal-h{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
 .modal-h h3{font-size:14px;font-weight:600}
 .modal-h .x{background:none;border:none;color:var(--tx3);padding:4px}
 .modal-h .x:hover{color:var(--tx)}
-.modal-b{padding:18px 20px}
-.modal-f{padding:14px 20px;border-top:1px solid var(--bd);display:flex;gap:8px;justify-content:flex-end}
+.modal-b{padding:18px 20px;flex:1 1 auto;overflow-y:auto;min-height:0}
+.modal-f{padding:14px 20px;border-top:1px solid var(--bd);display:flex;gap:8px;justify-content:flex-end;flex:0 0 auto;background:var(--bg1)}
 .fmt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
 .fmt-card{padding:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;cursor:pointer}
 .fmt-card:hover{border-color:var(--bd2)}
