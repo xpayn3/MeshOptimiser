@@ -455,11 +455,11 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .scrub-range:active::-moz-range-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(110,168,255,.18)}
 .scrub-range:focus-visible::-webkit-slider-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(110,168,255,.35)}
 .scrub-range:focus-visible::-moz-range-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(110,168,255,.35)}
-.mac-sel{width:100%;padding:7px 28px 7px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
-.mac-sel:hover{background:var(--bg3);border-color:var(--bd2)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:500;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
-.btn:hover{background:var(--bg3);border-color:var(--bd2)}
-.btn:active{transform:scale(.97);background:var(--bg2)}
+.mac-sel{width:100%;padding:7px 28px 7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
+.mac-sel:hover{background:var(--bg4);border-color:var(--bd2)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:500;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
+.btn:hover{background:var(--bg4);border-color:var(--bd2)}
+.btn:active{transform:scale(.97);background:var(--bg3)}
 /* Compact .btn variant for the right sidebar — matches the .split-preset
    segmented control height (~28px) so all sidebar buttons read at the same
    visual weight. */
@@ -661,10 +661,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 #vp-materials-pop .mat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;justify-items:center}
 #vp-materials-pop .mat-cell{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),box-shadow 120ms var(--ease-out);user-select:none}
 #vp-materials-pop .mat-cell:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
-#vp-materials-pop .mat-cell .mat-thumb{width:60px;height:60px;border-radius:6px;background-color:#15181f;background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);background-repeat:repeat;display:grid;place-items:center;overflow:hidden}
+#vp-materials-pop .mat-cell .mat-thumb{position:relative;width:60px;height:60px;border-radius:6px;background-color:#15181f;background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);background-repeat:repeat;display:grid;place-items:center;overflow:hidden}
 #vp-materials-pop .mat-cell .mat-thumb img,#vp-materials-pop .mat-cell .mat-thumb canvas{width:100%;height:100%;display:block;object-fit:cover}
-#vp-materials-pop .mat-cell .mat-name{font-size:10.5px;color:var(--tx2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.15;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#vp-materials-pop .mat-cell .mat-count{font-size:9.5px;color:var(--tx3);font-variant-numeric:tabular-nums;line-height:1}
+#vp-materials-pop .mat-cell .mat-name{font-size:10.5px;color:var(--tx2);line-height:1.15;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Count pill — pinned to the thumb's top-right. Subtle dark capsule with
+   tabular numerics so 1-, 2-, 3-digit counts stay aligned. */
+#vp-materials-pop .mat-cell .mat-count{position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;color:var(--tx);background:rgba(11,14,22,.75);border:1px solid rgba(255,255,255,.10);border-radius:7px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:.02em;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
 #vp-materials-pop .mat-cell.selected{background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.40)}
 /* Subtle ring on materials used by the current viewport selection — gives a
    passive "you have parts of this material picked" hint without competing
@@ -1826,7 +1828,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050623-shaderball-thumbs"></script>
+<script type="module" src="app-v2.js?v=2026050623-mateditor-textures"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

@@ -1750,6 +1750,11 @@ function initScene() {
   // slimming pass below this gives a noticeably lighter visual.
   state.gizmo.size = 0.6;
   state.gizmo.setMode('translate');
+  // Local space: handles align with the attached pivot's orientation.
+  // The pivot's rotation is synced to the selected object's world rotation in
+  // _attachGizmoToParts, so handles visually follow object rotation — the
+  // standard behaviour in Blender / Cinema 4D.
+  state.gizmo.space = 'local';
   // Industry-standard snap-while-shift, applied globally to whichever gizmo
   // mode is active. 10 units / 15° / 0.1 — same defaults as Maya/Blender/Max.
   // Snaps are armed/disarmed from the document-level Shift listeners in the
@@ -2151,14 +2156,27 @@ function _attachGizmoToParts(parts) {
     center = new THREE.Vector3();
     parts[0].mesh.getWorldPosition(center);
   }
-  // Reset the pivot to identity, then move it to the centroid.
+  // Reset the pivot, move it to the centroid, and — for single-part
+  // selections — orient it to match the part's world rotation so the
+  // gizmo handles align with the object's local axes (Blender-style).
+  // Multi-part selections fall back to identity rotation since there's
+  // no single "object rotation" to align to.
   state.pivot.position.set(0, 0, 0);
   state.pivot.rotation.set(0, 0, 0);
   state.pivot.scale.set(1, 1, 1);
   state.pivot.updateMatrixWorld();
   state.pivot.position.copy(center);
+  if (parts.length === 1) {
+    parts[0].mesh.updateWorldMatrix(true, false);
+    const _qWorld = new THREE.Quaternion();
+    parts[0].mesh.getWorldQuaternion(_qWorld);
+    state.pivot.quaternion.copy(_qWorld);
+  }
   state.pivot.updateMatrixWorld();
   // Re-parent every selected mesh under pivot, preserving world transforms.
+  // Because pivot now matches the part's world rotation, the part's local
+  // rotation will collapse to (near-)identity after attach — the rotation
+  // "lives" on the pivot, where the gizmo handles can follow it.
   for (const p of parts) state.pivot.attach(p.mesh);
   state._pivotedParts = parts;
   state._pivotedPart = parts[0]; // legacy compat
@@ -3440,7 +3458,15 @@ function onModelLoaded(filename) {
   // ramp has finished and the renderer has had a chance to draw at least one
   // full-quality frame; otherwise we'd snapshot a half-lit / partially-loaded
   // scene. ~1.1s matches the boot-light ramp duration.
-  setTimeout(() => { try { _captureRecentThumb(filename); } catch (e) { console.warn('[recent-thumb] capture failed:', e); } }, 1100);
+  setTimeout(() => {
+    // _captureRecentThumb is async — a synchronous try/catch can't catch
+    // its rejection, so the renderTargetPixelsAsync failure observed on
+    // WebGPU surfaced as an "Unhandled promise rejection". Always attach
+    // .catch() to swallow it cleanly.
+    Promise.resolve()
+      .then(() => _captureRecentThumb(filename))
+      .catch(e => console.warn('[recent-thumb] capture failed:', e?.message || e));
+  }, 1100);
 }
 
 // Render the scene into a small offscreen target, encode the result as a JPEG
@@ -3474,14 +3500,30 @@ async function _captureRecentThumb(filename) {
   const target = new THREE.WebGLRenderTarget(SIZE, SIZE, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
   const oldTarget = renderer.getRenderTarget?.();
   let pixels = new Uint8Array(SIZE * SIZE * 4);
+  let readOk = false;
   try {
     renderer.setRenderTarget(target);
     if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, cam);
     else renderer.render(scene, cam);
-    if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
-      await renderer.readRenderTargetPixelsAsync(target, 0, 0, SIZE, SIZE, pixels);
-    } else {
-      renderer.readRenderTargetPixels(target, 0, 0, SIZE, SIZE, pixels);
+    try {
+      if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
+        await renderer.readRenderTargetPixelsAsync(target, 0, 0, SIZE, SIZE, pixels);
+      } else {
+        renderer.readRenderTargetPixels(target, 0, 0, SIZE, SIZE, pixels);
+      }
+      readOk = true;
+    } catch (readErr) {
+      // WebGPU's readRenderTargetPixelsAsync rejects with "Invalid value
+      // used as weak map key" against a freshly-allocated RenderTarget —
+      // the GPU texture isn't registered with the backend's resource map
+      // yet at the moment the copy command runs. Known three.js issue;
+      // the canvas-snapshot fallback below keeps thumbs working. Log once
+      // per session so the failure is discoverable in the console without
+      // spamming on every model load.
+      if (!_captureRecentThumb._loggedReadFail) {
+        console.info('[recent-thumb] using canvas-snapshot path (WebGPU readRenderTargetPixelsAsync unavailable):', readErr?.message || readErr);
+        _captureRecentThumb._loggedReadFail = true;
+      }
     }
   } finally {
     renderer.setRenderTarget(oldTarget || null);
@@ -3491,18 +3533,40 @@ async function _captureRecentThumb(filename) {
     if (state.bboxRoot) state.bboxRoot.visible = wasBbox;
     requestRender?.();
   }
-  // GL/WebGPU framebuffer origin is bottom-left; canvas2D is top-left. Flip rows.
-  const c = document.createElement('canvas');
-  c.width = SIZE; c.height = SIZE;
-  const ctx = c.getContext('2d');
-  const imageData = ctx.createImageData(SIZE, SIZE);
-  for (let y = 0; y < SIZE; y++) {
-    const src = (SIZE - 1 - y) * SIZE * 4;
-    const dst = y * SIZE * 4;
-    imageData.data.set(pixels.subarray(src, src + SIZE * 4), dst);
+  let dataUrl;
+  if (readOk) {
+    // GL/WebGPU framebuffer origin is bottom-left; canvas2D is top-left. Flip rows.
+    const c = document.createElement('canvas');
+    c.width = SIZE; c.height = SIZE;
+    const ctx = c.getContext('2d');
+    const imageData = ctx.createImageData(SIZE, SIZE);
+    for (let y = 0; y < SIZE; y++) {
+      const src = (SIZE - 1 - y) * SIZE * 4;
+      const dst = y * SIZE * 4;
+      imageData.data.set(pixels.subarray(src, src + SIZE * 4), dst);
+    }
+    ctx.putImageData(imageData, 0, 0);
+    dataUrl = c.toDataURL('image/jpeg', 0.78);
+  } else {
+    // Snapshot the live viewport canvas instead. Cropped to a centred
+    // square so wide viewports don't produce stretched thumbnails.
+    try {
+      if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, cam);
+      else renderer.render(scene, cam);
+      const liveCanvas = renderer.domElement;
+      const w = liveCanvas.width, h = liveCanvas.height;
+      const side = Math.min(w, h);
+      const sx = (w - side) >> 1, sy = (h - side) >> 1;
+      const c = document.createElement('canvas');
+      c.width = SIZE; c.height = SIZE;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(liveCanvas, sx, sy, side, side, 0, 0, SIZE, SIZE);
+      dataUrl = c.toDataURL('image/jpeg', 0.78);
+    } catch (snapErr) {
+      console.warn('[recent-thumb] canvas snapshot fallback failed:', snapErr?.message || snapErr);
+      return;
+    }
   }
-  ctx.putImageData(imageData, 0, 0);
-  const dataUrl = c.toDataURL('image/jpeg', 0.78);
   // Persist on the matching recent entry. STEP imports go through a
   // server-side conversion that renames the file to a .glb, so a name match
   // can fail; fall back to "first recent" (the just-pushed one) when the
@@ -4002,17 +4066,16 @@ function _transformPanelRefresh() {
     if (Number.isFinite(_tfTmpVec.z) && inputs.pz && document.activeElement !== inputs.pz) inputs.pz.value = _fmtNum(_tfTmpVec.z);
   } catch (_) {}
 
+  // Rotation: read from the pivot when pivoted, since _attachGizmoToParts
+  // now bakes the part's world rotation onto state.pivot (collapsing the
+  // part's local rotation to identity). Reading obj.rotation in that case
+  // would always show 0. When un-pivoted, read obj.rotation directly.
   try {
     const rad2deg = (r) => r * 180 / Math.PI;
-    if (usingWorld) {
-      obj.getWorldQuaternion(_tfTmpQuat);
-      _tfTmpEuler.setFromQuaternion(_tfTmpQuat, 'XYZ');
-    } else {
-      _tfTmpEuler.set(obj.rotation.x, obj.rotation.y, obj.rotation.z, 'XYZ');
-    }
-    if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(_tfTmpEuler.x), 2);
-    if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
-    if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
+    const rotSource = (usingWorld && state.pivot) ? state.pivot.rotation : obj.rotation;
+    if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(rotSource.x), 2);
+    if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(rotSource.y), 2);
+    if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(rotSource.z), 2);
   } catch (_) {}
 
   // Size: stable bbox in the OBJECT's own local frame so rotation doesn't
@@ -4078,12 +4141,20 @@ function _wireTransformPanel() {
         }
       } else if (axis === 'rx' || axis === 'ry' || axis === 'rz') {
         const rad = v * Math.PI / 180;
-        // Rotation is local for now; world-rotation editing would need a
-        // full quat decomposition that matches Euler order conventions —
-        // leaving as a follow-up so the simple case stays predictable.
-        if (axis === 'rx') obj.rotation.x = rad;
-        if (axis === 'ry') obj.rotation.y = rad;
-        if (axis === 'rz') obj.rotation.z = rad;
+        // When pivoted, the rotation lives on state.pivot (so the gizmo
+        // handles can rotate with it). Write there. The pivot's rotation
+        // becomes the part's effective world rotation since obj.local
+        // rotation was collapsed to identity at attach time.
+        if (usingWorld && state.pivot) {
+          if (axis === 'rx') state.pivot.rotation.x = rad;
+          if (axis === 'ry') state.pivot.rotation.y = rad;
+          if (axis === 'rz') state.pivot.rotation.z = rad;
+          state.pivot.updateMatrixWorld(true);
+        } else {
+          if (axis === 'rx') obj.rotation.x = rad;
+          if (axis === 'ry') obj.rotation.y = rad;
+          if (axis === 'rz') obj.rotation.z = rad;
+        }
       } else if (axis === 'sx' || axis === 'sy' || axis === 'sz') {
         // Size is a target dimension in the object's OWN local frame
         // (matches the read path, which uses _readStableSize). Convert to
@@ -4105,6 +4176,16 @@ function _wireTransformPanel() {
       }
       obj.updateMatrix();
       obj.updateMatrixWorld(true);
+      // After the write, the object's bbox centre / orientation has moved
+      // out from under the gizmo's pivot. Detach + re-attach so the pivot
+      // re-positions at the NEW bbox centre with identity rotation —
+      // Blender's panel/gizmo stay in sync for free because Blender has no
+      // separate pivot, but our app needs an explicit refresh. This also
+      // prevents a follow-up gizmo scale on a rotated object from skewing
+      // through a stale pivot orientation.
+      if (state._pivotedPart || state._pivotedGroup) {
+        try { _detachGizmo(); updateGizmo?.(); } catch (_) {}
+      }
     } catch (err) { console.warn('[transform-panel] edit failed:', err); _transformPanelRefresh(); return; }
     requestRender();
     refreshPropertiesPanel?.();
@@ -4237,6 +4318,12 @@ function _wireTransformPanel() {
       obj.scale.set(1, 1, 1);
       obj.updateMatrix();
       obj.updateMatrixWorld(true);
+      // Same gizmo-refresh as the edit path — keep handles aligned with
+      // the now-identity object so a subsequent scale via gizmo doesn't
+      // skew through a stale pivot orientation.
+      if (state._pivotedPart || state._pivotedGroup) {
+        try { _detachGizmo(); updateGizmo?.(); } catch (_) {}
+      }
     } catch (err) { console.warn('[transform-panel] reset failed:', err); return; }
     requestRender();
     refreshPropertiesPanel?.();
@@ -11467,10 +11554,13 @@ function _populateMaterialsList() {
     const thumb = previewUrl
       ? `<img class="mat-thumb-img" src="${previewUrl}" alt="${escapeHtml(name)}" draggable="false">`
       : `<div class="mat-thumb-fallback" style="width:100%;height:100%;background:${hex}"></div>`;
+    // Count badge floats on the thumbnail's top-right corner — the
+    // standalone .mat-count row used to add a third line under each cell
+    // and inflate the grid; tucking it inside the preview keeps the cells
+    // tighter and reads like Cinema 4D / Substance "uses" pills.
     cell.innerHTML = `
-      <div class="mat-thumb">${thumb}</div>
+      <div class="mat-thumb">${thumb}<span class="mat-count">${info.count}</span></div>
       <div class="mat-name">${escapeHtml(name)}</div>
-      <div class="mat-count">${info.count}</div>
     `;
     // Stash the material on the cell so the editor can find this cell to
     // refresh just one thumbnail when the user edits sliders, without
@@ -11587,37 +11677,91 @@ function _openMaterialEditor(info) {
   const id = '_mat-editor-popup';
   const mat = info.mat;
 
-  // Inject editor stylesheet once.
+  // Inject editor stylesheet once. Restyles the popup chrome to match the
+  // viewport materials panel (#vp-materials-pop) so the editor and the
+  // grid feel like one surface — flat var(--bg1) background, 10 px radius,
+  // same hairline border + drop shadow, same section padding (10×12) and
+  // pop-section-head label vocabulary (uppercase tx3, .04em tracking).
   if (!document.getElementById('_mat-edit-style')) {
     const s = document.createElement('style');
     s.id = '_mat-edit-style';
     s.textContent = `
+      /* Override the generic _DraggablePopup chrome ONLY for the material
+         editor instance. Selector keys off the popup's id wrapper so other
+         draggable popups keep their default look.
+
+         height:auto + max-height makes the card wrap its sections instead
+         of locking to the create-time height = 860 baseline. With Base +
+         Emission + Surface visible the card sizes to that content; when
+         clearcoat / sheen / specular sections expand, the body's
+         overflow-y:auto (set by bodyScroll: true) kicks in once the card
+         hits the calc(100vh - 24px) viewport cap. Trade-off: vertical
+         drag-resize on the corner handles is suppressed for this popup;
+         users normally don't resize a properties panel anyway. */
+      #_mat-editor-popup .dlg-pop{background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);height:auto !important;max-height:calc(100vh - 24px)}
+      #_mat-editor-popup .dlg-pop:has(.dlg-resize.nw:hover),
+      #_mat-editor-popup .dlg-pop:has(.dlg-resize.ne:hover),
+      #_mat-editor-popup .dlg-pop:has(.dlg-resize.sw:hover),
+      #_mat-editor-popup .dlg-pop:has(.dlg-resize.se:hover){background:var(--bg1)}
+      #_mat-editor-popup .dlg-head{padding:10px 12px;border-bottom:1px solid var(--bd)}
+      #_mat-editor-popup .dlg-head::after{display:none}
+      #_mat-editor-popup .dlg-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3)}
+      #_mat-editor-popup .dlg-sub{font-size:10.5px;color:var(--tx3);font-weight:500;text-transform:none;letter-spacing:0;margin-top:1px}
+      #_mat-editor-popup .dlg-head-icon{width:22px;height:22px;border-radius:6px;background:rgba(110,168,255,.10);box-shadow:inset 0 0 0 1px rgba(110,168,255,.20)}
+      #_mat-editor-popup .dlg-head-icon svg{width:12px;height:12px}
+      #_mat-editor-popup .dlg-body[data-scroll="auto"]{padding:0}
+      #_mat-editor-popup .dlg-foot{padding:8px 10px;background:rgba(0,0,0,.18);border-top:1px solid rgba(255,255,255,.06);box-shadow:none}
+
       .mat-edit-body{display:flex;flex-direction:column;gap:0;padding:0}
-      .mat-edit-preview-wrap{position:relative;background:radial-gradient(circle at 30% 35%,#2a3142 0%,#0c0f15 75%);padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:14px}
-      .mat-edit-preview-canvas{flex:0 0 120px;width:120px;height:120px;border-radius:10px;background:#000;box-shadow:0 4px 16px rgba(0,0,0,.55);object-fit:cover;display:block}
-      .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
-      .mat-edit-preview-name{font-size:14px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-edit-preview-type{font-size:10.5px;color:var(--tx3);font-family:ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase}
-      .mat-edit-preview-uses{font-size:11px;color:var(--tx2)}
-      .mat-edit-section{padding:9px 14px;border-bottom:1px solid var(--bd)}
+      /* Hero preview row uses the same dark gradient as the materials grid
+         tile hover — subtle, just enough to lift the shaderball off the
+         flat panel surface without breaking the panel's read. */
+      .mat-edit-preview-wrap{position:relative;background:rgba(255,255,255,.02);padding:10px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px}
+      .mat-edit-preview-canvas{flex:0 0 92px;width:92px;height:92px;border-radius:8px;background:#0c0f15;box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.04);object-fit:cover;display:block}
+      .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+      .mat-edit-preview-name{font-size:13px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-edit-preview-type{font-size:10px;color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;text-transform:uppercase}
+      .mat-edit-preview-uses{font-size:10.5px;color:var(--tx2)}
+
+      /* Sections: padding + uppercase title style mirror the materials
+         panel's pop-section / pop-section-head conventions. */
+      .mat-edit-section{padding:10px 12px;border-bottom:1px solid var(--s2)}
       .mat-edit-section:last-child{border-bottom:none}
-      .mat-edit-section-h{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);cursor:pointer;user-select:none;padding-bottom:6px}
+      .mat-edit-section-h{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);cursor:pointer;user-select:none;margin-bottom:8px}
       .mat-edit-section-h:hover{color:var(--tx2)}
       .mat-edit-section-h .chev{font-size:10px;color:var(--tx3);transition:transform .15s var(--ease-out)}
       .mat-edit-section.collapsed .chev{transform:rotate(-90deg)}
       .mat-edit-section.collapsed .mat-edit-section-b{display:none}
       .mat-edit-section-b{display:flex;flex-direction:column;gap:5px}
-      .mat-color-row{display:flex;align-items:center;gap:8px;padding:4px 0}
-      .mat-color-row label{flex:0 0 80px;font-size:11.5px;color:var(--tx2)}
-      .mat-color-row input[type="color"]{width:30px;height:24px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer}
-      .mat-color-hex{font-family:ui-monospace,monospace;font-size:11px;color:var(--tx3);flex:1}
-      .mat-edit-toggle-row{display:flex;flex-wrap:wrap;gap:5px;padding:4px 0}
-      .mat-edit-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--s2);border:1px solid var(--bd);border-radius:6px;font-size:11px;color:var(--tx2);cursor:pointer;user-select:none;transition:background 120ms,border-color 120ms,color 120ms}
-      .mat-edit-toggle:hover{background:var(--s3);color:var(--tx)}
+
+      .mat-color-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+      .mat-color-row label{flex:0 0 80px;font-size:11px;color:var(--tx2)}
+      .mat-color-row input[type="color"]{width:28px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer}
+      .mat-color-hex{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--tx3);flex:1}
+      .mat-edit-toggle-row{display:flex;flex-wrap:wrap;gap:4px;padding:3px 0}
+      .mat-edit-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;font-size:11px;color:var(--tx2);cursor:pointer;user-select:none;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
+      .mat-edit-toggle:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
       .mat-edit-toggle input{accent-color:var(--ac);cursor:pointer;margin:0}
-      .mat-edit-select-row{display:flex;align-items:center;gap:8px;padding:4px 0}
-      .mat-edit-select-row label{flex:0 0 80px;font-size:11.5px;color:var(--tx2)}
+      .mat-edit-select-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+      .mat-edit-select-row label{flex:0 0 80px;font-size:11px;color:var(--tx2)}
       .mat-edit-select-row select{flex:1;font-size:11.5px;padding:5px 8px}
+
+      /* Texture slots: a thumb (or empty placeholder) + label + filename
+         + load/clear buttons. Compact rows, minimal chrome — matches the
+         color-row look. */
+      .mat-tex-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+      .mat-tex-thumb{flex:0 0 28px;width:28px;height:28px;border-radius:5px;background:#0c0f15;border:1px solid var(--bd);display:grid;place-items:center;overflow:hidden;color:var(--tx3)}
+      .mat-tex-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+      .mat-tex-thumb svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;opacity:.45}
+      .mat-tex-thumb.has-tex{border-color:var(--ac-line)}
+      .mat-tex-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+      .mat-tex-label{font-size:11px;color:var(--tx2);line-height:1.1}
+      .mat-tex-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--tx3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-tex-name.empty::before{content:'— no texture —';color:var(--tx3);opacity:.55}
+      .mat-tex-btn{flex:0 0 auto;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:4px 6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
+      .mat-tex-btn:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
+      .mat-tex-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
+      .mat-tex-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
     `;
     document.head.appendChild(s);
   }
@@ -11639,6 +11783,61 @@ function _openMaterialEditor(info) {
       <div class="mat-edit-section-h"><span>${title}</span><span class="chev">▾</span></div>
       <div class="mat-edit-section-b">${inner}</div>
     </div>`;
+
+  // Texture-slot descriptors. Each entry → one mat-tex-row in the Textures
+  // section. `cs` controls colorSpace assignment on load (sRGB for visible-
+  // colour maps, linear for data maps like normal/roughness/AO). `phys`-only
+  // slots are skipped unless the material is MeshPhysicalMaterial.
+  const _texSlots = [
+    { prop: 'map',                       label: 'Color',                  cs: 'srgb' },
+    { prop: 'normalMap',                 label: 'Normal',                 cs: 'linear' },
+    { prop: 'roughnessMap',              label: 'Roughness',              cs: 'linear' },
+    { prop: 'metalnessMap',              label: 'Metalness',              cs: 'linear' },
+    { prop: 'aoMap',                     label: 'AO',                     cs: 'linear' },
+    { prop: 'emissiveMap',               label: 'Emissive',               cs: 'srgb',   need: () => hasEmissive },
+    { prop: 'alphaMap',                  label: 'Alpha',                  cs: 'linear' },
+    { prop: 'bumpMap',                   label: 'Bump',                   cs: 'linear' },
+    { prop: 'displacementMap',           label: 'Displacement',           cs: 'linear' },
+    { prop: 'lightMap',                  label: 'Light',                  cs: 'linear' },
+    { prop: 'clearcoatMap',              label: 'Clearcoat',              cs: 'linear', phys: true },
+    { prop: 'clearcoatNormalMap',        label: 'Clearcoat normal',       cs: 'linear', phys: true },
+    { prop: 'clearcoatRoughnessMap',     label: 'Clearcoat rough',        cs: 'linear', phys: true },
+    { prop: 'transmissionMap',           label: 'Transmission',           cs: 'linear', phys: true },
+    { prop: 'thicknessMap',              label: 'Thickness',              cs: 'linear', phys: true },
+    { prop: 'sheenColorMap',             label: 'Sheen color',            cs: 'srgb',   phys: true },
+    { prop: 'sheenRoughnessMap',         label: 'Sheen rough',            cs: 'linear', phys: true },
+    { prop: 'specularIntensityMap',      label: 'Specular int.',          cs: 'linear', phys: true },
+    { prop: 'specularColorMap',          label: 'Specular color',         cs: 'srgb',   phys: true },
+    { prop: 'iridescenceMap',            label: 'Iridescence',            cs: 'linear', phys: true },
+    { prop: 'iridescenceThicknessMap',   label: 'Irid. thickness',        cs: 'linear', phys: true },
+    { prop: 'anisotropyMap',             label: 'Anisotropy',             cs: 'linear', phys: true },
+  ].filter(s => (!s.phys || isPhysical) && (!s.need || s.need()));
+
+  const texRow = (s) => {
+    const tex = mat[s.prop];
+    const hasTex = !!tex;
+    const fn = (tex?.name || tex?.image?.src?.split('/').pop() || tex?.userData?.fileName || '').slice(0, 32);
+    return `
+      <div class="mat-tex-row" data-tex-prop="${s.prop}" data-tex-cs="${s.cs}">
+        <div class="mat-tex-thumb${hasTex ? ' has-tex' : ''}" data-thumb>
+          ${hasTex ? '' : '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'}
+        </div>
+        <div class="mat-tex-meta">
+          <div class="mat-tex-label">${s.label}</div>
+          <div class="mat-tex-name${hasTex ? '' : ' empty'}" data-name>${escapeHtml(fn)}</div>
+        </div>
+        <button class="mat-tex-btn" data-load title="Load image">
+          <svg viewBox="0 0 24 24"><path d="M3 7l3-4h12l3 4M3 7v12a2 2 0 002 2h14a2 2 0 002-2V7M3 7h18"/><circle cx="12" cy="14" r="3.5"/></svg>
+        </button>
+        <button class="mat-tex-btn" data-clear title="Clear" ${hasTex ? '' : 'disabled'}>
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>`;
+  };
+
+  const texturesSection = _texSlots.length ? section('textures', 'Textures',
+    _texSlots.map(texRow).join('')
+  , true) : '';
 
   const baseSection = section('base', 'Base',
     colorRow('mat-edit-color', 'Color', '#' + (mat.color?.getHexString?.() || 'cccccc')) +
@@ -11669,6 +11868,17 @@ function _openMaterialEditor(info) {
   const envSection = hasEnv ? section('env', 'Environment',
     slider('mat-edit-env-scrub')
   ) : '';
+  // Map-intensity scalars: only meaningful when the corresponding map is
+  // bound, but we surface them unconditionally so the user can dial them
+  // in advance. Three.js silently ignores them when there's no map.
+  const mapIntensitySection = section('mapscale', 'Map intensity',
+    slider('mat-edit-normalScale-scrub') +
+    slider('mat-edit-aoMapInt-scrub') +
+    slider('mat-edit-lightMapInt-scrub') +
+    slider('mat-edit-bumpScale-scrub') +
+    slider('mat-edit-displScale-scrub') +
+    slider('mat-edit-displBias-scrub')
+  , true);
   const physicalSection = isPhysical ? section('physical', 'Clearcoat / IOR / Transmission',
     slider('mat-edit-clearcoat-scrub') +
     slider('mat-edit-clearcoatRough-scrub') +
@@ -11676,15 +11886,18 @@ function _openMaterialEditor(info) {
     slider('mat-edit-reflect-scrub') +
     slider('mat-edit-transmission-scrub') +
     slider('mat-edit-thickness-scrub') +
+    slider('mat-edit-dispersion-scrub') +
     colorRow('mat-edit-attenuation-color', 'Attenuation', '#' + (mat.attenuationColor?.getHexString?.() || 'ffffff')) +
     slider('mat-edit-attenuationDistance-scrub')
   , true) : '';
-  const sheenSection = isPhysical ? section('sheen', 'Sheen / Iridescence',
+  const sheenSection = isPhysical ? section('sheen', 'Sheen / Iridescence / Anisotropy',
     slider('mat-edit-sheen-scrub') +
     slider('mat-edit-sheenRough-scrub') +
     colorRow('mat-edit-sheen-color', 'Sheen color', '#' + (mat.sheenColor?.getHexString?.() || 'ffffff')) +
     slider('mat-edit-iridescence-scrub') +
-    slider('mat-edit-iridIor-scrub')
+    slider('mat-edit-iridIor-scrub') +
+    slider('mat-edit-anisotropy-scrub') +
+    slider('mat-edit-anisoRot-scrub')
   , true) : '';
   const specSection = isPhysical ? section('specular', 'Specular',
     slider('mat-edit-specInt-scrub') +
@@ -11705,6 +11918,8 @@ function _openMaterialEditor(info) {
       ${baseSection}
       ${emissiveSection}
       ${surfaceSection}
+      ${texturesSection}
+      ${mapIntensitySection}
       ${envSection}
       ${physicalSection}
       ${sheenSection}
@@ -11729,9 +11944,15 @@ function _openMaterialEditor(info) {
       title: 'Material',
       subtitle: '—',
       iconName: 'palette',
-      width: 380, height: 720,
-      minWidth: 340, minHeight: 520,
+      // Default tall enough to fit Base + Emission + Surface without scroll on
+      // a typical 1080p screen; bodyScroll lets the rest (Environment / IOR /
+      // Sheen / Specular for MeshPhysicalMaterial) reveal as the user scrolls.
+      // _DraggablePopup clamps to calc(100vh-24px), so on shorter screens this
+      // collapses gracefully and the scrollbar takes over.
+      width: 380, height: 860,
+      minWidth: 340, minHeight: 360,
       bodyHtml,
+      bodyScroll: true,
       onClose: () => {
         if (_matEditorState?._previewBall) _matEditorState._previewBall.dispose();
         _matEditorState = null;
@@ -11889,7 +12110,130 @@ function _openMaterialEditor(info) {
     num('mat-edit-iridescence-scrub',         'Iridescence',         'iridescence',        { fallback: 0 });
     num('mat-edit-iridIor-scrub',             'Iridescence IOR',     'iridescenceIOR',     { min: 1.0, max: 2.333, fallback: 1.3, decimals: 3 });
     num('mat-edit-specInt-scrub',             'Specular intensity',  'specularIntensity',  { fallback: 1 });
+    // Newer PBR additions; absent on older three.js builds, so num() is a
+    // no-op when the property doesn't exist on the material.
+    num('mat-edit-anisotropy-scrub', 'Anisotropy',         'anisotropy',         { fallback: 0 });
+    num('mat-edit-anisoRot-scrub',   'Anisotropy rotation','anisotropyRotation', { min: 0, max: Math.PI * 2, fallback: 0, decimals: 2, unit: 'rad' });
+    num('mat-edit-dispersion-scrub', 'Dispersion',         'dispersion',         { min: 0, max: 5, fallback: 0 });
   }
+
+  // ── Map intensity scalars (apply to whichever maps the user has loaded) ─
+  // normalScale is a Vector2; we expose a single "uniform scale" knob and
+  // mirror the value onto x AND y so the Vector2 stays a Vector2 (writing a
+  // plain number would clobber it and break the shader).
+  if (document.getElementById('mat-edit-normalScale-scrub') && mat.normalScale) {
+    const STEPS = 100, MIN = -2, MAX = 2, RANGE = MAX - MIN;
+    initScrubber({
+      el: 'mat-edit-normalScale-scrub',
+      label: 'Normal scale',
+      maxSteps: STEPS,
+      stepToVal: (s) => MIN + (s / STEPS) * RANGE,
+      valToStep: (v) => Math.round((Math.max(MIN, Math.min(MAX, v ?? 1)) - MIN) / RANGE * STEPS),
+      format: (v) => ({ value: v.toFixed(2), unit: '' }),
+      initialValue: mat.normalScale.x ?? 1,
+      promptTitle: 'Normal scale',
+      onChange: (v) => {
+        mat.normalScale.set(v, v);
+        mat.needsUpdate = true;
+        requestRender();
+        _refreshAll();
+      },
+    });
+  }
+  num('mat-edit-aoMapInt-scrub',    'AO intensity',           'aoMapIntensity',     { min: 0, max: 3, fallback: 1 });
+  num('mat-edit-lightMapInt-scrub', 'Light map intensity',    'lightMapIntensity',  { min: 0, max: 3, fallback: 1 });
+  num('mat-edit-bumpScale-scrub',   'Bump scale',             'bumpScale',          { min: -1, max: 1, fallback: 1, decimals: 2 });
+  num('mat-edit-displScale-scrub',  'Displacement scale',     'displacementScale',  { min: -1, max: 1, fallback: 1, decimals: 2 });
+  num('mat-edit-displBias-scrub',   'Displacement bias',      'displacementBias',   { min: -1, max: 1, fallback: 0, decimals: 2 });
+
+  // ── Texture slots — load / clear / preview ────────────────────────────
+  // Every .mat-tex-row in the rendered DOM gets two click handlers (load
+  // opens a hidden file picker; clear nulls + disposes the texture). On
+  // load, the chosen file becomes a THREE.Texture with the proper
+  // colorSpace, then we push a fresh thumbnail into the slot's preview.
+  function _texColorSpace(cs) {
+    return cs === 'srgb' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  }
+  function _setTexThumb(row, tex) {
+    const th = row.querySelector('[data-thumb]');
+    const nm = row.querySelector('[data-name]');
+    const cl = row.querySelector('[data-clear]');
+    if (!th) return;
+    if (tex) {
+      const url = tex.image?.src || (tex.image instanceof HTMLCanvasElement ? tex.image.toDataURL('image/png') : null) || tex.userData?.dataUrl;
+      th.classList.add('has-tex');
+      th.innerHTML = url ? `<img src="${url}" alt="">` : '';
+      const fn = (tex.name || tex.userData?.fileName || 'texture').slice(0, 32);
+      if (nm) { nm.textContent = fn; nm.classList.remove('empty'); }
+      if (cl) cl.disabled = false;
+    } else {
+      th.classList.remove('has-tex');
+      th.innerHTML = '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+      if (nm) { nm.textContent = ''; nm.classList.add('empty'); }
+      if (cl) cl.disabled = true;
+    }
+  }
+  function _loadTexture(file, cs) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const tex = new THREE.Texture(img);
+        tex.colorSpace = _texColorSpace(cs);
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.flipY = true;
+        tex.needsUpdate = true;
+        tex.name = file.name;
+        tex.userData = tex.userData || {};
+        tex.userData.fileName = file.name;
+        tex.userData.dataUrl = url; // keep for thumbnail (don't revoke)
+        resolve(tex);
+      };
+      img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
+      img.src = url;
+    });
+  }
+  popup.body.querySelectorAll('.mat-tex-row').forEach(row => {
+    const prop = row.dataset.texProp;
+    const cs   = row.dataset.texCs;
+    const loadBtn = row.querySelector('[data-load]');
+    const clrBtn  = row.querySelector('[data-clear]');
+    loadBtn?.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'image/png,image/jpeg,image/webp,image/avif,image/*';
+      inp.style.display = 'none';
+      inp.addEventListener('change', async () => {
+        const f = inp.files?.[0];
+        if (!f) return;
+        try {
+          const tex = await _loadTexture(f, cs);
+          // Dispose previous to avoid GPU leak.
+          try { mat[prop]?.dispose?.(); } catch (_) {}
+          mat[prop] = tex;
+          mat.needsUpdate = true;
+          _setTexThumb(row, tex);
+          requestRender();
+          _refreshAll();
+        } catch (e) {
+          console.warn('[mat-tex] load failed:', e);
+          toast?.('Texture load failed', f.name, 'error', 4000);
+        }
+      });
+      document.body.appendChild(inp);
+      inp.click();
+      setTimeout(() => inp.remove(), 0);
+    });
+    clrBtn?.addEventListener('click', () => {
+      try { mat[prop]?.dispose?.(); } catch (_) {}
+      mat[prop] = null;
+      mat.needsUpdate = true;
+      _setTexThumb(row, null);
+      requestRender();
+      _refreshAll();
+    });
+  });
 
   // Show first so the card has real dimensions, then anchor it to the LEFT
   // of the materials panel. Reading offsetWidth/Height before show() returns
@@ -15151,8 +15495,8 @@ function _initCustomSelects() {
       .cs-wrap { position: relative; display: block; }
       .cs-trigger {
         width: 100%; padding: 7px 28px 7px 10px;
-        background: var(--s3);
-        border: 1px solid var(--s3);
+        background: var(--bg3);
+        border: 1px solid var(--bd);
         border-radius: var(--r-md); color: var(--tx); font-size: var(--fs-md);
         outline: none; cursor: pointer; text-align: left;
         font: inherit; font-size: var(--fs-md);
@@ -15161,7 +15505,7 @@ function _initCustomSelects() {
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
       }
-      .cs-trigger:hover { background-color: var(--s5); }
+      .cs-trigger:hover { background-color: var(--bg4); border-color: var(--bd2); }
       .cs-trigger:focus { border-color: var(--ac); }
       .cs-pop {
         position: fixed; z-index: 10000; min-width: 160px;
