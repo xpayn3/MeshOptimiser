@@ -253,10 +253,46 @@ The viewer grew up. v1.0 could open and render. v1.1 lets you **work**.
 - 🎯 Highlight-small-parts toggle with subtle yellow-tinted rows.
 - 🧹 Viewport perf cleanups, dead-button fixes, archive of stale experiments.
 
-### **v1.0** — initial release
-- STEP → GLB pipeline with OCCT, PCA instancing, adaptive tessellation, Meshopt/Draco compression.
-- WebGPU viewer with hierarchy, picking, hide/isolate, colour groups.
-- One-click launchers for Windows + macOS.
+### **v1.0** — *first public cut* (2026-05-05)
+
+The first version that landed on GitHub. Everything below was already in the box:
+
+- **STEP → GLB pipeline** (`step2glb.py`) — OCCT-backed XCAF reader, PCA pose-normalized
+  instance hashing, adaptive tessellation (absolute or relative to bbox diagonal),
+  size culling, optional Meshopt compression via `gltfpack`.
+- **WebGPU viewer** (`index.html` + `app-v2.js`) — full assembly tree, picking,
+  hide / isolate, per-group colouring, fit-to-view, viewport modes (shaded / wireframe / matcap).
+- **Local server** (`serve.py`) — static file server + `/api/convert` endpoint that
+  spawns the converter as a background job.
+- **One-click launchers** — `start.bat` / `start.command` bootstraps the `.venv`, pulls
+  deps, and opens the browser. Subsequent runs are sub-second.
+- **Vendored decoders** — Draco encoder/decoder and Assimp.js shipped as WASM under
+  `vendor/`, so no CDN is required at runtime.
+
+### **Pre-1.0 R&D** — *the unwritten history*
+
+Before v1.0 there was a long stretch of pipeline-finding that never made it into git
+history. Traces of it still live in the repo (mostly under `_archive/`):
+
+- 🔬 **FBX archaeology** — `fbx_inspect.py`, `fbx_diff.py`, `fbx_recursive_diff.py`,
+  `fbx_validate.py`, `fbx_node_test.mjs`, `fbx_unique_names.py`. Half a dozen tools written
+  to figure out *why* DCC apps disagreed about the same FBX file. The lesson — **don't trust
+  FBX as an interchange format** — is the reason the v1.0 pipeline targets GLB first.
+- 🧪 **Blender export experiments** — `blender_test.py`, `blender_test2.py`. Briefly
+  considered driving Blender headlessly as the converter; abandoned in favour of going
+  straight from OCCT to GLB to skip a lossy round-trip.
+- 🔻 **Pixyz-preprocessor study** — the feature list (PCA instancing, adaptive
+  tessellation, size culling, `EXT_meshopt_compression`) is a deliberate open re-implementation
+  of the parts of the Pixyz pipeline that matter for browser delivery.
+- 🧠 **PCA hash tuning** — getting "same shape at any rotation/translation" to land on
+  the same hash bucket required several rounds of basis-canonicalisation experiments,
+  most of which got rolled into the final `step2glb.py`.
+- 🎨 **Viewer prototype** — the `app-v2.js` filename is itself a fossil; an `app.js`
+  predecessor (Three.js WebGL2 only, no XCAF tree) was the proving ground for picking,
+  instancing, and colour-group rendering before the WebGPU + tree rewrite.
+
+Long story short: **v1.0 was the survivor.** Everything that didn't earn its keep got
+archived, and the parts that did got wired into the pipeline you see today.
 
 ---
 
