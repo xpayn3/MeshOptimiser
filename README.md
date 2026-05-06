@@ -10,11 +10,10 @@
      O P T I M I S E R   ·   v 1 . 1
 ```
 
-### ⚡ From bloated CAD to browser-ready in one click. ⚡
+### From bloated CAD to browser-ready, locally.
 
-> 🧊 **Drop a STEP.**  🔬 **Crunch the geometry.**  🚀 **Fly through it on the GPU.**
-> A self-hosted, open take on the *Pixyz preprocessor* — minus the licence dongle,
-> minus the seat-fee, minus the install wizard. Just Python and your browser.
+> Drop a STEP file in. Get a Meshopt-compressed GLB and an interactive viewer out.
+> A self-hosted take on the Pixyz preprocessor. Python + your browser, no licence server.
 
 [![Python](https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![OCCT](https://img.shields.io/badge/OCCT-cadquery--ocp-red)](https://github.com/CadQuery/OCP)
@@ -28,46 +27,42 @@
 
 ---
 
-## 🎯 Why?
+## Why
 
-CAD assemblies are *enormous*. A real-world `.step` file can hide **400 identical bolts**,
-**80 duplicate brackets**, and **half a million degenerate triangles** — and still expect
-your GPU to swallow it whole.
+CAD assemblies are big. A real-world STEP file might contain 400 identical bolts,
+80 duplicate brackets, and half a million degenerate triangles, and still expect
+your GPU to render it.
 
-**MeshOptimiser** chews through it instead:
+The pipeline collapses what it can:
 
 ```
    400 bolts × 50 KB        →     1 mesh × 50 KB + 400 transforms
    80 brackets × 12 KB      →     1 mesh × 12 KB + 80  transforms
-   500 K bad triangles      →     adaptive retess, size-culled
+   500K bad triangles       →     adaptive retess, size-culled
    ───────────────────────────────────────────────────────────
-   320 MB STEP              →     11 MB Meshopt-compressed GLB ✨
+   320 MB STEP              →     11 MB Meshopt-compressed GLB
 ```
 
 ---
 
-## 💎 What makes it special
+## What's in the box
 
-This isn't another GLB viewer. It's a **full CAD preprocessor + inspector + editor + exporter**
-that runs entirely on your machine, with a UI that feels like a native desktop app and a
-renderer that doesn't blink at 10,000-node assemblies.
+A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 
-- 🧠 **Smart by default** — PCA pose-normalized hashing finds duplicate geometry across
-  any rotation/translation. No tagging, no manual grouping. Drop a STEP, get instances.
-- 🎛 **Hierarchy as a first-class citizen** — Browse, search, isolate, recolour, batch-rename,
-  flatten, dissolve, ungroup. Edit the assembly tree like layers in Photoshop.
-- ⚙️ **Two renderers, one app** — Hot-swap between **WebGPU** (TSL nodes, compute shaders,
-  custom discardNode clipping) and **WebGL2** at runtime. No reload. No regression.
-- 🔪 **Real section/clip planes** — Live cross-section via TSL `discardNode`, not a fake
-  plane mesh. Cut into your assembly and see what's inside, instantly.
-- 💾 **Resume where you left off** — Recent files, file-handle persistence (FS Access API
-  + IndexedDB), saved scenes. Close the tab, come back, hit *Resume*.
-- ⌨️ **Real keyboard support** — Command palette (⌘K), shortcuts overlay, F2 batch rename,
-  context menus, undo/redo. Mouse-only is optional.
-- 🪶 **Zero build step** — Vanilla JS, native ES modules, design tokens in CSS. Inspect it,
-  fork it, edit a line, refresh. No webpack, no Vite, no `node_modules` graveyard.
-- 🧪 **Lossless until you say otherwise** — Edits are reversible. Exports are explicit.
-  The original geometry is never mutated until you press *Export*.
+- **Pose-normalized instancing** — PCA-based hashing detects duplicate geometry
+  regardless of position or rotation. One GPU mesh, N transforms.
+- **Editable assembly tree** — search, isolate, recolour, batch-rename, flatten,
+  dissolve, ungroup. All undoable.
+- **Two renderers** — WebGPU (default, with TSL nodes and `discardNode` clipping)
+  and WebGL2. Hot-swap from the toolbar, no reload.
+- **GPU section planes** — real `discardNode`-based clipping, not a placeholder mesh.
+- **Resumable sessions** — FS Access API + IndexedDB persist file handles across
+  reloads. Saved scenes for view/selection/recolour state.
+- **Keyboard-first UX** — command palette (⌘K), shortcuts overlay, batch rename
+  (F2), context menus, undo/redo.
+- **No build step** — vanilla JS, native ES modules, CSS design tokens. Edit a
+  file, refresh, done.
+- **Non-destructive** — original geometry is never mutated until you export.
 
 ---
 
@@ -223,39 +218,39 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 Updates
 
-### **v1.1** — *the "feels like a real app" release*
+### **v1.1**
 
-The viewer grew up. v1.0 could open and render. v1.1 lets you **work**.
+v1.0 could open and render. v1.1 adds the editing surface around it.
 
-**🆕 New features**
+**Added**
 
-- 👋 **Welcome modal** — drag-drop, browse, recents with FS Access API + IndexedDB handle persistence. Resume your last file with one click.
-- ⌘ **Command palette (⌘K / Ctrl-K)** — every action in the app, fuzzy-searchable.
-- ⌨️ **Shortcuts overlay** — `?` to open, full keymap, always in sync.
-- ⚙️ **Settings modal** — persistent prefs for renderer, perf mode, background, FPS pill, instancing, material sharing, auto-rotate, highlight thresholds.
-- 🔪 **Section / Clip planes** — TSL `discardNode`-based GPU clipping. Live cross-sections, no shader fakery.
-- 🌐 **Renderer hot-swap** — switch between **WebGPU** and **WebGL2** from the toolbar without reloading.
-- ✏️ **Batch rename (F2)** — token templates, regex find/replace, presets, live preview.
-- ✂️ **Hierarchy flatten / dissolve / ungroup** — clean up imported assemblies; every edit is undoable.
-- 🔄 **Undo / Redo** for tree edits, recolours, renames, and flatten ops.
-- 📌 **Right-click context menu** on tree rows.
-- 💾 **Save Scene** — snapshot view + selection + recolours.
-- 🏷 **Brand menu** — about / GitHub / version / shortcuts dropdown.
-- 📊 **FPS pill** with colour-coded stutter detection.
-- 🎨 **Design tokens** — centralised CSS variables (surfaces, radii, type scale, easings) drive the entire UI.
-- 🚦 **Cancel + Copy-log** on every long-running load.
+- Welcome modal with drag-drop, file picker, and recent files (FS Access API + IndexedDB handle persistence).
+- Command palette (⌘K / Ctrl-K) over a unified action registry.
+- Shortcuts overlay (`?` to open).
+- Settings modal — persistent prefs for renderer, perf mode, background, FPS pill, instancing, material sharing, auto-rotate, highlight thresholds.
+- Section / clip planes via TSL `discardNode` (real GPU clipping).
+- Renderer hot-swap between WebGPU and WebGL2 from the toolbar.
+- Batch rename (F2) with token templates, regex find/replace, presets, live preview.
+- Hierarchy flatten / dissolve / ungroup, undoable.
+- Undo / redo for tree edits, recolours, renames, flatten ops.
+- Right-click context menu on tree rows.
+- Save Scene — view + selection + recolours.
+- Brand menu (about / GitHub / version / shortcuts).
+- FPS pill with colour-coded stutter detection.
+- CSS design-token system — surfaces, radii, type scale, easings.
+- Cancel + copy-log on every long-running load.
 
-**🛠 Improvements**
+**Changed**
 
-- 🚀 Tree expand/collapse on 10 K+ nodes is now **<10 ms** (was ~1 s) — class-flip toggling instead of DOM rebuild.
-- 🎭 Modal body scrolls so the footer stays visible on short screens.
-- 🔧 Toolbar `Export` is now a dropdown menu with consolidated settings modal.
-- 🎯 Highlight-small-parts toggle with subtle yellow-tinted rows.
-- 🧹 Viewport perf cleanups, dead-button fixes, archive of stale experiments.
+- Tree expand/collapse on 10K+ nodes: ~1s → <10ms, by flipping a class instead of rebuilding the DOM.
+- Modal body scrolls so the footer stays visible on short screens.
+- Export consolidated into a single toolbar dropdown + settings modal.
+- Added a highlight-small-parts toggle with tinted rows.
+- Viewport perf cleanups, dead-button fixes, stale experiments archived.
 
-### **v1.0** — *first public cut* (2026-05-05)
+### **v1.0** — first public commit (2026-05-05)
 
-The first version that landed on GitHub. Everything below was already in the box:
+What landed in the initial commit:
 
 - **STEP → GLB pipeline** (`step2glb.py`) — OCCT-backed XCAF reader, PCA pose-normalized
   instance hashing, adaptive tessellation (absolute or relative to bbox diagonal),
@@ -269,30 +264,27 @@ The first version that landed on GitHub. Everything below was already in the box
 - **Vendored decoders** — Draco encoder/decoder and Assimp.js shipped as WASM under
   `vendor/`, so no CDN is required at runtime.
 
-### **Pre-1.0 R&D** — *the unwritten history*
+### Pre-1.0 — what predates the repo
 
-Before v1.0 there was a long stretch of pipeline-finding that never made it into git
-history. Traces of it still live in the repo (mostly under `_archive/`):
+The git history starts at v1.0, but there was a stretch of work before that.
+Traces of it are still in the tree, mostly under `_archive/`:
 
-- 🔬 **FBX archaeology** — `fbx_inspect.py`, `fbx_diff.py`, `fbx_recursive_diff.py`,
-  `fbx_validate.py`, `fbx_node_test.mjs`, `fbx_unique_names.py`. Half a dozen tools written
-  to figure out *why* DCC apps disagreed about the same FBX file. The lesson — **don't trust
-  FBX as an interchange format** — is the reason the v1.0 pipeline targets GLB first.
-- 🧪 **Blender export experiments** — `blender_test.py`, `blender_test2.py`. Briefly
-  considered driving Blender headlessly as the converter; abandoned in favour of going
-  straight from OCCT to GLB to skip a lossy round-trip.
-- 🔻 **Pixyz-preprocessor study** — the feature list (PCA instancing, adaptive
-  tessellation, size culling, `EXT_meshopt_compression`) is a deliberate open re-implementation
-  of the parts of the Pixyz pipeline that matter for browser delivery.
-- 🧠 **PCA hash tuning** — getting "same shape at any rotation/translation" to land on
-  the same hash bucket required several rounds of basis-canonicalisation experiments,
-  most of which got rolled into the final `step2glb.py`.
-- 🎨 **Viewer prototype** — the `app-v2.js` filename is itself a fossil; an `app.js`
-  predecessor (Three.js WebGL2 only, no XCAF tree) was the proving ground for picking,
-  instancing, and colour-group rendering before the WebGPU + tree rewrite.
-
-Long story short: **v1.0 was the survivor.** Everything that didn't earn its keep got
-archived, and the parts that did got wired into the pipeline you see today.
+- **FBX inspection tooling** — `fbx_inspect.py`, `fbx_diff.py`, `fbx_recursive_diff.py`,
+  `fbx_validate.py`, `fbx_node_test.mjs`, `fbx_unique_names.py`. Written to figure out
+  why different DCC apps disagreed about the same FBX file. The takeaway (don't rely on
+  FBX as an interchange format) is why v1.0 targets GLB first.
+- **Headless Blender experiments** — `blender_test.py`, `blender_test2.py`. Briefly
+  considered using Blender as the converter, dropped in favour of going OCCT → GLB
+  directly to avoid a lossy round-trip.
+- **Pixyz feature study** — the v1.0 feature list (PCA instancing, adaptive tessellation,
+  size culling, `EXT_meshopt_compression`) is a deliberate subset of what the Pixyz
+  preprocessor does for browser delivery.
+- **PCA hash tuning** — getting same-shape-different-pose to land on the same hash
+  bucket took a few rounds of basis-canonicalisation experiments before the version
+  in `step2glb.py` settled.
+- **Viewer rewrite** — the `app-v2.js` filename is a fossil from this period. An
+  earlier `app.js` (Three.js WebGL2, no XCAF tree) was the proving ground for picking,
+  instancing, and colour-group rendering before the WebGPU + hierarchy rewrite.
 
 ---
 
