@@ -903,6 +903,9 @@ async function initRenderer() {
     renderer.toneMapping = THREE.NeutralToneMapping ?? THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
   }
+  // Enable local clipping (per-material Plane lists). Required for the
+  // Section/Clip panel; harmless when no planes are set.
+  try { if ('localClippingEnabled' in renderer) renderer.localClippingEnabled = true; } catch (_) {}
   $('renderer-name').textContent = name;
   $('stat-renderer').querySelector('.dot').classList.toggle('warn', name !== 'WebGPU');
   $('stat-renderer').querySelector('.dot').classList.remove('off');
@@ -2512,6 +2515,10 @@ function fitToView() {
   // Resize the floor grid to fit the model — a fixed 200-unit grid was getting
   // swallowed by typical mm-scale CAD assemblies (1000+ units across).
   _fitGridToModel(box);
+  if (state.clip && state.clip.enabled) {
+    _applyClipToAllMaterials();
+    updateClipPlane();
+  }
   requestRender();
 }
 
@@ -11408,6 +11415,140 @@ function _wireExplodeAndClip() {
   $('btn-explode-reset')?.addEventListener('click', resetExplode);
 }
 
+// ============== Section / Clipping plane ==============
+// Single axis-aligned plane applied to every loaded mesh's material via
+// material.clippingPlanes. Renderer-side localClippingEnabled is flipped on
+// in initRenderer(). The plane equation is positioned along the chosen axis
+// at a fraction of the partsRoot bbox.
+
+function _applyClipToAllMaterials() {
+  if (!state.partsRoot) return;
+  const planes = (state.clip && state.clip.enabled) ? [state.clip.plane] : [];
+  state.partsRoot.traverse(obj => {
+    if (!obj.isMesh && !obj.isInstancedMesh) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const m of mats) {
+      if (!m) continue;
+      m.clippingPlanes = planes;
+      m.clipShadows = true;
+      m.needsUpdate = true;
+    }
+  });
+}
+
+function updateClipPlane() {
+  if (!state.clip || !state.partsRoot) return;
+  const box = new THREE.Box3().setFromObject(state.partsRoot);
+  if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const axis = state.clip.axis;
+  const sign = state.clip.flipped ? -1 : 1;
+
+  const normal = new THREE.Vector3(
+    axis === 'x' ? sign : 0,
+    axis === 'y' ? sign : 0,
+    axis === 'z' ? sign : 0,
+  );
+  const min = box.min[axis], max = box.max[axis];
+  const along = min + (max - min) * state.clip.pos;
+  const point = center.clone();
+  point[axis] = along;
+  state.clip.plane.setFromNormalAndCoplanarPoint(normal, point);
+
+  if (state.clip.helper) {
+    state.clip.helper.size = Math.max(size.x, size.y, size.z) * 1.2;
+    state.clip.helper.visible = state.clip.enabled && state.clip.showHelper;
+  }
+  requestRender();
+}
+
+function setClipAxis(axis) {
+  if (!state.clip) return;
+  if (axis === 'off') {
+    state.clip.enabled = false;
+    state.clip.axis = 'x';
+    _applyClipToAllMaterials();
+    if (state.clip.helper) state.clip.helper.visible = false;
+    requestRender();
+    return;
+  }
+  state.clip.axis = axis;
+  state.clip.enabled = true;
+  if (!state.clip.helper) {
+    const h = new THREE.PlaneHelper(state.clip.plane, 1, 0x6ea8ff);
+    if (h.material) {
+      h.material.transparent = true;
+      h.material.opacity = 0.6;
+      h.material.depthWrite = false;
+    }
+    h.visible = false;
+    state.clip.helper = h;
+    scene.add(h);
+  }
+  _applyClipToAllMaterials();
+  updateClipPlane();
+}
+
+function _wireClipPlane() {
+  state.clip = {
+    enabled: false,
+    axis: 'x',
+    pos: 0.5,
+    flipped: false,
+    plane: new THREE.Plane(new THREE.Vector3(1, 0, 0), 0),
+    helper: null,
+    showHelper: false,
+  };
+
+  $('clip-axis')?.addEventListener('change', e => setClipAxis(e.target.value));
+
+  initScrubber({
+    el: 'clip-pos-scrub',
+    label: 'Position',
+    maxSteps: 200,
+    stepToVal: s => s / 2,
+    valToStep: v => Math.max(0, Math.min(200, Math.round(v * 2))),
+    format: v => ({ value: v.toFixed(1), unit: '%' }),
+    initialValue: 50,
+    promptTitle: 'Cut position',
+    promptUnit: '%',
+    onChange: v => {
+      state.clip.pos = Math.max(0, Math.min(1, v / 100));
+      if (state.clip.enabled) updateClipPlane();
+    },
+  });
+
+  $('btn-clip-flip')?.addEventListener('click', () => {
+    state.clip.flipped = !state.clip.flipped;
+    if (state.clip.enabled) updateClipPlane();
+  });
+
+  $('btn-clip-reset')?.addEventListener('click', () => {
+    state.clip.pos = 0.5;
+    state.clip.flipped = false;
+    state.clip.enabled = false;
+    state.clip.showHelper = false;
+    const sel = $('clip-axis');
+    if (sel) {
+      sel.value = 'off';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    const showCb = $('clip-show-plane'); if (showCb) showCb.checked = false;
+    _applyClipToAllMaterials();
+    if (state.clip.helper) state.clip.helper.visible = false;
+    requestRender();
+  });
+
+  $('clip-show-plane')?.addEventListener('change', e => {
+    state.clip.showHelper = !!e.target.checked;
+    if (state.clip.helper) {
+      state.clip.helper.visible = state.clip.enabled && state.clip.showHelper;
+    }
+    requestRender();
+  });
+}
+
 // ============== UX: frame selected, reveal in tree, custom dropdowns, ctx menus ==============
 
 // Frame the camera onto the bbox of the current selection.
@@ -11726,6 +11867,7 @@ const _origWireUI_ux1 = wireUI;
 wireUI = function() {
   _origWireUI_ux1();
   _safeRun(_wireExplodeAndClip, 'explode-and-clip');
+  _safeRun(_wireClipPlane,      'clip-plane');
   _safeRun(_wireMeshSplitter,   'mesh-splitter');
   _safeRun(_wireRevealAndKeys,  'reveal-and-keys');
   _safeRun(_wireSidebarResize,  'sidebar-resize');

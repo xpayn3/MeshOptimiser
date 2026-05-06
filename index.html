@@ -897,6 +897,32 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
     </div>
 
     <div class="section">
+      <div class="section-h"><span>Section / Clip</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div style="color:var(--tx3);font-size:11.5px;line-height:1.4;margin:2px 0 10px">
+          Cut the model with a plane to see inside. WebGPU's clipping is unreliable in three r172 — if the cut doesn't appear, append <code>?webgl=1</code> to the URL.
+        </div>
+        <div class="field" style="margin-bottom:6px">
+          <label style="display:block;color:var(--tx3);font-size:11px;margin-bottom:3px">Axis</label>
+          <select id="clip-axis" class="mac-sel" style="width:100%">
+            <option value="off">Off</option>
+            <option value="x">X (cut along YZ)</option>
+            <option value="y">Y (cut along XZ)</option>
+            <option value="z">Z (cut along XY)</option>
+          </select>
+        </div>
+        <div class="field"><div id="clip-pos-scrub"></div></div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn" id="btn-clip-flip" style="flex:1" title="Swap which side of the plane gets hidden">Flip side</button>
+          <button class="btn" id="btn-clip-reset" style="flex:1" title="Disable clipping and recenter slider">Reset</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:10px;color:var(--tx2);font-size:12px;cursor:pointer">
+          <input type="checkbox" id="clip-show-plane" /> Show cut plane
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-h"><span>Separate fused meshes</span><span class="chev">▾</span></div>
       <div class="section-b">
         <div style="color:var(--tx3);font-size:11.5px;line-height:1.4;margin:2px 0 10px">
