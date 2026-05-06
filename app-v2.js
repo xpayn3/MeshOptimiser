@@ -3899,20 +3899,45 @@ const _tfTmpQuat = new THREE.Quaternion();
 const _tfTmpBox = new THREE.Box3();
 const _tfStashQuat = new THREE.Quaternion();
 
-// Compute the bounding box in obj's OWN local frame, so rotating obj
-// doesn't grow the AABB and inflate the displayed size. We do this by
-// temporarily zeroing obj.quaternion, letting setFromObject build the
-// world AABB (which now equals the local-frame AABB), then restoring.
-// Children's own rotations are kept — they're part of the object's
-// "intrinsic shape" the way every DCC measures it.
+// Compute the size in a frame where obj's WORLD rotation is stripped,
+// so rotating the object (or any ancestor — like the gizmo pivot)
+// doesn't grow the displayed AABB. Per child geometry corner v:
+//   v_world      = child.matrixWorld · v_local
+//   v_relative   = v_world − obj.worldPosition
+//   v_unrotated  = qInv(obj.worldRotation) · v_relative
+// We pump the 8 corners of every descendant's geometry.boundingBox
+// through this and union into _tfTmpBox. obj's scale is preserved (it's
+// in child.matrixWorld), so a 2× scaled object reads twice as large.
+// Children's own rotations stay, so the result is the object's intrinsic
+// shape measured in an axis-aligned frame that doesn't spin with the gizmo.
+const _tfStableTmp = new THREE.Vector3();
+const _tfObjWorldPos = new THREE.Vector3();
+const _tfObjWorldQuatInv = new THREE.Quaternion();
 function _readStableSize(obj, target) {
   if (!obj) { target.set(0, 0, 0); return; }
-  _tfStashQuat.copy(obj.quaternion);
-  obj.quaternion.identity();
   obj.updateMatrixWorld(true);
-  _tfTmpBox.makeEmpty().setFromObject(obj);
-  obj.quaternion.copy(_tfStashQuat);
-  obj.updateMatrixWorld(true);
+  obj.getWorldPosition(_tfObjWorldPos);
+  obj.getWorldQuaternion(_tfObjWorldQuatInv);
+  _tfObjWorldQuatInv.invert();
+  _tfTmpBox.makeEmpty();
+  obj.traverse(child => {
+    const geom = child.geometry;
+    if (!geom) return;
+    if (!geom.boundingBox) {
+      try { geom.computeBoundingBox(); } catch (_) { return; }
+    }
+    if (!geom.boundingBox) return;
+    child.updateMatrixWorld(true);
+    const min = geom.boundingBox.min, max = geom.boundingBox.max;
+    const X = [min.x, max.x], Y = [min.y, max.y], Z = [min.z, max.z];
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) for (let k = 0; k < 2; k++) {
+      _tfStableTmp.set(X[i], Y[j], Z[k])
+        .applyMatrix4(child.matrixWorld)
+        .sub(_tfObjWorldPos)
+        .applyQuaternion(_tfObjWorldQuatInv);
+      _tfTmpBox.expandByPoint(_tfStableTmp);
+    }
+  });
   if (_tfTmpBox.isEmpty()) target.set(0, 0, 0);
   else _tfTmpBox.getSize(target);
 }
@@ -11228,8 +11253,15 @@ const _matThumb = (() => {
   let ctx = null;
   let envReady = false;
   let envLoading = false;
+  // The app ships the three.webgpu.js bundle, which doesn't expose
+  // WebGLRenderer. Dropping back to a 2D-canvas painter keeps the panel
+  // useful (you still see colour + roughness + metalness + emissive cues)
+  // without needing a second three.js bundle. Sticky failure flag prevents
+  // the warning from firing on every refresh.
+  let webglUnavailable = (typeof THREE.WebGLRenderer !== 'function');
 
   function _init() {
+    if (webglUnavailable) return null;
     if (ctx) return ctx;
     const SIZE = 96;
     const canvas = document.createElement('canvas');
@@ -11238,7 +11270,8 @@ const _matThumb = (() => {
     try {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true });
     } catch (e) {
-      console.warn('[mat-thumb] WebGL renderer init failed:', e);
+      webglUnavailable = true;
+      console.warn('[mat-thumb] WebGL renderer init failed; falling back to 2D preview:', e?.message || e);
       return null;
     }
     renderer.setPixelRatio(1);
@@ -11303,7 +11336,7 @@ const _matThumb = (() => {
 
   function render(mat) {
     const c = _init();
-    if (!c) return null;
+    if (!c) return _render2DFallback(mat);
     try {
       c.sphere.material = mat;
       c.torus.material  = mat;
@@ -11312,9 +11345,89 @@ const _matThumb = (() => {
       return c.canvas.toDataURL('image/png');
     } catch (e) {
       console.warn('[mat-thumb] render failed:', e);
+      return _render2DFallback(mat);
+    }
+  }
+
+  // 2D-canvas painter for when WebGLRenderer is missing (the app's main
+  // bundle is three.webgpu.js, which strips it). Reads colour / roughness /
+  // metalness / emissive off the live Material so each cell still
+  // communicates "what does this material look like" at a glance.
+  function _render2DFallback(mat) {
+    try {
+      const SIZE = 96;
+      const cvs = document.createElement('canvas');
+      cvs.width = cvs.height = SIZE;
+      const g = cvs.getContext('2d');
+      const cx = SIZE / 2, cy = SIZE / 2 + 2, r = SIZE * 0.40;
+      const baseHex = '#' + (mat?.color?.getHexString?.() || 'cccccc');
+      const rough = Math.max(0, Math.min(1, mat?.roughness ?? 0.55));
+      const metal = Math.max(0, Math.min(1, mat?.metalness ?? 0));
+      const emisHex = '#' + (mat?.emissive?.getHexString?.() || '000000');
+      const emisI   = Math.max(0, Math.min(2, mat?.emissiveIntensity ?? 0));
+
+      // Ground shadow.
+      const sg = g.createRadialGradient(cx, cy + r * 0.95, 0, cx, cy + r * 0.95, r * 1.2);
+      sg.addColorStop(0,    'rgba(0,0,0,0.35)');
+      sg.addColorStop(0.7,  'rgba(0,0,0,0.10)');
+      sg.addColorStop(1,    'rgba(0,0,0,0)');
+      g.fillStyle = sg;
+      g.beginPath(); g.ellipse(cx, cy + r * 0.95, r * 1.05, r * 0.30, 0, 0, Math.PI * 2); g.fill();
+
+      // Sphere body. Highlight is tighter on glossy / metallic materials.
+      const hl = 1 - rough;
+      const hlSize = 0.22 + 0.18 * hl;
+      const hx = cx - r * 0.32, hy = cy - r * 0.42;
+      const grad = g.createRadialGradient(hx, hy, 0, cx, cy, r);
+      const lighten = (hex, k) => {
+        const n = parseInt(hex.slice(1), 16);
+        const R = (n >> 16) & 0xff, G = (n >> 8) & 0xff, B = n & 0xff;
+        const f = (v) => Math.max(0, Math.min(255, Math.round(v + (255 - v) * k)));
+        return `rgb(${f(R)},${f(G)},${f(B)})`;
+      };
+      const darken = (hex, k) => {
+        const n = parseInt(hex.slice(1), 16);
+        const R = (n >> 16) & 0xff, G = (n >> 8) & 0xff, B = n & 0xff;
+        return `rgb(${Math.round(R*(1-k))},${Math.round(G*(1-k))},${Math.round(B*(1-k))})`;
+      };
+      grad.addColorStop(0,      lighten(baseHex, 0.55 + 0.30 * hl));
+      grad.addColorStop(hlSize, lighten(baseHex, 0.10));
+      grad.addColorStop(0.7,    baseHex);
+      grad.addColorStop(1,      darken(baseHex, 0.28 + 0.12 * metal));
+      g.fillStyle = grad;
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+
+      // Sharp specular highlight for low-roughness / metallic materials.
+      if (hl > 0.15) {
+        g.globalCompositeOperation = 'lighter';
+        const sp = g.createRadialGradient(hx, hy, 0, hx, hy, r * 0.45);
+        sp.addColorStop(0, `rgba(255,255,255,${0.55 * hl})`);
+        sp.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = sp;
+        g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+        g.globalCompositeOperation = 'source-over';
+      }
+
+      // Emissive overlay — flat tint scaled by emissiveIntensity.
+      if (emisI > 0) {
+        g.globalCompositeOperation = 'lighter';
+        g.fillStyle = emisHex;
+        g.globalAlpha = Math.min(0.7, 0.3 * emisI);
+        g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
+
+      g.strokeStyle = 'rgba(255,255,255,0.06)';
+      g.lineWidth = 1;
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+
+      return cvs.toDataURL('image/png');
+    } catch (_) {
       return null;
     }
   }
+
   return { render };
 })();
 
@@ -12045,11 +12158,22 @@ function _wireMaterialActions() {
         n++;
       }
     }
-    // Drop GPU resources for the now-orphaned materials and remove them from
-    // the user-materials registry so the panel doesn't show empty cells.
+    // Drop GPU resources, the user-materials entry, AND the colour-share
+    // cache slot. Without the materialByColor cleanup the next part to ask
+    // for the same hex via getOrCreateMaterial gets handed back the just-
+    // disposed object, which the renderer paints magenta — that was the
+    // "switches to pink" bug. Defensive: ensure we never wipe whatever the
+    // shared default-grey points at, even if the user happened to delete a
+    // material whose colour matched 0x9aa0a6.
     for (const m of removed) {
+      if (m === defaultMat) continue;
       try { m.dispose?.(); } catch (_) {}
       if (state.userMaterials) state.userMaterials.delete(m);
+      if (state.materialByColor) {
+        for (const [k, v] of state.materialByColor) {
+          if (v === m) state.materialByColor.delete(k);
+        }
+      }
     }
     _matPanelSelected.clear();
     _populateMaterialsList();
