@@ -3897,6 +3897,25 @@ const _tfTmpVec2 = new THREE.Vector3();
 const _tfTmpEuler = new THREE.Euler();
 const _tfTmpQuat = new THREE.Quaternion();
 const _tfTmpBox = new THREE.Box3();
+const _tfStashQuat = new THREE.Quaternion();
+
+// Compute the bounding box in obj's OWN local frame, so rotating obj
+// doesn't grow the AABB and inflate the displayed size. We do this by
+// temporarily zeroing obj.quaternion, letting setFromObject build the
+// world AABB (which now equals the local-frame AABB), then restoring.
+// Children's own rotations are kept — they're part of the object's
+// "intrinsic shape" the way every DCC measures it.
+function _readStableSize(obj, target) {
+  if (!obj) { target.set(0, 0, 0); return; }
+  _tfStashQuat.copy(obj.quaternion);
+  obj.quaternion.identity();
+  obj.updateMatrixWorld(true);
+  _tfTmpBox.makeEmpty().setFromObject(obj);
+  obj.quaternion.copy(_tfStashQuat);
+  obj.updateMatrixWorld(true);
+  if (_tfTmpBox.isEmpty()) target.set(0, 0, 0);
+  else _tfTmpBox.getSize(target);
+}
 
 function _transformPanelRefresh() {
   const panel = document.getElementById('transform-panel');
@@ -3941,8 +3960,18 @@ function _transformPanelRefresh() {
   const obj = target.obj;
   const usingWorld = _hasPivotAncestor(obj);
   try {
-    if (usingWorld) { obj.updateMatrixWorld(true); obj.getWorldPosition(_tfTmpVec); }
-    else _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
+    if (usingWorld && state.pivot) {
+      // Pivot is the gizmo's hub — at the selection's bbox centre. Showing
+      // pivot.position keeps the displayed position STABLE during a pure
+      // rotation in place (the user's "rotate, position shouldn't move"
+      // expectation), and updates correctly during translation since the
+      // gizmo writes pivot.position directly.
+      state.pivot.getWorldPosition(_tfTmpVec);
+    } else {
+      // No transient pivot — read local position (relative to parent),
+      // matching the DCC convention for nested groups.
+      _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
+    }
     if (Number.isFinite(_tfTmpVec.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(_tfTmpVec.x);
     if (Number.isFinite(_tfTmpVec.y) && inputs.py && document.activeElement !== inputs.py) inputs.py.value = _fmtNum(_tfTmpVec.y);
     if (Number.isFinite(_tfTmpVec.z) && inputs.pz && document.activeElement !== inputs.pz) inputs.pz.value = _fmtNum(_tfTmpVec.z);
@@ -3961,10 +3990,12 @@ function _transformPanelRefresh() {
     if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
   } catch (_) {}
 
+  // Size: stable bbox in the OBJECT's own local frame so rotation doesn't
+  // grow the displayed size (Box3.setFromObject would otherwise compute a
+  // world AABB that swells when the object is at an angle).
   try {
-    _tfTmpBox.makeEmpty().setFromObject(obj);
-    if (!_tfTmpBox.isEmpty()) {
-      _tfTmpBox.getSize(_tfTmpVec2);
+    _readStableSize(obj, _tfTmpVec2);
+    if (Number.isFinite(_tfTmpVec2.x) && _tfTmpVec2.x > 0) {
       if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(_tfTmpVec2.x);
       if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(_tfTmpVec2.y);
       if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(_tfTmpVec2.z);
@@ -4007,14 +4038,14 @@ function _wireTransformPanel() {
     const usingWorld = _hasPivotAncestor(obj);
     try {
       if (axis === 'px' || axis === 'py' || axis === 'pz') {
-        if (usingWorld) {
-          obj.parent?.updateMatrixWorld?.(true);
-          obj.getWorldPosition(_tfTmpVec);
-          if (axis === 'px') _tfTmpVec.x = v;
-          if (axis === 'py') _tfTmpVec.y = v;
-          if (axis === 'pz') _tfTmpVec.z = v;
-          if (obj.parent) obj.parent.worldToLocal(_tfTmpVec);
-          obj.position.copy(_tfTmpVec);
+        if (usingWorld && state.pivot) {
+          // Display reads pivot.position; writes go there too so a typed
+          // value round-trips. Since pivot is at scene root, its local
+          // position == world position.
+          if (axis === 'px') state.pivot.position.x = v;
+          if (axis === 'py') state.pivot.position.y = v;
+          if (axis === 'pz') state.pivot.position.z = v;
+          state.pivot.updateMatrixWorld(true);
         } else {
           if (axis === 'px') obj.position.x = v;
           if (axis === 'py') obj.position.y = v;
@@ -4029,15 +4060,14 @@ function _wireTransformPanel() {
         if (axis === 'ry') obj.rotation.y = rad;
         if (axis === 'rz') obj.rotation.z = rad;
       } else if (axis === 'sx' || axis === 'sy' || axis === 'sz') {
-        // Size is a target world-bbox dimension. Convert to a scale factor
-        // by dividing the target by the current bbox dimension, then
-        // multiply onto the existing scale. Reject ≤ 1e-4 so a typo can't
-        // collapse the geometry to a point.
+        // Size is a target dimension in the object's OWN local frame
+        // (matches the read path, which uses _readStableSize). Convert to
+        // a scale factor by dividing the target by the current local
+        // dimension, then multiply onto the existing scale. Reject < 1e-4
+        // so a typo can't collapse the geometry to a point.
         const tgt = Math.abs(v);
         if (!Number.isFinite(tgt) || tgt < 1e-4) { _transformPanelRefresh(); return; }
-        _tfTmpBox.makeEmpty().setFromObject(obj);
-        if (_tfTmpBox.isEmpty()) { _transformPanelRefresh(); return; }
-        _tfTmpBox.getSize(_tfTmpVec2);
+        _readStableSize(obj, _tfTmpVec2);
         const dim = axis === 'sx' ? _tfTmpVec2.x : (axis === 'sy' ? _tfTmpVec2.y : _tfTmpVec2.z);
         if (!Number.isFinite(dim) || dim < 1e-9) { _transformPanelRefresh(); return; }
         const factor = tgt / dim;
@@ -11183,92 +11213,117 @@ function _collectLiveMaterials() {
   return [...seen.values()].sort((a, b) => b.count - a.count);
 }
 
-// Synthetic sphere preview drawn to a 2D canvas. Avoids spinning up a
-// second WebGL/WebGPU renderer (the app's bundle is the WebGPU build, which
-// doesn't expose WebGLRenderer; WebGPURenderer needs async init + async
-// render which is awkward for a sync grid populate). Result is a fake-3D
-// sphere that conveys colour, roughness, metallic feel, and emissive glow
-// well enough to identify materials at a glance — same role as Cinema 4D's
-// material thumbnails. Cached per Material reference so opening the panel
-// is instant; invalidated on slider edits.
+// Real 3D shader-ball thumbnail for the materials grid. A single shared
+// offscreen WebGL renderer + scene + light rig + Disney-style geometry
+// renders each material's ball, snapshots the framebuffer to a data URL,
+// and caches by Material reference. Reusing one renderer across all
+// thumbnails keeps GPU resource churn near zero.
+//
+// Env reflections come from PMREM(RoomEnvironment), loaded async at first
+// use. Until env is ready we render with the direct lights only — still
+// vastly better than the old 2D fake-sphere painting; once env arrives we
+// invalidate the cache and refresh any thumbnails currently in the DOM.
 const _matPreviewCache = new WeakMap();
+const _matThumb = (() => {
+  let ctx = null;
+  let envReady = false;
+  let envLoading = false;
+
+  function _init() {
+    if (ctx) return ctx;
+    const SIZE = 96;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = SIZE;
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: true });
+    } catch (e) {
+      console.warn('[mat-thumb] WebGL renderer init failed:', e);
+      return null;
+    }
+    renderer.setPixelRatio(1);
+    renderer.setSize(SIZE, SIZE, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x1a1f28, 0.35));
+    const key  = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 1, 2);     scene.add(key);
+    const fill = new THREE.DirectionalLight(0xb0c4ff, 0.35); fill.position.set(-3, 0.5, 1.5); scene.add(fill);
+    const rim  = new THREE.DirectionalLight(0xffffff, 0.4); rim.position.set(-1, 1, -3);   scene.add(rim);
+
+    // Same Disney-style assembly as the editor preview ball.
+    const sphereGeom = new THREE.SphereGeometry(0.85, 48, 36);
+    const torusGeom  = new THREE.TorusGeometry(0.85, 0.10, 16, 64);
+    const baseGeom   = new THREE.CylinderGeometry(1.05, 1.10, 0.16, 64, 1, false);
+    const ballGroup = new THREE.Group();
+    const sphere = new THREE.Mesh(sphereGeom);
+    sphere.position.y = 0.30;
+    const torus = new THREE.Mesh(torusGeom);
+    torus.rotation.x = Math.PI * 0.5;
+    torus.position.y = -0.55;
+    const base = new THREE.Mesh(baseGeom);
+    base.position.y = -0.78;
+    ballGroup.add(sphere); ballGroup.add(torus); ballGroup.add(base);
+    scene.add(ballGroup);
+
+    const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+    cam.position.set(0, 0.55, 5.0);
+    cam.lookAt(0, -0.05, 0);
+
+    ctx = { canvas, renderer, scene, sphere, torus, base, cam, pmrem: null };
+    _loadEnv();
+    return ctx;
+  }
+
+  async function _loadEnv() {
+    if (envReady || envLoading || !ctx) return;
+    envLoading = true;
+    try {
+      const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
+      ctx.pmrem = new THREE.PMREMGenerator(ctx.renderer);
+      const envScene = new RoomEnvironment();
+      ctx.scene.environment = ctx.pmrem.fromScene(envScene, 0.04).texture;
+      envScene.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
+      envReady = true;
+      // Refresh any cells already painted with the env-less fallback so they
+      // pick up the now-correct reflections without a full panel rebuild.
+      const cells = document.querySelectorAll('.mat-cell');
+      for (const cell of cells) {
+        const m = cell._mat;
+        if (!m) continue;
+        try { _matPreviewCache.delete(m); } catch (_) {}
+        const img = cell.querySelector('img.mat-thumb-img');
+        const url = render(m);
+        if (img && url) img.src = url;
+      }
+    } catch (e) { console.warn('[mat-thumb] env load failed:', e); }
+  }
+
+  function render(mat) {
+    const c = _init();
+    if (!c) return null;
+    try {
+      c.sphere.material = mat;
+      c.torus.material  = mat;
+      c.base.material   = mat;
+      c.renderer.render(c.scene, c.cam);
+      return c.canvas.toDataURL('image/png');
+    } catch (e) {
+      console.warn('[mat-thumb] render failed:', e);
+      return null;
+    }
+  }
+  return { render };
+})();
+
 function _renderMaterialPreview(mat) {
   const cached = _matPreviewCache.get(mat);
   if (cached) return cached;
-  try {
-    const SIZE = 96;             // 2x of the 48px CSS thumb for crisp retina
-    const c = document.createElement('canvas');
-    c.width = c.height = SIZE;
-    const ctx = c.getContext('2d');
-
-    const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.4;
-    const baseHex = '#' + (mat.color?.getHexString?.() || 'cccccc');
-    const baseRgb = parseInt(baseHex.slice(1), 16);
-    const bR = (baseRgb >> 16) & 0xff, bG = (baseRgb >> 8) & 0xff, bB = baseRgb & 0xff;
-
-    const rough = Math.max(0, Math.min(1, mat.roughness ?? 0.5));
-    const metal = Math.max(0, Math.min(1, mat.metalness ?? 0));
-    const emisHex = '#' + (mat.emissive?.getHexString?.() || '000000');
-    const emisRgb = parseInt(emisHex.slice(1), 16);
-    const eR = (emisRgb >> 16) & 0xff, eG = (emisRgb >> 8) & 0xff, eB = emisRgb & 0xff;
-    const emisInt = Math.max(0, Math.min(2, mat.emissiveIntensity ?? 1));
-    // Fold emissive into the base RGB so glow shows even though we have no
-    // real lighting. emisRgb at intensity 1 is roughly additive.
-    const useR = Math.min(255, bR + Math.round(eR * emisInt * 0.6));
-    const useG = Math.min(255, bG + Math.round(eG * emisInt * 0.6));
-    const useB = Math.min(255, bB + Math.round(eB * emisInt * 0.6));
-
-    // Rough-but-readable shading: highlight top-left, shadow bottom-right.
-    // Highlight intensity falls off with roughness; metallic gets a
-    // tighter, brighter spec spot stacked on top.
-    const peakLight = 0.92 - rough * 0.55;
-    const peakR = Math.min(255, Math.round(useR + (255 - useR) * peakLight));
-    const peakG = Math.min(255, Math.round(useG + (255 - useG) * peakLight));
-    const peakB = Math.min(255, Math.round(useB + (255 - useB) * peakLight));
-    const shadowMul = 0.18 + rough * 0.10;
-    const shR = Math.round(useR * shadowMul);
-    const shG = Math.round(useG * shadowMul);
-    const shB = Math.round(useB * shadowMul);
-
-    const grad = ctx.createRadialGradient(
-      cx - r * 0.45, cy - r * 0.45, r * 0.05,
-      cx, cy, r * 1.05
-    );
-    grad.addColorStop(0,   `rgb(${peakR},${peakG},${peakB})`);
-    grad.addColorStop(0.5, `rgb(${useR},${useG},${useB})`);
-    grad.addColorStop(1,   `rgb(${shR},${shG},${shB})`);
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-
-    // Specular highlight — sharper for low roughness, brighter for metal.
-    if (metal > 0.05 || rough < 0.75) {
-      const specR = r * (0.10 + (1 - rough) * 0.30);
-      const specCx = cx - r * 0.42, specCy = cy - r * 0.42;
-      const specA = (1 - rough) * (0.45 + metal * 0.35);
-      const sg = ctx.createRadialGradient(specCx, specCy, 0, specCx, specCy, specR);
-      sg.addColorStop(0, `rgba(255,255,255,${specA})`);
-      sg.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = sg;
-      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // Soft contact shadow under the sphere — subtle, just helps the sphere
-    // sit on the checkerboard rather than floating.
-    ctx.globalCompositeOperation = 'destination-over';
-    const sh = ctx.createRadialGradient(cx, cy + r * 0.95, r * 0.1, cx, cy + r * 0.95, r * 0.9);
-    sh.addColorStop(0, 'rgba(0,0,0,.30)');
-    sh.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = sh;
-    ctx.fillRect(0, 0, SIZE, SIZE);
-    ctx.globalCompositeOperation = 'source-over';
-
-    const url = c.toDataURL('image/png');
-    _matPreviewCache.set(mat, url);
-    return url;
-  } catch (e) {
-    console.warn('[mat preview] render failed:', e);
-    return null;
-  }
+  const url = _matThumb.render(mat);
+  if (url) _matPreviewCache.set(mat, url);
+  return url;
 }
 
 // Populate the list inside #vp-materials-pop. Exposed on window so the
@@ -11377,106 +11432,39 @@ let _matEditorState = null;  // { popup, mat, info, scrubbers: [], _previewBall 
 // persistent tiny scene (sphere + lights) and renders it through the main
 // renderer into a 256px target whenever the editor needs to refresh.
 const _MatPreviewBall = (() => {
-  // Each editor instance gets its own dedicated WebGL renderer attached
-  // directly to the canvas. Independent of the main WebGPU renderer so we
-  // don't hijack its draw target, and works whether the main renderer is
-  // WebGL or WebGPU.
-  function attach(material, canvas) {
-    // Force explicit pixel buffer dimensions BEFORE creating the renderer.
-    // Reading clientWidth on a not-yet-shown popup returns 0, which left the
-    // renderer with a 0×0 framebuffer — invisible sphere. CSS controls
-    // display size; canvas.width/height controls the drawing buffer.
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const PX = 120;  // matches CSS .mat-edit-preview-canvas
-    canvas.width  = PX * dpr;
-    canvas.height = PX * dpr;
-    let glRenderer;
-    try {
-      glRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, premultipliedAlpha: false });
-    } catch (e) {
-      console.warn('[mat-preview] WebGL renderer init failed:', e);
-      return { render() {}, dispose() {} };
-    }
-    glRenderer.setPixelRatio(dpr);
-    glRenderer.setSize(PX, PX, false);
-    glRenderer.outputColorSpace = THREE.SRGBColorSpace;
-    glRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-    glRenderer.toneMappingExposure = 1.05;
-
-    const scene = new THREE.Scene();
-    // Side-lit key (camera-right, slightly elevated) so the highlight cuts
-    // across the sphere from the side instead of crowning the top. Fill on
-    // the camera-left at low intensity for shape readability without
-    // washing the side highlight out.
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x1a1f28, 0.35));
-    const key  = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 1, 2);   scene.add(key);
-    const fill = new THREE.DirectionalLight(0xb0c4ff, 0.35); fill.position.set(-3, 0.5, 1.5); scene.add(fill);
-    const rim  = new THREE.DirectionalLight(0xffffff, 0.4); rim.position.set(-1, 1, -3);  scene.add(rim);
-    // Disney/Substance-style shader-ball assembly. Three primitives that
-    // together cover every surface case a CAD material needs to read against:
-    //   • upper hemisphere    →  smooth curvature, edge Fresnel, top
-    //                            highlight that responds to roughness
-    //   • equator torus       →  inside/outside curvature inversion, hard
-    //                            occlusion crease against the sphere base
-    //   • flat base disc      →  flat reflection (mirrors envmap detail),
-    //                            sharp 90° cut at the rim for spec response
-    // Built procedurally so we don't ship a GLB asset; ~6k tris total —
-    // negligible for a 120×120 canvas. All sub-meshes share the previewed
-    // material reference (rebound in render() per draw).
-    const sphereGeom = new THREE.SphereGeometry(0.85, 64, 48);
-    const torusGeom  = new THREE.TorusGeometry(0.85, 0.10, 24, 96);
-    const baseGeom   = new THREE.CylinderGeometry(1.05, 1.10, 0.16, 96, 1, false);
-    const ballGroup = new THREE.Group();
-    const sphere = new THREE.Mesh(sphereGeom, material);
-    sphere.position.y = 0.30;
-    const torus  = new THREE.Mesh(torusGeom,  material);
-    torus.rotation.x = Math.PI * 0.5;
-    torus.position.y = -0.55;
-    const base   = new THREE.Mesh(baseGeom,   material);
-    base.position.y = -0.78;
-    ballGroup.add(sphere); ballGroup.add(torus); ballGroup.add(base);
-    scene.add(ballGroup);
-    const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
-    cam.position.set(0, 0.55, 5.0);
-    cam.lookAt(0, -0.05, 0);
-
+  // Reuses the existing _renderMaterialPreview() that powers every other
+  // material thumbnail in the app — a procedural 2D-canvas fake-3D sphere.
+  // Pure 2D drawing: always paints, no WebGL context required, no popup-
+  // visibility/driver/display-state dependencies, no context-cap issues.
+  function attach(material, target) {
     let disposed = false;
-    // Procedural studio environment via PMREM. Without this, PBR materials
-    // (the only ones we ever preview) Fresnel-reflect into a black void at
-    // grazing angles → the dark ring around the sphere edge that everyone
-    // hates. RoomEnvironment + PMREMGenerator gives a clean white-walled
-    // studio for free; no HDR file to ship. Async-loaded so we don't pay
-    // the import cost on app boot.
-    let pmrem = null;
-    (async () => {
-      try {
-        const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
-        if (disposed) return;
-        pmrem = new THREE.PMREMGenerator(glRenderer);
-        const envScene = new RoomEnvironment();
-        scene.environment = pmrem.fromScene(envScene, 0.04).texture;
-        envScene.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
-        render();
-      } catch (e) { console.warn('[mat-preview] env load failed:', e); }
-    })();
     function render() {
-      if (disposed) return;
-      // Rebind material on every child so live edits in the popup propagate
-      // even if the caller hands us a fresh material instance.
-      sphere.material = material; torus.material = material; base.material = material;
-      try { glRenderer.render(scene, cam); }
-      catch (e) { console.warn('[mat-preview] render failed:', e); }
+      if (disposed || !target) return;
+      try {
+        // Cache key is the Material reference; clear so each draw is fresh.
+        if (typeof _matPreviewCache !== 'undefined') _matPreviewCache.delete(material);
+        const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(material) : null;
+        if (!url) return;
+        // Accept either an <img> (set src) or a <canvas> (drawImage onto it).
+        if (target.tagName === 'IMG') {
+          target.src = url;
+        } else if (target.tagName === 'CANVAS') {
+          const ctx = target.getContext('2d');
+          if (!ctx) return;
+          const img = new Image();
+          img.onload = () => {
+            ctx.clearRect(0, 0, target.width, target.height);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, target.width, target.height);
+          };
+          img.src = url;
+        }
+      } catch (e) {
+        console.warn('[mat-preview] render failed:', e);
+      }
     }
-    function dispose() {
-      disposed = true;
-      try { sphereGeom.dispose(); } catch (_) {}
-      try { torusGeom.dispose(); }  catch (_) {}
-      try { baseGeom.dispose(); }   catch (_) {}
-      try { scene.environment?.dispose?.(); } catch (_) {}
-      try { pmrem?.dispose(); } catch (_) {}
-      try { glRenderer.dispose(); } catch (_) {}
-      try { glRenderer.forceContextLoss(); } catch (_) {}
-    }
+    function dispose() { disposed = true; }
     return { render, dispose };
   }
   return { attach };
@@ -11493,7 +11481,7 @@ function _openMaterialEditor(info) {
     s.textContent = `
       .mat-edit-body{display:flex;flex-direction:column;gap:0;padding:0}
       .mat-edit-preview-wrap{position:relative;background:radial-gradient(circle at 30% 35%,#2a3142 0%,#0c0f15 75%);padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:14px}
-      .mat-edit-preview-canvas{flex:0 0 120px;width:120px;height:120px;border-radius:10px;background:transparent;box-shadow:0 4px 16px rgba(0,0,0,.55)}
+      .mat-edit-preview-canvas{flex:0 0 120px;width:120px;height:120px;border-radius:10px;background:#000;box-shadow:0 4px 16px rgba(0,0,0,.55);object-fit:cover;display:block}
       .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
       .mat-edit-preview-name{font-size:14px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-edit-preview-type{font-size:10.5px;color:var(--tx3);font-family:ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase}
@@ -11594,7 +11582,7 @@ function _openMaterialEditor(info) {
   const bodyHtml = `
     <div class="mat-edit-body">
       <div class="mat-edit-preview-wrap">
-        <canvas class="mat-edit-preview-canvas" id="mat-edit-preview"></canvas>
+        <img class="mat-edit-preview-canvas" id="mat-edit-preview" alt="" draggable="false">
         <div class="mat-edit-preview-info">
           <div class="mat-edit-preview-name" title="${escapeHtml(matName)}">${escapeHtml(matName)}</div>
           <div class="mat-edit-preview-type">${escapeHtml(mat.type || 'Material')}</div>
@@ -11674,10 +11662,7 @@ function _openMaterialEditor(info) {
       }
     });
   };
-  // First render after popup.show() so the canvas has a real backing buffer
-  // and the WebGL context isn't initialized while display:none. Deferred to
-  // the next frame; subsequent property edits call _refreshAll synchronously.
-  requestAnimationFrame(() => requestAnimationFrame(() => _matEditorState?._previewBall?.render()));
+  _matEditorState._previewBall.render();
 
   const _bindColor = (cid, target) => {
     const inp = document.getElementById(cid);
@@ -12037,15 +12022,40 @@ function _wireMaterialActions() {
   delBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (_matPanelSelected.size === 0) return;
-    const allMats = _collectLiveMaterials();
-    let fallback = allMats.find(({ mat }) => !_matPanelSelected.has(mat))?.mat;
-    if (!fallback) fallback = _newMaterial({ name: 'default' });
+    // Delete = unassign. Every part using a removed material switches to a
+    // shared neutral-grey default — no source color, no original-load tint,
+    // just plain shading. Built once via getOrCreateMaterial so all
+    // unassigned parts share one Material reference (same draw-call dedupe
+    // benefit as the existing color-shared library).
+    const _DEFAULT_GREY = new THREE.Color(0x9aa0a6);
+    const defaultMat = getOrCreateMaterial(_DEFAULT_GREY);
     const removed = [..._matPanelSelected];
+    const removedSet = new Set(removed);
+    const seen = new Set();
     let n = 0;
-    for (const m of removed) n += _reassignMaterial(m, fallback);
+    for (const p of state.parts || []) {
+      if (p.deleted || !p.mesh || seen.has(p.mesh)) continue;
+      seen.add(p.mesh);
+      let cur = p.mesh.material;
+      const isArr = Array.isArray(cur);
+      if (isArr) cur = cur[0];
+      if (cur && removedSet.has(cur)) {
+        if (isArr) p.mesh.material = p.mesh.material.map(m => removedSet.has(m) ? defaultMat : m);
+        else       p.mesh.material = defaultMat;
+        n++;
+      }
+    }
+    // Drop GPU resources for the now-orphaned materials and remove them from
+    // the user-materials registry so the panel doesn't show empty cells.
+    for (const m of removed) {
+      try { m.dispose?.(); } catch (_) {}
+      if (state.userMaterials) state.userMaterials.delete(m);
+    }
     _matPanelSelected.clear();
     _populateMaterialsList();
-    toast?.('Deleted materials', `${removed.length} removed (${n} parts → fallback)`, 'success');
+    try { applySelectionColors?.(); } catch (_) {}
+    requestRender();
+    toast?.('Deleted materials', `${removed.length} removed (${n} parts restored)`, 'success');
   });
 
   preBtn.addEventListener('click', (e) => {
