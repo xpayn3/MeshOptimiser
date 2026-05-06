@@ -28,6 +28,21 @@ const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
   viewMode: 'solid', showGrid: true, showBboxes: false, showAxes: true,
   highlightSmall: true, autoRotate: false, bgMode: 'dark',
+  // ── Pro-mode scene settings (driven by the Display/Scene/Camera/Lighting
+  // /Grid sections of the viewport settings popup) ───────────────────────
+  displayUnit: 'mm',          // 'mm' | 'cm' | 'm' | 'in' | 'ft' | 'none'
+  sceneUpAxis: 'z',
+  sceneScale: 1,
+  cameraProjection: 'persp',
+  cameraFov: 45,
+  cameraClipMode: 'auto',
+  showOrigin: false, showFps: false, showStats: false,
+  shadowsEnabled: false,
+  exposure: 1.0,
+  ambientIntensity: 0.55, sunIntensity: 1.2,
+  sunAzimuth: 45, sunElevation: 45,
+  gridCellMode: 'auto',
+  snapToGrid: false,
   pendingFlagged: new Set(),
   partsRoot: null, bboxRoot: null,
   sizeMetricMode: 'diag', threshold: 2.0,
@@ -1173,14 +1188,20 @@ const _Welcome = (() => {
     } else {
       _renderResume(null);
     }
-    box.innerHTML = list.map((r, i) => `
-      <button class="welcome-recent" data-idx="${i}" style="display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);text-align:left;cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out)">
-        <i data-lucide="file" style="width:14px;height:14px;color:var(--tx3);flex-shrink:0"></i>
-        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-md)">${r.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</span>
-        <span style="color:var(--tx3);font-size:var(--fs-sm);flex-shrink:0">${_fmtBytes(r.size)}</span>
-        <span style="color:var(--tx3);font-size:var(--fs-sm);flex-shrink:0">${_fmtAge(r.ts)}</span>
-      </button>
-    `).join('');
+    box.innerHTML = list.map((r, i) => {
+      const safeName = r.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+      const thumbHtml = r.thumb
+        ? `<img src="${r.thumb}" alt="" draggable="false" style="width:38px;height:38px;border-radius:5px;flex-shrink:0;object-fit:cover;background:var(--bg);border:1px solid rgba(255,255,255,.06)">`
+        : `<span style="width:38px;height:38px;border-radius:5px;flex-shrink:0;display:grid;place-items:center;background:var(--bg);border:1px solid rgba(255,255,255,.06);color:var(--tx3)"><i data-lucide="file" style="width:16px;height:16px"></i></span>`;
+      return `
+      <button class="welcome-recent" data-idx="${i}" style="display:flex;align-items:center;gap:10px;width:100%;padding:7px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);text-align:left;cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out)">
+        ${thumbHtml}
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;overflow:hidden">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-md);font-weight:500">${safeName}</span>
+          <span style="color:var(--tx3);font-size:var(--fs-sm)">${_fmtBytes(r.size)} · ${_fmtAge(r.ts)}</span>
+        </span>
+      </button>`;
+    }).join('');
     box.querySelectorAll('.welcome-recent').forEach(el => {
       el.addEventListener('mouseenter', () => { el.style.background = 'var(--bg3)'; el.style.borderColor = 'var(--bd2)'; });
       el.addEventListener('mouseleave', () => { el.style.background = 'var(--bg2)'; el.style.borderColor = 'var(--bd)'; });
@@ -1327,9 +1348,9 @@ const _Actions = (() => {
     { id:'solid',        group:'View',       label:'Solid view',                 kbd:'1', run: () => { try { setViewMode('solid'); } catch (_) {} } },
     { id:'wire',         group:'View',       label:'Wireframe view',             kbd:'2', run: () => { try { setViewMode('wire'); } catch (_) {} } },
     { id:'edges',        group:'View',       label:'Edges view',                 kbd:'3', run: () => { try { setViewMode('edges'); } catch (_) {} } },
-    { id:'gzMove',       group:'View',       label:'Translate gizmo (Shift to snap 10u)', kbd:'W', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
-    { id:'gzRotate',     group:'View',       label:'Rotate gizmo (Shift to snap 15°)',    kbd:'E', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
-    { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'R', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
+    { id:'gzMove',       group:'View',       label:'Translate gizmo (Shift to snap 10u)', kbd:'E', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
+    { id:'gzRotate',     group:'View',       label:'Rotate gizmo (Shift to snap 15°)',    kbd:'R', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
+    { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
     { id:'gzOff',        group:'View',       label:'Hide gizmo',                          kbd:'Q', run: () => { try { setGizmoMode('off'); } catch (_) {} } },
     { id:'tgGrid',       group:'View',       label:'Toggle grid',                run: _click('tg-grid') },
     { id:'tgAxes',       group:'View',       label:'Toggle axes',                run: _click('tg-axes') },
@@ -1821,7 +1842,11 @@ function initScene() {
   });
   // Live invalidation while the gizmo is being dragged.
   state.gizmo.addEventListener('change', () => requestRender());
-  state.gizmo.addEventListener('objectChange', () => requestRender());
+  state.gizmo.addEventListener('objectChange', () => { requestRender(); _gizmoHud.update(); });
+  // Gizmo HUD: capture pivot baseline on drag start, hide on drag end.
+  state.gizmo.addEventListener('dragging-changed', e => {
+    if (e.value) _gizmoHud.start(); else _gizmoHud.stop();
+  });
   const gh = (typeof state.gizmo.getHelper === 'function') ? state.gizmo.getHelper() : state.gizmo;
   gh.visible = false;
   state.gizmoHelper = gh;
@@ -2261,7 +2286,114 @@ function _setGizmoSnap(on) {
   state.gizmo.setTranslationSnap(on ? s.translate : null);
   state.gizmo.setRotationSnap(on ? s.rotate : null);
   state.gizmo.setScaleSnap(on ? s.scale : null);
+  state._gizmoSnapOn = !!on;
+  // If a drag is live, refresh the HUD so the SNAP badge appears/disappears
+  // immediately when the user taps Shift mid-gesture.
+  if (state._gizmoHudActive) _gizmoHud.update();
 }
+
+// Live HUD that pops next to the gizmo while dragging and shows the delta
+// being applied to the pivot. Translate → ΔX/Y/Z in world units. Rotate →
+// per-axis Euler delta in degrees (XYZ order, derived from beforeQuat⁻¹·now).
+// Scale → per-axis multiplicative factor. Position is the pivot's projected
+// screen coords offset by ~16px so the readout sits clear of the gizmo origin.
+const _gizmoHud = (() => {
+  let el = null;
+  let before = null; // { pos: Vector3, quat: Quaternion, scale: Vector3 }
+  const _v = new THREE.Vector3();
+  const _q = new THREE.Quaternion();
+  const _qInv = new THREE.Quaternion();
+  const _e = new THREE.Euler();
+  const _project = new THREE.Vector3();
+  function _ensure() {
+    if (el) return el;
+    el = document.getElementById('gizmo-hud');
+    return el;
+  }
+  function _fmt(n, d = 2) {
+    if (!Number.isFinite(n)) return '0';
+    if (Math.abs(n) < 1e-4) n = 0;
+    return n.toFixed(d);
+  }
+  function _signed(n, d = 2) {
+    const s = _fmt(n, d);
+    return (n > 0 && !s.startsWith('-')) ? '+' + s : s;
+  }
+  function _position() {
+    if (!state.pivot || !el) return;
+    state.pivot.updateWorldMatrix(true, false);
+    _project.setFromMatrixPosition(state.pivot.matrixWorld);
+    _project.project(camera);
+    const rect = renderer.domElement.getBoundingClientRect();
+    const vp   = document.getElementById('viewport').getBoundingClientRect();
+    const x = (_project.x * 0.5 + 0.5) * rect.width  + (rect.left - vp.left);
+    const y = (-_project.y * 0.5 + 0.5) * rect.height + (rect.top  - vp.top);
+    el.style.left = (x + 18) + 'px';
+    el.style.top  = (y - 14) + 'px';
+  }
+  function start() {
+    _ensure();
+    if (!el || !state.pivot) return;
+    state._gizmoHudActive = true;
+    state.pivot.updateMatrixWorld(true);
+    before = {
+      pos:   state.pivot.position.clone(),
+      quat:  state.pivot.quaternion.clone(),
+      scale: state.pivot.scale.clone(),
+    };
+    update();
+    el.classList.add('show');
+  }
+  function stop() {
+    state._gizmoHudActive = false;
+    before = null;
+    if (el) el.classList.remove('show');
+  }
+  function update() {
+    if (!before || !el || !state.pivot) return;
+    const mode = state.gizmoMode;
+    const snap = state._gizmoSnapOn ? '<span class="ghud-snap">SNAP</span>' : '';
+    let body = '';
+    if (mode === 'translate') {
+      _v.copy(state.pivot.position).sub(before.pos);
+      const dist = _v.length();
+      body = `<span class="ghud-mode">MOVE</span>` +
+             `<span class="ghud-x">X ${_signed(_v.x)}</span>` +
+             `<span class="ghud-y">Y ${_signed(_v.y)}</span>` +
+             `<span class="ghud-z">Z ${_signed(_v.z)}</span>` +
+             `<span style="color:var(--tx3)">·</span>` +
+             `<span style="color:var(--tx2)">${_fmt(dist)} u</span>`;
+    } else if (mode === 'rotate') {
+      // Δq = qNow * qBefore⁻¹  →  Euler XYZ in degrees
+      _qInv.copy(before.quat).invert();
+      _q.copy(state.pivot.quaternion).multiply(_qInv);
+      _e.setFromQuaternion(_q, 'XYZ');
+      const rx = THREE.MathUtils.radToDeg(_e.x);
+      const ry = THREE.MathUtils.radToDeg(_e.y);
+      const rz = THREE.MathUtils.radToDeg(_e.z);
+      body = `<span class="ghud-mode">ROT</span>` +
+             `<span class="ghud-x">X ${_signed(rx, 1)}°</span>` +
+             `<span class="ghud-y">Y ${_signed(ry, 1)}°</span>` +
+             `<span class="ghud-z">Z ${_signed(rz, 1)}°</span>`;
+    } else if (mode === 'scale') {
+      const sx = before.scale.x ? state.pivot.scale.x / before.scale.x : 1;
+      const sy = before.scale.y ? state.pivot.scale.y / before.scale.y : 1;
+      const sz = before.scale.z ? state.pivot.scale.z / before.scale.z : 1;
+      const uniform = Math.abs(sx - sy) < 1e-4 && Math.abs(sy - sz) < 1e-4;
+      body = `<span class="ghud-mode">SCALE</span>` + (uniform
+        ? `<span style="color:var(--tx)">×${_fmt(sx, 3)}</span>`
+        : `<span class="ghud-x">X ×${_fmt(sx, 3)}</span>` +
+          `<span class="ghud-y">Y ×${_fmt(sy, 3)}</span>` +
+          `<span class="ghud-z">Z ×${_fmt(sz, 3)}</span>`);
+    } else {
+      stop();
+      return;
+    }
+    el.innerHTML = `<div class="ghud-row">${body}${snap}</div>`;
+    _position();
+  }
+  return { start, stop, update };
+})();
 
 // Build a 2D-canvas-backed CanvasTexture suitable for use as a scene
 // background. `paint(ctx, w, h)` does the drawing. Size defaults to 512² which
@@ -2350,9 +2482,18 @@ function onResize() {
   // exist — until then it's a no-op.
   if (!camera || !renderer) return;
   const c = $('canvas');
-  camera.aspect = c.clientWidth / Math.max(1, c.clientHeight);
+  const w = c.clientWidth, h = Math.max(1, c.clientHeight);
+  if (camera.isOrthographicCamera) {
+    // Preserve vertical extent; rescale horizontal to match the new aspect.
+    const halfH = (camera.top - camera.bottom) / 2;
+    const halfW = halfH * (w / h);
+    camera.left = -halfW; camera.right = halfW;
+    camera.top  =  halfH; camera.bottom = -halfH;
+  } else {
+    camera.aspect = w / h;
+  }
   camera.updateProjectionMatrix();
-  renderer.setSize(c.clientWidth, c.clientHeight, false);
+  renderer.setSize(w, h, false);
   requestRender();
 }
 
@@ -2446,7 +2587,22 @@ function tick() {
     const now = performance.now();
     if (now - lastFps > 500) {
       try {
-        $('fps').textContent = Math.round((frameCount * 1000) / (now - lastFps));
+        const fpsVal = Math.round((frameCount * 1000) / (now - lastFps));
+        $('fps').textContent = fpsVal;
+        // Viewport overlays — only touched when their toggles in Display
+        // settings are on. style.display is 'none' when off; the textContent
+        // write is a few characters, but the DOM read is cheaper than a
+        // visibilitychange dance, so we just check display here.
+        if (state.showFps) {
+          const el = $('vp-fps'); if (el) el.textContent = fpsVal + ' fps';
+        }
+        if (state.showStats && renderer?.info) {
+          const i = renderer.info;
+          const calls = i.render?.calls ?? '—';
+          const tris  = i.render?.triangles ?? 0;
+          const el = $('vp-stats');
+          if (el) el.textContent = `${calls} calls · ${(tris / 1e6).toFixed(2)}M tris`;
+        }
       } catch (_) {}
       frameCount = 0; lastFps = now;
     }
@@ -3280,6 +3436,92 @@ function onModelLoaded(filename) {
   // Welcome splash auto-dismisses on successful model load.
   try { _Welcome?.hide(); } catch (_) {}
   setStatus(filename);
+  // C4D-style snapshot for the recent-files panel. Defer until the lights
+  // ramp has finished and the renderer has had a chance to draw at least one
+  // full-quality frame; otherwise we'd snapshot a half-lit / partially-loaded
+  // scene. ~1.1s matches the boot-light ramp duration.
+  setTimeout(() => { try { _captureRecentThumb(filename); } catch (e) { console.warn('[recent-thumb] capture failed:', e); } }, 1100);
+}
+
+// Render the scene into a small offscreen target, encode the result as a JPEG
+// data URL, and persist it on the matching `_Welcome` recent record. Same
+// path works for WebGL and WebGPU renderers because we go through the
+// renderer's own readRenderTargetPixels API rather than canvas.toDataURL
+// (the swap-chain image is gone after WebGPU presents).
+async function _captureRecentThumb(filename) {
+  console.log('[recent-thumb] start for', filename);
+  if (!renderer || !scene) { console.warn('[recent-thumb] no renderer/scene'); return; }
+  if (!state.partsRoot) { console.warn('[recent-thumb] no partsRoot'); return; }
+  const box = new THREE.Box3().setFromObject(state.partsRoot);
+  if (box.isEmpty()) { console.warn('[recent-thumb] empty bbox'); return; }
+  const SIZE = 256;
+  // Frame the model with a 3/4 hero camera. Same dir as fitToView so the
+  // thumbnail looks like the user's first sight of the model.
+  const sz = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(sz.x, sz.y, sz.z) || 1;
+  const cam = new THREE.PerspectiveCamera(35, 1, maxDim / 1000, maxDim * 100);
+  cam.up.set(0, 0, 1);
+  const dir = new THREE.Vector3(0.7, -0.9, 0.5).normalize();
+  const dist = (maxDim / (2 * Math.tan(cam.fov * Math.PI / 360))) * 1.4;
+  cam.position.copy(center).add(dir.multiplyScalar(dist));
+  cam.lookAt(center);
+  // Hide helpers (grid, axes, bbox) for a clean thumbnail.
+  const wasGrid = gridHelper?.visible, wasAxes = axesHelper?.visible, wasBbox = state.bboxRoot?.visible;
+  if (gridHelper)       gridHelper.visible = false;
+  if (axesHelper)       axesHelper.visible = false;
+  if (state.bboxRoot)   state.bboxRoot.visible = false;
+  const target = new THREE.WebGLRenderTarget(SIZE, SIZE, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  const oldTarget = renderer.getRenderTarget?.();
+  let pixels = new Uint8Array(SIZE * SIZE * 4);
+  try {
+    renderer.setRenderTarget(target);
+    if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, cam);
+    else renderer.render(scene, cam);
+    if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
+      await renderer.readRenderTargetPixelsAsync(target, 0, 0, SIZE, SIZE, pixels);
+    } else {
+      renderer.readRenderTargetPixels(target, 0, 0, SIZE, SIZE, pixels);
+    }
+  } finally {
+    renderer.setRenderTarget(oldTarget || null);
+    target.dispose();
+    if (gridHelper)     gridHelper.visible = wasGrid;
+    if (axesHelper)     axesHelper.visible = wasAxes;
+    if (state.bboxRoot) state.bboxRoot.visible = wasBbox;
+    requestRender?.();
+  }
+  // GL/WebGPU framebuffer origin is bottom-left; canvas2D is top-left. Flip rows.
+  const c = document.createElement('canvas');
+  c.width = SIZE; c.height = SIZE;
+  const ctx = c.getContext('2d');
+  const imageData = ctx.createImageData(SIZE, SIZE);
+  for (let y = 0; y < SIZE; y++) {
+    const src = (SIZE - 1 - y) * SIZE * 4;
+    const dst = y * SIZE * 4;
+    imageData.data.set(pixels.subarray(src, src + SIZE * 4), dst);
+  }
+  ctx.putImageData(imageData, 0, 0);
+  const dataUrl = c.toDataURL('image/jpeg', 0.78);
+  // Persist on the matching recent entry. STEP imports go through a
+  // server-side conversion that renames the file to a .glb, so a name match
+  // can fail; fall back to "first recent" (the just-pushed one) when the
+  // exact-name lookup misses.
+  try {
+    const REC_KEY = 'stepopt-recents';
+    const list = JSON.parse(localStorage.getItem(REC_KEY) || '[]');
+    let idx = list.findIndex(r => r.name === filename);
+    if (idx < 0 && list.length > 0) idx = 0;  // newest entry is the active model
+    if (idx >= 0) {
+      list[idx].thumb = dataUrl;
+      localStorage.setItem(REC_KEY, JSON.stringify(list));
+      console.log('[recent-thumb] saved %d-byte JPEG to recents[%d] (%s)', dataUrl.length, idx, list[idx].name);
+    } else {
+      console.warn('[recent-thumb] no recent record to attach the thumb to');
+    }
+  } catch (e) {
+    console.warn('[recent-thumb] persist failed:', e);
+  }
 }
 
 function fitToView() {
@@ -3349,6 +3591,594 @@ function _fitGridToModel(box) {
     axesHelper.position.set(center.x, center.y, box.min.z);
     axesHelper.visible = state.showAxes;
     scene.add(axesHelper);
+  }
+}
+
+// ── Pro-mode scene-settings appliers ────────────────────────────────────
+// Each function applies its slice of state.* to the live scene/camera.
+
+const _UNIT_FACTOR = { mm: 1, cm: 0.1, m: 0.001, in: 1 / 25.4, ft: 1 / 304.8, none: 1 };
+const _UNIT_LABEL  = { mm: 'mm', cm: 'cm', m: 'm', in: 'in', ft: 'ft', none: '' };
+function _fmtLen(mm, decimals = 2) {
+  const u = state.displayUnit || 'mm';
+  const v = (mm ?? 0) * (_UNIT_FACTOR[u] ?? 1);
+  const lbl = _UNIT_LABEL[u];
+  return lbl ? `${v.toFixed(decimals)} ${lbl}` : v.toFixed(decimals);
+}
+function _fmtVol(mm3, decimals = 2) {
+  const u = state.displayUnit || 'mm';
+  const f = _UNIT_FACTOR[u] ?? 1;
+  const v = (mm3 ?? 0) * f * f * f;
+  const lbl = _UNIT_LABEL[u];
+  return lbl ? `${v.toFixed(decimals)} ${lbl}³` : v.toFixed(decimals);
+}
+
+function _applySceneUpAxis() {
+  if (!state.partsRoot) return;
+  state.partsRoot.rotation.x = (state.sceneUpAxis === 'y') ? -Math.PI / 2 : 0;
+  state.partsRoot.updateMatrix();
+  state.partsRoot.updateMatrixWorld(true);
+  if (camera) camera.up.set(0, state.sceneUpAxis === 'y' ? 1 : 0, state.sceneUpAxis === 'z' ? 1 : 0);
+  if (gridHelper) {
+    gridHelper.rotation.x = (state.sceneUpAxis === 'y') ? 0 : Math.PI / 2;
+    gridHelper.updateMatrix();
+  }
+}
+
+function _applySceneScale() {
+  if (!state.partsRoot) return;
+  state.partsRoot.scale.setScalar(state.sceneScale);
+  state.partsRoot.updateMatrix();
+  state.partsRoot.updateMatrixWorld(true);
+}
+
+function _applyOriginMarker() {
+  if (!scene) return;
+  if (state.showOrigin) {
+    if (!state._originMarker) {
+      const ax = new THREE.AxesHelper(1);
+      ax.name = '_originMarker';
+      const k = Math.max(state.modelDiag * 0.05, 0.5);
+      ax.scale.setScalar(k);
+      state._originMarker = ax;
+    }
+    if (!state._originMarker.parent) scene.add(state._originMarker);
+  } else if (state._originMarker?.parent) {
+    state._originMarker.parent.remove(state._originMarker);
+  }
+}
+
+function _applyCameraProjection() {
+  if (!camera || !controls) return;
+  const target = controls.target.clone();
+  const pos = camera.position.clone();
+  const up = camera.up.clone();
+  const aspect = (camera.aspect != null) ? camera.aspect : (camera.right - camera.left) / (camera.top - camera.bottom);
+  const near = camera.near, far = camera.far;
+  let next;
+  if (state.cameraProjection === 'ortho') {
+    if (camera.isOrthographicCamera) return;
+    const dist = pos.distanceTo(target);
+    const halfH = dist * Math.tan((camera.fov || state.cameraFov) * Math.PI / 360);
+    const halfW = halfH * aspect;
+    next = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, near, far);
+  } else {
+    if (camera.isPerspectiveCamera) return;
+    next = new THREE.PerspectiveCamera(state.cameraFov, aspect, near, far);
+  }
+  next.position.copy(pos);
+  next.up.copy(up);
+  next.lookAt(target);
+  next.updateProjectionMatrix();
+  camera = next;
+  controls.object = camera;
+  controls.update();
+  if (state.gizmo) state.gizmo.camera = camera;
+}
+
+function _applyCameraClip() {
+  if (!camera) return;
+  const diag = Math.max(state.modelDiag, 1);
+  if (state.cameraClipMode === 'tight') { camera.near = diag * 0.001; camera.far  = diag * 100; }
+  else if (state.cameraClipMode === 'wide') { camera.near = diag * 0.0001; camera.far  = diag * 10000; }
+  else { camera.near = 0.1; camera.far  = 100000; }
+  if (camera.updateProjectionMatrix) camera.updateProjectionMatrix();
+}
+
+function _applySunDirection() {
+  if (!state._lights?.dir) return;
+  const az = state.sunAzimuth * Math.PI / 180;
+  const el = state.sunElevation * Math.PI / 180;
+  const r  = Math.max(state.modelDiag, 100);
+  state._lights.dir.position.set(
+    r * Math.cos(el) * Math.cos(az),
+    r * Math.cos(el) * Math.sin(az),
+    r * Math.sin(el),
+  );
+}
+
+// =====================================================================
+// Sun direction gizmo — TransformControls in rotate mode at scene centre.
+// Rotating it spins a virtual sphere whose +Y vector is the sun direction;
+// we read that vector each frame and place state._lights.dir at
+// (direction × radius). Toggled by the tg-sun viewport button.
+// =====================================================================
+
+// Build (or fetch) the gizmo objects. Lazy — nothing in the scene until the
+// user actually clicks tg-sun, so unloaded models stay clean.
+function _ensureSunGizmo() {
+  if (state._sunGizmo) return state._sunGizmo;
+  if (!scene || !camera || !renderer) return null;
+  const diag = Math.max(state.modelDiag || 0, 100);
+  // Target whose orientation IS the sun direction. Local +Y on this target
+  // is what we project to world space and use as the light vector.
+  const target = new THREE.Object3D();
+  target.name = '__sun-gizmo-target';
+  // Anchor at world origin (0,0,0) per spec — the sun direction is a
+  // direction, not a point, so where the gizmo lives is purely visual and
+  // (0,0,0) gives a stable reference axis the user already orients to.
+  target.position.set(0, 0, 0);
+  // Visual marker — a small sun-yellow sphere with a stick pointing along
+  // the local +Y axis (i.e. the current sun direction). Cheap, depth-tested,
+  // not pickable.
+  const visual = new THREE.Group();
+  visual.name = '__sun-gizmo-visual';
+  const sunSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(diag * 0.018, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+  );
+  visual.add(sunSphere);
+  const stick = new THREE.ArrowHelper(
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, 0, 0),
+    diag * 0.18,
+    0xfbbf24,
+    diag * 0.04, diag * 0.025
+  );
+  visual.add(stick);
+  target.add(visual);
+  scene.add(target);
+
+  // Initial rotation so the gizmo's +Y starts aligned with the current sun
+  // direction (driven by state.sunAzimuth/Elevation). Math: azimuth around
+  // world Z, elevation tilts toward world Z. We want a quaternion that
+  // rotates +Y onto that direction.
+  const az = (state.sunAzimuth ?? 45) * Math.PI / 180;
+  const el = (state.sunElevation ?? 45) * Math.PI / 180;
+  const dir0 = new THREE.Vector3(
+    Math.cos(el) * Math.cos(az),
+    Math.cos(el) * Math.sin(az),
+    Math.sin(el),
+  ).normalize();
+  target.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir0);
+
+  // Rotation handles. We make a separate TransformControls — state.gizmo is
+  // already in use for part transforms, and TC needs exactly one attach
+  // target at a time. In Three.js 0.165+ TransformControls is no longer an
+  // Object3D — its visual rings are returned by getHelper(); we add THAT
+  // helper to the scene (older API still has the controls themselves work
+  // as a scene-mounted Object3D).
+  const tc = new TransformControls(camera, renderer.domElement);
+  tc.setMode('rotate');
+  tc.setSize(0.9);
+  tc.attach(target);
+  const tcHelper = (typeof tc.getHelper === 'function') ? tc.getHelper() : tc;
+  scene.add(tcHelper);
+
+  // Drag → recompute light position from the target's world +Y.
+  const tmpV = new THREE.Vector3();
+  const _onChange = () => {
+    if (!state._lights?.dir) return;
+    target.updateMatrixWorld(true);
+    tmpV.set(0, 1, 0).applyQuaternion(target.quaternion).normalize();
+    const r = Math.max(state.modelDiag || 0, 100);
+    state._lights.dir.position.copy(target.position).addScaledVector(tmpV, r);
+    // Keep the legacy azimuth/elevation state in sync so that whatever
+    // saves the scene captures the new direction. asin/atan2 invert the
+    // forward map in _applySunDirection.
+    state.sunElevation = Math.round(Math.asin(tmpV.z) * 180 / Math.PI);
+    state.sunAzimuth   = Math.round(Math.atan2(tmpV.y, tmpV.x) * 180 / Math.PI);
+    if (state.sunAzimuth < 0) state.sunAzimuth += 360;
+    requestRender();
+  };
+  tc.addEventListener('change', _onChange);
+  tc.addEventListener('dragging-changed', e => {
+    if (controls) controls.enabled = !e.value;
+  });
+  // Capture-phase pointerdown on the canvas: if the user pressed while
+  // hovering a TC handle (axis !== null), suspend orbit BEFORE OrbitControls'
+  // own pointerdown handler fires — otherwise OrbitControls grabs the drag
+  // first and the camera spins along with the rotation ring. The pointerup
+  // re-arms orbit unless TC is mid-drag (in which case dragging-changed
+  // already handled it on its own end-of-drag event).
+  const onPointerDown = () => {
+    if (!state._sunGizmo) return;
+    if (state._sunGizmo.tc.axis) controls.enabled = false;
+  };
+  const onPointerUp = () => {
+    if (!state._sunGizmo) return;
+    if (!state._sunGizmo.tc.dragging) controls.enabled = true;
+  };
+  const dom = renderer.domElement;
+  dom.addEventListener('pointerdown', onPointerDown, true);
+  window.addEventListener('pointerup', onPointerUp, true);
+
+  state._sunGizmo = { target, visual, tc, tcHelper, _onChange, _onPointerDown: onPointerDown, _onPointerUp: onPointerUp };
+  return state._sunGizmo;
+}
+
+function _removeSunGizmo() {
+  const g = state._sunGizmo;
+  if (!g) return;
+  try { g.tc.detach(); } catch (_) {}
+  // Tear down the capture-phase pointer listeners so they don't keep firing
+  // (and pinning controls.enabled) after the gizmo is gone.
+  try { renderer?.domElement?.removeEventListener('pointerdown', g._onPointerDown, true); } catch (_) {}
+  try { window.removeEventListener('pointerup', g._onPointerUp, true); } catch (_) {}
+  if (controls) controls.enabled = true;
+  // Helper is what we added to the scene — remove it (covers both the new
+  // helper-based API and the older direct-Object3D API where tc === helper).
+  if (g.tcHelper && g.tcHelper.parent) g.tcHelper.parent.remove(g.tcHelper);
+  if (g.tc.dispose) g.tc.dispose();
+  if (g.target.parent) g.target.parent.remove(g.target);
+  // Visual children (sphere + arrow) live under target — disposed via
+  // recursive parent removal. Geometries/materials are tiny one-offs;
+  // explicit dispose keeps GPU memory tidy.
+  g.visual?.traverse?.(o => {
+    if (o.isMesh) {
+      o.geometry?.dispose?.();
+      if (Array.isArray(o.material)) o.material.forEach(m => m.dispose?.());
+      else o.material?.dispose?.();
+    }
+  });
+  state._sunGizmo = null;
+}
+
+function _toggleSunGizmo() {
+  const btn = document.getElementById('tg-sun');
+  if (state._sunGizmo) {
+    _removeSunGizmo();
+    btn?.classList.remove('active');
+  } else {
+    if (!_ensureSunGizmo()) return;
+    btn?.classList.add('active');
+  }
+  requestRender();
+}
+
+// =====================================================================
+// Transform panel — sidebar-bottom slide-in showing position / rotation
+// (deg) / size (bbox) for the active selection. Editable position +
+// rotation; size is a read-out of the bounding box. Toggled by the
+// tg-transform viewport button.
+// =====================================================================
+
+// Resolve the Object3D the transform panel operates on. A single group
+// (hier or user-group) wins over part selection — a user-group also adds
+// its child parts to state.selected for highlighting, so we'd otherwise
+// see "mixed" instead of the group's own transform.
+function _transformTarget() {
+  const groupIds = state.selectedGroupIds ? [...state.selectedGroupIds] : [];
+  const partIds  = state.selected ? [...state.selected] : [];
+  if (groupIds.length === 1) {
+    const gid = groupIds[0];
+    const numId = parseInt(gid, 10);
+    if (!Number.isNaN(numId) && state.treeNodes) {
+      const hn = state.treeNodes.find(n => n.kind === 'group' && n.id === numId);
+      if (hn?.obj3d) return { obj: hn.obj3d, kind: 'group' };
+    }
+    if (state.userGroups) {
+      const ug = state.userGroups.find(g => String(g.id) === String(gid));
+      if (ug?.ref) return { obj: ug.ref, kind: 'user-group' };
+    }
+  }
+  if (partIds.length === 1 && groupIds.length === 0) {
+    const p = (typeof getPart === 'function') ? getPart(partIds[0]) : null;
+    if (p?.mesh) return { obj: p.mesh, kind: 'part', part: p };
+  }
+  return null;
+}
+
+function _transformPanelRefresh() {
+  const panel = document.getElementById('transform-panel');
+  if (!panel || !panel.classList.contains('show')) return;
+
+  const target = _transformTarget();
+  const inputs = {
+    px: document.getElementById('tform-px'),
+    py: document.getElementById('tform-py'),
+    pz: document.getElementById('tform-pz'),
+    rx: document.getElementById('tform-rx'),
+    ry: document.getElementById('tform-ry'),
+    rz: document.getElementById('tform-rz'),
+    sx: document.getElementById('tform-sx'),
+    sy: document.getElementById('tform-sy'),
+    sz: document.getElementById('tform-sz'),
+  };
+
+  // Multi/empty selection: clear + disable position/rotation. Size
+  // already disabled (read-only). User can still see the panel but
+  // editing is gated behind a stable single-selection target.
+  const selN = (state.selected?.size || 0) + (state.selectedGroupIds?.size || 0);
+  if (!target) {
+    for (const k of Object.keys(inputs)) {
+      if (!inputs[k]) continue;
+      inputs[k].value = '';
+      inputs[k].placeholder = selN > 1 ? 'mixed' : '—';
+      inputs[k].disabled = true;
+    }
+    return;
+  }
+
+  // Single-target case: enable, fill from LOCAL position/rotation + world
+  // bbox size. Local-to-parent matches every DCC (C4D, Maya, Blender):
+  // a top-level group reads as world (its parent IS the scene), a nested
+  // group reads relative to its parent group, and a part inside a group
+  // reads relative to that group. The mental model is "what you'd type
+  // in the parent's frame" — which is exactly what edits round-trip to.
+  for (const k of ['px','py','pz','rx','ry','rz','sx','sy','sz']) {
+    if (inputs[k]) { inputs[k].disabled = false; inputs[k].classList.remove('mixed'); }
+  }
+  // Reflect the enabled state on the wrapper so its border/buttons enable.
+  document.querySelectorAll('#tform-grid .tform-num.disabled').forEach(n => n.classList.remove('disabled'));
+  document.querySelectorAll('#tform-grid .tform-step[disabled]').forEach(b => { b.disabled = false; });
+  const obj = target.obj;
+  try {
+    if (Number.isFinite(obj.position.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(obj.position.x);
+    if (Number.isFinite(obj.position.y) && inputs.py && document.activeElement !== inputs.py) inputs.py.value = _fmtNum(obj.position.y);
+    if (Number.isFinite(obj.position.z) && inputs.pz && document.activeElement !== inputs.pz) inputs.pz.value = _fmtNum(obj.position.z);
+  } catch (_) {}
+  // Rotation as Euler degrees from local quaternion (XYZ order, Three's
+  // default). Using local because most users expect rotation values that
+  // round-trip to a clean editor field — converting world quat → euler is
+  // ambiguous when the object has a non-identity parent rotation.
+  try {
+    const rad2deg = (r) => r * 180 / Math.PI;
+    if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(obj.rotation.x), 2);
+    if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(obj.rotation.y), 2);
+    if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(obj.rotation.z), 2);
+  } catch (_) {}
+  // Size: world bounding box dimensions. Box3.setFromObject honours every
+  // child + transforms — gives a real-world reading even on instanced
+  // parts where the mesh's own scale is meaningless.
+  try {
+    const box = new THREE.Box3().setFromObject(obj);
+    if (!box.isEmpty()) {
+      const sz = new THREE.Vector3();
+      box.getSize(sz);
+      if (inputs.sx) inputs.sx.value = _fmtNum(sz.x);
+      if (inputs.sy) inputs.sy.value = _fmtNum(sz.y);
+      if (inputs.sz) inputs.sz.value = _fmtNum(sz.z);
+    } else {
+      if (inputs.sx) inputs.sx.value = '';
+      if (inputs.sy) inputs.sy.value = '';
+      if (inputs.sz) inputs.sz.value = '';
+    }
+  } catch (_) {}
+}
+function _fmtNum(v, decimals = 3) {
+  if (!Number.isFinite(v)) return '';
+  // Strip trailing zeros for readability.
+  return parseFloat(v.toFixed(decimals)).toString();
+}
+
+let _transformWired = false;
+function _wireTransformPanel() {
+  if (_transformWired) return;
+  _transformWired = true;
+  // Edit handlers — commit on `change` (blur / Enter) so the user can
+  // type a value without partial commits triggering a render every key.
+  // Position writes are world-space → converted to local via parent.
+  // worldToLocal so the displayed value (world) round-trips back correctly.
+  const handle = (axis) => (e) => {
+    const target = _transformTarget();
+    if (!target) { _transformPanelRefresh(); return; }
+    const obj = target.obj;
+    if (!obj || !obj.position || !obj.rotation) return;
+    const raw = parseFloat(e.target.value);
+    if (!Number.isFinite(raw)) { _transformPanelRefresh(); return; }
+    // Sanity clamp — Three.js gets very unhappy with non-finite or
+    // ridiculously huge values; cap at a million scene units which is
+    // already far beyond any plausible CAD bbox.
+    const v = Math.max(-1e6, Math.min(1e6, raw));
+    try {
+      if (axis === 'px' || axis === 'py' || axis === 'pz') {
+        // LOCAL position (relative to parent) — matches the panel's read
+        // path and how every DCC shows transforms. Top-level objects'
+        // parent is the scene root so local == world for them.
+        if (axis === 'px') obj.position.x = v;
+        if (axis === 'py') obj.position.y = v;
+        if (axis === 'pz') obj.position.z = v;
+      } else if (axis === 'rx' || axis === 'ry' || axis === 'rz') {
+        const rad = v * Math.PI / 180;
+        if (axis === 'rx') obj.rotation.x = rad;
+        if (axis === 'ry') obj.rotation.y = rad;
+        if (axis === 'rz') obj.rotation.z = rad;
+      } else if (axis === 'sx' || axis === 'sy' || axis === 'sz') {
+        // Size is a target world bbox dimension; convert to a scale factor
+        // by dividing the desired size by the CURRENT bbox size, then
+        // multiplying it onto the existing scale. Reject ≤ 0 outright so a
+        // typo can't collapse the geometry to a single point — the panel
+        // refresh that follows will revert the visible value.
+        // Note: scaling a shared instanced mesh affects every instance —
+        // that's a known caveat documented elsewhere.
+        const tgt = Math.abs(v);
+        if (!Number.isFinite(tgt) || tgt < 1e-4) { _transformPanelRefresh(); return; }
+        const box = new THREE.Box3().setFromObject(obj);
+        if (box.isEmpty()) return;
+        const cur = new THREE.Vector3();
+        box.getSize(cur);
+        const dim = axis === 'sx' ? cur.x : (axis === 'sy' ? cur.y : cur.z);
+        if (!Number.isFinite(dim) || dim < 1e-9) return;
+        const factor = tgt / dim;
+        if (!Number.isFinite(factor) || factor <= 0) return;
+        if (axis === 'sx') obj.scale.x *= factor;
+        if (axis === 'sy') obj.scale.y *= factor;
+        if (axis === 'sz') obj.scale.z *= factor;
+      } else {
+        return;
+      }
+      obj.updateMatrix();
+      obj.updateMatrixWorld(true);
+    } catch (err) { console.warn('[transform-panel] edit failed:', err); return; }
+    requestRender();
+    refreshPropertiesPanel?.();
+    _transformPanelRefresh();
+  };
+  for (const ax of ['px','py','pz','rx','ry','rz','sx','sy','sz']) {
+    const el = document.getElementById('tform-' + ax);
+    if (el) el.addEventListener('change', handle(ax));
+  }
+  // The part-transform gizmo (state.gizmo) fires `objectChange` on every
+  // mouse-move while dragging. Hook into it so the panel mirrors the live
+  // mesh transform — otherwise a user dragging the gizmo sees stale values.
+  if (state.gizmo && typeof state.gizmo.addEventListener === 'function') {
+    state.gizmo.addEventListener('objectChange', () => _transformPanelRefresh());
+    // Also fire after a drag completes; some Three.js versions only emit
+    // dragging-changed at end and skip the final objectChange.
+    state.gizmo.addEventListener('dragging-changed', () => _transformPanelRefresh());
+  }
+  // Custom stepper buttons (the wrapped −/+ on each side of every input).
+  // Delegated on the grid so all 18 buttons share one listener; the cell's
+  // data-for points at the input id, and data-step is "+" or "-".
+  // Hold-to-repeat: 350ms initial delay, then ~16Hz auto-fire so dragging
+  // a stepper smoothly nudges through values without a hundred clicks.
+  const grid = document.getElementById('tform-grid');
+  if (grid) {
+    let stepTimer = null, stepInterval = null;
+    const stopRepeat = () => {
+      if (stepTimer) { clearTimeout(stepTimer); stepTimer = null; }
+      if (stepInterval) { clearInterval(stepInterval); stepInterval = null; }
+    };
+    const fireStep = (input, btn, e) => {
+      if (!input || input.disabled || btn.disabled) return;
+      const step = parseFloat(input.step) || 1;
+      // Shift (×10), Alt (÷10) — Maya/Blender convention.
+      const mul = e.shiftKey ? 10 : (e.altKey ? 0.1 : 1);
+      const direction = btn.dataset.step === '-' ? -1 : 1;
+      const cur = parseFloat(input.value);
+      const base = Number.isFinite(cur) ? cur : 0;
+      const next = base + direction * step * mul;
+      // Keep readable formatting (no float-noise like 0.30000000000004).
+      input.value = parseFloat(next.toFixed(6)).toString();
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    grid.addEventListener('pointerdown', (e) => {
+      const btn = e.target.closest('.tform-step');
+      if (!btn || btn.disabled || e.button !== 0) return;
+      const wrap = btn.closest('.tform-num');
+      const input = wrap ? document.getElementById(wrap.dataset.for) : null;
+      if (!input) return;
+      e.preventDefault();
+      btn.setPointerCapture?.(e.pointerId);
+      fireStep(input, btn, e);
+      // After the initial click, pause a beat then auto-repeat at 60ms.
+      stepTimer = setTimeout(() => {
+        stepTimer = null;
+        stepInterval = setInterval(() => {
+          // Re-resolve target each tick so a delete/selection-change mid-
+          // hold doesn't write to a stale object — fireStep early-returns
+          // through change → handle() if _transformTarget is null now.
+          if (input.disabled || btn.disabled) { stopRepeat(); return; }
+          fireStep(input, btn, e);
+        }, 60);
+      }, 350);
+    });
+    const onUp = () => stopRepeat();
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('blur', onUp);
+  }
+  // Reset: zero position + rotation, restore scale to 1. Size is read-only
+  // so we don't touch the bbox; resetting scale is a sensible "back to
+  // identity" for the editable channels.
+  document.getElementById('tform-reset')?.addEventListener('click', () => {
+    const target = _transformTarget();
+    if (!target) return;
+    target.obj.position.set(0, 0, 0);
+    target.obj.rotation.set(0, 0, 0);
+    target.obj.scale.set(1, 1, 1);
+    target.obj.updateMatrix();
+    target.obj.updateMatrixWorld(true);
+    requestRender();
+    refreshPropertiesPanel?.();
+    _transformPanelRefresh();
+  });
+}
+
+function _toggleTransformPanel() {
+  const btn = document.getElementById('tg-transform');
+  const panel = document.getElementById('transform-panel');
+  if (!panel) return;
+  _wireTransformPanel();
+  const open = panel.classList.toggle('show');
+  btn?.classList.toggle('active', open);
+  if (open) _transformPanelRefresh();
+}
+
+// Hook the transform panel refresh into refreshPropertiesPanel so it
+// stays in sync with every selection change (the same site that already
+// fires for prop-panel updates).
+const _origRefreshPropsPanel_tform = refreshPropertiesPanel;
+refreshPropertiesPanel = function() {
+  const r = _origRefreshPropsPanel_tform.apply(this, arguments);
+  try { _transformPanelRefresh(); } catch (_) {}
+  return r;
+};
+
+function _applyShadows() {
+  if (!renderer || !state._lights?.dir) return;
+  const on = !!state.shadowsEnabled;
+  try { if (renderer.shadowMap) renderer.shadowMap.enabled = on; } catch (_) {}
+  const dir = state._lights.dir;
+  dir.castShadow = on;
+  if (on && dir.shadow) {
+    const diag = Math.max(state.modelDiag, 100);
+    dir.shadow.mapSize?.set?.(2048, 2048);
+    if (dir.shadow.camera) {
+      dir.shadow.camera.near = diag * 0.01;
+      dir.shadow.camera.far  = diag * 4;
+      const half = diag;
+      dir.shadow.camera.left = -half; dir.shadow.camera.right = half;
+      dir.shadow.camera.top = half;   dir.shadow.camera.bottom = -half;
+      dir.shadow.camera.updateProjectionMatrix?.();
+    }
+  }
+  state.partsRoot?.traverse(o => { if (o.isMesh) { o.castShadow = on; o.receiveShadow = on; } });
+}
+
+function _applyGridCell() {
+  if (!gridHelper || !scene) return;
+  if (state.gridCellMode === 'auto') {
+    const box = new THREE.Box3();
+    if (state.partsRoot) box.setFromObject(state.partsRoot);
+    if (!box.isEmpty()) _fitGridToModel(box);
+    return;
+  }
+  const cell = parseFloat(state.gridCellMode);
+  if (!isFinite(cell) || cell <= 0) return;
+  const size = cell * 20;
+  const newGrid = new THREE.GridHelper(size, 20, 0x3a4358, 0x232938);
+  if (state.sceneUpAxis === 'z') newGrid.rotation.x = Math.PI / 2;
+  newGrid.material.transparent = true;
+  newGrid.material.opacity = 0.45;
+  newGrid.visible = state.showGrid;
+  scene.remove(gridHelper);
+  gridHelper.geometry?.dispose?.();
+  gridHelper.material?.dispose?.();
+  gridHelper = newGrid;
+  scene.add(gridHelper);
+}
+
+function _applySnap() {
+  if (!state.gizmo) return;
+  if (state.snapToGrid) {
+    const cell = (state.gridCellMode === 'auto') ? 10 : parseFloat(state.gridCellMode) || 10;
+    state.gizmo.translationSnap = cell;
+    state.gizmo.rotationSnap = Math.PI / 12;
+  } else {
+    state.gizmo.translationSnap = null;
+    state.gizmo.rotationSnap = null;
   }
 }
 
@@ -4500,18 +5330,69 @@ function refreshPropertiesPanel() {
     const n = (m.name && m.name.trim()) || ('mat_' + (m.color?.getHexString?.() || 'cccccc'));
     return n;
   };
+  // Count how many live parts reference this material — used in the prop
+  // panel sub-label "PBR · 117 parts" so the user immediately sees how
+  // many parts an edit will affect.
+  const _countPartsUsingMaterial = (mat) => {
+    if (!mat) return 0;
+    let n = 0;
+    const seen = new Set();
+    for (const p of state.parts || []) {
+      if (p.deleted || !p.mesh || seen.has(p.mesh)) continue;
+      seen.add(p.mesh);
+      let m = p.mesh.material;
+      if (Array.isArray(m)) m = m[0];
+      if (m === mat) n += (p.group ? p.group.parts.length : 1);
+    }
+    return n;
+  };
 
   if (ids.length === 1) {
     const p = getPart(ids[0]);
     if (!p) return;
     const sz = p.bbox.getSize(new THREE.Vector3());
     const hex = '#' + (p.originalColor?.getHexString?.() || 'aaaaaa');
-    nameHtml = `<span class="prop-color" style="background:${hex}" title="Material color"></span>` +
+    // Type icon on the left disambiguates instance from a one-off part —
+    // matches the tree's typeicon vocabulary so it reads at a glance.
+    // Match the tree's typeicon vocabulary: green `box` for a singleton
+    // part, purple `copy` for an instance — same icon + colour the user
+    // already learned from the left sidebar.
+    const isInst = !!p.group;
+    const tCls   = isInst ? 'inst' : 'part';
+    const tIcon  = isInst ? 'copy' : 'box';
+    nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instanced part (×' + p.group.parts.length + ')' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
                `<span class="prop-name" title="${p.name}">${p.name}</span>`;
     const mat = _matOfPart(p);
     if (mat) {
       const label = _matLabel(mat);
-      materialHtml = `<button class="prop-mat-btn" data-action="edit-material" title="Click to edit material"><i data-lucide="sliders-horizontal"></i><span class="prop-mat-name">${escapeHtml(label)}</span></button>`;
+      const matHex = '#' + (mat.color?.getHexString?.() || 'cccccc');
+      // Try to use the cached preview sphere from the materials grid for
+      // visual consistency. Falls back to a flat colour swatch if the
+      // preview hasn't been rendered yet (first frame).
+      let thumbHtml;
+      try {
+        const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(mat) : null;
+        thumbHtml = url
+          ? `<span class="prop-mat-sphere"><img src="${url}" alt="" draggable="false"></span>`
+          : `<span class="prop-mat-color" style="background:${matHex}"></span>`;
+      } catch (_) {
+        thumbHtml = `<span class="prop-mat-color" style="background:${matHex}"></span>`;
+      }
+      // Sub-label: material type + part count + a "double-click name to
+      // rename" hint that fades on hover (CSS owns the visibility).
+      const usedCount = _countPartsUsingMaterial(mat);
+      const subLabel = `${mat.type.replace('Mesh','').replace('Material','')} · ${usedCount} part${usedCount === 1 ? '' : 's'}`;
+      materialHtml = `<div class="prop-mat-btn" data-action="edit-material" title="Click to edit · double-click name to rename">
+        ${thumbHtml}
+        <div class="prop-mat-info">
+          <span class="prop-mat-name" data-mat-name>${escapeHtml(label)}</span>
+          <span class="prop-mat-sub">${escapeHtml(subLabel)}</span>
+        </div>
+        <div class="prop-mat-actions">
+          <button class="prop-mat-action" data-action="rename-material" title="Rename material"><i data-lucide="pencil"></i></button>
+          <button class="prop-mat-action" data-action="edit-material" title="Edit material"><i data-lucide="sliders-horizontal"></i></button>
+        </div>
+      </div>`;
     }
     const tags = [];
     if (p.group)    tags.push(`<span class="tree-badge">instanced ×${p.group.parts.length}</span>`);
@@ -4521,10 +5402,10 @@ function refreshPropertiesPanel() {
     tagsHtml = tags.join('');
     tris  = fmtNum(p.triCount);
     verts = fmtNum(p.vertCount);
-    bbox  = `${sz.x.toFixed(2)} × ${sz.y.toFixed(2)} × ${sz.z.toFixed(2)}`;
-    diag  = p.sizeMetrics.diag.toFixed(3);
+    bbox  = `${_fmtLen(sz.x)} × ${_fmtLen(sz.y)} × ${_fmtLen(sz.z)}`;
+    diag  = _fmtLen(p.sizeMetrics.diag, 3);
     pct   = (p.sizeMetrics.diag / state.modelDiag * 100).toFixed(2) + '%';
-    vol   = p.sizeMetrics.vol.toFixed(2);
+    vol   = _fmtVol(p.sizeMetrics.vol);
     triShare = sceneTris > 0 ? p.triCount / sceneTris : 0;
     triShareLabel = (triShare * 100).toFixed(triShare < 0.001 ? 3 : triShare < 0.01 ? 2 : 1) + '% of scene';
   } else if (ids.length > 1) {
@@ -4543,10 +5424,13 @@ function refreshPropertiesPanel() {
       if (p.group)    anyInstanced++;
     }
     const sharedColor = colors.size === 1 ? '#' + [...colors][0] : null;
-    const swatch = sharedColor
-      ? `<span class="prop-color" style="background:${sharedColor}" title="All selected share this color"></span>`
-      : `<span class="prop-color" style="background:linear-gradient(135deg,#6ea8ff,#a78bfa,#34c759)" title="Mixed colors"></span>`;
-    nameHtml = swatch + `<span class="prop-name">${ids.length} parts selected</span>`;
+    // Multi-select uses the tree's `copy` icon (purple inst tone) when every
+    // selected part is instanced; otherwise the green `box` for parts.
+    const allInst = anyInstanced === ids.length && ids.length > 0;
+    const tCls   = allInst ? 'inst' : 'part';
+    const tIcon  = allInst ? 'copy' : 'box';
+    nameHtml = `<span class="prop-type-icon ${tCls}" title="${ids.length} parts selected"><i data-lucide="${tIcon}"></i></span>` +
+               `<span class="prop-name">${ids.length} parts selected</span>`;
     // Detect shared material across the selection — show its name; otherwise
     // mark as mixed so the user knows the editor would only target one.
     const matSet = new Set();
@@ -4559,9 +5443,32 @@ function refreshPropertiesPanel() {
       sharedMatRef = m;
     }
     if (matSet.size === 1 && sharedMatRef) {
-      materialHtml = `<button class="prop-mat-btn" data-action="edit-material" title="Click to edit material"><i data-lucide="sliders-horizontal"></i><span class="prop-mat-name">${escapeHtml(_matLabel(sharedMatRef))}</span></button>`;
+      const matHex = '#' + (sharedMatRef.color?.getHexString?.() || 'cccccc');
+      let thumbHtml;
+      try {
+        const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(sharedMatRef) : null;
+        thumbHtml = url
+          ? `<span class="prop-mat-sphere"><img src="${url}" alt="" draggable="false"></span>`
+          : `<span class="prop-mat-color" style="background:${matHex}"></span>`;
+      } catch (_) {
+        thumbHtml = `<span class="prop-mat-color" style="background:${matHex}"></span>`;
+      }
+      const usedCount = _countPartsUsingMaterial(sharedMatRef);
+      const subLabel = `${sharedMatRef.type.replace('Mesh','').replace('Material','')} · ${usedCount} part${usedCount === 1 ? '' : 's'}`;
+      materialHtml = `<div class="prop-mat-btn" data-action="edit-material" title="Click to edit · double-click name to rename">
+        ${thumbHtml}
+        <div class="prop-mat-info">
+          <span class="prop-mat-name" data-mat-name>${escapeHtml(_matLabel(sharedMatRef))}</span>
+          <span class="prop-mat-sub">${escapeHtml(subLabel)}</span>
+        </div>
+        <div class="prop-mat-actions">
+          <button class="prop-mat-action" data-action="rename-material" title="Rename material"><i data-lucide="pencil"></i></button>
+          <button class="prop-mat-action" data-action="edit-material" title="Edit material"><i data-lucide="sliders-horizontal"></i></button>
+        </div>
+      </div>`;
     } else if (matSet.size > 1) {
-      materialHtml = `<span class="prop-mat-btn prop-mat-mixed"><i data-lucide="sliders-horizontal"></i><span class="prop-mat-name">mixed materials</span></span>`;
+      const mixedSwatch = `<span class="prop-mat-color prop-mat-color-mixed"></span>`;
+      materialHtml = `<div class="prop-mat-btn prop-mat-mixed">${mixedSwatch}<div class="prop-mat-info"><span class="prop-mat-name">mixed materials</span><span class="prop-mat-sub">${matSet.size} different · select one to edit</span></div></div>`;
     }
     const tags = [];
     if (anyInstanced) tags.push(`<span class="tree-badge">${anyInstanced} instanced</span>`);
@@ -4573,13 +5480,44 @@ function refreshPropertiesPanel() {
     if (!combined.isEmpty()) {
       const sz = combined.getSize(new THREE.Vector3());
       const d = sz.length();
-      bbox = `${sz.x.toFixed(2)} × ${sz.y.toFixed(2)} × ${sz.z.toFixed(2)}`;
-      diag = d.toFixed(3);
+      bbox = `${_fmtLen(sz.x)} × ${_fmtLen(sz.y)} × ${_fmtLen(sz.z)}`;
+      diag = _fmtLen(d, 3);
       pct  = (d / state.modelDiag * 100).toFixed(2) + '%';
     }
-    vol = tvol.toFixed(2);
+    vol = _fmtVol(tvol);
     triShare = sceneTris > 0 ? tt / sceneTris : 0;
     triShareLabel = (triShare * 100).toFixed(triShare < 0.001 ? 3 : triShare < 0.01 ? 2 : 1) + '% of scene';
+  }
+
+  // If the user clicked a group row (rather than individual parts), the panel
+  // header should match the tree's vocabulary: archive icon + group name,
+  // not a part icon + "N parts selected". The descendants are still in
+  // state.selected so triangle / bbox / volume read-outs above remain valid;
+  // we only swap the header label + icon. Multi-group selections show the
+  // group count instead.
+  const groupIds = state.selectedGroupIds ? [...state.selectedGroupIds] : [];
+  if (groupIds.length > 0) {
+    const findGroup = (gid) => {
+      // hier groups (numeric) live in state.treeNodes; user groups (string id)
+      // live in state.userGroups. Search both so the panel name is correct
+      // regardless of group type.
+      const tn = state.treeNodes?.find(n => n.kind === 'group' && String(n.id) === String(gid));
+      if (tn) return { name: tn.name || ('Group ' + gid) };
+      const ug = (state.userGroups || []).find(g => String(g.id) === String(gid));
+      if (ug) return { name: ug.name || ('Group ' + gid) };
+      return null;
+    };
+    if (groupIds.length === 1) {
+      const g = findGroup(groupIds[0]);
+      const gname = g ? g.name : ('Group ' + groupIds[0]);
+      const partN = ids.length;
+      const sub = partN ? ` · ${partN} part${partN === 1 ? '' : 's'}` : '';
+      nameHtml = `<span class="prop-type-icon asm" title="Group${sub}"><i data-lucide="archive"></i></span>` +
+                 `<span class="prop-name" title="${escapeHtml(gname)}">${escapeHtml(gname)}</span>`;
+    } else {
+      nameHtml = `<span class="prop-type-icon asm" title="${groupIds.length} groups selected"><i data-lucide="archive"></i></span>` +
+                 `<span class="prop-name">${groupIds.length} groups selected</span>`;
+    }
   }
 
   // Bar tints: blue under 5%, yellow 5-20%, red over 20% — "this part is
@@ -4605,22 +5543,73 @@ function refreshPropertiesPanel() {
       <span class="prop-icon"><i data-lucide="package"></i></span><span class="prop-label">Volume</span><strong class="prop-value">${vol}</strong>
     </div>`;
   // Wire the material edit button — opens the same per-material editor used
-  // from the right-sidebar Materials section and the viewport popup.
+  // from the materials panel. The "rename" action button + dblclick on the
+  // name span both enter inline rename mode (same UX as the tree).
   const matBtn = el.querySelector('.prop-mat-btn[data-action="edit-material"]');
-  if (matBtn) matBtn.addEventListener('click', () => {
-    if (typeof _collectLiveMaterials !== 'function' || typeof _openMaterialEditor !== 'function') return;
+  const _resolveSelectedMat = () => {
     const ids = [...state.selected];
-    if (!ids.length) return;
+    if (!ids.length) return null;
     const p = getPart(ids[0]);
     let target = p?.mesh?.material;
     if (!target) target = p?.instancedMesh?.material;
     if (Array.isArray(target)) target = target[0];
-    if (!target) return;
-    const info = _collectLiveMaterials().find(i => i.mat === target);
-    if (info) _openMaterialEditor(info);
-  });
+    return target || null;
+  };
+  if (matBtn) {
+    matBtn.addEventListener('click', (e) => {
+      // The action buttons inside the chip handle their own clicks. Don't
+      // double-fire the editor when the user meant to hit "rename".
+      if (e.target.closest('.prop-mat-action[data-action="rename-material"]')) return;
+      if (typeof _collectLiveMaterials !== 'function' || typeof _openMaterialEditor !== 'function') return;
+      const target = _resolveSelectedMat();
+      if (!target) return;
+      const info = _collectLiveMaterials().find(i => i.mat === target);
+      if (info) _openMaterialEditor(info);
+    });
+    // Dblclick the name → rename inline. Stop propagation so the same
+    // event doesn't also open the editor (click bubbles independently).
+    const nameEl = matBtn.querySelector('[data-mat-name]');
+    if (nameEl) {
+      nameEl.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const target = _resolveSelectedMat();
+        if (target) _renameMaterialInline(nameEl, target);
+      });
+    }
+    // Pencil action button — same rename flow.
+    const renameBtn = matBtn.querySelector('.prop-mat-action[data-action="rename-material"]');
+    if (renameBtn) renameBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const target = _resolveSelectedMat();
+      if (target && nameEl) _renameMaterialInline(nameEl, target);
+    });
+  }
   _lucide();
   _updateSelectedChip();
+}
+
+// System-wide material rename. Replaces `labelEl`'s text with an inline
+// input (same .tree-label-input style used by the tree rename), commits on
+// Enter / blur, cancels on Escape. Updates mat.name + invalidates the
+// preview cache + repaints all surfaces (props panel, materials grid).
+function _renameMaterialInline(labelEl, mat) {
+  if (!labelEl || !mat) return;
+  const seedName = (mat.name || '').trim() || _matFallbackName(mat);
+  if (window.getSelection) try { window.getSelection().removeAllRanges(); } catch (_) {}
+  // Reuse the tree's _treeInlineRename helper so the rename UX is identical
+  // to renaming a part / group in the left sidebar — same input style, same
+  // Enter/Escape semantics, same blur-to-commit.
+  _treeInlineRename(labelEl, seedName, (next) => {
+    if (!next || next === seedName) return;
+    mat.name = next;
+    if (typeof _matPreviewCache !== 'undefined') _matPreviewCache.delete(mat);
+    refreshPropertiesPanel?.();
+    if (typeof window._populateMaterialsList === 'function') window._populateMaterialsList();
+  });
+}
+function _matFallbackName(m) {
+  return 'mat_' + (m?.color?.getHexString?.() || 'cccccc');
 }
 
 // Status-bar selection chip — synced from refreshPropertiesPanel so it tracks
@@ -8801,6 +9790,12 @@ function wireUI() {
     cb.checked = !cb.checked;
     cb.dispatchEvent(new Event('change', { bubbles: true }));
   });
+  // Sun direction gizmo — toggles a TransformControls in rotate mode at the
+  // model centre. Rotating drives state._lights.dir position via the helper.
+  $('tg-sun')?.addEventListener('click', () => _toggleSunGizmo());
+  // Transform panel — slide-in at the bottom of the left sidebar showing
+  // editable position/rotation + read-only size for the active selection.
+  $('tg-transform')?.addEventListener('click', () => _toggleTransformPanel());
   // Initialize the tree's flag-on class + viewport button to match current toggle state at load.
   document.getElementById('tree')?.classList.toggle('flag-on', !!state.highlightSmall);
   $('tg-hilite')?.classList.toggle('active', !!$('toggle-highlight')?.checked);
@@ -8812,6 +9807,101 @@ function wireUI() {
     applyPerfMode();
     const label = e.target.value === 'low' ? 'Low (0.6× DPR)' : e.target.value === 'high' ? 'High (full DPR)' : 'Auto';
     // Quality change is reflected in the dropdown itself — no toast.
+  });
+
+  // ── Pro-mode scene-settings handlers ────────────────────────────────────
+  // Each one updates state.* and applies its side-effect immediately. The
+  // handlers are intentionally small so the popup stays responsive even on
+  // huge scenes; expensive rebuilds (camera swap, grid rebuild) gate behind
+  // change events rather than 'input' so dragging a slider doesn't stutter.
+  $('display-units')?.addEventListener('change', e => {
+    state.displayUnit = e.target.value;
+    try { onSelectionChanged?.(); } catch (_) {}
+  });
+  $('scene-up-axis')?.addEventListener('change', e => {
+    state.sceneUpAxis = e.target.value;
+    _applySceneUpAxis();
+    requestRender();
+  });
+  $('scene-scale')?.addEventListener('change', e => {
+    const v = parseFloat(e.target.value);
+    if (!isFinite(v) || v <= 0) { e.target.value = state.sceneScale; return; }
+    state.sceneScale = v;
+    _applySceneScale();
+    requestRender();
+  });
+  $('toggle-origin')?.addEventListener('change', e => {
+    state.showOrigin = e.target.checked;
+    _applyOriginMarker();
+    requestRender();
+  });
+  $('toggle-fps')?.addEventListener('change', e => {
+    state.showFps = e.target.checked;
+    const el = $('vp-fps'); if (el) el.style.display = state.showFps ? '' : 'none';
+  });
+  $('toggle-stats')?.addEventListener('change', e => {
+    state.showStats = e.target.checked;
+    const el = $('vp-stats'); if (el) el.style.display = state.showStats ? '' : 'none';
+  });
+  // Camera projection: hot-swap PerspectiveCamera ↔ OrthographicCamera while
+  // preserving position/target/up. OrbitControls + TransformControls hold a
+  // direct camera reference, so both must be re-pointed after the swap.
+  $('cam-projection')?.addEventListener('change', e => {
+    state.cameraProjection = e.target.value;
+    _applyCameraProjection();
+    const fovRow = $('cam-fov-row'); if (fovRow) fovRow.style.opacity = (state.cameraProjection === 'persp') ? '1' : '.42';
+    requestRender();
+  });
+  $('cam-fov')?.addEventListener('input', e => {
+    const v = parseInt(e.target.value, 10) || 45;
+    state.cameraFov = v;
+    const lbl = $('cam-fov-val'); if (lbl) lbl.textContent = v;
+    if (camera?.isPerspectiveCamera) { camera.fov = v; camera.updateProjectionMatrix(); requestRender(); }
+  });
+  $('cam-clip')?.addEventListener('change', e => {
+    state.cameraClipMode = e.target.value;
+    _applyCameraClip();
+    requestRender();
+  });
+  $('light-exposure')?.addEventListener('input', e => {
+    const v = parseFloat(e.target.value) || 1;
+    state.exposure = v;
+    const lbl = $('light-exposure-val'); if (lbl) lbl.textContent = v.toFixed(2);
+    if (renderer && 'toneMappingExposure' in renderer) { renderer.toneMappingExposure = v; requestRender(); }
+  });
+  $('light-ambient')?.addEventListener('input', e => {
+    const v = parseFloat(e.target.value) || 0;
+    state.ambientIntensity = v;
+    const lbl = $('light-ambient-val'); if (lbl) lbl.textContent = v.toFixed(2);
+    if (state._lights?.hemi) { state._lights.hemi.intensity = v; requestRender(); }
+  });
+  $('light-sun')?.addEventListener('input', e => {
+    const v = parseFloat(e.target.value) || 0;
+    state.sunIntensity = v;
+    const lbl = $('light-sun-val'); if (lbl) lbl.textContent = v.toFixed(2);
+    if (state._lights?.dir) { state._lights.dir.intensity = v; requestRender(); }
+  });
+  $('light-azi')?.addEventListener('input', e => {
+    state.sunAzimuth = parseInt(e.target.value, 10) || 0;
+    const lbl = $('light-azi-val'); if (lbl) lbl.textContent = state.sunAzimuth;
+    _applySunDirection(); requestRender();
+  });
+  $('light-ele')?.addEventListener('input', e => {
+    state.sunElevation = parseInt(e.target.value, 10) || 0;
+    const lbl = $('light-ele-val'); if (lbl) lbl.textContent = state.sunElevation;
+    _applySunDirection(); requestRender();
+  });
+  $('toggle-shadows')?.addEventListener('change', e => {
+    state.shadowsEnabled = e.target.checked;
+    _applyShadows(); requestRender();
+  });
+  $('grid-cell')?.addEventListener('change', e => {
+    state.gridCellMode = e.target.value;
+    _applyGridCell(); requestRender();
+  });
+  $('toggle-snap-grid')?.addEventListener('change', e => {
+    state.snapToGrid = e.target.checked;
+    _applySnap();
   });
 
   // Status-bar chips: clicking "selected" frames the selection, clicking
@@ -9024,9 +10114,9 @@ function wireUI() {
     else if (e.key === '1') setViewMode('solid');
     else if (e.key === '2') setViewMode('wire');
     else if (e.key === '3') setViewMode('xray');
-    else if (e.key === 'w' || e.key === 'W') setGizmoMode('translate');
-    else if (e.key === 'e' || e.key === 'E') setGizmoMode('rotate');
-    else if (e.key === 'r' || e.key === 'R') setGizmoMode('scale');
+    else if (e.key === 'e' || e.key === 'E') setGizmoMode('translate');
+    else if (e.key === 'r' || e.key === 'R') setGizmoMode('rotate');
+    else if (e.key === 't' || e.key === 'T') setGizmoMode('scale');
     else if (e.key === 'q' || e.key === 'Q') setGizmoMode('off');
     else if (e.key === 'g' || e.key === 'G') $('tg-grid').click();
     else if (e.key === 'b' || e.key === 'B') $('tg-bbox').click();
@@ -9943,7 +11033,9 @@ rebuildTree = function() { _origRebuildTree2(); buildMaterialsPanel(); };
 // =====================================================================
 
 // Walk live parts, collect every unique Material reference. Returns an array
-// of { mat, count, partIds } sorted by count desc. Skips invisible/deleted.
+// of { mat, count, partIds } sorted by count desc. Also unions in
+// state.userMaterials so user-created materials that haven't been assigned
+// yet still show up as a library entry (count 0).
 function _collectLiveMaterials() {
   const seen = new Map();
   for (const p of state.parts || []) {
@@ -9955,6 +11047,15 @@ function _collectLiveMaterials() {
     if (!entry) { entry = { mat: m, count: 0, partIds: [] }; seen.set(m, entry); }
     entry.count++;
     entry.partIds.push(p.partId);
+  }
+  // Library-only materials: created via the "New" button without a viewport
+  // selection. Stored in state.userMaterials so they survive across
+  // selection changes and stay editable until something gets assigned to
+  // them (in which case the parts-walk above already covers them too).
+  if (state.userMaterials) {
+    for (const m of state.userMaterials) {
+      if (!seen.has(m)) seen.set(m, { mat: m, count: 0, partIds: [] });
+    }
   }
   return [...seen.values()].sort((a, b) => b.count - a.count);
 }
@@ -10103,6 +11204,14 @@ function _populateMaterialsList() {
     });
     cell.addEventListener('dblclick', (e) => {
       e.preventDefault();
+      // Dblclick the name span → inline rename (same UX as tree). Dblclick
+      // anywhere else on the cell (sphere, count, padding) opens the editor.
+      const nameEl = e.target.closest('.mat-name');
+      if (nameEl && nameEl !== cell) {
+        e.stopPropagation();
+        _renameMaterialInline(nameEl, m);
+        return;
+      }
       _openMaterialEditor(info);
     });
     list.appendChild(cell);
@@ -10131,36 +11240,201 @@ function _refreshPanelSelection() {
   setEnabled('mat-act-duplicate', n === 1);
   setEnabled('mat-act-merge',     n >= 2);
   setEnabled('mat-act-delete',    n >= 1);
-  // Add only makes sense when something is selected in the viewport, since
-  // a brand-new material with no assignments wouldn't show up in the grid.
-  setEnabled('mat-act-add',       (state.selected?.size || 0) > 0);
+  // Add is always available — a new material lands in the library
+  // (state.userMaterials) and gets assigned only if parts are selected.
+  setEnabled('mat-act-add',       true);
 }
 
 // Open the per-material editor as a _DraggablePopup. Every active editor
 // reuses one popup id (one editor at a time) — opening a different material
 // rebinds the sliders to the new material's values.
-let _matEditorState = null;  // { popup, mat, info, scrubbers: [] }
+let _matEditorState = null;  // { popup, mat, info, scrubbers: [], _previewBall }
+
+// Real 3D preview ball — same render path as _captureRecentThumb. Keeps a
+// persistent tiny scene (sphere + lights) and renders it through the main
+// renderer into a 256px target whenever the editor needs to refresh.
+const _MatPreviewBall = (() => {
+  // Each editor instance gets its own dedicated WebGL renderer attached
+  // directly to the canvas. Independent of the main WebGPU renderer so we
+  // don't hijack its draw target, and works whether the main renderer is
+  // WebGL or WebGPU.
+  function attach(material, canvas) {
+    // Force explicit pixel buffer dimensions BEFORE creating the renderer.
+    // Reading clientWidth on a not-yet-shown popup returns 0, which left the
+    // renderer with a 0×0 framebuffer — invisible sphere. CSS controls
+    // display size; canvas.width/height controls the drawing buffer.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const PX = 120;  // matches CSS .mat-edit-preview-canvas
+    canvas.width  = PX * dpr;
+    canvas.height = PX * dpr;
+    let glRenderer;
+    try {
+      glRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, premultipliedAlpha: false });
+    } catch (e) {
+      console.warn('[mat-preview] WebGL renderer init failed:', e);
+      return { render() {}, dispose() {} };
+    }
+    glRenderer.setPixelRatio(dpr);
+    glRenderer.setSize(PX, PX, false);
+    glRenderer.outputColorSpace = THREE.SRGBColorSpace;
+    glRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    glRenderer.toneMappingExposure = 1.05;
+
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x222831, 0.55));
+    const key  = new THREE.DirectionalLight(0xffffff, 1.4); key.position.set(2, 3, 4);  scene.add(key);
+    const fill = new THREE.DirectionalLight(0xb0c4ff, 0.5); fill.position.set(-2, -1, 2); scene.add(fill);
+    const sphereGeom = new THREE.SphereGeometry(0.95, 64, 48);
+    const sphere = new THREE.Mesh(sphereGeom, material);
+    scene.add(sphere);
+    const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+    cam.position.set(0, 0.45, 4.2);
+    cam.lookAt(0, 0, 0);
+
+    let disposed = false;
+    function render() {
+      if (disposed) return;
+      sphere.material = material;
+      try { glRenderer.render(scene, cam); }
+      catch (e) { console.warn('[mat-preview] render failed:', e); }
+    }
+    function dispose() {
+      disposed = true;
+      try { sphereGeom.dispose(); } catch (_) {}
+      try { glRenderer.dispose(); } catch (_) {}
+      try { glRenderer.forceContextLoss(); } catch (_) {}
+    }
+    return { render, dispose };
+  }
+  return { attach };
+})();
 
 function _openMaterialEditor(info) {
   const id = '_mat-editor-popup';
   const mat = info.mat;
 
+  // Inject editor stylesheet once.
+  if (!document.getElementById('_mat-edit-style')) {
+    const s = document.createElement('style');
+    s.id = '_mat-edit-style';
+    s.textContent = `
+      .mat-edit-body{display:flex;flex-direction:column;gap:0;padding:0}
+      .mat-edit-preview-wrap{position:relative;background:radial-gradient(circle at 30% 35%,#2a3142 0%,#0c0f15 75%);padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:14px}
+      .mat-edit-preview-canvas{flex:0 0 120px;width:120px;height:120px;border-radius:10px;background:transparent;box-shadow:0 4px 16px rgba(0,0,0,.55)}
+      .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+      .mat-edit-preview-name{font-size:14px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-edit-preview-type{font-size:10.5px;color:var(--tx3);font-family:ui-monospace,monospace;letter-spacing:.04em;text-transform:uppercase}
+      .mat-edit-preview-uses{font-size:11px;color:var(--tx2)}
+      .mat-edit-section{padding:9px 14px;border-bottom:1px solid var(--bd)}
+      .mat-edit-section:last-child{border-bottom:none}
+      .mat-edit-section-h{display:flex;align-items:center;justify-content:space-between;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);cursor:pointer;user-select:none;padding-bottom:6px}
+      .mat-edit-section-h:hover{color:var(--tx2)}
+      .mat-edit-section-h .chev{font-size:10px;color:var(--tx3);transition:transform .15s var(--ease-out)}
+      .mat-edit-section.collapsed .chev{transform:rotate(-90deg)}
+      .mat-edit-section.collapsed .mat-edit-section-b{display:none}
+      .mat-edit-section-b{display:flex;flex-direction:column;gap:5px}
+      .mat-color-row{display:flex;align-items:center;gap:8px;padding:4px 0}
+      .mat-color-row label{flex:0 0 80px;font-size:11.5px;color:var(--tx2)}
+      .mat-color-row input[type="color"]{width:30px;height:24px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer}
+      .mat-color-hex{font-family:ui-monospace,monospace;font-size:11px;color:var(--tx3);flex:1}
+      .mat-edit-toggle-row{display:flex;flex-wrap:wrap;gap:5px;padding:4px 0}
+      .mat-edit-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--s2);border:1px solid var(--bd);border-radius:6px;font-size:11px;color:var(--tx2);cursor:pointer;user-select:none;transition:background 120ms,border-color 120ms,color 120ms}
+      .mat-edit-toggle:hover{background:var(--s3);color:var(--tx)}
+      .mat-edit-toggle input{accent-color:var(--ac);cursor:pointer;margin:0}
+      .mat-edit-select-row{display:flex;align-items:center;gap:8px;padding:4px 0}
+      .mat-edit-select-row label{flex:0 0 80px;font-size:11.5px;color:var(--tx2)}
+      .mat-edit-select-row select{flex:1;font-size:11.5px;padding:5px 8px}
+    `;
+    document.head.appendChild(s);
+  }
+
+  const isPhysical = !!mat.isMeshPhysicalMaterial || mat.type === 'MeshPhysicalMaterial';
+  const hasPBR = typeof mat.metalness === 'number';
+  const hasEmissive = !!mat.emissive;
+  const hasEnv = typeof mat.envMapIntensity === 'number';
+
+  const colorRow = (cid, label, hex) => `
+    <div class="mat-color-row">
+      <label>${label}</label>
+      <input type="color" id="${cid}" value="${hex || '#000000'}">
+      <span class="mat-color-hex" id="${cid}-hex">${hex || '#000000'}</span>
+    </div>`;
+  const slider = (sid) => `<div class="field"><div id="${sid}"></div></div>`;
+  const section = (key, title, inner, collapsed = false) => `
+    <div class="mat-edit-section${collapsed ? ' collapsed' : ''}" data-section="${key}">
+      <div class="mat-edit-section-h"><span>${title}</span><span class="chev">▾</span></div>
+      <div class="mat-edit-section-b">${inner}</div>
+    </div>`;
+
+  const baseSection = section('base', 'Base',
+    colorRow('mat-edit-color', 'Color', '#' + (mat.color?.getHexString?.() || 'cccccc')) +
+    (hasPBR ? slider('mat-edit-metalness-scrub') + slider('mat-edit-roughness-scrub') : '')
+  );
+  const emissiveSection = hasEmissive ? section('emissive', 'Emission',
+    colorRow('mat-edit-emissive-color', 'Color', '#' + (mat.emissive?.getHexString?.() || '000000')) +
+    slider('mat-edit-emissive-scrub')
+  ) : '';
+  const surfaceSection = section('surface', 'Surface',
+    slider('mat-edit-opacity-scrub') +
+    slider('mat-edit-alphatest-scrub') +
+    `<div class="mat-edit-select-row">
+       <label>Side</label>
+       <select id="mat-edit-side" class="mac-sel">
+         <option value="0">Front</option>
+         <option value="1">Back</option>
+         <option value="2">Double</option>
+       </select>
+     </div>` +
+    `<div class="mat-edit-toggle-row">
+       <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-transparent">Transparent</label>
+       <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-flat">Flat shading</label>
+       <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-wireframe">Wireframe</label>
+       <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-vertexcolors">Vertex colors</label>
+     </div>`
+  );
+  const envSection = hasEnv ? section('env', 'Environment',
+    slider('mat-edit-env-scrub')
+  ) : '';
+  const physicalSection = isPhysical ? section('physical', 'Clearcoat / IOR / Transmission',
+    slider('mat-edit-clearcoat-scrub') +
+    slider('mat-edit-clearcoatRough-scrub') +
+    slider('mat-edit-ior-scrub') +
+    slider('mat-edit-reflect-scrub') +
+    slider('mat-edit-transmission-scrub') +
+    slider('mat-edit-thickness-scrub') +
+    colorRow('mat-edit-attenuation-color', 'Attenuation', '#' + (mat.attenuationColor?.getHexString?.() || 'ffffff')) +
+    slider('mat-edit-attenuationDistance-scrub')
+  , true) : '';
+  const sheenSection = isPhysical ? section('sheen', 'Sheen / Iridescence',
+    slider('mat-edit-sheen-scrub') +
+    slider('mat-edit-sheenRough-scrub') +
+    colorRow('mat-edit-sheen-color', 'Sheen color', '#' + (mat.sheenColor?.getHexString?.() || 'ffffff')) +
+    slider('mat-edit-iridescence-scrub') +
+    slider('mat-edit-iridIor-scrub')
+  , true) : '';
+  const specSection = isPhysical ? section('specular', 'Specular',
+    slider('mat-edit-specInt-scrub') +
+    colorRow('mat-edit-spec-color', 'Specular tint', '#' + (mat.specularColor?.getHexString?.() || 'ffffff'))
+  , true) : '';
+
+  const matName = (mat.name && mat.name.trim()) || ('mat_' + (mat.color?.getHexString?.() || 'cccccc'));
   const bodyHtml = `
     <div class="mat-edit-body">
-      <div class="mat-color-row">
-        <label>Color</label>
-        <input type="color" id="mat-edit-color" value="#${mat.color?.getHexString?.() || 'cccccc'}">
-        <span class="mat-color-hex" id="mat-edit-color-hex">#${mat.color?.getHexString?.() || 'cccccc'}</span>
+      <div class="mat-edit-preview-wrap">
+        <canvas class="mat-edit-preview-canvas" id="mat-edit-preview"></canvas>
+        <div class="mat-edit-preview-info">
+          <div class="mat-edit-preview-name" title="${escapeHtml(matName)}">${escapeHtml(matName)}</div>
+          <div class="mat-edit-preview-type">${escapeHtml(mat.type || 'Material')}</div>
+          <div class="mat-edit-preview-uses">${info.count} part${info.count === 1 ? '' : 's'} use this material</div>
+        </div>
       </div>
-      <div class="field"><div id="mat-edit-metalness-scrub"></div></div>
-      <div class="field"><div id="mat-edit-roughness-scrub"></div></div>
-      <div class="mat-color-row">
-        <label>Emissive</label>
-        <input type="color" id="mat-edit-emissive-color" value="#${mat.emissive?.getHexString?.() || '000000'}">
-        <span class="mat-color-hex" id="mat-edit-emissive-hex">#${mat.emissive?.getHexString?.() || '000000'}</span>
-      </div>
-      <div class="field"><div id="mat-edit-emissive-scrub"></div></div>
-      <div class="field"><div id="mat-edit-opacity-scrub"></div></div>
+      ${baseSection}
+      ${emissiveSection}
+      ${surfaceSection}
+      ${envSection}
+      ${physicalSection}
+      ${sheenSection}
+      ${specSection}
     </div>
   `;
 
@@ -10170,20 +11444,26 @@ function _openMaterialEditor(info) {
   const existing = document.getElementById(id);
   if (existing && _matEditorState) {
     popup = _matEditorState.popup;
-    // Rebuild the body so input ids/values reflect the new material.
     popup.body.innerHTML = bodyHtml;
+    if (_matEditorState._previewBall) {
+      _matEditorState._previewBall.dispose();
+      _matEditorState._previewBall = null;
+    }
   } else {
     popup = _DraggablePopup.create({
       id,
       title: 'Material',
       subtitle: '—',
       iconName: 'palette',
-      width: 360, height: 560,
-      minWidth: 320, minHeight: 480,
+      width: 380, height: 720,
+      minWidth: 340, minHeight: 520,
       bodyHtml,
-      onClose: () => { _matEditorState = null; },
+      onClose: () => {
+        if (_matEditorState?._previewBall) _matEditorState._previewBall.dispose();
+        _matEditorState = null;
+      },
     });
-    _matEditorState = { popup, mat: null, info: null, scrubbers: [] };
+    _matEditorState = { popup, mat: null, info: null, scrubbers: [], _previewBall: null };
   }
 
   _matEditorState.mat = mat;
@@ -10191,106 +11471,154 @@ function _openMaterialEditor(info) {
   popup.setTitle(mat.name?.trim() || 'Material');
   popup.setSubtitle(`${info.count} part${info.count === 1 ? '' : 's'} · ${mat.type} · live preview`);
 
-  // Bind controls.
-  // Any slider/color change → re-render only THIS material's preview thumb,
-  // not the full grid. Debounced to ~80ms so dragging doesn't trigger a
-  // sphere render on every frame (the previous implementation rebuilt the
-  // entire DOM list on every input event, which was the lag source).
-  let _thumbTimer = null;
-  const _refreshThumbForMat = () => {
-    if (_thumbTimer) clearTimeout(_thumbTimer);
-    _thumbTimer = setTimeout(() => {
-      _thumbTimer = null;
+  // Wire collapsible sections.
+  popup.body.querySelectorAll('.mat-edit-section-h').forEach(h => {
+    h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
+  });
+
+  // 3D preview ball — main renderer renders a sphere with this material into
+  // a small render target, pixels are blitted to the editor canvas. Updates
+  // every time a control changes (rAF-throttled).
+  const previewCanvas = document.getElementById('mat-edit-preview');
+  _matEditorState._previewBall = _MatPreviewBall.attach(mat, previewCanvas);
+
+  let _refreshTimer = null;
+  const _refreshAll = () => {
+    if (_refreshTimer) cancelAnimationFrame(_refreshTimer);
+    _refreshTimer = requestAnimationFrame(() => {
+      _refreshTimer = null;
+      _matEditorState?._previewBall?.render();
       _matPreviewCache.delete(mat);
       const panel = document.getElementById('vp-materials-pop');
-      if (!panel?.classList.contains('show')) return;
-      // Cells store their material reference on a property (set in
-      // _populateMaterialsList). Find ours and patch its <img src> in place.
-      for (const cell of panel.querySelectorAll('.mat-cell')) {
-        if (cell._mat !== mat) continue;
-        const img = cell.querySelector('img');
-        const url = _renderMaterialPreview(mat);
-        if (img && url) img.src = url;
-        break;
+      if (panel?.classList.contains('show')) {
+        for (const cell of panel.querySelectorAll('.mat-cell')) {
+          if (cell._mat !== mat) continue;
+          const img = cell.querySelector('img');
+          const url = _renderMaterialPreview(mat);
+          if (img && url) img.src = url;
+          break;
+        }
       }
-    }, 80);
+    });
+  };
+  // First render after popup.show() so the canvas has a real backing buffer
+  // and the WebGL context isn't initialized while display:none. Deferred to
+  // the next frame; subsequent property edits call _refreshAll synchronously.
+  requestAnimationFrame(() => requestAnimationFrame(() => _matEditorState?._previewBall?.render()));
+
+  const _bindColor = (cid, target) => {
+    const inp = document.getElementById(cid);
+    const hex = document.getElementById(cid + '-hex');
+    if (inp && target) {
+      inp.addEventListener('input', () => {
+        target.set(inp.value);
+        if (hex) hex.textContent = inp.value;
+        mat.needsUpdate = true;
+        requestRender();
+        _refreshAll();
+      });
+    }
+  };
+  _bindColor('mat-edit-color', mat.color);
+  _bindColor('mat-edit-emissive-color', mat.emissive);
+  if (isPhysical) {
+    if (!mat.sheenColor)        mat.sheenColor = new THREE.Color(0xffffff);
+    if (!mat.specularColor)     mat.specularColor = new THREE.Color(0xffffff);
+    if (!mat.attenuationColor)  mat.attenuationColor = new THREE.Color(0xffffff);
+    _bindColor('mat-edit-sheen-color', mat.sheenColor);
+    _bindColor('mat-edit-spec-color', mat.specularColor);
+    _bindColor('mat-edit-attenuation-color', mat.attenuationColor);
+  }
+
+  // Helper: bind a numeric property to a scrubber.
+  const num = (mid, label, prop, opts = {}) => {
+    if (!document.getElementById(mid)) return;
+    const min = opts.min ?? 0, max = opts.max ?? 1, decimals = opts.decimals ?? 2, unit = opts.unit ?? '';
+    const fallback = opts.fallback ?? 0;
+    const STEPS = opts.steps ?? 100;
+    const range = max - min;
+    initScrubber({
+      el: mid,
+      label,
+      maxSteps: STEPS,
+      stepToVal: (s) => min + (s / STEPS) * range,
+      valToStep: (v) => Math.round(((Math.max(min, Math.min(max, v ?? fallback))) - min) / range * STEPS),
+      format: (v) => ({ value: v.toFixed(decimals), unit }),
+      initialValue: typeof mat[prop] === 'number' ? mat[prop] : fallback,
+      promptTitle: label,
+      onChange: (v) => {
+        mat[prop] = v;
+        if (opts.after) opts.after(v);
+        mat.needsUpdate = true;
+        requestRender();
+        _refreshAll();
+      },
+    });
   };
 
-  const colorIn = document.getElementById('mat-edit-color');
-  const colorHex = document.getElementById('mat-edit-color-hex');
-  if (colorIn && mat.color) {
-    colorIn.addEventListener('input', () => {
-      mat.color.set(colorIn.value);
-      colorHex.textContent = colorIn.value;
-      requestRender();
-      _refreshThumbForMat();
-    });
+  // ── Base ──────────────────────────────
+  if (hasPBR) {
+    num('mat-edit-metalness-scrub', 'Metalness', 'metalness', { fallback: 0.15 });
+    num('mat-edit-roughness-scrub', 'Roughness', 'roughness', { fallback: 0.55 });
   }
-
-  const emisColorIn = document.getElementById('mat-edit-emissive-color');
-  const emisHex = document.getElementById('mat-edit-emissive-hex');
-  if (emisColorIn && mat.emissive) {
-    emisColorIn.addEventListener('input', () => {
-      mat.emissive.set(emisColorIn.value);
-      emisHex.textContent = emisColorIn.value;
-      requestRender();
-      _refreshThumbForMat();
-    });
+  // ── Emission ──────────────────────────
+  if (hasEmissive) {
+    num('mat-edit-emissive-scrub', 'Emissive intensity', 'emissiveIntensity',
+      { min: 0, max: 4, fallback: 1, unit: '×' });
   }
-
-  // Sliders use the same initScrubber helper as the rest of the app, so
-  // drag-to-scrub + click-to-type input both work.
-  initScrubber({
-    el: 'mat-edit-metalness-scrub',
-    label: 'Metalness',
-    maxSteps: 100,
-    stepToVal: (s) => s / 100,
-    valToStep: (v) => Math.round((v ?? 0) * 100),
-    format: (v) => ({ value: v.toFixed(2), unit: '' }),
-    initialValue: typeof mat.metalness === 'number' ? mat.metalness : 0.15,
-    promptTitle: 'Metalness',
-    onChange: (v) => { mat.metalness = v; requestRender(); _refreshThumbForMat(); },
+  // ── Surface ───────────────────────────
+  num('mat-edit-opacity-scrub', 'Opacity', 'opacity', {
+    fallback: 1,
+    after: (v) => { mat.transparent = v < 1; },
   });
-  initScrubber({
-    el: 'mat-edit-roughness-scrub',
-    label: 'Roughness',
-    maxSteps: 100,
-    stepToVal: (s) => s / 100,
-    valToStep: (v) => Math.round((v ?? 0) * 100),
-    format: (v) => ({ value: v.toFixed(2), unit: '' }),
-    initialValue: typeof mat.roughness === 'number' ? mat.roughness : 0.55,
-    promptTitle: 'Roughness',
-    onChange: (v) => { mat.roughness = v; requestRender(); _refreshThumbForMat(); },
-  });
-  initScrubber({
-    el: 'mat-edit-emissive-scrub',
-    label: 'Emissive intensity',
-    maxSteps: 200,
-    stepToVal: (s) => s / 100,
-    valToStep: (v) => Math.round((v ?? 0) * 100),
-    format: (v) => ({ value: v.toFixed(2), unit: '×' }),
-    initialValue: typeof mat.emissiveIntensity === 'number' ? mat.emissiveIntensity : 1,
-    promptTitle: 'Emissive intensity',
-    onChange: (v) => { mat.emissiveIntensity = v; requestRender(); _refreshThumbForMat(); },
-  });
-  initScrubber({
-    el: 'mat-edit-opacity-scrub',
-    label: 'Opacity',
-    maxSteps: 100,
-    stepToVal: (s) => s / 100,
-    valToStep: (v) => Math.round((v ?? 1) * 100),
-    format: (v) => ({ value: v.toFixed(2), unit: '' }),
-    initialValue: typeof mat.opacity === 'number' ? mat.opacity : 1,
-    promptTitle: 'Opacity',
-    onChange: (v) => {
-      mat.opacity = v;
-      // Three.js needs transparent=true to actually blend opacity < 1.
-      mat.transparent = v < 1;
+  num('mat-edit-alphatest-scrub', 'Alpha test', 'alphaTest', { fallback: 0 });
+  const sideSel = document.getElementById('mat-edit-side');
+  if (sideSel) {
+    sideSel.value = String(mat.side ?? 0);
+    sideSel.addEventListener('change', () => {
+      mat.side = parseInt(sideSel.value, 10);
       mat.needsUpdate = true;
       requestRender();
-      _refreshThumbForMat();
-    },
-  });
+      _refreshAll();
+    });
+  }
+  const _bindBool = (bid, prop) => {
+    const cb = document.getElementById(bid);
+    if (!cb) return;
+    cb.checked = !!mat[prop];
+    cb.addEventListener('change', () => {
+      mat[prop] = cb.checked;
+      mat.needsUpdate = true;
+      requestRender();
+      _refreshAll();
+    });
+  };
+  _bindBool('mat-edit-transparent', 'transparent');
+  _bindBool('mat-edit-flat', 'flatShading');
+  _bindBool('mat-edit-wireframe', 'wireframe');
+  _bindBool('mat-edit-vertexcolors', 'vertexColors');
+
+  // ── Environment ───────────────────────
+  if (hasEnv) {
+    num('mat-edit-env-scrub', 'Env intensity', 'envMapIntensity',
+      { min: 0, max: 3, fallback: 1, unit: '×' });
+  }
+
+  // ── Physical (MeshPhysicalMaterial) ──
+  if (isPhysical) {
+    num('mat-edit-clearcoat-scrub',           'Clearcoat',           'clearcoat',          { fallback: 0 });
+    num('mat-edit-clearcoatRough-scrub',      'Clearcoat roughness', 'clearcoatRoughness', { fallback: 0 });
+    num('mat-edit-ior-scrub',                 'IOR',                 'ior',                { min: 1.0, max: 2.333, fallback: 1.5, decimals: 3 });
+    num('mat-edit-reflect-scrub',             'Reflectivity',        'reflectivity',       { fallback: 0.5 });
+    num('mat-edit-transmission-scrub',        'Transmission',        'transmission',       { fallback: 0 });
+    num('mat-edit-thickness-scrub',           'Thickness',           'thickness',          { min: 0, max: 50, fallback: 0 });
+    num('mat-edit-attenuationDistance-scrub', 'Atten. distance',     'attenuationDistance',{ min: 0, max: 50, fallback: 0 });
+    num('mat-edit-sheen-scrub',               'Sheen',               'sheen',              { fallback: 0 });
+    num('mat-edit-sheenRough-scrub',          'Sheen roughness',     'sheenRoughness',     { fallback: 1 });
+    num('mat-edit-iridescence-scrub',         'Iridescence',         'iridescence',        { fallback: 0 });
+    num('mat-edit-iridIor-scrub',             'Iridescence IOR',     'iridescenceIOR',     { min: 1.0, max: 2.333, fallback: 1.3, decimals: 3 });
+    num('mat-edit-specInt-scrub',             'Specular intensity',  'specularIntensity',  { fallback: 1 });
+  }
 
   // Show first so the card has real dimensions, then anchor it to the LEFT
   // of the materials panel. Reading offsetWidth/Height before show() returns
@@ -10314,6 +11642,290 @@ function _openMaterialEditor(info) {
     popup.card.style.top  = top  + 'px';
   }
 }
+
+// =====================================================================
+// Materials toolbar — actions on panel-selected materials.
+// =====================================================================
+
+// Reassign every part whose live material === src to use dst instead.
+// Handles instanced parts where p.mesh is the InstancedMesh (shared
+// material reference covers all instances of that mesh).
+function _reassignMaterial(src, dst) {
+  if (!src || !dst || src === dst) return 0;
+  const seen = new Set();
+  let n = 0;
+  for (const p of state.parts || []) {
+    if (p.deleted) continue;
+    const mesh = p.mesh;
+    if (!mesh || seen.has(mesh)) continue;
+    seen.add(mesh);
+    if (Array.isArray(mesh.material)) {
+      mesh.material = mesh.material.map(m => m === src ? dst : m);
+    } else if (mesh.material === src) {
+      mesh.material = dst;
+      n++;
+    }
+  }
+  // Drop the dead material from the colour-share cache so new parts don't
+  // get handed the now-orphaned material later.
+  if (state.materialByColor) {
+    for (const [k, v] of state.materialByColor) {
+      if (v === src) state.materialByColor.delete(k);
+    }
+  }
+  requestRender();
+  return n;
+}
+
+function _newMaterial(opts = {}) {
+  const m = new THREE.MeshStandardMaterial({
+    color: opts.color ?? new THREE.Color(0x7a7f88),
+    metalness: opts.metalness ?? 0.15,
+    roughness: opts.roughness ?? 0.55,
+    side: THREE.DoubleSide,
+  });
+  if (opts.emissive) m.emissive = opts.emissive;
+  if (typeof opts.emissiveIntensity === 'number') m.emissiveIntensity = opts.emissiveIntensity;
+  if (typeof opts.opacity === 'number') {
+    m.opacity = opts.opacity;
+    m.transparent = opts.opacity < 1;
+  }
+  if (opts.name) m.name = opts.name;
+  return m;
+}
+
+// Industry-standard PBR presets — tuned to read at thumb scale. Same
+// vibe as Substance / V-Ray base material libraries.
+const _MAT_PRESETS = [
+  { section: 'Dielectrics' },
+  { name: 'Plastic — Matte',   color: 0xcfd1d4, metalness: 0,    roughness: 0.85 },
+  { name: 'Plastic — Glossy',  color: 0x2a3340, metalness: 0,    roughness: 0.25 },
+  { name: 'Rubber',            color: 0x222428, metalness: 0,    roughness: 0.95 },
+  { name: 'Ceramic',           color: 0xefefe8, metalness: 0,    roughness: 0.18 },
+  { name: 'Wood (rough)',      color: 0x6b4a2e, metalness: 0,    roughness: 0.78 },
+  { name: 'Concrete',          color: 0x999a92, metalness: 0,    roughness: 0.92 },
+  { name: 'Carbon Fiber',      color: 0x14171d, metalness: 0.20, roughness: 0.30 },
+  { name: 'Glass',             color: 0xeaf3ff, metalness: 0,    roughness: 0.05, opacity: 0.30 },
+  { name: 'Frosted Glass',     color: 0xeaf3ff, metalness: 0,    roughness: 0.55, opacity: 0.55 },
+  { section: 'Metals' },
+  { name: 'Aluminum',          color: 0xd9dade, metalness: 1.0,  roughness: 0.32 },
+  { name: 'Brushed Steel',     color: 0xc0c5cc, metalness: 1.0,  roughness: 0.45 },
+  { name: 'Polished Steel',    color: 0xd6dade, metalness: 1.0,  roughness: 0.10 },
+  { name: 'Mirror Chrome',     color: 0xfafbfd, metalness: 1.0,  roughness: 0.02 },
+  { name: 'Gold — Polished',   color: 0xf6c84a, metalness: 1.0,  roughness: 0.18 },
+  { name: 'Brass',             color: 0xc6a04a, metalness: 1.0,  roughness: 0.32 },
+  { name: 'Copper',            color: 0xc05a3a, metalness: 1.0,  roughness: 0.28 },
+  { name: 'Bronze',            color: 0x8a5a32, metalness: 1.0,  roughness: 0.44 },
+  { name: 'Iron — Cast',       color: 0x4d4f55, metalness: 1.0,  roughness: 0.62 },
+  { section: 'Emissive' },
+  { name: 'LED White',         color: 0xffffff, metalness: 0,    roughness: 0.5,  emissive: 0xffffff, emissiveIntensity: 1.4 },
+  { name: 'LED Red',           color: 0xff3333, metalness: 0,    roughness: 0.5,  emissive: 0xff3333, emissiveIntensity: 1.4 },
+  { name: 'Neon Cyan',         color: 0x33eaff, metalness: 0,    roughness: 0.5,  emissive: 0x33eaff, emissiveIntensity: 1.6 },
+  { name: 'Hazard Stripe',     color: 0xfbbf24, metalness: 0,    roughness: 0.55, emissive: 0xfbbf24, emissiveIntensity: 0.5 },
+];
+
+function _applyPresetTo(mat, preset) {
+  if (!mat || !preset || preset.section) return;
+  if (mat.color   && preset.color   != null) mat.color.setHex(preset.color);
+  if (mat.emissive) mat.emissive.setHex(preset.emissive ?? 0x000000);
+  if (typeof preset.emissiveIntensity === 'number') mat.emissiveIntensity = preset.emissiveIntensity;
+  else mat.emissiveIntensity = 1;
+  if (typeof preset.metalness === 'number') mat.metalness = preset.metalness;
+  if (typeof preset.roughness === 'number') mat.roughness = preset.roughness;
+  if (typeof preset.opacity === 'number') {
+    mat.opacity = preset.opacity;
+    mat.transparent = preset.opacity < 1;
+  } else {
+    mat.opacity = 1;
+    mat.transparent = false;
+  }
+  if (preset.name) mat.name = preset.name;
+  mat.needsUpdate = true;
+  _matPreviewCache.delete(mat);
+}
+
+function _renderPresetMenu() {
+  const menu = document.getElementById('mat-presets-menu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  for (const p of _MAT_PRESETS) {
+    if (p.section) {
+      const h = document.createElement('div');
+      h.className = 'mat-preset-section';
+      h.textContent = p.section;
+      menu.appendChild(h);
+      continue;
+    }
+    const row = document.createElement('div');
+    row.className = 'mat-preset';
+    const swatchHex = '#' + p.color.toString(16).padStart(6, '0');
+    row.innerHTML = `
+      <span class="mat-preset-swatch" style="background:${swatchHex}"></span>
+      <span class="mat-preset-name">${escapeHtml(p.name)}</span>
+      <span class="mat-preset-hint">${p.metalness >= 0.5 ? 'metal' : (p.emissive ? 'emit' : 'dielectric')}</span>
+    `;
+    row.addEventListener('click', () => {
+      const targets = _matPanelSelected.size > 0
+        ? [..._matPanelSelected]
+        : (_matEditorState?.mat ? [_matEditorState.mat] : []);
+      if (!targets.length) {
+        toast?.('Select a material first', 'Click a material card, then choose a preset', 'info');
+        return;
+      }
+      for (const m of targets) _applyPresetTo(m, p);
+      requestRender();
+      _populateMaterialsList();
+      menu.classList.remove('show');
+      toast?.(`Applied ${p.name}`, `${targets.length} material${targets.length === 1 ? '' : 's'}`, 'success');
+    });
+    menu.appendChild(row);
+  }
+}
+
+let _matActionsWired = false;
+function _wireMaterialActions() {
+  if (_matActionsWired) return;
+  const addBtn = document.getElementById('mat-act-add');
+  const dupBtn = document.getElementById('mat-act-duplicate');
+  const mrgBtn = document.getElementById('mat-act-merge');
+  const delBtn = document.getElementById('mat-act-delete');
+  const preBtn = document.getElementById('mat-act-presets');
+  const menu   = document.getElementById('mat-presets-menu');
+  if (!addBtn || !dupBtn || !mrgBtn || !delBtn || !preBtn || !menu) return;
+  _matActionsWired = true;
+
+  addBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const fresh = _newMaterial({ name: 'mat_' + Math.random().toString(16).slice(2, 8) });
+    // Track every user-created material in the scene-level library so it
+    // shows up in the grid even with no parts assigned. Once assigned, it
+    // also appears via the parts-walk in _collectLiveMaterials — Map dedup
+    // keeps it as a single entry.
+    state.userMaterials = state.userMaterials || new Set();
+    state.userMaterials.add(fresh);
+    // If parts are selected, assign immediately so the user can iterate.
+    // No selection → new material lands in the library only.
+    let assigned = 0;
+    if (state.selected?.size) {
+      const seen = new Set();
+      for (const id of state.selected) {
+        const p = getPart(id);
+        if (!p || p.deleted || !p.mesh || seen.has(p.mesh)) continue;
+        seen.add(p.mesh);
+        p.mesh.material = fresh;
+        assigned++;
+      }
+    }
+    _matPanelSelected.clear();
+    _matPanelSelected.add(fresh);
+    requestRender();
+    _populateMaterialsList();
+    if (assigned === 0) {
+      toast?.('Material added', 'Select parts and use Duplicate to assign', 'info', 2200);
+    }
+  });
+
+  dupBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (_matPanelSelected.size !== 1) return;
+    const src = [..._matPanelSelected][0];
+    if (!state.selected?.size) {
+      toast?.('Select parts first', 'Pick parts to receive the duplicated material', 'info');
+      return;
+    }
+    const clone = src.clone();
+    clone.name = (src.name || 'material') + ' copy';
+    const seen = new Set();
+    for (const id of state.selected) {
+      const p = getPart(id);
+      if (!p || p.deleted || !p.mesh || seen.has(p.mesh)) continue;
+      seen.add(p.mesh);
+      p.mesh.material = clone;
+    }
+    _matPanelSelected.clear();
+    _matPanelSelected.add(clone);
+    requestRender();
+    _populateMaterialsList();
+  });
+
+  mrgBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (_matPanelSelected.size < 2) return;
+    const arr = [..._matPanelSelected];
+    const target = arr[0];
+    let migrated = 0;
+    for (let i = 1; i < arr.length; i++) migrated += _reassignMaterial(arr[i], target);
+    _matPanelSelected.clear();
+    _matPanelSelected.add(target);
+    _populateMaterialsList();
+    toast?.('Merged materials', `${arr.length} → 1 (${migrated} parts moved)`, 'success');
+  });
+
+  delBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (_matPanelSelected.size === 0) return;
+    const allMats = _collectLiveMaterials();
+    let fallback = allMats.find(({ mat }) => !_matPanelSelected.has(mat))?.mat;
+    if (!fallback) fallback = _newMaterial({ name: 'default' });
+    const removed = [..._matPanelSelected];
+    let n = 0;
+    for (const m of removed) n += _reassignMaterial(m, fallback);
+    _matPanelSelected.clear();
+    _populateMaterialsList();
+    toast?.('Deleted materials', `${removed.length} removed (${n} parts → fallback)`, 'success');
+  });
+
+  preBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _renderPresetMenu();
+    menu.classList.toggle('show');
+  });
+  document.addEventListener('click', () => {
+    if (menu.classList.contains('show')) menu.classList.remove('show');
+  });
+  menu.addEventListener('click', (e) => e.stopPropagation());
+}
+
+// Wrap _populateMaterialsList to also wire actions + paint the
+// usedby-selection ring. Idempotent: wiring guard handles repeat calls.
+const _origPopulateMaterialsList_actions = window._populateMaterialsList;
+window._populateMaterialsList = function() {
+  _wireMaterialActions();
+  const r = _origPopulateMaterialsList_actions.apply(this, arguments);
+  _refreshUsedBySelection();
+  return r;
+};
+
+// Paint a subtle ring on every material cell whose Material is in use by
+// the current viewport selection (state.selected). Distinct from the
+// brighter .selected (panel-pick) state — this is just a passive hint.
+function _refreshUsedBySelection() {
+  const panel = document.getElementById('vp-materials-pop');
+  if (!panel) return;
+  const used = new Set();
+  if (state.selected?.size) {
+    for (const id of state.selected) {
+      const p = getPart(id);
+      if (!p || p.deleted || !p.mesh) continue;
+      let m = p.mesh.material;
+      if (Array.isArray(m)) m = m[0];
+      if (m?.isMaterial) used.add(m);
+    }
+  }
+  for (const cell of panel.querySelectorAll('.mat-cell')) {
+    cell.classList.toggle('usedby-selection', used.has(cell._mat));
+  }
+}
+
+// Hook usedby-selection refresh into refreshPropertiesPanel — that runs on
+// every selection change, so the ring stays in sync without each call site
+// needing to know about the materials panel.
+const _origRefreshPropsPanel_matRing = refreshPropertiesPanel;
+refreshPropertiesPanel = function() {
+  const r = _origRefreshPropsPanel_matRing.apply(this, arguments);
+  try { _refreshUsedBySelection(); } catch (_) {}
+  return r;
+};
 
 // ─── Smart-fit proxy fitter (AABB / OBB / cylinder) ────────────────────────
 // Picks the best low-poly stand-in for a part's silhouette. Replaces the

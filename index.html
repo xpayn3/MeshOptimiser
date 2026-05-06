@@ -155,7 +155,44 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 
 /* Sidebars */
 .panel{background:var(--bg);display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
-#sidebar-left{border-right:1px solid var(--bd)}
+#sidebar-left{border-right:1px solid var(--bd);display:flex;flex-direction:column;min-height:0}
+#sidebar-left>.tree-search,
+#sidebar-left>.tree-toolbar,
+#sidebar-left>.tree-summary,
+#sidebar-left>#tree-newgroup-zone{flex-shrink:0}
+#sidebar-left>#tree{flex:1;min-height:0}
+
+/* Transform panel — slides in from the bottom of the left sidebar.
+   Position / Rotation (deg) / Size (bbox in scene units) for the active
+   selection. Editing the inputs writes back to the mesh transform and
+   nudges a render. Toggled by the tg-transform viewport button. */
+#transform-panel{flex-shrink:0;background:var(--bg2);border-top:1px solid var(--bd);overflow:hidden;max-height:0;transition:max-height 240ms var(--ease-out)}
+#transform-panel.show{max-height:200px}
+#transform-panel .tform-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)}
+#transform-panel .tform-head .tform-title{display:inline-flex;align-items:center;gap:6px}
+#transform-panel .tform-head .tform-title svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+#transform-panel .tform-head .tform-reset{font:inherit;font-size:10.5px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3);background:transparent;border:1px solid rgba(255,255,255,.06);border-radius:5px;padding:3px 8px;cursor:pointer;transition:background .12s ease,color .12s ease,border-color .12s ease}
+#transform-panel .tform-head .tform-reset:hover{color:var(--tx);background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12)}
+#transform-panel .tform-grid{display:grid;grid-template-columns:32px 1fr 1fr 1fr;gap:5px 6px;padding:0 10px 10px 10px}
+#transform-panel .tform-row-label{font-size:10.5px;color:var(--tx3);font-weight:500;align-self:center;text-align:right;padding-right:2px}
+/* Number-input cell with custom stepper buttons on each side. The native
+   spinner is hidden (-webkit-/Firefox) since the visible buttons own the
+   increment/decrement action and the input itself is just a value field. */
+#transform-panel .tform-num{display:grid;grid-template-columns:18px 1fr 18px;align-items:stretch;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.06);border-radius:5px;overflow:hidden;transition:border-color .12s ease,box-shadow .12s ease,background .12s ease}
+#transform-panel .tform-num:hover{border-color:rgba(255,255,255,.12)}
+#transform-panel .tform-num:focus-within{border-color:rgba(110,168,255,.55);background:rgba(0,0,0,.30);box-shadow:0 0 0 3px rgba(110,168,255,.18)}
+#transform-panel .tform-num.disabled{opacity:.5}
+#transform-panel .tform-step{font:inherit;font-size:11px;font-weight:600;line-height:1;color:var(--tx3);background:transparent;border:none;cursor:pointer;display:grid;place-items:center;padding:0;user-select:none;transition:color .1s ease,background .1s ease}
+#transform-panel .tform-step:hover{color:var(--tx);background:rgba(255,255,255,.05)}
+#transform-panel .tform-step:active{background:rgba(110,168,255,.18);color:var(--ac)}
+#transform-panel .tform-step:disabled{cursor:not-allowed;opacity:.4}
+#transform-panel .tform-step:disabled:hover{background:transparent;color:var(--tx3)}
+#transform-panel .tform-input{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx);background:transparent;border:none;padding:5px 4px;outline:none;width:100%;min-width:0;text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+#transform-panel .tform-input::-webkit-outer-spin-button,
+#transform-panel .tform-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+#transform-panel .tform-input:disabled{cursor:not-allowed}
+#transform-panel .tform-input.mixed{color:var(--tx3);font-style:italic}
+#transform-panel .tform-empty{padding:14px 10px;text-align:center;color:var(--tx3);font-size:11px}
 #sidebar-right{display:block;border-left:1px solid var(--bd);overflow-y:auto;padding:12px 12px 20px;background:radial-gradient(circle at 80% 0%,rgba(110,168,255,.04),transparent 50%),var(--bg)}
 #sidebar-right .section{flex-shrink:0}
 .section{background:var(--bg2);border:1px solid rgba(255,255,255,.04);border-radius:var(--r-xl);margin-bottom:10px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.12)}
@@ -207,19 +244,39 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tree-inst:active{transform:scale(.92)}
 .tree-inst svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2.2}
 /* ── Properties panel ───────────────────────────────────────────────────── */
-.prop-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;min-height:18px}
+.prop-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;min-height:20px}
+/* Type icon next to the part name — disambiguates instance vs single part
+   at a glance. Same icon + colour vocabulary as .tree-typeicon in the left
+   sidebar so users only have to learn it once. */
+.prop-type-icon{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;color:var(--tx2)}
+.prop-type-icon svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.prop-type-icon.asm{color:#f59e0b}      /* warm amber for assemblies */
+.prop-type-icon.part{color:#10b981}     /* emerald for leaves */
+.prop-type-icon.inst{color:#a78bfa}     /* purple for shared-geometry leaves (instances) */
 .prop-color{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.18);box-shadow:0 1px 2px rgba(0,0,0,.4)}
 .prop-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
 .prop-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;min-height:14px}
-.prop-material-row{margin:-2px 0 8px}
-.prop-mat-btn{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;background:var(--s2);border:1px solid var(--bd);border-radius:6px;font-size:11.5px;color:var(--tx2);cursor:pointer;max-width:100%;transition:background 120ms,border-color 120ms,color 120ms}
+.prop-material-row{margin:10px 0 10px}
+/* Material chip under the part name — full-width row with a 36px shaded
+   sphere preview, the material name, a usage hint, and quick-access action
+   icons. Reuses the same preview thumbs as the materials grid so the
+   sphere and the cell stay in sync. */
+.prop-mat-btn{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:9px;font-size:12.5px;color:var(--tx2);cursor:pointer;max-width:100%;width:100%;text-align:left;transition:background 120ms,border-color 120ms,color 120ms}
 .prop-mat-btn:hover{background:var(--ac-soft);border-color:var(--ac-line);color:var(--tx)}
-.prop-mat-btn svg{width:11px;height:11px;flex-shrink:0;color:var(--tx3)}
-.prop-mat-btn:hover svg{color:var(--ac)}
-.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,monospace;font-size:11px}
+.prop-mat-btn .prop-mat-sphere{flex-shrink:0;width:36px;height:36px;border-radius:6px;background-color:#15181f;background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);overflow:hidden;display:grid;place-items:center}
+.prop-mat-btn .prop-mat-sphere img{width:100%;height:100%;display:block;object-fit:cover}
+.prop-mat-btn .prop-mat-color{flex-shrink:0;width:36px;height:36px;border-radius:6px;border:1px solid rgba(255,255,255,.18);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.prop-mat-btn .prop-mat-color.prop-mat-color-mixed{background:linear-gradient(135deg,#6ea8ff,#a78bfa,#34c759)}
+.prop-mat-btn .prop-mat-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--tx);font-weight:500}
+.prop-mat-btn .prop-mat-sub{font-size:10.5px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.005em}
+.prop-mat-btn .prop-mat-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
+.prop-mat-btn .prop-mat-action{width:24px;height:24px;border-radius:5px;border:none;background:transparent;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background 100ms ease,color 100ms ease}
+.prop-mat-btn .prop-mat-action:hover{background:rgba(255,255,255,.07);color:var(--tx)}
+.prop-mat-btn .prop-mat-action svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .prop-mat-btn.prop-mat-mixed{cursor:default;color:var(--tx3)}
 .prop-mat-btn.prop-mat-mixed:hover{background:var(--s2);border-color:var(--bd);color:var(--tx3)}
-.prop-mat-btn.prop-mat-mixed:hover svg{color:var(--tx3)}
+.prop-mat-btn .prop-mat-name-input{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:500;color:#fff;background:rgba(110,168,255,.14);border:1px solid var(--ac);border-radius:4px;padding:1px 5px;margin:-2px 0;width:100%;min-width:0;outline:none;box-shadow:0 0 0 2px rgba(110,168,255,.18)}
 .prop-bar-wrap{display:flex;align-items:center;gap:8px;margin:8px 0 10px;font-size:11px;color:var(--tx3)}
 .prop-bar-wrap .prop-bar-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3);flex-shrink:0}
 .prop-bar-wrap .prop-bar-icon svg{width:13px;height:13px}
@@ -481,6 +538,19 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .vpc.tr{top:12px;right:12px;flex-direction:column;align-items:flex-end}
 .vpc.br{bottom:12px;right:12px;align-items:flex-end;flex-direction:column}
 .vpc.bl{bottom:12px;left:12px}
+.vp-stat{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);background:rgba(11,14,22,.72);border:1px solid var(--bd);border-radius:6px;padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
+/* Gizmo HUD — small DRO that pops next to the gizmo while a drag is active.
+   Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
+   per-axis Euler) for rotate, scale factor for scale. Position is updated
+   each frame from the pivot's projected screen coords. */
+#gizmo-hud{position:absolute;left:0;top:0;display:none;background:rgba(15,19,25,.92);border:1px solid var(--bd);border-radius:6px;padding:6px 9px;font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:0 6px 18px rgba(0,0,0,.5);pointer-events:none;z-index:50;backdrop-filter:blur(8px);white-space:nowrap;line-height:1.5}
+#gizmo-hud.show{display:block}
+#gizmo-hud .ghud-row{display:flex;align-items:center;gap:8px}
+#gizmo-hud .ghud-mode{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-right:2px}
+#gizmo-hud .ghud-x{color:#ff6b6b}
+#gizmo-hud .ghud-y{color:#34c759}
+#gizmo-hud .ghud-z{color:#6ea8ff}
+#gizmo-hud .ghud-snap{margin-left:6px;font-size:9px;font-weight:700;color:var(--ac);background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:3px;padding:1px 5px;letter-spacing:.06em}
 #axis-gizmo{width:56px;height:56px;display:grid;place-items:center;opacity:.75;transition:opacity .15s}
 #axis-gizmo:hover{opacity:1}
 #axis-gizmo svg{width:54px;height:54px;display:block;overflow:visible}
@@ -531,6 +601,9 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 #tg-axes      {--btn-tint:#ff6b6b}
 #tg-hilite    {--btn-tint:#fbbf24}
 #tg-settings  {--btn-tint:var(--tx2)}
+#tg-materials {--btn-tint:#a78bfa}
+#tg-sun       {--btn-tint:#fbbf24}
+#tg-transform {--btn-tint:#34c759}
 .vp-info{background:rgba(15,19,25,.7);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:6px;padding:7px 11px;font-size:11px;color:var(--tx2);line-height:1.5;font-variant-numeric:tabular-nums;min-width:140px}
 .vp-info strong{color:var(--tx)}
 /* Triangle-count progress bar: 100% = starting tri count, shrinks as the
@@ -570,19 +643,23 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    beneath the new tg-materials button. Each cell is a rendered sphere
    showing the material on a neutral checkerboard; double-click opens the
    editor in a _DraggablePopup. */
-#vp-materials-pop{position:absolute;top:0;right:44px;width:240px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-materials-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
 #vp-materials-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 #vp-materials-pop .pop-section{padding:10px 12px}
 #vp-materials-pop .pop-section-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-bottom:10px}
 #vp-materials-pop .pop-section-head .hint{font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3);font-size:10.5px}
-#vp-materials-pop .mat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
-#vp-materials-pop .mat-cell{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out);user-select:none}
+#vp-materials-pop .mat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;justify-items:center}
+#vp-materials-pop .mat-cell{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),box-shadow 120ms var(--ease-out);user-select:none}
 #vp-materials-pop .mat-cell:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
 #vp-materials-pop .mat-cell .mat-thumb{width:60px;height:60px;border-radius:6px;background-color:#15181f;background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);background-repeat:repeat;display:grid;place-items:center;overflow:hidden}
 #vp-materials-pop .mat-cell .mat-thumb img,#vp-materials-pop .mat-cell .mat-thumb canvas{width:100%;height:100%;display:block;object-fit:cover}
 #vp-materials-pop .mat-cell .mat-name{font-size:10.5px;color:var(--tx2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.15;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #vp-materials-pop .mat-cell .mat-count{font-size:9.5px;color:var(--tx3);font-variant-numeric:tabular-nums;line-height:1}
 #vp-materials-pop .mat-cell.selected{background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.40)}
+/* Subtle ring on materials used by the current viewport selection — gives a
+   passive "you have parts of this material picked" hint without competing
+   with the brighter .selected (panel-selection) state. */
+#vp-materials-pop .mat-cell.usedby-selection .mat-thumb{box-shadow:inset 0 0 0 1px rgba(110,168,255,.55),0 0 0 2px rgba(110,168,255,.20)}
 
 /* Action toolbar at the bottom of the materials panel — add / delete /
    duplicate / merge / industry presets. Sticks to the bottom of the
@@ -898,10 +975,31 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
     </div>
     <div class="tree-summary" id="tree-summary">No model loaded</div>
     <div id="tree"><div class="tree-empty"><i data-lucide="box"></i><div>No model loaded</div><div style="font-size:11px;margin-top:4px">Open or drop a .step file</div></div></div>
+    <div id="transform-panel">
+      <div class="tform-head">
+        <span class="tform-title"><i data-lucide="move-3d"></i>Transform</span>
+        <button class="tform-reset" id="tform-reset" title="Reset position + rotation + scale">Reset</button>
+      </div>
+      <div class="tform-grid" id="tform-grid">
+        <span class="tform-row-label">Pos</span>
+        <span class="tform-num" data-for="tform-px"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-px" data-axis="px" step="0.1" placeholder="x"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-py"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-py" data-axis="py" step="0.1" placeholder="y"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-pz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-pz" data-axis="pz" step="0.1" placeholder="z"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-row-label">Rot°</span>
+        <span class="tform-num" data-for="tform-rx"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-rx" data-axis="rx" step="1" placeholder="x"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-ry"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-ry" data-axis="ry" step="1" placeholder="y"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-rz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-rz" data-axis="rz" step="1" placeholder="z"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-row-label">Size</span>
+        <span class="tform-num" data-for="tform-sx"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sx" data-axis="sx" step="0.1" placeholder="x"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-sy"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sy" data-axis="sy" step="0.1" placeholder="y"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-sz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sz" data-axis="sz" step="0.1" placeholder="z"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+      </div>
+    </div>
   </aside>
 
   <main id="viewport">
     <canvas id="canvas"></canvas>
+    <div id="gizmo-hud" aria-hidden="true"></div>
     <div id="vp-overlay">
       <div class="vpc tl">
         <button class="vpb" id="vw-solid" data-mode="solid" title="Solid (1)"><i data-lucide="box"></i></button>
@@ -909,9 +1007,9 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
         <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — colour parts by tri density (4)"><i data-lucide="flame"></i></button>
         <div style="height:10px"></div>
-        <button class="vpb" id="gz-translate" title="Translate gizmo (W) — hold Shift while dragging to snap to 10 units"><i data-lucide="move"></i></button>
-        <button class="vpb" id="gz-rotate" title="Rotate gizmo (E) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
-        <button class="vpb" id="gz-scale" title="Scale gizmo (R) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
+        <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to 10 units"><i data-lucide="move"></i></button>
+        <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
+        <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
       </div>
       <div class="vpc tr">
         <button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button>
@@ -920,6 +1018,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
         <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
         <button class="vpb" id="tg-materials" title="Materials in this file"><i data-lucide="palette"></i></button>
+        <button class="vpb" id="tg-sun" title="Toggle sun direction gizmo"><i data-lucide="sun"></i></button>
+        <button class="vpb" id="tg-transform" title="Toggle transform panel (position / rotation / size)"><i data-lucide="move-3d"></i></button>
         <div id="vp-materials-pop">
           <div class="pop-section">
             <div class="pop-section-head"><span>Materials</span><span class="hint">Double-click to edit</span></div>
@@ -940,8 +1040,78 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
           <div class="pop-section">
             <div class="pop-section-title">Display</div>
             <div class="toggle"><span>Auto-rotate</span><label><input type="checkbox" id="toggle-rotate"><span class="switch"></span></label></div>
-            <div class="toggle"><span>Highlight small</span><label><input type="checkbox" id="toggle-highlight" checked><span class="switch"></span></label></div>
+            <!-- Highlight-small lives on the viewport button (tg-hilite). The
+                 checkbox is kept hidden so existing state-mirror code that
+                 reads/writes #toggle-highlight (scene save/restore, etc) still
+                 works without a refactor. -->
+            <div class="toggle" style="display:none"><span>Highlight small</span><label><input type="checkbox" id="toggle-highlight" checked><span class="switch"></span></label></div>
+            <div class="toggle"><span>Origin marker</span><label><input type="checkbox" id="toggle-origin"><span class="switch"></span></label></div>
+            <div class="toggle"><span>FPS counter</span><label><input type="checkbox" id="toggle-fps"><span class="switch"></span></label></div>
+            <div class="toggle"><span>Renderer stats</span><label><input type="checkbox" id="toggle-stats"><span class="switch"></span></label></div>
             <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="solid">Solid black</option><option value="white">White</option></select></div>
+          </div>
+          <div class="pop-section">
+            <div class="pop-section-title">Scene</div>
+            <div class="field"><label><span>Display units</span></label>
+              <select id="display-units" class="mac-sel">
+                <option value="mm" selected>Millimetres (mm)</option>
+                <option value="cm">Centimetres (cm)</option>
+                <option value="m">Metres (m)</option>
+                <option value="in">Inches (in)</option>
+                <option value="ft">Feet (ft)</option>
+                <option value="none">No unit suffix</option>
+              </select>
+            </div>
+            <div class="field"><label><span>Up axis (viewport)</span></label>
+              <select id="scene-up-axis" class="mac-sel">
+                <option value="z" selected>Z-up (CAD, NX, SolidWorks)</option>
+                <option value="y">Y-up (Blender, Maya, glTF)</option>
+              </select>
+            </div>
+            <div class="field" style="margin-bottom:0"><label><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--s3);border:1px solid var(--s3);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the partsRoot transform. 0.001 turns mm → m; 1000 turns m → mm."></div>
+          </div>
+          <div class="pop-section">
+            <div class="pop-section-title">Camera</div>
+            <div class="field"><label><span>Projection</span></label>
+              <select id="cam-projection" class="mac-sel">
+                <option value="persp" selected>Perspective</option>
+                <option value="ortho">Orthographic</option>
+              </select>
+            </div>
+            <div class="field" id="cam-fov-row"><label><span>Field of view <span style="color:var(--tx3);font-size:10.5px"><span id="cam-fov-val">45</span>°</span></span></label><input type="range" id="cam-fov" min="10" max="100" step="1" value="45" style="width:100%"></div>
+            <div class="field" style="margin-bottom:0"><label><span>Clip planes</span></label>
+              <select id="cam-clip" class="mac-sel">
+                <option value="auto" selected>Auto (fit to scene)</option>
+                <option value="tight">Tight (max precision)</option>
+                <option value="wide">Wide (huge scenes)</option>
+              </select>
+            </div>
+          </div>
+          <!-- Lighting controls moved to the in-scene Sun gizmo (tg-sun button
+               in the viewport overlay). Inputs stay hidden so existing scene
+               save/restore wiring that reads/writes #light-* still works. -->
+          <div class="pop-section" style="display:none">
+            <div class="pop-section-title">Lighting</div>
+            <div class="field"><label><span>Exposure <span style="color:var(--tx3);font-size:10.5px"><span id="light-exposure-val">1.00</span></span></span></label><input type="range" id="light-exposure" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
+            <div class="field"><label><span>Ambient <span style="color:var(--tx3);font-size:10.5px"><span id="light-ambient-val">0.55</span></span></span></label><input type="range" id="light-ambient" min="0" max="2" step="0.05" value="0.55" style="width:100%"></div>
+            <div class="field"><label><span>Sun intensity <span style="color:var(--tx3);font-size:10.5px"><span id="light-sun-val">1.20</span></span></span></label><input type="range" id="light-sun" min="0" max="3" step="0.05" value="1.2" style="width:100%"></div>
+            <div class="field"><label><span>Sun azimuth <span style="color:var(--tx3);font-size:10.5px"><span id="light-azi-val">45</span>°</span></span></label><input type="range" id="light-azi" min="0" max="360" step="1" value="45" style="width:100%"></div>
+            <div class="field"><label><span>Sun elevation <span style="color:var(--tx3);font-size:10.5px"><span id="light-ele-val">45</span>°</span></span></label><input type="range" id="light-ele" min="0" max="90" step="1" value="45" style="width:100%"></div>
+            <div class="toggle" style="margin-bottom:0"><span>Shadows</span><label><input type="checkbox" id="toggle-shadows"><span class="switch"></span></label></div>
+          </div>
+          <div class="pop-section">
+            <div class="pop-section-title">Grid</div>
+            <div class="field"><label><span>Cell size</span></label>
+              <select id="grid-cell" class="mac-sel">
+                <option value="auto" selected>Auto (fit to model)</option>
+                <option value="0.1">0.1</option>
+                <option value="1">1</option>
+                <option value="10">10</option>
+                <option value="100">100</option>
+                <option value="1000">1000</option>
+              </select>
+            </div>
+            <div class="toggle" style="margin-bottom:0"><span>Snap gizmo to grid</span><label><input type="checkbox" id="toggle-snap-grid"><span class="switch"></span></label></div>
           </div>
           <div class="pop-section">
             <div class="pop-section-title">Performance</div>
@@ -959,6 +1129,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       </div>
       <div class="vpc br"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
       <div class="vpc bl"><div id="axis-gizmo" title="Click an axis to align the view"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
+      <!-- FPS / renderer stats overlay (top-right under the toolbar). Each
+           overlay is hidden until its toggle in Display settings is on. -->
+      <div class="vpc tl" id="vp-perf" style="top:auto;bottom:80px;left:14px;display:flex;flex-direction:column;gap:4px;pointer-events:none">
+        <div id="vp-fps" class="vp-stat" style="display:none">— fps</div>
+        <div id="vp-stats" class="vp-stat" style="display:none">— calls</div>
+      </div>
     </div>
 
     <div id="loader">
@@ -1636,7 +1812,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050623-scalegizmo"></script>
+<script type="module" src="app-v2.js?v=2026050623-gizmohud"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
