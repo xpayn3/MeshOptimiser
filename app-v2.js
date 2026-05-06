@@ -2195,6 +2195,7 @@ function _attachGizmoToParts(parts) {
     }
     state.gizmo.attach(state.pivot);
     if (state.gizmoHelper) state.gizmoHelper.visible = state.gizmoMode !== 'off';
+    _transformPanelRefresh();
     return;
   }
   // Combined world bbox center. updateWorldMatrix(true, false) walks the
@@ -2262,6 +2263,7 @@ function _attachGizmoToParts(parts) {
   }
   state.gizmo.attach(state.pivot);
   if (state.gizmoHelper) state.gizmoHelper.visible = state.gizmoMode !== 'off';
+  _transformPanelRefresh();
 }
 function _detachGizmo() {
   if (!state.gizmo) return;
@@ -4653,6 +4655,7 @@ function _transformPollLoop() {
   const isGroupTarget = target.kind === 'group' || target.kind === 'user-group';
   let sig;
   if (isGroupTarget) {
+    state.pivot?.updateWorldMatrix?.(true, false); // flush after position change before reading
     const pm = state.pivot?.matrixWorld?.elements;
     const firstId = state.selected ? [...state.selected][0] : null;
     const fp = firstId != null && typeof getPart === 'function' ? getPart(firstId) : null;
@@ -11087,32 +11090,44 @@ async function loadFbxFile(file) {
     try {
       root = new FBXLoader().parse(buffer, '');
     } catch (e) {
-      // Three's FBXLoader only handles FBX 7000+ (7.0 / 2011 onward). Older
-      // formats — most commonly FileVersion 6100 from pre-2010 exporters —
-      // throw "FBX version not supported". Route them through Assimp (which
-      // we already vendor for the FBX export pipeline) → GLB in memory →
-      // GLTFLoader. Same fallback also catches binary-vs-ASCII confusion
-      // and other parser-level failures.
+      // Three's FBXLoader requires FBX 7000+ (FBX 7.0 / 2011 onward). The
+      // bundled Assimp WASM (assimpjs 0.0.10) similarly tops out at FBX
+      // 7.x. So for a true pre-2011 file (FileVersion 6100, etc.) BOTH
+      // parsers will fail — there is no in-browser library that reads
+      // the 2009 ASCII-era FBX. We still try Assimp because some "version
+      // not supported" errors actually come from quirky-but-7000+ files
+      // that one parser likes and the other doesn't. If Assimp also gives
+      // up, surface a clean actionable error pointing at external tools.
       const msg = (e && (e.message || e.toString())) || '';
+      const versionMatch  = msg.match(/FileVersion: (\d+)/);
+      const fileVersion   = versionMatch ? parseInt(versionMatch[1], 10) : null;
+      const isLegacy      = fileVersion !== null && fileVersion < 7000;
       const isVersionMiss = /FBX version not supported|FileVersion: \d+/.test(msg);
+
       logProgress(
         isVersionMiss
-          ? `Legacy FBX detected (${msg.match(/FileVersion: \d+/)?.[0] || 'pre-7.0'}); converting via Assimp…`
+          ? `Legacy FBX detected (${versionMatch?.[0] || 'pre-7.0'}); trying Assimp fallback…`
           : `FBX parse failed; retrying via Assimp: ${msg}`,
         'warn'
       );
-      setLoader(true, 'Converting legacy FBX via Assimp...', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
+      setLoader(true, 'Converting via Assimp...', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
       let glbBytes;
       try {
         glbBytes = await _convertAnyToGlbWithAssimp(new Uint8Array(buffer), 'input.fbx');
       } catch (e2) {
-        // Surface a clean, actionable error rather than the raw Assimp string.
-        throw new Error(
-          `${msg || 'FBX parse failed'}\n\n` +
-          `Assimp fallback also failed: ${e2.message || e2}.\n` +
-          `Try re-exporting the file as FBX 2013+ (binary) from the source DCC, ` +
-          `or convert it with the free Autodesk FBX Converter.`
-        );
+        const detail = isLegacy
+          ? `FBX FileVersion ${fileVersion} is too old for in-browser loaders. ` +
+            `Three.js's FBXLoader and the bundled Assimp WASM both require FBX 7000 or newer (FBX 2011+).`
+          : `${msg || 'FBX parser failed'}. Assimp fallback: ${e2.message || e2}.`;
+        const tools =
+          `Convert the file first using one of:\n` +
+          `  • Autodesk FBX Converter (free): https://aps.autodesk.com/developer/overview/fbx-converter\n` +
+          `  • Blender: open then File → Export → FBX (binary)\n` +
+          `  • The source DCC: re-export as FBX 2013 or newer (binary).`;
+        toast('FBX too old to read', detail, 'error', 14000);
+        logProgress(detail, 'err');
+        logProgress(tools, 'warn');
+        throw new Error(`${detail}\n\n${tools}`);
       }
       setLoader(true, 'Parsing converted scene...', `${(glbBytes.byteLength/1048576).toFixed(1)} MB GLB`);
       const gltf = await new Promise((resolve, reject) => {
