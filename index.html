@@ -375,6 +375,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:500;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
 .btn:hover{background:var(--bg3);border-color:var(--bd2)}
 .btn:active{transform:scale(.97);background:var(--bg2)}
+/* Compact .btn variant for the right sidebar — matches the .split-preset
+   segmented control height (~28px) so all sidebar buttons read at the same
+   visual weight. */
+#sidebar-right .btn{padding:6px 10px;font-size:11px;border-radius:6px;gap:6px;min-height:30px}
+#sidebar-right .btn svg{width:13px;height:13px}
+#sidebar-right .btn-row{gap:5px}
 .btn.danger{color:var(--er)}
 .btn.danger:hover{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
 .btn.warn{color:var(--wn)}
@@ -1051,7 +1057,6 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
     <div class="item" style="display:none"><strong id="sb-tris">0</strong>triangles</div>
     <div class="item"><strong id="sb-verts">0</strong>vertices</div>
     <div class="item"><strong id="sb-mem">0 MB</strong>geom</div>
-    <div class="item"><strong id="sb-draws">0</strong>draws</div>
     <div class="item sb-action" id="sb-selected" title="Frame the current selection in the viewport (click)"><i data-lucide="mouse-pointer-2"></i><strong id="sb-selected-n">0</strong>selected</div>
     <div class="item sb-action" id="sb-flagged" title="Isolate flagged parts in the viewport (click)"><i data-lucide="flag"></i><strong id="sb-flagged-n">0</strong>flagged</div>
     <div class="item right" id="sb-status">Ready</div>

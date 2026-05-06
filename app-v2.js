@@ -2377,7 +2377,6 @@ function tick() {
     if (now - lastFps > 500) {
       try {
         $('fps').textContent = Math.round((frameCount * 1000) / (now - lastFps));
-        if (renderer.info?.render) $('sb-draws').textContent = fmtNum(renderer.info.render.calls);
       } catch (_) {}
       frameCount = 0; lastFps = now;
     }
