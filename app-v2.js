@@ -9,6 +9,10 @@ import { PLYExporter } from 'three/addons/exporters/PLYExporter.js';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
 import { USDZExporter } from 'three/addons/exporters/USDZExporter.js';
 import { GLTFLoader }  from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader }   from 'three/addons/loaders/FBXLoader.js';
+import { OBJLoader }   from 'three/addons/loaders/OBJLoader.js';
+import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
+import { STLLoader }   from 'three/addons/loaders/STLLoader.js';
 // Optional decoders. Imported eagerly so they're cached at boot, but only
 // attached to the loader when present. step2glb.py's --meshopt flag emits GLBs
 // using EXT_meshopt_compression (industry-standard); --quantize uses
@@ -758,12 +762,28 @@ function rafCoalesce(fn) {
   };
 }
 
+// Map a file's extension to the matching loader. Keep this list in sync
+// with the file-input accept attribute, the welcome-modal MIME map, and
+// the drag-and-drop pickers below.
+const _MESH_LOADERS = {
+  glb:  loadGlbFile,
+  gltf: loadGlbFile,
+  fbx:  loadFbxFile,
+  obj:  loadObjFile,
+  '3mf': load3mfFile,
+  stl:  loadStlFile,
+};
+function _loaderForName(name) {
+  const m = /\.([^.]+)$/.exec(name || '');
+  return m ? _MESH_LOADERS[m[1].toLowerCase()] : null;
+}
+
 function _handleSelectedFile(file) {
   if (!file) return;
   const isStep = /\.(step|stp)$/i.test(file.name);
-  const isGlb  = /\.(glb|gltf)$/i.test(file.name);
-  if (!isStep && !isGlb) {
-    toast('Wrong file type', 'Please choose a .step, .stp, .glb, or .gltf file', 'warn');
+  const meshLoader = _loaderForName(file.name);
+  if (!isStep && !meshLoader) {
+    toast('Wrong file type', 'Supported: .step, .stp, .glb, .gltf, .fbx, .obj, .3mf, .stl', 'warn');
     return;
   }
   // While the welcome modal is up, switch its body to the loading pane so
@@ -775,7 +795,7 @@ function _handleSelectedFile(file) {
     // The loader overlay already conveys "wait for engine init" — no toast.
     return;
   }
-  if (isGlb) { loadGlbFile(file); return; }
+  if (meshLoader) { meshLoader(file); return; }
   // STEP: route through the local Python converter (/api/convert) — handles
   // any size, no in-browser WASM cap, materials/colors flow through.
   convertStepViaServer(file);
@@ -896,11 +916,13 @@ async function _openWithPicker() {
   try {
     [handle] = await window.showOpenFilePicker({
       types: [{
-        description: 'STEP / glTF',
+        description: '3D model (STEP / glTF / FBX / OBJ / 3MF / STL)',
         accept: {
           'model/step':         ['.step', '.stp'],
           'model/gltf-binary':  ['.glb'],
           'model/gltf+json':    ['.gltf'],
+          'application/octet-stream': ['.fbx', '.3mf', '.stl'],
+          'model/obj':          ['.obj'],
         },
       }],
       excludeAcceptAllOption: false,
@@ -1305,6 +1327,10 @@ const _Actions = (() => {
     { id:'solid',        group:'View',       label:'Solid view',                 kbd:'1', run: () => { try { setViewMode('solid'); } catch (_) {} } },
     { id:'wire',         group:'View',       label:'Wireframe view',             kbd:'2', run: () => { try { setViewMode('wire'); } catch (_) {} } },
     { id:'edges',        group:'View',       label:'Edges view',                 kbd:'3', run: () => { try { setViewMode('edges'); } catch (_) {} } },
+    { id:'gzMove',       group:'View',       label:'Translate gizmo (Shift to snap 10u)', kbd:'W', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
+    { id:'gzRotate',     group:'View',       label:'Rotate gizmo (Shift to snap 15°)',    kbd:'E', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
+    { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'R', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
+    { id:'gzOff',        group:'View',       label:'Hide gizmo',                          kbd:'Q', run: () => { try { setGizmoMode('off'); } catch (_) {} } },
     { id:'tgGrid',       group:'View',       label:'Toggle grid',                run: _click('tg-grid') },
     { id:'tgAxes',       group:'View',       label:'Toggle axes',                run: _click('tg-axes') },
     { id:'tgBbox',       group:'View',       label:'Toggle bounding boxes',      run: _click('tg-bbox') },
@@ -1651,9 +1677,35 @@ function initScene() {
   controls.addEventListener('start', () => requestRender());
   controls.addEventListener('change', () => requestRender());
   controls.addEventListener('end', () => requestRender());
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x303642, 0.55));
-  const dir = new THREE.DirectionalLight(0xffffff, 1.2); dir.position.set(80, 60, 100); scene.add(dir);
-  const fill = new THREE.DirectionalLight(0xb0c4ff, 0.4); fill.position.set(-80, -40, 60); scene.add(fill);
+  // ── Lights ────────────────────────────────────────────────────────────
+  // Final (target) intensities. Captured here so the boot fade-in below can
+  // ramp from 0 to these values for a "lights turning on" reveal on first
+  // load. The same target values are used for any subsequent re-init (model
+  // reload, renderer swap), where the ramp is short enough to feel instant.
+  const _hemiTarget = 0.55, _dirTarget = 1.2, _fillTarget = 0.4;
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0); scene.add(hemi);
+  const dir  = new THREE.DirectionalLight(0xffffff, 0); dir.position.set(80, 60, 100); scene.add(dir);
+  const fill = new THREE.DirectionalLight(0xb0c4ff, 0); fill.position.set(-80, -40, 60); scene.add(fill);
+  state._lights = { hemi, dir, fill, hemiTarget: _hemiTarget, dirTarget: _dirTarget, fillTarget: _fillTarget };
+  // Boot ramp: smoothstep over ~900ms from 0 to target. Re-renders on each
+  // tick because the scene is render-on-demand; without requestRender the
+  // intermediate frames wouldn't paint and the user would just see a hard
+  // pop at the end of the ramp.
+  (function _rampLights() {
+    const start = performance.now();
+    const dur = 900;
+    function tick() {
+      const t = Math.min(1, (performance.now() - start) / dur);
+      // smoothstep — ease in/out
+      const k = t * t * (3 - 2 * t);
+      hemi.intensity = _hemiTarget * k;
+      dir.intensity  = _dirTarget  * k;
+      fill.intensity = _fillTarget * k;
+      requestRender?.();
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  })();
   gridHelper = new THREE.GridHelper(200, 40, 0x3a4358, 0x232938);
   gridHelper.rotation.x = Math.PI / 2;
   gridHelper.material.transparent = true;
@@ -1677,6 +1729,12 @@ function initScene() {
   // slimming pass below this gives a noticeably lighter visual.
   state.gizmo.size = 0.6;
   state.gizmo.setMode('translate');
+  // Industry-standard snap-while-shift, applied globally to whichever gizmo
+  // mode is active. 10 units / 15° / 0.1 — same defaults as Maya/Blender/Max.
+  // Snaps are armed/disarmed from the document-level Shift listeners in the
+  // input setup block; we only configure the values here so the gizmo
+  // reflects the latest settings even if it's recreated.
+  state.gizmoSnap = { translate: 10, rotate: Math.PI / 12, scale: 0.1 };
   // Track transforms for undo: snapshot mesh world matrix on drag start, push undo on drag end
   state.gizmo.addEventListener('dragging-changed', e => {
     controls.enabled = !e.value;
@@ -2189,8 +2247,20 @@ function setGizmoMode(mode) {
     state.gizmo.setMode(mode);
     updateGizmo();
   }
-  ['gz-translate','gz-rotate','gz-off'].forEach(id => $(id)?.classList.remove('active'));
+  ['gz-translate','gz-rotate','gz-scale'].forEach(id => $(id)?.classList.remove('active'));
   $('gz-' + mode)?.classList.add('active');
+}
+
+// Toggle snap on/off across all three gizmo modes. Called from the
+// document-level Shift keydown/keyup listeners — the user holds Shift to
+// snap, releases to free-drag. Three's TransformControls reads these every
+// frame, so toggling mid-drag works without restarting the drag.
+function _setGizmoSnap(on) {
+  if (!state.gizmo) return;
+  const s = state.gizmoSnap;
+  state.gizmo.setTranslationSnap(on ? s.translate : null);
+  state.gizmo.setRotationSnap(on ? s.rotate : null);
+  state.gizmo.setScaleSnap(on ? s.scale : null);
 }
 
 // Build a 2D-canvas-backed CanvasTexture suitable for use as a scene
@@ -4410,10 +4480,26 @@ function refreshPropertiesPanel() {
   for (const p of state.parts) if (!p.deleted) sceneTris += p.triCount;
 
   let nameHtml = `<span class="prop-name" style="color:var(--tx3)">No selection</span>`;
+  let materialHtml = '';
   let tagsHtml = '';
   let tris = '—', verts = '—', bbox = '—', diag = '—', pct = '—', vol = '—';
   let triShare = 0;
   let triShareLabel = '—';
+
+  // Resolve the material currently bound to a part (handles both standalone
+  // mesh and instanced parts; ignores Material[] arrays by taking [0]).
+  const _matOfPart = (p) => {
+    if (!p) return null;
+    let m = p.mesh?.material;
+    if (!m) m = p.instancedMesh?.material;
+    if (Array.isArray(m)) m = m[0];
+    return (m && m.isMaterial) ? m : null;
+  };
+  const _matLabel = (m) => {
+    if (!m) return '';
+    const n = (m.name && m.name.trim()) || ('mat_' + (m.color?.getHexString?.() || 'cccccc'));
+    return n;
+  };
 
   if (ids.length === 1) {
     const p = getPart(ids[0]);
@@ -4422,6 +4508,11 @@ function refreshPropertiesPanel() {
     const hex = '#' + (p.originalColor?.getHexString?.() || 'aaaaaa');
     nameHtml = `<span class="prop-color" style="background:${hex}" title="Material color"></span>` +
                `<span class="prop-name" title="${p.name}">${p.name}</span>`;
+    const mat = _matOfPart(p);
+    if (mat) {
+      const label = _matLabel(mat);
+      materialHtml = `<button class="prop-mat-btn" data-action="edit-material" title="Click to edit material"><i data-lucide="sliders-horizontal"></i><span class="prop-mat-name">${escapeHtml(label)}</span></button>`;
+    }
     const tags = [];
     if (p.group)    tags.push(`<span class="tree-badge">instanced ×${p.group.parts.length}</span>`);
     if (p.flagged)  tags.push(`<span class="tree-badge warn">flagged</span>`);
@@ -4456,6 +4547,22 @@ function refreshPropertiesPanel() {
       ? `<span class="prop-color" style="background:${sharedColor}" title="All selected share this color"></span>`
       : `<span class="prop-color" style="background:linear-gradient(135deg,#6ea8ff,#a78bfa,#34c759)" title="Mixed colors"></span>`;
     nameHtml = swatch + `<span class="prop-name">${ids.length} parts selected</span>`;
+    // Detect shared material across the selection — show its name; otherwise
+    // mark as mixed so the user knows the editor would only target one.
+    const matSet = new Set();
+    let sharedMatRef = null;
+    for (const id of ids) {
+      const m = _matOfPart(getPart(id));
+      if (!m) { matSet.clear(); break; }
+      matSet.add(m);
+      if (matSet.size > 1) break;
+      sharedMatRef = m;
+    }
+    if (matSet.size === 1 && sharedMatRef) {
+      materialHtml = `<button class="prop-mat-btn" data-action="edit-material" title="Click to edit material"><i data-lucide="sliders-horizontal"></i><span class="prop-mat-name">${escapeHtml(_matLabel(sharedMatRef))}</span></button>`;
+    } else if (matSet.size > 1) {
+      materialHtml = `<span class="prop-mat-btn prop-mat-mixed"><i data-lucide="sliders-horizontal"></i><span class="prop-mat-name">mixed materials</span></span>`;
+    }
     const tags = [];
     if (anyInstanced) tags.push(`<span class="tree-badge">${anyInstanced} instanced</span>`);
     if (anyFlagged)   tags.push(`<span class="tree-badge warn">contains flagged</span>`);
@@ -4482,6 +4589,7 @@ function refreshPropertiesPanel() {
 
   el.innerHTML = `
     <div class="prop-head">${nameHtml}</div>
+    ${materialHtml ? `<div class="prop-material-row">${materialHtml}</div>` : ''}
     <div class="prop-tags">${tagsHtml}</div>
     <div class="prop-bar-wrap" title="Triangle share of total scene">
       <span class="prop-bar-icon"><i data-lucide="bar-chart-3"></i></span>
@@ -4496,6 +4604,21 @@ function refreshPropertiesPanel() {
       <span class="prop-icon"><i data-lucide="percent"></i></span><span class="prop-label">% of model</span><strong class="prop-value">${pct}</strong>
       <span class="prop-icon"><i data-lucide="package"></i></span><span class="prop-label">Volume</span><strong class="prop-value">${vol}</strong>
     </div>`;
+  // Wire the material edit button — opens the same per-material editor used
+  // from the right-sidebar Materials section and the viewport popup.
+  const matBtn = el.querySelector('.prop-mat-btn[data-action="edit-material"]');
+  if (matBtn) matBtn.addEventListener('click', () => {
+    if (typeof _collectLiveMaterials !== 'function' || typeof _openMaterialEditor !== 'function') return;
+    const ids = [...state.selected];
+    if (!ids.length) return;
+    const p = getPart(ids[0]);
+    let target = p?.mesh?.material;
+    if (!target) target = p?.instancedMesh?.material;
+    if (Array.isArray(target)) target = target[0];
+    if (!target) return;
+    const info = _collectLiveMaterials().find(i => i.mat === target);
+    if (info) _openMaterialEditor(info);
+  });
   _lucide();
   _updateSelectedChip();
 }
@@ -8129,7 +8252,11 @@ function wireUI() {
       danger: true,
     });
     if (!ok) return;
-    loadGlbFile(state._sourceFile);
+    // Source file may be any supported mesh format — route through the same
+    // dispatcher used by drag-and-drop so revert works for FBX/OBJ/3MF/STL too.
+    const meshLoader = _loaderForName(state._sourceFile?.name);
+    if (meshLoader) meshLoader(state._sourceFile);
+    else loadGlbFile(state._sourceFile);
   });
   $('btn-undo').addEventListener('click', () => undoLast());
   $('btn-redo')?.addEventListener('click', () => redoLast());
@@ -8211,7 +8338,21 @@ function wireUI() {
   $('vw-xray').addEventListener('click', () => setViewMode('xray'));
   $('gz-translate')?.addEventListener('click', () => setGizmoMode('translate'));
   $('gz-rotate')?.addEventListener('click', () => setGizmoMode('rotate'));
-  $('gz-off')?.addEventListener('click', () => setGizmoMode('off'));
+  $('gz-scale')?.addEventListener('click', () => setGizmoMode('scale'));
+
+  // Global shift-to-snap. Industry-standard Maya/Blender/Max behaviour: hold
+  // Shift while dragging any gizmo handle and the motion snaps to fixed
+  // increments. Listeners are document-level so the modifier is honoured
+  // regardless of which element has focus, and keydown auto-repeat is a no-op.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift' && !e.repeat) _setGizmoSnap(true);
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') _setGizmoSnap(false);
+  });
+  // Window blur (alt-tab away while holding Shift) — clear snap so the user
+  // doesn't return to a "stuck snap" gizmo.
+  window.addEventListener('blur', () => _setGizmoSnap(false));
   $('tg-grid').addEventListener('click', () => { state.showGrid=!state.showGrid; gridHelper.visible=state.showGrid; $('tg-grid').classList.toggle('active', state.showGrid); requestRender(); });
   $('tg-bbox').addEventListener('click', () => {
     state.showBboxes = !state.showBboxes;
@@ -8721,6 +8862,14 @@ function wireUI() {
   }));
   $('export-close').addEventListener('click', () => $('export-modal').classList.remove('show'));
   $('export-cancel').addEventListener('click', () => $('export-modal').classList.remove('show'));
+  // Format-compatibility sheet — opened from "Compare formats" in the export
+  // modal header. Stays open over the export modal so the user can glance at
+  // it while picking a format.
+  $('export-compat-btn')?.addEventListener('click', () => $('format-compat-modal')?.classList.add('show'));
+  $('format-compat-close')?.addEventListener('click', () => $('format-compat-modal')?.classList.remove('show'));
+  $('format-compat-modal')?.addEventListener('click', (e) => {
+    if (e.target === $('format-compat-modal')) $('format-compat-modal').classList.remove('show');
+  });
   // Toggle the custom-scale input only when "Custom" is chosen.
   $('exp-scale')?.addEventListener('change', e => {
     const isCustom = e.target.value === 'custom';
@@ -8877,6 +9026,7 @@ function wireUI() {
     else if (e.key === '3') setViewMode('xray');
     else if (e.key === 'w' || e.key === 'W') setGizmoMode('translate');
     else if (e.key === 'e' || e.key === 'E') setGizmoMode('rotate');
+    else if (e.key === 'r' || e.key === 'R') setGizmoMode('scale');
     else if (e.key === 'q' || e.key === 'Q') setGizmoMode('off');
     else if (e.key === 'g' || e.key === 'G') $('tg-grid').click();
     else if (e.key === 'b' || e.key === 'B') $('tg-bbox').click();
@@ -9030,18 +9180,155 @@ function _disposeAllBVHs() {
   if (n) Log.debug(`disposed ${n} BVHs`, { tag: 'bvh' });
 }
 
-async function loadGlbFile(file) {
-  setLoader(true, 'Reading GLB...', file.name);
+// Format-agnostic ingestion: walks meshes off a parsed scene root, builds
+// state.parts, hooks up materials, and triggers all the post-load UI work.
+// Called from loadGlbFile / loadFbxFile / loadObjFile / load3mfFile /
+// loadStlFile after each format-specific parser produces a THREE.Object3D.
+async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
+  const formatLabel = format.toUpperCase();
+  setLoaderProgress(60);
+  // Yield one microtask so any in-flight WebGPU command buffer can finish
+  // before clearModel() starts calling .destroy()/.dispose() on resources.
+  await new Promise(r => requestAnimationFrame(r));
+  clearModel();
+  state.materialByColor.clear(); state.geomByHash.clear(); state.instancedGroups = [];
+  const overallBox = new THREE.Box3();
+  let totalTris = 0, totalVerts = 0, totalBytes = 0;
+  // Track stripped geometries by uuid so shared geoms (auto-instanced parts)
+  // are only stripped + accounted for once.
+  const _strippedGeoms = new Set();
+  let _stripBytesSaved = 0;
+  const meshList = [];
+  sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
+  const meshToPart = new Map();
+  let i = 0;
+  for (const m of meshList) {
+    const geom = m.geometry;
+    const pos = geom.attributes.position;
+    if (!pos) { i++; continue; }
+    if (!geom.attributes.normal) geom.computeVertexNormals();
+    geom.computeBoundingBox(); geom.computeBoundingSphere();
+    const idx = geom.index?.array;
+    const triCount = (idx ? idx.length : pos.count) / 3;
+    const vertCount = pos.count;
+    totalTris += triCount; totalVerts += vertCount;
+    totalBytes += pos.array.byteLength;
+    if (geom.attributes.normal) totalBytes += geom.attributes.normal.array.byteLength;
+    if (idx) totalBytes += geom.index.array.byteLength;
+    let color = new THREE.Color(0xaaaaaa);
+    if (m.material?.color) color = m.material.color.clone();
+    const bbox = geom.boundingBox.clone();
+    m.updateWorldMatrix(true, false);
+    bbox.applyMatrix4(m.matrixWorld);
+    if (!bbox.isEmpty()) overallBox.union(bbox);
+    const sz = bbox.getSize(new THREE.Vector3());
+    const partInfo = {
+      partId: i, name: m.name || `mesh_${i}`, hash: geom.uuid,
+      triCount, vertCount, bbox,
+      sizeMetrics: { diag: sz.length(), vol: sz.x*sz.y*sz.z, max: Math.max(sz.x, sz.y, sz.z) },
+      visible: true, deleted: false, flagged: false,
+      originalColor: color.clone(), mesh: m, group: null, instanceIndex: -1, instancedMesh: null,
+      userExtras: (typeof _grabExtras === 'function') ? _grabExtras(m) : {},
+    };
+    // Dispose the loader-created material before replacing with our shared
+    // one — otherwise each mesh leaks one MeshStandardMaterial / Phong /
+    // Lambert (plus any embedded textures) until full page reload.
+    const _origMat = m.material;
+    m.material = getOrCreateMaterial(color);
+    if (_origMat && _origMat !== m.material) {
+      if (Array.isArray(_origMat)) for (const mm of _origMat) mm?.dispose?.();
+      else _origMat.dispose?.();
+    }
+    m.userData.partId = partInfo.partId;
+    if (!_strippedGeoms.has(geom.uuid)) {
+      _strippedGeoms.add(geom.uuid);
+      _stripBytesSaved += _stripUnusedAttributes(geom, _attributeKeepSet(m.material));
+    }
+    state.parts.push(partInfo);
+    meshToPart.set(m, partInfo);
+    if (!state.geomByHash.has(partInfo.hash)) state.geomByHash.set(partInfo.hash, geom);
+    i++;
+  }
+  try { _buildHierarchyFromScene(sceneRoot, meshToPart); }
+  catch (err) { console.warn('[STEP] hierarchy build failed:', err); state.treeNodes = []; }
+  state.partsRoot.add(sceneRoot);
+  state.partsRoot.updateMatrixWorld(true);
+  // Capture each mesh's EXACT world matrix BEFORE anything can corrupt it
+  // — see the GLB-shear note that used to live here for the rationale.
+  for (const p of state.parts) {
+    if (p.mesh) {
+      p.mesh.updateWorldMatrix(true, false);
+      p._exactWorld = p.mesh.matrixWorld.clone();
+    }
+  }
+  // Auto-instance only meaningful for GLBs from step2glb.py — that pipeline
+  // shares BufferGeometry across instances so the dedupe pass actually finds
+  // matches. FBX / OBJ / 3MF / STL importers each clone geometry per mesh.
+  if (format === 'glb' && state.autoInstance) {
+    try { _autoInstanceFromGLB(); }
+    catch (e) { console.warn('[STEP] auto-instance failed:', e); }
+  }
+  setLoaderProgress(90);
+  state.bboxBuilt = false;
+  const size = overallBox.getSize(new THREE.Vector3());
+  state.modelDiag = Math.max(size.length(), 0.0001);
+  $('sb-parts').textContent = fmtNum(state.parts.length);
+  $('sb-tris').textContent = fmtNum(totalTris);
+  $('sb-verts').textContent = fmtNum(totalVerts);
+  $('sb-mem').textContent = fmtBytes(totalBytes);
+  $('vp-tris').textContent = fmtNum(totalTris);
+  $('vp-parts').textContent = fmtNum(state.parts.length);
+  $('vp-instances').textContent = fmtNum(state.instancedGroups.length);
+  $('vp-info').style.display = '';
+  state._initialTris = totalTris;
+  _updateTriBar(totalTris);
+  _reindexParts();
+  applyPerfMode();
+  rebuildTree(); refreshFlagged(); fitToView();
+  state._loadedFilename = file.name;
+  // Save-Scene marker only embedded in GLBs we exported ourselves; skip the
+  // walk for other formats.
+  if (format === 'glb') {
+    const _savedState = _extractSceneState(sceneRoot);
+    if (_savedState) _applySceneState(_savedState);
+  }
+  onModelLoaded(file.name);
+  _buildBVHsForAllGeoms();
+  requestRender();
+  setLoaderProgress(100);
+  if (_stripBytesSaved > 0) {
+    Log.info(`Stripped ${(_stripBytesSaved/1048576).toFixed(1)} MB of unused vertex attributes from ${_strippedGeoms.size} geometries`, { tag: 'load' });
+  }
+  toast(`${formatLabel} loaded`, `${state.parts.length} meshes - ${(byteLength/1048576).toFixed(1)} MB`, 'success');
+  await new Promise(r => setTimeout(r, 350));
+  _drainDisposeQueue();
+}
+
+// Shared try/finally wrapper around _ingestSceneRoot so each format-specific
+// loader is just: read bytes → parse → ingest. Renderer pause + control
+// re-enable + loader-overlay teardown all live here so the format functions
+// stay tiny.
+async function _runLoad(file, formatLabel, parser) {
+  setLoader(true, `Reading ${formatLabel}...`, file.name);
   setLoaderProgress(10);
-  // Cache the source File so the toolbar Revert button can re-load it from
-  // scratch. File objects expose arrayBuffer() repeatedly, so the same File
-  // can be parsed again without re-uploading or re-converting from STEP.
   state._sourceFile = file;
-  // Pause renderer BEFORE we start tearing down geometries — WebGPU is
-  // pipelining frames, and disposing a BufferGeometry while it's bound to
-  // an in-flight draw triggers "data.buffer is undefined" in writeBuffer.
   state.renderPaused = true;
   try {
+    await parser();
+  } catch (e) {
+    console.error(e);
+    toast(`${formatLabel} load failed`, e.message || String(e), 'error', 7000);
+    await new Promise(r => setTimeout(r, 1500));
+  } finally {
+    state.renderPaused = false;
+    if (controls) controls.enabled = true;
+    setLoader(false);
+    requestRender();
+  }
+}
+
+async function loadGlbFile(file) {
+  return _runLoad(file, 'GLB', async () => {
     const buffer = await file.arrayBuffer();
     setLoaderProgress(35);
     const loader = _getGlbLoader();
@@ -9051,7 +9338,6 @@ async function loadGlbFile(file) {
     // Most CAD-pipeline GLBs ship Draco- or meshopt-compressed; without
     // round-trip support, the re-exported file balloons 5–20× because we
     // write FP32 attributes against the source's quantized/compressed ones.
-    // Stash on state so the export modal / toast can reference it later.
     try {
       const usedExt = gltf.parser?.json?.extensionsUsed || [];
       state._sourceExtensions = usedExt;
@@ -9067,170 +9353,56 @@ async function loadGlbFile(file) {
           { tag: 'load' });
       }
     } catch (_) { /* parser shape may differ between three.js versions; non-fatal */ }
-    setLoaderProgress(60);
-    // Yield one microtask so any in-flight WebGPU command buffer can finish
-    // before clearModel() starts calling .destroy()/.dispose() on resources.
-    await new Promise(r => requestAnimationFrame(r));
-    clearModel();
-    state.materialByColor.clear(); state.geomByHash.clear(); state.instancedGroups = [];
-    const overallBox = new THREE.Box3();
-    let totalTris = 0, totalVerts = 0, totalBytes = 0;
-    // Track stripped geometries by uuid so shared geoms (auto-instanced parts)
-    // are only stripped + accounted for once. Bytes-saved counter feeds the
-    // load toast at the end.
-    const _strippedGeoms = new Set();
-    let _stripBytesSaved = 0;
-    const meshList = [];
-    gltf.scene.traverse(o => { if (o.isMesh) meshList.push(o); });
-    // mesh-Object3D → partInfo, used after the loop to build the tree hierarchy
-    // alongside the existing flat state.parts. Without this map we'd have no way
-    // to associate gltf scene-graph nodes with our partInfo records.
-    const meshToPart = new Map();
-    let i = 0;
-    for (const m of meshList) {
-      const geom = m.geometry;
-      const pos = geom.attributes.position;
-      if (!pos) { i++; continue; }
-      if (!geom.attributes.normal) geom.computeVertexNormals();
-      geom.computeBoundingBox(); geom.computeBoundingSphere();
-      const idx = geom.index?.array;
-      const triCount = (idx ? idx.length : pos.count) / 3;
-      const vertCount = pos.count;
-      totalTris += triCount; totalVerts += vertCount;
-      totalBytes += pos.array.byteLength;
-      if (geom.attributes.normal) totalBytes += geom.attributes.normal.array.byteLength;
-      if (idx) totalBytes += geom.index.array.byteLength;
-      let color = new THREE.Color(0xaaaaaa);
-      if (m.material?.color) color = m.material.color.clone();
-      const bbox = geom.boundingBox.clone();
-      m.updateWorldMatrix(true, false);
-      bbox.applyMatrix4(m.matrixWorld);
-      if (!bbox.isEmpty()) overallBox.union(bbox);
-      const sz = bbox.getSize(new THREE.Vector3());
-      // Hash by geometry UUID. step2glb.py emits a glTF where N copies of the
-      // same shape share the same BufferGeometry — using its uuid as the hash
-      // means cleanDupes/instance-detection actually find the duplicates that
-      // the converter already identified.
-      const partInfo = {
-        partId: i, name: m.name || `mesh_${i}`, hash: geom.uuid,
-        triCount, vertCount, bbox,
-        sizeMetrics: { diag: sz.length(), vol: sz.x*sz.y*sz.z, max: Math.max(sz.x, sz.y, sz.z) },
-        visible: true, deleted: false, flagged: false,
-        originalColor: color.clone(), mesh: m, group: null, instanceIndex: -1, instancedMesh: null,
-        userExtras: (typeof _grabExtras === 'function') ? _grabExtras(m) : {},
-      };
-      // Dispose the GLTFLoader-created material before replacing it with our
-      // shared one — otherwise every mesh leaks one MeshStandardMaterial
-      // (plus any embedded textures) until full page reload.
-      const _origMat = m.material;
-      m.material = getOrCreateMaterial(color);
-      if (_origMat && _origMat !== m.material) {
-        if (Array.isArray(_origMat)) for (const mm of _origMat) mm?.dispose?.();
-        else _origMat.dispose?.();
-      }
-      m.userData.partId = partInfo.partId;
-      // Strip dead vertex attributes (uv/uv2/tangent/color/morph*) the
-      // freshly-installed flat material doesn't bind. Done after the material
-      // swap above so _attributeKeepSet sees the LIVE material, not the
-      // source GLB's. Dedupe via geom.uuid: shared geometries (auto-instanced
-      // parts referencing the same BufferGeometry) only get processed once.
-      if (!_strippedGeoms.has(geom.uuid)) {
-        _strippedGeoms.add(geom.uuid);
-        _stripBytesSaved += _stripUnusedAttributes(geom, _attributeKeepSet(m.material));
-      }
-      // Keep mesh matrixAutoUpdate=true (default): bboxify/undo paths mutate
-      // mesh.position/quaternion/scale and need matrix recomposition. The big
-      // win comes from partsRoot.matrixAutoUpdate=false above (one less
-      // recursive walk through every child each frame).
-      state.parts.push(partInfo);
-      meshToPart.set(m, partInfo);
-      // Multiple parts may share the same geometry; only set once.
-      if (!state.geomByHash.has(partInfo.hash)) state.geomByHash.set(partInfo.hash, geom);
-      i++;
-    }
-    // ── Build hierarchical tree from the GLB scene graph ─────────────────
-    // step2glb.py (the new hierarchical path) emits intermediate THREE.Group
-    // nodes for each XCAF assembly node — these are the "Null Object" entries
-    // C4D shows. We walk the scene depth-first and record both groups and
-    // mesh leaves into state.treeNodes. rebuildTree consumes this list when
-    // present; if it's empty (legacy/flat GLB), tree falls back to flat.
-    try { _buildHierarchyFromScene(gltf.scene, meshToPart); }
-    catch (err) { console.warn('[STEP] hierarchy build failed:', err); state.treeNodes = []; }
-    state.partsRoot.add(gltf.scene);
-    state.partsRoot.updateMatrixWorld(true);
-    // Capture each mesh's EXACT world matrix BEFORE anything can corrupt it.
-    // Cinema-4D-exported GLBs sometimes carry shear in ancestor transforms
-    // (rotation × non-uniform scale). The first time the gizmo attaches, the
-    // pivot re-parents the mesh via Object3D.attach() — which decomposes the
-    // relative matrix into TRS and silently drops the shear. From that point
-    // on, mesh.matrixWorld is subtly wrong, and merge / bbox-ify operations
-    // that bake matrixWorld into vertices produce "exploded" geometry. We
-    // sidestep this by snapshotting the matrix here and preferring it over
-    // the live mesh.matrixWorld in those bake operations.
-    for (const p of state.parts) {
-      if (p.mesh) {
-        p.mesh.updateWorldMatrix(true, false);
-        p._exactWorld = p.mesh.matrixWorld.clone();
-      }
-    }
-    // Collapse repeated geometries into InstancedMesh draws.
-    if (state.autoInstance) {
-      try { _autoInstanceFromGLB(); }
-      catch (e) { console.warn('[STEP] auto-instance failed:', e); }
-    }
-    setLoaderProgress(90);
-    // Bbox helpers used to be created up front per part; for huge assemblies
-    // that's tens of thousands of scene-graph children that never render.
-    // Defer construction until the bbox toggle is first turned on.
-    state.bboxBuilt = false;
-    const size = overallBox.getSize(new THREE.Vector3());
-    state.modelDiag = Math.max(size.length(), 0.0001);
-    $('sb-parts').textContent = fmtNum(state.parts.length);
-    $('sb-tris').textContent = fmtNum(totalTris);
-    $('sb-verts').textContent = fmtNum(totalVerts);
-    $('sb-mem').textContent = fmtBytes(totalBytes);
-    $('vp-tris').textContent = fmtNum(totalTris);
-    $('vp-parts').textContent = fmtNum(state.parts.length);
-    // Reflect the result of _autoInstanceFromGLB() (which may have populated
-    // state.instancedGroups by now). Hard-coding '0' here used to wipe the
-    // count that auto-instancing had just written.
-    $('vp-instances').textContent = fmtNum(state.instancedGroups.length);
-    $('vp-info').style.display = '';
-    state._initialTris = totalTris;
-    _updateTriBar(totalTris);
-    _reindexParts();
-    applyPerfMode();
-    rebuildTree(); refreshFlagged(); fitToView();
-    state._loadedFilename = file.name;
-    // If this GLB was produced by Save Scene, restore camera + toggles + per-part
-    // state. Marker is removed from the scene-graph by _extractSceneState so the
-    // tree view doesn't show a phantom entry.
-    const _savedState = _extractSceneState(gltf.scene);
-    if (_savedState) _applySceneState(_savedState);
-    onModelLoaded(file.name);
-    // Kick off BVH build async — non-blocking, see _buildBVHsForAllGeoms note.
-    _buildBVHsForAllGeoms();
-    requestRender();
-    setLoaderProgress(100);
-    if (_stripBytesSaved > 0) {
-      Log.info(`Stripped ${(_stripBytesSaved/1048576).toFixed(1)} MB of unused vertex attributes from ${_strippedGeoms.size} geometries`, { tag: 'load' });
-    }
-    toast('GLB loaded', `${state.parts.length} meshes - ${(buffer.byteLength/1048576).toFixed(1)} MB`, 'success');
-    await new Promise(r => setTimeout(r, 350));
-    // Drain the deferred-dispose queue from the previous model now that the
-    // new one has been rendered. Fire-and-forget: it self-paces with rAFs and
-    // doesn't block the load completion.
-    _drainDisposeQueue();
-  } catch (e) { console.error(e); toast('GLB load failed', e.message || String(e), 'error', 7000); await new Promise(r => setTimeout(r, 1500)); }
-  finally {
-    state.renderPaused = false;
-    // Defensive: if anything above left controls disabled (gizmo drag was
-    // active when the user picked a new file, etc.), restore camera control
-    // so the viewport doesn't appear "frozen" — orbit was just disabled.
-    if (controls) controls.enabled = true;
-    setLoader(false);
-    requestRender();
-  }
+    await _ingestSceneRoot(gltf.scene, file, buffer.byteLength, 'glb');
+  });
+}
+
+async function loadFbxFile(file) {
+  return _runLoad(file, 'FBX', async () => {
+    const buffer = await file.arrayBuffer();
+    setLoaderProgress(35);
+    setLoader(true, 'Parsing FBX scene...', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
+    const root = new FBXLoader().parse(buffer, '');
+    await _ingestSceneRoot(root, file, buffer.byteLength, 'fbx');
+  });
+}
+
+async function loadObjFile(file) {
+  return _runLoad(file, 'OBJ', async () => {
+    const text = await file.text();
+    setLoaderProgress(35);
+    setLoader(true, 'Parsing OBJ scene...', `${(text.length/1048576).toFixed(1)} MB`);
+    const root = new OBJLoader().parse(text);
+    await _ingestSceneRoot(root, file, text.length, 'obj');
+  });
+}
+
+async function load3mfFile(file) {
+  return _runLoad(file, '3MF', async () => {
+    const buffer = await file.arrayBuffer();
+    setLoaderProgress(35);
+    setLoader(true, 'Parsing 3MF scene...', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
+    const root = new ThreeMFLoader().parse(buffer);
+    await _ingestSceneRoot(root, file, buffer.byteLength, '3mf');
+  });
+}
+
+async function loadStlFile(file) {
+  return _runLoad(file, 'STL', async () => {
+    const buffer = await file.arrayBuffer();
+    setLoaderProgress(35);
+    setLoader(true, 'Parsing STL...', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
+    // STL is single-mesh, no scene graph. Wrap in a Group so the ingestion
+    // helper sees a normal hierarchy with one mesh leaf.
+    const geom = new STLLoader().parse(buffer);
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'mesh';
+    const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ color: 0xaaaaaa }));
+    mesh.name = baseName;
+    const root = new THREE.Group();
+    root.name = baseName;
+    root.add(mesh);
+    await _ingestSceneRoot(root, file, buffer.byteLength, 'stl');
+  });
 }
 
 async function loadByUrl(relUrl) {
@@ -9242,7 +9414,8 @@ async function loadByUrl(relUrl) {
     const buf = await res.arrayBuffer();
     const fname = relUrl.split('/').pop() || 'model';
     const file = new File([new Blob([buf])], fname);
-    if (/\.(glb|gltf)$/i.test(fname)) await loadGlbFile(file);
+    const meshLoader = _loaderForName(fname);
+    if (meshLoader) await meshLoader(file);
     else await loadStepFile(file);
   } catch (e) {
     // Stale ?file= param pointing at a cleaned-up inbox file is the common
@@ -9306,7 +9479,8 @@ async function boot() {
   Log.success('Ready', { tag: 'boot' });
   if (_pendingFile) {
     const f = _pendingFile; _pendingFile = null;
-    if (/\.(glb|gltf)$/i.test(f.name)) loadGlbFile(f); else convertStepViaServer(f);
+    const meshLoader = _loaderForName(f.name);
+    if (meshLoader) meshLoader(f); else convertStepViaServer(f);
   } else if (_Prefs?.get?.('welcomeOnBoot') !== false) {
     // First-run welcome — only when no model is queued AND the pref is on.
     try { _Welcome.show(); } catch (_) {}
@@ -9684,47 +9858,462 @@ function buildMaterialsPanel() {
   const root = $('materials-body');
   if (!root) return;
   if (state.parts.length === 0) {
-    root.innerHTML = `<div style="color:var(--tx3);font-size:12.5px;padding:4px 0">Load a model to see colors / materials.</div>`;
+    root.innerHTML = `<div style="color:var(--tx3);font-size:12.5px;padding:4px 0">Load a model to see materials.</div>`;
     return;
   }
-  const groups = new Map();
-  for (const p of state.parts) {
-    if (p.deleted) continue;
-    const hex = '#' + p.originalColor.getHexString();
-    let g = groups.get(hex);
-    if (!g) { g = { hex, count: 0, parts: [], materials: new Set() }; groups.set(hex, g); }
-    g.count++; g.parts.push(p.partId);
-    if (p.userExtras?.material) g.materials.add(p.userExtras.material);
+  // Group by Material reference (not by color) so the cards mirror what the
+  // Materials viewport popup + editor see. Click-to-select picks every part
+  // using that material, click-to-edit (pencil button or dblclick) opens the
+  // existing _openMaterialEditor so all the slider edits flow through one path.
+  const mats = (typeof _collectLiveMaterials === 'function') ? _collectLiveMaterials() : [];
+  if (!mats.length) {
+    root.innerHTML = `<div style="color:var(--tx3);font-size:12.5px;padding:4px 0">No materials yet.</div>`;
+    return;
   }
-  const sorted = [...groups.values()].sort((a, b) => b.count - a.count);
   root.innerHTML = '';
   const head = document.createElement('div');
-  head.style.cssText = 'font-size:11px;color:var(--tx3);padding:4px 0 6px';
-  head.textContent = `${groups.size} unique color${groups.size===1?'':'s'} · ${state.parts.filter(p=>!p.deleted).length} parts`;
+  head.style.cssText = 'font-size:11px;color:var(--tx3);padding:4px 0 8px';
+  const live = state.parts.filter(p => !p.deleted).length;
+  head.textContent = `${mats.length} material${mats.length === 1 ? '' : 's'} · ${live} part${live === 1 ? '' : 's'}`;
   root.appendChild(head);
-  for (const g of sorted) {
+
+  for (const info of mats) {
+    const m = info.mat;
+    const hex = '#' + (m.color?.getHexString?.() || 'cccccc');
+    const name = (m.name && m.name.trim()) || ('mat_' + hex.slice(1));
+    const previewUrl = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(m) : null;
     const row = document.createElement('div');
-    row.dataset.matColor = g.hex;
-    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 0;cursor:pointer;border-top:1px solid rgba(255,255,255,.04);font-size:12px';
-    const matLabel = g.materials.size ? [...g.materials].slice(0, 2).join(', ') : '';
-    row.innerHTML = `<span class="mat-swatch" data-mat-hex="${g.hex}" title="Click to edit color" style="width:18px;height:18px;border-radius:4px;background:${g.hex};border:1px solid rgba(255,255,255,.15);flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:pointer;transition:transform 100ms var(--ease-out),box-shadow 100ms var(--ease-out)"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span style="font-family:ui-monospace,monospace;font-size:11px;color:var(--tx2)">${g.hex}</span>${matLabel ? `<span style="color:var(--tx3);font-size:10.5px;margin-left:6px">${matLabel}</span>` : ''}</span><span style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:500">${g.count}</span>`;
+    row.className = 'mat-row';
+    row.dataset.matName = name;
+    row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;border-top:1px solid rgba(255,255,255,.04);font-size:12px;border-radius:6px;transition:background 120ms var(--ease-out)';
+    const thumbHtml = previewUrl
+      ? `<img src="${previewUrl}" alt="" draggable="false" style="width:26px;height:26px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.3)">`
+      : `<span style="width:26px;height:26px;border-radius:5px;flex-shrink:0;background:${hex};border:1px solid rgba(255,255,255,.15);box-shadow:0 1px 3px rgba(0,0,0,.3)"></span>`;
+    row.innerHTML = `
+      ${thumbHtml}
+      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <span style="color:var(--tx);font-weight:500" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+        <span style="display:block;font-family:ui-monospace,monospace;font-size:10.5px;color:var(--tx3)">${hex} · ${info.count}</span>
+      </span>
+      <button class="mat-row-edit" title="Edit material" style="background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:5px;cursor:pointer;flex-shrink:0;transition:background 120ms,border-color 120ms,color 120ms">
+        <i data-lucide="sliders-horizontal" style="width:13px;height:13px"></i>
+      </button>
+    `;
     row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,.04)');
     row.addEventListener('mouseleave', () => row.style.background = '');
+    // Single-click → select every part using this material.
     row.addEventListener('click', (e) => {
+      // The pencil/sliders button has its own handler; don't double-fire.
+      if (e.target.closest('.mat-row-edit')) return;
       if (!e.shiftKey && !e.ctrlKey && !e.metaKey) state.selected.clear();
-      for (const id of g.parts) state.selected.add(id);
+      for (const id of info.partIds) state.selected.add(id);
       applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel();
       if (typeof updateGizmo === 'function') updateGizmo();
       $('del-sel-count').textContent = state.selected.size;
-      // Selection result is visible in the viewport / sidebar chip — no toast.
+    });
+    // Double-click anywhere on the row also opens the editor — mirrors the
+    // viewport popup convention so users get the same gesture across panels.
+    row.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      if (typeof _openMaterialEditor === 'function') _openMaterialEditor(info);
+    });
+    // Pencil/sliders icon — explicit "edit material" affordance.
+    row.querySelector('.mat-row-edit')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (typeof _openMaterialEditor === 'function') _openMaterialEditor(info);
     });
     root.appendChild(row);
   }
+  _lucide?.();
 }
 
 // Hook materials rebuild into the tree rebuild
 const _origRebuildTree2 = rebuildTree;
 rebuildTree = function() { _origRebuildTree2(); buildMaterialsPanel(); };
+
+// =====================================================================
+// Materials popup + per-material editor (draggable).
+// Triggered by tg-materials in the viewport overlay. The list groups every
+// live material in the scene (by Material reference, not by colour, so two
+// materials sharing a hex but with different metalness show separately).
+// Double-click opens an editor in a _DraggablePopup with sliders bound to
+// the live material — every change is a direct write + requestRender, so
+// the viewport updates as you drag. Edits are session-only for now;
+// persistence into scene.json is a follow-up.
+// =====================================================================
+
+// Walk live parts, collect every unique Material reference. Returns an array
+// of { mat, count, partIds } sorted by count desc. Skips invisible/deleted.
+function _collectLiveMaterials() {
+  const seen = new Map();
+  for (const p of state.parts || []) {
+    if (p.deleted) continue;
+    let m = p.mesh?.material;
+    if (Array.isArray(m)) m = m[0];
+    if (!m || !m.isMaterial) continue;
+    let entry = seen.get(m);
+    if (!entry) { entry = { mat: m, count: 0, partIds: [] }; seen.set(m, entry); }
+    entry.count++;
+    entry.partIds.push(p.partId);
+  }
+  return [...seen.values()].sort((a, b) => b.count - a.count);
+}
+
+// Synthetic sphere preview drawn to a 2D canvas. Avoids spinning up a
+// second WebGL/WebGPU renderer (the app's bundle is the WebGPU build, which
+// doesn't expose WebGLRenderer; WebGPURenderer needs async init + async
+// render which is awkward for a sync grid populate). Result is a fake-3D
+// sphere that conveys colour, roughness, metallic feel, and emissive glow
+// well enough to identify materials at a glance — same role as Cinema 4D's
+// material thumbnails. Cached per Material reference so opening the panel
+// is instant; invalidated on slider edits.
+const _matPreviewCache = new WeakMap();
+function _renderMaterialPreview(mat) {
+  const cached = _matPreviewCache.get(mat);
+  if (cached) return cached;
+  try {
+    const SIZE = 96;             // 2x of the 48px CSS thumb for crisp retina
+    const c = document.createElement('canvas');
+    c.width = c.height = SIZE;
+    const ctx = c.getContext('2d');
+
+    const cx = SIZE / 2, cy = SIZE / 2, r = SIZE * 0.4;
+    const baseHex = '#' + (mat.color?.getHexString?.() || 'cccccc');
+    const baseRgb = parseInt(baseHex.slice(1), 16);
+    const bR = (baseRgb >> 16) & 0xff, bG = (baseRgb >> 8) & 0xff, bB = baseRgb & 0xff;
+
+    const rough = Math.max(0, Math.min(1, mat.roughness ?? 0.5));
+    const metal = Math.max(0, Math.min(1, mat.metalness ?? 0));
+    const emisHex = '#' + (mat.emissive?.getHexString?.() || '000000');
+    const emisRgb = parseInt(emisHex.slice(1), 16);
+    const eR = (emisRgb >> 16) & 0xff, eG = (emisRgb >> 8) & 0xff, eB = emisRgb & 0xff;
+    const emisInt = Math.max(0, Math.min(2, mat.emissiveIntensity ?? 1));
+    // Fold emissive into the base RGB so glow shows even though we have no
+    // real lighting. emisRgb at intensity 1 is roughly additive.
+    const useR = Math.min(255, bR + Math.round(eR * emisInt * 0.6));
+    const useG = Math.min(255, bG + Math.round(eG * emisInt * 0.6));
+    const useB = Math.min(255, bB + Math.round(eB * emisInt * 0.6));
+
+    // Rough-but-readable shading: highlight top-left, shadow bottom-right.
+    // Highlight intensity falls off with roughness; metallic gets a
+    // tighter, brighter spec spot stacked on top.
+    const peakLight = 0.92 - rough * 0.55;
+    const peakR = Math.min(255, Math.round(useR + (255 - useR) * peakLight));
+    const peakG = Math.min(255, Math.round(useG + (255 - useG) * peakLight));
+    const peakB = Math.min(255, Math.round(useB + (255 - useB) * peakLight));
+    const shadowMul = 0.18 + rough * 0.10;
+    const shR = Math.round(useR * shadowMul);
+    const shG = Math.round(useG * shadowMul);
+    const shB = Math.round(useB * shadowMul);
+
+    const grad = ctx.createRadialGradient(
+      cx - r * 0.45, cy - r * 0.45, r * 0.05,
+      cx, cy, r * 1.05
+    );
+    grad.addColorStop(0,   `rgb(${peakR},${peakG},${peakB})`);
+    grad.addColorStop(0.5, `rgb(${useR},${useG},${useB})`);
+    grad.addColorStop(1,   `rgb(${shR},${shG},${shB})`);
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+
+    // Specular highlight — sharper for low roughness, brighter for metal.
+    if (metal > 0.05 || rough < 0.75) {
+      const specR = r * (0.10 + (1 - rough) * 0.30);
+      const specCx = cx - r * 0.42, specCy = cy - r * 0.42;
+      const specA = (1 - rough) * (0.45 + metal * 0.35);
+      const sg = ctx.createRadialGradient(specCx, specCy, 0, specCx, specCy, specR);
+      sg.addColorStop(0, `rgba(255,255,255,${specA})`);
+      sg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sg;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Soft contact shadow under the sphere — subtle, just helps the sphere
+    // sit on the checkerboard rather than floating.
+    ctx.globalCompositeOperation = 'destination-over';
+    const sh = ctx.createRadialGradient(cx, cy + r * 0.95, r * 0.1, cx, cy + r * 0.95, r * 0.9);
+    sh.addColorStop(0, 'rgba(0,0,0,.30)');
+    sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.globalCompositeOperation = 'source-over';
+
+    const url = c.toDataURL('image/png');
+    _matPreviewCache.set(mat, url);
+    return url;
+  } catch (e) {
+    console.warn('[mat preview] render failed:', e);
+    return null;
+  }
+}
+
+// Populate the list inside #vp-materials-pop. Exposed on window so the
+// inline toggle script in index.html can call it on open without
+// reaching into module scope.
+function _populateMaterialsList() {
+  const list = document.getElementById('mat-list');
+  if (!list) return;
+  const mats = _collectLiveMaterials();
+  if (mats.length === 0) {
+    list.innerHTML = '<div class="mat-empty">No materials yet — load a model.</div>';
+    list.className = 'mat-empty';
+    return;
+  }
+  list.innerHTML = '';
+  list.className = 'mat-grid';
+  for (const info of mats) {
+    const m = info.mat;
+    const hex = '#' + (m.color?.getHexString?.() || 'cccccc');
+    // Prefer the Material's name (often set by the GLB loader from the source
+    // material's name); fall back to a short hash of the colour so empty-name
+    // materials still get a stable, readable label.
+    const name = (m.name && m.name.trim()) || ('mat_' + hex.slice(1));
+    const cell = document.createElement('div');
+    cell.className = 'mat-cell';
+    cell.title = `${m.type} · ${info.count} part${info.count === 1 ? '' : 's'} · double-click to edit`;
+    const previewUrl = _renderMaterialPreview(m);
+    const thumb = previewUrl
+      ? `<img class="mat-thumb-img" src="${previewUrl}" alt="${escapeHtml(name)}" draggable="false">`
+      : `<div class="mat-thumb-fallback" style="width:100%;height:100%;background:${hex}"></div>`;
+    cell.innerHTML = `
+      <div class="mat-thumb">${thumb}</div>
+      <div class="mat-name">${escapeHtml(name)}</div>
+      <div class="mat-count">${info.count}</div>
+    `;
+    // Stash the material on the cell so the editor can find this cell to
+    // refresh just one thumbnail when the user edits sliders, without
+    // rebuilding the whole grid.
+    cell._mat = m;
+    cell._info = info;
+    if (_matPanelSelected.has(m)) cell.classList.add('selected');
+    // Single-click selects in the PANEL only (no viewport effect, per spec).
+    // Ctrl/Cmd/Shift+click toggles multi-select for merge/delete/preset
+    // batch ops. Double-click opens the editor.
+    cell.addEventListener('click', (e) => {
+      const multi = e.ctrlKey || e.metaKey || e.shiftKey;
+      if (multi) {
+        if (_matPanelSelected.has(m)) _matPanelSelected.delete(m);
+        else _matPanelSelected.add(m);
+      } else {
+        const wasOnly = _matPanelSelected.size === 1 && _matPanelSelected.has(m);
+        _matPanelSelected.clear();
+        if (!wasOnly) _matPanelSelected.add(m);
+      }
+      _refreshPanelSelection();
+    });
+    cell.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      _openMaterialEditor(info);
+    });
+    list.appendChild(cell);
+  }
+  _refreshPanelSelection();
+}
+window._populateMaterialsList = _populateMaterialsList;
+
+// Track which material cells are highlighted in the panel. This is
+// independent of the viewport selection (parts in the 3D scene); it only
+// drives which materials the toolbar (delete/merge/preset) operates on.
+const _matPanelSelected = new Set();
+function _refreshPanelSelection() {
+  const panel = document.getElementById('vp-materials-pop');
+  if (!panel) return;
+  for (const cell of panel.querySelectorAll('.mat-cell')) {
+    cell.classList.toggle('selected', _matPanelSelected.has(cell._mat));
+  }
+  // Toolbar enable/disable based on selection size.
+  const n = _matPanelSelected.size;
+  const setEnabled = (id, on) => {
+    const b = document.getElementById(id);
+    if (b) b.disabled = !on;
+  };
+  // Duplicate works on exactly 1 (need a clear source). Delete on 1+, merge on 2+.
+  setEnabled('mat-act-duplicate', n === 1);
+  setEnabled('mat-act-merge',     n >= 2);
+  setEnabled('mat-act-delete',    n >= 1);
+  // Add only makes sense when something is selected in the viewport, since
+  // a brand-new material with no assignments wouldn't show up in the grid.
+  setEnabled('mat-act-add',       (state.selected?.size || 0) > 0);
+}
+
+// Open the per-material editor as a _DraggablePopup. Every active editor
+// reuses one popup id (one editor at a time) — opening a different material
+// rebinds the sliders to the new material's values.
+let _matEditorState = null;  // { popup, mat, info, scrubbers: [] }
+
+function _openMaterialEditor(info) {
+  const id = '_mat-editor-popup';
+  const mat = info.mat;
+
+  const bodyHtml = `
+    <div class="mat-edit-body">
+      <div class="mat-color-row">
+        <label>Color</label>
+        <input type="color" id="mat-edit-color" value="#${mat.color?.getHexString?.() || 'cccccc'}">
+        <span class="mat-color-hex" id="mat-edit-color-hex">#${mat.color?.getHexString?.() || 'cccccc'}</span>
+      </div>
+      <div class="field"><div id="mat-edit-metalness-scrub"></div></div>
+      <div class="field"><div id="mat-edit-roughness-scrub"></div></div>
+      <div class="mat-color-row">
+        <label>Emissive</label>
+        <input type="color" id="mat-edit-emissive-color" value="#${mat.emissive?.getHexString?.() || '000000'}">
+        <span class="mat-color-hex" id="mat-edit-emissive-hex">#${mat.emissive?.getHexString?.() || '000000'}</span>
+      </div>
+      <div class="field"><div id="mat-edit-emissive-scrub"></div></div>
+      <div class="field"><div id="mat-edit-opacity-scrub"></div></div>
+    </div>
+  `;
+
+  // Reuse existing popup if present (rebind to new material instead of
+  // re-creating DOM and re-injecting styles).
+  let popup;
+  const existing = document.getElementById(id);
+  if (existing && _matEditorState) {
+    popup = _matEditorState.popup;
+    // Rebuild the body so input ids/values reflect the new material.
+    popup.body.innerHTML = bodyHtml;
+  } else {
+    popup = _DraggablePopup.create({
+      id,
+      title: 'Material',
+      subtitle: '—',
+      iconName: 'palette',
+      width: 360, height: 560,
+      minWidth: 320, minHeight: 480,
+      bodyHtml,
+      onClose: () => { _matEditorState = null; },
+    });
+    _matEditorState = { popup, mat: null, info: null, scrubbers: [] };
+  }
+
+  _matEditorState.mat = mat;
+  _matEditorState.info = info;
+  popup.setTitle(mat.name?.trim() || 'Material');
+  popup.setSubtitle(`${info.count} part${info.count === 1 ? '' : 's'} · ${mat.type} · live preview`);
+
+  // Bind controls.
+  // Any slider/color change → re-render only THIS material's preview thumb,
+  // not the full grid. Debounced to ~80ms so dragging doesn't trigger a
+  // sphere render on every frame (the previous implementation rebuilt the
+  // entire DOM list on every input event, which was the lag source).
+  let _thumbTimer = null;
+  const _refreshThumbForMat = () => {
+    if (_thumbTimer) clearTimeout(_thumbTimer);
+    _thumbTimer = setTimeout(() => {
+      _thumbTimer = null;
+      _matPreviewCache.delete(mat);
+      const panel = document.getElementById('vp-materials-pop');
+      if (!panel?.classList.contains('show')) return;
+      // Cells store their material reference on a property (set in
+      // _populateMaterialsList). Find ours and patch its <img src> in place.
+      for (const cell of panel.querySelectorAll('.mat-cell')) {
+        if (cell._mat !== mat) continue;
+        const img = cell.querySelector('img');
+        const url = _renderMaterialPreview(mat);
+        if (img && url) img.src = url;
+        break;
+      }
+    }, 80);
+  };
+
+  const colorIn = document.getElementById('mat-edit-color');
+  const colorHex = document.getElementById('mat-edit-color-hex');
+  if (colorIn && mat.color) {
+    colorIn.addEventListener('input', () => {
+      mat.color.set(colorIn.value);
+      colorHex.textContent = colorIn.value;
+      requestRender();
+      _refreshThumbForMat();
+    });
+  }
+
+  const emisColorIn = document.getElementById('mat-edit-emissive-color');
+  const emisHex = document.getElementById('mat-edit-emissive-hex');
+  if (emisColorIn && mat.emissive) {
+    emisColorIn.addEventListener('input', () => {
+      mat.emissive.set(emisColorIn.value);
+      emisHex.textContent = emisColorIn.value;
+      requestRender();
+      _refreshThumbForMat();
+    });
+  }
+
+  // Sliders use the same initScrubber helper as the rest of the app, so
+  // drag-to-scrub + click-to-type input both work.
+  initScrubber({
+    el: 'mat-edit-metalness-scrub',
+    label: 'Metalness',
+    maxSteps: 100,
+    stepToVal: (s) => s / 100,
+    valToStep: (v) => Math.round((v ?? 0) * 100),
+    format: (v) => ({ value: v.toFixed(2), unit: '' }),
+    initialValue: typeof mat.metalness === 'number' ? mat.metalness : 0.15,
+    promptTitle: 'Metalness',
+    onChange: (v) => { mat.metalness = v; requestRender(); _refreshThumbForMat(); },
+  });
+  initScrubber({
+    el: 'mat-edit-roughness-scrub',
+    label: 'Roughness',
+    maxSteps: 100,
+    stepToVal: (s) => s / 100,
+    valToStep: (v) => Math.round((v ?? 0) * 100),
+    format: (v) => ({ value: v.toFixed(2), unit: '' }),
+    initialValue: typeof mat.roughness === 'number' ? mat.roughness : 0.55,
+    promptTitle: 'Roughness',
+    onChange: (v) => { mat.roughness = v; requestRender(); _refreshThumbForMat(); },
+  });
+  initScrubber({
+    el: 'mat-edit-emissive-scrub',
+    label: 'Emissive intensity',
+    maxSteps: 200,
+    stepToVal: (s) => s / 100,
+    valToStep: (v) => Math.round((v ?? 0) * 100),
+    format: (v) => ({ value: v.toFixed(2), unit: '×' }),
+    initialValue: typeof mat.emissiveIntensity === 'number' ? mat.emissiveIntensity : 1,
+    promptTitle: 'Emissive intensity',
+    onChange: (v) => { mat.emissiveIntensity = v; requestRender(); _refreshThumbForMat(); },
+  });
+  initScrubber({
+    el: 'mat-edit-opacity-scrub',
+    label: 'Opacity',
+    maxSteps: 100,
+    stepToVal: (s) => s / 100,
+    valToStep: (v) => Math.round((v ?? 1) * 100),
+    format: (v) => ({ value: v.toFixed(2), unit: '' }),
+    initialValue: typeof mat.opacity === 'number' ? mat.opacity : 1,
+    promptTitle: 'Opacity',
+    onChange: (v) => {
+      mat.opacity = v;
+      // Three.js needs transparent=true to actually blend opacity < 1.
+      mat.transparent = v < 1;
+      mat.needsUpdate = true;
+      requestRender();
+      _refreshThumbForMat();
+    },
+  });
+
+  // Show first so the card has real dimensions, then anchor it to the LEFT
+  // of the materials panel. Reading offsetWidth/Height before show() returns
+  // 0 because the .dlg-popup parent is display:none — that's why the earlier
+  // pre-show positioning collapsed every editor to the top-left corner.
+  popup.show();
+  const panel = document.getElementById('vp-materials-pop');
+  if (panel) {
+    const pr = panel.getBoundingClientRect();
+    const cardW = popup.card.offsetWidth;
+    const cardH = popup.card.offsetHeight;
+    const gap = 10;
+    let left = pr.left - cardW - gap;
+    let top  = pr.top;
+    // Fall back to the right side if the editor would clip off-screen
+    // on the left (narrow viewport / very wide editor card).
+    if (left < 8) left = pr.right + gap;
+    // Clamp vertically so the bottom never goes off-screen.
+    top = Math.max(8, Math.min(top, window.innerHeight - cardH - 8));
+    popup.card.style.left = left + 'px';
+    popup.card.style.top  = top  + 'px';
+  }
+}
 
 // ─── Smart-fit proxy fitter (AABB / OBB / cylinder) ────────────────────────
 // Picks the best low-poly stand-in for a part's silhouette. Replaces the
@@ -15179,7 +15768,15 @@ const _DraggablePopup = (() => {
     if (!id) throw new Error('_DraggablePopup.create: id is required');
 
     let el = document.getElementById(id);
-    if (el) return _bind(el, opts);
+    if (el) {
+      // Reuse the cached instance — calling _bind() again would re-attach
+      // drag/resize/escape/outside-click handlers on top of existing ones,
+      // so each reopen would double-fire (and over time, leak handlers).
+      if (el._dlgInstance) return el._dlgInstance;
+      const inst = _bind(el, opts);
+      el._dlgInstance = inst;
+      return inst;
+    }
 
     el = document.createElement('div');
     el.id = id;
@@ -15209,7 +15806,9 @@ const _DraggablePopup = (() => {
         ${footMarkup}
       </div>`;
     document.body.appendChild(el);
-    return _bind(el, opts);
+    const inst = _bind(el, opts);
+    el._dlgInstance = inst;
+    return inst;
   }
 
   function _bind(el, opts) {

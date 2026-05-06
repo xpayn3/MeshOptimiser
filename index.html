@@ -55,6 +55,15 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{font:13px/1.4 -apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;color:var(--tx);background:var(--bg);overflow:hidden;-webkit-font-smoothing:antialiased}
+/* Boot fade-in: hide everything until layout + lucide icons settle, then
+   fade in. Hides the early-load content shift / icon-pop visible at first
+   paint. .app-ready is added by the inline script at the end of <body>;
+   if the script never runs for some reason, a 1.2s safety timeout auto-
+   reveals so the page is never permanently blank. */
+body{opacity:0;transition:opacity .45s cubic-bezier(.2,.8,.3,1)}
+body.app-ready{opacity:1}
+#welcome-modal{transition:opacity .3s ease .1s}
+body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
 input,select{font:inherit;color:inherit}
 ::-webkit-scrollbar{width:12px;height:12px}
@@ -64,7 +73,7 @@ input,select{font:inherit;color:inherit}
 ::-webkit-scrollbar-thumb:active{background:var(--ac)}
 ::-webkit-scrollbar-corner{background:transparent}
 
-:root{--side-l-w:280px;--side-r-w:320px}
+:root{--side-l-w:248px;--side-r-w:280px}
 #app{display:grid;grid-template-columns:var(--side-l-w) 1fr var(--side-r-w);grid-template-rows:38px 1fr 22px;height:100vh;width:100vw}
 /* Vertical drag handle on the inside edge of each sidebar. Sits in its own
    grid cell via absolute positioning anchored to the sidebar's edge so it
@@ -149,15 +158,15 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 #sidebar-left{border-right:1px solid var(--bd)}
 #sidebar-right{display:block;border-left:1px solid var(--bd);overflow-y:auto;padding:12px 12px 20px;background:radial-gradient(circle at 80% 0%,rgba(110,168,255,.04),transparent 50%),var(--bg)}
 #sidebar-right .section{flex-shrink:0}
-.section{background:var(--bg1);border-radius:var(--r-xl);margin-bottom:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.18)}
+.section{background:var(--bg2);border:1px solid rgba(255,255,255,.04);border-radius:var(--r-xl);margin-bottom:10px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.12)}
 .section:last-child{margin-bottom:0}
-.section-h{display:flex;align-items:center;justify-content:space-between;padding:11px 14px 9px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);cursor:pointer;user-select:none}
+.section-h{display:flex;align-items:center;justify-content:space-between;padding:11px 10px 9px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);cursor:pointer;user-select:none}
 .section-h:hover{color:var(--tx)}
 .section-h .chev{transition:transform .2s var(--ease-out);opacity:.7;font-size:14px;line-height:1;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;color:var(--tx2)}
 .section-h:hover .chev{opacity:1;color:var(--tx)}
 .section-h.collapsed .chev{transform:rotate(-90deg)}
 .section-h.collapsed + .section-b{display:none}
-.section-b{padding:2px 18px 14px}
+.section-b{padding:2px 10px 14px}
 
 /* Tree */
 #tree{flex:1;overflow-y:auto;overflow-x:auto;padding:4px 0;contain:layout paint;display:flex;flex-direction:column}
@@ -202,6 +211,15 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-color{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.18);box-shadow:0 1px 2px rgba(0,0,0,.4)}
 .prop-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
 .prop-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;min-height:14px}
+.prop-material-row{margin:-2px 0 8px}
+.prop-mat-btn{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;background:var(--s2);border:1px solid var(--bd);border-radius:6px;font-size:11.5px;color:var(--tx2);cursor:pointer;max-width:100%;transition:background 120ms,border-color 120ms,color 120ms}
+.prop-mat-btn:hover{background:var(--ac-soft);border-color:var(--ac-line);color:var(--tx)}
+.prop-mat-btn svg{width:11px;height:11px;flex-shrink:0;color:var(--tx3)}
+.prop-mat-btn:hover svg{color:var(--ac)}
+.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,monospace;font-size:11px}
+.prop-mat-btn.prop-mat-mixed{cursor:default;color:var(--tx3)}
+.prop-mat-btn.prop-mat-mixed:hover{background:var(--s2);border-color:var(--bd);color:var(--tx3)}
+.prop-mat-btn.prop-mat-mixed:hover svg{color:var(--tx3)}
 .prop-bar-wrap{display:flex;align-items:center;gap:8px;margin:8px 0 10px;font-size:11px;color:var(--tx3)}
 .prop-bar-wrap .prop-bar-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3);flex-shrink:0}
 .prop-bar-wrap .prop-bar-icon svg{width:13px;height:13px}
@@ -300,8 +318,8 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tree-node.is-group.selected{background:transparent;border-left-color:transparent}
 
 /* Compact toolbar row under the search input */
-.tree-toolbar{display:flex;gap:3px;padding:0 10px 6px;align-items:center}
-.tree-toolbar #tree-sort{flex:1 1 0;min-width:0;font-size:11px;padding:5px 20px 5px 7px;background-position:right 6px center}
+.tree-toolbar{display:flex;flex-wrap:wrap;gap:3px;row-gap:5px;padding:0 10px 6px;align-items:center}
+.tree-toolbar #tree-sort{flex:1 1 100%;min-width:0;font-size:11px;padding:5px 20px 5px 7px;background-position:right 6px center}
 .tree-icon-btn{flex:0 0 28px;width:28px;height:28px;display:grid;place-items:center;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 120ms var(--ease-out)}
 .tree-icon-btn:hover{color:var(--tx);background:var(--bg3);border-color:var(--bd2)}
 .tree-icon-btn:active{transform:scale(.92)}
@@ -468,11 +486,51 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 #axis-gizmo svg{width:54px;height:54px;display:block;overflow:visible}
 .axg-handle text{user-select:none;pointer-events:none;font-family:ui-sans-serif,system-ui,sans-serif}
 .axg-handle:hover circle{stroke-width:2.4}
-.vpb{width:32px;height:32px;background:rgba(15,19,25,.7);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:6px;display:grid;place-items:center;color:var(--tx);transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
-.vpb:hover{background:rgba(29,35,48,.85);border-color:var(--bd2);color:var(--ac)}
+/* Per-button tints — pro-app convention: each viewport button gets a stable
+   colour so users find them by hue rather than re-reading icons. Idle state
+   keeps the tint subtle; hover/active amps the same hue. Grouped by function:
+   view modes (blue→violet→teal→orange), gizmo (green/yellow = motion), display
+   toggles (blue grid, violet bbox, red axes, amber highlight, neutral settings). */
+.vpb{
+  --btn-tint: var(--tx2);
+  width:32px;height:32px;
+  background:rgba(15,19,25,.7);
+  border:1px solid var(--bd);
+  backdrop-filter:blur(10px);
+  border-radius:6px;
+  display:grid;place-items:center;
+  color:var(--btn-tint);
+  transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out);
+}
+.vpb:hover{
+  color:var(--btn-tint);
+  background:color-mix(in srgb, var(--btn-tint) 14%, rgba(15,19,25,.7));
+  border-color:color-mix(in srgb, var(--btn-tint) 40%, var(--bd));
+}
 .vpb:active{transform:scale(.92)}
-.vpb.active{color:var(--ac);border-color:var(--ac);background:rgba(110,168,255,.1)}
+.vpb.active{
+  color:var(--btn-tint);
+  border-color:color-mix(in srgb, var(--btn-tint) 55%, var(--bd));
+  background:color-mix(in srgb, var(--btn-tint) 18%, rgba(15,19,25,.7));
+}
 .vpb svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
+
+/* View-mode group — each rendering style gets a unique hue. */
+#vw-solid     {--btn-tint:#6ea8ff}
+#vw-wire      {--btn-tint:#a78bfa}
+#vw-xray      {--btn-tint:#5dd5cc}
+#vw-heat      {--btn-tint:#fb923c}
+
+/* Gizmo group — translate + rotate share the accent blue. */
+#gz-translate {--btn-tint:#6ea8ff}
+#gz-rotate    {--btn-tint:#6ea8ff}
+
+/* Display toggles — ambient helpers. */
+#tg-grid      {--btn-tint:#6ea8ff}
+#tg-bbox      {--btn-tint:#a78bfa}
+#tg-axes      {--btn-tint:#ff6b6b}
+#tg-hilite    {--btn-tint:#fbbf24}
+#tg-settings  {--btn-tint:var(--tx2)}
 .vp-info{background:rgba(15,19,25,.7);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:6px;padding:7px 11px;font-size:11px;color:var(--tx2);line-height:1.5;font-variant-numeric:tabular-nums;min-width:140px}
 .vp-info strong{color:var(--tx)}
 /* Triangle-count progress bar: 100% = starting tri count, shrinks as the
@@ -507,6 +565,58 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 #vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid var(--s2)}
 #vp-settings-pop .pop-section:last-child{border-bottom:none}
 #vp-settings-pop .pop-section-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:10px}
+
+/* Materials popup — Cinema-4D-style grid of preview spheres, anchored
+   beneath the new tg-materials button. Each cell is a rendered sphere
+   showing the material on a neutral checkerboard; double-click opens the
+   editor in a _DraggablePopup. */
+#vp-materials-pop{position:absolute;top:0;right:44px;width:240px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-materials-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+#vp-materials-pop .pop-section{padding:10px 12px}
+#vp-materials-pop .pop-section-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-bottom:10px}
+#vp-materials-pop .pop-section-head .hint{font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3);font-size:10.5px}
+#vp-materials-pop .mat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+#vp-materials-pop .mat-cell{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out);user-select:none}
+#vp-materials-pop .mat-cell:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
+#vp-materials-pop .mat-cell .mat-thumb{width:60px;height:60px;border-radius:6px;background-color:#15181f;background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);background-repeat:repeat;display:grid;place-items:center;overflow:hidden}
+#vp-materials-pop .mat-cell .mat-thumb img,#vp-materials-pop .mat-cell .mat-thumb canvas{width:100%;height:100%;display:block;object-fit:cover}
+#vp-materials-pop .mat-cell .mat-name{font-size:10.5px;color:var(--tx2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.15;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vp-materials-pop .mat-cell .mat-count{font-size:9.5px;color:var(--tx3);font-variant-numeric:tabular-nums;line-height:1}
+#vp-materials-pop .mat-cell.selected{background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.40)}
+
+/* Action toolbar at the bottom of the materials panel — add / delete /
+   duplicate / merge / industry presets. Sticks to the bottom of the
+   scrollable section so it's always reachable. */
+#vp-materials-pop .mat-actions{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px 10px;border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.18)}
+#vp-materials-pop .mat-actions .mat-act{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 8px;font-size:11px;font-weight:500;color:var(--tx2);background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:6px;cursor:pointer;transition:background .12s var(--ease-out),color .12s var(--ease-out),border-color .12s var(--ease-out);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#vp-materials-pop .mat-actions .mat-act:hover{background:rgba(255,255,255,.06);color:var(--tx);border-color:rgba(255,255,255,.12)}
+#vp-materials-pop .mat-actions .mat-act:disabled{opacity:.4;cursor:not-allowed;background:transparent}
+#vp-materials-pop .mat-actions .mat-act:disabled:hover{background:transparent;color:var(--tx2);border-color:rgba(255,255,255,.06)}
+#vp-materials-pop .mat-actions .mat-act svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
+#vp-materials-pop .mat-actions .mat-act-danger{color:var(--er)}
+#vp-materials-pop .mat-actions .mat-act-danger:hover{background:rgba(255,107,107,.10);border-color:rgba(255,107,107,.30);color:var(--er)}
+#vp-materials-pop .mat-actions .mat-act-presets{grid-column:1/-1;justify-content:space-between;color:var(--tx3)}
+#vp-materials-pop .mat-actions .mat-act-presets:hover{color:var(--ac);background:rgba(110,168,255,.08);border-color:rgba(110,168,255,.25)}
+
+/* Industry-preset menu floats above the materials panel when the user
+   clicks the presets button. Same blur/shadow as other system popovers. */
+#vp-materials-pop .mat-presets-menu{position:absolute;left:8px;right:8px;bottom:50px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.55);padding:4px;z-index:5;display:none;max-height:240px;overflow-y:auto}
+#vp-materials-pop .mat-presets-menu.show{display:block}
+#vp-materials-pop .mat-presets-menu .mat-preset{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;cursor:pointer;font-size:11.5px;color:var(--tx2);transition:background .1s ease,color .1s ease}
+#vp-materials-pop .mat-presets-menu .mat-preset:hover{background:rgba(110,168,255,.10);color:var(--tx)}
+#vp-materials-pop .mat-presets-menu .mat-preset .mat-preset-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.18)}
+#vp-materials-pop .mat-presets-menu .mat-preset-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vp-materials-pop .mat-presets-menu .mat-preset-hint{color:var(--tx3);font-size:10px}
+#vp-materials-pop .mat-presets-menu .mat-preset-sep{height:1px;background:rgba(255,255,255,.06);margin:4px 6px}
+#vp-materials-pop .mat-presets-menu .mat-preset-section{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);padding:6px 8px 3px}
+#vp-materials-pop .mat-empty{color:var(--tx3);font-size:11.5px;padding:6px 0;text-align:center}
+
+/* Material-editor popup body content (inside _DraggablePopup .dlg-body). */
+.mat-edit-body{display:flex;flex-direction:column;gap:14px;padding:14px 16px}
+.mat-edit-body .mat-color-row{display:flex;align-items:center;gap:10px}
+.mat-edit-body .mat-color-row label{flex:0 0 80px;font-size:11px;color:var(--tx3);font-weight:500;letter-spacing:.005em}
+.mat-edit-body input[type=color]{width:36px;height:24px;border:1px solid rgba(255,255,255,.10);border-radius:5px;background:transparent;cursor:pointer;padding:0;flex-shrink:0}
+.mat-edit-body .mat-color-hex{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--tx2);margin-left:auto}
 
 .kbd{display:inline-block;padding:1px 5px;font-size:10px;background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:ui-monospace,monospace}
 
@@ -564,6 +674,18 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .modal-b{padding:18px 20px;flex:1 1 auto;overflow-y:auto;min-height:0}
 .modal-f{padding:14px 20px;border-top:1px solid var(--bd);display:flex;gap:8px;justify-content:flex-end;flex:0 0 auto;background:var(--bg1)}
 .fmt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+/* Format-compatibility reference table — opened from "Compare formats" in
+   the Export modal header. Cell contents use ● for "yes" + qualifier text
+   ("PBR", "flat", "single mesh") for nuances that matter at a glance. */
+.fmt-compat{width:100%;border-collapse:collapse;font-size:11.5px;color:var(--tx2)}
+.fmt-compat thead th{position:sticky;top:0;background:var(--bg1);z-index:1;padding:10px 8px;border-bottom:1px solid var(--bd);text-align:center;font-weight:600;color:var(--tx);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.fmt-compat tbody td{padding:9px 8px;border-bottom:1px solid var(--s3);text-align:center;vertical-align:middle}
+.fmt-compat tbody td:first-child{text-align:left;padding-left:20px;color:var(--tx)}
+.fmt-compat tbody td:last-child{text-align:left;color:var(--tx3);font-size:11px;line-height:1.45;padding-right:20px;max-width:280px}
+.fmt-compat tbody tr:hover{background:var(--bg2)}
+.fmt-compat .y{color:#22c55e;font-weight:600;font-size:13px}
+.fmt-compat .n{color:var(--tx3);font-size:11px}
+.fmt-compat .muted{color:var(--tx3);font-style:italic;font-size:11px}
 .fmt-card{padding:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;cursor:pointer}
 .fmt-card:hover{border-color:var(--bd2)}
 .fmt-card.selected{border-color:var(--ac);background:rgba(110,168,255,.08)}
@@ -787,9 +909,9 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
         <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — colour parts by tri density (4)"><i data-lucide="flame"></i></button>
         <div style="height:10px"></div>
-        <button class="vpb" id="gz-translate" title="Translate gizmo (W) - select a part first"><i data-lucide="move"></i></button>
-        <button class="vpb" id="gz-rotate" title="Rotate gizmo (E) - select a part first"><i data-lucide="rotate-cw"></i></button>
-        <button class="vpb" id="gz-off" title="Hide gizmo (Q)"><i data-lucide="ban"></i></button>
+        <button class="vpb" id="gz-translate" title="Translate gizmo (W) — hold Shift while dragging to snap to 10 units"><i data-lucide="move"></i></button>
+        <button class="vpb" id="gz-rotate" title="Rotate gizmo (E) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
+        <button class="vpb" id="gz-scale" title="Scale gizmo (R) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
       </div>
       <div class="vpc tr">
         <button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button>
@@ -797,6 +919,23 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="vpb" id="tg-axes" title="Toggle world-axis triad"><svg viewBox="0 0 24 24"><path d="M12 22V12L4 8M12 12l8-4M12 12V2"/></svg></button>
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
         <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
+        <button class="vpb" id="tg-materials" title="Materials in this file"><i data-lucide="palette"></i></button>
+        <div id="vp-materials-pop">
+          <div class="pop-section">
+            <div class="pop-section-head"><span>Materials</span><span class="hint">Double-click to edit</span></div>
+            <div class="mat-list" id="mat-list">
+              <div class="mat-empty">No materials yet — load a model.</div>
+            </div>
+          </div>
+          <div class="mat-actions">
+            <button class="mat-act" id="mat-act-add" title="Create a new material and assign to selected parts"><i data-lucide="plus"></i>New</button>
+            <button class="mat-act" id="mat-act-duplicate" title="Duplicate the selected material" disabled><i data-lucide="copy"></i>Duplicate</button>
+            <button class="mat-act" id="mat-act-merge" title="Merge all selected materials into one" disabled><i data-lucide="combine"></i>Merge</button>
+            <button class="mat-act mat-act-danger" id="mat-act-delete" title="Delete material (parts revert to default)" disabled><i data-lucide="trash-2"></i>Delete</button>
+            <button class="mat-act mat-act-presets" id="mat-act-presets" title="Apply an industry-standard PBR preset"><span><i data-lucide="sparkles" style="margin-right:4px"></i>Industry presets</span><i data-lucide="chevron-up"></i></button>
+            <div class="mat-presets-menu" id="mat-presets-menu"></div>
+          </div>
+        </div>
         <div id="vp-settings-pop">
           <div class="pop-section">
             <div class="pop-section-title">Display</div>
@@ -1100,7 +1239,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   </div>
 </div>
 
-<input type="file" id="file-input" accept=".step,.stp,.STEP,.STP,.glb,.gltf,.GLB,.GLTF" style="display:none">
+<input type="file" id="file-input" accept=".step,.stp,.STEP,.STP,.glb,.gltf,.GLB,.GLTF,.fbx,.FBX,.obj,.OBJ,.3mf,.3MF,.stl,.STL" style="display:none">
 
 <div class="modal-bg" id="save-scene-modal">
   <div class="modal" style="width:420px">
@@ -1120,7 +1259,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 
 <div class="modal-bg" id="export-modal">
   <div class="modal" style="width:520px">
-    <div class="modal-h"><h3>Export model</h3><button class="x" id="export-close" title="Close (Esc)">✕</button></div>
+    <div class="modal-h"><h3>Export model</h3><div style="margin-left:auto;display:flex;gap:6px;align-items:center"><button id="export-compat-btn" title="Format compatibility — what each format can read and write" style="font-size:11px;padding:5px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx2);cursor:pointer;letter-spacing:.02em">Compare formats</button><button class="x" id="export-close" title="Close (Esc)">✕</button></div></div>
     <div class="modal-b">
       <div class="fmt-grid" id="format-grid">
         <div class="fmt-card selected" data-fmt="glb"><div class="n">GLB</div><div class="d">Modern, light, single binary file. Best for web AND <strong>Cinema 4D 2026</strong> (native glTF import).</div></div>
@@ -1177,6 +1316,46 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   </div>
 </div>
 
+<!-- Format compatibility — quick-reference of which formats can be opened
+     vs. exported and what each preserves (hierarchy, materials, colors). -->
+<div class="modal-bg" id="format-compat-modal">
+  <div class="modal" style="width:780px;max-width:96vw">
+    <div class="modal-h"><h3>Format compatibility</h3><button class="x" id="format-compat-close" title="Close (Esc)">✕</button></div>
+    <div class="modal-b" style="padding:0">
+      <table class="fmt-compat">
+        <thead>
+          <tr>
+            <th style="text-align:left;padding-left:20px">Format</th>
+            <th>Open</th>
+            <th>Export</th>
+            <th>Hierarchy</th>
+            <th>Materials</th>
+            <th>Vertex&nbsp;colors</th>
+            <th style="text-align:left">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>STEP / STP</strong></td><td class="y">●</td><td class="n">—</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>Native CAD; routed through local Python (OpenCascade).</td></tr>
+          <tr><td><strong>GLB</strong></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">PBR</td><td class="y">●</td><td>Best all-round. Recommended for Cinema 4D 2026.</td></tr>
+          <tr><td><strong>GLTF</strong></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">PBR</td><td class="y">●</td><td>JSON variant of GLB. Same capabilities, larger.</td></tr>
+          <tr><td><strong>FBX</strong></td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>Maya, Blender, Unreal, 3ds&nbsp;Max. Binary 7.4 default; ASCII fallback.</td></tr>
+          <tr><td><strong>USDZ</strong></td><td class="n">—</td><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>Apple Quick Look, Reality Composer, C4D R26+.</td></tr>
+          <tr><td><strong>OBJ</strong></td><td class="y">●</td><td class="y">●</td><td class="n">flat</td><td class="y">via&nbsp;.mtl</td><td class="n">—</td><td>Universal but no transforms; hierarchy baked into names.</td></tr>
+          <tr><td><strong>3MF</strong></td><td class="y">●</td><td class="n">—</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>3D-printing standard. Read-only for now.</td></tr>
+          <tr><td><strong>STL</strong></td><td class="y">●</td><td class="y">●</td><td class="n">single&nbsp;mesh</td><td class="n">—</td><td class="n">—</td><td>Geometry only. 3D printing.</td></tr>
+          <tr><td><strong>PLY</strong></td><td class="n">—</td><td class="y">●</td><td class="n">single&nbsp;mesh</td><td class="n">—</td><td class="y">●</td><td>Geometry + per-vertex colors. Research / scanning.</td></tr>
+          <tr><td><strong>CSV</strong></td><td class="n">—</td><td class="y">●</td><td class="muted">n/a</td><td class="muted">n/a</td><td class="muted">n/a</td><td>Parts list / BOM. No geometry written.</td></tr>
+        </tbody>
+      </table>
+      <div style="padding:12px 20px 16px;color:var(--tx3);font-size:11.5px;line-height:1.5;border-top:1px solid var(--bd)">
+        <strong style="color:var(--tx2)">Hierarchy</strong> — whether the format preserves the assembly tree (groups / nested transforms) on round-trip.
+        <strong style="color:var(--tx2)">Materials</strong> — color + shading info per part. PBR means full metalness/roughness; plain ● is diffuse only.
+        <strong style="color:var(--tx2)">Vertex colors</strong> — per-vertex RGB baked into the geometry (no separate material).
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="settings-modal">
   <div class="modal" style="width:560px">
     <div class="modal-h">
@@ -1222,8 +1401,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <div id="welcome-resume"></div>
         <div id="welcome-drop" style="border:2px dashed var(--bd2);border-radius:var(--r-xl);padding:34px 20px;text-align:center;cursor:pointer;background:var(--bg2);transition:border-color 150ms var(--ease-out),background 150ms var(--ease-out)">
           <i data-lucide="upload" style="width:40px;height:40px;stroke:var(--ac);fill:none;stroke-width:1.5;display:inline-block;margin-bottom:10px"></i>
-          <div style="font-size:var(--fs-xl);font-weight:600;margin-bottom:4px;color:var(--tx)">Open a STEP or GLB file</div>
-          <div style="color:var(--tx2);font-size:var(--fs-md);line-height:1.5;margin-bottom:14px">Drop a <span style="color:var(--ac)">.step</span>, <span style="color:var(--ac)">.stp</span>, <span style="color:var(--ac)">.glb</span>, or <span style="color:var(--ac)">.gltf</span> here, or click to browse.</div>
+          <div style="font-size:var(--fs-xl);font-weight:600;margin-bottom:4px;color:var(--tx)">Open a 3D model</div>
+          <div style="color:var(--tx2);font-size:var(--fs-md);line-height:1.5;margin-bottom:14px">Drop a <span style="color:var(--ac)">.step</span>, <span style="color:var(--ac)">.stp</span>, <span style="color:var(--ac)">.glb</span>, <span style="color:var(--ac)">.gltf</span>, <span style="color:var(--ac)">.fbx</span>, <span style="color:var(--ac)">.obj</span>, <span style="color:var(--ac)">.3mf</span>, or <span style="color:var(--ac)">.stl</span> here, or click to browse.</div>
           <button class="tbtn primary" id="welcome-pick" style="padding:7px 18px"><i data-lucide="folder-open"></i>Browse…</button>
         </div>
 
@@ -1401,23 +1580,46 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   window.addEventListener('blur', hide);
 })();
 
-// ─── Settings popover (Display + Performance) ────────────────────────────
-// Toggled by the gear button in the top-right viewport stack. Closes on
-// outside click or Esc. Click inside the panel must not close it, so we
-// stop propagation on the panel itself before the document handler runs.
+// ─── Viewport popovers (Settings + Materials) ─────────────────────────────
+// Both panels share the same anchor (top:0; right:44px) so they'd visually
+// overlap if both were open. We make them mutually exclusive: opening one
+// closes the other. Settings still closes on outside-click / Esc; Materials
+// stays sticky so the user can edit colours without losing the panel.
 (function () {
-  const btn = document.getElementById('tg-settings');
-  const pop = document.getElementById('vp-settings-pop');
-  if (!btn || !pop) return;
-  const close = () => { pop.classList.remove('show'); btn.classList.remove('active'); };
-  btn.addEventListener('click', e => {
-    e.stopPropagation();
-    const open = pop.classList.toggle('show');
-    btn.classList.toggle('active', open);
-  });
-  pop.addEventListener('click', e => e.stopPropagation());
-  document.addEventListener('click', () => { if (pop.classList.contains('show')) close(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && pop.classList.contains('show')) close(); });
+  const sBtn = document.getElementById('tg-settings');
+  const sPop = document.getElementById('vp-settings-pop');
+  const mBtn = document.getElementById('tg-materials');
+  const mPop = document.getElementById('vp-materials-pop');
+
+  const closeSettings  = () => { sPop?.classList.remove('show'); sBtn?.classList.remove('active'); };
+  const closeMaterials = () => { mPop?.classList.remove('show'); mBtn?.classList.remove('active'); };
+
+  if (sBtn && sPop) {
+    sBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const willOpen = !sPop.classList.contains('show');
+      if (willOpen) closeMaterials();
+      sPop.classList.toggle('show', willOpen);
+      sBtn.classList.toggle('active', willOpen);
+    });
+    sPop.addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('click', () => { if (sPop.classList.contains('show')) closeSettings(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && sPop.classList.contains('show')) closeSettings(); });
+  }
+
+  if (mBtn && mPop) {
+    mBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const willOpen = !mPop.classList.contains('show');
+      if (willOpen) closeSettings();
+      mPop.classList.toggle('show', willOpen);
+      mBtn.classList.toggle('active', willOpen);
+      if (willOpen && typeof window._populateMaterialsList === 'function') {
+        try { window._populateMaterialsList(); } catch (err) { console.warn('[mat] populate failed:', err); }
+      }
+    });
+    mPop.addEventListener('click', e => e.stopPropagation());
+  }
 })();
 </script>
 
@@ -1434,6 +1636,27 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050623-fpstoggle1"></script>
+<script type="module" src="app-v2.js?v=2026050623-scalegizmo"></script>
+<script>
+  // Reveal the app once layout has had a chance to settle and the lucide
+  // icons have been materialized. We schedule a double-rAF (lets the browser
+  // paint at least once after the initial DOM parse) and a safety timeout
+  // (fires in case the rAFs are starved e.g. by a long sync renderer init).
+  (function () {
+    let revealed = false;
+    function reveal() {
+      if (revealed) return;
+      revealed = true;
+      document.body.classList.add('app-ready');
+    }
+    // Primary path: 2× rAF + small settle delay (≈ 200ms) to absorb the
+    // initial render's content shift before fading the body in.
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(reveal, 120)));
+    // Belt-and-braces: a window-load fallback (fires even if rAF is starved)
+    // and a hard cap so the page can never stay black if anything stalls.
+    window.addEventListener('load', () => setTimeout(reveal, 60), { once: true });
+    setTimeout(reveal, 1400);
+  })();
+</script>
 </body>
 </html>
