@@ -920,6 +920,15 @@ async function _idbGet(key) {
     req.onerror = () => reject(req.error);
   });
 }
+async function _idbDelete(key) {
+  const db = await _idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(_IDB_STORE, 'readwrite');
+    tx.objectStore(_IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
 function _recKey(name, size) { return name + '|' + size; }
 
 async function _openWithPicker() {
@@ -1190,30 +1199,54 @@ const _Welcome = (() => {
     }
     box.innerHTML = list.map((r, i) => {
       const safeName = r.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-      // Big hero thumbnail card. When _captureRecentThumb has saved a JPEG
-      // for this entry, the thumb fills the 16:10 hero area with cover-fit
-      // crop. Otherwise we centre a generic file glyph so empty cards
-      // don't collapse to whitespace.
       const thumbInner = r.thumb
         ? `<img src="${r.thumb}" alt="" draggable="false">`
         : `<i data-lucide="file"></i>`;
+      // <div> wrapper (not <button>) because the row hosts a nested <button>
+      // for the hover-revealed × delete affordance, and HTML disallows nested
+      // buttons. Click bubbling on the row still triggers the open handler.
       return `
-      <button class="welcome-recent" data-idx="${i}" title="${safeName}">
+      <div class="welcome-recent" data-idx="${i}" title="${safeName}" tabindex="0">
         <div class="wr-thumb">${thumbInner}</div>
         <div class="wr-meta">
           <div class="wr-name">${safeName}</div>
           <div class="wr-sub">${_fmtBytes(r.size)} · ${_fmtAge(r.ts)}</div>
         </div>
-      </button>`;
+        <button class="wr-del" data-act="delete" title="Remove from recent files"><i data-lucide="x"></i></button>
+      </div>`;
     }).join('');
     box.querySelectorAll('.welcome-recent').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        // Skip when the × badge was the actual target — that's a delete,
+        // not an open. Without this guard the row's open-on-click would
+        // fire alongside the delete and load the file we just removed.
+        if (e.target.closest('[data-act="delete"]')) return;
         const idx = parseInt(el.dataset.idx, 10);
         const rec = _load()[idx];
         if (!rec) return;
         _openRecentByKey(_recKey(rec.name, rec.size));
       });
     });
+    // Per-row delete: drop the entry from the persisted list, drop the
+    // matching IDB file handle, re-render. The file on disk is never
+    // touched — this only forgets the shortcut.
+    box.querySelectorAll('.wr-del').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const row = btn.closest('.welcome-recent');
+        const idx = parseInt(row?.dataset.idx, 10);
+        const cur = _load();
+        const rec = cur[idx];
+        if (!rec) return;
+        cur.splice(idx, 1);
+        _save(cur);
+        try { if (typeof _idbDelete === 'function') await _idbDelete(_recKey(rec.name, rec.size)); } catch (_) {}
+        _renderRecents();
+      });
+    });
+    // Toggle the Clear-all chip based on whether the list has anything.
+    const clearBtn = document.getElementById('welcome-recents-clear');
+    if (clearBtn) clearBtn.style.display = list.length ? 'inline-flex' : 'none';
     try { _lucide(); } catch (_) {}
   }
 
@@ -1270,6 +1303,27 @@ const _Welcome = (() => {
       _openWithPicker();
     });
     close?.addEventListener('click', hide);
+    // Clear-all chip — confirms before wiping. Walks the list once to
+    // also drop each entry's IDB file handle so the next render starts
+    // from a truly empty state instead of leaving orphaned handles around.
+    document.getElementById('welcome-recents-clear')?.addEventListener('click', async () => {
+      const list = _load();
+      if (!list.length) return;
+      const ok = (typeof appConfirm === 'function')
+        ? await appConfirm(`Remove all ${list.length} entries from the recent files list? The files themselves stay on disk.`, {
+            title: 'Clear recent files?',
+            okLabel: 'Clear',
+            cancelLabel: 'Keep',
+            danger: true,
+          })
+        : confirm(`Remove all ${list.length} recent file entries?`);
+      if (!ok) return;
+      for (const r of list) {
+        try { if (typeof _idbDelete === 'function') await _idbDelete(_recKey(r.name, r.size)); } catch (_) {}
+      }
+      _save([]);
+      _renderRecents();
+    });
     bg.addEventListener('click', e => { if (e.target === bg) hide(); });
     document.addEventListener('keydown', e => {
       if (!bg.classList.contains('show')) return;
@@ -3489,7 +3543,13 @@ async function _captureRecentThumb(filename) {
   if (!state.partsRoot) { console.warn('[recent-thumb] no partsRoot'); return; }
   const box = new THREE.Box3().setFromObject(state.partsRoot);
   if (box.isEmpty()) { console.warn('[recent-thumb] empty bbox'); return; }
-  const SIZE = 256;
+  // Output 640 px square. The hero card (520 px-wide modal × ~140 px tall)
+  // and the recent-list rows (42×42) both crop a centred region; a square
+  // source keeps the framing consistent. Higher than 256 makes the hero
+  // background read sharply on retina displays without bloating
+  // localStorage too much (one JPEG ≈ 60-120 KB at quality 0.85, so 8
+  // recents stay well under the 5 MB localStorage cap).
+  const SIZE = 640;
   // Frame the model with a 3/4 hero camera. Same dir as fitToView so the
   // thumbnail looks like the user's first sight of the model.
   const sz = box.getSize(new THREE.Vector3());
@@ -3555,7 +3615,7 @@ async function _captureRecentThumb(filename) {
       imageData.data.set(pixels.subarray(src, src + SIZE * 4), dst);
     }
     ctx.putImageData(imageData, 0, 0);
-    dataUrl = c.toDataURL('image/jpeg', 0.78);
+    dataUrl = c.toDataURL('image/jpeg', 0.86);
   } else {
     // Snapshot the live viewport canvas instead. Cropped to a centred
     // square so wide viewports don't produce stretched thumbnails.
@@ -3569,8 +3629,13 @@ async function _captureRecentThumb(filename) {
       const c = document.createElement('canvas');
       c.width = SIZE; c.height = SIZE;
       const ctx = c.getContext('2d');
+      // Higher-quality downsample — without this Chrome uses bilinear and
+      // the result looks visibly soft at 640 px next to the hero card's
+      // sharp UI text.
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(liveCanvas, sx, sy, side, side, 0, 0, SIZE, SIZE);
-      dataUrl = c.toDataURL('image/jpeg', 0.78);
+      dataUrl = c.toDataURL('image/jpeg', 0.86);
     } catch (snapErr) {
       console.warn('[recent-thumb] canvas snapshot fallback failed:', snapErr?.message || snapErr);
       return;
@@ -4068,15 +4133,22 @@ function _transformPanelRefresh() {
       // Pivot is the gizmo's hub — at the selection's bbox centre.
       state.pivot.getWorldPosition(_tfTmpVec);
     } else if (isGroup) {
-      // Group containers sit at world origin; children carry their own
-      // positions. Show the bbox centre of the children instead —
-      // the same anchor the gizmo uses — so the user sees a real number
-      // rather than always 0,0,0.
-      obj.updateWorldMatrix(true, true);
-      _tfTmpBox.makeEmpty();
-      obj.traverse(child => { if (child.isMesh) _tfTmpBox.expandByObject(child); });
-      if (!_tfTmpBox.isEmpty()) _tfTmpBox.getCenter(_tfTmpVec);
-      else obj.getWorldPosition(_tfTmpVec);
+      // Group containers (hierarchy and user) sit at world origin — parts
+      // carry their own positions in partsRoot or pivot. Use the pivot's
+      // world position when a drag is active; otherwise gather the actual
+      // selected meshes to compute the bbox centre. Do NOT traverse obj
+      // (the container is often empty — meshes live in partsRoot).
+      if (state.pivot && (state._pivotedGroup || state._pivotedParts?.length)) {
+        state.pivot.getWorldPosition(_tfTmpVec);
+      } else {
+        _tfTmpBox.makeEmpty();
+        const selParts = [...(state.selected || [])].map(id => (typeof getPart === 'function' ? getPart(id) : null)).filter(p => p?.mesh);
+        for (const p of selParts) { p.mesh.updateWorldMatrix(true, false); _tfTmpBox.expandByObject(p.mesh); }
+        // fallback for user-groups that still hold children under obj
+        if (_tfTmpBox.isEmpty()) { obj.updateWorldMatrix(true, true); obj.traverse(c => { if (c.isMesh) _tfTmpBox.expandByObject(c); }); }
+        if (!_tfTmpBox.isEmpty()) _tfTmpBox.getCenter(_tfTmpVec);
+        else obj.getWorldPosition(_tfTmpVec);
+      }
     } else {
       _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
     }
@@ -11805,13 +11877,47 @@ function _openMaterialEditor(info) {
       .mat-tex-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
       .mat-tex-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
 
-      /* Property block — keeps a scrubber/colour picker, its texture slot,
-         and any per-map scalar (normal scale, AO intensity, etc.) visually
-         glued together. Dashed separator between blocks so the eye doesn't
-         confuse one property's texture for the next property's. */
-      .mat-prop{display:flex;flex-direction:column;gap:3px;padding:5px 0;border-bottom:1px dashed var(--s2)}
-      .mat-prop:last-child{border-bottom:none}
-      .mat-prop > .field{margin:0}
+      /* C4D / Redshift-style row layout. Each property is a single row:
+         [diamond glyph] [label] [tex-attach circle] [value control].
+         The tex-attach circle (data-tex-prop) is a clickable indicator;
+         empty = outline-only, has-tex = filled with the accent. Click
+         opens a small popover for load/clear. */
+      .mat-row{display:grid;grid-template-columns:14px 1fr 12px minmax(0,1.5fr);align-items:center;gap:8px;padding:4px 0;font-size:11.5px;line-height:1.2}
+      .mat-row + .mat-row{border-top:1px dashed var(--s2)}
+      .mat-row-diamond{width:10px;height:10px;display:grid;place-items:center;color:var(--tx3);opacity:.55}
+      .mat-row-diamond svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:1.6}
+      .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-row-tex{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--tx3);background:transparent;cursor:pointer;padding:0;display:grid;place-items:center;transition:background 120ms,border-color 120ms,color 120ms;color:var(--tx3)}
+      .mat-row-tex:hover{border-color:var(--ac);color:var(--ac)}
+      .mat-row-tex.has-tex{background:var(--ac);border-color:var(--ac)}
+      .mat-row-tex.has-tex::after{content:'';width:4px;height:4px;border-radius:50%;background:#fff}
+      .mat-row-val{display:flex;align-items:center;gap:6px;min-width:0}
+      .mat-row-val > *:first-child{flex:1;min-width:0}
+      .mat-row-val .field{margin:0}
+
+      /* Eyedropper button — sits flush with the colour picker.  */
+      .mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
+      .mat-eyedrop:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
+      .mat-eyedrop:disabled{opacity:.35;cursor:default;pointer-events:none}
+      .mat-eyedrop svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
+
+      /* Floating texture-attach popover anchored to the .mat-row-tex.  */
+      .mat-tex-pop{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--bd);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:10px;width:240px;display:none}
+      .mat-tex-pop.show{display:block}
+      .mat-tex-pop-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+      .mat-tex-pop-thumb{flex:0 0 40px;width:40px;height:40px;border-radius:6px;background:#0c0f15;border:1px solid var(--bd);overflow:hidden;display:grid;place-items:center}
+      .mat-tex-pop-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+      .mat-tex-pop-thumb svg{width:18px;height:18px;stroke:var(--tx3);fill:none;stroke-width:1.6;opacity:.45}
+      .mat-tex-pop-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+      .mat-tex-pop-prop{font-size:11px;font-weight:600;color:var(--tx);text-transform:uppercase;letter-spacing:.04em}
+      .mat-tex-pop-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-tex-pop-row{display:flex;gap:6px}
+      .mat-tex-pop-btn{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:6px 8px;color:var(--tx);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 120ms,border-color 120ms,color 120ms}
+      .mat-tex-pop-btn:hover{background:var(--bg3);border-color:var(--bd2)}
+      .mat-tex-pop-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
+      .mat-tex-pop-btn.danger{color:var(--er)}
+      .mat-tex-pop-btn.danger:hover{background:rgba(255,107,107,.10);border-color:rgba(255,107,107,.25)}
+      .mat-tex-pop-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
     `;
     document.head.appendChild(s);
   }
@@ -11885,45 +11991,58 @@ function _openMaterialEditor(info) {
       </div>`;
   };
 
-  // Lookup so we can spawn the right texRow for a given map property when
-  // building per-property blocks below.
   const _texSlotByProp = Object.fromEntries(_texSlots.map(s => [s.prop, s]));
-  const texFor = (propName) => {
-    const s = _texSlotByProp[propName];
-    return s ? texRow(s) : '';
+
+  // Row helpers — each property is a single C4D-style row:
+  //   [diamond] [label] [tex-attach] [value]
+  // texAttach is just a stateful indicator + click target; the actual file
+  // picker lives in a shared floating popover wired below.
+  const _diamondSvg = '<svg viewBox="0 0 12 12"><path d="M6 1 11 6 6 11 1 6Z"/></svg>';
+  const texAttach = (propName) => {
+    if (!propName || !_texSlotByProp[propName]) return '<span></span>';
+    const has = !!mat[propName];
+    return `<button class="mat-row-tex${has ? ' has-tex' : ''}" data-tex-prop="${propName}" title="Texture (click to load/clear)"></button>`;
   };
-  // Wrap a property's controls in a single visual block so the eye groups
-  // the property's scrubber/picker, texture slot and any per-map scalar
-  // (normal scale, AO intensity, etc.) together.
-  const prop = (...parts) => `<div class="mat-prop">${parts.filter(Boolean).join('')}</div>`;
+  const row = (label, valueHtml, texProp = null) => `
+    <div class="mat-row">
+      <span class="mat-row-diamond">${_diamondSvg}</span>
+      <span class="mat-row-label">${escapeHtml(label)}</span>
+      ${texAttach(texProp)}
+      <div class="mat-row-val">${valueHtml}</div>
+    </div>`;
+  const colorVal = (cid, hex) => `
+    <input type="color" id="${cid}" value="${hex || '#000000'}" style="width:28px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer">
+    <span class="mat-color-hex" id="${cid}-hex" style="flex:1;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--tx3)">${hex || '#000000'}</span>
+    <button class="mat-eyedrop" data-eyedrop="${cid}" title="Pick colour from screen (Eyedropper)">
+      <svg viewBox="0 0 24 24"><path d="M16 4l4 4-2 2-4-4 2-2zM14 6L4 16v4h4L18 10"/></svg>
+    </button>`;
+  const sliderVal = (sid) => `<div id="${sid}"></div>`;
 
   const baseSection = section('base', 'Base',
-    prop(colorRow('mat-edit-color', 'Color', '#' + (mat.color?.getHexString?.() || 'cccccc')), texFor('map')) +
+    row('Color',     colorVal('mat-edit-color', '#' + (mat.color?.getHexString?.() || 'cccccc')), 'map') +
     (hasPBR
-      ? prop(slider('mat-edit-metalness-scrub'), texFor('metalnessMap')) +
-        prop(slider('mat-edit-roughness-scrub'), texFor('roughnessMap'))
+      ? row('Metalness', sliderVal('mat-edit-metalness-scrub'), 'metalnessMap') +
+        row('Roughness', sliderVal('mat-edit-roughness-scrub'), 'roughnessMap')
       : '')
   );
 
-  // Surface detail — normal/bump/displacement/AO. Each of these maps has an
-  // accompanying scalar (normalScale, bumpScale, displacementScale + bias,
-  // aoMapIntensity) that we pin underneath the texture slot.
   const surfaceDetailSection = section('detail', 'Surface detail',
-    prop(texFor('normalMap'),       slider('mat-edit-normalScale-scrub')) +
-    prop(texFor('bumpMap'),         slider('mat-edit-bumpScale-scrub')) +
-    prop(texFor('displacementMap'), slider('mat-edit-displScale-scrub'), slider('mat-edit-displBias-scrub')) +
-    prop(texFor('aoMap'),           slider('mat-edit-aoMapInt-scrub'))
+    row('Normal',            sliderVal('mat-edit-normalScale-scrub'), 'normalMap') +
+    row('Bump',              sliderVal('mat-edit-bumpScale-scrub'),   'bumpMap') +
+    row('Displacement',      sliderVal('mat-edit-displScale-scrub'),  'displacementMap') +
+    row('Displacement bias', sliderVal('mat-edit-displBias-scrub')) +
+    row('AO',                sliderVal('mat-edit-aoMapInt-scrub'),    'aoMap')
   , true);
 
   const emissiveSection = hasEmissive ? section('emissive', 'Emission',
-    prop(colorRow('mat-edit-emissive-color', 'Color', '#' + (mat.emissive?.getHexString?.() || '000000')), texFor('emissiveMap')) +
-    prop(slider('mat-edit-emissive-scrub'))
+    row('Color',     colorVal('mat-edit-emissive-color', '#' + (mat.emissive?.getHexString?.() || '000000')), 'emissiveMap') +
+    row('Intensity', sliderVal('mat-edit-emissive-scrub'))
   ) : '';
 
   const surfaceSection = section('surface', 'Surface',
-    prop(slider('mat-edit-opacity-scrub'), texFor('alphaMap')) +
-    prop(slider('mat-edit-alphatest-scrub')) +
-    prop(texFor('lightMap'), slider('mat-edit-lightMapInt-scrub')) +
+    row('Opacity',     sliderVal('mat-edit-opacity-scrub'),     'alphaMap') +
+    row('Alpha test',  sliderVal('mat-edit-alphatest-scrub')) +
+    row('Light map',   sliderVal('mat-edit-lightMapInt-scrub'), 'lightMap') +
     `<div class="mat-edit-select-row">
        <label>Side</label>
        <select id="mat-edit-side" class="mac-sel">
@@ -11941,36 +12060,37 @@ function _openMaterialEditor(info) {
   );
 
   const envSection = hasEnv ? section('env', 'Environment',
-    prop(slider('mat-edit-env-scrub'))
+    row('Env intensity', sliderVal('mat-edit-env-scrub'))
   ) : '';
 
+  const _mapOnly = '<span style="color:var(--tx3);font-size:11px;font-style:italic;opacity:.7">map only</span>';
   const physicalSection = isPhysical ? section('physical', 'Clearcoat / IOR / Transmission',
-    prop(slider('mat-edit-clearcoat-scrub'),      texFor('clearcoatMap')) +
-    prop(slider('mat-edit-clearcoatRough-scrub'), texFor('clearcoatRoughnessMap')) +
-    prop(texFor('clearcoatNormalMap')) +
-    prop(slider('mat-edit-ior-scrub')) +
-    prop(slider('mat-edit-reflect-scrub')) +
-    prop(slider('mat-edit-transmission-scrub'),   texFor('transmissionMap')) +
-    prop(slider('mat-edit-thickness-scrub'),      texFor('thicknessMap')) +
-    prop(slider('mat-edit-dispersion-scrub')) +
-    prop(colorRow('mat-edit-attenuation-color', 'Attenuation', '#' + (mat.attenuationColor?.getHexString?.() || 'ffffff'))) +
-    prop(slider('mat-edit-attenuationDistance-scrub'))
+    row('Clearcoat',           sliderVal('mat-edit-clearcoat-scrub'),           'clearcoatMap') +
+    row('Clearcoat roughness', sliderVal('mat-edit-clearcoatRough-scrub'),      'clearcoatRoughnessMap') +
+    row('Clearcoat normal',    _mapOnly,                                        'clearcoatNormalMap') +
+    row('IOR',                 sliderVal('mat-edit-ior-scrub')) +
+    row('Reflectivity',        sliderVal('mat-edit-reflect-scrub')) +
+    row('Transmission',        sliderVal('mat-edit-transmission-scrub'),        'transmissionMap') +
+    row('Thickness',           sliderVal('mat-edit-thickness-scrub'),           'thicknessMap') +
+    row('Dispersion',          sliderVal('mat-edit-dispersion-scrub')) +
+    row('Attenuation',         colorVal('mat-edit-attenuation-color', '#' + (mat.attenuationColor?.getHexString?.() || 'ffffff'))) +
+    row('Atten. distance',     sliderVal('mat-edit-attenuationDistance-scrub'))
   , true) : '';
 
   const sheenSection = isPhysical ? section('sheen', 'Sheen / Iridescence / Anisotropy',
-    prop(slider('mat-edit-sheen-scrub'),       texFor('sheenColorMap')) +
-    prop(slider('mat-edit-sheenRough-scrub'),  texFor('sheenRoughnessMap')) +
-    prop(colorRow('mat-edit-sheen-color', 'Sheen color', '#' + (mat.sheenColor?.getHexString?.() || 'ffffff'))) +
-    prop(slider('mat-edit-iridescence-scrub'), texFor('iridescenceMap')) +
-    prop(texFor('iridescenceThicknessMap')) +
-    prop(slider('mat-edit-iridIor-scrub')) +
-    prop(slider('mat-edit-anisotropy-scrub'),  texFor('anisotropyMap')) +
-    prop(slider('mat-edit-anisoRot-scrub'))
+    row('Sheen',           sliderVal('mat-edit-sheen-scrub'),       'sheenColorMap') +
+    row('Sheen roughness', sliderVal('mat-edit-sheenRough-scrub'),  'sheenRoughnessMap') +
+    row('Sheen color',     colorVal('mat-edit-sheen-color', '#' + (mat.sheenColor?.getHexString?.() || 'ffffff'))) +
+    row('Iridescence',     sliderVal('mat-edit-iridescence-scrub'), 'iridescenceMap') +
+    row('Irid. thickness', _mapOnly,                                'iridescenceThicknessMap') +
+    row('Iridescence IOR', sliderVal('mat-edit-iridIor-scrub')) +
+    row('Anisotropy',      sliderVal('mat-edit-anisotropy-scrub'),  'anisotropyMap') +
+    row('Anis. rotation',  sliderVal('mat-edit-anisoRot-scrub'))
   , true) : '';
 
   const specSection = isPhysical ? section('specular', 'Specular',
-    prop(slider('mat-edit-specInt-scrub'),     texFor('specularIntensityMap')) +
-    prop(colorRow('mat-edit-spec-color', 'Specular tint', '#' + (mat.specularColor?.getHexString?.() || 'ffffff')), texFor('specularColorMap'))
+    row('Intensity', sliderVal('mat-edit-specInt-scrub'),                                                       'specularIntensityMap') +
+    row('Tint',      colorVal('mat-edit-spec-color', '#' + (mat.specularColor?.getHexString?.() || 'ffffff')),  'specularColorMap')
   , true) : '';
 
   const matName = (mat.name && mat.name.trim()) || ('mat_' + (mat.color?.getHexString?.() || 'cccccc'));
@@ -12214,32 +12334,12 @@ function _openMaterialEditor(info) {
   num('mat-edit-displScale-scrub',  'Displacement scale',     'displacementScale',  { min: -1, max: 1, fallback: 1, decimals: 2 });
   num('mat-edit-displBias-scrub',   'Displacement bias',      'displacementBias',   { min: -1, max: 1, fallback: 0, decimals: 2 });
 
-  // ── Texture slots — load / clear / preview ────────────────────────────
-  // Every .mat-tex-row in the rendered DOM gets two click handlers (load
-  // opens a hidden file picker; clear nulls + disposes the texture). On
-  // load, the chosen file becomes a THREE.Texture with the proper
-  // colorSpace, then we push a fresh thumbnail into the slot's preview.
+  // ── Texture attach popover (one shared instance) ──────────────────────
+  // Click the small circle (.mat-row-tex) next to a property to open the
+  // popover anchored to it. Shows thumb + filename + Load / Clear. One
+  // shared instance to avoid spamming DOM nodes per row.
   function _texColorSpace(cs) {
     return cs === 'srgb' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-  }
-  function _setTexThumb(row, tex) {
-    const th = row.querySelector('[data-thumb]');
-    const nm = row.querySelector('[data-name]');
-    const cl = row.querySelector('[data-clear]');
-    if (!th) return;
-    if (tex) {
-      const url = tex.image?.src || (tex.image instanceof HTMLCanvasElement ? tex.image.toDataURL('image/png') : null) || tex.userData?.dataUrl;
-      th.classList.add('has-tex');
-      th.innerHTML = url ? `<img src="${url}" alt="">` : '';
-      const fn = (tex.name || tex.userData?.fileName || 'texture').slice(0, 32);
-      if (nm) { nm.textContent = fn; nm.classList.remove('empty'); }
-      if (cl) cl.disabled = false;
-    } else {
-      th.classList.remove('has-tex');
-      th.innerHTML = '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
-      if (nm) { nm.textContent = ''; nm.classList.add('empty'); }
-      if (cl) cl.disabled = true;
-    }
   }
   function _loadTexture(file, cs) {
     return new Promise((resolve, reject) => {
@@ -12255,19 +12355,73 @@ function _openMaterialEditor(info) {
         tex.name = file.name;
         tex.userData = tex.userData || {};
         tex.userData.fileName = file.name;
-        tex.userData.dataUrl = url; // keep for thumbnail (don't revoke)
+        tex.userData.dataUrl = url;
         resolve(tex);
       };
       img.onerror = (e) => { URL.revokeObjectURL(url); reject(e); };
       img.src = url;
     });
   }
-  popup.body.querySelectorAll('.mat-tex-row').forEach(row => {
-    const prop = row.dataset.texProp;
-    const cs   = row.dataset.texCs;
-    const loadBtn = row.querySelector('[data-load]');
-    const clrBtn  = row.querySelector('[data-clear]');
-    loadBtn?.addEventListener('click', () => {
+  function _texThumbUrl(tex) {
+    return tex?.image?.src
+        || (tex?.image instanceof HTMLCanvasElement ? tex.image.toDataURL('image/png') : null)
+        || tex?.userData?.dataUrl
+        || '';
+  }
+  function _refreshAttach(propName) {
+    const ind = popup.body.querySelector(`.mat-row-tex[data-tex-prop="${propName}"]`);
+    if (ind) ind.classList.toggle('has-tex', !!mat[propName]);
+  }
+  let _texPop = document.getElementById('_mat-tex-pop');
+  if (!_texPop) {
+    _texPop = document.createElement('div');
+    _texPop.id = '_mat-tex-pop';
+    _texPop.className = 'mat-tex-pop';
+    document.body.appendChild(_texPop);
+    document.addEventListener('click', (e) => {
+      if (!_texPop.classList.contains('show')) return;
+      if (_texPop.contains(e.target)) return;
+      if (e.target.closest?.('.mat-row-tex')) return;
+      _texPop.classList.remove('show');
+    });
+  }
+  function _openTexPop(anchor, propName, cs) {
+    const slot = _texSlotByProp[propName];
+    const tex = mat[propName];
+    const thumbUrl = _texThumbUrl(tex);
+    _texPop.innerHTML = `
+      <div class="mat-tex-pop-head">
+        <div class="mat-tex-pop-thumb">
+          ${thumbUrl
+            ? `<img src="${thumbUrl}" alt="">`
+            : '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'}
+        </div>
+        <div class="mat-tex-pop-meta">
+          <div class="mat-tex-pop-prop">${escapeHtml(slot?.label || propName)}</div>
+          <div class="mat-tex-pop-name" title="${escapeHtml(tex?.name || tex?.userData?.fileName || '')}">${escapeHtml(tex?.name || tex?.userData?.fileName || '— no texture —')}</div>
+        </div>
+      </div>
+      <div class="mat-tex-pop-row">
+        <button class="mat-tex-pop-btn" data-pop-load>
+          <svg viewBox="0 0 24 24"><path d="M3 7l3-4h12l3 4M3 7v12a2 2 0 002 2h14a2 2 0 002-2V7M3 7h18"/><circle cx="12" cy="14" r="3.5"/></svg>
+          Load…
+        </button>
+        <button class="mat-tex-pop-btn danger" data-pop-clear ${tex ? '' : 'disabled'}>
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          Clear
+        </button>
+      </div>`;
+    _texPop.style.left = '0px'; _texPop.style.top = '0px';
+    _texPop.classList.add('show');
+    const r = anchor.getBoundingClientRect();
+    const pw = _texPop.offsetWidth, ph = _texPop.offsetHeight;
+    let x = r.right + 6, y = r.top - 4;
+    if (x + pw > window.innerWidth - 8)  x = Math.max(8, r.left - pw - 6);
+    if (y + ph > window.innerHeight - 8) y = Math.max(8, window.innerHeight - ph - 8);
+    _texPop.style.left = x + 'px';
+    _texPop.style.top  = y + 'px';
+
+    _texPop.querySelector('[data-pop-load]')?.addEventListener('click', () => {
       const inp = document.createElement('input');
       inp.type = 'file';
       inp.accept = 'image/png,image/jpeg,image/webp,image/avif,image/*';
@@ -12276,12 +12430,12 @@ function _openMaterialEditor(info) {
         const f = inp.files?.[0];
         if (!f) return;
         try {
-          const tex = await _loadTexture(f, cs);
-          // Dispose previous to avoid GPU leak.
-          try { mat[prop]?.dispose?.(); } catch (_) {}
-          mat[prop] = tex;
+          const newTex = await _loadTexture(f, cs);
+          try { mat[propName]?.dispose?.(); } catch (_) {}
+          mat[propName] = newTex;
           mat.needsUpdate = true;
-          _setTexThumb(row, tex);
+          _refreshAttach(propName);
+          _texPop.classList.remove('show');
           requestRender();
           _refreshAll();
         } catch (e) {
@@ -12289,17 +12443,56 @@ function _openMaterialEditor(info) {
           toast?.('Texture load failed', f.name, 'error', 4000);
         }
       });
-      document.body.appendChild(inp);
-      inp.click();
+      document.body.appendChild(inp); inp.click();
       setTimeout(() => inp.remove(), 0);
     });
-    clrBtn?.addEventListener('click', () => {
-      try { mat[prop]?.dispose?.(); } catch (_) {}
-      mat[prop] = null;
+    _texPop.querySelector('[data-pop-clear]')?.addEventListener('click', () => {
+      try { mat[propName]?.dispose?.(); } catch (_) {}
+      mat[propName] = null;
       mat.needsUpdate = true;
-      _setTexThumb(row, null);
+      _refreshAttach(propName);
+      _texPop.classList.remove('show');
       requestRender();
       _refreshAll();
+    });
+  }
+  popup.body.querySelectorAll('.mat-row-tex').forEach(btn => {
+    const propName = btn.dataset.texProp;
+    if (!propName) return;
+    const cs = _texSlotByProp[propName]?.cs || 'linear';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (_texPop.classList.contains('show') && _texPop._anchorProp === propName) {
+        _texPop.classList.remove('show');
+        return;
+      }
+      _texPop._anchorProp = propName;
+      _openTexPop(btn, propName, cs);
+    });
+  });
+
+  // ── Eyedropper buttons (next to colour pickers) ───────────────────────
+  // Uses the native EyeDropper API (Chromium since v95). On Firefox/Safari
+  // the button is disabled with an explanatory tooltip.
+  const _eyedropAvailable = (typeof window.EyeDropper === 'function');
+  popup.body.querySelectorAll('.mat-eyedrop').forEach(btn => {
+    const cid = btn.dataset.eyedrop;
+    if (!cid) return;
+    if (!_eyedropAvailable) {
+      btn.disabled = true;
+      btn.title = 'Eyedropper API not supported in this browser';
+      return;
+    }
+    btn.addEventListener('click', async () => {
+      try {
+        const result = await new window.EyeDropper().open();
+        const hex = result?.sRGBHex;
+        if (!hex) return;
+        const inp = document.getElementById(cid);
+        if (!inp) return;
+        inp.value = hex;
+        inp.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch (_) { /* user cancelled */ }
     });
   });
 
