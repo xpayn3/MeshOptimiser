@@ -3879,6 +3879,25 @@ function _transformTarget() {
   return null;
 }
 
+// Walk obj's parent chain — if state.pivot is in there, the gizmo is
+// mid-drag and the user sees the world position move even though
+// obj.position (local-to-pivot) stays fixed. Read world in that case so
+// the panel matches what the viewport shows.
+function _hasPivotAncestor(obj) {
+  if (!state.pivot) return false;
+  let p = obj?.parent;
+  while (p) { if (p === state.pivot) return true; p = p.parent; }
+  return false;
+}
+
+// Cached temporaries — refresh runs every frame while the panel is open,
+// so allocating fresh THREE objects each tick adds GC noise.
+const _tfTmpVec = new THREE.Vector3();
+const _tfTmpVec2 = new THREE.Vector3();
+const _tfTmpEuler = new THREE.Euler();
+const _tfTmpQuat = new THREE.Quaternion();
+const _tfTmpBox = new THREE.Box3();
+
 function _transformPanelRefresh() {
   const panel = document.getElementById('transform-panel');
   if (!panel || !panel.classList.contains('show')) return;
@@ -3896,69 +3915,68 @@ function _transformPanelRefresh() {
     sz: document.getElementById('tform-sz'),
   };
 
-  // Multi/empty selection: clear + disable position/rotation. Size
-  // already disabled (read-only). User can still see the panel but
-  // editing is gated behind a stable single-selection target.
+  // Multi/empty selection: clear + disable. Don't clobber the input the
+  // user is actively typing into.
   const selN = (state.selected?.size || 0) + (state.selectedGroupIds?.size || 0);
   if (!target) {
     for (const k of Object.keys(inputs)) {
-      if (!inputs[k]) continue;
-      inputs[k].value = '';
-      inputs[k].placeholder = selN > 1 ? 'mixed' : '—';
-      inputs[k].disabled = true;
+      const el = inputs[k];
+      if (!el) continue;
+      if (document.activeElement !== el) el.value = '';
+      el.placeholder = selN > 1 ? 'mixed' : '—';
+      el.disabled = true;
     }
+    document.querySelectorAll('#tform-grid .tform-num').forEach(n => n.classList.add('disabled'));
     return;
   }
 
-  // Single-target case: enable, fill from LOCAL position/rotation + world
-  // bbox size. Local-to-parent matches every DCC (C4D, Maya, Blender):
-  // a top-level group reads as world (its parent IS the scene), a nested
-  // group reads relative to its parent group, and a part inside a group
-  // reads relative to that group. The mental model is "what you'd type
-  // in the parent's frame" — which is exactly what edits round-trip to.
+  // Single-target case: enable, fill from local position/rotation (or
+  // world if a transient pivot is in the way) + world bbox size.
   for (const k of ['px','py','pz','rx','ry','rz','sx','sy','sz']) {
     if (inputs[k]) { inputs[k].disabled = false; inputs[k].classList.remove('mixed'); }
   }
-  // Reflect the enabled state on the wrapper so its border/buttons enable.
   document.querySelectorAll('#tform-grid .tform-num.disabled').forEach(n => n.classList.remove('disabled'));
   document.querySelectorAll('#tform-grid .tform-step[disabled]').forEach(b => { b.disabled = false; });
+
   const obj = target.obj;
+  const usingWorld = _hasPivotAncestor(obj);
   try {
-    if (Number.isFinite(obj.position.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(obj.position.x);
-    if (Number.isFinite(obj.position.y) && inputs.py && document.activeElement !== inputs.py) inputs.py.value = _fmtNum(obj.position.y);
-    if (Number.isFinite(obj.position.z) && inputs.pz && document.activeElement !== inputs.pz) inputs.pz.value = _fmtNum(obj.position.z);
+    if (usingWorld) { obj.updateMatrixWorld(true); obj.getWorldPosition(_tfTmpVec); }
+    else _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
+    if (Number.isFinite(_tfTmpVec.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(_tfTmpVec.x);
+    if (Number.isFinite(_tfTmpVec.y) && inputs.py && document.activeElement !== inputs.py) inputs.py.value = _fmtNum(_tfTmpVec.y);
+    if (Number.isFinite(_tfTmpVec.z) && inputs.pz && document.activeElement !== inputs.pz) inputs.pz.value = _fmtNum(_tfTmpVec.z);
   } catch (_) {}
-  // Rotation as Euler degrees from local quaternion (XYZ order, Three's
-  // default). Using local because most users expect rotation values that
-  // round-trip to a clean editor field — converting world quat → euler is
-  // ambiguous when the object has a non-identity parent rotation.
+
   try {
     const rad2deg = (r) => r * 180 / Math.PI;
-    if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(obj.rotation.x), 2);
-    if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(obj.rotation.y), 2);
-    if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(obj.rotation.z), 2);
-  } catch (_) {}
-  // Size: world bounding box dimensions. Box3.setFromObject honours every
-  // child + transforms — gives a real-world reading even on instanced
-  // parts where the mesh's own scale is meaningless.
-  try {
-    const box = new THREE.Box3().setFromObject(obj);
-    if (!box.isEmpty()) {
-      const sz = new THREE.Vector3();
-      box.getSize(sz);
-      if (inputs.sx) inputs.sx.value = _fmtNum(sz.x);
-      if (inputs.sy) inputs.sy.value = _fmtNum(sz.y);
-      if (inputs.sz) inputs.sz.value = _fmtNum(sz.z);
+    if (usingWorld) {
+      obj.getWorldQuaternion(_tfTmpQuat);
+      _tfTmpEuler.setFromQuaternion(_tfTmpQuat, 'XYZ');
     } else {
-      if (inputs.sx) inputs.sx.value = '';
-      if (inputs.sy) inputs.sy.value = '';
-      if (inputs.sz) inputs.sz.value = '';
+      _tfTmpEuler.set(obj.rotation.x, obj.rotation.y, obj.rotation.z, 'XYZ');
+    }
+    if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(_tfTmpEuler.x), 2);
+    if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
+    if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
+  } catch (_) {}
+
+  try {
+    _tfTmpBox.makeEmpty().setFromObject(obj);
+    if (!_tfTmpBox.isEmpty()) {
+      _tfTmpBox.getSize(_tfTmpVec2);
+      if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(_tfTmpVec2.x);
+      if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(_tfTmpVec2.y);
+      if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(_tfTmpVec2.z);
+    } else {
+      if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = '';
+      if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = '';
+      if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = '';
     }
   } catch (_) {}
 }
 function _fmtNum(v, decimals = 3) {
   if (!Number.isFinite(v)) return '';
-  // Strip trailing zeros for readability.
   return parseFloat(v.toFixed(decimals)).toString();
 }
 
@@ -3970,48 +3988,60 @@ function _wireTransformPanel() {
   // type a value without partial commits triggering a render every key.
   // Position writes are world-space → converted to local via parent.
   // worldToLocal so the displayed value (world) round-trips back correctly.
+  // Position/rotation writes mirror the read path: when a pivot ancestor
+  // is in the chain, the displayed value is world; the user types a
+  // world-space target and we convert back to local via the actual parent
+  // so the round-trip works. Without a pivot, write straight to local.
   const handle = (axis) => (e) => {
     const target = _transformTarget();
     if (!target) { _transformPanelRefresh(); return; }
     const obj = target.obj;
-    if (!obj || !obj.position || !obj.rotation) return;
+    if (!obj || !obj.position || !obj.rotation || !obj.scale) {
+      _transformPanelRefresh(); return;
+    }
     const raw = parseFloat(e.target.value);
     if (!Number.isFinite(raw)) { _transformPanelRefresh(); return; }
-    // Sanity clamp — Three.js gets very unhappy with non-finite or
-    // ridiculously huge values; cap at a million scene units which is
-    // already far beyond any plausible CAD bbox.
+    // Sanity clamp — Three.js gets unhappy with non-finite or absurd
+    // values; cap at ±1e6 scene units which exceeds any plausible CAD bbox.
     const v = Math.max(-1e6, Math.min(1e6, raw));
+    const usingWorld = _hasPivotAncestor(obj);
     try {
       if (axis === 'px' || axis === 'py' || axis === 'pz') {
-        // LOCAL position (relative to parent) — matches the panel's read
-        // path and how every DCC shows transforms. Top-level objects'
-        // parent is the scene root so local == world for them.
-        if (axis === 'px') obj.position.x = v;
-        if (axis === 'py') obj.position.y = v;
-        if (axis === 'pz') obj.position.z = v;
+        if (usingWorld) {
+          obj.parent?.updateMatrixWorld?.(true);
+          obj.getWorldPosition(_tfTmpVec);
+          if (axis === 'px') _tfTmpVec.x = v;
+          if (axis === 'py') _tfTmpVec.y = v;
+          if (axis === 'pz') _tfTmpVec.z = v;
+          if (obj.parent) obj.parent.worldToLocal(_tfTmpVec);
+          obj.position.copy(_tfTmpVec);
+        } else {
+          if (axis === 'px') obj.position.x = v;
+          if (axis === 'py') obj.position.y = v;
+          if (axis === 'pz') obj.position.z = v;
+        }
       } else if (axis === 'rx' || axis === 'ry' || axis === 'rz') {
         const rad = v * Math.PI / 180;
+        // Rotation is local for now; world-rotation editing would need a
+        // full quat decomposition that matches Euler order conventions —
+        // leaving as a follow-up so the simple case stays predictable.
         if (axis === 'rx') obj.rotation.x = rad;
         if (axis === 'ry') obj.rotation.y = rad;
         if (axis === 'rz') obj.rotation.z = rad;
       } else if (axis === 'sx' || axis === 'sy' || axis === 'sz') {
-        // Size is a target world bbox dimension; convert to a scale factor
-        // by dividing the desired size by the CURRENT bbox size, then
-        // multiplying it onto the existing scale. Reject ≤ 0 outright so a
-        // typo can't collapse the geometry to a single point — the panel
-        // refresh that follows will revert the visible value.
-        // Note: scaling a shared instanced mesh affects every instance —
-        // that's a known caveat documented elsewhere.
+        // Size is a target world-bbox dimension. Convert to a scale factor
+        // by dividing the target by the current bbox dimension, then
+        // multiply onto the existing scale. Reject ≤ 1e-4 so a typo can't
+        // collapse the geometry to a point.
         const tgt = Math.abs(v);
         if (!Number.isFinite(tgt) || tgt < 1e-4) { _transformPanelRefresh(); return; }
-        const box = new THREE.Box3().setFromObject(obj);
-        if (box.isEmpty()) return;
-        const cur = new THREE.Vector3();
-        box.getSize(cur);
-        const dim = axis === 'sx' ? cur.x : (axis === 'sy' ? cur.y : cur.z);
-        if (!Number.isFinite(dim) || dim < 1e-9) return;
+        _tfTmpBox.makeEmpty().setFromObject(obj);
+        if (_tfTmpBox.isEmpty()) { _transformPanelRefresh(); return; }
+        _tfTmpBox.getSize(_tfTmpVec2);
+        const dim = axis === 'sx' ? _tfTmpVec2.x : (axis === 'sy' ? _tfTmpVec2.y : _tfTmpVec2.z);
+        if (!Number.isFinite(dim) || dim < 1e-9) { _transformPanelRefresh(); return; }
         const factor = tgt / dim;
-        if (!Number.isFinite(factor) || factor <= 0) return;
+        if (!Number.isFinite(factor) || factor <= 0) { _transformPanelRefresh(); return; }
         if (axis === 'sx') obj.scale.x *= factor;
         if (axis === 'sy') obj.scale.y *= factor;
         if (axis === 'sz') obj.scale.z *= factor;
@@ -4020,14 +4050,46 @@ function _wireTransformPanel() {
       }
       obj.updateMatrix();
       obj.updateMatrixWorld(true);
-    } catch (err) { console.warn('[transform-panel] edit failed:', err); return; }
+    } catch (err) { console.warn('[transform-panel] edit failed:', err); _transformPanelRefresh(); return; }
     requestRender();
     refreshPropertiesPanel?.();
     _transformPanelRefresh();
   };
   for (const ax of ['px','py','pz','rx','ry','rz','sx','sy','sz']) {
     const el = document.getElementById('tform-' + ax);
-    if (el) el.addEventListener('change', handle(ax));
+    if (!el) continue;
+    el.addEventListener('change', handle(ax));
+    // Enter / Tab / Esc — number inputs don't reliably fire `change` on
+    // Enter across browsers, so commit explicitly. Esc reverts by
+    // re-running refresh, which clobbers the in-flight value.
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.blur();
+      } else if (ev.key === 'Escape') {
+        ev.preventDefault();
+        // Blur FIRST so the focus-skip in _transformPanelRefresh doesn't
+        // protect this input — we explicitly want it overwritten with the
+        // real value.
+        el.blur();
+        _transformPanelRefresh();
+      }
+    });
+    // Wheel on a focused input is a quick scrubber: increment/decrement by
+    // step (× shift / ÷ alt). Without this the wheel scrolls the page
+    // instead of nudging the value, which is surprising for a number field.
+    el.addEventListener('wheel', (ev) => {
+      if (document.activeElement !== el || el.disabled) return;
+      ev.preventDefault();
+      const step = parseFloat(el.step) || 1;
+      const mul = ev.shiftKey ? 10 : (ev.altKey ? 0.1 : 1);
+      const cur = parseFloat(el.value);
+      const base = Number.isFinite(cur) ? cur : 0;
+      const dir = ev.deltaY < 0 ? 1 : -1;
+      el.value = parseFloat((base + dir * step * mul).toFixed(6)).toString();
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, { passive: false });
   }
   // The part-transform gizmo (state.gizmo) fires `objectChange` on every
   // mouse-move while dragging. Hook into it so the panel mirrors the live
@@ -4089,21 +4151,81 @@ function _wireTransformPanel() {
     window.addEventListener('pointercancel', onUp);
     window.addEventListener('blur', onUp);
   }
-  // Reset: zero position + rotation, restore scale to 1. Size is read-only
-  // so we don't touch the bbox; resetting scale is a sensible "back to
-  // identity" for the editable channels.
+  // Reset: clear the editable channels back to identity in the SAME frame
+  // we display (world if pivot is ancestor, else local). Setting local to
+  // zero when a non-identity pivot is in the chain leaves the object stuck
+  // at the pivot's world transform — confusing — so we route through world
+  // → local conversion for the pivoted case.
   document.getElementById('tform-reset')?.addEventListener('click', () => {
     const target = _transformTarget();
-    if (!target) return;
-    target.obj.position.set(0, 0, 0);
-    target.obj.rotation.set(0, 0, 0);
-    target.obj.scale.set(1, 1, 1);
-    target.obj.updateMatrix();
-    target.obj.updateMatrixWorld(true);
+    if (!target?.obj) return;
+    const obj = target.obj;
+    try {
+      if (_hasPivotAncestor(obj)) {
+        // Want world position = (0,0,0), world rotation = identity.
+        obj.parent?.updateMatrixWorld?.(true);
+        _tfTmpVec.set(0, 0, 0);
+        if (obj.parent) obj.parent.worldToLocal(_tfTmpVec);
+        obj.position.copy(_tfTmpVec);
+        // World identity rotation, expressed in local frame: invert
+        // parent's world rotation.
+        if (obj.parent) {
+          obj.parent.getWorldQuaternion(_tfTmpQuat).invert();
+          obj.quaternion.copy(_tfTmpQuat);
+        } else {
+          obj.rotation.set(0, 0, 0);
+        }
+      } else {
+        obj.position.set(0, 0, 0);
+        obj.rotation.set(0, 0, 0);
+      }
+      obj.scale.set(1, 1, 1);
+      obj.updateMatrix();
+      obj.updateMatrixWorld(true);
+    } catch (err) { console.warn('[transform-panel] reset failed:', err); return; }
     requestRender();
     refreshPropertiesPanel?.();
     _transformPanelRefresh();
   });
+}
+
+// While the panel is open, poll once per frame so any source of transform
+// change — gizmo drag, programmatic move, undo/redo, gizmo end-of-drag
+// re-attach — surfaces in the inputs without us having to discover and
+// hook every site that mutates the transform. Cheap: ~1 read of obj.matrix
+// + a handful of toFixed calls per frame.
+let _transformPollHandle = null;
+let _transformPollLast = '';
+function _transformPollLoop() {
+  _transformPollHandle = requestAnimationFrame(_transformPollLoop);
+  const panel = document.getElementById('transform-panel');
+  if (!panel || !panel.classList.contains('show')) return;
+  const target = _transformTarget();
+  if (!target) {
+    if (_transformPollLast !== '') { _transformPollLast = ''; _transformPanelRefresh(); }
+    return;
+  }
+  // Cheap signature: hash the local matrix elements so we only re-render
+  // the inputs when something actually changed. matrixWorld would be more
+  // accurate for pivoted parts but matrix is updated by the gizmo each
+  // tick too (Three.js calls updateMatrix()).
+  const obj = target.obj;
+  obj.updateMatrixWorld?.(true);
+  const m = obj.matrixWorld?.elements;
+  if (!m) return;
+  const sig = m[12].toFixed(4)+','+m[13].toFixed(4)+','+m[14].toFixed(4)+'|'+m[0].toFixed(4)+','+m[5].toFixed(4)+','+m[10].toFixed(4)+','+m[1].toFixed(4)+','+m[2].toFixed(4)+','+m[6].toFixed(4);
+  if (sig !== _transformPollLast) {
+    _transformPollLast = sig;
+    _transformPanelRefresh();
+  }
+}
+function _startTransformPoll() {
+  if (_transformPollHandle != null) return;
+  _transformPollLast = '';
+  _transformPollLoop();
+}
+function _stopTransformPoll() {
+  if (_transformPollHandle != null) { cancelAnimationFrame(_transformPollHandle); _transformPollHandle = null; }
 }
 
 function _toggleTransformPanel() {
@@ -4113,7 +4235,8 @@ function _toggleTransformPanel() {
   _wireTransformPanel();
   const open = panel.classList.toggle('show');
   btn?.classList.toggle('active', open);
-  if (open) _transformPanelRefresh();
+  if (open) { _transformPanelRefresh(); _startTransformPoll(); }
+  else _stopTransformPoll();
 }
 
 // Hook the transform panel refresh into refreshPropertiesPanel so it
@@ -11289,12 +11412,33 @@ const _MatPreviewBall = (() => {
     const key  = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 1, 2);   scene.add(key);
     const fill = new THREE.DirectionalLight(0xb0c4ff, 0.35); fill.position.set(-3, 0.5, 1.5); scene.add(fill);
     const rim  = new THREE.DirectionalLight(0xffffff, 0.4); rim.position.set(-1, 1, -3);  scene.add(rim);
-    const sphereGeom = new THREE.SphereGeometry(0.95, 64, 48);
+    // Disney/Substance-style shader-ball assembly. Three primitives that
+    // together cover every surface case a CAD material needs to read against:
+    //   • upper hemisphere    →  smooth curvature, edge Fresnel, top
+    //                            highlight that responds to roughness
+    //   • equator torus       →  inside/outside curvature inversion, hard
+    //                            occlusion crease against the sphere base
+    //   • flat base disc      →  flat reflection (mirrors envmap detail),
+    //                            sharp 90° cut at the rim for spec response
+    // Built procedurally so we don't ship a GLB asset; ~6k tris total —
+    // negligible for a 120×120 canvas. All sub-meshes share the previewed
+    // material reference (rebound in render() per draw).
+    const sphereGeom = new THREE.SphereGeometry(0.85, 64, 48);
+    const torusGeom  = new THREE.TorusGeometry(0.85, 0.10, 24, 96);
+    const baseGeom   = new THREE.CylinderGeometry(1.05, 1.10, 0.16, 96, 1, false);
+    const ballGroup = new THREE.Group();
     const sphere = new THREE.Mesh(sphereGeom, material);
-    scene.add(sphere);
+    sphere.position.y = 0.30;
+    const torus  = new THREE.Mesh(torusGeom,  material);
+    torus.rotation.x = Math.PI * 0.5;
+    torus.position.y = -0.55;
+    const base   = new THREE.Mesh(baseGeom,   material);
+    base.position.y = -0.78;
+    ballGroup.add(sphere); ballGroup.add(torus); ballGroup.add(base);
+    scene.add(ballGroup);
     const cam = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
-    cam.position.set(0, 0.45, 4.2);
-    cam.lookAt(0, 0, 0);
+    cam.position.set(0, 0.55, 5.0);
+    cam.lookAt(0, -0.05, 0);
 
     let disposed = false;
     // Procedural studio environment via PMREM. Without this, PBR materials
@@ -11317,13 +11461,17 @@ const _MatPreviewBall = (() => {
     })();
     function render() {
       if (disposed) return;
-      sphere.material = material;
+      // Rebind material on every child so live edits in the popup propagate
+      // even if the caller hands us a fresh material instance.
+      sphere.material = material; torus.material = material; base.material = material;
       try { glRenderer.render(scene, cam); }
       catch (e) { console.warn('[mat-preview] render failed:', e); }
     }
     function dispose() {
       disposed = true;
       try { sphereGeom.dispose(); } catch (_) {}
+      try { torusGeom.dispose(); }  catch (_) {}
+      try { baseGeom.dispose(); }   catch (_) {}
       try { scene.environment?.dispose?.(); } catch (_) {}
       try { pmrem?.dispose(); } catch (_) {}
       try { glRenderer.dispose(); } catch (_) {}
