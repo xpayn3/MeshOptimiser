@@ -11281,9 +11281,14 @@ const _MatPreviewBall = (() => {
     glRenderer.toneMappingExposure = 1.05;
 
     const scene = new THREE.Scene();
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x222831, 0.55));
-    const key  = new THREE.DirectionalLight(0xffffff, 1.4); key.position.set(2, 3, 4);  scene.add(key);
-    const fill = new THREE.DirectionalLight(0xb0c4ff, 0.5); fill.position.set(-2, -1, 2); scene.add(fill);
+    // Side-lit key (camera-right, slightly elevated) so the highlight cuts
+    // across the sphere from the side instead of crowning the top. Fill on
+    // the camera-left at low intensity for shape readability without
+    // washing the side highlight out.
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x1a1f28, 0.35));
+    const key  = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(4, 1, 2);   scene.add(key);
+    const fill = new THREE.DirectionalLight(0xb0c4ff, 0.35); fill.position.set(-3, 0.5, 1.5); scene.add(fill);
+    const rim  = new THREE.DirectionalLight(0xffffff, 0.4); rim.position.set(-1, 1, -3);  scene.add(rim);
     const sphereGeom = new THREE.SphereGeometry(0.95, 64, 48);
     const sphere = new THREE.Mesh(sphereGeom, material);
     scene.add(sphere);
@@ -11292,6 +11297,24 @@ const _MatPreviewBall = (() => {
     cam.lookAt(0, 0, 0);
 
     let disposed = false;
+    // Procedural studio environment via PMREM. Without this, PBR materials
+    // (the only ones we ever preview) Fresnel-reflect into a black void at
+    // grazing angles → the dark ring around the sphere edge that everyone
+    // hates. RoomEnvironment + PMREMGenerator gives a clean white-walled
+    // studio for free; no HDR file to ship. Async-loaded so we don't pay
+    // the import cost on app boot.
+    let pmrem = null;
+    (async () => {
+      try {
+        const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
+        if (disposed) return;
+        pmrem = new THREE.PMREMGenerator(glRenderer);
+        const envScene = new RoomEnvironment();
+        scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+        envScene.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
+        render();
+      } catch (e) { console.warn('[mat-preview] env load failed:', e); }
+    })();
     function render() {
       if (disposed) return;
       sphere.material = material;
@@ -11301,6 +11324,8 @@ const _MatPreviewBall = (() => {
     function dispose() {
       disposed = true;
       try { sphereGeom.dispose(); } catch (_) {}
+      try { scene.environment?.dispose?.(); } catch (_) {}
+      try { pmrem?.dispose(); } catch (_) {}
       try { glRenderer.dispose(); } catch (_) {}
       try { glRenderer.forceContextLoss(); } catch (_) {}
     }

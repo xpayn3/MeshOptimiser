@@ -173,8 +173,18 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 #transform-panel .tform-head .tform-title svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 #transform-panel .tform-head .tform-reset{font:inherit;font-size:10.5px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3);background:transparent;border:1px solid rgba(255,255,255,.06);border-radius:5px;padding:3px 8px;cursor:pointer;transition:background .12s ease,color .12s ease,border-color .12s ease}
 #transform-panel .tform-head .tform-reset:hover{color:var(--tx);background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12)}
-#transform-panel .tform-grid{display:grid;grid-template-columns:32px 1fr 1fr 1fr;gap:5px 6px;padding:0 10px 10px 10px}
-#transform-panel .tform-row-label{font-size:10.5px;color:var(--tx3);font-weight:500;align-self:center;text-align:right;padding-right:2px}
+/* Transposed layout: rows = X/Y/Z, columns = Position/Rotation/Size.
+   Same shape as Cinema 4D's transform inspector. The first column is a
+   thin axis tag (X/Y/Z); the header row labels each transform channel. */
+#transform-panel .tform-grid{display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:4px 6px;padding:2px 10px 10px 10px}
+#transform-panel .tform-col-label{font-size:9.5px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px}
+#transform-panel .tform-row-label{font-size:10.5px;color:var(--tx3);font-weight:600;align-self:center;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+#transform-panel .tform-row-label.x{color:#ff6b6b}
+#transform-panel .tform-row-label.y{color:#34c759}
+#transform-panel .tform-row-label.z{color:#6ea8ff}
+#transform-panel .tform-num{position:relative}
+#transform-panel .tform-unit{position:absolute;right:22px;top:50%;transform:translateY(-50%);font-size:9.5px;color:var(--tx3);pointer-events:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.01em}
+#transform-panel .tform-input{padding-right:22px;text-align:right}
 /* Number-input cell with custom stepper buttons on each side. The native
    spinner is hidden (-webkit-/Firefox) since the visible buttons own the
    increment/decrement action and the input itself is just a value field. */
@@ -981,18 +991,22 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="tform-reset" id="tform-reset" title="Reset position + rotation + scale">Reset</button>
       </div>
       <div class="tform-grid" id="tform-grid">
-        <span class="tform-row-label">Pos</span>
-        <span class="tform-num" data-for="tform-px"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-px" data-axis="px" step="0.1" placeholder="x"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
-        <span class="tform-num" data-for="tform-py"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-py" data-axis="py" step="0.1" placeholder="y"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
-        <span class="tform-num" data-for="tform-pz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-pz" data-axis="pz" step="0.1" placeholder="z"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
-        <span class="tform-row-label">Rot°</span>
-        <span class="tform-num" data-for="tform-rx"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-rx" data-axis="rx" step="1" placeholder="x"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
-        <span class="tform-num" data-for="tform-ry"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-ry" data-axis="ry" step="1" placeholder="y"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
-        <span class="tform-num" data-for="tform-rz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-rz" data-axis="rz" step="1" placeholder="z"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
-        <span class="tform-row-label">Size</span>
-        <span class="tform-num" data-for="tform-sx"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sx" data-axis="sx" step="0.1" placeholder="x"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
-        <span class="tform-num" data-for="tform-sy"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sy" data-axis="sy" step="0.1" placeholder="y"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
-        <span class="tform-num" data-for="tform-sz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sz" data-axis="sz" step="0.1" placeholder="z"><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span></span>
+        <span class="tform-col-label">Position</span>
+        <span class="tform-col-label">Rotation</span>
+        <span class="tform-col-label">Size</span>
+        <span class="tform-row-label x">X</span>
+        <span class="tform-num" data-for="tform-px"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-px" data-axis="px" step="0.1" placeholder="0"><span class="tform-unit">cm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-rx"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-rx" data-axis="rx" step="1" placeholder="0"><span class="tform-unit">°</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-sx"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sx" data-axis="sx" step="0.1" placeholder="0"><span class="tform-unit">cm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-row-label y">Y</span>
+        <span class="tform-num" data-for="tform-py"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-py" data-axis="py" step="0.1" placeholder="0"><span class="tform-unit">cm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-ry"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-ry" data-axis="ry" step="1" placeholder="0"><span class="tform-unit">°</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-sy"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sy" data-axis="sy" step="0.1" placeholder="0"><span class="tform-unit">cm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-row-label z">Z</span>
+        <span class="tform-num" data-for="tform-pz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-pz" data-axis="pz" step="0.1" placeholder="0"><span class="tform-unit">cm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-rz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-rz" data-axis="rz" step="1" placeholder="0"><span class="tform-unit">°</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
+        <span class="tform-num" data-for="tform-sz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-sz" data-axis="sz" step="0.1" placeholder="0"><span class="tform-unit">cm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
       </div>
     </div>
   </aside>
@@ -1812,7 +1826,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050623-gizmohud"></script>
+<script type="module" src="app-v2.js?v=2026050623-matpreview-env"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
