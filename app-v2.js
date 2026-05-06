@@ -7310,72 +7310,6 @@ function wireUI() {
     $('export-modal').classList.add('show');
   });
 
-  // ── Right-sidebar export-data buttons ──────────────────────────────────
-  // CSV export: parts-list dump (name, color, tris, verts, volume, diag,
-  // largest dim, flagged). Useful for BOMs / spreadsheets. Streams to a
-  // Blob so even 100k-part assemblies stay under the single-string limit.
-  $('btn-export-csv')?.addEventListener('click', () => {
-    if (!state.parts.length) { toast('No parts', 'Load a model first', 'warn'); return; }
-    const esc = s => {
-      const v = String(s ?? '');
-      return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-    };
-    const rows = ['name,color_hex,tri_count,vert_count,volume,diag,max_dim,flagged,visible,locked'];
-    for (const p of state.parts) {
-      if (p.deleted) continue;
-      const sm = p.sizeMetrics || {};
-      rows.push([
-        esc(p.name),
-        '#' + p.originalColor.getHexString(),
-        p.triCount | 0,
-        p.vertCount | 0,
-        (sm.vol ?? 0).toFixed(4),
-        (sm.diag ?? 0).toFixed(4),
-        (sm.max ?? 0).toFixed(4),
-        p.flagged ? 1 : 0,
-        p.visible ? 1 : 0,
-        p.locked ? 1 : 0,
-      ].join(','));
-    }
-    const blob = new Blob([rows.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'parts_list.csv';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast('Exported parts list', `${rows.length - 1} rows`, 'info', 1800);
-  });
-
-  // Selected-as-GLB: temporarily hides non-selected parts, runs the standard
-  // GLB export pipeline (which honours visibleOnly), then restores. Re-using
-  // doExport keeps option handling (scale / axis / origin / draco) consistent
-  // with the main export modal — defaults match the modal's defaults.
-  $('btn-export-selected-glb')?.addEventListener('click', async () => {
-    if (!state.selected || state.selected.size === 0) {
-      toast('Nothing selected', 'Select parts first to export them', 'warn');
-      return;
-    }
-    const snapshot = [];
-    for (const p of state.parts) {
-      if (p.deleted) continue;
-      const wantVisible = state.selected.has(p.partId);
-      if (p.visible !== wantVisible) {
-        snapshot.push({ p, prev: p.visible });
-        p.visible = wantVisible;
-        if (p.mesh) p.mesh.visible = wantVisible;
-      }
-    }
-    try {
-      await doExport({ format: 'glb', merge: false, visibleOnly: true, scale: 1, axis: 'z-up', origin: 'model', draco: false });
-    } finally {
-      for (const s of snapshot) {
-        s.p.visible = s.prev;
-        if (s.p.mesh) s.p.mesh.visible = s.prev;
-      }
-      requestRender();
-    }
-  });
-
   $('vw-solid').addEventListener('click', () => setViewMode('solid'));
   $('vw-wire').addEventListener('click', () => setViewMode('wire'));
   $('vw-xray').addEventListener('click', () => setViewMode('xray'));
@@ -7856,6 +7790,7 @@ function wireUI() {
     const fmt = document.querySelector('#format-grid .fmt-card.selected')?.dataset.fmt || 'glb';
     const merge = $('exp-merge').checked;
     const visibleOnly = $('exp-visible').checked;
+    const selectedOnly = $('exp-selected')?.checked || false;
     const draco = $('exp-draco')?.checked && fmt === 'glb';
     // New options: unit scale, up-axis, origin recenter.
     const scaleSel = $('exp-scale')?.value || '1';
@@ -7864,8 +7799,79 @@ function wireUI() {
     if (!isFinite(scale) || scale <= 0) scale = 1;
     const axis = $('exp-axis')?.value || 'z-up';
     const origin = $('exp-origin')?.value || 'model';
+
+    // Validate selected-only.
+    if (selectedOnly && (!state.selected || state.selected.size === 0)) {
+      toast('Nothing selected', 'Pick at least one part or untick "Selected parts only"', 'warn');
+      return;
+    }
+
     $('export-modal').classList.remove('show');
-    await doExport({ format: fmt, merge, visibleOnly, scale, axis, origin, draco });
+
+    // CSV branch: parts-list dump (BOM-style). Doesn't go through doExport
+    // because there's no geometry pipeline to run — just iterate state.parts.
+    if (fmt === 'csv') {
+      const parts = state.parts.filter(p => !p.deleted &&
+        (!selectedOnly || state.selected.has(p.partId)) &&
+        (!visibleOnly || p.visible));
+      if (!parts.length) { toast('No parts', 'Nothing matches the export filters', 'warn'); return; }
+      const esc = s => {
+        const v = String(s ?? '');
+        return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+      };
+      const rows = ['name,color_hex,tri_count,vert_count,volume,diag,max_dim,flagged,visible,locked'];
+      for (const p of parts) {
+        const sm = p.sizeMetrics || {};
+        rows.push([
+          esc(p.name),
+          '#' + p.originalColor.getHexString(),
+          p.triCount | 0,
+          p.vertCount | 0,
+          (sm.vol ?? 0).toFixed(4),
+          (sm.diag ?? 0).toFixed(4),
+          (sm.max ?? 0).toFixed(4),
+          p.flagged ? 1 : 0,
+          p.visible ? 1 : 0,
+          p.locked ? 1 : 0,
+        ].join(','));
+      }
+      const blob = new Blob([rows.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'parts_list.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('Exported parts list', `${parts.length} rows`, 'info', 1800);
+      return;
+    }
+
+    // Geometry export path. "Selected only" is implemented as a temporary
+    // visibility flip + visibleOnly=true so doExport's existing filter does
+    // the work — the snapshot is restored in finally so the user's actual
+    // visibility state is preserved across the export.
+    const snapshot = [];
+    if (selectedOnly) {
+      for (const p of state.parts) {
+        if (p.deleted) continue;
+        const wantVisible = state.selected.has(p.partId);
+        if (p.visible !== wantVisible) {
+          snapshot.push({ p, prev: p.visible });
+          p.visible = wantVisible;
+          if (p.mesh) p.mesh.visible = wantVisible;
+        }
+      }
+    }
+    try {
+      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, draco });
+    } finally {
+      if (snapshot.length) {
+        for (const s of snapshot) {
+          s.p.visible = s.prev;
+          if (s.p.mesh) s.p.mesh.visible = s.prev;
+        }
+        requestRender();
+      }
+    }
   });
   // Show/hide format-specific toggles based on the selected export format.
   // Draco is GLB-only; ASCII FBX is FBX-only. Dim and disable when irrelevant
@@ -7873,6 +7879,7 @@ function wireUI() {
   function _refreshFormatToggles() {
     const sel = document.querySelector('#format-grid .fmt-card.selected');
     const fmt = sel?.dataset.fmt || 'glb';
+    const isCsv = fmt === 'csv';
 
     // Draco — GLB only
     const dracoRow = $('exp-draco-row');
@@ -7892,6 +7899,24 @@ function wireUI() {
       asciiRow.style.opacity = on ? '1' : '.42';
       asciiRow.style.pointerEvents = on ? '' : 'none';
       if (!on) asciiCb.checked = false;
+    }
+
+    // CSV: geometry pipeline doesn't run, so dim the irrelevant rows
+    // (scale / axis / origin / merge / draco). 'Visible parts only' and
+    // 'Selected parts only' DO still filter rows so they stay enabled.
+    const geomRows = ['exp-scale', 'exp-scale-custom', 'exp-axis', 'exp-origin', 'exp-merge'];
+    for (const id of geomRows) {
+      const el = $(id);
+      const wrap = el?.closest('.field') || el?.closest('.toggle') || el?.parentElement;
+      if (wrap) {
+        wrap.style.opacity = isCsv ? '.42' : '1';
+        wrap.style.pointerEvents = isCsv ? 'none' : '';
+      }
+    }
+    if (isCsv && dracoRow) {
+      dracoRow.style.opacity = '.42';
+      dracoRow.style.pointerEvents = 'none';
+      if (dracoCb) dracoCb.checked = false;
     }
   }
   document.querySelectorAll('#format-grid .fmt-card').forEach(c =>
