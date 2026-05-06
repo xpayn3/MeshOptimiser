@@ -2183,6 +2183,10 @@ function _attachGizmoToParts(parts) {
     state.pivot.scale.set(1, 1, 1);
     state.pivot.updateMatrixWorld();
     state.pivot.position.copy(center);
+    // Mirror single-part behaviour: orient the pivot to match the group's
+    // world rotation so gizmo handles align with the group's local axes.
+    ug.ref.updateWorldMatrix(true, false);
+    ug.ref.getWorldQuaternion(state.pivot.quaternion);
     state.pivot.updateMatrixWorld();
     state.pivot.attach(ug.ref);
     state._pivotedGroup = ug.ref;
@@ -4229,17 +4233,29 @@ function _wireTransformPanel() {
     // Sanity clamp — Three.js gets unhappy with non-finite or absurd
     // values; cap at ±1e6 scene units which exceeds any plausible CAD bbox.
     const v = Math.max(-1e6, Math.min(1e6, raw));
+    const isGroup = target.kind === 'group' || target.kind === 'user-group';
     const usingWorld = _hasPivotAncestor(obj);
+    // For groups the pivot is the real mover — hn.obj3d / ug.ref are logical
+    // containers that don't parent the actual meshes in the scene graph.
+    // Use the pivot whenever it's set up for this selection.
+    const pivotActive = state.pivot && (state._pivotedGroup || state._pivotedParts?.length);
+    const usePivot = (usingWorld && state.pivot) || (isGroup && pivotActive);
     try {
       if (axis === 'px' || axis === 'py' || axis === 'pz') {
-        if (usingWorld && state.pivot) {
-          // Display reads pivot.position; writes go there too so a typed
-          // value round-trips. Since pivot is at scene root, its local
-          // position == world position.
+        if (usePivot) {
+          // Display reads pivot.position; writes go there too so the value
+          // round-trips. Pivot is at scene root so local == world position.
           if (axis === 'px') state.pivot.position.x = v;
           if (axis === 'py') state.pivot.position.y = v;
           if (axis === 'pz') state.pivot.position.z = v;
           state.pivot.updateMatrixWorld(true);
+        } else if (isGroup) {
+          // No active pivot — for user-groups write directly (ug.ref parents
+          // the meshes). Tree groups: this is a no-op visually; user must
+          // activate the gizmo first.
+          obj.position.x = axis === 'px' ? v : obj.position.x;
+          obj.position.y = axis === 'py' ? v : obj.position.y;
+          obj.position.z = axis === 'pz' ? v : obj.position.z;
         } else {
           if (axis === 'px') obj.position.x = v;
           if (axis === 'py') obj.position.y = v;
@@ -4247,11 +4263,8 @@ function _wireTransformPanel() {
         }
       } else if (axis === 'rx' || axis === 'ry' || axis === 'rz') {
         const rad = v * Math.PI / 180;
-        // When pivoted, the rotation lives on state.pivot (so the gizmo
-        // handles can rotate with it). Write there. The pivot's rotation
-        // becomes the part's effective world rotation since obj.local
-        // rotation was collapsed to identity at attach time.
-        if (usingWorld && state.pivot) {
+        // Rotation lives on the pivot so gizmo handles rotate with the object.
+        if (usePivot) {
           if (axis === 'rx') state.pivot.rotation.x = rad;
           if (axis === 'ry') state.pivot.rotation.y = rad;
           if (axis === 'rz') state.pivot.rotation.z = rad;
@@ -4262,7 +4275,6 @@ function _wireTransformPanel() {
           if (axis === 'rz') obj.rotation.z = rad;
         }
       } else if (axis === 'sx' || axis === 'sy' || axis === 'sz') {
-        const isGroup = target.kind === 'group' || target.kind === 'user-group';
         if (isGroup) {
           // Groups show their scale factor directly (1 = unscaled). The user
           // types the desired scale multiplier; apply it directly to obj.scale.
@@ -4300,9 +4312,29 @@ function _wireTransformPanel() {
       if (state._pivotedPart || state._pivotedGroup) {
         try { _detachGizmo(); updateGizmo?.(); } catch (_) {}
       }
+      // Refresh per-part _exactWorld for any selected part whose mesh
+      // matrixWorld just changed. Other call sites (boxify, BVH builder,
+      // etc.) read this snapshot and would otherwise see the pre-edit
+      // pose for the rest of the session.
+      try {
+        for (const id of (state.selected || [])) {
+          const p = getPart?.(id);
+          if (p && p.mesh) {
+            p.mesh.updateWorldMatrix(true, false);
+            p._exactWorld = p.mesh.matrixWorld.clone();
+          }
+        }
+      } catch (_) {}
     } catch (err) { console.warn('[transform-panel] edit failed:', err); _transformPanelRefresh(); return; }
     requestRender();
     refreshPropertiesPanel?.();
+    // Critical for "highlight stuck after typing in transform tab": the
+    // number-input edits used to skip applySelectionColors entirely, so
+    // the cyan outline stayed at the pre-edit pose. Cheap rebuild now
+    // that the highlight is parented to partsRoot — the buffer is keyed
+    // on partsRoot-local space, so most of the cost is the per-vertex
+    // transform pass which is bounded by SELECTION_EDGE_VERT_BUDGET.
+    try { applySelectionColors?.(); } catch (_) {}
     _transformPanelRefresh();
   };
   for (const ax of ['px','py','pz','rx','ry','rz','sx','sy','sz']) {
@@ -4410,31 +4442,48 @@ function _wireTransformPanel() {
     const target = _transformTarget();
     if (!target?.obj) return;
     const obj = target.obj;
+    const isGroup = target.kind === 'group' || target.kind === 'user-group';
+    const pivotActive = state.pivot && (state._pivotedGroup || state._pivotedParts?.length);
     try {
-      if (_hasPivotAncestor(obj)) {
-        // Want world position = (0,0,0), world rotation = identity.
+      if (pivotActive) {
+        // Reset pivot to world origin with identity rotation.
+        // Child objects preserve their world offsets relative to the pivot —
+        // for single parts that brings them to (0,0,0); for groups the group
+        // container moves to origin and the parts come along.
+        state.pivot.position.set(0, 0, 0);
+        state.pivot.rotation.set(0, 0, 0);
+        state.pivot.updateMatrixWorld(true);
+        // Also reset the real object's scale (pivot has no scale of its own).
+        obj.scale.set(1, 1, 1);
+        obj.updateMatrix();
+        obj.updateMatrixWorld(true);
+      } else if (_hasPivotAncestor(obj)) {
+        // obj is under pivot but pivotActive is false — edge case; fall back
+        // to the world-to-local path.
         obj.parent?.updateMatrixWorld?.(true);
         _tfTmpVec.set(0, 0, 0);
         if (obj.parent) obj.parent.worldToLocal(_tfTmpVec);
         obj.position.copy(_tfTmpVec);
-        // World identity rotation, expressed in local frame: invert
-        // parent's world rotation.
         if (obj.parent) {
           obj.parent.getWorldQuaternion(_tfTmpQuat).invert();
           obj.quaternion.copy(_tfTmpQuat);
         } else {
           obj.rotation.set(0, 0, 0);
         }
+        obj.scale.set(1, 1, 1);
+        obj.updateMatrix();
+        obj.updateMatrixWorld(true);
       } else {
+        // No pivot active — write directly to obj. Works for user-groups
+        // (ug.ref parents the meshes) and normal parts. For tree groups this
+        // resets the container's own transform (usually a no-op since it's
+        // already identity), but scale reset is always safe.
         obj.position.set(0, 0, 0);
         obj.rotation.set(0, 0, 0);
+        obj.scale.set(1, 1, 1);
+        obj.updateMatrix();
+        obj.updateMatrixWorld(true);
       }
-      obj.scale.set(1, 1, 1);
-      obj.updateMatrix();
-      obj.updateMatrixWorld(true);
-      // Same gizmo-refresh as the edit path — keep handles aligned with
-      // the now-identity object so a subsequent scale via gizmo doesn't
-      // skew through a stale pivot orientation.
       if (state._pivotedPart || state._pivotedGroup) {
         try { _detachGizmo(); updateGizmo?.(); } catch (_) {}
       }
@@ -4461,15 +4510,28 @@ function _transformPollLoop() {
     if (_transformPollLast !== '') { _transformPollLast = ''; _transformPanelRefresh(); }
     return;
   }
-  // Cheap signature: hash the local matrix elements so we only re-render
-  // the inputs when something actually changed. matrixWorld would be more
-  // accurate for pivoted parts but matrix is updated by the gizmo each
-  // tick too (Three.js calls updateMatrix()).
+  // Cheap signature: detect any change to position/rotation/scale.
+  // For groups the container object (hn.obj3d / ug.ref) may not move even
+  // when the parts inside do (they live in partsRoot, not under the container).
+  // In that case hash the pivot's matrix and the first selected part instead.
   const obj = target.obj;
-  obj.updateMatrixWorld?.(true);
-  const m = obj.matrixWorld?.elements;
-  if (!m) return;
-  const sig = m[12].toFixed(4)+','+m[13].toFixed(4)+','+m[14].toFixed(4)+'|'+m[0].toFixed(4)+','+m[5].toFixed(4)+','+m[10].toFixed(4)+','+m[1].toFixed(4)+','+m[2].toFixed(4)+','+m[6].toFixed(4);
+  const isGroupTarget = target.kind === 'group' || target.kind === 'user-group';
+  let sig;
+  if (isGroupTarget) {
+    const pm = state.pivot?.matrixWorld?.elements;
+    const firstId = state.selected ? [...state.selected][0] : null;
+    const fp = firstId != null && typeof getPart === 'function' ? getPart(firstId) : null;
+    fp?.mesh?.updateMatrixWorld?.(true);
+    const fm = fp?.mesh?.matrixWorld?.elements;
+    const pp = pm ? pm[12].toFixed(3)+','+pm[13].toFixed(3)+','+pm[14].toFixed(3) : '0,0,0';
+    const fp2 = fm ? fm[12].toFixed(3)+','+fm[13].toFixed(3)+','+fm[14].toFixed(3) : '0,0,0';
+    sig = pp + '|' + fp2;
+  } else {
+    obj.updateMatrixWorld?.(true);
+    const m = obj.matrixWorld?.elements;
+    if (!m) return;
+    sig = m[12].toFixed(4)+','+m[13].toFixed(4)+','+m[14].toFixed(4)+'|'+m[0].toFixed(4)+','+m[5].toFixed(4)+','+m[10].toFixed(4)+','+m[1].toFixed(4)+','+m[2].toFixed(4)+','+m[6].toFixed(4);
+  }
   if (sig !== _transformPollLast) {
     _transformPollLast = sig;
     _transformPanelRefresh();
@@ -5247,6 +5309,39 @@ const _SEL_LINE_MAT        = new THREE.LineBasicMaterial({ color: 0x00ddff, tran
 const _SEL_LINE_MAT_BEHIND = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.35, depthTest: false, depthWrite: false });
 const _FLAG_FILL_MAT = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.22, depthTest: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
 
+// Triangle-vert budget for feature edges. Selecting a 5000-part tree with
+// 100k tris each used to spend seconds in EdgesGeometry construction; once
+// we cross this many edge floats we switch to bbox edges (24 verts/part)
+// for any further parts. Numbers chosen so a typical "select every screw"
+// stays sharp but a "select whole assembly" degrades to bbox cluster.
+const SELECTION_EDGE_VERT_BUDGET = 200000;
+
+// 12 line segments (24 verts × 3 floats = 72) for an AABB. Ordered as
+// [bottom 4 edges, 4 verticals, top 4 edges] so the result reads as a
+// proper wireframe cube rather than a soup of disconnected segments.
+function _bboxEdgeVerts(b) {
+  if (!b || b.isEmpty()) return null;
+  const x0 = b.min.x, y0 = b.min.y, z0 = b.min.z;
+  const x1 = b.max.x, y1 = b.max.y, z1 = b.max.z;
+  return new Float32Array([
+    // bottom rectangle (z = z0)
+    x0,y0,z0, x1,y0,z0,
+    x1,y0,z0, x1,y1,z0,
+    x1,y1,z0, x0,y1,z0,
+    x0,y1,z0, x0,y0,z0,
+    // 4 vertical edges
+    x0,y0,z0, x0,y0,z1,
+    x1,y0,z0, x1,y0,z1,
+    x1,y1,z0, x1,y1,z1,
+    x0,y1,z0, x0,y1,z1,
+    // top rectangle (z = z1)
+    x0,y0,z1, x1,y0,z1,
+    x1,y0,z1, x1,y1,z1,
+    x1,y1,z1, x0,y1,z1,
+    x0,y1,z1, x0,y0,z1,
+  ]);
+}
+
 function _applySelectionColorsImpl() {
   // Fast path: nothing selected, nothing flagged-and-shown, no leftover
   // overlays. Skip the entire teardown + per-part scan. Cuts per-click
@@ -5255,109 +5350,125 @@ function _applySelectionColorsImpl() {
   const wantsSel    = state.selected && state.selected.size > 0;
   const wantsFlag   = state.highlightSmall;
   if (!hasOverlays && !wantsSel && !wantsFlag) return;
-  // Tear down previous highlight overlays. Shared materials are NOT disposed
-  // (they're reused across renders). The merged selection geometry IS owned
-  // here — both LineSegments reference the same buffer, so we dispose once
-  // by tracking it explicitly in state._selMergedGeom.
+
+  // ── Tear down previous overlays — defensively, with a try around each
+  //    removal. A throw mid-cleanup used to leave half the old highlights
+  //    in the scene + half the new ones, which manifested as "the old
+  //    highlight stayed in place" the user reported. Materials are shared
+  //    across rebuilds so we never dispose them.
   if (state.activeHighlights) {
-    for (const h of state.activeHighlights) { if (h.parent) h.parent.remove(h); }
+    for (const h of state.activeHighlights) {
+      try { if (h.parent) h.parent.remove(h); } catch (_) {}
+    }
   }
   state.activeHighlights = [];
-  if (state._selMergedGeom) { state._selMergedGeom.dispose?.(); state._selMergedGeom = null; }
+  if (state._selMergedGeom) {
+    try { state._selMergedGeom.dispose?.(); } catch (_) {}
+    state._selMergedGeom = null;
+  }
 
-  // ── Selection outline: merge every selected part's EdgesGeometry into ONE
-  //    BufferGeometry with world-space vertex positions baked in. Drawn as
-  //    two LineSegments (front/behind passes) sharing the same buffer.
-  //    Result: 2 draw calls regardless of selection size. Was 2×N — at 5000
-  //    selected parts that's the difference between 2 and 10000 draw calls,
-  //    and on big assemblies the per-mesh scene-graph overhead dominates the
-  //    actual GPU work.
-  //
-  //    Build cost is O(total edge verts), runs only when selection changes.
-  //    The MAX_SELECTION_HIGHLIGHTS cap still applies — caps total verts and
-  //    keeps the merge fast even on absurd selections.
+  // Refresh partsRoot's matrixWorld once. Highlights are parented to
+  // partsRoot (see scene.add → partsRoot.add below), so any partsRoot
+  // transform — autorotate, scene-scale slider, up-axis swap — auto-
+  // applies to the highlight at render time without rebuilding the
+  // buffer. We back partsRoot's transform OUT of each part's world
+  // matrix so the stored verts are in partsRoot-local space.
+  if (state.partsRoot) {
+    state.partsRoot.updateMatrix();
+    state.partsRoot.updateMatrixWorld(true);
+  }
+  const partsRootInv = new THREE.Matrix4();
+  if (state.partsRoot) partsRootInv.copy(state.partsRoot.matrixWorld).invert();
+
   const tmpV = new THREE.Vector3();
   const tmpM = new THREE.Matrix4();
 
-  // Pass 1 — collect (edgesGeom, worldMatrix) pairs and tally float count.
+  // Pass 1 — collect (epos, partsLocalMatrix) pairs and tally float count.
+  // Switches from feature edges to bbox edges once SELECTION_EDGE_VERT_BUDGET
+  // is exceeded, so a "select all 5000 parts" call rebuilds in ~10 ms
+  // instead of seconds. Once flipped, the rest of the selection uses
+  // bbox edges for visual consistency (no mixed precision/coarseness).
   const sources = [];
   let totalFloats = 0;
   let drawn = 0;
+  let usedBboxFallback = false;
+
   for (const id of state.selected) {
     if (drawn >= MAX_SELECTION_HIGHLIGHTS) break;
     const p = getPart(id);
     if (!p || p.deleted || !p.visible) continue;
+
     let geom = null;
     if (p.mesh) geom = p.mesh.geometry;
     else if (p.instancedMesh) geom = p.instancedMesh.geometry;
     else geom = state.geomByHash.get(p.hash);
     if (!geom) continue;
-    const edgesGeom = _getEdgesGeom(geom);
-    if (!edgesGeom) continue;
-    const epos = edgesGeom.attributes.position?.array;
-    if (!epos || epos.length === 0) continue;
 
-    // Resolve the part's world matrix. Prefer the exact-world snapshot
-    // (p._exactWorld) over the live mesh.matrixWorld — for Cinema-exported
-    // GLBs with shear in the parent chain, the live matrixWorld can be
-    // corrupted after Object3D.attach() round-trips (gizmo pivot), and
-    // baking it here produces edge highlights radiating to/from wrong screen
-    // positions. Snapshot is captured at load time and refreshed on
-    // legitimate transform paths (gizmo drag end, bake, undo).
-    //
-    // EXCEPTION: while exploded, mesh.position has been translated away from
-    // its rest pose, but _exactWorld still encodes the rest pose — so using
-    // the snapshot would draw the highlight at the part's UNEXPLODED
-    // location. Explode is pure translation (no shear introduced), so the
-    // live matrixWorld is safe to bake. Same exception while the user is
-    // dragging the gizmo: live matrix is the source of truth.
+    // Resolve the part's world matrix. Always live: cached snapshots
+    // (_exactWorld) caused stale highlights when the user moved a part
+    // through a path that didn't refresh them — most reliably, the
+    // transform-tab number inputs and Ctrl+Z partial restores. Live
+    // matrixWorld + updateWorldMatrix(true, …) is correct for every
+    // path the part can travel, including gizmo drags and explode.
     let world = null;
-    const exploded = state.explode && (state.explode.x || state.explode.y || state.explode.z);
     if (p.mesh) {
-      if (p._exactWorld && !exploded) {
-        world = p._exactWorld;
-      } else {
-        p.mesh.updateWorldMatrix(true, false);
-        world = p.mesh.matrixWorld;
-      }
+      p.mesh.updateWorldMatrix(true, false);
+      world = p.mesh.matrixWorld;
     } else if (p.instancedMesh) {
       p.instancedMesh.updateWorldMatrix(true, false);
       const local = new THREE.Matrix4();
       p.instancedMesh.getMatrixAt(p.instanceIndex, local);
       world = tmpM.multiplyMatrices(p.instancedMesh.matrixWorld, local).clone();
     }
+    if (!world) continue;
+    const partsLocal = new THREE.Matrix4().multiplyMatrices(partsRootInv, world);
 
-    sources.push({ epos, world });
+    // Pick the cheaper edge source once we cross the budget.
+    let epos = null;
+    if (!usedBboxFallback && totalFloats < SELECTION_EDGE_VERT_BUDGET) {
+      const edgesGeom = _getEdgesGeom(geom);
+      epos = edgesGeom?.attributes?.position?.array || null;
+      // Skip parts whose feature-edges blew up on construction (returned null);
+      // they'll fall through to the bbox path below for this iteration only.
+      if (epos && totalFloats + epos.length > SELECTION_EDGE_VERT_BUDGET) {
+        // This part itself fits, but adding the rest would blow the budget.
+        // Keep this part on feature-edges; subsequent ones flip to bbox.
+        usedBboxFallback = true;
+      }
+    }
+    if (!epos) {
+      if (!geom.boundingBox) {
+        try { geom.computeBoundingBox(); } catch (_) {}
+      }
+      epos = _bboxEdgeVerts(geom.boundingBox);
+      usedBboxFallback = true;
+    }
+    if (!epos || epos.length === 0) continue;
+
+    sources.push({ epos, world: partsLocal });
     totalFloats += epos.length;
     drawn++;
   }
 
-  // Pass 2 — fill one Float32Array, applying each part's world transform.
+  // Pass 2 — fill one Float32Array. Single contiguous allocation; cheap
+  // even on multi-MB selections.
   if (totalFloats > 0) {
     const positions = new Float32Array(totalFloats);
     let off = 0;
     for (const s of sources) {
       const epos = s.epos;
       const m = s.world;
-      if (m) {
-        for (let i = 0; i < epos.length; i += 3) {
-          tmpV.set(epos[i], epos[i+1], epos[i+2]).applyMatrix4(m);
-          positions[off++] = tmpV.x;
-          positions[off++] = tmpV.y;
-          positions[off++] = tmpV.z;
-        }
-      } else {
-        // Identity transform — bulk copy.
-        positions.set(epos, off);
-        off += epos.length;
+      for (let i = 0; i < epos.length; i += 3) {
+        tmpV.set(epos[i], epos[i+1], epos[i+2]).applyMatrix4(m);
+        positions[off++] = tmpV.x;
+        positions[off++] = tmpV.y;
+        positions[off++] = tmpV.z;
       }
     }
     const merged = new THREE.BufferGeometry();
     merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     state._selMergedGeom = merged;
 
-    // Two draw calls — FRONT pass (depth-tested, bright) and BEHIND pass
-    // (depth-test off, dim). Both reference the same buffer.
     const linesBehind = new THREE.LineSegments(merged, _SEL_LINE_MAT_BEHIND);
     linesBehind.renderOrder = 998;
     linesBehind.frustumCulled = false;
@@ -5368,8 +5479,12 @@ function _applySelectionColorsImpl() {
     lines.frustumCulled = false;
     lines.matrixAutoUpdate = false;
 
-    scene.add(linesBehind);
-    scene.add(lines);
+    // Parent to partsRoot. partsRoot.matrixAutoUpdate=false, so we never
+    // pay a per-frame matrix recompute — the highlight rides whatever
+    // world matrix partsRoot already has.
+    const parent = state.partsRoot || scene;
+    parent.add(linesBehind);
+    parent.add(lines);
     state.activeHighlights.push(linesBehind, lines);
   }
   if (state.highlightSmall) {
@@ -14087,7 +14202,25 @@ function _treeCollapseAll() {
 // context menus (tree nodes, viewport, materials list, etc.) are wired below
 // and continue to receive the event because preventDefault does not stop
 // propagation. Registered at window capture so it runs before everything else.
-window.addEventListener('contextmenu', e => { e.preventDefault(); }, { capture: true });
+//
+// Carve-out: editable form fields (transform-panel inputs, search boxes,
+// renames, etc.) keep the native context menu so the user gets the usual
+// Copy / Cut / Paste / Select-all / spell-check commands. Without this,
+// every text input in the app loses its right-click affordance — which
+// surprises anyone who reaches for it on a numeric field in the transform
+// panel.
+window.addEventListener('contextmenu', e => {
+  const t = e.target;
+  if (t && (
+        t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.tagName === 'SELECT' ||
+        t.isContentEditable
+      )) {
+    return; // let the browser show its native menu
+  }
+  e.preventDefault();
+}, { capture: true });
 
 document.addEventListener('contextmenu', e => {
   const node = e.target.closest('.tree-node');
