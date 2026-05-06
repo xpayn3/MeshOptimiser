@@ -64,6 +64,71 @@ body{opacity:0;transition:opacity .45s cubic-bezier(.2,.8,.3,1)}
 body.app-ready{opacity:1}
 #welcome-modal{transition:opacity .3s ease .1s}
 body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
+/* Recent-files list rows — compact horizontal row with a small thumbnail
+   on the left, name + size/age stack in the middle. The big visual is
+   the hero "Resume project" card above; this list is the secondary
+   archive of older opens. Mirrors the IDE / Figma "open a recent file"
+   strip pattern. */
+.welcome-recent{
+  display:flex;align-items:center;gap:10px;width:100%;padding:7px 9px;
+  background:var(--bg2);border:1px solid var(--bd);border-radius:8px;
+  color:var(--tx);text-align:left;cursor:pointer;overflow:hidden;
+  transition:background 140ms var(--ease-out),border-color 140ms var(--ease-out);
+}
+.welcome-recent:hover{background:var(--bg3);border-color:var(--bd2)}
+.welcome-recent .wr-thumb{
+  position:relative;flex-shrink:0;width:42px;height:42px;border-radius:6px;
+  background:var(--bg);overflow:hidden;
+  border:1px solid rgba(255,255,255,.06);
+  display:grid;place-items:center;color:var(--tx3);
+}
+.welcome-recent .wr-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.welcome-recent .wr-thumb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6}
+.welcome-recent .wr-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;overflow:hidden}
+.welcome-recent .wr-name{font-size:var(--fs-md);font-weight:500;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-recent .wr-sub{font-size:var(--fs-sm);color:var(--tx3);font-variant-numeric:tabular-nums}
+/* Per-row delete (×). Hidden until the row is hovered to keep the list
+   visually quiet; opacity transition prevents a flash on first paint. */
+.welcome-recent .wr-del{
+  flex-shrink:0;width:24px;height:24px;display:grid;place-items:center;
+  background:transparent;border:none;border-radius:5px;color:var(--tx3);
+  cursor:pointer;opacity:0;
+  transition:opacity 120ms var(--ease-out),background 120ms var(--ease-out),color 120ms var(--ease-out);
+}
+.welcome-recent .wr-del svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+.welcome-recent:hover .wr-del,.welcome-recent:focus-within .wr-del{opacity:1}
+.welcome-recent .wr-del:hover{background:rgba(255,107,107,.14);color:var(--er)}
+#welcome-recents-clear:hover{color:var(--er);border-color:rgba(255,107,107,.25);background:rgba(255,107,107,.10)}
+
+/* Resume hero card — uses the most-recent thumb as a full-bleed
+   background, with a darkening gradient + accent play badge sitting over
+   the artwork. C4D's "Continue working on…" pattern. */
+.welcome-resume{
+  position:relative;display:flex;align-items:flex-end;width:100%;height:140px;
+  margin-bottom:14px;padding:14px 16px;
+  background:var(--bg2) center/cover no-repeat;
+  border:1px solid var(--ac-line);border-radius:12px;
+  color:var(--tx);text-align:left;cursor:pointer;overflow:hidden;
+  transition:filter 140ms var(--ease-out),transform 120ms var(--ease-out),box-shadow 140ms var(--ease-out);
+}
+.welcome-resume:hover{filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 8px 24px rgba(110,168,255,.18)}
+.welcome-resume::before{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(15,19,25,.30) 0%,rgba(15,19,25,.85) 90%);
+}
+.welcome-resume > *{position:relative;z-index:1}
+.welcome-resume .wr-play{
+  width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  background:var(--ac);color:#fff;
+  box-shadow:0 4px 14px rgba(110,168,255,.45),inset 0 1px 0 rgba(255,255,255,.25);
+  flex-shrink:0;margin-right:14px;
+}
+.welcome-resume .wr-play svg{width:16px;height:16px;stroke:currentColor;fill:currentColor;stroke-width:0}
+.welcome-resume .wr-info{flex:1;min-width:0}
+.welcome-resume .wr-info .wr-label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ac);margin-bottom:2px}
+.welcome-resume .wr-info .wr-name{font-size:16px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-resume .wr-info .wr-sub{font-size:var(--fs-sm);color:rgba(255,255,255,.65);margin-top:2px}
+.welcome-resume .wr-age{align-self:flex-end;color:rgba(255,255,255,.55);font-size:var(--fs-sm);flex-shrink:0;margin-left:12px}
 button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
 input,select{font:inherit;color:inherit}
 ::-webkit-scrollbar{width:12px;height:12px}
@@ -220,7 +285,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tree-empty{color:var(--tx3);text-align:center;padding:20px;font-size:12px;line-height:1.6;flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center}
 .tree-empty svg{width:38px;height:38px;stroke:currentColor;opacity:.4;fill:none;stroke-width:1.5;margin-bottom:10px}
 .tree-search{margin:8px 12px 6px;position:relative}
-.tree-search input{width:100%;padding:7px 10px 7px 28px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12px;outline:none}
+.tree-search input{width:100%;padding:7px 10px 7px 28px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12px;outline:none}
 .tree-search input:focus{border-color:var(--ac)}
 .tree-search svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;stroke:var(--tx3);fill:none;stroke-width:2}
 .tree-summary{padding:6px 14px;font-size:11px;color:var(--tx3)}
@@ -420,7 +485,7 @@ input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(-
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;background:white;border-radius:50%;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.2);transition:transform .12s}
 input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .range-row{display:flex;align-items:center;gap:10px}
-.range-row input[type=number]{width:64px;padding:6px 8px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx);font-size:12px;font-variant-numeric:tabular-nums;outline:none;text-align:right;-moz-appearance:textfield}
+.range-row input[type=number]{width:64px;padding:6px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx);font-size:12px;font-variant-numeric:tabular-nums;outline:none;text-align:right;-moz-appearance:textfield}
 .range-row input[type=number]::-webkit-outer-spin-button,.range-row input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 /* Marquee (rubber-band) selection box drawn over the viewport while the user
@@ -729,7 +794,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .log-time{color:var(--tx3);flex-shrink:0;width:48px}
 .log-msg.ok{color:var(--ok)}.log-msg.warn{color:var(--wn)}.log-msg.err{color:var(--er)}
 .loader-cancel{margin-top:12px;text-align:right}
-.loader-cancel button{padding:6px 14px;background:var(--s3);border:1px solid var(--s3);border-radius:6px;color:var(--tx2);font-size:12px;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
+.loader-cancel button{padding:6px 14px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx2);font-size:12px;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
 .loader-cancel button:hover{color:var(--er);border-color:rgba(255,107,107,.3)}
 
 /* Status bar */
@@ -1084,7 +1149,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
                 <option value="y">Y-up (Blender, Maya, glTF)</option>
               </select>
             </div>
-            <div class="field" style="margin-bottom:0"><label><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--s3);border:1px solid var(--s3);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the partsRoot transform. 0.001 turns mm → m; 1000 turns m → mm."></div>
+            <div class="field" style="margin-bottom:0"><label><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the partsRoot transform. 0.001 turns mm → m; 1000 turns m → mm."></div>
           </div>
           <div class="pop-section">
             <div class="pop-section-title">Camera</div>
@@ -1214,7 +1279,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
           <button class="btn" id="btn-select-regex" title="Select every part whose name matches the regex"><i data-lucide="search"></i>By name</button>
         </div>
         <div class="field" style="margin-top:6px">
-          <input type="text" id="name-regex" placeholder="screw|bolt|washer" style="width:100%;padding:7px 10px;background:var(--s3);border:1px solid var(--s3);border-radius:6px;color:var(--tx);font-size:12.5px;outline:none;">
+          <input type="text" id="name-regex" placeholder="screw|bolt|washer" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12.5px;outline:none;">
         </div>
 
         <div style="height:10px"></div>
@@ -1440,7 +1505,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       <div class="field" style="margin:0">
         <label><span>Filename</span></label>
         <div style="display:flex;align-items:stretch;gap:0">
-          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:var(--s3);border:1px solid var(--s3);border-right:none;border-radius:7px 0 0 7px;color:var(--tx);font-size:12.5px;outline:none">
+          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-right:none;border-radius:7px 0 0 7px;color:var(--tx);font-size:12.5px;outline:none">
           <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid var(--s3);border-left:none;border-radius:0 7px 7px 0;color:var(--tx3);font-size:12px">.glb</span>
         </div>
       </div>
@@ -1479,7 +1544,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         </div>
         <div class="field" style="margin:0">
           <label><span>Custom scale</span></label>
-          <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--s3);border:1px solid var(--s3);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" disabled>
+          <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" disabled>
         </div>
         <div class="field" style="margin:0">
           <label><span>Up axis</span></label>
@@ -1583,7 +1648,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 </div>
 
 <div class="modal-bg" id="welcome-modal">
-  <div class="modal" style="width:580px">
+  <div class="modal" style="width:760px">
     <div class="modal-h">
       <h3 id="welcome-title">Open a model</h3>
       <button class="x" id="welcome-close" title="Close (Esc)">✕</button>
@@ -1599,7 +1664,10 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         </div>
 
         <div style="margin-top:18px">
-          <div style="font-size:var(--fs-sm);font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3);margin-bottom:8px">Recent files</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="font-size:var(--fs-sm);font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)">Recent files</div>
+            <button id="welcome-recents-clear" title="Remove every entry from the recent files list" style="display:none;align-items:center;gap:5px;padding:4px 8px;background:transparent;border:1px solid transparent;border-radius:5px;color:var(--tx3);font-size:11px;cursor:pointer;transition:color 120ms var(--ease-out),border-color 120ms var(--ease-out),background 120ms var(--ease-out)"><i data-lucide="trash-2" style="width:11px;height:11px"></i>Clear all</button>
+          </div>
           <div id="welcome-recents" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
 
@@ -1828,7 +1896,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050623-mateditor-textures"></script>
+<script type="module" src="app-v2.js?v=2026050623-mateditor-tex-inline"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

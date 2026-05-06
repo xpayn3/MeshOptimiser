@@ -1190,21 +1190,23 @@ const _Welcome = (() => {
     }
     box.innerHTML = list.map((r, i) => {
       const safeName = r.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-      const thumbHtml = r.thumb
-        ? `<img src="${r.thumb}" alt="" draggable="false" style="width:38px;height:38px;border-radius:5px;flex-shrink:0;object-fit:cover;background:var(--bg);border:1px solid rgba(255,255,255,.06)">`
-        : `<span style="width:38px;height:38px;border-radius:5px;flex-shrink:0;display:grid;place-items:center;background:var(--bg);border:1px solid rgba(255,255,255,.06);color:var(--tx3)"><i data-lucide="file" style="width:16px;height:16px"></i></span>`;
+      // Big hero thumbnail card. When _captureRecentThumb has saved a JPEG
+      // for this entry, the thumb fills the 16:10 hero area with cover-fit
+      // crop. Otherwise we centre a generic file glyph so empty cards
+      // don't collapse to whitespace.
+      const thumbInner = r.thumb
+        ? `<img src="${r.thumb}" alt="" draggable="false">`
+        : `<i data-lucide="file"></i>`;
       return `
-      <button class="welcome-recent" data-idx="${i}" style="display:flex;align-items:center;gap:10px;width:100%;padding:7px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);text-align:left;cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out)">
-        ${thumbHtml}
-        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;overflow:hidden">
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-md);font-weight:500">${safeName}</span>
-          <span style="color:var(--tx3);font-size:var(--fs-sm)">${_fmtBytes(r.size)} · ${_fmtAge(r.ts)}</span>
-        </span>
+      <button class="welcome-recent" data-idx="${i}" title="${safeName}">
+        <div class="wr-thumb">${thumbInner}</div>
+        <div class="wr-meta">
+          <div class="wr-name">${safeName}</div>
+          <div class="wr-sub">${_fmtBytes(r.size)} · ${_fmtAge(r.ts)}</div>
+        </div>
       </button>`;
     }).join('');
     box.querySelectorAll('.welcome-recent').forEach(el => {
-      el.addEventListener('mouseenter', () => { el.style.background = 'var(--bg3)'; el.style.borderColor = 'var(--bd2)'; });
-      el.addEventListener('mouseleave', () => { el.style.background = 'var(--bg2)'; el.style.borderColor = 'var(--bd)'; });
       el.addEventListener('click', () => {
         const idx = parseInt(el.dataset.idx, 10);
         const rec = _load()[idx];
@@ -1220,20 +1222,27 @@ const _Welcome = (() => {
     if (!slot) return;
     if (!rec) { slot.innerHTML = ''; return; }
     const safeName = rec.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+    // Hero card. The captured viewport thumb (when present) becomes a
+    // full-bleed background with a darkening gradient overlay so the
+    // accent label + filename stay legible. C4D / IDE "continue working
+    // on…" pattern. Style for `style="background-image..."` is inline
+    // because it's data-driven from the persisted thumb data URL.
+    const bgStyle = rec.thumb
+      ? `style="background-image:url('${rec.thumb}')"`
+      : '';
     slot.innerHTML = `
-      <button id="welcome-resume-btn" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;margin-bottom:14px;background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:var(--r-md);color:var(--tx);text-align:left;cursor:pointer;transition:filter 120ms var(--ease-out)">
-        <i data-lucide="play" style="width:18px;height:18px;color:var(--ac);flex-shrink:0"></i>
-        <span style="flex:1;min-width:0">
-          <span style="display:block;font-size:var(--fs-md);font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Resume ${safeName}</span>
-          <span style="display:block;font-size:var(--fs-sm);color:var(--tx2);margin-top:2px">Open the last file you worked on</span>
+      <button id="welcome-resume-btn" class="welcome-resume" ${bgStyle}>
+        <span class="wr-play"><i data-lucide="play"></i></span>
+        <span class="wr-info">
+          <span class="wr-label">Resume project</span>
+          <span class="wr-name">${safeName}</span>
+          <span class="wr-sub">Pick up where you left off</span>
         </span>
-        <span style="color:var(--tx3);font-size:var(--fs-sm);flex-shrink:0">${_fmtAge(rec.ts)}</span>
+        <span class="wr-age">${_fmtAge(rec.ts)}</span>
       </button>`;
     document.getElementById('welcome-resume-btn')?.addEventListener('click', () => {
       _openRecentByKey(_recKey(rec.name, rec.size));
     });
-    document.getElementById('welcome-resume-btn')?.addEventListener('mouseenter', e => { e.currentTarget.style.filter = 'brightness(1.15)'; });
-    document.getElementById('welcome-resume-btn')?.addEventListener('mouseleave', e => { e.currentTarget.style.filter = ''; });
     try { _lucide(); } catch (_) {}
   }
 
@@ -4047,18 +4056,28 @@ function _transformPanelRefresh() {
   document.querySelectorAll('#tform-grid .tform-step[disabled]').forEach(b => { b.disabled = false; });
 
   const obj = target.obj;
+  const isGroup = target.kind === 'group' || target.kind === 'user-group';
   const usingWorld = _hasPivotAncestor(obj);
+
+  // Swap the Size column header to "Scale" for groups.
+  const sizeColLabel = document.querySelector('#tform-grid .tform-col-label:last-child');
+  if (sizeColLabel) sizeColLabel.textContent = isGroup ? 'Scale' : 'Size';
+
   try {
     if (usingWorld && state.pivot) {
-      // Pivot is the gizmo's hub — at the selection's bbox centre. Showing
-      // pivot.position keeps the displayed position STABLE during a pure
-      // rotation in place (the user's "rotate, position shouldn't move"
-      // expectation), and updates correctly during translation since the
-      // gizmo writes pivot.position directly.
+      // Pivot is the gizmo's hub — at the selection's bbox centre.
       state.pivot.getWorldPosition(_tfTmpVec);
+    } else if (isGroup) {
+      // Group containers sit at world origin; children carry their own
+      // positions. Show the bbox centre of the children instead —
+      // the same anchor the gizmo uses — so the user sees a real number
+      // rather than always 0,0,0.
+      obj.updateWorldMatrix(true, true);
+      _tfTmpBox.makeEmpty();
+      obj.traverse(child => { if (child.isMesh) _tfTmpBox.expandByObject(child); });
+      if (!_tfTmpBox.isEmpty()) _tfTmpBox.getCenter(_tfTmpVec);
+      else obj.getWorldPosition(_tfTmpVec);
     } else {
-      // No transient pivot — read local position (relative to parent),
-      // matching the DCC convention for nested groups.
       _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
     }
     if (Number.isFinite(_tfTmpVec.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(_tfTmpVec.x);
@@ -4066,31 +4085,46 @@ function _transformPanelRefresh() {
     if (Number.isFinite(_tfTmpVec.z) && inputs.pz && document.activeElement !== inputs.pz) inputs.pz.value = _fmtNum(_tfTmpVec.z);
   } catch (_) {}
 
-  // Rotation: read from the pivot when pivoted, since _attachGizmoToParts
-  // now bakes the part's world rotation onto state.pivot (collapsing the
-  // part's local rotation to identity). Reading obj.rotation in that case
-  // would always show 0. When un-pivoted, read obj.rotation directly.
+  // Rotation: for groups read world quaternion (the container's local
+  // rotation is identity). For pivoted parts read from pivot. Otherwise
+  // read obj.rotation directly.
   try {
     const rad2deg = (r) => r * 180 / Math.PI;
-    const rotSource = (usingWorld && state.pivot) ? state.pivot.rotation : obj.rotation;
-    if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(rotSource.x), 2);
-    if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(rotSource.y), 2);
-    if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(rotSource.z), 2);
+    if (isGroup && !usingWorld) {
+      obj.updateWorldMatrix(true, false);
+      obj.getWorldQuaternion(_tfTmpQuat);
+      _tfTmpEuler.setFromQuaternion(_tfTmpQuat, obj.rotation.order);
+      if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(_tfTmpEuler.x), 2);
+      if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
+      if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
+    } else {
+      const rotSource = (usingWorld && state.pivot) ? state.pivot.rotation : obj.rotation;
+      if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(rotSource.x), 2);
+      if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(rotSource.y), 2);
+      if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(rotSource.z), 2);
+    }
   } catch (_) {}
 
-  // Size: stable bbox in the OBJECT's own local frame so rotation doesn't
-  // grow the displayed size (Box3.setFromObject would otherwise compute a
-  // world AABB that swells when the object is at an angle).
+  // Size (parts) / Scale (groups): parts show stable bbox dimensions in the
+  // object's own local frame; groups show the group container's scale factor
+  // (1,1,1 = unscaled) since there's no single "size" for a group.
   try {
-    _readStableSize(obj, _tfTmpVec2);
-    if (Number.isFinite(_tfTmpVec2.x) && _tfTmpVec2.x > 0) {
-      if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(_tfTmpVec2.x);
-      if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(_tfTmpVec2.y);
-      if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(_tfTmpVec2.z);
+    if (isGroup) {
+      const sc = obj.scale;
+      if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(sc.x, 3);
+      if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(sc.y, 3);
+      if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(sc.z, 3);
     } else {
-      if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = '';
-      if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = '';
-      if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = '';
+      _readStableSize(obj, _tfTmpVec2);
+      if (Number.isFinite(_tfTmpVec2.x) && _tfTmpVec2.x > 0) {
+        if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(_tfTmpVec2.x);
+        if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(_tfTmpVec2.y);
+        if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(_tfTmpVec2.z);
+      } else {
+        if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = '';
+        if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = '';
+        if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = '';
+      }
     }
   } catch (_) {}
 }
@@ -4156,21 +4190,29 @@ function _wireTransformPanel() {
           if (axis === 'rz') obj.rotation.z = rad;
         }
       } else if (axis === 'sx' || axis === 'sy' || axis === 'sz') {
-        // Size is a target dimension in the object's OWN local frame
-        // (matches the read path, which uses _readStableSize). Convert to
-        // a scale factor by dividing the target by the current local
-        // dimension, then multiply onto the existing scale. Reject < 1e-4
-        // so a typo can't collapse the geometry to a point.
-        const tgt = Math.abs(v);
-        if (!Number.isFinite(tgt) || tgt < 1e-4) { _transformPanelRefresh(); return; }
-        _readStableSize(obj, _tfTmpVec2);
-        const dim = axis === 'sx' ? _tfTmpVec2.x : (axis === 'sy' ? _tfTmpVec2.y : _tfTmpVec2.z);
-        if (!Number.isFinite(dim) || dim < 1e-9) { _transformPanelRefresh(); return; }
-        const factor = tgt / dim;
-        if (!Number.isFinite(factor) || factor <= 0) { _transformPanelRefresh(); return; }
-        if (axis === 'sx') obj.scale.x *= factor;
-        if (axis === 'sy') obj.scale.y *= factor;
-        if (axis === 'sz') obj.scale.z *= factor;
+        const isGroup = target.kind === 'group' || target.kind === 'user-group';
+        if (isGroup) {
+          // Groups show their scale factor directly (1 = unscaled). The user
+          // types the desired scale multiplier; apply it directly to obj.scale.
+          const tgt = Math.abs(v);
+          if (!Number.isFinite(tgt) || tgt < 1e-4) { _transformPanelRefresh(); return; }
+          if (axis === 'sx') obj.scale.x = tgt;
+          if (axis === 'sy') obj.scale.y = tgt;
+          if (axis === 'sz') obj.scale.z = tgt;
+        } else {
+          // Parts: value is a target bbox dimension in mm. Convert to a scale
+          // factor by dividing target by current dimension. Reject < 1e-4.
+          const tgt = Math.abs(v);
+          if (!Number.isFinite(tgt) || tgt < 1e-4) { _transformPanelRefresh(); return; }
+          _readStableSize(obj, _tfTmpVec2);
+          const dim = axis === 'sx' ? _tfTmpVec2.x : (axis === 'sy' ? _tfTmpVec2.y : _tfTmpVec2.z);
+          if (!Number.isFinite(dim) || dim < 1e-9) { _transformPanelRefresh(); return; }
+          const factor = tgt / dim;
+          if (!Number.isFinite(factor) || factor <= 0) { _transformPanelRefresh(); return; }
+          if (axis === 'sx') obj.scale.x *= factor;
+          if (axis === 'sy') obj.scale.y *= factor;
+          if (axis === 'sz') obj.scale.z *= factor;
+        }
       } else {
         return;
       }
@@ -11762,6 +11804,14 @@ function _openMaterialEditor(info) {
       .mat-tex-btn:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
       .mat-tex-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
       .mat-tex-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
+
+      /* Property block — keeps a scrubber/colour picker, its texture slot,
+         and any per-map scalar (normal scale, AO intensity, etc.) visually
+         glued together. Dashed separator between blocks so the eye doesn't
+         confuse one property's texture for the next property's. */
+      .mat-prop{display:flex;flex-direction:column;gap:3px;padding:5px 0;border-bottom:1px dashed var(--s2)}
+      .mat-prop:last-child{border-bottom:none}
+      .mat-prop > .field{margin:0}
     `;
     document.head.appendChild(s);
   }
@@ -11835,21 +11885,45 @@ function _openMaterialEditor(info) {
       </div>`;
   };
 
-  const texturesSection = _texSlots.length ? section('textures', 'Textures',
-    _texSlots.map(texRow).join('')
-  , true) : '';
+  // Lookup so we can spawn the right texRow for a given map property when
+  // building per-property blocks below.
+  const _texSlotByProp = Object.fromEntries(_texSlots.map(s => [s.prop, s]));
+  const texFor = (propName) => {
+    const s = _texSlotByProp[propName];
+    return s ? texRow(s) : '';
+  };
+  // Wrap a property's controls in a single visual block so the eye groups
+  // the property's scrubber/picker, texture slot and any per-map scalar
+  // (normal scale, AO intensity, etc.) together.
+  const prop = (...parts) => `<div class="mat-prop">${parts.filter(Boolean).join('')}</div>`;
 
   const baseSection = section('base', 'Base',
-    colorRow('mat-edit-color', 'Color', '#' + (mat.color?.getHexString?.() || 'cccccc')) +
-    (hasPBR ? slider('mat-edit-metalness-scrub') + slider('mat-edit-roughness-scrub') : '')
+    prop(colorRow('mat-edit-color', 'Color', '#' + (mat.color?.getHexString?.() || 'cccccc')), texFor('map')) +
+    (hasPBR
+      ? prop(slider('mat-edit-metalness-scrub'), texFor('metalnessMap')) +
+        prop(slider('mat-edit-roughness-scrub'), texFor('roughnessMap'))
+      : '')
   );
+
+  // Surface detail — normal/bump/displacement/AO. Each of these maps has an
+  // accompanying scalar (normalScale, bumpScale, displacementScale + bias,
+  // aoMapIntensity) that we pin underneath the texture slot.
+  const surfaceDetailSection = section('detail', 'Surface detail',
+    prop(texFor('normalMap'),       slider('mat-edit-normalScale-scrub')) +
+    prop(texFor('bumpMap'),         slider('mat-edit-bumpScale-scrub')) +
+    prop(texFor('displacementMap'), slider('mat-edit-displScale-scrub'), slider('mat-edit-displBias-scrub')) +
+    prop(texFor('aoMap'),           slider('mat-edit-aoMapInt-scrub'))
+  , true);
+
   const emissiveSection = hasEmissive ? section('emissive', 'Emission',
-    colorRow('mat-edit-emissive-color', 'Color', '#' + (mat.emissive?.getHexString?.() || '000000')) +
-    slider('mat-edit-emissive-scrub')
+    prop(colorRow('mat-edit-emissive-color', 'Color', '#' + (mat.emissive?.getHexString?.() || '000000')), texFor('emissiveMap')) +
+    prop(slider('mat-edit-emissive-scrub'))
   ) : '';
+
   const surfaceSection = section('surface', 'Surface',
-    slider('mat-edit-opacity-scrub') +
-    slider('mat-edit-alphatest-scrub') +
+    prop(slider('mat-edit-opacity-scrub'), texFor('alphaMap')) +
+    prop(slider('mat-edit-alphatest-scrub')) +
+    prop(texFor('lightMap'), slider('mat-edit-lightMapInt-scrub')) +
     `<div class="mat-edit-select-row">
        <label>Side</label>
        <select id="mat-edit-side" class="mac-sel">
@@ -11865,43 +11939,38 @@ function _openMaterialEditor(info) {
        <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-vertexcolors">Vertex colors</label>
      </div>`
   );
+
   const envSection = hasEnv ? section('env', 'Environment',
-    slider('mat-edit-env-scrub')
+    prop(slider('mat-edit-env-scrub'))
   ) : '';
-  // Map-intensity scalars: only meaningful when the corresponding map is
-  // bound, but we surface them unconditionally so the user can dial them
-  // in advance. Three.js silently ignores them when there's no map.
-  const mapIntensitySection = section('mapscale', 'Map intensity',
-    slider('mat-edit-normalScale-scrub') +
-    slider('mat-edit-aoMapInt-scrub') +
-    slider('mat-edit-lightMapInt-scrub') +
-    slider('mat-edit-bumpScale-scrub') +
-    slider('mat-edit-displScale-scrub') +
-    slider('mat-edit-displBias-scrub')
-  , true);
+
   const physicalSection = isPhysical ? section('physical', 'Clearcoat / IOR / Transmission',
-    slider('mat-edit-clearcoat-scrub') +
-    slider('mat-edit-clearcoatRough-scrub') +
-    slider('mat-edit-ior-scrub') +
-    slider('mat-edit-reflect-scrub') +
-    slider('mat-edit-transmission-scrub') +
-    slider('mat-edit-thickness-scrub') +
-    slider('mat-edit-dispersion-scrub') +
-    colorRow('mat-edit-attenuation-color', 'Attenuation', '#' + (mat.attenuationColor?.getHexString?.() || 'ffffff')) +
-    slider('mat-edit-attenuationDistance-scrub')
+    prop(slider('mat-edit-clearcoat-scrub'),      texFor('clearcoatMap')) +
+    prop(slider('mat-edit-clearcoatRough-scrub'), texFor('clearcoatRoughnessMap')) +
+    prop(texFor('clearcoatNormalMap')) +
+    prop(slider('mat-edit-ior-scrub')) +
+    prop(slider('mat-edit-reflect-scrub')) +
+    prop(slider('mat-edit-transmission-scrub'),   texFor('transmissionMap')) +
+    prop(slider('mat-edit-thickness-scrub'),      texFor('thicknessMap')) +
+    prop(slider('mat-edit-dispersion-scrub')) +
+    prop(colorRow('mat-edit-attenuation-color', 'Attenuation', '#' + (mat.attenuationColor?.getHexString?.() || 'ffffff'))) +
+    prop(slider('mat-edit-attenuationDistance-scrub'))
   , true) : '';
+
   const sheenSection = isPhysical ? section('sheen', 'Sheen / Iridescence / Anisotropy',
-    slider('mat-edit-sheen-scrub') +
-    slider('mat-edit-sheenRough-scrub') +
-    colorRow('mat-edit-sheen-color', 'Sheen color', '#' + (mat.sheenColor?.getHexString?.() || 'ffffff')) +
-    slider('mat-edit-iridescence-scrub') +
-    slider('mat-edit-iridIor-scrub') +
-    slider('mat-edit-anisotropy-scrub') +
-    slider('mat-edit-anisoRot-scrub')
+    prop(slider('mat-edit-sheen-scrub'),       texFor('sheenColorMap')) +
+    prop(slider('mat-edit-sheenRough-scrub'),  texFor('sheenRoughnessMap')) +
+    prop(colorRow('mat-edit-sheen-color', 'Sheen color', '#' + (mat.sheenColor?.getHexString?.() || 'ffffff'))) +
+    prop(slider('mat-edit-iridescence-scrub'), texFor('iridescenceMap')) +
+    prop(texFor('iridescenceThicknessMap')) +
+    prop(slider('mat-edit-iridIor-scrub')) +
+    prop(slider('mat-edit-anisotropy-scrub'),  texFor('anisotropyMap')) +
+    prop(slider('mat-edit-anisoRot-scrub'))
   , true) : '';
+
   const specSection = isPhysical ? section('specular', 'Specular',
-    slider('mat-edit-specInt-scrub') +
-    colorRow('mat-edit-spec-color', 'Specular tint', '#' + (mat.specularColor?.getHexString?.() || 'ffffff'))
+    prop(slider('mat-edit-specInt-scrub'),     texFor('specularIntensityMap')) +
+    prop(colorRow('mat-edit-spec-color', 'Specular tint', '#' + (mat.specularColor?.getHexString?.() || 'ffffff')), texFor('specularColorMap'))
   , true) : '';
 
   const matName = (mat.name && mat.name.trim()) || ('mat_' + (mat.color?.getHexString?.() || 'cccccc'));
@@ -11916,10 +11985,9 @@ function _openMaterialEditor(info) {
         </div>
       </div>
       ${baseSection}
+      ${surfaceDetailSection}
       ${emissiveSection}
       ${surfaceSection}
-      ${texturesSection}
-      ${mapIntensitySection}
       ${envSection}
       ${physicalSection}
       ${sheenSection}
