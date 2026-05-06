@@ -387,6 +387,20 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .vp-tribar{position:relative;height:3px;width:100%;background:linear-gradient(90deg,#22c55e 0%,#84cc16 25%,#facc15 50%,#fb923c 75%,#ef4444 100%);border-radius:2px;overflow:hidden;margin:3px 0 5px}
 .vp-tribar-mask{position:absolute;top:0;bottom:0;right:0;width:0;background:rgba(15,19,25,.92);transition:width 220ms ease-out}
 
+/* Export dropdown — anchored to the toolbar Export button. Click the
+   button to choose a format; the modal then opens for that format's
+   options (scale, axis, origin, selected/visible, draco, etc.). */
+.export-wrap{position:relative;display:inline-flex}
+.export-wrap .caret{margin-left:4px;font-size:10px;color:var(--tx2);transition:transform 140ms var(--ease-out)}
+.export-wrap.open .caret{transform:rotate(180deg)}
+.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;background:rgba(15,19,25,.94);border:1px solid var(--bd);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.02) inset;padding:6px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
+.export-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+.export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--tx);width:calc(100% - 24px);user-select:none;transition:background 80ms}
+.export-menu-item:hover,.export-menu-item:focus-visible{background:rgba(255,255,255,.06);outline:none}
+.export-menu-item .fmt{font-weight:600;letter-spacing:.02em}
+.export-menu-item .hint{color:var(--tx3);font-size:11px;font-weight:400}
+.export-menu-sep{height:1px;background:rgba(255,255,255,.06);margin:4px 6px}
+
 /* Settings popover — floats next to the top-right viewport buttons. Mirrors
    the sidebar `.section-b` layout so existing field/toggle markup drops in
    unchanged. Hidden by default; JS toggles `.show` and outside-click closes. */
@@ -599,7 +613,20 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
     <div class="divider"></div>
     <button class="tbtn" id="btn-undo" disabled title="Undo the last destructive action (Ctrl+Z)"><i data-lucide="undo-2"></i>Undo</button>
     <button class="tbtn" id="btn-redo" disabled title="Redo (Ctrl+Shift+Z / Ctrl+Y)"><i data-lucide="redo-2"></i>Redo</button>
-    <button class="tbtn" id="btn-export" disabled title="Export to GLB / GLTF / OBJ / STL / PLY"><i data-lucide="download"></i>Export</button>
+    <div class="export-wrap">
+      <button class="tbtn" id="btn-export" disabled title="Export to GLB / GLTF / OBJ / STL / PLY / CSV"><i data-lucide="download"></i>Export <span class="caret">▾</span></button>
+      <div id="export-menu" class="export-menu">
+        <button class="export-menu-item" data-fmt="glb"><span class="fmt">GLB</span><span class="hint">Best for web &amp; C4D</span></button>
+        <button class="export-menu-item" data-fmt="gltf"><span class="fmt">GLTF</span><span class="hint">JSON glTF 2.0</span></button>
+        <button class="export-menu-item" data-fmt="fbx"><span class="fmt">FBX</span><span class="hint">Blender, Maya, Unreal</span></button>
+        <button class="export-menu-item" data-fmt="usdz"><span class="fmt">USDZ</span><span class="hint">Apple Quick Look</span></button>
+        <button class="export-menu-item" data-fmt="obj"><span class="fmt">OBJ</span><span class="hint">Wavefront, universal</span></button>
+        <button class="export-menu-item" data-fmt="stl"><span class="fmt">STL</span><span class="hint">3D printing</span></button>
+        <button class="export-menu-item" data-fmt="ply"><span class="fmt">PLY</span><span class="hint">Geometry + colors</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-fmt="csv"><span class="fmt">CSV</span><span class="hint">Parts list (BOM)</span></button>
+      </div>
+    </div>
     <button class="tbtn" id="btn-save-scene" disabled title="Save the current scene (camera, view toggles, hidden/flagged parts, transforms) as a single .glb you can re-open here later or on another machine"><i data-lucide="save"></i>Save Scene</button>
     <div class="spacer"></div>
     <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><strong id="renderer-name">—</strong></div>

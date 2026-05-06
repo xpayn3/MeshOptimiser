@@ -7280,11 +7280,47 @@ function wireUI() {
   $('btn-undo').addEventListener('click', () => undoLast());
   $('btn-redo')?.addEventListener('click', () => redoLast());
   $('btn-save-scene')?.addEventListener('click', () => { saveScene(); });
-  $('btn-export').addEventListener('click', () => {
-    // Refresh the source-compression banner each time the modal opens, in
-    // case the user loaded a different file since last open. Only shown
-    // when the source actually used a compression / quantization extension
-    // — for plain GLBs it stays hidden.
+  // Export dropdown — click toolbar Export → choose format → modal opens
+  // for that format's options. Clicking any format pre-selects the matching
+  // .fmt-card so the modal appears focused on what the user picked.
+  function _openExportModalForFormat(fmt) {
+    document.querySelectorAll('#format-grid .fmt-card').forEach(c => {
+      c.classList.toggle('selected', c.dataset.fmt === fmt);
+    });
+    if (typeof _refreshFormatToggles === 'function') _refreshFormatToggles();
+    _showExportSourceNote();
+    $('export-modal').classList.add('show');
+  }
+  function _closeExportMenu() {
+    $('export-menu')?.classList.remove('show');
+    document.querySelector('.export-wrap')?.classList.remove('open');
+  }
+  function _toggleExportMenu() {
+    const menu = $('export-menu');
+    const wrap = document.querySelector('.export-wrap');
+    if (!menu || !wrap) return;
+    const open = !menu.classList.contains('show');
+    menu.classList.toggle('show', open);
+    wrap.classList.toggle('open', open);
+  }
+  $('export-menu')?.addEventListener('click', e => {
+    const item = e.target.closest('.export-menu-item');
+    if (!item) return;
+    const fmt = item.dataset.fmt;
+    _closeExportMenu();
+    _openExportModalForFormat(fmt);
+  });
+  // Outside-click + Esc dismiss the dropdown.
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.export-wrap')) _closeExportMenu();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('export-menu')?.classList.contains('show')) _closeExportMenu();
+  });
+
+  // Source-compression banner — hoisted out of the click handler so the
+  // dropdown→modal path can reuse it for every format.
+  function _showExportSourceNote() {
     const note = $('exp-source-note');
     const exts = state._sourceExtensions || [];
     const hits = exts.filter(e =>
@@ -7307,7 +7343,13 @@ function wireUI() {
         note.style.display = 'none';
       }
     }
-    $('export-modal').classList.add('show');
+  }
+
+  // Toolbar Export button → open the dropdown menu (which then opens the
+  // modal with the chosen format pre-selected).
+  $('btn-export').addEventListener('click', e => {
+    e.stopPropagation();
+    _toggleExportMenu();
   });
 
   $('vw-solid').addEventListener('click', () => setViewMode('solid'));
