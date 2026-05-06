@@ -243,6 +243,8 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    thin axis tag (X/Y/Z); the header row labels each transform channel. */
 #transform-panel .tform-grid{display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:4px 6px;padding:2px 10px 10px 10px}
 #transform-panel .tform-col-label{font-size:9.5px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px}
+#transform-panel .tform-col-label[data-tform-col]{cursor:context-menu;user-select:none;border-radius:3px;transition:background .12s ease,color .12s ease}
+#transform-panel .tform-col-label[data-tform-col]:hover{color:var(--tx2);background:rgba(255,255,255,.04)}
 #transform-panel .tform-row-label{font-size:10.5px;color:var(--tx3);font-weight:600;align-self:center;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 #transform-panel .tform-row-label.x{color:#ff6b6b}
 #transform-panel .tform-row-label.y{color:#34c759}
@@ -1059,9 +1061,9 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       </div>
       <div class="tform-grid" id="tform-grid">
         <span></span>
-        <span class="tform-col-label">Position</span>
-        <span class="tform-col-label">Rotation</span>
-        <span class="tform-col-label">Size</span>
+        <span class="tform-col-label" data-tform-col="pos" title="Right-click for Copy / Paste XYZ">Position</span>
+        <span class="tform-col-label" data-tform-col="rot" title="Right-click for Copy / Paste XYZ">Rotation</span>
+        <span class="tform-col-label" data-tform-col="scale" title="Right-click for Copy / Paste XYZ">Size</span>
         <span class="tform-row-label x">X</span>
         <span class="tform-num" data-for="tform-px"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-px" data-axis="px" step="0.1" placeholder="0"><span class="tform-unit">cm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
         <span class="tform-num" data-for="tform-rx"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" id="tform-rx" data-axis="rx" step="1" placeholder="0"><span class="tform-unit">°</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
@@ -1896,7 +1898,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-input-ctxmenu"></script>
+<script type="module" src="app-v2.js?v=2026050707-tform-copyxyz"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

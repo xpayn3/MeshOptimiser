@@ -4492,6 +4492,98 @@ function _wireTransformPanel() {
     refreshPropertiesPanel?.();
     _transformPanelRefresh();
   });
+
+  // ── Right-click on Position / Rotation / Size column headers ─────────
+  // Pops a small context menu with Copy XYZ / Paste XYZ / Reset XYZ for
+  // that one channel. Copies are mirrored to the system clipboard as
+  // "x, y, z" so a triplet from one selection can be pasted into a
+  // different one (or any text editor). Paste tries the in-app buffer
+  // first, then falls back to parsing whatever's in the system clipboard.
+  const _tformBuf = { pos: null, rot: null, scale: null };
+  const _tformChanLabel = { pos: 'position', rot: 'rotation', scale: 'size' };
+  const _tformChanPrefix = { pos: 'p', rot: 'r', scale: 's' };
+  function _tformChanInputs(kind) {
+    const p = _tformChanPrefix[kind];
+    return ['x', 'y', 'z'].map(a => document.getElementById(`tform-${p}${a}`));
+  }
+  function _tformChanValues(kind) {
+    return _tformChanInputs(kind).map(i => i ? parseFloat(i.value) : NaN);
+  }
+  function _tformChanReadable(kind, vals) {
+    const unit = kind === 'rot' ? '°' : '';
+    return vals.map(v => Number.isFinite(v) ? v.toFixed(4).replace(/\.?0+$/, '') + unit : '?').join(', ');
+  }
+  async function _copyTformChan(kind) {
+    const vals = _tformChanValues(kind);
+    if (vals.some(v => !Number.isFinite(v))) {
+      toast?.('Nothing to copy', 'No active selection in this channel', 'info', 2000);
+      return;
+    }
+    _tformBuf[kind] = vals.slice();
+    const text = vals.map(v => v.toFixed(6).replace(/\.?0+$/, '')).join(', ');
+    try { await navigator.clipboard?.writeText(text); } catch (_) {}
+    toast?.(`Copied ${_tformChanLabel[kind]}`, _tformChanReadable(kind, vals), 'info', 2200);
+  }
+  async function _pasteTformChan(kind) {
+    let vals = null;
+    // Prefer system clipboard (so cross-app paste works); fall back to the
+    // in-app buffer if reading the clipboard fails or the contents aren't a
+    // recognisable triplet.
+    try {
+      const text = await navigator.clipboard?.readText();
+      if (text) {
+        const parsed = text.split(/[,;\s]+/)
+                           .map(s => parseFloat(s.replace(/[°cm]/g, '')))
+                           .filter(Number.isFinite);
+        if (parsed.length >= 3) vals = parsed.slice(0, 3);
+      }
+    } catch (_) {}
+    if (!vals) vals = _tformBuf[kind];
+    if (!vals || vals.length !== 3) {
+      toast?.('Nothing to paste', 'Clipboard has no XYZ triplet', 'info', 2000);
+      return;
+    }
+    const inputs = _tformChanInputs(kind);
+    let n = 0;
+    inputs.forEach((inp, i) => {
+      if (!inp || inp.disabled) return;
+      inp.value = parseFloat(vals[i].toFixed(6)).toString();
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      n++;
+    });
+    if (n) toast?.(`Pasted ${_tformChanLabel[kind]}`, _tformChanReadable(kind, vals), 'info', 2200);
+  }
+  function _resetTformChan(kind) {
+    const identity = kind === 'scale' ? 1 : 0;
+    const inputs = _tformChanInputs(kind);
+    let n = 0;
+    inputs.forEach(inp => {
+      if (!inp || inp.disabled) return;
+      inp.value = String(identity);
+      inp.dispatchEvent(new Event('change', { bubbles: true }));
+      n++;
+    });
+    if (n) toast?.(`Reset ${_tformChanLabel[kind]}`, '', 'info', 1600);
+  }
+  document.getElementById('tform-grid')?.addEventListener('contextmenu', (e) => {
+    const lbl = e.target.closest('.tform-col-label[data-tform-col]');
+    if (!lbl) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const kind = lbl.dataset.tformCol;          // 'pos' | 'rot' | 'scale'
+    const channelTitle = lbl.textContent;       // 'Position' / 'Rotation' / 'Size'
+    const vals = _tformChanValues(kind);
+    const live = vals.every(Number.isFinite);
+    const items = [
+      { icon: 'copy',     label: `Copy ${channelTitle} XYZ`,   kbd: live ? _tformChanReadable(kind, vals) : '',
+        fn: () => _copyTformChan(kind) },
+      { icon: 'clipboard-paste', label: `Paste ${channelTitle} XYZ`,
+        fn: () => _pasteTformChan(kind) },
+      '---',
+      { icon: 'rotate-ccw', label: `Reset ${channelTitle}`,    fn: () => _resetTformChan(kind) },
+    ];
+    _ctxBuild(items, e.clientX, e.clientY);
+  });
 }
 
 // While the panel is open, poll once per frame so any source of transform
