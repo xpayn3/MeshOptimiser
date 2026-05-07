@@ -2660,6 +2660,11 @@ function onResize() {
 // robust as well as allocation-free.
 const _TICK_PREV_POS = new THREE.Vector3();
 const _TICK_PREV_TGT = new THREE.Vector3();
+// Tracks whether the camera is currently aligned to one of the standard
+// Top/Front/Side views. Set by _setStandardView, cleared by tick() the
+// instant the user starts orbiting — so the active button highlight is
+// always honest.
+let _stdViewActive = false;
 // The render loop. Wrapped so NO exception can kill the rAF chain. Long
 // sessions used to "hang" because some inner step threw, the rest of tick()
 // never ran, requestAnimationFrame(tick) was never called, and the loop just
@@ -2682,6 +2687,15 @@ function tick() {
         if (camera.position.distanceToSquared(_TICK_PREV_POS) > 1e-12 ||
             controls.target.distanceToSquared(_TICK_PREV_TGT) > 1e-12) {
           requestRender();
+          // User orbited away from a standard view — drop the Top/Front/Side
+          // active highlight so the toolbar doesn't keep claiming we're still
+          // aligned to it. Cheap because it's only triggered on real motion.
+          if (_stdViewActive) {
+            for (const id of ['vw-top', 'vw-front', 'vw-side']) {
+              document.getElementById(id)?.classList.remove('active');
+            }
+            _stdViewActive = false;
+          }
         }
       } catch (e) { _logTickErr('controls', e); }
     }
@@ -2703,7 +2717,10 @@ function tick() {
     const shouldRender = state.needsRender || state.activeFrames > 0;
     if (shouldRender && !state.renderPaused) {
       let renderErr = null;
-      try { renderer.render(scene, camera); }
+      try {
+        if (state.quadView) _renderQuadView();
+        else renderer.render(scene, camera);
+      }
       catch (e) { renderErr = e; }
       if (renderErr) {
         // Throttled diagnostics. Previously this catch was a silent no-op
@@ -3676,7 +3693,7 @@ function _doCameraFlash(durMs = 360) {
 // Render the scene into an offscreen target at the requested resolution and
 // return a PNG blob. Adjusts camera aspect for non-viewport sizes so the
 // composition isn't squashed; restores the camera afterwards.
-async function _captureFrameAsBlob(outW, outH) {
+async function _captureFrameAsBlob(outW, outH, opts = {}) {
   if (!renderer || !scene || !camera) throw new Error('renderer not ready');
   outW = Math.max(2, Math.round(outW));
   outH = Math.max(2, Math.round(outH));
@@ -3745,9 +3762,97 @@ async function _captureFrameAsBlob(outW, outH) {
     ctx.drawImage(cv, dx, dy, dw, dh);
   }
 
+  // Optional info overlay — pinned to the bottom-left, scales with output
+  // resolution so a 4K screenshot doesn't get a 9-pixel typewriter caption.
+  if (opts.stamp) {
+    try { _drawScreenshotStamp(ctx, outW, outH); } catch (e) { console.warn('[screenshot] stamp draw failed', e); }
+  }
+
   const blob = await new Promise(res => out.toBlob(res, 'image/png'));
   if (!blob) throw new Error('toBlob returned null');
   return blob;
+}
+
+// Render a small black info card in the bottom-left corner of the captured
+// canvas. Pulls the same numbers shown in the status bar (model name, vert
+// count, parts, mem) so the stamp matches what the user sees in the app.
+function _drawScreenshotStamp(ctx, w, h) {
+  const sbStatus   = document.getElementById('sb-status')?.textContent?.trim() || 'Untitled';
+  const sbVerts    = document.getElementById('sb-verts')?.textContent?.trim() || '';
+  const sbMem      = document.getElementById('sb-mem')?.textContent?.trim() || '';
+  const sbSelected = document.getElementById('sb-selected-n')?.textContent?.trim() || '0';
+  const sbFlagged  = document.getElementById('sb-flagged-n')?.textContent?.trim() || '0';
+  const partCount  = (state?.parts?.filter?.(p => p && !p.deleted).length) ?? 0;
+  const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const modelName = (sbStatus && sbStatus !== 'Ready') ? sbStatus : 'Untitled';
+
+  // Scale type/padding with the shorter edge so 4K stamps don't disappear
+  // and 1×viewport stamps don't dominate the frame. Reference at ~1080p tall.
+  const k = Math.max(1, Math.min(h, w) / 1080);
+  const pad   = Math.round(18 * k);
+  const lead  = Math.round(18 * k);
+  const fsTitle = Math.round(15 * k);
+  const fsBody  = Math.round(12 * k);
+  const radius = Math.round(8 * k);
+
+  const lines = [
+    { text: modelName, font: `600 ${fsTitle}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#ffffff' },
+    { text: `${partCount} parts · ${sbVerts} verts · ${sbMem}`, font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#cbd2db' },
+    { text: `${sbSelected} selected · ${sbFlagged} flagged`,    font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#9aa3b0' },
+    { text: ts,                                                 font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#7a828f' },
+  ];
+
+  // Measure the widest line so the box fits content snugly.
+  ctx.save();
+  let maxW = 0;
+  for (const l of lines) {
+    ctx.font = l.font;
+    const m = ctx.measureText(l.text);
+    if (m.width > maxW) maxW = m.width;
+  }
+  const innerPad = Math.round(14 * k);
+  const boxW = Math.round(maxW + innerPad * 2);
+  const boxH = Math.round(innerPad * 2 + lead * (lines.length - 1) + fsTitle);
+  const x = pad;
+  const y = h - pad - boxH;
+
+  // Soft shadow for legibility on busy backgrounds.
+  ctx.shadowColor = 'rgba(0,0,0,0.55)';
+  ctx.shadowBlur  = Math.round(14 * k);
+  ctx.shadowOffsetY = Math.round(2 * k);
+
+  // Rounded panel background.
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, boxW, boxH, radius);
+  } else {
+    // Older Canvas2D paths: assemble manually.
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + boxW, y,        x + boxW, y + boxH, radius);
+    ctx.arcTo(x + boxW, y + boxH, x,        y + boxH, radius);
+    ctx.arcTo(x,        y + boxH, x,        y,        radius);
+    ctx.arcTo(x,        y,        x + boxW, y,        radius);
+    ctx.closePath();
+  }
+  ctx.fillStyle = 'rgba(10,13,18,0.78)';
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+
+  // Hairline border for definition over high-key backgrounds.
+  ctx.lineWidth = Math.max(1, Math.round(1 * k));
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.stroke();
+
+  // Text rows.
+  ctx.textBaseline = 'top';
+  let cy = y + innerPad;
+  for (const l of lines) {
+    ctx.font = l.font;
+    ctx.fillStyle = l.color;
+    ctx.fillText(l.text, x + innerPad, cy);
+    cy += lead;
+  }
+  ctx.restore();
 }
 
 // Build the default screenshot filename from the loaded model name (stashed
@@ -3816,6 +3921,11 @@ function _openScreenshotDialog() {
       #scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:6px}
       #scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:7px;font-size:12.5px;outline:none}
       #scrshot-dlg .ss-name input:focus{border-color:rgba(110,168,255,.5)}
+      #scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:7px;cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
+      #scrshot-dlg .ss-overlay-row:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.10)}
+      #scrshot-dlg .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
+      #scrshot-dlg .ss-overlay-row .lbl{flex:1;font-size:12px;color:var(--tx);font-weight:500}
+      #scrshot-dlg .ss-overlay-row .hint{font-size:10.5px;color:var(--tx3);font-weight:400;margin-left:4px}
       #scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:500}
       #scrshot-dlg .dlg-foot .ss-cancel:hover{background:rgba(255,255,255,.05)}
       #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,rgba(110,168,255,.32),rgba(110,168,255,.18));border-color:rgba(110,168,255,.5);color:#dde7f9}
@@ -3874,6 +3984,10 @@ function _openScreenshotDialog() {
           <div class="ss-section-title">Filename</div>
           <input type="text" id="ss-name" value="${_defaultScreenshotName()}" spellcheck="false">
         </div>
+        <label class="ss-overlay-row" for="ss-overlay-stamp" title="Overlay file name, vertex / part / triangle counts and a timestamp on the bottom-left corner of the saved image.">
+          <input type="checkbox" id="ss-overlay-stamp">
+          <span class="lbl">Stamp object info <span class="hint">(model name · vertices · parts · timestamp)</span></span>
+        </label>
       </div>`,
     footHtml: `
       <button class="ss-cancel" type="button">Cancel</button>
@@ -3939,7 +4053,8 @@ function _openScreenshotDialog() {
       const oldLabel = saveBtn.textContent;
       saveBtn.textContent = 'Capturing…';
       try {
-        const blob = await _captureFrameAsBlob(w, h);
+        const stamp = !!root.querySelector('#ss-overlay-stamp')?.checked;
+        const blob = await _captureFrameAsBlob(w, h, { stamp });
         // Fire the shutter flash AFTER readback so the visible viewport is
         // already restored — the flash overlays the recovered frame, giving
         // a clean "snap" without the messy black blink.
@@ -5391,6 +5506,148 @@ function alignViewToAxis(axisId) {
   else camera.up.set(0, 0, 1);
   camera.lookAt(controls.target);
   controls.update();
+  requestRender();
+}
+
+// Switch to orthographic + align to a standard view (top / front / side).
+// Picks the axis convention from state.upAxis so Z-up CAD scenes and Y-up
+// (Blender/glTF) scenes both come out right. The single-button counterpart
+// to the axis-gizmo's six face-arrows.
+function _setStandardView(view) {
+  if (!camera || !controls) return;
+  const upAxis = (state.sceneUpAxis === 'y') ? 'y' : 'z';
+  // axisId is the camera position vector ("p<axis>"=positive end of axis,
+  // "n<axis>"=negative). Convention matches alignViewToAxis above.
+  let axisId;
+  if (upAxis === 'z') {
+    if (view === 'top')   axisId = 'pz';   // camera above, looking -Z
+    if (view === 'front') axisId = 'ny';   // camera at -Y, looking +Y
+    if (view === 'side')  axisId = 'px';   // camera at +X, looking -X (right side)
+  } else {
+    if (view === 'top')   axisId = 'py';
+    if (view === 'front') axisId = 'pz';
+    if (view === 'side')  axisId = 'px';
+  }
+  if (!axisId) return;
+  // Standard CAD/CAM views are always orthographic — flip the projection
+  // first so the alignment lands in ortho space.
+  if (state.cameraProjection !== 'ortho') {
+    state.cameraProjection = 'ortho';
+    _applyCameraProjection();
+    const sel = document.getElementById('cam-projection');
+    if (sel) sel.value = 'ortho';
+    const fovRow = document.getElementById('cam-fov-row');
+    if (fovRow) fovRow.style.opacity = '.42';
+  }
+  alignViewToAxis(axisId);
+  // Visual feedback on the buttons — clear all three first, then mark active.
+  for (const id of ['vw-top', 'vw-front', 'vw-side']) {
+    document.getElementById(id)?.classList.remove('active');
+  }
+  document.getElementById('vw-' + view)?.classList.add('active');
+  _stdViewActive = true;
+}
+
+// ─── Quad view ───────────────────────────────────────────────────────────
+// Splits the canvas into a 2×2 grid: top-left = current camera (interactive,
+// orbit/picking still works there); the other three are read-only ortho
+// cameras locked to Top / Front / Side and auto-fit to the model bbox each
+// frame so they stay framed regardless of zoom on the main view.
+const _quadCams = { top: null, front: null, side: null };
+
+function _ensureQuadCams() {
+  if (_quadCams.top) return;
+  const make = () => {
+    const c = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1e7);
+    return c;
+  };
+  _quadCams.top = make();
+  _quadCams.front = make();
+  _quadCams.side = make();
+}
+
+// Frame an ortho camera around the model bbox along the given world-axis
+// direction. Reuses controls.target as the focus point so the previews
+// follow the user's pan in the main view — mirrors how Blender / Maya
+// quad views track the active orbit centre.
+function _fitQuadCam(cam, dirX, dirY, dirZ, upX, upY, upZ, vpAspect) {
+  if (!camera || !controls) return;
+  const target = controls.target;
+  // Use the model diagonal as the base extent; fall back to a sensible
+  // default before the first model loads so the quad still shows the grid.
+  const diag = state.modelDiag || 100;
+  const halfH = diag * 0.6;
+  const halfW = halfH * (vpAspect || 1);
+  cam.left = -halfW; cam.right = halfW;
+  cam.top  =  halfH; cam.bottom = -halfH;
+  cam.near = -diag * 4;
+  cam.far  =  diag * 4;
+  cam.up.set(upX, upY, upZ);
+  cam.position.copy(target).add(new THREE.Vector3(dirX, dirY, dirZ).multiplyScalar(diag * 2));
+  cam.lookAt(target);
+  cam.updateProjectionMatrix();
+}
+
+function _renderQuadView() {
+  if (!renderer || !scene || !camera) return;
+  _ensureQuadCams();
+  const cv = renderer.domElement;
+  const w = cv.width, h = cv.height;
+  const halfW = Math.floor(w / 2), halfH = Math.floor(h / 2);
+  const aspect = halfW / halfH;
+  const upAxis = (state.sceneUpAxis === 'y') ? 'y' : 'z';
+
+  // Reframe ortho cameras every frame — cheap, and keeps the previews
+  // tracking the user's pan/zoom on the main quadrant.
+  if (upAxis === 'z') {
+    _fitQuadCam(_quadCams.top,   0, 0,  1,  0, 1, 0, aspect); // top: down -Z
+    _fitQuadCam(_quadCams.front, 0,-1,  0,  0, 0, 1, aspect); // front: along +Y, Z-up
+    _fitQuadCam(_quadCams.side,  1, 0,  0,  0, 0, 1, aspect); // side: along -X, Z-up
+  } else {
+    _fitQuadCam(_quadCams.top,   0, 1,  0,  0, 0,-1, aspect); // top: down -Y
+    _fitQuadCam(_quadCams.front, 0, 0,  1,  0, 1, 0, aspect); // front: along -Z, Y-up
+    _fitQuadCam(_quadCams.side,  1, 0,  0,  0, 1, 0, aspect); // side: along -X, Y-up
+  }
+
+  // Save renderer state so the per-quadrant scissor doesn't leak into the
+  // next frame (single-camera or back-to-quad transitions both rely on
+  // scissorTest being false).
+  const oldScissorTest = renderer.getScissorTest?.() ?? false;
+  renderer.setScissorTest(true);
+
+  // Quadrant layout (origin is bottom-left in renderer coords):
+  //   TL = top-left of canvas = bottom row in WebGL Y? No — three.js
+  //   setViewport uses GL coords (origin bottom-left). So:
+  //     top row of CSS canvas  = upper Y in GL = (y = halfH .. h)
+  //     bottom row of CSS canvas = lower Y in GL = (y = 0 .. halfH)
+  //   We want CSS top-left = main camera, CSS top-right = Top ortho,
+  //   CSS bottom-left = Front ortho, CSS bottom-right = Side ortho.
+  const draw = (x, y, ww, hh, cam) => {
+    renderer.setViewport(x, y, ww, hh);
+    renderer.setScissor(x, y, ww, hh);
+    renderer.render(scene, cam);
+  };
+  draw(0,     halfH, halfW, halfH, camera);          // TL: live camera
+  draw(halfW, halfH, halfW, halfH, _quadCams.top);   // TR: Top
+  draw(0,     0,     halfW, halfH, _quadCams.front); // BL: Front
+  draw(halfW, 0,     halfW, halfH, _quadCams.side);  // BR: Side
+
+  // Restore full-canvas viewport so anything that calls renderer.render()
+  // outside this path (thumbnail capture, screenshot dialog) gets a normal
+  // single-frame render with no leftover scissor.
+  renderer.setViewport(0, 0, w, h);
+  renderer.setScissor(0, 0, w, h);
+  renderer.setScissorTest(oldScissorTest);
+}
+
+function _toggleQuadView() {
+  state.quadView = !state.quadView;
+  document.getElementById('vw-quad')?.classList.toggle('active', state.quadView);
+  document.getElementById('vp-quad-labels')?.classList.toggle('show', state.quadView);
+  // Hide pickable interactions in quad mode — picking math assumes a single
+  // viewport. Re-enabled when the user toggles back to single-view.
+  const cv = renderer?.domElement;
+  if (cv) cv.style.cursor = state.quadView ? 'default' : '';
   requestRender();
 }
 
@@ -11017,6 +11274,12 @@ function wireUI() {
   // editable position/rotation + read-only size for the active selection.
   $('tg-transform')?.addEventListener('click', () => _toggleTransformPanel());
   $('tg-screenshot')?.addEventListener('click', () => _captureViewportScreenshot());
+  // Standard CAD views — each switches to ortho + aligns to the named axis.
+  // Z-up scenes use CAD convention (Y forward); Y-up uses glTF/Blender.
+  $('vw-top')?.addEventListener('click', () => _setStandardView('top'));
+  $('vw-front')?.addEventListener('click', () => _setStandardView('front'));
+  $('vw-side')?.addEventListener('click', () => _setStandardView('side'));
+  $('vw-quad')?.addEventListener('click', () => _toggleQuadView());
   // Initialize the tree's flag-on class + viewport button to match current toggle state at load.
   document.getElementById('tree')?.classList.toggle('flag-on', !!state.highlightSmall);
   $('tg-hilite')?.classList.toggle('active', !!$('toggle-highlight')?.checked);
