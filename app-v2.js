@@ -4297,7 +4297,7 @@ function fitToView() {
 // API so it works on both WebGL2 and WebGPU — three's WebGPU renderer
 // rejects raw ShaderMaterial as "not compatible", which earlier killed the
 // shader-plane attempt and rendered the floor as a solid black square.
-function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fadeStart, fadeEnd, majorEvery = 10) {
+function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fadeStart, fadeEnd, majorEvery = 10, minorCellSize = 1) {
   const halfSize = size / 2;
   const step = size / divisions;
   const center = divisions / 2;
@@ -4305,17 +4305,19 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
   // produces a smooth radial fade without going crazy on the vertex budget.
   const SEGS = 24;
 
-  const positions = [];
-  const colors = [];          // 3-component RGB — three.webgpu.js bundle ignores
-                              // vertex-color alpha, so we bake the fade into RGB
-                              // by lerping the line colour toward black.
+  // Two parallel buffers: minor lines vs major + axis lines. Splitting them
+  // into separate meshes lets us LOD the minor tier away at zoom-out (the
+  // minor mesh's onBeforeRender tweaks its own opacity per frame from the
+  // on-screen pixel size of one minor cell).
+  const posMinor = [], colMinor = [];
+  const posMajor = [], colMajor = [];
+
   const cGrid  = new THREE.Color(gridHex);
   const cAxisX = new THREE.Color(axisXHex);
   const cAxisY = new THREE.Color(axisYHex);
 
-  // Per-tier brightness multipliers. With material.opacity = 0.12 on top
-  // these read as faint hairlines on a dark viewport — the grid is there
-  // when you look for it but never fights with the model.
+  // Per-tier brightness multipliers — combined with material.opacity these
+  // land at minor ≈ 0.025, major ≈ 0.05, axis ≈ 0.12 effective alpha.
   const MULT_MINOR = 0.35;
   const MULT_MAJOR = 0.70;
   const MULT_AXIS  = 1.00;
@@ -4325,21 +4327,18 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
     const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
     return t * t * (3 - 2 * t);
   };
-  // Radial fade: returns a brightness multiplier in [0,1] at world (x,y).
   const fadeAt = (x, y) => 1 - smoothstep(fadeStart, fadeEnd, Math.hypot(x, y));
-  // Emit one segmented line. `getPt(t)` returns [x, y] for t in [0,1].
-  const emitLine = (getPt, color, mult) => {
+
+  // Emit one segmented line into the supplied position/colour arrays.
+  const emitLine = (posArr, colArr, getPt, color, mult) => {
     let prev = getPt(0);
     let prevF = fadeAt(prev[0], prev[1]) * mult;
     for (let s = 1; s <= SEGS; s++) {
       const cur = getPt(s / SEGS);
       const curF = fadeAt(cur[0], cur[1]) * mult;
-      // Skip segments where both ends are essentially black — saves ~half
-      // the vertex budget on the corners that would render invisibly.
       if (prevF > 0.005 || curF > 0.005) {
-        positions.push(prev[0], prev[1], 0,  cur[0], cur[1], 0);
-        // Bake fade into RGB: line colour × (radial fade × tier multiplier).
-        colors.push(color.r * prevF, color.g * prevF, color.b * prevF,
+        posArr.push(prev[0], prev[1], 0,  cur[0], cur[1], 0);
+        colArr.push(color.r * prevF, color.g * prevF, color.b * prevF,
                     color.r * curF,  color.g * curF,  color.b * curF);
       }
       prev = cur;
@@ -4351,37 +4350,79 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
     const isAxis  = (i === center);
     const fromCtr = i - center;
     const isMajor = !isAxis && (Math.abs(fromCtr) % majorEvery === 0);
-    const mult    = isAxis ? MULT_AXIS : (isMajor ? MULT_MAJOR : MULT_MINOR);
+    // Pick destination buffers + colour/mult for this row+column pair.
+    const usePos = (isAxis || isMajor) ? posMajor : posMinor;
+    const useCol = (isAxis || isMajor) ? colMajor : colMinor;
+    const mult   = isAxis ? MULT_AXIS : (isMajor ? MULT_MAJOR : MULT_MINOR);
 
-    // Horizontal line parallel to X at y=k.
-    emitLine(
-      (t) => [-halfSize + t * size, k],
-      isAxis ? cAxisX : cGrid,
-      mult,
-    );
-    // Vertical line parallel to Y at x=k.
-    emitLine(
-      (t) => [k, -halfSize + t * size],
-      isAxis ? cAxisY : cGrid,
-      mult,
-    );
+    emitLine(usePos, useCol, (t) => [-halfSize + t * size, k], isAxis ? cAxisX : cGrid, mult);
+    emitLine(usePos, useCol, (t) => [k, -halfSize + t * size], isAxis ? cAxisY : cGrid, mult);
   }
 
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geom.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
-  const mat = new THREE.LineBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.22,        // global dim — combined with the per-vertex multiplier
-                          // and bake-to-RGB fade this lands the minor lines at
-                          // ~0.025 effective opacity (ghost hairlines).
-    depthWrite: false,
-  });
-  const mesh = new THREE.LineSegments(geom, mat);
-  mesh.matrixAutoUpdate = false;
-  mesh.updateMatrix();
-  return mesh;
+  const _mkMesh = (positions, colors) => {
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geom.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
+    const mat = new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+    });
+    const mesh = new THREE.LineSegments(geom, mat);
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
+    return mesh;
+  };
+  const minorMesh = _mkMesh(posMinor, colMinor);
+  const majorMesh = _mkMesh(posMajor, colMajor);
+
+  // ── LOD: fade the minor mesh out when one minor cell drops below ~6
+  // screen pixels (i.e. zoom-out). Smooth ramp from 0 px → fully invisible
+  // to ~24 px → fully visible. Keeps the close-up "every-unit hairline"
+  // detail without making the zoomed-out view a moiré jungle. Major and
+  // axis lines aren't LOD'd — they're the meaningful reference at any zoom.
+  const baseOpacity = minorMesh.material.opacity;
+  const _camPosLen = new THREE.Vector3();
+  minorMesh.onBeforeRender = (renderer, _scene, camera) => {
+    let pxPerUnit;
+    const canvasH = renderer.domElement?.height || renderer.domElement?.clientHeight || 1080;
+    if (camera.isOrthographicCamera) {
+      // Ortho: vertical world span = (top - bottom) / camera.zoom.
+      const span = (camera.top - camera.bottom) / (camera.zoom || 1);
+      pxPerUnit = canvasH / Math.max(span, 1e-6);
+    } else {
+      // Perspective: rough but right-magnitude metric — pixel size at the
+      // distance of the grid plane's centre.
+      const fovRad = THREE.MathUtils.degToRad(camera.fov || 50);
+      _camPosLen.copy(camera.position).sub(group.position);
+      const dist = _camPosLen.length();
+      const worldH = 2 * Math.tan(fovRad / 2) * Math.max(dist, 1e-6);
+      pxPerUnit = canvasH / worldH;
+    }
+    const cellPx = minorCellSize * pxPerUnit;
+    const t = smoothstep(6, 24, cellPx);
+    minorMesh.material.opacity = baseOpacity * t;
+    minorMesh.visible = t > 0.005;
+  };
+
+  const group = new THREE.Group();
+  group.name = '_infiniteGrid';
+  group.add(majorMesh);
+  group.add(minorMesh);
+  group.matrixAutoUpdate = false;
+  group.userData.minorMesh = minorMesh;
+  group.userData.majorMesh = majorMesh;
+  group.userData.minorCellSize = minorCellSize;
+  // Convenience disposer — _fitGridToModel calls this on the old group
+  // before swapping in a fresh one to free GPU buffers cleanly.
+  group.dispose = () => {
+    [minorMesh, majorMesh].forEach(m => {
+      m.geometry?.dispose?.();
+      m.material?.dispose?.();
+    });
+  };
+  return group;
 }
 
 // "Infinite" floor grid: a very large GridHelper-style line set with the two
@@ -4405,9 +4446,8 @@ function _makeInfiniteGrid(opts = {}) {
   const grid = _buildAxisColouredGrid(
     PLANE_SIZE, targetDivisions,
     0xa0a6b0, 0xff5050, 0x40d860,
-    fadeStart, fadeEnd, majorEvery,
+    fadeStart, fadeEnd, majorEvery, minor,
   );
-  grid.name = '_infiniteGrid';
   grid.userData.gridParams = { minor, major, planeSize: PLANE_SIZE, fadeStart, fadeEnd };
   return grid;
 }
@@ -4440,17 +4480,16 @@ function _fitGridToModel(box) {
 
   // Rebuild the line set with the new spacing — geometry encodes the line
   // positions AND per-vertex fade alphas, so re-spacing / re-fading means
-  // new buffers (cheap; one-shot per load).
+  // new buffers (cheap; one-shot per load). The grid is now a Group with
+  // two LineSegments children (minor + major/axis); .dispose() walks both.
   scene.remove(gridHelper);
-  gridHelper.geometry?.dispose?.();
-  gridHelper.material?.dispose?.();
+  gridHelper.dispose?.();
   gridHelper = _buildAxisColouredGrid(
     planeSize,
     Math.min(5000, Math.max(40, Math.round(planeSize / minor))),
     0xa0a6b0, 0xff5050, 0x40d860,
-    fadeStart, fadeEnd, majorEvery,
+    fadeStart, fadeEnd, majorEvery, minor,
   );
-  gridHelper.name = '_infiniteGrid';
   gridHelper.userData.gridParams = { minor, major, planeSize, fadeStart, fadeEnd };
   gridHelper.position.set(center.x, center.y, box.min.z);
   gridHelper.visible = state.showGrid;
