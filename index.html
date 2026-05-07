@@ -621,10 +621,10 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 #canvas{display:block;width:100%;height:100%;outline:none}
 #vp-overlay{position:absolute;inset:0;pointer-events:none}
 .vpc{position:absolute;display:flex;gap:4px;pointer-events:auto}
-.vpc.tl{top:12px;left:12px;flex-direction:column}
-.vpc.tr{top:12px;right:12px;flex-direction:column;align-items:flex-end}
-.vpc.br{bottom:12px;right:12px;align-items:flex-end;flex-direction:column}
-.vpc.bl{bottom:12px;left:12px}
+.vpc.tl{top:6px;left:6px;flex-direction:column}
+.vpc.tr{top:6px;right:6px;flex-direction:column;align-items:flex-end}
+.vpc.br{bottom:6px;right:6px;align-items:flex-end;flex-direction:column}
+.vpc.bl{bottom:6px;left:6px}
 .vp-stat{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);background:rgba(11,14,22,.72);border:1px solid var(--bd);border-radius:6px;padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
 /* Gizmo HUD — small DRO that pops next to the gizmo while a drag is active.
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
@@ -641,6 +641,10 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 #axis-gizmo{width:56px;height:56px;display:grid;place-items:center;opacity:.75;transition:opacity .15s}
 #axis-gizmo:hover{opacity:1}
 #axis-gizmo svg{width:54px;height:54px;display:block;overflow:visible}
+#sun-gizmo{width:64px;height:64px;display:grid;place-items:center;opacity:.85;transition:opacity .15s}
+#sun-gizmo:hover{opacity:1}
+#sun-gizmo svg{width:64px;height:64px;display:block;overflow:visible;user-select:none;-webkit-user-select:none}
+#sun-gizmo-dot.dragging{cursor:grabbing}
 .axg-handle text{user-select:none;pointer-events:none;font-family:ui-sans-serif,system-ui,sans-serif}
 .axg-handle:hover circle{stroke-width:2.4}
 /* Per-button tints — pro-app convention: each viewport button gets a stable
@@ -1163,7 +1167,16 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
               <div class="field" style="margin:0" title="Multiplier on the fog falloff. >1 = denser fog ramps in faster, <1 = gentler."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="fog-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">1.0×</span></label><input type="range" id="fog-int" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
               <button id="fog-reset" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:10.5px;cursor:pointer;align-self:flex-start" title="Clear overrides and use the auto-tuned distances + intensity 1.0">Reset to auto</button>
             </div>
-            <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral gray (Blender)</option><option value="solid">Solid black</option><option value="white">White</option></select></div>
+            <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral gray (Blender)</option><option value="solid">Solid black</option><option value="white">White</option><option value="hdri">HDRI environment</option></select></div>
+            <div id="hdri-controls" style="display:none;flex-direction:column;gap:6px;margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
+              <div style="font-size:10.5px;color:var(--tx3);font-weight:500;line-height:1.4">Drag the <span style="color:#ffd76b">sun</span> in the viewport to rotate. Brightness from the env lights all PBR materials in the scene.</div>
+              <div style="display:flex;gap:6px">
+                <button id="hdri-load-btn" type="button" style="flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:5px 8px;border-radius:5px;font-size:11px;cursor:pointer" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
+                <button id="hdri-default-btn" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:10.5px;cursor:pointer" title="Reset to the built-in studio environment">Default</button>
+              </div>
+              <div id="hdri-current" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
+              <input type="file" id="hdri-file" accept=".hdr,.exr,image/*" style="display:none">
+            </div>
           </div>
           <div class="pop-section">
             <div class="pop-section-title">Scene</div>
@@ -1244,6 +1257,39 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       </div>
       <div class="vpc br"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
       <div class="vpc bl"><div id="axis-gizmo" title="Click an axis to align the view"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
+      <!-- Sun gizmo (HDRI rotation). Visible only when bg-mode === 'hdri'.
+           Top-down dome view: drag the sun marker around to rotate the
+           environment around the scene up axis. Distance from centre maps
+           to elevation (centre = directly overhead, edge = horizon). -->
+      <div class="vpc bl" id="sun-gizmo-wrap" style="display:none;left:88px" title="Drag the sun to rotate the HDRI environment">
+        <div id="sun-gizmo">
+          <svg id="sun-gizmo-svg" viewBox="-44 -44 88 88">
+            <defs>
+              <radialGradient id="sun-dome-grad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#1f2734" stop-opacity=".75"/>
+                <stop offset="80%" stop-color="#0d1219" stop-opacity=".55"/>
+                <stop offset="100%" stop-color="#000" stop-opacity=".30"/>
+              </radialGradient>
+              <radialGradient id="sun-dot-grad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#fff8c0"/>
+                <stop offset="60%" stop-color="#ffd76b"/>
+                <stop offset="100%" stop-color="#ff8a32"/>
+              </radialGradient>
+            </defs>
+            <!-- dome -->
+            <circle cx="0" cy="0" r="36" fill="url(#sun-dome-grad)" stroke="rgba(255,255,255,.10)" stroke-width="1"/>
+            <!-- compass marks -->
+            <line x1="0" y1="-36" x2="0" y2="-32" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <line x1="0" y1="36"  x2="0" y2="32"  stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <line x1="-36" y1="0" x2="-32" y2="0" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <line x1="36"  y1="0" x2="32"  y2="0" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <!-- horizon ring (sun-at-edge marker) -->
+            <circle cx="0" cy="0" r="36" fill="none" stroke="rgba(255,200,100,.10)" stroke-width="1" stroke-dasharray="2 3"/>
+            <!-- sun puck (initial position: NE, slightly elevated) -->
+            <circle id="sun-gizmo-dot" cx="14" cy="-14" r="6" fill="url(#sun-dot-grad)" style="filter:drop-shadow(0 0 4px rgba(255,200,100,.55));cursor:grab"/>
+          </svg>
+        </div>
+      </div>
       <!-- FPS / renderer stats overlay (top-right under the toolbar). Each
            overlay is hidden until its toggle in Display settings is on. -->
       <div class="vpc tl" id="vp-perf" style="top:auto;bottom:80px;left:14px;display:flex;flex-direction:column;gap:4px;pointer-events:none">
@@ -1930,7 +1976,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-fog-controls"></script>
+<script type="module" src="app-v2.js?v=2026050707-hdri-sungizmo"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

@@ -30,6 +30,9 @@ const state = {
   highlightSmall: true, autoRotate: false, bgMode: 'dark', fog: true,
   fogNear: null, fogFar: null,     // null = auto-tune from model footprint
   fogIntensity: 1,                 // multiplier on fog falloff range
+  hdriRotation: Math.PI * 0.25,    // radians around scene up (Z) for HDRI bg/env
+  _customHdri: null,               // optional user-loaded equirect → PMREM cubemap
+  _customHdriName: null,
   // ── Pro-mode scene settings (driven by the Display/Scene/Camera/Lighting
   // /Grid sections of the viewport settings popup) ───────────────────────
   displayUnit: 'mm',          // 'mm' | 'cm' | 'm' | 'in' | 'ft' | 'none'
@@ -2645,11 +2648,108 @@ function setBackground(mode) {
     scene.background = tex;
     renderer.setClearColor(0xdedede, 1);
   }
+  else if (mode === 'hdri') {
+    // HDRI environment: same texture drives both the visible background AND
+    // the PBR light/reflection model on every material. We default to the
+    // RoomEnvironment-derived PMREM cubemap (built-in studio); a custom
+    // .hdr / .exr can be plugged in via the file picker in the Display
+    // section. Loading is async so the rest of the scene doesn't stall.
+    _ensureHdriEnvironment();
+    renderer.setClearColor(0x0a0d12, 1);
+  }
+  // Sun gizmo + HDRI controls only appear in 'hdri' mode.
+  _toggleHdriUI(mode === 'hdri');
   // Re-apply fog so its colour tracks the new background — without this
   // the fog stays whatever colour the previous bg implied, leaving an
   // off-tint horizon when the user switches preset.
   if (state.fog) _applyFog();
   requestRender();
+}
+
+// Lazy-built default environment — RoomEnvironment passed through PMREM
+// once. Cached on the renderer so consecutive 'hdri' mode toggles don't
+// re-pay the cost.
+let _defaultEnvTex = null;
+let _hdriPmrem = null;
+async function _ensureHdriEnvironment() {
+  if (state._customHdri) {
+    scene.background = state._customHdri;
+    scene.environment = state._customHdri;
+    _applyHdriRotation();
+    return;
+  }
+  if (!_defaultEnvTex) {
+    try {
+      const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
+      _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
+      const envScene = new RoomEnvironment();
+      _defaultEnvTex = _hdriPmrem.fromScene(envScene, 0.04).texture;
+      envScene.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
+    } catch (e) {
+      console.warn('[hdri] default env load failed:', e);
+      return;
+    }
+  }
+  scene.background = _defaultEnvTex;
+  scene.environment = _defaultEnvTex;
+  _applyHdriRotation();
+  requestRender();
+  const cur = document.getElementById('hdri-current');
+  if (cur) cur.textContent = 'Built-in studio';
+}
+
+// Load a user-supplied .hdr (Radiance) or .exr (OpenEXR) equirectangular
+// HDRI. JPGs/PNGs are accepted as a fallback (treated as LDR equirect).
+// On success the texture replaces scene.background + scene.environment.
+async function _loadCustomHdri(file) {
+  try {
+    const url = URL.createObjectURL(file);
+    let tex;
+    if (/\.exr$/i.test(file.name)) {
+      const { EXRLoader } = await import('three/addons/loaders/EXRLoader.js');
+      tex = await new EXRLoader().setDataType(THREE.HalfFloatType).loadAsync(url);
+    } else if (/\.hdr$/i.test(file.name)) {
+      const { RGBELoader } = await import('three/addons/loaders/RGBELoader.js');
+      tex = await new RGBELoader().setDataType(THREE.HalfFloatType).loadAsync(url);
+    } else {
+      tex = await new THREE.TextureLoader().loadAsync(url);
+    }
+    URL.revokeObjectURL(url);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    // Run through PMREM so it lights PBR materials with the correct
+    // pre-filtered roughness mips; without this, reflections are noisy.
+    _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
+    const envTex = _hdriPmrem.fromEquirectangular(tex).texture;
+    tex.dispose();
+    // Drop the previous custom HDRI to avoid GPU leaks.
+    state._customHdri?.dispose?.();
+    state._customHdri = envTex;
+    state._customHdriName = file.name;
+    if (state.bgMode === 'hdri') _ensureHdriEnvironment();
+    const cur = document.getElementById('hdri-current');
+    if (cur) cur.textContent = file.name;
+    toast('HDRI loaded', file.name, 'info', 2200);
+  } catch (e) {
+    console.error('[hdri] load failed', e);
+    toast('HDRI load failed', e?.message || String(e), 'error', 5000);
+  }
+}
+
+// Apply state.hdriRotation as a Z-axis rotation (scene up). Three.js's
+// scene.environmentRotation / backgroundRotation were added in r163;
+// guarded so older bundles silently fall back to fixed rotation.
+function _applyHdriRotation() {
+  if (!scene) return;
+  const rot = state.hdriRotation || 0;
+  if (scene.environmentRotation) scene.environmentRotation.set(0, 0, rot);
+  if (scene.backgroundRotation)  scene.backgroundRotation.set(0, 0, rot);
+}
+
+function _toggleHdriUI(on) {
+  const ctl = document.getElementById('hdri-controls');
+  if (ctl) ctl.style.display = on ? 'flex' : 'none';
+  const sun = document.getElementById('sun-gizmo-wrap');
+  if (sun) sun.style.display = on ? '' : 'none';
 }
 
 function onResize() {
@@ -10609,6 +10709,7 @@ function _collectSceneState() {
       fogNear:         state.fogNear,
       fogFar:          state.fogFar,
       fogIntensity:    state.fogIntensity,
+      hdriRotation:    state.hdriRotation,
       highlightSmall:  state.highlightSmall,
       perfMode:        state.perfMode,
     },
@@ -10834,6 +10935,10 @@ function _applySceneState(s) {
       state.fogIntensity = v.fogIntensity;
       const el = $('fog-int'); if (el) el.value = String(state.fogIntensity);
       const lbl = $('fog-int-v'); if (lbl) lbl.textContent = state.fogIntensity.toFixed(2) + '×';
+    }
+    if (typeof v.hdriRotation === 'number') {
+      state.hdriRotation = v.hdriRotation;
+      try { _applyHdriRotation(); } catch (_) {}
     }
     try { _applyFog(); } catch (_) {}
     if (typeof v.perfMode === 'string') {
@@ -11766,6 +11871,91 @@ function wireUI() {
   // Apply once at boot so the default-on fog actually attaches even
   // before the user touches the toggle.
   try { _applyFog(); _updateFogControlsEnabled(); } catch (_) {}
+
+  // ── HDRI controls + sun gizmo ─────────────────────────────────────────
+  $('hdri-load-btn')?.addEventListener('click', () => $('hdri-file')?.click());
+  $('hdri-file')?.addEventListener('change', e => {
+    const f = e.target.files?.[0];
+    if (f) _loadCustomHdri(f);
+    e.target.value = '';
+  });
+  $('hdri-default-btn')?.addEventListener('click', () => {
+    state._customHdri?.dispose?.();
+    state._customHdri = null;
+    state._customHdriName = null;
+    if (state.bgMode === 'hdri') _ensureHdriEnvironment();
+    const cur = $('hdri-current'); if (cur) cur.textContent = 'Built-in studio';
+  });
+  // Sun gizmo: drag the puck around the dome to rotate the HDRI. Top-down
+  // dome view → angle of (dx,dy) from centre = azimuth around the scene up
+  // axis (Z). Distance from centre is purely visual (closer to centre =
+  // higher elevation), used to pin the dot inside the ring; rotation only
+  // tracks azimuth because three.js's environmentRotation / background-
+  // Rotation are Eulers and elevating the env vertically doesn't make
+  // physical sense for a dome HDRI.
+  (function wireSunGizmo() {
+    const wrap = $('sun-gizmo-wrap');
+    const svg  = $('sun-gizmo-svg');
+    const dot  = $('sun-gizmo-dot');
+    if (!wrap || !svg || !dot) return;
+
+    const R_OUTER = 36;            // dome radius in SVG units
+    const R_DOT   = 22;            // visual radius the puck sits at by default
+    let dragging = false;
+
+    // Initialise the puck position from current state.hdriRotation.
+    const _placeDot = () => {
+      const rot = state.hdriRotation || 0;
+      // Map rotation: rot=0 → puck at +X (3 o'clock), rot=π/2 → +Y (12 o'clock,
+      // svg-y is up-negative so we negate). Z-up scene; the gizmo is a top-down
+      // compass so rotating the env around Z visually rotates the puck.
+      const x = Math.cos(rot) * R_DOT;
+      const y = -Math.sin(rot) * R_DOT;   // SVG y axis is inverted
+      dot.setAttribute('cx', x.toFixed(2));
+      dot.setAttribute('cy', y.toFixed(2));
+    };
+    _placeDot();
+
+    const _eventToSvg = (ev) => {
+      const rect = svg.getBoundingClientRect();
+      const px = (ev.touches?.[0]?.clientX ?? ev.clientX) - rect.left;
+      const py = (ev.touches?.[0]?.clientY ?? ev.clientY) - rect.top;
+      // SVG viewBox is -44..44 → map clientX/Y to that range.
+      return { x: (px / rect.width) * 88 - 44, y: (py / rect.height) * 88 - 44 };
+    };
+    const _setRotFromPoint = (sx, sy) => {
+      // SVG y is positive down; flip so up = +y in math.
+      const ang = Math.atan2(-sy, sx);
+      state.hdriRotation = ang;
+      _applyHdriRotation();
+      _placeDot();
+      requestRender();
+    };
+    const _onDown = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      dragging = true;
+      dot.classList.add('dragging');
+      const p = _eventToSvg(ev);
+      _setRotFromPoint(p.x, p.y);
+      window.addEventListener('pointermove', _onMove);
+      window.addEventListener('pointerup',   _onUp);
+    };
+    const _onMove = (ev) => {
+      if (!dragging) return;
+      const p = _eventToSvg(ev);
+      _setRotFromPoint(p.x, p.y);
+    };
+    const _onUp = () => {
+      dragging = false;
+      dot.classList.remove('dragging');
+      window.removeEventListener('pointermove', _onMove);
+      window.removeEventListener('pointerup',   _onUp);
+    };
+    // Both the puck and the surrounding dome accept clicks/drags so the
+    // user doesn't have to hit the small dot precisely.
+    svg.addEventListener('pointerdown', _onDown);
+  })();
   // Camera projection: hot-swap PerspectiveCamera ↔ OrthographicCamera while
   // preserving position/target/up. OrbitControls + TransformControls hold a
   // direct camera reference, so both must be re-pointed after the swap.
@@ -13509,7 +13699,7 @@ function _openMaterialEditor(info) {
       .mat-row-val .scrub-head{justify-content:flex-end}
 
       /* Spline-style color row: [label] [swatch] [hex] [pct] [tex-trigger]. */
-      .mat-row.mat-color-row{grid-template-columns:1fr minmax(0,1.6fr)}
+      .mat-row.mat-color-row{grid-template-columns:minmax(0,max-content) minmax(0,1fr)}
       .mat-row.mat-color-row .mat-row-val{gap:8px}
       .mat-row.mat-color-row .mat-row-val > *:first-child{flex:0 0 22px}
       .mat-swatch{width:22px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer;overflow:hidden;flex:0 0 22px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
@@ -13517,8 +13707,14 @@ function _openMaterialEditor(info) {
       .mat-swatch::-webkit-color-swatch{border:none;border-radius:4px}
       .mat-swatch::-moz-color-swatch{border:none;border-radius:4px}
       .mat-swatch:hover{border-color:var(--bd2)}
-      .mat-color-hex-v2{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);letter-spacing:.02em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-color-pct{font-size:10.5px;color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;flex:0 0 auto}
+      .mat-color-hex-v2{flex:0 0 auto;width:7.5ch;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);letter-spacing:.02em;text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:3px 8px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
+      .mat-color-hex-v2:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
+      .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(110,168,255,.18)}
+      .mat-color-hex-v2.invalid{border-color:var(--er);color:var(--er)}
+      .mat-color-pct{flex:0 0 44px;width:44px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:3px 8px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
+      .mat-color-pct::-webkit-outer-spin-button,.mat-color-pct::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+      .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
+      .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(110,168,255,.18)}
       .mat-row-tex.mat-row-tex-inline{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background:transparent;display:grid;place-items:center;padding:0}
       .mat-row-tex.mat-row-tex-inline::after{display:none}
       .mat-row-tex.mat-row-tex-inline svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:1.8;display:block}
@@ -13651,9 +13847,9 @@ function _openMaterialEditor(info) {
       <div class="mat-row mat-color-row">
         <span class="mat-row-label">${escapeHtml(label)}</span>
         <div class="mat-row-val">
-          <input type="color" id="${cid}" value="${hex || '#000000'}" class="mat-swatch">
-          <span class="mat-color-hex-v2" id="${cid}-hex">${hexClean}</span>
-          <span class="mat-color-pct">100%</span>
+          <button type="button" id="${cid}" class="mat-swatch" data-hex="${hex || '#000000'}" style="background:${hex || '#000000'}" title="Click to pick color"></button>
+          <input type="text" class="mat-color-hex-v2" id="${cid}-hex" value="${hexClean}" maxlength="7" spellcheck="false" autocomplete="off">
+          <input type="text" class="mat-color-pct" id="${cid}-pct" value="100%" inputmode="numeric" autocomplete="off">
           ${texBtn}
         </div>
       </div>`;
@@ -13749,7 +13945,6 @@ function _openMaterialEditor(info) {
       ${surfaceDetailSection}
       ${emissiveSection}
       ${surfaceSection}
-      ${envSection}
       ${physicalSection}
       ${sheenSection}
       ${specSection}
@@ -13778,8 +13973,8 @@ function _openMaterialEditor(info) {
       // Sheen / Specular for MeshPhysicalMaterial) reveal as the user scrolls.
       // _DraggablePopup clamps to calc(100vh-24px), so on shorter screens this
       // collapses gracefully and the scrollbar takes over.
-      width: 380, height: 860,
-      minWidth: 340, minHeight: 360,
+      width: 300, height: 860,
+      minWidth: 260, minHeight: 360,
       bodyHtml,
       bodyScroll: true,
       onClose: () => {
@@ -13844,16 +14039,73 @@ function _openMaterialEditor(info) {
   _matEditorState._previewBall.render();
 
   const _bindColor = (cid, target) => {
-    const inp = document.getElementById(cid);
+    const swatch = document.getElementById(cid);
     const hex = document.getElementById(cid + '-hex');
-    if (inp && target) {
-      inp.addEventListener('input', () => {
-        target.set(inp.value);
-        if (hex) hex.textContent = inp.value.replace(/^#/, '').toUpperCase();
-        mat.needsUpdate = true;
-        requestRender();
-        _refreshAll();
+    const pct = document.getElementById(cid + '-pct');
+    const _applyColor = (rawHex) => {
+      const h = (rawHex || '#000000').toLowerCase();
+      target.set(h);
+      if (swatch) {
+        swatch.style.background = h;
+        swatch.dataset.hex = h;
+      }
+      if (hex) {
+        hex.value = h.replace(/^#/, '').toUpperCase();
+        hex.classList.remove('invalid');
+      }
+      mat.needsUpdate = true;
+      requestRender();
+      _refreshAll();
+    };
+    if (swatch && target) {
+      // Click swatch → custom HSV picker (callback mode).
+      swatch.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const seed = '#' + target.getHexString();
+        const before = seed;
+        window._openColorPickerForCallback?.(swatch, seed, {
+          onPreview: (h) => _applyColor(h),
+          onCommit:  (h) => _applyColor(h),
+          onCancel:  ()  => _applyColor(before),
+        });
       });
+    }
+    if (hex && target) {
+      // Hex pill → color (validated). 3- or 6-char hex, optional leading #.
+      const _commitHex = () => {
+        const raw = hex.value.trim().replace(/^#/, '');
+        const m3 = /^([0-9a-fA-F]{3})$/.exec(raw);
+        const m6 = /^([0-9a-fA-F]{6})$/.exec(raw);
+        if (!m3 && !m6) { hex.classList.add('invalid'); return; }
+        const full = m6 ? m6[1] : m3[1].split('').map(c => c + c).join('');
+        _applyColor('#' + full);
+      };
+      hex.addEventListener('change', _commitHex);
+      hex.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); hex.blur(); }
+        else if (e.key === 'Escape') {
+          hex.value = target.getHexString().toUpperCase();
+          hex.classList.remove('invalid');
+          hex.blur();
+        }
+      });
+      hex.addEventListener('focus', () => hex.select());
+    }
+    if (pct) {
+      // Percentage pill — accepts "0".."100" with optional %. Cosmetic for now;
+      // future hook can route this to opacity / emissive intensity per row.
+      const _commitPct = () => {
+        const raw = pct.value.trim().replace(/%$/, '');
+        const n = parseFloat(raw);
+        const clamped = Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 100;
+        pct.value = Math.round(clamped) + '%';
+      };
+      pct.addEventListener('change', _commitPct);
+      pct.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); pct.blur(); }
+        else if (e.key === 'Escape') { pct.value = '100%'; pct.blur(); }
+      });
+      pct.addEventListener('focus', () => pct.select());
     }
   };
   _bindColor('mat-edit-color', mat.color);
@@ -22256,8 +22508,10 @@ setTimeout(() => _dndDecorateTree(), 0);
     const prev = popEl.querySelector('.cp-preview');
     if (prev) prev.style.background = hex;
     if (!opts.skipHexUpdate) hexInput.value = hex.toUpperCase();
-    // Live preview to viewport
-    if (session) {
+    // Live preview — generic-callback mode wins; otherwise per-part legacy path.
+    if (session?.callbacks) {
+      try { session.callbacks.onPreview?.(hex); } catch (_) {}
+    } else if (session) {
       const c = new THREE.Color(hex);
       for (const id of session.ids) {
         const p = getPart(id); if (!p) continue;
@@ -22311,7 +22565,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     // Clicking another swatch should re-open with new context, not close. The
     // swatch handler runs after this in bubble phase and will call _open
     // which re-seeds session — let it through without canceling.
-    if (e.target.closest('#prop-body .prop-color, #materials-body .mat-swatch')) return;
+    if (e.target.closest('#prop-body .prop-color, #materials-body .mat-swatch, #_mat-editor-popup .mat-swatch')) return;
     _cancel();
   }
   function _onKeyDown(e) {
@@ -22330,6 +22584,12 @@ setTimeout(() => _dndDecorateTree(), 0);
 
   function _cancel() {
     if (!session) { _cleanup(); return; }
+    if (session.callbacks) {
+      try { session.callbacks.onCancel?.(); } catch (_) {}
+      session = null;
+      _cleanup();
+      return;
+    }
     // Revert each part to its captured baseline
     for (const id of session.ids) {
       const p = getPart(id); if (!p) continue;
@@ -22344,6 +22604,13 @@ setTimeout(() => _dndDecorateTree(), 0);
   function _commit() {
     if (!session) { _cleanup(); return; }
     const rgb = hsvToRgb(h, s, v);
+    if (session.callbacks) {
+      const hex = rgbToHex(rgb);
+      try { session.callbacks.onCommit?.(hex); } catch (_) {}
+      session = null;
+      _cleanup();
+      return;
+    }
     const c = new THREE.Color(rgb.r, rgb.g, rgb.b);
     const items = [];
     for (const id of session.ids) {
@@ -22398,6 +22665,26 @@ setTimeout(() => _dndDecorateTree(), 0);
     const $del = $('del-sel-count'); if ($del) $del.textContent = ids.length;
     _open(swatch, ids, hex);
   });
+
+  // Generic callback-mode opener — used by the material editor swatches to
+  // route HSV picker output into mat.color / mat.emissive / etc. directly,
+  // bypassing the per-part recolor pipeline.
+  window._openColorPickerForCallback = function (anchor, seedHex, callbacks) {
+    _buildPopover();
+    session = { callbacks: callbacks || {}, anchor };
+    const rgb = hexToRgb(seedHex);
+    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    h = hsv.h; s = hsv.s; v = hsv.v;
+    popEl.classList.add('show');
+    requestAnimationFrame(() => _position(anchor));
+    _syncFromHsv();
+    setTimeout(() => {
+      document.addEventListener('click',   _onDocClick,   true);
+      document.addEventListener('keydown', _onKeyDown,    true);
+      window.addEventListener('resize',    _onWindow);
+      window.addEventListener('scroll',    _onWindow, true);
+    }, 0);
+  };
 })();
 
 
