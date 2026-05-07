@@ -4378,13 +4378,18 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
   const majorMesh = _mkMesh(posMajor, colMajor);
 
   // ── LOD: fade the minor mesh out when one minor cell drops below ~6
-  // screen pixels (i.e. zoom-out). Smooth ramp from 0 px → fully invisible
-  // to ~24 px → fully visible. Keeps the close-up "every-unit hairline"
-  // detail without making the zoomed-out view a moiré jungle. Major and
-  // axis lines aren't LOD'd — they're the meaningful reference at any zoom.
+  // screen pixels (i.e. zoom-out). Smooth ramp from 0 px → invisible to
+  // ~24 px → fully visible. Keeps the close-up "every-unit hairline" detail
+  // without making the zoomed-out view a moiré jungle. Major and axis lines
+  // aren't LOD'd — they're the meaningful reference at any zoom.
+  //
+  // The hook is attached to MAJORMESH (always visible) instead of minorMesh.
+  // If we put it on the minor mesh, hiding the mesh would also stop its
+  // onBeforeRender from firing — once minor went hidden it could never
+  // wake itself back up on zoom-in.
   const baseOpacity = minorMesh.material.opacity;
   const _camPosLen = new THREE.Vector3();
-  minorMesh.onBeforeRender = (renderer, _scene, camera) => {
+  majorMesh.onBeforeRender = (renderer, _scene, camera) => {
     let pxPerUnit;
     const canvasH = renderer.domElement?.height || renderer.domElement?.clientHeight || 1080;
     if (camera.isOrthographicCamera) {
@@ -4392,8 +4397,7 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
       const span = (camera.top - camera.bottom) / (camera.zoom || 1);
       pxPerUnit = canvasH / Math.max(span, 1e-6);
     } else {
-      // Perspective: rough but right-magnitude metric — pixel size at the
-      // distance of the grid plane's centre.
+      // Perspective: pixel size at the distance of the grid plane's centre.
       const fovRad = THREE.MathUtils.degToRad(camera.fov || 50);
       _camPosLen.copy(camera.position).sub(group.position);
       const dist = _camPosLen.length();
@@ -4403,7 +4407,9 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
     const cellPx = minorCellSize * pxPerUnit;
     const t = smoothstep(6, 24, cellPx);
     minorMesh.material.opacity = baseOpacity * t;
-    minorMesh.visible = t > 0.005;
+    // Don't toggle .visible — opacity alone is enough; with transparent:true
+    // the GPU draws zero pixels but the onBeforeRender chain stays alive on
+    // a sibling that's always rendered, so we'll see the next zoom-in.
   };
 
   const group = new THREE.Group();
