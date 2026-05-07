@@ -2358,25 +2358,35 @@ function _updateGizmoImpl() {
   const parts = ids.map(id => getPart(id))
                    .filter(p => p && !p.deleted && (p.mesh || p.instancedMesh));
   if (parts.length === 0) { _detachGizmo(); return; }
-  // If the same set is already pivoted, do nothing (avoid re-parent thrash).
+  // Resolve the target tree group ID (if any) before the sameSet check so we
+  // can detect a group switch even when the part set is identical (e.g. parent
+  // and child that share the same 13 parts — skipping re-attach would leave the
+  // pivot at the child's moved position and display the wrong parent centroid).
+  const _tgt = _transformTarget();
+  let _tgCenter;
+  let _numId2 = NaN;
+  if (_tgt && _tgt.kind === 'group') {
+    const _gid2 = [...(state.selectedGroupIds || [])][0];
+    _numId2 = _gid2 != null ? parseInt(String(_gid2), 10) : NaN;
+  }
+  // If the same set is already pivoted AND the selected group hasn't changed,
+  // do nothing (avoid re-parent thrash). Must re-attach when the group changes
+  // so the pivot re-anchors at the new group's stored origin.
   const cur = state._pivotedParts || (state._pivotedPart ? [state._pivotedPart] : []);
   const sameSet = cur.length === parts.length && cur.every(p => parts.includes(p));
-  if (sameSet) return;
+  const sameGroup = Number.isFinite(_numId2)
+    ? _numId2 === state._pivotedTreeGroupId
+    : state._pivotedTreeGroupId == null;
+  if (sameSet && sameGroup) return;
   _detachGizmo();
   // For tree group selections, anchor the gizmo at the STORED group origin
   // (not the live bbox centroid of all descendants). This keeps the gizmo
   // position stable when child sub-groups have been moved — the parent's
   // stored origin is only updated when the parent itself is explicitly moved.
-  let _tgCenter;
-  const _tgt = _transformTarget();
-  if (_tgt && _tgt.kind === 'group') {
-    const _gid2 = [...(state.selectedGroupIds || [])][0];
-    const _numId2 = _gid2 != null ? parseInt(String(_gid2), 10) : NaN;
-    if (Number.isFinite(_numId2)) {
-      _initGroupOrigins();
-      _tgCenter = _groupOrigins.get(_numId2) ?? undefined;
-      state._pivotedTreeGroupId = _numId2; // track which tree group this pivot is for
-    }
+  if (Number.isFinite(_numId2)) {
+    _initGroupOrigins();
+    _tgCenter = _groupOrigins.get(_numId2) ?? undefined;
+    state._pivotedTreeGroupId = _numId2; // track which tree group this pivot is for
   }
   _attachGizmoToParts(parts, _tgCenter);
 }
@@ -2717,10 +2727,7 @@ function tick() {
     const shouldRender = state.needsRender || state.activeFrames > 0;
     if (shouldRender && !state.renderPaused) {
       let renderErr = null;
-      try {
-        if (state.quadView) _renderQuadView();
-        else renderer.render(scene, camera);
-      }
+      try { renderer.render(scene, camera); }
       catch (e) { renderErr = e; }
       if (renderErr) {
         // Throttled diagnostics. Previously this catch was a silent no-op
@@ -3870,19 +3877,38 @@ function _defaultScreenshotName() {
 // final filename, or null if the user cancelled.
 async function _saveScreenshotBlob(blob, suggestedName) {
   if (window.showSaveFilePicker) {
+    // Split the catch into TWO phases. Once the picker dialog returns a
+    // handle, the destination file has already been created on disk —
+    // falling back to downloadBlob from here would produce a SECOND
+    // 'where to save' prompt AND leave a truncated file at the user's
+    // chosen location. That's the 'first save corrupted, second save ok'
+    // double-prompt bug.
+    let handle;
     try {
-      const handle = await window.showSaveFilePicker({
+      handle = await window.showSaveFilePicker({
         suggestedName,
         types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }],
       });
+    } catch (e) {
+      // User cancelled the picker — don't fall back, just bail.
+      if (e?.name === 'AbortError') return null;
+      // Picker itself unavailable / blocked (insecure context, iframe
+      // perms). No file was created yet, so falling back to a download
+      // is safe.
+      console.warn('[screenshot] save picker unavailable, falling back to download:', e);
+      downloadBlob(blob, suggestedName);
+      return suggestedName;
+    }
+    // Write through the handle. Failures here are surfaced to the caller
+    // — do NOT fall back, otherwise we'd double-save.
+    try {
       const w = await handle.createWritable();
       await w.write(blob);
       await w.close();
       return handle.name || suggestedName;
     } catch (e) {
-      // AbortError → user cancelled the picker; bail without a download.
-      if (e?.name === 'AbortError') return null;
-      console.warn('[screenshot] save picker failed, falling back to download:', e);
+      console.error('[screenshot] FSA write failed:', e);
+      throw new Error(`Could not write to ${handle.name || suggestedName}: ${e?.message || e}`);
     }
   }
   downloadBlob(blob, suggestedName);
@@ -5548,106 +5574,34 @@ function _setStandardView(view) {
   _stdViewActive = true;
 }
 
-// ─── Quad view ───────────────────────────────────────────────────────────
-// Splits the canvas into a 2×2 grid: top-left = current camera (interactive,
-// orbit/picking still works there); the other three are read-only ortho
-// cameras locked to Top / Front / Side and auto-fit to the model bbox each
-// frame so they stay framed regardless of zoom on the main view.
-const _quadCams = { top: null, front: null, side: null };
-
-function _ensureQuadCams() {
-  if (_quadCams.top) return;
-  const make = () => {
-    const c = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 1e7);
-    return c;
-  };
-  _quadCams.top = make();
-  _quadCams.front = make();
-  _quadCams.side = make();
-}
-
-// Frame an ortho camera around the model bbox along the given world-axis
-// direction. Reuses controls.target as the focus point so the previews
-// follow the user's pan in the main view — mirrors how Blender / Maya
-// quad views track the active orbit centre.
-function _fitQuadCam(cam, dirX, dirY, dirZ, upX, upY, upZ, vpAspect) {
+// Return to perspective + a fresh isometric framing. Companion to the
+// Top/Front/Side buttons — one click to escape ortho mode.
+function _setPerspectiveView() {
   if (!camera || !controls) return;
-  const target = controls.target;
-  // Use the model diagonal as the base extent; fall back to a sensible
-  // default before the first model loads so the quad still shows the grid.
-  const diag = state.modelDiag || 100;
-  const halfH = diag * 0.6;
-  const halfW = halfH * (vpAspect || 1);
-  cam.left = -halfW; cam.right = halfW;
-  cam.top  =  halfH; cam.bottom = -halfH;
-  cam.near = -diag * 4;
-  cam.far  =  diag * 4;
-  cam.up.set(upX, upY, upZ);
-  cam.position.copy(target).add(new THREE.Vector3(dirX, dirY, dirZ).multiplyScalar(diag * 2));
-  cam.lookAt(target);
-  cam.updateProjectionMatrix();
-}
-
-function _renderQuadView() {
-  if (!renderer || !scene || !camera) return;
-  _ensureQuadCams();
-  const cv = renderer.domElement;
-  const w = cv.width, h = cv.height;
-  const halfW = Math.floor(w / 2), halfH = Math.floor(h / 2);
-  const aspect = halfW / halfH;
-  const upAxis = (state.sceneUpAxis === 'y') ? 'y' : 'z';
-
-  // Reframe ortho cameras every frame — cheap, and keeps the previews
-  // tracking the user's pan/zoom on the main quadrant.
-  if (upAxis === 'z') {
-    _fitQuadCam(_quadCams.top,   0, 0,  1,  0, 1, 0, aspect); // top: down -Z
-    _fitQuadCam(_quadCams.front, 0,-1,  0,  0, 0, 1, aspect); // front: along +Y, Z-up
-    _fitQuadCam(_quadCams.side,  1, 0,  0,  0, 0, 1, aspect); // side: along -X, Z-up
-  } else {
-    _fitQuadCam(_quadCams.top,   0, 1,  0,  0, 0,-1, aspect); // top: down -Y
-    _fitQuadCam(_quadCams.front, 0, 0,  1,  0, 1, 0, aspect); // front: along -Z, Y-up
-    _fitQuadCam(_quadCams.side,  1, 0,  0,  0, 1, 0, aspect); // side: along -X, Y-up
+  if (state.cameraProjection !== 'persp') {
+    state.cameraProjection = 'persp';
+    _applyCameraProjection();
+    const sel = document.getElementById('cam-projection');
+    if (sel) sel.value = 'persp';
+    const fovRow = document.getElementById('cam-fov-row');
+    if (fovRow) fovRow.style.opacity = '1';
   }
-
-  // Save renderer state so the per-quadrant scissor doesn't leak into the
-  // next frame (single-camera or back-to-quad transitions both rely on
-  // scissorTest being false).
-  const oldScissorTest = renderer.getScissorTest?.() ?? false;
-  renderer.setScissorTest(true);
-
-  // Quadrant layout (origin is bottom-left in renderer coords):
-  //   TL = top-left of canvas = bottom row in WebGL Y? No — three.js
-  //   setViewport uses GL coords (origin bottom-left). So:
-  //     top row of CSS canvas  = upper Y in GL = (y = halfH .. h)
-  //     bottom row of CSS canvas = lower Y in GL = (y = 0 .. halfH)
-  //   We want CSS top-left = main camera, CSS top-right = Top ortho,
-  //   CSS bottom-left = Front ortho, CSS bottom-right = Side ortho.
-  const draw = (x, y, ww, hh, cam) => {
-    renderer.setViewport(x, y, ww, hh);
-    renderer.setScissor(x, y, ww, hh);
-    renderer.render(scene, cam);
-  };
-  draw(0,     halfH, halfW, halfH, camera);          // TL: live camera
-  draw(halfW, halfH, halfW, halfH, _quadCams.top);   // TR: Top
-  draw(0,     0,     halfW, halfH, _quadCams.front); // BL: Front
-  draw(halfW, 0,     halfW, halfH, _quadCams.side);  // BR: Side
-
-  // Restore full-canvas viewport so anything that calls renderer.render()
-  // outside this path (thumbnail capture, screenshot dialog) gets a normal
-  // single-frame render with no leftover scissor.
-  renderer.setViewport(0, 0, w, h);
-  renderer.setScissor(0, 0, w, h);
-  renderer.setScissorTest(oldScissorTest);
-}
-
-function _toggleQuadView() {
-  state.quadView = !state.quadView;
-  document.getElementById('vw-quad')?.classList.toggle('active', state.quadView);
-  document.getElementById('vp-quad-labels')?.classList.toggle('show', state.quadView);
-  // Hide pickable interactions in quad mode — picking math assumes a single
-  // viewport. Re-enabled when the user toggles back to single-view.
-  const cv = renderer?.domElement;
-  if (cv) cv.style.cursor = state.quadView ? 'default' : '';
+  // Restore CAD-standard up axis (Z-up unless the scene is glTF-style Y-up)
+  // and frame from a 3/4 isometric so the result reads as a fresh perspective
+  // rather than a relabelled ortho.
+  const upY = (state.sceneUpAxis === 'y');
+  camera.up.set(0, upY ? 1 : 0, upY ? 0 : 1);
+  const dist = camera.position.distanceTo(controls.target) || state.modelDiag * 1.5 || 100;
+  const dir = upY
+    ? new THREE.Vector3(0.7, 0.5, 0.9).normalize()
+    : new THREE.Vector3(0.7, -0.9, 0.5).normalize();
+  camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
+  camera.lookAt(controls.target);
+  controls.update();
+  for (const id of ['vw-top', 'vw-front', 'vw-side']) {
+    document.getElementById(id)?.classList.remove('active');
+  }
+  _stdViewActive = false;
   requestRender();
 }
 
@@ -11279,7 +11233,7 @@ function wireUI() {
   $('vw-top')?.addEventListener('click', () => _setStandardView('top'));
   $('vw-front')?.addEventListener('click', () => _setStandardView('front'));
   $('vw-side')?.addEventListener('click', () => _setStandardView('side'));
-  $('vw-quad')?.addEventListener('click', () => _toggleQuadView());
+  $('vw-persp')?.addEventListener('click', () => _setPerspectiveView());
   // Initialize the tree's flag-on class + viewport button to match current toggle state at load.
   document.getElementById('tree')?.classList.toggle('flag-on', !!state.highlightSmall);
   $('tg-hilite')?.classList.toggle('active', !!$('toggle-highlight')?.checked);
