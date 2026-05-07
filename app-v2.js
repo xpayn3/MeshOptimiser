@@ -2445,38 +2445,63 @@ const _gizmoHud = (() => {
     if (!before || !el || !state.pivot) return;
     const mode = state.gizmoMode;
     const snap = state._gizmoSnapOn ? '<span class="ghud-snap">SNAP</span>' : '';
+    // TransformControls.axis is set on grab and cleared on release. Possible
+    // values: 'X' | 'Y' | 'Z' (single-axis arrow / ring), 'XY' | 'XZ' | 'YZ'
+    // (planar handles), 'XYZ' / 'XYZE' (centre handle = uniform / free).
+    // We render only the channels the user is actually moving — single-axis
+    // grabs collapse the HUD to one value, planar grabs to two, centre/
+    // uniform grabs to either a distance (move) or a single multiplier.
+    const axis = state.gizmo?.axis || '';
+    const has = { x: axis.includes('X'), y: axis.includes('Y'), z: axis.includes('Z') };
+    const isUniform = (axis === 'XYZ' || axis === 'XYZE');
+    // Defensive: if no axis is reported (TransformControls between events)
+    // fall back to showing all three so the readout never goes blank.
+    if (!axis) { has.x = has.y = has.z = true; }
     let body = '';
     if (mode === 'translate') {
       _v.copy(state.pivot.position).sub(before.pos);
-      const dist = _v.length();
-      body = `<span class="ghud-mode">MOVE</span>` +
-             `<span class="ghud-x">X ${_signed(_v.x)}</span>` +
-             `<span class="ghud-y">Y ${_signed(_v.y)}</span>` +
-             `<span class="ghud-z">Z ${_signed(_v.z)}</span>` +
-             `<span style="color:var(--tx3)">·</span>` +
-             `<span style="color:var(--tx2)">${_fmt(dist)} u</span>`;
+      const parts = [];
+      if (has.x) parts.push(`<span class="ghud-x">X ${_signed(_v.x)}</span>`);
+      if (has.y) parts.push(`<span class="ghud-y">Y ${_signed(_v.y)}</span>`);
+      if (has.z) parts.push(`<span class="ghud-z">Z ${_signed(_v.z)}</span>`);
+      // For multi-axis grabs (planar / centre) tack on the total distance
+      // travelled — handy when sliding on a plane.
+      if (parts.length > 1 || isUniform) {
+        parts.push(`<span style="color:var(--tx3)">·</span>` +
+                   `<span style="color:var(--tx2)">${_fmt(_v.length())} u</span>`);
+      }
+      body = `<span class="ghud-mode">MOVE</span>` + parts.join('');
     } else if (mode === 'rotate') {
       // Δq = qNow * qBefore⁻¹  →  Euler XYZ in degrees
       _qInv.copy(before.quat).invert();
       _q.copy(state.pivot.quaternion).multiply(_qInv);
       _e.setFromQuaternion(_q, 'XYZ');
-      const rx = THREE.MathUtils.radToDeg(_e.x);
-      const ry = THREE.MathUtils.radToDeg(_e.y);
-      const rz = THREE.MathUtils.radToDeg(_e.z);
-      body = `<span class="ghud-mode">ROT</span>` +
-             `<span class="ghud-x">X ${_signed(rx, 1)}°</span>` +
-             `<span class="ghud-y">Y ${_signed(ry, 1)}°</span>` +
-             `<span class="ghud-z">Z ${_signed(rz, 1)}°</span>`;
+      const r = {
+        x: THREE.MathUtils.radToDeg(_e.x),
+        y: THREE.MathUtils.radToDeg(_e.y),
+        z: THREE.MathUtils.radToDeg(_e.z),
+      };
+      const parts = [];
+      if (has.x) parts.push(`<span class="ghud-x">X ${_signed(r.x, 1)}°</span>`);
+      if (has.y) parts.push(`<span class="ghud-y">Y ${_signed(r.y, 1)}°</span>`);
+      if (has.z) parts.push(`<span class="ghud-z">Z ${_signed(r.z, 1)}°</span>`);
+      body = `<span class="ghud-mode">ROT</span>` + parts.join('');
     } else if (mode === 'scale') {
       const sx = before.scale.x ? state.pivot.scale.x / before.scale.x : 1;
       const sy = before.scale.y ? state.pivot.scale.y / before.scale.y : 1;
       const sz = before.scale.z ? state.pivot.scale.z / before.scale.z : 1;
-      const uniform = Math.abs(sx - sy) < 1e-4 && Math.abs(sy - sz) < 1e-4;
-      body = `<span class="ghud-mode">SCALE</span>` + (uniform
-        ? `<span style="color:var(--tx)">×${_fmt(sx, 3)}</span>`
-        : `<span class="ghud-x">X ×${_fmt(sx, 3)}</span>` +
-          `<span class="ghud-y">Y ×${_fmt(sy, 3)}</span>` +
-          `<span class="ghud-z">Z ×${_fmt(sz, 3)}</span>`);
+      // Centre (uniform) handle → one multiplier; planar / single-axis →
+      // only the channels actually being scaled.
+      if (isUniform) {
+        body = `<span class="ghud-mode">SCALE</span>` +
+               `<span style="color:var(--tx)">×${_fmt(sx, 3)}</span>`;
+      } else {
+        const parts = [];
+        if (has.x) parts.push(`<span class="ghud-x">X ×${_fmt(sx, 3)}</span>`);
+        if (has.y) parts.push(`<span class="ghud-y">Y ×${_fmt(sy, 3)}</span>`);
+        if (has.z) parts.push(`<span class="ghud-z">Z ×${_fmt(sz, 3)}</span>`);
+        body = `<span class="ghud-mode">SCALE</span>` + parts.join('');
+      }
     } else {
       stop();
       return;
@@ -3439,6 +3464,37 @@ function _safeDispose(obj) {
   }
 }
 
+// Texture map slots three.js materials can carry. material.dispose() does NOT
+// dispose its textures, so a model swap leaks every user-attached map on the
+// GPU until page reload. Walked explicitly when a material drains.
+const _MAT_TEX_SLOTS = [
+  'map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap',
+  'emissiveMap', 'bumpMap', 'displacementMap', 'alphaMap', 'envMap',
+  'lightMap', 'gradientMap', 'matcap', 'specularMap',
+  'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap',
+  'sheenColorMap', 'sheenRoughnessMap',
+  'transmissionMap', 'thicknessMap',
+  'specularIntensityMap', 'specularColorMap',
+  'iridescenceMap', 'iridescenceThicknessMap',
+  'anisotropyMap',
+];
+function _disposeMaterialTextures(mat) {
+  if (!mat) return;
+  for (const slot of _MAT_TEX_SLOTS) {
+    const tex = mat[slot];
+    if (!tex) continue;
+    // Blob URLs created by the material editor's _loadTexture live on
+    // tex.userData.dataUrl — revoke before dispose or they leak in memory.
+    const blobUrl = tex.userData?.dataUrl;
+    if (blobUrl && typeof blobUrl === 'string' && blobUrl.startsWith('blob:')) {
+      try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+      tex.userData.dataUrl = null;
+    }
+    _safeDispose(tex);
+    mat[slot] = null;
+  }
+}
+
 // Drain the deferred-dispose queue. Called after the new model has rendered
 // at least once, so the WebGPU backend has settled and old buffers can be
 // safely destroyed without racing in-flight commands.
@@ -3457,6 +3513,9 @@ async function _drainDisposeQueue() {
     if (item.kind === 'geom') {
       _disposeEdgesFor(item.obj);
       if (item.obj.boundsTree) { try { item.obj.disposeBoundsTree?.(); } catch (_) {} }
+      _safeDispose(item.obj);
+    } else if (item.kind === 'mat') {
+      _disposeMaterialTextures(item.obj);
       _safeDispose(item.obj);
     } else {
       _safeDispose(item.obj);
@@ -4062,6 +4121,11 @@ const _tfTmpVec2 = new THREE.Vector3();
 const _tfTmpEuler = new THREE.Euler();
 const _tfTmpQuat = new THREE.Quaternion();
 const _tfTmpBox = new THREE.Box3();
+// Cache: parent group's bbox centroid for local-position display in nested groups.
+// Recomputed when the selected group id changes, not every frame.
+const _tfParentCentroid = new THREE.Vector3();
+let _tfParentCentroidForChild = null; // child group id the cache was built for
+let _tfHasParentCentroid = false;
 
 // Compute the size in a frame where obj's WORLD rotation is stripped,
 // so rotating the object (or any ancestor — like the gizmo pivot)
@@ -4166,15 +4230,51 @@ function _transformPanelRefresh() {
         state._pivotOrigParent.updateWorldMatrix(true, false);
         state._pivotOrigParent.worldToLocal(_tfTmpVec);
       }
-    } else if (target.kind === 'group' && state.pivot && state._pivotedParts?.length) {
-      // Tree group with active gizmo: hn.obj3d is NOT reparented under pivot (only
-      // its child meshes are), so usingWorld=false above. Show pivot world position —
-      // the bbox centroid of the selection — so the panel tracks where content is.
-      state.pivot.getWorldPosition(_tfTmpVec);
+    } else if (target.kind === 'group') {
+      // Tree group: position = own bbox centroid - parent group's bbox centroid.
+      // Always computed from parts world positions — pivot is used as a fast proxy
+      // when the gizmo is active (avoids bbox recompute every frame); falls back to
+      // direct bbox computation so the value is never wrong due to gizmo timing.
+      const _selGid = state.selectedGroupIds ? [...state.selectedGroupIds][0] : null;
+      const _selNumId = _selGid != null ? parseInt(String(_selGid), 10) : NaN;
+      if (state.pivot && state._pivotedParts?.length) {
+        state.pivot.getWorldPosition(_tfTmpVec);
+      } else if (Number.isFinite(_selNumId)) {
+        const _cBox = new THREE.Box3(), _cBox2 = new THREE.Box3();
+        for (const id of _treeGroupDescendants(_selNumId)) {
+          const p = getPart(id);
+          if (!p?.mesh) continue;
+          p.mesh.updateWorldMatrix(true, false);
+          _cBox2.setFromObject(p.mesh);
+          if (!_cBox2.isEmpty()) _cBox.union(_cBox2);
+        }
+        if (!_cBox.isEmpty()) _cBox.getCenter(_tfTmpVec);
+        else _tfTmpVec.set(0, 0, 0);
+      } else {
+        _tfTmpVec.set(0, 0, 0);
+      }
+      // Parent centroid cache: keyed by child group id, recomputed on selection change.
+      if (Number.isFinite(_selNumId) && _tfParentCentroidForChild !== _selNumId) {
+        _tfParentCentroidForChild = _selNumId;
+        _tfHasParentCentroid = false;
+        const _thisNode = state.treeNodes?.find(n => n.kind === 'group' && n.id === _selNumId);
+        const _parentId = _thisNode?.parentId;
+        if (_parentId != null) {
+          const _pBox = new THREE.Box3(), _pBox2 = new THREE.Box3();
+          for (const id of _treeGroupDescendants(_parentId)) {
+            const p = getPart(id);
+            if (!p?.mesh) continue;
+            p.mesh.updateWorldMatrix(true, false);
+            _pBox2.setFromObject(p.mesh);
+            if (!_pBox2.isEmpty()) _pBox.union(_pBox2);
+          }
+          if (!_pBox.isEmpty()) { _pBox.getCenter(_tfParentCentroid); _tfHasParentCentroid = true; }
+        }
+      }
+      if (_tfHasParentCentroid) _tfTmpVec.sub(_tfParentCentroid);
     } else {
-      // user-group without gizmo  → ug.ref.position (partsRoot-local / world)
-      // tree group without gizmo  → obj.position (0,0,0 for imported GLTF groups)
-      // part without gizmo        → obj.position (world, since parent = partsRoot)
+      // user-group without gizmo → ug.ref.position
+      // part without gizmo       → obj.position (world, parent = partsRoot)
       _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
     }
     if (Number.isFinite(_tfTmpVec.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(_tfTmpVec.x);
@@ -4277,7 +4377,12 @@ function _wireTransformPanel() {
           // Value is in parent-local frame. When an original parent is tracked
           // (e.g. part inside a user group), compute the delta in world space
           // so the pivot (which lives in scene/partsRoot space) moves correctly.
-          if (state._pivotOrigParent) {
+          if (state._pivotOrigParent && target.kind !== 'group') {
+            // Parts / user-groups reparented under pivot: compute world-space delta
+            // from the obj's current world position and add to pivot. Only valid when
+            // obj itself is a real scene node (part mesh or ug.ref) — NOT for tree
+            // groups, where obj = hn.obj3d is always at world origin and gives a
+            // nonsense delta.
             obj.updateWorldMatrix(true, false);
             state._pivotOrigParent.updateWorldMatrix(true, false);
             const _wOld = new THREE.Vector3();
@@ -4289,9 +4394,16 @@ function _wireTransformPanel() {
             const _wNew = state._pivotOrigParent.localToWorld(_lPos.clone());
             state.pivot.position.add(_wNew.sub(_wOld));
           } else {
-            if (axis === 'px') state.pivot.position.x = v;
-            if (axis === 'py') state.pivot.position.y = v;
-            if (axis === 'pz') state.pivot.position.z = v;
+            // Display = pivot.worldPos - parentCentroid, so to write display value v:
+            // set pivot.worldPos = v + parentCentroid. User-groups reach this path only
+            // when _pivotOrigParent is unset and usingWorld is true — for them
+            // _tfHasParentCentroid is false (only set for tree groups), so offset = 0.
+            const _pcX = target.kind === 'group' && _tfHasParentCentroid ? _tfParentCentroid.x : 0;
+            const _pcY = target.kind === 'group' && _tfHasParentCentroid ? _tfParentCentroid.y : 0;
+            const _pcZ = target.kind === 'group' && _tfHasParentCentroid ? _tfParentCentroid.z : 0;
+            if (axis === 'px') state.pivot.position.x = v + _pcX;
+            if (axis === 'py') state.pivot.position.y = v + _pcY;
+            if (axis === 'pz') state.pivot.position.z = v + _pcZ;
           }
           state.pivot.updateMatrixWorld(true);
         } else if (isGroup) {
@@ -4354,7 +4466,16 @@ function _wireTransformPanel() {
       // separate pivot, but our app needs an explicit refresh. This also
       // prevents a follow-up gizmo scale on a rotated object from skewing
       // through a stale pivot orientation.
-      if (state._pivotedPart || state._pivotedGroup) {
+      //
+      // Tree groups: NEVER detach+reattach after a panel write. The pivot IS the
+      // bbox centre — after moving it, parts follow automatically (they're under it),
+      // so no re-centering is needed. More critically, _updateGizmoImpl reads
+      // state.selected to find parts, but for tree-group selections that set is
+      // unreliable (may contain only a placeholder ID), so it calls _detachGizmo()
+      // instead of reattaching, permanently killing the gizmo for the session.
+      // For non-tree selections (parts / user-groups) still detach+reattach so the
+      // pivot re-centres at the new bbox after translation.
+      if (target.kind !== 'group' && (state._pivotedPart || state._pivotedGroup)) {
         try { _detachGizmo(); updateGizmo?.(); } catch (_) {}
       }
       // Refresh per-part _exactWorld for any selected part whose mesh
