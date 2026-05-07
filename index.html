@@ -534,13 +534,19 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Compact .btn variant for the right sidebar — matches the .split-preset
    segmented control height (~28px) so all sidebar buttons read at the same
    visual weight. */
-#sidebar-right .btn{padding:6px 10px;font-size:11px;border-radius:6px;gap:6px;min-height:30px}
+#sidebar-right .btn{padding:6px 10px;font-size:11px;border-radius:6px;gap:6px;min-height:30px;font-weight:400}
 #sidebar-right .btn svg{width:13px;height:13px}
 #sidebar-right .btn-row{gap:5px}
 .btn.danger{color:var(--er)}
 .btn.danger:hover{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
 .btn.warn{color:var(--wn)}
 .btn.warn:hover{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25)}
+/* Right sidebar override — readability beats hue-coding here. The yellow
+   hover background still flags the button as a lossy/destructive op, but
+   the resting label is white so a column of warn buttons doesn't read
+   as a wall of yellow against the dark panel. */
+#sidebar-right .btn.warn,
+#sidebar-right .btn-caret.warn{color:var(--tx)}
 .btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .btn-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
@@ -834,7 +840,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .modal-bg{position:fixed;inset:0;background:rgba(6,8,12,.55);backdrop-filter:blur(10px) saturate(140%);-webkit-backdrop-filter:blur(10px) saturate(140%);display:grid;place-items:center;z-index:200;opacity:0;pointer-events:none;transition:opacity 180ms var(--ease-out)}
 #cmdk-modal{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none}
 .modal-bg.show{opacity:1;pointer-events:auto}
-.modal{background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-xl);width:420px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform 220ms var(--ease-out),opacity 180ms var(--ease-out)}
+.modal{background:var(--bg1);border:0;border-radius:var(--r-xl);width:420px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform 220ms var(--ease-out),opacity 180ms var(--ease-out)}
 .modal-bg.show .modal{transform:translateY(0) scale(1);opacity:1}
 .modal-h{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
 .modal-h h3{font-size:var(--fs-xl);font-weight:600}
@@ -1917,7 +1923,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-fsa-3phase"></script>
+<script type="module" src="app-v2.js?v=2026050707-infinite-grid"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

@@ -1784,10 +1784,7 @@ function initScene() {
     }
     requestAnimationFrame(tick);
   })();
-  gridHelper = new THREE.GridHelper(200, 40, 0x3a4358, 0x232938);
-  gridHelper.rotation.x = Math.PI / 2;
-  gridHelper.material.transparent = true;
-  gridHelper.material.opacity = 0.45;
+  gridHelper = _makeInfiniteGrid();
   scene.add(gridHelper);
   axesHelper = new THREE.AxesHelper(8); scene.add(axesHelper);
   state.partsRoot = new THREE.Group(); state.partsRoot.name = '_partsRoot'; scene.add(state.partsRoot);
@@ -2110,7 +2107,7 @@ function _findSelectionUserGroup() {
   return null;
 }
 
-function _attachGizmoToParts(parts, centerOverride) {
+function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   if (!state.gizmo || !state.pivot) return;
   // Promote any selected-but-instanced parts so they CAN be moved by the
   // gizmo. Without this they'd silently be filtered out below and the user
@@ -2237,7 +2234,12 @@ function _attachGizmoToParts(parts, centerOverride) {
   state.pivot.scale.set(1, 1, 1);
   state.pivot.updateMatrixWorld();
   state.pivot.position.copy(center);
-  if (parts.length === 1) {
+  if (quatOverride) {
+    // Restore the stored quaternion for this group so its rotation is preserved
+    // across selection changes. Parts are attached after this, so they get the
+    // correct local-to-pivot matrix from the start.
+    state.pivot.quaternion.copy(quatOverride);
+  } else if (parts.length === 1) {
     parts[0].mesh.updateWorldMatrix(true, false);
     const _qWorld = new THREE.Quaternion();
     parts[0].mesh.getWorldQuaternion(_qWorld);
@@ -2388,7 +2390,8 @@ function _updateGizmoImpl() {
     _tgCenter = _groupOrigins.get(_numId2) ?? undefined;
     state._pivotedTreeGroupId = _numId2; // track which tree group this pivot is for
   }
-  _attachGizmoToParts(parts, _tgCenter);
+  const _tgQuat = Number.isFinite(_numId2) ? _groupRotations.get(_numId2) : undefined;
+  _attachGizmoToParts(parts, _tgCenter, _tgQuat);
 }
 
 function setGizmoMode(mode) {
@@ -3575,7 +3578,8 @@ async function _drainDisposeQueue() {
 
 function clearModel() {
   _detachGizmo();
-  _groupOrigins.clear();  // reset stored group origins for new model
+  _groupOrigins.clear();   // reset stored group origins for new model
+  _groupRotations.clear(); // reset stored group rotations for new model
 
   // ── Force-reset interaction state ──────────────────────────────────────
   // If the user opens a new file mid-gesture (gizmo drag, marquee drag,
@@ -4287,43 +4291,117 @@ function fitToView() {
   requestRender();
 }
 
-// Rebuild gridHelper at a size proportional to the model. Snaps to a "nice"
-// power-of-10 dimension and centers the grid under the model's XY footprint
-// at z = bbox.min.z so it reads as a floor.
+// Infinite floor grid — one huge XY plane with a fragment shader that
+// computes lines from each fragment's world XY. Two scales (minor + major)
+// tile forever; the world X=0 line is red (X axis), Y=0 is green (Y axis);
+// every other line is a thin light-grey hairline. Distance fade kills
+// horizon moiré, grazing-angle fade kills horizon streaks.
+function _makeInfiniteGrid(opts = {}) {
+  const PLANE_SIZE = opts.size || 1e5;
+  const minor      = opts.minor || 1.0;
+  const major      = opts.major || 10.0;
+  const fadeStart  = opts.fadeStart || 200;
+  const fadeEnd    = opts.fadeEnd   || 2000;
+
+  const geom = new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE, 1, 1);
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: {
+      uMinor:      { value: minor },
+      uMajor:      { value: major },
+      uMinorColor: { value: new THREE.Color(0xa0a6b0) },
+      uMajorColor: { value: new THREE.Color(0xc0c6d0) },
+      uAxisX:      { value: new THREE.Color(0xff5050) },
+      uAxisY:      { value: new THREE.Color(0x40d860) },
+      uOpacity:    { value: 0.85 },
+      uFadeStart:  { value: fadeStart },
+      uFadeEnd:    { value: fadeEnd },
+    },
+    vertexShader: `
+      varying vec3 vWorld;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      varying vec3 vWorld;
+      uniform float uMinor, uMajor, uOpacity, uFadeStart, uFadeEnd;
+      uniform vec3 uMinorColor, uMajorColor, uAxisX, uAxisY;
+
+      float lineMask(vec2 p, float scale) {
+        vec2 c = p / scale;
+        vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
+        return 1.0 - min(min(g.x, g.y), 1.0);
+      }
+      float axisMask(float x) {
+        float fw = max(fwidth(x), 1e-6);
+        return 1.0 - min(abs(x) / fw, 1.0);
+      }
+
+      void main() {
+        vec2 p = vWorld.xy;
+        float minor = lineMask(p, uMinor);
+        float major = lineMask(p, uMajor);
+        float axisX = axisMask(p.y);
+        float axisY = axisMask(p.x);
+
+        vec3 col = uMinorColor;
+        col = mix(col, uMajorColor, major);
+        col = mix(col, uAxisX, axisX);
+        col = mix(col, uAxisY, axisY);
+
+        float a = max(max(minor, major), max(axisX, axisY));
+        a *= (1.0 - smoothstep(uFadeStart, uFadeEnd, length(p - cameraPosition.xy))) * uOpacity;
+
+        vec3 viewDir = normalize(cameraPosition - vWorld);
+        a *= smoothstep(0.04, 0.20, abs(viewDir.z));
+
+        if (a < 0.005) discard;
+        gl_FragColor = vec4(col, a);
+      }
+    `,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.name = '_infiniteGrid';
+  mesh.renderOrder = -1;
+  mesh.matrixAutoUpdate = false;
+  mesh.updateMatrix();
+  return mesh;
+}
+
+// Reposition the infinite grid + axes for the loaded model. The grid extends
+// forever via the shader, so we only pin its z to the model floor and tune
+// the shader's grid scale + fade distances to the footprint.
 function _fitGridToModel(box) {
   if (!gridHelper || !scene) return;
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   const footprint = Math.max(size.x, size.y, 1);
-  // Round up to next nice multiple of 10 / 100 / 1000 etc. so grid ticks land
-  // on round numbers regardless of unit (mm, cm, m, in).
-  const target = footprint * 2.5;
-  const mag = Math.pow(10, Math.floor(Math.log10(target)));
-  const gridSize = Math.ceil(target / mag) * mag;
-  // ~20 visible divisions; one cell ≈ gridSize / 20.
-  const divisions = 20;
 
-  // Replace the geometry & material on the existing helper so we keep its
-  // identity (and the toggle button's wiring just works).
-  const newGrid = new THREE.GridHelper(gridSize, divisions, 0x3a4358, 0x232938);
-  newGrid.rotation.x = Math.PI / 2;            // lie in XY plane (Z-up)
-  newGrid.position.set(center.x, center.y, box.min.z);
-  newGrid.visible = state.showGrid;
-  newGrid.material.transparent = true;
-  newGrid.material.opacity = 0.45;
-  newGrid.matrixAutoUpdate = false;
-  newGrid.updateMatrix();
+  // Pick minor/major near ~5% of the footprint, snapped to a power-of-10
+  // nice number. Below 1 unit we fall back to 1 minor / 10 major.
+  const targetMinor = Math.max(footprint * 0.05, 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(targetMinor)));
+  const minor = Math.max(1, mag);
+  const major = minor * 10;
 
-  scene.remove(gridHelper);
-  gridHelper.geometry?.dispose?.();
-  gridHelper.material?.dispose?.();
-  gridHelper = newGrid;
-  scene.add(gridHelper);
+  gridHelper.position.set(center.x, center.y, box.min.z);
+  gridHelper.matrixAutoUpdate = false;
+  gridHelper.updateMatrix();
+  if (gridHelper.material?.uniforms) {
+    gridHelper.material.uniforms.uMinor.value     = minor;
+    gridHelper.material.uniforms.uMajor.value     = major;
+    gridHelper.material.uniforms.uFadeStart.value = footprint * 4;
+    gridHelper.material.uniforms.uFadeEnd.value   = footprint * 40;
+  }
 
-  // Axes helper too — fixed-size 8 units is invisible on a 1000-mm model.
-  // Rescale to ~10% of the model footprint, sitting at the model's floor corner.
   if (axesHelper) {
-    const axLen = Math.max(footprint * 0.1, gridSize / 40);
+    const axLen = Math.max(footprint * 0.1, major / 4);
     scene.remove(axesHelper);
     axesHelper.geometry?.dispose?.();
     axesHelper.material?.dispose?.();
@@ -4615,6 +4693,9 @@ function _transformTarget() {
   if (partIds.length === 1 && groupIds.length === 0) {
     const p = (typeof getPart === 'function') ? getPart(partIds[0]) : null;
     if (p?.mesh) return { obj: p.mesh, kind: 'part', part: p };
+    // Instanced parts have no standalone mesh node yet — return them so the
+    // panel can read a position from the instance matrix (read-only until promoted).
+    if (p?.instancedMesh) return { obj: p.instancedMesh, kind: 'instance', part: p };
   }
   return null;
 }
@@ -4648,6 +4729,12 @@ let _tfHasParentCentroid = false;
 // (gizmo drag end or transform panel write). Never updated by child group moves —
 // that's the point: parent origin stays fixed when a child sub-group is dragged.
 const _groupOrigins = new Map();
+
+// Persistent group rotations: groupId (number) → THREE.Quaternion (world rotation).
+// Mirrors _groupOrigins but for orientation. Stored on gizmo drag-end and panel
+// write; restored to the pivot on re-attach so each group remembers its own rotation
+// independently of which other groups have been selected/rotated since.
+const _groupRotations = new Map();
 
 // Compute the size in a frame where obj's WORLD rotation is stripped,
 // so rotating the object (or any ancestor — like the gizmo pivot)
@@ -4749,12 +4836,20 @@ function _transformPanelRefresh() {
 
   try {
     if (usingWorld && state.pivot) {
-      // obj is reparented under pivot — show obj's OWN world position (not
-      // the pivot's bbox-center), then convert to original-parent local frame
-      // so the panel displays local coordinates relative to parent.
+      // obj is reparented under pivot — show obj's OWN world position, then
+      // convert to parent-group-relative frame so the panel displays local
+      // coordinates consistent with the static (no-pivot) read path.
       obj.updateWorldMatrix(true, false);
       obj.getWorldPosition(_tfTmpVec);
-      if (state._pivotOrigParent) {
+      if (target.kind === 'part') {
+        // Subtract parent group's stored origin to show parent-relative position.
+        const _pnWU = state.treeNodes?.find(n => n.kind === 'part' && n.partId === target.part?.partId);
+        if (_pnWU?.parentId != null) {
+          _initGroupOrigins();
+          const _pgWU = _groupOrigins.get(_pnWU.parentId);
+          if (_pgWU) _tfTmpVec.sub(_pgWU);
+        }
+      } else if (state._pivotOrigParent) {
         state._pivotOrigParent.updateWorldMatrix(true, false);
         state._pivotOrigParent.worldToLocal(_tfTmpVec);
       }
@@ -4820,9 +4915,36 @@ function _transformPanelRefresh() {
         }
       }
       if (_tfHasParentCentroid) _tfTmpVec.sub(_tfParentCentroid);
+    } else if (target.kind === 'part') {
+      // Part without active pivot: world position, then subtract parent group's
+      // stored origin so the panel shows parent-relative coordinates.
+      obj.updateWorldMatrix(true, false);
+      obj.getWorldPosition(_tfTmpVec);
+      const _pnSt = state.treeNodes?.find(n => n.kind === 'part' && n.partId === target.part?.partId);
+      if (_pnSt?.parentId != null) {
+        _initGroupOrigins();
+        const _pgSt = _groupOrigins.get(_pnSt.parentId);
+        if (_pgSt) _tfTmpVec.sub(_pgSt);
+      }
+    } else if (target.kind === 'instance') {
+      // Instanced part (not yet promoted): read world position from the
+      // instance matrix entry and subtract parent group's stored origin.
+      const _ip = target.part;
+      if (_ip?.instancedMesh && _ip.instanceIndex >= 0) {
+        const _iMat = new THREE.Matrix4();
+        _ip.instancedMesh.getMatrixAt(_ip.instanceIndex, _iMat);
+        _ip.instancedMesh.updateWorldMatrix(true, false);
+        new THREE.Matrix4().multiplyMatrices(_ip.instancedMesh.matrixWorld, _iMat)
+          .decompose(_tfTmpVec, _tfTmpQuat, _tfTmpVec2);
+        const _pnIn = state.treeNodes?.find(n => n.kind === 'part' && n.partId === _ip.partId);
+        if (_pnIn?.parentId != null) {
+          _initGroupOrigins();
+          const _pgIn = _groupOrigins.get(_pnIn.parentId);
+          if (_pgIn) _tfTmpVec.sub(_pgIn);
+        }
+      }
     } else {
-      // user-group without gizmo → ug.ref.position
-      // part without gizmo       → obj.position (world, parent = partsRoot)
+      // user-group without gizmo → ug.ref.position (partsRoot-local = world)
       _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
     }
     if (Number.isFinite(_tfTmpVec.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(_tfTmpVec.x);
@@ -4836,22 +4958,49 @@ function _transformPanelRefresh() {
   try {
     const rad2deg = (r) => r * 180 / Math.PI;
     if (target.kind === 'group' && state.pivot && state._pivotedParts?.length && _pivotForThisGroup) {
-      // Tree group with active gizmo: show the pivot's own rotation — this is exactly
-      // the rotation applied by the user in the current gizmo session (0 on fresh attach,
-      // updates live during drag). Using any part's world quaternion instead would leak
-      // per-part GLTF orientations across different hierarchy levels.
-      const r = state.pivot.rotation;
-      if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(r.x), 2);
-      if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(r.y), 2);
-      if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(r.z), 2);
-    } else if (isGroup && !usingWorld) {
-      // Group without active gizmo: show the node's own world rotation.
+      // Tree group with active gizmo: decompose the pivot's current quaternion to Euler.
+      // Reading pivot.rotation.x directly would give the same decomposition but can lag
+      // a frame behind when TransformControls sets pivot.quaternion directly during drag.
+      _tfTmpEuler.setFromQuaternion(state.pivot.quaternion, 'XYZ');
+      if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(_tfTmpEuler.x), 2);
+      if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
+      if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
+    } else if (target.kind === 'group' && !usingWorld) {
+      // Tree group without active gizmo: read from _groupRotations (stored world quaternion).
+      // obj = hn.obj3d which is always at identity — obj.getWorldQuaternion() is wrong here.
+      const _selNumIdRd = state.selectedGroupIds ? parseInt(String([...state.selectedGroupIds][0]), 10) : NaN;
+      const _storedQuatRd = Number.isFinite(_selNumIdRd) ? _groupRotations.get(_selNumIdRd) : null;
+      if (_storedQuatRd) {
+        _tfTmpEuler.setFromQuaternion(_storedQuatRd, 'XYZ');
+        if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(_tfTmpEuler.x), 2);
+        if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
+        if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
+      } else {
+        if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = '0.00';
+        if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = '0.00';
+        if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = '0.00';
+      }
+    } else if (target.kind === 'user-group' && !usingWorld) {
+      // User-group without active gizmo: ug.ref is the real container with actual rotation.
       obj.updateWorldMatrix(true, false);
       obj.getWorldQuaternion(_tfTmpQuat);
       _tfTmpEuler.setFromQuaternion(_tfTmpQuat, obj.rotation.order);
       if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(_tfTmpEuler.x), 2);
       if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
       if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
+    } else if (target.kind === 'instance') {
+      const _ip2 = target.part;
+      if (_ip2?.instancedMesh && _ip2.instanceIndex >= 0) {
+        const _iMat2 = new THREE.Matrix4();
+        _ip2.instancedMesh.getMatrixAt(_ip2.instanceIndex, _iMat2);
+        _ip2.instancedMesh.updateWorldMatrix(true, false);
+        new THREE.Matrix4().multiplyMatrices(_ip2.instancedMesh.matrixWorld, _iMat2)
+          .decompose(_tfTmpVec, _tfTmpQuat, _tfTmpVec2);
+        _tfTmpEuler.setFromQuaternion(_tfTmpQuat, 'XYZ');
+        if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(_tfTmpEuler.x), 2);
+        if (inputs.ry && document.activeElement !== inputs.ry) inputs.ry.value = _fmtNum(rad2deg(_tfTmpEuler.y), 2);
+        if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(_tfTmpEuler.z), 2);
+      }
     } else {
       const rotSource = (usingWorld && state.pivot) ? state.pivot.rotation : obj.rotation;
       if (inputs.rx && document.activeElement !== inputs.rx) inputs.rx.value = _fmtNum(rad2deg(rotSource.x), 2);
@@ -4859,6 +5008,13 @@ function _transformPanelRefresh() {
       if (inputs.rz && document.activeElement !== inputs.rz) inputs.rz.value = _fmtNum(rad2deg(rotSource.z), 2);
     }
   } catch (_) {}
+
+  // Instances are read-only in the panel until promoted via gizmo activation.
+  if (target.kind === 'instance') {
+    ['px','py','pz','rx','ry','rz','sx','sy','sz'].forEach(k => { if (inputs[k]) inputs[k].disabled = true; });
+    document.querySelectorAll('#tform-grid .tform-num').forEach(n => n.classList.add('disabled'));
+    document.querySelectorAll('#tform-grid .tform-step').forEach(b => { b.disabled = true; });
+  }
 
   // Size (parts) / Scale (groups): parts show stable bbox dimensions in the
   // object's own local frame; groups show the group container's scale factor
@@ -4881,6 +5037,20 @@ function _transformPanelRefresh() {
       if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(sc.x, 3);
       if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(sc.y, 3);
       if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(sc.z, 3);
+    } else if (target.kind === 'instance') {
+      // Scale from instance matrix (already decomposed into _tfTmpVec2 above).
+      // Re-decompose here since the size block runs after rotation.
+      const _ip3 = target.part;
+      if (_ip3?.instancedMesh && _ip3.instanceIndex >= 0) {
+        const _iMat3 = new THREE.Matrix4();
+        _ip3.instancedMesh.getMatrixAt(_ip3.instanceIndex, _iMat3);
+        _ip3.instancedMesh.updateWorldMatrix(true, false);
+        new THREE.Matrix4().multiplyMatrices(_ip3.instancedMesh.matrixWorld, _iMat3)
+          .decompose(_tfTmpVec, _tfTmpQuat, _tfTmpVec2);
+        if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(Math.abs(_tfTmpVec2.x));
+        if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(Math.abs(_tfTmpVec2.y));
+        if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(Math.abs(_tfTmpVec2.z));
+      }
     } else if (isDragging && !isScaleDrag) {
       // Translate/rotate drag: size unchanged, leave the previous values.
     } else {
@@ -4950,9 +5120,14 @@ function _wireTransformPanel() {
             const _wOld = new THREE.Vector3();
             obj.getWorldPosition(_wOld);
             const _lPos = state._pivotOrigParent.worldToLocal(_wOld.clone());
-            if (axis === 'px') _lPos.x = v;
-            if (axis === 'py') _lPos.y = v;
-            if (axis === 'pz') _lPos.z = v;
+            // v is parent-group-relative; _lPos is in partsRoot frame (= world).
+            // World target = v + parent_group_origin.
+            const _pnWr = state.treeNodes?.find(n => n.kind === 'part' && n.partId === target.part?.partId);
+            if (_pnWr?.parentId != null) _initGroupOrigins();
+            const _pgWr = _pnWr?.parentId != null ? _groupOrigins.get(_pnWr.parentId) : null;
+            if (axis === 'px') _lPos.x = v + (_pgWr?.x || 0);
+            if (axis === 'py') _lPos.y = v + (_pgWr?.y || 0);
+            if (axis === 'pz') _lPos.z = v + (_pgWr?.z || 0);
             const _wNew = state._pivotOrigParent.localToWorld(_lPos.clone());
             state.pivot.position.add(_wNew.sub(_wOld));
           } else {
@@ -4977,7 +5152,19 @@ function _wireTransformPanel() {
           obj.position.x = axis === 'px' ? v : obj.position.x;
           obj.position.y = axis === 'py' ? v : obj.position.y;
           obj.position.z = axis === 'pz' ? v : obj.position.z;
+        } else if (target.kind === 'instance') {
+          // Instance inputs are disabled; nothing to write. Bail cleanly.
+          _transformPanelRefresh(); return;
+        } else if (target.kind === 'part') {
+          // v is parent-group-relative; obj.position is world (partsRoot-local = world).
+          const _pnNP = state.treeNodes?.find(n => n.kind === 'part' && n.partId === target.part?.partId);
+          if (_pnNP?.parentId != null) _initGroupOrigins();
+          const _pgNP = _pnNP?.parentId != null ? _groupOrigins.get(_pnNP.parentId) : null;
+          if (axis === 'px') obj.position.x = v + (_pgNP?.x || 0);
+          if (axis === 'py') obj.position.y = v + (_pgNP?.y || 0);
+          if (axis === 'pz') obj.position.z = v + (_pgNP?.z || 0);
         } else {
+          // user-group without pivot: write to ug.ref.position directly
           if (axis === 'px') obj.position.x = v;
           if (axis === 'py') obj.position.y = v;
           if (axis === 'pz') obj.position.z = v;
@@ -4990,6 +5177,13 @@ function _wireTransformPanel() {
           if (axis === 'ry') state.pivot.rotation.y = rad;
           if (axis === 'rz') state.pivot.rotation.z = rad;
           state.pivot.updateMatrixWorld(true);
+          // Persist the typed rotation into _groupRotations so the value survives
+          // deselection and re-selection of this tree group.
+          if (target.kind === 'group') {
+            const _selGidRw = [...(state.selectedGroupIds || [])][0];
+            const _selNumRw = parseInt(String(_selGidRw), 10);
+            if (Number.isFinite(_selNumRw)) _groupRotations.set(_selNumRw, state.pivot.quaternion.clone());
+          }
         } else {
           if (axis === 'rx') obj.rotation.x = rad;
           if (axis === 'ry') obj.rotation.y = rad;
@@ -6008,16 +6202,26 @@ function _treeGroupDescendants(groupId) {
 function _initGroupOrigins() {
   if (!state.treeNodes?.length) return;
   const box = new THREE.Box3(), box2 = new THREE.Box3();
+  const _iMat0 = new THREE.Matrix4();
   for (const n of state.treeNodes) {
     if (n.kind !== 'group') continue;
     if (_groupOrigins.has(n.id)) continue;
     box.makeEmpty();
     for (const id of _treeGroupDescendants(n.id)) {
       const p = getPart(id);
-      if (!p?.mesh) continue;
-      p.mesh.updateWorldMatrix(true, false);
-      box2.setFromObject(p.mesh);
-      if (!box2.isEmpty()) box.union(box2);
+      if (!p) continue;
+      if (p.mesh) {
+        p.mesh.updateWorldMatrix(true, false);
+        box2.setFromObject(p.mesh);
+        if (!box2.isEmpty()) box.union(box2);
+      } else if (p.instancedMesh && p.instanceIndex >= 0) {
+        // Include instanced parts: extract world position from instance matrix.
+        p.instancedMesh.getMatrixAt(p.instanceIndex, _iMat0);
+        p.instancedMesh.updateWorldMatrix(true, false);
+        const _wPos = new THREE.Vector3().setFromMatrixPosition(
+          new THREE.Matrix4().multiplyMatrices(p.instancedMesh.matrixWorld, _iMat0));
+        box.expandByPoint(_wPos);
+      }
     }
     if (!box.isEmpty()) _groupOrigins.set(n.id, box.getCenter(new THREE.Vector3()));
   }
@@ -6034,7 +6238,26 @@ function _updateTreeGroupOrigin() {
   if (!tgt || tgt.kind !== 'group') return;
   const newPos = new THREE.Vector3();
   state.pivot.getWorldPosition(newPos);
+  // Store the new pivot world position and rotation for this group.
   _groupOrigins.set(numId, newPos);
+  _groupRotations.set(numId, state.pivot.quaternion.clone());
+  // Invalidate all descendant group origins so they are recomputed from
+  // current part positions on next access. This handles both translation
+  // (where delta-propagation would also work) and rotation (where orbiting
+  // parts shift the descendant bbox centroids — delta-propagation gives ~0
+  // for pure rotation and leaves stale values that corrupt position display).
+  const all = state.treeNodes;
+  if (all) {
+    const startIdx = all.findIndex(n => n.id === numId);
+    if (startIdx !== -1) {
+      const groupDepth = all[startIdx].depth;
+      for (let i = startIdx + 1; i < all.length; i++) {
+        if (all[i].depth <= groupDepth) break;
+        if (all[i].kind !== 'group') continue;
+        _groupOrigins.delete(all[i].id);
+      }
+    }
+  }
   // Invalidate parent-centroid cache so next display re-reads from _groupOrigins.
   _tfParentCentroidForChild = null;
 }
@@ -12953,7 +13176,7 @@ function _openMaterialEditor(info) {
          hits the calc(100vh - 24px) viewport cap. Trade-off: vertical
          drag-resize on the corner handles is suppressed for this popup;
          users normally don't resize a properties panel anyway. */
-      #_mat-editor-popup .dlg-pop{background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);height:auto !important;max-height:calc(100vh - 24px)}
+      #_mat-editor-popup .dlg-pop{background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);height:auto !important;max-height:calc(100vh - 24px)}
       #_mat-editor-popup .dlg-pop:has(.dlg-resize.nw:hover),
       #_mat-editor-popup .dlg-pop:has(.dlg-resize.ne:hover),
       #_mat-editor-popup .dlg-pop:has(.dlg-resize.sw:hover),
@@ -19366,7 +19589,7 @@ const _DraggablePopup = (() => {
         position:absolute;
         max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);
         background:linear-gradient(180deg,#1a1f2a,#10141c);
-        border:1px solid rgba(255,255,255,.04);
+        border:0;
         border-radius:14px;
         box-shadow:0 30px 80px -16px rgba(0,0,0,.7),0 8px 24px -8px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);
         display:flex;flex-direction:column;
