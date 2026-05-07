@@ -7801,6 +7801,18 @@ function refreshPropertiesPanel() {
       <span class="prop-icon"><i data-lucide="percent"></i></span><span class="prop-label">% of model</span><strong class="prop-value">${pct}</strong>
       <span class="prop-icon"><i data-lucide="package"></i></span><span class="prop-label">Volume</span><strong class="prop-value">${vol}</strong>
     </div>`;
+  // Append the C4D-style Shape-parameters panel when the active selection
+  // is a single primitive part. Sliders rebuild the geometry live.
+  if (ids.length === 1) {
+    const _selPart = getPart(ids[0]);
+    if (_selPart?.isPrimitive) {
+      const html = _renderPrimitiveSection(_selPart);
+      if (html) {
+        el.insertAdjacentHTML('beforeend', html);
+        _wirePrimitiveSliders(el, _selPart);
+      }
+    }
+  }
   // Wire the material edit button — opens the same per-material editor used
   // from the materials panel. The "rename" action button + dblclick on the
   // name span both enter inline rename mode (same UX as the tree).
@@ -12786,18 +12798,104 @@ function _disposeAllBVHs() {
 // a material, exported alongside the loaded model. Sized relative to the
 // current model footprint (or 100 units when the scene is empty) so the
 // new shape is immediately visible at any zoom.
-function _primitiveGeometry(kind) {
+// Parameter schemas — drive both the default geometry on add and the
+// shape-parameters panel that pops in the right-side props sidebar when
+// a primitive is selected. `s` is the per-primitive base size (defaults
+// to ~25% of model footprint or 100 if empty), used to scale the size-
+// like params so the new shape lands at a sensible visible scale.
+function _primitiveDefaultParams(kind, s) {
   switch (kind) {
-    case 'cube':         return new THREE.BoxGeometry(1, 1, 1, 2, 2, 2);
-    case 'sphere':       return new THREE.SphereGeometry(0.5, 48, 32);
-    case 'cylinder':     return new THREE.CylinderGeometry(0.5, 0.5, 1, 48, 1, false);
-    case 'cone':         return new THREE.ConeGeometry(0.5, 1, 48, 1);
-    case 'torus':        return new THREE.TorusGeometry(0.4, 0.15, 24, 64);
-    case 'torusknot':    return new THREE.TorusKnotGeometry(0.35, 0.12, 100, 16);
-    case 'plane':        return new THREE.PlaneGeometry(1, 1, 1, 1);
-    case 'capsule':      return new THREE.CapsuleGeometry(0.3, 0.6, 12, 24);
-    case 'icosahedron':  return new THREE.IcosahedronGeometry(0.5, 0);
-    case 'dodecahedron': return new THREE.DodecahedronGeometry(0.5, 0);
+    case 'cube':         return { width: s,         height: s,         depth: s,        wseg: 1, hseg: 1, dseg: 1 };
+    case 'sphere':       return { radius: s * 0.5,  wseg: 48,          hseg: 32 };
+    case 'cylinder':     return { radTop: s * 0.5,  radBot: s * 0.5,   height: s,       segs: 48,  open: false };
+    case 'cone':         return { radius: s * 0.5,  height: s,         segs: 48 };
+    case 'torus':        return { radius: s * 0.4,  tube: s * 0.15,    radSegs: 24,     tubSegs: 64 };
+    case 'torusknot':    return { radius: s * 0.35, tube: s * 0.12,    tubSegs: 100,    radSegs: 16, p: 2, q: 3 };
+    case 'plane':        return { width: s,         height: s,         wseg: 1,         hseg: 1 };
+    case 'capsule':      return { radius: s * 0.3,  length: s * 0.6,   capSegs: 12,     radSegs: 24 };
+    case 'icosahedron':  return { radius: s * 0.5,  detail: 0 };
+    case 'dodecahedron': return { radius: s * 0.5,  detail: 0 };
+    default: throw new Error(`Unknown primitive: ${kind}`);
+  }
+}
+// Slider schema for each primitive — drives the right-panel UI. min/max
+// for size-like fields are baked at add-time relative to the default
+// (so the slider range is meaningful for the chosen scale), int fields
+// are integers (segments / detail), bool fields render as checkboxes.
+function _primitiveSchema(kind) {
+  switch (kind) {
+    case 'cube': return [
+      { id: 'width',  label: 'Width',  size: true },
+      { id: 'height', label: 'Height', size: true },
+      { id: 'depth',  label: 'Depth',  size: true },
+      { id: 'wseg', label: 'Width seg.',  int: true, min: 1, max: 32 },
+      { id: 'hseg', label: 'Height seg.', int: true, min: 1, max: 32 },
+      { id: 'dseg', label: 'Depth seg.',  int: true, min: 1, max: 32 },
+    ];
+    case 'sphere': return [
+      { id: 'radius', label: 'Radius', size: true },
+      { id: 'wseg', label: 'Width seg.',  int: true, min: 4, max: 128 },
+      { id: 'hseg', label: 'Height seg.', int: true, min: 3, max: 96 },
+    ];
+    case 'cylinder': return [
+      { id: 'radTop', label: 'Top radius',    size: true },
+      { id: 'radBot', label: 'Bottom radius', size: true },
+      { id: 'height', label: 'Height',        size: true },
+      { id: 'segs',   label: 'Radial seg.',   int: true, min: 3, max: 128 },
+      { id: 'open',   label: 'Open ended',    bool: true },
+    ];
+    case 'cone': return [
+      { id: 'radius', label: 'Radius', size: true },
+      { id: 'height', label: 'Height', size: true },
+      { id: 'segs',   label: 'Segments', int: true, min: 3, max: 128 },
+    ];
+    case 'torus': return [
+      { id: 'radius',  label: 'Radius',     size: true },
+      { id: 'tube',    label: 'Tube',       size: true },
+      { id: 'radSegs', label: 'Radial seg.',   int: true, min: 3, max: 64 },
+      { id: 'tubSegs', label: 'Tubular seg.',  int: true, min: 3, max: 256 },
+    ];
+    case 'torusknot': return [
+      { id: 'radius',  label: 'Radius',  size: true },
+      { id: 'tube',    label: 'Tube',    size: true },
+      { id: 'tubSegs', label: 'Tubular seg.', int: true, min: 3, max: 512 },
+      { id: 'radSegs', label: 'Radial seg.',  int: true, min: 3, max: 64 },
+      { id: 'p',       label: 'p',  int: true, min: 1, max: 12 },
+      { id: 'q',       label: 'q',  int: true, min: 1, max: 12 },
+    ];
+    case 'plane': return [
+      { id: 'width',  label: 'Width',  size: true },
+      { id: 'height', label: 'Height', size: true },
+      { id: 'wseg', label: 'Width seg.',  int: true, min: 1, max: 64 },
+      { id: 'hseg', label: 'Height seg.', int: true, min: 1, max: 64 },
+    ];
+    case 'capsule': return [
+      { id: 'radius', label: 'Radius', size: true },
+      { id: 'length', label: 'Length', size: true },
+      { id: 'capSegs', label: 'Cap seg.',   int: true, min: 2, max: 32 },
+      { id: 'radSegs', label: 'Radial seg.', int: true, min: 4, max: 64 },
+    ];
+    case 'icosahedron':
+    case 'dodecahedron': return [
+      { id: 'radius', label: 'Radius', size: true },
+      { id: 'detail', label: 'Detail', int: true, min: 0, max: 5 },
+    ];
+    default: return [];
+  }
+}
+function _primitiveGeometry(kind, p) {
+  // p is the params object returned by _primitiveDefaultParams.
+  switch (kind) {
+    case 'cube':         return new THREE.BoxGeometry(p.width, p.height, p.depth, p.wseg, p.hseg, p.dseg);
+    case 'sphere':       return new THREE.SphereGeometry(p.radius, p.wseg, p.hseg);
+    case 'cylinder':     return new THREE.CylinderGeometry(p.radTop, p.radBot, p.height, p.segs, 1, !!p.open);
+    case 'cone':         return new THREE.ConeGeometry(p.radius, p.height, p.segs, 1);
+    case 'torus':        return new THREE.TorusGeometry(p.radius, p.tube, p.radSegs, p.tubSegs);
+    case 'torusknot':    return new THREE.TorusKnotGeometry(p.radius, p.tube, p.tubSegs, p.radSegs, p.p, p.q);
+    case 'plane':        return new THREE.PlaneGeometry(p.width, p.height, p.wseg, p.hseg);
+    case 'capsule':      return new THREE.CapsuleGeometry(p.radius, p.length, p.capSegs, p.radSegs);
+    case 'icosahedron':  return new THREE.IcosahedronGeometry(p.radius, p.detail);
+    case 'dodecahedron': return new THREE.DodecahedronGeometry(p.radius, p.detail);
     default: throw new Error(`Unknown primitive: ${kind}`);
   }
 }
@@ -12811,26 +12909,29 @@ function _primitiveDefaultName(kind) {
 function _addPrimitive(kind) {
   if (!scene || !state.partsRoot) return;
 
-  const geom = _primitiveGeometry(kind);
-  // Three.js cylinders/cones/capsules are Y-up; the app is Z-up. Stand
-  // them on the floor instead of letting them lie on their side.
+  // Size relative to the loaded model so the new shape is visible.
+  // Empty scene → 100 units (mm-friendly).
+  const overall = new THREE.Box3();
+  state.partsRoot.traverse(o => { if (o.isMesh && o.geometry) overall.expandByObject(o); });
+  let baseSize = 100;
+  if (!overall.isEmpty()) {
+    const sz = overall.getSize(new THREE.Vector3());
+    baseSize = Math.max(sz.x, sz.y, sz.z) * 0.25 || 100;
+  }
+
+  // Build params + geometry from the schema. baseSize gets baked into
+  // size-like params so the geometry is born at the right scale (no
+  // mesh.scale trick — that confused the bbox computation downstream).
+  const params = _primitiveDefaultParams(kind, baseSize);
+  const geom = _primitiveGeometry(kind, params);
+  // Y-up shapes (cylinder, cone, capsule) → rotate so they stand on the
+  // Z-up floor.
   if (kind === 'cylinder' || kind === 'cone' || kind === 'capsule') {
     geom.rotateX(Math.PI / 2);
   }
   geom.computeBoundingBox();
   geom.computeVertexNormals();
 
-  // Size relative to the loaded model so the new shape is immediately
-  // visible. Empty scene → 100 units (mm-friendly).
-  const overall = new THREE.Box3();
-  state.partsRoot.traverse(o => { if (o.isMesh && o.geometry) overall.expandByObject(o); });
-  let scale = 100;
-  if (!overall.isEmpty()) {
-    const sz = overall.getSize(new THREE.Vector3());
-    scale = Math.max(sz.x, sz.y, sz.z) * 0.25 || 100;
-  }
-
-  // Unique name so back-to-back adds don't collide (Cube, Cube.001, ...).
   const baseName = _primitiveDefaultName(kind);
   const usedNames = new Set(state.parts.filter(p => !p.deleted).map(p => p.name));
   let name = baseName;
@@ -12840,7 +12941,6 @@ function _addPrimitive(kind) {
     name = `${baseName}.${String(n).padStart(3, '0')}`;
   }
 
-  // Cycle through a small palette so consecutive primitives stand apart.
   const palette = [0x6ea8ff, 0xa78bfa, 0x34c759, 0xfbbf24, 0xff6b6b, 0x60d394, 0xff9f43, 0xb388ff];
   const color = new THREE.Color(palette[(state.parts.length || 0) % palette.length]);
   const material = (typeof getOrCreateMaterial === 'function')
@@ -12849,14 +12949,12 @@ function _addPrimitive(kind) {
 
   const mesh = new THREE.Mesh(geom, material);
   mesh.name = name;
-  mesh.scale.set(scale, scale, scale);
-  // Drop the primitive at the model bbox centre, raised half its height
-  // so it sits on top of the floor — feels like a natural insert point.
+  // Drop at model bbox centre, raised half its height so it sits on top.
   if (!overall.isEmpty()) {
     const center = overall.getCenter(new THREE.Vector3());
-    mesh.position.set(center.x, center.y, overall.min.z + scale * 0.5);
+    mesh.position.set(center.x, center.y, overall.min.z + baseSize * 0.5);
   } else {
-    mesh.position.set(0, 0, scale * 0.5);
+    mesh.position.set(0, 0, baseSize * 0.5);
   }
   mesh.updateMatrixWorld(true);
 
@@ -12873,6 +12971,8 @@ function _addPrimitive(kind) {
     originalColor: color.clone(),
     mesh, group: null, instanceIndex: -1, instancedMesh: null,
     userExtras: {}, isPrimitive: true, primitiveKind: kind,
+    primParams: params,         // drives the shape-parameters panel below
+    primBaseSize: baseSize,     // baked-in scale of size-like params
   };
   mesh.userData.partId = partId;
   state.parts.push(partInfo);
@@ -12933,6 +13033,117 @@ function _addPrimitive(kind) {
   toast(`Added ${baseName}`, name, 'info', 2200);
   requestRender();
   return partInfo;
+}
+
+// Rebuild a primitive's geometry in place from its current params. Drops
+// the old GPU buffers, creates fresh geometry from _primitiveGeometry,
+// re-applies the Z-up rotate where needed, and updates bbox / sizeMetrics
+// so the transform panel + props panel + tree all stay in sync. Doesn't
+// move the mesh — position is preserved.
+function _rebuildPrimitiveGeometry(p) {
+  if (!p?.isPrimitive || !p.mesh) return;
+  const oldGeom = p.mesh.geometry;
+  const newGeom = _primitiveGeometry(p.primitiveKind, p.primParams);
+  if (p.primitiveKind === 'cylinder' || p.primitiveKind === 'cone' || p.primitiveKind === 'capsule') {
+    newGeom.rotateX(Math.PI / 2);
+  }
+  newGeom.computeBoundingBox();
+  newGeom.computeVertexNormals();
+  p.mesh.geometry = newGeom;
+  try { oldGeom?.dispose?.(); } catch (_) {}
+
+  // Refresh derived stats — used by the transform panel size column,
+  // the right-prop bbox row, the % of model bar, etc.
+  p.triCount  = newGeom.index ? newGeom.index.count / 3 : (newGeom.attributes.position?.count || 0) / 3;
+  p.vertCount = newGeom.attributes.position?.count || 0;
+  p.mesh.updateMatrixWorld(true);
+  p.bbox = newGeom.boundingBox.clone().applyMatrix4(p.mesh.matrixWorld);
+  const sz = p.bbox.getSize(new THREE.Vector3());
+  p.sizeMetrics = { diag: sz.length(), vol: sz.x * sz.y * sz.z, max: Math.max(sz.x, sz.y, sz.z) };
+  if (state.geomByHash) state.geomByHash.set(p.hash, newGeom);
+  requestRender();
+}
+
+// Build the Shape-parameters HTML for a primitive part. Caller injects
+// this into the right-side properties panel; _wirePrimitiveSliders binds
+// the events afterwards.
+function _renderPrimitiveSection(p) {
+  if (!p?.isPrimitive) return '';
+  const schema = _primitiveSchema(p.primitiveKind);
+  if (!schema.length) return '';
+  const cur = p.primParams;
+  const baseSize = p.primBaseSize || 100;
+  const rows = schema.map(f => {
+    const v = cur[f.id];
+    if (f.bool) {
+      return `<div class="prim-row" data-prim-field="${f.id}">
+        <label class="prim-label">${escapeHtml(f.label)}</label>
+        <label class="prim-toggle"><input type="checkbox" data-prim-input ${v ? 'checked' : ''}><span></span></label>
+      </div>`;
+    }
+    if (f.int) {
+      const min = f.min ?? 1, max = f.max ?? 64;
+      return `<div class="prim-row" data-prim-field="${f.id}">
+        <label class="prim-label">${escapeHtml(f.label)}</label>
+        <input type="range" data-prim-input min="${min}" max="${max}" step="1" value="${v}" class="prim-slider">
+        <span class="prim-value" data-prim-value>${v}</span>
+      </div>`;
+    }
+    // Size-like field: range scales with baseSize. 0.05× baseSize → 5×.
+    const min = baseSize * 0.05, max = baseSize * 5;
+    return `<div class="prim-row" data-prim-field="${f.id}">
+      <label class="prim-label">${escapeHtml(f.label)}</label>
+      <input type="range" data-prim-input min="${min.toFixed(3)}" max="${max.toFixed(3)}" step="any" value="${v}" class="prim-slider">
+      <span class="prim-value" data-prim-value>${_fmtLen(v)}</span>
+    </div>`;
+  }).join('');
+  return `
+    <div class="prop-section prim-section">
+      <div class="prop-section-title">
+        <span><i data-lucide="boxes"></i> Shape parameters</span>
+        <button type="button" class="prim-reset" title="Reset all parameters to defaults"><i data-lucide="rotate-ccw"></i></button>
+      </div>
+      ${rows}
+    </div>`;
+}
+function _wirePrimitiveSliders(rootEl, p) {
+  if (!rootEl || !p?.isPrimitive) return;
+  // Throttle: rebuild via rAF coalescing — fast slider drags would
+  // otherwise rebuild geometry on every input event (50+/s) and stall.
+  let _raf = 0;
+  const _scheduleRebuild = () => {
+    if (_raf) return;
+    _raf = requestAnimationFrame(() => {
+      _raf = 0;
+      try { _rebuildPrimitiveGeometry(p); } catch (e) { console.warn('[prim] rebuild failed:', e); }
+    });
+  };
+  rootEl.querySelectorAll('.prim-row').forEach(row => {
+    const fId = row.dataset.primField;
+    const input = row.querySelector('[data-prim-input]');
+    const valEl = row.querySelector('[data-prim-value]');
+    if (!input || !fId) return;
+    const update = () => {
+      let v;
+      if (input.type === 'checkbox') v = !!input.checked;
+      else if (input.step === '1') v = parseInt(input.value, 10);
+      else v = parseFloat(input.value);
+      if (Number.isNaN(v) && typeof v !== 'boolean') return;
+      p.primParams[fId] = v;
+      if (valEl) valEl.textContent = (typeof v === 'number')
+        ? (input.step === '1' ? String(v) : _fmtLen(v))
+        : (v ? 'on' : 'off');
+      _scheduleRebuild();
+    };
+    input.addEventListener('input', update);
+    input.addEventListener('change', update);
+  });
+  // Reset → rebuild defaults at the original baseSize and re-render.
+  rootEl.querySelector('.prim-reset')?.addEventListener('click', () => {
+    p.primParams = _primitiveDefaultParams(p.primitiveKind, p.primBaseSize || 100);
+    _rebuildPrimitiveGeometry(p);
+    refreshPropertiesPanel();
+  });
 }
 
 // Called from loadGlbFile / loadFbxFile / loadObjFile / load3mfFile /
