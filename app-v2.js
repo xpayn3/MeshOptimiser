@@ -2578,20 +2578,19 @@ function setBackground(mode) {
   }
   else if (mode === 'solid') { scene.background = new THREE.Color(0x000000); renderer.setClearColor(0x000000, 1); }
   else if (mode === 'gray') {
-    // Blender-style neutral viewport: warm mid-grey with a subtle vertical
-    // falloff from slightly lighter at the top to a touch darker at the
-    // bottom. Reads as a flat studio backdrop without the "looking up at
-    // the sky" cool tint of the dark/grad presets — keeps the model's own
-    // colours honest, which is the whole reason you'd pick a neutral grey.
+    // Blender-style neutral viewport — bumped lighter overall (was 4a/3a/2c).
+    // Now sits in mid-grey territory so models read against a brighter
+    // studio backdrop without going full white. Still keeps the subtle
+    // top-to-bottom falloff so it isn't a flat slab.
     const tex = _makeBgTexture((ctx, w, h) => {
       const lg = ctx.createLinearGradient(0, 0, 0, h);
-      lg.addColorStop(0,    '#4a4a4a');   // slightly lifted top
-      lg.addColorStop(0.55, '#3a3a3a');   // Blender default neutral
-      lg.addColorStop(1,    '#2c2c2c');   // grounded bottom
+      lg.addColorStop(0,    '#7a7a7a');   // lifted top
+      lg.addColorStop(0.55, '#6a6a6a');   // mid
+      lg.addColorStop(1,    '#5a5a5a');   // grounded bottom
       ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
     }, 1024);
     scene.background = tex;
-    renderer.setClearColor(0x3a3a3a, 1);
+    renderer.setClearColor(0x6a6a6a, 1);
   }
   else if (mode === 'white') {
     // Soft white studio: very gentle radial vignette so a white backdrop
@@ -3616,6 +3615,120 @@ function onModelLoaded(filename) {
       .then(() => _captureRecentThumb(filename))
       .catch(e => console.warn('[recent-thumb] capture failed:', e?.message || e));
   }, 1100);
+}
+
+// Capture a PNG of the current viewport and offer share / clipboard /
+// download. Uses readRenderTargetPixels into an in-memory canvas so the
+// result is byte-for-byte identical on WebGL and WebGPU — `canvas.toBlob`
+// alone returns a blank frame on WebGPU after present() and on WebGL
+// without preserveDrawingBuffer.
+async function _captureViewportScreenshot() {
+  if (!renderer || !scene || !camera) {
+    toast('Screenshot failed', 'Renderer not ready', 'warn');
+    return;
+  }
+  const btn = document.getElementById('tg-screenshot');
+  btn?.classList.add('active');
+  try {
+    const cv = renderer.domElement;
+    const w = cv.width, h = cv.height;
+    if (!w || !h) throw new Error('canvas has zero size');
+
+    // Render into an offscreen target so we can read back deterministically.
+    // Same pattern as _captureRecentThumb; sized to the live canvas so the
+    // shot matches exactly what the user sees.
+    const target = new THREE.WebGLRenderTarget(w, h, {
+      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+    });
+    const oldTarget = renderer.getRenderTarget?.();
+    const pixels = new Uint8Array(w * h * 4);
+    let readOk = false;
+    try {
+      renderer.setRenderTarget(target);
+      if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
+      else renderer.render(scene, camera);
+      try {
+        if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
+          await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h, pixels);
+        } else {
+          renderer.readRenderTargetPixels(target, 0, 0, w, h, pixels);
+        }
+        readOk = true;
+      } catch (_) { /* fall through to canvas-snapshot path */ }
+    } finally {
+      renderer.setRenderTarget(oldTarget || null);
+      target.dispose();
+    }
+
+    // Compose into a 2D canvas, flipping Y (GL origin is bottom-left).
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const ctx = out.getContext('2d');
+    if (readOk) {
+      const img = ctx.createImageData(w, h);
+      const src = pixels, dst = img.data, rowBytes = w * 4;
+      for (let y = 0; y < h; y++) {
+        const sRow = (h - 1 - y) * rowBytes;
+        const dRow = y * rowBytes;
+        dst.set(src.subarray(sRow, sRow + rowBytes), dRow);
+      }
+      ctx.putImageData(img, 0, 0);
+    } else {
+      // Fallback: render to the live canvas and snapshot it directly. Works
+      // on WebGL with preserveDrawingBuffer, may be blank otherwise — we
+      // accept that since the readRenderTargetPixels path is the primary.
+      if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
+      else renderer.render(scene, camera);
+      ctx.drawImage(cv, 0, 0, w, h);
+    }
+
+    const blob = await new Promise(res => out.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('toBlob returned null');
+
+    // Filename is parked in the status bar by onModelLoaded — borrow it for
+    // a meaningful screenshot name. Falls back to "viewport" pre-load.
+    const sbName = document.getElementById('sb-status')?.textContent?.trim() || '';
+    const baseName = (sbName && sbName !== 'Ready') ? sbName : 'viewport';
+    const stem = baseName.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'viewport';
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fname = `${stem}_${ts}.png`;
+    const file = new File([blob], fname, { type: 'image/png' });
+
+    // 1) Native share sheet — preferred on mobile + supported desktops.
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: fname });
+        toast('Screenshot shared', fname, 'info', 1800);
+        return;
+      } catch (e) {
+        // User-cancelled share → still let them grab it via clipboard/download below.
+        if (e?.name !== 'AbortError') console.warn('[screenshot] share failed:', e);
+        else { return; }
+      }
+    }
+
+    // 2) Copy to clipboard (works in Chrome/Edge/Safari on https/localhost).
+    let copied = false;
+    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        copied = true;
+      } catch (e) {
+        // Permission denied / focus lost — fall through to download.
+        console.warn('[screenshot] clipboard write failed:', e);
+      }
+    }
+
+    // 3) Always trigger a download as a reliable fallback.
+    downloadBlob(blob, fname);
+    toast(copied ? 'Screenshot copied & saved' : 'Screenshot saved', fname, 'info', 2000);
+  } catch (err) {
+    console.error('[screenshot]', err);
+    toast('Screenshot failed', err?.message || String(err), 'warn');
+  } finally {
+    setTimeout(() => btn?.classList.remove('active'), 250);
+    requestRender();
+  }
 }
 
 // Render the scene into a small offscreen target, encode the result as a JPEG
@@ -10551,6 +10664,7 @@ function wireUI() {
   // Transform panel — slide-in at the bottom of the left sidebar showing
   // editable position/rotation + read-only size for the active selection.
   $('tg-transform')?.addEventListener('click', () => _toggleTransformPanel());
+  $('tg-screenshot')?.addEventListener('click', () => _captureViewportScreenshot());
   // Initialize the tree's flag-on class + viewport button to match current toggle state at load.
   document.getElementById('tree')?.classList.toggle('flag-on', !!state.highlightSmall);
   $('tg-hilite')?.classList.toggle('active', !!$('toggle-highlight')?.checked);
