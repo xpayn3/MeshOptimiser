@@ -632,17 +632,21 @@ Traces of it are still in the tree, mostly under `_archive/`:
 <!-- ── Changelog tag badges ───────────────────────────────────────────────
      Reference-style image defs used by every entry under ## Updates. Single
      source of truth: change the colour / label here once and every row in
-     the changelog updates.  Hex values map to GitHub's own label palette:
-       new      → green   (matches "Type: feature")
-       fix      → red     (matches "Type: bug")
-       perf     → amber   (performance work)
-       polish   → purple  (matches "enhancement")
-       refactor → blue    (matches "good first issue" link blue)
-       docs     → grey    (matches "documentation")
+     the changelog updates.  Modern Linear / Vercel-inspired palette tuned
+     for cohesion: every swatch is the same Tailwind-500 luminance so the
+     changelog reads as one cohesive design system rather than six unrelated
+     swatches.  `style=flat` for soft pill chips with rounded corners — the
+     contemporary take on shield badges.
+       new      #10b981  emerald 500  — feature additions
+       fix      #f43f5e  rose 500     — bug fixes (warmer than fire-engine red)
+       perf     #f59e0b  amber 500    — performance work
+       polish   #a855f7  purple 500   — UX / visual refinement
+       refactor #3b82f6  blue 500     — internal cleanup
+       docs     #64748b  slate 500    — documentation
 -->
-[new]:      https://img.shields.io/badge/new-1a7f37?style=flat-square
-[fix]:      https://img.shields.io/badge/fix-cf222e?style=flat-square
-[perf]:     https://img.shields.io/badge/perf-9a6700?style=flat-square
-[polish]:   https://img.shields.io/badge/polish-8250df?style=flat-square
-[refactor]: https://img.shields.io/badge/refactor-0969da?style=flat-square
-[docs]:     https://img.shields.io/badge/docs-57606a?style=flat-square
+[new]:      https://img.shields.io/badge/new-10b981?style=flat
+[fix]:      https://img.shields.io/badge/fix-f43f5e?style=flat
+[perf]:     https://img.shields.io/badge/perf-f59e0b?style=flat
+[polish]:   https://img.shields.io/badge/polish-a855f7?style=flat
+[refactor]: https://img.shields.io/badge/refactor-3b82f6?style=flat
+[docs]:     https://img.shields.io/badge/docs-64748b?style=flat
