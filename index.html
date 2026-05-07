@@ -131,9 +131,13 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 .welcome-resume .wr-age{align-self:flex-end;color:rgba(255,255,255,.55);font-size:var(--fs-sm);flex-shrink:0;margin-left:12px}
 button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
 input,select{font:inherit;color:inherit}
-::-webkit-scrollbar{width:12px;height:12px}
+/* Thin scrollbars in Chromium to match the Firefox `scrollbar-width: thin`
+   default. Reduce track from 12px → 7px and the thumb's surrounding inset
+   from 2px → 1px so the visible thumb width is closer to Firefox's. */
+*{scrollbar-width:thin;scrollbar-color:var(--bg4) transparent}
+::-webkit-scrollbar{width:7px;height:7px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:7px;border:2px solid var(--bg1);min-height:48px;min-width:48px}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px;border:1px solid var(--bg1);min-height:32px;min-width:32px}
 ::-webkit-scrollbar-thumb:hover{background:var(--bd2)}
 ::-webkit-scrollbar-thumb:active{background:var(--ac)}
 ::-webkit-scrollbar-corner{background:transparent}
@@ -681,6 +685,28 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 #tg-materials {--btn-tint:#a78bfa}
 #tg-sun       {--btn-tint:#fbbf24}
 #tg-transform {--btn-tint:#34c759}
+#tg-screenshot{--btn-tint:#7dd3fc}
+
+/* Standard-view group (orthographic Top/Front/Side + Quad). Letter-glyph
+   buttons share the gizmo accent so the cluster reads as a "view tool". */
+#vw-top   {--btn-tint:#6ea8ff}
+#vw-front {--btn-tint:#6ea8ff}
+#vw-side  {--btn-tint:#6ea8ff}
+#vw-quad  {--btn-tint:#6ea8ff}
+.vpb.vpb-text span{font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1;font-family:ui-sans-serif,system-ui,Inter,Helvetica,Arial,sans-serif}
+
+/* Quadrant labels for the 4-up split view. Hidden when state.quadView is
+   off; the JS toggles the parent's .show class. */
+#vp-quad-labels{position:absolute;inset:0;pointer-events:none;display:none;z-index:6;font-family:ui-monospace,monospace}
+#vp-quad-labels.show{display:block}
+#vp-quad-labels .qlbl{position:absolute;background:rgba(15,19,25,.72);border:1px solid var(--bd);backdrop-filter:blur(8px);color:var(--tx);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;padding:3px 8px;border-radius:5px}
+#vp-quad-labels .qlbl.tl{top:8px;left:8px}
+#vp-quad-labels .qlbl.tr{top:8px;left:50%;transform:translateX(8px)}
+#vp-quad-labels .qlbl.bl{top:50%;left:8px;transform:translateY(8px)}
+#vp-quad-labels .qlbl.br{top:50%;left:50%;transform:translate(8px,8px)}
+#vp-quad-labels::before,#vp-quad-labels::after{content:'';position:absolute;background:rgba(255,255,255,.10);pointer-events:none}
+#vp-quad-labels::before{left:50%;top:0;bottom:0;width:1px}
+#vp-quad-labels::after{top:50%;left:0;right:0;height:1px}
 .vp-info{background:rgba(15,19,25,.7);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:6px;padding:7px 11px;font-size:11px;color:var(--tx2);line-height:1.5;font-variant-numeric:tabular-nums;min-width:140px}
 .vp-info strong{color:var(--tx)}
 /* Triangle-count progress bar: 100% = starting tri count, shrinks as the
@@ -1093,6 +1119,11 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to 10 units"><i data-lucide="move"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
         <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
+        <div style="height:10px"></div>
+        <button class="vpb vpb-text" id="vw-top" title="Top view — orthographic (looking down)"><span>T</span></button>
+        <button class="vpb vpb-text" id="vw-front" title="Front view — orthographic"><span>F</span></button>
+        <button class="vpb vpb-text" id="vw-side" title="Side view — orthographic (looking along X)"><span>S</span></button>
+        <button class="vpb" id="vw-quad" title="Quad view — current camera + Top / Front / Side ortho previews"><i data-lucide="layout-grid"></i></button>
       </div>
       <div class="vpc tr">
         <button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button>
@@ -1213,6 +1244,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       </div>
       <div class="vpc br"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
       <div class="vpc bl"><div id="axis-gizmo" title="Click an axis to align the view"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
+      <div id="vp-quad-labels" aria-hidden="true">
+        <div class="qlbl tl">Persp</div>
+        <div class="qlbl tr">Top</div>
+        <div class="qlbl bl">Front</div>
+        <div class="qlbl br">Side</div>
+      </div>
       <!-- FPS / renderer stats overlay (top-right under the toolbar). Each
            overlay is hidden until its toggle in Display settings is on. -->
       <div class="vpc tl" id="vp-perf" style="top:auto;bottom:80px;left:14px;display:flex;flex-direction:column;gap:4px;pointer-events:none">
