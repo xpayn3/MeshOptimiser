@@ -4301,48 +4301,49 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
   const halfSize = size / 2;
   const step = size / divisions;
   const center = divisions / 2;
-  // Subdivide each line so per-vertex alpha can interpolate along the line.
-  // 24 segments = smooth radial fade without blowing the vertex budget.
+  // Each line subdivided so per-vertex RGB darkens along its length and
+  // produces a smooth radial fade without going crazy on the vertex budget.
   const SEGS = 24;
 
   const positions = [];
-  const colors = [];          // RGBA — alpha used by LineBasicMaterial when vertexColors:true
+  const colors = [];          // 3-component RGB — three.webgpu.js bundle ignores
+                              // vertex-color alpha, so we bake the fade into RGB
+                              // by lerping the line colour toward black.
   const cGrid  = new THREE.Color(gridHex);
   const cAxisX = new THREE.Color(axisXHex);
   const cAxisY = new THREE.Color(axisYHex);
 
-  // Spline-style hierarchy: nearly invisible minor hairlines, slightly
-  // stronger every-Nth majors, faint axis hint. Distance fade further
-  // attenuates everything toward the horizon, so even the axis lines
-  // dissolve at the edges instead of stabbing all the way out.
-  const ALPHA_MINOR = 0.06;
-  const ALPHA_MAJOR = 0.14;
-  const ALPHA_AXIS  = 0.45;
+  // Per-tier brightness multipliers. With material.opacity = 0.12 on top
+  // these read as faint hairlines on a dark viewport — the grid is there
+  // when you look for it but never fights with the model.
+  const MULT_MINOR = 0.35;
+  const MULT_MAJOR = 0.70;
+  const MULT_AXIS  = 1.00;
 
   const smoothstep = (a, b, x) => {
     if (a === b) return x < a ? 0 : 1;
     const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
     return t * t * (3 - 2 * t);
   };
-  const fadeAt = (x, y, base) => {
-    const d = Math.hypot(x, y);
-    return base * (1 - smoothstep(fadeStart, fadeEnd, d));
-  };
-  const emitLine = (getPt, color, baseAlpha) => {
+  // Radial fade: returns a brightness multiplier in [0,1] at world (x,y).
+  const fadeAt = (x, y) => 1 - smoothstep(fadeStart, fadeEnd, Math.hypot(x, y));
+  // Emit one segmented line. `getPt(t)` returns [x, y] for t in [0,1].
+  const emitLine = (getPt, color, mult) => {
     let prev = getPt(0);
-    let prevA = fadeAt(prev[0], prev[1], baseAlpha);
+    let prevF = fadeAt(prev[0], prev[1]) * mult;
     for (let s = 1; s <= SEGS; s++) {
       const cur = getPt(s / SEGS);
-      const curA = fadeAt(cur[0], cur[1], baseAlpha);
-      // Drop fully-faded segments — saves ~half the vertex budget on a
-      // 200×-footprint plane where the corners are past fadeEnd.
-      if (prevA > 0.003 || curA > 0.003) {
+      const curF = fadeAt(cur[0], cur[1]) * mult;
+      // Skip segments where both ends are essentially black — saves ~half
+      // the vertex budget on the corners that would render invisibly.
+      if (prevF > 0.005 || curF > 0.005) {
         positions.push(prev[0], prev[1], 0,  cur[0], cur[1], 0);
-        colors.push(color.r, color.g, color.b, prevA,
-                    color.r, color.g, color.b, curA);
+        // Bake fade into RGB: line colour × (radial fade × tier multiplier).
+        colors.push(color.r * prevF, color.g * prevF, color.b * prevF,
+                    color.r * curF,  color.g * curF,  color.b * curF);
       }
       prev = cur;
-      prevA = curA;
+      prevF = curF;
     }
   };
 
@@ -4350,28 +4351,31 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
     const isAxis  = (i === center);
     const fromCtr = i - center;
     const isMajor = !isAxis && (Math.abs(fromCtr) % majorEvery === 0);
-    const baseA   = isAxis ? ALPHA_AXIS : (isMajor ? ALPHA_MAJOR : ALPHA_MINOR);
+    const mult    = isAxis ? MULT_AXIS : (isMajor ? MULT_MAJOR : MULT_MINOR);
 
     // Horizontal line parallel to X at y=k.
     emitLine(
       (t) => [-halfSize + t * size, k],
       isAxis ? cAxisX : cGrid,
-      baseA,
+      mult,
     );
     // Vertical line parallel to Y at x=k.
     emitLine(
       (t) => [k, -halfSize + t * size],
       isAxis ? cAxisY : cGrid,
-      baseA,
+      mult,
     );
   }
 
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geom.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 4));
+  geom.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
   const mat = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
+    opacity: 0.55,        // global dim — combined with the per-vertex multiplier
+                          // and bake-to-RGB fade this lands the minor lines at
+                          // ~0.06 effective opacity (faint hairlines).
     depthWrite: false,
   });
   const mesh = new THREE.LineSegments(geom, mat);

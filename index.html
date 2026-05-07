@@ -729,7 +729,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Settings popover — floats next to the top-right viewport buttons. Mirrors
    the sidebar `.section-b` layout so existing field/toggle markup drops in
    unchanged. Hidden by default; JS toggles `.show` and outside-click closes. */
-#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
 #vp-settings-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 #vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid var(--s2)}
 #vp-settings-pop .pop-section:last-child{border-bottom:none}
@@ -739,7 +739,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    beneath the new tg-materials button. Each cell is a rendered sphere
    showing the material on a neutral checkerboard; double-click opens the
    editor in a _DraggablePopup. */
-#vp-materials-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-materials-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
 #vp-materials-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 #vp-materials-pop .pop-section{padding:10px 12px}
 #vp-materials-pop .pop-section-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-bottom:10px}
@@ -1923,7 +1923,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-grid-spline-fade"></script>
+<script type="module" src="app-v2.js?v=2026050707-grid-rgb-fade"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
