@@ -218,6 +218,150 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 Updates
 
+Tag legend: **[feat]** new feature · **[fix]** bug fix · **[perf]** performance ·
+**[polish]** UX / visual refinement · **[refactor]** internal cleanup · **[docs]** documentation.
+
+### **v1.2**
+
+v1.1 was the editing surface. v1.2 hardens it: a real material editor with
+shader-ball previews, transform-gizmo polish (scale + snap + live HUD),
+screenshot capture with custom resolutions and a system save dialog,
+orthographic Top/Front/Side viewport toggles, FBX legacy-format rescue,
+and a long tail of fixes around dispose hygiene, drag perf, and context
+menus.
+
+**Viewport — standard CAD views**
+
+- **[feat]** New `T` / `F` / `S` viewport buttons → switch to orthographic
+  and align to Top, Front, or Side. Z-up CAD scenes use the CAD convention
+  (Y forward); Y-up scenes (glTF / Blender) flip accordingly. The active
+  button highlights itself, and the highlight clears the instant the user
+  orbits — no stale active state.
+- **[feat]** New `Persp` button (`video` icon) → snap back to a 3/4
+  isometric perspective view. Restores the scene's CAD up-axis, re-enables
+  the FOV slider, and clears the ortho-view active state in one click.
+
+**Viewport — screenshot capture**
+
+- **[feat]** New camera button (top-right of the viewport) opens a custom
+  draggable, resizable **Save Screenshot** popup with:
+  - 6 resolution presets — Viewport 1×/2×/4×, 1080p, 1440p, 4K — in a 3×2
+    grid; the active preset auto-highlights when W/H matches.
+  - Custom width × height inputs with live aspect ratio + megapixel readout.
+  - Filename field auto-populated as `<modelStem>_<ISO timestamp>.png`,
+    pre-selected on open for instant rename.
+- **[feat]** Save uses the **File System Access API** (`showSaveFilePicker`)
+  on supported browsers so you pick the destination + filename in the OS
+  dialog. Falls back to a regular browser download otherwise.
+- **[feat]** Optional bottom-left info stamp burnt into the saved PNG —
+  filename, dimensions, timestamp.
+- **[feat]** Camera-shutter flash effect — a white overlay fades in (~65 ms)
+  and out (~280 ms) as the frame is captured, masking the unintentional
+  swap-chain blink during readback so the capture feels like a real shutter
+  click.
+- **[feat]** Capture pipeline renders into a `WebGLRenderTarget` at the
+  chosen resolution and reads back via `readRenderTargetPixels`. Identical
+  output on WebGL and WebGPU; for perspective cameras it temporarily
+  adjusts `camera.aspect` so a 16:9 export of a square viewport isn't
+  squashed.
+- **[fix]** 3-phase File System Access error handling — `showSaveFilePicker`
+  returns null on user cancel, but `createWritable` can also reject (write
+  denial, OneDrive lock). All three failure modes now route to the regular
+  download fallback instead of silently dropping the save.
+- **[fix]** Stop the double-prompt corrupted-file bug where the save dialog
+  fired twice and produced a 0-byte PNG.
+
+**Materials — full editor + shader-ball preview**
+
+- **[feat]** Disney-style **shader-ball preview** assembly replaces the
+  bare sphere — sphere + cylinder + ground disk + back-card geometry, lit
+  with a PMREM env map + a side-key fill so PBR responses read the way
+  they would in a real DCC viewport.
+- **[feat]** Same shader-ball geometry now powers the materials grid
+  thumbnails, not just the editor's hero preview.
+- **[feat]** Material editor switched to **C4D / Redshift-style row
+  layout** — each property is a single horizontal row; map slots, intensity
+  scalars, and the eyedropper sit inline with the property they belong to.
+- **[feat]** Per-property texture slots covering the full PBR set — base
+  color, normal, roughness, metalness, AO, emissive, bump, displacement,
+  alpha, env, clearcoat (×3), sheen (×2), transmission, thickness, specular
+  (×2), iridescence (×2), anisotropy. Map intensity scalars per slot.
+- **[feat]** Floating texture-attach popover anchored to each `.mat-row-tex`,
+  plus an eyedropper button flush with the colour picker.
+- **[fix]** Texture leak on model swap — `material.dispose()` doesn't dispose
+  textures, and `_loadTexture` only revoked its blob URL on error. The
+  deferred-dispose drain now walks all 25 PBR map slots, revokes any
+  `userData.dataUrl` blob URL, disposes the texture, and nulls the slot.
+- **[fix]** Material thumbnails fall back to a lightweight 2D canvas paint
+  when `WebGLRenderer` is unavailable, instead of showing blank tiles.
+
+**Gizmo — scale, snap, HUD**
+
+- **[feat]** Added a **scale gizmo** (`T` shortcut, `scaling` icon).
+- **[feat]** Global **Shift-to-snap** across all three gizmo modes —
+  10 units for translate, 15° for rotate, 0.1-step for scale.
+- **[feat]** Live **gizmo HUD** — readout panel next to the gizmo while
+  dragging, showing the current delta in world units / degrees / scale
+  factor.
+- **[polish]** HUD only shows the axis you're actually grabbing, not the
+  full XYZ block, while a single-axis handle is active.
+
+**Transform panel**
+
+- **[feat]** Right-click on the Position / Rotation / Size column headers
+  for **Copy / Paste XYZ** — round-trips the three values as
+  `x, y, z` text via the clipboard, so transforms move between objects in
+  one keystroke pair.
+- **[perf]** Skip `_readStableSize()` while a translate or rotate gizmo
+  drag is in flight — the size readout doesn't change during pure
+  position/rotation, and the per-frame box recompute was a measurable
+  hit on 50K-tri parts.
+- **[fix]** Restored the **native browser context menu** on form inputs —
+  Copy / Paste / Select All works again on every numeric/text field. The
+  custom right-click was eating those events project-wide.
+
+**Loaders & format coverage**
+
+- **[feat]** Legacy **FBX rescue path** — FBX FileVersion 6100 (and any
+  ASCII variant Three.js's loader chokes on) now routes through Assimp.js
+  → GLB → GLTFLoader. Saves files that were previously stuck at "loader
+  threw, no model on screen".
+- **[polish]** When both Three.js and Assimp give up, the toast names
+  the actual cause instead of a generic "loader failed".
+
+**Tree / sidebar**
+
+- **[polish]** Tree rows: object/group labels shrink from 12.5 px → 11.5 px,
+  and group rows lose the bold weight. Reads denser without losing
+  hierarchy.
+- **[polish]** Sidebar: compact sidebar buttons; the "draws" stat was
+  noise alongside "tris/parts/instanced" — dropped.
+- **[polish]** Welcome modal: drop zone pushed lower so the recent-files
+  list breathes.
+
+**Visual polish**
+
+- **[polish]** Background: Blender-grey preset lightened — the previous
+  shade tipped too dark and competed with the grid's contrast.
+- **[polish]** Chromium scrollbars: `::-webkit-scrollbar` set to match
+  Firefox's `scrollbar-width: thin` so the sidebar reads consistent
+  across browsers.
+
+**Internal**
+
+- **[refactor]** Removed dead `_tfStashQuat` global (declared, never
+  referenced).
+- **[refactor]** Scoped four `_shearTmp*` THREE-object globals into the
+  `_matrixHasShear` IIFE; same per-call profile, no module-level pollution.
+- **[refactor]** Collapsed `_Welcome._fmtBytes` (7 lines) into a one-line
+  wrapper around the global `fmtBytes` — kept the `Number.isFinite` guard
+  for stored-state reads.
+
+**Docs**
+
+- **[docs]** README: ASCII logo centered, Pre-1.0 R&D section added,
+  marketing copy toned down across About + Updates.
+
 ### **v1.1**
 
 v1.0 could open and render. v1.1 adds the editing surface around it.
