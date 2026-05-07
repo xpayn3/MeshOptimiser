@@ -1202,6 +1202,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
                 <button id="hdri-default-btn" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:10.5px;cursor:pointer" title="Reset to the built-in studio environment">Default</button>
               </div>
               <div id="hdri-current" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
+              <div class="field" style="margin:0" title="Multiplier on the HDRI's lighting and reflections. Higher = brighter env light on every PBR material."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="hdri-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">1.00×</span></label><input type="range" id="hdri-int" min="0" max="4" step="0.05" value="1" style="width:100%"></div>
               <input type="file" id="hdri-file" accept=".hdr,.exr,image/*" style="display:none">
             </div>
           </div>
@@ -2018,7 +2019,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-hdri-lights+pop"></script>
+<script type="module" src="app-v2.js?v=2026050707-hdri-intensity"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

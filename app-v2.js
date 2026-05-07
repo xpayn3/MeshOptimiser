@@ -31,6 +31,7 @@ const state = {
   fogNear: null, fogFar: null,     // null = auto-tune from model footprint
   fogIntensity: 1,                 // multiplier on fog falloff range
   hdriRotation: Math.PI * 0.25,    // radians around scene up (Z) for HDRI bg/env
+  hdriIntensity: 1.0,              // multiplier on env lighting + reflections
   _customHdri: null,               // optional user-loaded equirect → PMREM cubemap
   _customHdriName: null,
   // ── Pro-mode scene settings (driven by the Display/Scene/Camera/Lighting
@@ -2678,6 +2679,7 @@ async function _ensureHdriEnvironment() {
     scene.background = state._customHdri;
     scene.environment = state._customHdri;
     _applyHdriRotation();
+    _applyHdriIntensity();
     return;
   }
   if (!_defaultEnvTex) {
@@ -2695,6 +2697,7 @@ async function _ensureHdriEnvironment() {
   scene.background = _defaultEnvTex;
   scene.environment = _defaultEnvTex;
   _applyHdriRotation();
+  _applyHdriIntensity();
   requestRender();
   const cur = document.getElementById('hdri-current');
   if (cur) cur.textContent = 'Built-in studio';
@@ -2747,6 +2750,29 @@ function _applyHdriRotation() {
   if (scene.backgroundRotation)  scene.backgroundRotation.set(0, 0, rot);
 }
 
+// Apply state.hdriIntensity to the env's lighting and reflections. Modern
+// three.js (r163+) exposes scene.environmentIntensity / backgroundIntensity
+// — we set both so the visible bg tracks the lighting brightness. On older
+// bundles we silently fall back to a per-material walk that updates each
+// PBR material's envMapIntensity, which is the older knob for the same
+// effect (slower; it's why r163 added the scene-level property).
+function _applyHdriIntensity() {
+  if (!scene) return;
+  const k = Math.max(0, state.hdriIntensity ?? 1);
+  if ('environmentIntensity' in scene) scene.environmentIntensity = k;
+  if ('backgroundIntensity'  in scene) scene.backgroundIntensity  = k;
+  // Older fallback — only matters if scene.environmentIntensity is missing.
+  if (!('environmentIntensity' in scene) && state.partsRoot) {
+    state.partsRoot.traverse(o => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : null;
+      if (!mats) return;
+      for (const m of mats) {
+        if (typeof m.envMapIntensity === 'number') m.envMapIntensity = k;
+      }
+    });
+  }
+}
+
 function _toggleHdriUI(on) {
   const ctl = document.getElementById('hdri-controls');
   if (ctl) ctl.style.display = on ? 'flex' : 'none';
@@ -2757,27 +2783,30 @@ function _toggleHdriUI(on) {
 
 // When HDRI is the lighting source the procedural 3-light rig (hemi + key
 // directional + fill directional) doubles up with the env's baked sun and
-// blows out highlights. Stash the current intensities on entry to HDRI
-// mode and drop them to a small fraction; restore on exit. Standard
-// behaviour in Substance Painter / Blender / Unity HDRI workflows.
+// blows out highlights. Drop the rig to 0 on entry; restore from the
+// stable TARGET values (state._lights.{hemi,dir,fill}Target) on exit.
+//
+// Earlier this function captured the live intensities on entry and
+// restored from that snapshot, but the boot ramp can fire mid-load and
+// either (a) capture a half-faded value or (b) capture 0 because the
+// ramp hadn't started yet. The user then exited HDRI and saw a black
+// scene because the restore wrote 0 back. Targets are immutable, so
+// they always restore to the right values regardless of timing.
 function _applyHdriLightStash(on) {
   if (!state._lights) return;
   const L = state._lights;
   if (on) {
-    if (L._stashedForHdri) return;          // already stashed — don't overwrite
-    L._stashedForHdri = {
-      hemi: L.hemi.intensity,
-      dir:  L.dir.intensity,
-      fill: L.fill.intensity,
-    };
-    L.hemi.intensity = 0;       // env hemisphere already covers the ambient
-    L.dir.intensity  = 0;       // env's sun is the directional now
+    L._stashedForHdri = true;      // sticky flag — survives multiple HDRI calls
+    L.hemi.intensity = 0;          // env hemisphere covers the ambient
+    L.dir.intensity  = 0;          // env's sun is the directional now
     L.fill.intensity = 0;
-  } else if (L._stashedForHdri) {
-    L.hemi.intensity = L._stashedForHdri.hemi;
-    L.dir.intensity  = L._stashedForHdri.dir;
-    L.fill.intensity = L._stashedForHdri.fill;
-    L._stashedForHdri = null;
+  } else {
+    // Always restore to targets, even if the flag is cleared — guards
+    // against the case where lights were left at 0 by some other path.
+    L.hemi.intensity = L.hemiTarget;
+    L.dir.intensity  = L.dirTarget;
+    L.fill.intensity = L.fillTarget;
+    L._stashedForHdri = false;
   }
 }
 
@@ -10820,6 +10849,7 @@ function _collectSceneState() {
       fogFar:          state.fogFar,
       fogIntensity:    state.fogIntensity,
       hdriRotation:    state.hdriRotation,
+      hdriIntensity:   state.hdriIntensity,
       highlightSmall:  state.highlightSmall,
       perfMode:        state.perfMode,
     },
@@ -11044,6 +11074,12 @@ function _applySceneState(s) {
     if (typeof v.hdriRotation === 'number') {
       state.hdriRotation = v.hdriRotation;
       try { _applyHdriRotation(); } catch (_) {}
+    }
+    if (typeof v.hdriIntensity === 'number' && v.hdriIntensity >= 0) {
+      state.hdriIntensity = v.hdriIntensity;
+      const el = $('hdri-int'); if (el) el.value = String(state.hdriIntensity);
+      const lbl = $('hdri-int-v'); if (lbl) lbl.textContent = state.hdriIntensity.toFixed(2) + '×';
+      try { _applyHdriIntensity(); } catch (_) {}
     }
     try { _applyFog(); } catch (_) {}
     if (typeof v.perfMode === 'string') {
@@ -11987,6 +12023,13 @@ function wireUI() {
     state._customHdriName = null;
     if (state.bgMode === 'hdri') _ensureHdriEnvironment();
     const cur = $('hdri-current'); if (cur) cur.textContent = 'Built-in studio';
+  });
+  $('hdri-int')?.addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    state.hdriIntensity = Number.isFinite(v) && v >= 0 ? v : 1;
+    const lbl = $('hdri-int-v'); if (lbl) lbl.textContent = state.hdriIntensity.toFixed(2) + '×';
+    _applyHdriIntensity();
+    requestRender();
   });
   // Sun gizmo: drag the puck around the dome to rotate the HDRI. Top-down
   // dome view → angle of (dx,dy) from centre = azimuth around the scene up
