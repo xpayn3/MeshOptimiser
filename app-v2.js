@@ -3877,12 +3877,16 @@ function _defaultScreenshotName() {
 // final filename, or null if the user cancelled.
 async function _saveScreenshotBlob(blob, suggestedName) {
   if (window.showSaveFilePicker) {
-    // Split the catch into TWO phases. Once the picker dialog returns a
-    // handle, the destination file has already been created on disk —
-    // falling back to downloadBlob from here would produce a SECOND
-    // 'where to save' prompt AND leave a truncated file at the user's
-    // chosen location. That's the 'first save corrupted, second save ok'
-    // double-prompt bug.
+    // FSA writes can fail at three different points and each one needs a
+    // different recovery strategy — collapsing them into one try/catch
+    // produced either the double-prompt-corrupted-file bug (if write
+    // mid-flight failed) or a useless toast error (if createWritable was
+    // simply denied because transient activation expired between picker
+    // and write).
+    //
+    //   PHASE 1  showSaveFilePicker          no file created yet      → fall back
+    //   PHASE 2  handle.createWritable()     no file created yet      → fall back
+    //   PHASE 3  writable.write/close()      file already truncated   → surface
     let handle;
     try {
       handle = await window.showSaveFilePicker({
@@ -3890,24 +3894,33 @@ async function _saveScreenshotBlob(blob, suggestedName) {
         types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }],
       });
     } catch (e) {
-      // User cancelled the picker — don't fall back, just bail.
-      if (e?.name === 'AbortError') return null;
-      // Picker itself unavailable / blocked (insecure context, iframe
-      // perms). No file was created yet, so falling back to a download
-      // is safe.
+      if (e?.name === 'AbortError') return null;          // user cancelled
       console.warn('[screenshot] save picker unavailable, falling back to download:', e);
       downloadBlob(blob, suggestedName);
       return suggestedName;
     }
-    // Write through the handle. Failures here are surfaced to the caller
-    // — do NOT fall back, otherwise we'd double-save.
+    let writable;
     try {
-      const w = await handle.createWritable();
-      await w.write(blob);
-      await w.close();
+      writable = await handle.createWritable();
+    } catch (e) {
+      // Common path: NotAllowedError when the user-activation chain
+      // expired between picker and write (long capture + dialog lingering).
+      // No file has been touched yet — safe to fall back to a download
+      // so the user still gets the screenshot they asked for.
+      console.warn('[screenshot] createWritable denied, falling back to download:', e);
+      downloadBlob(blob, suggestedName);
+      return suggestedName;
+    }
+    try {
+      await writable.write(blob);
+      await writable.close();
       return handle.name || suggestedName;
     } catch (e) {
-      console.error('[screenshot] FSA write failed:', e);
+      // Mid-write failure: the destination is now truncated. Best effort:
+      // ask the writable to abort so the target file goes back to its
+      // pre-write state where the platform supports it.
+      try { await writable.abort?.(); } catch (_) {}
+      console.error('[screenshot] FSA write failed mid-write:', e);
       throw new Error(`Could not write to ${handle.name || suggestedName}: ${e?.message || e}`);
     }
   }
