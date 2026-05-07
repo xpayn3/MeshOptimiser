@@ -221,6 +221,192 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 Tag legend: **[feat]** new feature · **[fix]** bug fix · **[perf]** performance ·
 **[polish]** UX / visual refinement · **[refactor]** internal cleanup · **[docs]** documentation.
 
+### **v1.3**
+
+v1.2 hardened the editing surface. v1.3 makes the viewport itself feel modern:
+HDRI environment lighting with procedural presets and a draggable sun, an
+LOD-aware infinite floor grid with spline-style hairlines, atmospheric fog,
+parametric primitive insertion, a pill-shaped camera-view selector at the
+top centre, full keyboard shortcuts (Ctrl+1..4) for standard CAD views, a
+borderless popup language across every modal/popover, and an accent-token
+refresh toward IBM blue with strict token-only colour usage.
+
+**Lighting — HDRI environment**
+
+- **[feat]** New **HDRI** mode in Background settings. Loads any `.hdr` /
+  `.exr` file as an image-based environment that lights every PBR
+  material in the scene. Plus 4 **procedural presets** so a user can ship
+  a polished look without sourcing an HDRI file.
+- **[feat]** **Custom HDR / EXR loader** wired to the file picker — the
+  loaded environment becomes both the scene background AND the IBL light
+  source.
+- **[feat]** **Draggable sun gizmo** repurposed to drive HDRI rotation:
+  rotating the sun rotates the whole environment, and the model relights
+  in real time as the gizmo moves.
+- **[feat]** **HDRI intensity slider** under Display → Lighting. Forces a
+  full re-light pass on change so the model brightness updates instantly.
+- **[fix]** Fixed black-scene bug when switching back to HDRI mode after
+  having loaded a different background.
+- **[polish]** Sun rig dims automatically when HDRI is active so it
+  doesn't double-up over the IBL.
+
+**Atmosphere — floor grid + fog**
+
+- **[feat]** Replaced the finite `THREE.GridHelper` with an "infinite"
+  axis-coloured `LineSegments` grid that scales to ~200× the model
+  footprint. Centre row red (X axis) / green (Y axis); every other line
+  thin grey.
+- **[feat]** **Spline-style hairline fade** — per-vertex alpha smoothsteps
+  out toward the horizon, with corners past the fadeEnd dropped at build
+  time so the vertex budget stays under 50k even on a 1mm-unit model.
+- **[feat]** **LOD on the minor cells** — minor hairlines fade out when
+  zoomed out so far the cells become visual noise; restore correctly on
+  zoom-in.
+- **[polish]** Overall grid opacity dropped 0.55 → 0.22 — the grid now
+  reads as a quiet reference plane instead of a dominant element.
+- **[feat]** **Scene fog** enabled by default with Display-section
+  controls for **near**, **far**, and **intensity**. Fog colour picks
+  itself from the active background mode so the horizon dissolves cleanly.
+
+**Primitives — direct mesh creation**
+
+- **[feat]** New toolbar dropdown to **add primitives** (`+` icon) —
+  Cube, Sphere, Cylinder, Cone, Torus, plus more. Inserted directly into
+  the scene with proper materials and a fresh tree node so they're
+  immediately editable like any other part.
+- **[feat]** **Parametric Shape-parameters panel** in the C4D
+  Attributes-Manager style. After insertion the panel exposes all the
+  generator parameters (radius, segments, height, etc.) — re-edits
+  rebuild the geometry in place.
+- **[fix]** Deferred geometry dispose on parameter edits to fix the
+  WebGPU `setIndexBuffer` race that would crash the renderer on rapid
+  re-evaluations.
+
+**Camera views — top-center pill**
+
+- **[feat]** Removed the four `T / F / S / Persp` buttons from the
+  top-left toolbar in favour of a single **pill button at the top centre
+  of the viewport**. The pill shows the active view's name (Cam / Top /
+  Front / Side); clicking it reveals a dropdown of the alternatives.
+- **[feat]** **`Ctrl/⌘ + 1..4`** keyboard shortcuts: 1 = Cam
+  (Perspective), 2 = Top, 3 = Front, 4 = Side. Each row in the pill
+  dropdown shows its shortcut as a kbd chip; the prefix is platform-aware
+  (`⌘` on macOS, `Ctrl` everywhere else). Existing bare `1/2/3` keys
+  for view modes (solid / wireframe / x-ray) now require *no* modifier
+  so the two systems don't collide.
+- **[feat]** Pill auto-syncs back to **Cam** the instant the user starts
+  orbiting, so the toolbar can never lie about the active view.
+- **[polish]** Pill label centered, lucide camera icon, slight black
+  glaze background, no stroke, blur backdrop. Camera-view shortcuts also
+  added to the command palette and Shortcuts overlay.
+
+**Viewport — render-to-PNG enhancements**
+
+- **[feat]** **Camera-shutter flash fires on icon click**, *before* the
+  Save Screenshot dialog opens — the visual snap precedes the
+  configuration step rather than firing after, so the click-to-shutter
+  feedback feels like a real camera. The dialog now lands ~120 ms later,
+  just as the flash fades, with the OS save picker still firing on Save.
+- **[feat]** Right-click on empty viewport space now exposes **17
+  actions** (was 5): Fit / Reset camera, all 4 standard views with
+  shortcuts, all 3 render modes, live-state toggles for grid /
+  bounding-boxes / auto-rotate (label flips `Show ↔ Hide`, `Start ↔ Stop`
+  based on current state), Select all / Show all parts, Save
+  screenshot…, Save scene.
+- **[fix]** **Right-click viewport menu was completely broken** —
+  another `contextmenu` capture-phase listener in `app-v2.js:16359`
+  unconditionally `preventDefault`s on every non-input target to
+  suppress the native browser menu, which set `defaultPrevented=true`
+  before the app's custom menu builder ran. The custom builder bailed
+  on the first line via `if (e.defaultPrevented) return;`. Removed the
+  guard — each branch is target-scoped, so unconditional run is safe
+  and the bubble-phase tree-row handler still wins for tree clicks.
+
+**Tooltips — bulletproof against navigation**
+
+- **[fix]** Tooltips no longer get stranded when a popup opens, a modal
+  shows, the page loses focus, the anchor's DOM gets rebuilt, or the
+  cursor sits still while a panel slides in over the button. Six
+  layered safeguards added without changing the happy path:
+  - Defensive `document.contains(target)` check inside `show()` so a
+    detached anchor doesn't render at a stale rect.
+  - `mousedown / pointerdown / touchstart / contextmenu` capture-phase
+    hides — fire before `click` and catch drag-starts the original
+    listener missed.
+  - `focusin` (capture) — palette open, form focus, etc.
+  - `visibilitychange` — alt-tab + return no longer leaves stale tips.
+  - **rAF-coalesced `mousemove` validator** that uses
+    `document.elementFromPoint` to verify the cursor is still inside
+    `currentTarget`. Catches "popup slid over my anchor without me
+    moving" instantly.
+  - **MutationObserver on `class` / `style`** at `<body>` watches for
+    `.modal-bg.show`, `.dlg-popup.show`, `.vp-pill-menu.show`,
+    `#vp-settings-pop.show`, `#vp-materials-pop.show`, `.ctx-menu`
+    appearing — any of those gaining `.show` retires the tip.
+  - Detach observer (`childList:true subtree:true`) re-checks
+    `document.contains(currentTarget)` whenever the DOM mutates, so
+    tree rebuilds / panel refreshes can't park a tooltip on a removed
+    row. `pagehide` added too.
+
+**Visual language — borderless popups**
+
+- **[polish]** Removed the 1px stroke from every popup card sitewide.
+  `.dlg-popup .dlg-pop` (Save Screenshot, Batch Rename, Material editor,
+  any `_DraggablePopup`), `.modal` (Welcome, Settings, Shortcuts,
+  Cmd-K, Save Scene, Export), `#vp-materials-pop`, `#vp-settings-pop`,
+  and the camera-view dropdown all now sit flush on their `var(--bg1)`
+  / blurred backgrounds with `box-shadow:var(--sh)` for depth.
+- **[polish]** Removed the world-axis triad button (`tg-axes`) and the
+  in-scene `THREE.AxesHelper` it controlled. Boot path, scene init,
+  thumbnail capture, command palette, scene-state save/restore — all
+  references swept. The bottom-left axis-gizmo SVG (camera-orient
+  click target) is unaffected.
+
+**Visual language — accent refresh**
+
+- **[polish]** Accent token `--ac` shifted from `#6ea8ff` (sky blue)
+  toward IBM blue: **`#6b8dff`** rgb(107,141,255). Slightly more
+  saturated, marginally less violet. Gradient companion `#4f8be5` →
+  `#4f7ce0`. All `rgba(110,168,255, X)` triplets updated to
+  `rgba(107,141,255, X)` sitewide.
+- **[refactor]** Audit + sweep: every hardcoded accent reference (the
+  Z-axis label, gizmo HUD Z value, mixed-material gradient, view-mode
+  + gizmo + grid `--btn-tint` declarations) now uses `var(--ac)`. The
+  only remaining literal `#6b8dff` is the token definition itself and
+  the material-color-picker `PRESETS` array (a list of distinct user
+  swatches).
+- **[polish]** **iOS switch tint** flipped from `var(--ok)` (green) to
+  `var(--ac)` (accent blue) — single rule
+  `.toggle input:checked+.switch` changes every checkbox switch in
+  Display, Export, Save Scene, dynamic-template toggles, etc.
+
+**Right sidebar — readability**
+
+- **[polish]** Yellow `.btn.warn` text on the right sidebar
+  (`Smart fit`, `Remove empty parts`, `Deduplicate geometry`, `Fix
+  degenerate parts`, `Delete empty groups`, `Flag low-triangle parts`,
+  `Flag thin slivers`, `Smart-fit all parts`, `Decimate`) flipped to
+  `var(--tx)` white. The yellow-tinted hover background still flags
+  them as lossy/destructive ops; only the resting label/icon colour
+  changed.
+- **[polish]** Right-sidebar button font weight 500 → 400 so a column
+  of buttons reads quieter at the 11 px size.
+
+**Material editor + popups**
+
+- **[feat]** Single-click swap when the material editor is already
+  open — clicking a different material in the grid switches the editor
+  contents to that material in place instead of needing close/reopen.
+- **[polish]** Materials popup actions row promoted to the top of the
+  panel (action bar above grid) so the most-used buttons are always
+  reachable without scrolling.
+
+**Toolbar**
+
+- **[polish]** Only one toolbar dropdown can be open at a time —
+  opening any of the format / primitive / export menus auto-closes the
+  others.
+
 ### **v1.2**
 
 v1.1 was the editing surface. v1.2 hardens it: a real material editor with

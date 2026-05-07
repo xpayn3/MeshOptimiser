@@ -840,7 +840,10 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 /* Action toolbar at the bottom of the materials panel — add / delete /
    duplicate / merge / industry presets. Sticks to the bottom of the
    scrollable section so it's always reachable. */
-#vp-materials-pop .mat-actions{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px 10px;border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.18)}
+#vp-materials-pop .mat-actions{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.18);border-radius:10px 10px 0 0}
+#vp-materials-pop .mat-actions-icons{display:flex;gap:4px}
+#vp-materials-pop .mat-actions-icons .mat-act-icon{flex:1;padding:6px 0;justify-content:center}
+#vp-materials-pop .mat-actions-icons .mat-act-icon i,#vp-materials-pop .mat-actions-icons .mat-act-icon svg{width:14px;height:14px}
 #vp-materials-pop .mat-actions .mat-act{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 8px;font-size:11px;font-weight:500;color:var(--tx2);background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:6px;cursor:pointer;transition:background .12s var(--ease-out),color .12s var(--ease-out),border-color .12s var(--ease-out);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #vp-materials-pop .mat-actions .mat-act:hover{background:rgba(255,255,255,.06);color:var(--tx);border-color:rgba(255,255,255,.12)}
 #vp-materials-pop .mat-actions .mat-act:disabled{opacity:.4;cursor:not-allowed;background:transparent}
@@ -1228,19 +1231,21 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         <button class="vpb" id="tg-transform" title="Toggle transform panel (position / rotation / size)"><i data-lucide="move-3d"></i></button>
         <button class="vpb" id="tg-screenshot" title="Capture viewport screenshot (share / copy / download)"><i data-lucide="camera"></i></button>
         <div id="vp-materials-pop">
+          <div class="mat-actions">
+            <div class="mat-actions-icons">
+              <button class="mat-act mat-act-icon" id="mat-act-add" title="New material"><i data-lucide="plus"></i></button>
+              <button class="mat-act mat-act-icon" id="mat-act-duplicate" title="Duplicate" disabled><i data-lucide="copy"></i></button>
+              <button class="mat-act mat-act-icon" id="mat-act-merge" title="Merge" disabled><i data-lucide="combine"></i></button>
+              <button class="mat-act mat-act-icon mat-act-danger" id="mat-act-delete" title="Delete" disabled><i data-lucide="trash-2"></i></button>
+            </div>
+            <button class="mat-act mat-act-presets" id="mat-act-presets" title="Apply an industry-standard PBR preset"><span><i data-lucide="sparkles" style="margin-right:4px"></i>Industry presets</span><i data-lucide="chevron-up"></i></button>
+            <div class="mat-presets-menu" id="mat-presets-menu"></div>
+          </div>
           <div class="pop-section">
             <div class="pop-section-head"><span>Materials</span><span class="hint">Double-click to edit</span></div>
             <div class="mat-list" id="mat-list">
               <div class="mat-empty">No materials yet — load a model.</div>
             </div>
-          </div>
-          <div class="mat-actions">
-            <button class="mat-act" id="mat-act-add" title="Create a new material and assign to selected parts"><i data-lucide="plus"></i>New</button>
-            <button class="mat-act" id="mat-act-duplicate" title="Duplicate the selected material" disabled><i data-lucide="copy"></i>Duplicate</button>
-            <button class="mat-act" id="mat-act-merge" title="Merge all selected materials into one" disabled><i data-lucide="combine"></i>Merge</button>
-            <button class="mat-act mat-act-danger" id="mat-act-delete" title="Delete material (parts revert to default)" disabled><i data-lucide="trash-2"></i>Delete</button>
-            <button class="mat-act mat-act-presets" id="mat-act-presets" title="Apply an industry-standard PBR preset"><span><i data-lucide="sparkles" style="margin-right:4px"></i>Industry presets</span><i data-lucide="chevron-up"></i></button>
-            <div class="mat-presets-menu" id="mat-presets-menu"></div>
           </div>
         </div>
         <div id="vp-settings-pop">
