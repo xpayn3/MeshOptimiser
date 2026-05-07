@@ -13208,7 +13208,16 @@ function _rebuildPrimitiveGeometry(p) {
   newGeom.computeBoundingBox();
   newGeom.computeVertexNormals();
   p.mesh.geometry = newGeom;
-  try { oldGeom?.dispose?.(); } catch (_) {}
+  // Defer the dispose by two frames so any render commands the WebGPU
+  // backend already enqueued referencing oldGeom's index/vertex buffers
+  // complete before we release the GPU resources. Without this, fast
+  // slider drags trigger 'setIndexBuffer: parameter 1 is not of type
+  // GPUBuffer' errors as the renderer hits a buffer it just freed.
+  if (oldGeom) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      try { oldGeom.dispose(); } catch (_) {}
+    }));
+  }
 
   // Refresh derived stats — used by the transform panel size column,
   // the right-prop bbox row, the % of model bar, etc.
