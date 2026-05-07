@@ -11612,6 +11612,35 @@ function wireUI() {
     _toggleExportMenu();
   });
 
+  // Toolbar Add-primitive button. Same dropdown affordance as Export —
+  // the menu is in HTML; we just toggle visibility and route the chosen
+  // primitive id to _addPrimitive(). Closing on outside click is wired
+  // alongside the export menu's existing close logic.
+  const _addPrimMenu = $('add-prim-menu');
+  const _addPrimBtn  = $('btn-add-prim');
+  if (_addPrimBtn && _addPrimMenu) {
+    _addPrimBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const open = _addPrimMenu.classList.toggle('show');
+      _addPrimBtn.classList.toggle('active', open);
+    });
+    _addPrimMenu.addEventListener('click', e => {
+      const item = e.target.closest('[data-prim]');
+      if (!item) return;
+      e.stopPropagation();
+      _addPrimMenu.classList.remove('show');
+      _addPrimBtn.classList.remove('active');
+      try { _addPrimitive(item.dataset.prim); }
+      catch (err) { console.warn('[prim] add failed:', err); toast('Add failed', err.message || String(err), 'error', 4000); }
+    });
+    document.addEventListener('click', () => {
+      if (_addPrimMenu.classList.contains('show')) {
+        _addPrimMenu.classList.remove('show');
+        _addPrimBtn.classList.remove('active');
+      }
+    });
+  }
+
   $('vw-solid').addEventListener('click', () => setViewMode('solid'));
   $('vw-wire').addEventListener('click', () => setViewMode('wire'));
   $('vw-xray').addEventListener('click', () => setViewMode('xray'));
@@ -12738,6 +12767,124 @@ function _disposeAllBVHs() {
 
 // Format-agnostic ingestion: walks meshes off a parsed scene root, builds
 // state.parts, hooks up materials, and triggers all the post-load UI work.
+// ── Primitive shapes ─────────────────────────────────────────────────────
+// Add a Blender / C4D / Maya-style primitive to the scene as a first-class
+// part — shows up in the assembly tree, pickable, transformable, can take
+// a material, exported alongside the loaded model. Sized relative to the
+// current model footprint (or 100 units when the scene is empty) so the
+// new shape is immediately visible at any zoom.
+function _primitiveGeometry(kind) {
+  switch (kind) {
+    case 'cube':         return new THREE.BoxGeometry(1, 1, 1, 2, 2, 2);
+    case 'sphere':       return new THREE.SphereGeometry(0.5, 48, 32);
+    case 'cylinder':     return new THREE.CylinderGeometry(0.5, 0.5, 1, 48, 1, false);
+    case 'cone':         return new THREE.ConeGeometry(0.5, 1, 48, 1);
+    case 'torus':        return new THREE.TorusGeometry(0.4, 0.15, 24, 64);
+    case 'torusknot':    return new THREE.TorusKnotGeometry(0.35, 0.12, 100, 16);
+    case 'plane':        return new THREE.PlaneGeometry(1, 1, 1, 1);
+    case 'capsule':      return new THREE.CapsuleGeometry(0.3, 0.6, 12, 24);
+    case 'icosahedron':  return new THREE.IcosahedronGeometry(0.5, 0);
+    case 'dodecahedron': return new THREE.DodecahedronGeometry(0.5, 0);
+    default: throw new Error(`Unknown primitive: ${kind}`);
+  }
+}
+function _primitiveDefaultName(kind) {
+  return ({
+    cube: 'Cube', sphere: 'Sphere', cylinder: 'Cylinder', cone: 'Cone',
+    torus: 'Torus', torusknot: 'Torus knot', plane: 'Plane',
+    capsule: 'Capsule', icosahedron: 'Icosahedron', dodecahedron: 'Dodecahedron',
+  })[kind] || kind;
+}
+function _addPrimitive(kind) {
+  if (!scene || !state.partsRoot) return;
+
+  const geom = _primitiveGeometry(kind);
+  // Three.js cylinders/cones/capsules are Y-up; the app is Z-up. Stand
+  // them on the floor instead of letting them lie on their side.
+  if (kind === 'cylinder' || kind === 'cone' || kind === 'capsule') {
+    geom.rotateX(Math.PI / 2);
+  }
+  geom.computeBoundingBox();
+  geom.computeVertexNormals();
+
+  // Size relative to the loaded model so the new shape is immediately
+  // visible. Empty scene → 100 units (mm-friendly).
+  const overall = new THREE.Box3();
+  state.partsRoot.traverse(o => { if (o.isMesh && o.geometry) overall.expandByObject(o); });
+  let scale = 100;
+  if (!overall.isEmpty()) {
+    const sz = overall.getSize(new THREE.Vector3());
+    scale = Math.max(sz.x, sz.y, sz.z) * 0.25 || 100;
+  }
+
+  // Unique name so back-to-back adds don't collide (Cube, Cube.001, ...).
+  const baseName = _primitiveDefaultName(kind);
+  const usedNames = new Set(state.parts.filter(p => !p.deleted).map(p => p.name));
+  let name = baseName;
+  if (usedNames.has(name)) {
+    let n = 1;
+    while (usedNames.has(`${baseName}.${String(n).padStart(3, '0')}`)) n++;
+    name = `${baseName}.${String(n).padStart(3, '0')}`;
+  }
+
+  // Cycle through a small palette so consecutive primitives stand apart.
+  const palette = [0x6ea8ff, 0xa78bfa, 0x34c759, 0xfbbf24, 0xff6b6b, 0x60d394, 0xff9f43, 0xb388ff];
+  const color = new THREE.Color(palette[(state.parts.length || 0) % palette.length]);
+  const material = (typeof getOrCreateMaterial === 'function')
+    ? getOrCreateMaterial(color)
+    : new THREE.MeshStandardMaterial({ color, metalness: 0.05, roughness: 0.55 });
+
+  const mesh = new THREE.Mesh(geom, material);
+  mesh.name = name;
+  mesh.scale.set(scale, scale, scale);
+  // Drop the primitive at the model bbox centre, raised half its height
+  // so it sits on top of the floor — feels like a natural insert point.
+  if (!overall.isEmpty()) {
+    const center = overall.getCenter(new THREE.Vector3());
+    mesh.position.set(center.x, center.y, overall.min.z + scale * 0.5);
+  } else {
+    mesh.position.set(0, 0, scale * 0.5);
+  }
+  mesh.updateMatrixWorld(true);
+
+  const triCount = geom.index ? geom.index.count / 3 : (geom.attributes.position?.count || 0) / 3;
+  const vertCount = geom.attributes.position?.count || 0;
+  const bbox = geom.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+  const sz = bbox.getSize(new THREE.Vector3());
+  const partId = (state.parts.length ? Math.max(...state.parts.map(p => p.partId)) : -1) + 1;
+  const partInfo = {
+    partId, name, hash: 'prim_' + kind + '_' + partId,
+    triCount, vertCount, bbox,
+    sizeMetrics: { diag: sz.length(), vol: sz.x * sz.y * sz.z, max: Math.max(sz.x, sz.y, sz.z) },
+    visible: true, deleted: false, flagged: false,
+    originalColor: color.clone(),
+    mesh, group: null, instanceIndex: -1, instancedMesh: null,
+    userExtras: {}, isPrimitive: true, primitiveKind: kind,
+  };
+  mesh.userData.partId = partId;
+  state.parts.push(partInfo);
+  if (state.partById) state.partById.set(partId, partInfo);
+  state.partsRoot.add(mesh);
+  state.partsRoot.updateMatrixWorld(true);
+  if (state.geomByHash && !state.geomByHash.has(partInfo.hash)) {
+    state.geomByHash.set(partInfo.hash, geom);
+  }
+
+  // UI refresh: tree, status, selection, gizmo.
+  try {
+    if (typeof rebuildTree === 'function') rebuildTree();
+    if (typeof refreshStatusBar === 'function') refreshStatusBar();
+    if (state.selected) { state.selected.clear(); state.selected.add(partId); }
+    if (typeof applySelectionColors === 'function') applySelectionColors();
+    if (typeof refreshPropertiesPanel === 'function') refreshPropertiesPanel();
+    if (typeof updateGizmo === 'function') updateGizmo();
+  } catch (e) { console.warn('[prim] post-add UI refresh failed:', e); }
+
+  toast(`Added ${baseName}`, name, 'info', 2200);
+  requestRender();
+  return partInfo;
+}
+
 // Called from loadGlbFile / loadFbxFile / loadObjFile / load3mfFile /
 // loadStlFile after each format-specific parser produces a THREE.Object3D.
 async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
@@ -14353,8 +14500,8 @@ function _openMaterialEditor(info) {
       // Sheen / Specular for MeshPhysicalMaterial) reveal as the user scrolls.
       // _DraggablePopup clamps to calc(100vh-24px), so on shorter screens this
       // collapses gracefully and the scrollbar takes over.
-      width: 420, height: 860,
-      minWidth: 360, minHeight: 360,
+      width: 380, height: 860,
+      minWidth: 340, minHeight: 360,
       bodyHtml,
       bodyScroll: true,
       onClose: () => {

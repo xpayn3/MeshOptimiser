@@ -1009,6 +1009,21 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     <button class="tbtn primary" id="btn-open"><i data-lucide="folder-open"></i>Open</button>
     <button class="tbtn" id="btn-fit" disabled><i data-lucide="maximize"></i>Fit</button>
     <button class="tbtn" id="btn-reset" disabled><i data-lucide="rotate-ccw"></i>Revert</button>
+    <div class="add-prim-wrap" style="position:relative;display:inline-block">
+      <button class="tbtn" id="btn-add-prim" title="Add a primitive shape (Cube, Sphere, Cylinder, Torus, Cone, Plane, Torus-knot)"><i data-lucide="plus-square"></i>Add <span class="caret"><i data-lucide="chevron-down"></i></span></button>
+      <div id="add-prim-menu" class="export-menu" style="min-width:200px">
+        <button class="export-menu-item" data-prim="cube"><span class="fmt">Cube</span><span class="hint">Box, 6 faces</span></button>
+        <button class="export-menu-item" data-prim="sphere"><span class="fmt">Sphere</span><span class="hint">UV sphere</span></button>
+        <button class="export-menu-item" data-prim="cylinder"><span class="fmt">Cylinder</span><span class="hint">Open or capped</span></button>
+        <button class="export-menu-item" data-prim="cone"><span class="fmt">Cone</span><span class="hint">Tapered cylinder</span></button>
+        <button class="export-menu-item" data-prim="torus"><span class="fmt">Torus</span><span class="hint">Donut</span></button>
+        <button class="export-menu-item" data-prim="torusknot"><span class="fmt">Torus knot</span><span class="hint">Material test shape</span></button>
+        <button class="export-menu-item" data-prim="plane"><span class="fmt">Plane</span><span class="hint">Flat quad</span></button>
+        <button class="export-menu-item" data-prim="capsule"><span class="fmt">Capsule</span><span class="hint">Cylinder + 2 hemispheres</span></button>
+        <button class="export-menu-item" data-prim="icosahedron"><span class="fmt">Icosahedron</span><span class="hint">20-face poly</span></button>
+        <button class="export-menu-item" data-prim="dodecahedron"><span class="fmt">Dodecahedron</span><span class="hint">12-face poly</span></button>
+      </div>
+    </div>
     <div class="divider"></div>
     <button class="tbtn" id="btn-undo" disabled><i data-lucide="undo-2"></i>Undo</button>
     <button class="tbtn" id="btn-redo" disabled><i data-lucide="redo-2"></i>Redo</button>
@@ -1985,6 +2000,9 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     document.addEventListener('mousedown', e => {
       if (!sPop.classList.contains('show')) return;
       if (sPop.contains(e.target) || sBtn.contains(e.target)) return;
+      // Don't close when interacting with floating editors / pickers /
+      // popovers that might sit over the panel.
+      if (e.target.closest?.('#_mat-editor-popup, .cp-pop, .mat-tex-pop, .dlg-popup, .cs-pop')) return;
       closeSettings();
     });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && sPop.classList.contains('show')) closeSettings(); });
@@ -2001,11 +2019,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         try { window._populateMaterialsList(); } catch (err) { console.warn('[mat] populate failed:', err); }
       }
     });
-    document.addEventListener('mousedown', e => {
-      if (!mPop.classList.contains('show')) return;
-      if (mPop.contains(e.target) || mBtn.contains(e.target)) return;
-      closeMaterials();
-    });
+    // Materials panel is sticky — only its own button (mBtn) toggles it.
+    // No outside-click or Esc dismissal, by design.
   }
 })();
 </script>
@@ -2023,7 +2038,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-mat-singleclick"></script>
+<script type="module" src="app-v2.js?v=2026050707-add-primitive"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
