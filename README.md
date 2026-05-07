@@ -218,8 +218,7 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 Updates
 
-Tag legend: **[feat]** new feature · **[fix]** bug fix · **[perf]** performance ·
-**[polish]** UX / visual refinement · **[refactor]** internal cleanup · **[docs]** documentation.
+Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
 ### **v1.3**
 
@@ -233,87 +232,87 @@ refresh toward IBM blue with strict token-only colour usage.
 
 **Lighting — HDRI environment**
 
-- **[feat]** New **HDRI** mode in Background settings. Loads any `.hdr` /
+- ![new][new] New **HDRI** mode in Background settings. Loads any `.hdr` /
   `.exr` file as an image-based environment that lights every PBR
   material in the scene. Plus 4 **procedural presets** so a user can ship
   a polished look without sourcing an HDRI file.
-- **[feat]** **Custom HDR / EXR loader** wired to the file picker — the
+- ![new][new] **Custom HDR / EXR loader** wired to the file picker — the
   loaded environment becomes both the scene background AND the IBL light
   source.
-- **[feat]** **Draggable sun gizmo** repurposed to drive HDRI rotation:
+- ![new][new] **Draggable sun gizmo** repurposed to drive HDRI rotation:
   rotating the sun rotates the whole environment, and the model relights
   in real time as the gizmo moves.
-- **[feat]** **HDRI intensity slider** under Display → Lighting. Forces a
+- ![new][new] **HDRI intensity slider** under Display → Lighting. Forces a
   full re-light pass on change so the model brightness updates instantly.
-- **[fix]** Fixed black-scene bug when switching back to HDRI mode after
+- ![fix][fix] Fixed black-scene bug when switching back to HDRI mode after
   having loaded a different background.
-- **[polish]** Sun rig dims automatically when HDRI is active so it
+- ![polish][polish] Sun rig dims automatically when HDRI is active so it
   doesn't double-up over the IBL.
 
 **Atmosphere — floor grid + fog**
 
-- **[feat]** Replaced the finite `THREE.GridHelper` with an "infinite"
+- ![new][new] Replaced the finite `THREE.GridHelper` with an "infinite"
   axis-coloured `LineSegments` grid that scales to ~200× the model
   footprint. Centre row red (X axis) / green (Y axis); every other line
   thin grey.
-- **[feat]** **Spline-style hairline fade** — per-vertex alpha smoothsteps
+- ![new][new] **Spline-style hairline fade** — per-vertex alpha smoothsteps
   out toward the horizon, with corners past the fadeEnd dropped at build
   time so the vertex budget stays under 50k even on a 1mm-unit model.
-- **[feat]** **LOD on the minor cells** — minor hairlines fade out when
+- ![new][new] **LOD on the minor cells** — minor hairlines fade out when
   zoomed out so far the cells become visual noise; restore correctly on
   zoom-in.
-- **[polish]** Overall grid opacity dropped 0.55 → 0.22 — the grid now
+- ![polish][polish] Overall grid opacity dropped 0.55 → 0.22 — the grid now
   reads as a quiet reference plane instead of a dominant element.
-- **[feat]** **Scene fog** enabled by default with Display-section
+- ![new][new] **Scene fog** enabled by default with Display-section
   controls for **near**, **far**, and **intensity**. Fog colour picks
   itself from the active background mode so the horizon dissolves cleanly.
 
 **Primitives — direct mesh creation**
 
-- **[feat]** New toolbar dropdown to **add primitives** (`+` icon) —
+- ![new][new] New toolbar dropdown to **add primitives** (`+` icon) —
   Cube, Sphere, Cylinder, Cone, Torus, plus more. Inserted directly into
   the scene with proper materials and a fresh tree node so they're
   immediately editable like any other part.
-- **[feat]** **Parametric Shape-parameters panel** in the C4D
+- ![new][new] **Parametric Shape-parameters panel** in the C4D
   Attributes-Manager style. After insertion the panel exposes all the
   generator parameters (radius, segments, height, etc.) — re-edits
   rebuild the geometry in place.
-- **[fix]** Deferred geometry dispose on parameter edits to fix the
+- ![fix][fix] Deferred geometry dispose on parameter edits to fix the
   WebGPU `setIndexBuffer` race that would crash the renderer on rapid
   re-evaluations.
 
 **Camera views — top-center pill**
 
-- **[feat]** Removed the four `T / F / S / Persp` buttons from the
+- ![new][new] Removed the four `T / F / S / Persp` buttons from the
   top-left toolbar in favour of a single **pill button at the top centre
   of the viewport**. The pill shows the active view's name (Cam / Top /
   Front / Side); clicking it reveals a dropdown of the alternatives.
-- **[feat]** **`Ctrl/⌘ + 1..4`** keyboard shortcuts: 1 = Cam
+- ![new][new] **`Ctrl/⌘ + 1..4`** keyboard shortcuts: 1 = Cam
   (Perspective), 2 = Top, 3 = Front, 4 = Side. Each row in the pill
   dropdown shows its shortcut as a kbd chip; the prefix is platform-aware
   (`⌘` on macOS, `Ctrl` everywhere else). Existing bare `1/2/3` keys
   for view modes (solid / wireframe / x-ray) now require *no* modifier
   so the two systems don't collide.
-- **[feat]** Pill auto-syncs back to **Cam** the instant the user starts
+- ![new][new] Pill auto-syncs back to **Cam** the instant the user starts
   orbiting, so the toolbar can never lie about the active view.
-- **[polish]** Pill label centered, lucide camera icon, slight black
+- ![polish][polish] Pill label centered, lucide camera icon, slight black
   glaze background, no stroke, blur backdrop. Camera-view shortcuts also
   added to the command palette and Shortcuts overlay.
 
 **Viewport — render-to-PNG enhancements**
 
-- **[feat]** **Camera-shutter flash fires on icon click**, *before* the
+- ![new][new] **Camera-shutter flash fires on icon click**, *before* the
   Save Screenshot dialog opens — the visual snap precedes the
   configuration step rather than firing after, so the click-to-shutter
   feedback feels like a real camera. The dialog now lands ~120 ms later,
   just as the flash fades, with the OS save picker still firing on Save.
-- **[feat]** Right-click on empty viewport space now exposes **17
+- ![new][new] Right-click on empty viewport space now exposes **17
   actions** (was 5): Fit / Reset camera, all 4 standard views with
   shortcuts, all 3 render modes, live-state toggles for grid /
   bounding-boxes / auto-rotate (label flips `Show ↔ Hide`, `Start ↔ Stop`
   based on current state), Select all / Show all parts, Save
   screenshot…, Save scene.
-- **[fix]** **Right-click viewport menu was completely broken** —
+- ![fix][fix] **Right-click viewport menu was completely broken** —
   another `contextmenu` capture-phase listener in `app-v2.js:16359`
   unconditionally `preventDefault`s on every non-input target to
   suppress the native browser menu, which set `defaultPrevented=true`
@@ -324,7 +323,7 @@ refresh toward IBM blue with strict token-only colour usage.
 
 **Tooltips — bulletproof against navigation**
 
-- **[fix]** Tooltips no longer get stranded when a popup opens, a modal
+- ![fix][fix] Tooltips no longer get stranded when a popup opens, a modal
   shows, the page loses focus, the anchor's DOM gets rebuilt, or the
   cursor sits still while a panel slides in over the button. Six
   layered safeguards added without changing the happy path:
@@ -350,13 +349,13 @@ refresh toward IBM blue with strict token-only colour usage.
 
 **Visual language — borderless popups**
 
-- **[polish]** Removed the 1px stroke from every popup card sitewide.
+- ![polish][polish] Removed the 1px stroke from every popup card sitewide.
   `.dlg-popup .dlg-pop` (Save Screenshot, Batch Rename, Material editor,
   any `_DraggablePopup`), `.modal` (Welcome, Settings, Shortcuts,
   Cmd-K, Save Scene, Export), `#vp-materials-pop`, `#vp-settings-pop`,
   and the camera-view dropdown all now sit flush on their `var(--bg1)`
   / blurred backgrounds with `box-shadow:var(--sh)` for depth.
-- **[polish]** Removed the world-axis triad button (`tg-axes`) and the
+- ![polish][polish] Removed the world-axis triad button (`tg-axes`) and the
   in-scene `THREE.AxesHelper` it controlled. Boot path, scene init,
   thumbnail capture, command palette, scene-state save/restore — all
   references swept. The bottom-left axis-gizmo SVG (camera-orient
@@ -364,46 +363,46 @@ refresh toward IBM blue with strict token-only colour usage.
 
 **Visual language — accent refresh**
 
-- **[polish]** Accent token `--ac` shifted from `#6ea8ff` (sky blue)
+- ![polish][polish] Accent token `--ac` shifted from `#6ea8ff` (sky blue)
   toward IBM blue: **`#6b8dff`** rgb(107,141,255). Slightly more
   saturated, marginally less violet. Gradient companion `#4f8be5` →
   `#4f7ce0`. All `rgba(110,168,255, X)` triplets updated to
   `rgba(107,141,255, X)` sitewide.
-- **[refactor]** Audit + sweep: every hardcoded accent reference (the
+- ![refactor][refactor] Audit + sweep: every hardcoded accent reference (the
   Z-axis label, gizmo HUD Z value, mixed-material gradient, view-mode
   + gizmo + grid `--btn-tint` declarations) now uses `var(--ac)`. The
   only remaining literal `#6b8dff` is the token definition itself and
   the material-color-picker `PRESETS` array (a list of distinct user
   swatches).
-- **[polish]** **iOS switch tint** flipped from `var(--ok)` (green) to
+- ![polish][polish] **iOS switch tint** flipped from `var(--ok)` (green) to
   `var(--ac)` (accent blue) — single rule
   `.toggle input:checked+.switch` changes every checkbox switch in
   Display, Export, Save Scene, dynamic-template toggles, etc.
 
 **Right sidebar — readability**
 
-- **[polish]** Yellow `.btn.warn` text on the right sidebar
+- ![polish][polish] Yellow `.btn.warn` text on the right sidebar
   (`Smart fit`, `Remove empty parts`, `Deduplicate geometry`, `Fix
   degenerate parts`, `Delete empty groups`, `Flag low-triangle parts`,
   `Flag thin slivers`, `Smart-fit all parts`, `Decimate`) flipped to
   `var(--tx)` white. The yellow-tinted hover background still flags
   them as lossy/destructive ops; only the resting label/icon colour
   changed.
-- **[polish]** Right-sidebar button font weight 500 → 400 so a column
+- ![polish][polish] Right-sidebar button font weight 500 → 400 so a column
   of buttons reads quieter at the 11 px size.
 
 **Material editor + popups**
 
-- **[feat]** Single-click swap when the material editor is already
+- ![new][new] Single-click swap when the material editor is already
   open — clicking a different material in the grid switches the editor
   contents to that material in place instead of needing close/reopen.
-- **[polish]** Materials popup actions row promoted to the top of the
+- ![polish][polish] Materials popup actions row promoted to the top of the
   panel (action bar above grid) so the most-used buttons are always
   reachable without scrolling.
 
 **Toolbar**
 
-- **[polish]** Only one toolbar dropdown can be open at a time —
+- ![polish][polish] Only one toolbar dropdown can be open at a time —
   opening any of the format / primitive / export menus auto-closes the
   others.
 
@@ -418,134 +417,134 @@ menus.
 
 **Viewport — standard CAD views**
 
-- **[feat]** New `T` / `F` / `S` viewport buttons → switch to orthographic
+- ![new][new] New `T` / `F` / `S` viewport buttons → switch to orthographic
   and align to Top, Front, or Side. Z-up CAD scenes use the CAD convention
   (Y forward); Y-up scenes (glTF / Blender) flip accordingly. The active
   button highlights itself, and the highlight clears the instant the user
   orbits — no stale active state.
-- **[feat]** New `Persp` button (`video` icon) → snap back to a 3/4
+- ![new][new] New `Persp` button (`video` icon) → snap back to a 3/4
   isometric perspective view. Restores the scene's CAD up-axis, re-enables
   the FOV slider, and clears the ortho-view active state in one click.
 
 **Viewport — screenshot capture**
 
-- **[feat]** New camera button (top-right of the viewport) opens a custom
+- ![new][new] New camera button (top-right of the viewport) opens a custom
   draggable, resizable **Save Screenshot** popup with:
   - 6 resolution presets — Viewport 1×/2×/4×, 1080p, 1440p, 4K — in a 3×2
     grid; the active preset auto-highlights when W/H matches.
   - Custom width × height inputs with live aspect ratio + megapixel readout.
   - Filename field auto-populated as `<modelStem>_<ISO timestamp>.png`,
     pre-selected on open for instant rename.
-- **[feat]** Save uses the **File System Access API** (`showSaveFilePicker`)
+- ![new][new] Save uses the **File System Access API** (`showSaveFilePicker`)
   on supported browsers so you pick the destination + filename in the OS
   dialog. Falls back to a regular browser download otherwise.
-- **[feat]** Optional bottom-left info stamp burnt into the saved PNG —
+- ![new][new] Optional bottom-left info stamp burnt into the saved PNG —
   filename, dimensions, timestamp.
-- **[feat]** Camera-shutter flash effect — a white overlay fades in (~65 ms)
+- ![new][new] Camera-shutter flash effect — a white overlay fades in (~65 ms)
   and out (~280 ms) as the frame is captured, masking the unintentional
   swap-chain blink during readback so the capture feels like a real shutter
   click.
-- **[feat]** Capture pipeline renders into a `WebGLRenderTarget` at the
+- ![new][new] Capture pipeline renders into a `WebGLRenderTarget` at the
   chosen resolution and reads back via `readRenderTargetPixels`. Identical
   output on WebGL and WebGPU; for perspective cameras it temporarily
   adjusts `camera.aspect` so a 16:9 export of a square viewport isn't
   squashed.
-- **[fix]** 3-phase File System Access error handling — `showSaveFilePicker`
+- ![fix][fix] 3-phase File System Access error handling — `showSaveFilePicker`
   returns null on user cancel, but `createWritable` can also reject (write
   denial, OneDrive lock). All three failure modes now route to the regular
   download fallback instead of silently dropping the save.
-- **[fix]** Stop the double-prompt corrupted-file bug where the save dialog
+- ![fix][fix] Stop the double-prompt corrupted-file bug where the save dialog
   fired twice and produced a 0-byte PNG.
 
 **Materials — full editor + shader-ball preview**
 
-- **[feat]** Disney-style **shader-ball preview** assembly replaces the
+- ![new][new] Disney-style **shader-ball preview** assembly replaces the
   bare sphere — sphere + cylinder + ground disk + back-card geometry, lit
   with a PMREM env map + a side-key fill so PBR responses read the way
   they would in a real DCC viewport.
-- **[feat]** Same shader-ball geometry now powers the materials grid
+- ![new][new] Same shader-ball geometry now powers the materials grid
   thumbnails, not just the editor's hero preview.
-- **[feat]** Material editor switched to **C4D / Redshift-style row
+- ![new][new] Material editor switched to **C4D / Redshift-style row
   layout** — each property is a single horizontal row; map slots, intensity
   scalars, and the eyedropper sit inline with the property they belong to.
-- **[feat]** Per-property texture slots covering the full PBR set — base
+- ![new][new] Per-property texture slots covering the full PBR set — base
   color, normal, roughness, metalness, AO, emissive, bump, displacement,
   alpha, env, clearcoat (×3), sheen (×2), transmission, thickness, specular
   (×2), iridescence (×2), anisotropy. Map intensity scalars per slot.
-- **[feat]** Floating texture-attach popover anchored to each `.mat-row-tex`,
+- ![new][new] Floating texture-attach popover anchored to each `.mat-row-tex`,
   plus an eyedropper button flush with the colour picker.
-- **[fix]** Texture leak on model swap — `material.dispose()` doesn't dispose
+- ![fix][fix] Texture leak on model swap — `material.dispose()` doesn't dispose
   textures, and `_loadTexture` only revoked its blob URL on error. The
   deferred-dispose drain now walks all 25 PBR map slots, revokes any
   `userData.dataUrl` blob URL, disposes the texture, and nulls the slot.
-- **[fix]** Material thumbnails fall back to a lightweight 2D canvas paint
+- ![fix][fix] Material thumbnails fall back to a lightweight 2D canvas paint
   when `WebGLRenderer` is unavailable, instead of showing blank tiles.
 
 **Gizmo — scale, snap, HUD**
 
-- **[feat]** Added a **scale gizmo** (`T` shortcut, `scaling` icon).
-- **[feat]** Global **Shift-to-snap** across all three gizmo modes —
+- ![new][new] Added a **scale gizmo** (`T` shortcut, `scaling` icon).
+- ![new][new] Global **Shift-to-snap** across all three gizmo modes —
   10 units for translate, 15° for rotate, 0.1-step for scale.
-- **[feat]** Live **gizmo HUD** — readout panel next to the gizmo while
+- ![new][new] Live **gizmo HUD** — readout panel next to the gizmo while
   dragging, showing the current delta in world units / degrees / scale
   factor.
-- **[polish]** HUD only shows the axis you're actually grabbing, not the
+- ![polish][polish] HUD only shows the axis you're actually grabbing, not the
   full XYZ block, while a single-axis handle is active.
 
 **Transform panel**
 
-- **[feat]** Right-click on the Position / Rotation / Size column headers
+- ![new][new] Right-click on the Position / Rotation / Size column headers
   for **Copy / Paste XYZ** — round-trips the three values as
   `x, y, z` text via the clipboard, so transforms move between objects in
   one keystroke pair.
-- **[perf]** Skip `_readStableSize()` while a translate or rotate gizmo
+- ![perf][perf] Skip `_readStableSize()` while a translate or rotate gizmo
   drag is in flight — the size readout doesn't change during pure
   position/rotation, and the per-frame box recompute was a measurable
   hit on 50K-tri parts.
-- **[fix]** Restored the **native browser context menu** on form inputs —
+- ![fix][fix] Restored the **native browser context menu** on form inputs —
   Copy / Paste / Select All works again on every numeric/text field. The
   custom right-click was eating those events project-wide.
 
 **Loaders & format coverage**
 
-- **[feat]** Legacy **FBX rescue path** — FBX FileVersion 6100 (and any
+- ![new][new] Legacy **FBX rescue path** — FBX FileVersion 6100 (and any
   ASCII variant Three.js's loader chokes on) now routes through Assimp.js
   → GLB → GLTFLoader. Saves files that were previously stuck at "loader
   threw, no model on screen".
-- **[polish]** When both Three.js and Assimp give up, the toast names
+- ![polish][polish] When both Three.js and Assimp give up, the toast names
   the actual cause instead of a generic "loader failed".
 
 **Tree / sidebar**
 
-- **[polish]** Tree rows: object/group labels shrink from 12.5 px → 11.5 px,
+- ![polish][polish] Tree rows: object/group labels shrink from 12.5 px → 11.5 px,
   and group rows lose the bold weight. Reads denser without losing
   hierarchy.
-- **[polish]** Sidebar: compact sidebar buttons; the "draws" stat was
+- ![polish][polish] Sidebar: compact sidebar buttons; the "draws" stat was
   noise alongside "tris/parts/instanced" — dropped.
-- **[polish]** Welcome modal: drop zone pushed lower so the recent-files
+- ![polish][polish] Welcome modal: drop zone pushed lower so the recent-files
   list breathes.
 
 **Visual polish**
 
-- **[polish]** Background: Blender-grey preset lightened — the previous
+- ![polish][polish] Background: Blender-grey preset lightened — the previous
   shade tipped too dark and competed with the grid's contrast.
-- **[polish]** Chromium scrollbars: `::-webkit-scrollbar` set to match
+- ![polish][polish] Chromium scrollbars: `::-webkit-scrollbar` set to match
   Firefox's `scrollbar-width: thin` so the sidebar reads consistent
   across browsers.
 
 **Internal**
 
-- **[refactor]** Removed dead `_tfStashQuat` global (declared, never
+- ![refactor][refactor] Removed dead `_tfStashQuat` global (declared, never
   referenced).
-- **[refactor]** Scoped four `_shearTmp*` THREE-object globals into the
+- ![refactor][refactor] Scoped four `_shearTmp*` THREE-object globals into the
   `_matrixHasShear` IIFE; same per-call profile, no module-level pollution.
-- **[refactor]** Collapsed `_Welcome._fmtBytes` (7 lines) into a one-line
+- ![refactor][refactor] Collapsed `_Welcome._fmtBytes` (7 lines) into a one-line
   wrapper around the global `fmtBytes` — kept the `Number.isFinite` guard
   for stored-state reads.
 
 **Docs**
 
-- **[docs]** README: ASCII logo centered, Pre-1.0 R&D section added,
+- ![docs][docs] README: ASCII logo centered, Pre-1.0 R&D section added,
   marketing copy toned down across About + Updates.
 
 ### **v1.1**
@@ -629,3 +628,21 @@ Traces of it are still in the tree, mostly under `_archive/`:
 *Built for engineers who want their CAD to load before their coffee.* ☕
 
 </div>
+
+<!-- ── Changelog tag badges ───────────────────────────────────────────────
+     Reference-style image defs used by every entry under ## Updates. Single
+     source of truth: change the colour / label here once and every row in
+     the changelog updates.  Hex values map to GitHub's own label palette:
+       new      → green   (matches "Type: feature")
+       fix      → red     (matches "Type: bug")
+       perf     → amber   (performance work)
+       polish   → purple  (matches "enhancement")
+       refactor → blue    (matches "good first issue" link blue)
+       docs     → grey    (matches "documentation")
+-->
+[new]:      https://img.shields.io/badge/new-1a7f37?style=flat-square
+[fix]:      https://img.shields.io/badge/fix-cf222e?style=flat-square
+[perf]:     https://img.shields.io/badge/perf-9a6700?style=flat-square
+[polish]:   https://img.shields.io/badge/polish-8250df?style=flat-square
+[refactor]: https://img.shields.io/badge/refactor-0969da?style=flat-square
+[docs]:     https://img.shields.io/badge/docs-57606a?style=flat-square
