@@ -126,6 +126,7 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 .welcome-resume .wr-play svg{width:16px;height:16px;stroke:currentColor;fill:currentColor;stroke-width:0}
 .welcome-resume .wr-info{flex:1;min-width:0}
 .welcome-resume .wr-info .wr-label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ac);margin-bottom:2px}
+#welcome-resume .wr-heading{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ac);margin-bottom:8px;padding-left:2px}
 .welcome-resume .wr-info .wr-name{font-size:16px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .welcome-resume .wr-info .wr-sub{font-size:var(--fs-sm);color:rgba(255,255,255,.65);margin-top:2px}
 .welcome-resume .wr-age{align-self:flex-end;color:rgba(255,255,255,.55);font-size:var(--fs-sm);flex-shrink:0;margin-left:12px}
@@ -523,8 +524,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .scrub-range::-webkit-slider-runnable-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--scrub-pct),var(--bg3) var(--scrub-pct),var(--bg3) 100%);border:none}
 .scrub-range::-moz-range-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:var(--bg3);border:none}
 .scrub-range::-moz-range-progress{height:4px;border-radius:999px;background:var(--ac)}
-.scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:9px;height:9px;border-radius:50%;background:var(--ac);border:0;margin-top:-2.5px;box-shadow:0 1px 2px rgba(0,0,0,.4);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
-.scrub-range::-moz-range-thumb{width:9px;height:9px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 1px 2px rgba(0,0,0,.4);cursor:grab}
+input[type=range].scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;margin-top:-4px;box-shadow:0 0 0 1px rgba(110,168,255,.35),0 1px 2px rgba(0,0,0,.4);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
+input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 1px rgba(110,168,255,.35),0 1px 2px rgba(0,0,0,.4);cursor:grab}
 .scrub-range:hover::-webkit-slider-thumb{transform:scale(1.1)}
 .scrub-range:hover::-moz-range-thumb{transform:scale(1.1)}
 .scrub-range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(110,168,255,.18)}
@@ -638,13 +639,13 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    (Cam / Top / Front / Side) and reveals a dropdown of the alternatives.
    Replaces the four T/F/S/Persp buttons that used to live in the TL stack
    so the toolbar reads quieter and the active view is always legible. */
-.vp-pill{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:26px;background:rgba(15,19,25,.78);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:999px;color:var(--tx);font-size:11px;font-weight:500;letter-spacing:.01em;cursor:pointer;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out);user-select:none;min-width:72px;justify-content:center;line-height:1}
-.vp-pill:hover{background:color-mix(in srgb, var(--ac) 14%, rgba(15,19,25,.78));border-color:color-mix(in srgb, var(--ac) 40%, var(--bd));color:var(--tx)}
+.vp-pill{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:26px;background:rgba(0,0,0,.28);border:0;backdrop-filter:blur(8px);border-radius:999px;color:var(--tx);font-size:11px;font-weight:500;letter-spacing:.01em;cursor:pointer;transition:background 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out);user-select:none;min-width:72px;justify-content:center;line-height:1}
+.vp-pill:hover{background:color-mix(in srgb, var(--ac) 14%, rgba(0,0,0,.28));color:var(--tx)}
 .vp-pill:active{transform:scale(.97)}
-.vp-pill[aria-expanded="true"]{background:color-mix(in srgb, var(--ac) 18%, rgba(15,19,25,.78));border-color:color-mix(in srgb, var(--ac) 55%, var(--bd))}
+.vp-pill[aria-expanded="true"]{background:color-mix(in srgb, var(--ac) 18%, rgba(0,0,0,.28))}
 .vp-pill .vp-pill-label{line-height:1}
-.vp-pill .vp-pill-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:8px;height:8px;color:currentColor;opacity:.85;transition:opacity 160ms var(--ease-out),color 160ms var(--ease-out)}
-.vp-pill .vp-pill-icon svg{width:8px!important;height:8px!important;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;display:block}
+.vp-pill .vp-pill-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:14px;height:14px;color:currentColor;opacity:.85;transition:opacity 160ms var(--ease-out),color 160ms var(--ease-out)}
+.vp-pill .vp-pill-icon svg{width:14px!important;height:14px!important;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block}
 .vp-pill:hover .vp-pill-icon,.vp-pill[aria-expanded="true"] .vp-pill-icon{opacity:1}
 
 .vp-pill-menu{display:flex;flex-direction:column;min-width:160px;padding:4px;background:rgba(15,19,25,.92);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(10px);opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top center;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
@@ -1140,7 +1141,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       </div>
       <div class="vpc tc" id="vp-view-pill-wrap">
         <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="listbox" aria-expanded="false" title="Camera view — click to switch (Cam / Top / Front / Side)">
-          <i class="vp-pill-icon" data-lucide="camera" aria-hidden="true"></i>
+          <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
           <span class="vp-pill-label">Cam</span>
         </button>
         <div id="vp-view-pill-menu" class="vp-pill-menu" role="listbox">
@@ -1183,7 +1184,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
                  checkbox is kept hidden so existing state-mirror code that
                  reads/writes #toggle-highlight (scene save/restore, etc) still
                  works without a refactor. -->
-            <div class="toggle" style="display:none"><span>Highlight small</span><label><input type="checkbox" id="toggle-highlight" checked><span class="switch"></span></label></div>
+            <div class="toggle" style="display:none"><span>Highlight small</span><label><input type="checkbox" id="toggle-highlight"><span class="switch"></span></label></div>
             <div class="toggle"><span>Origin marker</span><label><input type="checkbox" id="toggle-origin"><span class="switch"></span></label></div>
             <div class="toggle"><span>FPS counter</span><label><input type="checkbox" id="toggle-fps"><span class="switch"></span></label></div>
             <div class="toggle"><span>Renderer stats</span><label><input type="checkbox" id="toggle-stats"><span class="switch"></span></label></div>
@@ -1762,11 +1763,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 </div>
 
 <div class="modal-bg" id="welcome-modal">
-  <div class="modal" style="width:520px">
-    <div class="modal-h">
-      <h3 id="welcome-title">Open a model</h3>
-      <button class="x" id="welcome-close" title="Close (Esc)">✕</button>
-    </div>
+  <div class="modal" style="width:520px;position:relative">
+    <button class="x" id="welcome-close" title="Close (Esc)" style="position:absolute;top:14px;right:14px;z-index:1">✕</button>
     <div class="modal-b">
       <div id="welcome-pick-pane">
         <div id="welcome-resume"></div>
@@ -2025,7 +2023,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-hdri-sunlight"></script>
+<script type="module" src="app-v2.js?v=2026050707-mat-singleclick"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

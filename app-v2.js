@@ -27,7 +27,7 @@ const $ = id => document.getElementById(id);
 const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
   viewMode: 'solid', showGrid: true, showBboxes: false,
-  highlightSmall: true, autoRotate: false, bgMode: 'dark', fog: true,
+  highlightSmall: false, autoRotate: false, bgMode: 'dark', fog: true,
   fogNear: null, fogFar: null,     // null = auto-tune from model footprint
   fogIntensity: 1,                 // multiplier on fog falloff range
   hdriRotation: Math.PI * 0.25,    // radians around scene up (Z) for HDRI bg/env
@@ -1265,10 +1265,10 @@ const _Welcome = (() => {
       ? `style="background-image:url('${rec.thumb}')"`
       : '';
     slot.innerHTML = `
+      <div class="wr-heading">Resume project</div>
       <button id="welcome-resume-btn" class="welcome-resume" ${bgStyle}>
         <span class="wr-play"><i data-lucide="play"></i></span>
         <span class="wr-info">
-          <span class="wr-label">Resume project</span>
           <span class="wr-name">${safeName}</span>
           <span class="wr-sub">Pick up where you left off</span>
         </span>
@@ -4425,10 +4425,10 @@ function _openScreenshotDialog() {
       try {
         const stamp = !!root.querySelector('#ss-overlay-stamp')?.checked;
         const blob = await _captureFrameAsBlob(w, h, { stamp });
-        // Fire the shutter flash AFTER readback so the visible viewport is
-        // already restored — the flash overlays the recovered frame, giving
-        // a clean "snap" without the messy black blink.
-        _doCameraFlash();
+        // No flash here on purpose — the shutter already fired when the
+        // user pressed the camera button to open this dialog (see
+        // _captureViewportScreenshot). Flashing again at save time would
+        // double-blink the viewport for a single conceptual action.
         const finalName = await _saveScreenshotBlob(blob, name);
         if (finalName) {
           toast('Screenshot saved', `${finalName} (${w}×${h})`, 'info', 2200);
@@ -4460,9 +4460,18 @@ function _openScreenshotDialog() {
   setTimeout(() => { try { nameIn.focus(); nameIn.select(); } catch (_) {} }, 60);
 }
 
-// Public entry point wired to the viewport camera button.
+// Public entry point wired to the viewport camera button. Fires the camera
+// shutter flash immediately so the click feels like an actual snapshot,
+// then opens the resolution + save-location dialog one frame later so the
+// flash is fully visible before the popup chrome paints over it. The real
+// capture still happens when the user clicks Save in the dialog — the flash
+// is purely the "shutter" cue.
 function _captureViewportScreenshot() {
-  _openScreenshotDialog();
+  _doCameraFlash();
+  // ~120 ms delay = roughly the flash's peak frame, so the popup arrives
+  // just as the white starts fading out — feels like the dialog is "what
+  // came out of the camera" rather than a separate action.
+  setTimeout(_openScreenshotDialog, 120);
 }
 
 // Render the scene into a small offscreen target, encode the result as a JPEG
@@ -13508,10 +13517,10 @@ function buildMaterialsPanel() {
     row.innerHTML = `
       ${thumbHtml}
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-        <span style="color:var(--tx);font-weight:500" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+        <span style="color:var(--tx);font-weight:500">${escapeHtml(name)}</span>
         <span style="display:block;font-family:ui-monospace,monospace;font-size:10.5px;color:var(--tx3)">${hex} · ${info.count}</span>
       </span>
-      <button class="mat-row-edit" title="Edit material" style="background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:5px;cursor:pointer;flex-shrink:0;transition:background 120ms,border-color 120ms,color 120ms">
+      <button class="mat-row-edit" style="background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:5px;cursor:pointer;flex-shrink:0;transition:background 120ms,border-color 120ms,color 120ms">
         <i data-lucide="sliders-horizontal" style="width:13px;height:13px"></i>
       </button>
     `;
@@ -13829,19 +13838,37 @@ function _populateMaterialsList() {
     cell._mat = m;
     cell._info = info;
     if (_matPanelSelected.has(m)) cell.classList.add('selected');
-    // Single-click selects in the PANEL only (no viewport effect, per spec).
-    // Ctrl/Cmd/Shift+click toggles multi-select for merge/delete/preset
-    // batch ops. Double-click opens the editor.
+    // Single-click behaviour depends on whether the material editor is
+    // already open:
+    //   • Editor closed: panel-select (no viewport effect). Dblclick to
+    //     open the editor.
+    //   • Editor open  : single-click switches the editor to the clicked
+    //     material — no dblclick required while you're in editing mode.
+    // Ctrl/Cmd/Shift+click always toggles multi-select for merge / delete
+    // / preset batch ops, regardless of editor state.
     cell.addEventListener('click', (e) => {
       const multi = e.ctrlKey || e.metaKey || e.shiftKey;
       if (multi) {
         if (_matPanelSelected.has(m)) _matPanelSelected.delete(m);
         else _matPanelSelected.add(m);
-      } else {
-        const wasOnly = _matPanelSelected.size === 1 && _matPanelSelected.has(m);
-        _matPanelSelected.clear();
-        if (!wasOnly) _matPanelSelected.add(m);
+        _refreshPanelSelection();
+        return;
       }
+      // Editor open → swap its target to this material on a single click.
+      // _openMaterialEditor reuses the existing popup when one is present
+      // (it just rebinds the body), so this is fast and doesn't flash
+      // the popup closed/open.
+      if (_matEditorState) {
+        _matPanelSelected.clear();
+        _matPanelSelected.add(m);
+        _refreshPanelSelection();
+        try { _openMaterialEditor(info); } catch (err) { console.warn('[mat] swap failed:', err); }
+        return;
+      }
+      // Editor closed → existing panel-select toggle.
+      const wasOnly = _matPanelSelected.size === 1 && _matPanelSelected.has(m);
+      _matPanelSelected.clear();
+      if (!wasOnly) _matPanelSelected.add(m);
       _refreshPanelSelection();
     });
     cell.addEventListener('dblclick', (e) => {
@@ -14029,7 +14056,7 @@ function _openMaterialEditor(info) {
          The tex-attach circle (data-tex-prop) is a clickable indicator;
          empty = outline-only, has-tex = filled with the accent. Click
          opens a small popover for load/clear. */
-      .mat-row{display:grid;grid-template-columns:minmax(0,max-content) 14px minmax(0,1fr);align-items:center;gap:10px;padding:4px 0;font-size:11.5px;line-height:1.2}
+      .mat-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);align-items:center;gap:10px;padding:4px 0;font-size:11.5px;line-height:1.2}
       .mat-row + .mat-row{border-top:1px dashed var(--s2)}
       .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-row-tex{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background-color:#0c0f15;background-image:linear-gradient(45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.10) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.10) 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0;cursor:pointer;padding:0;display:grid;place-items:center;transition:border-color 120ms,color 120ms;color:var(--tx3)}
@@ -14057,7 +14084,7 @@ function _openMaterialEditor(info) {
       .mat-row-val .scrub-range::-moz-range-track{height:3px}
 
       /* Spline-style color row: [label] [swatch] [hex] [pct] [tex-trigger]. */
-      .mat-row.mat-color-row{grid-template-columns:minmax(0,max-content) minmax(0,1fr)}
+      .mat-row.mat-color-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);gap:10px;padding:4px 0}
       .mat-row.mat-color-row .mat-row-val{gap:8px}
       .mat-row.mat-color-row .mat-row-val > *:first-child{flex:0 0 22px}
       .mat-swatch{width:22px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer;overflow:hidden;flex:0 0 22px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
@@ -14199,6 +14226,7 @@ function _openMaterialEditor(info) {
     return `
       <div class="mat-row mat-color-row">
         <span class="mat-row-label">${escapeHtml(label)}</span>
+        <span></span>
         <div class="mat-row-val">
           <button type="button" id="${cid}" class="mat-swatch" data-hex="${hex || '#000000'}" style="background:${hex || '#000000'}" title="Click to pick color"></button>
           <input type="text" class="mat-color-hex-v2" id="${cid}-hex" value="${hexClean}" maxlength="7" spellcheck="false" autocomplete="off">
@@ -14220,7 +14248,6 @@ function _openMaterialEditor(info) {
     row('Normal',            sliderVal('mat-edit-normalScale-scrub'), 'normalMap') +
     row('Bump',              sliderVal('mat-edit-bumpScale-scrub'),   'bumpMap') +
     row('Displacement',      sliderVal('mat-edit-displScale-scrub'),  'displacementMap') +
-    row('Displacement bias', sliderVal('mat-edit-displBias-scrub')) +
     row('AO',                sliderVal('mat-edit-aoMapInt-scrub'),    'aoMap')
   , true);
 
@@ -14326,8 +14353,8 @@ function _openMaterialEditor(info) {
       // Sheen / Specular for MeshPhysicalMaterial) reveal as the user scrolls.
       // _DraggablePopup clamps to calc(100vh-24px), so on shorter screens this
       // collapses gracefully and the scrollbar takes over.
-      width: 360, height: 860,
-      minWidth: 300, minHeight: 360,
+      width: 420, height: 860,
+      minWidth: 360, minHeight: 360,
       bodyHtml,
       bodyScroll: true,
       onClose: () => {
@@ -18181,7 +18208,13 @@ function _initCustomSelects() {
   // Use capture phase so we run BEFORE OrbitControls' canvas listener (which
   // unconditionally preventDefaults the contextmenu event).
   document.addEventListener('contextmenu', e => {
-    if (e.defaultPrevented) return;     // original tree-node handler already won
+    // (We used to bail on `e.defaultPrevented` here to defer to the tree-node
+    // handler — but that handler is bubble-phase and runs AFTER this capture
+    // handler, so the only thing that can have preventDefaulted by now is the
+    // blanket suppress-native-menu listener registered earlier in the file,
+    // which fires on EVERY non-input contextmenu. Checking defaultPrevented
+    // therefore killed the viewport/material/tree-empty menus on every click.
+    // Each branch below is target-scoped, so we can safely run unconditionally.)
     // If the right button was dragged before this contextmenu fired, the user
     // was panning the camera — don't pop up a menu.
     if (_rmbDown) {
@@ -18234,12 +18267,37 @@ function _initCustomSelects() {
         items.push('---');
         items.push({ icon: 'trash-2',         label: 'Delete selected',    danger: true, kbd: 'Del', fn: () => deleteParts([...state.selected], 'Deleted via context menu') });
       } else {
-        items.push({ icon: 'maximize',        label: 'Fit view',           kbd: 'F', fn: fitToView });
-        items.push({ icon: 'check',           label: 'Select all',         kbd: 'Ctrl+A', fn: () => $('sel-all')?.click() });
+        // Frame / camera reset
+        items.push({ icon: 'maximize',         label: 'Fit view',            kbd: 'F',     fn: fitToView });
+        items.push({ icon: 'rotate-ccw',       label: 'Reset camera',                       fn: () => $('btn-reset')?.click() });
         items.push('---');
-        items.push({ icon: 'circle-plus',     label: 'Show all parts',     fn: showAllParts });
-        items.push({ icon: 'box',             label: 'Solid view',         kbd: '1', fn: () => setViewMode('solid') });
-        items.push({ icon: 'grid-3x3',        label: 'Wireframe view',     kbd: '2', fn: () => setViewMode('wire') });
+        // Standard CAD views — same set as the top-center pill / Ctrl+1..4.
+        items.push({ icon: 'video',            label: 'Camera view',         kbd: 'Ctrl+1', fn: () => _setPerspectiveView() });
+        items.push({ icon: 'square',           label: 'Top view',            kbd: 'Ctrl+2', fn: () => _setStandardView('top') });
+        items.push({ icon: 'square',           label: 'Front view',          kbd: 'Ctrl+3', fn: () => _setStandardView('front') });
+        items.push({ icon: 'square',           label: 'Side view',           kbd: 'Ctrl+4', fn: () => _setStandardView('side') });
+        items.push('---');
+        // Render / display modes
+        items.push({ icon: 'box',              label: 'Solid view',          kbd: '1',     fn: () => setViewMode('solid') });
+        items.push({ icon: 'grid-3x3',         label: 'Wireframe view',      kbd: '2',     fn: () => setViewMode('wire') });
+        items.push({ icon: 'crosshair',        label: 'X-ray view',          kbd: '3',     fn: () => setViewMode('xray') });
+        items.push('---');
+        // Helper toggles — labels reflect the current state so the row reads
+        // as the action that's about to happen rather than a status line.
+        const gridOn = !!state.showGrid;
+        const bboxOn = !!state.showBboxes;
+        const rotOn  = !!state.autoRotate;
+        items.push({ icon: gridOn ? 'eye-off' : 'eye',   label: gridOn ? 'Hide ground grid'    : 'Show ground grid',     kbd: 'G', fn: () => $('tg-grid')?.click() });
+        items.push({ icon: bboxOn ? 'eye-off' : 'eye',   label: bboxOn ? 'Hide bounding boxes' : 'Show bounding boxes',  kbd: 'B', fn: () => $('tg-bbox')?.click() });
+        items.push({ icon: rotOn  ? 'pause'   : 'play',  label: rotOn  ? 'Stop auto-rotate'    : 'Start auto-rotate',              fn: () => { const t = $('toggle-rotate'); if (t) { t.checked = !t.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } } });
+        items.push('---');
+        // Selection helpers
+        items.push({ icon: 'check',            label: 'Select all',          kbd: 'Ctrl+A', fn: () => $('sel-all')?.click() });
+        items.push({ icon: 'circle-plus',      label: 'Show all parts',                     fn: showAllParts });
+        items.push('---');
+        // Output
+        items.push({ icon: 'camera',           label: 'Save screenshot…',                   fn: () => _captureViewportScreenshot?.() });
+        items.push({ icon: 'save',             label: 'Save scene',                         fn: () => $('btn-save-scene')?.click() });
       }
       _ctxBuild(items, e.clientX, e.clientY);
       return;
@@ -20663,11 +20721,15 @@ const _DraggablePopup = (() => {
     const _show = () => {
       // Re-clamp every open: a previously stored size may exceed the
       // current viewport (window resize, monitor change), so without this
-      // the popup can render partially off-screen.
-      _layout({
-        left: card.offsetLeft, top: card.offsetTop,
-        width: card.offsetWidth, height: card.offsetHeight,
-      });
+      // the popup can render partially off-screen. Skip re-clamp when the
+      // popup hasn't been laid out yet (display:none → offsetWidth=0), since
+      // measuring then would clobber the just-applied default size.
+      if (card.offsetWidth > 0) {
+        _layout({
+          left: card.offsetLeft, top: card.offsetTop,
+          width: card.offsetWidth, height: card.offsetHeight,
+        });
+      }
       el.classList.add('show');
     };
 
@@ -22774,11 +22836,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         <div class="cp-preview"></div>
         <input type="text" class="cp-hex" maxlength="7" spellcheck="false">
       </div>
-      <div class="cp-presets"></div>
-      <div class="cp-actions">
-        <button class="cp-btn cp-cancel">Cancel</button>
-        <button class="cp-btn primary cp-apply">Apply</button>
-      </div>`;
+      <div class="cp-presets"></div>`;
     document.body.appendChild(popEl);
     svEl       = popEl.querySelector('.cp-sv');
     svCursor   = popEl.querySelector('.cp-sv-cursor');
@@ -22786,8 +22844,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     hueCursor  = popEl.querySelector('.cp-hue-cursor');
     hexInput   = popEl.querySelector('.cp-hex');
     presetsEl  = popEl.querySelector('.cp-presets');
-    applyBtn   = popEl.querySelector('.cp-apply');
-    cancelBtn  = popEl.querySelector('.cp-cancel');
+    applyBtn   = null;
+    cancelBtn  = null;
 
     presetsEl.innerHTML = PRESETS.map(c =>
       `<div class="cp-preset" data-c="${c}" style="background:${c}"></div>`).join('');
@@ -22840,9 +22898,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       h = hsv.h; s = hsv.s; v = hsv.v;
       _syncFromHsv();
     });
-    applyBtn.addEventListener('click', _commit);
-    cancelBtn.addEventListener('click', _cancel);
-    // Outside-click cancel — installed when popover opens.
+    // Outside-click commits — auto-apply UX, no Apply/Cancel buttons.
     popEl.addEventListener('click', e => e.stopPropagation());
   }
 
@@ -22919,7 +22975,9 @@ setTimeout(() => _dndDecorateTree(), 0);
     // swatch handler runs after this in bubble phase and will call _open
     // which re-seeds session — let it through without canceling.
     if (e.target.closest('#prop-body .prop-color, #materials-body .mat-swatch, #_mat-editor-popup .mat-swatch')) return;
-    _cancel();
+    // Auto-apply on outside click — change has been live-previewing the whole
+    // time, so commit is what the user expects. Esc still reverts.
+    _commit();
   }
   function _onKeyDown(e) {
     if (e.key === 'Escape') { e.preventDefault(); _cancel(); }
