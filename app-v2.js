@@ -4291,11 +4291,58 @@ function fitToView() {
   requestRender();
 }
 
-// Infinite floor grid — one huge XY plane with a fragment shader that
-// computes lines from each fragment's world XY. Two scales (minor + major)
-// tile forever; the world X=0 line is red (X axis), Y=0 is green (Y axis);
-// every other line is a thin light-grey hairline. Distance fade kills
-// horizon moiré, grazing-angle fade kills horizon streaks.
+// Build a GridHelper-style mesh whose centre two lines are coloured RED
+// (X axis = the world Y=0 line) and GREEN (Y axis = the world X=0 line),
+// with every other line a thin light grey. Driven entirely by the BufferGeo
+// API so it works on both WebGL2 and WebGPU — three's WebGPU renderer
+// rejects raw ShaderMaterial as "not compatible", which earlier killed the
+// shader-plane attempt and rendered the floor as a solid black square.
+function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex) {
+  const halfSize = size / 2;
+  const step = size / divisions;
+  const center = divisions / 2;
+  const positions = [];
+  const colors = [];
+  const cGrid  = new THREE.Color(gridHex);
+  const cAxisX = new THREE.Color(axisXHex);
+  const cAxisY = new THREE.Color(axisYHex);
+
+  for (let i = 0, k = -halfSize; i <= divisions; i++, k += step) {
+    // Line parallel to the X axis at y=k (lives in XY plane → z=0).
+    positions.push(-halfSize, k, 0,  halfSize, k, 0);
+    // The line at k=0 is THE X-axis itself → red.
+    const cRow = (i === center) ? cAxisX : cGrid;
+    colors.push(cRow.r, cRow.g, cRow.b,  cRow.r, cRow.g, cRow.b);
+
+    // Line parallel to the Y axis at x=k.
+    positions.push(k, -halfSize, 0,  k, halfSize, 0);
+    // The line at k=0 is THE Y-axis itself → green.
+    const cCol = (i === center) ? cAxisY : cGrid;
+    colors.push(cCol.r, cCol.g, cCol.b,  cCol.r, cCol.g, cCol.b);
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
+  const mat = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
+    fog: true,    // picks up scene.fog to handle horizon fade for free
+  });
+  const mesh = new THREE.LineSegments(geom, mat);
+  mesh.matrixAutoUpdate = false;
+  mesh.updateMatrix();
+  return mesh;
+}
+
+// "Infinite" floor grid: a very large GridHelper-style line set with the two
+// centre lines coloured red (X axis) and green (Y axis) via vertex colours.
+// A real infinite shader plane would need NodeMaterial/TSL to compile on
+// WebGPU; this version is renderer-agnostic and feels infinite for any
+// realistic camera distance because we make the grid extent ~5000× the
+// minor cell so the user sees the fade-into-distance effect through perspective.
 function _makeInfiniteGrid(opts = {}) {
   const PLANE_SIZE = opts.size || 1e5;
   const minor      = opts.minor || 1.0;
@@ -4303,80 +4350,20 @@ function _makeInfiniteGrid(opts = {}) {
   const fadeStart  = opts.fadeStart || 200;
   const fadeEnd    = opts.fadeEnd   || 2000;
 
-  const geom = new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE, 1, 1);
-  const mat = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    uniforms: {
-      uMinor:      { value: minor },
-      uMajor:      { value: major },
-      uMinorColor: { value: new THREE.Color(0xa0a6b0) },
-      uMajorColor: { value: new THREE.Color(0xc0c6d0) },
-      uAxisX:      { value: new THREE.Color(0xff5050) },
-      uAxisY:      { value: new THREE.Color(0x40d860) },
-      uOpacity:    { value: 0.85 },
-      uFadeStart:  { value: fadeStart },
-      uFadeEnd:    { value: fadeEnd },
-    },
-    vertexShader: `
-      varying vec3 vWorld;
-      void main() {
-        vec4 wp = modelMatrix * vec4(position, 1.0);
-        vWorld = wp.xyz;
-        gl_Position = projectionMatrix * viewMatrix * wp;
-      }
-    `,
-    fragmentShader: `
-      precision highp float;
-      varying vec3 vWorld;
-      uniform float uMinor, uMajor, uOpacity, uFadeStart, uFadeEnd;
-      uniform vec3 uMinorColor, uMajorColor, uAxisX, uAxisY;
-
-      float lineMask(vec2 p, float scale) {
-        vec2 c = p / scale;
-        vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
-        return 1.0 - min(min(g.x, g.y), 1.0);
-      }
-      float axisMask(float x) {
-        float fw = max(fwidth(x), 1e-6);
-        return 1.0 - min(abs(x) / fw, 1.0);
-      }
-
-      void main() {
-        vec2 p = vWorld.xy;
-        float minor = lineMask(p, uMinor);
-        float major = lineMask(p, uMajor);
-        float axisX = axisMask(p.y);
-        float axisY = axisMask(p.x);
-
-        vec3 col = uMinorColor;
-        col = mix(col, uMajorColor, major);
-        col = mix(col, uAxisX, axisX);
-        col = mix(col, uAxisY, axisY);
-
-        float a = max(max(minor, major), max(axisX, axisY));
-        a *= (1.0 - smoothstep(uFadeStart, uFadeEnd, length(p - cameraPosition.xy))) * uOpacity;
-
-        vec3 viewDir = normalize(cameraPosition - vWorld);
-        a *= smoothstep(0.04, 0.20, abs(viewDir.z));
-
-        if (a < 0.005) discard;
-        gl_FragColor = vec4(col, a);
-      }
-    `,
-  });
-  const mesh = new THREE.Mesh(geom, mat);
-  mesh.name = '_infiniteGrid';
-  mesh.renderOrder = -1;
-  mesh.matrixAutoUpdate = false;
-  mesh.updateMatrix();
-  return mesh;
+  // Grid extent should feel infinite at typical viewing distances. We cap
+  // the visible line count at ~5000 (5000+5000 segments) so even a 1u minor
+  // on a 1mm-unit model stays under 50k vertices.
+  const targetDivisions = Math.min(5000, Math.max(40, Math.round(PLANE_SIZE / minor)));
+  const grid = _buildAxisColouredGrid(PLANE_SIZE, targetDivisions, 0xa0a6b0, 0xff5050, 0x40d860);
+  grid.name = '_infiniteGrid';
+  grid.userData.gridParams = { minor, major, planeSize: PLANE_SIZE };
+  return grid;
 }
 
-// Reposition the infinite grid + axes for the loaded model. The grid extends
-// forever via the shader, so we only pin its z to the model floor and tune
-// the shader's grid scale + fade distances to the footprint.
+// Reposition the grid for the loaded model. Picks minor / major spacing
+// from the model footprint (so a 100mm part shows 5mm cells and a 5m
+// assembly shows 250mm cells), rebuilds the LineSegments geometry, and
+// pins it to box.min.z so it reads as the model's floor.
 function _fitGridToModel(box) {
   if (!gridHelper || !scene) return;
   const size = box.getSize(new THREE.Vector3());
@@ -4390,15 +4377,26 @@ function _fitGridToModel(box) {
   const minor = Math.max(1, mag);
   const major = minor * 10;
 
+  // Plane extends ~200× the footprint so it feels infinite from any
+  // reasonable camera distance, capped at 1e5 for vertex-budget sanity.
+  const planeSize = Math.min(1e5, Math.max(footprint * 200, 200));
+
+  // Rebuild the line set with the new spacing — geometry encodes the line
+  // positions, so re-spacing means new buffers (cheap; one-shot per load).
+  scene.remove(gridHelper);
+  gridHelper.geometry?.dispose?.();
+  gridHelper.material?.dispose?.();
+  gridHelper = _buildAxisColouredGrid(
+    planeSize,
+    Math.min(5000, Math.max(40, Math.round(planeSize / minor))),
+    0xa0a6b0, 0xff5050, 0x40d860,
+  );
+  gridHelper.name = '_infiniteGrid';
+  gridHelper.userData.gridParams = { minor, major, planeSize };
   gridHelper.position.set(center.x, center.y, box.min.z);
-  gridHelper.matrixAutoUpdate = false;
+  gridHelper.visible = state.showGrid;
   gridHelper.updateMatrix();
-  if (gridHelper.material?.uniforms) {
-    gridHelper.material.uniforms.uMinor.value     = minor;
-    gridHelper.material.uniforms.uMajor.value     = major;
-    gridHelper.material.uniforms.uFadeStart.value = footprint * 4;
-    gridHelper.material.uniforms.uFadeEnd.value   = footprint * 40;
-  }
+  scene.add(gridHelper);
 
   if (axesHelper) {
     const axLen = Math.max(footprint * 0.1, major / 4);
