@@ -1157,6 +1157,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
             <div class="toggle"><span>FPS counter</span><label><input type="checkbox" id="toggle-fps"><span class="switch"></span></label></div>
             <div class="toggle"><span>Renderer stats</span><label><input type="checkbox" id="toggle-stats"><span class="switch"></span></label></div>
             <div class="toggle" title="Atmospheric fog — fades the grid and distant geometry into the background."><span>Fog</span><label><input type="checkbox" id="toggle-fog" checked><span class="switch"></span></label></div>
+            <div id="fog-controls" style="display:flex;flex-direction:column;gap:8px;margin:6px 0 0 0;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
+              <div class="field" style="margin:0" title="Distance from the camera at which fog starts. 'Auto' = 3× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">auto</span></label><input type="number" id="fog-near" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:11.5px;outline:none;font-variant-numeric:tabular-nums"></div>
+              <div class="field" style="margin:0" title="Distance at which fog is fully opaque. 'Auto' = 30× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Fog end</span><span class="v" id="fog-far-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">auto</span></label><input type="number" id="fog-far" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:11.5px;outline:none;font-variant-numeric:tabular-nums"></div>
+              <div class="field" style="margin:0" title="Multiplier on the fog falloff. >1 = denser fog ramps in faster, <1 = gentler."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="fog-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">1.0×</span></label><input type="range" id="fog-int" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
+              <button id="fog-reset" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:10.5px;cursor:pointer;align-self:flex-start" title="Clear overrides and use the auto-tuned distances + intensity 1.0">Reset to auto</button>
+            </div>
             <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral gray (Blender)</option><option value="solid">Solid black</option><option value="white">White</option></select></div>
           </div>
           <div class="pop-section">
@@ -1924,7 +1930,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-fog"></script>
+<script type="module" src="app-v2.js?v=2026050707-fog-controls"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

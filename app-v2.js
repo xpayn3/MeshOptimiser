@@ -28,6 +28,8 @@ const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
   viewMode: 'solid', showGrid: true, showBboxes: false, showAxes: true,
   highlightSmall: true, autoRotate: false, bgMode: 'dark', fog: true,
+  fogNear: null, fogFar: null,     // null = auto-tune from model footprint
+  fogIntensity: 1,                 // multiplier on fog falloff range
   // ── Pro-mode scene settings (driven by the Display/Scene/Camera/Lighting
   // /Grid sections of the viewport settings popup) ───────────────────────
   displayUnit: 'mm',          // 'mm' | 'cm' | 'm' | 'in' | 'ft' | 'none'
@@ -4478,8 +4480,31 @@ function _applyFog() {
     scene.fog = null;
     return;
   }
-  const colorHex = _bgFogColor();
-  scene.fog = new THREE.Fog(colorHex, _fogTuned.near, _fogTuned.far);
+  // Resolve near/far from explicit user overrides first, fall back to the
+  // per-model auto-tune. Then apply intensity as a multiplicative pull on
+  // the (far - near) gap: intensity > 1 collapses the gap (fog ramps in
+  // faster), < 1 expands it (gentler haze).
+  let near = (Number.isFinite(state.fogNear) && state.fogNear > 0) ? state.fogNear : _fogTuned.near;
+  let far  = (Number.isFinite(state.fogFar)  && state.fogFar  > near) ? state.fogFar  : _fogTuned.far;
+  const intensity = Math.max(0.05, state.fogIntensity ?? 1);
+  if (intensity !== 1) {
+    far = near + (far - near) / intensity;
+  }
+  // Sanity: keep far strictly above near so the renderer's mix() stays valid.
+  if (!(far > near)) far = near + 1;
+  scene.fog = new THREE.Fog(_bgFogColor(), near, far);
+  // Mirror the resolved values into the Display labels so the user can see
+  // exactly what's in effect (auto vs. override + intensity-adjusted far).
+  const nVl = document.getElementById('fog-near-v');
+  const fVl = document.getElementById('fog-far-v');
+  if (nVl) nVl.textContent = (state.fogNear == null) ? `auto (${_fmtFog(near)})` : _fmtFog(near);
+  if (fVl) fVl.textContent = (state.fogFar  == null) ? `auto (${_fmtFog(far)})`  : _fmtFog(far);
+}
+function _fmtFog(v) {
+  if (!Number.isFinite(v)) return '—';
+  if (v >= 1000) return (v / 1000).toFixed(1) + 'k';
+  if (v >= 100)  return v.toFixed(0);
+  return v.toFixed(1);
 }
 // Pick a fog colour matching the current background preset. We want fog
 // to dissolve geometry into the same colour the user sees as 'sky', so
@@ -10581,6 +10606,9 @@ function _collectSceneState() {
       autoRotate:      state.autoRotate,
       bgMode:          state.bgMode,
       fog:             state.fog,
+      fogNear:         state.fogNear,
+      fogFar:          state.fogFar,
+      fogIntensity:    state.fogIntensity,
       highlightSmall:  state.highlightSmall,
       perfMode:        state.perfMode,
     },
@@ -10791,9 +10819,23 @@ function _applySceneState(s) {
     }
     if (typeof v.fog === 'boolean') {
       state.fog = v.fog;
-      try { _applyFog(); } catch (_) {}
       const cb = $('toggle-fog'); if (cb) cb.checked = !!v.fog;
     }
+    // Fog overrides — null/undefined leaves auto-tune in effect.
+    if ('fogNear' in v) {
+      state.fogNear = (v.fogNear == null) ? null : Number(v.fogNear);
+      const el = $('fog-near'); if (el) el.value = state.fogNear == null ? '' : String(state.fogNear);
+    }
+    if ('fogFar' in v) {
+      state.fogFar = (v.fogFar == null) ? null : Number(v.fogFar);
+      const el = $('fog-far'); if (el) el.value = state.fogFar == null ? '' : String(state.fogFar);
+    }
+    if (typeof v.fogIntensity === 'number' && v.fogIntensity > 0) {
+      state.fogIntensity = v.fogIntensity;
+      const el = $('fog-int'); if (el) el.value = String(state.fogIntensity);
+      const lbl = $('fog-int-v'); if (lbl) lbl.textContent = state.fogIntensity.toFixed(2) + '×';
+    }
+    try { _applyFog(); } catch (_) {}
     if (typeof v.perfMode === 'string') {
       state.perfMode = v.perfMode;
       const sel = $('perf-mode'); if (sel) sel.value = v.perfMode;
@@ -11673,14 +11715,57 @@ function wireUI() {
   $('toggle-fog')?.addEventListener('change', e => {
     state.fog = e.target.checked;
     _applyFog();
+    _updateFogControlsEnabled();
     requestRender();
   });
+  // Fog distance / intensity overrides. Empty input → state.fog{Near,Far} = null
+  // → _applyFog falls back to the auto-tuned per-model values.
+  const _readFogNum = (id) => {
+    const el = $(id);
+    if (!el) return null;
+    const raw = el.value.trim();
+    if (raw === '') return null;
+    const v = parseFloat(raw);
+    return Number.isFinite(v) ? v : null;
+  };
+  $('fog-near')?.addEventListener('change', () => {
+    state.fogNear = _readFogNum('fog-near');
+    _applyFog(); requestRender();
+  });
+  $('fog-far')?.addEventListener('change', () => {
+    state.fogFar = _readFogNum('fog-far');
+    _applyFog(); requestRender();
+  });
+  $('fog-int')?.addEventListener('input', e => {
+    const v = parseFloat(e.target.value);
+    state.fogIntensity = Number.isFinite(v) && v > 0 ? v : 1;
+    const lbl = $('fog-int-v'); if (lbl) lbl.textContent = state.fogIntensity.toFixed(2) + '×';
+    _applyFog(); requestRender();
+  });
+  $('fog-reset')?.addEventListener('click', () => {
+    state.fogNear = null;
+    state.fogFar  = null;
+    state.fogIntensity = 1;
+    const nIn = $('fog-near'); if (nIn) nIn.value = '';
+    const fIn = $('fog-far');  if (fIn) fIn.value = '';
+    const iIn = $('fog-int');  if (iIn) iIn.value = '1';
+    const iVl = $('fog-int-v');if (iVl) iVl.textContent = '1.00×';
+    _applyFog(); requestRender();
+  });
+  // Toggle fog control disabled state alongside the master toggle so it's
+  // visually obvious they don't do anything when fog is off.
+  function _updateFogControlsEnabled() {
+    const ctl = $('fog-controls'); if (!ctl) return;
+    const on = !!state.fog;
+    ctl.style.opacity = on ? '1' : '0.45';
+    ctl.style.pointerEvents = on ? 'auto' : 'none';
+  }
   // Reflect initial state.fog on the checkbox (HTML markup defaults to
   // checked but state could be loaded from prefs/scene differently).
   { const cb = $('toggle-fog'); if (cb) cb.checked = !!state.fog; }
   // Apply once at boot so the default-on fog actually attaches even
   // before the user touches the toggle.
-  try { _applyFog(); } catch (_) {}
+  try { _applyFog(); _updateFogControlsEnabled(); } catch (_) {}
   // Camera projection: hot-swap PerspectiveCamera ↔ OrthographicCamera while
   // preserving position/target/up. OrbitControls + TransformControls hold a
   // direct camera reference, so both must be re-pointed after the swap.
@@ -13410,7 +13495,7 @@ function _openMaterialEditor(info) {
          The tex-attach circle (data-tex-prop) is a clickable indicator;
          empty = outline-only, has-tex = filled with the accent. Click
          opens a small popover for load/clear. */
-      .mat-row{display:grid;grid-template-columns:1fr 12px minmax(0,1.5fr);align-items:center;gap:8px;padding:4px 0;font-size:11.5px;line-height:1.2}
+      .mat-row{display:grid;grid-template-columns:minmax(0,max-content) 12px minmax(0,1fr);align-items:center;gap:10px;padding:4px 0;font-size:11.5px;line-height:1.2}
       .mat-row + .mat-row{border-top:1px dashed var(--s2)}
       .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-row-tex{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--tx3);background:transparent;cursor:pointer;padding:0;display:grid;place-items:center;transition:background 120ms,border-color 120ms,color 120ms;color:var(--tx3)}
@@ -13472,12 +13557,6 @@ function _openMaterialEditor(info) {
   const hasEmissive = !!mat.emissive;
   const hasEnv = typeof mat.envMapIntensity === 'number';
 
-  const colorRow = (cid, label, hex) => `
-    <div class="mat-color-row">
-      <label>${label}</label>
-      <input type="color" id="${cid}" value="${hex || '#000000'}">
-      <span class="mat-color-hex" id="${cid}-hex">${hex || '#000000'}</span>
-    </div>`;
   const slider = (sid) => `<div class="field"><div id="${sid}"></div></div>`;
   const section = (key, title, inner, collapsed = false) => `
     <div class="mat-edit-section${collapsed ? ' collapsed' : ''}" data-section="${key}">
