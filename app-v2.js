@@ -32,6 +32,7 @@ const state = {
   fogIntensity: 1,                 // multiplier on fog falloff range
   hdriRotation: Math.PI * 0.25,    // radians around scene up (Z) for HDRI bg/env
   hdriIntensity: 1.0,              // multiplier on env lighting + reflections
+  hdriPreset: 'studio',             // 'studio' | 'outdoor' | 'sunset' | 'overcast'
   _customHdri: null,               // optional user-loaded equirect → PMREM cubemap
   _customHdriName: null,
   // ── Pro-mode scene settings (driven by the Display/Scene/Camera/Lighting
@@ -2674,6 +2675,112 @@ function setBackground(mode) {
 // re-pay the cost.
 let _defaultEnvTex = null;
 let _hdriPmrem = null;
+
+// Procedural HDRI presets — each preset paints a 1024×512 equirect canvas
+// with a directional sky gradient + sun spot, then runs it through PMREM
+// for proper roughness mip maps. No assets to ship; cached per preset id
+// so repeated toggles are free. Returned texture replaces scene.environ-
+// ment + scene.background just like a loaded .hdr would.
+const _hdriPresetCache = new Map();
+function _paintHdriPreset(id) {
+  const W = 1024, H = 512;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // Helper: paint a smooth vertical gradient (sky → ground) using the
+  // four-stop palette. Equirect Y goes from top (zenith) at y=0 to
+  // bottom (nadir) at y=H.
+  const skyGrad = (zenith, sky, horizon, ground) => {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0,    zenith);
+    g.addColorStop(0.45, sky);
+    g.addColorStop(0.55, horizon);
+    g.addColorStop(1,    ground);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  };
+  // Helper: stamp a soft "sun" disc centered at (sx, sy) in pixels with
+  // a multiply-strength radial highlight. Hot core fades to transparent.
+  const sun = (sx, sy, radius, hotHex, mid) => {
+    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, radius);
+    g.addColorStop(0,    hotHex);
+    g.addColorStop(0.25, mid);
+    g.addColorStop(1,    'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(sx - radius, sy - radius, radius * 2, radius * 2);
+  };
+
+  if (id === 'outdoor') {
+    skyGrad('#3d6cb8', '#7fb3ff', '#cfe6ff', '#5a6f7c');
+    sun(W * 0.32, H * 0.30, 180, 'rgba(255,255,235,1)', 'rgba(255,235,180,.55)');
+  } else if (id === 'sunset') {
+    skyGrad('#1a2640', '#4a3258', '#ff8b3e', '#3a2438');
+    sun(W * 0.50, H * 0.55, 220, 'rgba(255,200,90,1)', 'rgba(255,140,60,.55)');
+  } else if (id === 'overcast') {
+    skyGrad('#a9b3bf', '#c2cbd5', '#d8dde4', '#5e656d');
+    // No sun — overcast is uniform diffuse light.
+  } else if (id === 'forest') {
+    skyGrad('#2c4a2a', '#5a7e4a', '#3d5a32', '#1c2818');
+    sun(W * 0.65, H * 0.30, 140, 'rgba(255,255,200,.85)', 'rgba(220,255,180,.40)');
+  } else {
+    // 'studio' or unknown id → null sentinel; caller falls back to
+    // RoomEnvironment which is the canonical clean-studio look.
+    return null;
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  if (tex.colorSpace !== undefined) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  return tex;
+}
+function _ensurePresetEnv(id) {
+  if (_hdriPresetCache.has(id)) return _hdriPresetCache.get(id);
+  const equirect = _paintHdriPreset(id);
+  if (!equirect) return null;
+  _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
+  const envTex = _hdriPmrem.fromEquirectangular(equirect).texture;
+  equirect.dispose();
+  _hdriPresetCache.set(id, envTex);
+  return envTex;
+}
+// Apply a preset: install its env into the scene + update the readout.
+// 'studio' is the special case — it falls back to RoomEnvironment (which
+// is what _ensureHdriEnvironment() does without a preset selected).
+async function _applyHdriPreset(id) {
+  state.hdriPreset = id;
+  // Drop a custom-loaded HDRI so the preset wins.
+  if (state._customHdri) {
+    state._customHdri.dispose?.();
+    state._customHdri = null;
+    state._customHdriName = null;
+  }
+  if (id === 'studio') {
+    await _ensureHdriEnvironment();   // RoomEnvironment path
+    const cur = document.getElementById('hdri-current');
+    if (cur) cur.textContent = 'Studio (built-in)';
+  } else {
+    const env = _ensurePresetEnv(id);
+    if (!env) return;
+    scene.background = env;
+    scene.environment = env;
+    _applyHdriRotation();
+    _applyHdriIntensity();
+    requestRender();
+    const cur = document.getElementById('hdri-current');
+    const labels = { outdoor: 'Outdoor', sunset: 'Sunset', overcast: 'Overcast', forest: 'Forest' };
+    if (cur) cur.textContent = labels[id] || id;
+  }
+  _markHdriPresetActive(id);
+}
+function _markHdriPresetActive(id) {
+  document.querySelectorAll('.hdri-preset').forEach(b => {
+    const isActive = b.dataset.hdriPreset === id;
+    b.style.background = isActive ? 'rgba(110,168,255,.18)' : 'var(--bg3)';
+    b.style.borderColor = isActive ? 'rgba(110,168,255,.5)' : 'var(--bd)';
+    b.style.color = isActive ? 'var(--tx)' : 'var(--tx)';
+  });
+}
 async function _ensureHdriEnvironment() {
   if (state._customHdri) {
     scene.background = state._customHdri;
@@ -2681,6 +2788,22 @@ async function _ensureHdriEnvironment() {
     _applyHdriRotation();
     _applyHdriIntensity();
     return;
+  }
+  // Non-studio preset → procedural canvas-based env. Cached per preset.
+  if (state.hdriPreset && state.hdriPreset !== 'studio') {
+    const env = _ensurePresetEnv(state.hdriPreset);
+    if (env) {
+      scene.background = env;
+      scene.environment = env;
+      _applyHdriRotation();
+      _applyHdriIntensity();
+      requestRender();
+      _markHdriPresetActive(state.hdriPreset);
+      const cur = document.getElementById('hdri-current');
+      const labels = { outdoor: 'Outdoor', sunset: 'Sunset', overcast: 'Overcast', forest: 'Forest' };
+      if (cur) cur.textContent = labels[state.hdriPreset] || state.hdriPreset;
+      return;
+    }
   }
   if (!_defaultEnvTex) {
     try {
@@ -2699,8 +2822,9 @@ async function _ensureHdriEnvironment() {
   _applyHdriRotation();
   _applyHdriIntensity();
   requestRender();
+  _markHdriPresetActive('studio');
   const cur = document.getElementById('hdri-current');
-  if (cur) cur.textContent = 'Built-in studio';
+  if (cur) cur.textContent = 'Studio (built-in)';
 }
 
 // Load a user-supplied .hdr (Radiance) or .exr (OpenEXR) equirectangular
@@ -2740,29 +2864,53 @@ async function _loadCustomHdri(file) {
   }
 }
 
-// Apply state.hdriRotation as a Z-axis rotation (scene up). Three.js's
-// scene.environmentRotation / backgroundRotation were added in r163;
-// guarded so older bundles silently fall back to fixed rotation.
+// Apply state.hdriRotation as a Z-axis rotation (scene up). The newer
+// scene.environmentRotation / backgroundRotation properties (r163+) drive
+// the visible background but the WebGPU renderer's NodeMaterial path
+// doesn't always honour them for the LIGHTING part of the env — meshes
+// stay lit as if the env weren't moving. To make the model actually re-
+// light when the sun gizmo turns, we ALSO mark every cached material as
+// dirty and reassign scene.environment, which forces the renderer to
+// rebuild its env uniforms next frame.
 function _applyHdriRotation() {
   if (!scene) return;
   const rot = state.hdriRotation || 0;
   if (scene.environmentRotation) scene.environmentRotation.set(0, 0, rot);
   if (scene.backgroundRotation)  scene.backgroundRotation.set(0, 0, rot);
+  // Force-rebuild path: reassign the env (no-op on the texture but flips
+  // the renderer's needsUpdate flag), and bump every PBR material's
+  // version so the WebGPU renderer rebuilds them with the new rotation.
+  const envTex = scene.environment;
+  if (envTex) {
+    scene.environment = null;
+    scene.environment = envTex;
+    if (state.partsRoot) {
+      state.partsRoot.traverse(o => {
+        const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : null;
+        if (!mats) return;
+        for (const m of mats) {
+          if (m.isMaterial) m.needsUpdate = true;
+        }
+      });
+    }
+  }
 }
 
-// Apply state.hdriIntensity to the env's lighting and reflections. Modern
-// three.js (r163+) exposes scene.environmentIntensity / backgroundIntensity
-// — we set both so the visible bg tracks the lighting brightness. On older
-// bundles we silently fall back to a per-material walk that updates each
-// PBR material's envMapIntensity, which is the older knob for the same
-// effect (slower; it's why r163 added the scene-level property).
+// Apply state.hdriIntensity to the env's lighting and reflections.
+//
+// Modern three.js (r163+) exposes scene.environmentIntensity /
+// backgroundIntensity. The WebGPU bundle's NodeMaterial path picks them
+// up for some materials but not all, so we ALSO walk every PBR material
+// and set envMapIntensity directly (the older per-material knob). Doing
+// both is harmless — a 'belt + suspenders' so the slider actually moves
+// pixels regardless of which renderer is active or whether the loaded
+// model uses MeshStandardMaterial or NodeMaterial.
 function _applyHdriIntensity() {
   if (!scene) return;
   const k = Math.max(0, state.hdriIntensity ?? 1);
   if ('environmentIntensity' in scene) scene.environmentIntensity = k;
   if ('backgroundIntensity'  in scene) scene.backgroundIntensity  = k;
-  // Older fallback — only matters if scene.environmentIntensity is missing.
-  if (!('environmentIntensity' in scene) && state.partsRoot) {
+  if (state.partsRoot) {
     state.partsRoot.traverse(o => {
       const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : null;
       if (!mats) return;
@@ -10850,6 +10998,7 @@ function _collectSceneState() {
       fogIntensity:    state.fogIntensity,
       hdriRotation:    state.hdriRotation,
       hdriIntensity:   state.hdriIntensity,
+      hdriPreset:      state.hdriPreset,
       highlightSmall:  state.highlightSmall,
       perfMode:        state.perfMode,
     },
@@ -11080,6 +11229,13 @@ function _applySceneState(s) {
       const el = $('hdri-int'); if (el) el.value = String(state.hdriIntensity);
       const lbl = $('hdri-int-v'); if (lbl) lbl.textContent = state.hdriIntensity.toFixed(2) + '×';
       try { _applyHdriIntensity(); } catch (_) {}
+    }
+    if (typeof v.hdriPreset === 'string') {
+      state.hdriPreset = v.hdriPreset;
+      try {
+        if (state.bgMode === 'hdri') _ensureHdriEnvironment();
+        else _markHdriPresetActive(v.hdriPreset);
+      } catch (_) {}
     }
     try { _applyFog(); } catch (_) {}
     if (typeof v.perfMode === 'string') {
@@ -12030,6 +12186,23 @@ function wireUI() {
     const lbl = $('hdri-int-v'); if (lbl) lbl.textContent = state.hdriIntensity.toFixed(2) + '×';
     _applyHdriIntensity();
     requestRender();
+  });
+  // Preset buttons (studio / outdoor / sunset / overcast). Each one
+  // routes through _applyHdriPreset which handles the env install +
+  // active-state highlight.
+  document.querySelectorAll('.hdri-preset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.hdriPreset;
+      if (!id) return;
+      // If user clicks a preset while bg-mode isn't HDRI, switch to
+      // HDRI first so the preset is actually visible.
+      if (state.bgMode !== 'hdri') {
+        state.bgMode = 'hdri';
+        const sel = $('bg-mode'); if (sel) sel.value = 'hdri';
+        try { setBackground('hdri'); } catch (_) {}
+      }
+      _applyHdriPreset(id);
+    });
   });
   // Sun gizmo: drag the puck around the dome to rotate the HDRI. Top-down
   // dome view → angle of (dx,dy) from centre = azimuth around the scene up

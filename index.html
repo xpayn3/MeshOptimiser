@@ -644,7 +644,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .vp-pill[aria-expanded="true"]{background:color-mix(in srgb, var(--ac) 18%, rgba(15,19,25,.78));border-color:color-mix(in srgb, var(--ac) 55%, var(--bd))}
 .vp-pill .vp-pill-label{line-height:1}
 .vp-pill .vp-pill-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:currentColor;opacity:.85;transition:opacity 160ms var(--ease-out),color 160ms var(--ease-out)}
-.vp-pill .vp-pill-icon svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
+.vp-pill .vp-pill-icon svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
 .vp-pill:hover .vp-pill-icon,.vp-pill[aria-expanded="true"] .vp-pill-icon{opacity:1}
 
 .vp-pill-menu{display:flex;flex-direction:column;min-width:160px;padding:4px;background:rgba(15,19,25,.92);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(10px);opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top center;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
@@ -1140,7 +1140,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       </div>
       <div class="vpc tc" id="vp-view-pill-wrap">
         <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="listbox" aria-expanded="false" title="Camera view — click to switch (Cam / Top / Front / Side)">
-          <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
+          <i class="vp-pill-icon" data-lucide="camera" aria-hidden="true"></i>
           <span class="vp-pill-label">Cam</span>
         </button>
         <div id="vp-view-pill-menu" class="vp-pill-menu" role="listbox">
@@ -1197,6 +1197,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
             <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral gray (Blender)</option><option value="solid">Solid black</option><option value="white">White</option><option value="hdri">HDRI environment</option></select></div>
             <div id="hdri-controls" style="display:none;flex-direction:column;gap:6px;margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
               <div style="font-size:10.5px;color:var(--tx3);font-weight:500;line-height:1.4">Drag the <span style="color:#ffd76b">sun</span> in the viewport to rotate. Brightness from the env lights all PBR materials in the scene.</div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
+                <button class="hdri-preset" data-hdri-preset="studio"   title="Built-in neutral studio (RoomEnvironment)" style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:10.5px;cursor:pointer">Studio</button>
+                <button class="hdri-preset" data-hdri-preset="outdoor"  title="Bright sunny daylight, blue sky"           style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:10.5px;cursor:pointer">Outdoor</button>
+                <button class="hdri-preset" data-hdri-preset="sunset"   title="Warm sunset gradient with low-angle sun"   style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:10.5px;cursor:pointer">Sunset</button>
+                <button class="hdri-preset" data-hdri-preset="overcast" title="Soft overcast — diffuse, no harsh sun"     style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:10.5px;cursor:pointer">Overcast</button>
+              </div>
               <div style="display:flex;gap:6px">
                 <button id="hdri-load-btn" type="button" style="flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:5px 8px;border-radius:5px;font-size:11px;cursor:pointer" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
                 <button id="hdri-default-btn" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:10.5px;cursor:pointer" title="Reset to the built-in studio environment">Default</button>
@@ -2019,7 +2025,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-hdri-intensity"></script>
+<script type="module" src="app-v2.js?v=2026050707-hdri-presets"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
