@@ -1821,6 +1821,11 @@ function initScene() {
   // Track transforms for undo: snapshot mesh world matrix on drag start, push undo on drag end
   state.gizmo.addEventListener('dragging-changed', e => {
     controls.enabled = !e.value;
+    // Public flag the transform-panel poll reads to skip the expensive
+    // _readStableSize() traversal during translate/rotate drags. Set BEFORE
+    // any other work so the next poll tick (likely already queued for this
+    // same frame) sees it.
+    state._gizmoDragging = !!e.value;
     requestRender();
     // ── Group-pivot path: one snapshot of the group's world matrix on start,
     //    one 'groupTransform' undo entry on end. Children come along for the
@@ -2105,7 +2110,7 @@ function _findSelectionUserGroup() {
   return null;
 }
 
-function _attachGizmoToParts(parts) {
+function _attachGizmoToParts(parts, centerOverride) {
   if (!state.gizmo || !state.pivot) return;
   // Promote any selected-but-instanced parts so they CAN be moved by the
   // gizmo. Without this they'd silently be filtered out below and the user
@@ -2219,6 +2224,9 @@ function _attachGizmoToParts(parts) {
     center = new THREE.Vector3();
     parts[0].mesh.getWorldPosition(center);
   }
+  // For tree group selections, caller passes the DIRECT-parts centroid so the
+  // gizmo anchor stays stable when child sub-groups are moved.
+  if (centerOverride) center = centerOverride;
   // Reset the pivot, move it to the centroid, and — for single-part
   // selections — orient it to match the part's world rotation so the
   // gizmo handles align with the object's local axes (Blender-style).
@@ -2292,6 +2300,7 @@ function _detachGizmo() {
     state._pivotedParts = null;
     state._pivotedPart = null;
     state._pivotOrigParent = null;
+    state._pivotedTreeGroupId = null;
     return;
   }
   // Per-part path: return every pivoted mesh to partsRoot with its final
@@ -2324,6 +2333,7 @@ function _detachGizmo() {
   state._pivotedParts = null;
   state._pivotedPart = null;
   state._pivotOrigParent = null;
+  state._pivotedTreeGroupId = null;
 }
 
 let _updateGizmoRaf = 0;
@@ -2353,7 +2363,22 @@ function _updateGizmoImpl() {
   const sameSet = cur.length === parts.length && cur.every(p => parts.includes(p));
   if (sameSet) return;
   _detachGizmo();
-  _attachGizmoToParts(parts);
+  // For tree group selections, anchor the gizmo at the STORED group origin
+  // (not the live bbox centroid of all descendants). This keeps the gizmo
+  // position stable when child sub-groups have been moved — the parent's
+  // stored origin is only updated when the parent itself is explicitly moved.
+  let _tgCenter;
+  const _tgt = _transformTarget();
+  if (_tgt && _tgt.kind === 'group') {
+    const _gid2 = [...(state.selectedGroupIds || [])][0];
+    const _numId2 = _gid2 != null ? parseInt(String(_gid2), 10) : NaN;
+    if (Number.isFinite(_numId2)) {
+      _initGroupOrigins();
+      _tgCenter = _groupOrigins.get(_numId2) ?? undefined;
+      state._pivotedTreeGroupId = _numId2; // track which tree group this pivot is for
+    }
+  }
+  _attachGizmoToParts(parts, _tgCenter);
 }
 
 function setGizmoMode(mode) {
@@ -3526,6 +3551,7 @@ async function _drainDisposeQueue() {
 
 function clearModel() {
   _detachGizmo();
+  _groupOrigins.clear();  // reset stored group origins for new model
 
   // ── Force-reset interaction state ──────────────────────────────────────
   // If the user opens a new file mid-gesture (gizmo drag, marquee drag,
@@ -3617,118 +3643,341 @@ function onModelLoaded(filename) {
   }, 1100);
 }
 
-// Capture a PNG of the current viewport and offer share / clipboard /
-// download. Uses readRenderTargetPixels into an in-memory canvas so the
-// result is byte-for-byte identical on WebGL and WebGPU — `canvas.toBlob`
-// alone returns a blank frame on WebGPU after present() and on WebGL
-// without preserveDrawingBuffer.
-async function _captureViewportScreenshot() {
+// Camera-shutter flash overlay. Replaces the unintentional black blink that
+// readRenderTargetPixels causes (the live swap-chain is interrupted while the
+// offscreen target renders) with an intentional white pulse so the capture
+// feels like a real shutter going off. Single shared element, lazily built.
+function _doCameraFlash(durMs = 360) {
+  let flash = document.getElementById('vp-flash');
+  if (!flash) {
+    flash = document.createElement('div');
+    flash.id = 'vp-flash';
+    Object.assign(flash.style, {
+      position: 'absolute', inset: '0', pointerEvents: 'none',
+      background: '#ffffff', opacity: '0',
+      mixBlendMode: 'screen', zIndex: '500',
+      borderRadius: 'inherit',
+    });
+    (document.getElementById('viewport') || document.body).appendChild(flash);
+  }
+  // Re-trigger the animation by clearing then forcing layout.
+  flash.style.transition = 'none';
+  flash.style.opacity = '0';
+  // eslint-disable-next-line no-unused-expressions
+  flash.offsetHeight;
+  flash.style.transition = `opacity ${Math.round(durMs * 0.18)}ms cubic-bezier(.2,.9,.3,1.1)`;
+  flash.style.opacity = '0.92';
+  setTimeout(() => {
+    flash.style.transition = `opacity ${Math.round(durMs * 0.78)}ms ease-out`;
+    flash.style.opacity = '0';
+  }, Math.round(durMs * 0.18));
+}
+
+// Render the scene into an offscreen target at the requested resolution and
+// return a PNG blob. Adjusts camera aspect for non-viewport sizes so the
+// composition isn't squashed; restores the camera afterwards.
+async function _captureFrameAsBlob(outW, outH) {
+  if (!renderer || !scene || !camera) throw new Error('renderer not ready');
+  outW = Math.max(2, Math.round(outW));
+  outH = Math.max(2, Math.round(outH));
+
+  // Stash + adjust perspective camera aspect so a 16:9 export of a square
+  // viewport doesn't stretch the model. Orthographic cameras carry their own
+  // l/r/t/b — leave those untouched (the user's framing already implies aspect).
+  const stashedAspect = (camera.isPerspectiveCamera) ? camera.aspect : null;
+  if (stashedAspect != null) {
+    camera.aspect = outW / outH;
+    camera.updateProjectionMatrix();
+  }
+
+  const target = new THREE.WebGLRenderTarget(outW, outH, {
+    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+  });
+  const oldTarget = renderer.getRenderTarget?.();
+  const pixels = new Uint8Array(outW * outH * 4);
+  let readOk = false;
+  try {
+    renderer.setRenderTarget(target);
+    if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
+    else renderer.render(scene, camera);
+    try {
+      if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
+        await renderer.readRenderTargetPixelsAsync(target, 0, 0, outW, outH, pixels);
+      } else {
+        renderer.readRenderTargetPixels(target, 0, 0, outW, outH, pixels);
+      }
+      readOk = true;
+    } catch (_) { /* fall through to live-canvas path */ }
+  } finally {
+    renderer.setRenderTarget(oldTarget || null);
+    target.dispose();
+    if (stashedAspect != null) {
+      camera.aspect = stashedAspect;
+      camera.updateProjectionMatrix();
+    }
+  }
+
+  const out = document.createElement('canvas');
+  out.width = outW; out.height = outH;
+  const ctx = out.getContext('2d');
+  if (readOk) {
+    // GL origin is bottom-left; canvas2d is top-left. Flip rows during copy.
+    const img = ctx.createImageData(outW, outH);
+    const dst = img.data, rowBytes = outW * 4;
+    for (let y = 0; y < outH; y++) {
+      const sRow = (outH - 1 - y) * rowBytes;
+      const dRow = y * rowBytes;
+      dst.set(pixels.subarray(sRow, sRow + rowBytes), dRow);
+    }
+    ctx.putImageData(img, 0, 0);
+  } else {
+    // Read failed (WebGPU race on some drivers). Re-render to the live canvas
+    // at its native size and snapshot via drawImage. Output is letterboxed at
+    // outW×outH — better than nothing, but the readback path is the norm.
+    if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
+    else renderer.render(scene, camera);
+    const cv = renderer.domElement;
+    const cvW = cv.width, cvH = cv.height;
+    const s = Math.min(outW / cvW, outH / cvH);
+    const dw = Math.round(cvW * s), dh = Math.round(cvH * s);
+    const dx = Math.floor((outW - dw) / 2), dy = Math.floor((outH - dh) / 2);
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, outW, outH);
+    ctx.drawImage(cv, dx, dy, dw, dh);
+  }
+
+  const blob = await new Promise(res => out.toBlob(res, 'image/png'));
+  if (!blob) throw new Error('toBlob returned null');
+  return blob;
+}
+
+// Build the default screenshot filename from the loaded model name (stashed
+// in the status bar by onModelLoaded) plus an ISO timestamp.
+function _defaultScreenshotName() {
+  const sbName = document.getElementById('sb-status')?.textContent?.trim() || '';
+  const baseName = (sbName && sbName !== 'Ready') ? sbName : 'viewport';
+  const stem = baseName.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'viewport';
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  return `${stem}_${ts}.png`;
+}
+
+// Save a blob via showSaveFilePicker (where supported, lets the user choose
+// the destination + name) or fall back to a plain download. Returns the
+// final filename, or null if the user cancelled.
+async function _saveScreenshotBlob(blob, suggestedName) {
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }],
+      });
+      const w = await handle.createWritable();
+      await w.write(blob);
+      await w.close();
+      return handle.name || suggestedName;
+    } catch (e) {
+      // AbortError → user cancelled the picker; bail without a download.
+      if (e?.name === 'AbortError') return null;
+      console.warn('[screenshot] save picker failed, falling back to download:', e);
+    }
+  }
+  downloadBlob(blob, suggestedName);
+  return suggestedName;
+}
+
+// Custom dialog: lets the user pick output resolution + filename, then save.
+// Built on top of _DraggablePopup so it inherits the app's chrome (drag,
+// resize, escape, persisted position).
+function _openScreenshotDialog() {
   if (!renderer || !scene || !camera) {
     toast('Screenshot failed', 'Renderer not ready', 'warn');
     return;
   }
-  const btn = document.getElementById('tg-screenshot');
-  btn?.classList.add('active');
-  try {
-    const cv = renderer.domElement;
-    const w = cv.width, h = cv.height;
-    if (!w || !h) throw new Error('canvas has zero size');
-
-    // Render into an offscreen target so we can read back deterministically.
-    // Same pattern as _captureRecentThumb; sized to the live canvas so the
-    // shot matches exactly what the user sees.
-    const target = new THREE.WebGLRenderTarget(w, h, {
-      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
-    });
-    const oldTarget = renderer.getRenderTarget?.();
-    const pixels = new Uint8Array(w * h * 4);
-    let readOk = false;
-    try {
-      renderer.setRenderTarget(target);
-      if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
-      else renderer.render(scene, camera);
-      try {
-        if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
-          await renderer.readRenderTargetPixelsAsync(target, 0, 0, w, h, pixels);
-        } else {
-          renderer.readRenderTargetPixels(target, 0, 0, w, h, pixels);
-        }
-        readOk = true;
-      } catch (_) { /* fall through to canvas-snapshot path */ }
-    } finally {
-      renderer.setRenderTarget(oldTarget || null);
-      target.dispose();
-    }
-
-    // Compose into a 2D canvas, flipping Y (GL origin is bottom-left).
-    const out = document.createElement('canvas');
-    out.width = w; out.height = h;
-    const ctx = out.getContext('2d');
-    if (readOk) {
-      const img = ctx.createImageData(w, h);
-      const src = pixels, dst = img.data, rowBytes = w * 4;
-      for (let y = 0; y < h; y++) {
-        const sRow = (h - 1 - y) * rowBytes;
-        const dRow = y * rowBytes;
-        dst.set(src.subarray(sRow, sRow + rowBytes), dRow);
-      }
-      ctx.putImageData(img, 0, 0);
-    } else {
-      // Fallback: render to the live canvas and snapshot it directly. Works
-      // on WebGL with preserveDrawingBuffer, may be blank otherwise — we
-      // accept that since the readRenderTargetPixels path is the primary.
-      if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
-      else renderer.render(scene, camera);
-      ctx.drawImage(cv, 0, 0, w, h);
-    }
-
-    const blob = await new Promise(res => out.toBlob(res, 'image/png'));
-    if (!blob) throw new Error('toBlob returned null');
-
-    // Filename is parked in the status bar by onModelLoaded — borrow it for
-    // a meaningful screenshot name. Falls back to "viewport" pre-load.
-    const sbName = document.getElementById('sb-status')?.textContent?.trim() || '';
-    const baseName = (sbName && sbName !== 'Ready') ? sbName : 'viewport';
-    const stem = baseName.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'viewport';
-    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const fname = `${stem}_${ts}.png`;
-    const file = new File([blob], fname, { type: 'image/png' });
-
-    // 1) Native share sheet — preferred on mobile + supported desktops.
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: fname });
-        toast('Screenshot shared', fname, 'info', 1800);
-        return;
-      } catch (e) {
-        // User-cancelled share → still let them grab it via clipboard/download below.
-        if (e?.name !== 'AbortError') console.warn('[screenshot] share failed:', e);
-        else { return; }
-      }
-    }
-
-    // 2) Copy to clipboard (works in Chrome/Edge/Safari on https/localhost).
-    let copied = false;
-    if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
-      try {
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        copied = true;
-      } catch (e) {
-        // Permission denied / focus lost — fall through to download.
-        console.warn('[screenshot] clipboard write failed:', e);
-      }
-    }
-
-    // 3) Always trigger a download as a reliable fallback.
-    downloadBlob(blob, fname);
-    toast(copied ? 'Screenshot copied & saved' : 'Screenshot saved', fname, 'info', 2000);
-  } catch (err) {
-    console.error('[screenshot]', err);
-    toast('Screenshot failed', err?.message || String(err), 'warn');
-  } finally {
-    setTimeout(() => btn?.classList.remove('active'), 250);
-    requestRender();
+  // Inject the dialog-specific styles once. Scoped to #scrshot-dlg so they
+  // don't leak into other popups.
+  if (!document.getElementById('_scrshot-dlg-style')) {
+    const s = document.createElement('style');
+    s.id = '_scrshot-dlg-style';
+    s.textContent = `
+      #scrshot-dlg .ss-body{padding:14px 16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+      #scrshot-dlg .ss-section-title{font-size:11px;font-weight:600;color:var(--tx2);letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
+      #scrshot-dlg .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+      #scrshot-dlg .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:8px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .14s ease,border-color .14s ease,transform .12s ease}
+      #scrshot-dlg .ss-preset:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
+      #scrshot-dlg .ss-preset.active{background:linear-gradient(180deg,rgba(110,168,255,.18),rgba(110,168,255,.08));border-color:rgba(110,168,255,.42);color:var(--tx)}
+      #scrshot-dlg .ss-preset .lbl{font-size:12px;font-weight:600;line-height:1.1}
+      #scrshot-dlg .ss-preset .sub{font-size:10.5px;color:var(--tx3);font-variant-numeric:tabular-nums}
+      #scrshot-dlg .ss-preset.active .sub{color:var(--ac)}
+      #scrshot-dlg .ss-custom{display:flex;align-items:center;gap:8px}
+      #scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:7px;font-size:12.5px;outline:none;font-variant-numeric:tabular-nums}
+      #scrshot-dlg .ss-custom input:focus{border-color:rgba(110,168,255,.5)}
+      #scrshot-dlg .ss-custom .x{color:var(--tx3);font-size:13px;font-weight:500}
+      #scrshot-dlg .ss-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums}
+      #scrshot-dlg .ss-meta strong{color:var(--tx2);font-weight:500}
+      #scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:6px}
+      #scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:7px;font-size:12.5px;outline:none}
+      #scrshot-dlg .ss-name input:focus{border-color:rgba(110,168,255,.5)}
+      #scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:500}
+      #scrshot-dlg .dlg-foot .ss-cancel:hover{background:rgba(255,255,255,.05)}
+      #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,rgba(110,168,255,.32),rgba(110,168,255,.18));border-color:rgba(110,168,255,.5);color:#dde7f9}
+      #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,rgba(110,168,255,.42),rgba(110,168,255,.24))}
+      #scrshot-dlg .dlg-foot .ss-save:disabled{opacity:.5;cursor:wait}
+    `;
+    document.head.appendChild(s);
   }
+
+  // Compute viewport size up front so the "Match viewport" preset is exact.
+  const cv = renderer.domElement;
+  const baseW = cv.width || 1920;
+  const baseH = cv.height || 1080;
+
+  const presets = [
+    { id: 'vp1',    label: 'Viewport',  w: baseW,  h: baseH,  desc: '1×' },
+    { id: 'vp2',    label: 'Viewport',  w: baseW * 2, h: baseH * 2, desc: '2× (sharp)' },
+    { id: 'vp4',    label: 'Viewport',  w: baseW * 4, h: baseH * 4, desc: '4× (poster)' },
+    { id: 'fhd',    label: '1080p',     w: 1920, h: 1080,           desc: 'Full HD' },
+    { id: 'qhd',    label: '1440p',     w: 2560, h: 1440,           desc: 'QHD' },
+    { id: 'uhd',    label: '4K',        w: 3840, h: 2160,           desc: 'Ultra HD' },
+  ];
+
+  const presetsHtml = presets.map(p => `
+    <button type="button" class="ss-preset" data-id="${p.id}" data-w="${Math.round(p.w)}" data-h="${Math.round(p.h)}">
+      <span class="lbl">${p.label}</span>
+      <span class="sub">${Math.round(p.w)}×${Math.round(p.h)} · ${p.desc}</span>
+    </button>`).join('');
+
+  const dlg = _DraggablePopup.create({
+    id: 'scrshot-dlg',
+    title: 'Save Screenshot',
+    subtitle: 'Render the viewport at any resolution',
+    iconName: 'camera',
+    width: 460, height: 520,
+    minWidth: 380, minHeight: 440,
+    bodyHtml: `
+      <div class="ss-body">
+        <div>
+          <div class="ss-section-title">Resolution</div>
+          <div class="ss-presets" id="ss-presets">${presetsHtml}</div>
+        </div>
+        <div>
+          <div class="ss-section-title">Custom (px)</div>
+          <div class="ss-custom">
+            <input type="number" id="ss-w" min="16" max="16384" step="1" value="${Math.round(baseW)}">
+            <span class="x">×</span>
+            <input type="number" id="ss-h" min="16" max="16384" step="1" value="${Math.round(baseH)}">
+          </div>
+          <div class="ss-meta" style="margin-top:6px">
+            <span><strong>Aspect</strong> <span id="ss-aspect">${(baseW / baseH).toFixed(3)}</span></span>
+            <span><strong>Pixels</strong> <span id="ss-mpix">${(baseW * baseH / 1e6).toFixed(1)} MP</span></span>
+          </div>
+        </div>
+        <div class="ss-name">
+          <div class="ss-section-title">Filename</div>
+          <input type="text" id="ss-name" value="${_defaultScreenshotName()}" spellcheck="false">
+        </div>
+      </div>`,
+    footHtml: `
+      <button class="ss-cancel" type="button">Cancel</button>
+      <button class="ss-save" type="button">Save…</button>`,
+  });
+
+  const root = document.getElementById('scrshot-dlg');
+  const wIn = root.querySelector('#ss-w');
+  const hIn = root.querySelector('#ss-h');
+  const aspectEl = root.querySelector('#ss-aspect');
+  const mpixEl = root.querySelector('#ss-mpix');
+  const nameIn = root.querySelector('#ss-name');
+  const saveBtn = root.querySelector('.ss-save');
+  const cancelBtn = root.querySelector('.ss-cancel');
+  const presetBtns = root.querySelectorAll('.ss-preset');
+
+  const _highlight = () => {
+    const w = parseInt(wIn.value, 10) || 0;
+    const h = parseInt(hIn.value, 10) || 0;
+    presetBtns.forEach(b => {
+      const match = parseInt(b.dataset.w, 10) === w && parseInt(b.dataset.h, 10) === h;
+      b.classList.toggle('active', match);
+    });
+    aspectEl.textContent = (h > 0) ? (w / h).toFixed(3) : '—';
+    mpixEl.textContent = (w * h / 1e6).toFixed(1) + ' MP';
+  };
+
+  // Reset filename to a fresh timestamp every open. W/H are left at the
+  // user's last pick so a repeat shot is one click away.
+  nameIn.value = _defaultScreenshotName();
+
+  // Bind handlers ONCE. _DraggablePopup.create returns the SAME instance on
+  // re-open — without this guard each open stacks another listener, so save
+  // would fire N times after N opens.
+  if (!root.dataset.wired) {
+    root.dataset.wired = '1';
+
+    presetBtns.forEach(b => b.addEventListener('click', () => {
+      wIn.value = b.dataset.w;
+      hIn.value = b.dataset.h;
+      _highlight();
+    }));
+    wIn.addEventListener('input', _highlight);
+    hIn.addEventListener('input', _highlight);
+    cancelBtn.addEventListener('click', () => dlg.hide());
+
+    saveBtn.addEventListener('click', async () => {
+      const w = parseInt(wIn.value, 10);
+      const h = parseInt(hIn.value, 10);
+      if (!Number.isFinite(w) || !Number.isFinite(h) || w < 16 || h < 16) {
+        toast('Invalid size', 'Width and height must be ≥ 16 px', 'warn');
+        return;
+      }
+      if (w > 16384 || h > 16384) {
+        toast('Size too large', 'Max 16384 px per side', 'warn');
+        return;
+      }
+      let name = (nameIn.value || _defaultScreenshotName()).trim();
+      if (!/\.png$/i.test(name)) name += '.png';
+
+      saveBtn.disabled = true;
+      cancelBtn.disabled = true;
+      const oldLabel = saveBtn.textContent;
+      saveBtn.textContent = 'Capturing…';
+      try {
+        const blob = await _captureFrameAsBlob(w, h);
+        // Fire the shutter flash AFTER readback so the visible viewport is
+        // already restored — the flash overlays the recovered frame, giving
+        // a clean "snap" without the messy black blink.
+        _doCameraFlash();
+        const finalName = await _saveScreenshotBlob(blob, name);
+        if (finalName) {
+          toast('Screenshot saved', `${finalName} (${w}×${h})`, 'info', 2200);
+          dlg.hide();
+        }
+        // Cancelled save picker → leave dialog open; finally restores button.
+      } catch (err) {
+        console.error('[screenshot]', err);
+        toast('Screenshot failed', err?.message || String(err), 'warn');
+      } finally {
+        saveBtn.textContent = oldLabel;
+        saveBtn.disabled = false;
+        cancelBtn.disabled = false;
+        requestRender();
+      }
+    });
+  }
+
+  _highlight();
+
+  // Re-run lucide so the camera icon in the dialog head paints. The popup is
+  // built after the boot-time createIcons sweep that wires the toolbar.
+  if (window.lucide?.createIcons) {
+    try { window.lucide.createIcons({ icons: window.lucide.icons, attrs: {} }); } catch (_) {}
+  }
+
+  dlg.show();
+  // Pre-select the filename text so a quick rename is a single keystroke away.
+  setTimeout(() => { try { nameIn.focus(); nameIn.select(); } catch (_) {} }, 60);
+}
+
+// Public entry point wired to the viewport camera button.
+function _captureViewportScreenshot() {
+  _openScreenshotDialog();
 }
 
 // Render the scene into a small offscreen target, encode the result as a JPEG
@@ -4240,6 +4489,12 @@ const _tfParentCentroid = new THREE.Vector3();
 let _tfParentCentroidForChild = null; // child group id the cache was built for
 let _tfHasParentCentroid = false;
 
+// Persistent group origins: groupId (number) → THREE.Vector3 (world bbox centroid).
+// Populated lazily on first use; updated when the user explicitly moves a group
+// (gizmo drag end or transform panel write). Never updated by child group moves —
+// that's the point: parent origin stays fixed when a child sub-group is dragged.
+const _groupOrigins = new Map();
+
 // Compute the size in a frame where obj's WORLD rotation is stripped,
 // so rotating the object (or any ancestor — like the gizmo pivot)
 // doesn't grow the displayed AABB. Per child geometry corner v:
@@ -4326,6 +4581,12 @@ function _transformPanelRefresh() {
   const obj = target.obj;
   const isGroup = target.kind === 'group' || target.kind === 'user-group';
   const usingWorld = _hasPivotAncestor(obj);
+  // True only when the current pivot was set up for the currently-selected tree group.
+  // Guards WITH-PIVOT read paths from stale pivots left by previously-selected groups.
+  const _pivotForThisGroup = !!(
+    state._pivotedTreeGroupId != null &&
+    state.selectedGroupIds?.has(state._pivotedTreeGroupId)
+  );
 
   // Swap the Size column header to "Scale" for groups.
   const _allColLabels = document.querySelectorAll('#tform-grid .tform-col-label');
@@ -4350,38 +4611,58 @@ function _transformPanelRefresh() {
       // direct bbox computation so the value is never wrong due to gizmo timing.
       const _selGid = state.selectedGroupIds ? [...state.selectedGroupIds][0] : null;
       const _selNumId = _selGid != null ? parseInt(String(_selGid), 10) : NaN;
-      if (state.pivot && state._pivotedParts?.length) {
+      // Only use the live pivot if it actually belongs to THIS group's selection.
+      // Without this guard, switching from child→parent while rAF is pending
+      // _pivotForThisGroup is computed at function scope above.
+      if (state.pivot && state._pivotedParts?.length && _pivotForThisGroup) {
         state.pivot.getWorldPosition(_tfTmpVec);
       } else if (Number.isFinite(_selNumId)) {
-        const _cBox = new THREE.Box3(), _cBox2 = new THREE.Box3();
-        for (const id of _treeGroupDescendants(_selNumId)) {
-          const p = getPart(id);
-          if (!p?.mesh) continue;
-          p.mesh.updateWorldMatrix(true, false);
-          _cBox2.setFromObject(p.mesh);
-          if (!_cBox2.isEmpty()) _cBox.union(_cBox2);
+        // Use persistent stored origin so displayed position doesn't shift when a
+        // child sub-group is moved. Init lazily on first use after model load.
+        _initGroupOrigins();
+        const _stored = _groupOrigins.get(_selNumId);
+        if (_stored) {
+          _tfTmpVec.copy(_stored);
+        } else {
+          // Fallback: live bbox centroid (group not yet in origins — empty group case).
+          const _cBox = new THREE.Box3(), _cBox2 = new THREE.Box3();
+          for (const id of _treeGroupDescendants(_selNumId)) {
+            const p = getPart(id);
+            if (!p?.mesh) continue;
+            p.mesh.updateWorldMatrix(true, false);
+            _cBox2.setFromObject(p.mesh);
+            if (!_cBox2.isEmpty()) _cBox.union(_cBox2);
+          }
+          if (!_cBox.isEmpty()) _cBox.getCenter(_tfTmpVec);
+          else _tfTmpVec.set(0, 0, 0);
         }
-        if (!_cBox.isEmpty()) _cBox.getCenter(_tfTmpVec);
-        else _tfTmpVec.set(0, 0, 0);
       } else {
         _tfTmpVec.set(0, 0, 0);
       }
-      // Parent centroid cache: keyed by child group id, recomputed on selection change.
+      // Parent centroid: use stored origin (stable — unaffected by sibling moves).
       if (Number.isFinite(_selNumId) && _tfParentCentroidForChild !== _selNumId) {
         _tfParentCentroidForChild = _selNumId;
         _tfHasParentCentroid = false;
         const _thisNode = state.treeNodes?.find(n => n.kind === 'group' && n.id === _selNumId);
         const _parentId = _thisNode?.parentId;
         if (_parentId != null) {
-          const _pBox = new THREE.Box3(), _pBox2 = new THREE.Box3();
-          for (const id of _treeGroupDescendants(_parentId)) {
-            const p = getPart(id);
-            if (!p?.mesh) continue;
-            p.mesh.updateWorldMatrix(true, false);
-            _pBox2.setFromObject(p.mesh);
-            if (!_pBox2.isEmpty()) _pBox.union(_pBox2);
+          _initGroupOrigins();
+          const _pStored = _groupOrigins.get(_parentId);
+          if (_pStored) {
+            _tfParentCentroid.copy(_pStored);
+            _tfHasParentCentroid = true;
+          } else {
+            // Fallback: live bbox centroid of parent's all-descendants.
+            const _pBox = new THREE.Box3(), _pBox2 = new THREE.Box3();
+            for (const id of _treeGroupDescendants(_parentId)) {
+              const p = getPart(id);
+              if (!p?.mesh) continue;
+              p.mesh.updateWorldMatrix(true, false);
+              _pBox2.setFromObject(p.mesh);
+              if (!_pBox2.isEmpty()) _pBox.union(_pBox2);
+            }
+            if (!_pBox.isEmpty()) { _pBox.getCenter(_tfParentCentroid); _tfHasParentCentroid = true; }
           }
-          if (!_pBox.isEmpty()) { _pBox.getCenter(_tfParentCentroid); _tfHasParentCentroid = true; }
         }
       }
       if (_tfHasParentCentroid) _tfTmpVec.sub(_tfParentCentroid);
@@ -4400,7 +4681,7 @@ function _transformPanelRefresh() {
   // read obj.rotation directly.
   try {
     const rad2deg = (r) => r * 180 / Math.PI;
-    if (target.kind === 'group' && state.pivot && state._pivotedParts?.length) {
+    if (target.kind === 'group' && state.pivot && state._pivotedParts?.length && _pivotForThisGroup) {
       // Tree group with active gizmo: show the pivot's own rotation — this is exactly
       // the rotation applied by the user in the current gizmo session (0 on fresh attach,
       // updates live during drag). Using any part's world quaternion instead would leak
@@ -4428,12 +4709,26 @@ function _transformPanelRefresh() {
   // Size (parts) / Scale (groups): parts show stable bbox dimensions in the
   // object's own local frame; groups show the group container's scale factor
   // (1,1,1 = unscaled) since there's no single "size" for a group.
+  //
+  // During an active gizmo drag we SKIP the parts-size computation entirely
+  // for translate/rotate gestures: the bbox dimensions don't change when
+  // you move or spin the object, only when you scale it, and the
+  // _readStableSize() traversal walks every descendant geometry's 8 bbox
+  // corners — O(meshes) work per frame that flat-lines the viewport on a
+  // 1000-mesh selection. The poll's dragging-changed listener (and the
+  // signature-bump on the next frame after release) gives us one final
+  // refresh once the gesture ends, so the displayed size still settles.
+  // Group containers use cheap obj.scale reads, so they stay live.
+  const isDragging = !!state._gizmoDragging;
+  const isScaleDrag = isDragging && state.gizmoMode === 'scale';
   try {
     if (isGroup) {
       const sc = obj.scale;
       if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(sc.x, 3);
       if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(sc.y, 3);
       if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(sc.z, 3);
+    } else if (isDragging && !isScaleDrag) {
+      // Translate/rotate drag: size unchanged, leave the previous values.
     } else {
       _readStableSize(obj, _tfTmpVec2);
       if (Number.isFinite(_tfTmpVec2.x) && _tfTmpVec2.x > 0) {
@@ -4519,6 +4814,8 @@ function _wireTransformPanel() {
             if (axis === 'pz') state.pivot.position.z = v + _pcZ;
           }
           state.pivot.updateMatrixWorld(true);
+          // Persist new origin so parent's gizmo stays stable after this write.
+          if (target.kind === 'group') _updateTreeGroupOrigin();
         } else if (isGroup) {
           // No active pivot — for user-groups write directly (ug.ref parents
           // the meshes). Tree groups: this is a no-op visually; user must
@@ -4659,7 +4956,12 @@ function _wireTransformPanel() {
     state.gizmo.addEventListener('objectChange', () => _transformPanelRefresh());
     // Also fire after a drag completes; some Three.js versions only emit
     // dragging-changed at end and skip the final objectChange.
-    state.gizmo.addEventListener('dragging-changed', () => _transformPanelRefresh());
+    // On drag END (e.value === false), persist the new group origin so the
+    // parent's gizmo position stays stable on next selection.
+    state.gizmo.addEventListener('dragging-changed', (e) => {
+      if (!e.value) _updateTreeGroupOrigin();
+      _transformPanelRefresh();
+    });
   }
   // Custom stepper buttons (the wrapped −/+ on each side of every input).
   // Delegated on the grid so all 18 buttons share one listener; the cell's
@@ -4896,8 +5198,10 @@ function _transformPollLoop() {
     fp?.mesh?.updateMatrixWorld?.(true);
     const fm = fp?.mesh?.matrixWorld?.elements;
     const pp = pm ? pm[12].toFixed(3)+','+pm[13].toFixed(3)+','+pm[14].toFixed(3) : '0,0,0';
+    // Include rotation columns so rotation drags are detected by the poll too.
+    const pr = pm ? pm[0].toFixed(3)+','+pm[1].toFixed(3)+','+pm[4].toFixed(3)+','+pm[5].toFixed(3) : '0,0,0,0';
     const fp2 = fm ? fm[12].toFixed(3)+','+fm[13].toFixed(3)+','+fm[14].toFixed(3) : '0,0,0';
-    sig = pp + '|' + fp2;
+    sig = pp + '|' + pr + '|' + fp2;
   } else {
     obj.updateMatrixWorld?.(true);
     const m = obj.matrixWorld?.elements;
@@ -5442,6 +5746,16 @@ function _instBadge(n) {
 }
 
 // Collect every part-id descendant of a group node in state.treeNodes.
+// Returns partIds that are DIRECT children of groupId (n.parentId === groupId,
+// n.kind === 'part'). Does NOT include parts nested inside child sub-groups.
+// Used to anchor a group's gizmo/centroid at its own content — so moving a
+// child sub-group doesn't shift the parent group's displayed position or gizmo.
+function _treeGroupDirectPartIds(groupId) {
+  return (state.treeNodes || [])
+    .filter(n => n.kind === 'part' && n.parentId === groupId && n.partId != null)
+    .map(n => n.partId);
+}
+
 // Walks forward from the group's index until depth drops back to or below
 // the group's depth — that's the boundary of the group's subtree (treeNodes
 // is in DFS order). Returns the list of partIds, no group ids.
@@ -5461,6 +5775,44 @@ function _treeGroupDescendants(groupId) {
     }
   }
   return out;
+}
+
+// Populate _groupOrigins for any group node that doesn't yet have an entry.
+// Idempotent: safe to call at any time; skips groups already initialised.
+// Called lazily from _transformPanelRefresh and _updateGizmoImpl on first use
+// so we don't need a dedicated "model loaded" hook.
+function _initGroupOrigins() {
+  if (!state.treeNodes?.length) return;
+  const box = new THREE.Box3(), box2 = new THREE.Box3();
+  for (const n of state.treeNodes) {
+    if (n.kind !== 'group') continue;
+    if (_groupOrigins.has(n.id)) continue;
+    box.makeEmpty();
+    for (const id of _treeGroupDescendants(n.id)) {
+      const p = getPart(id);
+      if (!p?.mesh) continue;
+      p.mesh.updateWorldMatrix(true, false);
+      box2.setFromObject(p.mesh);
+      if (!box2.isEmpty()) box.union(box2);
+    }
+    if (!box.isEmpty()) _groupOrigins.set(n.id, box.getCenter(new THREE.Vector3()));
+  }
+}
+
+// Update the stored origin for the currently-selected tree group after the
+// user has moved it (called on gizmo drag-end and transform-panel position write).
+function _updateTreeGroupOrigin() {
+  if (!state.selectedGroupIds?.size || !state.pivot) return;
+  const gid = [...state.selectedGroupIds][0];
+  const numId = parseInt(String(gid), 10);
+  if (!Number.isFinite(numId)) return;
+  const tgt = _transformTarget();
+  if (!tgt || tgt.kind !== 'group') return;
+  const newPos = new THREE.Vector3();
+  state.pivot.getWorldPosition(newPos);
+  _groupOrigins.set(numId, newPos);
+  // Invalidate parent-centroid cache so next display re-reads from _groupOrigins.
+  _tfParentCentroidForChild = null;
 }
 
 // Minimal HTML escape for names that may contain CAD-special characters.
