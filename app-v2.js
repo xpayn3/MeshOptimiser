@@ -4373,9 +4373,9 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
   const mat = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.55,        // global dim — combined with the per-vertex multiplier
+    opacity: 0.22,        // global dim — combined with the per-vertex multiplier
                           // and bake-to-RGB fade this lands the minor lines at
-                          // ~0.06 effective opacity (faint hairlines).
+                          // ~0.025 effective opacity (ghost hairlines).
     depthWrite: false,
   });
   const mesh = new THREE.LineSegments(geom, mat);
