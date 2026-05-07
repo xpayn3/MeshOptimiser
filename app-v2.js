@@ -2864,35 +2864,22 @@ async function _loadCustomHdri(file) {
   }
 }
 
-// Apply state.hdriRotation as a Z-axis rotation (scene up). The newer
-// scene.environmentRotation / backgroundRotation properties (r163+) drive
-// the visible background but the WebGPU renderer's NodeMaterial path
-// doesn't always honour them for the LIGHTING part of the env — meshes
-// stay lit as if the env weren't moving. To make the model actually re-
-// light when the sun gizmo turns, we ALSO mark every cached material as
-// dirty and reassign scene.environment, which forces the renderer to
-// rebuild its env uniforms next frame.
+// Apply state.hdriRotation. Two paths run in parallel because the WebGPU
+// bundle's NodeMaterial path doesn't reliably re-light meshes when
+// scene.environmentRotation alone changes:
+//   1. scene.environmentRotation / backgroundRotation rotate the visible
+//      background (and the diffuse env on WebGL2).
+//   2. The directional "sun" light gets repositioned to match the gizmo,
+//      providing the visible relighting that responds to the user drag.
+// Together this gives the same look as a real HDRI rotation regardless
+// of which renderer is active.
 function _applyHdriRotation() {
   if (!scene) return;
   const rot = state.hdriRotation || 0;
   if (scene.environmentRotation) scene.environmentRotation.set(0, 0, rot);
   if (scene.backgroundRotation)  scene.backgroundRotation.set(0, 0, rot);
-  // Force-rebuild path: reassign the env (no-op on the texture but flips
-  // the renderer's needsUpdate flag), and bump every PBR material's
-  // version so the WebGPU renderer rebuilds them with the new rotation.
-  const envTex = scene.environment;
-  if (envTex) {
-    scene.environment = null;
-    scene.environment = envTex;
-    if (state.partsRoot) {
-      state.partsRoot.traverse(o => {
-        const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : null;
-        if (!mats) return;
-        for (const m of mats) {
-          if (m.isMaterial) m.needsUpdate = true;
-        }
-      });
-    }
+  if (state._lights?.dir && state._lights._stashedForHdri) {
+    _applyHdriSunPosition();
   }
 }
 
@@ -2919,6 +2906,12 @@ function _applyHdriIntensity() {
       }
     });
   }
+  // Sun directional in HDRI mode: scale with intensity so the visible
+  // relighting tracks the env brightness. Outside HDRI mode the dir
+  // light is at its target value (set in _applyHdriLightStash).
+  if (state._lights?.dir && state._lights._stashedForHdri) {
+    state._lights.dir.intensity = (state._lights.dirTarget * 0.6) * k;
+  }
 }
 
 function _toggleHdriUI(on) {
@@ -2929,33 +2922,57 @@ function _toggleHdriUI(on) {
   _applyHdriLightStash(on);
 }
 
-// When HDRI is the lighting source the procedural 3-light rig (hemi + key
-// directional + fill directional) doubles up with the env's baked sun and
-// blows out highlights. Drop the rig to 0 on entry; restore from the
-// stable TARGET values (state._lights.{hemi,dir,fill}Target) on exit.
+// HDRI lighting model — the WebGPU bundle's NodeMaterial path doesn't
+// reliably re-light meshes when scene.environmentRotation changes (the
+// visible bg rotates but the diffuse/specular lookups stay frozen on
+// the original orientation). Workaround used by Substance Painter and
+// Marmoset: keep a single directional "sun" light alive that the user
+// drags via the sun gizmo. The HDRI continues to provide ambient +
+// reflections; the directional gives the visible relighting that
+// actually responds to the gizmo.
 //
-// Earlier this function captured the live intensities on entry and
-// restored from that snapshot, but the boot ramp can fire mid-load and
-// either (a) capture a half-faded value or (b) capture 0 because the
-// ramp hadn't started yet. The user then exited HDRI and saw a black
-// scene because the restore wrote 0 back. Targets are immutable, so
-// they always restore to the right values regardless of timing.
+// On HDRI enter:
+//   - hemi      → 0 (HDRI covers ambient)
+//   - fill      → 0 (HDRI fills shadow side)
+//   - dir       → target × 0.6 × hdriIntensity (the visible sun)
+//   - dir.position from _applyHdriSunPosition() — driven by the gizmo
+//
+// On HDRI exit: restore all three from their stable target values.
+// Capturing live values caused boot-ramp races; targets are immutable.
 function _applyHdriLightStash(on) {
   if (!state._lights) return;
   const L = state._lights;
   if (on) {
-    L._stashedForHdri = true;      // sticky flag — survives multiple HDRI calls
-    L.hemi.intensity = 0;          // env hemisphere covers the ambient
-    L.dir.intensity  = 0;          // env's sun is the directional now
+    L._stashedForHdri = true;
+    L.hemi.intensity = 0;
     L.fill.intensity = 0;
+    L.dir.intensity  = (L.dirTarget * 0.6) * (state.hdriIntensity ?? 1);
+    _applyHdriSunPosition();
   } else {
-    // Always restore to targets, even if the flag is cleared — guards
-    // against the case where lights were left at 0 by some other path.
     L.hemi.intensity = L.hemiTarget;
     L.dir.intensity  = L.dirTarget;
     L.fill.intensity = L.fillTarget;
     L._stashedForHdri = false;
   }
+}
+
+// Position the dir light from state.hdriRotation. Top-down compass: the
+// gizmo's azimuth maps to a sun direction sitting ~30° above the horizon
+// (a flattering low-key angle). r is set large so the light reads as
+// directional rather than point-like even on big models.
+function _applyHdriSunPosition() {
+  if (!state._lights?.dir) return;
+  const az = state.hdriRotation || 0;
+  const el = Math.PI * 0.30;
+  const r = 1000;
+  const cos = Math.cos(el);
+  state._lights.dir.position.set(
+    r * Math.cos(az) * cos,
+    r * Math.sin(az) * cos,
+    r * Math.sin(el),
+  );
+  state._lights.dir.target?.position?.set?.(0, 0, 0);
+  state._lights.dir.target?.updateMatrixWorld?.();
 }
 
 function onResize() {

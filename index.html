@@ -523,8 +523,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .scrub-range::-webkit-slider-runnable-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--scrub-pct),var(--bg3) var(--scrub-pct),var(--bg3) 100%);border:none}
 .scrub-range::-moz-range-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:var(--bg3);border:none}
 .scrub-range::-moz-range-progress{height:4px;border-radius:999px;background:var(--ac)}
-.scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:11px;height:11px;border-radius:50%;background:var(--ac);border:0;margin-top:-4px;box-shadow:0 0 0 2px rgba(110,168,255,.25),0 1px 2px rgba(0,0,0,.4);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
-.scrub-range::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 2px rgba(110,168,255,.25),0 1px 2px rgba(0,0,0,.4);cursor:grab}
+.scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:9px;height:9px;border-radius:50%;background:var(--ac);border:0;margin-top:-2.5px;box-shadow:0 1px 2px rgba(0,0,0,.4);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
+.scrub-range::-moz-range-thumb{width:9px;height:9px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 1px 2px rgba(0,0,0,.4);cursor:grab}
 .scrub-range:hover::-webkit-slider-thumb{transform:scale(1.1)}
 .scrub-range:hover::-moz-range-thumb{transform:scale(1.1)}
 .scrub-range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(110,168,255,.18)}
@@ -643,8 +643,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .vp-pill:active{transform:scale(.97)}
 .vp-pill[aria-expanded="true"]{background:color-mix(in srgb, var(--ac) 18%, rgba(15,19,25,.78));border-color:color-mix(in srgb, var(--ac) 55%, var(--bd))}
 .vp-pill .vp-pill-label{line-height:1}
-.vp-pill .vp-pill-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:currentColor;opacity:.85;transition:opacity 160ms var(--ease-out),color 160ms var(--ease-out)}
-.vp-pill .vp-pill-icon svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;display:block}
+.vp-pill .vp-pill-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:8px;height:8px;color:currentColor;opacity:.85;transition:opacity 160ms var(--ease-out),color 160ms var(--ease-out)}
+.vp-pill .vp-pill-icon svg{width:8px!important;height:8px!important;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;display:block}
 .vp-pill:hover .vp-pill-icon,.vp-pill[aria-expanded="true"] .vp-pill-icon{opacity:1}
 
 .vp-pill-menu{display:flex;flex-direction:column;min-width:160px;padding:4px;background:rgba(15,19,25,.92);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(10px);opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top center;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
@@ -2025,7 +2025,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-hdri-presets"></script>
+<script type="module" src="app-v2.js?v=2026050707-hdri-sunlight"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
