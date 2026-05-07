@@ -179,20 +179,20 @@ const _Dialog = (() => {
       }
       .dlg-bg.show .dlg-card{transform:translateY(0) scale(1);opacity:1}
       .dlg-head{display:flex;align-items:flex-start;gap:14px;padding:22px 22px 0}
-      .dlg-icon{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:rgba(110,168,255,.12);color:var(--ac);box-shadow:inset 0 0 0 1px rgba(110,168,255,.18)}
+      .dlg-icon{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:rgba(107,141,255,.12);color:var(--ac);box-shadow:inset 0 0 0 1px rgba(107,141,255,.18)}
       .dlg-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
       .dlg-card.danger .dlg-icon{background:rgba(255,107,107,.13);color:var(--er);box-shadow:inset 0 0 0 1px rgba(255,107,107,.2)}
       .dlg-text{flex:1;min-width:0;padding-top:2px}
       .dlg-title{font-size:15px;font-weight:600;color:var(--tx);letter-spacing:-.01em;margin-bottom:6px}
       .dlg-msg{color:var(--tx2);font-size:13px;line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
       .dlg-input{display:none;width:100%;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--tx);font-size:13.5px;font-family:inherit;outline:none;transition:border-color .15s,background .15s,box-shadow .15s}
-      .dlg-input:focus{border-color:rgba(110,168,255,.5);background:rgba(255,255,255,.06);box-shadow:0 0 0 3px rgba(110,168,255,.15)}
+      .dlg-input:focus{border-color:rgba(107,141,255,.5);background:rgba(255,255,255,.06);box-shadow:0 0 0 3px rgba(107,141,255,.15)}
       .dlg-foot{display:flex;justify-content:flex-end;gap:8px;padding:18px 22px 20px;margin-top:18px;border-top:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.18)}
       .dlg-btn{font:inherit;padding:8px 16px;border-radius:8px;border:1px solid transparent;cursor:pointer;font-size:13px;font-weight:500;transition:transform .08s,filter .12s,background .12s,border-color .12s;letter-spacing:.005em}
       .dlg-btn:active{transform:translateY(.5px)}
       .dlg-btn-cancel{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.06);color:var(--tx2)}
       .dlg-btn-cancel:hover{background:rgba(255,255,255,.08);color:var(--tx);border-color:rgba(255,255,255,.1)}
-      .dlg-btn-ok{background:linear-gradient(180deg,#7ab2ff,#4f8be5);color:white;border-color:transparent;box-shadow:0 4px 14px rgba(110,168,255,.28),inset 0 1px 0 rgba(255,255,255,.18)}
+      .dlg-btn-ok{background:linear-gradient(180deg,#7ab2ff,#4f7ce0);color:white;border-color:transparent;box-shadow:0 4px 14px rgba(107,141,255,.28),inset 0 1px 0 rgba(255,255,255,.18)}
       .dlg-btn-ok:hover{filter:brightness(1.07)}
       .dlg-btn-ok.danger{background:linear-gradient(180deg,#ff7a85,#e25151);box-shadow:0 4px 14px rgba(255,107,107,.32),inset 0 1px 0 rgba(255,255,255,.18)}
       .dlg-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:14px;transition:color .12s,background .12s}
@@ -1421,7 +1421,6 @@ const _Actions = (() => {
     { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
     { id:'gzOff',        group:'View',       label:'Hide gizmo',                          kbd:'Q', run: () => { try { setGizmoMode('off'); } catch (_) {} } },
     { id:'tgGrid',       group:'View',       label:'Toggle grid',                run: _click('tg-grid') },
-    { id:'tgBbox',       group:'View',       label:'Toggle bounding boxes',      run: _click('tg-bbox') },
     { id:'selAll',       group:'Selection',  label:'Select all',                 kbd:'Ctrl+A', run: _click('sel-all') },
     { id:'selInvert',    group:'Selection',  label:'Invert selection',           run: _click('sel-invert') },
     { id:'selClear',     group:'Selection',  label:'Clear selection',            kbd:'Esc', run: _click('sel-clear') },
@@ -1586,6 +1585,28 @@ window.addEventListener('keydown', e => {
     if (state.parts.length === 0) _Welcome.show();
     else _openWithPicker();
   });
+  // Left-sidebar slide toggle. State persists so the layout sticks across
+  // reloads (and is restored before paint to avoid a flash).
+  (function wireLeftToggle(){
+    const tBtn = $('btn-toggle-left');
+    if (!tBtn) return;
+    const STORE_KEY = 'stepopt-left-collapsed';
+    const apply = (collapsed) => {
+      document.body.classList.toggle('left-collapsed', collapsed);
+      tBtn.classList.toggle('active', !collapsed);
+      tBtn.setAttribute('aria-pressed', String(!collapsed));
+    };
+    let initial = false;
+    try { initial = localStorage.getItem(STORE_KEY) === '1'; } catch (_) {}
+    apply(initial);
+    tBtn.addEventListener('click', () => {
+      const next = !document.body.classList.contains('left-collapsed');
+      apply(next);
+      try { localStorage.setItem(STORE_KEY, next ? '1' : '0'); } catch (_) {}
+      // Renderer needs a resize after the layout transition lands.
+      setTimeout(() => { try { onResize?.(); } catch (_) {} }, 360);
+    });
+  })();
   $('btn-settings')?.addEventListener('click', () => _Settings.show());
   try { _applyShowFps(_Prefs.get('showFps') !== false); } catch(_){}
   (function wireBrandMenu(){
@@ -2615,8 +2636,8 @@ function setBackground(mode) {
       ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
       // Pass 2: radial highlight ⅔ up to fake a soft fill light.
       const rg = ctx.createRadialGradient(w/2, h*0.62, 0, w/2, h*0.62, w*0.55);
-      rg.addColorStop(0,    'rgba(110,168,255,0.10)');
-      rg.addColorStop(0.6,  'rgba(110,168,255,0.03)');
+      rg.addColorStop(0,    'rgba(107,141,255,0.10)');
+      rg.addColorStop(0.6,  'rgba(107,141,255,0.03)');
       rg.addColorStop(1,    'rgba(0,0,0,0)');
       ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
     });
@@ -2776,8 +2797,8 @@ async function _applyHdriPreset(id) {
 function _markHdriPresetActive(id) {
   document.querySelectorAll('.hdri-preset').forEach(b => {
     const isActive = b.dataset.hdriPreset === id;
-    b.style.background = isActive ? 'rgba(110,168,255,.18)' : 'var(--bg3)';
-    b.style.borderColor = isActive ? 'rgba(110,168,255,.5)' : 'var(--bd)';
+    b.style.background = isActive ? 'rgba(107,141,255,.18)' : 'var(--bg3)';
+    b.style.borderColor = isActive ? 'rgba(107,141,255,.5)' : 'var(--bd)';
     b.style.color = isActive ? 'var(--tx)' : 'var(--tx)';
   });
 }
@@ -4278,19 +4299,19 @@ function _openScreenshotDialog() {
       #scrshot-dlg .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
       #scrshot-dlg .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:8px;cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .14s ease,border-color .14s ease,transform .12s ease}
       #scrshot-dlg .ss-preset:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
-      #scrshot-dlg .ss-preset.active{background:linear-gradient(180deg,rgba(110,168,255,.18),rgba(110,168,255,.08));border-color:rgba(110,168,255,.42);color:var(--tx)}
+      #scrshot-dlg .ss-preset.active{background:linear-gradient(180deg,rgba(107,141,255,.18),rgba(107,141,255,.08));border-color:rgba(107,141,255,.42);color:var(--tx)}
       #scrshot-dlg .ss-preset .lbl{font-size:12px;font-weight:600;line-height:1.1}
       #scrshot-dlg .ss-preset .sub{font-size:10.5px;color:var(--tx3);font-variant-numeric:tabular-nums}
       #scrshot-dlg .ss-preset.active .sub{color:var(--ac)}
       #scrshot-dlg .ss-custom{display:flex;align-items:center;gap:8px}
       #scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:7px;font-size:12.5px;outline:none;font-variant-numeric:tabular-nums}
-      #scrshot-dlg .ss-custom input:focus{border-color:rgba(110,168,255,.5)}
+      #scrshot-dlg .ss-custom input:focus{border-color:rgba(107,141,255,.5)}
       #scrshot-dlg .ss-custom .x{color:var(--tx3);font-size:13px;font-weight:500}
       #scrshot-dlg .ss-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums}
       #scrshot-dlg .ss-meta strong{color:var(--tx2);font-weight:500}
       #scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:6px}
       #scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:7px;font-size:12.5px;outline:none}
-      #scrshot-dlg .ss-name input:focus{border-color:rgba(110,168,255,.5)}
+      #scrshot-dlg .ss-name input:focus{border-color:rgba(107,141,255,.5)}
       #scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:7px;cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
       #scrshot-dlg .ss-overlay-row:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.10)}
       #scrshot-dlg .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
@@ -4298,8 +4319,8 @@ function _openScreenshotDialog() {
       #scrshot-dlg .ss-overlay-row .hint{font-size:10.5px;color:var(--tx3);font-weight:400;margin-left:4px}
       #scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:500}
       #scrshot-dlg .dlg-foot .ss-cancel:hover{background:rgba(255,255,255,.05)}
-      #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,rgba(110,168,255,.32),rgba(110,168,255,.18));border-color:rgba(110,168,255,.5);color:#dde7f9}
-      #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,rgba(110,168,255,.42),rgba(110,168,255,.24))}
+      #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,rgba(107,141,255,.32),rgba(107,141,255,.18));border-color:rgba(107,141,255,.5);color:#dde7f9}
+      #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,rgba(107,141,255,.42),rgba(107,141,255,.24))}
       #scrshot-dlg .dlg-foot .ss-save:disabled{opacity:.5;cursor:wait}
     `;
     document.head.appendChild(s);
@@ -11662,13 +11683,6 @@ function wireUI() {
   // doesn't return to a "stuck snap" gizmo.
   window.addEventListener('blur', () => _setGizmoSnap(false));
   $('tg-grid').addEventListener('click', () => { state.showGrid=!state.showGrid; gridHelper.visible=state.showGrid; $('tg-grid').classList.toggle('active', state.showGrid); requestRender(); });
-  $('tg-bbox').addEventListener('click', () => {
-    state.showBboxes = !state.showBboxes;
-    if (state.showBboxes) _ensureBboxHelpers();
-    state.bboxRoot.visible = state.showBboxes;
-    $('tg-bbox').classList.toggle('active', state.showBboxes);
-    requestRender();
-  });
   $('tg-grid').classList.add('active'); $('vw-solid').classList.add('active');
   $('gz-translate')?.classList.add('active');
 
@@ -12614,7 +12628,6 @@ function wireUI() {
     else if (e.key === 't' || e.key === 'T') setGizmoMode('scale');
     else if (e.key === 'q' || e.key === 'Q') setGizmoMode('off');
     else if (e.key === 'g' || e.key === 'G') $('tg-grid').click();
-    else if (e.key === 'b' || e.key === 'B') $('tg-bbox').click();
     else if (e.key === 'Delete' || e.key === 'Backspace') { if (state.selected.size > 0) { e.preventDefault(); deleteParts([...state.selected], 'Deleted selected'); } }
     else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redoLast(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); }
@@ -12868,6 +12881,43 @@ function _addPrimitive(kind) {
   state.partsRoot.updateMatrixWorld(true);
   if (state.geomByHash && !state.geomByHash.has(partInfo.hash)) {
     state.geomByHash.set(partInfo.hash, geom);
+  }
+
+  // Surface the new part in the assembly tree. The tree renders from
+  // state.treeNodes when it's non-empty (hierarchical mode); just adding
+  // to state.parts isn't enough — the tree builder skips parts that
+  // aren't represented as a node. We bucket primitives under a synthetic
+  // 'Primitives' group at the tree's top so consecutive adds don't
+  // litter the tree root, and so the user can collapse them out of the
+  // way when they're not the focus.
+  if (state.treeNodes && state.treeNodes.length) {
+    let primGroup = state.treeNodes.find(n => n.kind === 'group' && n.name?.startsWith('Primitives'));
+    if (!primGroup) {
+      // Use a negative id so it doesn't collide with any GLTF-derived
+      // group ids (which are positive, starting at 1).
+      const _existingNeg = state.treeNodes
+        .filter(n => n.kind === 'group' && typeof n.id === 'number' && n.id < 0)
+        .map(n => n.id);
+      const newId = _existingNeg.length ? Math.min(..._existingNeg) - 1 : -100;
+      primGroup = {
+        id: newId, kind: 'group', name: 'Primitives',
+        depth: 0, parentId: null, partId: null, obj3d: null,
+      };
+      state.treeNodes.unshift(primGroup);
+    }
+    // Update the group label to reflect the new count.
+    const memberCount = 1 + state.treeNodes.filter(n => n.kind === 'part' && n.parentId === primGroup.id).length;
+    primGroup.name = `Primitives (${memberCount})`;
+    // Append the part node directly after the last existing primitive
+    // (so order matches insertion). depth 1 = inside the synthetic group.
+    let insertAt = state.treeNodes.indexOf(primGroup) + 1;
+    while (insertAt < state.treeNodes.length &&
+           state.treeNodes[insertAt].parentId === primGroup.id) insertAt++;
+    state.treeNodes.splice(insertAt, 0, {
+      id: partId, kind: 'part', name, depth: 1,
+      parentId: primGroup.id, partId, instanceCount: 0,
+      obj3d: mesh,
+    });
   }
 
   // UI refresh: tree, status, selection, gizmo.
@@ -14142,7 +14192,7 @@ function _openMaterialEditor(info) {
       #_mat-editor-popup .dlg-head::after{display:none}
       #_mat-editor-popup .dlg-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3)}
       #_mat-editor-popup .dlg-sub{display:none}
-      #_mat-editor-popup .dlg-head-icon{width:22px;height:22px;border-radius:6px;background:rgba(110,168,255,.10);box-shadow:inset 0 0 0 1px rgba(110,168,255,.20)}
+      #_mat-editor-popup .dlg-head-icon{width:22px;height:22px;border-radius:6px;background:rgba(107,141,255,.10);box-shadow:inset 0 0 0 1px rgba(107,141,255,.20)}
       #_mat-editor-popup .dlg-head-icon svg{width:12px;height:12px}
       #_mat-editor-popup .dlg-body[data-scroll="auto"]{padding:0}
       #_mat-editor-popup .dlg-foot{padding:8px 10px;background:rgba(0,0,0,.18);border-top:1px solid rgba(255,255,255,.06);box-shadow:none}
@@ -14225,8 +14275,8 @@ function _openMaterialEditor(info) {
       .mat-row-val .scrub-value:hover{background:transparent;color:var(--tx)}
       .mat-row-val .scrub.editing .scrub-value{background:transparent;color:var(--tx)}
       .mat-row-val .scrub-unit{font-size:10px;color:var(--tx3)}
-      .mat-row-val .scrub-range::-webkit-slider-thumb{width:10px;height:10px;background:var(--ac);border:0;margin-top:-3px;box-shadow:0 0 0 2px rgba(110,168,255,.25),0 1px 2px rgba(0,0,0,.4)}
-      .mat-row-val .scrub-range::-moz-range-thumb{width:10px;height:10px;background:var(--ac);border:0;box-shadow:0 0 0 2px rgba(110,168,255,.25),0 1px 2px rgba(0,0,0,.4)}
+      .mat-row-val .scrub-range::-webkit-slider-thumb{width:10px;height:10px;background:var(--ac);border:0;margin-top:-3px;box-shadow:0 0 0 2px rgba(107,141,255,.25),0 1px 2px rgba(0,0,0,.4)}
+      .mat-row-val .scrub-range::-moz-range-thumb{width:10px;height:10px;background:var(--ac);border:0;box-shadow:0 0 0 2px rgba(107,141,255,.25),0 1px 2px rgba(0,0,0,.4)}
       .mat-row-val .scrub-range::-webkit-slider-runnable-track{height:3px}
       .mat-row-val .scrub-range::-moz-range-track{height:3px}
 
@@ -14241,12 +14291,12 @@ function _openMaterialEditor(info) {
       .mat-swatch:hover{border-color:var(--bd2)}
       .mat-color-hex-v2{flex:0 0 auto;width:11ch;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--tx2);letter-spacing:.04em;text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:4px 10px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
       .mat-color-hex-v2:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
-      .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(110,168,255,.18)}
+      .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(107,141,255,.18)}
       .mat-color-hex-v2.invalid{border-color:var(--er);color:var(--er)}
       .mat-color-pct{flex:0 0 52px;width:52px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:4px 10px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
       .mat-color-pct::-webkit-outer-spin-button,.mat-color-pct::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
-      .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(110,168,255,.18)}
+      .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(107,141,255,.18)}
 
       /* Eyedropper button — sits flush with the colour picker.  */
       .mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
@@ -18172,7 +18222,7 @@ function revealSelectedInTree() {
   node.scrollIntoView({ block: 'center', behavior: 'smooth' });
   const orig = node.style.background;
   node.style.transition = 'background .35s';
-  node.style.background = 'rgba(110,168,255,0.45)';
+  node.style.background = 'rgba(107,141,255,0.45)';
   setTimeout(() => { node.style.background = orig; setTimeout(() => { node.style.transition = ''; }, 350); }, 700);
 }
 
@@ -18432,10 +18482,8 @@ function _initCustomSelects() {
         // Helper toggles — labels reflect the current state so the row reads
         // as the action that's about to happen rather than a status line.
         const gridOn = !!state.showGrid;
-        const bboxOn = !!state.showBboxes;
         const rotOn  = !!state.autoRotate;
         items.push({ icon: gridOn ? 'eye-off' : 'eye',   label: gridOn ? 'Hide ground grid'    : 'Show ground grid',     kbd: 'G', fn: () => $('tg-grid')?.click() });
-        items.push({ icon: bboxOn ? 'eye-off' : 'eye',   label: bboxOn ? 'Hide bounding boxes' : 'Show bounding boxes',  kbd: 'B', fn: () => $('tg-bbox')?.click() });
         items.push({ icon: rotOn  ? 'pause'   : 'play',  label: rotOn  ? 'Stop auto-rotate'    : 'Start auto-rotate',              fn: () => { const t = $('toggle-rotate'); if (t) { t.checked = !t.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } } });
         items.push('---');
         // Selection helpers
@@ -19439,7 +19487,7 @@ const _FlattenDialog = (() => {
       #_flat-dialog .flat-opts{display:flex;flex-direction:column;gap:6px}
       #_flat-dialog .flat-opt{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);cursor:pointer;transition:background .14s ease,border-color .14s ease}
       #_flat-dialog .flat-opt:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
-      #_flat-dialog .flat-opt.active{background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.35)}
+      #_flat-dialog .flat-opt.active{background:rgba(107,141,255,.10);border-color:rgba(107,141,255,.35)}
       #_flat-dialog .flat-opt input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:2px 0 0 0;transition:border-color .14s ease,background .14s ease}
       #_flat-dialog .flat-opt input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
       #_flat-dialog .flat-opt input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
@@ -19451,7 +19499,7 @@ const _FlattenDialog = (() => {
       #_flat-dialog .flat-row{display:flex;align-items:center;gap:8px;margin-top:9px}
       #_flat-dialog .flat-row label{font-size:11px;color:var(--tx3);font-weight:500;letter-spacing:.005em}
       #_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      #_flat-dialog .flat-row input[type=number]:focus{border-color:rgba(110,168,255,.55);box-shadow:0 0 0 3px rgba(110,168,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      #_flat-dialog .flat-row input[type=number]:focus{border-color:rgba(107,141,255,.55);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
       #_flat-dialog .flat-toggles{display:flex;flex-direction:column;gap:2px}
       #_flat-dialog .flat-tog{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:7px;transition:background .14s ease,color .14s ease}
       #_flat-dialog .flat-tog:hover{background:rgba(255,255,255,.03);color:var(--tx)}
@@ -19460,7 +19508,7 @@ const _FlattenDialog = (() => {
       #_flat-dialog .flat-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
       #_flat-dialog .flat-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
       #_flat-dialog .flat-info{font-size:11.5px;color:var(--tx3);flex:1;min-width:0;text-align:left;letter-spacing:.005em}
-      #_flat-dialog .dlg-foot #_flat-ok{box-shadow:0 4px 14px rgba(110,168,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
+      #_flat-dialog .dlg-foot #_flat-ok{box-shadow:0 4px 14px rgba(107,141,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
       #_flat-dialog .dlg-foot #_flat-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
     `;
     document.head.appendChild(s);
@@ -20716,15 +20764,15 @@ const _DraggablePopup = (() => {
       .dlg-popup .dlg-resize.sw{bottom:-3px;left:-3px;width:16px;height:16px;cursor:nesw-resize}
       .dlg-popup .dlg-resize.se{bottom:-3px;right:-3px;width:16px;height:16px;cursor:nwse-resize}
 
-      .dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,rgba(110,168,255,.45),rgba(110,168,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
-      .dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,rgba(110,168,255,.45),rgba(110,168,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
-      .dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,rgba(110,168,255,.45),rgba(110,168,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
-      .dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,rgba(110,168,255,.45),rgba(110,168,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+      .dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+      .dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+      .dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+      .dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
 
       .dlg-popup .dlg-head{display:flex;align-items:center;gap:11px;padding:13px 14px 12px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;position:relative;cursor:grab;user-select:none}
       .dlg-popup .dlg-head:active{cursor:grabbing}
       .dlg-popup .dlg-head::after{content:'';position:absolute;left:16px;right:16px;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06) 30%,rgba(255,255,255,.06) 70%,transparent);pointer-events:none}
-      .dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,rgba(110,168,255,.22),rgba(110,168,255,.10));color:var(--ac);box-shadow:inset 0 0 0 1px rgba(110,168,255,.32),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
+      .dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,rgba(107,141,255,.22),rgba(107,141,255,.10));color:var(--ac);box-shadow:inset 0 0 0 1px rgba(107,141,255,.32),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
       .dlg-popup .dlg-head-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
       .dlg-popup .dlg-head-titles{flex:1;min-width:0}
       .dlg-popup .dlg-title{font-size:14px;font-weight:600;color:var(--tx);letter-spacing:-.01em;line-height:1.2}
@@ -21006,9 +21054,9 @@ const _BatchRenameDialog = (() => {
       .brn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
       .brn-row label{font-size:11px;color:var(--tx3);min-width:60px;font-weight:500;letter-spacing:.005em}
       .brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=text]:focus{border-color:rgba(110,168,255,.55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px rgba(110,168,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=text]:focus{border-color:rgba(107,141,255,.55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=number]:focus{border-color:rgba(110,168,255,.55);box-shadow:0 0 0 3px rgba(110,168,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=number]:focus{border-color:rgba(107,141,255,.55);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input::placeholder{color:var(--tx3);opacity:.55}
       .brn-row select.mac-sel{padding:7px 9px;font-size:12.5px}
       .brn-tog{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--tx2);cursor:pointer;user-select:none;padding:5px 10px 5px 8px;border-radius:7px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .14s ease,border-color .14s ease,color .14s ease}
@@ -21017,7 +21065,7 @@ const _BatchRenameDialog = (() => {
       .brn-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
       .brn-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
       .brn-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
-      .brn-tog:has(input[type=checkbox]:checked){background:rgba(110,168,255,.10);border-color:rgba(110,168,255,.30);color:var(--tx)}
+      .brn-tog:has(input[type=checkbox]:checked){background:rgba(107,141,255,.10);border-color:rgba(107,141,255,.30);color:var(--tx)}
       .brn-tog input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
       .brn-tog input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
       .brn-tog input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
@@ -21025,7 +21073,7 @@ const _BatchRenameDialog = (() => {
       .brn-section-title{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:8px 0 6px 0}
       .brn-presets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
       .brn-preset{all:unset;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.025);cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:border-color .14s ease,background .14s ease,transform .14s ease}
-      .brn-preset:hover{border-color:rgba(110,168,255,.32);background:rgba(110,168,255,.06)}
+      .brn-preset:hover{border-color:rgba(107,141,255,.32);background:rgba(107,141,255,.06)}
       .brn-preset:active{transform:translateY(.5px)}
       .brn-preset .n{font-size:13px;font-weight:500;color:var(--tx)}
       .brn-preset .d{font-size:11px;color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -21052,8 +21100,8 @@ const _BatchRenameDialog = (() => {
       .brn-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:8px;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-foot .dlg-btn{padding:7px 13px;font-size:12px;border-radius:7px}
       .brn-foot #_brn-save{background:transparent;border-color:transparent;color:var(--tx3);padding:7px 4px;font-weight:500}
-      .brn-foot #_brn-save:hover{color:var(--ac);background:transparent;border-color:transparent;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(110,168,255,.5)}
-      .brn-foot #_brn-ok{box-shadow:0 4px 14px rgba(110,168,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
+      .brn-foot #_brn-save:hover{color:var(--ac);background:transparent;border-color:transparent;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(107,141,255,.5)}
+      .brn-foot #_brn-ok{box-shadow:0 4px 14px rgba(107,141,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
       .brn-foot #_brn-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
       .brn-foot #_brn-ok:disabled:hover{filter:grayscale(.3) brightness(.85)}
       .brn-collapsible{border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);overflow:hidden;flex-shrink:0;transition:border-color .14s ease,background .14s ease}
@@ -21078,7 +21126,7 @@ const _BatchRenameDialog = (() => {
         transition:transform .2s cubic-bezier(.2,.85,.3,1.1);
       }
       .brn-collapsible-h:hover .chev{background:rgba(255,255,255,.07);color:var(--tx);opacity:1}
-      .brn-collapsible.open .chev{background:rgba(110,168,255,.15);color:var(--ac);opacity:1}
+      .brn-collapsible.open .chev{background:rgba(107,141,255,.15);color:var(--ac);opacity:1}
       .brn-collapsible.open .chev::before{transform:translateY(-1px) rotate(45deg)}
       .brn-collapsible-b{display:none;padding:10px 12px 12px 12px;border-top:1px solid rgba(255,255,255,.05);flex-direction:column;gap:8px}
       .brn-collapsible.open .brn-collapsible-b{display:flex}
@@ -21964,9 +22012,9 @@ rebuildTree = function() {
     .tree-node.tree-empty::after,#tree > div:not(.tree-node)::after{display:none}
     /* Finder-style inline rename input — sits inside .tree-label, inherits
        the row's font/colour, no chrome that would compete with the row. */
-    .tree-label-input{width:100%;background:rgba(255,255,255,.08);border:1px solid var(--ac);border-radius:3px;color:var(--tx);font:inherit;font-size:inherit;padding:1px 4px;margin:-2px 0;outline:none;box-shadow:0 0 0 2px rgba(110,168,255,.18)}
-    .tree-node.dnd-drop-into{outline:2px solid var(--ac);outline-offset:-2px;background:rgba(110,168,255,.14)!important;border-radius:3px}
-    .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px rgba(110,168,255,.6);pointer-events:none;z-index:50}
+    .tree-label-input{width:100%;background:rgba(255,255,255,.08);border:1px solid var(--ac);border-radius:3px;color:var(--tx);font:inherit;font-size:inherit;padding:1px 4px;margin:-2px 0;outline:none;box-shadow:0 0 0 2px rgba(107,141,255,.18)}
+    .tree-node.dnd-drop-into{outline:2px solid var(--ac);outline-offset:-2px;background:rgba(107,141,255,.14)!important;border-radius:3px}
+    .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px rgba(107,141,255,.6);pointer-events:none;z-index:50}
     .tree-drop-line::before{content:'';position:absolute;left:2px;top:-4px;width:6px;height:6px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px var(--ac)}
     #tree-newgroup-zone{display:none!important}
     #_dnd-ghost{position:fixed;pointer-events:none;z-index:9999;background:rgba(20,28,40,.95);border:1px solid var(--ac);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--tx);box-shadow:0 4px 18px rgba(0,0,0,.5);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -22941,7 +22989,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   let h = 0, s = 1, v = 1;
   let session = null;          // { ids:[], originals: Map<partId, hexnum>, anchor }
 
-  const PRESETS = ['#e6edf3','#8b95a7','#5a6275','#1d2330','#000000','#ff6b6b','#fbbf24','#34c759','#6ea8ff','#a78bfa','#f59e0b','#10b981','#ef4444','#3b82f6'];
+  const PRESETS = ['#e6edf3','#8b95a7','#5a6275','#1d2330','#000000','#ff6b6b','#fbbf24','#34c759','#6b8dff','#a78bfa','#f59e0b','#10b981','#ef4444','#3b82f6'];
 
   function _buildPopover() {
     if (popEl) return;
@@ -22956,7 +23004,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-hue-cursor{position:absolute;top:-2px;width:6px;height:16px;border-radius:3px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.5);transform:translateX(-50%);pointer-events:none}
       .cp-row{display:flex;gap:8px;align-items:center;margin-top:10px}
       .cp-hex{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:5px;color:var(--tx);font:500 11.5px ui-monospace,Menlo,monospace;padding:5px 7px;outline:none;text-transform:uppercase}
-      .cp-hex:focus{border-color:var(--ac);background:rgba(110,168,255,.08)}
+      .cp-hex:focus{border-color:var(--ac);background:rgba(107,141,255,.08)}
       .cp-preview{width:24px;height:24px;border-radius:5px;border:1px solid rgba(255,255,255,.1);box-shadow:0 1px 3px rgba(0,0,0,.4);flex-shrink:0}
       .cp-presets{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}
       .cp-preset{width:100%;aspect-ratio:1;border-radius:4px;border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:transform 100ms var(--ease-out),border-color 100ms var(--ease-out)}
@@ -22964,11 +23012,11 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-actions{display:flex;gap:6px;margin-top:12px;justify-content:flex-end}
       .cp-btn{padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:5px;color:var(--tx2);font-size:11.5px;font-weight:500;cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
       .cp-btn:hover{background:rgba(255,255,255,.1);color:var(--tx)}
-      .cp-btn.primary{background:linear-gradient(180deg,var(--ac),#4f8be5);color:#fff;border-color:transparent}
+      .cp-btn.primary{background:linear-gradient(180deg,var(--ac),#4f7ce0);color:#fff;border-color:transparent}
       .cp-btn.primary:hover{filter:brightness(1.08)}
       #prop-body .prop-color,.mat-swatch{cursor:pointer}
-      #prop-body .prop-color:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px rgba(110,168,255,.45)}
-      .mat-swatch:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px rgba(110,168,255,.45)!important}
+      #prop-body .prop-color:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px rgba(107,141,255,.45)}
+      .mat-swatch:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px rgba(107,141,255,.45)!important}
     `;
     const style = document.createElement('style');
     style.textContent = css;
