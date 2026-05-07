@@ -27,7 +27,7 @@ const $ = id => document.getElementById(id);
 const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
   viewMode: 'solid', showGrid: true, showBboxes: false, showAxes: true,
-  highlightSmall: true, autoRotate: false, bgMode: 'dark',
+  highlightSmall: true, autoRotate: false, bgMode: 'dark', fog: true,
   // ── Pro-mode scene settings (driven by the Display/Scene/Camera/Lighting
   // /Grid sections of the viewport settings popup) ───────────────────────
   displayUnit: 'mm',          // 'mm' | 'cm' | 'm' | 'in' | 'ft' | 'none'
@@ -2643,6 +2643,10 @@ function setBackground(mode) {
     scene.background = tex;
     renderer.setClearColor(0xdedede, 1);
   }
+  // Re-apply fog so its colour tracks the new background — without this
+  // the fog stays whatever colour the previous bg implied, leaving an
+  // off-tint horizon when the user switches preset.
+  if (state.fog) _applyFog();
   requestRender();
 }
 
@@ -4458,6 +4462,39 @@ function _makeInfiniteGrid(opts = {}) {
   return grid;
 }
 
+// Atmospheric fog. Two purposes here:
+//   1. Provides the "fade into the horizon" feel for the floor grid for
+//      free — LineBasicMaterial(fog:true) attenuates line colour by
+//      distance once scene.fog is set. No shader needed.
+//   2. Gentle distance-cue for the model itself when there's lots of it.
+// Tuned to start AFTER the close-up viewing range so the model never gets
+// hazy when you're inspecting it. Picks the fog colour from the current
+// background so the horizon dissolves into the bg instead of into a
+// random grey.
+let _fogTuned = { near: 50, far: 1000 };
+function _applyFog() {
+  if (!scene) return;
+  if (!state.fog) {
+    scene.fog = null;
+    return;
+  }
+  const colorHex = _bgFogColor();
+  scene.fog = new THREE.Fog(colorHex, _fogTuned.near, _fogTuned.far);
+}
+// Pick a fog colour matching the current background preset. We want fog
+// to dissolve geometry into the same colour the user sees as 'sky', so
+// the horizon never reveals hard edges where the fog and bg disagree.
+function _bgFogColor() {
+  switch (state.bgMode) {
+    case 'white':  return 0xefefef;
+    case 'gray':   return 0x6a6a6a;
+    case 'grad':   return 0x161c2a;
+    case 'solid':  return 0x000000;
+    case 'dark':
+    default:       return 0x2a3340;
+  }
+}
+
 // Reposition the grid for the loaded model. Picks minor / major spacing
 // from the model footprint (so a 100mm part shows 5mm cells and a 5m
 // assembly shows 250mm cells), rebuilds the LineSegments geometry, and
@@ -4512,6 +4549,13 @@ function _fitGridToModel(box) {
     axesHelper.visible = state.showAxes;
     scene.add(axesHelper);
   }
+
+  // Tune fog distances to the loaded model. Start fog past 3× footprint
+  // (so the close-up viewing range stays clear) and fully fog at 30×
+  // (matches the grid's fadeEnd so they reach the horizon together).
+  _fogTuned.near = footprint * 3;
+  _fogTuned.far  = footprint * 30;
+  if (state.fog) _applyFog();
 }
 
 // ── Pro-mode scene-settings appliers ────────────────────────────────────
@@ -7360,7 +7404,7 @@ function refreshPropertiesPanel() {
 // input (same .tree-label-input style used by the tree rename), commits on
 // Enter / blur, cancels on Escape. Updates mat.name + invalidates the
 // preview cache + repaints all surfaces (props panel, materials grid).
-function _renameMaterialInline(labelEl, mat) {
+function _renameMaterialInline(labelEl, mat, onCommit) {
   if (!labelEl || !mat) return;
   const seedName = (mat.name || '').trim() || _matFallbackName(mat);
   if (window.getSelection) try { window.getSelection().removeAllRanges(); } catch (_) {}
@@ -7373,6 +7417,7 @@ function _renameMaterialInline(labelEl, mat) {
     if (typeof _matPreviewCache !== 'undefined') _matPreviewCache.delete(mat);
     refreshPropertiesPanel?.();
     if (typeof window._populateMaterialsList === 'function') window._populateMaterialsList();
+    onCommit?.(next);
   });
 }
 function _matFallbackName(m) {
@@ -10535,6 +10580,7 @@ function _collectSceneState() {
       sizeMetricMode:  state.sizeMetricMode,
       autoRotate:      state.autoRotate,
       bgMode:          state.bgMode,
+      fog:             state.fog,
       highlightSmall:  state.highlightSmall,
       perfMode:        state.perfMode,
     },
@@ -10742,6 +10788,11 @@ function _applySceneState(s) {
     if (typeof v.bgMode === 'string' && v.bgMode !== state.bgMode) {
       try { setBackground(v.bgMode); } catch (_) {}
       const sel = $('bg-mode'); if (sel) sel.value = v.bgMode;
+    }
+    if (typeof v.fog === 'boolean') {
+      state.fog = v.fog;
+      try { _applyFog(); } catch (_) {}
+      const cb = $('toggle-fog'); if (cb) cb.checked = !!v.fog;
     }
     if (typeof v.perfMode === 'string') {
       state.perfMode = v.perfMode;
@@ -11619,6 +11670,17 @@ function wireUI() {
     state.showStats = e.target.checked;
     const el = $('vp-stats'); if (el) el.style.display = state.showStats ? '' : 'none';
   });
+  $('toggle-fog')?.addEventListener('change', e => {
+    state.fog = e.target.checked;
+    _applyFog();
+    requestRender();
+  });
+  // Reflect initial state.fog on the checkbox (HTML markup defaults to
+  // checked but state could be loaded from prefs/scene differently).
+  { const cb = $('toggle-fog'); if (cb) cb.checked = !!state.fog; }
+  // Apply once at boot so the default-on fog actually attaches even
+  // before the user touches the toggle.
+  try { _applyFog(); } catch (_) {}
   // Camera projection: hot-swap PerspectiveCamera ↔ OrthographicCamera while
   // preserving position/target/up. OrbitControls + TransformControls hold a
   // direct camera reference, so both must be re-pointed after the swap.
@@ -13286,7 +13348,7 @@ function _openMaterialEditor(info) {
       #_mat-editor-popup .dlg-head{padding:10px 12px;border-bottom:1px solid var(--bd)}
       #_mat-editor-popup .dlg-head::after{display:none}
       #_mat-editor-popup .dlg-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3)}
-      #_mat-editor-popup .dlg-sub{font-size:10.5px;color:var(--tx3);font-weight:500;text-transform:none;letter-spacing:0;margin-top:1px}
+      #_mat-editor-popup .dlg-sub{display:none}
       #_mat-editor-popup .dlg-head-icon{width:22px;height:22px;border-radius:6px;background:rgba(110,168,255,.10);box-shadow:inset 0 0 0 1px rgba(110,168,255,.20)}
       #_mat-editor-popup .dlg-head-icon svg{width:12px;height:12px}
       #_mat-editor-popup .dlg-body[data-scroll="auto"]{padding:0}
@@ -13348,10 +13410,8 @@ function _openMaterialEditor(info) {
          The tex-attach circle (data-tex-prop) is a clickable indicator;
          empty = outline-only, has-tex = filled with the accent. Click
          opens a small popover for load/clear. */
-      .mat-row{display:grid;grid-template-columns:14px 1fr 12px minmax(0,1.5fr);align-items:center;gap:8px;padding:4px 0;font-size:11.5px;line-height:1.2}
+      .mat-row{display:grid;grid-template-columns:1fr 12px minmax(0,1.5fr);align-items:center;gap:8px;padding:4px 0;font-size:11.5px;line-height:1.2}
       .mat-row + .mat-row{border-top:1px dashed var(--s2)}
-      .mat-row-diamond{width:10px;height:10px;display:grid;place-items:center;color:var(--tx3);opacity:.55}
-      .mat-row-diamond svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:1.6}
       .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-row-tex{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--tx3);background:transparent;cursor:pointer;padding:0;display:grid;place-items:center;transition:background 120ms,border-color 120ms,color 120ms;color:var(--tx3)}
       .mat-row-tex:hover{border-color:var(--ac);color:var(--ac)}
@@ -13360,6 +13420,25 @@ function _openMaterialEditor(info) {
       .mat-row-val{display:flex;align-items:center;gap:6px;min-width:0}
       .mat-row-val > *:first-child{flex:1;min-width:0}
       .mat-row-val .field{margin:0}
+      .mat-row-val .scrub-label{display:none}
+      .mat-row-val .scrub-head{justify-content:flex-end}
+
+      /* Spline-style color row: [label] [swatch] [hex] [pct] [tex-trigger]. */
+      .mat-row.mat-color-row{grid-template-columns:1fr minmax(0,1.6fr)}
+      .mat-row.mat-color-row .mat-row-val{gap:8px}
+      .mat-row.mat-color-row .mat-row-val > *:first-child{flex:0 0 22px}
+      .mat-swatch{width:22px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer;overflow:hidden;flex:0 0 22px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+      .mat-swatch::-webkit-color-swatch-wrapper{padding:0}
+      .mat-swatch::-webkit-color-swatch{border:none;border-radius:4px}
+      .mat-swatch::-moz-color-swatch{border:none;border-radius:4px}
+      .mat-swatch:hover{border-color:var(--bd2)}
+      .mat-color-hex-v2{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);letter-spacing:.02em;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-color-pct{font-size:10.5px;color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;flex:0 0 auto}
+      .mat-row-tex.mat-row-tex-inline{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background:transparent;display:grid;place-items:center;padding:0}
+      .mat-row-tex.mat-row-tex-inline::after{display:none}
+      .mat-row-tex.mat-row-tex-inline svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:1.8;display:block}
+      .mat-row-tex.mat-row-tex-inline.has-tex{border-style:solid}
+      .mat-row-tex.mat-row-tex-inline.has-tex svg{color:#fff}
 
       /* Eyedropper button — sits flush with the colour picker.  */
       .mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
@@ -13471,21 +13550,38 @@ function _openMaterialEditor(info) {
   };
   const row = (label, valueHtml, texProp = null) => `
     <div class="mat-row">
-      <span class="mat-row-diamond">${_diamondSvg}</span>
       <span class="mat-row-label">${escapeHtml(label)}</span>
       ${texAttach(texProp)}
       <div class="mat-row-val">${valueHtml}</div>
     </div>`;
-  const colorVal = (cid, hex) => `
-    <input type="color" id="${cid}" value="${hex || '#000000'}" style="width:28px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer">
-    <span class="mat-color-hex" id="${cid}-hex" style="flex:1;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--tx3)">${hex || '#000000'}</span>
-    <button class="mat-eyedrop" data-eyedrop="${cid}" title="Pick colour from screen (Eyedropper)">
-      <svg viewBox="0 0 24 24"><path d="M16 4l4 4-2 2-4-4 2-2zM14 6L4 16v4h4L18 10"/></svg>
-    </button>`;
   const sliderVal = (sid) => `<div id="${sid}"></div>`;
 
+  // Spline-style color row: [label] [swatch] [hex] [pct] [tex-trigger].
+  // The swatch is the native color picker (click → OS color dialog). The
+  // tex-trigger sits inline (replaces the middle-column .mat-row-tex circle
+  // for color rows) and opens the shared texture popover.
+  const _texDot = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg>';
+  const colorRow = (label, cid, hex, texProp = null) => {
+    const slot = texProp && _texSlotByProp[texProp];
+    const has  = slot && !!mat[texProp];
+    const hexClean = (hex || '#000000').replace(/^#/, '').toUpperCase();
+    const texBtn = slot
+      ? `<button class="mat-row-tex mat-row-tex-inline${has ? ' has-tex' : ''}" data-tex-prop="${texProp}" title="Texture (click to load/clear)">${_texDot}</button>`
+      : '';
+    return `
+      <div class="mat-row mat-color-row">
+        <span class="mat-row-label">${escapeHtml(label)}</span>
+        <div class="mat-row-val">
+          <input type="color" id="${cid}" value="${hex || '#000000'}" class="mat-swatch">
+          <span class="mat-color-hex-v2" id="${cid}-hex">${hexClean}</span>
+          <span class="mat-color-pct">100%</span>
+          ${texBtn}
+        </div>
+      </div>`;
+  };
+
   const baseSection = section('base', 'Base',
-    row('Color',     colorVal('mat-edit-color', '#' + (mat.color?.getHexString?.() || 'cccccc')), 'map') +
+    colorRow('Color', 'mat-edit-color', '#' + (mat.color?.getHexString?.() || 'cccccc'), 'map') +
     (hasPBR
       ? row('Metalness', sliderVal('mat-edit-metalness-scrub'), 'metalnessMap') +
         row('Roughness', sliderVal('mat-edit-roughness-scrub'), 'roughnessMap')
@@ -13501,7 +13597,7 @@ function _openMaterialEditor(info) {
   , true);
 
   const emissiveSection = hasEmissive ? section('emissive', 'Emission',
-    row('Color',     colorVal('mat-edit-emissive-color', '#' + (mat.emissive?.getHexString?.() || '000000')), 'emissiveMap') +
+    colorRow('Color', 'mat-edit-emissive-color', '#' + (mat.emissive?.getHexString?.() || '000000'), 'emissiveMap') +
     row('Intensity', sliderVal('mat-edit-emissive-scrub'))
   ) : '';
 
@@ -13539,14 +13635,14 @@ function _openMaterialEditor(info) {
     row('Transmission',        sliderVal('mat-edit-transmission-scrub'),        'transmissionMap') +
     row('Thickness',           sliderVal('mat-edit-thickness-scrub'),           'thicknessMap') +
     row('Dispersion',          sliderVal('mat-edit-dispersion-scrub')) +
-    row('Attenuation',         colorVal('mat-edit-attenuation-color', '#' + (mat.attenuationColor?.getHexString?.() || 'ffffff'))) +
+    colorRow('Attenuation', 'mat-edit-attenuation-color', '#' + (mat.attenuationColor?.getHexString?.() || 'ffffff')) +
     row('Atten. distance',     sliderVal('mat-edit-attenuationDistance-scrub'))
   , true) : '';
 
   const sheenSection = isPhysical ? section('sheen', 'Sheen / Iridescence / Anisotropy',
     row('Sheen',           sliderVal('mat-edit-sheen-scrub'),       'sheenColorMap') +
     row('Sheen roughness', sliderVal('mat-edit-sheenRough-scrub'),  'sheenRoughnessMap') +
-    row('Sheen color',     colorVal('mat-edit-sheen-color', '#' + (mat.sheenColor?.getHexString?.() || 'ffffff'))) +
+    colorRow('Sheen color', 'mat-edit-sheen-color', '#' + (mat.sheenColor?.getHexString?.() || 'ffffff')) +
     row('Iridescence',     sliderVal('mat-edit-iridescence-scrub'), 'iridescenceMap') +
     row('Irid. thickness', _mapOnly,                                'iridescenceThicknessMap') +
     row('Iridescence IOR', sliderVal('mat-edit-iridIor-scrub')) +
@@ -13556,7 +13652,7 @@ function _openMaterialEditor(info) {
 
   const specSection = isPhysical ? section('specular', 'Specular',
     row('Intensity', sliderVal('mat-edit-specInt-scrub'),                                                       'specularIntensityMap') +
-    row('Tint',      colorVal('mat-edit-spec-color', '#' + (mat.specularColor?.getHexString?.() || 'ffffff')),  'specularColorMap')
+    colorRow('Tint', 'mat-edit-spec-color', '#' + (mat.specularColor?.getHexString?.() || 'ffffff'), 'specularColorMap')
   , true) : '';
 
   const matName = (mat.name && mat.name.trim()) || ('mat_' + (mat.color?.getHexString?.() || 'cccccc'));
@@ -13565,7 +13661,7 @@ function _openMaterialEditor(info) {
       <div class="mat-edit-preview-wrap">
         <img class="mat-edit-preview-canvas" id="mat-edit-preview" alt="" draggable="false">
         <div class="mat-edit-preview-info">
-          <div class="mat-edit-preview-name" title="${escapeHtml(matName)}">${escapeHtml(matName)}</div>
+          <div class="mat-edit-preview-name" title="${escapeHtml(matName)} — double-click to rename">${escapeHtml(matName)}</div>
           <div class="mat-edit-preview-type">${escapeHtml(mat.type || 'Material')}</div>
           <div class="mat-edit-preview-uses">${info.count} part${info.count === 1 ? '' : 's'} use this material</div>
         </div>
@@ -13597,7 +13693,7 @@ function _openMaterialEditor(info) {
       id,
       title: 'Material',
       subtitle: '—',
-      iconName: 'palette',
+      iconName: 'gem',
       // Default tall enough to fit Base + Emission + Surface without scroll on
       // a typical 1080p screen; bodyScroll lets the rest (Environment / IOR /
       // Sheen / Specular for MeshPhysicalMaterial) reveal as the user scrolls.
@@ -13624,6 +13720,22 @@ function _openMaterialEditor(info) {
   popup.body.querySelectorAll('.mat-edit-section-h').forEach(h => {
     h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
   });
+
+  // Double-click the preview name to rename the material in place.
+  const _previewNameEl = popup.body.querySelector('.mat-edit-preview-name');
+  if (_previewNameEl) {
+    _previewNameEl.style.cursor = 'text';
+    _previewNameEl.addEventListener('dblclick', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const m = _matEditorState?.mat;
+      if (!m) return;
+      _renameMaterialInline(_previewNameEl, m, (next) => {
+        // Live-update everything inside the editor that shows the name.
+        popup.setTitle(next || 'Material');
+        _previewNameEl.setAttribute('title', `${next} — double-click to rename`);
+      });
+    });
+  }
 
   // 3D preview ball — main renderer renders a sphere with this material into
   // a small render target, pixels are blitted to the editor canvas. Updates
@@ -13658,7 +13770,7 @@ function _openMaterialEditor(info) {
     if (inp && target) {
       inp.addEventListener('input', () => {
         target.set(inp.value);
-        if (hex) hex.textContent = inp.value;
+        if (hex) hex.textContent = inp.value.replace(/^#/, '').toUpperCase();
         mat.needsUpdate = true;
         requestRender();
         _refreshAll();
