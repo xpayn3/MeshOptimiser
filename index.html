@@ -785,6 +785,13 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .export-menu-item .fmt{font-weight:600;letter-spacing:.02em}
 .export-menu-item .hint{color:var(--tx3);font-size:11px;font-weight:400}
 .export-menu-sep{height:1px;background:var(--s3);margin:4px 6px}
+/* Add-primitive menu: 3D snapshot thumbnails on the left of each item. */
+#add-prim-menu{min-width:260px}
+#add-prim-menu .export-menu-item{display:grid;grid-template-columns:40px 1fr;gap:12px;padding:6px 10px}
+#add-prim-menu .prim-thumb{width:40px;height:40px;border-radius:7px;background:linear-gradient(160deg,rgba(255,255,255,.04),rgba(255,255,255,.01));box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);display:block;object-fit:contain;transition:transform 200ms var(--ease-out),box-shadow 200ms var(--ease-out)}
+#add-prim-menu .export-menu-item:hover .prim-thumb,#add-prim-menu .export-menu-item:focus-visible .prim-thumb{transform:scale(1.05);box-shadow:inset 0 0 0 1px rgba(110,168,255,.35),0 2px 8px rgba(0,0,0,.35)}
+#add-prim-menu .fmt{justify-self:start}
+#add-prim-menu .hint{justify-self:end;text-align:right;max-width:120px;line-height:1.25}
 
 /* Settings popover — floats next to the top-right viewport buttons. Mirrors
    the sidebar `.section-b` layout so existing field/toggle markup drops in
@@ -1047,16 +1054,16 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     <div class="add-prim-wrap" style="position:relative;display:inline-block">
       <button class="tbtn" id="btn-add-prim" title="Add a primitive shape (Cube, Sphere, Cylinder, Torus, Cone, Plane, Torus-knot)"><i data-lucide="plus-square"></i>Add <span class="caret"><i data-lucide="chevron-down"></i></span></button>
       <div id="add-prim-menu" class="export-menu" style="min-width:200px">
-        <button class="export-menu-item" data-prim="cube"><span class="fmt">Cube</span><span class="hint">Box, 6 faces</span></button>
-        <button class="export-menu-item" data-prim="sphere"><span class="fmt">Sphere</span><span class="hint">UV sphere</span></button>
-        <button class="export-menu-item" data-prim="cylinder"><span class="fmt">Cylinder</span><span class="hint">Open or capped</span></button>
-        <button class="export-menu-item" data-prim="cone"><span class="fmt">Cone</span><span class="hint">Tapered cylinder</span></button>
-        <button class="export-menu-item" data-prim="torus"><span class="fmt">Torus</span><span class="hint">Donut</span></button>
-        <button class="export-menu-item" data-prim="torusknot"><span class="fmt">Torus knot</span><span class="hint">Material test shape</span></button>
-        <button class="export-menu-item" data-prim="plane"><span class="fmt">Plane</span><span class="hint">Flat quad</span></button>
-        <button class="export-menu-item" data-prim="capsule"><span class="fmt">Capsule</span><span class="hint">Cylinder + 2 hemispheres</span></button>
-        <button class="export-menu-item" data-prim="icosahedron"><span class="fmt">Icosahedron</span><span class="hint">20-face poly</span></button>
-        <button class="export-menu-item" data-prim="dodecahedron"><span class="fmt">Dodecahedron</span><span class="hint">12-face poly</span></button>
+        <button class="export-menu-item" data-prim="cube"><span class="fmt">Cube</span></button>
+        <button class="export-menu-item" data-prim="sphere"><span class="fmt">Sphere</span></button>
+        <button class="export-menu-item" data-prim="cylinder"><span class="fmt">Cylinder</span></button>
+        <button class="export-menu-item" data-prim="cone"><span class="fmt">Cone</span></button>
+        <button class="export-menu-item" data-prim="torus"><span class="fmt">Torus</span></button>
+        <button class="export-menu-item" data-prim="torusknot"><span class="fmt">Torus knot</span></button>
+        <button class="export-menu-item" data-prim="plane"><span class="fmt">Plane</span></button>
+        <button class="export-menu-item" data-prim="capsule"><span class="fmt">Capsule</span></button>
+        <button class="export-menu-item" data-prim="icosahedron"><span class="fmt">Icosahedron</span></button>
+        <button class="export-menu-item" data-prim="dodecahedron"><span class="fmt">Dodecahedron</span></button>
       </div>
     </div>
     <div class="divider"></div>
@@ -2153,7 +2160,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-prim-params"></script>
+<script type="module" src="app-v2.js?v=2026050707-toolbar-1menu"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

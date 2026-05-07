@@ -11588,11 +11588,25 @@ function wireUI() {
     $('export-menu')?.classList.remove('show');
     document.querySelector('.export-wrap')?.classList.remove('open');
   }
+  // Close every toolbar dropdown except (optionally) the one identified
+  // by the supplied id. Lets each open-handler ensure mutual exclusion
+  // — clicking Add closes Export, clicking Export closes Add, etc.
+  function _closeOtherToolbarMenus(except) {
+    if (except !== 'export-menu') {
+      $('export-menu')?.classList.remove('show');
+      document.querySelector('.export-wrap')?.classList.remove('open');
+    }
+    if (except !== 'add-prim-menu') {
+      $('add-prim-menu')?.classList.remove('show');
+      $('btn-add-prim')?.classList.remove('active');
+    }
+  }
   function _toggleExportMenu() {
     const menu = $('export-menu');
     const wrap = document.querySelector('.export-wrap');
     if (!menu || !wrap) return;
     const open = !menu.classList.contains('show');
+    if (open) _closeOtherToolbarMenus('export-menu');
     menu.classList.toggle('show', open);
     wrap.classList.toggle('open', open);
   }
@@ -11651,11 +11665,155 @@ function wireUI() {
   // alongside the export menu's existing close logic.
   const _addPrimMenu = $('add-prim-menu');
   const _addPrimBtn  = $('btn-add-prim');
+
+  // Tiny one-time renderer for primitive thumbnails. Snapshots each kind
+  // with a per-shape coloured PBR material once and persists the data URL
+  // to localStorage so subsequent app loads skip the WebGPU init entirely.
+  // Uses WebGPURenderer (the bundle's only renderer; WebGLRenderer isn't
+  // shipped in three.webgpu.js).
+  const _primThumb = (() => {
+    let ctx = null;
+    let unavailable = (typeof THREE.WebGPURenderer !== 'function');
+    let initPromise = null;
+    const STORE_KEY = 'stepopt-prim-thumbs-v2';
+    const COLORS = {
+      cube: 0x6ea8ff, sphere: 0xa78bfa, cylinder: 0x34c759, cone: 0xfbbf24,
+      torus: 0xff6b6b, torusknot: 0xb388ff, plane: 0x60d394, capsule: 0xff9f43,
+      icosahedron: 0x10b981, dodecahedron: 0xef4444,
+    };
+    let cache;
+    try { cache = new Map(Object.entries(JSON.parse(localStorage.getItem(STORE_KEY) || '{}'))); }
+    catch (_) { cache = new Map(); }
+    const _persist = () => {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(Object.fromEntries(cache))); }
+      catch (_) {}
+    };
+    async function init() {
+      if (unavailable) return null;
+      if (ctx) return ctx;
+      if (initPromise) return initPromise;
+      initPromise = (async () => {
+        const SIZE = 56;
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = SIZE * 2;
+        let renderer;
+        try {
+          renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: true });
+          await renderer.init();
+        } catch (e) {
+          console.warn('[prim-thumb] WebGPU init failed:', e?.message || e);
+          unavailable = true;
+          return null;
+        }
+        renderer.setPixelRatio(1);
+        renderer.setSize(SIZE * 2, SIZE * 2, false);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.05;
+        const scene = new THREE.Scene();
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x1a1f28, 0.45));
+        const key  = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(2.5, 3, 2);  scene.add(key);
+        const fill = new THREE.DirectionalLight(0xb0c4ff, 0.4); fill.position.set(-2, 1, 1.5); scene.add(fill);
+        const rim  = new THREE.DirectionalLight(0xffffff, 0.4); rim.position.set(-1, -0.5, -2); scene.add(rim);
+        const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+        cam.position.set(2.6, 2.0, 2.8);
+        cam.lookAt(0, 0, 0);
+        ctx = { canvas, renderer, scene, cam, mesh: null, SIZE: SIZE * 2 };
+        return ctx;
+      })();
+      return initPromise;
+    }
+    function geomFor(kind) {
+      switch (kind) {
+        case 'cube':         return new THREE.BoxGeometry(1.25, 1.25, 1.25);
+        case 'sphere':       return new THREE.SphereGeometry(0.85, 36, 24);
+        case 'cylinder':     return new THREE.CylinderGeometry(0.7, 0.7, 1.4, 32);
+        case 'cone':         return new THREE.ConeGeometry(0.85, 1.5, 32);
+        case 'torus':        return new THREE.TorusGeometry(0.7, 0.28, 16, 48);
+        case 'torusknot':    return new THREE.TorusKnotGeometry(0.6, 0.22, 96, 14);
+        case 'plane':        { const g = new THREE.PlaneGeometry(1.4, 1.4); g.rotateX(-Math.PI * 0.45); return g; }
+        case 'capsule':      return new THREE.CapsuleGeometry(0.5, 1.0, 8, 24);
+        case 'icosahedron':  return new THREE.IcosahedronGeometry(0.95, 0);
+        case 'dodecahedron': return new THREE.DodecahedronGeometry(0.92, 0);
+      }
+      return null;
+    }
+    async function render(kind) {
+      if (cache.has(kind)) return cache.get(kind);
+      const c = await init(); if (!c) return null;
+      const geom = geomFor(kind); if (!geom) return null;
+      // Center the geometry on its own bbox so off-axis shapes (cone with
+      // its tip up, torus knot, etc.) sit visually centered in the thumb
+      // instead of drifting to one corner.
+      geom.computeBoundingBox();
+      const bb = geom.boundingBox;
+      const cx = (bb.min.x + bb.max.x) * 0.5;
+      const cy = (bb.min.y + bb.max.y) * 0.5;
+      const cz = (bb.min.z + bb.max.z) * 0.5;
+      geom.translate(-cx, -cy, -cz);
+      // Per-shape coloured material so the menu reads as a colour key too.
+      const material = new THREE.MeshStandardMaterial({
+        color: COLORS[kind] ?? 0x9aaccc, metalness: 0.18, roughness: 0.42,
+      });
+      if (c.mesh) {
+        c.scene.remove(c.mesh);
+        c.mesh.geometry.dispose();
+        c.mesh.material.dispose?.();
+      }
+      c.mesh = new THREE.Mesh(geom, material);
+      c.mesh.rotation.x = 0.32; c.mesh.rotation.y = 0.55;
+      c.scene.add(c.mesh);
+      try { await c.renderer.renderAsync(c.scene, c.cam); }
+      catch (e) { c.renderer.render(c.scene, c.cam); }
+      await new Promise(r => requestAnimationFrame(r));
+      const url = c.canvas.toDataURL('image/png');
+      if (url && url.length > 200) {
+        cache.set(kind, url);
+        _persist();
+      }
+      return url;
+    }
+    return { render };
+  })();
+
+  const _populatePrimThumbs = async () => {
+    if (!_addPrimMenu) return;
+    const items = [..._addPrimMenu.querySelectorAll('.export-menu-item[data-prim]')];
+    // Insert placeholder thumbs first so the menu doesn't reflow as each
+    // snapshot lands. Each placeholder is replaced once its image is ready.
+    for (const item of items) {
+      if (item.querySelector('.prim-thumb')) continue;
+      const ph = document.createElement('span');
+      ph.className = 'prim-thumb prim-thumb-placeholder';
+      item.insertBefore(ph, item.firstChild);
+    }
+    // Render snapshots serially so they share one renderer instance.
+    for (const item of items) {
+      const ph = item.querySelector('.prim-thumb.prim-thumb-placeholder');
+      if (!ph) continue;
+      let url = null;
+      try { url = await _primThumb.render(item.dataset.prim); }
+      catch (err) { console.warn('[prim-thumb] render failed for', item.dataset.prim, err); }
+      if (url) {
+        const img = document.createElement('img');
+        img.src = url; img.alt = ''; img.className = 'prim-thumb'; img.draggable = false;
+        ph.replaceWith(img);
+      } else {
+        ph.classList.remove('prim-thumb-placeholder');
+      }
+    }
+  };
+  window._populatePrimThumbs = _populatePrimThumbs;
+  window._primThumb = _primThumb;
+
   if (_addPrimBtn && _addPrimMenu) {
     _addPrimBtn.addEventListener('click', e => {
       e.stopPropagation();
-      const open = _addPrimMenu.classList.toggle('show');
-      _addPrimBtn.classList.toggle('active', open);
+      const willOpen = !_addPrimMenu.classList.contains('show');
+      if (willOpen) _closeOtherToolbarMenus('add-prim-menu');
+      _addPrimMenu.classList.toggle('show', willOpen);
+      _addPrimBtn.classList.toggle('active', willOpen);
+      if (willOpen) _populatePrimThumbs();
     });
     _addPrimMenu.addEventListener('click', e => {
       const item = e.target.closest('[data-prim]');
