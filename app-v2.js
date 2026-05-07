@@ -4297,39 +4297,82 @@ function fitToView() {
 // API so it works on both WebGL2 and WebGPU — three's WebGPU renderer
 // rejects raw ShaderMaterial as "not compatible", which earlier killed the
 // shader-plane attempt and rendered the floor as a solid black square.
-function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex) {
+function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fadeStart, fadeEnd, majorEvery = 10) {
   const halfSize = size / 2;
   const step = size / divisions;
   const center = divisions / 2;
+  // Subdivide each line so per-vertex alpha can interpolate along the line.
+  // 24 segments = smooth radial fade without blowing the vertex budget.
+  const SEGS = 24;
+
   const positions = [];
-  const colors = [];
+  const colors = [];          // RGBA — alpha used by LineBasicMaterial when vertexColors:true
   const cGrid  = new THREE.Color(gridHex);
   const cAxisX = new THREE.Color(axisXHex);
   const cAxisY = new THREE.Color(axisYHex);
 
-  for (let i = 0, k = -halfSize; i <= divisions; i++, k += step) {
-    // Line parallel to the X axis at y=k (lives in XY plane → z=0).
-    positions.push(-halfSize, k, 0,  halfSize, k, 0);
-    // The line at k=0 is THE X-axis itself → red.
-    const cRow = (i === center) ? cAxisX : cGrid;
-    colors.push(cRow.r, cRow.g, cRow.b,  cRow.r, cRow.g, cRow.b);
+  // Spline-style hierarchy: nearly invisible minor hairlines, slightly
+  // stronger every-Nth majors, faint axis hint. Distance fade further
+  // attenuates everything toward the horizon, so even the axis lines
+  // dissolve at the edges instead of stabbing all the way out.
+  const ALPHA_MINOR = 0.06;
+  const ALPHA_MAJOR = 0.14;
+  const ALPHA_AXIS  = 0.45;
 
-    // Line parallel to the Y axis at x=k.
-    positions.push(k, -halfSize, 0,  k, halfSize, 0);
-    // The line at k=0 is THE Y-axis itself → green.
-    const cCol = (i === center) ? cAxisY : cGrid;
-    colors.push(cCol.r, cCol.g, cCol.b,  cCol.r, cCol.g, cCol.b);
+  const smoothstep = (a, b, x) => {
+    if (a === b) return x < a ? 0 : 1;
+    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  const fadeAt = (x, y, base) => {
+    const d = Math.hypot(x, y);
+    return base * (1 - smoothstep(fadeStart, fadeEnd, d));
+  };
+  const emitLine = (getPt, color, baseAlpha) => {
+    let prev = getPt(0);
+    let prevA = fadeAt(prev[0], prev[1], baseAlpha);
+    for (let s = 1; s <= SEGS; s++) {
+      const cur = getPt(s / SEGS);
+      const curA = fadeAt(cur[0], cur[1], baseAlpha);
+      // Drop fully-faded segments — saves ~half the vertex budget on a
+      // 200×-footprint plane where the corners are past fadeEnd.
+      if (prevA > 0.003 || curA > 0.003) {
+        positions.push(prev[0], prev[1], 0,  cur[0], cur[1], 0);
+        colors.push(color.r, color.g, color.b, prevA,
+                    color.r, color.g, color.b, curA);
+      }
+      prev = cur;
+      prevA = curA;
+    }
+  };
+
+  for (let i = 0, k = -halfSize; i <= divisions; i++, k += step) {
+    const isAxis  = (i === center);
+    const fromCtr = i - center;
+    const isMajor = !isAxis && (Math.abs(fromCtr) % majorEvery === 0);
+    const baseA   = isAxis ? ALPHA_AXIS : (isMajor ? ALPHA_MAJOR : ALPHA_MINOR);
+
+    // Horizontal line parallel to X at y=k.
+    emitLine(
+      (t) => [-halfSize + t * size, k],
+      isAxis ? cAxisX : cGrid,
+      baseA,
+    );
+    // Vertical line parallel to Y at x=k.
+    emitLine(
+      (t) => [k, -halfSize + t * size],
+      isAxis ? cAxisY : cGrid,
+      baseA,
+    );
   }
 
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geom.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
+  geom.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 4));
   const mat = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.45,
     depthWrite: false,
-    fog: true,    // picks up scene.fog to handle horizon fade for free
   });
   const mesh = new THREE.LineSegments(geom, mat);
   mesh.matrixAutoUpdate = false;
@@ -4354,9 +4397,14 @@ function _makeInfiniteGrid(opts = {}) {
   // the visible line count at ~5000 (5000+5000 segments) so even a 1u minor
   // on a 1mm-unit model stays under 50k vertices.
   const targetDivisions = Math.min(5000, Math.max(40, Math.round(PLANE_SIZE / minor)));
-  const grid = _buildAxisColouredGrid(PLANE_SIZE, targetDivisions, 0xa0a6b0, 0xff5050, 0x40d860);
+  const majorEvery = Math.max(1, Math.round(major / minor));
+  const grid = _buildAxisColouredGrid(
+    PLANE_SIZE, targetDivisions,
+    0xa0a6b0, 0xff5050, 0x40d860,
+    fadeStart, fadeEnd, majorEvery,
+  );
   grid.name = '_infiniteGrid';
-  grid.userData.gridParams = { minor, major, planeSize: PLANE_SIZE };
+  grid.userData.gridParams = { minor, major, planeSize: PLANE_SIZE, fadeStart, fadeEnd };
   return grid;
 }
 
@@ -4380,9 +4428,15 @@ function _fitGridToModel(box) {
   // Plane extends ~200× the footprint so it feels infinite from any
   // reasonable camera distance, capped at 1e5 for vertex-budget sanity.
   const planeSize = Math.min(1e5, Math.max(footprint * 200, 200));
+  // Distance fade: full opacity within ~5× footprint, gone by ~30× —
+  // smooth roll-off so the horizon dissolves cleanly.
+  const fadeStart = footprint * 5;
+  const fadeEnd   = footprint * 30;
+  const majorEvery = Math.max(1, Math.round(major / minor));
 
   // Rebuild the line set with the new spacing — geometry encodes the line
-  // positions, so re-spacing means new buffers (cheap; one-shot per load).
+  // positions AND per-vertex fade alphas, so re-spacing / re-fading means
+  // new buffers (cheap; one-shot per load).
   scene.remove(gridHelper);
   gridHelper.geometry?.dispose?.();
   gridHelper.material?.dispose?.();
@@ -4390,9 +4444,10 @@ function _fitGridToModel(box) {
     planeSize,
     Math.min(5000, Math.max(40, Math.round(planeSize / minor))),
     0xa0a6b0, 0xff5050, 0x40d860,
+    fadeStart, fadeEnd, majorEvery,
   );
   gridHelper.name = '_infiniteGrid';
-  gridHelper.userData.gridParams = { minor, major, planeSize };
+  gridHelper.userData.gridParams = { minor, major, planeSize, fadeStart, fadeEnd };
   gridHelper.position.set(center.x, center.y, box.min.z);
   gridHelper.visible = state.showGrid;
   gridHelper.updateMatrix();
