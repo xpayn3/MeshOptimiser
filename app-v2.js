@@ -26,7 +26,7 @@ const $ = id => document.getElementById(id);
 
 const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
-  viewMode: 'solid', showGrid: true, showBboxes: false, showAxes: true,
+  viewMode: 'solid', showGrid: true, showBboxes: false,
   highlightSmall: true, autoRotate: false, bgMode: 'dark', fog: true,
   fogNear: null, fogFar: null,     // null = auto-tune from model footprint
   fogIntensity: 1,                 // multiplier on fog falloff range
@@ -128,7 +128,7 @@ function _lucide() {
 
 let scene, camera, renderer, controls;
 let raycaster, pointer;
-let gridHelper, axesHelper;
+let gridHelper;
 let frameCount = 0, lastFps = performance.now();
 let _sceneReady = false, _pendingFile = null;
 let _stepWorker = null, _activeParse = null;
@@ -1407,6 +1407,10 @@ const _Actions = (() => {
     { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: _click('btn-fit') },
     { id:'reset',        group:'View',       label:'Reset camera',               run: _click('btn-reset') },
     { id:'frameSel',     group:'View',       label:'Frame selection',            run: () => { try { frameSelected(); } catch (_) {} } },
+    { id:'camPersp',     group:'View',       label:'Camera view (Perspective)',  kbd:'Ctrl+1', run: () => { try { _setPerspectiveView(); } catch (_) {} } },
+    { id:'camTop',       group:'View',       label:'Top view',                   kbd:'Ctrl+2', run: () => { try { _setStandardView('top'); } catch (_) {} } },
+    { id:'camFront',     group:'View',       label:'Front view',                 kbd:'Ctrl+3', run: () => { try { _setStandardView('front'); } catch (_) {} } },
+    { id:'camSide',      group:'View',       label:'Side view',                  kbd:'Ctrl+4', run: () => { try { _setStandardView('side'); } catch (_) {} } },
     { id:'solid',        group:'View',       label:'Solid view',                 kbd:'1', run: () => { try { setViewMode('solid'); } catch (_) {} } },
     { id:'wire',         group:'View',       label:'Wireframe view',             kbd:'2', run: () => { try { setViewMode('wire'); } catch (_) {} } },
     { id:'edges',        group:'View',       label:'Edges view',                 kbd:'3', run: () => { try { setViewMode('edges'); } catch (_) {} } },
@@ -1415,7 +1419,6 @@ const _Actions = (() => {
     { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
     { id:'gzOff',        group:'View',       label:'Hide gizmo',                          kbd:'Q', run: () => { try { setGizmoMode('off'); } catch (_) {} } },
     { id:'tgGrid',       group:'View',       label:'Toggle grid',                run: _click('tg-grid') },
-    { id:'tgAxes',       group:'View',       label:'Toggle axes',                run: _click('tg-axes') },
     { id:'tgBbox',       group:'View',       label:'Toggle bounding boxes',      run: _click('tg-bbox') },
     { id:'selAll',       group:'Selection',  label:'Select all',                 kbd:'Ctrl+A', run: _click('sel-all') },
     { id:'selInvert',    group:'Selection',  label:'Invert selection',           run: _click('sel-invert') },
@@ -1791,7 +1794,6 @@ function initScene() {
   })();
   gridHelper = _makeInfiniteGrid();
   scene.add(gridHelper);
-  axesHelper = new THREE.AxesHelper(8); scene.add(axesHelper);
   state.partsRoot = new THREE.Group(); state.partsRoot.name = '_partsRoot'; scene.add(state.partsRoot);
   // Mass scenes: partsRoot's local matrix doesn't change unless we rotate or
   // recenter, so opting out of per-frame auto-update saves a Mat4 propagation
@@ -2750,6 +2752,33 @@ function _toggleHdriUI(on) {
   if (ctl) ctl.style.display = on ? 'flex' : 'none';
   const sun = document.getElementById('sun-gizmo-wrap');
   if (sun) sun.style.display = on ? '' : 'none';
+  _applyHdriLightStash(on);
+}
+
+// When HDRI is the lighting source the procedural 3-light rig (hemi + key
+// directional + fill directional) doubles up with the env's baked sun and
+// blows out highlights. Stash the current intensities on entry to HDRI
+// mode and drop them to a small fraction; restore on exit. Standard
+// behaviour in Substance Painter / Blender / Unity HDRI workflows.
+function _applyHdriLightStash(on) {
+  if (!state._lights) return;
+  const L = state._lights;
+  if (on) {
+    if (L._stashedForHdri) return;          // already stashed — don't overwrite
+    L._stashedForHdri = {
+      hemi: L.hemi.intensity,
+      dir:  L.dir.intensity,
+      fill: L.fill.intensity,
+    };
+    L.hemi.intensity = 0;       // env hemisphere already covers the ambient
+    L.dir.intensity  = 0;       // env's sun is the directional now
+    L.fill.intensity = 0;
+  } else if (L._stashedForHdri) {
+    L.hemi.intensity = L._stashedForHdri.hemi;
+    L.dir.intensity  = L._stashedForHdri.dir;
+    L.fill.intensity = L._stashedForHdri.fill;
+    L._stashedForHdri = null;
+  }
 }
 
 function onResize() {
@@ -2806,13 +2835,11 @@ function tick() {
         if (camera.position.distanceToSquared(_TICK_PREV_POS) > 1e-12 ||
             controls.target.distanceToSquared(_TICK_PREV_TGT) > 1e-12) {
           requestRender();
-          // User orbited away from a standard view — drop the Top/Front/Side
-          // active highlight so the toolbar doesn't keep claiming we're still
-          // aligned to it. Cheap because it's only triggered on real motion.
+          // User orbited away from a standard view — flip the pill back to
+          // "Cam" so the toolbar doesn't keep claiming we're still aligned
+          // to Top/Front/Side. Triggered only on real motion, so cheap.
           if (_stdViewActive) {
-            for (const id of ['vw-top', 'vw-front', 'vw-side']) {
-              document.getElementById(id)?.classList.remove('active');
-            }
+            _syncViewPill('persp');
             _stdViewActive = false;
           }
         }
@@ -4273,10 +4300,9 @@ async function _captureRecentThumb(filename) {
   const dist = (maxDim / (2 * Math.tan(cam.fov * Math.PI / 360))) * 1.4;
   cam.position.copy(center).add(dir.multiplyScalar(dist));
   cam.lookAt(center);
-  // Hide helpers (grid, axes, bbox) for a clean thumbnail.
-  const wasGrid = gridHelper?.visible, wasAxes = axesHelper?.visible, wasBbox = state.bboxRoot?.visible;
+  // Hide helpers (grid, bbox) for a clean thumbnail.
+  const wasGrid = gridHelper?.visible, wasBbox = state.bboxRoot?.visible;
   if (gridHelper)       gridHelper.visible = false;
-  if (axesHelper)       axesHelper.visible = false;
   if (state.bboxRoot)   state.bboxRoot.visible = false;
   const target = new THREE.WebGLRenderTarget(SIZE, SIZE, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
   const oldTarget = renderer.getRenderTarget?.();
@@ -4310,7 +4336,6 @@ async function _captureRecentThumb(filename) {
     renderer.setRenderTarget(oldTarget || null);
     target.dispose();
     if (gridHelper)     gridHelper.visible = wasGrid;
-    if (axesHelper)     axesHelper.visible = wasAxes;
     if (state.bboxRoot) state.bboxRoot.visible = wasBbox;
     requestRender?.();
   }
@@ -4663,17 +4688,6 @@ function _fitGridToModel(box) {
   gridHelper.visible = state.showGrid;
   gridHelper.updateMatrix();
   scene.add(gridHelper);
-
-  if (axesHelper) {
-    const axLen = Math.max(footprint * 0.1, major / 4);
-    scene.remove(axesHelper);
-    axesHelper.geometry?.dispose?.();
-    axesHelper.material?.dispose?.();
-    axesHelper = new THREE.AxesHelper(axLen);
-    axesHelper.position.set(center.x, center.y, box.min.z);
-    axesHelper.visible = state.showAxes;
-    scene.add(axesHelper);
-  }
 
   // Tune fog distances to the loaded model. Start fog past 3× footprint
   // (so the close-up viewing range stays clear) and fully fog at 30×
@@ -6044,11 +6058,7 @@ function _setStandardView(view) {
     if (fovRow) fovRow.style.opacity = '.42';
   }
   alignViewToAxis(axisId);
-  // Visual feedback on the buttons — clear all three first, then mark active.
-  for (const id of ['vw-top', 'vw-front', 'vw-side']) {
-    document.getElementById(id)?.classList.remove('active');
-  }
-  document.getElementById('vw-' + view)?.classList.add('active');
+  _syncViewPill(view);
   _stdViewActive = true;
 }
 
@@ -6076,11 +6086,72 @@ function _setPerspectiveView() {
   camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
   camera.lookAt(controls.target);
   controls.update();
-  for (const id of ['vw-top', 'vw-front', 'vw-side']) {
-    document.getElementById(id)?.classList.remove('active');
-  }
+  _syncViewPill('persp');
   _stdViewActive = false;
   requestRender();
+}
+
+// Sync the top-center camera-view pill: label + active dropdown item. Called
+// by every code path that changes the active camera view (the pill itself,
+// the standard-view setters, and the tick orbit-detector that snaps back
+// to "Cam" the moment the user starts dragging).
+function _syncViewPill(view) {
+  const labels = { persp: 'Cam', top: 'Top', front: 'Front', side: 'Side' };
+  const lbl = labels[view] || 'Cam';
+  const lblEl = document.querySelector('#vp-view-pill .vp-pill-label');
+  if (lblEl) lblEl.textContent = lbl;
+  document.querySelectorAll('#vp-view-pill-menu .vp-pill-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
+}
+
+function _wireViewPill() {
+  const pill = document.getElementById('vp-view-pill');
+  const menu = document.getElementById('vp-view-pill-menu');
+  if (!pill || !menu) return;
+
+  // Platform-aware shortcut hint per dropdown row. Mac uses ⌘N, every
+  // other platform uses Ctrl+N. Reads from data-kbd which only carries
+  // the digit so the markup stays platform-agnostic.
+  const isMac = /mac/i.test(navigator.platform || '') || /Mac/i.test(navigator.userAgent || '');
+  const prefix = isMac ? '⌘' : 'Ctrl ';
+  menu.querySelectorAll('.vp-pill-item-kbd').forEach(k => {
+    k.textContent = prefix + (k.dataset.kbd || '');
+  });
+
+  const close = () => {
+    menu.classList.remove('show');
+    pill.setAttribute('aria-expanded', 'false');
+  };
+  const open = () => {
+    menu.classList.add('show');
+    pill.setAttribute('aria-expanded', 'true');
+  };
+
+  pill.addEventListener('click', e => {
+    e.stopPropagation();
+    if (menu.classList.contains('show')) close(); else open();
+  });
+
+  // Outside click + Escape close. Listener stays bound across opens because
+  // it cheaply early-returns when the menu is hidden.
+  document.addEventListener('mousedown', e => {
+    if (!menu.classList.contains('show')) return;
+    if (pill.contains(e.target) || menu.contains(e.target)) return;
+    close();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && menu.classList.contains('show')) { close(); e.stopPropagation(); }
+  });
+
+  menu.addEventListener('click', e => {
+    const item = e.target.closest('.vp-pill-item');
+    if (!item) return;
+    const view = item.dataset.view;
+    close();
+    if (view === 'persp') _setPerspectiveView();
+    else _setStandardView(view);
+  });
 }
 
 function rebuildTree() {
@@ -7403,8 +7474,36 @@ function refreshPropertiesPanel() {
         </div>
       </div>`;
     } else if (matSet.size > 1) {
-      const mixedSwatch = `<span class="prop-mat-color prop-mat-color-mixed"></span>`;
-      materialHtml = `<div class="prop-mat-btn prop-mat-mixed">${mixedSwatch}<div class="prop-mat-info"><span class="prop-mat-name">mixed materials</span><span class="prop-mat-sub">${matSet.size} different · select one to edit</span></div></div>`;
+      // Multi-material selection — list every unique material with a per-row
+      // edit affordance so the user can drill straight into the one they want
+      // without first narrowing the selection.
+      const matCounts = new Map(); // mat -> count in selection
+      for (const id of ids) {
+        const m = _matOfPart(getPart(id));
+        if (!m) continue;
+        matCounts.set(m, (matCounts.get(m) || 0) + 1);
+      }
+      const rowsHtml = [...matCounts.entries()].map(([m, n]) => {
+        const matHex = '#' + (m.color?.getHexString?.() || 'cccccc');
+        let thumbHtml;
+        try {
+          const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(m) : null;
+          thumbHtml = url
+            ? `<span class="prop-mat-sphere"><img src="${url}" alt="" draggable="false"></span>`
+            : `<span class="prop-mat-color" style="background:${matHex}"></span>`;
+        } catch (_) {
+          thumbHtml = `<span class="prop-mat-color" style="background:${matHex}"></span>`;
+        }
+        const subLabel = `${(m.type || 'Material').replace('Mesh','').replace('Material','')} · ${n} part${n === 1 ? '' : 's'}`;
+        return `<div class="prop-mat-btn prop-mat-multi-row" data-action="edit-material" data-mat-uuid="${m.uuid}" title="Click to edit">
+          ${thumbHtml}
+          <div class="prop-mat-info">
+            <span class="prop-mat-name">${escapeHtml(_matLabel(m))}</span>
+            <span class="prop-mat-sub">${escapeHtml(subLabel)}</span>
+          </div>
+        </div>`;
+      }).join('');
+      materialHtml = `<div class="prop-mat-multi-list">${rowsHtml}</div>`;
     }
     const tags = [];
     if (anyInstanced) tags.push(`<span class="tree-badge">${anyInstanced} instanced</span>`);
@@ -7491,7 +7590,19 @@ function refreshPropertiesPanel() {
     if (Array.isArray(target)) target = target[0];
     return target || null;
   };
-  if (matBtn) {
+  // Multi-material list rows: each has data-mat-uuid pointing at a specific
+  // material in the selection — wire each row to open that one (not just the
+  // first selected part's material).
+  el.querySelectorAll('.prop-mat-multi-row[data-action="edit-material"]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (typeof _collectLiveMaterials !== 'function' || typeof _openMaterialEditor !== 'function') return;
+      const uuid = row.dataset.matUuid;
+      if (!uuid) return;
+      const info = _collectLiveMaterials().find(i => i.mat?.uuid === uuid);
+      if (info) _openMaterialEditor(info);
+    });
+  });
+  if (matBtn && !matBtn.classList.contains('prop-mat-multi-row')) {
     matBtn.addEventListener('click', (e) => {
       // The action buttons inside the chip handle their own clicks. Don't
       // double-fire the editor when the user meant to hit "rename".
@@ -10700,7 +10811,6 @@ function _collectSceneState() {
       viewMode:        state.viewMode,
       showGrid:        state.showGrid,
       showBboxes:      state.showBboxes,
-      showAxes:        state.showAxes,
       threshold:       state.threshold,
       sizeMetricMode:  state.sizeMetricMode,
       autoRotate:      state.autoRotate,
@@ -10889,11 +10999,6 @@ function _applySceneState(s) {
       state.showGrid = v.showGrid;
       if (gridHelper) gridHelper.visible = v.showGrid;
       $('tg-grid')?.classList.toggle('active', v.showGrid);
-    }
-    if (typeof v.showAxes === 'boolean' && v.showAxes !== state.showAxes) {
-      state.showAxes = v.showAxes;
-      if (axesHelper) axesHelper.visible = v.showAxes;
-      $('tg-axes')?.classList.toggle('active', v.showAxes);
     }
     if (typeof v.showBboxes === 'boolean' && v.showBboxes !== state.showBboxes) {
       state.showBboxes = v.showBboxes;
@@ -11317,8 +11422,7 @@ function wireUI() {
     $('tg-bbox').classList.toggle('active', state.showBboxes);
     requestRender();
   });
-  $('tg-axes').addEventListener('click', () => { state.showAxes=!state.showAxes; axesHelper.visible=state.showAxes; $('tg-axes').classList.toggle('active', state.showAxes); requestRender(); });
-  $('tg-grid').classList.add('active'); $('tg-axes').classList.add('active'); $('vw-solid').classList.add('active');
+  $('tg-grid').classList.add('active'); $('vw-solid').classList.add('active');
   $('gz-translate')?.classList.add('active');
 
   let mouseDown = null;
@@ -11764,12 +11868,10 @@ function wireUI() {
   // editable position/rotation + read-only size for the active selection.
   $('tg-transform')?.addEventListener('click', () => _toggleTransformPanel());
   $('tg-screenshot')?.addEventListener('click', () => _captureViewportScreenshot());
-  // Standard CAD views — each switches to ortho + aligns to the named axis.
-  // Z-up scenes use CAD convention (Y forward); Y-up uses glTF/Blender.
-  $('vw-top')?.addEventListener('click', () => _setStandardView('top'));
-  $('vw-front')?.addEventListener('click', () => _setStandardView('front'));
-  $('vw-side')?.addEventListener('click', () => _setStandardView('side'));
-  $('vw-persp')?.addEventListener('click', () => _setPerspectiveView());
+  // Camera-view pill — single pill at top-center exposing the active view
+  // (Cam / Top / Front / Side) with a dropdown for the alternatives.
+  // Replaces the four T/F/S/Persp toolbar buttons.
+  _wireViewPill();
   // Initialize the tree's flag-on class + viewport button to match current toggle state at load.
   document.getElementById('tree')?.classList.toggle('flag-on', !!state.highlightSmall);
   $('tg-hilite')?.classList.toggle('active', !!$('toggle-highlight')?.checked);
@@ -12224,9 +12326,18 @@ function wireUI() {
       if (state.selected.size > 0 && typeof frameSelected === 'function') frameSelected();
       else fitToView();
     }
-    else if (e.key === '1') setViewMode('solid');
-    else if (e.key === '2') setViewMode('wire');
-    else if (e.key === '3') setViewMode('xray');
+    // Ctrl/⌘ + 1..4 → camera view pill (Cam / Top / Front / Side). Has to
+    // sit BEFORE the bare-key view-mode handlers below so the modifier path
+    // wins; the bare ones now explicitly require no Ctrl/Meta.
+    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4')) {
+      e.preventDefault();
+      const view = ({ '1':'persp', '2':'top', '3':'front', '4':'side' })[e.key];
+      if (view === 'persp') _setPerspectiveView();
+      else _setStandardView(view);
+    }
+    else if (e.key === '1' && !e.ctrlKey && !e.metaKey) setViewMode('solid');
+    else if (e.key === '2' && !e.ctrlKey && !e.metaKey) setViewMode('wire');
+    else if (e.key === '3' && !e.ctrlKey && !e.metaKey) setViewMode('xray');
     else if (e.key === 'e' || e.key === 'E') setGizmoMode('translate');
     else if (e.key === 'r' || e.key === 'R') setGizmoMode('rotate');
     else if (e.key === 't' || e.key === 'T') setGizmoMode('scale');
@@ -13646,7 +13757,7 @@ function _openMaterialEditor(info) {
       .mat-edit-section:last-child{border-bottom:none}
       .mat-edit-section-h{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);cursor:pointer;user-select:none;margin-bottom:8px}
       .mat-edit-section-h:hover{color:var(--tx2)}
-      .mat-edit-section-h .chev{font-size:10px;color:var(--tx3);transition:transform .15s var(--ease-out)}
+      .mat-edit-section-h .chev{font-size:14px;line-height:1;color:var(--tx3);transition:transform .15s var(--ease-out)}
       .mat-edit-section.collapsed .chev{transform:rotate(-90deg)}
       .mat-edit-section.collapsed .mat-edit-section-b{display:none}
       .mat-edit-section-b{display:flex;flex-direction:column;gap:5px}
@@ -13685,18 +13796,32 @@ function _openMaterialEditor(info) {
          The tex-attach circle (data-tex-prop) is a clickable indicator;
          empty = outline-only, has-tex = filled with the accent. Click
          opens a small popover for load/clear. */
-      .mat-row{display:grid;grid-template-columns:minmax(0,max-content) 12px minmax(0,1fr);align-items:center;gap:10px;padding:4px 0;font-size:11.5px;line-height:1.2}
+      .mat-row{display:grid;grid-template-columns:minmax(0,max-content) 14px minmax(0,1fr);align-items:center;gap:10px;padding:4px 0;font-size:11.5px;line-height:1.2}
       .mat-row + .mat-row{border-top:1px dashed var(--s2)}
       .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-row-tex{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--tx3);background:transparent;cursor:pointer;padding:0;display:grid;place-items:center;transition:background 120ms,border-color 120ms,color 120ms;color:var(--tx3)}
+      .mat-row-tex{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background-color:#0c0f15;background-image:linear-gradient(45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.10) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.10) 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0;cursor:pointer;padding:0;display:grid;place-items:center;transition:border-color 120ms,color 120ms;color:var(--tx3)}
       .mat-row-tex:hover{border-color:var(--ac);color:var(--ac)}
-      .mat-row-tex.has-tex{background:var(--ac);border-color:var(--ac)}
-      .mat-row-tex.has-tex::after{content:'';width:4px;height:4px;border-radius:50%;background:#fff}
+      .mat-row-tex svg{display:none}
+      .mat-row-tex.has-tex{background-image:none;background-color:var(--ac);border-color:var(--ac);border-style:solid}
+      .mat-row-tex.has-tex svg{display:block;width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:1.8;color:#fff}
       .mat-row-val{display:flex;align-items:center;gap:6px;min-width:0}
       .mat-row-val > *:first-child{flex:1;min-width:0}
       .mat-row-val .field{margin:0}
       .mat-row-val .scrub-label{display:none}
-      .mat-row-val .scrub-head{justify-content:flex-end}
+      /* Inline scrubber: [value pill] [range slider] on one line. */
+      .mat-row-val .scrub{flex-direction:row;align-items:center;gap:8px;padding:0;width:100%}
+      .mat-row-val .scrub-head{flex:0 0 auto;min-height:0;justify-content:flex-end;gap:0}
+      .mat-row-val .scrub-range{flex:1;min-width:0;width:auto}
+      .mat-row-val .scrub-rhs{display:flex;align-items:center;gap:3px;background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:2px 9px;height:20px;transition:background 120ms,border-color 120ms,color 120ms}
+      .mat-row-val .scrub-rhs:hover{background:var(--bg3);border-color:var(--bd2)}
+      .mat-row-val .scrub-value{font-size:11px;font-weight:500;min-width:0;height:auto;padding:0;border-radius:0;background:transparent;color:var(--tx2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
+      .mat-row-val .scrub-value:hover{background:transparent;color:var(--tx)}
+      .mat-row-val .scrub.editing .scrub-value{background:transparent;color:var(--tx)}
+      .mat-row-val .scrub-unit{font-size:10px;color:var(--tx3)}
+      .mat-row-val .scrub-range::-webkit-slider-thumb{width:10px;height:10px;background:var(--ac);border:0;margin-top:-3px;box-shadow:0 0 0 2px rgba(110,168,255,.25),0 1px 2px rgba(0,0,0,.4)}
+      .mat-row-val .scrub-range::-moz-range-thumb{width:10px;height:10px;background:var(--ac);border:0;box-shadow:0 0 0 2px rgba(110,168,255,.25),0 1px 2px rgba(0,0,0,.4)}
+      .mat-row-val .scrub-range::-webkit-slider-runnable-track{height:3px}
+      .mat-row-val .scrub-range::-moz-range-track{height:3px}
 
       /* Spline-style color row: [label] [swatch] [hex] [pct] [tex-trigger]. */
       .mat-row.mat-color-row{grid-template-columns:minmax(0,max-content) minmax(0,1fr)}
@@ -13707,19 +13832,14 @@ function _openMaterialEditor(info) {
       .mat-swatch::-webkit-color-swatch{border:none;border-radius:4px}
       .mat-swatch::-moz-color-swatch{border:none;border-radius:4px}
       .mat-swatch:hover{border-color:var(--bd2)}
-      .mat-color-hex-v2{flex:0 0 auto;width:7.5ch;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);letter-spacing:.02em;text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:3px 8px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
+      .mat-color-hex-v2{flex:0 0 auto;width:11ch;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--tx2);letter-spacing:.04em;text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:4px 10px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
       .mat-color-hex-v2:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
       .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(110,168,255,.18)}
       .mat-color-hex-v2.invalid{border-color:var(--er);color:var(--er)}
-      .mat-color-pct{flex:0 0 44px;width:44px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:3px 8px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
+      .mat-color-pct{flex:0 0 52px;width:52px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:4px 10px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
       .mat-color-pct::-webkit-outer-spin-button,.mat-color-pct::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
       .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(110,168,255,.18)}
-      .mat-row-tex.mat-row-tex-inline{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background:transparent;display:grid;place-items:center;padding:0}
-      .mat-row-tex.mat-row-tex-inline::after{display:none}
-      .mat-row-tex.mat-row-tex-inline svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:1.8;display:block}
-      .mat-row-tex.mat-row-tex-inline.has-tex{border-style:solid}
-      .mat-row-tex.mat-row-tex-inline.has-tex svg{color:#fff}
 
       /* Eyedropper button — sits flush with the colour picker.  */
       .mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
@@ -13821,7 +13941,7 @@ function _openMaterialEditor(info) {
   const texAttach = (propName) => {
     if (!propName || !_texSlotByProp[propName]) return '<span></span>';
     const has = !!mat[propName];
-    return `<button class="mat-row-tex${has ? ' has-tex' : ''}" data-tex-prop="${propName}" title="Texture (click to load/clear)"></button>`;
+    return `<button class="mat-row-tex${has ? ' has-tex' : ''}" data-tex-prop="${propName}" title="Texture (click to load/clear)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></svg></button>`;
   };
   const row = (label, valueHtml, texProp = null) => `
     <div class="mat-row">
@@ -13973,8 +14093,8 @@ function _openMaterialEditor(info) {
       // Sheen / Specular for MeshPhysicalMaterial) reveal as the user scrolls.
       // _DraggablePopup clamps to calc(100vh-24px), so on shorter screens this
       // collapses gracefully and the scrollbar takes over.
-      width: 300, height: 860,
-      minWidth: 260, minHeight: 360,
+      width: 360, height: 860,
+      minWidth: 300, minHeight: 360,
       bodyHtml,
       bodyScroll: true,
       onClose: () => {

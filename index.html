@@ -357,6 +357,11 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-mat-btn .prop-mat-action svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .prop-mat-btn.prop-mat-mixed{cursor:default;color:var(--tx3)}
 .prop-mat-btn.prop-mat-mixed:hover{background:var(--s2);border-color:var(--bd);color:var(--tx3)}
+.prop-mat-multi-list{display:flex;flex-direction:column;gap:6px}
+.prop-mat-multi-list .prop-mat-btn{padding:6px 8px;gap:8px}
+.prop-mat-multi-list .prop-mat-sphere,.prop-mat-multi-list .prop-mat-color{width:28px!important;height:28px!important}
+.prop-mat-multi-list .prop-mat-name{font-size:12px}
+.prop-mat-multi-list .prop-mat-sub{font-size:10px}
 .prop-mat-btn .prop-mat-name-input{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:500;color:#fff;background:rgba(110,168,255,.14);border:1px solid var(--ac);border-radius:4px;padding:1px 5px;margin:-2px 0;width:100%;min-width:0;outline:none;box-shadow:0 0 0 2px rgba(110,168,255,.18)}
 .prop-bar-wrap{display:flex;align-items:center;gap:8px;margin:8px 0 10px;font-size:11px;color:var(--tx3)}
 .prop-bar-wrap .prop-bar-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3);flex-shrink:0}
@@ -518,8 +523,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .scrub-range::-webkit-slider-runnable-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--scrub-pct),var(--bg3) var(--scrub-pct),var(--bg3) 100%);border:none}
 .scrub-range::-moz-range-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:var(--bg3);border:none}
 .scrub-range::-moz-range-progress{height:4px;border-radius:999px;background:var(--ac)}
-.scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:14px;height:14px;border-radius:50%;background:var(--ac);border:2px solid var(--bg1);margin-top:-7px;box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 1px rgba(110,168,255,.35);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
-.scrub-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--ac);border:2px solid var(--bg1);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 1px rgba(110,168,255,.35);cursor:grab}
+.scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:11px;height:11px;border-radius:50%;background:var(--ac);border:0;margin-top:-4px;box-shadow:0 0 0 2px rgba(110,168,255,.25),0 1px 2px rgba(0,0,0,.4);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
+.scrub-range::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 2px rgba(110,168,255,.25),0 1px 2px rgba(0,0,0,.4);cursor:grab}
 .scrub-range:hover::-webkit-slider-thumb{transform:scale(1.1)}
 .scrub-range:hover::-moz-range-thumb{transform:scale(1.1)}
 .scrub-range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(110,168,255,.18)}
@@ -527,7 +532,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .scrub-range:focus-visible::-webkit-slider-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(110,168,255,.35)}
 .scrub-range:focus-visible::-moz-range-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(110,168,255,.35)}
 .mac-sel{width:100%;padding:7px 28px 7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
-.mac-sel:hover{background:var(--bg4);border-color:var(--bd2)}
+.mac-sel:hover{background-color:var(--bg4);border-color:var(--bd2)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:500;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
 .btn:hover{background:var(--bg4);border-color:var(--bd2)}
 .btn:active{transform:scale(.97);background:var(--bg3)}
@@ -625,6 +630,31 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .vpc.tr{top:6px;right:6px;flex-direction:column;align-items:flex-end}
 .vpc.br{bottom:6px;right:6px;align-items:flex-end;flex-direction:column}
 .vpc.bl{bottom:6px;left:6px}
+/* Top-center cluster — used by the camera-view pill so it floats centered
+   above the GPU canvas without colliding with the corner toolbars. */
+.vpc.tc{top:8px;left:50%;transform:translateX(-50%);flex-direction:column;align-items:center;gap:4px}
+
+/* Camera-view pill: a single rounded button that exposes the current view
+   (Cam / Top / Front / Side) and reveals a dropdown of the alternatives.
+   Replaces the four T/F/S/Persp buttons that used to live in the TL stack
+   so the toolbar reads quieter and the active view is always legible. */
+.vp-pill{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:26px;background:rgba(15,19,25,.78);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:999px;color:var(--tx);font-size:11px;font-weight:500;letter-spacing:.01em;cursor:pointer;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out);user-select:none;min-width:72px;justify-content:center;line-height:1}
+.vp-pill:hover{background:color-mix(in srgb, var(--ac) 14%, rgba(15,19,25,.78));border-color:color-mix(in srgb, var(--ac) 40%, var(--bd));color:var(--tx)}
+.vp-pill:active{transform:scale(.97)}
+.vp-pill[aria-expanded="true"]{background:color-mix(in srgb, var(--ac) 18%, rgba(15,19,25,.78));border-color:color-mix(in srgb, var(--ac) 55%, var(--bd))}
+.vp-pill .vp-pill-label{line-height:1}
+.vp-pill .vp-pill-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:currentColor;opacity:.85;transition:opacity 160ms var(--ease-out),color 160ms var(--ease-out)}
+.vp-pill .vp-pill-icon svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
+.vp-pill:hover .vp-pill-icon,.vp-pill[aria-expanded="true"] .vp-pill-icon{opacity:1}
+
+.vp-pill-menu{display:flex;flex-direction:column;min-width:160px;padding:4px;background:rgba(15,19,25,.92);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(10px);opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top center;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
+.vp-pill-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+.vp-pill-item{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:7px 10px;background:transparent;border:0;border-radius:6px;color:var(--tx);font-size:12px;text-align:left;cursor:pointer;font-weight:500;transition:background 120ms var(--ease-out),color 120ms var(--ease-out)}
+.vp-pill-item:hover{background:rgba(255,255,255,.05)}
+.vp-pill-item.active{background:color-mix(in srgb, var(--ac) 18%, transparent);color:var(--ac)}
+.vp-pill-item.active .vp-pill-item-kbd{color:color-mix(in srgb, var(--ac) 70%, var(--tx3));border-color:color-mix(in srgb, var(--ac) 35%, var(--bd));background:color-mix(in srgb, var(--ac) 12%, rgba(0,0,0,.25))}
+.vp-pill-item-lbl{font-weight:600;letter-spacing:.005em}
+.vp-pill-item-kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;font-weight:500;color:var(--tx3);background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:4px;padding:2px 6px;line-height:1;letter-spacing:.02em;flex-shrink:0;transition:color 120ms var(--ease-out),background 120ms var(--ease-out),border-color 120ms var(--ease-out)}
 .vp-stat{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);background:rgba(11,14,22,.72);border:1px solid var(--bd);border-radius:6px;padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
 /* Gizmo HUD — small DRO that pops next to the gizmo while a drag is active.
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
@@ -689,21 +719,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Display toggles — ambient helpers. */
 #tg-grid      {--btn-tint:#6ea8ff}
 #tg-bbox      {--btn-tint:#a78bfa}
-#tg-axes      {--btn-tint:#ff6b6b}
 #tg-hilite    {--btn-tint:#fbbf24}
 #tg-settings  {--btn-tint:var(--tx2)}
 #tg-materials {--btn-tint:#a78bfa}
 #tg-sun       {--btn-tint:#fbbf24}
 #tg-transform {--btn-tint:#34c759}
 #tg-screenshot{--btn-tint:#7dd3fc}
-
-/* Standard-view group (orthographic Top/Front/Side). Letter-glyph buttons
-   share the gizmo accent so the cluster reads as a "view tool". */
-#vw-top   {--btn-tint:#6ea8ff}
-#vw-front {--btn-tint:#6ea8ff}
-#vw-side  {--btn-tint:#6ea8ff}
-#vw-persp {--btn-tint:#6ea8ff}
-.vpb.vpb-text span{font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1;font-family:ui-sans-serif,system-ui,Inter,Helvetica,Arial,sans-serif}
 .vp-info{background:rgba(15,19,25,.7);border:1px solid var(--bd);backdrop-filter:blur(10px);border-radius:6px;padding:7px 11px;font-size:11px;color:var(--tx2);line-height:1.5;font-variant-numeric:tabular-nums;min-width:140px}
 .vp-info strong{color:var(--tx)}
 /* Triangle-count progress bar: 100% = starting tri count, shrinks as the
@@ -733,8 +754,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Settings popover — floats next to the top-right viewport buttons. Mirrors
    the sidebar `.section-b` layout so existing field/toggle markup drops in
    unchanged. Hidden by default; JS toggles `.show` and outside-click closes. */
-#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
-#vp-settings-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s linear 160ms;max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-settings-pop.show{opacity:1;visibility:visible;transform:translateY(0) scale(1);pointer-events:auto;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s}
 #vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid var(--s2)}
 #vp-settings-pop .pop-section:last-child{border-bottom:none}
 #vp-settings-pop .pop-section-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:10px}
@@ -743,8 +764,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
    beneath the new tg-materials button. Each cell is a rendered sphere
    showing the material on a neutral checkerboard; double-click opens the
    editor in a _DraggablePopup. */
-#vp-materials-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out);max-height:calc(100vh - 100px);overflow-y:auto}
-#vp-materials-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+#vp-materials-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s linear 160ms;max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-materials-pop.show{opacity:1;visibility:visible;transform:translateY(0) scale(1);pointer-events:auto;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s}
 #vp-materials-pop .pop-section{padding:10px 12px}
 #vp-materials-pop .pop-section-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-bottom:10px}
 #vp-materials-pop .pop-section-head .hint{font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3);font-size:10.5px}
@@ -1116,16 +1137,22 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to 10 units"><i data-lucide="move"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
         <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
-        <div style="height:10px"></div>
-        <button class="vpb vpb-text" id="vw-top" title="Top view — orthographic (looking down)"><span>T</span></button>
-        <button class="vpb vpb-text" id="vw-front" title="Front view — orthographic"><span>F</span></button>
-        <button class="vpb vpb-text" id="vw-side" title="Side view — orthographic (looking along X)"><span>S</span></button>
-        <button class="vpb" id="vw-persp" title="Perspective view — back to default 3D camera"><i data-lucide="video"></i></button>
+      </div>
+      <div class="vpc tc" id="vp-view-pill-wrap">
+        <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="listbox" aria-expanded="false" title="Camera view — click to switch (Cam / Top / Front / Side)">
+          <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
+          <span class="vp-pill-label">Cam</span>
+        </button>
+        <div id="vp-view-pill-menu" class="vp-pill-menu" role="listbox">
+          <button class="vp-pill-item active" type="button" data-view="persp" role="option"><span class="vp-pill-item-lbl">Cam</span><kbd class="vp-pill-item-kbd" data-kbd="1"></kbd></button>
+          <button class="vp-pill-item" type="button" data-view="top" role="option"><span class="vp-pill-item-lbl">Top</span><kbd class="vp-pill-item-kbd" data-kbd="2"></kbd></button>
+          <button class="vp-pill-item" type="button" data-view="front" role="option"><span class="vp-pill-item-lbl">Front</span><kbd class="vp-pill-item-kbd" data-kbd="3"></kbd></button>
+          <button class="vp-pill-item" type="button" data-view="side" role="option"><span class="vp-pill-item-lbl">Side</span><kbd class="vp-pill-item-kbd" data-kbd="4"></kbd></button>
+        </div>
       </div>
       <div class="vpc tr">
         <button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button>
         <button class="vpb" id="tg-bbox" title="Toggle bounding boxes for every part"><i data-lucide="square-dashed"></i></button>
-        <button class="vpb" id="tg-axes" title="Toggle world-axis triad"><svg viewBox="0 0 24 24"><path d="M12 22V12L4 8M12 12l8-4M12 12V2"/></svg></button>
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
         <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
         <button class="vpb" id="tg-materials" title="Materials in this file"><i data-lucide="palette"></i></button>
@@ -1934,6 +1961,14 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   const closeSettings  = () => { sPop?.classList.remove('show'); sBtn?.classList.remove('active'); };
   const closeMaterials = () => { mPop?.classList.remove('show'); mBtn?.classList.remove('active'); };
 
+  // Outside-click closing uses a contains() check rather than stopPropagation
+  // on the panel itself. Native <select> dropdowns render outside the DOM
+  // (the OS draws the option list), so the click that closes a select can
+  // land on the document instead of bubbling through the option element —
+  // which made stopPropagation miss it and the panel slammed shut whenever
+  // the user picked anything in a dropdown. contains() is robust because it
+  // looks at where the click actually lands and ignores anything inside
+  // the panel or its trigger button.
   if (sBtn && sPop) {
     sBtn.addEventListener('click', e => {
       e.stopPropagation();
@@ -1942,8 +1977,11 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
       sPop.classList.toggle('show', willOpen);
       sBtn.classList.toggle('active', willOpen);
     });
-    sPop.addEventListener('click', e => e.stopPropagation());
-    document.addEventListener('click', () => { if (sPop.classList.contains('show')) closeSettings(); });
+    document.addEventListener('mousedown', e => {
+      if (!sPop.classList.contains('show')) return;
+      if (sPop.contains(e.target) || sBtn.contains(e.target)) return;
+      closeSettings();
+    });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && sPop.classList.contains('show')) closeSettings(); });
   }
 
@@ -1958,7 +1996,11 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
         try { window._populateMaterialsList(); } catch (err) { console.warn('[mat] populate failed:', err); }
       }
     });
-    mPop.addEventListener('click', e => e.stopPropagation());
+    document.addEventListener('mousedown', e => {
+      if (!mPop.classList.contains('show')) return;
+      if (mPop.contains(e.target) || mBtn.contains(e.target)) return;
+      closeMaterials();
+    });
   }
 })();
 </script>
@@ -1976,7 +2018,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-hdri-sungizmo"></script>
+<script type="module" src="app-v2.js?v=2026050707-hdri-lights+pop"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
