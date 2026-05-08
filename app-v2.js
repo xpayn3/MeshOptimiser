@@ -27,7 +27,7 @@ const $ = id => document.getElementById(id);
 const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
   viewMode: 'solid', showGrid: true, showBboxes: false,
-  highlightSmall: false, autoRotate: false, bgMode: 'dark', fog: true,
+  highlightSmall: false, autoRotate: false, bgMode: 'dark', fog: false,
   fogNear: null, fogFar: null,     // null = auto-tune from model footprint
   fogIntensity: 1,                 // multiplier on fog falloff range
   hdriRotation: Math.PI * 0.25,    // radians around scene up (Z) for HDRI bg/env
@@ -128,11 +128,46 @@ function _lucide() {
   catch (_) { /* lucide CDN failed to load; silently fall back to placeholders */ }
 }
 
+// Tiny "listener bag" — collect per-modal listeners at open, remove them all
+// at close.
+//
+// Why this exists: this file has ~407 addEventListener vs ~35 removeEventListener.
+// Most one-off boot listeners are fine, but long-lived modal builders (material
+// editor, flatten dialog, batch rename, export) bind dozens of listeners per
+// open and rebind on every reopen. Their modal DOM nodes are reused (not
+// recreated), so each open stacks listeners on the same element. Across a long
+// session this leaks closures over fat state slices.
+//
+// Usage:
+//   const bag = _listenerBag();
+//   bag.on(el, 'click', fn);
+//   bag.on(otherEl, 'input', fn2, { passive: true });
+//   ...later, in the modal's close handler:
+//   bag.dispose();
+//
+// el may be null/undefined (querySelector miss) — bag.on quietly no-ops so
+// the call site doesn't have to guard each lookup.
+function _listenerBag() {
+  const disposers = [];
+  return {
+    on(el, ev, fn, opt) {
+      if (!el || typeof el.addEventListener !== 'function') return;
+      el.addEventListener(ev, fn, opt);
+      disposers.push(() => { try { el.removeEventListener(ev, fn, opt); } catch (_) {} });
+    },
+    dispose() {
+      while (disposers.length) {
+        try { disposers.pop()(); } catch (_) {}
+      }
+    },
+  };
+}
+
 let scene, camera, renderer, controls;
 let raycaster, pointer;
 let gridHelper;
 let frameCount = 0, lastFps = performance.now();
-let _sceneReady = false, _pendingFile = null;
+let _sceneReady = false, _pendingFile = null, _pendingFileOpts = null;
 let _stepWorker = null, _activeParse = null;
 
 function toast(title, msg='', type='info', dur=2400) {
@@ -140,7 +175,14 @@ function toast(title, msg='', type='info', dur=2400) {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
   el.dataset.state = 'enter';
-  el.innerHTML = `<span class="t">${title}</span>${msg ? `<span class="m">${msg}</span>` : ''}`;
+  // Escape title/msg here so callers can pass user-controlled strings (part
+  // names, user-group names, filenames) without thinking about it. Most call
+  // sites already do — this is belt-and-braces for the ones that don't.
+  // _escHtmlSafe() lives next to escapeHtml() further down; we inline the
+  // logic here to avoid the temporal-dead-zone (toast is hoisted into module
+  // top-level scope and may be called before escapeHtml's binding is reached).
+  const esc = (s) => s == null ? '' : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  el.innerHTML = `<span class="t">${esc(title)}</span>${msg ? `<span class="m">${esc(msg)}</span>` : ''}`;
   stack.appendChild(el);
   // Force a layout flush so the browser sees the "enter" state, then flip to
   // "open" so the CSS transition runs. Cheaper than animation/keyframes and
@@ -305,6 +347,153 @@ const appPrompt  = (msg, def, opts) => _Dialog.prompt(msg, def, opts);
 // browser handles drag/keyboard/touch — we just react to the input event,
 // rAF-coalescing the user's onChange so heavy consumers (3D rebuilds) don't
 // throttle the input. Click the value chip to type a number directly.
+// Universal wheel-step helper: while the user holds the thumb of any
+// `<input type="range">`, the mouse wheel cycles the step multiplier
+// through 1 → 10 → 100, snapping the slider to multiples of (step × mult).
+// A small pill tooltip floats above the thumb showing the active multiplier.
+// Multiplier resets to 1 at the start of every drag — fine granularity is
+// the safe default; coarsening is opt-in per gesture.
+//
+// Tooltip uses position:fixed coords from getBoundingClientRect so it
+// works regardless of the input's containing flex/grid layout.
+//
+// A global capture-phase pointerdown delegate (below) wires every range
+// input on first grab, so dynamic sliders in popovers/modals get the
+// feature without explicit calls. Set data-no-wheel-step="1" on a range
+// input to opt it out.
+function _attachWheelStepBehavior(rangeEl) {
+  if (!rangeEl || rangeEl._wheelStepWired) return null;
+  rangeEl._wheelStepWired = true;
+
+  const LEVELS = [1, 10, 100];
+  const state = { mult: 1, active: false, tip: null };
+
+  const lo = () => parseFloat(rangeEl.min) || 0;
+  const hi = () => parseFloat(rangeEl.max) || 100;
+  const baseStep = () => parseFloat(rangeEl.step) || 1;
+  const cur = () => parseFloat(rangeEl.value) || 0;
+
+  function quantize(v) {
+    if (state.mult <= 1) return v;
+    const a = lo(), b = hi();
+    const unit = baseStep() * state.mult;
+    let q = a + Math.round((v - a) / unit) * unit;
+    if (q < a) q = a;
+    // Clamp to the largest valid multiple instead of overshooting max.
+    if (q > b) q = a + Math.floor((b - a) / unit) * unit;
+    return q;
+  }
+  function placeTip() {
+    if (!state.tip) return;
+    const r = rangeEl.getBoundingClientRect();
+    const a = lo(), b = hi(), v = cur();
+    const p = b === a ? 0 : Math.max(0, Math.min(1, (v - a) / (b - a)));
+    // Thumb centre: 6px in from each edge of the track (half the 12px thumb).
+    state.tip.style.left = `${r.left + 6 + (r.width - 12) * p}px`;
+    state.tip.style.top  = `${r.top - 8}px`;
+  }
+  function showTip() {
+    if (state.tip) return;
+    const tip = document.createElement('div');
+    tip.className = 'scrub-mult-tip';
+    tip.style.cssText =
+      'position:fixed;transform:translate(-50%,-100%);' +
+      'background:var(--bg3);color:var(--tx);' +
+      'padding:2px 9px;border:1px solid var(--bd);' +
+      'border-radius:var(--r-pill);font-size:var(--fs-xs);' +
+      'font-weight:var(--fw-semibold);' +
+      'white-space:nowrap;pointer-events:none;' +
+      'box-shadow:var(--sh-pop);z-index:var(--z-tooltip);' +
+      'opacity:0;transition:opacity var(--dur-fast) var(--ease-out)';
+    document.body.appendChild(tip);
+    state.tip = tip;
+    updateTipText();
+    placeTip();
+    requestAnimationFrame(() => { if (state.tip === tip) tip.style.opacity = '1'; });
+  }
+  function updateTipText() {
+    if (!state.tip) return;
+    state.tip.textContent = `×${state.mult}`;
+  }
+  function hideTip() {
+    if (!state.tip) return;
+    const t = state.tip; state.tip = null;
+    t.style.opacity = '0';
+    setTimeout(() => t.remove(), 150);
+  }
+  function onWheel(e) {
+    if (!state.active) return;
+    e.preventDefault();
+    // deltaY < 0 → wheel up → coarser step (1 → 10 → 100).
+    const dir = e.deltaY < 0 ? +1 : -1;
+    const idx = Math.max(0, LEVELS.indexOf(state.mult));
+    const next = LEVELS[Math.max(0, Math.min(LEVELS.length - 1, idx + dir))];
+    if (next === state.mult) return;
+    state.mult = next;
+    // Tooltip materialises on the first wheel-driven mult change. showTip()
+    // is idempotent, so subsequent scrolls just refresh the text.
+    showTip();
+    updateTipText();
+    const c = cur(), q = quantize(c);
+    if (q !== c) {
+      rangeEl.value = String(q);
+      // Re-fire input so listeners (display sync, throttled rebuild, etc.)
+      // pick up the new value.
+      rangeEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    placeTip();
+  }
+  function activate() {
+    // Idempotent: the global delegate may call this for the same gesture
+    // that the per-element pointerdown listener also fires for.
+    if (state.active) return;
+    state.active = true;
+    state.mult = 1;
+    // Tooltip is created on first wheel scroll, not pointerdown — most drags
+    // are at ×1 and don't need a popup hovering over the slider. The wheel
+    // listener triggers showTip() the moment the user opts into coarsening.
+    window.addEventListener('wheel', onWheel, { passive: false });
+    const onUp = () => {
+      state.active = false;
+      hideTip();
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+  rangeEl.addEventListener('pointerdown', activate);
+  // Capture-phase snap — runs BEFORE any consumer's bubble-phase input
+  // handler reads range.value, so the rest of the chain sees the snapped
+  // number directly. Reposition tooltip while we're at it.
+  rangeEl.addEventListener('input', () => {
+    if (state.active && state.mult > 1) {
+      const c = cur(), q = quantize(c);
+      if (q !== c) rangeEl.value = String(q);
+    }
+    if (state.tip && state.active) placeTip();
+  }, true);
+
+  return { activate };
+}
+
+// Global capture-phase delegate: any range input the user grabs gets the
+// wheel-step feature on first touch. This means popover sliders (smart-fit
+// thresholds, future dialogs, etc.) inherit the behaviour without each
+// callsite calling _attachWheelStepBehavior. Idempotent: the per-element
+// listener installed by _attachWheelStepBehavior won't re-fire for THIS
+// gesture (it's added during the same dispatch we're already in), so we
+// also call activate() manually here. activate() guards against double-fire.
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target;
+  if (!el || el.tagName !== 'INPUT' || el.type !== 'range') return;
+  if (el.dataset.noWheelStep === '1') return;
+  if (el._wheelStepWired) return;
+  const api = _attachWheelStepBehavior(el);
+  api?.activate();
+}, true);
+
 function initScrubber(opts) {
   try { return _initScrubberImpl(opts); }
   catch (e) {
@@ -357,6 +546,13 @@ function _initScrubberImpl({
     const v = _pendingVal; _pendingVal = null;
     onChange(v);
   }
+
+  // Wheel-cycled step multiplier — shared with primitive-shape sliders via
+  // the universal helper. The helper installs its own pointerdown/wheel
+  // handlers and snaps range.value in capture phase, so by the time the
+  // input listener below reads range.value the snap already happened.
+  _attachWheelStepBehavior(range);
+
   range.addEventListener('input', () => {
     _syncDisplay();
     _pendingVal = stepToVal(parseInt(range.value, 10) || 0);
@@ -472,7 +668,12 @@ function setLoaderProgress(pct) {
 }
 function logProgress(msg, kind='') {
   const el = ((performance.now() - _loaderStart) / 1000).toFixed(1);
-  const lineHTML = `<span class="log-time">${el}s</span><span class="log-msg ${kind}">${msg}</span>`;
+  // Inline escape — msg often carries user file names ("foo<bar>.step"
+  // sanitised by serve.py is unlikely, but a renamed file from the picker
+  // can still contain HTML-special chars). Keep `kind` raw — it's a
+  // hard-coded class name from this file (err/warn/ok/'').
+  const escMsg = msg == null ? '' : String(msg).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const lineHTML = `<span class="log-time">${el}s</span><span class="log-msg ${kind}">${escMsg}</span>`;
   for (const id of ['loader-log', 'wl-log']) {
     const box = document.getElementById(id);
     if (!box) continue;
@@ -800,7 +1001,167 @@ function _loaderForName(name) {
   return m ? _MESH_LOADERS[m[1].toLowerCase()] : null;
 }
 
-function _handleSelectedFile(file) {
+// ── Import-settings modal ────────────────────────────────────────────────
+// Single popup that appears between picking a file and the actual load /
+// conversion. For STEP it exposes the XCAF read-mode toggles that drive the
+// slow Transfer pass — letting the user trade per-instance overrides /
+// layers / props for big speedups on huge assemblies. For mesh formats
+// it's mostly a confirmation step (append vs replace, frame-on-load).
+//
+// Persistence is per-extension: `import_skip_<ext>` controls whether the
+// modal pops at all, and `import_opts_<ext>` stores the last-used values.
+// GLB/glTF skip the modal entirely — there's nothing meaningful to ask.
+const _ImportSettings = (() => {
+  // Defaults — biased toward "fast" for STEP (SHUO/layers/props off) since
+  // the user's whole reason for the modal is to make conversion not take
+  // forever. Users can re-enable per-import or via persisted opts.
+  const DEFAULTS_STEP = {
+    quality: '0.5', colors: 'on',
+    shuo: false, layers: false, materials: true, names: true, props: false,
+    minSize: 0, force: false, instance: true,
+    append: false, fit: true,
+  };
+  const DEFAULTS_MESH = { append: false, fit: true };
+
+  function _ext(name) { const m = /\.([^.]+)$/.exec(name || ''); return m ? m[1].toLowerCase() : ''; }
+  function _skipModal(ext) {
+    if (ext === 'glb' || ext === 'gltf') return true;
+    try { return localStorage.getItem('import_skip_' + ext) === '1'; } catch (_) { return false; }
+  }
+  function _loadOpts(ext, base) {
+    try {
+      const raw = localStorage.getItem('import_opts_' + ext);
+      if (!raw) return { ...base };
+      return { ...base, ...JSON.parse(raw) };
+    } catch (_) { return { ...base }; }
+  }
+  function _saveOpts(ext, opts) {
+    try { localStorage.setItem('import_opts_' + ext, JSON.stringify(opts)); } catch (_) {}
+  }
+  function _setSkip(ext, skip) {
+    try {
+      if (skip) localStorage.setItem('import_skip_' + ext, '1');
+      else      localStorage.removeItem('import_skip_' + ext);
+    } catch (_) {}
+  }
+
+  // Populate the modal's form controls from `opts` and reveal the right
+  // per-format panel. Returns the fileExt for later read-back.
+  function _hydrate(file, opts, isStep) {
+    document.getElementById('import-modal-name').textContent = file.name;
+    const mb = file.size / 1048576;
+    const fmtLabel = isStep ? 'STEP' : (_ext(file.name) || 'file').toUpperCase();
+    document.getElementById('import-modal-meta').textContent = `${mb.toFixed(1)} MB · ${fmtLabel}`;
+    document.getElementById('import-panel-step').style.display = isStep ? '' : 'none';
+    document.getElementById('import-panel-mesh').style.display = isStep ? 'none' : '';
+    if (isStep) {
+      document.getElementById('imp-step-quality').value   = opts.quality;
+      document.getElementById('imp-step-colors').value    = opts.colors;
+      document.getElementById('imp-step-shuo').checked      = !!opts.shuo;
+      document.getElementById('imp-step-layers').checked    = !!opts.layers;
+      document.getElementById('imp-step-materials').checked = !!opts.materials;
+      document.getElementById('imp-step-names').checked     = !!opts.names;
+      document.getElementById('imp-step-props').checked     = !!opts.props;
+      document.getElementById('imp-step-min-size').value    = opts.minSize;
+      document.getElementById('imp-step-force').checked     = !!opts.force;
+      document.getElementById('imp-step-instance').checked  = !!opts.instance;
+    }
+    document.getElementById('imp-append').checked = !!opts.append;
+    document.getElementById('imp-fit').checked    = !!opts.fit;
+    document.getElementById('imp-skip-next').checked = false;
+  }
+
+  // Read form state back into a plain opts object.
+  function _read(isStep) {
+    const out = {
+      append: document.getElementById('imp-append').checked,
+      fit:    document.getElementById('imp-fit').checked,
+    };
+    if (isStep) {
+      out.quality   = document.getElementById('imp-step-quality').value;
+      out.colors    = document.getElementById('imp-step-colors').value;
+      out.shuo      = document.getElementById('imp-step-shuo').checked;
+      out.layers    = document.getElementById('imp-step-layers').checked;
+      out.materials = document.getElementById('imp-step-materials').checked;
+      out.names     = document.getElementById('imp-step-names').checked;
+      out.props     = document.getElementById('imp-step-props').checked;
+      out.minSize   = Math.max(0, Math.min(100, parseFloat(document.getElementById('imp-step-min-size').value) || 0));
+      out.force     = document.getElementById('imp-step-force').checked;
+      out.instance  = document.getElementById('imp-step-instance').checked;
+    }
+    return out;
+  }
+
+  // Show the modal. Resolves to an opts object if the user clicks Import,
+  // or null if they cancel / Esc / click backdrop. Bypasses the modal
+  // entirely (resolves with persisted defaults) when "don't ask" is set
+  // for this extension or the format is GLB/glTF.
+  function show(file, { forceAppend = false } = {}) {
+    return new Promise((resolve) => {
+      const ext = _ext(file.name);
+      const isStep = ext === 'step' || ext === 'stp';
+      const base = isStep ? DEFAULTS_STEP : DEFAULTS_MESH;
+      const opts = _loadOpts(ext, base);
+      if (forceAppend) opts.append = true;
+      if (_skipModal(ext)) { resolve(opts); return; }
+
+      const bg = document.getElementById('import-modal');
+      if (!bg) { resolve(opts); return; }
+      _hydrate(file, opts, isStep);
+
+      const cleanup = () => {
+        bg.classList.remove('show');
+        document.removeEventListener('keydown', onKey, true);
+        confirmBtn.removeEventListener('click', onConfirm);
+        cancelBtn.removeEventListener('click', onCancel);
+        closeBtn.removeEventListener('click', onCancel);
+        bg.removeEventListener('mousedown', onBackdrop);
+      };
+      const onConfirm = () => {
+        const next = _read(isStep);
+        _saveOpts(ext, next);
+        if (document.getElementById('imp-skip-next').checked) _setSkip(ext, true);
+        cleanup(); resolve(next);
+      };
+      const onCancel = () => { cleanup(); resolve(null); };
+      const onKey = (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        else if (e.key === 'Enter' && !e.shiftKey) {
+          // Enter confirms — but not if focus is in a number input (let it commit first)
+          const tag = (document.activeElement?.tagName || '').toLowerCase();
+          if (tag !== 'textarea') { e.preventDefault(); onConfirm(); }
+        }
+      };
+      const onBackdrop = (e) => { if (e.target === bg) onCancel(); };
+
+      const confirmBtn = document.getElementById('import-modal-confirm');
+      const cancelBtn  = document.getElementById('import-modal-cancel');
+      const closeBtn   = document.getElementById('import-modal-close');
+      confirmBtn.addEventListener('click', onConfirm);
+      cancelBtn.addEventListener('click', onCancel);
+      closeBtn.addEventListener('click', onCancel);
+      bg.addEventListener('mousedown', onBackdrop);
+      document.addEventListener('keydown', onKey, true);
+      bg.classList.add('show');
+      try { window.lucide?.createIcons(); } catch (_) {}
+      try { confirmBtn.focus(); } catch (_) {}
+    });
+  }
+
+  // Reset all per-format "don't ask" flags. Wired from the File menu.
+  function resetSkips() {
+    try {
+      for (const ext of ['step','stp','fbx','obj','3mf','stl']) {
+        localStorage.removeItem('import_skip_' + ext);
+      }
+    } catch (_) {}
+  }
+
+  return { show, resetSkips };
+})();
+window._ImportSettings = _ImportSettings;
+
+async function _handleSelectedFile(file) {
   if (!file) return;
   const isStep = /\.(step|stp)$/i.test(file.name);
   const meshLoader = _loaderForName(file.name);
@@ -808,32 +1169,83 @@ function _handleSelectedFile(file) {
     toast('Wrong file type', 'Supported: .step, .stp, .glb, .gltf, .fbx, .obj, .3mf, .stl', 'warn');
     return;
   }
-  // While the welcome modal is up, switch its body to the loading pane so
-  // the user sees progress in-place instead of a separate floating loader.
-  try { if (_welcomeActive()) _Welcome?.enterLoading(); } catch (_) {}
+  // The picker callers (_importWithPicker) pre-set state._importMode to true
+  // to flag "append, don't replace". The modal exposes the same toggle
+  // ("Append to current scene") so users get the choice no matter how they
+  // initiated the pick. We pre-fill the modal's append checkbox from this
+  // flag and clear it — the modal's read-back is the source of truth.
+  const forceAppend = !!state._importMode;
+  state._importMode = false;
+
+  // If the welcome modal is open, hide it before showing the import-settings
+  // modal — otherwise the two stack visually with the welcome popup still
+  // visible behind the new one. Track that it was open so we can re-open it
+  // on cancel (otherwise the user gets stranded with no picker visible).
+  const _welcomeWasOpen = (() => { try { return _welcomeActive(); } catch (_) { return false; } })();
+  if (_welcomeWasOpen) { try { _Welcome?.hide?.(); } catch (_) {} }
+
+  // Show the import-settings modal (skipped automatically for .glb/.gltf
+  // and when the user opted out for this format).
+  let opts;
+  try { opts = await _ImportSettings.show(file, { forceAppend }); }
+  catch (e) { console.warn('[import] modal failed:', e); opts = null; }
+  if (opts === null) {
+    // User cancelled. Re-open the welcome modal if that's where they came
+    // from, so they're not left staring at a blank app.
+    if (_welcomeWasOpen) { try { _Welcome?.show?.(); } catch (_) {} }
+    return;
+  }
+
+  // Apply universal opts. _importMode is read by the loaders / STEP path
+  // to switch between append and replace. We stomp it here so the rest of
+  // the pipeline doesn't need to know about the modal.
+  if (opts.append) state._importMode = true;
+  // Stash fit-to-view choice on a parallel flag the post-load hooks check.
+  state._importFitOnLoad = !!opts.fit;
+
+  // If the welcome was open and we hid it for the modal, restore it briefly
+  // and switch it to its loading pane so the user sees progress in-place
+  // (matches the pre-modal behavior). Otherwise we'd jump straight to the
+  // floating loader, losing the recent-files context they just came from.
+  if (_welcomeWasOpen) { try { _Welcome?.show?.(); _Welcome?.enterLoading?.(); } catch (_) {} }
+  else { try { if (_welcomeActive()) _Welcome?.enterLoading(); } catch (_) {} }
   try { _Welcome?.pushRecent(file); } catch (_) {}
   if (!_sceneReady) {
     _pendingFile = file;
-    // The loader overlay already conveys "wait for engine init" — no toast.
+    _pendingFileOpts = opts;
     return;
   }
   if (meshLoader) { meshLoader(file); return; }
-  // STEP: route through the local Python converter (/api/convert) — handles
-  // any size, no in-browser WASM cap, materials/colors flow through.
-  convertStepViaServer(file);
+  // STEP: route through the local Python converter, threading the opts
+  // through as query parameters so /api/convert can drive step2glb.py CLI.
+  convertStepViaServer(file, opts);
 }
 
 // Upload a STEP file to the running server's /api/convert endpoint, poll the
 // background conversion job, then load the resulting GLB. The server runs
 // step2glb.py natively so files of any size work.
-async function convertStepViaServer(file) {
+async function convertStepViaServer(file, opts = {}) {
   const mb = file.size / 1048576;
   setLoader(true, 'Uploading to local converter...', `${file.name} (${mb.toFixed(1)} MB)`);
   setLoaderProgress(2);
   logProgress(`uploading ${mb.toFixed(1)} MB to /api/convert`);
   try {
-    // POST file as raw body; server stores under inbox/<job_id>_<name>.step
-    const res = await fetch('/api/convert?name=' + encodeURIComponent(file.name) + '&quality=0.5', {
+    // Build the query string from the import-settings modal opts. The server
+    // has safe defaults for any param we omit, so older callers keep working.
+    const q = new URLSearchParams({
+      name:    file.name,
+      quality: String(opts.quality ?? '0.5'),
+    });
+    if (opts.colors)    q.set('colors',    opts.colors);
+    if (opts.shuo      !== undefined) q.set('shuo',      opts.shuo      ? '1' : '0');
+    if (opts.layers    !== undefined) q.set('layers',    opts.layers    ? '1' : '0');
+    if (opts.materials !== undefined) q.set('materials', opts.materials ? '1' : '0');
+    if (opts.names     !== undefined) q.set('names',     opts.names     ? '1' : '0');
+    if (opts.props     !== undefined) q.set('props',     opts.props     ? '1' : '0');
+    if (opts.instance  !== undefined) q.set('instance',  opts.instance  ? '1' : '0');
+    if (opts.force) q.set('force', '1');
+    if (opts.minSize > 0) q.set('min_size', String(opts.minSize));
+    const res = await fetch('/api/convert?' + q.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: file,
@@ -1680,7 +2092,7 @@ const _CmdK = (() => {
         <div class="cmdk-item${i === activeIdx ? ' active' : ''}" data-idx="${i}" style="display:flex;align-items:center;gap:var(--space-xl);padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:var(--fs-md);background:${i === activeIdx ? 'var(--ac-soft)' : 'transparent'}">
           <span style="color:var(--tx3);font-size:var(--fs-sm);min-width:54px">${a.group}</span>
           <span style="flex:1;color:var(--tx)">${a.label}</span>
-          ${a.kbd ? `<span style="color:var(--tx3);font-family:ui-monospace,monospace;font-size:var(--fs-sm);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 7px">${a.kbd}</span>` : ''}
+          ${a.kbd ? `<span style="color:var(--tx3);font-family:var(--font-sans);font-size:var(--fs-sm);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 7px">${a.kbd}</span>` : ''}
         </div>
       `).join('');
     list.querySelectorAll('.cmdk-item').forEach(el => {
@@ -1744,7 +2156,7 @@ const _Shortcuts = (() => {
         <div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3);margin-bottom:6px">${g}</div>
         ${items.map(a => `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:var(--fs-md)">
           <span style="color:var(--tx)">${a.label}</span>
-          <span style="color:var(--tx2);font-family:ui-monospace,monospace;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 8px;font-size:var(--fs-sm)">${a.kbd}</span>
+          <span style="color:var(--tx2);font-family:var(--font-sans);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 8px;font-size:var(--fs-sm)">${a.kbd}</span>
         </div>`).join('')}
       </div>
     `).join('');
@@ -3595,11 +4007,15 @@ async function loadStepFile(file) {
     setLoader(true, 'Building 3D scene...', `${result.meshes.length} parts`);
     await new Promise(r => setTimeout(r, 16));
     const importMode = !!state._importMode; state._importMode = false;
+    // Frame-on-load preference comes from the import-settings modal. Default
+    // is true; only the modal can opt out. It applies to both fresh loads
+    // and appends.
+    const fitOnLoad = state._importFitOnLoad !== false; state._importFitOnLoad = undefined;
     if (!importMode) clearModel();
     await buildModelFromMeshes(result.meshes, hashes, ctrl, { append: importMode });
     if (ctrl.cancelled) throw new Error('cancelled');
     setLoaderProgress(95);
-    if (!importMode) fitToView();
+    if (!importMode && fitOnLoad) fitToView();
     if (!importMode) state._loadedFilename = file.name;
     if (importMode) onSceneActivated(); else onModelLoaded(file.name);
     setLoaderProgress(100);
@@ -4442,9 +4858,9 @@ function _drawScreenshotStamp(ctx, w, h) {
 
   const lines = [
     { text: modelName, font: `600 ${fsTitle}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#ffffff' },
-    { text: `${partCount} parts · ${sbVerts} verts · ${sbMem}`, font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#cccccc' },
-    { text: `${sbSelected} selected · ${sbFlagged} flagged`,    font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#a0a0a0' },
-    { text: ts,                                                 font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#808080' },
+    { text: `${partCount} parts · ${sbVerts} verts · ${sbMem}`, font: `500 ${fsBody}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#cccccc' },
+    { text: `${sbSelected} selected · ${sbFlagged} flagged`,    font: `500 ${fsBody}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#a0a0a0' },
+    { text: ts,                                                 font: `500 ${fsBody}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#808080' },
   ];
 
   // Measure the widest line so the box fits content snugly.
@@ -7893,8 +8309,9 @@ function refreshPropertiesPanel() {
     const isInst = !!p.group;
     const tCls   = isInst ? 'inst' : 'part';
     const tIcon  = isInst ? 'copy' : 'box';
+    const _safeName = escapeHtml(p.name);
     nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instanced part (×' + p.group.parts.length + ')' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
-               `<span class="prop-name" title="${p.name}">${p.name}</span>`;
+               `<span class="prop-name" title="${_safeName}">${_safeName}</span>`;
     const mat = _matOfPart(p);
     if (mat) {
       const label = _matLabel(mat);
@@ -13231,11 +13648,29 @@ function wireUI() {
     }
   });
   // Show/hide format-specific toggles based on the selected export format.
+  const _EXP_META = {
+    glb:  { title:'GLB',  desc:'Modern binary glTF · Best for web & Cinema 4D 2026' },
+    gltf: { title:'GLTF', desc:'JSON glTF 2.0 · Maximum compatibility' },
+    fbx:  { title:'FBX',  desc:'Binary FBX 7.4 · Blender, Maya, 3ds Max, Houdini, Unreal' },
+    usdz: { title:'USDZ', desc:'OpenUSD · Apple Quick Look, Reality Composer, C4D R26+' },
+    obj:  { title:'OBJ',  desc:'Wavefront OBJ · Universal, geometry only' },
+    stl:  { title:'STL',  desc:'Binary STL · Standard for 3D printing' },
+    ply:  { title:'PLY',  desc:'Polygon File Format · Geometry + vertex colors' },
+    csv:  { title:'CSV',  desc:'Parts list spreadsheet · Name, color, tris, verts, dimensions' },
+  };
+  function _syncExpHeading(fmt) {
+    const m = _EXP_META[fmt] || { title: fmt.toUpperCase(), desc: '' };
+    const h = $('exp-fmt-heading'); if (h) h.textContent = m.title;
+    const d = $('exp-fmt-desc');    if (d) d.textContent = m.desc;
+    const b = $('export-confirm');  if (b) b.textContent = `Export ${m.title}`;
+  }
+
   // Draco is GLB-only; ASCII FBX is FBX-only. Dim and disable when irrelevant
   // so users can see the option exists without us silently ignoring it.
   function _refreshFormatToggles() {
     const sel = document.querySelector('#format-grid .fmt-card.selected');
     const fmt = sel?.dataset.fmt || 'glb';
+    _syncExpHeading(fmt);
     const isCsv = fmt === 'csv';
 
     // Draco — GLB only
@@ -13817,6 +14252,10 @@ function _wirePrimitiveSliders(rootEl, p) {
     const valEl = row.querySelector('[data-prim-value]');
     if (!input || !fId) return;
 
+    // Universal wheel-step (1 / 10 / 100). Same UX as the sidebar scrubbers —
+    // hold the thumb, scroll wheel to coarsen, see "Step ×N" tooltip.
+    if (input.type === 'range') _attachWheelStepBehavior(input);
+
     const applyVal = (v) => {
       if (Number.isNaN(v) && typeof v !== 'boolean') return;
       p.primParams[fId] = v;
@@ -13974,8 +14413,10 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   applyPerfMode();
   rebuildTree(); refreshFlagged();
   // Replace mode: frame the loaded model. Import mode: don't yank the camera
-  // away from whatever the user was looking at.
-  if (!importMode) fitToView();
+  // away from whatever the user was looking at. Either way the import-settings
+  // modal can suppress the framing (state._importFitOnLoad === false).
+  const fitOnLoad = state._importFitOnLoad !== false; state._importFitOnLoad = undefined;
+  if (!importMode && fitOnLoad) fitToView();
   if (!importMode) state._loadedFilename = file.name;
   // Save-Scene marker only embedded in GLBs we exported ourselves; skip the
   // walk for other formats. Import-mode: don't apply saved scene state from
@@ -14245,8 +14686,9 @@ async function boot() {
   Log.success('Ready', { tag: 'boot' });
   if (_pendingFile) {
     const f = _pendingFile; _pendingFile = null;
+    const opts = _pendingFileOpts || {}; _pendingFileOpts = null;
     const meshLoader = _loaderForName(f.name);
-    if (meshLoader) meshLoader(f); else convertStepViaServer(f);
+    if (meshLoader) meshLoader(f); else convertStepViaServer(f, opts);
   } else if (_Prefs?.get?.('welcomeOnBoot') !== false) {
     // First-run welcome — only when no model is queued AND the pref is on.
     try { _Welcome.show(); } catch (_) {}
@@ -14659,7 +15101,7 @@ function buildMaterialsPanel() {
       ${thumbHtml}
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         <span style="color:var(--tx);font-weight:var(--fw-medium)">${escapeHtml(name)}</span>
-        <span style="display:block;font-family:ui-monospace,monospace;font-size:var(--fs-xs);color:var(--tx3)">${hex} · ${info.count}</span>
+        <span style="display:block;font-family:var(--font-sans);font-size:var(--fs-xs);color:var(--tx3)">${hex} · ${info.count}</span>
       </span>
       <button class="mat-row-edit" style="background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:5px;cursor:pointer;flex-shrink:0;transition:background 120ms,border-color 120ms,color 120ms">
         <i data-lucide="sliders-horizontal" style="width:13px;height:13px"></i>
@@ -15149,7 +15591,7 @@ function _openMaterialEditor(info) {
       .mat-edit-preview-canvas{flex:0 0 92px;width:92px;height:92px;border-radius:var(--r-md);background:var(--bg-checker);box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.04);object-fit:cover;display:block}
       .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
       .mat-edit-preview-name{font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-edit-preview-type{font-size:var(--fs-10);color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:var(--tracking-wide);text-transform:uppercase}
+      .mat-edit-preview-type{font-size:var(--fs-10);color:var(--tx3);font-family:var(--font-sans);letter-spacing:var(--tracking-wide);text-transform:uppercase}
       .mat-edit-preview-uses{font-size:var(--fs-xs);color:var(--tx2)}
 
       /* Sections: padding + uppercase title style mirror the materials
@@ -15166,7 +15608,7 @@ function _openMaterialEditor(info) {
       .mat-color-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
       .mat-color-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx2)}
       .mat-color-row input[type="color"]{width:28px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer}
-      .mat-color-hex{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-xs);color:var(--tx3);flex:1}
+      .mat-color-hex{font-family:var(--font-sans);font-size:var(--fs-xs);color:var(--tx3);flex:1}
       .mat-edit-toggle-row{display:flex;flex-wrap:wrap;gap:var(--space-xs);padding:3px 0}
       .mat-edit-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
       .mat-edit-toggle:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
@@ -15185,7 +15627,7 @@ function _openMaterialEditor(info) {
       .mat-tex-thumb.has-tex{border-color:var(--ac-line)}
       .mat-tex-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
       .mat-tex-label{font-size:var(--fs-11);color:var(--tx2);line-height:1.1}
-      .mat-tex-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-10);color:var(--tx3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-tex-name{font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-tex-name.empty::before{content:'— no texture —';color:var(--tx3);opacity:.55}
       .mat-tex-btn{flex:0 0 auto;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:4px 6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
       .mat-tex-btn:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
@@ -15215,7 +15657,7 @@ function _openMaterialEditor(info) {
       .mat-row-val .scrub-range{flex:1;min-width:0;width:auto}
       .mat-row-val .scrub-rhs{display:flex;align-items:center;gap:3px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:2px 9px;height:20px;transition:background 120ms,border-color 120ms,color 120ms}
       .mat-row-val .scrub-rhs:hover{background:var(--bg3);border-color:var(--bd2)}
-      .mat-row-val .scrub-value{font-size:var(--fs-11);font-weight:var(--fw-medium);min-width:0;height:auto;padding:0;border-radius:0;background:transparent;color:var(--tx2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:var(--tracking-mono)}
+      .mat-row-val .scrub-value{font-size:var(--fs-11);font-weight:var(--fw-medium);min-width:0;height:auto;padding:0;border-radius:0;background:transparent;color:var(--tx2);font-family:var(--font-sans);letter-spacing:var(--tracking-mono)}
       .mat-row-val .scrub-value:hover{background:transparent;color:var(--tx)}
       .mat-row-val .scrub.editing .scrub-value{background:transparent;color:var(--tx)}
       .mat-row-val .scrub-unit{font-size:var(--fs-10);color:var(--tx3)}
@@ -15233,11 +15675,11 @@ function _openMaterialEditor(info) {
       .mat-swatch::-webkit-color-swatch{border:none;border-radius:var(--r-xs)}
       .mat-swatch::-moz-color-swatch{border:none;border-radius:var(--r-xs)}
       .mat-swatch:hover{border-color:var(--bd2)}
-      .mat-color-hex-v2{flex:0 0 auto;width:11ch;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-12);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
+      .mat-color-hex-v2{flex:0 0 auto;width:11ch;min-width:0;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
       .mat-color-hex-v2:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
       .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(107,141,255,.18)}
       .mat-color-hex-v2.invalid{border-color:var(--er);color:var(--er)}
-      .mat-color-pct{flex:0 0 52px;width:52px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-12);color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
+      .mat-color-pct{flex:0 0 52px;width:52px;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
       .mat-color-pct::-webkit-outer-spin-button,.mat-color-pct::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
       .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(107,141,255,.18)}
@@ -15257,7 +15699,7 @@ function _openMaterialEditor(info) {
       .mat-tex-pop-thumb svg{width:18px;height:18px;stroke:var(--tx3);fill:none;stroke-width:1.6;opacity:.45}
       .mat-tex-pop-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
       .mat-tex-pop-prop{font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx);text-transform:uppercase;letter-spacing:var(--tracking-wide)}
-      .mat-tex-pop-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-tex-pop-name{font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-tex-pop-row{display:flex;gap:var(--space-sm)}
       .mat-tex-pop-btn{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:6px 8px;color:var(--tx);font-size:var(--fs-11);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 120ms,border-color 120ms,color 120ms}
       .mat-tex-pop-btn:hover{background:var(--bg3);border-color:var(--bd2)}
@@ -17304,7 +17746,7 @@ function _ctxBuild(items, x, y) {
       ? `<i data-lucide="${it.icon}" style="width:14px;height:14px;flex:0 0 14px;color:${it.danger ? 'var(--er)' : 'var(--tx2)'};stroke-width:2"></i>`
       : `<span style="width:14px;flex:0 0 14px"></span>`;
     const kbdHtml = it.kbd
-      ? `<span style="margin-left:auto;padding:1px 5px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-bottom-color:rgba(0,0,0,.35);border-radius:3px;font:600 10px ui-monospace,monospace;color:var(--tx2)">${it.kbd}</span>`
+      ? `<span style="margin-left:auto;padding:1px 5px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-bottom-color:rgba(0,0,0,.35);border-radius:3px;font:600 10px var(--font-sans);color:var(--tx2)">${it.kbd}</span>`
       : '';
     row.innerHTML = `${iconHtml}<span style="flex:1;min-width:0">${it.label}</span>${kbdHtml}`;
     if (it.danger) row.style.color = 'var(--er)';
@@ -20209,7 +20651,7 @@ rebuildTree = function() {
     ghdr.innerHTML =
       `<span class="tree-chev" data-act="toggle">▾</span>` +
       `<span class="tree-folder"><i data-lucide="folder"></i></span>` +
-      `<span class="tree-label">${g.name} <span class="tree-badge">${g.partIds.size}</span></span>` +
+      `<span class="tree-label">${escapeHtml(g.name)} <span class="tree-badge">${g.partIds.size}</span></span>` +
       `<span class="tree-group-actions">` +
         `<button data-act="rename" title="Rename"><i data-lucide="pencil"></i></button>` +
         `<button data-act="ungroup" title="Ungroup"><i data-lucide="x"></i></button>` +
@@ -20447,10 +20889,10 @@ const _FlattenDialog = (() => {
       #_flat-dialog .flat-opt-text{flex:1;min-width:0}
       #_flat-dialog .flat-opt-label{font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--tx);margin-bottom:3px;letter-spacing:var(--tracking-tight)}
       #_flat-dialog .flat-opt-help{font-size:var(--fs-sm);color:var(--tx3);line-height:var(--lh-base)5}
-      #_flat-dialog .flat-opt-help code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ac);background:rgba(0,0,0,.28);padding:0 5px;border-radius:var(--r-xs);font-size:var(--fs-11)}
+      #_flat-dialog .flat-opt-help code{font-family:var(--font-sans);color:var(--ac);background:rgba(0,0,0,.28);padding:0 5px;border-radius:var(--r-xs);font-size:var(--fs-11)}
       #_flat-dialog .flat-row{display:flex;align-items:center;gap:var(--space-md);margin-top:9px}
       #_flat-dialog .flat-row label{font-size:var(--fs-11);color:var(--tx3);font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
-      #_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      #_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
       #_flat-dialog .flat-row input[type=number]:focus{border-color:rgba(107,141,255,.55);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
       #_flat-dialog .flat-toggles{display:flex;flex-direction:column;gap:2px}
       #_flat-dialog .flat-tog{display:flex;align-items:center;gap:var(--space-lg);font-size:var(--fs-md);color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:7px;transition:background .14s ease,color .14s ease}
@@ -22005,9 +22447,9 @@ const _BatchRenameDialog = (() => {
       .brn-pane.active{display:flex}
       .brn-row{display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap}
       .brn-row label{font-size:var(--fs-11);color:var(--tx3);min-width:60px;font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
-      .brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input[type=text]:focus{border-color:rgba(107,141,255,.55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input[type=number]:focus{border-color:rgba(107,141,255,.55);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input::placeholder{color:var(--tx3);opacity:.55}
       .brn-row select.mac-sel{padding:7px 9px;font-size:var(--fs-md)}
@@ -22028,13 +22470,13 @@ const _BatchRenameDialog = (() => {
       .brn-preset:hover{border-color:rgba(107,141,255,.32);background:rgba(107,141,255,.06)}
       .brn-preset:active{transform:translateY(.5px)}
       .brn-preset .n{font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--tx)}
-      .brn-preset .d{font-size:var(--fs-11);color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .brn-preset .d{font-size:var(--fs-11);color:var(--tx3);font-family:var(--font-sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .brn-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;background:rgba(0,0,0,.22);border-top:1px solid rgba(255,255,255,.04);font-size:var(--fs-sm);color:var(--tx3);flex-shrink:0;flex-wrap:wrap;gap:var(--space-sm);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-snug)}
       .brn-summary .ok{color:var(--ok);font-weight:var(--fw-semibold)}
       .brn-summary .warn{color:var(--wn);font-weight:var(--fw-semibold)}
       .brn-summary .err{color:var(--er);font-weight:var(--fw-semibold)}
       .brn-preview{flex:1 1 auto;min-height:0;overflow:auto;background:transparent}
-      .brn-preview-table{width:100%;border-collapse:collapse;font-size:var(--fs-12);font-family:ui-monospace,monospace}
+      .brn-preview-table{width:100%;border-collapse:collapse;font-size:var(--fs-12);font-family:var(--font-sans)}
       .brn-preview-table tr{border-bottom:1px solid var(--bd)}
       .brn-preview-table tr.warn{background:rgba(251,191,36,.05)}
       .brn-preview-table tr.error{background:rgba(255,107,107,.06)}
@@ -22084,12 +22526,12 @@ const _BatchRenameDialog = (() => {
       .brn-collapsible.open .brn-collapsible-b{display:flex}
       .brn-token-pop{position:absolute;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:var(--r-lg);box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06);padding:4px;z-index:600;display:none;max-height:280px;overflow:auto;min-width:280px}
       .brn-token-pop.show{display:block}
-      .brn-token-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:ui-monospace,monospace;font-size:var(--fs-12);color:var(--tx)}
+      .brn-token-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx)}
       .brn-token-item:hover,.brn-token-item.active{background:var(--ac-soft)}
       .brn-token-item .desc{color:var(--tx3);font-size:var(--fs-11);font-family:inherit;font-weight:var(--fw-regular)}
       .brn-token-item .tname{font-weight:var(--fw-semibold);color:var(--ac)}
       .brn-help{font-size:var(--fs-xs);color:var(--tx3);padding-left:68px}
-      .brn-help code{font-family:ui-monospace,monospace;color:var(--ac);background:rgba(0,0,0,.25);padding:0 4px;border-radius:3px}
+      .brn-help code{font-family:var(--font-sans);color:var(--ac);background:rgba(0,0,0,.25);padding:0 4px;border-radius:3px}
     `;
     document.head.appendChild(s);
   }
@@ -22727,6 +23169,618 @@ redoLast = function() {
   return _origRedoLast_duplicate();
 };
 
+// =====================================================================
+// Measurement tool — distance between two snapped points (MVP).
+// =====================================================================
+// Lives as a self-contained IIFE so future additions (angle, area,
+// radius) can land here without disturbing the rest of the file. Picks
+// re-use the existing raycaster/pointer globals; rendered entities go
+// into a dedicated THREE.Group attached to `scene` so model transforms
+// don't drag measurements around.
+//
+// State:
+//   active                 — measure mode on?
+//   pendingA               — first picked Vec3 awaiting the second click
+//   items[]                — committed measurements: { id, kind, a[3], b[3], value, _line, _label }
+//
+// Persistence: getSerialized() / setSerialized() for Save Scene.
+// Undo/redo: 'measure-add', 'measure-delete', 'measure-clear' op types
+// handled by the wrappers around undoLast/redoLast at the bottom.
+const _Measure = (() => {
+  let active = false;
+  let pendingA = null;
+  let group = null;
+  const items = [];
+
+  // Snap radius in screen pixels. Below this, the click snaps to the nearest
+  // triangle vertex of the hit face. Above, fall back to the raw hit point.
+  const PIXEL_SNAP_RADIUS = 22;
+  const _v = new THREE.Vector3();
+  const _v2 = new THREE.Vector3();
+  const _instM = new THREE.Matrix4();
+
+  function _ensureGroup() {
+    if (group && group.parent) return group;
+    if (!scene) return null;
+    if (!group) {
+      group = new THREE.Group();
+      group.name = '__measurements__';
+      // Rendered after everything else so labels stay legible through fog.
+      group.renderOrder = 999;
+      // matrixAutoUpdate stays on (default) — we move sprites by setting
+      // .position directly; no need to opt out.
+    }
+    if (group.parent !== scene) scene.add(group);
+    return group;
+  }
+
+  function _fmtVal(value) {
+    const u = (state.displayUnit && state.displayUnit !== 'none') ? ' ' + state.displayUnit : '';
+    const v = value;
+    const txt = v >= 1000 ? v.toFixed(0)
+              : v >= 100  ? v.toFixed(1)
+              : v >= 10   ? v.toFixed(2)
+              :             v.toFixed(3);
+    return txt + u;
+  }
+
+  function _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  function _makeLabelSprite(text) {
+    // Canvas-backed sprite. The texture is regenerated on every label change
+    // (cheap — a few hundred ms of canvas paint amortised over the lifetime
+    // of the measurement). Sprites billboard to the camera automatically.
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const fontPx = 13;
+    const padPx = 7;
+    // Measure
+    const meas = document.createElement('canvas');
+    const m = meas.getContext('2d');
+    m.font = `${fontPx}px var(--font-sans), -apple-system, BlinkMacSystemFont, sans-serif`;
+    const w = Math.ceil(m.measureText(text).width);
+    const cw = (w + padPx * 2);
+    const ch = (fontPx + padPx * 2);
+    // Paint at DPR resolution so the label stays crisp on hi-DPI screens.
+    meas.width = cw * dpr; meas.height = ch * dpr;
+    m.scale(dpr, dpr);
+    m.font = `${fontPx}px var(--font-sans), -apple-system, BlinkMacSystemFont, sans-serif`;
+    m.fillStyle = 'rgba(20,20,20,.92)';
+    _roundRect(m, 0, 0, cw, ch, 4);
+    m.fill();
+    m.strokeStyle = 'rgba(255,255,255,.10)';
+    m.lineWidth = 1;
+    m.stroke();
+    m.fillStyle = '#ededed';
+    m.textBaseline = 'middle';
+    m.textAlign = 'center';
+    m.fillText(text, cw / 2, ch / 2 + 1);
+    const tex = new THREE.CanvasTexture(meas);
+    tex.minFilter = THREE.LinearFilter;
+    tex.anisotropy = 1;
+    const mat = new THREE.SpriteMaterial({
+      map: tex, depthTest: false, depthWrite: false, transparent: true,
+    });
+    const sprite = new THREE.Sprite(mat);
+    // Scale relative to model diag so the label reads at any zoom level.
+    // The aspect ratio of the canvas is preserved.
+    const baseScale = Math.max(1, state.modelDiag || 1) * 0.04;
+    sprite.scale.set(baseScale * (cw / ch), baseScale, 1);
+    sprite.renderOrder = 1000;
+    sprite.userData._isMeasureLabel = true;
+    return sprite;
+  }
+
+  function _makeLine(a, b, color = 0xfbbf24) {
+    const g = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3().fromArray(a),
+      new THREE.Vector3().fromArray(b),
+    ]);
+    // depthTest:false keeps the line readable when the measurement passes
+    // through occluding geometry — CAD viewer convention.
+    const mat = new THREE.LineBasicMaterial({
+      color, depthTest: false, depthWrite: false, transparent: true, opacity: 0.95,
+    });
+    const line = new THREE.Line(g, mat);
+    line.renderOrder = 999;
+    return line;
+  }
+
+  function _disposeRendered(it) {
+    if (it._line) {
+      group?.remove(it._line);
+      it._line.geometry.dispose();
+      it._line.material.dispose();
+      it._line = null;
+    }
+    if (it._label) {
+      group?.remove(it._label);
+      it._label.material.map?.dispose();
+      it._label.material.dispose();
+      it._label = null;
+    }
+  }
+
+  function _addRendered(it) {
+    const grp = _ensureGroup();
+    if (!grp) return;
+    const line = _makeLine(it.a, it.b);
+    const label = _makeLabelSprite(_fmtVal(it.value));
+    label.position.set(
+      (it.a[0] + it.b[0]) / 2,
+      (it.a[1] + it.b[1]) / 2,
+      (it.a[2] + it.b[2]) / 2,
+    );
+    grp.add(line);
+    grp.add(label);
+    it._line = line;
+    it._label = label;
+  }
+
+  function _hit(ev) {
+    if (!camera || !renderer) return null;
+    if (state.partsRoot) {
+      state.partsRoot.updateMatrix();
+      state.partsRoot.updateMatrixWorld(true);
+    }
+    const r = renderer.domElement.getBoundingClientRect();
+    const targets = [];
+    const seen = new Set();
+    for (const p of state.parts) {
+      if (p.deleted || !p.visible) continue;
+      if (p.mesh && !seen.has(p.mesh.id)) { targets.push(p.mesh); seen.add(p.mesh.id); }
+    }
+    for (const g of (state.instancedGroups || [])) targets.push(g.instanced);
+    if (!targets.length) return null;
+    pointer.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+    pointer.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects(targets, false);
+    return hits[0] || null;
+  }
+
+  function _snapToVertex(hit, screenX, screenY) {
+    // Snap to the nearest of the hit triangle's three vertices. Returns null
+    // if no vertex is within PIXEL_SNAP_RADIUS — caller falls back to raw point.
+    const obj = hit.object;
+    const geom = obj?.geometry;
+    if (!geom?.attributes?.position || !hit.face) return null;
+    const pos = geom.attributes.position;
+    const idxs = [hit.face.a, hit.face.b, hit.face.c];
+    const isInst = obj.isInstancedMesh && hit.instanceId != null;
+    if (isInst) obj.getMatrixAt(hit.instanceId, _instM);
+    const r = renderer.domElement.getBoundingClientRect();
+    const W = r.width, H = r.height;
+    let bestPx = Infinity;
+    let bestPt = null;
+    for (const i of idxs) {
+      _v.fromBufferAttribute(pos, i);
+      if (isInst) _v.applyMatrix4(_instM);
+      _v.applyMatrix4(obj.matrixWorld);
+      _v2.copy(_v).project(camera);
+      const sx = (_v2.x * 0.5 + 0.5) * W;
+      const sy = (-_v2.y * 0.5 + 0.5) * H;
+      const dx = sx - screenX;
+      const dy = sy - screenY;
+      const px = Math.hypot(dx, dy);
+      if (px < bestPx) { bestPx = px; bestPt = _v.clone(); }
+    }
+    return (bestPx <= PIXEL_SNAP_RADIUS) ? bestPt : null;
+  }
+
+  function _resolvePoint(ev) {
+    const hit = _hit(ev);
+    if (!hit) return null;
+    const r = renderer.domElement.getBoundingClientRect();
+    const sx = ev.clientX - r.left, sy = ev.clientY - r.top;
+    const snapped = _snapToVertex(hit, sx, sy);
+    return snapped || hit.point.clone();
+  }
+
+  function _refreshHint() {
+    const el = document.getElementById('msr-info');
+    if (!el) return;
+    if (!active) el.textContent = 'Click Measure or press M, then pick two points on geometry.';
+    else if (!pendingA) el.textContent = 'Pick the first point. Esc exits measure mode.';
+    else el.textContent = 'Pick the second point. Esc cancels.';
+  }
+
+  function _refreshButtonState() {
+    document.getElementById('msr-toggle')?.classList.toggle('active', active);
+    document.getElementById('msr-add')?.classList.toggle('active', active);
+  }
+
+  function setActive(on) {
+    on = !!on;
+    if (active === on) return;
+    active = on;
+    document.body.classList.toggle('msr-mode', active);
+    if (!active) _cancelPending();
+    _refreshButtonState();
+    _refreshHint();
+  }
+
+  function _cancelPending() {
+    pendingA = null;
+    requestRender();
+  }
+
+  function _commit(b) {
+    const a = pendingA;
+    if (!a) return;
+    const dist = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    const it = {
+      id: 'msr_' + Date.now().toString(36) + '_' + Math.floor(Math.random() * 999),
+      kind: 'distance',
+      a: [a.x, a.y, a.z],
+      b: [b.x, b.y, b.z],
+      value: dist,
+    };
+    items.push(it);
+    _addRendered(it);
+    state.history.push({ type: 'measure-add', id: it.id });
+    state.redo.length = 0;
+    if (typeof _refreshUndoRedoButtons === 'function') _refreshUndoRedoButtons();
+    pendingA = null;
+    rebuildList();
+    _refreshHint();
+    requestRender();
+  }
+
+  function handleClick(ev) {
+    if (!active) return false;
+    const p = _resolvePoint(ev);
+    if (!p) {
+      // Click landed on empty space. If pendingA exists, cancel current
+      // measurement (matches Onshape / Glovius UX). If not, just no-op.
+      if (pendingA) {
+        _cancelPending();
+        _refreshHint();
+        requestRender();
+      }
+      return true;
+    }
+    if (!pendingA) {
+      pendingA = p;
+      _refreshHint();
+    } else {
+      _commit(p);
+    }
+    return true;
+  }
+
+  function handleEsc() {
+    if (!active) return false;
+    if (pendingA) { _cancelPending(); _refreshHint(); }
+    else setActive(false);
+    return true;
+  }
+
+  function _findIndexById(id) { return items.findIndex(x => x.id === id); }
+
+  function _serialiseItem(it) {
+    return { id: it.id, kind: it.kind, a: it.a.slice(), b: it.b.slice(), value: it.value };
+  }
+
+  function deleteOne(id, recordUndo = true) {
+    const idx = _findIndexById(id);
+    if (idx < 0) return;
+    const snap = _serialiseItem(items[idx]);
+    _disposeRendered(items[idx]);
+    items.splice(idx, 1);
+    if (recordUndo) {
+      state.history.push({ type: 'measure-delete', snap });
+      state.redo.length = 0;
+      if (typeof _refreshUndoRedoButtons === 'function') _refreshUndoRedoButtons();
+    }
+    rebuildList();
+    requestRender();
+  }
+
+  function clearAll() {
+    if (!items.length) return;
+    const snaps = items.map(_serialiseItem);
+    while (items.length) {
+      const it = items.pop();
+      _disposeRendered(it);
+    }
+    state.history.push({ type: 'measure-clear', snaps });
+    state.redo.length = 0;
+    if (typeof _refreshUndoRedoButtons === 'function') _refreshUndoRedoButtons();
+    rebuildList();
+    requestRender();
+  }
+
+  // Undo/redo helpers exposed to the wrappers below. They mutate items[]
+  // directly — pushing to state.history is the wrappers' job since they
+  // dispatch on op type.
+  function _undoAdd(opId) {
+    const idx = _findIndexById(opId);
+    if (idx < 0) return null;
+    const snap = _serialiseItem(items[idx]);
+    _disposeRendered(items[idx]);
+    items.splice(idx, 1);
+    rebuildList();
+    requestRender();
+    return snap;
+  }
+  function _redoAdd(snap) {
+    items.push({ ...snap, a: snap.a.slice(), b: snap.b.slice() });
+    _addRendered(items[items.length - 1]);
+    rebuildList();
+    requestRender();
+  }
+  function _undoDelete(snap) {
+    const it = { ...snap, a: snap.a.slice(), b: snap.b.slice() };
+    items.push(it);
+    _addRendered(it);
+    rebuildList();
+    requestRender();
+  }
+  function _redoDelete(opId) {
+    deleteOne(opId, /*recordUndo*/ false);
+  }
+  function _undoClear(snaps) {
+    for (const s of snaps) {
+      const it = { ...s, a: s.a.slice(), b: s.b.slice() };
+      items.push(it);
+      _addRendered(it);
+    }
+    rebuildList();
+    requestRender();
+  }
+  function _redoClear() {
+    while (items.length) {
+      const it = items.pop();
+      _disposeRendered(it);
+    }
+    rebuildList();
+    requestRender();
+  }
+
+  function rebuildList() {
+    const list = document.getElementById('msr-list');
+    if (!list) return;
+    if (!items.length) {
+      list.innerHTML = '';
+      return;
+    }
+    // String build with escapeHtml on the value (the only user-visible field
+    // that originates from runtime state). kind is hard-coded; id is alphanum.
+    list.innerHTML = items.map(it => `
+      <div class="msr-row" data-id="${it.id}">
+        <span class="msr-kind">${it.kind}</span>
+        <span class="msr-val" title="${escapeHtml(_fmtVal(it.value))}">${escapeHtml(_fmtVal(it.value))}</span>
+        <button class="msr-del" type="button" title="Delete this measurement"><i data-lucide="x"></i></button>
+      </div>`).join('');
+    list.querySelectorAll('.msr-row .msr-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.msr-row');
+        const id = row?.dataset?.id;
+        if (id) deleteOne(id);
+      });
+    });
+    _lucide();
+  }
+
+  function getSerialized() { return items.map(_serialiseItem); }
+
+  function setSerialized(list) {
+    while (items.length) {
+      const it = items.pop();
+      _disposeRendered(it);
+    }
+    if (Array.isArray(list)) {
+      for (const s of list) {
+        if (!s?.a || !s?.b || s.a.length !== 3 || s.b.length !== 3) continue;
+        const it = {
+          id: s.id || ('msr_' + Date.now().toString(36) + '_' + Math.floor(Math.random() * 999)),
+          kind: s.kind || 'distance',
+          a: s.a.slice(),
+          b: s.b.slice(),
+          value: typeof s.value === 'number' ? s.value : Math.hypot(s.a[0]-s.b[0], s.a[1]-s.b[1], s.a[2]-s.b[2]),
+        };
+        items.push(it);
+        _addRendered(it);
+      }
+    }
+    rebuildList();
+    requestRender();
+  }
+
+  function init() {
+    _ensureGroup();
+    rebuildList();
+    _refreshHint();
+    _refreshButtonState();
+  }
+
+  return {
+    setActive, isActive: () => active, toggle: () => setActive(!active),
+    handleClick, handleEsc, init, rebuildList,
+    deleteOne, clearAll, getSerialized, setSerialized,
+    _undoAdd, _redoAdd, _undoDelete, _redoDelete, _undoClear, _redoClear,
+  };
+})();
+window._Measure = _Measure;
+
+// Wire toolbar / sidebar buttons + canvas pointer interception + keybind.
+const _origWireUI_measure = wireUI;
+wireUI = function() {
+  _origWireUI_measure();
+  const tbBtn   = document.getElementById('msr-toggle');
+  const sideBtn = document.getElementById('msr-add');
+  const clrBtn  = document.getElementById('msr-clear');
+  tbBtn?.addEventListener('click',   () => _Measure.toggle());
+  sideBtn?.addEventListener('click', () => _Measure.toggle());
+  clrBtn?.addEventListener('click',  () => _Measure.clearAll());
+
+  // Capture-phase canvas pointer interception. Three concerns:
+  //  1. Block OrbitControls left-button drag while measuring.
+  //  2. Block the canvas mousedown handler (~line 12598) that records
+  //     `mouseDown = {x,y}` — without this, the window mouseup handler
+  //     at ~line 12634 fires pickAtPointer + selectPart on our click.
+  //  3. Run _Measure.handleClick on mouseup before the window-level
+  //     selection handler can reach it.
+  // stopImmediatePropagation kills subsequent listeners on the same
+  // element AND every parent (so the window mouseup at line 12634 is
+  // suppressed too). Right-click + middle-click still bubble through so
+  // the user can pan/orbit while measuring.
+  const canvas = document.getElementById('canvas');
+  if (canvas) {
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!_Measure.isActive() || e.button !== 0) return;
+      e.stopPropagation();
+      e.preventDefault();
+    }, { capture: true });
+    canvas.addEventListener('mousedown', (e) => {
+      if (!_Measure.isActive() || e.button !== 0) return;
+      // stopImmediatePropagation rather than stopPropagation: the existing
+      // canvas mousedown handler is registered at bubble phase on the same
+      // element, and only stopImmediatePropagation halts SAME-element
+      // listeners across phases.
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    }, { capture: true });
+    canvas.addEventListener('mouseup', (e) => {
+      if (!_Measure.isActive() || e.button !== 0) return;
+      e.stopImmediatePropagation();
+      _Measure.handleClick(e);
+    }, { capture: true });
+  }
+
+  // M toggles measure mode; Esc cancels current pick or exits mode.
+  // Skipped while typing into inputs so the user can type "m" in fields.
+  window.addEventListener('keydown', (e) => {
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.key === 'm' || e.key === 'M') {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      _Measure.toggle();
+      return;
+    }
+    if (e.key === 'Escape' && _Measure.isActive()) {
+      // Don't preventDefault unless we actually consumed it — let other Esc
+      // handlers (modal dismiss etc.) still fire if we're not in a pending
+      // state.
+      if (_Measure.handleEsc()) e.preventDefault();
+    }
+  });
+
+  // Boot-time init: scene may not exist yet at wireUI time, but
+  // _ensureGroup() is lazy and re-runs on first commit if needed.
+  setTimeout(() => _Measure.init(), 0);
+};
+
+// Undo/redo wrappers — dispatch the three measure op types ahead of the
+// chained core dispatcher. Snap data round-trips through both directions:
+// each cross-pop pushes the SAME snap onto the destination stack so a
+// later redo can resurrect with full point coordinates.
+const _origUndoLast_measure = undoLast;
+undoLast = function() {
+  const op = state.history[state.history.length - 1];
+  if (op && (op.type === 'measure-add' || op.type === 'measure-delete' || op.type === 'measure-clear')) {
+    state.history.pop();
+    if (op.type === 'measure-add') {
+      // Capture full snap so redo can rebuild geometry+label.
+      const snap = _Measure._undoAdd(op.id);
+      if (snap) state.redo.push({ type: 'measure-add', snap });
+    } else if (op.type === 'measure-delete') {
+      // op.snap holds the original delete payload. Restore it, then carry
+      // the same snap forward so a redo of this delete can re-remove by id.
+      _Measure._undoDelete(op.snap);
+      state.redo.push({ type: 'measure-delete', snap: op.snap });
+    } else {
+      _Measure._undoClear(op.snaps);
+      state.redo.push({ type: 'measure-clear', snaps: op.snaps });
+    }
+    if (typeof _finalizeUndo === 'function') _finalizeUndo();
+    return;
+  }
+  return _origUndoLast_measure();
+};
+const _origRedoLast_measure = redoLast;
+redoLast = function() {
+  const op = state.redo && state.redo[state.redo.length - 1];
+  if (op && (op.type === 'measure-add' || op.type === 'measure-delete' || op.type === 'measure-clear')) {
+    state.redo.pop();
+    if (op.type === 'measure-add') {
+      _Measure._redoAdd(op.snap);
+      // The history op for an add only needs the id — undoLast captures a
+      // fresh snap from live items[] before disposing.
+      state.history.push({ type: 'measure-add', id: op.snap.id });
+    } else if (op.type === 'measure-delete') {
+      // Drop by id, then push the original snap back onto history so a
+      // subsequent undo can resurrect with the full coordinates.
+      _Measure._redoDelete(op.snap.id);
+      state.history.push({ type: 'measure-delete', snap: op.snap });
+    } else {
+      _Measure._redoClear();
+      state.history.push({ type: 'measure-clear', snaps: op.snaps });
+    }
+    if (typeof _refreshUndoRedoButtons === 'function') _refreshUndoRedoButtons();
+    requestRender();
+    return;
+  }
+  return _origRedoLast_measure();
+};
+
+// Persist measurements into Save Scene metadata so reopening a sidecar
+// restores the user's annotation work alongside camera + selection state.
+const _origCollectSceneState_measure = _collectSceneState;
+_collectSceneState = function() {
+  const s = _origCollectSceneState_measure();
+  try {
+    const list = _Measure.getSerialized();
+    if (list && list.length) s.measurements = list;
+  } catch (_) { /* boot ordering safety: _Measure may not be ready yet */ }
+  return s;
+};
+const _origApplySceneState_measure = _applySceneState;
+_applySceneState = function(s) {
+  _origApplySceneState_measure(s);
+  if (s && Array.isArray(s.measurements)) {
+    try { _Measure.setSerialized(s.measurements); }
+    catch (e) { console.warn('[measure] restore failed:', e); }
+  }
+};
+
+// Wipe measurements when a new model loads. Their world-space points refer
+// to geometry that's about to be replaced; carrying them across feels
+// disorienting (the labels float in empty space). setSerialized([]) wipes
+// without pushing an undo entry — clearModel resets a lot of state and
+// shouldn't load up a redo stack the user can't make sense of after a
+// model swap. _applySceneState reseeds from the sidecar after this, so
+// reopening a saved scene still restores measurements.
+const _origClearModel_measure = clearModel;
+clearModel = function() {
+  try { _Measure.setSerialized([]); } catch (_) {}
+  return _origClearModel_measure();
+};
+
+// Surface measure mode through the command palette (⌘K) and keyboard
+// shortcuts overlay so users find it without scanning the toolbar.
+try {
+  _Actions.list.push(
+    { id:'msrToggle', group:'Measure', label:'Toggle measure mode', kbd:'M',
+      run: () => { try { _Measure.toggle(); } catch (_) {} } },
+    { id:'msrClear',  group:'Measure', label:'Clear all measurements',
+      run: () => { try { _Measure.clearAll(); } catch (_) {} } },
+  );
+} catch (_) { /* _Actions may not be alive in unit-test contexts */ }
+
 // Toolbar wiring + F2 shortcut
 function _openBatchRenameDialog(anchor) { return _BatchRenameDialog.open(anchor); }
 
@@ -22766,7 +23820,7 @@ refreshPropertiesPanel = function() {
       const totalTri = [...g.partIds].reduce((s, id) => s + (getPart(id)?.triCount || 0), 0);
       const html = `
         <div style="display:grid;gap:var(--space-md);font-size:var(--fs-12)">
-          <div style="font-weight:var(--fw-semibold);color:var(--ac2);font-size:var(--fs-lg)">📁 ${g.name}</div>
+          <div style="font-weight:var(--fw-semibold);color:var(--ac2);font-size:var(--fs-lg)">📁 ${escapeHtml(g.name)}</div>
           <div style="color:var(--tx2)">${g.partIds.size} parts · ${fmtNum(totalTri)} triangles</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin-top:4px">
             <button class="btn" data-grp-act="rename" data-gid="${g.id}">Rename</button>
@@ -24027,7 +25081,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-hue{position:relative;width:100%;height:12px;margin-top:10px;border-radius:var(--r-sm);cursor:pointer;background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%);touch-action:none;user-select:none}
       .cp-hue-cursor{position:absolute;top:-2px;width:6px;height:16px;border-radius:3px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.5);transform:translateX(-50%);pointer-events:none}
       .cp-row{display:flex;gap:var(--space-md);align-items:center;margin-top:10px}
-      .cp-hex{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:5px;color:var(--tx);font:500 11.5px ui-monospace,Menlo,monospace;padding:5px 7px;outline:none;text-transform:uppercase}
+      .cp-hex{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:5px;color:var(--tx);font:500 11.5px var(--font-sans);padding:5px 7px;outline:none;text-transform:uppercase}
       .cp-hex:focus{border-color:var(--ac);background:rgba(107,141,255,.08)}
       .cp-preview{width:24px;height:24px;border-radius:5px;border:1px solid rgba(255,255,255,.1);box-shadow:0 1px 3px rgba(0,0,0,.4);flex-shrink:0}
       .cp-presets{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--space-xs);margin-top:10px}

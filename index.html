@@ -101,9 +101,10 @@
   --fs-11:11px;
   --fs-12:12px;
 
-  /* Font stacks */
+  /* Font stack — sans only. Monospace was retired; numeric alignment is
+     handled via font-variant-numeric:tabular-nums where digits need to line
+     up (counters, transform inputs). */
   --font-sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
-  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 
   /* Font weights */
   --fw-regular:400;
@@ -122,7 +123,7 @@
   /* Letter spacing (tracking) */
   --tracking-tight:-.005em; /* numerical readouts, tabular */
   --tracking-snug:.005em;   /* subtle tighten on small body */
-  --tracking-mono:.02em;    /* monospaced numbers */
+  --tracking-mono:.02em;    /* tabular-num readouts (legacy name; sans-only now) */
   --tracking-wide:.04em;    /* uppercase labels (most common) */
   --tracking-wider:.06em;   /* very small caps */
 
@@ -340,7 +341,7 @@ body.resizing *{cursor:col-resize !important}
 .brand-menu-item:hover svg,.brand-menu-item:focus-visible svg{stroke:var(--tx)}
 .brand-menu-item .lbl{flex:1 1 auto}
 .brand-menu-item .ext{width:12px;height:12px;stroke:var(--tx3);opacity:.7}
-.brand-menu-item .kbd{font-family:var(--mono,ui-monospace,monospace);font-size:var(--fs-xs);color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 6px;letter-spacing:var(--tracking-wide)}
+.brand-menu-item .kbd{font-family:var(--font-sans);font-size:var(--fs-xs);color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 6px;letter-spacing:var(--tracking-wide)}
 .brand-menu-foot{display:flex;align-items:center;justify-content:center;gap:var(--space-md);padding:6px 10px 4px;font-size:var(--fs-xs);color:var(--tx3)}
 .brand-menu-foot .dot{opacity:.5}
 /* Lucide placeholders: keep layout stable before lucide.createIcons() runs */
@@ -366,8 +367,8 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 /* FPS pill — compact rounded badge with a green pulse dot. Color shifts on
    the dot are driven from JS via .warn / .bad classes. */
 .stat-pill{padding:4px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);gap:var(--space-sm);line-height:1;white-space:nowrap}
-.stat-pill strong{font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:var(--tracking-mono);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums}
-.stat-pill .fps-label{font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-9);font-weight:var(--fw-semibold);letter-spacing:.1em;color:var(--tx3);text-transform:uppercase}
+.stat-pill strong{font-family:var(--font-sans);font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:var(--tracking-mono);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums}
+.stat-pill .fps-label{font-family:var(--font-sans);font-size:var(--fs-9);font-weight:var(--fw-semibold);letter-spacing:.1em;color:var(--tx3);text-transform:uppercase}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
 .dot.warn{background:var(--wn)}.dot.off{background:var(--tx3)}
 
@@ -398,12 +399,12 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 #transform-panel .tform-col-label{font-size:var(--fs-2xs);color:var(--tx3);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px}
 #transform-panel .tform-col-label[data-tform-col]{cursor:context-menu;user-select:none;border-radius:3px;transition:background var(--dur-fast) ease,color var(--dur-fast) ease}
 #transform-panel .tform-col-label[data-tform-col]:hover{color:var(--tx2);background:rgba(255,255,255,.04)}
-#transform-panel .tform-row-label{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-semibold);align-self:center;text-align:center;font-family:var(--font-mono)}
+#transform-panel .tform-row-label{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-semibold);align-self:center;text-align:center;font-family:var(--font-sans)}
 #transform-panel .tform-row-label.x{color:var(--er)}
 #transform-panel .tform-row-label.y{color:var(--ok)}
 #transform-panel .tform-row-label.z{color:var(--ac)}
 #transform-panel .tform-num{position:relative}
-#transform-panel .tform-unit{position:absolute;right:22px;top:50%;transform:translateY(-50%);font-size:var(--fs-2xs);color:var(--tx3);pointer-events:none;font-family:var(--font-mono);letter-spacing:.01em}
+#transform-panel .tform-unit{position:absolute;right:22px;top:50%;transform:translateY(-50%);font-size:var(--fs-2xs);color:var(--tx3);pointer-events:none;font-family:var(--font-sans);letter-spacing:.01em}
 #transform-panel .tform-input{padding-right:22px;text-align:right}
 /* Number-input cell with custom stepper buttons on each side. The native
    spinner is hidden (-webkit-/Firefox) since the visible buttons own the
@@ -417,7 +418,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 #transform-panel .tform-step:active{background:var(--ac-tint-18);color:var(--ac)}
 #transform-panel .tform-step:disabled{cursor:not-allowed;opacity:.4}
 #transform-panel .tform-step:disabled:hover{background:transparent;color:var(--tx3)}
-#transform-panel .tform-input{font:inherit;font-family:var(--font-mono);font-size:var(--fs-11);color:var(--tx);background:transparent;border:none;padding:5px 4px;outline:none;width:100%;min-width:0;text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+#transform-panel .tform-input{font:inherit;font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx);background:transparent;border:none;padding:5px 4px;outline:none;width:100%;min-width:0;text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
 #transform-panel .tform-input::-webkit-outer-spin-button,
 #transform-panel .tform-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 #transform-panel .tform-input:disabled{cursor:not-allowed}
@@ -498,7 +499,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-mat-btn .prop-mat-color{flex-shrink:0;width:36px;height:36px;border-radius:var(--r-sm);border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
 .prop-mat-btn .prop-mat-color.prop-mat-color-mixed{background:linear-gradient(135deg,var(--ac),var(--ac2),var(--ok))}
 .prop-mat-btn .prop-mat-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:var(--fs-md);color:var(--tx);font-weight:var(--fw-medium)}
+.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-sans);font-size:var(--fs-md);color:var(--tx);font-weight:var(--fw-medium)}
 .prop-mat-btn .prop-mat-sub{font-size:var(--fs-xs);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:var(--tracking-snug)}
 .prop-mat-btn .prop-mat-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .prop-mat-btn .prop-mat-action{width:24px;height:24px;border-radius:5px;border:none;background:transparent;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background 100ms ease,color 100ms ease}
@@ -511,7 +512,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-mat-multi-list .prop-mat-sphere,.prop-mat-multi-list .prop-mat-color{width:28px!important;height:28px!important}
 .prop-mat-multi-list .prop-mat-name{font-size:var(--fs-12)}
 .prop-mat-multi-list .prop-mat-sub{font-size:var(--fs-10)}
-.prop-mat-btn .prop-mat-name-input{font:inherit;font-family:var(--font-mono);font-size:var(--fs-md);font-weight:var(--fw-medium);color:var(--tx-on-accent);background:var(--ac-tint-14);border:1px solid var(--ac);border-radius:var(--r-xs);padding:1px 5px;margin:-2px 0;width:100%;min-width:0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
+.prop-mat-btn .prop-mat-name-input{font:inherit;font-family:var(--font-sans);font-size:var(--fs-md);font-weight:var(--fw-medium);color:var(--tx-on-accent);background:var(--ac-tint-14);border:1px solid var(--ac);border-radius:var(--r-xs);padding:1px 5px;margin:-2px 0;width:100%;min-width:0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
 .prop-bar-wrap{display:flex;align-items:center;gap:var(--space-md);margin:8px 0 10px;font-size:var(--fs-11);color:var(--tx3)}
 .prop-bar-wrap .prop-bar-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3);flex-shrink:0}
 .prop-bar-wrap .prop-bar-icon svg{width:13px;height:13px}
@@ -540,12 +541,12 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prim-row .prim-value{grid-column:2;grid-row:1;justify-self:end}
 .prim-row .prim-slider{grid-column:1 / -1;grid-row:2}
 .prim-row .prim-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.prim-row .prim-value{flex:0 0 auto;font-family:var(--font-mono);font-size:var(--fs-11);color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:2px 9px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:var(--lh-snug);transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast)}
+.prim-row .prim-value{flex:0 0 auto;font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:2px 9px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:var(--lh-snug);transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast)}
 input.prim-value{width:52px;outline:none;cursor:text;-moz-appearance:textfield}
 input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 input.prim-value:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.25);box-shadow:0 0 0 3px var(--ac-tint-18);color:var(--tx)}
 .prim-row .prim-value:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
-.prim-unit{font-family:var(--font-mono);font-size:var(--fs-11);color:var(--tx3);white-space:nowrap;line-height:1}
+.prim-unit{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx3);white-space:nowrap;line-height:1}
 .prim-row .prim-slider{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;outline:none;cursor:pointer;margin:0;padding:0;display:block}
 .prim-row .prim-slider::-webkit-slider-runnable-track{box-sizing:border-box;height:3px;border-radius:var(--r-pill);background:var(--bg3);border:none}
 .prim-row .prim-slider::-moz-range-track{box-sizing:border-box;height:3px;border-radius:var(--r-pill);background:var(--bg3);border:none}
@@ -569,7 +570,7 @@ input.prim-value:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.25)
    Color coding mirrors how C4D / Maya / 3ds Max signal node types — assemblies
    warm/orange so subassembly trees pop visually, leaves cool/green so the
    eye finds the actual geometry quickly. */
-.tree-expand{width:13px;height:13px;display:inline-grid;place-items:center;border:1px solid var(--bd2);border-radius:var(--r-2xs);font-size:var(--fs-11);line-height:1;cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:var(--font-mono);font-weight:var(--fw-semibold);user-select:none;transition:border-color 100ms,color 100ms,background 100ms}
+.tree-expand{width:13px;height:13px;display:inline-grid;place-items:center;border:1px solid var(--bd2);border-radius:var(--r-2xs);font-size:var(--fs-11);line-height:1;cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:var(--font-sans);font-weight:var(--fw-semibold);user-select:none;transition:border-color 100ms,color 100ms,background 100ms}
 .tree-expand:hover{border-color:var(--ac);color:var(--ac);background:var(--ac-tint-08)}
 /* Spacer used in place of the +/- on leaf rows so all icons line up vertically */
 .tree-expand-spacer{width:13px;height:13px;flex-shrink:0}
@@ -839,13 +840,13 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .vp-pill-item.active{background:color-mix(in srgb, var(--ac) 18%, transparent);color:var(--ac)}
 .vp-pill-item.active .vp-pill-item-kbd{color:color-mix(in srgb, var(--ac) 70%, var(--tx3));border-color:color-mix(in srgb, var(--ac) 35%, var(--bd));background:color-mix(in srgb, var(--ac) 12%, rgba(0,0,0,.25))}
 .vp-pill-item-lbl{font-weight:var(--fw-semibold);letter-spacing:var(--tracking-snug)}
-.vp-pill-item-kbd{font-family:var(--font-mono);font-size:var(--fs-10);font-weight:var(--fw-medium);color:var(--tx3);background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 6px;line-height:1;letter-spacing:var(--tracking-mono);flex-shrink:0;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
-.vp-stat{font-family:var(--font-mono);font-size:var(--fs-11);color:var(--tx2);background:rgba(13,13,13,.72);border:1px solid var(--bd);border-radius:var(--r-sm);padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
+.vp-pill-item-kbd{font-family:var(--font-sans);font-size:var(--fs-10);font-weight:var(--fw-medium);color:var(--tx3);background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 6px;line-height:1;letter-spacing:var(--tracking-mono);flex-shrink:0;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.vp-stat{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx2);background:rgba(13,13,13,.72);border:1px solid var(--bd);border-radius:var(--r-sm);padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
 /* Gizmo HUD — small DRO that pops next to the gizmo while a drag is active.
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
    per-axis Euler) for rotate, scale factor for scale. Position is updated
    each frame from the pivot's projected screen coords. */
-#gizmo-hud{position:absolute;left:0;top:0;display:none;background:var(--glass-strong);border:1px solid var(--bd);border-radius:var(--r-sm);padding:6px 9px;font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-xs);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:0 6px 18px rgba(0,0,0,.5);pointer-events:none;z-index:var(--z-sticky);backdrop-filter:blur(8px);white-space:nowrap;line-height:var(--lh-relaxed)}
+#gizmo-hud{position:absolute;left:0;top:0;display:none;background:var(--glass-strong);border:1px solid var(--bd);border-radius:var(--r-sm);padding:6px 9px;font-family:var(--font-sans);font-size:var(--fs-xs);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:0 6px 18px rgba(0,0,0,.5);pointer-events:none;z-index:var(--z-sticky);backdrop-filter:blur(8px);white-space:nowrap;line-height:var(--lh-relaxed)}
 #gizmo-hud.show{display:block}
 #gizmo-hud .ghud-row{display:flex;align-items:center;gap:var(--space-md)}
 #gizmo-hud .ghud-mode{font-size:var(--fs-9);font-weight:var(--fw-bold);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-right:2px}
@@ -900,6 +901,26 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 /* Gizmo group — translate + rotate share the accent blue. */
 #gz-translate {--btn-tint:var(--ac)}
 #gz-rotate    {--btn-tint:var(--ac)}
+
+/* Measure tool — uses warning amber so it's visually distinct from gizmos and
+   reads as "active mode that consumes clicks". */
+#msr-toggle   {--btn-tint:var(--wn)}
+body.msr-mode #canvas{cursor:crosshair}
+.msr-row{
+  display:flex;align-items:center;gap:var(--space-sm);
+  padding:5px 8px;background:var(--bg2);border:1px solid var(--bd);
+  border-radius:var(--r-sm);font-size:var(--fs-11);color:var(--tx2);
+  font-variant-numeric:tabular-nums;
+}
+.msr-row .msr-kind{flex:0 0 auto;color:var(--tx3);font-size:var(--fs-10);text-transform:uppercase;letter-spacing:var(--tracking-wide)}
+.msr-row .msr-val{flex:1;color:var(--tx);font-weight:var(--fw-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msr-row .msr-del{
+  flex:0 0 auto;background:transparent;border:none;color:var(--tx3);
+  width:20px;height:20px;border-radius:4px;display:grid;place-items:center;cursor:pointer;
+  transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
+}
+.msr-row .msr-del:hover{background:var(--er-soft);color:var(--er)}
+.msr-row .msr-del svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
 
 /* Display toggles — ambient helpers. */
 #tg-grid      {--btn-tint:var(--ac)}
@@ -1022,9 +1043,9 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .mat-edit-body .mat-color-row{display:flex;align-items:center;gap:var(--space-lg)}
 .mat-edit-body .mat-color-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx3);font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
 .mat-edit-body input[type=color]{width:36px;height:24px;border:1px solid rgba(255,255,255,.10);border-radius:5px;background:transparent;cursor:pointer;padding:0;flex-shrink:0}
-.mat-edit-body .mat-color-hex{font-family:var(--font-mono);font-size:var(--fs-sm);color:var(--tx2);margin-left:auto}
+.mat-edit-body .mat-color-hex{font-family:var(--font-sans);font-size:var(--fs-sm);color:var(--tx2);margin-left:auto}
 
-.kbd{display:inline-block;padding:1px 5px;font-size:var(--fs-10);background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:var(--font-mono)}
+.kbd{display:inline-block;padding:1px 5px;font-size:var(--fs-10);background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:var(--font-sans)}
 
 /* Loader */
 #loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:transparent;z-index:100}
@@ -1041,7 +1062,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .loader-bar-fill{height:100%;width:35%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:3px;transition:width .3s ease;position:absolute;left:0}
 .loader-bar-fill.indeterminate{animation:slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
 @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
-.loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid var(--hairline);border-radius:7px;padding:8px 10px;font:11px/1.55 ui-monospace,Menlo,monospace;color:var(--tx2)}
+.loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid var(--hairline);border-radius:7px;padding:8px 10px;font:11px/1.55 var(--font-sans);color:var(--tx2)}
 .log-line{display:flex;gap:var(--space-md)}
 .log-time{color:var(--tx3);flex-shrink:0;width:48px}
 .log-msg.ok{color:var(--ok)}.log-msg.warn{color:var(--wn)}.log-msg.err{color:var(--er)}
@@ -1079,7 +1100,28 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .modal-h .x:hover{color:var(--tx)}
 .modal-b{padding:18px 20px;flex:1 1 auto;overflow-y:auto;min-height:0}
 .modal-f{padding:14px 20px;border-top:1px solid var(--bd);display:flex;gap:var(--space-md);justify-content:flex-end;flex:0 0 auto;background:var(--bg1)}
-.fmt-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md);margin-bottom:14px}
+/* Export window — Spline-style two-panel */
+.exp-win{display:flex;width:740px;max-width:96vw;height:530px;background:var(--bg1);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh);transform:translateY(8px) scale(.97);opacity:0;transition:transform var(--dur-slow) var(--ease-out),opacity 180ms var(--ease-out)}
+#export-modal.show .exp-win{transform:translateY(0) scale(1);opacity:1}
+.exp-sidebar{width:200px;flex:0 0 200px;background:var(--bg2);border-right:1px solid var(--bd);overflow-y:auto;padding:6px 6px 12px}
+.exp-cat-label{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3);padding:12px 8px 3px}
+.exp-cat-label:first-child{padding-top:6px}
+.fmt-grid{display:block}
+.fmt-card{all:unset;display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:var(--r-md);cursor:pointer;width:100%;box-sizing:border-box;transition:background 80ms}
+.fmt-card:hover{background:rgba(255,255,255,.05)}
+.fmt-card.selected{background:rgba(107,141,255,.12)}
+.fmt-card.selected .fmt-icon{background:rgba(107,141,255,.22);color:var(--ac)}
+.fmt-card.selected .fmt-name{color:var(--ac)}
+.fmt-icon{width:28px;height:28px;background:var(--bg3);border-radius:var(--r-sm);display:grid;place-items:center;flex:0 0 28px;transition:background 80ms,color 80ms}
+.fmt-icon i{display:block;width:13px;height:13px}
+.fmt-name{font-size:var(--fs-sm);color:var(--tx);font-weight:var(--fw-medium);display:block;line-height:1.2}
+.fmt-sub{font-size:10px;color:var(--tx3);display:block;line-height:1.3;margin-top:1px}
+.exp-content{flex:1;display:flex;flex-direction:column;min-width:0}
+.exp-content-h{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:flex-start;justify-content:space-between;flex:0 0 auto;gap:10px}
+.exp-fmt-title{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);line-height:1.1}
+.exp-fmt-desc{font-size:var(--fs-sm);color:var(--tx3);margin-top:3px;line-height:1.4;max-width:340px}
+.exp-content-b{flex:1 1 auto;overflow-y:auto;padding:16px 20px;min-height:0}
+.exp-content-f{padding:12px 20px;border-top:1px solid var(--bd);flex:0 0 auto}
 /* Format-compatibility reference table — opened from "Compare formats" in
    the Export modal header. Cell contents use ● for "yes" + qualifier text
    ("PBR", "flat", "single mesh") for nuances that matter at a glance. */
@@ -1092,11 +1134,6 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .fmt-compat .y{color:var(--ok);font-weight:var(--fw-semibold);font-size:var(--fs-lg)}
 .fmt-compat .n{color:var(--tx3);font-size:var(--fs-11)}
 .fmt-compat .muted{color:var(--tx3);font-style:italic;font-size:var(--fs-11)}
-.fmt-card{padding:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);cursor:pointer}
-.fmt-card:hover{border-color:var(--bd2)}
-.fmt-card.selected{border-color:var(--ac);background:var(--ac-tint-08)}
-.fmt-card .n{font-weight:var(--fw-semibold);font-size:var(--fs-lg);margin-bottom:2px}
-.fmt-card .d{color:var(--tx2);font-size:var(--fs-11);line-height:var(--lh-base)}
 
 /* Toast — top-center compact pill, dark glassmorphism */
 .toasts{position:fixed;top:56px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:5px;z-index:250;pointer-events:none;align-items:center;max-width:90vw}
@@ -1120,11 +1157,11 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #file-warn .card{max-width:540px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-2xl);padding:28px 30px;box-shadow:var(--sh)}
 #file-warn h2{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);margin-bottom:14px}
 #file-warn p{color:var(--tx2);line-height:var(--lh-loose);font-size:var(--fs-lg);margin-bottom:14px}
-#file-warn code{font-family:var(--font-mono);color:var(--ac)}
-#file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);padding:12px 14px;font-family:var(--font-mono);font-size:var(--fs-12);color:var(--tx);line-height:1.8}
+#file-warn code{font-family:var(--font-sans);color:var(--ac)}
+#file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);padding:12px 14px;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx);line-height:1.8}
 
 /* Global Log Console */
-#log-console{position:fixed;left:0;right:0;bottom:28px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:var(--z-toolbar);transform:translateY(calc(100% + 28px));transition:transform .22s cubic-bezier(.4,0,.2,1);font:11.5px/1.5 ui-monospace,Menlo,monospace}
+#log-console{position:fixed;left:0;right:0;bottom:28px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:var(--z-toolbar);transform:translateY(calc(100% + 28px));transition:transform .22s cubic-bezier(.4,0,.2,1);font:11.5px/1.5 var(--font-sans)}
 #log-console.show{transform:translateY(0)}
 .lc-grip{position:absolute;top:-3px;left:0;right:0;height:6px;cursor:ns-resize;z-index:1}
 .lc-grip:hover{background:var(--ac-tint-15)}
@@ -1199,7 +1236,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
   background:rgba(255,255,255,.07);
   border:1px solid var(--s5);
   border-radius:var(--r-xs);
-  font:600 10px ui-monospace,'SFMono-Regular',Menlo,monospace;
+  font:600 10px var(--font-sans);
   color:var(--tx2);
   vertical-align:1px;
 }
@@ -1385,6 +1422,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to 10 units"><i data-lucide="move"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
         <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
+        <div style="height:10px"></div>
+        <button class="vpb" id="msr-toggle" title="Measure (M) — distance between two snapped points · Esc to cancel"><i data-lucide="ruler"></i></button>
       </div>
       <div class="vpc tc" id="vp-view-pill-wrap">
         <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="listbox" aria-expanded="false" title="Camera view — click to switch (Cam / Top / Front / Side)">
@@ -1456,7 +1495,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
                 <button id="hdri-load-btn" type="button" style="flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:5px 8px;border-radius:5px;font-size:var(--fs-11);cursor:pointer" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
                 <button id="hdri-default-btn" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:var(--fs-xs);cursor:pointer" title="Reset to the built-in studio environment">Default</button>
               </div>
-              <div id="hdri-current" style="font-family:var(--font-mono);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
+              <div id="hdri-current" style="font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
               <div class="field" style="margin:0" title="Multiplier on the HDRI's lighting and reflections. Higher = brighter env light on every PBR material."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="hdri-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">1.00×</span></label><input type="range" id="hdri-int" min="0" max="4" step="0.05" value="1" style="width:100%"></div>
               <input type="file" id="hdri-file" accept=".hdr,.exr,image/*" style="display:none">
             </div>
@@ -1663,6 +1702,18 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     </div>
 
     <div class="section">
+      <div class="section-h"><span>Measurements</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="btn-row">
+          <button class="btn" id="msr-add" title="Toggle measure mode (M) — pick two points in the viewport to measure distance"><i data-lucide="ruler"></i>Measure</button>
+          <button class="btn warn" id="msr-clear" title="Delete every measurement">Clear all</button>
+        </div>
+        <div class="field-help" id="msr-info" style="margin-top:8px">Click Measure or press <kbd class="kbd">M</kbd>, then pick two points on geometry.</div>
+        <div id="msr-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-h"><span>Size threshold</span><span class="chev">▾</span></div>
       <div class="section-b">
         <div class="field"><div id="thr-scrub"></div></div>
@@ -1856,6 +1907,90 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 
 <input type="file" id="file-input" accept=".step,.stp,.STEP,.STP,.glb,.gltf,.GLB,.GLTF,.fbx,.FBX,.obj,.OBJ,.3mf,.3MF,.stl,.STL" style="display:none">
 
+<!-- Import-settings modal — shown between picking a file and starting the
+     load/conversion. Lets the user trade XCAF read fidelity for conversion
+     speed (huge wins on STEP). For non-STEP formats, the panels just expose
+     the loader knobs that meaningfully change the import (scale, append/
+     replace, etc). For .glb/.gltf there's nothing useful to ask, so the
+     wiring code skips the modal entirely. -->
+<div class="modal-bg" id="import-modal">
+  <div class="modal" style="width:560px;max-height:88vh">
+    <div class="modal-h">
+      <h3>Import settings</h3>
+      <button class="x" id="import-modal-close" title="Close (Esc)">✕</button>
+    </div>
+    <div class="modal-b" id="import-modal-body" style="padding:0">
+      <div style="padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px">
+        <i data-lucide="file" id="import-modal-icon" style="width:28px;height:28px;stroke:var(--ac);flex:0 0 auto"></i>
+        <div style="min-width:0;flex:1">
+          <div id="import-modal-name" style="font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">filename.step</div>
+          <div id="import-modal-meta" style="font-size:var(--fs-sm);color:var(--tx3);margin-top:2px">— · STEP</div>
+        </div>
+      </div>
+
+      <!-- STEP-only panel -->
+      <div id="import-panel-step" style="padding:16px 20px;display:none">
+        <div class="field" style="margin-bottom:14px">
+          <label><span>Tessellation quality</span></label>
+          <select id="imp-step-quality" class="mac-sel">
+            <option value="1.0">Coarse (1.0) — fastest, jagged curves</option>
+            <option value="0.5" selected>Standard (0.5) — recommended</option>
+            <option value="0.2">Fine (0.2) — smoother surfaces</option>
+            <option value="0.05">Ultra (0.05) — slow, very smooth</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:14px">
+          <label><span>Colors &amp; materials</span></label>
+          <select id="imp-step-colors" class="mac-sel">
+            <option value="on" selected>Read XCAF (colors + names + hierarchy)</option>
+            <option value="off">Geometry only (fastest, no colors / hierarchy)</option>
+          </select>
+          <div style="font-size:var(--fs-sm);color:var(--tx3);margin-top:6px;line-height:var(--lh-relaxed)">"Geometry only" skips the slow XCAF transfer entirely — best for huge files where you only need the shape.</div>
+        </div>
+
+        <div style="font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin:18px 0 4px">XCAF read modes</div>
+        <div style="font-size:var(--fs-sm);color:var(--tx3);margin-bottom:6px;line-height:var(--lh-relaxed)">Each mode adds a pass over the STEP entity graph. Disable what you don't need — SHUO is the biggest win on instanced assemblies.</div>
+        <div class="toggle" title="Specified Higher-Usage Occurrence overrides — per-instance color/material overrides resolved combinatorially. The single biggest cost on instanced assemblies."><span>SHUO overrides <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(slowest)</span></span><label><input type="checkbox" id="imp-step-shuo"><span class="switch"></span></label></div>
+        <div class="toggle"><span>Layer attributes</span><label><input type="checkbox" id="imp-step-layers"><span class="switch"></span></label></div>
+        <div class="toggle"><span>Material attributes</span><label><input type="checkbox" id="imp-step-materials" checked><span class="switch"></span></label></div>
+        <div class="toggle"><span>Product names</span><label><input type="checkbox" id="imp-step-names" checked><span class="switch"></span></label></div>
+        <div class="toggle"><span>Validation properties (mass, area)</span><label><input type="checkbox" id="imp-step-props"><span class="switch"></span></label></div>
+
+        <div style="font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin:18px 0 4px">Filter</div>
+        <div class="field" style="margin:0 0 6px">
+          <label><span>Drop parts smaller than (% of model)</span></label>
+          <input type="number" id="imp-step-min-size" min="0" max="100" step="0.1" value="0" style="width:100%;padding:var(--space-7) var(--space-lg);background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums">
+          <div style="font-size:var(--fs-sm);color:var(--tx3);margin-top:6px;line-height:var(--lh-relaxed)">Useful for hiding tiny fasteners. 0 keeps everything.</div>
+        </div>
+
+        <div class="toggle" style="margin-top:10px"><span>Force re-convert (ignore cached GLB / XCAF cache)</span><label><input type="checkbox" id="imp-step-force"><span class="switch"></span></label></div>
+        <div class="toggle"><span>Collapse identical shapes into instances</span><label><input type="checkbox" id="imp-step-instance" checked><span class="switch"></span></label></div>
+      </div>
+
+      <!-- Mesh-format panel (FBX / OBJ / 3MF / STL) -->
+      <div id="import-panel-mesh" style="padding:16px 20px;display:none">
+        <div style="font-size:var(--fs-sm);color:var(--tx3);margin-bottom:14px;line-height:var(--lh-relaxed)">Mesh formats load directly via three.js — there's no slow conversion step to tune. The options below apply to the resulting scene.</div>
+      </div>
+
+      <!-- Universal section -->
+      <div style="padding:16px 20px;border-top:1px solid var(--bd)">
+        <div style="font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin-bottom:8px">Scene</div>
+        <div class="toggle" id="imp-append-row"><span>Append to current scene <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(off = replace)</span></span><label><input type="checkbox" id="imp-append"><span class="switch"></span></label></div>
+        <div class="toggle"><span>Frame view after import</span><label><input type="checkbox" id="imp-fit" checked><span class="switch"></span></label></div>
+      </div>
+
+      <div style="padding:12px 20px 16px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="imp-skip-next" style="margin:0">
+        <label for="imp-skip-next" style="color:var(--tx2);font-size:var(--fs-sm);cursor:pointer;flex:1">Don't ask again for this format <span style="color:var(--tx3)">(reset from File menu)</span></label>
+      </div>
+    </div>
+    <div class="modal-f">
+      <button class="btn" id="import-modal-cancel" style="width:auto;padding:7px 16px" title="Close without importing (Esc)">Cancel</button>
+      <button class="tbtn primary" id="import-modal-confirm" title="Start import with these settings (Enter)">Import</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-bg" id="save-scene-modal">
   <div class="modal" style="width:420px">
     <div class="modal-h"><h3>Save scene</h3><button class="x" id="save-scene-close" title="Close (Esc)">✕</button></div>
@@ -1873,61 +2008,79 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 </div>
 
 <div class="modal-bg" id="export-modal">
-  <div class="modal" style="width:520px">
-    <div class="modal-h"><h3>Export model</h3><div style="margin-left:auto;display:flex;gap:var(--space-sm);align-items:center"><button id="export-compat-btn" title="Format compatibility — what each format can read and write" style="font-size:var(--fs-11);padding:5px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;letter-spacing:var(--tracking-mono)">Compare formats</button><button class="x" id="export-close" title="Close (Esc)">✕</button></div></div>
-    <div class="modal-b">
-      <div class="fmt-grid" id="format-grid">
-        <div class="fmt-card selected" data-fmt="glb"><div class="n">GLB</div><div class="d">Modern, light, single binary file. Best for web AND <strong>Cinema 4D 2026</strong> (native glTF import).</div></div>
-        <div class="fmt-card" data-fmt="gltf"><div class="n">GLTF</div><div class="d">JSON-based glTF 2.0. Maximum compatibility.</div></div>
-        <div class="fmt-card" data-fmt="fbx"><div class="n">FBX</div><div class="d">Binary FBX 7.4 — Blender, Maya, 3ds Max, Houdini, Unreal. Enable ASCII mode below if Houdini rejects the binary. <span style="color:var(--wn)">Cinema 4D: prefer GLB for best results.</span></div></div>
-        <div class="fmt-card" data-fmt="usdz"><div class="n">USDZ</div><div class="d">OpenUSD (Pixar/Apple). Quick Look, Reality Composer, Substance, C4D R26+.</div></div>
-        <div class="fmt-card" data-fmt="obj"><div class="n">OBJ</div><div class="d">Wavefront OBJ. Universal, geometry only.</div></div>
-        <div class="fmt-card" data-fmt="stl"><div class="n">STL</div><div class="d">Binary STL. Standard for 3D printing.</div></div>
-        <div class="fmt-card" data-fmt="ply"><div class="n">PLY</div><div class="d">Polygon File Format. Geometry + colors.</div></div>
-        <div class="fmt-card" data-fmt="csv"><div class="n">CSV</div><div class="d">Parts list spreadsheet (name, color, tris, verts, volume, dimensions, flags). For BOMs and reports — geometry options below are ignored.</div></div>
+  <div class="exp-win">
+    <!-- Left: format list -->
+    <nav class="exp-sidebar">
+      <div class="exp-cat-label">3D Formats</div>
+      <div id="format-grid">
+        <button class="fmt-card selected" data-fmt="glb"><span class="fmt-icon"><i data-lucide="box"></i></span><span><span class="fmt-name">GLB</span><span class="fmt-sub">Web, Cinema 4D</span></span></button>
+        <button class="fmt-card" data-fmt="gltf"><span class="fmt-icon"><i data-lucide="file-code-2"></i></span><span><span class="fmt-name">GLTF</span><span class="fmt-sub">JSON glTF 2.0</span></span></button>
+        <button class="fmt-card" data-fmt="fbx"><span class="fmt-icon"><i data-lucide="layers-2"></i></span><span><span class="fmt-name">FBX</span><span class="fmt-sub">Blender, Maya, Unreal</span></span></button>
+        <button class="fmt-card" data-fmt="usdz"><span class="fmt-icon"><i data-lucide="smartphone"></i></span><span><span class="fmt-name">USDZ</span><span class="fmt-sub">Apple Quick Look</span></span></button>
+        <button class="fmt-card" data-fmt="obj"><span class="fmt-icon"><i data-lucide="triangle"></i></span><span><span class="fmt-name">OBJ</span><span class="fmt-sub">Wavefront, universal</span></span></button>
+        <div class="exp-cat-label">3D Printing</div>
+        <button class="fmt-card" data-fmt="stl"><span class="fmt-icon"><i data-lucide="printer"></i></span><span><span class="fmt-name">STL</span><span class="fmt-sub">Standard format</span></span></button>
+        <div class="exp-cat-label">Point Cloud</div>
+        <button class="fmt-card" data-fmt="ply"><span class="fmt-icon"><i data-lucide="grid-3x3"></i></span><span><span class="fmt-name">PLY</span><span class="fmt-sub">Geometry + colors</span></span></button>
+        <div class="exp-cat-label">Data</div>
+        <button class="fmt-card" data-fmt="csv"><span class="fmt-icon"><i data-lucide="table-2"></i></span><span><span class="fmt-name">CSV</span><span class="fmt-sub">Parts list, BOM</span></span></button>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-lg) 14px;margin-bottom:10px">
-        <div class="field" style="margin:0">
-          <label><span>Unit scale</span></label>
-          <select id="exp-scale" class="mac-sel">
-            <option value="1" selected>1.0 (no change)</option>
-            <option value="0.001">× 0.001 (mm → m)</option>
-            <option value="0.01">× 0.01 (cm → m)</option>
-            <option value="1000">× 1000 (m → mm)</option>
-            <option value="100">× 100 (m → cm)</option>
-            <option value="25.4">× 25.4 (in → mm)</option>
-            <option value="0.0393701">× 0.0393701 (mm → in)</option>
-            <option value="custom">Custom…</option>
-          </select>
+    </nav>
+    <!-- Right: options -->
+    <div class="exp-content">
+      <div class="exp-content-h">
+        <div>
+          <div class="exp-fmt-title" id="exp-fmt-heading">GLB</div>
+          <div class="exp-fmt-desc" id="exp-fmt-desc">Modern binary glTF · Best for web &amp; Cinema 4D 2026</div>
         </div>
-        <div class="field" style="margin:0">
-          <label><span>Custom scale</span></label>
-          <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" disabled>
-        </div>
-        <div class="field" style="margin:0">
-          <label><span>Up axis</span></label>
-          <select id="exp-axis" class="mac-sel">
-            <option value="z-up" selected>Z-up (CAD, keep)</option>
-            <option value="y-up">Y-up (Blender, glTF, OBJ)</option>
-          </select>
-        </div>
-        <div class="field" style="margin:0">
-          <label><span>Origin</span></label>
-          <select id="exp-origin" class="mac-sel">
-            <option value="keep" selected>Keep model origin</option>
-            <option value="center">Recenter to bbox center</option>
-            <option value="floor">Center XY, drop to floor (Z=0)</option>
-          </select>
+        <div style="display:flex;gap:var(--space-sm);align-items:center;flex-shrink:0">
+          <button id="export-compat-btn" title="Format compatibility sheet" style="font-size:var(--fs-11);padding:4px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;white-space:nowrap">Compare</button>
+          <button class="x" id="export-close" title="Close (Esc)">✕</button>
         </div>
       </div>
-      <div class="toggle"><span>Merge all parts into one mesh</span><label><input type="checkbox" id="exp-merge"><span class="switch"></span></label></div>
-      <div class="toggle"><span>Visible parts only</span><label><input type="checkbox" id="exp-visible" checked><span class="switch"></span></label></div>
-      <div class="toggle" id="exp-selected-row" title="Export only the parts you've currently selected. Overrides 'Visible parts only' when both are set."><span>Selected parts only <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(overrides visible)</span></span><label><input type="checkbox" id="exp-selected"><span class="switch"></span></label></div>
-      <div class="toggle" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only. Slower export and load."><span>Draco compression <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(GLB only · slower)</span></span><label><input type="checkbox" id="exp-draco"><span class="switch"></span></label></div>
-      <div class="toggle" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII (text) format instead of binary. ~3× larger, but sometimes loads in apps that reject the binary. Try this if Houdini or C4D shows a 'failed to load' error."><span>ASCII FBX <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(FBX only · try if binary fails)</span></span><label><input type="checkbox" id="exp-fbx-ascii"><span class="switch"></span></label></div>
-      <div id="exp-source-note" style="display:none;margin-top:10px;padding:8px 10px;background:var(--wn-tint-08);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-sm);color:var(--wn);font-size:var(--fs-sm);line-height:var(--lh-base)"></div>
+      <div class="exp-content-b">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-lg) 14px;margin-bottom:14px">
+          <div class="field" style="margin:0"><label><span>Unit scale</span></label>
+            <select id="exp-scale" class="mac-sel">
+              <option value="1" selected>1.0 (no change)</option>
+              <option value="0.001">× 0.001 (mm → m)</option>
+              <option value="0.01">× 0.01 (cm → m)</option>
+              <option value="1000">× 1000 (m → mm)</option>
+              <option value="100">× 100 (m → cm)</option>
+              <option value="25.4">× 25.4 (in → mm)</option>
+              <option value="0.0393701">× 0.0393701 (mm → in)</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0"><label><span>Custom scale</span></label>
+            <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" disabled>
+          </div>
+          <div class="field" style="margin:0"><label><span>Up axis</span></label>
+            <select id="exp-axis" class="mac-sel">
+              <option value="z-up" selected>Z-up (CAD, keep)</option>
+              <option value="y-up">Y-up (Blender, glTF, OBJ)</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0"><label><span>Origin</span></label>
+            <select id="exp-origin" class="mac-sel">
+              <option value="keep" selected>Keep model origin</option>
+              <option value="center">Recenter to bbox center</option>
+              <option value="floor">Center XY, drop to floor (Z=0)</option>
+            </select>
+          </div>
+        </div>
+        <div class="toggle"><span>Merge all parts into one mesh</span><label><input type="checkbox" id="exp-merge"><span class="switch"></span></label></div>
+        <div class="toggle"><span>Visible parts only</span><label><input type="checkbox" id="exp-visible" checked><span class="switch"></span></label></div>
+        <div class="toggle" id="exp-selected-row" title="Export only the parts you've currently selected. Overrides 'Visible parts only' when both are set."><span>Selected parts only <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(overrides visible)</span></span><label><input type="checkbox" id="exp-selected"><span class="switch"></span></label></div>
+        <div class="toggle" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only."><span>Draco compression <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(GLB only · slower)</span></span><label><input type="checkbox" id="exp-draco"><span class="switch"></span></label></div>
+        <div class="toggle" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII format instead of binary."><span>ASCII FBX <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(FBX only · try if binary fails)</span></span><label><input type="checkbox" id="exp-fbx-ascii"><span class="switch"></span></label></div>
+        <div id="exp-source-note" style="display:none;margin-top:10px;padding:8px 10px;background:var(--wn-tint-08);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-sm);color:var(--wn);font-size:var(--fs-sm);line-height:var(--lh-base)"></div>
+      </div>
+      <div class="exp-content-f">
+        <button class="tbtn primary" id="export-confirm" style="width:100%;padding:10px 16px;justify-content:center;border-radius:var(--r-md)" title="Export with chosen options">Export GLB</button>
+        <button id="export-cancel" style="display:none" aria-hidden="true"></button>
+      </div>
     </div>
-    <div class="modal-f"><button class="btn" id="export-cancel" style="width:auto;padding:7px 16px" title="Close without exporting (Esc)">Cancel</button><button class="tbtn primary" id="export-confirm" title="Generate the file with the chosen format and options">Export</button></div>
   </div>
 </div>
 
@@ -2016,7 +2169,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
   <div class="modal" style="width:520px;max-height:60vh">
     <div class="modal-h" style="padding:10px 14px">
       <input type="text" id="cmdk-input" placeholder="Search actions… (Esc to close)" style="flex:1;background:transparent;border:none;outline:none;color:var(--tx);font-size:var(--fs-xl);font-weight:var(--fw-medium)" autocomplete="off">
-      <span style="color:var(--tx3);font-size:var(--fs-sm);margin-left:10px"><kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-mono);font-size:var(--fs-10);color:var(--tx2)">↑↓</kbd> <kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-mono);font-size:var(--fs-10);color:var(--tx2)">↵</kbd></span>
+      <span style="color:var(--tx3);font-size:var(--fs-sm);margin-left:10px"><kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx2)">↑↓</kbd> <kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx2)">↵</kbd></span>
     </div>
     <div class="modal-b" id="cmdk-list" style="padding:6px"></div>
   </div>
@@ -2045,7 +2198,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         </div>
 
         <div style="margin-top:16px;color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-relaxed)">
-          Huge assemblies (&gt;200 MB) load faster if you pre-convert with <code style="font-family:var(--font-mono);color:var(--ac)">step2glb.py</code>.
+          Huge assemblies (&gt;200 MB) load faster if you pre-convert with <code style="font-family:var(--font-sans);color:var(--ac)">step2glb.py</code>.
         </div>
       </div>
 
