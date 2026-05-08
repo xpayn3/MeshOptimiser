@@ -970,6 +970,82 @@ async function _openWithPicker() {
   _handleSelectedFile(file);
 }
 
+// Same as _openWithPicker but flips the import flag so _ingestSceneRoot
+// merges the loaded meshes into the current scene instead of clearing.
+async function _importWithPicker() {
+  state._importMode = true;
+  if (!window.showOpenFilePicker) {
+    const inp = document.getElementById('file-input');
+    // One-shot listener so we reset the flag after the user picks (or cancels).
+    const reset = () => { state._importMode = false; };
+    inp?.addEventListener('change', reset, { once: true });
+    inp?.click();
+    return;
+  }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{
+        description: '3D model (STEP / glTF / FBX / OBJ / 3MF / STL)',
+        accept: {
+          'model/step':         ['.step', '.stp'],
+          'model/gltf-binary':  ['.glb'],
+          'model/gltf+json':    ['.gltf'],
+          'application/octet-stream': ['.fbx', '.3mf', '.stl'],
+          'model/obj':          ['.obj'],
+        },
+      }],
+      excludeAcceptAllOption: false,
+      multiple: false,
+    });
+    const file = await handle.getFile();
+    _handleSelectedFile(file);
+  } catch (e) {
+    state._importMode = false;
+    if (e?.name !== 'AbortError') console.warn('[import] picker failed:', e);
+  }
+}
+
+// Dispatcher for the File-menu items. Pulled out into a function so the
+// command palette / keyboard shortcuts can route through the same code path.
+function _runFileCmd(cmd) {
+  switch (cmd) {
+    case 'new':            newScene(); break;
+    case 'open':           _openWithPicker(); break;
+    case 'import':         _importWithPicker(); break;
+    case 'save':           document.getElementById('btn-save-scene')?.click(); break;
+    case 'export':         document.getElementById('btn-export')?.click(); break;
+    case 'scene-settings': _openSceneSettings(); break;
+    case 'welcome':        try { _Welcome.show(); } catch (_) {} break;
+  }
+}
+
+// File → Scene settings opens the existing viewport settings popup so the
+// user has a discoverable home for scene-level fields (units / up-axis /
+// scale / camera / lighting / grid / fog) without having to find the cog
+// inside the viewport. Same UI, two entry points.
+function _openSceneSettings() {
+  const sBtn = document.getElementById('tg-settings');
+  const sPop = document.getElementById('vp-settings-pop');
+  if (!sBtn || !sPop) return;
+  if (!sPop.classList.contains('show')) {
+    // Mirror the cog button's click handler — opens the popup with the same
+    // outside-click / Esc behaviour wired in index.html. Closes Materials
+    // popup if it was open (they share the same anchor).
+    sBtn.click();
+    // Bring the Scene section into view inside the scrollable popup so the
+    // user sees the fields they came for, not whatever's at the top.
+    setTimeout(() => {
+      const titles = sPop.querySelectorAll('.pop-section-title');
+      for (const t of titles) {
+        if (t.textContent.trim().toLowerCase() === 'scene') {
+          t.closest('.pop-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          break;
+        }
+      }
+    }, 80);
+  }
+}
+
 async function _openRecentByKey(key) {
   if (window.showOpenFilePicker) {
     try {
@@ -1299,9 +1375,14 @@ const _Welcome = (() => {
 
     pick.addEventListener('click', () => _openWithPicker());
     drop.addEventListener('click', e => {
-      // Don't let the browse button bubble into the dropzone click.
+      // Don't let the browse button or the start-empty link bubble into the dropzone click.
       if (e.target.closest('#welcome-pick')) return;
+      if (e.target.closest('#welcome-start-empty')) return;
       _openWithPicker();
+    });
+    document.getElementById('welcome-start-empty')?.addEventListener('click', e => {
+      e.stopPropagation();
+      try { newScene(); } catch (_) {}
     });
     close?.addEventListener('click', hide);
     // Clear-all chip — confirms before wiping. Walks the list once to
@@ -1403,9 +1484,12 @@ const _Welcome = (() => {
 const _Actions = (() => {
   const _click = id => () => document.getElementById(id)?.click();
   const list = [
+    { id:'newscene',     group:'File',       label:'New scene',                  kbd:'Ctrl+N', run: () => { try { newScene(); } catch (_) {} } },
     { id:'open',         group:'File',       label:'Open file…',                 kbd:'Ctrl+O', run: () => _openWithPicker() },
+    { id:'import',       group:'File',       label:'Import…',                    kbd:'Ctrl+Shift+O', run: () => _importWithPicker() },
+    { id:'savescene',    group:'File',       label:'Save scene…',                kbd:'Ctrl+S', run: _click('btn-save-scene') },
     { id:'export',       group:'File',       label:'Export model…',              run: _click('btn-export') },
-    { id:'savescene',    group:'File',       label:'Save scene…',                run: _click('btn-save-scene') },
+    { id:'sceneSettings',group:'File',       label:'Scene settings…',            kbd:'Ctrl+;', run: () => { try { _openSceneSettings(); } catch (_) {} } },
     { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: _click('btn-fit') },
     { id:'reset',        group:'View',       label:'Reset camera',               run: _click('btn-reset') },
     { id:'frameSel',     group:'View',       label:'Frame selection',            run: () => { try { frameSelected(); } catch (_) {} } },
@@ -1574,17 +1658,73 @@ window.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === ',') {
     e.preventDefault(); _Settings.show(); return;
   }
+  // File menu shortcuts: Ctrl+N (new), Ctrl+O (open), Ctrl+Shift+O (import),
+  // Ctrl+S (save scene), Ctrl+; (scene settings). Skip when typing in fields.
+  if (!inField && (e.metaKey || e.ctrlKey) && !e.altKey) {
+    if (!e.shiftKey && (e.key === 'n' || e.key === 'N')) {
+      e.preventDefault(); try { newScene(); } catch (_) {} return;
+    }
+    if (!e.shiftKey && (e.key === 'o' || e.key === 'O')) {
+      e.preventDefault(); try { _openWithPicker(); } catch (_) {} return;
+    }
+    if (e.shiftKey && (e.key === 'o' || e.key === 'O')) {
+      e.preventDefault(); try { _importWithPicker(); } catch (_) {} return;
+    }
+    if (!e.shiftKey && (e.key === 's' || e.key === 'S')) {
+      // Only intercept Ctrl+S when there's a scene to save — otherwise let
+      // the browser do its native page-save (devs wouldn't want to lose it).
+      if (state._sceneActive) { e.preventDefault(); document.getElementById('btn-save-scene')?.click(); return; }
+    }
+    if (!e.shiftKey && e.key === ';') {
+      e.preventDefault(); try { _openSceneSettings(); } catch (_) {} return;
+    }
+  }
   if (!inField && (e.key === '?' || (e.key === '/' && e.shiftKey))) {
     e.preventDefault(); _Shortcuts.show();
   }
 }, true);
 
 (function wireEarly() {
-  const btn = $('btn-open'), input = $('file-input');
-  btn?.addEventListener('click', () => {
-    if (state.parts.length === 0) _Welcome.show();
-    else _openWithPicker();
-  });
+  const input = $('file-input');
+  // File menu dropdown — replaces the standalone Open button. New / Open /
+  // Import / Save / Export / Scene settings / Welcome all live here.
+  (function wireFileMenu(){
+    const btn  = $('btn-file');
+    const menu = $('file-menu');
+    const wrap = $('file-menu-wrap');
+    if (!btn || !menu || !wrap) return;
+    const close = () => {
+      menu.classList.remove('show');
+      wrap.classList.remove('open');
+      btn.classList.remove('active');
+      btn.setAttribute('aria-expanded','false');
+    };
+    const open = () => {
+      menu.classList.add('show');
+      wrap.classList.add('open');
+      btn.classList.add('active');
+      btn.setAttribute('aria-expanded','true');
+    };
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      menu.classList.contains('show') ? close() : open();
+    });
+    document.addEventListener('mousedown', e => {
+      if (!menu.classList.contains('show')) return;
+      if (menu.contains(e.target) || btn.contains(e.target)) return;
+      close();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && menu.classList.contains('show')) { close(); btn.focus(); }
+    });
+    menu.addEventListener('click', e => {
+      const item = e.target.closest('[data-file-cmd]');
+      if (!item) return;
+      const cmd = item.dataset.fileCmd;
+      close();
+      _runFileCmd(cmd);
+    });
+  })();
   // Left-sidebar slide toggle. State persists so the layout sticks across
   // reloads (and is restored before paint to avoid a flash).
   (function wireLeftToggle(){
@@ -3336,15 +3476,18 @@ async function loadStepFile(file) {
     logProgress(`parsed ${result.meshes.length} meshes in ${dt.toFixed(1)}s`, 'ok');
     setLoader(true, 'Building 3D scene...', `${result.meshes.length} parts`);
     await new Promise(r => setTimeout(r, 16));
-    clearModel();
-    await buildModelFromMeshes(result.meshes, hashes, ctrl);
+    const importMode = !!state._importMode; state._importMode = false;
+    if (!importMode) clearModel();
+    await buildModelFromMeshes(result.meshes, hashes, ctrl, { append: importMode });
     if (ctrl.cancelled) throw new Error('cancelled');
     setLoaderProgress(95);
-    fitToView();
-    state._loadedFilename = file.name;
-    onModelLoaded(file.name);
+    if (!importMode) fitToView();
+    if (!importMode) state._loadedFilename = file.name;
+    if (importMode) onSceneActivated(); else onModelLoaded(file.name);
     setLoaderProgress(100);
-    toast('Model loaded', `${result.meshes.length} parts - ${dt.toFixed(1)}s`, 'success');
+    toast(importMode ? 'STEP imported' : 'Model loaded',
+          importMode ? `+${result.meshes.length} parts (now ${state.parts.length})` : `${result.meshes.length} parts - ${dt.toFixed(1)}s`,
+          'success');
     await new Promise(r => setTimeout(r, 350));
     // Drain stale resources from the previous model — see _drainDisposeQueue.
     _drainDisposeQueue();
@@ -3359,12 +3502,16 @@ async function loadStepFile(file) {
   }
 }
 
-async function buildModelFromMeshes(meshes, hashes, ctrl) {
+async function buildModelFromMeshes(meshes, hashes, ctrl, opts) {
+  const append = !!(opts && opts.append);
   const partsRoot = state.partsRoot;
-  partsRoot.rotation.set(0, 0, 0);
-  state.materialByColor.clear();
-  state.geomByHash.clear();
-  state.instancedGroups = [];
+  if (!append) {
+    partsRoot.rotation.set(0, 0, 0);
+    state.materialByColor.clear();
+    state.geomByHash.clear();
+    state.instancedGroups = [];
+  }
+  const partIdBase = state.parts.length;
   const total = meshes.length;
   const yieldEvery = Math.max(50, (total / 50) | 0);
   const overallBox = new THREE.Box3();
@@ -3404,13 +3551,13 @@ async function buildModelFromMeshes(meshes, hashes, ctrl) {
     const bbox = geom.boundingBox.clone();
     if (!bbox.isEmpty()) overallBox.union(bbox);
     const partInfo = {
-      partId: i, name: m.name || `part_${i}`, hash, triCount, vertCount, bbox,
+      partId: partIdBase + i, name: m.name || `part_${i}`, hash, triCount, vertCount, bbox,
       sizeMetrics: (() => { const s = bbox.getSize(new THREE.Vector3()); return { diag: s.length(), vol: s.x*s.y*s.z, max: Math.max(s.x, s.y, s.z) }; })(),
       visible: true, deleted: false, flagged: false, originalColor: color.clone(),
       mesh: null, group: null, instanceIndex: -1, instancedMesh: null,
     };
     totalTris += triCount; totalVerts += vertCount;
-    if (state.autoInstance && counts.get(hash) >= 3) {
+    if (!append && state.autoInstance && counts.get(hash) >= 3) {
       let g = instanceCollect.get(hash);
       if (!g) { g = { hash, geom, parts: [] }; instanceCollect.set(hash, g); }
       g.parts.push({ partInfo, color });
@@ -3971,17 +4118,59 @@ function clearModel() {
   // wouldn't apply to whatever we load next).
   state.history.length = 0; state.redo.length = 0;
   $('btn-undo').disabled = true; $('btn-redo') && ($('btn-redo').disabled = true);
-  $('btn-export').disabled = true; $('btn-fit').disabled = true; $('btn-reset').disabled = true;
-  const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = true;
+  // Export needs geometry; Fit / Reset / Save stay live while a scene is
+  // active (e.g. New scene → empty). Only fully disable when the scene is
+  // torn down ahead of a fresh load (`_sceneActive` cleared first).
+  $('btn-export').disabled = true;
+  if (!state._sceneActive) {
+    $('btn-fit').disabled = true; $('btn-reset').disabled = true;
+    const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = true;
+  }
   requestRender();
 }
 
-function onModelLoaded(filename) {
-  $('btn-export').disabled = false; $('btn-fit').disabled = false; $('btn-reset').disabled = false;
+// Start a brand-new empty scene. Wipes any previous model, marks the scene
+// active so primitives / save / fit / scene-settings light up without
+// requiring a file load first. Called from File → New and from the welcome
+// modal's "Start with empty scene" link.
+function newScene() {
+  state._sceneActive = false;       // ensure clearModel fully resets
+  clearModel();
+  state._loadedFilename = null;
+  state._sourceFile = null;
+  state._sourceExtensions = null;
+  state._modelCenter = null;
+  state.modelDiag = 100;
+  state._initialTris = 0;
+  try {
+    const setTxt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    setTxt('sb-parts', '0'); setTxt('sb-tris', '0'); setTxt('sb-verts', '0'); setTxt('sb-mem', '0 B');
+    setTxt('vp-tris', '0'); setTxt('vp-parts', '0'); setTxt('vp-instances', '0');
+  } catch (_) {}
+  try { setStatus?.('Untitled scene'); } catch (_) {}
+  onSceneActivated();
+  try { fitToView(); } catch (_) {}
+  requestRender();
+  toast('New scene', 'Ready', 'success', 1500);
+}
+
+// Marks the scene as "active" — fires for both file loads AND `New scene` /
+// first primitive add on an empty scene. Unblocks the toolbar (Fit / Save /
+// Scene settings work without geometry) and dismisses the welcome splash.
+// `onModelLoaded` calls this then layers on the model-specific bits
+// (recent-thumb capture, status name).
+function onSceneActivated() {
+  $('btn-fit').disabled = false; $('btn-reset').disabled = false;
   const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = false;
+  // Export still requires geometry — re-evaluated on every part add/remove.
+  const _exp = $('btn-export'); if (_exp) _exp.disabled = state.parts.length === 0;
   $('dropzone')?.style && ($('dropzone').style.display = 'none');
-  // Welcome splash auto-dismisses on successful model load.
   try { _Welcome?.hide(); } catch (_) {}
+  state._sceneActive = true;
+}
+
+function onModelLoaded(filename) {
+  onSceneActivated();
   setStatus(filename);
   // C4D-style snapshot for the recent-files panel. Defer until the lights
   // ramp has finished and the renderer has had a chance to draw at least one
@@ -13170,6 +13359,9 @@ function _addPrimitive(kind) {
     if (typeof updateGizmo === 'function') updateGizmo();
   } catch (e) { console.warn('[prim] post-add UI refresh failed:', e); }
 
+  // First primitive on a fresh boot also activates the scene — Save / Fit /
+  // Scene-settings should now be reachable without first loading a model.
+  try { onSceneActivated(); } catch (_) {}
   toast(`Added ${baseName}`, name, 'info', 2200);
   requestRender();
   return partInfo;
@@ -13299,12 +13491,21 @@ function _wirePrimitiveSliders(rootEl, p) {
 // loadStlFile after each format-specific parser produces a THREE.Object3D.
 async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   const formatLabel = format.toUpperCase();
+  // Capture & clear the import flag up-front so format-specific failures
+  // don't leave it sticky for the next load.
+  const importMode = !!state._importMode;
+  state._importMode = false;
   setLoaderProgress(60);
   // Yield one microtask so any in-flight WebGPU command buffer can finish
   // before clearModel() starts calling .destroy()/.dispose() on resources.
   await new Promise(r => requestAnimationFrame(r));
-  clearModel();
-  state.materialByColor.clear(); state.geomByHash.clear(); state.instancedGroups = [];
+  if (!importMode) {
+    clearModel();
+    state.materialByColor.clear(); state.geomByHash.clear(); state.instancedGroups = [];
+  }
+  // Import mode: continue from the current part list. Replace mode: start
+  // from 0 (clearModel just emptied state.parts).
+  const partIdBase = state.parts.length;
   const overallBox = new THREE.Box3();
   let totalTris = 0, totalVerts = 0, totalBytes = 0;
   // Track stripped geometries by uuid so shared geoms (auto-instanced parts)
@@ -13336,7 +13537,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (!bbox.isEmpty()) overallBox.union(bbox);
     const sz = bbox.getSize(new THREE.Vector3());
     const partInfo = {
-      partId: i, name: m.name || `mesh_${i}`, hash: geom.uuid,
+      partId: partIdBase + i, name: m.name || `mesh_${i}`, hash: geom.uuid,
       triCount, vertCount, bbox,
       sizeMetrics: { diag: sz.length(), vol: sz.x*sz.y*sz.z, max: Math.max(sz.x, sz.y, sz.z) },
       visible: true, deleted: false, flagged: false,
@@ -13377,7 +13578,9 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   // Auto-instance only meaningful for GLBs from step2glb.py — that pipeline
   // shares BufferGeometry across instances so the dedupe pass actually finds
   // matches. FBX / OBJ / 3MF / STL importers each clone geometry per mesh.
-  if (format === 'glb' && state.autoInstance) {
+  // Skip in import-mode: re-running it across previously-imported parts
+  // would re-instance geometry that's already settled into the scene graph.
+  if (!importMode && format === 'glb' && state.autoInstance) {
     try { _autoInstanceFromGLB(); }
     catch (e) { console.warn('[STEP] auto-instance failed:', e); }
   }
@@ -13397,22 +13600,31 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   _updateTriBar(totalTris);
   _reindexParts();
   applyPerfMode();
-  rebuildTree(); refreshFlagged(); fitToView();
-  state._loadedFilename = file.name;
+  rebuildTree(); refreshFlagged();
+  // Replace mode: frame the loaded model. Import mode: don't yank the camera
+  // away from whatever the user was looking at.
+  if (!importMode) fitToView();
+  if (!importMode) state._loadedFilename = file.name;
   // Save-Scene marker only embedded in GLBs we exported ourselves; skip the
-  // walk for other formats.
-  if (format === 'glb') {
+  // walk for other formats. Import-mode: don't apply saved scene state from
+  // the imported file (would clobber the live scene's camera / units / etc.).
+  if (!importMode && format === 'glb') {
     const _savedState = _extractSceneState(sceneRoot);
     if (_savedState) _applySceneState(_savedState);
   }
-  onModelLoaded(file.name);
+  if (importMode) onSceneActivated();
+  else onModelLoaded(file.name);
   _buildBVHsForAllGeoms();
   requestRender();
   setLoaderProgress(100);
   if (_stripBytesSaved > 0) {
     Log.info(`Stripped ${(_stripBytesSaved/1048576).toFixed(1)} MB of unused vertex attributes from ${_strippedGeoms.size} geometries`, { tag: 'load' });
   }
-  toast(`${formatLabel} loaded`, `${state.parts.length} meshes - ${(byteLength/1048576).toFixed(1)} MB`, 'success');
+  toast(importMode ? `${formatLabel} imported` : `${formatLabel} loaded`,
+        importMode
+          ? `+${meshList.length} meshes (now ${state.parts.length} total)`
+          : `${state.parts.length} meshes - ${(byteLength/1048576).toFixed(1)} MB`,
+        'success');
   await new Promise(r => setTimeout(r, 350));
   _drainDisposeQueue();
 }
