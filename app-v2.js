@@ -1552,6 +1552,9 @@ const _Actions = (() => {
     { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undo(); } catch (_) {} } },
     { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', run: () => { try { redo(); } catch (_) {} } },
     { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', run: () => { if (state.selected.size) deleteParts([...state.selected], 'Deleted via palette'); } },
+    { id:'copy',         group:'Edit',       label:'Copy selection',             kbd:'Ctrl+C', run: () => { if (state.selected.size) copyParts([...state.selected]); } },
+    { id:'paste',        group:'Edit',       label:'Paste',                      kbd:'Ctrl+V', run: () => pasteParts() },
+    { id:'duplicate',    group:'Edit',       label:'Duplicate selection',        kbd:'Ctrl+D', run: () => { if (state.selected.size) duplicateParts([...state.selected]); } },
     { id:'recenter',     group:'Edit',       label:'Recenter model',             run: _click('btn-recenter') },
     { id:'group',        group:'Edit',       label:'Group selection',            run: _click('btn-group-sel') },
     { id:'merge',        group:'Edit',       label:'Merge selection',            run: _click('btn-merge-sel') },
@@ -4361,9 +4364,9 @@ function _drawScreenshotStamp(ctx, w, h) {
 
   const lines = [
     { text: modelName, font: `600 ${fsTitle}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#ffffff' },
-    { text: `${partCount} parts · ${sbVerts} verts · ${sbMem}`, font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#cbd2db' },
-    { text: `${sbSelected} selected · ${sbFlagged} flagged`,    font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#9aa3b0' },
-    { text: ts,                                                 font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#7a828f' },
+    { text: `${partCount} parts · ${sbVerts} verts · ${sbMem}`, font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#cccccc' },
+    { text: `${sbSelected} selected · ${sbFlagged} flagged`,    font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#a0a0a0' },
+    { text: ts,                                                 font: `500 ${fsBody}px ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace`, color: '#808080' },
   ];
 
   // Measure the widest line so the box fits content snugly.
@@ -4398,7 +4401,7 @@ function _drawScreenshotStamp(ctx, w, h) {
     ctx.arcTo(x,        y,        x + boxW, y,        radius);
     ctx.closePath();
   }
-  ctx.fillStyle = 'rgba(10,13,18,0.78)';
+  ctx.fillStyle = 'rgba(13,13,13,0.78)';
   ctx.fill();
   ctx.shadowColor = 'transparent';
 
@@ -4524,7 +4527,7 @@ function _openScreenshotDialog() {
       #scrshot-dlg .ss-overlay-row .hint{font-size:10.5px;color:var(--tx3);font-weight:400;margin-left:4px}
       #scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:500}
       #scrshot-dlg .dlg-foot .ss-cancel:hover{background:rgba(255,255,255,.05)}
-      #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,rgba(107,141,255,.32),rgba(107,141,255,.18));border-color:rgba(107,141,255,.5);color:#dde7f9}
+      #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,rgba(107,141,255,.32),var(--ac-tint-18));border-color:rgba(107,141,255,.5);color:var(--tx-on-accent)}
       #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,rgba(107,141,255,.42),rgba(107,141,255,.24))}
       #scrshot-dlg .dlg-foot .ss-save:disabled{opacity:.5;cursor:wait}
     `;
@@ -5509,6 +5512,8 @@ function _transformPanelRefresh() {
     sy: document.getElementById('tform-sy'),
     sz: document.getElementById('tform-sz'),
   };
+  const _uf = _UNIT_FACTOR[state.displayUnit] || 1;
+  const _ul = _UNIT_LABEL[state.displayUnit] || '';
 
   // Multi/empty selection: clear + disable. Don't clobber the input the
   // user is actively typing into.
@@ -5547,6 +5552,16 @@ function _transformPanelRefresh() {
   const _allColLabels = document.querySelectorAll('#tform-grid .tform-col-label');
   const sizeColLabel = _allColLabels[_allColLabels.length - 1] || null;
   if (sizeColLabel) sizeColLabel.textContent = isGroup ? 'Scale' : 'Size';
+
+  // Keep position/size unit labels in sync with the active displayUnit.
+  ['px','py','pz'].forEach(id => {
+    const c = document.querySelector(`[data-for="tform-${id}"] .tform-unit`);
+    if (c) c.textContent = _ul;
+  });
+  ['sx','sy','sz'].forEach(id => {
+    const c = document.querySelector(`[data-for="tform-${id}"] .tform-unit`);
+    if (c) c.textContent = isGroup ? '' : _ul;
+  });
 
   try {
     if (usingWorld && state.pivot) {
@@ -5661,9 +5676,9 @@ function _transformPanelRefresh() {
       // user-group without gizmo → ug.ref.position (partsRoot-local = world)
       _tfTmpVec.set(obj.position.x, obj.position.y, obj.position.z);
     }
-    if (Number.isFinite(_tfTmpVec.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(_tfTmpVec.x);
-    if (Number.isFinite(_tfTmpVec.y) && inputs.py && document.activeElement !== inputs.py) inputs.py.value = _fmtNum(_tfTmpVec.y);
-    if (Number.isFinite(_tfTmpVec.z) && inputs.pz && document.activeElement !== inputs.pz) inputs.pz.value = _fmtNum(_tfTmpVec.z);
+    if (Number.isFinite(_tfTmpVec.x) && inputs.px && document.activeElement !== inputs.px) inputs.px.value = _fmtNum(_tfTmpVec.x * _uf);
+    if (Number.isFinite(_tfTmpVec.y) && inputs.py && document.activeElement !== inputs.py) inputs.py.value = _fmtNum(_tfTmpVec.y * _uf);
+    if (Number.isFinite(_tfTmpVec.z) && inputs.pz && document.activeElement !== inputs.pz) inputs.pz.value = _fmtNum(_tfTmpVec.z * _uf);
   } catch (_) {}
 
   // Rotation: for groups read world quaternion (the container's local
@@ -5770,9 +5785,9 @@ function _transformPanelRefresh() {
     } else {
       _readStableSize(obj, _tfTmpVec2);
       if (Number.isFinite(_tfTmpVec2.x) && _tfTmpVec2.x > 0) {
-        if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(_tfTmpVec2.x);
-        if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(_tfTmpVec2.y);
-        if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(_tfTmpVec2.z);
+        if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(_tfTmpVec2.x * _uf);
+        if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(_tfTmpVec2.y * _uf);
+        if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(_tfTmpVec2.z * _uf);
       } else {
         if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = '';
         if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = '';
@@ -5807,10 +5822,14 @@ function _wireTransformPanel() {
     }
     const raw = parseFloat(e.target.value);
     if (!Number.isFinite(raw)) { _transformPanelRefresh(); return; }
-    // Sanity clamp — Three.js gets unhappy with non-finite or absurd
-    // values; cap at ±1e6 scene units which exceeds any plausible CAD bbox.
-    const v = Math.max(-1e6, Math.min(1e6, raw));
     const isGroup = target.kind === 'group' || target.kind === 'user-group';
+    // Convert typed displayUnit value → scene units (mm). Rotation stays in
+    // degrees; group scale is a dimensionless factor — only position and
+    // part size inputs carry physical length units.
+    const _uf_w = (axis === 'rx' || axis === 'ry' || axis === 'rz' ||
+                   ((axis === 'sx' || axis === 'sy' || axis === 'sz') && isGroup))
+      ? 1 : (_UNIT_FACTOR[state.displayUnit] || 1);
+    const v = Math.max(-1e6, Math.min(1e6, raw / _uf_w));
     const usingWorld = _hasPivotAncestor(obj);
     // For groups the pivot is the real mover — hn.obj3d / ug.ref are logical
     // containers that don't parent the actual meshes in the scene graph.
@@ -6379,7 +6398,7 @@ function buildAxisGizmo() {
   const c = _AXG.colors;
   let html = '';
   // Origin dot
-  html += `<circle cx="0" cy="0" r="2" fill="#9aa4b2"/>`;
+  html += `<circle cx="0" cy="0" r="2" fill="#a0a0a0"/>`;
   // Three axis lines (positive direction only)
   for (const a of ['x', 'y', 'z']) {
     html += `<line id="axg-line-${a}" x1="0" y1="0" x2="0" y2="0" stroke="${c[a]}" stroke-width="2.4" stroke-linecap="round"/>`;
@@ -8212,6 +8231,205 @@ function deleteParts(ids, label='Deleted parts') {
   recomputeStats(); refreshFlagged(); rebuildTree(); refreshPropertiesPanel(); updateGizmo();
   toast(label, `${hidden.length} parts removed`, 'success');
   requestRender();
+}
+
+// ─── Copy / Paste / Duplicate ────────────────────────────────────────────
+// In-app clipboard: ids of the parts captured by the last copy. We don't
+// touch the system clipboard — CAD geometry isn't a sensible thing to push
+// to the OS, and this buffer only needs to survive within the session.
+state._clipboardParts = state._clipboardParts || [];
+
+// "foo" → "foo copy"; "foo copy" → "foo copy 2"; "foo copy 7" → "foo copy 8".
+// Re-bumping the trailing number keeps a chain of duplicates sortable instead
+// of accumulating " copy copy copy" suffixes.
+function _nextDuplicateName(name) {
+  const m = /^(.*?)\s+copy(?:\s+(\d+))?$/.exec(name);
+  if (!m) return `${name} copy`;
+  const n = m[2] ? parseInt(m[2], 10) + 1 : 2;
+  return `${m[1]} copy ${n}`;
+}
+
+function _allocPartId() {
+  let id = 0;
+  for (const p of state.parts) if (p.partId >= id) id = p.partId + 1;
+  return id;
+}
+
+// Resolve the currently-selected group (if exactly one) into a target
+// descriptor: { kind: 'user', ug } | { kind: 'hier', node } | null. Used by
+// paste so dropped clones land inside the group the user has selected in
+// the sidebar instead of as a sibling of the original source.
+function _resolvePasteTarget() {
+  const sel = state.selectedGroupIds;
+  if (!sel || sel.size !== 1) return null;
+  const gid = [...sel][0];
+  const ug = (state.userGroups || []).find(g => String(g.id) === String(gid));
+  if (ug && ug.ref) return { kind: 'user', ug };
+  const hn = (state.treeNodes || []).find(n => n.kind === 'group' && String(n.id) === String(gid));
+  if (hn) return { kind: 'hier', node: hn };
+  return null;
+}
+
+// Clone a single part into a standalone (non-instanced) Mesh, preserving
+// its current world transform. The optional `target` selects a destination
+// container (a user group's THREE.Group or a hier-group's captured obj3d);
+// when omitted, the clone goes under partsRoot as a sibling of the source.
+// Returns the new partInfo or null if the source can't be cloned.
+function _clonePart(srcId, target = null) {
+  const src = getPart(srcId);
+  if (!src || src.deleted) return null;
+
+  const srcWorld = new THREE.Matrix4();
+  if (src.mesh) {
+    src.mesh.updateWorldMatrix(true, false);
+    srcWorld.copy(src.mesh.matrixWorld);
+  } else if (src.instancedMesh) {
+    const tmp = new THREE.Matrix4();
+    src.instancedMesh.getMatrixAt(src.instanceIndex, tmp);
+    src.instancedMesh.updateWorldMatrix(true, false);
+    srcWorld.multiplyMatrices(src.instancedMesh.matrixWorld, tmp);
+  } else {
+    return null;
+  }
+
+  const geom = state.geomByHash.get(src.hash) || (src.mesh && src.mesh.geometry);
+  if (!geom) return null;
+  const mat = getOrCreateMaterial(src.originalColor);
+  const mesh = new THREE.Mesh(geom, mat);
+  const newId = _allocPartId();
+  const newName = _nextDuplicateName(src.name);
+  mesh.name = newName;
+  mesh.userData.partId = newId;
+
+  // Pick the actual scene-graph parent. user-group → ug.ref so future
+  // group transforms drag the clone along (matches drag-into-group behaviour).
+  // hier-group → captured obj3d if it's still attached to the scene; otherwise
+  // fall back to partsRoot (and we'll still reflect the group membership in
+  // treeNodes so the tree shows it inside the group).
+  let meshParent = state.partsRoot;
+  if (target?.kind === 'user' && target.ug?.ref) meshParent = target.ug.ref;
+  else if (target?.kind === 'hier' && target.node?.obj3d) {
+    const o = target.node.obj3d;
+    let alive = false;
+    for (let n = o; n; n = n.parent) if (n === scene) { alive = true; break; }
+    if (alive) meshParent = o;
+  }
+
+  // Convert the captured world matrix into the chosen parent's local space
+  // so the duplicate renders exactly where the source was, regardless of the
+  // parent's transform.
+  meshParent.updateWorldMatrix(true, false);
+  const local = new THREE.Matrix4()
+    .copy(meshParent.matrixWorld).invert()
+    .multiply(srcWorld);
+  mesh.matrix.copy(local);
+  mesh.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
+  meshParent.add(mesh);
+  meshParent.updateMatrixWorld(true);
+
+  const newPart = {
+    partId: newId, name: newName, hash: src.hash,
+    triCount: src.triCount, vertCount: src.vertCount,
+    bbox: src.bbox.clone(),
+    sizeMetrics: { ...src.sizeMetrics },
+    visible: true, deleted: false, flagged: false,
+    originalColor: src.originalColor.clone(),
+    mesh, group: null, instanceIndex: -1, instancedMesh: null,
+  };
+
+  // Place in state.parts. For grouped targets we just append (the user-group
+  // tree renderer buckets parts by ug.partIds, and the hier tree renderer
+  // walks treeNodes — neither cares about state.parts ordering for grouped
+  // rows). For the "no target" path we still want the duplicate to appear
+  // right after its source in the flat tree.
+  if (target) {
+    state.parts.push(newPart);
+  } else {
+    const srcIdx = state.parts.indexOf(src);
+    if (srcIdx >= 0) state.parts.splice(srcIdx + 1, 0, newPart);
+    else state.parts.push(newPart);
+  }
+  state.partById.set(newId, newPart);
+
+  // Reflect group membership in the data structures the renderer reads:
+  //   user group → add to ug.partIds (user-group tree renderer buckets by this)
+  //   hier group → insert a treeNode at the end of the group's subtree
+  //   no target  → insert as the source's next sibling in treeNodes
+  if (target?.kind === 'user' && target.ug) {
+    target.ug.partIds.add(newId);
+  } else if (state.treeNodes && Array.isArray(state.treeNodes)) {
+    if (target?.kind === 'hier' && target.node) {
+      const gIdx = state.treeNodes.indexOf(target.node);
+      const gDepth = target.node.depth;
+      // Subtree extends until we hit a node at depth ≤ group's depth.
+      let insertAt = gIdx + 1;
+      for (let i = gIdx + 1; i < state.treeNodes.length; i++) {
+        if (state.treeNodes[i].depth <= gDepth) break;
+        insertAt = i + 1;
+      }
+      state.treeNodes.splice(insertAt, 0, {
+        id: 'p_dup_' + newId, kind: 'part', name: newName, depth: gDepth + 1,
+        parentId: target.node.id, partId: newId, instanceCount: 0,
+      });
+    } else {
+      const tnIdx = state.treeNodes.findIndex(n => n.kind === 'part' && n.partId === srcId);
+      const baseDepth = tnIdx >= 0 ? state.treeNodes[tnIdx].depth : 0;
+      const baseParent = tnIdx >= 0 ? state.treeNodes[tnIdx].parentId : null;
+      const tn = {
+        id: 'p_dup_' + newId, kind: 'part', name: newName, depth: baseDepth,
+        parentId: baseParent, partId: newId, instanceCount: 0,
+      };
+      if (tnIdx >= 0) state.treeNodes.splice(tnIdx + 1, 0, tn);
+      else state.treeNodes.push(tn);
+    }
+  }
+
+  return newPart;
+}
+
+function duplicateParts(ids, label='Duplicated', opts = {}) {
+  if (!ids || !ids.length) return [];
+  const target = opts.target || null;
+  const sourceIds = [];
+  const newIds = [];
+  for (const id of ids) {
+    const np = _clonePart(id, target);
+    if (np) { sourceIds.push(id); newIds.push(np.partId); }
+  }
+  if (!newIds.length) return [];
+
+  // Stash enough on the op to redo the placement faithfully — userGroup id
+  // for 'user' targets, treeNode id for 'hier' targets.
+  const undoOp = { type: 'duplicate', sourceIds, partIds: newIds, label };
+  if (target?.kind === 'user') undoOp.targetUserGroupId = target.ug.id;
+  else if (target?.kind === 'hier') undoOp.targetHierNodeId = target.node.id;
+  pushUndo(undoOp);
+
+  state.selected = new Set(newIds);
+  $('del-sel-count').textContent = state.selected.size;
+
+  recomputeStats(); rebuildTree(); applySelectionColors();
+  refreshPropertiesPanel(); updateGizmo(); requestRender();
+  toast(label, `${newIds.length} part${newIds.length === 1 ? '' : 's'}`, 'success');
+  return newIds;
+}
+
+function copyParts(ids) {
+  const live = (ids || []).filter(id => { const p = getPart(id); return p && !p.deleted; });
+  if (!live.length) { toast('Nothing to copy', '', 'info', 1500); return false; }
+  state._clipboardParts = live;
+  toast('Copied', `${live.length} part${live.length === 1 ? '' : 's'} ready to paste`, 'info', 1500);
+  return true;
+}
+
+function pasteParts() {
+  const ids = (state._clipboardParts || []).filter(id => { const p = getPart(id); return p && !p.deleted; });
+  if (!ids.length) { toast('Nothing to paste', 'Copy something first (Ctrl+C)', 'warn', 1800); return []; }
+  const target = _resolvePasteTarget();
+  let label = 'Pasted';
+  if (target?.kind === 'user') label = `Pasted into "${target.ug.name}"`;
+  else if (target?.kind === 'hier') label = `Pasted into "${target.node.name}"`;
+  return duplicateParts(ids, label, { target });
 }
 
 // Apply transform-style op in either direction. dir='before' restores the
@@ -13012,6 +13230,17 @@ function wireUI() {
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoLast(); }
     else if (e.key === 'Escape') clearSelection();
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); $('sel-all').click(); }
+    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'c' || e.key === 'C')) {
+      // Only intercept when there's a part selection — otherwise let the
+      // browser handle Ctrl+C for any DOM text selection in the sidebar.
+      if (state.selected.size > 0) { e.preventDefault(); copyParts([...state.selected]); }
+    }
+    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V')) {
+      if ((state._clipboardParts || []).length > 0) { e.preventDefault(); pasteParts(); }
+    }
+    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'd' || e.key === 'D')) {
+      if (state.selected.size > 0) { e.preventDefault(); duplicateParts([...state.selected]); }
+    }
   });
 }
 
@@ -14811,7 +15040,7 @@ function _openMaterialEditor(info) {
          tile hover — subtle, just enough to lift the shaderball off the
          flat panel surface without breaking the panel's read. */
       .mat-edit-preview-wrap{position:relative;background:rgba(255,255,255,.02);padding:10px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px}
-      .mat-edit-preview-canvas{flex:0 0 92px;width:92px;height:92px;border-radius:8px;background:#0c0f15;box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.04);object-fit:cover;display:block}
+      .mat-edit-preview-canvas{flex:0 0 92px;width:92px;height:92px;border-radius:8px;background:var(--bg-checker);box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.04);object-fit:cover;display:block}
       .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
       .mat-edit-preview-name{font-size:13px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-edit-preview-type{font-size:10px;color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;text-transform:uppercase}
@@ -14844,7 +15073,7 @@ function _openMaterialEditor(info) {
          + load/clear buttons. Compact rows, minimal chrome — matches the
          color-row look. */
       .mat-tex-row{display:flex;align-items:center;gap:8px;padding:3px 0}
-      .mat-tex-thumb{flex:0 0 28px;width:28px;height:28px;border-radius:5px;background:#0c0f15;border:1px solid var(--bd);display:grid;place-items:center;overflow:hidden;color:var(--tx3)}
+      .mat-tex-thumb{flex:0 0 28px;width:28px;height:28px;border-radius:5px;background:var(--bg-checker);border:1px solid var(--bd);display:grid;place-items:center;overflow:hidden;color:var(--tx3)}
       .mat-tex-thumb img{width:100%;height:100%;object-fit:cover;display:block}
       .mat-tex-thumb svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;opacity:.45}
       .mat-tex-thumb.has-tex{border-color:var(--ac-line)}
@@ -14865,7 +15094,7 @@ function _openMaterialEditor(info) {
       .mat-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);align-items:center;gap:10px;padding:4px 0;font-size:11.5px;line-height:1.2}
       .mat-row + .mat-row{border-top:1px dashed var(--s2)}
       .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-row-tex{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background-color:#0c0f15;background-image:linear-gradient(45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.10) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.10) 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0;cursor:pointer;padding:0;display:grid;place-items:center;transition:border-color 120ms,color 120ms;color:var(--tx3)}
+      .mat-row-tex{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.10) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.10) 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0;cursor:pointer;padding:0;display:grid;place-items:center;transition:border-color 120ms,color 120ms;color:var(--tx3)}
       .mat-row-tex:hover{border-color:var(--ac);color:var(--ac)}
       .mat-row-tex svg{display:none}
       .mat-row-tex.has-tex{background-image:none;background-color:var(--ac);border-color:var(--ac);border-style:solid}
@@ -14917,7 +15146,7 @@ function _openMaterialEditor(info) {
       .mat-tex-pop{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--bd);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:10px;width:240px;display:none}
       .mat-tex-pop.show{display:block}
       .mat-tex-pop-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-      .mat-tex-pop-thumb{flex:0 0 40px;width:40px;height:40px;border-radius:6px;background:#0c0f15;border:1px solid var(--bd);overflow:hidden;display:grid;place-items:center}
+      .mat-tex-pop-thumb{flex:0 0 40px;width:40px;height:40px;border-radius:6px;background:var(--bg-checker);border:1px solid var(--bd);overflow:hidden;display:grid;place-items:center}
       .mat-tex-pop-thumb img{width:100%;height:100%;object-fit:cover;display:block}
       .mat-tex-pop-thumb svg{width:18px;height:18px;stroke:var(--tx3);fill:none;stroke-width:1.6;opacity:.45}
       .mat-tex-pop-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
@@ -17268,6 +17497,10 @@ document.addEventListener('contextmenu', e => {
     { icon: 'chevrons-down',  label: 'Expand all groups',      fn: _treeExpandAll },
     { icon: 'chevrons-up',    label: 'Collapse all groups',    fn: _treeCollapseAll },
     '---',
+    { icon: 'copy',           label: 'Copy',                   kbd: 'Ctrl+C', fn: () => copyParts([...state.selected]) },
+    ...((state._clipboardParts || []).length ? [{ icon: 'clipboard-paste', label: 'Paste', kbd: 'Ctrl+V', fn: () => pasteParts() }] : []),
+    { icon: 'copy-plus',      label: 'Duplicate',              kbd: 'Ctrl+D', fn: () => duplicateParts([...state.selected]) },
+    '---',
     { icon: 'trash-2',        label: 'Delete',                 danger: true, fn: () => deleteParts([...state.selected], 'Deleted via context menu') },
   ];
   _ctxBuild(items, e.clientX, e.clientY);
@@ -19070,6 +19303,10 @@ function _initCustomSelects() {
         items.push('---');
         items.push({ icon: 'shapes',          label: 'Select similar shape', fn: selectSimilar });
         items.push({ icon: 'palette',         label: 'Select same color',  fn: selectByColor });
+        items.push('---');
+        items.push({ icon: 'copy',            label: 'Copy',               kbd: 'Ctrl+C', fn: () => copyParts([...state.selected]) });
+        if ((state._clipboardParts || []).length) items.push({ icon: 'clipboard-paste', label: 'Paste', kbd: 'Ctrl+V', fn: () => pasteParts() });
+        items.push({ icon: 'copy-plus',       label: 'Duplicate',          kbd: 'Ctrl+D', fn: () => duplicateParts([...state.selected]) });
         items.push('---');
         items.push({ icon: 'trash-2',         label: 'Delete selected',    danger: true, kbd: 'Del', fn: () => deleteParts([...state.selected], 'Deleted via context menu') });
       } else {
@@ -21348,7 +21585,7 @@ const _DraggablePopup = (() => {
       .dlg-popup .dlg-pop{
         position:absolute;
         max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);
-        background:linear-gradient(180deg,#1a1f2a,#10141c);
+        background:linear-gradient(180deg,var(--bg3),var(--bg));
         border:0;
         border-radius:14px;
         box-shadow:0 30px 80px -16px rgba(0,0,0,.7),0 8px 24px -8px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);
@@ -21373,10 +21610,10 @@ const _DraggablePopup = (() => {
       .dlg-popup .dlg-resize.sw{bottom:-3px;left:-3px;width:16px;height:16px;cursor:nesw-resize}
       .dlg-popup .dlg-resize.se{bottom:-3px;right:-3px;width:16px;height:16px;cursor:nwse-resize}
 
-      .dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
-      .dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
-      .dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
-      .dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,#1a1f2a,#10141c)}
+      .dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
+      .dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
+      .dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
+      .dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
 
       .dlg-popup .dlg-head{display:flex;align-items:center;gap:11px;padding:13px 14px 12px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;position:relative;cursor:grab;user-select:none}
       .dlg-popup .dlg-head:active{cursor:grabbing}
@@ -21739,7 +21976,7 @@ const _BatchRenameDialog = (() => {
       .brn-collapsible.open .chev::before{transform:translateY(-1px) rotate(45deg)}
       .brn-collapsible-b{display:none;padding:10px 12px 12px 12px;border-top:1px solid rgba(255,255,255,.05);flex-direction:column;gap:8px}
       .brn-collapsible.open .brn-collapsible-b{display:flex}
-      .brn-token-pop{position:absolute;background:#161b24;border:1px solid rgba(255,255,255,.07);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06);padding:4px;z-index:600;display:none;max-height:280px;overflow:auto;min-width:280px}
+      .brn-token-pop{position:absolute;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06);padding:4px;z-index:600;display:none;max-height:280px;overflow:auto;min-width:280px}
       .brn-token-pop.show{display:block}
       .brn-token-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:ui-monospace,monospace;font-size:12px;color:var(--tx)}
       .brn-token-item:hover,.brn-token-item.active{background:var(--ac-soft)}
@@ -22312,6 +22549,78 @@ redoLast = function() {
   return _origRedoLast_batchRename();
 };
 
+// Undo / redo wrappers for 'duplicate'.
+// Undo deletes the cloned meshes outright (geometry + material are shared via
+// geomByHash / materialByColor — disposing them would wreck the source). Redo
+// re-runs the clone from the original source ids that we stash on the op.
+const _origUndoLast_duplicate = undoLast;
+undoLast = function() {
+  const op = state.history[state.history.length - 1];
+  if (op && op.type === 'duplicate') {
+    state.history.pop();
+    const idSet = new Set(op.partIds);
+    // Drop membership from any user group the clones got pasted into so the
+    // sidebar bucket count matches the live mesh count after undo.
+    if (op.targetUserGroupId != null) {
+      const ug = (state.userGroups || []).find(g => g.id === op.targetUserGroupId);
+      if (ug) for (const id of op.partIds) ug.partIds.delete(id);
+    }
+    for (const id of op.partIds) {
+      const p = getPart(id);
+      if (p && p.mesh) p.mesh.parent?.remove(p.mesh);
+      state.partById.delete(id);
+    }
+    state.parts = state.parts.filter(p => !idSet.has(p.partId));
+    if (state.treeNodes && Array.isArray(state.treeNodes)) {
+      state.treeNodes = state.treeNodes.filter(n => !(n.kind === 'part' && idSet.has(n.partId)));
+    }
+    if (state.selected) for (const id of op.partIds) state.selected.delete(id);
+    $('del-sel-count').textContent = state.selected.size;
+    state.redo.push(op);
+    recomputeStats();
+    _finalizeUndo({ rebuildTree: true });
+    return;
+  }
+  return _origUndoLast_duplicate();
+};
+
+const _origRedoLast_duplicate = redoLast;
+redoLast = function() {
+  const op = state.redo[state.redo.length - 1];
+  if (op && op.type === 'duplicate') {
+    state.redo.pop();
+    // Re-resolve the original target. If the group has since been dissolved
+    // we silently fall back to "no target" (clones land at top level) rather
+    // than refuse the redo.
+    let target = null;
+    if (op.targetUserGroupId != null) {
+      const ug = (state.userGroups || []).find(g => g.id === op.targetUserGroupId);
+      if (ug && ug.ref) target = { kind: 'user', ug };
+    } else if (op.targetHierNodeId != null) {
+      const hn = (state.treeNodes || []).find(n => n.kind === 'group' && n.id === op.targetHierNodeId);
+      if (hn) target = { kind: 'hier', node: hn };
+    }
+    const newIds = [];
+    for (const id of op.sourceIds) {
+      const np = _clonePart(id, target);
+      if (np) newIds.push(np.partId);
+    }
+    if (!newIds.length) {
+      toast('Redo unavailable', 'Source parts are gone', 'warn', 1800);
+      _refreshUndoRedoButtons();
+      return;
+    }
+    op.partIds = newIds;          // keep the op consistent for a follow-up undo
+    state.history.push(op);
+    state.selected = new Set(newIds);
+    $('del-sel-count').textContent = state.selected.size;
+    recomputeStats();
+    _finalizeUndo({ rebuildTree: true });
+    return;
+  }
+  return _origRedoLast_duplicate();
+};
+
 // Toolbar wiring + F2 shortcut
 function _openBatchRenameDialog(anchor) { return _BatchRenameDialog.open(anchor); }
 
@@ -22593,7 +22902,7 @@ rebuildTree = function() {
     /* Width math: 14px left fade + 18px eye + 6px gap + 10px color swatch
        + 6px right pad = 54px. flex-shrink:0 so it never compresses; if you
        widen the eye/color icons, bump this. */
-    .tree-iconcol{position:sticky;right:0;z-index:2;display:inline-flex;align-items:center;justify-content:flex-start;gap:6px;width:54px;flex-shrink:0;margin-left:auto;padding:0 6px 0 14px;align-self:stretch;background:linear-gradient(90deg,rgba(15,19,25,0) 0,var(--bg1) 12px,var(--bg1) 100%)}
+    .tree-iconcol{position:sticky;right:0;z-index:2;display:inline-flex;align-items:center;justify-content:flex-start;gap:6px;width:54px;flex-shrink:0;margin-left:auto;padding:0 6px 0 14px;align-self:stretch;background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%)}
     /* Vertical divider line: sits AT the iconcol's left edge so it inherits
        the sticky-right anchoring. The previous .tree-node::after was
        absolute-positioned on the row, which made the line scroll
@@ -22605,9 +22914,9 @@ rebuildTree = function() {
     /* Selected/hover row backgrounds need to extend through the sticky icon
        column too — otherwise the gradient + bg1 column shows over the
        selection tint and looks like a missing chunk on the right side. */
-    .tree-node.selected .tree-iconcol{background:linear-gradient(90deg,rgba(28,42,68,0) 0,rgba(28,42,68,1) 12px,rgba(28,42,68,1) 100%)}
-    .tree-node:hover .tree-iconcol{background:linear-gradient(90deg,rgba(20,25,33,0) 0,#141921 12px,#141921 100%)}
-    .tree-node.selected:hover .tree-iconcol{background:linear-gradient(90deg,rgba(36,52,80,0) 0,rgba(36,52,80,1) 12px,rgba(36,52,80,1) 100%)}
+    .tree-node.selected .tree-iconcol{background:linear-gradient(90deg,transparent 0,var(--bg2) 12px,var(--bg2) 100%)}
+    .tree-node:hover .tree-iconcol{background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%)}
+    .tree-node.selected:hover .tree-iconcol{background:linear-gradient(90deg,transparent 0,var(--bg3) 12px,var(--bg3) 100%)}
     /* Row-level divider that extends 1px above and below to overlap adjacent
        rows. Right offset matches the iconcol width (38px) + its left
        padding (14px) - 1px so the divider sits at the column's left edge
@@ -22626,8 +22935,8 @@ rebuildTree = function() {
     .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px rgba(107,141,255,.6);pointer-events:none;z-index:50}
     .tree-drop-line::before{content:'';position:absolute;left:2px;top:-4px;width:6px;height:6px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px var(--ac)}
     #tree-newgroup-zone{display:none!important}
-    #_dnd-ghost{position:fixed;pointer-events:none;z-index:9999;background:rgba(20,28,40,.95);border:1px solid var(--ac);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--tx);box-shadow:0 4px 18px rgba(0,0,0,.5);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    #_dnd-ghost .badge{display:inline-block;margin-right:6px;padding:1px 6px;background:var(--ac);color:#0a0d12;border-radius:10px;font-weight:700;font-variant-numeric:tabular-nums}
+    #_dnd-ghost{position:fixed;pointer-events:none;z-index:9999;background:rgba(28,28,28,.95);border:1px solid var(--ac);border-radius:6px;padding:6px 10px;font-size:12px;color:var(--tx);box-shadow:0 4px 18px rgba(0,0,0,.5);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #_dnd-ghost .badge{display:inline-block;margin-right:6px;padding:1px 6px;background:var(--ac);color:var(--bg);border-radius:10px;font-weight:700;font-variant-numeric:tabular-nums}
   `;
   document.head.appendChild(s);
 })();
