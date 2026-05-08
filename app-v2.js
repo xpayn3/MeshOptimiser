@@ -1031,10 +1031,12 @@ const _SceneSettings = (() => {
   let inited = false;
 
   // Section titles to pull out of the cog popup and into the modal. Order
-  // here is the order they'll appear in the modal body. Lighting is moved
-  // even though it's currently hidden — keeps state save/restore working
-  // and lets us re-show it from the modal later without a refactor.
-  const SECTIONS = ['Scene', 'Camera', 'Lighting', 'Grid'];
+  // here is the order they'll appear in the modal body. Camera stays in
+  // the viewport cog popup (alongside Display / Performance) since it's a
+  // viewport concern users want quick access to. Lighting is moved even
+  // though it's currently hidden — keeps state save/restore working and
+  // lets us re-show it from the modal later without a refactor.
+  const SECTIONS = ['Scene', 'Lighting', 'Grid'];
 
   function _relocateOnce() {
     if (relocated) return;
