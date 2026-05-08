@@ -66,6 +66,12 @@
   --icon-part:#10b981;
   --icon-inst:#a78bfa;
 
+  /* Native <select> dropdown arrow — embedded SVG. Stroke must be a literal
+     hex (data: URL strings can't reference var(...)). Update both the URL
+     and `--select-arrow-color` if rebranding. */
+  --select-arrow-color:#ededed;
+  --select-arrow:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%23ededed' stroke-width='1.5'/></svg>");
+
   /* Shadows / elevation */
   --sh:0 8px 24px rgba(0,0,0,.45);
   --sh-pop:0 12px 32px rgba(0,0,0,.5);
@@ -335,8 +341,8 @@ body.resizing *{cursor:col-resize !important}
 i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-style:normal}
 .brand h1{font-size:var(--fs-sm);font-weight:var(--fw-semibold);line-height:1.05}
 .brand small{color:var(--tx3);font-size:var(--fs-2xs);line-height:1.05}
-.tbtn{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);border-radius:5px;font-size:var(--fs-sm);line-height:1.2;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out),filter var(--dur-base) var(--ease-out)}
-.tbtn.icon-only{padding:5px 7px}
+.tbtn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:26px;gap:5px;padding:0 9px;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);border-radius:5px;font-size:var(--fs-sm);line-height:1;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out),filter var(--dur-base) var(--ease-out)}
+.tbtn.icon-only{padding:0;width:26px}
 .tbtn.icon-only i,.tbtn.icon-only svg{width:14px;height:14px}
 .tbtn.icon-only.active{background:var(--ac-soft);border-color:var(--ac-line);color:var(--ac)}
 .tbtn:hover{background:var(--bg4);border-color:var(--bd2)}
@@ -704,15 +710,15 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .scrub-range:active::-moz-range-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px var(--ac-tint-18)}
 .scrub-range:focus-visible::-webkit-slider-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px var(--ac-tint-35)}
 .scrub-range:focus-visible::-moz-range-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px var(--ac-tint-35)}
-.mac-sel{width:100%;padding:7px 28px 7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%239a9a9a' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out)}
+.mac-sel{width:100%;padding:var(--space-7) 28px var(--space-7) var(--space-lg);background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;appearance:none;cursor:pointer;background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 9px center;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out)}
 .mac-sel:hover{background-color:var(--bg4);border-color:var(--bd2)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:var(--fw-medium);transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.btn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:var(--space-7);padding:0 var(--space-xl);min-height:32px;line-height:1;width:100%;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:var(--fw-medium);transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .btn:hover{background:var(--bg4);border-color:var(--bd2)}
 .btn:active{transform:scale(.97);background:var(--bg3)}
 /* Compact .btn variant for the right sidebar — matches the .split-preset
    segmented control height (~28px) so all sidebar buttons read at the same
    visual weight. */
-#sidebar-right .btn{padding:6px 10px;font-size:var(--fs-11);border-radius:var(--r-sm);gap:var(--space-sm);min-height:30px;font-weight:var(--fw-regular)}
+#sidebar-right .btn{padding:0 var(--space-lg);font-size:var(--fs-11);border-radius:var(--r-sm);gap:var(--space-sm);min-height:30px;font-weight:var(--fw-regular)}
 #sidebar-right .btn svg{width:13px;height:13px}
 #sidebar-right .btn-row{gap:5px}
 .btn.danger{color:var(--er)}
@@ -758,9 +764,9 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .split-preview .pv-ok{color:var(--ok)}
 .split-advanced summary::marker{color:var(--tx3)}
 .split-advanced[open] summary{color:var(--tx2)}
-.btn-split{display:flex;width:100%}
+.btn-split{display:flex;width:100%;align-items:stretch}
 .btn-split > .btn{border-top-right-radius:0;border-bottom-right-radius:0;border-right:none}
-.btn-split > .btn-caret{display:inline-flex;align-items:center;justify-content:center;width:26px;flex:0 0 26px;padding:0;background:var(--bg2);border:1px solid var(--bd);border-top-left-radius:0;border-bottom-left-radius:0;border-top-right-radius:var(--r-md);border-bottom-right-radius:var(--r-md);color:var(--tx);cursor:pointer;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out)}
+.btn-split > .btn-caret{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:26px;flex:0 0 26px;padding:0;line-height:1;background:var(--bg2);border:1px solid var(--bd);border-top-left-radius:0;border-bottom-left-radius:0;border-top-right-radius:var(--r-md);border-bottom-right-radius:var(--r-md);color:var(--tx);cursor:pointer;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out)}
 .btn-split > .btn-caret:hover{background:var(--bg3);border-color:var(--bd2)}
 .btn-split > .btn-caret svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:1.6}
 .btn-caret.warn{color:var(--wn)}
@@ -912,9 +918,14 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
    button to choose a format; the modal then opens for that format's
    options (scale, axis, origin, selected/visible, draco, etc.). */
 .export-wrap{position:relative;display:inline-flex}
-.export-wrap .caret{display:inline-flex;align-items:center;justify-content:center;margin-left:2px;color:var(--tx2);transition:transform 140ms var(--ease-out)}
-.export-wrap .caret svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
-.export-wrap.open .caret{transform:rotate(180deg)}
+/* Dropdown caret used inside any .tbtn that opens a menu (File, Add, Export, …).
+   Color inherits from the host button so primary buttons get a white caret
+   while default buttons get text-grey. The wrapper toggles `.open` to flip. */
+.tbtn .caret{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;margin-left:var(--space-2xs);color:currentColor;opacity:.85;transition:transform 140ms var(--ease-out)}
+.tbtn .caret svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;display:block}
+.export-wrap.open > .tbtn .caret,
+.tbtn.active .caret,
+.tbtn[aria-expanded="true"] .caret{transform:rotate(180deg)}
 .export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.5);padding:6px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .export-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 .export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);padding:8px 12px;border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-md);color:var(--tx);width:calc(100% - 24px);user-select:none;transition:background 80ms,color 80ms}
@@ -1260,7 +1271,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
             <div class="brand-menu-title">STEP Optimizer</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v1.1</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v1.2</div>
         </div>
         <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / GLTF models in the browser. Real-time WebGPU rendering, lossless edits and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
@@ -2337,7 +2348,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050707-prim-deferdispose"></script>
+<script type="module" src="app-v2.js?v=2026050807-v1.2"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

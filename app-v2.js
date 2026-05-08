@@ -19213,7 +19213,7 @@ function _initCustomSelects() {
         border-radius: var(--r-md); color: var(--tx); font-size: var(--fs-md);
         outline: none; cursor: pointer; text-align: left;
         font: inherit; font-size: var(--fs-md);
-        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");
+        background-image: var(--select-arrow);
         background-repeat: no-repeat; background-position: right 9px center;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
