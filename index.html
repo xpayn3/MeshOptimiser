@@ -29,32 +29,108 @@
 
   /* Accents / status */
   --ac:#6b8dff; --ac2:#a78bfa; --ok:#34c759; --wn:#fbbf24; --er:#ff6b6b;
-  --ac-soft:rgba(107,141,255,.10);   /* tint for selected/active states */
-  --ac-line:rgba(107,141,255,.30);   /* tint borders */
+  --ac-hover:#5a8eff;                 /* primary button hover */
+  --ac-active:#4f7ce0;                /* primary button pressed / segmented active end */
+  --ac-soft:rgba(107,141,255,.10);    /* tint for selected/active states */
+  --ac-line:rgba(107,141,255,.30);    /* tint borders */
+  --ac-tint-04:rgba(107,141,255,.04); /* faintest hint */
+  --ac-tint-08:rgba(107,141,255,.08); /* lightest accent wash (tree-expand hover) */
+  --ac-tint-12:rgba(107,141,255,.12); /* pill / lc-pill active */
+  --ac-tint-14:rgba(107,141,255,.14); /* input/edit-state fill */
+  --ac-tint-15:rgba(107,141,255,.15); /* tree-badge bg */
+  --ac-tint-18:rgba(107,141,255,.18); /* focus ring shadow / pressed step */
+  --ac-tint-20:rgba(107,141,255,.20); /* mat-thumb selected ring */
+  --ac-tint-25:rgba(107,141,255,.25); /* segmented-active shadow */
+  --ac-tint-35:rgba(107,141,255,.35); /* mark glow / ring base */
+  --ac-tint-40:rgba(107,141,255,.40); /* mat-cell selected border */
+  --ac-tint-45:rgba(107,141,255,.45); /* strong mark glow */
+  --ac-tint-55:rgba(107,141,255,.55); /* focus border */
+  --er-soft:rgba(255,107,107,.12);    /* danger button hover bg */
+  --er-soft-strong:rgba(255,107,107,.14);
+  --er-line:rgba(255,107,107,.25);    /* danger border tint */
+  --er-tint-15:rgba(255,107,107,.15); /* danger badge bg */
+  --er-tint-10:rgba(255,107,107,.10);
+  --wn-soft:rgba(251,191,36,.12);     /* warn button hover bg */
+  --wn-line:rgba(251,191,36,.25);     /* warn border tint */
+  --wn-tint-08:rgba(251,191,36,.08);  /* flagged-row bg */
+  --wn-tint-13:rgba(251,191,36,.13);
+  --wn-tint-15:rgba(251,191,36,.15);  /* warn badge bg */
+  --wn-tint-55:rgba(251,191,36,.55);  /* flagged-row inset stroke */
+  --tx-on-accent:#fff;                /* text/icon color over solid accent */
 
-  /* Shadows */
+  /* Type-icon palette (assemblies / parts / shared-instance leaves) */
+  --icon-asm:#f59e0b;
+  --icon-part:#10b981;
+  --icon-inst:#a78bfa;
+
+  /* Shadows / elevation */
   --sh:0 8px 24px rgba(0,0,0,.45);
   --sh-pop:0 12px 32px rgba(0,0,0,.5);
+  --sh-card:0 2px 10px rgba(0,0,0,.12);
+  --sh-thumb:0 1px 2px rgba(0,0,0,.4);
+  --sh-thumb-strong:0 1px 3px rgba(0,0,0,.5);
+  --ring-focus:0 0 0 2px var(--ac-line);
+  --ring-focus-thick:0 0 0 3px var(--ac-tint-18);
 
   /* Radius scale */
+  --r-2xs:2px;
   --r-xs:4px;   /* badges, tiny chips */
   --r-sm:6px;   /* icon buttons, segmented controls */
   --r-md:8px;   /* buttons, cards */
   --r-lg:10px;  /* popups */
   --r-xl:12px;  /* modals, sections */
+  --r-2xl:14px;
   --r-pill:999px;
 
   /* Type scale (kept in px, lined up with the existing ramp) */
+  --fs-2xs:9.5px;
   --fs-xs:10.5px; --fs-sm:11.5px; --fs-md:12.5px; --fs-lg:13px; --fs-xl:14px;
+  --fs-2xl:16px;
+  /* Off-grid sizes the codebase actually uses — kept named so future drift is visible. */
+  --fs-10:10px;
+  --fs-11:11px;
+  --fs-12:12px;
+
+  /* Font stacks */
+  --font-sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+  /* Motion durations */
+  --dur-instant:80ms;
+  --dur-fast:120ms;
+  --dur-base:150ms;
+  --dur-slow:220ms;
+  --dur-slower:320ms;
 
   /* Easings — built-in `ease`/`ease-out` are too weak. */
   --ease-out:cubic-bezier(.23,1,.32,1);          /* punchy ease-out for UI exits/entrances */
   --ease-in-out:cubic-bezier(.77,0,.175,1);      /* on-screen movement */
   --ease-ios:cubic-bezier(.32,.72,0,1);          /* iOS-feel curve (drawers, switches) */
+  --ease-std:cubic-bezier(.4,0,.2,1);            /* Material-style standard curve */
+
+  /* Z-index scale */
+  --z-base:1;
+  --z-sticky:50;
+  --z-toolbar:90;
+  --z-dropdown:100;
+  --z-overlay:200;
+  --z-modal:500;
+  --z-popover:1500;
+  --z-toast:9000;
+  --z-tooltip:10000;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+    scroll-behavior:auto!important;
+  }
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{font:13px/1.4 -apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;color:var(--tx);background:var(--bg);overflow:hidden;-webkit-font-smoothing:antialiased}
+body{font:var(--fs-lg)/1.4 var(--font-sans);color:var(--tx);background:var(--bg);overflow:hidden;-webkit-font-smoothing:antialiased}
 /* Boot fade-in: hide everything until layout + lucide icons settle, then
    fade in. Hides the early-load content shift / icon-pop visible at first
    paint. .app-ready is added by the inline script at the end of <body>;
@@ -97,8 +173,8 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 }
 .welcome-recent .wr-del svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .welcome-recent:hover .wr-del,.welcome-recent:focus-within .wr-del{opacity:1}
-.welcome-recent .wr-del:hover{background:rgba(255,107,107,.14);color:var(--er)}
-#welcome-recents-clear:hover{color:var(--er);border-color:rgba(255,107,107,.25);background:rgba(255,107,107,.10)}
+.welcome-recent .wr-del:hover{background:var(--er-soft-strong);color:var(--er)}
+#welcome-recents-clear:hover{color:var(--er);border-color:var(--er-line);background:var(--er-tint-10)}
 
 /* Resume hero card — uses the most-recent thumb as a full-bleed
    background, with a darkening gradient + accent play badge sitting over
@@ -111,7 +187,7 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
   color:var(--tx);text-align:left;cursor:pointer;overflow:hidden;
   transition:filter 140ms var(--ease-out),transform 120ms var(--ease-out),box-shadow 140ms var(--ease-out);
 }
-.welcome-resume:hover{filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 8px 24px rgba(107,141,255,.18)}
+.welcome-resume:hover{filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 8px 24px var(--ac-tint-18)}
 .welcome-resume::before{
   content:'';position:absolute;inset:0;
   background:linear-gradient(180deg,rgba(15,19,25,.30) 0%,rgba(15,19,25,.85) 90%);
@@ -119,8 +195,8 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 .welcome-resume > *{position:relative;z-index:1}
 .welcome-resume .wr-play{
   width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
-  background:var(--ac);color:#fff;
-  box-shadow:0 4px 14px rgba(107,141,255,.45),inset 0 1px 0 rgba(255,255,255,.25);
+  background:var(--ac);color:var(--tx-on-accent);
+  box-shadow:0 4px 14px var(--ac-tint-45),inset 0 1px 0 rgba(255,255,255,.25);
   flex-shrink:0;margin-right:14px;
 }
 .welcome-resume .wr-play svg{width:16px;height:16px;stroke:currentColor;fill:currentColor;stroke-width:0}
@@ -128,7 +204,7 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 .welcome-resume .wr-info .wr-label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ac);margin-bottom:2px}
 #welcome-resume .wr-heading{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ac);margin-bottom:8px;padding-left:2px}
 .welcome-resume .wr-info{display:flex;flex-direction:column;gap:2px}
-.welcome-resume .wr-info .wr-name{display:block;font-size:16px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-resume .wr-info .wr-name{display:block;font-size:var(--fs-2xl);font-weight:600;color:var(--tx-on-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .welcome-resume .wr-info .wr-sub{display:block;font-size:var(--fs-sm);color:rgba(255,255,255,.65)}
 .welcome-resume .wr-age{align-self:flex-end;color:rgba(255,255,255,.55);font-size:var(--fs-sm);flex-shrink:0;margin-left:12px}
 button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
@@ -155,7 +231,7 @@ body.resizing #app{transition:none}
    doesn't disturb existing layout. Hover gets a subtle accent so users
    notice they CAN drag it. */
 .resize-handle{position:absolute;top:0;width:5px;height:100%;cursor:col-resize;z-index:50;background:transparent;transition:background 120ms var(--ease-out)}
-.resize-handle:hover,.resize-handle.dragging{background:rgba(107,141,255,.35)}
+.resize-handle:hover,.resize-handle.dragging{background:var(--ac-tint-35)}
 #sidebar-left{position:relative}
 #sidebar-right{position:relative}
 #resize-l{right:-2px}
@@ -171,26 +247,26 @@ body.resizing *{cursor:col-resize !important}
    the brand keeps a small gap from the rightmost stat. */
 .brand-right{margin-left:16px}
 .brand-right .brand-text{text-align:right}
-.brand-mark{position:relative;width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 4px 14px rgba(107,141,255,.35);transition:box-shadow 260ms var(--ease-out),transform 320ms var(--ease-out),filter 260ms var(--ease-out)}
+.brand-mark{position:relative;width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 4px 14px var(--ac-tint-35);transition:box-shadow 260ms var(--ease-out),transform 320ms var(--ease-out),filter 260ms var(--ease-out)}
 .brand-mark::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,0) 55%);opacity:0;transition:opacity 260ms var(--ease-out);pointer-events:none}
-.brand-mark::after{content:"";position:absolute;inset:-6px;border-radius:14px;background:radial-gradient(closest-side,rgba(107,141,255,.55),rgba(107,141,255,0) 70%);opacity:0;transition:opacity 320ms var(--ease-out);pointer-events:none;z-index:-1}
+.brand-mark::after{content:"";position:absolute;inset:-6px;border-radius:14px;background:radial-gradient(closest-side,var(--ac-tint-55),rgba(107,141,255,0) 70%);opacity:0;transition:opacity 320ms var(--ease-out);pointer-events:none;z-index:-1}
 .brand-mark svg{width:16px;height:16px;stroke:white;fill:none;stroke-width:2;transition:transform 320ms var(--ease-out),filter 320ms var(--ease-out)}
 /* Brand button — replaces the app-name text. Click to open the brand-menu
    popover with About / GitHub / version / shortcuts. */
 .brand-btn{all:unset;display:grid;place-items:center;padding:5px;border-radius:8px;cursor:pointer;transition:background 120ms var(--ease-out),transform 120ms var(--ease-out)}
-.brand-btn:hover .brand-mark{transform:scale(1.08);box-shadow:0 8px 26px rgba(107,141,255,.55),inset 0 1px 0 rgba(255,255,255,.18);filter:brightness(1.08) saturate(1.1)}
+.brand-btn:hover .brand-mark{transform:scale(1.08);box-shadow:0 8px 26px var(--ac-tint-55),inset 0 1px 0 rgba(255,255,255,.18);filter:brightness(1.08) saturate(1.1)}
 .brand-btn:hover .brand-mark::before{opacity:1}
 .brand-btn:hover .brand-mark::after{opacity:1}
 .brand-btn:hover .brand-mark svg{transform:scale(1.06);filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
 .brand-btn:active .brand-mark{transform:scale(.96)}
 .brand-btn:focus-visible{box-shadow:0 0 0 2px var(--ac-line)}
-.brand-btn[aria-expanded="true"] .brand-mark{box-shadow:0 4px 18px rgba(107,141,255,.55),0 0 0 2px var(--ac-line)}
+.brand-btn[aria-expanded="true"] .brand-mark{box-shadow:0 4px 18px var(--ac-tint-55),0 0 0 2px var(--ac-line)}
 /* Brand menu — anchored to the brand button on the top-right. Right-aligned
    transform-origin so it grows out of the button corner. */
 .brand-menu{position:absolute;top:calc(100% + 8px);right:8px;width:300px;background:var(--bg1);border:1px solid var(--bd);border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);padding:8px;z-index:90;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
 .brand-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 .brand-menu-head{display:flex;align-items:center;gap:10px;padding:10px 10px 12px}
-.brand-menu-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 6px 20px rgba(107,141,255,.45);flex:0 0 auto}
+.brand-menu-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 6px 20px var(--ac-tint-45);flex:0 0 auto}
 .brand-menu-mark svg{width:18px;height:18px;stroke:white;fill:none;stroke-width:2}
 .brand-menu-titles{flex:1 1 auto;min-width:0}
 .brand-menu-title{font-size:13.5px;font-weight:600;color:var(--tx);line-height:1.15}
@@ -220,9 +296,9 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tbtn:hover{background:var(--bg4);border-color:var(--bd2)}
 .tbtn:active{transform:scale(.97)}
 .tbtn:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
-.tbtn.primary{background:var(--ac);border-color:transparent;color:#fff;font-weight:500;box-shadow:none}
-.tbtn.primary:hover{background:#5a8eff}
-.tbtn.primary:active{background:#4f7ce0}
+.tbtn.primary{background:var(--ac);border-color:transparent;color:var(--tx-on-accent);font-weight:500;box-shadow:none}
+.tbtn.primary:hover{background:var(--ac-hover)}
+.tbtn.primary:active{background:var(--ac-active)}
 .tbtn:disabled{opacity:.4;cursor:not-allowed}
 .tbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .spacer{flex:1}
@@ -264,34 +340,34 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 #transform-panel .tform-col-label{font-size:9.5px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px}
 #transform-panel .tform-col-label[data-tform-col]{cursor:context-menu;user-select:none;border-radius:3px;transition:background .12s ease,color .12s ease}
 #transform-panel .tform-col-label[data-tform-col]:hover{color:var(--tx2);background:rgba(255,255,255,.04)}
-#transform-panel .tform-row-label{font-size:10.5px;color:var(--tx3);font-weight:600;align-self:center;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-#transform-panel .tform-row-label.x{color:#ff6b6b}
-#transform-panel .tform-row-label.y{color:#34c759}
+#transform-panel .tform-row-label{font-size:10.5px;color:var(--tx3);font-weight:600;align-self:center;text-align:center;font-family:var(--font-mono)}
+#transform-panel .tform-row-label.x{color:var(--er)}
+#transform-panel .tform-row-label.y{color:var(--ok)}
 #transform-panel .tform-row-label.z{color:var(--ac)}
 #transform-panel .tform-num{position:relative}
-#transform-panel .tform-unit{position:absolute;right:22px;top:50%;transform:translateY(-50%);font-size:9.5px;color:var(--tx3);pointer-events:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.01em}
+#transform-panel .tform-unit{position:absolute;right:22px;top:50%;transform:translateY(-50%);font-size:9.5px;color:var(--tx3);pointer-events:none;font-family:var(--font-mono);letter-spacing:.01em}
 #transform-panel .tform-input{padding-right:22px;text-align:right}
 /* Number-input cell with custom stepper buttons on each side. The native
    spinner is hidden (-webkit-/Firefox) since the visible buttons own the
    increment/decrement action and the input itself is just a value field. */
 #transform-panel .tform-num{display:grid;grid-template-columns:18px 1fr 18px;align-items:stretch;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.06);border-radius:5px;overflow:hidden;transition:border-color .12s ease,box-shadow .12s ease,background .12s ease}
 #transform-panel .tform-num:hover{border-color:rgba(255,255,255,.12)}
-#transform-panel .tform-num:focus-within{border-color:rgba(107,141,255,.55);background:rgba(0,0,0,.30);box-shadow:0 0 0 3px rgba(107,141,255,.18)}
+#transform-panel .tform-num:focus-within{border-color:var(--ac-tint-55);background:rgba(0,0,0,.30);box-shadow:0 0 0 3px var(--ac-tint-18)}
 #transform-panel .tform-num.disabled{opacity:.5}
 #transform-panel .tform-step{font:inherit;font-size:11px;font-weight:600;line-height:1;color:var(--tx3);background:transparent;border:none;cursor:pointer;display:grid;place-items:center;padding:0;user-select:none;transition:color .1s ease,background .1s ease}
 #transform-panel .tform-step:hover{color:var(--tx);background:rgba(255,255,255,.05)}
-#transform-panel .tform-step:active{background:rgba(107,141,255,.18);color:var(--ac)}
+#transform-panel .tform-step:active{background:var(--ac-tint-18);color:var(--ac)}
 #transform-panel .tform-step:disabled{cursor:not-allowed;opacity:.4}
 #transform-panel .tform-step:disabled:hover{background:transparent;color:var(--tx3)}
-#transform-panel .tform-input{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx);background:transparent;border:none;padding:5px 4px;outline:none;width:100%;min-width:0;text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+#transform-panel .tform-input{font:inherit;font-family:var(--font-mono);font-size:11px;color:var(--tx);background:transparent;border:none;padding:5px 4px;outline:none;width:100%;min-width:0;text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
 #transform-panel .tform-input::-webkit-outer-spin-button,
 #transform-panel .tform-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 #transform-panel .tform-input:disabled{cursor:not-allowed}
 #transform-panel .tform-input.mixed{color:var(--tx3);font-style:italic}
 #transform-panel .tform-empty{padding:14px 10px;text-align:center;color:var(--tx3);font-size:11px}
-#sidebar-right{display:block;border-left:1px solid var(--bd);overflow-y:auto;padding:12px 12px 20px;background:radial-gradient(circle at 80% 0%,rgba(107,141,255,.04),transparent 50%),var(--bg)}
+#sidebar-right{display:block;border-left:1px solid var(--bd);overflow-y:auto;padding:12px 12px 20px;background:radial-gradient(circle at 80% 0%,var(--ac-tint-04),transparent 50%),var(--bg)}
 #sidebar-right .section{flex-shrink:0}
-.section{background:var(--bg2);border:1px solid rgba(255,255,255,.04);border-radius:var(--r-xl);margin-bottom:10px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.section{background:var(--bg2);border:1px solid rgba(255,255,255,.04);border-radius:var(--r-xl);margin-bottom:10px;overflow:hidden;box-shadow:var(--sh-card)}
 .section:last-child{margin-bottom:0}
 .section-h{display:flex;align-items:center;justify-content:space-between;padding:11px 10px 9px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);cursor:pointer;user-select:none}
 .section-h:hover{color:var(--tx)}
@@ -321,8 +397,8 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tree-node.hidden-vis{opacity:.45}
 /* Subtle yellow tint on flagged-small-part rows, only when the
    "Highlight small" toggle is on. */
-#tree.flag-on .tree-node.flagged{background:rgba(251,191,36,.08);box-shadow:inset 2px 0 0 rgba(251,191,36,.55)}
-#tree.flag-on .tree-node.flagged:hover{background:rgba(251,191,36,.13)}
+#tree.flag-on .tree-node.flagged{background:var(--wn-tint-08);box-shadow:inset 2px 0 0 var(--wn-tint-55)}
+#tree.flag-on .tree-node.flagged:hover{background:var(--wn-tint-13)}
 .tree-vis{width:18px;height:18px;display:grid;place-items:center;flex-shrink:0;border-radius:4px;opacity:.55}
 .tree-vis:hover{opacity:1;background:var(--s3)}
 .tree-vis svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
@@ -334,7 +410,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    when long part names push the row content into horizontal scroll. The
    solid bg + soft fade-in hides the label text that scrolls underneath. */
 .tree-iconcol{position:sticky;right:0;margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;padding:0 10px 0 14px;background:linear-gradient(90deg,rgba(11,15,22,0) 0,var(--bg1) 12px,var(--bg1) 100%);z-index:1;height:100%}
-.tree-badge{display:inline-block;padding:1px 5px;font-size:9.5px;background:rgba(107,141,255,.15);color:var(--ac);border-radius:3px;margin-left:4px}
+.tree-badge{display:inline-block;padding:1px 5px;font-size:var(--fs-2xs);background:var(--ac-tint-15);color:var(--ac);border-radius:3px;margin-left:4px}
 .tree-inst{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;font-size:9.5px;background:rgba(167,139,250,.18);color:var(--ac2);border-radius:3px;margin-left:6px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 100ms var(--ease-out),color 100ms var(--ease-out),transform 80ms var(--ease-out)}
 .tree-inst:hover{background:rgba(167,139,250,.32);color:#d8c5ff}
 .tree-inst:active{transform:scale(.92)}
@@ -346,10 +422,10 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    sidebar so users only have to learn it once. */
 .prop-type-icon{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;color:var(--tx2)}
 .prop-type-icon svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
-.prop-type-icon.asm{color:#f59e0b}      /* warm amber for assemblies */
-.prop-type-icon.part{color:#10b981}     /* emerald for leaves */
-.prop-type-icon.inst{color:#a78bfa}     /* purple for shared-geometry leaves (instances) */
-.prop-color{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.18);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.prop-type-icon.asm{color:var(--icon-asm)}      /* warm amber for assemblies */
+.prop-type-icon.part{color:var(--icon-part)}    /* emerald for leaves */
+.prop-type-icon.inst{color:var(--icon-inst)}    /* purple for shared-geometry leaves (instances) */
+.prop-color{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
 .prop-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
 .prop-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;min-height:14px}
 .prop-material-row{margin:10px 0 10px}
@@ -361,10 +437,10 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-mat-btn:hover{background:var(--ac-soft);border-color:var(--ac-line);color:var(--tx)}
 .prop-mat-btn .prop-mat-sphere{flex-shrink:0;width:36px;height:36px;border-radius:6px;background-color:#15181f;background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);overflow:hidden;display:grid;place-items:center}
 .prop-mat-btn .prop-mat-sphere img{width:100%;height:100%;display:block;object-fit:cover}
-.prop-mat-btn .prop-mat-color{flex-shrink:0;width:36px;height:36px;border-radius:6px;border:1px solid rgba(255,255,255,.18);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.prop-mat-btn .prop-mat-color{flex-shrink:0;width:36px;height:36px;border-radius:6px;border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
 .prop-mat-btn .prop-mat-color.prop-mat-color-mixed{background:linear-gradient(135deg,var(--ac),var(--ac2),var(--ok))}
 .prop-mat-btn .prop-mat-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--tx);font-weight:500}
+.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:12.5px;color:var(--tx);font-weight:500}
 .prop-mat-btn .prop-mat-sub{font-size:10.5px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.005em}
 .prop-mat-btn .prop-mat-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .prop-mat-btn .prop-mat-action{width:24px;height:24px;border-radius:5px;border:none;background:transparent;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background 100ms ease,color 100ms ease}
@@ -377,7 +453,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-mat-multi-list .prop-mat-sphere,.prop-mat-multi-list .prop-mat-color{width:28px!important;height:28px!important}
 .prop-mat-multi-list .prop-mat-name{font-size:12px}
 .prop-mat-multi-list .prop-mat-sub{font-size:10px}
-.prop-mat-btn .prop-mat-name-input{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;font-weight:500;color:#fff;background:rgba(107,141,255,.14);border:1px solid var(--ac);border-radius:4px;padding:1px 5px;margin:-2px 0;width:100%;min-width:0;outline:none;box-shadow:0 0 0 2px rgba(107,141,255,.18)}
+.prop-mat-btn .prop-mat-name-input{font:inherit;font-family:var(--font-mono);font-size:var(--fs-md);font-weight:500;color:var(--tx-on-accent);background:var(--ac-tint-14);border:1px solid var(--ac);border-radius:var(--r-xs);padding:1px 5px;margin:-2px 0;width:100%;min-width:0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
 .prop-bar-wrap{display:flex;align-items:center;gap:8px;margin:8px 0 10px;font-size:11px;color:var(--tx3)}
 .prop-bar-wrap .prop-bar-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3);flex-shrink:0}
 .prop-bar-wrap .prop-bar-icon svg{width:13px;height:13px}
@@ -405,49 +481,49 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prim-row .prim-value{grid-column:2;grid-row:1;justify-self:end}
 .prim-row .prim-slider{grid-column:1 / -1;grid-row:2}
 .prim-row .prim-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.prim-row .prim-value{flex:0 0 auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:2px 9px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.25;transition:background 120ms,border-color 120ms,color 120ms}
+.prim-row .prim-value{flex:0 0 auto;font-family:var(--font-mono);font-size:11px;color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:2px 9px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.25;transition:background 120ms,border-color 120ms,color 120ms}
 .prim-row .prim-value:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
 .prim-row .prim-slider{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;outline:none;cursor:pointer;margin:0;padding:0;display:block}
 .prim-row .prim-slider::-webkit-slider-runnable-track{box-sizing:border-box;height:3px;border-radius:999px;background:var(--bg3);border:none}
 .prim-row .prim-slider::-moz-range-track{box-sizing:border-box;height:3px;border-radius:999px;background:var(--bg3);border:none}
 .prim-row .prim-slider::-moz-range-progress{height:3px;border-radius:999px;background:var(--ac)}
-.prim-row .prim-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;margin-top:-4.5px;box-shadow:0 0 0 1px rgba(110,168,255,.35),0 1px 2px rgba(0,0,0,.4);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
-.prim-row .prim-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 1px rgba(110,168,255,.35),0 1px 2px rgba(0,0,0,.4);cursor:grab}
+.prim-row .prim-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;margin-top:-4.5px;box-shadow:0 0 0 1px rgba(110,168,255,.35),var(--sh-thumb);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
+.prim-row .prim-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 1px rgba(110,168,255,.35),var(--sh-thumb);cursor:grab}
 .prim-row .prim-slider:hover::-webkit-slider-thumb{transform:scale(1.1)}
-.prim-row .prim-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.18);box-shadow:0 0 0 4px rgba(110,168,255,.18),0 1px 2px rgba(0,0,0,.4)}
+.prim-row .prim-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.18);box-shadow:0 0 0 4px rgba(110,168,255,.18),var(--sh-thumb)}
 .prim-row .prim-toggle{position:relative;display:inline-flex;align-items:center;cursor:pointer;width:30px;height:16px;justify-self:start;grid-column:2 / span 2}
 .prim-row .prim-toggle input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
 .prim-row .prim-toggle span{position:relative;display:block;width:30px;height:16px;background:var(--bg3);border:1px solid var(--bd);border-radius:9px;transition:background .14s ease,border-color .14s ease}
 .prim-row .prim-toggle span::after{content:'';position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:var(--tx3);transition:left .14s ease,background .14s ease}
 .prim-row .prim-toggle input:checked + span{background:rgba(110,168,255,.32);border-color:rgba(110,168,255,.5)}
-.prim-row .prim-toggle input:checked + span::after{left:15px;background:#fff}
+.prim-row .prim-toggle input:checked + span::after{left:15px;background:var(--tx-on-accent)}
 
-.tree-badge.warn{background:rgba(251,191,36,.15);color:var(--wn)}
+.tree-badge.warn{background:var(--wn-tint-15);color:var(--wn)}
 .tree-badge.muted{background:var(--s4);color:var(--tx3)}
-.tree-badge.danger{background:rgba(255,107,107,.15);color:var(--er)}
+.tree-badge.danger{background:var(--er-tint-15);color:var(--er)}
 
 /* C4D-style tree: small +/- expand boxes, colored icons, tinted labels.
    Color coding mirrors how C4D / Maya / 3ds Max signal node types — assemblies
    warm/orange so subassembly trees pop visually, leaves cool/green so the
    eye finds the actual geometry quickly. */
-.tree-expand{width:13px;height:13px;display:inline-grid;place-items:center;border:1px solid var(--bd2);border-radius:2px;font-size:11px;line-height:1;cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:ui-monospace,monospace;font-weight:600;user-select:none;transition:border-color 100ms,color 100ms,background 100ms}
-.tree-expand:hover{border-color:var(--ac);color:var(--ac);background:rgba(107,141,255,.08)}
+.tree-expand{width:13px;height:13px;display:inline-grid;place-items:center;border:1px solid var(--bd2);border-radius:2px;font-size:11px;line-height:1;cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:var(--font-mono);font-weight:600;user-select:none;transition:border-color 100ms,color 100ms,background 100ms}
+.tree-expand:hover{border-color:var(--ac);color:var(--ac);background:var(--ac-tint-08)}
 /* Spacer used in place of the +/- on leaf rows so all icons line up vertically */
 .tree-expand-spacer{width:13px;height:13px;flex-shrink:0}
 
 /* Type icons: lucide stroke icons, sized to match the row height. */
 .tree-typeicon{width:14px;height:14px;display:inline-grid;place-items:center;flex-shrink:0}
 .tree-typeicon svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8}
-.tree-typeicon.asm{color:#f59e0b}      /* warm amber for assemblies */
-.tree-typeicon.part{color:#10b981}     /* emerald for leaves */
-.tree-typeicon.inst{color:#a78bfa}     /* purple for shared-geometry leaves (instances) */
+.tree-typeicon.asm{color:var(--icon-asm)}      /* warm amber for assemblies */
+.tree-typeicon.part{color:var(--icon-part)}    /* emerald for leaves */
+.tree-typeicon.inst{color:var(--icon-inst)}    /* purple for shared-geometry leaves (instances) */
 
 /* Default label color: grey for all rows. Only the selected row gets the
    accent color, matching the user's request: "orange is only active, else
    is grey." Icons keep their per-type color so the row type is still
    distinguishable at a glance — only the text is monochrome by default.   */
 .tree-node .tree-label{color:var(--tx2)}
-.tree-node.selected .tree-label{color:#f59e0b}
+.tree-node.selected .tree-label{color:var(--icon-asm)}
 .tree-node.ancestor-selected .tree-label{color:rgba(245,158,11,.5)}
 
 /* Real tree lines via inline indent spans — one span per ancestor depth.
@@ -547,7 +623,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 
 /* Marquee (rubber-band) selection box drawn over the viewport while the user
    shift- or ctrl-drags. Display toggled via JS by adding/removing .active. */
-#marquee-box{position:fixed;pointer-events:none;z-index:150;border:1px solid var(--ac);background:rgba(107,141,255,.1);box-shadow:0 0 0 1px rgba(0,0,0,.3) inset;border-radius:1px;display:none}
+#marquee-box{position:fixed;pointer-events:none;z-index:150;border:1px solid var(--ac);background:var(--ac-soft);box-shadow:0 0 0 1px rgba(0,0,0,.3) inset;border-radius:1px;display:none}
 #marquee-box.active{display:block}
 
 /* Slider — plain native <input type="range"> with a label/value header above.
@@ -559,8 +635,8 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .scrub-rhs{display:flex;align-items:center;gap:4px;flex-shrink:0;line-height:1}
 .scrub-value{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;color:var(--tx);line-height:1;display:inline-flex;align-items:center;justify-content:flex-end;height:20px;min-width:36px;padding:0 6px;border-radius:4px;cursor:text}
 .scrub-value:hover{background:var(--s4)}
-.scrub.editing .scrub-value{background:rgba(107,141,255,.14);color:#fff}
-.scrub-input{font:inherit;font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;line-height:1;color:#fff;background:rgba(107,141,255,.14);border:1px solid rgba(107,141,255,.5);border-radius:4px;padding:0 6px;height:20px;width:60px;text-align:right;outline:none;font-family:inherit}
+.scrub.editing .scrub-value{background:var(--ac-tint-14);color:var(--tx-on-accent)}
+.scrub-input{font:inherit;font-size:var(--fs-md);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;line-height:1;color:var(--tx-on-accent);background:var(--ac-tint-14);border:1px solid rgba(107,141,255,.5);border-radius:var(--r-xs);padding:0 6px;height:20px;width:60px;text-align:right;outline:none;font-family:inherit}
 .scrub-input::-webkit-outer-spin-button,.scrub-input::-webkit-inner-spin-button{-webkit-appearance:none}
 .scrub-unit{font-size:11px;color:var(--tx3);letter-spacing:.02em;text-transform:lowercase;font-weight:500;line-height:1}
 /* Native range — track is a thin rounded bar, fill is drawn via background
@@ -569,14 +645,14 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 .scrub-range::-webkit-slider-runnable-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--scrub-pct),var(--bg3) var(--scrub-pct),var(--bg3) 100%);border:none}
 .scrub-range::-moz-range-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:var(--bg3);border:none}
 .scrub-range::-moz-range-progress{height:4px;border-radius:999px;background:var(--ac)}
-input[type=range].scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;margin-top:-4px;box-shadow:0 0 0 1px rgba(107,141,255,.35),0 1px 2px rgba(0,0,0,.4);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
-input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 1px rgba(107,141,255,.35),0 1px 2px rgba(0,0,0,.4);cursor:grab}
+input[type=range].scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;margin-top:-4px;box-shadow:0 0 0 1px var(--ac-tint-35),var(--sh-thumb);cursor:grab;transition:transform 120ms var(--ease-out),box-shadow 120ms var(--ease-out)}
+input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 1px var(--ac-tint-35),var(--sh-thumb);cursor:grab}
 .scrub-range:hover::-webkit-slider-thumb{transform:scale(1.1)}
 .scrub-range:hover::-moz-range-thumb{transform:scale(1.1)}
-.scrub-range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(107,141,255,.18)}
-.scrub-range:active::-moz-range-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px rgba(107,141,255,.18)}
-.scrub-range:focus-visible::-webkit-slider-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(107,141,255,.35)}
-.scrub-range:focus-visible::-moz-range-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px rgba(107,141,255,.35)}
+.scrub-range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px var(--ac-tint-18)}
+.scrub-range:active::-moz-range-thumb{cursor:grabbing;transform:scale(1.15);box-shadow:0 1px 3px rgba(0,0,0,.5),0 0 0 4px var(--ac-tint-18)}
+.scrub-range:focus-visible::-webkit-slider-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px var(--ac-tint-35)}
+.scrub-range:focus-visible::-moz-range-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px var(--ac-tint-35)}
 .mac-sel{width:100%;padding:7px 28px 7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%238b95a7' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out)}
 .mac-sel:hover{background-color:var(--bg4);border-color:var(--bd2)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:500;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
@@ -589,9 +665,9 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #sidebar-right .btn svg{width:13px;height:13px}
 #sidebar-right .btn-row{gap:5px}
 .btn.danger{color:var(--er)}
-.btn.danger:hover{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
+.btn.danger:hover{background:var(--er-soft);border-color:var(--er-line)}
 .btn.warn{color:var(--wn)}
-.btn.warn:hover{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25)}
+.btn.warn:hover{background:var(--wn-soft);border-color:var(--wn-line)}
 /* Right sidebar override — readability beats hue-coding here. The yellow
    hover background still flags the button as a lossy/destructive op, but
    the resting label is white so a column of warn buttons doesn't read
@@ -626,7 +702,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .split-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;overflow:hidden;padding:2px}
 .split-preset{padding:6px 2px;background:transparent;color:var(--tx2);font-size:11px;font-weight:500;border:none;border-radius:4px;cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out);white-space:nowrap}
 .split-preset:hover{color:var(--tx);background:var(--hairline)}
-.split-preset.active{background:linear-gradient(180deg,var(--ac),#4f7ce0);color:white;box-shadow:0 1px 2px rgba(107,141,255,.25)}
+.split-preset.active{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:var(--tx-on-accent);box-shadow:0 1px 2px var(--ac-tint-25)}
 .split-preview .pv-warn{color:var(--wn)}
 .split-preview .pv-ok{color:var(--ok)}
 .split-advanced summary::marker{color:var(--tx3)}
@@ -637,16 +713,16 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .btn-split > .btn-caret:hover{background:var(--bg3);border-color:var(--bd2)}
 .btn-split > .btn-caret svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:1.6}
 .btn-caret.warn{color:var(--wn)}
-.btn-split > .btn-caret.warn:hover{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25)}
+.btn-split > .btn-caret.warn:hover{background:var(--wn-soft);border-color:var(--wn-line)}
 .btn-caret.danger{color:var(--er)}
-.btn-split > .btn-caret.danger:hover{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
+.btn-split > .btn-caret.danger:hover{background:var(--er-soft);border-color:var(--er-line)}
 /* Hover either half of a split button — the other half lights up too. */
 .btn-split:has(> .btn-caret:hover) > .btn,
 .btn-split:has(> .btn:hover) > .btn-caret{background:var(--bg3);border-color:var(--bd2)}
 .btn-split:has(> .btn-caret.warn:hover) > .btn,
-.btn-split:has(> .btn.warn:hover) > .btn-caret{background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25)}
+.btn-split:has(> .btn.warn:hover) > .btn-caret{background:var(--wn-soft);border-color:var(--wn-line)}
 .btn-split:has(> .btn-caret.danger:hover) > .btn,
-.btn-split:has(> .btn.danger:hover) > .btn-caret{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25)}
+.btn-split:has(> .btn.danger:hover) > .btn-caret{background:var(--er-soft);border-color:var(--er-line)}
 .fit-pop{position:fixed;z-index:9000;min-width:220px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5);padding:6px;opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .fit-pop.show{opacity:1;transform:translateY(0);pointer-events:auto}
 .fit-pop .fit-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:12.5px;color:var(--tx);cursor:pointer;transition:background 120ms var(--ease-out)}
@@ -700,8 +776,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .vp-pill-item.active{background:color-mix(in srgb, var(--ac) 18%, transparent);color:var(--ac)}
 .vp-pill-item.active .vp-pill-item-kbd{color:color-mix(in srgb, var(--ac) 70%, var(--tx3));border-color:color-mix(in srgb, var(--ac) 35%, var(--bd));background:color-mix(in srgb, var(--ac) 12%, rgba(0,0,0,.25))}
 .vp-pill-item-lbl{font-weight:600;letter-spacing:.005em}
-.vp-pill-item-kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;font-weight:500;color:var(--tx3);background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:4px;padding:2px 6px;line-height:1;letter-spacing:.02em;flex-shrink:0;transition:color 120ms var(--ease-out),background 120ms var(--ease-out),border-color 120ms var(--ease-out)}
-.vp-stat{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--tx2);background:rgba(11,14,22,.72);border:1px solid var(--bd);border-radius:6px;padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
+.vp-pill-item-kbd{font-family:var(--font-mono);font-size:10px;font-weight:500;color:var(--tx3);background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:4px;padding:2px 6px;line-height:1;letter-spacing:.02em;flex-shrink:0;transition:color 120ms var(--ease-out),background 120ms var(--ease-out),border-color 120ms var(--ease-out)}
+.vp-stat{font-family:var(--font-mono);font-size:11px;color:var(--tx2);background:rgba(11,14,22,.72);border:1px solid var(--bd);border-radius:6px;padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
 /* Gizmo HUD — small DRO that pops next to the gizmo while a drag is active.
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
    per-axis Euler) for rotate, scale factor for scale. Position is updated
@@ -710,8 +786,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #gizmo-hud.show{display:block}
 #gizmo-hud .ghud-row{display:flex;align-items:center;gap:8px}
 #gizmo-hud .ghud-mode{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-right:2px}
-#gizmo-hud .ghud-x{color:#ff6b6b}
-#gizmo-hud .ghud-y{color:#34c759}
+#gizmo-hud .ghud-x{color:var(--er)}
+#gizmo-hud .ghud-y{color:var(--ok)}
 #gizmo-hud .ghud-z{color:var(--ac)}
 #gizmo-hud .ghud-snap{margin-left:6px;font-size:9px;font-weight:700;color:var(--ac);background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:3px;padding:1px 5px;letter-spacing:.06em}
 #axis-gizmo{width:56px;height:56px;display:grid;place-items:center;opacity:.75;transition:opacity .15s}
@@ -754,7 +830,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 
 /* View-mode group — each rendering style gets a unique hue. */
 #vw-solid     {--btn-tint:var(--ac)}
-#vw-wire      {--btn-tint:#a78bfa}
+#vw-wire      {--btn-tint:var(--ac2)}
 #vw-xray      {--btn-tint:#5dd5cc}
 #vw-heat      {--btn-tint:#fb923c}
 
@@ -764,12 +840,12 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 
 /* Display toggles — ambient helpers. */
 #tg-grid      {--btn-tint:var(--ac)}
-#tg-bbox      {--btn-tint:#a78bfa}
-#tg-hilite    {--btn-tint:#fbbf24}
+#tg-bbox      {--btn-tint:var(--ac2)}
+#tg-hilite    {--btn-tint:var(--wn)}
 #tg-settings  {--btn-tint:var(--tx2)}
-#tg-materials {--btn-tint:#a78bfa}
-#tg-sun       {--btn-tint:#fbbf24}
-#tg-transform {--btn-tint:#34c759}
+#tg-materials {--btn-tint:var(--ac2)}
+#tg-sun       {--btn-tint:var(--wn)}
+#tg-transform {--btn-tint:var(--ok)}
 #tg-screenshot{--btn-tint:#7dd3fc}
 .vp-info{background:rgba(15,19,25,.7);border:0;backdrop-filter:blur(10px);border-radius:6px;padding:7px 11px;font-size:11px;color:var(--tx2);line-height:1.5;font-variant-numeric:tabular-nums;min-width:140px}
 .vp-info strong{color:var(--tx)}
@@ -831,11 +907,11 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 /* Count pill — pinned to the thumb's top-right. Subtle dark capsule with
    tabular numerics so 1-, 2-, 3-digit counts stay aligned. */
 #vp-materials-pop .mat-cell .mat-count{position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;color:var(--tx);background:rgba(11,14,22,.75);border:1px solid rgba(255,255,255,.10);border-radius:7px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:.02em;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
-#vp-materials-pop .mat-cell.selected{background:rgba(107,141,255,.10);border-color:rgba(107,141,255,.40)}
+#vp-materials-pop .mat-cell.selected{background:var(--ac-soft);border-color:var(--ac-tint-40)}
 /* Subtle ring on materials used by the current viewport selection — gives a
    passive "you have parts of this material picked" hint without competing
    with the brighter .selected (panel-selection) state. */
-#vp-materials-pop .mat-cell.usedby-selection .mat-thumb{box-shadow:inset 0 0 0 1px rgba(107,141,255,.55),0 0 0 2px rgba(107,141,255,.20)}
+#vp-materials-pop .mat-cell.usedby-selection .mat-thumb{box-shadow:inset 0 0 0 1px var(--ac-tint-55),0 0 0 2px var(--ac-tint-20)}
 
 /* Action toolbar at the bottom of the materials panel — add / delete /
    duplicate / merge / industry presets. Sticks to the bottom of the
@@ -850,16 +926,16 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #vp-materials-pop .mat-actions .mat-act:disabled:hover{background:transparent;color:var(--tx2);border-color:rgba(255,255,255,.06)}
 #vp-materials-pop .mat-actions .mat-act svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
 #vp-materials-pop .mat-actions .mat-act-danger{color:var(--er)}
-#vp-materials-pop .mat-actions .mat-act-danger:hover{background:rgba(255,107,107,.10);border-color:rgba(255,107,107,.30);color:var(--er)}
+#vp-materials-pop .mat-actions .mat-act-danger:hover{background:var(--er-tint-10);border-color:var(--er-line);color:var(--er)}
 #vp-materials-pop .mat-actions .mat-act-presets{grid-column:1/-1;justify-content:space-between;color:var(--tx3)}
-#vp-materials-pop .mat-actions .mat-act-presets:hover{color:var(--ac);background:rgba(107,141,255,.08);border-color:rgba(107,141,255,.25)}
+#vp-materials-pop .mat-actions .mat-act-presets:hover{color:var(--ac);background:var(--ac-tint-08);border-color:var(--ac-tint-25)}
 
 /* Industry-preset menu floats above the materials panel when the user
    clicks the presets button. Same blur/shadow as other system popovers. */
 #vp-materials-pop .mat-presets-menu{position:absolute;left:8px;right:8px;bottom:50px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.55);padding:4px;z-index:5;display:none;max-height:240px;overflow-y:auto}
 #vp-materials-pop .mat-presets-menu.show{display:block}
 #vp-materials-pop .mat-presets-menu .mat-preset{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;cursor:pointer;font-size:11.5px;color:var(--tx2);transition:background .1s ease,color .1s ease}
-#vp-materials-pop .mat-presets-menu .mat-preset:hover{background:rgba(107,141,255,.10);color:var(--tx)}
+#vp-materials-pop .mat-presets-menu .mat-preset:hover{background:var(--ac-soft);color:var(--tx)}
 #vp-materials-pop .mat-presets-menu .mat-preset .mat-preset-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.18)}
 #vp-materials-pop .mat-presets-menu .mat-preset-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #vp-materials-pop .mat-presets-menu .mat-preset-hint{color:var(--tx3);font-size:10px}
@@ -872,9 +948,9 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .mat-edit-body .mat-color-row{display:flex;align-items:center;gap:10px}
 .mat-edit-body .mat-color-row label{flex:0 0 80px;font-size:11px;color:var(--tx3);font-weight:500;letter-spacing:.005em}
 .mat-edit-body input[type=color]{width:36px;height:24px;border:1px solid rgba(255,255,255,.10);border-radius:5px;background:transparent;cursor:pointer;padding:0;flex-shrink:0}
-.mat-edit-body .mat-color-hex{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--tx2);margin-left:auto}
+.mat-edit-body .mat-color-hex{font-family:var(--font-mono);font-size:11.5px;color:var(--tx2);margin-left:auto}
 
-.kbd{display:inline-block;padding:1px 5px;font-size:10px;background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:ui-monospace,monospace}
+.kbd{display:inline-block;padding:1px 5px;font-size:10px;background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:var(--font-mono)}
 
 /* Loader */
 #loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:transparent;z-index:100}
@@ -897,7 +973,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .log-msg.ok{color:var(--ok)}.log-msg.warn{color:var(--wn)}.log-msg.err{color:var(--er)}
 .loader-cancel{margin-top:12px;text-align:right}
 .loader-cancel button{padding:6px 14px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx2);font-size:12px;transition:background 150ms var(--ease-out),border-color 150ms var(--ease-out),color 150ms var(--ease-out),transform 120ms var(--ease-out)}
-.loader-cancel button:hover{color:var(--er);border-color:rgba(255,107,107,.3)}
+.loader-cancel button:hover{color:var(--er);border-color:var(--er-line)}
 
 /* Status bar */
 #sb{grid-column:1/-1;display:flex;align-items:center;padding:0 12px;background:var(--bg2);border-top:1px solid var(--bd);font-size:10.5px;color:var(--tx3);gap:11px;font-variant-numeric:tabular-nums;line-height:1}
@@ -908,9 +984,9 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #sb .sb-action:hover{background:var(--hairline);border-color:var(--bd);color:var(--tx)}
 #sb .sb-action svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 #sb .sb-action.empty{opacity:.45;cursor:default;pointer-events:none}
-#sb #sb-selected.active{color:var(--ac);background:rgba(107,141,255,.10);border-color:rgba(107,141,255,.30)}
+#sb #sb-selected.active{color:var(--ac);background:var(--ac-soft);border-color:var(--ac-line)}
 #sb #sb-selected.active strong{color:var(--ac)}
-#sb #sb-flagged.active{color:var(--wn);background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.30)}
+#sb #sb-flagged.active{color:var(--wn);background:rgba(251,191,36,.10);border-color:var(--wn-line)}
 #sb #sb-flagged.active strong{color:var(--wn)}
 
 /* Modal */
@@ -939,12 +1015,12 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .fmt-compat tbody td:first-child{text-align:left;padding-left:20px;color:var(--tx)}
 .fmt-compat tbody td:last-child{text-align:left;color:var(--tx3);font-size:11px;line-height:1.45;padding-right:20px;max-width:280px}
 .fmt-compat tbody tr:hover{background:var(--bg2)}
-.fmt-compat .y{color:#22c55e;font-weight:600;font-size:13px}
+.fmt-compat .y{color:var(--ok);font-weight:600;font-size:var(--fs-lg)}
 .fmt-compat .n{color:var(--tx3);font-size:11px}
 .fmt-compat .muted{color:var(--tx3);font-style:italic;font-size:11px}
 .fmt-card{padding:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;cursor:pointer}
 .fmt-card:hover{border-color:var(--bd2)}
-.fmt-card.selected{border-color:var(--ac);background:rgba(107,141,255,.08)}
+.fmt-card.selected{border-color:var(--ac);background:var(--ac-tint-08)}
 .fmt-card .n{font-weight:600;font-size:13px;margin-bottom:2px}
 .fmt-card .d{color:var(--tx2);font-size:11px;line-height:1.4}
 
@@ -970,21 +1046,21 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #file-warn .card{max-width:540px;background:var(--bg1);border:1px solid var(--bd);border-radius:14px;padding:28px 30px;box-shadow:var(--sh)}
 #file-warn h2{font-size:16px;font-weight:600;margin-bottom:14px}
 #file-warn p{color:var(--tx2);line-height:1.6;font-size:13px;margin-bottom:14px}
-#file-warn code{font-family:ui-monospace,monospace;color:var(--ac)}
-#file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;font-family:ui-monospace,monospace;font-size:12px;color:var(--tx);line-height:1.8}
+#file-warn code{font-family:var(--font-mono);color:var(--ac)}
+#file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;font-family:var(--font-mono);font-size:12px;color:var(--tx);line-height:1.8}
 
 /* Global Log Console */
 #log-console{position:fixed;left:0;right:0;bottom:28px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:90;transform:translateY(calc(100% + 28px));transition:transform .22s cubic-bezier(.4,0,.2,1);font:11.5px/1.5 ui-monospace,Menlo,monospace}
 #log-console.show{transform:translateY(0)}
 .lc-grip{position:absolute;top:-3px;left:0;right:0;height:6px;cursor:ns-resize;z-index:1}
-.lc-grip:hover{background:rgba(107,141,255,.15)}
+.lc-grip:hover{background:var(--ac-tint-15)}
 .lc-h{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif}
 .lc-h .lc-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);padding-right:4px}
 .lc-filters{display:flex;gap:3px}
 .lc-pill{padding:3px 9px;background:var(--hairline);border:1px solid var(--s2);border-radius:5px;color:var(--tx2);font-size:11px;cursor:pointer;font-variant-numeric:tabular-nums;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out);font-family:inherit}
 .lc-pill:hover{color:var(--tx);background:rgba(255,255,255,.07)}
 .lc-pill:active{transform:scale(.95)}
-.lc-pill.active{color:var(--tx);background:rgba(107,141,255,.12);border-color:rgba(107,141,255,.3)}
+.lc-pill.active{color:var(--tx);background:var(--ac-tint-12);border-color:var(--ac-line)}
 .lc-pill .n{color:var(--tx3);margin-left:4px;font-size:10px}
 .lc-pill.active .n{color:var(--ac)}
 .lc-search{flex:1;max-width:220px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:11.5px;outline:none;font-family:inherit}
@@ -1016,7 +1092,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #sb-console-btn{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--tx2);font-size:11px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out),transform 100ms var(--ease-out);margin-left:6px;font-family:inherit}
 #sb-console-btn:hover{color:var(--tx);background:var(--hairline);border-color:var(--bd)}
 #sb-console-btn:active{transform:scale(.95)}
-#sb-console-btn.active{color:var(--ac);background:rgba(107,141,255,.08);border-color:rgba(107,141,255,.25)}
+#sb-console-btn.active{color:var(--ac);background:var(--ac-tint-08);border-color:var(--ac-tint-25)}
 #sb-console-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 #sb-console-btn .badge{background:var(--er);color:white;font-size:9px;padding:0 4px;border-radius:6px;min-width:14px;text-align:center;font-weight:600;line-height:1.4}
 #sb-console-btn .badge.warn{background:var(--wn);color:black}
@@ -1280,7 +1356,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
                 <button id="hdri-load-btn" type="button" style="flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:5px 8px;border-radius:5px;font-size:11px;cursor:pointer" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
                 <button id="hdri-default-btn" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:10.5px;cursor:pointer" title="Reset to the built-in studio environment">Default</button>
               </div>
-              <div id="hdri-current" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
+              <div id="hdri-current" style="font-family:var(--font-mono);font-size:10px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
               <div class="field" style="margin:0" title="Multiplier on the HDRI's lighting and reflections. Higher = brighter env light on every PBR material."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="hdri-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">1.00×</span></label><input type="range" id="hdri-int" min="0" max="4" step="0.05" value="1" style="width:100%"></div>
               <input type="file" id="hdri-file" accept=".hdr,.exr,image/*" style="display:none">
             </div>
@@ -1480,11 +1556,6 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         </div>
         <div style="height:6px"></div>
         <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together"><i data-lucide="group"></i>Group selection</button>
-        <div style="height:6px"></div>
-        <div class="btn-row">
-          <button class="btn" id="btn-hide-selected" title="Hide selected parts without deleting them"><i data-lucide="eye-off"></i>Hide</button>
-          <button class="btn" id="btn-isolate" title="Hide every part that is NOT selected"><i data-lucide="eye"></i>Isolate</button>
-        </div>
         <div style="height:6px"></div>
         <button class="btn danger" id="btn-delete-sel" title="Permanently remove the selected parts (Del — undoable)"><i data-lucide="trash-2"></i>Delete (<span id="del-sel-count">0</span>)</button>
 
@@ -1828,7 +1899,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
   <div class="modal" style="width:520px;max-height:60vh">
     <div class="modal-h" style="padding:10px 14px">
       <input type="text" id="cmdk-input" placeholder="Search actions… (Esc to close)" style="flex:1;background:transparent;border:none;outline:none;color:var(--tx);font-size:var(--fs-xl);font-weight:500" autocomplete="off">
-      <span style="color:var(--tx3);font-size:var(--fs-sm);margin-left:10px"><kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:ui-monospace,monospace;font-size:10px;color:var(--tx2)">↑↓</kbd> <kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:ui-monospace,monospace;font-size:10px;color:var(--tx2)">↵</kbd></span>
+      <span style="color:var(--tx3);font-size:var(--fs-sm);margin-left:10px"><kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-mono);font-size:10px;color:var(--tx2)">↑↓</kbd> <kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-mono);font-size:10px;color:var(--tx2)">↵</kbd></span>
     </div>
     <div class="modal-b" id="cmdk-list" style="padding:6px"></div>
   </div>
@@ -1856,7 +1927,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         </div>
 
         <div style="margin-top:16px;color:var(--tx3);font-size:var(--fs-sm);line-height:1.5">
-          Huge assemblies (&gt;200 MB) load faster if you pre-convert with <code style="font-family:ui-monospace,monospace;color:var(--ac)">step2glb.py</code>.
+          Huge assemblies (&gt;200 MB) load faster if you pre-convert with <code style="font-family:var(--font-mono);color:var(--ac)">step2glb.py</code>.
         </div>
       </div>
 

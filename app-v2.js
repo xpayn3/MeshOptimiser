@@ -1717,6 +1717,10 @@ async function initRenderer() {
     renderer.toneMapping = THREE.NeutralToneMapping ?? THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
   }
+  // Dithering breaks up 8-bit quantization banding in the background gradient.
+  // The tiny noise pattern is invisible in normal use but eliminates visible
+  // horizontal steps caused by the limited color range of dark gradient presets.
+  try { if ('dithering' in renderer) renderer.dithering = true; } catch (_) {}
   // Enable local clipping (per-material Plane lists). Required for the
   // Section/Clip panel; harmless when no planes are set.
   try { if ('localClippingEnabled' in renderer) renderer.localClippingEnabled = true; } catch (_) {}
@@ -2601,77 +2605,52 @@ function _makeBgTexture(paint, size = 512) {
 
 function setBackground(mode) {
   state.bgMode = mode;
-  // Dispose the previous gradient texture (if any) to avoid GPU leaks every
-  // time the user toggles bg modes — a CanvasTexture holds its image data
-  // until disposed.
+  // Clear any previous background node (TSL shader gradient) first.
+  if (scene.backgroundNode !== undefined) scene.backgroundNode = null;
+  // Dispose any previous canvas-backed texture to avoid GPU leaks.
   if (scene.background && scene.background.isTexture) {
     scene.background.dispose?.();
+    scene.background = null;
   }
+
   if (mode === 'dark') {
-    // Industry-standard CAD viewport: cool slate-blue at the top fading to
-    // a darker bottom (SolidWorks / Onshape / NX studio look). Vertical
-    // linear gradient with a soft radial highlight just above centre to
-    // suggest a fill light, so the model reads dimensional rather than
-    // pasted on a flat sheet.
-    const tex = _makeBgTexture((ctx, w, h) => {
-      const lg = ctx.createLinearGradient(0, 0, 0, h);
-      lg.addColorStop(0,    '#5a6878');   // sky — cool slate blue-grey
-      lg.addColorStop(0.55, '#3a434f');   // mid
-      lg.addColorStop(1,    '#222831');   // ground
-      ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
-    }, 1024);
-    scene.background = tex;
+    // Solid dark — same as Blender's default viewport. No gradient means no
+    // 8-bit quantization banding. The scene lighting provides all the depth cues.
+    scene.background = new THREE.Color(0x222831);
     renderer.setClearColor(0x222831, 1);
   }
   else if (mode === 'grad') {
-    // Studio gradient: warm-tinted bottom, cool top, with a soft horizon
-    // glow centred a third of the way up. Two passes — a vertical linear
-    // for the sky/ground split, then a radial highlight composited on top.
-    const tex = _makeBgTexture((ctx, w, h) => {
-      // Pass 1: vertical sky → ground linear.
-      const lg = ctx.createLinearGradient(0, 0, 0, h);
-      lg.addColorStop(0,    '#243049');     // sky top
-      lg.addColorStop(0.5,  '#161c2a');     // horizon
-      lg.addColorStop(1,    '#0b0e16');     // ground floor
-      ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
-      // Pass 2: radial highlight ⅔ up to fake a soft fill light.
-      const rg = ctx.createRadialGradient(w/2, h*0.62, 0, w/2, h*0.62, w*0.55);
-      rg.addColorStop(0,    'rgba(107,141,255,0.10)');
-      rg.addColorStop(0.6,  'rgba(107,141,255,0.03)');
-      rg.addColorStop(1,    'rgba(0,0,0,0)');
-      ctx.fillStyle = rg; ctx.fillRect(0, 0, w, h);
-    });
-    scene.background = tex;
+    // Studio gradient — computed entirely in the GPU shader via Three.js TSL
+    // (scene.backgroundNode). The interpolation happens in linear float space
+    // before tone-mapping and renderer dithering, so 8-bit banding is impossible.
     renderer.setClearColor(0x0b0e16, 1);
+    try {
+      // THREE.color / THREE.mix / THREE.uv are TSL node constructors exported
+      // by three@0.172.0's webgpu bundle.
+      scene.backgroundNode = THREE.mix(
+        THREE.color(0x0b0e16),   // ground / bottom  (dark navy)
+        THREE.color(0x243049),   // sky    / top      (cool blue-grey)
+        THREE.uv().y
+      );
+    } catch (_) {
+      // Fallback for environments where backgroundNode / TSL isn't available.
+      scene.background = new THREE.Color(0x161c2a);
+      renderer.setClearColor(0x161c2a, 1);
+    }
   }
-  else if (mode === 'solid') { scene.background = new THREE.Color(0x000000); renderer.setClearColor(0x000000, 1); }
+  else if (mode === 'solid') {
+    scene.background = new THREE.Color(0x000000);
+    renderer.setClearColor(0x000000, 1);
+  }
   else if (mode === 'gray') {
-    // Blender-style neutral viewport — bumped lighter overall (was 4a/3a/2c).
-    // Now sits in mid-grey territory so models read against a brighter
-    // studio backdrop without going full white. Still keeps the subtle
-    // top-to-bottom falloff so it isn't a flat slab.
-    const tex = _makeBgTexture((ctx, w, h) => {
-      const lg = ctx.createLinearGradient(0, 0, 0, h);
-      lg.addColorStop(0,    '#7a7a7a');   // lifted top
-      lg.addColorStop(0.55, '#6a6a6a');   // mid
-      lg.addColorStop(1,    '#5a5a5a');   // grounded bottom
-      ctx.fillStyle = lg; ctx.fillRect(0, 0, w, h);
-    }, 1024);
-    scene.background = tex;
-    renderer.setClearColor(0x6a6a6a, 1);
+    // Blender-style neutral grey — solid, no gradient.
+    scene.background = new THREE.Color(0x646464);
+    renderer.setClearColor(0x646464, 1);
   }
   else if (mode === 'white') {
-    // Soft white studio: very gentle radial vignette so a white backdrop
-    // doesn't read as a flat sheet of paper. The tint is barely there.
-    const tex = _makeBgTexture((ctx, w, h) => {
-      const g = ctx.createRadialGradient(w/2, h*0.45, 0, w/2, h*0.45, w*0.72);
-      g.addColorStop(0,    '#ffffff');
-      g.addColorStop(0.7,  '#f3f3f3');
-      g.addColorStop(1,    '#dedede');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-    });
-    scene.background = tex;
-    renderer.setClearColor(0xdedede, 1);
+    // Pure white studio background.
+    scene.background = new THREE.Color(0xf0f0f0);
+    renderer.setClearColor(0xf0f0f0, 1);
   }
   else if (mode === 'hdri') {
     // HDRI environment: same texture drives both the visible background AND
@@ -12272,7 +12251,10 @@ function wireUI() {
     if (!state.selected.size) return;
     deleteParts([...state.selected], 'Deleted selected');
   });
-  $('btn-isolate').addEventListener('click', isolateSelected);
+  // btn-isolate exists in HTML in some builds but not all — guard with the
+  // same `?.` pattern as its siblings so wireUI doesn't crash when the
+  // button has been temporarily removed from the sidebar layout.
+  $('btn-isolate')?.addEventListener('click', isolateSelected);
   $('btn-show-all')?.addEventListener('click', showAllParts);
   $('btn-isolate-small')?.addEventListener('click', isolateFlagged);
 
