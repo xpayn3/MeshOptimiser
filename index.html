@@ -90,6 +90,7 @@
   --fs-xs:10.5px; --fs-sm:11.5px; --fs-md:12.5px; --fs-lg:13px; --fs-xl:14px;
   --fs-2xl:16px;
   /* Off-grid sizes the codebase actually uses — kept named so future drift is visible. */
+  --fs-9:9px;
   --fs-10:10px;
   --fs-11:11px;
   --fs-12:12px;
@@ -97,6 +98,42 @@
   /* Font stacks */
   --font-sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
   --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+  /* Font weights */
+  --fw-regular:400;
+  --fw-medium:500;
+  --fw-semibold:600;
+  --fw-bold:700;
+
+  /* Line heights — semantic ramp from flat (icons/inline labels) to loose (help text) */
+  --lh-flat:1;          /* badges, tightly stacked icons */
+  --lh-tight:1.15;      /* large titles, headings */
+  --lh-snug:1.25;       /* small UI labels with descenders */
+  --lh-base:1.4;        /* default body */
+  --lh-relaxed:1.5;     /* readable copy, lists */
+  --lh-loose:1.6;       /* help text, multiline tooltips */
+
+  /* Letter spacing (tracking) */
+  --tracking-tight:-.005em; /* numerical readouts, tabular */
+  --tracking-snug:.005em;   /* subtle tighten on small body */
+  --tracking-mono:.02em;    /* monospaced numbers */
+  --tracking-wide:.04em;    /* uppercase labels (most common) */
+  --tracking-wider:.06em;   /* very small caps */
+
+  /* Spacing scale — semantic 2/4/6/8/10/12/14/16/20/24 ramp.
+     Names track the radius scale's `2xs..2xl` for symmetry; off-scale
+     odd values (5/7/9/11) stay raw — using a token for them would just
+     be a renamed literal. */
+  --space-2xs:2px;
+  --space-xs:4px;
+  --space-sm:6px;
+  --space-md:8px;
+  --space-lg:10px;
+  --space-xl:12px;
+  --space-2xl:14px;
+  --space-3xl:16px;
+  --space-4xl:20px;
+  --space-5xl:24px;
 
   /* Motion durations */
   --dur-instant:80ms;
@@ -155,14 +192,14 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
    archive of older opens. Mirrors the IDE / Figma "open a recent file"
    strip pattern. */
 .welcome-recent{
-  display:flex;align-items:center;gap:10px;width:100%;padding:7px 9px;
-  background:var(--bg2);border:1px solid var(--bd);border-radius:8px;
+  display:flex;align-items:center;gap:var(--space-lg);width:100%;padding:7px 9px;
+  background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);
   color:var(--tx);text-align:left;cursor:pointer;overflow:hidden;
   transition:background 140ms var(--ease-out),border-color 140ms var(--ease-out);
 }
 .welcome-recent:hover{background:var(--bg3);border-color:var(--bd2)}
 .welcome-recent .wr-thumb{
-  position:relative;flex-shrink:0;width:42px;height:42px;border-radius:6px;
+  position:relative;flex-shrink:0;width:42px;height:42px;border-radius:var(--r-sm);
   background:var(--bg);overflow:hidden;
   border:1px solid rgba(255,255,255,.06);
   display:grid;place-items:center;color:var(--tx3);
@@ -170,7 +207,7 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 .welcome-recent .wr-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .welcome-recent .wr-thumb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6}
 .welcome-recent .wr-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;overflow:hidden}
-.welcome-recent .wr-name{font-size:var(--fs-md);font-weight:500;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-recent .wr-name{font-size:var(--fs-md);font-weight:var(--fw-medium);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .welcome-recent .wr-sub{font-size:var(--fs-sm);color:var(--tx3);font-variant-numeric:tabular-nums}
 /* Per-row delete (×). Hidden until the row is hovered to keep the list
    visually quiet; opacity transition prevents a flash on first paint. */
@@ -192,7 +229,7 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
   position:relative;display:flex;align-items:flex-end;width:100%;height:140px;
   margin-bottom:14px;padding:14px 16px;
   background:var(--bg2) center/cover no-repeat;
-  border:1px solid var(--ac-line);border-radius:12px;
+  border:1px solid var(--ac-line);border-radius:var(--r-xl);
   color:var(--tx);text-align:left;cursor:pointer;overflow:hidden;
   transition:filter 140ms var(--ease-out),transform var(--dur-fast) var(--ease-out),box-shadow 140ms var(--ease-out);
 }
@@ -210,10 +247,10 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 }
 .welcome-resume .wr-play svg{width:16px;height:16px;stroke:currentColor;fill:currentColor;stroke-width:0}
 .welcome-resume .wr-info{flex:1;min-width:0}
-.welcome-resume .wr-info .wr-label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ac);margin-bottom:2px}
-#welcome-resume .wr-heading{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ac);margin-bottom:8px;padding-left:2px}
+.welcome-resume .wr-info .wr-label{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--ac);margin-bottom:2px}
+#welcome-resume .wr-heading{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--ac);margin-bottom:8px;padding-left:2px}
 .welcome-resume .wr-info{display:flex;flex-direction:column;gap:2px}
-.welcome-resume .wr-info .wr-name{display:block;font-size:var(--fs-2xl);font-weight:600;color:var(--tx-on-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-resume .wr-info .wr-name{display:block;font-size:var(--fs-2xl);font-weight:var(--fw-semibold);color:var(--tx-on-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .welcome-resume .wr-info .wr-sub{display:block;font-size:var(--fs-sm);color:rgba(255,255,255,.65)}
 .welcome-resume .wr-age{align-self:flex-end;color:rgba(255,255,255,.55);font-size:var(--fs-sm);flex-shrink:0;margin-left:12px}
 button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
@@ -224,7 +261,7 @@ input,select{font:inherit;color:inherit}
 *{scrollbar-width:thin;scrollbar-color:var(--bg4) transparent}
 ::-webkit-scrollbar{width:7px;height:7px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px;border:1px solid var(--bg1);min-height:32px;min-width:32px}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-xs);border:1px solid var(--bg1);min-height:32px;min-width:32px}
 ::-webkit-scrollbar-thumb:hover{background:var(--bd2)}
 ::-webkit-scrollbar-thumb:active{background:var(--ac)}
 ::-webkit-scrollbar-corner{background:transparent}
@@ -239,7 +276,7 @@ body.resizing #app{transition:none}
    grid cell via absolute positioning anchored to the sidebar's edge so it
    doesn't disturb existing layout. Hover gets a subtle accent so users
    notice they CAN drag it. */
-.resize-handle{position:absolute;top:0;width:5px;height:100%;cursor:col-resize;z-index:50;background:transparent;transition:background var(--dur-fast) var(--ease-out)}
+.resize-handle{position:absolute;top:0;width:5px;height:100%;cursor:col-resize;z-index:var(--z-sticky);background:transparent;transition:background var(--dur-fast) var(--ease-out)}
 .resize-handle:hover,.resize-handle.dragging{background:var(--ac-tint-35)}
 #sidebar-left{position:relative}
 #sidebar-right{position:relative}
@@ -250,19 +287,19 @@ body.resizing *{cursor:col-resize !important}
 
 /* Toolbar */
 #tb{grid-column:1/-1;display:flex;align-items:center;height:38px;padding:0 12px;gap:5px;background:var(--bg2);border-bottom:1px solid var(--bd);z-index:10}
-.brand{display:flex;align-items:center;gap:8px;position:relative}
+.brand{display:flex;align-items:center;gap:var(--space-md);position:relative}
 /* Right-side brand: sits at the end of the toolbar with the chip on the right
    and the title/subtitle right-aligned next to it. Margin sits on the left so
    the brand keeps a small gap from the rightmost stat. */
 .brand-right{margin-left:16px}
 .brand-right .brand-text{text-align:right}
-.brand-mark{position:relative;width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 4px 14px var(--ac-tint-35);transition:box-shadow 260ms var(--ease-out),transform var(--dur-slower) var(--ease-out),filter 260ms var(--ease-out)}
+.brand-mark{position:relative;width:24px;height:24px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 4px 14px var(--ac-tint-35);transition:box-shadow 260ms var(--ease-out),transform var(--dur-slower) var(--ease-out),filter 260ms var(--ease-out)}
 .brand-mark::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,0) 55%);opacity:0;transition:opacity 260ms var(--ease-out);pointer-events:none}
-.brand-mark::after{content:"";position:absolute;inset:-6px;border-radius:14px;background:radial-gradient(closest-side,var(--ac-tint-55),rgba(107,141,255,0) 70%);opacity:0;transition:opacity var(--dur-slower) var(--ease-out);pointer-events:none;z-index:-1}
+.brand-mark::after{content:"";position:absolute;inset:-6px;border-radius:var(--r-2xl);background:radial-gradient(closest-side,var(--ac-tint-55),rgba(107,141,255,0) 70%);opacity:0;transition:opacity var(--dur-slower) var(--ease-out);pointer-events:none;z-index:-1}
 .brand-mark svg{width:16px;height:16px;stroke:white;fill:none;stroke-width:2;transition:transform var(--dur-slower) var(--ease-out),filter var(--dur-slower) var(--ease-out)}
 /* Brand button — replaces the app-name text. Click to open the brand-menu
    popover with About / GitHub / version / shortcuts. */
-.brand-btn{all:unset;display:grid;place-items:center;padding:5px;border-radius:8px;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.brand-btn{all:unset;display:grid;place-items:center;padding:5px;border-radius:var(--r-md);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .brand-btn:hover .brand-mark{transform:scale(1.08);box-shadow:0 8px 26px var(--ac-tint-55),inset 0 1px 0 rgba(255,255,255,.18);filter:brightness(1.08) saturate(1.1)}
 .brand-btn:hover .brand-mark::before{opacity:1}
 .brand-btn:hover .brand-mark::after{opacity:1}
@@ -272,18 +309,18 @@ body.resizing *{cursor:col-resize !important}
 .brand-btn[aria-expanded="true"] .brand-mark{box-shadow:0 4px 18px var(--ac-tint-55),0 0 0 2px var(--ac-line)}
 /* Brand menu — anchored to the brand button on the top-right. Right-aligned
    transform-origin so it grows out of the button corner. */
-.brand-menu{position:absolute;top:calc(100% + 8px);right:8px;width:300px;background:var(--bg1);border:1px solid var(--bd);border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);padding:8px;z-index:90;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
+.brand-menu{position:absolute;top:calc(100% + 8px);right:8px;width:300px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-xl);box-shadow:0 18px 48px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);padding:8px;z-index:var(--z-toolbar);opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
 .brand-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-.brand-menu-head{display:flex;align-items:center;gap:10px;padding:10px 10px 12px}
+.brand-menu-head{display:flex;align-items:center;gap:var(--space-lg);padding:10px 10px 12px}
 .brand-menu-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 6px 20px var(--ac-tint-45);flex:0 0 auto}
 .brand-menu-mark svg{width:18px;height:18px;stroke:white;fill:none;stroke-width:2}
 .brand-menu-titles{flex:1 1 auto;min-width:0}
-.brand-menu-title{font-size:13.5px;font-weight:600;color:var(--tx);line-height:1.15}
-.brand-menu-tagline{font-size:11px;color:var(--tx3);margin-top:2px;line-height:1.15}
-.brand-menu-ver{font-size:10.5px;font-weight:600;color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:2px 7px;letter-spacing:.02em;flex:0 0 auto}
-.brand-menu-about{font-size:11.5px;color:var(--tx2);line-height:1.5;padding:0 10px 4px}
+.brand-menu-title{font-size:13.5px;font-weight:var(--fw-semibold);color:var(--tx);line-height:var(--lh-tight)}
+.brand-menu-tagline{font-size:var(--fs-11);color:var(--tx3);margin-top:2px;line-height:var(--lh-tight)}
+.brand-menu-ver{font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:2px 7px;letter-spacing:var(--tracking-mono);flex:0 0 auto}
+.brand-menu-about{font-size:var(--fs-sm);color:var(--tx2);line-height:var(--lh-relaxed);padding:0 10px 4px}
 .brand-menu-sep{height:1px;background:var(--s3);margin:8px 4px}
-.brand-menu-item{all:unset;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--tx);user-select:none;transition:background 80ms,color 80ms;width:calc(100% - 20px)}
+.brand-menu-item{all:unset;display:flex;align-items:center;gap:var(--space-lg);padding:8px 10px;border-radius:7px;cursor:pointer;font-size:var(--fs-md);color:var(--tx);user-select:none;transition:background 80ms,color 80ms;width:calc(100% - 20px)}
 .brand-menu-item:hover,.brand-menu-item:focus-visible{background:var(--ac-soft);outline:none;box-shadow:inset 0 0 0 1px var(--ac-line)}
 .brand-menu-item svg{width:14px;height:14px;stroke:var(--tx2);fill:none;stroke-width:2;flex:0 0 auto}
 .brand-menu-item svg.brand-gh{stroke:none;fill:currentColor;color:var(--tx2)}
@@ -291,34 +328,34 @@ body.resizing *{cursor:col-resize !important}
 .brand-menu-item:hover svg,.brand-menu-item:focus-visible svg{stroke:var(--tx)}
 .brand-menu-item .lbl{flex:1 1 auto}
 .brand-menu-item .ext{width:12px;height:12px;stroke:var(--tx3);opacity:.7}
-.brand-menu-item .kbd{font-family:var(--mono,ui-monospace,monospace);font-size:10.5px;color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:4px;padding:2px 6px;letter-spacing:.04em}
-.brand-menu-foot{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 10px 4px;font-size:10.5px;color:var(--tx3)}
+.brand-menu-item .kbd{font-family:var(--mono,ui-monospace,monospace);font-size:var(--fs-xs);color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 6px;letter-spacing:var(--tracking-wide)}
+.brand-menu-foot{display:flex;align-items:center;justify-content:center;gap:var(--space-md);padding:6px 10px 4px;font-size:var(--fs-xs);color:var(--tx3)}
 .brand-menu-foot .dot{opacity:.5}
 /* Lucide placeholders: keep layout stable before lucide.createIcons() runs */
 i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-style:normal}
-.brand h1{font-size:11.5px;font-weight:600;line-height:1.05}
-.brand small{color:var(--tx3);font-size:9.5px;line-height:1.05}
-.tbtn{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);border-radius:5px;font-size:11.5px;line-height:1.2;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out),filter var(--dur-base) var(--ease-out)}
+.brand h1{font-size:var(--fs-sm);font-weight:var(--fw-semibold);line-height:1.05}
+.brand small{color:var(--tx3);font-size:var(--fs-2xs);line-height:1.05}
+.tbtn{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);border-radius:5px;font-size:var(--fs-sm);line-height:1.2;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out),filter var(--dur-base) var(--ease-out)}
 .tbtn.icon-only{padding:5px 7px}
 .tbtn.icon-only i,.tbtn.icon-only svg{width:14px;height:14px}
 .tbtn.icon-only.active{background:var(--ac-soft);border-color:var(--ac-line);color:var(--ac)}
 .tbtn:hover{background:var(--bg4);border-color:var(--bd2)}
 .tbtn:active{transform:scale(.97)}
 .tbtn:focus-visible,.btn:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
-.tbtn.primary{background:var(--ac);border-color:transparent;color:var(--tx-on-accent);font-weight:500;box-shadow:none}
+.tbtn.primary{background:var(--ac);border-color:transparent;color:var(--tx-on-accent);font-weight:var(--fw-medium);box-shadow:none}
 .tbtn.primary:hover{background:var(--ac-hover)}
 .tbtn.primary:active{background:var(--ac-active)}
 .tbtn:disabled{opacity:.4;cursor:not-allowed}
 .tbtn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .spacer{flex:1}
 .divider{width:1px;height:15px;background:var(--bd);margin:0 5px}
-.stat{display:flex;align-items:center;gap:5px;padding:0 8px;color:var(--tx2);font-size:11px;font-variant-numeric:tabular-nums}
-.stat strong{color:var(--tx);font-weight:500}
+.stat{display:flex;align-items:center;gap:5px;padding:0 8px;color:var(--tx2);font-size:var(--fs-11);font-variant-numeric:tabular-nums}
+.stat strong{color:var(--tx);font-weight:var(--fw-medium)}
 /* FPS pill — compact rounded badge with a green pulse dot. Color shifts on
    the dot are driven from JS via .warn / .bad classes. */
-.stat-pill{padding:4px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:999px;gap:6px;line-height:1;white-space:nowrap}
-.stat-pill strong{font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;font-weight:600;color:var(--tx);letter-spacing:.02em;font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums}
-.stat-pill .fps-label{font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:9px;font-weight:600;letter-spacing:.1em;color:var(--tx3);text-transform:uppercase}
+.stat-pill{padding:4px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);gap:var(--space-sm);line-height:1;white-space:nowrap}
+.stat-pill strong{font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-sm);font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:var(--tracking-mono);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums}
+.stat-pill .fps-label{font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-9);font-weight:var(--fw-semibold);letter-spacing:.1em;color:var(--tx3);text-transform:uppercase}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
 .dot.warn{background:var(--wn)}.dot.off{background:var(--tx3)}
 
@@ -337,50 +374,50 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    nudges a render. Toggled by the tg-transform viewport button. */
 #transform-panel{flex-shrink:0;background:var(--bg2);border-top:1px solid var(--bd);overflow:hidden;max-height:0;transition:max-height 240ms var(--ease-out)}
 #transform-panel.show{max-height:200px}
-#transform-panel .tform-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)}
-#transform-panel .tform-head .tform-title{display:inline-flex;align-items:center;gap:6px}
+#transform-panel .tform-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);padding:8px 10px 6px;font-size:var(--fs-11);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3)}
+#transform-panel .tform-head .tform-title{display:inline-flex;align-items:center;gap:var(--space-sm)}
 #transform-panel .tform-head .tform-title svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
-#transform-panel .tform-head .tform-reset{font:inherit;font-size:10.5px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3);background:transparent;border:1px solid rgba(255,255,255,.06);border-radius:5px;padding:3px 8px;cursor:pointer;transition:background .12s ease,color .12s ease,border-color .12s ease}
+#transform-panel .tform-head .tform-reset{font:inherit;font-size:var(--fs-xs);font-weight:var(--fw-medium);text-transform:none;letter-spacing:0;color:var(--tx3);background:transparent;border:1px solid rgba(255,255,255,.06);border-radius:5px;padding:3px 8px;cursor:pointer;transition:background var(--dur-fast) ease,color var(--dur-fast) ease,border-color var(--dur-fast) ease}
 #transform-panel .tform-head .tform-reset:hover{color:var(--tx);background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12)}
 /* Transposed layout: rows = X/Y/Z, columns = Position/Rotation/Size.
    Same shape as Cinema 4D's transform inspector. The first column is a
    thin axis tag (X/Y/Z); the header row labels each transform channel. */
-#transform-panel .tform-grid{display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:4px 6px;padding:2px 10px 10px 10px}
-#transform-panel .tform-col-label{font-size:9.5px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px}
-#transform-panel .tform-col-label[data-tform-col]{cursor:context-menu;user-select:none;border-radius:3px;transition:background .12s ease,color .12s ease}
+#transform-panel .tform-grid{display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:var(--space-xs) 6px;padding:2px 10px 10px 10px}
+#transform-panel .tform-col-label{font-size:var(--fs-2xs);color:var(--tx3);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px}
+#transform-panel .tform-col-label[data-tform-col]{cursor:context-menu;user-select:none;border-radius:3px;transition:background var(--dur-fast) ease,color var(--dur-fast) ease}
 #transform-panel .tform-col-label[data-tform-col]:hover{color:var(--tx2);background:rgba(255,255,255,.04)}
-#transform-panel .tform-row-label{font-size:10.5px;color:var(--tx3);font-weight:600;align-self:center;text-align:center;font-family:var(--font-mono)}
+#transform-panel .tform-row-label{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-semibold);align-self:center;text-align:center;font-family:var(--font-mono)}
 #transform-panel .tform-row-label.x{color:var(--er)}
 #transform-panel .tform-row-label.y{color:var(--ok)}
 #transform-panel .tform-row-label.z{color:var(--ac)}
 #transform-panel .tform-num{position:relative}
-#transform-panel .tform-unit{position:absolute;right:22px;top:50%;transform:translateY(-50%);font-size:9.5px;color:var(--tx3);pointer-events:none;font-family:var(--font-mono);letter-spacing:.01em}
+#transform-panel .tform-unit{position:absolute;right:22px;top:50%;transform:translateY(-50%);font-size:var(--fs-2xs);color:var(--tx3);pointer-events:none;font-family:var(--font-mono);letter-spacing:.01em}
 #transform-panel .tform-input{padding-right:22px;text-align:right}
 /* Number-input cell with custom stepper buttons on each side. The native
    spinner is hidden (-webkit-/Firefox) since the visible buttons own the
    increment/decrement action and the input itself is just a value field. */
-#transform-panel .tform-num{display:grid;grid-template-columns:18px 1fr 18px;align-items:stretch;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.06);border-radius:5px;overflow:hidden;transition:border-color .12s ease,box-shadow .12s ease,background .12s ease}
+#transform-panel .tform-num{display:grid;grid-template-columns:18px 1fr 18px;align-items:stretch;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.06);border-radius:5px;overflow:hidden;transition:border-color var(--dur-fast) ease,box-shadow var(--dur-fast) ease,background var(--dur-fast) ease}
 #transform-panel .tform-num:hover{border-color:rgba(255,255,255,.12)}
 #transform-panel .tform-num:focus-within{border-color:var(--ac-tint-55);background:rgba(0,0,0,.30);box-shadow:0 0 0 3px var(--ac-tint-18)}
 #transform-panel .tform-num.disabled{opacity:.5}
-#transform-panel .tform-step{font:inherit;font-size:11px;font-weight:600;line-height:1;color:var(--tx3);background:transparent;border:none;cursor:pointer;display:grid;place-items:center;padding:0;user-select:none;transition:color .1s ease,background .1s ease}
+#transform-panel .tform-step{font:inherit;font-size:var(--fs-11);font-weight:var(--fw-semibold);line-height:1;color:var(--tx3);background:transparent;border:none;cursor:pointer;display:grid;place-items:center;padding:0;user-select:none;transition:color .1s ease,background .1s ease}
 #transform-panel .tform-step:hover{color:var(--tx);background:rgba(255,255,255,.05)}
 #transform-panel .tform-step:active{background:var(--ac-tint-18);color:var(--ac)}
 #transform-panel .tform-step:disabled{cursor:not-allowed;opacity:.4}
 #transform-panel .tform-step:disabled:hover{background:transparent;color:var(--tx3)}
-#transform-panel .tform-input{font:inherit;font-family:var(--font-mono);font-size:11px;color:var(--tx);background:transparent;border:none;padding:5px 4px;outline:none;width:100%;min-width:0;text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+#transform-panel .tform-input{font:inherit;font-family:var(--font-mono);font-size:var(--fs-11);color:var(--tx);background:transparent;border:none;padding:5px 4px;outline:none;width:100%;min-width:0;text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
 #transform-panel .tform-input::-webkit-outer-spin-button,
 #transform-panel .tform-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 #transform-panel .tform-input:disabled{cursor:not-allowed}
 #transform-panel .tform-input.mixed{color:var(--tx3);font-style:italic}
-#transform-panel .tform-empty{padding:14px 10px;text-align:center;color:var(--tx3);font-size:11px}
+#transform-panel .tform-empty{padding:14px 10px;text-align:center;color:var(--tx3);font-size:var(--fs-11)}
 #sidebar-right{display:block;border-left:1px solid var(--bd);overflow-y:auto;padding:12px 12px 20px;background:var(--bg)}
 #sidebar-right .section{flex-shrink:0}
 .section{background:var(--bg2);border:1px solid rgba(255,255,255,.04);border-radius:var(--r-xl);margin-bottom:10px;overflow:hidden;box-shadow:var(--sh-card)}
 .section:last-child{margin-bottom:0}
-.section-h{display:flex;align-items:center;justify-content:space-between;padding:11px 10px 9px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);cursor:pointer;user-select:none}
+.section-h{display:flex;align-items:center;justify-content:space-between;padding:11px 10px 9px;font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);cursor:pointer;user-select:none}
 .section-h:hover{color:var(--tx)}
-.section-h .chev{transition:transform .2s var(--ease-out);opacity:.7;font-size:14px;line-height:1;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;color:var(--tx2)}
+.section-h .chev{transition:transform .2s var(--ease-out);opacity:.7;font-size:var(--fs-xl);line-height:1;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;color:var(--tx2)}
 .section-h:hover .chev{opacity:1;color:var(--tx)}
 .section-h.collapsed .chev{transform:rotate(-90deg)}
 .section-h.collapsed + .section-b{display:none}
@@ -388,14 +425,14 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 
 /* Tree */
 #tree{flex:1;overflow-y:auto;overflow-x:auto;padding:4px 0;contain:layout paint;display:flex;flex-direction:column}
-.tree-empty{color:var(--tx3);text-align:center;padding:20px;font-size:12px;line-height:1.6;flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.tree-empty{color:var(--tx3);text-align:center;padding:20px;font-size:var(--fs-12);line-height:var(--lh-loose);flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center}
 .tree-empty svg{width:38px;height:38px;stroke:currentColor;opacity:.4;fill:none;stroke-width:1.5;margin-bottom:10px}
 .tree-search{margin:8px 12px 6px;position:relative}
-.tree-search input{width:100%;padding:7px 10px 7px 28px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12px;outline:none}
+.tree-search input{width:100%;padding:7px 10px 7px 28px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx);font-size:var(--fs-12);outline:none}
 .tree-search input:focus{border-color:var(--ac)}
 .tree-search svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;stroke:var(--tx3);fill:none;stroke-width:2}
-.tree-summary{padding:6px 14px;font-size:11px;color:var(--tx3)}
-.tree-node{display:flex;align-items:center;gap:6px;padding:5px 12px 5px 8px;font-size:11.5px;cursor:pointer;user-select:none;border-left:2px solid transparent;white-space:nowrap;contain:layout style paint;min-height:28px;width:max-content;min-width:100%;overflow-anchor:none}
+.tree-summary{padding:6px 14px;font-size:var(--fs-11);color:var(--tx3)}
+.tree-node{display:flex;align-items:center;gap:var(--space-sm);padding:5px 12px 5px 8px;font-size:var(--fs-sm);cursor:pointer;user-select:none;border-left:2px solid transparent;white-space:nowrap;contain:layout style paint;min-height:28px;width:max-content;min-width:100%;overflow-anchor:none}
 #tree{overflow-anchor:none}
 /* Collapsed-ancestor hide. _toggleGroupCollapseFast flips this class per
    subtree row instead of rebuilding the DOM — keeps expand/collapse < 10ms
@@ -408,24 +445,24 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    "Highlight small" toggle is on. */
 #tree.flag-on .tree-node.flagged{background:var(--wn-tint-08);box-shadow:inset 2px 0 0 var(--wn-tint-55)}
 #tree.flag-on .tree-node.flagged:hover{background:var(--wn-tint-13)}
-.tree-vis{width:18px;height:18px;display:grid;place-items:center;flex-shrink:0;border-radius:4px;opacity:.55}
+.tree-vis{width:18px;height:18px;display:grid;place-items:center;flex-shrink:0;border-radius:var(--r-xs);opacity:.55}
 .tree-vis:hover{opacity:1;background:var(--s3)}
 .tree-vis svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
-.tree-color{width:10px;height:10px;border-radius:2px;flex-shrink:0;border:1px solid var(--s5)}
+.tree-color{width:10px;height:10px;border-radius:var(--r-2xs);flex-shrink:0;border:1px solid var(--s5)}
 .tree-label{flex:0 0 auto;white-space:nowrap}
-.tree-meta{color:var(--tx3);font-size:10.5px;flex-shrink:0;font-variant-numeric:tabular-nums}
+.tree-meta{color:var(--tx3);font-size:var(--fs-xs);flex-shrink:0;font-variant-numeric:tabular-nums}
 /* Right-side icon column (eye + color swatch). Sticky to the scrollport's
    right edge so the eye/colour controls stay aligned in one column even
    when long part names push the row content into horizontal scroll. The
    solid bg + soft fade-in hides the label text that scrolls underneath. */
-.tree-iconcol{position:sticky;right:0;margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;padding:0 10px 0 14px;background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%);z-index:1;height:100%}
+.tree-iconcol{position:sticky;right:0;margin-left:auto;display:inline-flex;align-items:center;gap:var(--space-sm);flex-shrink:0;padding:0 10px 0 14px;background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%);z-index:1;height:100%}
 .tree-badge{display:inline-block;padding:1px 5px;font-size:var(--fs-2xs);background:var(--ac-tint-15);color:var(--ac);border-radius:3px;margin-left:4px}
-.tree-inst{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;font-size:9.5px;background:rgba(167,139,250,.18);color:var(--ac2);border-radius:3px;margin-left:6px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 100ms var(--ease-out),color 100ms var(--ease-out),transform var(--dur-instant) var(--ease-out)}
+.tree-inst{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;font-size:var(--fs-2xs);background:rgba(167,139,250,.18);color:var(--ac2);border-radius:3px;margin-left:6px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 100ms var(--ease-out),color 100ms var(--ease-out),transform var(--dur-instant) var(--ease-out)}
 .tree-inst:hover{background:rgba(167,139,250,.32);color:#d8c5ff}
 .tree-inst:active{transform:scale(.92)}
 .tree-inst svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2.2}
 /* ── Properties panel ───────────────────────────────────────────────────── */
-.prop-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;min-height:20px}
+.prop-head{display:flex;align-items:center;gap:var(--space-md);margin-bottom:6px;min-height:20px}
 /* Type icon next to the part name — disambiguates instance vs single part
    at a glance. Same icon + colour vocabulary as .tree-typeicon in the left
    sidebar so users only have to learn it once. */
@@ -435,67 +472,72 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-type-icon.part{color:var(--icon-part)}    /* emerald for leaves */
 .prop-type-icon.inst{color:var(--icon-inst)}    /* purple for shared-geometry leaves (instances) */
 .prop-color{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
-.prop-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
-.prop-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;min-height:14px}
+.prop-name{font-size:var(--fs-lg);font-weight:var(--fw-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
+.prop-tags{display:flex;flex-wrap:wrap;gap:var(--space-xs);margin-bottom:8px;min-height:14px}
 .prop-material-row{margin:10px 0 10px}
 /* Material chip under the part name — full-width row with a 36px shaded
    sphere preview, the material name, a usage hint, and quick-access action
    icons. Reuses the same preview thumbs as the materials grid so the
    sphere and the cell stay in sync. */
-.prop-mat-btn{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:9px;font-size:12.5px;color:var(--tx2);cursor:pointer;max-width:100%;width:100%;text-align:left;transition:background 120ms,border-color 120ms,color 120ms}
+.prop-mat-btn{display:flex;align-items:center;gap:var(--space-lg);padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:9px;font-size:var(--fs-md);color:var(--tx2);cursor:pointer;max-width:100%;width:100%;text-align:left;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast)}
 .prop-mat-btn:hover{background:var(--ac-soft);border-color:var(--ac-line);color:var(--tx)}
-.prop-mat-btn .prop-mat-sphere{flex-shrink:0;width:36px;height:36px;border-radius:6px;background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);overflow:hidden;display:grid;place-items:center}
+.prop-mat-btn .prop-mat-sphere{flex-shrink:0;width:36px;height:36px;border-radius:var(--r-sm);background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0;box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);overflow:hidden;display:grid;place-items:center}
 .prop-mat-btn .prop-mat-sphere img{width:100%;height:100%;display:block;object-fit:cover}
-.prop-mat-btn .prop-mat-color{flex-shrink:0;width:36px;height:36px;border-radius:6px;border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
+.prop-mat-btn .prop-mat-color{flex-shrink:0;width:36px;height:36px;border-radius:var(--r-sm);border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
 .prop-mat-btn .prop-mat-color.prop-mat-color-mixed{background:linear-gradient(135deg,var(--ac),var(--ac2),var(--ok))}
 .prop-mat-btn .prop-mat-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:12.5px;color:var(--tx);font-weight:500}
-.prop-mat-btn .prop-mat-sub{font-size:10.5px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.005em}
+.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);font-size:var(--fs-md);color:var(--tx);font-weight:var(--fw-medium)}
+.prop-mat-btn .prop-mat-sub{font-size:var(--fs-xs);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:var(--tracking-snug)}
 .prop-mat-btn .prop-mat-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
 .prop-mat-btn .prop-mat-action{width:24px;height:24px;border-radius:5px;border:none;background:transparent;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background 100ms ease,color 100ms ease}
 .prop-mat-btn .prop-mat-action:hover{background:rgba(255,255,255,.07);color:var(--tx)}
 .prop-mat-btn .prop-mat-action svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .prop-mat-btn.prop-mat-mixed{cursor:default;color:var(--tx3)}
 .prop-mat-btn.prop-mat-mixed:hover{background:var(--s2);border-color:var(--bd);color:var(--tx3)}
-.prop-mat-multi-list{display:flex;flex-direction:column;gap:6px}
-.prop-mat-multi-list .prop-mat-btn{padding:6px 8px;gap:8px}
+.prop-mat-multi-list{display:flex;flex-direction:column;gap:var(--space-sm)}
+.prop-mat-multi-list .prop-mat-btn{padding:6px 8px;gap:var(--space-md)}
 .prop-mat-multi-list .prop-mat-sphere,.prop-mat-multi-list .prop-mat-color{width:28px!important;height:28px!important}
-.prop-mat-multi-list .prop-mat-name{font-size:12px}
-.prop-mat-multi-list .prop-mat-sub{font-size:10px}
-.prop-mat-btn .prop-mat-name-input{font:inherit;font-family:var(--font-mono);font-size:var(--fs-md);font-weight:500;color:var(--tx-on-accent);background:var(--ac-tint-14);border:1px solid var(--ac);border-radius:var(--r-xs);padding:1px 5px;margin:-2px 0;width:100%;min-width:0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
-.prop-bar-wrap{display:flex;align-items:center;gap:8px;margin:8px 0 10px;font-size:11px;color:var(--tx3)}
+.prop-mat-multi-list .prop-mat-name{font-size:var(--fs-12)}
+.prop-mat-multi-list .prop-mat-sub{font-size:var(--fs-10)}
+.prop-mat-btn .prop-mat-name-input{font:inherit;font-family:var(--font-mono);font-size:var(--fs-md);font-weight:var(--fw-medium);color:var(--tx-on-accent);background:var(--ac-tint-14);border:1px solid var(--ac);border-radius:var(--r-xs);padding:1px 5px;margin:-2px 0;width:100%;min-width:0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
+.prop-bar-wrap{display:flex;align-items:center;gap:var(--space-md);margin:8px 0 10px;font-size:var(--fs-11);color:var(--tx3)}
 .prop-bar-wrap .prop-bar-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3);flex-shrink:0}
 .prop-bar-wrap .prop-bar-icon svg{width:13px;height:13px}
-.prop-bar{flex:1;height:6px;background:var(--s3);border-radius:999px;overflow:hidden}
-.prop-bar-fill{height:100%;background:var(--ac);border-radius:999px;transition:width 200ms var(--ease-out),background 200ms var(--ease-out)}
+.prop-bar{flex:1;height:6px;background:var(--s3);border-radius:var(--r-pill);overflow:hidden}
+.prop-bar-fill{height:100%;background:var(--ac);border-radius:var(--r-pill);transition:width 200ms var(--ease-out),background 200ms var(--ease-out)}
 .prop-bar-fill.heavy{background:var(--wn)}
 .prop-bar-fill.very-heavy{background:var(--er)}
 .prop-bar-label{font-variant-numeric:tabular-nums;flex-shrink:0;min-width:62px;text-align:right;color:var(--tx2)}
-.prop-grid{display:grid;grid-template-columns:14px 1fr auto;gap:6px 10px;font-size:12px;font-variant-numeric:tabular-nums;align-items:center}
+.prop-grid{display:grid;grid-template-columns:14px 1fr auto;gap:var(--space-sm) 10px;font-size:var(--fs-12);font-variant-numeric:tabular-nums;align-items:center}
 .prop-grid .prop-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3)}
 .prop-grid .prop-icon svg{width:13px;height:13px}
 .prop-grid .prop-label{color:var(--tx3)}
-.prop-grid .prop-value{color:var(--tx);font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
+.prop-grid .prop-value{color:var(--tx);font-weight:var(--fw-medium);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px}
 
 /* Primitive shape parameters block in the right-side props panel.
    C4D-style — selection-driven, sliders rebuild geometry on the fly. */
 .prim-section{margin-top:14px;padding:10px 0 0 0;border-top:1px solid var(--s2)}
-.prim-section .prop-section-title{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:8px}
+.prim-section .prop-section-title{display:flex;align-items:center;justify-content:space-between;font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin-bottom:8px}
 .prim-section .prop-section-title svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;margin-right:6px;vertical-align:-2px}
-.prim-section .prim-reset{background:transparent;border:1px solid var(--bd);border-radius:5px;padding:3px 6px;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background .12s,color .12s,border-color .12s}
+.prim-section .prim-reset{background:transparent;border:1px solid var(--bd);border-radius:5px;padding:3px 6px;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast)}
 .prim-section .prim-reset:hover{background:var(--bg2);color:var(--tx);border-color:var(--bd2)}
 .prim-section .prim-reset svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
-.prim-row{display:grid;grid-template-columns:1fr auto;column-gap:10px;row-gap:4px;align-items:center;padding:4px 0;font-size:11.5px}
+.prim-row{display:grid;grid-template-columns:1fr auto;column-gap:var(--space-lg);row-gap:var(--space-xs);align-items:center;padding:4px 0;font-size:var(--fs-sm)}
 .prim-row .prim-label{grid-column:1;grid-row:1}
+.prim-val-wrap{grid-column:2;grid-row:1;justify-self:end;display:inline-flex;align-items:center;gap:3px}
 .prim-row .prim-value{grid-column:2;grid-row:1;justify-self:end}
 .prim-row .prim-slider{grid-column:1 / -1;grid-row:2}
 .prim-row .prim-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.prim-row .prim-value{flex:0 0 auto;font-family:var(--font-mono);font-size:11px;color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:999px;padding:2px 9px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:1.25;transition:background 120ms,border-color 120ms,color 120ms}
+.prim-row .prim-value{flex:0 0 auto;font-family:var(--font-mono);font-size:var(--fs-11);color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:2px 9px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;line-height:var(--lh-snug);transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast)}
+input.prim-value{width:52px;outline:none;cursor:text;-moz-appearance:textfield}
+input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input.prim-value:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.25);box-shadow:0 0 0 3px var(--ac-tint-18);color:var(--tx)}
 .prim-row .prim-value:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
+.prim-unit{font-family:var(--font-mono);font-size:var(--fs-11);color:var(--tx3);white-space:nowrap;line-height:1}
 .prim-row .prim-slider{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;outline:none;cursor:pointer;margin:0;padding:0;display:block}
-.prim-row .prim-slider::-webkit-slider-runnable-track{box-sizing:border-box;height:3px;border-radius:999px;background:var(--bg3);border:none}
-.prim-row .prim-slider::-moz-range-track{box-sizing:border-box;height:3px;border-radius:999px;background:var(--bg3);border:none}
-.prim-row .prim-slider::-moz-range-progress{height:3px;border-radius:999px;background:var(--ac)}
+.prim-row .prim-slider::-webkit-slider-runnable-track{box-sizing:border-box;height:3px;border-radius:var(--r-pill);background:var(--bg3);border:none}
+.prim-row .prim-slider::-moz-range-track{box-sizing:border-box;height:3px;border-radius:var(--r-pill);background:var(--bg3);border:none}
+.prim-row .prim-slider::-moz-range-progress{height:3px;border-radius:var(--r-pill);background:var(--ac)}
 .prim-row .prim-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;margin-top:-4.5px;box-shadow:0 0 0 1px rgba(110,168,255,.35),var(--sh-thumb);cursor:grab;transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
 .prim-row .prim-slider::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 1px rgba(110,168,255,.35),var(--sh-thumb);cursor:grab}
 .prim-row .prim-slider:hover::-webkit-slider-thumb{transform:scale(1.1)}
@@ -515,7 +557,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    Color coding mirrors how C4D / Maya / 3ds Max signal node types — assemblies
    warm/orange so subassembly trees pop visually, leaves cool/green so the
    eye finds the actual geometry quickly. */
-.tree-expand{width:13px;height:13px;display:inline-grid;place-items:center;border:1px solid var(--bd2);border-radius:2px;font-size:11px;line-height:1;cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:var(--font-mono);font-weight:600;user-select:none;transition:border-color 100ms,color 100ms,background 100ms}
+.tree-expand{width:13px;height:13px;display:inline-grid;place-items:center;border:1px solid var(--bd2);border-radius:var(--r-2xs);font-size:var(--fs-11);line-height:1;cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:var(--font-mono);font-weight:var(--fw-semibold);user-select:none;transition:border-color 100ms,color 100ms,background 100ms}
 .tree-expand:hover{border-color:var(--ac);color:var(--ac);background:var(--ac-tint-08)}
 /* Spacer used in place of the +/- on leaf rows so all icons line up vertically */
 .tree-expand-spacer{width:13px;height:13px;flex-shrink:0}
@@ -587,13 +629,13 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 }
 
 /* Assembly row hover/select bg — subtle amber wash on selection only. */
-.tree-node.is-group{font-weight:500;background:transparent}
+.tree-node.is-group{font-weight:var(--fw-medium);background:transparent}
 .tree-node.is-group:hover{background:rgba(255,255,255,.03)}
 .tree-node.is-group.selected{background:transparent;border-left-color:transparent}
 
 /* Compact toolbar row under the search input */
 .tree-toolbar{display:flex;flex-wrap:wrap;gap:3px;row-gap:5px;padding:0 10px 6px;align-items:center}
-.tree-toolbar #tree-sort{flex:1 1 100%;min-width:0;font-size:11px;padding:5px 20px 5px 7px;background-position:right 6px center}
+.tree-toolbar #tree-sort{flex:1 1 100%;min-width:0;font-size:var(--fs-11);padding:5px 20px 5px 7px;background-position:right 6px center}
 .tree-icon-btn{flex:0 0 28px;width:28px;height:28px;display:grid;place-items:center;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .tree-icon-btn:hover{color:var(--tx);background:var(--bg3);border-color:var(--bd2)}
 .tree-icon-btn:active{transform:scale(.92)}
@@ -601,33 +643,33 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .tree-icon-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 
 /* Group rows in the parts tree */
-.tree-node.is-group{font-weight:400;background:rgba(167,139,250,.05);border-left-color:transparent}
+.tree-node.is-group{font-weight:var(--fw-regular);background:rgba(167,139,250,.05);border-left-color:transparent}
 .tree-node.is-group:hover{background:rgba(167,139,250,.1)}
 .tree-node.is-group.selected{background:rgba(167,139,250,.05);border-left-color:transparent}
-.tree-chev{width:14px;display:inline-grid;place-items:center;color:var(--tx3);font-size:10px;flex-shrink:0;cursor:pointer;transition:transform .15s}
+.tree-chev{width:14px;display:inline-grid;place-items:center;color:var(--tx3);font-size:var(--fs-10);flex-shrink:0;cursor:pointer;transition:transform .15s}
 .tree-chev:hover{color:var(--tx)}
 .tree-node.collapsed .tree-chev{transform:rotate(-90deg)}
-.tree-folder{flex-shrink:0;color:var(--ac2);font-size:11px;width:14px;display:inline-grid;place-items:center}
+.tree-folder{flex-shrink:0;color:var(--ac2);font-size:var(--fs-11);width:14px;display:inline-grid;place-items:center}
 .tree-folder svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .tree-node.in-group{padding-left:24px}
 .tree-node.in-group .tree-color{margin-left:0}
 .tree-group-actions{display:none;gap:2px;flex-shrink:0}
 .tree-node.is-group:hover .tree-group-actions{display:inline-flex}
-.tree-group-actions button{padding:2px 4px;background:transparent;border:1px solid transparent;border-radius:3px;color:var(--tx3);cursor:pointer;font-size:10px}
+.tree-group-actions button{padding:2px 4px;background:transparent;border:1px solid transparent;border-radius:3px;color:var(--tx3);cursor:pointer;font-size:var(--fs-10)}
 .tree-group-actions button:hover{color:var(--tx);background:var(--s4);border-color:var(--bd)}
 .tree-group-actions svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 
 /* Right panel controls */
 .field{margin-bottom:14px}
 .field:last-child{margin-bottom:0}
-.field label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--tx2);margin-bottom:7px;font-weight:500}
-.field label .v{color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600}
-.field-help{font-size:11px;color:var(--tx3);margin-top:8px;line-height:1.55}
+.field label{display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-12);color:var(--tx2);margin-bottom:7px;font-weight:var(--fw-medium)}
+.field label .v{color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold)}
+.field-help{font-size:var(--fs-11);color:var(--tx3);margin-top:8px;line-height:var(--lh-relaxed)5}
 input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(--bg3);border-radius:var(--r-pill);outline:none}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;background:white;border-radius:50%;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.2);transition:transform .12s}
 input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
-.range-row{display:flex;align-items:center;gap:10px}
-.range-row input[type=number]{width:64px;padding:6px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx);font-size:12px;font-variant-numeric:tabular-nums;outline:none;text-align:right;-moz-appearance:textfield}
+.range-row{display:flex;align-items:center;gap:var(--space-lg)}
+.range-row input[type=number]{width:64px;padding:6px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx);font-size:var(--fs-12);font-variant-numeric:tabular-nums;outline:none;text-align:right;-moz-appearance:textfield}
 .range-row input[type=number]::-webkit-outer-spin-button,.range-row input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 
 /* Marquee (rubber-band) selection box drawn over the viewport while the user
@@ -638,22 +680,22 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
 /* Slider — plain native <input type="range"> with a label/value header above.
    Filled portion = CSS variable `--scrub-pct` updated by JS on input. Trusted
    browser drag/keyboard/touch behavior; no custom pointer code. */
-.scrub{display:flex;flex-direction:column;gap:10px;padding:2px 0;--scrub-pct:0%}
-.scrub-head{display:flex;align-items:center;justify-content:space-between;gap:10px;line-height:1;min-height:16px}
-.scrub-label{font-size:12px;font-weight:500;color:var(--tx2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
-.scrub-rhs{display:flex;align-items:center;gap:4px;flex-shrink:0;line-height:1}
-.scrub-value{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;color:var(--tx);line-height:1;display:inline-flex;align-items:center;justify-content:flex-end;height:20px;min-width:36px;padding:0 6px;border-radius:4px;cursor:text}
+.scrub{display:flex;flex-direction:column;gap:var(--space-lg);padding:2px 0;--scrub-pct:0%}
+.scrub-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);line-height:1;min-height:16px}
+.scrub-label{font-size:var(--fs-12);font-weight:var(--fw-medium);color:var(--tx2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
+.scrub-rhs{display:flex;align-items:center;gap:var(--space-xs);flex-shrink:0;line-height:1}
+.scrub-value{font-size:var(--fs-md);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-tight);color:var(--tx);line-height:1;display:inline-flex;align-items:center;justify-content:flex-end;height:20px;min-width:36px;padding:0 6px;border-radius:var(--r-xs);cursor:text}
 .scrub-value:hover{background:var(--s4)}
 .scrub.editing .scrub-value{background:var(--ac-tint-14);color:var(--tx-on-accent)}
-.scrub-input{font:inherit;font-size:var(--fs-md);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.005em;line-height:1;color:var(--tx-on-accent);background:var(--ac-tint-14);border:1px solid rgba(107,141,255,.5);border-radius:var(--r-xs);padding:0 6px;height:20px;width:60px;text-align:right;outline:none;font-family:inherit}
+.scrub-input{font:inherit;font-size:var(--fs-md);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-tight);line-height:1;color:var(--tx-on-accent);background:var(--ac-tint-14);border:1px solid rgba(107,141,255,.5);border-radius:var(--r-xs);padding:0 6px;height:20px;width:60px;text-align:right;outline:none;font-family:inherit}
 .scrub-input::-webkit-outer-spin-button,.scrub-input::-webkit-inner-spin-button{-webkit-appearance:none}
-.scrub-unit{font-size:11px;color:var(--tx3);letter-spacing:.02em;text-transform:lowercase;font-weight:500;line-height:1}
+.scrub-unit{font-size:var(--fs-11);color:var(--tx3);letter-spacing:var(--tracking-mono);text-transform:lowercase;font-weight:var(--fw-medium);line-height:1}
 /* Native range — track is a thin rounded bar, fill is drawn via background
    gradient up to --scrub-pct, thumb is a small accent disc. */
 .scrub-range{-webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;outline:none;cursor:pointer;margin:0;padding:0;display:block}
 .scrub-range::-webkit-slider-runnable-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:linear-gradient(to right,var(--ac) 0,var(--ac) var(--scrub-pct),var(--bg3) var(--scrub-pct),var(--bg3) 100%);border:none}
 .scrub-range::-moz-range-track{box-sizing:border-box;height:4px;border-radius:var(--r-pill);background:var(--bg3);border:none}
-.scrub-range::-moz-range-progress{height:4px;border-radius:999px;background:var(--ac)}
+.scrub-range::-moz-range-progress{height:4px;border-radius:var(--r-pill);background:var(--ac)}
 input[type=range].scrub-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;box-sizing:border-box;width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;margin-top:-4px;box-shadow:0 0 0 1px var(--ac-tint-35),var(--sh-thumb);cursor:grab;transition:transform var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
 input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--ac);border:0;box-shadow:0 0 0 1px var(--ac-tint-35),var(--sh-thumb);cursor:grab}
 .scrub-range:hover::-webkit-slider-thumb{transform:scale(1.1)}
@@ -664,13 +706,13 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .scrub-range:focus-visible::-moz-range-thumb{box-shadow:0 1px 3px rgba(0,0,0,.4),0 0 0 3px var(--ac-tint-35)}
 .mac-sel{width:100%;padding:7px 28px 7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%239a9a9a' stroke-width='1.5'/></svg>");background-repeat:no-repeat;background-position:right 9px center;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out)}
 .mac-sel:hover{background-color:var(--bg4);border-color:var(--bd2)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:500;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;width:100%;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);font-weight:var(--fw-medium);transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .btn:hover{background:var(--bg4);border-color:var(--bd2)}
 .btn:active{transform:scale(.97);background:var(--bg3)}
 /* Compact .btn variant for the right sidebar — matches the .split-preset
    segmented control height (~28px) so all sidebar buttons read at the same
    visual weight. */
-#sidebar-right .btn{padding:6px 10px;font-size:11px;border-radius:6px;gap:6px;min-height:30px;font-weight:400}
+#sidebar-right .btn{padding:6px 10px;font-size:var(--fs-11);border-radius:var(--r-sm);gap:var(--space-sm);min-height:30px;font-weight:var(--fw-regular)}
 #sidebar-right .btn svg{width:13px;height:13px}
 #sidebar-right .btn-row{gap:5px}
 .btn.danger{color:var(--er)}
@@ -685,22 +727,22 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #sidebar-right .btn-caret.warn{color:var(--tx)}
 .btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
 .btn:disabled{opacity:.4;cursor:not-allowed}
-.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm)}
 
 /* ── Heavy parts (offenders) panel ────────────────────────────────────────
    One row per part, sorted by triCount desc. Click selects + frames.
    The density bar fills red→amber→green by tri-density rank so the eye
    can scan straight to the worst offenders without reading numbers. */
 .off-list{display:flex;flex-direction:column;gap:3px}
-.off-row{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:5px 7px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-sm);transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.off-row{display:grid;grid-template-columns:18px 1fr auto;gap:var(--space-md);align-items:center;padding:5px 7px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-sm);transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .off-row:hover{background:var(--bg3);border-color:var(--bd2)}
 .off-row.selected{background:var(--ac-soft);border-color:var(--ac-line)}
-.off-rank{color:var(--tx3);font-variant-numeric:tabular-nums;text-align:center;font-size:10.5px}
+.off-rank{color:var(--tx3);font-variant-numeric:tabular-nums;text-align:center;font-size:var(--fs-xs)}
 .off-mid{display:flex;flex-direction:column;gap:2px;min-width:0}
 .off-name{color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .off-bar{display:block;height:5px;background:var(--s4);border-radius:3px;overflow:hidden;margin-top:2px;width:100%}
 .off-bar-fill{height:100%;border-radius:3px;transition:width 200ms var(--ease-out);min-width:2px;display:block}
-.off-tri{color:var(--tx2);font-variant-numeric:tabular-nums;font-size:10.5px;flex-shrink:0}
+.off-tri{color:var(--tx2);font-variant-numeric:tabular-nums;font-size:var(--fs-xs);flex-shrink:0}
 .off-empty{display:none}
 .off-list:empty + .off-empty,#offenders-body:has(.off-list:empty) .off-empty{display:block}
 
@@ -708,8 +750,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
    Three-way segmented control for tolerance presets. Each segment fills
    1/3 of the row; the active segment gets the accent treatment so the
    current choice is obvious without reading numbers. */
-.split-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;overflow:hidden;padding:2px}
-.split-preset{padding:6px 2px;background:transparent;color:var(--tx2);font-size:11px;font-weight:500;border:none;border-radius:4px;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);white-space:nowrap}
+.split-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);overflow:hidden;padding:2px}
+.split-preset{padding:6px 2px;background:transparent;color:var(--tx2);font-size:var(--fs-11);font-weight:var(--fw-medium);border:none;border-radius:var(--r-xs);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);white-space:nowrap}
 .split-preset:hover{color:var(--tx);background:var(--hairline)}
 .split-preset.active{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:var(--tx-on-accent);box-shadow:0 1px 2px var(--ac-tint-25)}
 .split-preview .pv-warn{color:var(--wn)}
@@ -732,21 +774,21 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .btn-split:has(> .btn.warn:hover) > .btn-caret{background:var(--wn-soft);border-color:var(--wn-line)}
 .btn-split:has(> .btn-caret.danger:hover) > .btn,
 .btn-split:has(> .btn.danger:hover) > .btn-caret{background:var(--er-soft);border-color:var(--er-line)}
-.fit-pop{position:fixed;z-index:9000;min-width:220px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5);padding:6px;opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
+.fit-pop{position:fixed;z-index:var(--z-toast);min-width:220px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-lg);box-shadow:0 16px 40px rgba(0,0,0,.5);padding:6px;opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .fit-pop.show{opacity:1;transform:translateY(0);pointer-events:auto}
-.fit-pop .fit-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:12.5px;color:var(--tx);cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
+.fit-pop .fit-item{display:flex;align-items:center;gap:var(--space-md);padding:8px 10px;border-radius:var(--r-sm);font-size:var(--fs-md);color:var(--tx);cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
 .fit-pop .fit-item:hover{background:rgba(255,255,255,.07)}
-.fit-pop .fit-item .fit-hint{margin-left:auto;font-size:10.5px;color:var(--tx3)}
+.fit-pop .fit-item .fit-hint{margin-left:auto;font-size:var(--fs-xs);color:var(--tx3)}
 .fit-pop .fit-sep{height:1px;background:var(--s3);margin:4px 6px}
 .fit-pop .fit-sliders{padding:8px 10px}
-.fit-pop .fit-sliders label{display:block;font-size:11px;color:var(--tx2);margin:6px 0 2px}
+.fit-pop .fit-sliders label{display:block;font-size:var(--fs-11);color:var(--tx2);margin:6px 0 2px}
 .fit-pop .fit-sliders input[type=range]{width:100%;margin:6px 0 10px}
-.fit-pop .fit-sliders .fit-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--tx3)}
-.toggle{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;font-size:13px;border-top:1px solid var(--hairline);min-width:0}
+.fit-pop .fit-sliders .fit-row{display:flex;justify-content:space-between;align-items:center;gap:var(--space-md);font-size:var(--fs-11);color:var(--tx3)}
+.toggle{display:flex;justify-content:space-between;align-items:center;gap:var(--space-xl);padding:9px 0;font-size:var(--fs-lg);border-top:1px solid var(--hairline);min-width:0}
 .toggle > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .toggle:first-child{border-top:none}
 .toggle label{flex-shrink:0;display:inline-flex;align-items:center;cursor:pointer}
-.toggle .switch{position:relative;width:34px;height:20px;background:rgba(120,128,140,.35);border-radius:10px;transition:background 220ms var(--ease-ios);cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);display:block}
+.toggle .switch{position:relative;width:34px;height:20px;background:rgba(120,128,140,.35);border-radius:var(--r-lg);transition:background 220ms var(--ease-ios);cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);display:block}
 .toggle .switch::after{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;background:white;border-radius:50%;transition:transform 220ms var(--ease-ios);box-shadow:0 1px 2px rgba(0,0,0,.25),0 2px 6px rgba(0,0,0,.15)}
 .toggle input{display:none}
 .toggle input:checked+.switch{background:var(--ac)}
@@ -756,20 +798,20 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #viewport{position:relative;background:var(--bg);overflow:hidden}
 #canvas{display:block;width:100%;height:100%;outline:none}
 #vp-overlay{position:absolute;inset:0;pointer-events:none}
-.vpc{position:absolute;display:flex;gap:4px;pointer-events:auto}
+.vpc{position:absolute;display:flex;gap:var(--space-xs);pointer-events:auto}
 .vpc.tl{top:6px;left:6px;flex-direction:column}
 .vpc.tr{top:6px;right:6px;flex-direction:column;align-items:flex-end}
 .vpc.br{bottom:6px;right:6px;align-items:flex-end;flex-direction:column}
 .vpc.bl{bottom:6px;left:6px}
 /* Top-center cluster — used by the camera-view pill so it floats centered
    above the GPU canvas without colliding with the corner toolbars. */
-.vpc.tc{top:8px;left:50%;transform:translateX(-50%);flex-direction:column;align-items:center;gap:4px}
+.vpc.tc{top:8px;left:50%;transform:translateX(-50%);flex-direction:column;align-items:center;gap:var(--space-xs)}
 
 /* Camera-view pill: a single rounded button that exposes the current view
    (Cam / Top / Front / Side) and reveals a dropdown of the alternatives.
    Replaces the four T/F/S/Persp buttons that used to live in the TL stack
    so the toolbar reads quieter and the active view is always legible. */
-.vp-pill{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:26px;background:rgba(0,0,0,.28);border:0;backdrop-filter:blur(8px);border-radius:999px;color:var(--tx);font-size:11px;font-weight:500;letter-spacing:.01em;cursor:pointer;transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out);user-select:none;min-width:72px;justify-content:center;line-height:1}
+.vp-pill{display:inline-flex;align-items:center;gap:var(--space-sm);padding:0 12px;height:26px;background:rgba(0,0,0,.28);border:0;backdrop-filter:blur(8px);border-radius:var(--r-pill);color:var(--tx);font-size:var(--fs-11);font-weight:var(--fw-medium);letter-spacing:.01em;cursor:pointer;transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out);user-select:none;min-width:72px;justify-content:center;line-height:1}
 .vp-pill:hover{background:color-mix(in srgb, var(--ac) 14%, rgba(0,0,0,.28));color:var(--tx)}
 .vp-pill:active{transform:scale(.97)}
 .vp-pill[aria-expanded="true"]{background:color-mix(in srgb, var(--ac) 18%, rgba(0,0,0,.28))}
@@ -778,27 +820,27 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .vp-pill .vp-pill-icon svg{width:14px!important;height:14px!important;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block}
 .vp-pill:hover .vp-pill-icon,.vp-pill[aria-expanded="true"] .vp-pill-icon{opacity:1}
 
-.vp-pill-menu{display:flex;flex-direction:column;min-width:160px;padding:4px;background:var(--glass-strong);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(10px);opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top center;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
+.vp-pill-menu{display:flex;flex-direction:column;min-width:160px;padding:4px;background:var(--glass-strong);border:0;border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(10px);opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top center;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
 .vp-pill-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-.vp-pill-item{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:7px 10px;background:transparent;border:0;border-radius:6px;color:var(--tx);font-size:12px;text-align:left;cursor:pointer;font-weight:500;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.vp-pill-item{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);padding:7px 10px;background:transparent;border:0;border-radius:var(--r-sm);color:var(--tx);font-size:var(--fs-12);text-align:left;cursor:pointer;font-weight:var(--fw-medium);transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .vp-pill-item:hover{background:rgba(255,255,255,.05)}
 .vp-pill-item.active{background:color-mix(in srgb, var(--ac) 18%, transparent);color:var(--ac)}
 .vp-pill-item.active .vp-pill-item-kbd{color:color-mix(in srgb, var(--ac) 70%, var(--tx3));border-color:color-mix(in srgb, var(--ac) 35%, var(--bd));background:color-mix(in srgb, var(--ac) 12%, rgba(0,0,0,.25))}
-.vp-pill-item-lbl{font-weight:600;letter-spacing:.005em}
-.vp-pill-item-kbd{font-family:var(--font-mono);font-size:10px;font-weight:500;color:var(--tx3);background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:4px;padding:2px 6px;line-height:1;letter-spacing:.02em;flex-shrink:0;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
-.vp-stat{font-family:var(--font-mono);font-size:11px;color:var(--tx2);background:rgba(13,13,13,.72);border:1px solid var(--bd);border-radius:6px;padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
+.vp-pill-item-lbl{font-weight:var(--fw-semibold);letter-spacing:var(--tracking-snug)}
+.vp-pill-item-kbd{font-family:var(--font-mono);font-size:var(--fs-10);font-weight:var(--fw-medium);color:var(--tx3);background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 6px;line-height:1;letter-spacing:var(--tracking-mono);flex-shrink:0;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.vp-stat{font-family:var(--font-mono);font-size:var(--fs-11);color:var(--tx2);background:rgba(13,13,13,.72);border:1px solid var(--bd);border-radius:var(--r-sm);padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
 /* Gizmo HUD — small DRO that pops next to the gizmo while a drag is active.
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
    per-axis Euler) for rotate, scale factor for scale. Position is updated
    each frame from the pivot's projected screen coords. */
-#gizmo-hud{position:absolute;left:0;top:0;display:none;background:var(--glass-strong);border:1px solid var(--bd);border-radius:6px;padding:6px 9px;font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:10.5px;font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:0 6px 18px rgba(0,0,0,.5);pointer-events:none;z-index:50;backdrop-filter:blur(8px);white-space:nowrap;line-height:1.5}
+#gizmo-hud{position:absolute;left:0;top:0;display:none;background:var(--glass-strong);border:1px solid var(--bd);border-radius:var(--r-sm);padding:6px 9px;font-family:'JetBrains Mono','SF Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;font-size:var(--fs-xs);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:0 6px 18px rgba(0,0,0,.5);pointer-events:none;z-index:var(--z-sticky);backdrop-filter:blur(8px);white-space:nowrap;line-height:var(--lh-relaxed)}
 #gizmo-hud.show{display:block}
-#gizmo-hud .ghud-row{display:flex;align-items:center;gap:8px}
-#gizmo-hud .ghud-mode{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-right:2px}
+#gizmo-hud .ghud-row{display:flex;align-items:center;gap:var(--space-md)}
+#gizmo-hud .ghud-mode{font-size:var(--fs-9);font-weight:var(--fw-bold);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-right:2px}
 #gizmo-hud .ghud-x{color:var(--er)}
 #gizmo-hud .ghud-y{color:var(--ok)}
 #gizmo-hud .ghud-z{color:var(--ac)}
-#gizmo-hud .ghud-snap{margin-left:6px;font-size:9px;font-weight:700;color:var(--ac);background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:3px;padding:1px 5px;letter-spacing:.06em}
+#gizmo-hud .ghud-snap{margin-left:6px;font-size:var(--fs-9);font-weight:var(--fw-bold);color:var(--ac);background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:3px;padding:1px 5px;letter-spacing:var(--tracking-wider)}
 #axis-gizmo{width:56px;height:56px;display:grid;place-items:center;opacity:.75;transition:opacity .15s}
 #axis-gizmo:hover{opacity:1}
 #axis-gizmo svg{width:54px;height:54px;display:block;overflow:visible}
@@ -819,7 +861,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
   background:var(--glass-soft);
   border:1px solid var(--bd);
   backdrop-filter:blur(10px);
-  border-radius:6px;
+  border-radius:var(--r-sm);
   display:grid;place-items:center;
   color:var(--btn-tint);
   transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out);
@@ -856,14 +898,14 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #tg-sun       {--btn-tint:var(--wn)}
 #tg-transform {--btn-tint:var(--ok)}
 #tg-screenshot{--btn-tint:#7dd3fc}
-.vp-info{background:var(--glass-soft);border:0;backdrop-filter:blur(10px);border-radius:6px;padding:7px 11px;font-size:11px;color:var(--tx2);line-height:1.5;font-variant-numeric:tabular-nums;min-width:140px}
+.vp-info{background:var(--glass-soft);border:0;backdrop-filter:blur(10px);border-radius:var(--r-sm);padding:7px 11px;font-size:var(--fs-11);color:var(--tx2);line-height:var(--lh-relaxed);font-variant-numeric:tabular-nums;min-width:140px}
 .vp-info strong{color:var(--tx)}
 /* Triangle-count progress bar: 100% = starting tri count, shrinks as the
    user deletes geometry. Track holds the colorful gradient (green→…→red);
    a dark mask covers the right portion proportional to how much was
    deleted, so the visible right edge transitions from red (full) through
    yellow to green as the user trims geometry. */
-.vp-tribar{position:relative;height:3px;width:100%;background:linear-gradient(90deg,#22c55e 0%,#84cc16 25%,#facc15 50%,#fb923c 75%,#ef4444 100%);border-radius:2px;overflow:hidden;margin:3px 0 5px}
+.vp-tribar{position:relative;height:3px;width:100%;background:linear-gradient(90deg,#22c55e 0%,#84cc16 25%,#facc15 50%,#fb923c 75%,#ef4444 100%);border-radius:var(--r-2xs);overflow:hidden;margin:3px 0 5px}
 .vp-tribar-mask{position:absolute;top:0;bottom:0;right:0;width:0;background:var(--glass-strong);transition:width 220ms ease-out}
 
 /* Export dropdown — anchored to the toolbar Export button. Click the
@@ -873,55 +915,55 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .export-wrap .caret{display:inline-flex;align-items:center;justify-content:center;margin-left:2px;color:var(--tx2);transition:transform 140ms var(--ease-out)}
 .export-wrap .caret svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .export-wrap.open .caret{transform:rotate(180deg)}
-.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;background:var(--bg1);border:1px solid var(--bd);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:6px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
+.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.5);padding:6px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .export-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-.export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--tx);width:calc(100% - 24px);user-select:none;transition:background 80ms,color 80ms}
+.export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);padding:8px 12px;border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-md);color:var(--tx);width:calc(100% - 24px);user-select:none;transition:background 80ms,color 80ms}
 .export-menu-item:hover,.export-menu-item:focus-visible{background:var(--ac-soft);color:var(--tx);outline:none;box-shadow:inset 0 0 0 1px var(--ac-line)}
 .export-menu-item:hover .hint,.export-menu-item:focus-visible .hint{color:var(--tx2)}
-.export-menu-item .fmt{font-weight:400;letter-spacing:.02em}
-.export-menu-item .hint{color:var(--tx3);font-size:11px;font-weight:400}
+.export-menu-item .fmt{font-weight:var(--fw-regular);letter-spacing:var(--tracking-mono)}
+.export-menu-item .hint{color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)}
 .export-menu-sep{height:1px;background:var(--s3);margin:4px 6px}
 /* Add-primitive menu: 3D snapshot thumbnails on the left of each item. */
 #add-prim-menu{min-width:260px}
-#add-prim-menu .export-menu-item{display:grid;grid-template-columns:30px 1fr;gap:10px;padding:3px 10px}
+#add-prim-menu .export-menu-item{display:grid;grid-template-columns:30px 1fr;gap:var(--space-lg);padding:3px 10px}
 #add-prim-menu .prim-thumb{width:30px;height:30px;background:transparent;display:block;object-fit:contain;transition:transform 200ms var(--ease-out)}
 #add-prim-menu .export-menu-item:hover .prim-thumb,#add-prim-menu .export-menu-item:focus-visible .prim-thumb{transform:scale(1.05)}
 #add-prim-menu .fmt{justify-self:start}
-#add-prim-menu .hint{justify-self:end;text-align:right;max-width:120px;line-height:1.25}
+#add-prim-menu .hint{justify-self:end;text-align:right;max-width:120px;line-height:var(--lh-snug)}
 
 /* Settings popover — floats next to the top-right viewport buttons. Mirrors
    the sidebar `.section-b` layout so existing field/toggle markup drops in
    unchanged. Hidden by default; JS toggles `.show` and outside-click closes. */
-#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s linear 160ms;max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s linear 160ms;max-height:calc(100vh - 100px);overflow-y:auto}
 #vp-settings-pop.show{opacity:1;visibility:visible;transform:translateY(0) scale(1);pointer-events:auto;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s}
 #vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid var(--s2)}
 #vp-settings-pop .pop-section:last-child{border-bottom:none}
-#vp-settings-pop .pop-section-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:10px}
+#vp-settings-pop .pop-section-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin-bottom:10px}
 /* Same .pop-section markup is hosted inside #scene-settings-body when the
    sections are relocated at boot. Mirror the popup styling so the moved
    nodes don't lose their look — slightly more padding for modal density. */
 #scene-settings-body .pop-section{padding:14px 18px;border-bottom:1px solid var(--s2)}
 #scene-settings-body .pop-section:last-child{border-bottom:none}
-#scene-settings-body .pop-section-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:12px}
+#scene-settings-body .pop-section-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin-bottom:12px}
 
 /* Materials popup — Cinema-4D-style grid of preview spheres, anchored
    beneath the new tg-materials button. Each cell is a rendered sphere
    showing the material on a neutral checkerboard; double-click opens the
    editor in a _DraggablePopup. */
-#vp-materials-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s linear 160ms;max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-materials-pop{position:absolute;top:0;right:44px;width:280px;background:var(--bg1);border:0;border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.5);padding:0;z-index:60;opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s linear 160ms;max-height:calc(100vh - 100px);overflow-y:auto}
 #vp-materials-pop.show{opacity:1;visibility:visible;transform:translateY(0) scale(1);pointer-events:auto;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out),visibility 0s}
 #vp-materials-pop .pop-section{padding:10px 12px}
-#vp-materials-pop .pop-section-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);margin-bottom:10px}
-#vp-materials-pop .pop-section-head .hint{font-weight:500;text-transform:none;letter-spacing:0;color:var(--tx3);font-size:10.5px}
+#vp-materials-pop .pop-section-head{display:flex;align-items:center;justify-content:space-between;font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3);margin-bottom:10px}
+#vp-materials-pop .pop-section-head .hint{font-weight:var(--fw-medium);text-transform:none;letter-spacing:0;color:var(--tx3);font-size:var(--fs-xs)}
 #vp-materials-pop .mat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;justify-items:center}
-#vp-materials-pop .mat-cell{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:6px;cursor:pointer;border:1px solid transparent;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);user-select:none}
+#vp-materials-pop .mat-cell{display:flex;flex-direction:column;align-items:center;gap:3px;padding:5px;border-radius:var(--r-sm);cursor:pointer;border:1px solid transparent;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);user-select:none}
 #vp-materials-pop .mat-cell:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
-#vp-materials-pop .mat-cell .mat-thumb{position:relative;width:60px;height:60px;border-radius:6px;background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);background-repeat:repeat;display:grid;place-items:center;overflow:hidden}
+#vp-materials-pop .mat-cell .mat-thumb{position:relative;width:60px;height:60px;border-radius:var(--r-sm);background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.04) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.04) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.04) 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);background-repeat:repeat;display:grid;place-items:center;overflow:hidden}
 #vp-materials-pop .mat-cell .mat-thumb img,#vp-materials-pop .mat-cell .mat-thumb canvas{width:100%;height:100%;display:block;object-fit:cover}
-#vp-materials-pop .mat-cell .mat-name{font-size:10.5px;color:var(--tx2);line-height:1.15;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vp-materials-pop .mat-cell .mat-name{font-size:var(--fs-xs);color:var(--tx2);line-height:var(--lh-tight);text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Count pill — pinned to the thumb's top-right. Subtle dark capsule with
    tabular numerics so 1-, 2-, 3-digit counts stay aligned. */
-#vp-materials-pop .mat-cell .mat-count{position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:600;color:var(--tx);background:rgba(13,13,13,.75);border:1px solid rgba(255,255,255,.10);border-radius:7px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:.02em;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
+#vp-materials-pop .mat-cell .mat-count{position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--tx);background:rgba(13,13,13,.75);border:1px solid rgba(255,255,255,.10);border-radius:7px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:var(--tracking-mono);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
 #vp-materials-pop .mat-cell.selected{background:var(--ac-soft);border-color:var(--ac-tint-40)}
 /* Subtle ring on materials used by the current viewport selection — gives a
    passive "you have parts of this material picked" hint without competing
@@ -931,11 +973,11 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 /* Action toolbar at the bottom of the materials panel — add / delete /
    duplicate / merge / industry presets. Sticks to the bottom of the
    scrollable section so it's always reachable. */
-#vp-materials-pop .mat-actions{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.18);border-radius:10px 10px 0 0}
-#vp-materials-pop .mat-actions-icons{display:flex;gap:4px}
+#vp-materials-pop .mat-actions{display:flex;flex-direction:column;gap:var(--space-sm);padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.18);border-radius:var(--r-lg) 10px 0 0}
+#vp-materials-pop .mat-actions-icons{display:flex;gap:var(--space-xs)}
 #vp-materials-pop .mat-actions-icons .mat-act-icon{flex:1;padding:6px 0;justify-content:center}
 #vp-materials-pop .mat-actions-icons .mat-act-icon i,#vp-materials-pop .mat-actions-icons .mat-act-icon svg{width:14px;height:14px}
-#vp-materials-pop .mat-actions .mat-act{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 8px;font-size:11px;font-weight:500;color:var(--tx2);background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:6px;cursor:pointer;transition:background .12s var(--ease-out),color .12s var(--ease-out),border-color .12s var(--ease-out);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#vp-materials-pop .mat-actions .mat-act{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 8px;font-size:var(--fs-11);font-weight:var(--fw-medium);color:var(--tx2);background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:var(--r-sm);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #vp-materials-pop .mat-actions .mat-act:hover{background:rgba(255,255,255,.06);color:var(--tx);border-color:rgba(255,255,255,.12)}
 #vp-materials-pop .mat-actions .mat-act:disabled{opacity:.4;cursor:not-allowed;background:transparent}
 #vp-materials-pop .mat-actions .mat-act:disabled:hover{background:transparent;color:var(--tx2);border-color:rgba(255,255,255,.06)}
@@ -947,55 +989,55 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 
 /* Industry-preset menu floats above the materials panel when the user
    clicks the presets button. Same blur/shadow as other system popovers. */
-#vp-materials-pop .mat-presets-menu{position:absolute;left:8px;right:8px;bottom:50px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.55);padding:4px;z-index:5;display:none;max-height:240px;overflow-y:auto}
+#vp-materials-pop .mat-presets-menu{position:absolute;left:8px;right:8px;bottom:50px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);box-shadow:0 12px 32px rgba(0,0,0,.55);padding:4px;z-index:5;display:none;max-height:240px;overflow-y:auto}
 #vp-materials-pop .mat-presets-menu.show{display:block}
-#vp-materials-pop .mat-presets-menu .mat-preset{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;cursor:pointer;font-size:11.5px;color:var(--tx2);transition:background .1s ease,color .1s ease}
+#vp-materials-pop .mat-presets-menu .mat-preset{display:flex;align-items:center;gap:var(--space-md);padding:6px 8px;border-radius:5px;cursor:pointer;font-size:var(--fs-sm);color:var(--tx2);transition:background .1s ease,color .1s ease}
 #vp-materials-pop .mat-presets-menu .mat-preset:hover{background:var(--ac-soft);color:var(--tx)}
 #vp-materials-pop .mat-presets-menu .mat-preset .mat-preset-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.18)}
 #vp-materials-pop .mat-presets-menu .mat-preset-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#vp-materials-pop .mat-presets-menu .mat-preset-hint{color:var(--tx3);font-size:10px}
+#vp-materials-pop .mat-presets-menu .mat-preset-hint{color:var(--tx3);font-size:var(--fs-10)}
 #vp-materials-pop .mat-presets-menu .mat-preset-sep{height:1px;background:rgba(255,255,255,.06);margin:4px 6px}
-#vp-materials-pop .mat-presets-menu .mat-preset-section{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);padding:6px 8px 3px}
-#vp-materials-pop .mat-empty{color:var(--tx3);font-size:11.5px;padding:6px 0;text-align:center}
+#vp-materials-pop .mat-presets-menu .mat-preset-section{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wider);color:var(--tx3);padding:6px 8px 3px}
+#vp-materials-pop .mat-empty{color:var(--tx3);font-size:var(--fs-sm);padding:6px 0;text-align:center}
 
 /* Material-editor popup body content (inside _DraggablePopup .dlg-body). */
-.mat-edit-body{display:flex;flex-direction:column;gap:14px;padding:14px 16px}
-.mat-edit-body .mat-color-row{display:flex;align-items:center;gap:10px}
-.mat-edit-body .mat-color-row label{flex:0 0 80px;font-size:11px;color:var(--tx3);font-weight:500;letter-spacing:.005em}
+.mat-edit-body{display:flex;flex-direction:column;gap:var(--space-2xl);padding:14px 16px}
+.mat-edit-body .mat-color-row{display:flex;align-items:center;gap:var(--space-lg)}
+.mat-edit-body .mat-color-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx3);font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
 .mat-edit-body input[type=color]{width:36px;height:24px;border:1px solid rgba(255,255,255,.10);border-radius:5px;background:transparent;cursor:pointer;padding:0;flex-shrink:0}
-.mat-edit-body .mat-color-hex{font-family:var(--font-mono);font-size:11.5px;color:var(--tx2);margin-left:auto}
+.mat-edit-body .mat-color-hex{font-family:var(--font-mono);font-size:var(--fs-sm);color:var(--tx2);margin-left:auto}
 
-.kbd{display:inline-block;padding:1px 5px;font-size:10px;background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:var(--font-mono)}
+.kbd{display:inline-block;padding:1px 5px;font-size:var(--fs-10);background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:var(--font-mono)}
 
 /* Loader */
 #loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:transparent;z-index:100}
 #loader.show{display:flex}
-.loader-card{width:480px;max-width:90vw;background:var(--bg1);border:1px solid var(--bd);border-radius:14px;padding:18px 20px 16px;box-shadow:var(--sh)}
-.loader-head{display:flex;align-items:center;gap:14px}
+.loader-card{width:480px;max-width:90vw;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-2xl);padding:18px 20px 16px;box-shadow:var(--sh)}
+.loader-head{display:flex;align-items:center;gap:var(--space-2xl)}
 .spinner{width:28px;height:28px;border-radius:50%;border:2.5px solid var(--bg3);border-top-color:var(--ac);animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loader-text{flex:1;min-width:0}
-#loader-msg{color:var(--tx);font-weight:600;font-size:14px;margin-bottom:2px}
-#loader-sub{color:var(--tx2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#loader-time{color:var(--tx2);font-size:12px;font-variant-numeric:tabular-nums;flex-shrink:0;padding:4px 8px;background:var(--hairline);border-radius:6px}
+#loader-msg{color:var(--tx);font-weight:var(--fw-semibold);font-size:var(--fs-xl);margin-bottom:2px}
+#loader-sub{color:var(--tx2);font-size:var(--fs-12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#loader-time{color:var(--tx2);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;padding:4px 8px;background:var(--hairline);border-radius:var(--r-sm)}
 .loader-bar{height:6px;background:var(--s3);border-radius:3px;margin-top:14px;overflow:hidden;position:relative}
 .loader-bar-fill{height:100%;width:35%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:3px;transition:width .3s ease;position:absolute;left:0}
 .loader-bar-fill.indeterminate{animation:slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
 @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
 .loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid var(--hairline);border-radius:7px;padding:8px 10px;font:11px/1.55 ui-monospace,Menlo,monospace;color:var(--tx2)}
-.log-line{display:flex;gap:8px}
+.log-line{display:flex;gap:var(--space-md)}
 .log-time{color:var(--tx3);flex-shrink:0;width:48px}
 .log-msg.ok{color:var(--ok)}.log-msg.warn{color:var(--wn)}.log-msg.err{color:var(--er)}
 .loader-cancel{margin-top:12px;text-align:right}
-.loader-cancel button{padding:6px 14px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx2);font-size:12px;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.loader-cancel button{padding:6px 14px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);font-size:var(--fs-12);transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .loader-cancel button:hover{color:var(--er);border-color:var(--er-line)}
 
 /* Status bar */
-#sb{grid-column:1/-1;display:flex;align-items:center;padding:0 12px;background:var(--bg2);border-top:1px solid var(--bd);font-size:10.5px;color:var(--tx3);gap:11px;font-variant-numeric:tabular-nums;line-height:1}
-#sb .item{display:flex;gap:4px;align-items:center}
-#sb strong{color:var(--tx2);font-weight:500}
+#sb{grid-column:1/-1;display:flex;align-items:center;padding:0 12px;background:var(--bg2);border-top:1px solid var(--bd);font-size:var(--fs-xs);color:var(--tx3);gap:11px;font-variant-numeric:tabular-nums;line-height:1}
+#sb .item{display:flex;gap:var(--space-xs);align-items:center}
+#sb strong{color:var(--tx2);font-weight:var(--fw-medium)}
 #sb .right{margin-left:auto}
-#sb .sb-action{cursor:pointer;padding:2px 8px;border-radius:4px;border:1px solid transparent;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+#sb .sb-action{cursor:pointer;padding:2px 8px;border-radius:var(--r-xs);border:1px solid transparent;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 #sb .sb-action:hover{background:var(--hairline);border-color:var(--bd);color:var(--tx)}
 #sb .sb-action svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 #sb .sb-action.empty{opacity:.45;cursor:default;pointer-events:none}
@@ -1009,85 +1051,85 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
    keeps pointer-events:none until .show so it doesn't intercept clicks while
    hidden. Modals stay center-origin (unlike popovers); only translateY+scale
    sells the entrance — origin stays in the middle. */
-.modal-bg{position:fixed;inset:0;background:rgba(8,8,8,.55);backdrop-filter:blur(10px) saturate(140%);-webkit-backdrop-filter:blur(10px) saturate(140%);display:grid;place-items:center;z-index:200;opacity:0;pointer-events:none;transition:opacity 1var(--dur-instant) var(--ease-out)}
+.modal-bg{position:fixed;inset:0;background:rgba(8,8,8,.55);backdrop-filter:blur(10px) saturate(140%);-webkit-backdrop-filter:blur(10px) saturate(140%);display:grid;place-items:center;z-index:var(--z-overlay);opacity:0;pointer-events:none;transition:opacity 180ms var(--ease-out)}
 #cmdk-modal{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none}
 .modal-bg.show{opacity:1;pointer-events:auto}
-.modal{background:var(--bg1);border:0;border-radius:var(--r-xl);width:420px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform var(--dur-slow) var(--ease-out),opacity 1var(--dur-instant) var(--ease-out)}
+.modal{background:var(--bg1);border:0;border-radius:var(--r-xl);width:420px;max-width:90vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:var(--sh);overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform var(--dur-slow) var(--ease-out),opacity 180ms var(--ease-out)}
 .modal-bg.show .modal{transform:translateY(0) scale(1);opacity:1}
 .modal-h{padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;flex:0 0 auto}
-.modal-h h3{font-size:var(--fs-xl);font-weight:600}
-.modal-h .x{background:none;border:none;color:var(--tx3);padding:4px}
+.modal-h h3{font-size:var(--fs-xl);font-weight:var(--fw-semibold)}
+.modal-h .x{background:none;border:none;color:var(--tx3);padding:var(--space-xs)}
 .modal-h .x:hover{color:var(--tx)}
 .modal-b{padding:18px 20px;flex:1 1 auto;overflow-y:auto;min-height:0}
-.modal-f{padding:14px 20px;border-top:1px solid var(--bd);display:flex;gap:8px;justify-content:flex-end;flex:0 0 auto;background:var(--bg1)}
-.fmt-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.modal-f{padding:14px 20px;border-top:1px solid var(--bd);display:flex;gap:var(--space-md);justify-content:flex-end;flex:0 0 auto;background:var(--bg1)}
+.fmt-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-md);margin-bottom:14px}
 /* Format-compatibility reference table — opened from "Compare formats" in
    the Export modal header. Cell contents use ● for "yes" + qualifier text
    ("PBR", "flat", "single mesh") for nuances that matter at a glance. */
-.fmt-compat{width:100%;border-collapse:collapse;font-size:11.5px;color:var(--tx2)}
-.fmt-compat thead th{position:sticky;top:0;background:var(--bg1);z-index:1;padding:10px 8px;border-bottom:1px solid var(--bd);text-align:center;font-weight:600;color:var(--tx);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em}
+.fmt-compat{width:100%;border-collapse:collapse;font-size:var(--fs-sm);color:var(--tx2)}
+.fmt-compat thead th{position:sticky;top:0;background:var(--bg1);z-index:1;padding:10px 8px;border-bottom:1px solid var(--bd);text-align:center;font-weight:var(--fw-semibold);color:var(--tx);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:var(--tracking-wide)}
 .fmt-compat tbody td{padding:9px 8px;border-bottom:1px solid var(--s3);text-align:center;vertical-align:middle}
 .fmt-compat tbody td:first-child{text-align:left;padding-left:20px;color:var(--tx)}
-.fmt-compat tbody td:last-child{text-align:left;color:var(--tx3);font-size:11px;line-height:1.45;padding-right:20px;max-width:280px}
+.fmt-compat tbody td:last-child{text-align:left;color:var(--tx3);font-size:var(--fs-11);line-height:var(--lh-base)5;padding-right:20px;max-width:280px}
 .fmt-compat tbody tr:hover{background:var(--bg2)}
-.fmt-compat .y{color:var(--ok);font-weight:600;font-size:var(--fs-lg)}
-.fmt-compat .n{color:var(--tx3);font-size:11px}
-.fmt-compat .muted{color:var(--tx3);font-style:italic;font-size:11px}
-.fmt-card{padding:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;cursor:pointer}
+.fmt-compat .y{color:var(--ok);font-weight:var(--fw-semibold);font-size:var(--fs-lg)}
+.fmt-compat .n{color:var(--tx3);font-size:var(--fs-11)}
+.fmt-compat .muted{color:var(--tx3);font-style:italic;font-size:var(--fs-11)}
+.fmt-card{padding:12px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);cursor:pointer}
 .fmt-card:hover{border-color:var(--bd2)}
 .fmt-card.selected{border-color:var(--ac);background:var(--ac-tint-08)}
-.fmt-card .n{font-weight:600;font-size:13px;margin-bottom:2px}
-.fmt-card .d{color:var(--tx2);font-size:11px;line-height:1.4}
+.fmt-card .n{font-weight:var(--fw-semibold);font-size:var(--fs-lg);margin-bottom:2px}
+.fmt-card .d{color:var(--tx2);font-size:var(--fs-11);line-height:var(--lh-base)}
 
 /* Toast — top-center compact pill, dark glassmorphism */
 .toasts{position:fixed;top:56px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:5px;z-index:250;pointer-events:none;align-items:center;max-width:90vw}
 /* Toasts use CSS transitions keyed on data-state so a stack of rapidly-added
    toasts can animate smoothly — keyframes restart from zero on each insert
    and would jank under load. JS toggles data-state="enter" → "open" → "exit". */
-.toast{display:inline-flex;align-items:center;gap:6px;background:var(--bg1);border:1px solid var(--bd);padding:6px 14px;border-radius:999px;font-size:12px;line-height:1.35;max-width:480px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 6px 24px rgba(0,0,0,.45);pointer-events:auto;opacity:0;transform:translateY(-8px);transition:opacity 200ms var(--ease-out),transform 200ms var(--ease-out)}
+.toast{display:inline-flex;align-items:center;gap:var(--space-sm);background:var(--bg1);border:1px solid var(--bd);padding:6px 14px;border-radius:var(--r-pill);font-size:var(--fs-12);line-height:1.35;max-width:480px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 6px 24px rgba(0,0,0,.45);pointer-events:auto;opacity:0;transform:translateY(-8px);transition:opacity 200ms var(--ease-out),transform 200ms var(--ease-out)}
 .toast[data-state="open"]{opacity:1;transform:translateY(0)}
 .toast[data-state="exit"]{opacity:0;transform:translateY(-8px);transition-duration:160ms}
 .toast::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ac);flex-shrink:0}
 .toast.success::before{background:var(--ok)}
 .toast.warn::before{background:var(--wn)}
 .toast.error::before{background:var(--er)}
-.toast .t{font-weight:600;color:var(--tx)}
-.toast .m{color:var(--tx2);font-weight:400;margin-left:4px}
+.toast .t{font-weight:var(--fw-semibold);color:var(--tx)}
+.toast .m{color:var(--tx2);font-weight:var(--fw-regular);margin-left:4px}
 .toast .m::before{content:'·';color:var(--tx3);margin-right:6px}
 
 /* file:// warning */
-#file-warn{display:none;position:fixed;inset:0;background:transparent;z-index:500;place-items:center;padding:20px}
+#file-warn{display:none;position:fixed;inset:0;background:transparent;z-index:var(--z-modal);place-items:center;padding:20px}
 #file-warn.show{display:grid}
-#file-warn .card{max-width:540px;background:var(--bg1);border:1px solid var(--bd);border-radius:14px;padding:28px 30px;box-shadow:var(--sh)}
-#file-warn h2{font-size:16px;font-weight:600;margin-bottom:14px}
-#file-warn p{color:var(--tx2);line-height:1.6;font-size:13px;margin-bottom:14px}
+#file-warn .card{max-width:540px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-2xl);padding:28px 30px;box-shadow:var(--sh)}
+#file-warn h2{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);margin-bottom:14px}
+#file-warn p{color:var(--tx2);line-height:var(--lh-loose);font-size:var(--fs-lg);margin-bottom:14px}
 #file-warn code{font-family:var(--font-mono);color:var(--ac)}
-#file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;font-family:var(--font-mono);font-size:12px;color:var(--tx);line-height:1.8}
+#file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);padding:12px 14px;font-family:var(--font-mono);font-size:var(--fs-12);color:var(--tx);line-height:1.8}
 
 /* Global Log Console */
-#log-console{position:fixed;left:0;right:0;bottom:28px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:90;transform:translateY(calc(100% + 28px));transition:transform .22s cubic-bezier(.4,0,.2,1);font:11.5px/1.5 ui-monospace,Menlo,monospace}
+#log-console{position:fixed;left:0;right:0;bottom:28px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:var(--z-toolbar);transform:translateY(calc(100% + 28px));transition:transform .22s cubic-bezier(.4,0,.2,1);font:11.5px/1.5 ui-monospace,Menlo,monospace}
 #log-console.show{transform:translateY(0)}
 .lc-grip{position:absolute;top:-3px;left:0;right:0;height:6px;cursor:ns-resize;z-index:1}
 .lc-grip:hover{background:var(--ac-tint-15)}
-.lc-h{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:var(--font-sans)}
-.lc-h .lc-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);padding-right:4px}
+.lc-h{display:flex;align-items:center;gap:var(--space-md);padding:6px 10px;border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:var(--font-sans)}
+.lc-h .lc-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);padding-right:4px}
 .lc-filters{display:flex;gap:3px}
-.lc-pill{padding:3px 9px;background:var(--hairline);border:1px solid var(--s2);border-radius:5px;color:var(--tx2);font-size:11px;cursor:pointer;font-variant-numeric:tabular-nums;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out);font-family:inherit}
+.lc-pill{padding:3px 9px;background:var(--hairline);border:1px solid var(--s2);border-radius:5px;color:var(--tx2);font-size:var(--fs-11);cursor:pointer;font-variant-numeric:tabular-nums;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out);font-family:inherit}
 .lc-pill:hover{color:var(--tx);background:rgba(255,255,255,.07)}
 .lc-pill:active{transform:scale(.95)}
 .lc-pill.active{color:var(--tx);background:var(--ac-tint-12);border-color:var(--ac-line)}
-.lc-pill .n{color:var(--tx3);margin-left:4px;font-size:10px}
+.lc-pill .n{color:var(--tx3);margin-left:4px;font-size:var(--fs-10)}
 .lc-pill.active .n{color:var(--ac)}
-.lc-search{flex:1;max-width:220px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:11.5px;outline:none;font-family:inherit}
+.lc-search{flex:1;max-width:220px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-family:inherit}
 .lc-search:focus{border-color:var(--ac)}
 .lc-spacer{flex:1}
-.lc-icon-btn{width:24px;height:24px;display:grid;place-items:center;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--tx2);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out)}
+.lc-icon-btn{width:24px;height:24px;display:grid;place-items:center;background:transparent;border:1px solid transparent;border-radius:var(--r-xs);color:var(--tx2);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out)}
 .lc-icon-btn:hover{color:var(--tx);background:var(--s2);border-color:var(--bd)}
 .lc-icon-btn:active{transform:scale(.92)}
 .lc-icon-btn svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .lc-icon-btn.active{color:var(--ac)}
 .lc-b{flex:1;overflow-y:auto;padding:4px 0;background:rgba(0,0,0,.18)}
-.lc-row{display:flex;gap:10px;padding:1px 12px;border-left:2px solid transparent;white-space:pre-wrap;word-break:break-word}
+.lc-row{display:flex;gap:var(--space-lg);padding:1px 12px;border-left:2px solid transparent;white-space:pre-wrap;word-break:break-word}
 .lc-row:hover{background:rgba(255,255,255,.02)}
 .lc-row.lvl-debug{border-left-color:var(--tx3);color:var(--tx2)}
 .lc-row.lvl-success{border-left-color:var(--ok)}
@@ -1101,15 +1143,15 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .lc-time{color:var(--tx3);flex-shrink:0;min-width:80px;font-variant-numeric:tabular-nums}
 .lc-tag{color:var(--ac2);flex-shrink:0}
 .lc-msg{flex:1;color:var(--tx)}
-.lc-empty{padding:30px 20px;text-align:center;color:var(--tx3);font-size:12px;font-family:var(--font-sans)}
+.lc-empty{padding:30px 20px;text-align:center;color:var(--tx3);font-size:var(--fs-12);font-family:var(--font-sans)}
 
 /* Status bar console toggle */
-#sb-console-btn{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--tx2);font-size:11px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out);margin-left:6px;font-family:inherit}
+#sb-console-btn{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;background:transparent;border:1px solid transparent;border-radius:var(--r-xs);color:var(--tx2);font-size:var(--fs-11);font-variant-numeric:tabular-nums;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out);margin-left:6px;font-family:inherit}
 #sb-console-btn:hover{color:var(--tx);background:var(--hairline);border-color:var(--bd)}
 #sb-console-btn:active{transform:scale(.95)}
 #sb-console-btn.active{color:var(--ac);background:var(--ac-tint-08);border-color:var(--ac-tint-25)}
 #sb-console-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
-#sb-console-btn .badge{background:var(--er);color:white;font-size:9px;padding:0 4px;border-radius:6px;min-width:14px;text-align:center;font-weight:600;line-height:1.4}
+#sb-console-btn .badge{background:var(--er);color:white;font-size:var(--fs-9);padding:0 4px;border-radius:var(--r-sm);min-width:14px;text-align:center;font-weight:var(--fw-semibold);line-height:var(--lh-base)}
 #sb-console-btn .badge.warn{background:var(--wn);color:black}
 #sb-console-btn .badge.hidden{display:none}
 
@@ -1121,13 +1163,13 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
    correct two edges and matches the bubble's border. The kbd pill highlights
    keyboard shortcuts parsed out of the original title string (e.g. "Fit (F)"). */
 .tip-pop{
-  position:fixed;z-index:10000;pointer-events:none;
+  position:fixed;z-index:var(--z-tooltip);pointer-events:none;
   background:var(--bg3);
   border:1px solid var(--bd2);
   color:var(--tx);
-  padding:6px 10px;border-radius:8px;
+  padding:6px 10px;border-radius:var(--r-md);
   font:500 11.5px/1.4 var(--font-sans);
-  letter-spacing:.005em;
+  letter-spacing:var(--tracking-snug);
   max-width:280px;
   opacity:0;transform:translateY(2px);
   transition:opacity 110ms var(--ease-out),transform 110ms var(--ease-out);
@@ -1139,7 +1181,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
   display:inline-block;margin-left:7px;padding:1px 6px;
   background:rgba(255,255,255,.07);
   border:1px solid var(--s5);
-  border-radius:4px;
+  border-radius:var(--r-xs);
   font:600 10px ui-monospace,'SFMono-Regular',Menlo,monospace;
   color:var(--tx2);
   vertical-align:1px;
@@ -1164,6 +1206,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         <div class="export-menu-sep"></div>
         <button class="export-menu-item" data-file-cmd="scene-settings"><span class="fmt"><i data-lucide="sliders-horizontal" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Scene settings…</span><span class="hint">Ctrl ;</span></button>
         <button class="export-menu-item" data-file-cmd="welcome"><span class="fmt"><i data-lucide="home" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Welcome screen</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
       </div>
     </div>
     <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
@@ -1203,7 +1247,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     </div>
     <button class="tbtn" id="btn-save-scene" disabled style="display:none"><i data-lucide="save"></i>Save Scene</button>
     <div class="spacer"></div>
-    <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="font-size:11.5px;padding:4px 22px 4px 8px;min-width:80px"><option value="webgpu">WebGPU</option><option value="webgl2">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
+    <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="font-size:var(--fs-sm);padding:4px 22px 4px 8px;min-width:80px"><option value="webgpu">WebGPU</option><option value="webgl2">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
     <div class="stat stat-pill"><strong id="fps">0</strong><span class="fps-label">FPS</span></div>
     <div class="brand brand-right">
       <button class="brand-btn" id="btn-brand" aria-haspopup="menu" aria-expanded="false">
@@ -1273,7 +1317,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
       </button>
     </div>
     <div class="tree-summary" id="tree-summary">No model loaded</div>
-    <div id="tree"><div class="tree-empty"><i data-lucide="box"></i><div>No model loaded</div><div style="font-size:11px;margin-top:4px">Open or drop a .step file</div></div></div>
+    <div id="tree"><div class="tree-empty"><i data-lucide="box"></i><div>No model loaded</div><div style="font-size:var(--fs-11);margin-top:4px">Open or drop a .step file</div></div></div>
     <div id="transform-panel">
       <div class="tform-head">
         <span class="tform-title"><i data-lucide="move-3d"></i>Transform</span>
@@ -1365,27 +1409,27 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
             <div class="toggle"><span>FPS counter</span><label><input type="checkbox" id="toggle-fps"><span class="switch"></span></label></div>
             <div class="toggle"><span>Renderer stats</span><label><input type="checkbox" id="toggle-stats"><span class="switch"></span></label></div>
             <div class="toggle" title="Atmospheric fog — fades the grid and distant geometry into the background."><span>Fog</span><label><input type="checkbox" id="toggle-fog" checked><span class="switch"></span></label></div>
-            <div id="fog-controls" style="display:flex;flex-direction:column;gap:8px;margin:6px 0 0 0;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
-              <div class="field" style="margin:0" title="Distance from the camera at which fog starts. 'Auto' = 3× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">auto</span></label><input type="number" id="fog-near" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:11.5px;outline:none;font-variant-numeric:tabular-nums"></div>
-              <div class="field" style="margin:0" title="Distance at which fog is fully opaque. 'Auto' = 30× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Fog end</span><span class="v" id="fog-far-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">auto</span></label><input type="number" id="fog-far" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:11.5px;outline:none;font-variant-numeric:tabular-nums"></div>
-              <div class="field" style="margin:0" title="Multiplier on the fog falloff. >1 = denser fog ramps in faster, <1 = gentler."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="fog-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">1.0×</span></label><input type="range" id="fog-int" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
-              <button id="fog-reset" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:10.5px;cursor:pointer;align-self:flex-start" title="Clear overrides and use the auto-tuned distances + intensity 1.0">Reset to auto</button>
+            <div id="fog-controls" style="display:flex;flex-direction:column;gap:var(--space-md);margin:6px 0 0 0;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
+              <div class="field" style="margin:0" title="Distance from the camera at which fog starts. 'Auto' = 3× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input type="number" id="fog-near" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-variant-numeric:tabular-nums"></div>
+              <div class="field" style="margin:0" title="Distance at which fog is fully opaque. 'Auto' = 30× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog end</span><span class="v" id="fog-far-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input type="number" id="fog-far" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-variant-numeric:tabular-nums"></div>
+              <div class="field" style="margin:0" title="Multiplier on the fog falloff. >1 = denser fog ramps in faster, <1 = gentler."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="fog-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">1.0×</span></label><input type="range" id="fog-int" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
+              <button id="fog-reset" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:var(--fs-xs);cursor:pointer;align-self:flex-start" title="Clear overrides and use the auto-tuned distances + intensity 1.0">Reset to auto</button>
             </div>
             <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral gray (Blender)</option><option value="solid">Solid black</option><option value="white">White</option><option value="hdri">HDRI environment</option></select></div>
-            <div id="hdri-controls" style="display:none;flex-direction:column;gap:6px;margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
-              <div style="font-size:10.5px;color:var(--tx3);font-weight:500;line-height:1.4">Drag the <span style="color:#ffd76b">sun</span> in the viewport to rotate. Brightness from the env lights all PBR materials in the scene.</div>
-              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px">
-                <button class="hdri-preset" data-hdri-preset="studio"   title="Built-in neutral studio (RoomEnvironment)" style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:10.5px;cursor:pointer">Studio</button>
-                <button class="hdri-preset" data-hdri-preset="outdoor"  title="Bright sunny daylight, blue sky"           style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:10.5px;cursor:pointer">Outdoor</button>
-                <button class="hdri-preset" data-hdri-preset="sunset"   title="Warm sunset gradient with low-angle sun"   style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:10.5px;cursor:pointer">Sunset</button>
-                <button class="hdri-preset" data-hdri-preset="overcast" title="Soft overcast — diffuse, no harsh sun"     style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:10.5px;cursor:pointer">Overcast</button>
+            <div id="hdri-controls" style="display:none;flex-direction:column;gap:var(--space-sm);margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
+              <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:var(--lh-base)">Drag the <span style="color:#ffd76b">sun</span> in the viewport to rotate. Brightness from the env lights all PBR materials in the scene.</div>
+              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-xs)">
+                <button class="hdri-preset" data-hdri-preset="studio"   title="Built-in neutral studio (RoomEnvironment)" style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-xs);cursor:pointer">Studio</button>
+                <button class="hdri-preset" data-hdri-preset="outdoor"  title="Bright sunny daylight, blue sky"           style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-xs);cursor:pointer">Outdoor</button>
+                <button class="hdri-preset" data-hdri-preset="sunset"   title="Warm sunset gradient with low-angle sun"   style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-xs);cursor:pointer">Sunset</button>
+                <button class="hdri-preset" data-hdri-preset="overcast" title="Soft overcast — diffuse, no harsh sun"     style="padding:5px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-xs);cursor:pointer">Overcast</button>
               </div>
-              <div style="display:flex;gap:6px">
-                <button id="hdri-load-btn" type="button" style="flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:5px 8px;border-radius:5px;font-size:11px;cursor:pointer" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
-                <button id="hdri-default-btn" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:10.5px;cursor:pointer" title="Reset to the built-in studio environment">Default</button>
+              <div style="display:flex;gap:var(--space-sm)">
+                <button id="hdri-load-btn" type="button" style="flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:5px 8px;border-radius:5px;font-size:var(--fs-11);cursor:pointer" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
+                <button id="hdri-default-btn" type="button" style="background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:5px 8px;border-radius:5px;font-size:var(--fs-xs);cursor:pointer" title="Reset to the built-in studio environment">Default</button>
               </div>
-              <div id="hdri-current" style="font-family:var(--font-mono);font-size:10px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
-              <div class="field" style="margin:0" title="Multiplier on the HDRI's lighting and reflections. Higher = brighter env light on every PBR material."><label style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="hdri-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:600;font-size:11px">1.00×</span></label><input type="range" id="hdri-int" min="0" max="4" step="0.05" value="1" style="width:100%"></div>
+              <div id="hdri-current" style="font-family:var(--font-mono);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
+              <div class="field" style="margin:0" title="Multiplier on the HDRI's lighting and reflections. Higher = brighter env light on every PBR material."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="hdri-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">1.00×</span></label><input type="range" id="hdri-int" min="0" max="4" step="0.05" value="1" style="width:100%"></div>
               <input type="file" id="hdri-file" accept=".hdr,.exr,image/*" style="display:none">
             </div>
           </div>
@@ -1407,7 +1451,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
                 <option value="y">Y-up (Blender, Maya, glTF)</option>
               </select>
             </div>
-            <div class="field" style="margin-bottom:0"><label><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the partsRoot transform. 0.001 turns mm → m; 1000 turns m → mm."></div>
+            <div class="field" style="margin-bottom:0"><label><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the partsRoot transform. 0.001 turns mm → m; 1000 turns m → mm."></div>
           </div>
           <div class="pop-section">
             <div class="pop-section-title">Camera</div>
@@ -1417,7 +1461,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
                 <option value="ortho">Orthographic</option>
               </select>
             </div>
-            <div class="field" id="cam-fov-row"><label><span>Field of view <span style="color:var(--tx3);font-size:10.5px"><span id="cam-fov-val">45</span>°</span></span></label><input type="range" id="cam-fov" min="10" max="100" step="1" value="45" style="width:100%"></div>
+            <div class="field" id="cam-fov-row"><label><span>Field of view <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="cam-fov-val">45</span>°</span></span></label><input type="range" id="cam-fov" min="10" max="100" step="1" value="45" style="width:100%"></div>
             <div class="field" style="margin-bottom:0"><label><span>Clip planes</span></label>
               <select id="cam-clip" class="mac-sel">
                 <option value="auto" selected>Auto (fit to scene)</option>
@@ -1431,11 +1475,11 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
                save/restore wiring that reads/writes #light-* still works. -->
           <div class="pop-section" style="display:none">
             <div class="pop-section-title">Lighting</div>
-            <div class="field"><label><span>Exposure <span style="color:var(--tx3);font-size:10.5px"><span id="light-exposure-val">1.00</span></span></span></label><input type="range" id="light-exposure" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
-            <div class="field"><label><span>Ambient <span style="color:var(--tx3);font-size:10.5px"><span id="light-ambient-val">0.55</span></span></span></label><input type="range" id="light-ambient" min="0" max="2" step="0.05" value="0.55" style="width:100%"></div>
-            <div class="field"><label><span>Sun intensity <span style="color:var(--tx3);font-size:10.5px"><span id="light-sun-val">1.20</span></span></span></label><input type="range" id="light-sun" min="0" max="3" step="0.05" value="1.2" style="width:100%"></div>
-            <div class="field"><label><span>Sun azimuth <span style="color:var(--tx3);font-size:10.5px"><span id="light-azi-val">45</span>°</span></span></label><input type="range" id="light-azi" min="0" max="360" step="1" value="45" style="width:100%"></div>
-            <div class="field"><label><span>Sun elevation <span style="color:var(--tx3);font-size:10.5px"><span id="light-ele-val">45</span>°</span></span></label><input type="range" id="light-ele" min="0" max="90" step="1" value="45" style="width:100%"></div>
+            <div class="field"><label><span>Exposure <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-exposure-val">1.00</span></span></span></label><input type="range" id="light-exposure" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
+            <div class="field"><label><span>Ambient <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-ambient-val">0.55</span></span></span></label><input type="range" id="light-ambient" min="0" max="2" step="0.05" value="0.55" style="width:100%"></div>
+            <div class="field"><label><span>Sun intensity <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-sun-val">1.20</span></span></span></label><input type="range" id="light-sun" min="0" max="3" step="0.05" value="1.2" style="width:100%"></div>
+            <div class="field"><label><span>Sun azimuth <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-azi-val">45</span>°</span></span></label><input type="range" id="light-azi" min="0" max="360" step="1" value="45" style="width:100%"></div>
+            <div class="field"><label><span>Sun elevation <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-ele-val">45</span>°</span></span></label><input type="range" id="light-ele" min="0" max="90" step="1" value="45" style="width:100%"></div>
             <div class="toggle" style="margin-bottom:0"><span>Shadows</span><label><input type="checkbox" id="toggle-shadows"><span class="switch"></span></label></div>
           </div>
           <div class="pop-section">
@@ -1503,7 +1547,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
       </div>
       <!-- FPS / renderer stats overlay (top-right under the toolbar). Each
            overlay is hidden until its toggle in Display settings is on. -->
-      <div class="vpc tl" id="vp-perf" style="top:auto;bottom:80px;left:14px;display:flex;flex-direction:column;gap:4px;pointer-events:none">
+      <div class="vpc tl" id="vp-perf" style="top:auto;bottom:80px;left:14px;display:flex;flex-direction:column;gap:var(--space-xs);pointer-events:none">
         <div id="vp-fps" class="vp-stat" style="display:none">— fps</div>
         <div id="vp-stats" class="vp-stat" style="display:none">— calls</div>
       </div>
@@ -1518,7 +1562,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         </div>
         <div class="loader-bar"><div class="loader-bar-fill" id="loader-bar"></div></div>
         <div id="loader-log" class="loader-log"></div>
-        <div class="loader-cancel" style="display:flex;gap:6px;justify-content:flex-end"><button id="loader-copy-btn" title="Copy the log to clipboard">Copy log</button><button id="loader-cancel-btn" title="Abort the current load / operation">Cancel</button></div>
+        <div class="loader-cancel" style="display:flex;gap:var(--space-sm);justify-content:flex-end"><button id="loader-copy-btn" title="Copy the log to clipboard">Copy log</button><button id="loader-cancel-btn" title="Abort the current load / operation">Cancel</button></div>
       </div>
     </div>
   </main>
@@ -1550,7 +1594,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     <div class="section">
       <div class="section-h"><span>Heavy parts</span><span class="chev">▾</span></div>
       <div class="section-b" id="offenders-body">
-        <div class="off-empty" style="color:var(--tx3);font-size:12px;padding:4px 0">Load a model to see heavy parts.</div>
+        <div class="off-empty" style="color:var(--tx3);font-size:var(--fs-12);padding:4px 0">Load a model to see heavy parts.</div>
         <div class="off-list" id="offenders-list"></div>
       </div>
     </div>
@@ -1570,7 +1614,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
           <button class="btn" id="btn-select-regex" title="Select every part whose name matches the regex"><i data-lucide="search"></i>By name</button>
         </div>
         <div class="field" style="margin-top:6px">
-          <input type="text" id="name-regex" placeholder="screw|bolt|washer" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12.5px;outline:none;">
+          <input type="text" id="name-regex" placeholder="screw|bolt|washer" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx);font-size:var(--fs-md);outline:none;">
         </div>
 
         <div style="height:10px"></div>
@@ -1644,7 +1688,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         <div style="height:6px"></div>
         <div class="btn-row">
           <button class="btn warn" id="btn-decimate-sel" title="Reduce triangle count of selected parts using edge-collapse simplification. Lossy."><i data-lucide="triangle-alert"></i>Decimate <span id="dec-sel-count">0</span></button>
-          <select id="decimate-strength" class="mac-sel" title="How much to drop from each selected part" style="flex:0 0 96px;font-size:11px">
+          <select id="decimate-strength" class="mac-sel" title="How much to drop from each selected part" style="flex:0 0 96px;font-size:var(--fs-11)">
             <option value="0.25">−25%</option>
             <option value="0.5" selected>−50%</option>
             <option value="0.75">−75%</option>
@@ -1657,7 +1701,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     <div class="section">
       <div class="section-h"><span>Materials</span><span class="chev">▾</span></div>
       <div class="section-b" id="materials-body">
-        <div style="color:var(--tx3);font-size:12.5px;padding:4px 0">Load a model to see colors / materials.</div>
+        <div style="color:var(--tx3);font-size:var(--fs-md);padding:4px 0">Load a model to see colors / materials.</div>
       </div>
     </div>
 
@@ -1675,11 +1719,11 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     <div class="section">
       <div class="section-h"><span>Section / Clip</span><span class="chev">▾</span></div>
       <div class="section-b">
-        <div style="color:var(--tx3);font-size:11.5px;line-height:1.4;margin:2px 0 10px">
+        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
           Cut the model with a plane to see inside. Uses TSL discardNode — works on both WebGPU and WebGL2 (switch backends via the Renderer dropdown in the top bar).
         </div>
         <div class="field" style="margin-bottom:6px">
-          <label style="display:block;color:var(--tx3);font-size:11px;margin-bottom:3px">Axis</label>
+          <label style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:3px">Axis</label>
           <select id="clip-axis" class="mac-sel" style="width:100%">
             <option value="off">Off</option>
             <option value="x">X (cut along YZ)</option>
@@ -1688,11 +1732,11 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
           </select>
         </div>
         <div class="field"><div id="clip-pos-scrub"></div></div>
-        <div style="display:flex;gap:6px;margin-top:6px">
+        <div style="display:flex;gap:var(--space-sm);margin-top:6px">
           <button class="btn" id="btn-clip-flip" style="flex:1" title="Swap which side of the plane gets hidden">Flip side</button>
           <button class="btn" id="btn-clip-reset" style="flex:1" title="Disable clipping and recenter slider">Reset</button>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;margin-top:10px;color:var(--tx2);font-size:12px;cursor:pointer">
+        <label style="display:flex;align-items:center;gap:var(--space-sm);margin-top:10px;color:var(--tx2);font-size:var(--fs-12);cursor:pointer">
           <input type="checkbox" id="clip-show-plane" /> Show cut plane
         </label>
       </div>
@@ -1701,7 +1745,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     <div class="section">
       <div class="section-h"><span>Separate fused meshes</span><span class="chev">▾</span></div>
       <div class="section-b">
-        <div style="color:var(--tx3);font-size:11.5px;line-height:1.4;margin:2px 0 10px">
+        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
           Recover individual parts from solids that were merged on export. Two vertices closer than the threshold are treated as the same point.
         </div>
         <div class="split-presets" role="group" aria-label="Detection sensitivity">
@@ -1710,9 +1754,9 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
           <button class="split-preset" data-eps="1e-6" title="Welds vertices within 0.0001% of model size — tolerant of small float drift between duplicates.">Normal</button>
           <button class="split-preset" data-eps="1e-3" title="Welds vertices within 0.1% of model size — intentionally MERGES touching solids. Use when you want fewer, larger parts.">Loose</button>
         </div>
-        <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:11px;margin:8px 0 6px">≈ — at this model size</div>
+        <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:var(--fs-11);margin:8px 0 6px">≈ — at this model size</div>
         <div class="field" style="margin-bottom:6px">
-          <label style="display:block;color:var(--tx3);font-size:11px;margin-bottom:3px">Algorithm</label>
+          <label style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:3px">Algorithm</label>
           <select id="split-method" class="mac-sel" style="width:100%">
             <option value="vertex" title="Default. Connect triangles that share a vertex.">Vertex connectivity</option>
             <option value="edge" title="Stricter than vertex. Connect only when triangles share a full edge — keeps solids meeting at a point separate.">Edge connectivity</option>
@@ -1721,12 +1765,12 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
             <option value="hybrid" title="Vertex connectivity first, then re-split any dominant component (>50%) with spatial proximity.">Hybrid (vertex + spatial)</option>
           </select>
         </div>
-        <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:11.5px;margin:0 0 10px;min-height:16px">Select a mesh to preview the split.</div>
+        <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:var(--fs-sm);margin:0 0 10px;min-height:16px">Select a mesh to preview the split.</div>
         <button class="btn" id="btn-split-selected" title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
         <div style="height:6px"></div>
-        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts" style="font-size:11.5px;opacity:.85"><i data-lucide="search"></i>Scan whole model</button>
+        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts" style="font-size:var(--fs-sm);opacity:.85"><i data-lucide="search"></i>Scan whole model</button>
         <details class="split-advanced" style="margin-top:10px">
-          <summary style="cursor:pointer;color:var(--tx3);font-size:11px;user-select:none;padding:4px 0">Advanced — custom tolerance</summary>
+          <summary style="cursor:pointer;color:var(--tx3);font-size:var(--fs-11);user-select:none;padding:4px 0">Advanced — custom tolerance</summary>
           <div class="field" style="margin-top:6px"><div id="split-eps-scrub"></div></div>
         </details>
       </div>
@@ -1791,8 +1835,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
       <div class="field" style="margin:0">
         <label><span>Filename</span></label>
         <div style="display:flex;align-items:stretch;gap:0">
-          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-right:none;border-radius:7px 0 0 7px;color:var(--tx);font-size:12.5px;outline:none">
-          <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid var(--s3);border-left:none;border-radius:0 7px 7px 0;color:var(--tx3);font-size:12px">.glb</span>
+          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-right:none;border-radius:7px 0 0 7px;color:var(--tx);font-size:var(--fs-md);outline:none">
+          <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid var(--s3);border-left:none;border-radius:0 7px 7px 0;color:var(--tx3);font-size:var(--fs-12)">.glb</span>
         </div>
       </div>
     </div>
@@ -1802,7 +1846,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 
 <div class="modal-bg" id="export-modal">
   <div class="modal" style="width:520px">
-    <div class="modal-h"><h3>Export model</h3><div style="margin-left:auto;display:flex;gap:6px;align-items:center"><button id="export-compat-btn" title="Format compatibility — what each format can read and write" style="font-size:11px;padding:5px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx2);cursor:pointer;letter-spacing:.02em">Compare formats</button><button class="x" id="export-close" title="Close (Esc)">✕</button></div></div>
+    <div class="modal-h"><h3>Export model</h3><div style="margin-left:auto;display:flex;gap:var(--space-sm);align-items:center"><button id="export-compat-btn" title="Format compatibility — what each format can read and write" style="font-size:var(--fs-11);padding:5px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;letter-spacing:var(--tracking-mono)">Compare formats</button><button class="x" id="export-close" title="Close (Esc)">✕</button></div></div>
     <div class="modal-b">
       <div class="fmt-grid" id="format-grid">
         <div class="fmt-card selected" data-fmt="glb"><div class="n">GLB</div><div class="d">Modern, light, single binary file. Best for web AND <strong>Cinema 4D 2026</strong> (native glTF import).</div></div>
@@ -1814,7 +1858,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         <div class="fmt-card" data-fmt="ply"><div class="n">PLY</div><div class="d">Polygon File Format. Geometry + colors.</div></div>
         <div class="fmt-card" data-fmt="csv"><div class="n">CSV</div><div class="d">Parts list spreadsheet (name, color, tris, verts, volume, dimensions, flags). For BOMs and reports — geometry options below are ignored.</div></div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-lg) 14px;margin-bottom:10px">
         <div class="field" style="margin:0">
           <label><span>Unit scale</span></label>
           <select id="exp-scale" class="mac-sel">
@@ -1830,7 +1874,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         </div>
         <div class="field" style="margin:0">
           <label><span>Custom scale</span></label>
-          <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:12.5px;outline:none;font-variant-numeric:tabular-nums" disabled>
+          <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" disabled>
         </div>
         <div class="field" style="margin:0">
           <label><span>Up axis</span></label>
@@ -1850,10 +1894,10 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
       </div>
       <div class="toggle"><span>Merge all parts into one mesh</span><label><input type="checkbox" id="exp-merge"><span class="switch"></span></label></div>
       <div class="toggle"><span>Visible parts only</span><label><input type="checkbox" id="exp-visible" checked><span class="switch"></span></label></div>
-      <div class="toggle" id="exp-selected-row" title="Export only the parts you've currently selected. Overrides 'Visible parts only' when both are set."><span>Selected parts only <span style="color:var(--tx3);font-size:11px;font-weight:400">(overrides visible)</span></span><label><input type="checkbox" id="exp-selected"><span class="switch"></span></label></div>
-      <div class="toggle" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only. Slower export and load."><span>Draco compression <span style="color:var(--tx3);font-size:11px;font-weight:400">(GLB only · slower)</span></span><label><input type="checkbox" id="exp-draco"><span class="switch"></span></label></div>
-      <div class="toggle" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII (text) format instead of binary. ~3× larger, but sometimes loads in apps that reject the binary. Try this if Houdini or C4D shows a 'failed to load' error."><span>ASCII FBX <span style="color:var(--tx3);font-size:11px;font-weight:400">(FBX only · try if binary fails)</span></span><label><input type="checkbox" id="exp-fbx-ascii"><span class="switch"></span></label></div>
-      <div id="exp-source-note" style="display:none;margin-top:10px;padding:8px 10px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:6px;color:var(--wn);font-size:11.5px;line-height:1.4"></div>
+      <div class="toggle" id="exp-selected-row" title="Export only the parts you've currently selected. Overrides 'Visible parts only' when both are set."><span>Selected parts only <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(overrides visible)</span></span><label><input type="checkbox" id="exp-selected"><span class="switch"></span></label></div>
+      <div class="toggle" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only. Slower export and load."><span>Draco compression <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(GLB only · slower)</span></span><label><input type="checkbox" id="exp-draco"><span class="switch"></span></label></div>
+      <div class="toggle" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII (text) format instead of binary. ~3× larger, but sometimes loads in apps that reject the binary. Try this if Houdini or C4D shows a 'failed to load' error."><span>ASCII FBX <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(FBX only · try if binary fails)</span></span><label><input type="checkbox" id="exp-fbx-ascii"><span class="switch"></span></label></div>
+      <div id="exp-source-note" style="display:none;margin-top:10px;padding:8px 10px;background:var(--wn-tint-08);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-sm);color:var(--wn);font-size:var(--fs-sm);line-height:var(--lh-base)"></div>
     </div>
     <div class="modal-f"><button class="btn" id="export-cancel" style="width:auto;padding:7px 16px" title="Close without exporting (Esc)">Cancel</button><button class="tbtn primary" id="export-confirm" title="Generate the file with the chosen format and options">Export</button></div>
   </div>
@@ -1890,7 +1934,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
           <tr><td><strong>CSV</strong></td><td class="n">—</td><td class="y">●</td><td class="muted">n/a</td><td class="muted">n/a</td><td class="muted">n/a</td><td>Parts list / BOM. No geometry written.</td></tr>
         </tbody>
       </table>
-      <div style="padding:12px 20px 16px;color:var(--tx3);font-size:11.5px;line-height:1.5;border-top:1px solid var(--bd)">
+      <div style="padding:12px 20px 16px;color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-relaxed);border-top:1px solid var(--bd)">
         <strong style="color:var(--tx2)">Hierarchy</strong> — whether the format preserves the assembly tree (groups / nested transforms) on round-trip.
         <strong style="color:var(--tx2)">Materials</strong> — color + shading info per part. PBR means full metalness/roughness; plain ● is diffuse only.
         <strong style="color:var(--tx2)">Vertex colors</strong> — per-vertex RGB baked into the geometry (no separate material).
@@ -1943,8 +1987,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 <div class="modal-bg" id="cmdk-modal">
   <div class="modal" style="width:520px;max-height:60vh">
     <div class="modal-h" style="padding:10px 14px">
-      <input type="text" id="cmdk-input" placeholder="Search actions… (Esc to close)" style="flex:1;background:transparent;border:none;outline:none;color:var(--tx);font-size:var(--fs-xl);font-weight:500" autocomplete="off">
-      <span style="color:var(--tx3);font-size:var(--fs-sm);margin-left:10px"><kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-mono);font-size:10px;color:var(--tx2)">↑↓</kbd> <kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-mono);font-size:10px;color:var(--tx2)">↵</kbd></span>
+      <input type="text" id="cmdk-input" placeholder="Search actions… (Esc to close)" style="flex:1;background:transparent;border:none;outline:none;color:var(--tx);font-size:var(--fs-xl);font-weight:var(--fw-medium)" autocomplete="off">
+      <span style="color:var(--tx3);font-size:var(--fs-sm);margin-left:10px"><kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-mono);font-size:var(--fs-10);color:var(--tx2)">↑↓</kbd> <kbd style="display:inline-block;padding:2px 6px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-xs);font-family:var(--font-mono);font-size:var(--fs-10);color:var(--tx2)">↵</kbd></span>
     </div>
     <div class="modal-b" id="cmdk-list" style="padding:6px"></div>
   </div>
@@ -1958,37 +2002,37 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         <div id="welcome-resume"></div>
         <div id="welcome-drop" style="border:2px dashed var(--bd2);border-radius:var(--r-xl);padding:54px 20px 34px;margin-top:32px;text-align:center;cursor:pointer;background:var(--bg2);transition:border-color var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out)">
           <i data-lucide="upload" style="width:40px;height:40px;stroke:var(--ac);fill:none;stroke-width:1.5;display:inline-block;margin-bottom:10px"></i>
-          <div style="font-size:var(--fs-xl);font-weight:600;margin-bottom:4px;color:var(--tx)">Open a 3D model</div>
-          <div style="color:var(--tx2);font-size:var(--fs-md);line-height:1.5;margin-bottom:14px">Drop a <span style="color:var(--ac)">.step</span>, <span style="color:var(--ac)">.stp</span>, <span style="color:var(--ac)">.glb</span>, <span style="color:var(--ac)">.gltf</span>, <span style="color:var(--ac)">.fbx</span>, <span style="color:var(--ac)">.obj</span>, <span style="color:var(--ac)">.3mf</span>, or <span style="color:var(--ac)">.stl</span> here, or click to browse.</div>
+          <div style="font-size:var(--fs-xl);font-weight:var(--fw-semibold);margin-bottom:4px;color:var(--tx)">Open a 3D model</div>
+          <div style="color:var(--tx2);font-size:var(--fs-md);line-height:var(--lh-relaxed);margin-bottom:14px">Drop a <span style="color:var(--ac)">.step</span>, <span style="color:var(--ac)">.stp</span>, <span style="color:var(--ac)">.glb</span>, <span style="color:var(--ac)">.gltf</span>, <span style="color:var(--ac)">.fbx</span>, <span style="color:var(--ac)">.obj</span>, <span style="color:var(--ac)">.3mf</span>, or <span style="color:var(--ac)">.stl</span> here, or click to browse.</div>
           <button class="tbtn primary" id="welcome-pick" style="padding:7px 18px"><i data-lucide="folder-open"></i>Browse…</button>
           <div style="margin-top:14px;font-size:var(--fs-sm);color:var(--tx3)">or <button id="welcome-start-empty" type="button" style="background:transparent;border:none;color:var(--ac);font-size:var(--fs-sm);cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px">start with an empty scene</button></div>
         </div>
 
         <div style="margin-top:18px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-size:var(--fs-sm);font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--tx3)">Recent files</div>
-            <button id="welcome-recents-clear" title="Remove every entry from the recent files list" style="display:none;align-items:center;gap:5px;padding:4px 8px;background:transparent;border:1px solid transparent;border-radius:5px;color:var(--tx3);font-size:11px;cursor:pointer;transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)"><i data-lucide="trash-2" style="width:11px;height:11px"></i>Clear all</button>
+            <div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3)">Recent files</div>
+            <button id="welcome-recents-clear" title="Remove every entry from the recent files list" style="display:none;align-items:center;gap:5px;padding:4px 8px;background:transparent;border:1px solid transparent;border-radius:5px;color:var(--tx3);font-size:var(--fs-11);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)"><i data-lucide="trash-2" style="width:11px;height:11px"></i>Clear all</button>
           </div>
-          <div id="welcome-recents" style="display:flex;flex-direction:column;gap:6px"></div>
+          <div id="welcome-recents" style="display:flex;flex-direction:column;gap:var(--space-sm)"></div>
         </div>
 
-        <div style="margin-top:16px;color:var(--tx3);font-size:var(--fs-sm);line-height:1.5">
+        <div style="margin-top:16px;color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-relaxed)">
           Huge assemblies (&gt;200 MB) load faster if you pre-convert with <code style="font-family:var(--font-mono);color:var(--ac)">step2glb.py</code>.
         </div>
       </div>
 
       <div id="welcome-load-pane" style="display:none">
-        <div style="display:flex;align-items:center;gap:14px;padding:6px 0 14px">
+        <div style="display:flex;align-items:center;gap:var(--space-2xl);padding:6px 0 14px">
           <div class="spinner" style="flex-shrink:0"></div>
           <div style="flex:1;min-width:0">
-            <div id="wl-msg" style="font-size:var(--fs-lg);font-weight:600;color:var(--tx);margin-bottom:3px">Loading…</div>
+            <div id="wl-msg" style="font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);margin-bottom:3px">Loading…</div>
             <div id="wl-sub" style="color:var(--tx3);font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
           </div>
           <div id="wl-time" style="color:var(--tx3);font-size:var(--fs-sm);font-variant-numeric:tabular-nums;flex-shrink:0">0.0s</div>
         </div>
         <div class="loader-bar" style="margin-top:0"><div class="loader-bar-fill" id="wl-bar"></div></div>
         <div id="wl-log" class="loader-log" style="margin-top:12px;max-height:160px"></div>
-        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px">
+        <div style="display:flex;gap:var(--space-sm);justify-content:flex-end;margin-top:10px">
           <button id="wl-copy-btn" class="btn" style="width:auto;padding:6px 14px;font-size:var(--fs-sm)" title="Copy the log to clipboard">Copy log</button>
           <button id="wl-cancel-btn" class="btn" style="width:auto;padding:6px 14px;font-size:var(--fs-sm)" title="Abort the current load">Cancel</button>
         </div>
