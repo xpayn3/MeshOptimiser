@@ -1061,7 +1061,20 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 <div id="app">
 
   <header id="tb">
-    <button class="tbtn primary" id="btn-open"><i data-lucide="folder-open"></i>Open</button>
+    <div class="export-wrap" id="file-menu-wrap">
+      <button class="tbtn primary" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="File menu (New / Open / Import / Save / Scene settings)"><i data-lucide="file"></i>File <span class="caret"><i data-lucide="chevron-down"></i></span></button>
+      <div id="file-menu" class="export-menu" style="min-width:260px">
+        <button class="export-menu-item" data-file-cmd="new"><span class="fmt"><i data-lucide="file-plus" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>New scene</span><span class="hint">Ctrl N</span></button>
+        <button class="export-menu-item" data-file-cmd="open"><span class="fmt"><i data-lucide="folder-open" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Open…</span><span class="hint">Ctrl O</span></button>
+        <button class="export-menu-item" data-file-cmd="import"><span class="fmt"><i data-lucide="file-input" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Import…</span><span class="hint">Ctrl Shift O</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-file-cmd="save"><span class="fmt"><i data-lucide="save" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Save scene…</span><span class="hint">Ctrl S</span></button>
+        <button class="export-menu-item" data-file-cmd="export"><span class="fmt"><i data-lucide="download" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Export…</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-file-cmd="scene-settings"><span class="fmt"><i data-lucide="sliders-horizontal" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Scene settings…</span><span class="hint">Ctrl ;</span></button>
+        <button class="export-menu-item" data-file-cmd="welcome"><span class="fmt"><i data-lucide="home" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Welcome screen</span></button>
+      </div>
+    </div>
     <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
     <button class="tbtn" id="btn-fit" disabled><i data-lucide="maximize"></i>Fit</button>
     <button class="tbtn" id="btn-reset" disabled><i data-lucide="rotate-ccw"></i>Revert</button>
@@ -1097,7 +1110,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         <button class="export-menu-item" data-fmt="csv"><span class="fmt">CSV</span><span class="hint">Parts list (BOM)</span></button>
       </div>
     </div>
-    <button class="tbtn" id="btn-save-scene" disabled><i data-lucide="save"></i>Save Scene</button>
+    <button class="tbtn" id="btn-save-scene" disabled style="display:none"><i data-lucide="save"></i>Save Scene</button>
     <div class="spacer"></div>
     <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="font-size:11.5px;padding:4px 22px 4px 8px;min-width:80px"><option value="webgpu">WebGPU</option><option value="webgl2">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
     <div class="stat stat-pill"><strong id="fps">0</strong><span class="fps-label">FPS</span></div>
@@ -1845,6 +1858,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
           <div style="font-size:var(--fs-xl);font-weight:600;margin-bottom:4px;color:var(--tx)">Open a 3D model</div>
           <div style="color:var(--tx2);font-size:var(--fs-md);line-height:1.5;margin-bottom:14px">Drop a <span style="color:var(--ac)">.step</span>, <span style="color:var(--ac)">.stp</span>, <span style="color:var(--ac)">.glb</span>, <span style="color:var(--ac)">.gltf</span>, <span style="color:var(--ac)">.fbx</span>, <span style="color:var(--ac)">.obj</span>, <span style="color:var(--ac)">.3mf</span>, or <span style="color:var(--ac)">.stl</span> here, or click to browse.</div>
           <button class="tbtn primary" id="welcome-pick" style="padding:7px 18px"><i data-lucide="folder-open"></i>Browse…</button>
+          <div style="margin-top:14px;font-size:var(--fs-sm);color:var(--tx3)">or <button id="welcome-start-empty" type="button" style="background:transparent;border:none;color:var(--ac);font-size:var(--fs-sm);cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px">start with an empty scene</button></div>
         </div>
 
         <div style="margin-top:18px">
