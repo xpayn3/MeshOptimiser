@@ -220,6 +220,65 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+### **v1.4**
+
+v1.3 made the viewport feel modern. v1.4 makes the *session* feel modern:
+real scene management (start empty, merge files in, edit scene-level
+settings as a first-class modal), parametric primitives that round-trip
+cleanly through the transform panel with mm-snapped inputs, unit-aware
+transforms that follow the right-sidebar display unit, a banding-free
+background pipeline, and a clean-shutdown server endpoint.
+
+**Scene management — File menu**
+
+- ![new][new] **New scene** action — boots straight into an empty viewport
+  instead of forcing a load to start working. The toolbar, gizmos, and
+  right sidebar all initialize from the empty-state path so primitives
+  / imports can land into a known-clean scene.
+- ![new][new] **Import (merge)** — load a STEP / GLB / GLTF / FBX file
+  *into* the current scene instead of replacing it, with the imported
+  hierarchy folded into the existing tree under its own root node.
+- ![new][new] **Scene settings** is now a dedicated modal in the File
+  menu, lifted out of the viewport cog popup. Camera controls remain in
+  the cog popup where they're contextual to the viewport.
+
+**Primitives — parameter polish**
+
+- ![new][new] **Editable number inputs** for every primitive parameter —
+  any size slider can be type-edited directly with the keyboard.
+- ![polish][polish] **Round defaults** on insertion (whole-mm radii /
+  heights / tube thicknesses) so freshly-added primitives don't show
+  long decimal trails.
+- ![polish][polish] Size sliders now **snap to whole-mm increments** —
+  drag-edits land on round values without needing the input field.
+- ![fix][fix] **Transform panel refreshes** after a parametric rebuild,
+  so the displayed translation / rotation / scale matches the new
+  geometry's bounds instead of staying stuck on pre-rebuild values.
+
+**Transform — unit alignment**
+
+- ![polish][polish] Transform panel units now **follow the right-sidebar
+  `displayUnit`** (mm / cm / m / in). Switching the global unit updates
+  the transform readouts in lockstep so the two panels can never disagree.
+
+**Visual — banding-free backgrounds**
+
+- ![new][new] Gradient backgrounds get a **per-pixel dither pass** that
+  breaks up the smooth ramp into a high-frequency noise pattern. Eight
+  bits of colour can no longer band visibly across the viewport, even
+  on dark gradients where banding was most obvious.
+- ![refactor][refactor] **Design-token expansion** — font-weight tokens
+  (`--fw-regular/-medium/-semibold/-bold`), select-arrow tokens
+  (`--select-arrow` / `--select-arrow-color`), and unified button-height
+  rules (`.tbtn` 26px, `.btn` 32px). Native `<select>` and the JS-injected
+  custom selects now share the same chevron SVG.
+
+**Server — clean shutdown**
+
+- ![new][new] **`/api/quit` endpoint** for graceful shutdown — the desktop
+  shell can now close the bundled server cleanly instead of hard-killing
+  the process and leaking the port.
+
 ### **v1.3**
 
 v1.2 hardened the editing surface. v1.3 makes the viewport itself feel modern:
