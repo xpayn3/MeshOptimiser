@@ -725,9 +725,10 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 /* Compact .btn variant for the right sidebar — matches the .split-preset
    segmented control height (~28px) so all sidebar buttons read at the same
    visual weight. */
-#sidebar-right .btn{padding:0 var(--space-lg);font-size:var(--fs-11);border-radius:var(--r-sm);gap:var(--space-sm);min-height:30px;font-weight:var(--fw-regular)}
+#sidebar-right .btn{padding:0 var(--space-lg);font-size:10px;border-radius:var(--r-sm);gap:var(--space-sm);min-height:28px;font-weight:var(--fw-regular)}
 #sidebar-right .btn svg{width:13px;height:13px}
 #sidebar-right .btn-row{gap:5px}
+#sidebar-right .cs-trigger{box-sizing:border-box;height:28px;padding:0 28px 0 10px;font-size:10px;line-height:1}
 .btn.danger{color:var(--er)}
 .btn.danger:hover{background:var(--er-soft);border-color:var(--er-line)}
 .btn.warn{color:var(--wn)}
@@ -1815,9 +1816,7 @@ body.msr-mode #canvas{cursor:crosshair}
           <button class="btn" id="btn-clip-flip" style="flex:1" title="Swap which side of the plane gets hidden">Flip side</button>
           <button class="btn" id="btn-clip-reset" style="flex:1" title="Disable clipping and recenter slider">Reset</button>
         </div>
-        <label style="display:flex;align-items:center;gap:var(--space-sm);margin-top:10px;color:var(--tx2);font-size:var(--fs-12);cursor:pointer">
-          <input type="checkbox" id="clip-show-plane" /> Show cut plane
-        </label>
+        <div class="toggle" style="margin-top:4px"><span>Show cut plane</span><label><input type="checkbox" id="clip-show-plane"><span class="switch"></span></label></div>
       </div>
     </div>
 
@@ -1847,7 +1846,7 @@ body.msr-mode #canvas{cursor:crosshair}
         <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:var(--fs-sm);margin:0 0 10px;min-height:16px">Select a mesh to preview the split.</div>
         <button class="btn" id="btn-split-selected" title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
         <div style="height:6px"></div>
-        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts" style="font-size:var(--fs-sm);opacity:.85"><i data-lucide="search"></i>Scan whole model</button>
+        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts"><i data-lucide="search"></i>Scan whole model</button>
         <details class="split-advanced" style="margin-top:10px">
           <summary style="cursor:pointer;color:var(--tx3);font-size:var(--fs-11);user-select:none;padding:4px 0">Advanced — custom tolerance</summary>
           <div class="field" style="margin-top:6px"><div id="split-eps-scrub"></div></div>

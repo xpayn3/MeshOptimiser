@@ -19671,8 +19671,8 @@ function _initCustomSelects() {
       }
       @keyframes cs-fade { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform: translateY(0); } }
       .cs-opt {
-        padding: 7px 14px; cursor: pointer; color: var(--tx);
-        font-size: var(--fs-md); display: flex; align-items: center; gap: 8px;
+        padding: 5px 14px; cursor: pointer; color: var(--tx);
+        font-size: 10px; display: flex; align-items: center; gap: 8px;
       }
       .cs-opt:hover { background: var(--ac-soft); color: white; }
       .cs-opt.cs-sel { color: var(--ac); }
@@ -23283,25 +23283,52 @@ const _Measure = (() => {
   }
 
   function _makeLine(a, b, color = 0xfbbf24) {
-    const g = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3().fromArray(a),
-      new THREE.Vector3().fromArray(b),
-    ]);
-    // depthTest:false keeps the line readable when the measurement passes
-    // through occluding geometry — CAD viewer convention.
-    const mat = new THREE.LineBasicMaterial({
-      color, depthTest: false, depthWrite: false, transparent: true, opacity: 0.95,
-    });
-    const line = new THREE.Line(g, mat);
-    line.renderOrder = 999;
-    return line;
+    // Build a small Group with: thin cylinder segment + sphere markers at
+    // each end. Why not THREE.Line / LineBasicMaterial? In WebGPU, line
+    // rendering is rasterised at exactly 1 pixel and depthTest:false on the
+    // line material doesn't always paint through opaque geometry the same
+    // way it does in WebGL. Mesh-based geometry is bulletproof: standard
+    // PBR pipeline, depth-write controllable per-mesh, always renders.
+    const grp = new THREE.Group();
+    const va = new THREE.Vector3().fromArray(a);
+    const vb = new THREE.Vector3().fromArray(b);
+    const dir = new THREE.Vector3().subVectors(vb, va);
+    const len = dir.length();
+    // Segment thickness scales with model diag so it reads at any zoom.
+    const t = Math.max(1, state.modelDiag || 1) * 0.0015;
+    const mid = new THREE.Vector3().addVectors(va, vb).multiplyScalar(0.5);
+    const cyl = new THREE.Mesh(
+      new THREE.CylinderGeometry(t, t, len, 8, 1, true),
+      new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false, transparent: true, opacity: 0.95, toneMapped: false }),
+    );
+    cyl.position.copy(mid);
+    // CylinderGeometry's axis is Y by default; orient it from a→b.
+    cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    cyl.renderOrder = 999;
+    grp.add(cyl);
+    const sphereGeom = new THREE.SphereGeometry(t * 2.2, 12, 8);
+    const dotMat = new THREE.MeshBasicMaterial({ color, depthTest: false, depthWrite: false, transparent: true, opacity: 1, toneMapped: false });
+    const dotA = new THREE.Mesh(sphereGeom, dotMat);
+    const dotB = new THREE.Mesh(sphereGeom, dotMat);
+    dotA.position.copy(va); dotB.position.copy(vb);
+    dotA.renderOrder = 999; dotB.renderOrder = 999;
+    grp.add(dotA); grp.add(dotB);
+    grp.userData._isMeasureLine = true;
+    grp.userData._sharedGeoms = [cyl.geometry, sphereGeom];
+    grp.userData._sharedMats = [cyl.material, dotMat];
+    return grp;
   }
 
   function _disposeRendered(it) {
     if (it._line) {
       group?.remove(it._line);
-      it._line.geometry.dispose();
-      it._line.material.dispose();
+      // _line is now a Group of cylinder + 2 spheres sharing materials and
+      // sharing the sphere geometry. userData carries arrays of unique
+      // geom/mat references so we dispose each exactly once.
+      const geoms = it._line.userData?._sharedGeoms || [];
+      const mats  = it._line.userData?._sharedMats  || [];
+      for (const g of geoms) { try { g.dispose(); } catch (_) {} }
+      for (const m of mats)  { try { m.dispose(); } catch (_) {} }
       it._line = null;
     }
     if (it._label) {
@@ -23406,9 +23433,14 @@ const _Measure = (() => {
     if (active === on) return;
     active = on;
     document.body.classList.toggle('msr-mode', active);
+    // Don't disable OrbitControls outright — the user may need to orbit
+    // (right-click pan / middle drag) between picks to reach the back of
+    // the model. The capture-phase canvas listeners further down stop
+    // left-button propagation so orbit gestures can't consume picks.
     if (!active) _cancelPending();
     _refreshButtonState();
     _refreshHint();
+    try { Log?.info?.(`measure: ${active ? 'ON' : 'off'}`, { tag: 'measure' }); } catch (_) {}
   }
 
   function _cancelPending() {
@@ -23429,6 +23461,11 @@ const _Measure = (() => {
     };
     items.push(it);
     _addRendered(it);
+    try {
+      const grp = group;
+      const ok = !!(grp && grp.parent === scene && it._line && it._label);
+      Log?.[ok ? 'success' : 'warn']?.(`measure: ${_fmtVal(dist)} ${ok ? '(rendered)' : '(NOT rendered — group/scene attach failed)'}`, { tag: 'measure' });
+    } catch (_) {}
     state.history.push({ type: 'measure-add', id: it.id });
     state.redo.length = 0;
     if (typeof _refreshUndoRedoButtons === 'function') _refreshUndoRedoButtons();
@@ -23442,8 +23479,7 @@ const _Measure = (() => {
     if (!active) return false;
     const p = _resolvePoint(ev);
     if (!p) {
-      // Click landed on empty space. If pendingA exists, cancel current
-      // measurement (matches Onshape / Glovius UX). If not, just no-op.
+      try { Log?.info?.('measure: click missed geometry', { tag: 'measure' }); } catch (_) {}
       if (pendingA) {
         _cancelPending();
         _refreshHint();
@@ -23451,6 +23487,7 @@ const _Measure = (() => {
       }
       return true;
     }
+    try { Log?.info?.(`measure: ${pendingA ? 'second' : 'first'} point at (${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)})`, { tag: 'measure' }); } catch (_) {}
     if (!pendingA) {
       pendingA = p;
       _refreshHint();
@@ -23682,6 +23719,10 @@ wireUI = function() {
   // Boot-time init: scene may not exist yet at wireUI time, but
   // _ensureGroup() is lazy and re-runs on first commit if needed.
   setTimeout(() => _Measure.init(), 0);
+  try {
+    const wired = [tbBtn ? 'toolbar' : null, sideBtn ? 'sidebar' : null, clrBtn ? 'clear' : null, canvas ? 'canvas' : null].filter(Boolean).join(', ');
+    Log?.info?.(`measure: listeners attached (${wired || 'NONE — buttons missing!'})`, { tag: 'measure' });
+  } catch (_) {}
 };
 
 // Undo/redo wrappers — dispatch the three measure op types ahead of the
