@@ -113,9 +113,14 @@ if "%~1"=="" (
 set EXITCODE=%ERRORLEVEL%
 echo.
 echo  [4/4] Server stopped.
-if not %EXITCODE%==0 echo    Exit code: %EXITCODE%
-echo.
-pause
+REM Only pause on error so a clean shutdown (Ctrl+C, /api/quit from the
+REM File > Quit menu) closes the window automatically. On error we keep
+REM the window open so the user can see the failure.
+if not %EXITCODE%==0 (
+  echo    Exit code: %EXITCODE%
+  echo.
+  pause
+)
 exit /b %EXITCODE%
 
 

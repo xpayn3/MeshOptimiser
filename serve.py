@@ -45,6 +45,12 @@ _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._\- ]")
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
 
+# Module-level reference set by main() once the server binds. The /api/quit
+# handler reads this to schedule a clean shutdown — keeping it module-level
+# (rather than a closure) means the Handler class doesn't need the httpd
+# instance threaded through its constructor.
+HTTPD: "http.server.ThreadingHTTPServer | None" = None
+
 
 def _sanitize_filename(name: str, fallback: str = "upload.step") -> str:
     """Strip everything except a conservative alphabet + dot/dash/underscore/space.
@@ -246,7 +252,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path)
         if u.path == "/api/convert": return self._handle_convert()
+        if u.path == "/api/quit":    return self._handle_quit()
         return self._json({"error": "unknown endpoint"}, 404)
+
+    def _handle_quit(self):
+        """Graceful shutdown triggered by the in-app Quit menu item.
+
+        We send the JSON ack first, then spawn a thread to call
+        httpd.shutdown(). Calling shutdown() inline would deadlock — it waits
+        for serve_forever() to exit, but serve_forever is the thread that's
+        currently running this handler. The 0.1 s delay gives the wfile
+        flush time to land before the socket goes away.
+        """
+        self._json({"status": "shutting down"})
+        def _stop():
+            time.sleep(0.1)
+            try:
+                if HTTPD is not None: HTTPD.shutdown()
+            except Exception: pass
+        threading.Thread(target=_stop, daemon=True).start()
 
     def _json(self, obj, status=200):
         body = json.dumps(obj).encode()
@@ -374,6 +398,10 @@ def main() -> int:
             print(f"  port {p} unavailable, trying next...")
     if httpd is None:
         print(f"\n  ERROR: couldn't bind to any port. Last error: {last_err}"); return 1
+
+    # Expose for the /api/quit handler — it can't reach this local otherwise.
+    global HTTPD
+    HTTPD = httpd
 
     with httpd:
         url = f"http://localhost:{chosen_port}/index.html"
