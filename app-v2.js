@@ -19676,8 +19676,7 @@ function _initCustomSelects() {
       }
       .cs-opt:hover { background: var(--ac-soft); color: white; }
       .cs-opt.cs-sel { color: var(--ac); }
-      .cs-opt.cs-sel::before { content: '✓'; opacity: .9; }
-      .cs-opt:not(.cs-sel)::before { content: ''; width: 8px; }
+      .cs-opt.cs-sel::after { content: '●'; font-size: 6px; margin-left: auto; opacity: .9; line-height: 1; }
     `;
     document.head.appendChild(s);
   }
