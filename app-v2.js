@@ -184,18 +184,18 @@ const _Dialog = (() => {
       .dlg-card.danger .dlg-icon{background:rgba(255,107,107,.13);color:var(--er);box-shadow:inset 0 0 0 1px rgba(255,107,107,.2)}
       .dlg-text{flex:1;min-width:0;padding-top:2px}
       .dlg-title{font-size:15px;font-weight:600;color:var(--tx);letter-spacing:-.01em;margin-bottom:6px}
-      .dlg-msg{color:var(--tx2);font-size:13px;line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
+      .dlg-msg{color:var(--tx2);font-size:var(--fs-lg);line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
       .dlg-input{display:none;width:100%;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:var(--r-md);color:var(--tx);font-size:13.5px;font-family:inherit;outline:none;transition:border-color .15s,background .15s,box-shadow .15s}
       .dlg-input:focus{border-color:rgba(107,141,255,.5);background:rgba(255,255,255,.06);box-shadow:0 0 0 3px rgba(107,141,255,.15)}
-      .dlg-foot{display:flex;justify-content:flex-end;gap:8px;padding:18px 22px 20px;margin-top:18px;border-top:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.18)}
-      .dlg-btn{font:inherit;padding:8px 16px;border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;font-size:13px;font-weight:500;transition:transform .08s,filter .12s,background .12s,border-color .12s;letter-spacing:.005em}
+      .dlg-foot{display:flex;justify-content:flex-end;gap:var(--space-md);padding:18px 22px 20px;margin-top:18px;border-top:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.18)}
+      .dlg-btn{font:inherit;padding:8px 16px;border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;font-size:var(--fs-lg);font-weight:500;transition:transform .08s,filter .12s,background .12s,border-color .12s;letter-spacing:.005em}
       .dlg-btn:active{transform:translateY(.5px)}
       .dlg-btn-cancel{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.06);color:var(--tx2)}
       .dlg-btn-cancel:hover{background:rgba(255,255,255,.08);color:var(--tx);border-color:rgba(255,255,255,.1)}
       .dlg-btn-ok{background:linear-gradient(180deg,#7ab2ff,#4f7ce0);color:white;border-color:transparent;box-shadow:0 4px 14px rgba(107,141,255,.28),inset 0 1px 0 rgba(255,255,255,.18)}
       .dlg-btn-ok:hover{filter:brightness(1.07)}
       .dlg-btn-ok.danger{background:linear-gradient(180deg,#ff7a85,#e25151);box-shadow:0 4px 14px rgba(255,107,107,.32),inset 0 1px 0 rgba(255,255,255,.18)}
-      .dlg-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:14px;transition:color .12s,background .12s}
+      .dlg-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-xl);transition:color .12s,background .12s}
       .dlg-close:hover{color:var(--tx);background:rgba(255,255,255,.06)}
     `;
     document.head.appendChild(s);
@@ -1016,7 +1016,85 @@ function _runFileCmd(cmd) {
     case 'export':         document.getElementById('btn-export')?.click(); break;
     case 'scene-settings': _openSceneSettings(); break;
     case 'welcome':        try { _Welcome.show(); } catch (_) {} break;
+    case 'quit':           _quitApp(); break;
   }
+}
+
+// Quit-confirmation dialog. Returns 'save' | 'discard' | 'cancel'. We build
+// it inline rather than reusing _openSaveSceneDialog because it's a
+// three-way prompt and the existing modal is a single-input save dialog.
+function _confirmQuitDialog() {
+  return new Promise((resolve) => {
+    const bg = document.createElement('div');
+    bg.style.cssText =
+      'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;' +
+      'display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+    const card = document.createElement('div');
+    card.style.cssText =
+      'background:var(--bg1,#141414);border:1px solid var(--bg3,#252525);border-radius:8px;' +
+      'padding:22px 24px;min-width:380px;max-width:480px;' +
+      'box-shadow:0 12px 40px rgba(0,0,0,.5);color:var(--tx,#ededed);' +
+      'font:13px/1.5 system-ui,-apple-system,Segoe UI,sans-serif';
+    card.innerHTML =
+      `<div style="font-size:15px;font-weight:600;margin-bottom:6px">Quit STEP Optimizer?</div>` +
+      `<div style="color:var(--tx2,#9a9a9a);margin-bottom:20px">` +
+      `Save your scene before quitting? Unsaved changes will be lost.` +
+      `</div>` +
+      `<div style="display:flex;justify-content:flex-end;gap:8px">` +
+        `<button data-act="cancel" style="padding:7px 14px;border:1px solid var(--bg3,#252525);` +
+          `background:transparent;color:var(--tx,#ededed);border-radius:5px;cursor:pointer;font:inherit">Cancel</button>` +
+        `<button data-act="discard" style="padding:7px 14px;border:1px solid var(--bg3,#252525);` +
+          `background:transparent;color:var(--er,#ff6b6b);border-radius:5px;cursor:pointer;font:inherit">Don't save</button>` +
+        `<button data-act="save" style="padding:7px 14px;border:1px solid var(--ac,#6b8dff);` +
+          `background:var(--ac,#6b8dff);color:#fff;border-radius:5px;cursor:pointer;font:inherit;font-weight:600">Save</button>` +
+      `</div>`;
+    bg.appendChild(card);
+    document.body.appendChild(bg);
+    const finish = (act) => {
+      document.removeEventListener('keydown', onKey, true);
+      bg.remove();
+      resolve(act);
+    };
+    card.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act) finish(act);
+    });
+    bg.addEventListener('click', (e) => { if (e.target === bg) finish('cancel'); });
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); finish('cancel'); }
+      else if (e.key === 'Enter') { e.preventDefault(); finish('save'); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    setTimeout(() => card.querySelector('[data-act="save"]')?.focus(), 50);
+  });
+}
+
+// Quit: tell the local Python server to shut down, then replace the page so
+// the user knows the app is gone. window.close() only works on tabs that JS
+// itself opened — most browsers refuse it for a tab the user navigated to,
+// so we don't rely on it; the user can close the tab manually.
+async function _quitApp() {
+  const hasContent = (state.parts || []).some(p => !p.deleted);
+  if (hasContent) {
+    const action = await _confirmQuitDialog();
+    if (action === 'cancel') return;
+    if (action === 'save') {
+      const ok = await saveScene();
+      // saveScene returns false when the user backed out of the picker /
+      // name dialog, or when the export errored. In both cases keep the
+      // app open so they can retry rather than silently dropping work.
+      if (ok === false) return;
+    }
+  } else {
+    if (!confirm('Quit STEP Optimizer?\n\nThe local server will stop.')) return;
+  }
+  try { await fetch('/api/quit', { method: 'POST' }); } catch (_) {}
+  try { window.close(); } catch (_) {}
+  document.documentElement.innerHTML =
+    `<body style="margin:0;background:#101218;color:#9aa3b2;font:14px/1.5 system-ui,sans-serif;` +
+    `display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:24px">` +
+    `<div><div style="font-size:18px;color:#e6e9ef;margin-bottom:8px">STEP Optimizer closed</div>` +
+    `<div>Server stopped. You can close this tab.</div></div></body>`;
 }
 
 // Scene settings modal — separate dedicated surface for scene-persistent
@@ -1196,7 +1274,7 @@ const _Settings = (() => {
         _toggleRow('set-confirm', 'Confirm destructive actions', p.confirmDestructive, 'Ask before deletes and other irreversible ops.')
       ) +
       _section('Storage', `
-        <div style="display:flex;gap:8px;flex-wrap:wrap;padding:8px 0">
+        <div style="display:flex;gap:var(--space-md);flex-wrap:wrap;padding:8px 0">
           <button class="btn" id="set-clear-recents" style="width:auto;padding:7px 14px">Clear recent files</button>
           <button class="btn" id="set-clear-handles" style="width:auto;padding:7px 14px">Clear file handles</button>
         </div>
@@ -1599,7 +1677,7 @@ const _CmdK = (() => {
     list.innerHTML = items.length === 0
       ? `<div style="padding:18px;text-align:center;color:var(--tx3);font-size:var(--fs-md)">No matches</div>`
       : items.map((a, i) => `
-        <div class="cmdk-item${i === activeIdx ? ' active' : ''}" data-idx="${i}" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:var(--fs-md);background:${i === activeIdx ? 'var(--ac-soft)' : 'transparent'}">
+        <div class="cmdk-item${i === activeIdx ? ' active' : ''}" data-idx="${i}" style="display:flex;align-items:center;gap:var(--space-xl);padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:var(--fs-md);background:${i === activeIdx ? 'var(--ac-soft)' : 'transparent'}">
           <span style="color:var(--tx3);font-size:var(--fs-sm);min-width:54px">${a.group}</span>
           <span style="flex:1;color:var(--tx)">${a.label}</span>
           ${a.kbd ? `<span style="color:var(--tx3);font-family:ui-monospace,monospace;font-size:var(--fs-sm);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 7px">${a.kbd}</span>` : ''}
@@ -4503,29 +4581,29 @@ function _openScreenshotDialog() {
     s.id = '_scrshot-dlg-style';
     s.textContent = `
       #scrshot-dlg .ss-body{padding:14px 16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
-      #scrshot-dlg .ss-section-title{font-size:11px;font-weight:600;color:var(--tx2);letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
-      #scrshot-dlg .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+      #scrshot-dlg .ss-section-title{font-size:var(--fs-11);font-weight:600;color:var(--tx2);letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
+      #scrshot-dlg .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-sm)}
       #scrshot-dlg .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:var(--r-md);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .14s ease,border-color .14s ease,transform .12s ease}
       #scrshot-dlg .ss-preset:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
       #scrshot-dlg .ss-preset.active{background:linear-gradient(180deg,rgba(107,141,255,.18),rgba(107,141,255,.08));border-color:rgba(107,141,255,.42);color:var(--tx)}
-      #scrshot-dlg .ss-preset .lbl{font-size:12px;font-weight:600;line-height:1.1}
-      #scrshot-dlg .ss-preset .sub{font-size:10.5px;color:var(--tx3);font-variant-numeric:tabular-nums}
+      #scrshot-dlg .ss-preset .lbl{font-size:var(--fs-12);font-weight:600;line-height:1.1}
+      #scrshot-dlg .ss-preset .sub{font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
       #scrshot-dlg .ss-preset.active .sub{color:var(--ac)}
-      #scrshot-dlg .ss-custom{display:flex;align-items:center;gap:8px}
-      #scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:7px;font-size:12.5px;outline:none;font-variant-numeric:tabular-nums}
+      #scrshot-dlg .ss-custom{display:flex;align-items:center;gap:var(--space-md)}
+      #scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:7px;font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
       #scrshot-dlg .ss-custom input:focus{border-color:rgba(107,141,255,.5)}
-      #scrshot-dlg .ss-custom .x{color:var(--tx3);font-size:13px;font-weight:500}
-      #scrshot-dlg .ss-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);font-variant-numeric:tabular-nums}
+      #scrshot-dlg .ss-custom .x{color:var(--tx3);font-size:var(--fs-lg);font-weight:500}
+      #scrshot-dlg .ss-meta{display:flex;justify-content:space-between;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
       #scrshot-dlg .ss-meta strong{color:var(--tx2);font-weight:500}
-      #scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:6px}
-      #scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:7px;font-size:12.5px;outline:none}
+      #scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:var(--space-sm)}
+      #scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:7px;font-size:var(--fs-md);outline:none}
       #scrshot-dlg .ss-name input:focus{border-color:rgba(107,141,255,.5)}
-      #scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:7px;cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
+      #scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:7px;cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
       #scrshot-dlg .ss-overlay-row:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.10)}
       #scrshot-dlg .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
-      #scrshot-dlg .ss-overlay-row .lbl{flex:1;font-size:12px;color:var(--tx);font-weight:500}
-      #scrshot-dlg .ss-overlay-row .hint{font-size:10.5px;color:var(--tx3);font-weight:400;margin-left:4px}
-      #scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:12px;border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:500}
+      #scrshot-dlg .ss-overlay-row .lbl{flex:1;font-size:var(--fs-12);color:var(--tx);font-weight:500}
+      #scrshot-dlg .ss-overlay-row .hint{font-size:var(--fs-xs);color:var(--tx3);font-weight:400;margin-left:4px}
+      #scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:var(--fs-12);border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:500}
       #scrshot-dlg .dlg-foot .ss-cancel:hover{background:rgba(255,255,255,.05)}
       #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,rgba(107,141,255,.32),var(--ac-tint-18));border-color:rgba(107,141,255,.5);color:var(--tx-on-accent)}
       #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,rgba(107,141,255,.42),rgba(107,141,255,.24))}
@@ -6646,7 +6724,7 @@ function rebuildTree() {
   root.appendChild(frag);
   if (visible.length > MAX) {
     const more = document.createElement('div');
-    more.style.cssText = 'padding:8px 14px;color:var(--tx3);font-size:11px;';
+    more.style.cssText = 'padding:8px 14px;color:var(--tx3);font-size:var(--fs-11);';
     more.textContent = `... ${fmtNum(visible.length - MAX)} more parts (use search)`;
     root.appendChild(more);
   }
@@ -6883,7 +6961,7 @@ function _rebuildTreeHierarchical() {
     : `${totalParts} parts in hierarchy`;
   if (emitted >= MAX) {
     const more = document.createElement('div');
-    more.style.cssText = 'padding:8px 14px;color:var(--tx3);font-size:11px;';
+    more.style.cssText = 'padding:8px 14px;color:var(--tx3);font-size:var(--fs-11);';
     more.textContent = `... display capped at ${fmtNum(MAX)} rows (use search to narrow)`;
     root.appendChild(more);
   }
@@ -11524,14 +11602,14 @@ function _openSaveSceneDialog(suggested) {
 }
 
 async function saveScene() {
-  if (!state.parts.length) { toast('Nothing to save', 'Load a model first', 'warn'); return; }
+  if (!state.parts.length) { toast('Nothing to save', 'Load a model first', 'warn'); return false; }
   // Suggest the last name the user typed (sticky across saves in the same
   // session), falling back to the loaded filename. No timestamp — the user
   // asked to keep it stable so they can overwrite the same file.
   const baseName = (state._loadedFilename || 'scene').replace(/\.[^.]+$/, '');
   const suggested = state._lastSavedSceneName || baseName;
   const entered = await _openSaveSceneDialog(suggested);
-  if (entered === null) return;
+  if (entered === null) return false;
   let chosenName = (entered || '').trim() || suggested;
   chosenName = chosenName.replace(/\.glb$/i, '').replace(/[\\/:*?"<>|]/g, '_');
   state._lastSavedSceneName = chosenName;
@@ -11570,7 +11648,7 @@ async function saveScene() {
         });
         state._lastSaveSceneHandle = fileHandle;
       } catch (e) {
-        if (e && e.name === 'AbortError') return;
+        if (e && e.name === 'AbortError') return false;
         console.warn('[scene-save] save picker failed, falling back to download', e);
       }
     }
@@ -11581,7 +11659,7 @@ async function saveScene() {
   // stored in the sidecar and re-applied on load. Identity axis/scale/origin
   // means the saved file overlays the live scene exactly when reopened.
   const { root, count } = buildExportRoot({ visibleOnly: false, merge: false, scale: 1, axis: 'z-up', origin: 'model' });
-  if (count === 0) { setLoader(false); toast('Nothing to save', 'No parts in scene', 'warn'); return; }
+  if (count === 0) { setLoader(false); toast('Nothing to save', 'No parts in scene', 'warn'); return false; }
   root.updateMatrixWorld(true);
   // Stash the sidecar on a *named* child node so traversal on load can find it
   // unambiguously. The Three.js GLTFExporter wraps a Group root in an
@@ -11615,9 +11693,11 @@ async function saveScene() {
       downloadBlob(blob, fname);
     }
     toast('Scene saved', fname, 'success', 4000);
+    return true;
   } catch (e) {
     console.error('[scene-save]', e);
     toast('Save failed', e.message || String(e), 'error', 6000);
+    return false;
   } finally {
     setLoader(false);
   }
@@ -13701,11 +13781,11 @@ function _renderPrimitiveSection(p) {
       </div>`;
     }
     // Size-like field: range scales with baseSize. 0.05× baseSize → 5×.
-    const min = baseSize * 0.05, max = baseSize * 5;
+    const min = Math.max(1, Math.round(baseSize * 0.05)), max = Math.round(baseSize * 5);
     return `<div class="prim-row" data-prim-field="${f.id}">
       <label class="prim-label">${escapeHtml(f.label)}</label>
-      <input type="range" data-prim-input min="${min.toFixed(3)}" max="${max.toFixed(3)}" step="any" value="${v}" class="prim-slider">
-      <span class="prim-value" data-prim-value>${_fmtLen(v)}</span>
+      <input type="range" data-prim-input data-prim-size min="${min}" max="${max}" step="1" value="${Math.round(v)}" class="prim-slider">
+      <span class="prim-value" data-prim-value>${_fmtLen(Math.round(v))}</span>
     </div>`;
   }).join('');
   return `
@@ -13737,12 +13817,11 @@ function _wirePrimitiveSliders(rootEl, p) {
     const update = () => {
       let v;
       if (input.type === 'checkbox') v = !!input.checked;
-      else if (input.step === '1') v = parseInt(input.value, 10);
-      else v = parseFloat(input.value);
+      else v = parseInt(input.value, 10);
       if (Number.isNaN(v) && typeof v !== 'boolean') return;
       p.primParams[fId] = v;
       if (valEl) valEl.textContent = (typeof v === 'number')
-        ? (input.step === '1' ? String(v) : _fmtLen(v))
+        ? (input.dataset.primSize ? _fmtLen(v) : String(v))
         : (v ? 'on' : 'off');
       _scheduleRebuild();
     };
@@ -14522,7 +14601,7 @@ function buildMaterialsPanel() {
   const root = $('materials-body');
   if (!root) return;
   if (state.parts.length === 0) {
-    root.innerHTML = `<div style="color:var(--tx3);font-size:12.5px;padding:4px 0">Load a model to see materials.</div>`;
+    root.innerHTML = `<div style="color:var(--tx3);font-size:var(--fs-md);padding:4px 0">Load a model to see materials.</div>`;
     return;
   }
   // Group by Material reference (not by color) so the cards mirror what the
@@ -14531,12 +14610,12 @@ function buildMaterialsPanel() {
   // existing _openMaterialEditor so all the slider edits flow through one path.
   const mats = (typeof _collectLiveMaterials === 'function') ? _collectLiveMaterials() : [];
   if (!mats.length) {
-    root.innerHTML = `<div style="color:var(--tx3);font-size:12.5px;padding:4px 0">No materials yet.</div>`;
+    root.innerHTML = `<div style="color:var(--tx3);font-size:var(--fs-md);padding:4px 0">No materials yet.</div>`;
     return;
   }
   root.innerHTML = '';
   const head = document.createElement('div');
-  head.style.cssText = 'font-size:11px;color:var(--tx3);padding:4px 0 8px';
+  head.style.cssText = 'font-size:var(--fs-11);color:var(--tx3);padding:4px 0 8px';
   const live = state.parts.filter(p => !p.deleted).length;
   head.textContent = `${mats.length} material${mats.length === 1 ? '' : 's'} · ${live} part${live === 1 ? '' : 's'}`;
   root.appendChild(head);
@@ -14549,7 +14628,7 @@ function buildMaterialsPanel() {
     const row = document.createElement('div');
     row.className = 'mat-row';
     row.dataset.matName = name;
-    row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;border-top:1px solid rgba(255,255,255,.04);font-size:12px;border-radius:var(--r-sm);transition:background 120ms var(--ease-out)';
+    row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;border-top:1px solid rgba(255,255,255,.04);font-size:var(--fs-12);border-radius:var(--r-sm);transition:background 120ms var(--ease-out)';
     const thumbHtml = previewUrl
       ? `<img src="${previewUrl}" alt="" draggable="false" style="width:26px;height:26px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.3)">`
       : `<span style="width:26px;height:26px;border-radius:5px;flex-shrink:0;background:${hex};border:1px solid rgba(255,255,255,.15);box-shadow:0 1px 3px rgba(0,0,0,.3)"></span>`;
@@ -14557,7 +14636,7 @@ function buildMaterialsPanel() {
       ${thumbHtml}
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         <span style="color:var(--tx);font-weight:500">${escapeHtml(name)}</span>
-        <span style="display:block;font-family:ui-monospace,monospace;font-size:10.5px;color:var(--tx3)">${hex} · ${info.count}</span>
+        <span style="display:block;font-family:ui-monospace,monospace;font-size:var(--fs-xs);color:var(--tx3)">${hex} · ${info.count}</span>
       </span>
       <button class="mat-row-edit" style="background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:5px;cursor:pointer;flex-shrink:0;transition:background 120ms,border-color 120ms,color 120ms">
         <i data-lucide="sliders-horizontal" style="width:13px;height:13px"></i>
@@ -15032,7 +15111,7 @@ function _openMaterialEditor(info) {
       #_mat-editor-popup .dlg-pop:has(.dlg-resize.se:hover){background:var(--bg1)}
       #_mat-editor-popup .dlg-head{padding:10px 12px;border-bottom:1px solid var(--bd)}
       #_mat-editor-popup .dlg-head::after{display:none}
-      #_mat-editor-popup .dlg-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3)}
+      #_mat-editor-popup .dlg-title{font-size:var(--fs-11);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3)}
       #_mat-editor-popup .dlg-sub{display:none}
       #_mat-editor-popup .dlg-head-icon{width:22px;height:22px;border-radius:var(--r-sm);background:rgba(107,141,255,.10);box-shadow:inset 0 0 0 1px rgba(107,141,255,.20)}
       #_mat-editor-popup .dlg-head-icon svg{width:12px;height:12px}
@@ -15043,47 +15122,47 @@ function _openMaterialEditor(info) {
       /* Hero preview row uses the same dark gradient as the materials grid
          tile hover — subtle, just enough to lift the shaderball off the
          flat panel surface without breaking the panel's read. */
-      .mat-edit-preview-wrap{position:relative;background:rgba(255,255,255,.02);padding:10px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px}
+      .mat-edit-preview-wrap{position:relative;background:rgba(255,255,255,.02);padding:10px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:var(--space-xl)}
       .mat-edit-preview-canvas{flex:0 0 92px;width:92px;height:92px;border-radius:var(--r-md);background:var(--bg-checker);box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.04);object-fit:cover;display:block}
       .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-      .mat-edit-preview-name{font-size:13px;font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-edit-preview-type{font-size:10px;color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;text-transform:uppercase}
-      .mat-edit-preview-uses{font-size:10.5px;color:var(--tx2)}
+      .mat-edit-preview-name{font-size:var(--fs-lg);font-weight:600;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-edit-preview-type{font-size:var(--fs-10);color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em;text-transform:uppercase}
+      .mat-edit-preview-uses{font-size:var(--fs-xs);color:var(--tx2)}
 
       /* Sections: padding + uppercase title style mirror the materials
          panel's pop-section / pop-section-head conventions. */
       .mat-edit-section{padding:10px 12px;border-bottom:1px solid var(--s2)}
       .mat-edit-section:last-child{border-bottom:none}
-      .mat-edit-section-h{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);cursor:pointer;user-select:none;margin-bottom:8px}
+      .mat-edit-section-h{display:flex;align-items:center;justify-content:space-between;font-size:var(--fs-11);font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx3);cursor:pointer;user-select:none;margin-bottom:8px}
       .mat-edit-section-h:hover{color:var(--tx2)}
-      .mat-edit-section-h .chev{font-size:14px;line-height:1;color:var(--tx3);transition:transform .15s var(--ease-out)}
+      .mat-edit-section-h .chev{font-size:var(--fs-xl);line-height:1;color:var(--tx3);transition:transform .15s var(--ease-out)}
       .mat-edit-section.collapsed .chev{transform:rotate(-90deg)}
       .mat-edit-section.collapsed .mat-edit-section-b{display:none}
       .mat-edit-section-b{display:flex;flex-direction:column;gap:5px}
 
-      .mat-color-row{display:flex;align-items:center;gap:8px;padding:3px 0}
-      .mat-color-row label{flex:0 0 80px;font-size:11px;color:var(--tx2)}
+      .mat-color-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
+      .mat-color-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx2)}
       .mat-color-row input[type="color"]{width:28px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer}
-      .mat-color-hex{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--tx3);flex:1}
-      .mat-edit-toggle-row{display:flex;flex-wrap:wrap;gap:4px;padding:3px 0}
-      .mat-edit-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);font-size:11px;color:var(--tx2);cursor:pointer;user-select:none;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
+      .mat-color-hex{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-xs);color:var(--tx3);flex:1}
+      .mat-edit-toggle-row{display:flex;flex-wrap:wrap;gap:var(--space-xs);padding:3px 0}
+      .mat-edit-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
       .mat-edit-toggle:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
       .mat-edit-toggle input{accent-color:var(--ac);cursor:pointer;margin:0}
-      .mat-edit-select-row{display:flex;align-items:center;gap:8px;padding:3px 0}
-      .mat-edit-select-row label{flex:0 0 80px;font-size:11px;color:var(--tx2)}
-      .mat-edit-select-row select{flex:1;font-size:11.5px;padding:5px 8px}
+      .mat-edit-select-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
+      .mat-edit-select-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx2)}
+      .mat-edit-select-row select{flex:1;font-size:var(--fs-sm);padding:5px 8px}
 
       /* Texture slots: a thumb (or empty placeholder) + label + filename
          + load/clear buttons. Compact rows, minimal chrome — matches the
          color-row look. */
-      .mat-tex-row{display:flex;align-items:center;gap:8px;padding:3px 0}
+      .mat-tex-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
       .mat-tex-thumb{flex:0 0 28px;width:28px;height:28px;border-radius:5px;background:var(--bg-checker);border:1px solid var(--bd);display:grid;place-items:center;overflow:hidden;color:var(--tx3)}
       .mat-tex-thumb img{width:100%;height:100%;object-fit:cover;display:block}
       .mat-tex-thumb svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;opacity:.45}
       .mat-tex-thumb.has-tex{border-color:var(--ac-line)}
       .mat-tex-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-      .mat-tex-label{font-size:11px;color:var(--tx2);line-height:1.1}
-      .mat-tex-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--tx3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-tex-label{font-size:var(--fs-11);color:var(--tx2);line-height:1.1}
+      .mat-tex-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-10);color:var(--tx3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-tex-name.empty::before{content:'— no texture —';color:var(--tx3);opacity:.55}
       .mat-tex-btn{flex:0 0 auto;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:4px 6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
       .mat-tex-btn:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
@@ -15095,7 +15174,7 @@ function _openMaterialEditor(info) {
          The tex-attach circle (data-tex-prop) is a clickable indicator;
          empty = outline-only, has-tex = filled with the accent. Click
          opens a small popover for load/clear. */
-      .mat-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);align-items:center;gap:10px;padding:4px 0;font-size:11.5px;line-height:1.2}
+      .mat-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);align-items:center;gap:var(--space-lg);padding:4px 0;font-size:var(--fs-sm);line-height:1.2}
       .mat-row + .mat-row{border-top:1px dashed var(--s2)}
       .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .mat-row-tex{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.10) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.10) 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0;cursor:pointer;padding:0;display:grid;place-items:center;transition:border-color 120ms,color 120ms;color:var(--tx3)}
@@ -15103,39 +15182,39 @@ function _openMaterialEditor(info) {
       .mat-row-tex svg{display:none}
       .mat-row-tex.has-tex{background-image:none;background-color:var(--ac);border-color:var(--ac);border-style:solid}
       .mat-row-tex.has-tex svg{display:block;width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:1.8;color:#fff}
-      .mat-row-val{display:flex;align-items:center;gap:6px;min-width:0}
+      .mat-row-val{display:flex;align-items:center;gap:var(--space-sm);min-width:0}
       .mat-row-val > *:first-child{flex:1;min-width:0}
       .mat-row-val .field{margin:0}
       .mat-row-val .scrub-label{display:none}
       /* Inline scrubber: [value pill] [range slider] on one line. */
-      .mat-row-val .scrub{flex-direction:row;align-items:center;gap:8px;padding:0;width:100%}
+      .mat-row-val .scrub{flex-direction:row;align-items:center;gap:var(--space-md);padding:0;width:100%}
       .mat-row-val .scrub-head{flex:0 0 auto;min-height:0;justify-content:flex-end;gap:0}
       .mat-row-val .scrub-range{flex:1;min-width:0;width:auto}
       .mat-row-val .scrub-rhs{display:flex;align-items:center;gap:3px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:2px 9px;height:20px;transition:background 120ms,border-color 120ms,color 120ms}
       .mat-row-val .scrub-rhs:hover{background:var(--bg3);border-color:var(--bd2)}
-      .mat-row-val .scrub-value{font-size:11px;font-weight:500;min-width:0;height:auto;padding:0;border-radius:0;background:transparent;color:var(--tx2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
+      .mat-row-val .scrub-value{font-size:var(--fs-11);font-weight:500;min-width:0;height:auto;padding:0;border-radius:0;background:transparent;color:var(--tx2);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em}
       .mat-row-val .scrub-value:hover{background:transparent;color:var(--tx)}
       .mat-row-val .scrub.editing .scrub-value{background:transparent;color:var(--tx)}
-      .mat-row-val .scrub-unit{font-size:10px;color:var(--tx3)}
+      .mat-row-val .scrub-unit{font-size:var(--fs-10);color:var(--tx3)}
       .mat-row-val .scrub-range::-webkit-slider-thumb{width:10px;height:10px;background:var(--ac);border:0;margin-top:-3px;box-shadow:0 0 0 2px rgba(107,141,255,.25),0 1px 2px rgba(0,0,0,.4)}
       .mat-row-val .scrub-range::-moz-range-thumb{width:10px;height:10px;background:var(--ac);border:0;box-shadow:0 0 0 2px rgba(107,141,255,.25),0 1px 2px rgba(0,0,0,.4)}
       .mat-row-val .scrub-range::-webkit-slider-runnable-track{height:3px}
       .mat-row-val .scrub-range::-moz-range-track{height:3px}
 
       /* Spline-style color row: [label] [swatch] [hex] [pct] [tex-trigger]. */
-      .mat-row.mat-color-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);gap:10px;padding:4px 0}
-      .mat-row.mat-color-row .mat-row-val{gap:8px}
+      .mat-row.mat-color-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);gap:var(--space-lg);padding:4px 0}
+      .mat-row.mat-color-row .mat-row-val{gap:var(--space-md)}
       .mat-row.mat-color-row .mat-row-val > *:first-child{flex:0 0 22px}
       .mat-swatch{width:22px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer;overflow:hidden;flex:0 0 22px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
       .mat-swatch::-webkit-color-swatch-wrapper{padding:0}
       .mat-swatch::-webkit-color-swatch{border:none;border-radius:var(--r-xs)}
       .mat-swatch::-moz-color-swatch{border:none;border-radius:var(--r-xs)}
       .mat-swatch:hover{border-color:var(--bd2)}
-      .mat-color-hex-v2{flex:0 0 auto;width:11ch;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--tx2);letter-spacing:.04em;text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
+      .mat-color-hex-v2{flex:0 0 auto;width:11ch;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-12);color:var(--tx2);letter-spacing:.04em;text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
       .mat-color-hex-v2:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
       .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(107,141,255,.18)}
       .mat-color-hex-v2.invalid{border-color:var(--er);color:var(--er)}
-      .mat-color-pct{flex:0 0 52px;width:52px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
+      .mat-color-pct{flex:0 0 52px;width:52px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-12);color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
       .mat-color-pct::-webkit-outer-spin-button,.mat-color-pct::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
       .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(107,141,255,.18)}
@@ -15149,15 +15228,15 @@ function _openMaterialEditor(info) {
       /* Floating texture-attach popover anchored to the .mat-row-tex.  */
       .mat-tex-pop{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-md);box-shadow:0 12px 32px rgba(0,0,0,.5);padding:10px;width:240px;display:none}
       .mat-tex-pop.show{display:block}
-      .mat-tex-pop-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+      .mat-tex-pop-head{display:flex;align-items:center;gap:var(--space-md);margin-bottom:8px}
       .mat-tex-pop-thumb{flex:0 0 40px;width:40px;height:40px;border-radius:var(--r-sm);background:var(--bg-checker);border:1px solid var(--bd);overflow:hidden;display:grid;place-items:center}
       .mat-tex-pop-thumb img{width:100%;height:100%;object-fit:cover;display:block}
       .mat-tex-pop-thumb svg{width:18px;height:18px;stroke:var(--tx3);fill:none;stroke-width:1.6;opacity:.45}
       .mat-tex-pop-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-      .mat-tex-pop-prop{font-size:11px;font-weight:600;color:var(--tx);text-transform:uppercase;letter-spacing:.04em}
-      .mat-tex-pop-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-tex-pop-row{display:flex;gap:6px}
-      .mat-tex-pop-btn{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:6px 8px;color:var(--tx);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 120ms,border-color 120ms,color 120ms}
+      .mat-tex-pop-prop{font-size:var(--fs-11);font-weight:600;color:var(--tx);text-transform:uppercase;letter-spacing:.04em}
+      .mat-tex-pop-name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .mat-tex-pop-row{display:flex;gap:var(--space-sm)}
+      .mat-tex-pop-btn{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:6px 8px;color:var(--tx);font-size:var(--fs-11);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 120ms,border-color 120ms,color 120ms}
       .mat-tex-pop-btn:hover{background:var(--bg3);border-color:var(--bd2)}
       .mat-tex-pop-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
       .mat-tex-pop-btn.danger{color:var(--er)}
@@ -15319,7 +15398,7 @@ function _openMaterialEditor(info) {
     row('Env intensity', sliderVal('mat-edit-env-scrub'))
   ) : '';
 
-  const _mapOnly = '<span style="color:var(--tx3);font-size:11px;font-style:italic;opacity:.7">map only</span>';
+  const _mapOnly = '<span style="color:var(--tx3);font-size:var(--fs-11);font-style:italic;opacity:.7">map only</span>';
   const physicalSection = isPhysical ? section('physical', 'Clearcoat / IOR / Transmission',
     row('Clearcoat',           sliderVal('mat-edit-clearcoat-scrub'),           'clearcoatMap') +
     row('Clearcoat roughness', sliderVal('mat-edit-clearcoatRough-scrub'),      'clearcoatRoughnessMap') +
@@ -17027,7 +17106,7 @@ function _wireBboxButtonsFinal() {
           <input type="range" id="fit-waste" min="0.40" max="0.80" step="0.01" value="${cfg.cylBoxWaste}">
           <div class="fit-row"><span>Aspect-ratio gate</span><span id="fit-aspect-val">${cfg.cylAspect.toFixed(1)}</span></div>
           <input type="range" id="fit-aspect" min="1.0" max="3.0" step="0.1" value="${cfg.cylAspect}">
-          <label style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer">
+          <label style="display:flex;align-items:center;gap:var(--space-sm);margin-top:8px;cursor:pointer">
             <input type="checkbox" id="fit-pca" ${cfg.pcaEnabled ? 'checked' : ''}>
             <span>PCA fallback</span>
           </label>
@@ -17168,7 +17247,7 @@ rebuildTree = function() {
       ? `<i data-lucide="eye"></i>`
       : `<i data-lucide="eye-off"></i>`;
     const inst = _instBadge(p.group ? p.group.parts.length : 0);
-    const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:10px">🔒</span>` : '';
+    const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10)">🔒</span>` : '';
     const triFrac = Math.log10(p.triCount + 1) / logMax;
     const barHue = 240 - triFrac * 240;   // blue → red
     const barW = Math.max(2, triFrac * 40) | 0;
@@ -17179,7 +17258,7 @@ rebuildTree = function() {
   root.appendChild(frag);
   if (visible.length > MAX) {
     const more = document.createElement('div');
-    more.style.cssText = 'padding:8px 14px;color:var(--tx3);font-size:11px;';
+    more.style.cssText = 'padding:8px 14px;color:var(--tx3);font-size:var(--fs-11);';
     more.textContent = `… ${fmtNum(visible.length - MAX)} more parts not shown (use search)`;
     root.appendChild(more);
   }
@@ -17194,7 +17273,7 @@ function _ctxBuild(items, x, y) {
   for (const it of items) {
     if (it === '---') { const d = document.createElement('div'); d.style.cssText='height:1px;background:rgba(255,255,255,.06);margin:4px 0'; m.appendChild(d); continue; }
     const row = document.createElement('div');
-    row.style.cssText = 'padding:7px 14px;cursor:pointer;color:var(--tx);display:flex;align-items:center;gap:10px;font-size:12.5px';
+    row.style.cssText = 'padding:7px 14px;cursor:pointer;color:var(--tx);display:flex;align-items:center;gap:var(--space-lg);font-size:var(--fs-md)';
     // Icon + label as two slots so the icon column lines up across rows.
     // Icon is a Lucide name (string). Empty string skips the icon for that
     // row but reserves the column width so labels stay aligned.
@@ -19119,7 +19198,7 @@ function _initCustomSelects() {
       .cs-trigger:hover { background-color: var(--bg4); border-color: var(--bd2); }
       .cs-trigger:focus { border-color: var(--ac); }
       .cs-pop {
-        position: fixed; z-index: 10000; min-width: 160px;
+        position: fixed; z-index:var(--z-tooltip); min-width: 160px;
         background: var(--bg1); border: 1px solid var(--bd);
         border-radius: var(--r-lg); padding: 5px 0; box-shadow: var(--sh-pop);
         max-height: 320px; overflow-y: auto;
@@ -20080,7 +20159,7 @@ rebuildTree = function() {
       ? `<i data-lucide="eye"></i>`
       : `<i data-lucide="eye-off"></i>`;
     const inst = _instBadge(p.group ? p.group.parts.length : 0);
-    const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:10px">🔒</span>` : '';
+    const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10)">🔒</span>` : '';
     const triFrac = Math.log10(p.triCount + 1) / logMax;
     const barHue = 240 - triFrac * 240;
     const barW = Math.max(2, triFrac * 40) | 0;
@@ -20153,7 +20232,7 @@ rebuildTree = function() {
 
   if (drawn >= MAX) {
     const more = document.createElement('div');
-    more.style.cssText = 'padding:8px 14px;color:var(--tx3);font-size:11px;';
+    more.style.cssText = 'padding:8px 14px;color:var(--tx3);font-size:var(--fs-11);';
     more.textContent = `… more parts not shown (use search)`;
     root.appendChild(more);
   }
@@ -20333,8 +20412,8 @@ const _FlattenDialog = (() => {
          Only Advanced flatten content classes live here. */
       #_flat-dialog .flat-section{margin-bottom:14px}
       #_flat-dialog .flat-section:last-child{margin-bottom:0}
-      #_flat-dialog .flat-section-title{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:0 0 8px 0}
-      #_flat-dialog .flat-opts{display:flex;flex-direction:column;gap:6px}
+      #_flat-dialog .flat-section-title{font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:0 0 8px 0}
+      #_flat-dialog .flat-opts{display:flex;flex-direction:column;gap:var(--space-sm)}
       #_flat-dialog .flat-opt{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);cursor:pointer;transition:background .14s ease,border-color .14s ease}
       #_flat-dialog .flat-opt:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
       #_flat-dialog .flat-opt.active{background:rgba(107,141,255,.10);border-color:rgba(107,141,255,.35)}
@@ -20343,21 +20422,21 @@ const _FlattenDialog = (() => {
       #_flat-dialog .flat-opt input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
       #_flat-dialog .flat-opt input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff}
       #_flat-dialog .flat-opt-text{flex:1;min-width:0}
-      #_flat-dialog .flat-opt-label{font-size:13px;font-weight:500;color:var(--tx);margin-bottom:3px;letter-spacing:-.005em}
-      #_flat-dialog .flat-opt-help{font-size:11.5px;color:var(--tx3);line-height:1.45}
-      #_flat-dialog .flat-opt-help code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ac);background:rgba(0,0,0,.28);padding:0 5px;border-radius:var(--r-xs);font-size:11px}
-      #_flat-dialog .flat-row{display:flex;align-items:center;gap:8px;margin-top:9px}
-      #_flat-dialog .flat-row label{font-size:11px;color:var(--tx3);font-weight:500;letter-spacing:.005em}
-      #_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      #_flat-dialog .flat-opt-label{font-size:var(--fs-lg);font-weight:500;color:var(--tx);margin-bottom:3px;letter-spacing:-.005em}
+      #_flat-dialog .flat-opt-help{font-size:var(--fs-sm);color:var(--tx3);line-height:1.45}
+      #_flat-dialog .flat-opt-help code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ac);background:rgba(0,0,0,.28);padding:0 5px;border-radius:var(--r-xs);font-size:var(--fs-11)}
+      #_flat-dialog .flat-row{display:flex;align-items:center;gap:var(--space-md);margin-top:9px}
+      #_flat-dialog .flat-row label{font-size:var(--fs-11);color:var(--tx3);font-weight:500;letter-spacing:.005em}
+      #_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
       #_flat-dialog .flat-row input[type=number]:focus{border-color:rgba(107,141,255,.55);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
       #_flat-dialog .flat-toggles{display:flex;flex-direction:column;gap:2px}
-      #_flat-dialog .flat-tog{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:7px;transition:background .14s ease,color .14s ease}
+      #_flat-dialog .flat-tog{display:flex;align-items:center;gap:var(--space-lg);font-size:var(--fs-md);color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:7px;transition:background .14s ease,color .14s ease}
       #_flat-dialog .flat-tog:hover{background:rgba(255,255,255,.03);color:var(--tx)}
       #_flat-dialog .flat-tog input[type=checkbox]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:var(--r-xs);border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
       #_flat-dialog .flat-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
       #_flat-dialog .flat-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
       #_flat-dialog .flat-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
-      #_flat-dialog .flat-info{font-size:11.5px;color:var(--tx3);flex:1;min-width:0;text-align:left;letter-spacing:.005em}
+      #_flat-dialog .flat-info{font-size:var(--fs-sm);color:var(--tx3);flex:1;min-width:0;text-align:left;letter-spacing:.005em}
       #_flat-dialog .dlg-foot #_flat-ok{box-shadow:0 4px 14px rgba(107,141,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
       #_flat-dialog .dlg-foot #_flat-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
     `;
@@ -20438,7 +20517,7 @@ const _FlattenDialog = (() => {
 
     const footHtml = `
       <div class="flat-info" id="_flat-info">—</div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:var(--space-md)">
         <button class="dlg-btn dlg-btn-cancel" id="_flat-cancel">Cancel</button>
         <button class="dlg-btn dlg-btn-ok" id="_flat-ok">Apply</button>
       </div>`;
@@ -21625,16 +21704,16 @@ const _DraggablePopup = (() => {
       .dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,rgba(107,141,255,.22),rgba(107,141,255,.10));color:var(--ac);box-shadow:inset 0 0 0 1px rgba(107,141,255,.32),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
       .dlg-popup .dlg-head-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
       .dlg-popup .dlg-head-titles{flex:1;min-width:0}
-      .dlg-popup .dlg-title{font-size:14px;font-weight:600;color:var(--tx);letter-spacing:-.01em;line-height:1.2}
-      .dlg-popup .dlg-sub{font-size:11px;color:var(--tx3);line-height:1.35;margin-top:2px;letter-spacing:.005em}
-      .dlg-popup .dlg-x{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:11px;flex-shrink:0;padding:0;transition:color .14s ease,background .14s ease,transform .14s ease}
+      .dlg-popup .dlg-title{font-size:var(--fs-xl);font-weight:600;color:var(--tx);letter-spacing:-.01em;line-height:1.2}
+      .dlg-popup .dlg-sub{font-size:var(--fs-11);color:var(--tx3);line-height:1.35;margin-top:2px;letter-spacing:.005em}
+      .dlg-popup .dlg-x{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-11);flex-shrink:0;padding:0;transition:color .14s ease,background .14s ease,transform .14s ease}
       .dlg-popup .dlg-x:hover{color:var(--tx);background:rgba(255,255,255,.07)}
       .dlg-popup .dlg-x:active{transform:scale(.92)}
 
       .dlg-popup .dlg-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
       .dlg-popup .dlg-body[data-scroll="auto"]{overflow-y:auto;padding:14px 16px 16px 16px}
-      .dlg-popup .dlg-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:8px;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .dlg-popup .dlg-foot .dlg-btn{padding:7px 13px;font-size:12px;border-radius:7px}
+      .dlg-popup .dlg-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:var(--space-md);box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .dlg-popup .dlg-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:7px}
     `;
     document.head.appendChild(s);
   }
@@ -21894,22 +21973,22 @@ const _BatchRenameDialog = (() => {
       #_brn-dialog .brn-cols{display:flex;flex:1;min-height:0}
       #_brn-dialog .brn-left{flex:0 0 360px;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.05);min-height:0;overflow:hidden}
       #_brn-dialog .brn-right{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:rgba(0,0,0,.10)}
-      #_brn-dialog .brn-right-head{padding:13px 16px 9px 16px;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);border-bottom:1px solid rgba(255,255,255,.04);flex-shrink:0;background:transparent}
+      #_brn-dialog .brn-right-head{padding:13px 16px 9px 16px;font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);border-bottom:1px solid rgba(255,255,255,.04);flex-shrink:0;background:transparent}
       .brn-tabs{display:inline-flex;gap:2px;padding:3px;margin:12px 14px 4px 14px;border-radius:var(--r-md);background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.04);box-shadow:inset 0 1px 0 rgba(0,0,0,.20);flex-shrink:0;align-self:flex-start}
-      .brn-tab{all:unset;padding:5px 11px;font-size:12px;color:var(--tx2);border-radius:var(--r-sm);cursor:pointer;font-weight:500;transition:color .14s ease,background .14s ease,box-shadow .14s ease;letter-spacing:-.005em;text-align:center}
+      .brn-tab{all:unset;padding:5px 11px;font-size:var(--fs-12);color:var(--tx2);border-radius:var(--r-sm);cursor:pointer;font-weight:500;transition:color .14s ease,background .14s ease,box-shadow .14s ease;letter-spacing:-.005em;text-align:center}
       .brn-tab:hover{color:var(--tx)}
       .brn-tab.active{background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.04));color:var(--tx);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 0 0 1px rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.30)}
       .brn-pane{display:none;flex-direction:column;gap:11px;padding:10px 14px 14px 14px;overflow:auto;flex:1;min-height:0}
       .brn-pane.active{display:flex}
-      .brn-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-      .brn-row label{font-size:11px;color:var(--tx3);min-width:60px;font-weight:500;letter-spacing:.005em}
-      .brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row{display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap}
+      .brn-row label{font-size:var(--fs-11);color:var(--tx3);min-width:60px;font-weight:500;letter-spacing:.005em}
+      .brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input[type=text]:focus{border-color:rgba(107,141,255,.55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:12.5px;outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input[type=number]:focus{border-color:rgba(107,141,255,.55);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input::placeholder{color:var(--tx3);opacity:.55}
-      .brn-row select.mac-sel{padding:7px 9px;font-size:12.5px}
-      .brn-tog{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--tx2);cursor:pointer;user-select:none;padding:5px 10px 5px 8px;border-radius:7px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .14s ease,border-color .14s ease,color .14s ease}
+      .brn-row select.mac-sel{padding:7px 9px;font-size:var(--fs-md)}
+      .brn-tog{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-12);color:var(--tx2);cursor:pointer;user-select:none;padding:5px 10px 5px 8px;border-radius:7px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .14s ease,border-color .14s ease,color .14s ease}
       .brn-tog:hover{background:rgba(255,255,255,.05);color:var(--tx);border-color:rgba(255,255,255,.10)}
       .brn-tog input[type=checkbox]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:var(--r-xs);border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
       .brn-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
@@ -21920,35 +21999,35 @@ const _BatchRenameDialog = (() => {
       .brn-tog input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
       .brn-tog input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
       .brn-tog input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff}
-      .brn-section-title{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:8px 0 6px 0}
-      .brn-presets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+      .brn-section-title{font-size:var(--fs-xs);font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:8px 0 6px 0}
+      .brn-presets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-md)}
       .brn-preset{all:unset;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.025);cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:border-color .14s ease,background .14s ease,transform .14s ease}
       .brn-preset:hover{border-color:rgba(107,141,255,.32);background:rgba(107,141,255,.06)}
       .brn-preset:active{transform:translateY(.5px)}
-      .brn-preset .n{font-size:13px;font-weight:500;color:var(--tx)}
-      .brn-preset .d{font-size:11px;color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .brn-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;background:rgba(0,0,0,.22);border-top:1px solid rgba(255,255,255,.04);font-size:11.5px;color:var(--tx3);flex-shrink:0;flex-wrap:wrap;gap:6px;font-variant-numeric:tabular-nums;letter-spacing:.005em}
+      .brn-preset .n{font-size:var(--fs-lg);font-weight:500;color:var(--tx)}
+      .brn-preset .d{font-size:var(--fs-11);color:var(--tx3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .brn-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;background:rgba(0,0,0,.22);border-top:1px solid rgba(255,255,255,.04);font-size:var(--fs-sm);color:var(--tx3);flex-shrink:0;flex-wrap:wrap;gap:var(--space-sm);font-variant-numeric:tabular-nums;letter-spacing:.005em}
       .brn-summary .ok{color:var(--ok);font-weight:600}
       .brn-summary .warn{color:var(--wn);font-weight:600}
       .brn-summary .err{color:var(--er);font-weight:600}
       .brn-preview{flex:1 1 auto;min-height:0;overflow:auto;background:transparent}
-      .brn-preview-table{width:100%;border-collapse:collapse;font-size:12px;font-family:ui-monospace,monospace}
+      .brn-preview-table{width:100%;border-collapse:collapse;font-size:var(--fs-12);font-family:ui-monospace,monospace}
       .brn-preview-table tr{border-bottom:1px solid var(--bd)}
       .brn-preview-table tr.warn{background:rgba(251,191,36,.05)}
       .brn-preview-table tr.error{background:rgba(255,107,107,.06)}
       .brn-preview-table tr.unchanged{opacity:.5}
       .brn-preview-table tr.skipped{opacity:.35}
       .brn-preview-table td{padding:5px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
-      .brn-preview-table td.kind{color:var(--tx3);font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;width:60px;font-family:inherit}
+      .brn-preview-table td.kind{color:var(--tx3);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.04em;width:60px;font-family:inherit}
       .brn-preview-table td.arrow{color:var(--tx3);width:24px;text-align:center}
       .brn-preview-table td.new{color:var(--ac)}
       .brn-preview-table tr.warn td.new{color:var(--wn)}
       .brn-preview-table tr.error td.new{color:var(--er)}
       .brn-preview-table tr.unchanged td.new{color:var(--tx3)}
       .brn-preview-table tr.skipped td.new{color:var(--tx3)}
-      .brn-preview-table td.reason{color:var(--tx3);font-size:11px;font-family:inherit}
-      .brn-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:8px;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-foot .dlg-btn{padding:7px 13px;font-size:12px;border-radius:7px}
+      .brn-preview-table td.reason{color:var(--tx3);font-size:var(--fs-11);font-family:inherit}
+      .brn-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:var(--space-md);box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:7px}
       .brn-foot #_brn-save{background:transparent;border-color:transparent;color:var(--tx3);padding:7px 4px;font-weight:500}
       .brn-foot #_brn-save:hover{color:var(--ac);background:transparent;border-color:transparent;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(107,141,255,.5)}
       .brn-foot #_brn-ok{box-shadow:0 4px 14px rgba(107,141,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
@@ -21957,7 +22036,7 @@ const _BatchRenameDialog = (() => {
       .brn-collapsible{border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);overflow:hidden;flex-shrink:0;transition:border-color .14s ease,background .14s ease}
       .brn-collapsible:hover{border-color:rgba(255,255,255,.09)}
       .brn-collapsible.open{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.08)}
-      .brn-collapsible-h{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;cursor:pointer;font-size:12px;color:var(--tx2);user-select:none;transition:background .12s ease,color .12s ease}
+      .brn-collapsible-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);padding:10px 12px;cursor:pointer;font-size:var(--fs-12);color:var(--tx2);user-select:none;transition:background .12s ease,color .12s ease}
       .brn-collapsible-h:hover{background:rgba(255,255,255,.025);color:var(--tx)}
       .brn-collapsible-h strong{color:var(--tx);font-weight:600}
       .brn-collapsible-h .chev{
@@ -21978,15 +22057,15 @@ const _BatchRenameDialog = (() => {
       .brn-collapsible-h:hover .chev{background:rgba(255,255,255,.07);color:var(--tx);opacity:1}
       .brn-collapsible.open .chev{background:rgba(107,141,255,.15);color:var(--ac);opacity:1}
       .brn-collapsible.open .chev::before{transform:translateY(-1px) rotate(45deg)}
-      .brn-collapsible-b{display:none;padding:10px 12px 12px 12px;border-top:1px solid rgba(255,255,255,.05);flex-direction:column;gap:8px}
+      .brn-collapsible-b{display:none;padding:10px 12px 12px 12px;border-top:1px solid rgba(255,255,255,.05);flex-direction:column;gap:var(--space-md)}
       .brn-collapsible.open .brn-collapsible-b{display:flex}
       .brn-token-pop{position:absolute;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:var(--r-lg);box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06);padding:4px;z-index:600;display:none;max-height:280px;overflow:auto;min-width:280px}
       .brn-token-pop.show{display:block}
-      .brn-token-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:ui-monospace,monospace;font-size:12px;color:var(--tx)}
+      .brn-token-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:ui-monospace,monospace;font-size:var(--fs-12);color:var(--tx)}
       .brn-token-item:hover,.brn-token-item.active{background:var(--ac-soft)}
-      .brn-token-item .desc{color:var(--tx3);font-size:11px;font-family:inherit;font-weight:400}
+      .brn-token-item .desc{color:var(--tx3);font-size:var(--fs-11);font-family:inherit;font-weight:400}
       .brn-token-item .tname{font-weight:600;color:var(--ac)}
-      .brn-help{font-size:10.5px;color:var(--tx3);padding-left:68px}
+      .brn-help{font-size:var(--fs-xs);color:var(--tx3);padding-left:68px}
       .brn-help code{font-family:ui-monospace,monospace;color:var(--ac);background:rgba(0,0,0,.25);padding:0 4px;border-radius:3px}
     `;
     document.head.appendChild(s);
@@ -22105,14 +22184,14 @@ const _BatchRenameDialog = (() => {
             <div class="brn-presets-grid" id="_brn-presets-builtin"></div>
             <div class="brn-section-title" style="margin-top:14px">My presets</div>
             <div class="brn-presets-grid" id="_brn-presets-user"></div>
-            <div style="font-size:11px;color:var(--tx3);margin-top:6px">Build a rule in another tab, then click <em>Save preset…</em> to add it here.</div>
+            <div style="font-size:var(--fs-11);color:var(--tx3);margin-top:6px">Build a rule in another tab, then click <em>Save preset…</em> to add it here.</div>
           </div>
 
           <div class="brn-foot">
-            <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:var(--space-md)">
               <button class="dlg-btn dlg-btn-cancel" id="_brn-save">Save preset…</button>
             </div>
-            <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:var(--space-md)">
               <button class="dlg-btn dlg-btn-cancel" id="_brn-cancel">Cancel</button>
               <button class="dlg-btn dlg-btn-ok" id="_brn-ok">Apply</button>
             </div>
@@ -22319,7 +22398,7 @@ const _BatchRenameDialog = (() => {
     const user = _BatchRename.loadUserPresets();
     if (userEl) userEl.innerHTML = user.length
       ? user.map((p, i) => _presetButtonHtml(p, 'u' + i, true)).join('')
-      : '<div style="font-size:12px;color:var(--tx3);padding:6px 0">None saved yet.</div>';
+      : '<div style="font-size:var(--fs-12);color:var(--tx3);padding:6px 0">None saved yet.</div>';
     bg.querySelectorAll('.brn-preset').forEach(b => b.addEventListener('click', () => {
       const id = b.dataset.id;
       const isUser = id.startsWith('u');
@@ -22334,7 +22413,7 @@ const _BatchRenameDialog = (() => {
       ? `find: ${p.config.find || '∅'}${p.config.regex ? ' (re)' : ''}`
       : `template: ${p.config.template || '∅'}`;
     return `<button class="brn-preset" data-id="${id}">
-      <div class="n">${escapeHtml(p.name)}${isUser ? ' <span style="color:var(--tx3);font-size:10.5px">(yours)</span>' : ''}</div>
+      <div class="n">${escapeHtml(p.name)}${isUser ? ' <span style="color:var(--tx3);font-size:var(--fs-xs)">(yours)</span>' : ''}</div>
       <div class="d">${escapeHtml(subtitle)}</div>
     </button>`;
   }
@@ -22663,10 +22742,10 @@ refreshPropertiesPanel = function() {
       if (!allIn) continue;
       const totalTri = [...g.partIds].reduce((s, id) => s + (getPart(id)?.triCount || 0), 0);
       const html = `
-        <div style="display:grid;gap:8px;font-size:12px">
-          <div style="font-weight:600;color:var(--ac2);font-size:13px">📁 ${g.name}</div>
+        <div style="display:grid;gap:var(--space-md);font-size:var(--fs-12)">
+          <div style="font-weight:600;color:var(--ac2);font-size:var(--fs-lg)">📁 ${g.name}</div>
           <div style="color:var(--tx2)">${g.partIds.size} parts · ${fmtNum(totalTri)} triangles</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin-top:4px">
             <button class="btn" data-grp-act="rename" data-gid="${g.id}">Rename</button>
             <button class="btn warn" data-grp-act="ungroup" data-gid="${g.id}">Ungroup</button>
           </div>
@@ -22906,7 +22985,7 @@ rebuildTree = function() {
     /* Width math: 14px left fade + 18px eye + 6px gap + 10px color swatch
        + 6px right pad = 54px. flex-shrink:0 so it never compresses; if you
        widen the eye/color icons, bump this. */
-    .tree-iconcol{position:sticky;right:0;z-index:2;display:inline-flex;align-items:center;justify-content:flex-start;gap:6px;width:54px;flex-shrink:0;margin-left:auto;padding:0 6px 0 14px;align-self:stretch;background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%)}
+    .tree-iconcol{position:sticky;right:0;z-index:2;display:inline-flex;align-items:center;justify-content:flex-start;gap:var(--space-sm);width:54px;flex-shrink:0;margin-left:auto;padding:0 6px 0 14px;align-self:stretch;background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%)}
     /* Vertical divider line: sits AT the iconcol's left edge so it inherits
        the sticky-right anchoring. The previous .tree-node::after was
        absolute-positioned on the row, which made the line scroll
@@ -22939,7 +23018,7 @@ rebuildTree = function() {
     .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px rgba(107,141,255,.6);pointer-events:none;z-index:50}
     .tree-drop-line::before{content:'';position:absolute;left:2px;top:-4px;width:6px;height:6px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px var(--ac)}
     #tree-newgroup-zone{display:none!important}
-    #_dnd-ghost{position:fixed;pointer-events:none;z-index:9999;background:rgba(28,28,28,.95);border:1px solid var(--ac);border-radius:var(--r-sm);padding:6px 10px;font-size:12px;color:var(--tx);box-shadow:0 4px 18px rgba(0,0,0,.5);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #_dnd-ghost{position:fixed;pointer-events:none;z-index:9999;background:rgba(28,28,28,.95);border:1px solid var(--ac);border-radius:var(--r-sm);padding:6px 10px;font-size:var(--fs-12);color:var(--tx);box-shadow:0 4px 18px rgba(0,0,0,.5);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     #_dnd-ghost .badge{display:inline-block;margin-right:6px;padding:1px 6px;background:var(--ac);color:var(--bg);border-radius:var(--r-lg);font-weight:700;font-variant-numeric:tabular-nums}
   `;
   document.head.appendChild(s);
@@ -23924,15 +24003,15 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-sv-cursor{position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 1px 3px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none;z-index:2}
       .cp-hue{position:relative;width:100%;height:12px;margin-top:10px;border-radius:var(--r-sm);cursor:pointer;background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%);touch-action:none;user-select:none}
       .cp-hue-cursor{position:absolute;top:-2px;width:6px;height:16px;border-radius:3px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.5);transform:translateX(-50%);pointer-events:none}
-      .cp-row{display:flex;gap:8px;align-items:center;margin-top:10px}
+      .cp-row{display:flex;gap:var(--space-md);align-items:center;margin-top:10px}
       .cp-hex{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:5px;color:var(--tx);font:500 11.5px ui-monospace,Menlo,monospace;padding:5px 7px;outline:none;text-transform:uppercase}
       .cp-hex:focus{border-color:var(--ac);background:rgba(107,141,255,.08)}
       .cp-preview{width:24px;height:24px;border-radius:5px;border:1px solid rgba(255,255,255,.1);box-shadow:0 1px 3px rgba(0,0,0,.4);flex-shrink:0}
-      .cp-presets{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px}
+      .cp-presets{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--space-xs);margin-top:10px}
       .cp-preset{width:100%;aspect-ratio:1;border-radius:var(--r-xs);border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:transform 100ms var(--ease-out),border-color 100ms var(--ease-out)}
       .cp-preset:hover{transform:scale(1.12);border-color:var(--ac)}
-      .cp-actions{display:flex;gap:6px;margin-top:12px;justify-content:flex-end}
-      .cp-btn{padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:5px;color:var(--tx2);font-size:11.5px;font-weight:500;cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
+      .cp-actions{display:flex;gap:var(--space-sm);margin-top:12px;justify-content:flex-end}
+      .cp-btn{padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:5px;color:var(--tx2);font-size:var(--fs-sm);font-weight:500;cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
       .cp-btn:hover{background:rgba(255,255,255,.1);color:var(--tx)}
       .cp-btn.primary{background:linear-gradient(180deg,var(--ac),#4f7ce0);color:#fff;border-color:transparent}
       .cp-btn.primary:hover{filter:brightness(1.08)}
