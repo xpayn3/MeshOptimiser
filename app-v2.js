@@ -1019,32 +1019,67 @@ function _runFileCmd(cmd) {
   }
 }
 
-// File → Scene settings opens the existing viewport settings popup so the
-// user has a discoverable home for scene-level fields (units / up-axis /
-// scale / camera / lighting / grid / fog) without having to find the cog
-// inside the viewport. Same UI, two entry points.
-function _openSceneSettings() {
-  const sBtn = document.getElementById('tg-settings');
-  const sPop = document.getElementById('vp-settings-pop');
-  if (!sBtn || !sPop) return;
-  if (!sPop.classList.contains('show')) {
-    // Mirror the cog button's click handler — opens the popup with the same
-    // outside-click / Esc behaviour wired in index.html. Closes Materials
-    // popup if it was open (they share the same anchor).
-    sBtn.click();
-    // Bring the Scene section into view inside the scrollable popup so the
-    // user sees the fields they came for, not whatever's at the top.
-    setTimeout(() => {
-      const titles = sPop.querySelectorAll('.pop-section-title');
+// Scene settings modal — separate dedicated surface for scene-persistent
+// state (units, up-axis, scale, camera, grid, lighting). The DOM nodes
+// physically live inside the cog popup at boot; the first time the user
+// opens this modal we MOVE the relevant sections into the modal body. All
+// event wiring is by element ID so the relocation is transparent to the
+// existing handlers — the same <select id="display-units"> still fires the
+// same change listener no matter which container hosts it.
+const _SceneSettings = (() => {
+  let relocated = false;
+  let inited = false;
+
+  // Section titles to pull out of the cog popup and into the modal. Order
+  // here is the order they'll appear in the modal body. Lighting is moved
+  // even though it's currently hidden — keeps state save/restore working
+  // and lets us re-show it from the modal later without a refactor.
+  const SECTIONS = ['Scene', 'Camera', 'Lighting', 'Grid'];
+
+  function _relocateOnce() {
+    if (relocated) return;
+    const pop  = document.getElementById('vp-settings-pop');
+    const body = document.getElementById('scene-settings-body');
+    if (!pop || !body) return;
+    for (const wanted of SECTIONS) {
+      const titles = pop.querySelectorAll('.pop-section-title');
       for (const t of titles) {
-        if (t.textContent.trim().toLowerCase() === 'scene') {
-          t.closest('.pop-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (t.textContent.trim().toLowerCase() === wanted.toLowerCase()) {
+          const sec = t.closest('.pop-section');
+          if (sec) body.appendChild(sec);  // appendChild moves the node
           break;
         }
       }
-    }, 80);
+    }
+    relocated = true;
   }
-}
+
+  function _wire() {
+    if (inited) return;
+    inited = true;
+    const bg = document.getElementById('scene-settings-modal');
+    if (!bg) return;
+    document.getElementById('scene-settings-close')?.addEventListener('click', hide);
+    document.getElementById('scene-settings-done')?.addEventListener('click', hide);
+    bg.addEventListener('click', e => { if (e.target === bg) hide(); });
+    document.addEventListener('keydown', e => {
+      if (!bg.classList.contains('show')) return;
+      if (e.key === 'Escape') { e.preventDefault(); hide(); }
+    });
+  }
+
+  function show() {
+    _wire();
+    _relocateOnce();
+    document.getElementById('scene-settings-modal')?.classList.add('show');
+  }
+  function hide() {
+    document.getElementById('scene-settings-modal')?.classList.remove('show');
+  }
+  return { show, hide };
+})();
+
+function _openSceneSettings() { _SceneSettings.show(); }
 
 async function _openRecentByKey(key) {
   if (window.showOpenFilePicker) {
