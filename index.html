@@ -325,6 +325,12 @@ body.resizing *{cursor:col-resize !important}
 .brand-menu-tagline{font-size:var(--fs-11);color:var(--tx3);margin-top:2px;line-height:var(--lh-tight)}
 .brand-menu-ver{font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:2px 7px;letter-spacing:var(--tracking-mono);flex:0 0 auto}
 .brand-menu-about{font-size:var(--fs-sm);color:var(--tx2);line-height:var(--lh-relaxed);padding:0 10px 4px}
+.brand-menu-changelog{padding:6px 10px 4px}
+.brand-menu-changelog-head{display:flex;align-items:center;gap:var(--space-sm);font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx2);text-transform:uppercase;letter-spacing:var(--tracking-wide);margin-bottom:6px}
+.brand-menu-changelog-head .tag{font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--ac);background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:var(--r-xs);padding:1px 5px;letter-spacing:var(--tracking-mono);text-transform:none}
+.brand-menu-changelog ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.brand-menu-changelog li{font-size:var(--fs-sm);color:var(--tx2);line-height:var(--lh-snug);padding-left:10px;position:relative}
+.brand-menu-changelog li::before{content:"";position:absolute;left:2px;top:8px;width:3px;height:3px;border-radius:50%;background:var(--tx3)}
 .brand-menu-sep{height:1px;background:var(--s3);margin:8px 4px}
 .brand-menu-item{all:unset;display:flex;align-items:center;gap:var(--space-lg);padding:8px 10px;border-radius:7px;cursor:pointer;font-size:var(--fs-md);color:var(--tx);user-select:none;transition:background 80ms,color 80ms;width:calc(100% - 20px)}
 .brand-menu-item:hover,.brand-menu-item:focus-visible{background:var(--ac-soft);outline:none;box-shadow:inset 0 0 0 1px var(--ac-line)}
@@ -1275,6 +1281,17 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
         </div>
         <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / GLTF models in the browser. Real-time WebGPU rendering, lossless edits and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
+        <div class="brand-menu-changelog">
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v1.2</span></div>
+          <ul>
+            <li>File menu &amp; scene management — New scene, Import (merge), dedicated Scene settings modal</li>
+            <li>Primitive shapes — Cube, Sphere, Cylinder, Cone, Torus with a C4D-style parametric panel</li>
+            <li>Transform panel — editable number inputs, mm snapping, unit-aligned with the right sidebar</li>
+            <li>Design polish — tokenized select arrow, unified button heights, banding-free dithered backgrounds</li>
+            <li>Server — <code>/api/quit</code> endpoint for clean shutdown</li>
+          </ul>
+        </div>
+        <div class="brand-menu-sep"></div>
         <a class="brand-menu-item" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener" role="menuitem">
           <svg class="brand-gh" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12.02c0 5.09 3.29 9.4 7.86 10.93.58.1.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.72-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.3-.51-1.47.11-3.07 0 0 .96-.31 3.16 1.18a10.94 10.94 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.6.23 2.77.11 3.07.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.67.8.55C20.21 21.41 23.5 17.1 23.5 12.02 23.5 5.65 18.35.5 12 .5Z"/></svg>
           <span class="lbl">View on GitHub</span><i class="ext" data-lucide="external-link"></i>
@@ -1419,8 +1436,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
             <div class="toggle"><span>Origin marker</span><label><input type="checkbox" id="toggle-origin"><span class="switch"></span></label></div>
             <div class="toggle"><span>FPS counter</span><label><input type="checkbox" id="toggle-fps"><span class="switch"></span></label></div>
             <div class="toggle"><span>Renderer stats</span><label><input type="checkbox" id="toggle-stats"><span class="switch"></span></label></div>
-            <div class="toggle" title="Atmospheric fog — fades the grid and distant geometry into the background."><span>Fog</span><label><input type="checkbox" id="toggle-fog" checked><span class="switch"></span></label></div>
-            <div id="fog-controls" style="display:flex;flex-direction:column;gap:var(--space-md);margin:6px 0 0 0;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
+            <div class="toggle" title="Atmospheric fog — fades the grid and distant geometry into the background."><span>Fog</span><label><input type="checkbox" id="toggle-fog"><span class="switch"></span></label></div>
+            <div id="fog-controls" style="display:none;flex-direction:column;gap:var(--space-md);margin:6px 0 0 0;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
               <div class="field" style="margin:0" title="Distance from the camera at which fog starts. 'Auto' = 3× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input type="number" id="fog-near" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-variant-numeric:tabular-nums"></div>
               <div class="field" style="margin:0" title="Distance at which fog is fully opaque. 'Auto' = 30× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog end</span><span class="v" id="fog-far-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input type="number" id="fog-far" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-variant-numeric:tabular-nums"></div>
               <div class="field" style="margin:0" title="Multiplier on the fog falloff. >1 = denser fog ramps in faster, <1 = gentler."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="fog-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">1.0×</span></label><input type="range" id="fog-int" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
