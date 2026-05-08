@@ -812,6 +812,12 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #vp-settings-pop .pop-section{padding:12px 14px;border-bottom:1px solid var(--s2)}
 #vp-settings-pop .pop-section:last-child{border-bottom:none}
 #vp-settings-pop .pop-section-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:10px}
+/* Same .pop-section markup is hosted inside #scene-settings-body when the
+   sections are relocated at boot. Mirror the popup styling so the moved
+   nodes don't lose their look — slightly more padding for modal density. */
+#scene-settings-body .pop-section{padding:14px 18px;border-bottom:1px solid var(--s2)}
+#scene-settings-body .pop-section:last-child{border-bottom:none}
+#scene-settings-body .pop-section-title{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--tx2);margin-bottom:12px}
 
 /* Materials popup — Cinema-4D-style grid of preview spheres, anchored
    beneath the new tg-materials button. Each cell is a rendered sphere
@@ -1823,6 +1829,23 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
     <div class="modal-f">
       <button class="btn danger" id="settings-reset" style="width:auto;padding:7px 14px" title="Restore default settings">Reset to defaults</button>
       <button class="tbtn primary" id="settings-done" style="margin-left:auto">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scene settings modal — a dedicated home for scene-persistent state
+     (units, up axis, scale, camera, grid, lighting). The body is populated
+     at boot by relocating the matching sections out of the viewport cog
+     popup, so all existing event wiring keeps working unchanged. -->
+<div class="modal-bg" id="scene-settings-modal">
+  <div class="modal" style="width:560px;max-height:85vh">
+    <div class="modal-h">
+      <h3>Scene settings</h3>
+      <button class="x" id="scene-settings-close" title="Close (Esc)">✕</button>
+    </div>
+    <div class="modal-b" id="scene-settings-body" style="padding:0"></div>
+    <div class="modal-f">
+      <button class="tbtn primary" id="scene-settings-done" style="margin-left:auto">Done</button>
     </div>
   </div>
 </div>
