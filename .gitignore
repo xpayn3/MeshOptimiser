@@ -19,9 +19,13 @@ _archive/
 .DS_Store
 Thumbs.db
 
-# Editors
+# Editors / AI tooling
 .vscode/
 .idea/
 .claude/
+CLAUDE.md
 *.swp
 *.lnk
+
+# Dev-only tools (not shipped to end users)
+stresstest.js
