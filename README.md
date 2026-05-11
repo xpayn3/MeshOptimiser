@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 1 . 5
+  O P T I M I S E R   ·   v 0 . 6 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
@@ -21,7 +21,7 @@
 [![Draco](https://img.shields.io/badge/compression-Draco%20%2B%20Meshopt-success)](https://github.com/google/draco)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#-license)
 [![Platform](https://img.shields.io/badge/platform-Windows%20|%20macOS-lightgrey)](#-requirements)
-[![Status](https://img.shields.io/badge/status-active-brightgreen)]()
+[![Status](https://img.shields.io/badge/status-pre--1.0-orange)]()
 
 </div>
 
@@ -218,7 +218,7 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v1.5** — a C4D-style live Cloner, a Ctrl-click measure tool, per-group
+**v0.6.0** — a C4D-style live Cloner, a Ctrl-click measure tool, per-group
 origin markers that follow your gizmo, a Spline-style two-panel Export
 modal, mesh simplification on the backend, and a CAD-correct mouse mapping.
 
@@ -228,13 +228,17 @@ modal, mesh simplification on the backend, and a CAD-correct mouse mapping.
 - ![new][new] **Simplify + meshopt-by-default** — smaller GLBs out of the box
 - ![new][new] **CAD-correct mouse mapping** — middle-pan, Alt + RMB dolly
 
+> **Pre-1.0 — breaking changes expected.** The CLI flags, in-app APIs,
+> and on-disk formats may shift between minor versions. `v1.0.0` will
+> mark the first commitment to backward compatibility.
+
 **Earlier**
 
-- **v1.4** — scene management (New scene, Import-merge, Scene settings modal), parametric-primitive polish with editable mm-snapped inputs, unit-aware transforms, banding-free dithered backgrounds, `/api/quit` clean shutdown.
-- **v1.3** — HDRI environment lighting, infinite floor grid + fog, parametric primitive insertion, top-center camera-view pill with `Ctrl/⌘+1..4`, borderless popup language, IBM-blue accent refresh.
-- **v1.2** — full material editor with shader-ball previews, scale gizmo + Shift-snap + live HUD, screenshot capture with custom resolutions, ortho Top/Front/Side viewport toggles, FBX legacy rescue.
-- **v1.1** — welcome modal, command palette (⌘K), shortcuts overlay, settings modal, section/clip planes, batch rename, hierarchy flatten/dissolve/ungroup, undo/redo, save scene.
-- **v1.0** — first public commit. STEP→GLB pipeline (XCAF, PCA instancing, Meshopt), WebGPU viewer, local server, one-click launchers.
+- **v0.5.0** — scene management (New scene, Import-merge, Scene settings modal), parametric-primitive polish with editable mm-snapped inputs, unit-aware transforms, banding-free dithered backgrounds, `/api/quit` clean shutdown.
+- **v0.4.0** — HDRI environment lighting, infinite floor grid + fog, parametric primitive insertion, top-center camera-view pill with `Ctrl/⌘+1..4`, borderless popup language, IBM-blue accent refresh.
+- **v0.3.0** — full material editor with shader-ball previews, scale gizmo + Shift-snap + live HUD, screenshot capture with custom resolutions, ortho Top/Front/Side viewport toggles, FBX legacy rescue.
+- **v0.2.0** — welcome modal, command palette (⌘K), shortcuts overlay, settings modal, section/clip planes, batch rename, hierarchy flatten/dissolve/ungroup, undo/redo, save scene.
+- **v0.1.0** — first public commit. STEP→GLB pipeline (XCAF, PCA instancing, Meshopt), WebGPU viewer, local server, one-click launchers.
 
 [Full changelog →](./CHANGELOG.md) · [Releases →](https://github.com/xpayn3/MeshOptimiser/releases)
 

@@ -4,9 +4,9 @@ All notable changes to STEP Optimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
-## v1.5
+## v0.6.0
 
-v1.4 made sessions feel modern. v1.5 makes the *authoring loop* feel modern:
+v0.5.0 made sessions feel modern. v0.6.0 makes the *authoring loop* feel modern:
 a C4D-style live Cloner, a Ctrl-click measure tool, per-group origin markers
 that follow your gizmo, a Spline-style two-panel Export modal, mesh
 simplification on the backend, and a CAD-correct mouse mapping.
@@ -129,9 +129,9 @@ simplification on the backend, and a CAD-correct mouse mapping.
 - ![new][new] **`start_hidden.vbs`** — silent .lnk launcher (no console
   window). Use `start.bat` directly when you want boot logs.
 
-## v1.4
+## v0.5.0
 
-v1.3 made the viewport feel modern. v1.4 makes the *session* feel modern:
+v0.4.0 made the viewport feel modern. v0.5.0 makes the *session* feel modern:
 real scene management (start empty, merge files in, edit scene-level
 settings as a first-class modal), parametric primitives that round-trip
 cleanly through the transform panel with mm-snapped inputs, unit-aware
@@ -188,9 +188,9 @@ background pipeline, and a clean-shutdown server endpoint.
   shell can now close the bundled server cleanly instead of hard-killing
   the process and leaking the port.
 
-## v1.3
+## v0.4.0
 
-v1.2 hardened the editing surface. v1.3 makes the viewport itself feel modern:
+v0.3.0 hardened the editing surface. v0.4.0 makes the viewport itself feel modern:
 HDRI environment lighting with procedural presets and a draggable sun, an
 LOD-aware infinite floor grid with spline-style hairlines, atmospheric fog,
 parametric primitive insertion, a pill-shaped camera-view selector at the
@@ -374,9 +374,9 @@ refresh toward IBM blue with strict token-only colour usage.
   opening any of the format / primitive / export menus auto-closes the
   others.
 
-## v1.2
+## v0.3.0
 
-v1.1 was the editing surface. v1.2 hardens it: a real material editor with
+v0.2.0 was the editing surface. v0.3.0 hardens it: a real material editor with
 shader-ball previews, transform-gizmo polish (scale + snap + live HUD),
 screenshot capture with custom resolutions and a system save dialog,
 orthographic Top/Front/Side viewport toggles, FBX legacy-format rescue,
@@ -515,9 +515,9 @@ menus.
 - ![docs][docs] README: ASCII logo centered, Pre-1.0 R&D section added,
   marketing copy toned down across About + Updates.
 
-## v1.1
+## v0.2.0
 
-v1.0 could open and render. v1.1 adds the editing surface around it.
+v0.1.0 could open and render. v0.2.0 adds the editing surface around it.
 
 **Added**
 
@@ -545,7 +545,7 @@ v1.0 could open and render. v1.1 adds the editing surface around it.
 - Added a highlight-small-parts toggle with tinted rows.
 - Viewport perf cleanups, dead-button fixes, stale experiments archived.
 
-## v1.0 — first public commit (2026-05-05)
+## v0.1.0 — first public commit (2026-05-05)
 
 What landed in the initial commit:
 
