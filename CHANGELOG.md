@@ -4,6 +4,87 @@ All notable changes to STEP Optimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.7.0
+
+v0.6.0 made authoring feel modern. v0.7.0 makes *presentation and
+discoverability* feel modern: a GPU path tracer that turns the viewport
+into a portfolio-grade render, a contextual hint strip that teaches the
+UI as you use it, a Cloner you can build C4D-style by dragging parts in,
+and a Revert-to-source escape hatch for when the edit pile gets away
+from you.
+
+**Path tracer — portfolio renders from the viewport**
+
+- ![new][new] **New `pathtracer.js` module** — three-gpu-pathtracer hooked
+  up to the viewport via a new aperture button (top-right of the canvas).
+  Click to open a render modal that accumulates samples in the background
+  while the live WebGPU viewport keeps responding. Save the result via the
+  shared FSA picker (same naming + folder memory as the Screenshot flow).
+- ![new][new] **Parallel WebGL2 scene** — the host runs WebGPU but
+  three-gpu-pathtracer needs WebGL2, so the module spins up a separate
+  offscreen `WebGLRenderer` and mirrors meshes / camera / lights into a
+  classic-three scene. Geometries are shared, materials are re-bound as
+  fresh `MeshStandardMaterial`s, GPU resources tear down on close.
+- ![new][new] **Aperture button** in the viewport (`#tg-render`,
+  lavender tint) sits beside Screenshot. Pre-1.0: slow, beautiful,
+  on-demand — no per-frame accumulation.
+
+**Cloner — drag-to-build + centred arrays**
+
+- ![new][new] **Standalone Cloner** — top-bar **Cloner** button now creates
+  an empty cloner with no sources when nothing is selected. Drag parts
+  into the cloner row in the tree to register them as sources (C4D-style).
+  Rebuild is reactive; empty cloners emit nothing but remain fully
+  functional until you populate them.
+- ![new][new] **`centerArray`** — toggle centres linear / grid arrays on
+  the cloner origin instead of growing in +direction. With the source
+  hidden, every position is a synthetic clone (offsets 0..N-1) so the
+  array straddles the pivot symmetrically. No-op for radial (already
+  centred by definition).
+- ![new][new] **`hideSources`** — hide the original mesh from the viewport
+  so only generated clones render. Useful when the array is symmetric and
+  the source-at-origin is already represented by clone-0.
+
+**Workspace — discoverability and polish**
+
+- ![new][new] **Contextual hint strip** (`#vp-hint`) at the bottom-centre
+  of the viewport. Reads selection count, gizmo mode, and measure mode to
+  emit one-line tips — "Click to select · Drag to orbit · Scroll to zoom"
+  empty, "N selected · Drag gizmo to move · Shift to snap" translating,
+  "Measure · Click two points · Esc to exit" mid-measure. Pointer-events:
+  none so it never blocks the gizmo or marquee underneath.
+- ![new][new] **Add-primitive button — long-hold picker, click-to-repeat**.
+  Click adds the last-used shape (cube by default). Hold for 400 ms to
+  open a 13-shape picker (cube, sphere, cylinder, cone, torus, plane,
+  capsule, icosahedron, dodecahedron, hex bolt, hex nut, socket-head
+  screw, washer). A tiny corner triangle hints at the long-press
+  affordance, Figma / Photoshop tool-group convention. Last-used shape
+  + per-kind thumbnails persist in localStorage.
+- ![polish][polish] **Brand menu moved to top-left** — the *About / GitHub
+  / What's new* dropdown now anchors to a brand mark at the start of the
+  top bar instead of the right corner. Right side stays free for the
+  Export + cog cluster. Left-anchored variant (`.brand-left`) overrides
+  the transform-origin so the popover grows from the top-left edge.
+- ![polish][polish] **Cloner promoted to the top bar** — was a sidebar
+  affordance, now a first-class `#btn-cloner` button next to File. Single
+  click whether you have a selection (wraps it) or not (creates standalone).
+- ![polish][polish] **Status bar + log console layering** — the status
+  bar lost its top border and gained a higher z-index so the global log
+  console now slides up *behind* it instead of overlapping. Console
+  bottom-offset trimmed from 28 → 22 px to match.
+- ![polish][polish] **Format card selection** in the Export modal uses
+  tokenized accent tints (`--ac-tint-12` / `--ac-tint-20`) instead of
+  baked `rgba(107,141,255,…)`. Selected cards now follow accent-colour
+  changes without a stale highlight.
+
+**File menu — Revert to source**
+
+- ![new][new] **Revert to source file…** — drops every edit and re-parses
+  the on-disk file the scene was loaded from. Destructive confirmation
+  dialog ("Revert to original model?" / "Revert"). Works for STEP, GLB,
+  GLTF, FBX, OBJ, 3MF, STL via the same drag-and-drop dispatcher, so the
+  revert path is identical to the open path.
+
 ## v0.6.0
 
 v0.5.0 made sessions feel modern. v0.6.0 makes the *authoring loop* feel modern:

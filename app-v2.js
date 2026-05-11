@@ -27,7 +27,7 @@ const $ = id => document.getElementById(id);
 const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
   viewMode: 'solid', showGrid: true, showBboxes: false,
-  highlightSmall: false, autoRotate: false, bgMode: 'dark', fog: false,
+  highlightSmall: false, bgMode: 'dark', fog: false,
   fogNear: null, fogFar: null,     // null = auto-tune from model footprint
   fogIntensity: 1,                 // multiplier on fog falloff range
   hdriRotation: Math.PI * 0.25,    // radians around scene up (Z) for HDRI bg/env
@@ -43,7 +43,7 @@ const state = {
   cameraProjection: 'persp',
   cameraFov: 45,
   cameraClipMode: 'auto',
-  showOrigin: false, showFps: false, showStats: false,
+  showFps: false, showStats: false,
   shadowsEnabled: false,
   exposure: 1.0,
   ambientIntensity: 0.55, sunIntensity: 1.2,
@@ -115,7 +115,19 @@ if (typeof window !== 'undefined') {
     get _UNIT_LABEL() { return _UNIT_LABEL; },
     get _Actions() { return _Actions; },
     get _lucide() { return (typeof _lucide !== 'undefined') ? _lucide : null; },
+    // Screenshot helpers — reused by external feature modules (pathtracer.js)
+    // for "save the rendered image" flows so they share FSA picker + naming.
+    get _saveScreenshotBlob() { return _saveScreenshotBlob; },
+    get _defaultScreenshotName() { return _defaultScreenshotName; },
   };
+  // Direct globals too, so non-module side-effect scripts can reach them
+  // without going through the getter object.
+  Object.defineProperty(window, '_saveScreenshotBlob', {
+    get() { return _saveScreenshotBlob; }, configurable: true,
+  });
+  Object.defineProperty(window, '_defaultScreenshotName', {
+    get() { return _defaultScreenshotName; }, configurable: true,
+  });
   // Hook arrays for external feature modules. The outermost wrappers that
   // consume these are installed in a final boot IIFE near the bottom of
   // this file (search "_appHooks consumer"). Handlers return truthy to
@@ -246,20 +258,20 @@ const _Dialog = (() => {
       }
       .dlg-bg.show .dlg-card{transform:translateY(0) scale(1);opacity:1}
       .dlg-head{display:flex;align-items:flex-start;gap:14px;padding:22px 22px 0}
-      .dlg-icon{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:rgba(107,141,255,.12);color:var(--ac);box-shadow:inset 0 0 0 1px rgba(107,141,255,.18)}
+      .dlg-icon{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:var(--ac-tint-12);color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac-tint-18)}
       .dlg-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
       .dlg-card.danger .dlg-icon{background:rgba(255,107,107,.13);color:var(--er);box-shadow:inset 0 0 0 1px rgba(255,107,107,.2)}
       .dlg-text{flex:1;min-width:0;padding-top:2px}
       .dlg-title{font-size:15px;font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:-.01em;margin-bottom:6px}
       .dlg-msg{color:var(--tx2);font-size:var(--fs-lg);line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
       .dlg-input{display:none;width:100%;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:var(--r-md);color:var(--tx);font-size:13.5px;font-family:inherit;outline:none;transition:border-color .15s,background .15s,box-shadow .15s}
-      .dlg-input:focus{border-color:rgba(107,141,255,.5);background:rgba(255,255,255,.06);box-shadow:0 0 0 3px rgba(107,141,255,.15)}
+      .dlg-input:focus{border-color:var(--ac-tint-55);background:rgba(255,255,255,.06);box-shadow:0 0 0 3px var(--ac-tint-15)}
       .dlg-foot{display:flex;justify-content:flex-end;gap:var(--space-md);padding:18px 22px 20px;margin-top:18px;border-top:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.18)}
       .dlg-btn{font:inherit;padding:8px 16px;border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;font-size:var(--fs-lg);font-weight:var(--fw-medium);transition:transform .08s,filter .12s,background .12s,border-color .12s;letter-spacing:var(--tracking-snug)}
       .dlg-btn:active{transform:translateY(.5px)}
       .dlg-btn-cancel{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.06);color:var(--tx2)}
       .dlg-btn-cancel:hover{background:rgba(255,255,255,.08);color:var(--tx);border-color:rgba(255,255,255,.1)}
-      .dlg-btn-ok{background:linear-gradient(180deg,#7ab2ff,#4f7ce0);color:white;border-color:transparent;box-shadow:0 4px 14px rgba(107,141,255,.28),inset 0 1px 0 rgba(255,255,255,.18)}
+      .dlg-btn-ok{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:white;border-color:transparent;box-shadow:0 4px 14px var(--ac-tint-25),inset 0 1px 0 rgba(255,255,255,.18)}
       .dlg-btn-ok:hover{filter:brightness(1.07)}
       .dlg-btn-ok.danger{background:linear-gradient(180deg,#ff7a85,#e25151);box-shadow:0 4px 14px rgba(255,107,107,.32),inset 0 1px 0 rgba(255,255,255,.18)}
       .dlg-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-xl);transition:color .12s,background .12s}
@@ -366,6 +378,17 @@ const _Dialog = (() => {
 })();
 const appConfirm = (msg, opts) => _Dialog.confirm(msg, opts);
 const appPrompt  = (msg, def, opts) => _Dialog.prompt(msg, def, opts);
+// Destructive variant — drop-in for appConfirm at danger sites (delete, revert,
+// clear-all, etc.). Honours the global Settings → Behavior → "Confirm
+// destructive actions" pref: when the user has turned that off, this short-
+// circuits to true so the caller proceeds without a dialog. Defaults
+// `danger:true` so the OK button gets the red destructive styling.
+const appConfirmDestructive = (msg, opts = {}) => {
+  if (typeof _Prefs !== 'undefined' && _Prefs.get('confirmDestructive') === false) {
+    return Promise.resolve(true);
+  }
+  return _Dialog.confirm(msg, { danger: true, ...opts });
+};
 
 // ─── Slider widget ─────────────────────────────────────────────────────────
 // Plain native <input type="range"> wrapped in a label + value display. The
@@ -713,6 +736,66 @@ function logProgress(msg, kind='') {
   Log[lvl](msg, { tag: 'loader' });
 }
 function setStatus(s) { $('sb-status').textContent = s; }
+
+// Paint the bottom-center hint once the DOM is ready so the user sees the
+// default tip on load (before any selection / mode change fires).
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { try { _updateVpHint(); } catch (_) {} }, { once: true });
+  else queueMicrotask(() => { try { _updateVpHint(); } catch (_) {} });
+}
+
+// Bottom-center contextual hint strip in the viewport. Reads current state
+// (selection, gizmo mode, measure mode) and emits a one-line tip. Cheap —
+// callers fire on state transitions, no per-frame poll.
+function _updateVpHint() {
+  const el = document.getElementById('vp-hint');
+  if (!el) return;
+  const SEP = '<span class="vp-hint-sep">•</span>';
+  const selN  = (state.selected && state.selected.size) || 0;
+  const gm    = state.gizmoMode;
+  const msr   = (typeof _Measure !== 'undefined' && _Measure?.isActive?.()) ? true : false;
+  let parts;
+  if (msr) {
+    parts = ['Measure', 'Click two points', 'Esc to exit'];
+  } else if (selN === 0) {
+    parts = ['Click to select', 'Drag to orbit', 'Scroll to zoom', 'Right-click for menu'];
+  } else if (gm === 'rotate') {
+    parts = [`${selN} selected`, 'Drag to rotate', 'Shift to snap', 'W/E/R: move/rotate/scale'];
+  } else if (gm === 'scale') {
+    parts = [`${selN} selected`, 'Drag to scale', 'W/E/R: move/rotate/scale'];
+  } else if (gm === 'translate') {
+    parts = [`${selN} selected`, 'Drag gizmo to move', 'Shift to snap', 'W/E/R: move/rotate/scale'];
+  } else {
+    parts = [`${selN} selected`, 'Ctrl+G group', 'Del to delete', 'Esc to deselect'];
+  }
+  el.innerHTML = parts.join(SEP);
+}
+
+// Mutual exclusion across top-bar dropdowns. Each open-handler calls this
+// before opening so only one top-bar menu is visible at a time — standard
+// nav-bar behavior. Knows the four current top-bar menus by id.
+function _closeAllTopbarMenus(exceptId) {
+  if (exceptId !== 'file-menu') {
+    document.getElementById('file-menu')?.classList.remove('show');
+    document.getElementById('file-menu-wrap')?.classList.remove('open');
+    const fb = document.getElementById('btn-file');
+    if (fb) { fb.classList.remove('active'); fb.setAttribute('aria-expanded', 'false'); }
+  }
+  if (exceptId !== 'add-prim-menu') {
+    document.getElementById('add-prim-menu')?.classList.remove('show');
+    document.getElementById('btn-add-prim')?.classList.remove('active');
+  }
+  if (exceptId !== 'export-menu') {
+    document.getElementById('export-menu')?.classList.remove('show');
+    document.querySelector('.export-wrap')?.classList.remove('open');
+  }
+  if (exceptId !== 'brand-menu') {
+    const bm = document.getElementById('brand-menu');
+    const bb = document.getElementById('btn-brand');
+    if (bm) { bm.classList.remove('show'); bm.setAttribute('aria-hidden', 'true'); }
+    if (bb) bb.setAttribute('aria-expanded', 'false');
+  }
+}
 
 // Deep-clone the treeNodes array so undo snapshots don't share node objects
 // with the live array. Without this, in-place mutations of `depth` /
@@ -1525,10 +1608,38 @@ function _runFileCmd(cmd) {
     case 'import':         _importWithPicker(); break;
     case 'save':           document.getElementById('btn-save-scene')?.click(); break;
     case 'export':         document.getElementById('btn-export')?.click(); break;
+    case 'revert':         _revertToSourceFile(); break;
     case 'scene-settings': _openSceneSettings(); break;
     case 'welcome':        try { _Welcome.show(); } catch (_) {} break;
     case 'quit':           _quitApp(); break;
   }
+}
+
+// Revert to the on-disk source file the current scene was loaded from. Throws
+// away every in-scene edit (undo history, deletions, hierarchy/group changes,
+// colors, merges, splits, transforms) and re-parses the file. No-op + toast
+// when there's no source cached (e.g. a scene built only from primitives).
+async function _revertToSourceFile() {
+  if (!state._sourceFile) {
+    toast('Nothing to revert', 'No source file loaded — open or import one first.', 'warn');
+    return;
+  }
+  const editCount = (state.history?.length || 0)
+    + (state.parts?.filter(p => p.deleted).length || 0);
+  const detail = editCount > 0
+    ? `Discards every edit (${editCount} undo entr${editCount === 1 ? 'y' : 'ies'} + deletions, hierarchy changes, colors, merges, splits) and re-parses ${state._sourceFile.name}.`
+    : `Re-parses ${state._sourceFile.name} from scratch.`;
+  const ok = await appConfirmDestructive(detail, {
+    title: 'Revert to original model?',
+    okLabel: 'Revert',
+    cancelLabel: 'Keep edits',
+  });
+  if (!ok) return;
+  // Source file may be any supported mesh format — route through the same
+  // dispatcher used by drag-and-drop so revert works for FBX/OBJ/3MF/STL too.
+  const meshLoader = _loaderForName(state._sourceFile?.name);
+  if (meshLoader) meshLoader(state._sourceFile);
+  else loadGlbFile(state._sourceFile);
 }
 
 // Quit-confirmation dialog. Returns 'save' | 'discard' | 'cancel'. We build
@@ -1676,6 +1787,9 @@ const _Prefs = (() => {
     autoFitOnLoad: true,
     confirmDestructive: true,
     showFps: true,
+    // Camera behavior
+    orbitPivot: 'cursor',    // 'scene' | 'selection' | 'cursor'
+    zoomToCursor: true,      // wheel zooms toward mouse, not toward target
   };
   function load() {
     try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); }
@@ -1729,7 +1843,6 @@ const _Settings = (() => {
     const p = _Prefs.all();
     const bgVal = document.getElementById('bg-mode')?.value || 'dark';
     const perfVal = document.getElementById('perf-mode')?.value || 'auto';
-    const rot = !!document.getElementById('toggle-rotate')?.checked;
     const hilite = !!document.getElementById('toggle-highlight')?.checked;
     const inst = !!document.getElementById('toggle-instance')?.checked;
     const shareMat = !!document.getElementById('toggle-share-mat')?.checked;
@@ -1739,7 +1852,6 @@ const _Settings = (() => {
         _selectRow('set-bg', 'Background', [
           ['dark','Dark'], ['grad','Studio gradient'], ['solid','Solid black'], ['white','White'],
         ], bgVal) +
-        _toggleRow('set-rot', 'Auto-rotate camera', rot) +
         _toggleRow('set-hilite', 'Highlight small parts', hilite) +
         _toggleRow('set-show-fps', 'Show FPS counter', p.showFps)
       ) +
@@ -1749,6 +1861,14 @@ const _Settings = (() => {
         ], perfVal) +
         _toggleRow('set-inst', 'Auto-instance duplicates', inst) +
         _toggleRow('set-sharemat', 'Share materials by color', shareMat)
+      ) +
+      _section('Camera',
+        _selectRow('set-orbit-pivot', 'Orbit around', [
+          ['cursor','Point under cursor'],
+          ['selection','Selection'],
+          ['scene','Scene center'],
+        ], p.orbitPivot) +
+        _toggleRow('set-zoom-cursor', 'Zoom toward cursor', p.zoomToCursor, 'Mouse wheel zooms toward the pointer instead of the orbit target.')
       ) +
       _section('Behavior',
         _toggleRow('set-welcome', 'Welcome screen on boot', p.welcomeOnBoot) +
@@ -1774,7 +1894,6 @@ const _Settings = (() => {
     };
     mirror('set-bg', 'bg-mode', 'value');
     mirror('set-perf', 'perf-mode', 'value');
-    mirror('set-rot', 'toggle-rotate', 'checked');
     mirror('set-hilite', 'toggle-highlight', 'checked');
     mirror('set-inst', 'toggle-instance', 'checked');
     mirror('set-sharemat', 'toggle-share-mat', 'checked');
@@ -1785,11 +1904,18 @@ const _Settings = (() => {
       ['set-autofit', 'autoFitOnLoad'],
       ['set-confirm', 'confirmDestructive'],
       ['set-show-fps', 'showFps'],
+      ['set-zoom-cursor', 'zoomToCursor'],
     ].forEach(([id, key]) => {
       document.getElementById(id)?.addEventListener('change', e => {
         _Prefs.set(key, e.target.checked);
         if (key === 'showFps') _applyShowFps(e.target.checked);
+        if (key === 'zoomToCursor' && typeof controls !== 'undefined' && controls) {
+          controls.zoomToCursor = !!e.target.checked;
+        }
       });
+    });
+    document.getElementById('set-orbit-pivot')?.addEventListener('change', e => {
+      _Prefs.set('orbitPivot', e.target.value);
     });
 
     document.getElementById('set-clear-recents')?.addEventListener('click', () => {
@@ -1989,14 +2115,11 @@ const _Welcome = (() => {
     document.getElementById('welcome-recents-clear')?.addEventListener('click', async () => {
       const list = _load();
       if (!list.length) return;
-      const ok = (typeof appConfirm === 'function')
-        ? await appConfirm(`Remove all ${list.length} entries from the recent files list? The files themselves stay on disk.`, {
-            title: 'Clear recent files?',
-            okLabel: 'Clear',
-            cancelLabel: 'Keep',
-            danger: true,
-          })
-        : confirm(`Remove all ${list.length} recent file entries?`);
+      const ok = await appConfirmDestructive(`Remove all ${list.length} entries from the recent files list? The files themselves stay on disk.`, {
+        title: 'Clear recent files?',
+        okLabel: 'Clear',
+        cancelLabel: 'Keep',
+      });
       if (!ok) return;
       for (const r of list) {
         try { if (typeof _idbDelete === 'function') await _idbDelete(_recKey(r.name, r.size)); } catch (_) {}
@@ -2038,19 +2161,20 @@ const _Welcome = (() => {
   }
 
   function _setMode(mode) {
+    // The two panes carry their own "Open a 3D model" / "Loading…" headings
+    // inline — there's no separate <h2 id="welcome-title"> in the markup, so
+    // the previous title-swap was a no-op. Pane swap + close-button toggle is
+    // all this needs to do.
     const pick = document.getElementById('welcome-pick-pane');
     const load = document.getElementById('welcome-load-pane');
-    const title = document.getElementById('welcome-title');
     const closeBtn = document.getElementById('welcome-close');
     if (mode === 'loading') {
       if (pick) pick.style.display = 'none';
       if (load) load.style.display = 'block';
-      if (title) title.textContent = 'Opening file…';
       if (closeBtn) closeBtn.style.display = 'none';
     } else {
       if (pick) pick.style.display = 'block';
       if (load) load.style.display = 'none';
-      if (title) title.textContent = 'Open a model';
       if (closeBtn) closeBtn.style.display = '';
     }
   }
@@ -2089,7 +2213,7 @@ const _Actions = (() => {
     { id:'export',       group:'File',       label:'Export model…',              run: _click('btn-export') },
     { id:'sceneSettings',group:'File',       label:'Scene settings…',            kbd:'Ctrl+;', run: () => { try { _openSceneSettings(); } catch (_) {} } },
     { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: _click('btn-fit') },
-    { id:'reset',        group:'View',       label:'Reset camera',               run: _click('btn-reset') },
+    { id:'revert',       group:'File',       label:'Revert to source file…',     run: () => { try { _revertToSourceFile(); } catch (_) {} } },
     { id:'frameSel',     group:'View',       label:'Frame selection',            run: () => { try { frameSelected(); } catch (_) {} } },
     { id:'camPersp',     group:'View',       label:'Camera view (Perspective)',  kbd:'Ctrl+1', run: () => { try { _setPerspectiveView(); } catch (_) {} } },
     { id:'camTop',       group:'View',       label:'Top view',                   kbd:'Ctrl+2', run: () => { try { _setStandardView('top'); } catch (_) {} } },
@@ -2097,7 +2221,7 @@ const _Actions = (() => {
     { id:'camSide',      group:'View',       label:'Side view',                  kbd:'Ctrl+4', run: () => { try { _setStandardView('side'); } catch (_) {} } },
     { id:'solid',        group:'View',       label:'Solid view',                 kbd:'1', run: () => { try { setViewMode('solid'); } catch (_) {} } },
     { id:'wire',         group:'View',       label:'Wireframe view',             kbd:'2', run: () => { try { setViewMode('wire'); } catch (_) {} } },
-    { id:'edges',        group:'View',       label:'Edges view',                 kbd:'3', run: () => { try { setViewMode('edges'); } catch (_) {} } },
+    { id:'xray',         group:'View',       label:'X-ray view',                 kbd:'3', run: () => { try { setViewMode('xray'); } catch (_) {} } },
     { id:'gzMove',       group:'View',       label:'Translate gizmo (Shift to snap 10u)', kbd:'E', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
     { id:'gzRotate',     group:'View',       label:'Rotate gizmo (Shift to snap 15°)',    kbd:'R', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
     { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
@@ -2110,8 +2234,8 @@ const _Actions = (() => {
     { id:'showAll',      group:'Selection',  label:'Show all parts',             run: () => { try { showAllParts(); } catch (_) {} } },
     { id:'hideUnsel',    group:'Selection',  label:'Hide unselected',            run: () => { try { hideUnselected(); } catch (_) {} } },
     { id:'reveal',       group:'Selection',  label:'Reveal selected in tree',    kbd:'Shift+S', run: () => { try { revealSelectedInTree(); } catch (_) {} } },
-    { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undo(); } catch (_) {} } },
-    { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', run: () => { try { redo(); } catch (_) {} } },
+    { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undoLast(); } catch (_) {} } },
+    { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', run: () => { try { redoLast(); } catch (_) {} } },
     { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', run: () => { if (state.selected.size) deleteParts([...state.selected], 'Deleted via palette'); } },
     { id:'copy',         group:'Edit',       label:'Copy selection',             kbd:'Ctrl+C', run: () => { if (state.selected.size) copyParts([...state.selected]); } },
     { id:'paste',        group:'Edit',       label:'Paste',                      kbd:'Ctrl+V', run: () => pasteParts() },
@@ -2301,6 +2425,7 @@ window.addEventListener('keydown', e => {
       btn.setAttribute('aria-expanded','false');
     };
     const open = () => {
+      _closeAllTopbarMenus('file-menu');
       menu.classList.add('show');
       wrap.classList.add('open');
       btn.classList.add('active');
@@ -2354,7 +2479,7 @@ window.addEventListener('keydown', e => {
     const btn = $('btn-brand'), menu = $('brand-menu');
     if (!btn || !menu) return;
     const close = () => { menu.classList.remove('show'); btn.setAttribute('aria-expanded','false'); menu.setAttribute('aria-hidden','true'); };
-    const open  = () => { menu.classList.add('show');    btn.setAttribute('aria-expanded','true');  menu.setAttribute('aria-hidden','false'); };
+    const open  = () => { _closeAllTopbarMenus('brand-menu'); menu.classList.add('show'); btn.setAttribute('aria-expanded','true'); menu.setAttribute('aria-hidden','false'); };
     btn.addEventListener('click', e => {
       e.stopPropagation();
       menu.classList.contains('show') ? close() : open();
@@ -2374,12 +2499,14 @@ window.addEventListener('keydown', e => {
     const f = e.target.files[0]; e.target.value = '';
     _handleSelectedFile(f);
   });
-  const vp = $('viewport'), dz = $('dropzone');
-  vp?.addEventListener('dragenter', e => { e.preventDefault(); dz?.classList.add('drag-over'); });
-  vp?.addEventListener('dragover',  e => { e.preventDefault(); dz?.classList.add('drag-over'); });
-  vp?.addEventListener('dragleave', e => { e.preventDefault(); dz?.classList.remove('drag-over'); });
+  // Drop a file anywhere on the viewport to load it. No `#dropzone` overlay
+  // exists — the .drag-over visual feedback the old code tried to toggle was
+  // dead since the element isn't in the markup. Drop is what matters.
+  const vp = $('viewport');
+  vp?.addEventListener('dragenter', e => e.preventDefault());
+  vp?.addEventListener('dragover',  e => e.preventDefault());
   vp?.addEventListener('drop', e => {
-    e.preventDefault(); dz?.classList.remove('drag-over');
+    e.preventDefault();
     _handleSelectedFile(e.dataTransfer?.files?.[0]);
   });
   $('loader-cancel-btn')?.addEventListener('click', () => {
@@ -2543,6 +2670,9 @@ function initScene() {
   // No damping — pan/orbit/zoom track the mouse 1:1 and stop the instant the
   // user lets go (no inertial drift, no ease-out tail).
   controls.enableDamping = false; controls.screenSpacePanning = true;
+  // Cursor-centric wheel zoom — wheel-in/out tracks toward the mouse pointer
+  // instead of always pulling toward controls.target. Standard CAD UX.
+  controls.zoomToCursor = (_Prefs.get('zoomToCursor') !== false);
   // Mouse button mapping — match standard CAD conventions:
   //  LEFT   → orbit (rotate)
   //  MIDDLE → pan (was DOLLY by default; wheel still handles zoom)
@@ -2595,6 +2725,19 @@ function initScene() {
       window.addEventListener('pointercancel', onUp);
     }, true /* capture */);
   })();
+  // Orbit-pivot mode: rebind controls.target on LEFT-button pointerdown so the
+  // rotate gesture pivots around the selection / point under cursor instead of
+  // a static target. Capture phase fires before OrbitControls reads target.
+  //   'scene'     → leave target alone (legacy behavior)
+  //   'selection' → bbox center of state.selected (falls back to scene)
+  //   'cursor'    → raycast hit point at mouse; no hit → leave target alone
+  // Changing target without moving the camera redefines the pivot but keeps
+  // the current framing — that's exactly OrbitControls' rotate math.
+  // Per-click orbit-pivot updates are disabled. Camera must NEVER recenter or
+  // shift when the user clicks/selects an object — every prior implementation
+  // (target.copy, delta-preserve, raycast-under-cursor) produced visible
+  // jumping the user didn't want. OrbitControls keeps whatever target the
+  // last explicit framing op (Fit / F / Reset / load) installed.
   // Any user interaction with the camera invalidates the framebuffer. Without
   // this hook the render-on-demand loop would freeze the viewport.
   controls.addEventListener('start', () => requestRender());
@@ -2751,6 +2894,29 @@ function initScene() {
   // Live invalidation while the gizmo is being dragged.
   state.gizmo.addEventListener('change', () => requestRender());
   state.gizmo.addEventListener('objectChange', () => { requestRender(); _gizmoHud.update(); _fastTrackGroupOriginDot(); applySelectionColors(); });
+  // Plane-handle uniform-scale lock. By default three's TransformControls
+  // computes scale.x and scale.y independently when the user drags the XY
+  // plane handle (sx = pointEnd.x / pointStart.x, sy = pointEnd.y /
+  // pointStart.y), producing asymmetric stretch unless the user drags a
+  // perfect 45° line. C4D / Houdini / Maya all lock plane drags to a 1:1
+  // ratio so the proportions of the object stay constant in that plane.
+  // We equalize the two scales here after three has applied them: pick
+  // whichever component moved FURTHER from 1.0 (preserves the dominant
+  // drag intent — e.g., pure-X drag scales X then mirrors into Y) and
+  // copy it onto the other. Single-axis drags (X/Y/Z) and uniform XYZ
+  // are left alone — they're already correct.
+  state.gizmo.addEventListener('objectChange', () => {
+    if (state.gizmoMode !== 'scale') return;
+    const axis = state.gizmo.axis;
+    if (axis !== 'XY' && axis !== 'YZ' && axis !== 'XZ') return;
+    if (!state.pivot) return;
+    const s = state.pivot.scale;
+    const pickDom = (a, b) => (Math.abs(a - 1) >= Math.abs(b - 1)) ? a : b;
+    if (axis === 'XY')      { const m = pickDom(s.x, s.y); s.x = m; s.y = m; }
+    else if (axis === 'YZ') { const m = pickDom(s.y, s.z); s.y = m; s.z = m; }
+    else if (axis === 'XZ') { const m = pickDom(s.x, s.z); s.x = m; s.z = m; }
+    state.pivot.updateMatrixWorld(true);
+  });
   // Gizmo HUD: capture pivot baseline on drag start, hide on drag end.
   // Also capture the descendant-dot baseline so child group dots can follow
   // the parent drag in real time (their stored origin is offset by the
@@ -2800,31 +2966,65 @@ function initScene() {
     if (o.isMesh && o.geometry) {
       const n = o.name || '';
       const t = o.geometry.type || '';
-      // Hide negative-direction arrow visuals. The TransformControls translate
-      // gizmo defines each axis with three cylinder meshes — shaft at (0,0,0),
-      // positive arrow tip at (+0.5, 0, 0)-equivalent, negative arrow tip at
-      // (-0.5, 0, 0)-equivalent. We want to keep shaft + positive, hide
-      // negative. The check is: any cylinder named X/Y/Z whose position
-      // component along its axis is negative (and not zero) gets hidden.
-      // Material check is OMITTED here — earlier "isVisible" gate was
-      // skipping the negative arrows because their material had matVis=false
-      // in this three.js version. The pickers (separate BoxGeometry meshes)
-      // are not affected because they're never at a negative position.
-      const pos = o.position;
-      const isAxisCyl = t === 'CylinderGeometry' && (n === 'X' || n === 'Y' || n === 'Z');
-      const negComponent = (n === 'X' && pos.x < -0.01)
-                       || (n === 'Y' && pos.y < -0.01)
-                       || (n === 'Z' && pos.z < -0.01);
-      if (isAxisCyl && negComponent) {
-        o.visible = false;
-        try {
-          Object.defineProperty(o, 'visible', {
-            get: () => false,
-            set: () => {},
-            configurable: true,
-          });
-        } catch (_) {}
-        return;
+      // Modernise the gizmo palette — three.js ships pure 0xff0000 / 0x00ff00
+      // / 0x0000ff which read as harsh "Win95 OpenGL demo" colours next to
+      // the app's muted UI. Remap to softer shades matched to the grid
+      // (red 0xff5050, green 0x40d860) plus a blue tuned to sit in the same
+      // family. GOTCHA: TransformControls re-applies `material.color.copy(
+      // material._color)` every frame, where _color is a one-shot clone of
+      // the colour at FIRST update. If we only mutate .color here it gets
+      // restored to red/green/blue on the next render. We also pre-seed
+      // material._color so three's restore picks up the new value as the
+      // canonical "original" for this axis.
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const mat of mats) {
+          if (!mat?.color) continue;
+          const hex = mat.color.getHex();
+          let next = null;
+          if      (hex === 0xff0000) next = 0xff5050;
+          else if (hex === 0x00ff00) next = 0x40d860;
+          else if (hex === 0x0000ff) next = 0x4d8dff;
+          if (next !== null) {
+            mat.color.setHex(next);
+            mat._color = mat.color.clone();
+          }
+        }
+      }
+      // Hide every negative-direction handle visual (translate arrow tips
+      // AND scale-mode box handles). Industry convention (C4D / Houdini /
+      // Maya) is to show ONE arrow per axis in the positive direction —
+      // the negative side is implied.
+      //
+      // GOTCHA: three.js r172's setupGizmo() bakes the mesh's position
+      // offset INTO THE GEOMETRY VERTICES and resets object.position to
+      // (0,0,0). Reading o.position.x always returns 0, so the old
+      // position-based check never matched anything. Compute the geometry
+      // bounding box center instead — for the negative-X arrow the bbox
+      // center sits at (-0.5, 0, 0) even though o.position is (0, 0, 0).
+      const isAxisHandle = (n === 'X' || n === 'Y' || n === 'Z');
+      if (isAxisHandle) {
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        const bb = o.geometry.boundingBox;
+        if (bb) {
+          const cx = (bb.min.x + bb.max.x) * 0.5;
+          const cy = (bb.min.y + bb.max.y) * 0.5;
+          const cz = (bb.min.z + bb.max.z) * 0.5;
+          const negComponent = (n === 'X' && cx < -0.01)
+                           || (n === 'Y' && cy < -0.01)
+                           || (n === 'Z' && cz < -0.01);
+          if (negComponent) {
+            o.visible = false;
+            try {
+              Object.defineProperty(o, 'visible', {
+                get: () => false,
+                set: () => {},
+                configurable: true,
+              });
+            } catch (_) {}
+            return;
+          }
+        }
       }
       if (t === 'CylinderGeometry') {
         // Arrow stems and tip cones — make thinner along the transverse axes.
@@ -2987,6 +3187,16 @@ function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   }
 
   parts = (parts || []).filter(p => p && p.mesh && !p.deleted);
+  // Locked parts can't be moved/rotated/scaled by the gizmo. Filter them out;
+  // if every selected part is locked, refuse to attach at all (and toast so
+  // the user knows why the gizmo didn't appear).
+  const _hadAny = parts.length > 0;
+  const _lockedCount = parts.filter(p => p.locked).length;
+  parts = parts.filter(p => !p.locked);
+  if (_hadAny && parts.length === 0) {
+    try { toast('Selection locked', `${_lockedCount} part${_lockedCount === 1 ? ' is' : 's are'} locked — unlock to transform`, 'warn', 3500); } catch (_) {}
+    return;
+  }
   if (parts.length === 0) return;
 
   // ── Group-pivot path: when the user selects exactly one userGroup, the
@@ -3265,6 +3475,7 @@ function setGizmoMode(mode) {
   }
   ['gz-translate','gz-rotate','gz-scale'].forEach(id => $(id)?.classList.remove('active'));
   $('gz-' + mode)?.classList.add('active');
+  try { _updateVpHint(); } catch (_) {}
 }
 
 // Toggle snap on/off across all three gizmo modes. Called from the
@@ -3410,25 +3621,6 @@ const _gizmoHud = (() => {
   }
   return { start, stop, update };
 })();
-
-// Build a 2D-canvas-backed CanvasTexture suitable for use as a scene
-// background. `paint(ctx, w, h)` does the drawing. Size defaults to 512² which
-// is large enough that radial gradients look smooth at any aspect ratio without
-// burning GPU memory (1 MB at RGBA8). Color space is forced to sRGB so the
-// pixels survive renderer.outputColorSpace conversion unchanged.
-function _makeBgTexture(paint, size = 512) {
-  const c = document.createElement('canvas'); c.width = size; c.height = size;
-  const ctx = c.getContext('2d');
-  paint(ctx, size, size);
-  const tex = new THREE.CanvasTexture(c);
-  if (tex.colorSpace !== undefined) tex.colorSpace = THREE.SRGBColorSpace;
-  // Linear filter on a smooth-gradient image avoids visible nearest-neighbour
-  // banding when the canvas is stretched to the viewport.
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  tex.generateMipmaps = false;
-  return tex;
-}
 
 function setBackground(mode) {
   state.bgMode = mode;
@@ -3601,8 +3793,8 @@ async function _applyHdriPreset(id) {
 function _markHdriPresetActive(id) {
   document.querySelectorAll('.hdri-preset').forEach(b => {
     const isActive = b.dataset.hdriPreset === id;
-    b.style.background = isActive ? 'rgba(107,141,255,.18)' : 'var(--bg3)';
-    b.style.borderColor = isActive ? 'rgba(107,141,255,.5)' : 'var(--bd)';
+    b.style.background = isActive ? 'var(--ac-tint-18)' : 'var(--bg3)';
+    b.style.borderColor = isActive ? 'var(--ac-tint-55)' : 'var(--bd)';
     b.style.color = isActive ? 'var(--tx)' : 'var(--tx)';
   });
 }
@@ -3866,18 +4058,6 @@ function tick() {
         }
       } catch (e) { _logTickErr('controls', e); }
     }
-
-    try {
-      if (state.autoRotate && state.partsRoot) {
-        state.partsRoot.rotation.z += 0.003;
-        // partsRoot.matrixAutoUpdate=false (perf), so updateMatrixWorld alone
-        // would propagate a stale local matrix and the rotation would be a
-        // no-op. Recompose the local matrix from rotation first.
-        state.partsRoot.updateMatrix();
-        state.partsRoot.updateMatrixWorld(true);
-        requestRender();
-      }
-    } catch (e) { _logTickErr('autorotate', e); }
 
     // Render only if something invalidated us, OR we're inside the post-event
     // decay window. This drops idle GPU usage to ~0 on a static 10k-part scene.
@@ -4249,7 +4429,11 @@ async function loadStepFile(file) {
     // Frame-on-load preference comes from the import-settings modal. Default
     // is true; only the modal can opt out. It applies to both fresh loads
     // and appends.
-    const fitOnLoad = state._importFitOnLoad !== false; state._importFitOnLoad = undefined;
+    // Layer two sources: per-file import-modal override (state._importFitOnLoad)
+    // AND the global Settings → Behavior → "Auto-fit on load" pref.
+    const fitOnLoad = (state._importFitOnLoad !== false)
+                   && (_Prefs.get('autoFitOnLoad') !== false);
+    state._importFitOnLoad = undefined;
     if (!importMode) clearModel();
     await buildModelFromMeshes(result.meshes, hashes, ctrl, { append: importMode });
     if (ctrl.cancelled) throw new Error('cancelled');
@@ -4943,7 +5127,7 @@ function clearModel() {
   // torn down ahead of a fresh load (`_sceneActive` cleared first).
   $('btn-export').disabled = true;
   if (!state._sceneActive) {
-    $('btn-fit').disabled = true; $('btn-reset').disabled = true;
+    $('btn-fit').disabled = true;
     const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = true;
   }
   requestRender();
@@ -4989,11 +5173,10 @@ function newScene() {
 // `onModelLoaded` calls this then layers on the model-specific bits
 // (recent-thumb capture, status name).
 function onSceneActivated() {
-  $('btn-fit').disabled = false; $('btn-reset').disabled = false;
+  $('btn-fit').disabled = false;
   const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = false;
   // Export still requires geometry — re-evaluated on every part add/remove.
   const _exp = $('btn-export'); if (_exp) _exp.disabled = state.parts.length === 0;
-  $('dropzone')?.style && ($('dropzone').style.display = 'none');
   try { _Welcome?.hide(); } catch (_) {}
   state._sceneActive = true;
 }
@@ -5054,6 +5237,24 @@ async function _captureFrameAsBlob(outW, outH, opts = {}) {
   outW = Math.max(2, Math.round(outW));
   outH = Math.max(2, Math.round(outH));
 
+  // Optional view-mode override — temporarily swap the viewport's view mode
+  // (solid / wire / xray) for the duration of the capture and restore it
+  // after. 'current' means leave the mode alone.
+  const _prevViewMode = state?.viewMode;
+  let _viewModeSwapped = false;
+  if (opts.viewMode && opts.viewMode !== 'current' && opts.viewMode !== _prevViewMode && typeof setViewMode === 'function') {
+    try { setViewMode(opts.viewMode); _viewModeSwapped = true; } catch (_) {}
+  }
+
+  // Optional grid hide — pin gridHelper invisible for the capture render.
+  // Also hide the scene origin marker so the screenshot is fully clean.
+  const _prevGridVis  = (typeof gridHelper !== 'undefined' && gridHelper) ? gridHelper.visible : null;
+  const _prevOriginVis = state?._originMarker ? state._originMarker.visible : null;
+  if (opts.hideGrid) {
+    try { if (typeof gridHelper !== 'undefined' && gridHelper) gridHelper.visible = false; } catch (_) {}
+    try { if (state?._originMarker) state._originMarker.visible = false; } catch (_) {}
+  }
+
   // Stash + adjust perspective camera aspect so a 16:9 export of a square
   // viewport doesn't stretch the model. Orthographic cameras carry their own
   // l/r/t/b — leave those untouched (the user's framing already implies aspect).
@@ -5104,27 +5305,64 @@ async function _captureFrameAsBlob(outW, outH, opts = {}) {
     }
     ctx.putImageData(img, 0, 0);
   } else {
-    // Read failed (WebGPU race on some drivers). Re-render to the live canvas
-    // at its native size and snapshot via drawImage. Output is letterboxed at
-    // outW×outH — better than nothing, but the readback path is the norm.
-    if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
-    else renderer.render(scene, camera);
+    // Read failed (typical on WebGPU drivers that don't implement
+    // readRenderTargetPixelsAsync). Fall back to a temporary resize of the
+    // live canvas so the render lands at exactly the requested output
+    // dimensions — no letterboxing. The visible viewport flickers for one
+    // frame but the saved image fills the entire output (no black bars).
     const cv = renderer.domElement;
-    const cvW = cv.width, cvH = cv.height;
-    const s = Math.min(outW / cvW, outH / cvH);
-    const dw = Math.round(cvW * s), dh = Math.round(cvH * s);
-    const dx = Math.floor((outW - dw) / 2), dy = Math.floor((outH - dh) / 2);
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, outW, outH);
-    ctx.drawImage(cv, dx, dy, dw, dh);
+    const prevW = cv.width, prevH = cv.height;
+    const prevPxRatio = renderer.getPixelRatio?.() || 1;
+    const stashedAspect2 = camera.isPerspectiveCamera ? camera.aspect : null;
+    try {
+      if (stashedAspect2 != null) {
+        camera.aspect = outW / outH;
+        camera.updateProjectionMatrix();
+      }
+      // updateStyle=false keeps the CSS box the same so layout doesn't shift.
+      renderer.setPixelRatio?.(1);
+      renderer.setSize(outW, outH, false);
+      if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
+      else renderer.render(scene, camera);
+      ctx.drawImage(cv, 0, 0, outW, outH);
+    } finally {
+      renderer.setPixelRatio?.(prevPxRatio);
+      renderer.setSize(prevW, prevH, false);
+      if (stashedAspect2 != null) {
+        camera.aspect = stashedAspect2;
+        camera.updateProjectionMatrix();
+      }
+      // One more render at the original size so the visible viewport
+      // returns to normal before the next animation tick.
+      try {
+        if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
+        else renderer.render(scene, camera);
+      } catch (_) {}
+    }
   }
 
   // Optional info overlay — pinned to the bottom-left, scales with output
   // resolution so a 4K screenshot doesn't get a 9-pixel typewriter caption.
   if (opts.stamp) {
-    try { _drawScreenshotStamp(ctx, outW, outH); } catch (e) { console.warn('[screenshot] stamp draw failed', e); }
+    try { _drawScreenshotStamp(ctx, outW, outH, opts.stampOpts); } catch (e) { console.warn('[screenshot] stamp draw failed', e); }
   }
 
   const blob = await new Promise(res => out.toBlob(res, 'image/png'));
+
+  // Restore view-mode and grid visibility before returning. Doing it AFTER
+  // toBlob (rather than in a finally near the top) is intentional — toBlob
+  // doesn't need the scene state, and restoring earlier would re-render
+  // the visible viewport in the original mode before the user's eye has
+  // a chance to register that anything changed.
+  if (_viewModeSwapped && typeof setViewMode === 'function') {
+    try { setViewMode(_prevViewMode); } catch (_) {}
+  }
+  if (opts.hideGrid) {
+    try { if (typeof gridHelper !== 'undefined' && gridHelper && _prevGridVis != null) gridHelper.visible = _prevGridVis; } catch (_) {}
+    try { if (state?._originMarker && _prevOriginVis != null) state._originMarker.visible = _prevOriginVis; } catch (_) {}
+    requestRender();
+  }
+
   if (!blob) throw new Error('toBlob returned null');
   return blob;
 }
@@ -5132,7 +5370,15 @@ async function _captureFrameAsBlob(outW, outH, opts = {}) {
 // Render a small black info card in the bottom-left corner of the captured
 // canvas. Pulls the same numbers shown in the status bar (model name, vert
 // count, parts, mem) so the stamp matches what the user sees in the app.
-function _drawScreenshotStamp(ctx, w, h) {
+// Default stamp configuration — every field on, anchored bottom-left.
+const _STAMP_DEFAULTS = {
+  name: true, stats: true, selection: true, timestamp: true,
+  camera: false, scale: false, branding: false,
+  position: 'bl', // 'tl' | 'tr' | 'bl' | 'br'
+};
+
+function _drawScreenshotStamp(ctx, w, h, optsIn) {
+  const opts = Object.assign({}, _STAMP_DEFAULTS, optsIn || {});
   const sbStatus   = document.getElementById('sb-status')?.textContent?.trim() || 'Untitled';
   const sbVerts    = document.getElementById('sb-verts')?.textContent?.trim() || '';
   const sbMem      = document.getElementById('sb-mem')?.textContent?.trim() || '';
@@ -5142,6 +5388,28 @@ function _drawScreenshotStamp(ctx, w, h) {
   const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const modelName = (sbStatus && sbStatus !== 'Ready') ? sbStatus : 'Untitled';
 
+  // Camera info — derives view kind (perspective vs ortho, named view if the
+  // user is locked to one) and a FOV / zoom number.
+  let cameraLine = '';
+  if (opts.camera && camera) {
+    if (camera.isOrthographicCamera) {
+      const zoom = (camera.zoom || 1).toFixed(2);
+      cameraLine = `Orthographic · zoom ${zoom}`;
+    } else {
+      const fov = Math.round(camera.fov || 45);
+      cameraLine = `Perspective · ${fov}° FOV`;
+    }
+  }
+
+  // Scale legend — current display unit + sceneScale.
+  let scaleLine = '';
+  if (opts.scale) {
+    const unit = (state?.displayUnit && state.displayUnit !== 'none') ? state.displayUnit : '—';
+    const sc = (state?.sceneScale != null) ? state.sceneScale : 1;
+    const upAxis = (state?.sceneUpAxis || 'z').toUpperCase();
+    scaleLine = `Unit ${unit} · scale ${sc}× · ${upAxis}-up`;
+  }
+
   // Scale type/padding with the shorter edge so 4K stamps don't disappear
   // and 1×viewport stamps don't dominate the frame. Reference at ~1080p tall.
   const k = Math.max(1, Math.min(h, w) / 1080);
@@ -5149,28 +5417,49 @@ function _drawScreenshotStamp(ctx, w, h) {
   const lead  = Math.round(18 * k);
   const fsTitle = Math.round(15 * k);
   const fsBody  = Math.round(12 * k);
+  const fsBrand = Math.round(11 * k);
   const radius = Math.round(8 * k);
 
-  const lines = [
-    { text: modelName, font: `600 ${fsTitle}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#ffffff' },
-    { text: `${partCount} parts · ${sbVerts} verts · ${sbMem}`, font: `500 ${fsBody}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#cccccc' },
-    { text: `${sbSelected} selected · ${sbFlagged} flagged`,    font: `500 ${fsBody}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#a0a0a0' },
-    { text: ts,                                                 font: `500 ${fsBody}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`, color: '#808080' },
-  ];
+  const titleFont = `600 ${fsTitle}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`;
+  const bodyFont  = `500 ${fsBody}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`;
+  const brandFont = `600 ${fsBrand}px -apple-system, "Inter", "Segoe UI", system-ui, sans-serif`;
+
+  // Build the line list dynamically based on opts. First field still uses
+  // the title size — promote whichever line ends up first.
+  const candidates = [
+    opts.name      ? { text: modelName,                                         color: '#ffffff' } : null,
+    opts.stats     ? { text: `${partCount} parts · ${sbVerts} verts · ${sbMem}`, color: '#cccccc' } : null,
+    opts.selection ? { text: `${sbSelected} selected · ${sbFlagged} flagged`,   color: '#a0a0a0' } : null,
+    opts.camera && cameraLine ? { text: cameraLine,                              color: '#a0a0a0' } : null,
+    opts.scale  && scaleLine  ? { text: scaleLine,                               color: '#a0a0a0' } : null,
+    opts.timestamp ? { text: ts,                                                  color: '#808080' } : null,
+    opts.branding  ? { text: 'STEP Optimizer',                                    color: 'var(--ac)', font: brandFont, accent: true } : null,
+  ].filter(Boolean);
+  if (!candidates.length) return; // nothing to draw — silently skip
+  candidates[0].font = titleFont;
+  for (let i = 1; i < candidates.length; i++) if (!candidates[i].font) candidates[i].font = bodyFont;
 
   // Measure the widest line so the box fits content snugly.
   ctx.save();
   let maxW = 0;
-  for (const l of lines) {
+  for (const l of candidates) {
     ctx.font = l.font;
     const m = ctx.measureText(l.text);
     if (m.width > maxW) maxW = m.width;
   }
   const innerPad = Math.round(14 * k);
   const boxW = Math.round(maxW + innerPad * 2);
-  const boxH = Math.round(innerPad * 2 + lead * (lines.length - 1) + fsTitle);
-  const x = pad;
-  const y = h - pad - boxH;
+  // Each line gets one full `lead`; the title's extra ascent above the
+  // baseline is absorbed by innerPad so the first line doesn't hug the top.
+  const boxH = Math.round(innerPad * 2 + lead * Math.max(0, candidates.length - 1) + fsTitle);
+
+  // Pick anchor corner based on opts.position.
+  const pos = opts.position || 'bl';
+  let x, y;
+  if (pos === 'tl')      { x = pad;            y = pad; }
+  else if (pos === 'tr') { x = w - pad - boxW; y = pad; }
+  else if (pos === 'br') { x = w - pad - boxW; y = h - pad - boxH; }
+  else                   { x = pad;            y = h - pad - boxH; } // 'bl' default
 
   // Soft shadow for legibility on busy backgrounds.
   ctx.shadowColor = 'rgba(0,0,0,0.55)';
@@ -5202,9 +5491,11 @@ function _drawScreenshotStamp(ctx, w, h) {
   // Text rows.
   ctx.textBaseline = 'top';
   let cy = y + innerPad;
-  for (const l of lines) {
+  for (const l of candidates) {
     ctx.font = l.font;
-    ctx.fillStyle = l.color;
+    // CSS var fallback — Canvas2D can't resolve var(--…), substitute the
+    // hex from the design tokens at draw time.
+    ctx.fillStyle = (l.color === 'var(--ac)') ? '#5b67f5' : l.color;
     ctx.fillText(l.text, x + innerPad, cy);
     cy += lead;
   }
@@ -5296,28 +5587,41 @@ function _openScreenshotDialog() {
       #scrshot-dlg .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-sm)}
       #scrshot-dlg .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:var(--r-md);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .14s ease,border-color .14s ease,transform .12s ease}
       #scrshot-dlg .ss-preset:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
-      #scrshot-dlg .ss-preset.active{background:linear-gradient(180deg,rgba(107,141,255,.18),rgba(107,141,255,.08));border-color:rgba(107,141,255,.42);color:var(--tx)}
+      #scrshot-dlg .ss-preset.active{background:linear-gradient(180deg,var(--ac-tint-18),var(--ac-tint-08));border-color:var(--ac-tint-40);color:var(--tx)}
       #scrshot-dlg .ss-preset .lbl{font-size:var(--fs-12);font-weight:var(--fw-semibold);line-height:1.1}
       #scrshot-dlg .ss-preset .sub{font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
       #scrshot-dlg .ss-preset.active .sub{color:var(--ac)}
       #scrshot-dlg .ss-custom{display:flex;align-items:center;gap:var(--space-md)}
       #scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:7px;font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
-      #scrshot-dlg .ss-custom input:focus{border-color:rgba(107,141,255,.5)}
+      #scrshot-dlg .ss-custom input:focus{border-color:var(--ac-tint-55)}
       #scrshot-dlg .ss-custom .x{color:var(--tx3);font-size:var(--fs-lg);font-weight:var(--fw-medium)}
       #scrshot-dlg .ss-meta{display:flex;justify-content:space-between;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
       #scrshot-dlg .ss-meta strong{color:var(--tx2);font-weight:var(--fw-medium)}
       #scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:var(--space-sm)}
       #scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:7px;font-size:var(--fs-md);outline:none}
-      #scrshot-dlg .ss-name input:focus{border-color:rgba(107,141,255,.5)}
+      #scrshot-dlg .ss-name input:focus{border-color:var(--ac-tint-55)}
       #scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:7px;cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
       #scrshot-dlg .ss-overlay-row:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.10)}
       #scrshot-dlg .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
       #scrshot-dlg .ss-overlay-row .lbl{flex:1;font-size:var(--fs-12);color:var(--tx);font-weight:var(--fw-medium)}
       #scrshot-dlg .ss-overlay-row .hint{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-regular);margin-left:4px}
+      #scrshot-dlg .ss-stamp-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--bd);border-top:0;border-radius:0 0 7px 7px;margin-top:-7px}
+      #scrshot-dlg .ss-stamp-fields.disabled{opacity:.45;pointer-events:none}
+      #scrshot-dlg .ss-stamp-check{display:flex;align-items:center;gap:7px;font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none}
+      #scrshot-dlg .ss-stamp-check input{accent-color:var(--ac);width:12px;height:12px;cursor:pointer;margin:0}
+      #scrshot-dlg .ss-stamp-pos{display:flex;align-items:center;gap:6px;grid-column:1 / -1;padding-top:6px;margin-top:2px;border-top:1px solid var(--bd);font-size:var(--fs-11);color:var(--tx3)}
+      #scrshot-dlg .ss-stamp-pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;flex:1}
+      #scrshot-dlg .ss-stamp-pos-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:4px 8px;border-radius:5px;font-size:var(--fs-11);cursor:pointer;transition:background .12s,border-color .12s,color .12s;font-variant-numeric:tabular-nums}
+      #scrshot-dlg .ss-stamp-pos-btn:hover{background:rgba(255,255,255,.06);color:var(--tx)}
+      #scrshot-dlg .ss-stamp-pos-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac)}
+      #scrshot-dlg .ss-vmode{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+      #scrshot-dlg .ss-vmode-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:7px 8px;border-radius:7px;font-size:var(--fs-11);cursor:pointer;font-weight:var(--fw-medium);transition:background .12s,border-color .12s,color .12s}
+      #scrshot-dlg .ss-vmode-btn:hover{background:rgba(255,255,255,.06);color:var(--tx)}
+      #scrshot-dlg .ss-vmode-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac)}
       #scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:var(--fs-12);border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:var(--fw-medium)}
       #scrshot-dlg .dlg-foot .ss-cancel:hover{background:rgba(255,255,255,.05)}
-      #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,rgba(107,141,255,.32),var(--ac-tint-18));border-color:rgba(107,141,255,.5);color:var(--tx-on-accent)}
-      #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,rgba(107,141,255,.42),rgba(107,141,255,.24))}
+      #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,var(--ac-tint-35),var(--ac-tint-18));border-color:var(--ac-tint-55);color:var(--tx-on-accent)}
+      #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,var(--ac-tint-40),var(--ac-tint-25))}
       #scrshot-dlg .dlg-foot .ss-save:disabled{opacity:.5;cursor:wait}
     `;
     document.head.appendChild(s);
@@ -5368,14 +5672,47 @@ function _openScreenshotDialog() {
             <span><strong>Pixels</strong> <span id="ss-mpix">${(baseW * baseH / 1e6).toFixed(1)} MP</span></span>
           </div>
         </div>
+        <div>
+          <div class="ss-section-title">View mode</div>
+          <div class="ss-vmode">
+            <button type="button" class="ss-vmode-btn" data-vmode="current" title="Use whatever view mode the viewport is currently set to">Current</button>
+            <button type="button" class="ss-vmode-btn" data-vmode="solid" title="Render as solid (shaded surfaces)">Solid</button>
+            <button type="button" class="ss-vmode-btn" data-vmode="wire" title="Render as wireframe (edges only)">Wireframe</button>
+            <button type="button" class="ss-vmode-btn" data-vmode="xray" title="Render as additive-blend x-ray (see-through layers)">X-ray</button>
+          </div>
+        </div>
+        <label class="ss-overlay-row" for="ss-hide-grid" title="Hide the floor grid for this screenshot only. The viewport returns to normal after saving.">
+          <input type="checkbox" id="ss-hide-grid">
+          <span class="lbl">Hide scene grid <span class="hint">(floor lines and origin axes)</span></span>
+        </label>
         <div class="ss-name">
           <div class="ss-section-title">Filename</div>
           <input type="text" id="ss-name" value="${_defaultScreenshotName()}" spellcheck="false">
         </div>
-        <label class="ss-overlay-row" for="ss-overlay-stamp" title="Overlay file name, vertex / part / triangle counts and a timestamp on the bottom-left corner of the saved image.">
-          <input type="checkbox" id="ss-overlay-stamp">
-          <span class="lbl">Stamp object info <span class="hint">(model name · vertices · parts · timestamp)</span></span>
-        </label>
+        <div>
+          <label class="ss-overlay-row" for="ss-overlay-stamp" title="Overlay an info panel on the saved image. Pick which fields and which corner below.">
+            <input type="checkbox" id="ss-overlay-stamp">
+            <span class="lbl">Stamp info on image <span class="hint">(pick fields & corner)</span></span>
+          </label>
+          <div class="ss-stamp-fields" id="ss-stamp-fields">
+            <label class="ss-stamp-check"><input type="checkbox" data-stamp-field="name"><span>Model name</span></label>
+            <label class="ss-stamp-check"><input type="checkbox" data-stamp-field="stats"><span>Stats (parts · verts · mem)</span></label>
+            <label class="ss-stamp-check"><input type="checkbox" data-stamp-field="selection"><span>Selection counts</span></label>
+            <label class="ss-stamp-check"><input type="checkbox" data-stamp-field="timestamp"><span>Timestamp</span></label>
+            <label class="ss-stamp-check"><input type="checkbox" data-stamp-field="camera"><span>Camera (proj · FOV)</span></label>
+            <label class="ss-stamp-check"><input type="checkbox" data-stamp-field="scale"><span>Unit · scale · up-axis</span></label>
+            <label class="ss-stamp-check"><input type="checkbox" data-stamp-field="branding"><span>App branding</span></label>
+            <div class="ss-stamp-pos">
+              <span>Corner</span>
+              <div class="ss-stamp-pos-grid">
+                <button type="button" class="ss-stamp-pos-btn" data-stamp-pos="tl">Top-L</button>
+                <button type="button" class="ss-stamp-pos-btn" data-stamp-pos="tr">Top-R</button>
+                <button type="button" class="ss-stamp-pos-btn" data-stamp-pos="bl">Bot-L</button>
+                <button type="button" class="ss-stamp-pos-btn" data-stamp-pos="br">Bot-R</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>`,
     footHtml: `
       <button class="ss-cancel" type="button">Cancel</button>
@@ -5407,6 +5744,66 @@ function _openScreenshotDialog() {
   // user's last pick so a repeat shot is one click away.
   nameIn.value = _defaultScreenshotName();
 
+  // View-mode + hide-grid persistence — load on open, save on change.
+  const _VIEWGRID_KEY = 'stepopt-screenshot-viewgrid';
+  const _loadViewGrid = () => {
+    try {
+      const raw = localStorage.getItem(_VIEWGRID_KEY);
+      if (!raw) return { viewMode: 'current', hideGrid: false };
+      return Object.assign({ viewMode: 'current', hideGrid: false }, JSON.parse(raw));
+    } catch (_) { return { viewMode: 'current', hideGrid: false }; }
+  };
+  const _saveViewGrid = (o) => { try { localStorage.setItem(_VIEWGRID_KEY, JSON.stringify(o)); } catch (_) {} };
+  const _readViewGridFromUI = () => ({
+    viewMode: root.querySelector('.ss-vmode-btn.active')?.dataset.vmode || 'current',
+    hideGrid: !!root.querySelector('#ss-hide-grid')?.checked,
+  });
+  const _applyViewGridToUI = (o) => {
+    const want = o.viewMode || 'current';
+    root.querySelectorAll('.ss-vmode-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.vmode === want);
+    });
+    const hg = root.querySelector('#ss-hide-grid');
+    if (hg) hg.checked = !!o.hideGrid;
+  };
+  _applyViewGridToUI(_loadViewGrid());
+
+  // Stamp-options persistence — load saved choices on open, save on change.
+  // Keyed under localStorage so per-user prefs survive reloads.
+  const _STAMP_KEY = 'stepopt-screenshot-stamp';
+  const _loadStampOpts = () => {
+    try {
+      const raw = localStorage.getItem(_STAMP_KEY);
+      if (!raw) return { enabled: false, ..._STAMP_DEFAULTS };
+      const parsed = JSON.parse(raw);
+      return Object.assign({ enabled: true, ..._STAMP_DEFAULTS }, parsed);
+    } catch (_) { return { enabled: false, ..._STAMP_DEFAULTS }; }
+  };
+  const _saveStampOpts = (o) => { try { localStorage.setItem(_STAMP_KEY, JSON.stringify(o)); } catch (_) {} };
+  const _readStampOptsFromUI = () => {
+    const enabled = !!root.querySelector('#ss-overlay-stamp')?.checked;
+    const o = { enabled };
+    root.querySelectorAll('[data-stamp-field]').forEach(cb => {
+      o[cb.dataset.stampField] = !!cb.checked;
+    });
+    const activePos = root.querySelector('.ss-stamp-pos-btn.active');
+    o.position = (activePos?.dataset.stampPos) || 'bl';
+    return o;
+  };
+  const _applyStampOptsToUI = (o) => {
+    const master = root.querySelector('#ss-overlay-stamp');
+    if (master) master.checked = !!o.enabled;
+    root.querySelectorAll('[data-stamp-field]').forEach(cb => {
+      cb.checked = !!o[cb.dataset.stampField];
+    });
+    root.querySelectorAll('.ss-stamp-pos-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.stampPos === (o.position || 'bl'));
+    });
+    const fields = root.querySelector('#ss-stamp-fields');
+    if (fields) fields.classList.toggle('disabled', !o.enabled);
+  };
+  _applyStampOptsToUI(_loadStampOpts());
+
   // Bind handlers ONCE. _DraggablePopup.create returns the SAME instance on
   // re-open — without this guard each open stacks another listener, so save
   // would fire N times after N opens.
@@ -5421,6 +5818,37 @@ function _openScreenshotDialog() {
     wIn.addEventListener('input', _highlight);
     hIn.addEventListener('input', _highlight);
     cancelBtn.addEventListener('click', () => dlg.hide());
+
+    // Stamp toggle + field checkboxes: persist on every change and re-skin
+    // the sub-fields block (disabled appearance when the master is off).
+    const _persist = () => _saveStampOpts(_readStampOptsFromUI());
+    root.querySelector('#ss-overlay-stamp')?.addEventListener('change', (e) => {
+      const fields = root.querySelector('#ss-stamp-fields');
+      if (fields) fields.classList.toggle('disabled', !e.target.checked);
+      _persist();
+    });
+    root.querySelectorAll('[data-stamp-field]').forEach(cb => {
+      cb.addEventListener('change', _persist);
+    });
+    root.querySelectorAll('.ss-stamp-pos-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        root.querySelectorAll('.ss-stamp-pos-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _persist();
+      });
+    });
+    // View-mode segmented picker.
+    root.querySelectorAll('.ss-vmode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        root.querySelectorAll('.ss-vmode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _saveViewGrid(_readViewGridFromUI());
+      });
+    });
+    // Hide-grid toggle.
+    root.querySelector('#ss-hide-grid')?.addEventListener('change', () => {
+      _saveViewGrid(_readViewGridFromUI());
+    });
 
     saveBtn.addEventListener('click', async () => {
       const w = parseInt(wIn.value, 10);
@@ -5441,8 +5869,14 @@ function _openScreenshotDialog() {
       const oldLabel = saveBtn.textContent;
       saveBtn.textContent = 'Capturing…';
       try {
-        const stamp = !!root.querySelector('#ss-overlay-stamp')?.checked;
-        const blob = await _captureFrameAsBlob(w, h, { stamp });
+        const stampOpts = _readStampOptsFromUI();
+        const stamp = stampOpts.enabled;
+        const vg = _readViewGridFromUI();
+        const blob = await _captureFrameAsBlob(w, h, {
+          stamp, stampOpts,
+          viewMode: vg.viewMode,
+          hideGrid: vg.hideGrid,
+        });
         // No flash here on purpose — the shutter already fired when the
         // user pressed the camera button to open this dialog (see
         // _captureViewportScreenshot). Flashing again at save time would
@@ -5736,11 +6170,12 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
     return mesh;
   };
   // Quiet base for minor + major — they're context, not content. The axis
-  // mesh gets a much higher alpha so the X/Y cross at the origin stays a
-  // first-class scene reference even when the rest of the grid is faint.
+  // mesh used to ride at 0.55 alpha but that made the red/green origin
+  // cross feel heavier than the rest of the grid; dropped to 0.28 so it
+  // reads as a subtle reference rather than a hard line.
   const minorMesh = _mkMesh(posMinor, colMinor, 0.18);
   const majorMesh = _mkMesh(posMajor, colMajor, 0.18);
-  const axisMesh  = _mkMesh(posAxis,  colAxis,  0.55);
+  const axisMesh  = _mkMesh(posAxis,  colAxis,  0.28);
   // Render order: axis on top of major, major on top of minor — matters
   // when the lines visually overlap at the origin.
   minorMesh.renderOrder = 0;
@@ -5848,10 +6283,14 @@ function _makeShaderGrid(opts = {}) {
     const dMaj    = abs(fract(cellMaj.sub(0.5)).sub(0.5)).div(fwMaj);
     const aMajor  = float(1).sub(min(min(dMaj.x, dMaj.y), float(1)));
 
-    // Axis lines (world X=0 and Y=0)
+    // Axis lines (world X=0 and Y=0). The divisor `fwXY * N` is the radius
+    // (in pixels-equivalent) over which the alpha ramps from 1 → 0, so a
+    // SMALLER multiplier = narrower falloff = thinner-looking line. Was 2,
+    // now 0.9 — paired with the lower alpha below this makes the red/green
+    // origin cross a quiet reference instead of a heavy bar.
     const fwXY   = fwidth(xy);
-    const aAxisX = float(1).sub(min(abs(xy.y).div(fwXY.y.mul(2)), float(1)));
-    const aAxisY = float(1).sub(min(abs(xy.x).div(fwXY.x.mul(2)), float(1)));
+    const aAxisX = float(1).sub(min(abs(xy.y).div(fwXY.y.mul(0.9)), float(1)));
+    const aAxisY = float(1).sub(min(abs(xy.x).div(fwXY.x.mul(0.9)), float(1)));
 
     // Distance fade — centred on camera ground projection, updated each frame
     const dist = len(xy.sub(vec2(uCamX, uCamY)));
@@ -5870,7 +6309,9 @@ function _makeShaderGrid(opts = {}) {
     // axis lines are exempt so a horizon reference still reads in front and
     // side ortho views (where the XY plane is edge-on).
     const aGrid  = max(aMinor.mul(0.035), aMajor.mul(0.11)).mul(uAngleFade);
-    const aAxis  = max(aAxisX.mul(0.6), aAxisY.mul(0.6));
+    // Axis alpha dropped from 0.6 → 0.32 — pairs with the thinner line above
+    // for an overall quieter origin cross.
+    const aAxis  = max(aAxisX.mul(0.32), aAxisY.mul(0.32));
     const alpha  = max(aGrid, aAxis).clamp(0, 1).mul(fade);
 
     // Grid draws LAST (renderOrder:999) with depth-test enabled but no depth
@@ -6105,78 +6546,6 @@ function _applySceneScale() {
   state.partsRoot.scale.setScalar(state.sceneScale);
   state.partsRoot.updateMatrix();
   state.partsRoot.updateMatrixWorld(true);
-}
-
-function _applyOriginMarker() {
-  if (!scene) return;
-
-  // ── Scene origin (one big axes helper at world 0,0,0) ─────────────────
-  if (state.showOrigin) {
-    if (!state._originMarker) {
-      const ax = new THREE.AxesHelper(1);
-      ax.name = '_originMarker';
-      const k = Math.max(state.modelDiag * 0.05, 0.5);
-      ax.scale.setScalar(k);
-      // Origin lines should always read on top of geometry — depthTest off
-      // and a high renderOrder match the convention used elsewhere for
-      // gizmos/handles.
-      ax.material.depthTest = false;
-      ax.material.depthWrite = false;
-      ax.renderOrder = 800;
-      state._originMarker = ax;
-    }
-    if (!state._originMarker.parent) scene.add(state._originMarker);
-  } else if (state._originMarker?.parent) {
-    state._originMarker.parent.remove(state._originMarker);
-  }
-
-  // ── Per-group origin markers ──────────────────────────────────────────
-  // Each user group + each hierarchy group gets a smaller axes helper
-  // attached to its own THREE.Group container, so the marker tracks any
-  // transform applied to that group. Existing markers are torn down and
-  // rebuilt on every toggle so newly-created/dissolved groups stay in
-  // sync the next time the user flips the switch. (Live-tracking through
-  // group create/delete would need hooks into addUserGroup/removeUserGroup
-  // — skipped for now; toggle off+on refreshes.)
-  state._groupOriginMarkers = state._groupOriginMarkers || [];
-  for (const m of state._groupOriginMarkers) {
-    if (m.parent) m.parent.remove(m);
-    m.material?.dispose?.();
-    m.geometry?.dispose?.();
-  }
-  state._groupOriginMarkers = [];
-
-  if (!state.showOrigin) return;
-
-  const groupAxisScale = Math.max(state.modelDiag * 0.025, 0.3);
-  const _addGroupAxes = (parent) => {
-    if (!parent) return;
-    const ax = new THREE.AxesHelper(1);
-    ax.scale.setScalar(groupAxisScale);
-    ax.userData._isGroupOriginMarker = true;
-    ax.material.depthTest = false;
-    ax.material.depthWrite = false;
-    ax.material.transparent = true;
-    ax.material.opacity = 0.85;
-    ax.renderOrder = 800;
-    parent.add(ax);
-    state._groupOriginMarkers.push(ax);
-  };
-
-  // User groups (created via "Group selection") — ug.ref is the THREE.Group.
-  for (const ug of (state.userGroups || [])) {
-    if (ug?.ref) _addGroupAxes(ug.ref);
-  }
-
-  // Hierarchy groups from the imported STEP/GLB tree — node.obj3d is the
-  // captured THREE.Group/Object3D. Skip ones that aren't currently
-  // attached to the scene (could be detached by flatten/dissolve ops).
-  for (const node of (state.treeNodes || [])) {
-    if (node?.kind !== 'group' || !node.obj3d) continue;
-    let alive = false;
-    for (let n = node.obj3d; n; n = n.parent) if (n === scene) { alive = true; break; }
-    if (alive) _addGroupAxes(node.obj3d);
-  }
 }
 
 function _applyCameraProjection() {
@@ -6852,6 +7221,13 @@ function _wireTransformPanel() {
   const handle = (axis) => (e) => {
     const target = _transformTarget();
     if (!target) { _transformPanelRefresh(); return; }
+    // Locked parts must reject typed transform edits too — gizmo lock alone
+    // wouldn't be enough since the user can still type into the panel.
+    if (target.part?.locked) {
+      try { toast('Part is locked', target.part.name, 'warn', 2000); } catch (_) {}
+      _transformPanelRefresh();
+      return;
+    }
     const obj = target.obj;
     if (!obj || !obj.position || !obj.rotation || !obj.scale) {
       _transformPanelRefresh(); return;
@@ -7779,8 +8155,17 @@ function _rebuildTreeHierarchical() {
     for (const n of all) {
       while (stack.length && stack[stack.length - 1].depth >= n.depth) stack.pop();
       if (n.kind === 'group') {
-        if (!groupAnyVisible.has(n.id)) groupAnyVisible.set(n.id, false);
-        if (!groupAnyAlive.has(n.id))   groupAnyAlive.set(n.id, false);
+        // Cloner nodes get their visibility from the cloner Group itself,
+        // not from descendant parts. An empty cloner is still "visible" if
+        // the user hasn't toggled it off — otherwise a freshly-created
+        // standalone cloner would render with the eye-off icon, and the
+        // eye-click handler (which only walks descendants) couldn't flip
+        // it back on. Seed both maps with `true` so the empty-group hide
+        // and the dim treatment are both bypassed.
+        const isCloner = !!n.obj3d?.userData?.isCloner;
+        const clonerVisible = isCloner ? (n.obj3d.visible !== false) : false;
+        if (!groupAnyVisible.has(n.id)) groupAnyVisible.set(n.id, isCloner ? clonerVisible : false);
+        if (!groupAnyAlive.has(n.id))   groupAnyAlive.set(n.id, isCloner ? true : false);
         stack.push({ id: n.id, depth: n.depth });
       } else if (n.kind === 'part') {
         const p = getPart(n.partId);
@@ -7846,8 +8231,15 @@ function _rebuildTreeHierarchical() {
     // emptyGroupHidden: this group has no surviving (non-deleted) parts in
     // its subtree. Skip — phantom empty containers confuse users into
     // thinking delete didn't work.
+    //
+    // EXCEPTION: cloner nodes are valid even when empty (the user creates a
+    // standalone Cloner and then drags parts into it C4D-style — hiding the
+    // row before they can drop anything would make the feature unreachable).
+    // The pre-hook in cloner.js temporarily flips kind to 'group' during
+    // render, so we can't use kind to identify them — check the backing
+    // THREE.Group's userData.isCloner flag instead.
     let emptyGroupHidden = false;
-    if (n.kind === 'group' && groupAnyAlive.get(n.id) === false) emptyGroupHidden = true;
+    if (n.kind === 'group' && groupAnyAlive.get(n.id) === false && !n.obj3d?.userData?.isCloner) emptyGroupHidden = true;
     const hidden = searchHidden || collapseHidden || emptyGroupHidden;
     if (emitted < MAX) {
       const row = document.createElement('div');
@@ -7908,6 +8300,7 @@ function _rebuildTreeHierarchical() {
         row.dataset.partId = p.partId;
         const colorHex = '#' + p.originalColor.getHexString();
         const eye = p.visible ? `<i data-lucide="eye"></i>` : `<i data-lucide="eye-off"></i>`;
+        const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10);margin-right:4px">🔒</span>` : '';
         // Two sources of instance count: (a) hashCount captured at hierarchy
         // build time, (b) p.group from the live _autoInstanceFromGLB pass.
         // Both should agree but (b) is the authoritative live one.
@@ -7922,7 +8315,7 @@ function _rebuildTreeHierarchical() {
         row.innerHTML = indentHtml +
           `<span class="tree-expand-spacer"></span>` +
           `<span class="tree-typeicon ${iconCls}"><i data-lucide="${iconName}"></i></span>` +
-          `<span class="tree-label">${escapeHtml(n.name || _stripFrameSuffix(p.name))}${inst}</span>` +
+          `${lockIcon}<span class="tree-label">${escapeHtml(n.name || _stripFrameSuffix(p.name))}${inst}</span>` +
           `<span class="tree-meta">${fmtNum(p.triCount)} tri</span>` +
           `<span class="tree-iconcol">` +
             `<span class="tree-vis">${eye}</span>` +
@@ -8017,15 +8410,6 @@ function _instBadge(n) {
 
 // Collect every part-id descendant of a group node in state.treeNodes.
 // Returns partIds that are DIRECT children of groupId (n.parentId === groupId,
-// n.kind === 'part'). Does NOT include parts nested inside child sub-groups.
-// Used to anchor a group's gizmo/centroid at its own content — so moving a
-// child sub-group doesn't shift the parent group's displayed position or gizmo.
-function _treeGroupDirectPartIds(groupId) {
-  return (state.treeNodes || [])
-    .filter(n => n.kind === 'part' && n.parentId === groupId && n.partId != null)
-    .map(n => n.partId);
-}
-
 // Walks forward from the group's index until depth drops back to or below
 // the group's depth — that's the boundary of the group's subtree (treeNodes
 // is in DFS order). Returns the list of partIds, no group ids.
@@ -8280,6 +8664,7 @@ function applySelectionColors() {
   _selColorsRaf = requestAnimationFrame(() => {
     _selColorsRaf = 0;
     _applySelectionColorsImpl();
+    try { _updateVpHint(); } catch (_) {}
   });
 }
 // Hard caps on highlight counts. With thousands of selected parts, the cost
@@ -9124,8 +9509,11 @@ function refreshPropertiesPanel() {
     const tCls   = isInst ? 'inst' : 'part';
     const tIcon  = isInst ? 'copy' : 'box';
     const _safeName = escapeHtml(p.name);
+    const _lockBadge = p.locked
+      ? `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Locked — click to unlock" style="margin-left:6px;font-size:var(--fs-10);padding:1px 6px;border-radius:var(--r-sm);background:var(--wn-soft);color:var(--wn);border:1px solid var(--wn-line);cursor:pointer;user-select:none">🔒 Locked</span>`
+      : `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Click to lock this part" style="margin-left:6px;font-size:var(--fs-10);padding:1px 6px;border-radius:var(--r-sm);background:var(--s2);color:var(--tx3);border:1px solid var(--bd);cursor:pointer;user-select:none;opacity:.65">Lock</span>`;
     nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instanced part (×' + p.group.parts.length + ')' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
-               `<span class="prop-name" title="${_safeName}">${_safeName}</span>`;
+               `<span class="prop-name" title="${_safeName}">${_safeName}</span>${_lockBadge}`;
     const mat = _matOfPart(p);
     if (mat && !p.isPrimitive) {
       const label = _matLabel(mat);
@@ -10427,8 +10815,27 @@ function setViewMode(mode) {
     }
     m.needsUpdate = true;
   };
-  for (const m of state.materialByColor.values()) apply(m);
-  for (const g of state.instancedGroups) apply(g.instanced.material);
+  // Pool materials from THREE distinct sources so view-mode covers every
+  // mesh in the scene, not just imported STEP/GLB ones:
+  //   1. state.materialByColor — color-deduped pool from STEP/GLB import
+  //   2. state.instancedGroups — auto-instanced clusters' shared material
+  //   3. live part meshes' own materials — primitives (cube/sphere/etc.)
+  //      and cloner clones build their MeshStandardMaterial directly via
+  //      `new`, bypassing the pool. Without this third pass the
+  //      view-mode toggle silently skips every custom-added shape.
+  const seenMat = new Set();
+  const applyOnce = (m) => { if (!m || seenMat.has(m)) return; seenMat.add(m); apply(m); };
+  for (const m of state.materialByColor.values()) applyOnce(m);
+  for (const g of state.instancedGroups) applyOnce(g.instanced.material);
+  for (const p of state.parts) {
+    if (p.deleted || !p.mesh) continue;
+    p.mesh.traverse(o => {
+      if (!o.isMesh) return;
+      const mat = o.material;
+      if (Array.isArray(mat)) for (const m of mat) applyOnce(m);
+      else applyOnce(mat);
+    });
+  }
   ['vw-solid','vw-wire','vw-xray'].forEach(id => $(id)?.classList.remove('active'));
   $('vw-' + mode)?.classList.add('active');
   requestRender();
@@ -12949,7 +13356,6 @@ function _collectSceneState() {
       showBboxes:      state.showBboxes,
       threshold:       state.threshold,
       sizeMetricMode:  state.sizeMetricMode,
-      autoRotate:      state.autoRotate,
       bgMode:          state.bgMode,
       fog:             state.fog,
       fogNear:         state.fogNear,
@@ -13154,10 +13560,6 @@ function _applySceneState(s) {
     if (typeof v.highlightSmall === 'boolean') {
       state.highlightSmall = v.highlightSmall;
       const cb = $('toggle-highlight'); if (cb) cb.checked = v.highlightSmall;
-    }
-    if (typeof v.autoRotate === 'boolean') {
-      state.autoRotate = v.autoRotate;
-      const cb = $('toggle-rotate'); if (cb) cb.checked = v.autoRotate;
     }
     if (typeof v.bgMode === 'string' && v.bgMode !== state.bgMode) {
       try { setBackground(v.bgMode); } catch (_) {}
@@ -13453,27 +13855,6 @@ async function doExport({ format, merge, visibleOnly, scale=1, axis='z-up', orig
 function wireUI() {
   new ResizeObserver(onResize).observe($('canvas'));
   $('btn-fit').addEventListener('click', fitToView);
-  $('btn-reset').addEventListener('click', async () => {
-    // No source cached (camera-only mode for legacy state): just reset view.
-    if (!state._sourceFile) { camera.up.set(0,0,1); fitToView(); return; }
-    const editCount = (state.history?.length || 0)
-      + (state.parts?.filter(p => p.deleted).length || 0);
-    const detail = editCount > 0
-      ? `Discards every edit (${editCount} undo entr${editCount === 1 ? 'y' : 'ies'} + deletions, hierarchy changes, colors, merges, splits) and re-parses ${state._sourceFile.name}.`
-      : `Re-parses ${state._sourceFile.name} from scratch.`;
-    const ok = await appConfirm(detail, {
-      title: 'Revert to original model?',
-      okLabel: 'Revert',
-      cancelLabel: 'Keep edits',
-      danger: true,
-    });
-    if (!ok) return;
-    // Source file may be any supported mesh format — route through the same
-    // dispatcher used by drag-and-drop so revert works for FBX/OBJ/3MF/STL too.
-    const meshLoader = _loaderForName(state._sourceFile?.name);
-    if (meshLoader) meshLoader(state._sourceFile);
-    else loadGlbFile(state._sourceFile);
-  });
   $('btn-undo').addEventListener('click', () => undoLast());
   $('btn-redo')?.addEventListener('click', () => redoLast());
   $('btn-save-scene')?.addEventListener('click', () => { saveScene(); });
@@ -13492,25 +13873,12 @@ function wireUI() {
     $('export-menu')?.classList.remove('show');
     document.querySelector('.export-wrap')?.classList.remove('open');
   }
-  // Close every toolbar dropdown except (optionally) the one identified
-  // by the supplied id. Lets each open-handler ensure mutual exclusion
-  // — clicking Add closes Export, clicking Export closes Add, etc.
-  function _closeOtherToolbarMenus(except) {
-    if (except !== 'export-menu') {
-      $('export-menu')?.classList.remove('show');
-      document.querySelector('.export-wrap')?.classList.remove('open');
-    }
-    if (except !== 'add-prim-menu') {
-      $('add-prim-menu')?.classList.remove('show');
-      $('btn-add-prim')?.classList.remove('active');
-    }
-  }
   function _toggleExportMenu() {
     const menu = $('export-menu');
     const wrap = document.querySelector('.export-wrap');
     if (!menu || !wrap) return;
     const open = !menu.classList.contains('show');
-    if (open) _closeOtherToolbarMenus('export-menu');
+    if (open) _closeAllTopbarMenus('export-menu');
     menu.classList.toggle('show', open);
     wrap.classList.toggle('open', open);
   }
@@ -13738,7 +14106,7 @@ function wireUI() {
     _addPrimBtn.addEventListener('click', e => {
       e.stopPropagation();
       const willOpen = !_addPrimMenu.classList.contains('show');
-      if (willOpen) _closeOtherToolbarMenus('add-prim-menu');
+      if (willOpen) _closeAllTopbarMenus('add-prim-menu');
       _addPrimMenu.classList.toggle('show', willOpen);
       _addPrimBtn.classList.toggle('active', willOpen);
       if (willOpen) _populatePrimThumbs();
@@ -13979,7 +14347,12 @@ function wireUI() {
       const gid = parseInt(rawGid, 10);
       // Eye click on a folder → toggle visibility of every descendant part.
       // Matches Cinema 4D: any-visible → hide all, all-hidden → show all.
+      // Special case for cloners: when the cloner is empty (or its Group
+      // itself was hidden by the user via this same toggle previously),
+      // flip the cloner's own visibility instead of walking descendants.
       if (e.target.closest('.tree-vis')) {
+        const tn = (state.treeNodes || []).find(n => n.id === gid);
+        const isCloner = !!tn?.obj3d?.userData?.isCloner;
         const descendants = _treeGroupDescendants(gid);
         if (descendants.length) {
           let anyVisible = false;
@@ -13994,6 +14367,17 @@ function wireUI() {
             p.visible = next;
             if (p.mesh) p.mesh.visible = next;
           }
+          rebuildTree();
+          requestRender();
+        } else if (isCloner && tn.obj3d) {
+          // Empty cloner — toggle the Group's visibility so the eye icon
+          // round-trips and the user can hide/show the (currently empty)
+          // cloner container.
+          tn.obj3d.visible = !tn.obj3d.visible;
+          // Also sync the corresponding cloner part if we can find it, so
+          // applySelectionColors / save-scene round-trip the state.
+          const clonerPart = state.parts.find(p => p.isCloner && p.mesh === tn.obj3d && !p.deleted);
+          if (clonerPart) clonerPart.visible = tn.obj3d.visible;
           rebuildTree();
           requestRender();
         }
@@ -14135,6 +14519,22 @@ function wireUI() {
     }
   });
 
+  // Click the lock badge in the properties panel to toggle the part's lock
+  // state. Delegated on #prop-body since refreshPropertiesPanel rewrites its
+  // innerHTML on every selection change.
+  $('prop-body')?.addEventListener('click', e => {
+    const badge = e.target.closest('[data-lock-toggle]');
+    if (!badge) return;
+    e.stopPropagation();
+    const pid = parseInt(badge.dataset.lockToggle, 10);
+    if (Number.isNaN(pid)) return;
+    const p = getPart(pid);
+    if (!p) return;
+    p.locked = !p.locked;
+    try { rebuildTree?.(); } catch (_) {}
+    try { refreshPropertiesPanel?.(); } catch (_) {}
+  });
+
   // Double-click the part name in the properties panel to rename — same UX
   // as the tree. Delegated on #prop-body since refreshPropertiesPanel rewrites
   // its innerHTML on every selection change.
@@ -14214,10 +14614,6 @@ function wireUI() {
     if (!state.selected.size) return;
     deleteParts([...state.selected], 'Deleted selected');
   });
-  // btn-isolate exists in HTML in some builds but not all — guard with the
-  // same `?.` pattern as its siblings so wireUI doesn't crash when the
-  // button has been temporarily removed from the sidebar layout.
-  $('btn-isolate')?.addEventListener('click', isolateSelected);
   $('btn-show-all')?.addEventListener('click', showAllParts);
   $('btn-isolate-small')?.addEventListener('click', isolateFlagged);
   $('tree-summary')?.addEventListener('click', () => { $('tree')?.scrollTo({ top: 0, behavior: 'smooth' }); });
@@ -14232,7 +14628,6 @@ function wireUI() {
     if (inp) { inp.click(); e.stopPropagation(); }
   });
 
-  $('toggle-rotate').addEventListener('change', e => { state.autoRotate = e.target.checked; requestRender(); });
   $('toggle-highlight').addEventListener('change', e => {
     state.highlightSmall = e.target.checked;
     document.getElementById('tree')?.classList.toggle('flag-on', state.highlightSmall);
@@ -14334,9 +14729,17 @@ function wireUI() {
         pop.appendChild(row);
       });
       const btnRect = btn.getBoundingClientRect();
-      const vpRect = btn.closest('#vp-overlay')?.getBoundingClientRect() || { top: 0 };
+      const vpRect = btn.closest('#vp-overlay')?.getBoundingClientRect() || { top: 0, height: 600 };
       pop.style.display = 'block';
-      pop.style.top = (btnRect.top - vpRect.top - pop.offsetHeight / 2) + 'px';
+      // Center vertically on the button, but clamp so the popup never sticks
+      // off the top or bottom of the viewport. The button now lives at the
+      // top of the left cluster, so a naive "btnTop - popHeight/2" goes
+      // negative — clamp to a small viewport padding.
+      const popH = pop.offsetHeight;
+      const ideal = btnRect.top - vpRect.top - popH / 2;
+      const minTop = 8;
+      const maxTop = Math.max(8, (vpRect.height || window.innerHeight) - popH - 8);
+      pop.style.top = Math.max(minTop, Math.min(maxTop, ideal)) + 'px';
       _lucide?.();
     };
 
@@ -15040,17 +15443,6 @@ async function _buildBVHsForAllGeoms() {
 }
 
 // Dispose every BVH attached to a hash-cached geom. Called from clearModel.
-// Guard with optional chaining because the prototype patch may not have
-// installed (CDN failure path) — disposeBoundsTree is a no-op then.
-function _disposeAllBVHs() {
-  if (!state._bvhReady) return;
-  let n = 0;
-  for (const g of state.geomByHash.values()) {
-    if (g && g.boundsTree) { g.disposeBoundsTree?.(); n++; }
-  }
-  if (n) Log.debug(`disposed ${n} BVHs`, { tag: 'bvh' });
-}
-
 // Format-agnostic ingestion: walks meshes off a parsed scene root, builds
 // state.parts, hooks up materials, and triggers all the post-load UI work.
 // ── Primitive shapes ─────────────────────────────────────────────────────
@@ -15391,11 +15783,12 @@ function _primitiveDefaultName(kind) {
   })[kind] || kind;
 }
 // Rotate a primitive's freshly-built geometry so its "long" axis points along
-// the chosen world axis. cylinder/cone/capsule are Y-up out of three.js;
-// everything else has no inherent axis but still rotates as a whole so the
-// 'orientation' control reads consistently across all primitives.
+// the chosen world axis. cylinder/cone/capsule/sphere are Y-up out of three.js
+// (sphere's UV poles run along local Y, so its perceived orientation axis is
+// Y too); everything else has no inherent axis but still rotates as a whole
+// so the 'orientation' control reads consistently across all primitives.
 function _applyPrimitiveOrientation(kind, geom, orient) {
-  const axisOrigin = (kind === 'cylinder' || kind === 'cone' || kind === 'capsule') ? 'y' : 'z';
+  const axisOrigin = (kind === 'cylinder' || kind === 'cone' || kind === 'capsule' || kind === 'sphere') ? 'y' : 'z';
   if (orient === axisOrigin) return; // no-op fast path
   const HALF_PI = Math.PI / 2;
   // Map (origin → target) to a single elementary rotation.
@@ -15580,6 +15973,12 @@ function _addPrimitive(kind) {
 // move the mesh — position is preserved.
 function _rebuildPrimitiveGeometry(p) {
   if (!p?.isPrimitive || !p.mesh) return;
+  // Defensive: locked primitives can't be reshaped. UI greys out the panel,
+  // but a synthetic slider event (or a wired-up shortcut firing while the
+  // lock toggled mid-drag) could still reach here. Bail before any GPU
+  // buffer churn — that's what produces the setIndexBuffer error flood
+  // under WebGPU when the user toggled the lock mid-gesture.
+  if (p.locked) return;
   // Pause the render-on-demand loop while we swap the BufferGeometry
   // on the mesh. Without this guard the WebGPU backend can tick during
   // the assignment and hand setIndexBuffer the OLD index attribute it
@@ -15595,8 +15994,12 @@ function _rebuildPrimitiveGeometry(p) {
   // the guard, fasteners produce a flood of frame-failed warnings and the
   // mesh visibly breaks during drag.
   const _liveSizeDrag = !!state._primDragging && state._primDragKind === 'size';
-  const _wasPaused = state.renderPaused;
-  if (!_liveSizeDrag) state.renderPaused = true;
+  // Ownership flag: only the rebuild that ACTUALLY flips renderPaused=true is
+  // allowed to clear it. Without this, fast topology drags pile up rebuilds —
+  // rebuild N+1 captures renderPaused=true (just set by rebuild N) and on its
+  // rAF restores TRUE, leaving the renderer paused permanently after drag end.
+  const _ownsPause = !_liveSizeDrag && !state.renderPaused;
+  if (_ownsPause) state.renderPaused = true;
   const oldGeom = p.mesh.geometry;
   const newGeom = _primitiveGeometry(p.primitiveKind, p.primParams);
   _applyPrimitiveOrientation(p.primitiveKind, newGeom, p.primParams.orientation || 'z');
@@ -15636,7 +16039,9 @@ function _rebuildPrimitiveGeometry(p) {
     try { requestRender(); } catch (_) {}
   } else {
     requestAnimationFrame(() => {
-      state.renderPaused = _wasPaused;
+      // Only clear if we set it — see _ownsPause comment above. A later rebuild
+      // that re-pauses will run its own restore.
+      if (_ownsPause) state.renderPaused = false;
       try { requestRender(); } catch (_) {}
     });
   }
@@ -15723,13 +16128,23 @@ function _renderPrimitiveSection(p) {
       <span class="prim-val-wrap"><input type="number" class="prim-value" data-prim-value data-prim-size min="${min}" max="${max}" step="1" value="${Math.round(v)}"><span class="prim-unit">${escapeHtml(_ul)}</span></span>
     </div>`;
   }).join('');
+  // Locked primitives: render the section but disable interaction. Without
+  // this the user can drag a slider, the rebuild kicks off (bypassing the
+  // gizmo / transform-panel lock guards), and on a WebGPU device the rapid
+  // geometry swaps can race the buffer pipeline and produce a flood of
+  // `setIndexBuffer: parameter 1 is not of type GPUBuffer` failures.
+  const _lockedAttr = p.locked ? ' data-locked="1"' : '';
+  const _lockedStyle = p.locked ? 'opacity:.45;pointer-events:none' : '';
+  const _lockedHint  = p.locked
+    ? '<span style="font-size:var(--fs-10);color:var(--wn);font-weight:var(--fw-medium);margin-left:8px">🔒 Locked</span>'
+    : '';
   return `
-    <div class="prop-section prim-section">
+    <div class="prop-section prim-section"${_lockedAttr}>
       <div class="prop-section-title">
-        <span><i data-lucide="boxes"></i> Shape parameters</span>
-        <button type="button" class="prim-reset" title="Reset all parameters to defaults"><i data-lucide="rotate-ccw"></i></button>
+        <span><i data-lucide="boxes"></i> Shape parameters${_lockedHint}</span>
+        <button type="button" class="prim-reset" title="Reset all parameters to defaults"${p.locked ? ' disabled' : ''}><i data-lucide="rotate-ccw"></i></button>
       </div>
-      ${rows}
+      <div style="${_lockedStyle}">${rows}</div>
     </div>`;
 }
 function _wirePrimitiveSliders(rootEl, p) {
@@ -16028,7 +16443,11 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   // Replace mode: frame the loaded model. Import mode: don't yank the camera
   // away from whatever the user was looking at. Either way the import-settings
   // modal can suppress the framing (state._importFitOnLoad === false).
-  const fitOnLoad = state._importFitOnLoad !== false; state._importFitOnLoad = undefined;
+  // Layer two sources: per-file import-modal override (state._importFitOnLoad)
+  // AND the global Settings → Behavior → "Auto-fit on load" pref.
+  const fitOnLoad = (state._importFitOnLoad !== false)
+                 && (_Prefs.get('autoFitOnLoad') !== false);
+  state._importFitOnLoad = undefined;
   if (!importMode && fitOnLoad) fitToView();
   if (!importMode) state._loadedFilename = file.name;
   // Save-Scene marker only embedded in GLBs we exported ourselves; skip the
@@ -16679,10 +17098,19 @@ function wireAdvancedUI() {
     onChange: () => {},
   });
   $('btn-flag-sliver')?.addEventListener('click', () => flagSlivers(_aspScrub ? _aspScrub.getValue() : 20));
-  $('btn-select-regex')?.addEventListener('click', () => selectByRegex($('name-regex').value.trim()));
-  $('name-regex')?.addEventListener('keydown', e => { if (e.key === 'Enter') selectByRegex(e.target.value.trim()); });
+  // "By name" — no inline regex input exists in the HTML, so prompt for one.
+  // (Earlier versions used `$('name-regex')` which crashed because that field
+  // was never added to the markup. The Dialog.prompt helper is the canonical
+  // pattern for ask-the-user-for-a-string flows in this app.)
+  $('btn-select-regex')?.addEventListener('click', async () => {
+    const pat = await appPrompt('Regex to match part names (case-insensitive):', state._lastSelectRegex || '', {
+      title: 'Select by name', okLabel: 'Select',
+    });
+    if (pat == null) return;
+    state._lastSelectRegex = pat;
+    selectByRegex(pat.trim());
+  });
   $('btn-select-color')?.addEventListener('click', selectByColor);
-  $('btn-hide-selected')?.addEventListener('click', hideSelected);
   $('btn-recompute-normals')?.addEventListener('click', recomputeNormals);
   $('btn-recenter')?.addEventListener('click', recenterModel);
   $('btn-bake-transforms')?.addEventListener('click', bakeTransforms);
@@ -17338,7 +17766,7 @@ function _openMaterialEditor(info) {
       #_mat-editor-popup .dlg-head::after{display:none}
       #_mat-editor-popup .dlg-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
       #_mat-editor-popup .dlg-sub{display:none}
-      #_mat-editor-popup .dlg-head-icon{width:22px;height:22px;border-radius:var(--r-sm);background:rgba(107,141,255,.10);box-shadow:inset 0 0 0 1px rgba(107,141,255,.20)}
+      #_mat-editor-popup .dlg-head-icon{width:22px;height:22px;border-radius:var(--r-sm);background:var(--ac-tint-12);box-shadow:inset 0 0 0 1px var(--ac-tint-20)}
       #_mat-editor-popup .dlg-head-icon svg{width:12px;height:12px}
       #_mat-editor-popup .dlg-body[data-scroll="auto"]{padding:0}
       #_mat-editor-popup .dlg-foot{padding:8px 10px;background:rgba(0,0,0,.18);border-top:1px solid rgba(255,255,255,.06);box-shadow:none}
@@ -17421,8 +17849,8 @@ function _openMaterialEditor(info) {
       .mat-row-val .scrub-value:hover{background:transparent;color:var(--tx)}
       .mat-row-val .scrub.editing .scrub-value{background:transparent;color:var(--tx)}
       .mat-row-val .scrub-unit{font-size:var(--fs-10);color:var(--tx3)}
-      .mat-row-val .scrub-range::-webkit-slider-thumb{width:10px;height:10px;background:var(--ac);border:0;margin-top:-3px;box-shadow:0 0 0 2px rgba(107,141,255,.25),0 1px 2px rgba(0,0,0,.4)}
-      .mat-row-val .scrub-range::-moz-range-thumb{width:10px;height:10px;background:var(--ac);border:0;box-shadow:0 0 0 2px rgba(107,141,255,.25),0 1px 2px rgba(0,0,0,.4)}
+      .mat-row-val .scrub-range::-webkit-slider-thumb{width:10px;height:10px;background:var(--ac);border:0;margin-top:-3px;box-shadow:0 0 0 2px var(--ac-tint-25),0 1px 2px rgba(0,0,0,.4)}
+      .mat-row-val .scrub-range::-moz-range-thumb{width:10px;height:10px;background:var(--ac);border:0;box-shadow:0 0 0 2px var(--ac-tint-25),0 1px 2px rgba(0,0,0,.4)}
       .mat-row-val .scrub-range::-webkit-slider-runnable-track{height:3px}
       .mat-row-val .scrub-range::-moz-range-track{height:3px}
 
@@ -17437,12 +17865,12 @@ function _openMaterialEditor(info) {
       .mat-swatch:hover{border-color:var(--bd2)}
       .mat-color-hex-v2{flex:0 0 auto;width:11ch;min-width:0;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
       .mat-color-hex-v2:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
-      .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(107,141,255,.18)}
+      .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px var(--ac-tint-18)}
       .mat-color-hex-v2.invalid{border-color:var(--er);color:var(--er)}
       .mat-color-pct{flex:0 0 52px;width:52px;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
       .mat-color-pct::-webkit-outer-spin-button,.mat-color-pct::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
-      .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px rgba(107,141,255,.18)}
+      .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px var(--ac-tint-18)}
 
       /* Eyedropper button — sits flush with the colour picker.  */
       .mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
@@ -19358,8 +19786,8 @@ function _wireBboxButtonsFinal() {
     if (!ids.length) return toast('No parts to fit', '', 'warn');
     // Smart-fit ALL still prompts: destructive across every part, easy to
     // fire by accident.
-    if (!await appConfirm(`Smart-fit ALL ${ids.length} parts with low-poly proxies?\n\nEach part picks the best proxy automatically (tight box, OBB, or cylinder). This is heavy poly reduction and lossy. The per-selection "Smart fit" covers the common case.`,
-                          { title: 'Smart-fit ALL parts', okLabel: 'Smart-fit all', danger: true })) return;
+    if (!await appConfirmDestructive(`Smart-fit ALL ${ids.length} parts with low-poly proxies?\n\nEach part picks the best proxy automatically (tight box, OBB, or cylinder). This is heavy poly reduction and lossy. The per-selection "Smart fit" covers the common case.`,
+                          { title: 'Smart-fit ALL parts', okLabel: 'Smart-fit all' })) return;
     bboxifyParts(ids, 'Smart-fit all', 'smart').catch(_onFitError);
   });
   // ── Caret popover: choose mode + edit thresholds ────────────────────────
@@ -19467,9 +19895,6 @@ if (!state.selHistory) state.selHistory = [];
 if (state.selHistoryIdx === undefined) state.selHistoryIdx = -1;
 if (!state.sortMode) state.sortMode = 'load';
 
-// Mark a part as locked: not deletable, not selectable via picking
-function _isLocked(p) { return !!p?.locked; }
-
 // Override pickAtPointer to skip locked parts
 const _origPickAtPointer = pickAtPointer;
 pickAtPointer = function(ev) {
@@ -19531,7 +19956,6 @@ rebuildTree = function() {
     if (state.selected.has(p.partId)) node.classList.add('selected');
     if (!p.visible) node.classList.add('hidden-vis');
     if (p.flagged) node.classList.add('flagged');
-    if (p.locked) node.style.fontStyle = 'italic';
     node.dataset.partId = p.partId;
     const colorHex = '#' + p.originalColor.getHexString();
     const eye = p.visible
@@ -19600,13 +20024,32 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') _ctxClose();
 // "create group from rows" pathway (which already handles hier vs userGroups
 // modes correctly). Falls back to flat behaviour automatically.
 function _treeGroupSelected() {
+  // Include cloner selections — when the user clicks a cloner row, the
+  // cloner-click interceptor populates state.selected with the cloner's
+  // partId. Concat with any group-only selections (state.selectedGroupIds)
+  // so Ctrl+G can wrap empty user-groups too.
   const sel = [...state.selected];
-  if (sel.length < 1) { toast('Nothing selected', 'Select at least one part to group', 'warn'); return; }
+  const selGroupIds = state.selectedGroupIds ? [...state.selectedGroupIds] : [];
+  if (sel.length + selGroupIds.length < 1) { toast('Nothing selected', 'Select at least one part to group', 'warn'); return; }
   const treeEl = $('tree');
   const rows = [];
   for (const id of sel) {
-    const r = treeEl?.querySelector(`.tree-node[data-part-id="${id}"]`);
+    let r = treeEl?.querySelector(`.tree-node[data-part-id="${id}"]`);
+    if (!r) {
+      // Cloner parts are rendered with data-group-id (not data-part-id)
+      // because cloner.js swaps kind→'group' during render. Look the row
+      // up via the cloner's tree node id instead.
+      const p = getPart(id);
+      if (p?.isCloner && p.mesh) {
+        const tn = (state.treeNodes || []).find(n => n.kind === 'cloner' && n.obj3d === p.mesh);
+        if (tn) r = treeEl?.querySelector(`.tree-node[data-group-id="${tn.id}"]`);
+      }
+    }
     if (r) rows.push(r);
+  }
+  for (const gid of selGroupIds) {
+    const r = treeEl?.querySelector(`.tree-node[data-group-id="${gid}"]`);
+    if (r && !rows.includes(r)) rows.push(r);
   }
   if (!rows.length) { toast('No tree rows', 'Selected parts are not visible in the tree', 'warn'); return; }
   const ctx = (typeof _dndContext === 'function') ? _dndContext() : 'flat';
@@ -20331,7 +20774,6 @@ function splitAllParts(epsRel, method) {
 }
 
 // Slider value is the log10 of epsRel: -7 → 1e-7, -2 → 1e-2.
-function _splitEpsFromSlider(v) { return Math.pow(10, parseFloat(v)); }
 function _splitFmtEps(epsRel) { return epsRel >= 1e-3 ? epsRel.toFixed(4) : epsRel.toExponential(0); }
 
 // Count-only fast path of _splitMeshLooseParts — same union-find, but
@@ -21013,13 +21455,6 @@ function _isGizmoPivotActive() {
 // gizmo before mutating brings every selected mesh back under partsRoot via
 // state.partsRoot.attach(), which preserves world transform — the per-mesh
 // math then runs in a single consistent frame.
-function _detachGizmoIfPivoted() {
-  if (_isGizmoPivotActive()) {
-    _detachGizmo();
-    return true;
-  }
-  return false;
-}
 
 function applyExplode() {
   if (!state.parts.length) return;
@@ -21448,7 +21883,10 @@ function frameSelected() {
   const center = box.getCenter(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z, 0.0001);
   const fov = camera.fov * Math.PI / 180;
-  const dist = (maxDim / (2 * Math.tan(fov / 2))) * 1.6;
+  // 2.5× padding keeps ~40% viewport headroom around the selection so framing
+  // a small part inside a large assembly doesn't slam the camera onto its
+  // surface — you still see surrounding context.
+  const dist = (maxDim / (2 * Math.tan(fov / 2))) * 2.5;
   const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
   if (dir.lengthSq() < 1e-6) dir.set(0.7, -0.9, 0.5);
   dir.normalize();
@@ -21493,7 +21931,7 @@ function revealSelectedInTree() {
   node.scrollIntoView({ block: 'center', behavior: 'smooth' });
   const orig = node.style.background;
   node.style.transition = 'background .35s';
-  node.style.background = 'rgba(107,141,255,0.45)';
+  node.style.background = 'var(--ac-tint-45)';
   setTimeout(() => { node.style.background = orig; setTimeout(() => { node.style.transition = ''; }, 350); }, 700);
 }
 
@@ -21752,7 +22190,7 @@ function _initCustomSelects() {
       } else {
         // Frame / camera reset
         items.push({ icon: 'maximize',         label: 'Fit view',            kbd: 'F',     fn: fitToView });
-        items.push({ icon: 'rotate-ccw',       label: 'Reset camera',                       fn: () => $('btn-reset')?.click() });
+        items.push({ icon: 'rotate-ccw',       label: 'Revert to source file…',             fn: _revertToSourceFile });
         items.push('---');
         // Standard CAD views — same set as the top-center pill / Ctrl+1..4.
         items.push({ icon: 'video',            label: 'Camera view',         kbd: 'Ctrl+1', fn: () => _setPerspectiveView() });
@@ -21768,9 +22206,7 @@ function _initCustomSelects() {
         // Helper toggles — labels reflect the current state so the row reads
         // as the action that's about to happen rather than a status line.
         const gridOn = !!state.showGrid;
-        const rotOn  = !!state.autoRotate;
         items.push({ icon: gridOn ? 'eye-off' : 'eye',   label: gridOn ? 'Hide ground grid'    : 'Show ground grid',     kbd: 'G', fn: () => $('tg-grid')?.click() });
-        items.push({ icon: rotOn  ? 'pause'   : 'play',  label: rotOn  ? 'Stop auto-rotate'    : 'Start auto-rotate',              fn: () => { const t = $('toggle-rotate'); if (t) { t.checked = !t.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } } });
         items.push('---');
         // Selection helpers
         items.push({ icon: 'check',            label: 'Select all',          kbd: 'Ctrl+A', fn: () => $('sel-all')?.click() });
@@ -21778,6 +22214,7 @@ function _initCustomSelects() {
         items.push('---');
         // Output
         items.push({ icon: 'camera',           label: 'Save screenshot…',                   fn: () => _captureViewportScreenshot?.() });
+        items.push({ icon: 'aperture',         label: 'Render (path traced)…',              fn: () => window.openPathTraceModal?.() });
         items.push({ icon: 'save',             label: 'Save scene',                         fn: () => $('btn-save-scene')?.click() });
       }
       _ctxBuild(items, e.clientX, e.clientY);
@@ -21951,9 +22388,9 @@ async function mergeSelectedIntoOne() {
   const consumed = [];
 
   // The merged mesh will be added to state.partsRoot at IDENTITY transform.
-  // partsRoot is auto-rotated (state.autoRotate increments partsRoot.rotation.z
-  // every frame) — so its matrixWorld is rarely the identity. If we baked
-  // vertices in WORLD space and then put the merged mesh under partsRoot,
+  // partsRoot's matrixWorld may not be identity (fit-on-load offsets,
+  // recenter, etc). If we baked vertices in WORLD space and then put the
+  // merged mesh under partsRoot,
   // partsRoot.matrixWorld would rotate them a SECOND time, producing the
   // visible "merged result rotated 90°" symptom (especially on boxified
   // parts where the world-axis-aligned BoxGeometry makes the rotation
@@ -22533,7 +22970,6 @@ rebuildTree = function() {
     if (state.selected.has(p.partId)) node.classList.add('selected');
     if (!p.visible) node.classList.add('hidden-vis');
     if (p.flagged) node.classList.add('flagged');
-    if (p.locked) node.style.fontStyle = 'italic';
     node.dataset.partId = p.partId;
     const colorHex = '#' + p.originalColor.getHexString();
     const eye = p.visible
@@ -22797,7 +23233,7 @@ const _FlattenDialog = (() => {
       #_flat-dialog .flat-opts{display:flex;flex-direction:column;gap:var(--space-sm)}
       #_flat-dialog .flat-opt{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);cursor:pointer;transition:background .14s ease,border-color .14s ease}
       #_flat-dialog .flat-opt:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
-      #_flat-dialog .flat-opt.active{background:rgba(107,141,255,.10);border-color:rgba(107,141,255,.35)}
+      #_flat-dialog .flat-opt.active{background:var(--ac-tint-12);border-color:var(--ac-tint-35)}
       #_flat-dialog .flat-opt input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:2px 0 0 0;transition:border-color .14s ease,background .14s ease}
       #_flat-dialog .flat-opt input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
       #_flat-dialog .flat-opt input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
@@ -22809,7 +23245,7 @@ const _FlattenDialog = (() => {
       #_flat-dialog .flat-row{display:flex;align-items:center;gap:var(--space-md);margin-top:9px}
       #_flat-dialog .flat-row label{font-size:var(--fs-11);color:var(--tx3);font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
       #_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      #_flat-dialog .flat-row input[type=number]:focus{border-color:rgba(107,141,255,.55);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      #_flat-dialog .flat-row input[type=number]:focus{border-color:var(--ac-tint-55);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
       #_flat-dialog .flat-toggles{display:flex;flex-direction:column;gap:2px}
       #_flat-dialog .flat-tog{display:flex;align-items:center;gap:var(--space-lg);font-size:var(--fs-md);color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:7px;transition:background .14s ease,color .14s ease}
       #_flat-dialog .flat-tog:hover{background:rgba(255,255,255,.03);color:var(--tx)}
@@ -22818,7 +23254,7 @@ const _FlattenDialog = (() => {
       #_flat-dialog .flat-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
       #_flat-dialog .flat-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
       #_flat-dialog .flat-info{font-size:var(--fs-sm);color:var(--tx3);flex:1;min-width:0;text-align:left;letter-spacing:var(--tracking-snug)}
-      #_flat-dialog .dlg-foot #_flat-ok{box-shadow:0 4px 14px rgba(107,141,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
+      #_flat-dialog .dlg-foot #_flat-ok{box-shadow:0 4px 14px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
       #_flat-dialog .dlg-foot #_flat-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
     `;
     document.head.appendChild(s);
@@ -24074,15 +24510,15 @@ const _DraggablePopup = (() => {
       .dlg-popup .dlg-resize.sw{bottom:-3px;left:-3px;width:16px;height:16px;cursor:nesw-resize}
       .dlg-popup .dlg-resize.se{bottom:-3px;right:-3px;width:16px;height:16px;cursor:nwse-resize}
 
-      .dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-      .dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-      .dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-      .dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,rgba(107,141,255,.45),rgba(107,141,255,.10) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
+      .dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
+      .dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
+      .dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
+      .dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
 
       .dlg-popup .dlg-head{display:flex;align-items:center;gap:11px;padding:13px 14px 12px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;position:relative;cursor:grab;user-select:none}
       .dlg-popup .dlg-head:active{cursor:grabbing}
       .dlg-popup .dlg-head::after{content:'';position:absolute;left:16px;right:16px;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06) 30%,rgba(255,255,255,.06) 70%,transparent);pointer-events:none}
-      .dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,rgba(107,141,255,.22),rgba(107,141,255,.10));color:var(--ac);box-shadow:inset 0 0 0 1px rgba(107,141,255,.32),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
+      .dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,var(--ac-tint-20),var(--ac-tint-12));color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
       .dlg-popup .dlg-head-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
       .dlg-popup .dlg-head-titles{flex:1;min-width:0}
       .dlg-popup .dlg-title{font-size:var(--fs-xl);font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:-.01em;line-height:1.2}
@@ -24364,9 +24800,9 @@ const _BatchRenameDialog = (() => {
       .brn-row{display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap}
       .brn-row label{font-size:var(--fs-11);color:var(--tx3);min-width:60px;font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
       .brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=text]:focus{border-color:rgba(107,141,255,.55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=text]:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=number]:focus{border-color:rgba(107,141,255,.55);box-shadow:0 0 0 3px rgba(107,141,255,.18),inset 0 1px 0 rgba(0,0,0,.25)}
+      .brn-row input[type=number]:focus{border-color:var(--ac-tint-55);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-row input::placeholder{color:var(--tx3);opacity:.55}
       .brn-row select.mac-sel{padding:7px 9px;font-size:var(--fs-md)}
       .brn-tog{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-12);color:var(--tx2);cursor:pointer;user-select:none;padding:5px 10px 5px 8px;border-radius:7px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .14s ease,border-color .14s ease,color .14s ease}
@@ -24375,7 +24811,7 @@ const _BatchRenameDialog = (() => {
       .brn-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
       .brn-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
       .brn-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
-      .brn-tog:has(input[type=checkbox]:checked){background:rgba(107,141,255,.10);border-color:rgba(107,141,255,.30);color:var(--tx)}
+      .brn-tog:has(input[type=checkbox]:checked){background:var(--ac-tint-12);border-color:var(--ac-tint-35);color:var(--tx)}
       .brn-tog input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
       .brn-tog input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
       .brn-tog input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
@@ -24383,7 +24819,7 @@ const _BatchRenameDialog = (() => {
       .brn-section-title{font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wider);color:var(--tx3);margin:8px 0 6px 0}
       .brn-presets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-md)}
       .brn-preset{all:unset;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.025);cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:border-color .14s ease,background .14s ease,transform .14s ease}
-      .brn-preset:hover{border-color:rgba(107,141,255,.32);background:rgba(107,141,255,.06)}
+      .brn-preset:hover{border-color:var(--ac-tint-35);background:var(--ac-tint-08)}
       .brn-preset:active{transform:translateY(.5px)}
       .brn-preset .n{font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--tx)}
       .brn-preset .d{font-size:var(--fs-11);color:var(--tx3);font-family:var(--font-sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -24410,8 +24846,8 @@ const _BatchRenameDialog = (() => {
       .brn-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:var(--space-md);box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
       .brn-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:7px}
       .brn-foot #_brn-save{background:transparent;border-color:transparent;color:var(--tx3);padding:7px 4px;font-weight:var(--fw-medium)}
-      .brn-foot #_brn-save:hover{color:var(--ac);background:transparent;border-color:transparent;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(107,141,255,.5)}
-      .brn-foot #_brn-ok{box-shadow:0 4px 14px rgba(107,141,255,.30),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
+      .brn-foot #_brn-save:hover{color:var(--ac);background:transparent;border-color:transparent;text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--ac-tint-55)}
+      .brn-foot #_brn-ok{box-shadow:0 4px 14px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
       .brn-foot #_brn-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
       .brn-foot #_brn-ok:disabled:hover{filter:grayscale(.3) brightness(.85)}
       .brn-collapsible{border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);overflow:hidden;flex-shrink:0;transition:border-color .14s ease,background .14s ease}
@@ -24436,7 +24872,7 @@ const _BatchRenameDialog = (() => {
         transition:transform .2s cubic-bezier(.2,.85,.3,1.1);
       }
       .brn-collapsible-h:hover .chev{background:rgba(255,255,255,.07);color:var(--tx);opacity:1}
-      .brn-collapsible.open .chev{background:rgba(107,141,255,.15);color:var(--ac);opacity:1}
+      .brn-collapsible.open .chev{background:var(--ac-tint-15);color:var(--ac);opacity:1}
       .brn-collapsible.open .chev::before{transform:translateY(-1px) rotate(45deg)}
       .brn-collapsible-b{display:none;padding:10px 12px 12px 12px;border-top:1px solid rgba(255,255,255,.05);flex-direction:column;gap:var(--space-md)}
       .brn-collapsible.open .brn-collapsible-b{display:flex}
@@ -25561,6 +25997,7 @@ const _Measure = (() => {
     if (active === on) return;
     active = on;
     document.body.classList.toggle('msr-mode', active);
+    try { _updateVpHint(); } catch (_) {}
     // Show/hide all measurements with the mode toggle. Pixyz / Onshape
     // keep measurements visible after exiting pick mode, but the user
     // explicitly asked for the button to act as a show/hide switch:
@@ -26764,9 +27201,9 @@ rebuildTree = function() {
     .tree-node.tree-empty::after,#tree > div:not(.tree-node)::after{display:none}
     /* Finder-style inline rename input — sits inside .tree-label, inherits
        the row's font/colour, no chrome that would compete with the row. */
-    .tree-label-input{width:100%;background:rgba(255,255,255,.08);border:1px solid var(--ac);border-radius:3px;color:var(--tx);font:inherit;font-size:inherit;padding:1px 4px;margin:-2px 0;outline:none;box-shadow:0 0 0 2px rgba(107,141,255,.18)}
-    .tree-node.dnd-drop-into{outline:2px solid var(--ac);outline-offset:-2px;background:rgba(107,141,255,.14)!important;border-radius:3px}
-    .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px rgba(107,141,255,.6);pointer-events:none;z-index:50}
+    .tree-label-input{width:100%;background:rgba(255,255,255,.08);border:1px solid var(--ac);border-radius:3px;color:var(--tx);font:inherit;font-size:inherit;padding:1px 4px;margin:-2px 0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
+    .tree-node.dnd-drop-into{outline:2px solid var(--ac);outline-offset:-2px;background:var(--ac-tint-14)!important;border-radius:3px}
+    .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px var(--ac-tint-55);pointer-events:none;z-index:50}
     .tree-drop-line::before{content:'';position:absolute;left:2px;top:-4px;width:6px;height:6px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px var(--ac)}
     #tree-newgroup-zone{display:none!important}
     #_dnd-ghost{position:fixed;pointer-events:none;z-index:9999;background:rgba(28,28,28,.95);border:1px solid var(--ac);border-radius:var(--r-sm);padding:6px 10px;font-size:var(--fs-12);color:var(--tx);box-shadow:0 4px 18px rgba(0,0,0,.5);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -27166,13 +27603,20 @@ function _hierNodeIndex(row) {
   }
   if (row.dataset.groupId) {
     const id = parseInt(row.dataset.groupId, 10);
-    return all.findIndex(n => n.kind === 'group' && n.id === id);
+    // Match both 'group' and 'cloner' kinds — cloner rows render as
+    // .is-group (the kind is temporarily swapped during rebuildTree)
+    // and carry their nodeId in dataset.groupId, but the cloner kind is
+    // restored before any DnD code reads it.
+    return all.findIndex(n => (n.kind === 'group' || n.kind === 'cloner') && n.id === id);
   }
   return -1;
 }
 function _hierSubtreeRange(groupId) {
   const all = state.treeNodes || [];
-  const start = all.findIndex(n => n.kind === 'group' && n.id === groupId);
+  // Cloners are container-like — their child rows (sources) sit immediately
+  // after the cloner node at depth+1 and belong to the cloner's subtree for
+  // move / wrap / collapse purposes. Treat them identically to 'group' here.
+  const start = all.findIndex(n => (n.kind === 'group' || n.kind === 'cloner') && n.id === groupId);
   if (start < 0) return null;
   const baseDepth = all[start].depth;
   let end = all.length;
@@ -27265,7 +27709,10 @@ function _dndDoNewGroupFromRows(rows, ctx, explicitName) {
         if (p && p.mesh) obj = p.mesh;
       } else if (r.dataset.groupId) {
         const gid = parseInt(r.dataset.groupId, 10);
-        const tn = state.treeNodes.find(n => n.kind === 'group' && n.id === gid);
+        // Accept both 'group' and 'cloner' kinds — cloner rows are rendered
+        // as .is-group via the cloner.js pre/post-build hooks and need to
+        // be wrappable in a parent group just like a normal user group.
+        const tn = state.treeNodes.find(n => (n.kind === 'group' || n.kind === 'cloner') && n.id === gid);
         if (tn && tn.obj3d) obj = tn.obj3d;
       }
       if (!obj) continue;
@@ -27360,7 +27807,7 @@ function _dndCommitHier(rows, t) {
       beforeNodeId = targNode.id;
     } else {
       newParentId = targNode.parentId;
-      const range = (targNode.kind === 'group')
+      const range = (targNode.kind === 'group' || targNode.kind === 'cloner')
         ? _hierSubtreeRange(targNode.id)
         : { start: targIdx, end: targIdx + 1 };
       const after = all[range.end];
@@ -27378,13 +27825,91 @@ function _dndMoveHier(rows, newParentId, beforeNodeId) {
   const all = state.treeNodes;
   if (!all || !all.length) return;
 
+  // Cloner drag-OUT detection — for every dragged part that currently lives
+  // under a cloner node, if the new parent ISN'T that same cloner, drop the
+  // part from the cloner's source list. Without this, _clonerRebuild's
+  // "stray re-attach" path would yank the part right back into the Group
+  // and the user can't free it. Runs BEFORE the standard splice so the
+  // sources list and the tree splice end up consistent.
+  if (window._Cloner?.removeSources) {
+    const partRowToOldClonerId = new Map(); // partId → cloner node id
+    for (const r of rows) {
+      if (!r.dataset || !r.dataset.partId) continue;
+      const pid = parseInt(r.dataset.partId, 10);
+      if (Number.isNaN(pid)) continue;
+      const tn = all.find(n => n.kind === 'part' && n.partId === pid);
+      if (!tn || tn.parentId == null) continue;
+      const parent = all.find(n => n.id === tn.parentId);
+      if (parent && parent.kind === 'cloner' && parent.id !== newParentId) {
+        partRowToOldClonerId.set(pid, parent.id);
+      }
+    }
+    if (partRowToOldClonerId.size) {
+      const byCloner = new Map(); // clonerId → [partIds]
+      for (const [pid, cid] of partRowToOldClonerId) {
+        if (!byCloner.has(cid)) byCloner.set(cid, []);
+        byCloner.get(cid).push(pid);
+      }
+      for (const [cid, pids] of byCloner) {
+        const cnode = all.find(n => n.id === cid && n.kind === 'cloner');
+        if (!cnode) continue;
+        const cpart = state.parts.find(p => p.isCloner && p.mesh === cnode.obj3d && !p.deleted);
+        if (cpart) window._Cloner.removeSources(cpart, pids);
+      }
+    }
+  }
+
+  // Cloner drop-target — when the user drags parts (or whole groups) onto
+  // a cloner row, route through _Cloner.addSources. C4D-style "drag into
+  // cloner": dropped group rows are walked and every leaf part inside them
+  // gets registered as a source, so dropping a multi-part assembly
+  // ("Bolt" with head+thread) Just Works.
+  if (newParentId != null && window._Cloner?.addSources) {
+    const clonerNode = all.find(n => n.kind === 'cloner' && n.id === newParentId);
+    if (clonerNode) {
+      const cloner = state.parts.find(p => p.isCloner && p.mesh === clonerNode.obj3d && !p.deleted);
+      if (cloner) {
+        const draggedPartIds = [];
+        const seenIds = new Set();
+        const addPart = (id) => {
+          if (Number.isNaN(id) || id === cloner.partId || seenIds.has(id)) return;
+          const sp = getPart(id);
+          if (!sp || sp.deleted || !sp.mesh || sp.instancedMesh || sp.isCloner) return;
+          seenIds.add(id);
+          draggedPartIds.push(id);
+        };
+        for (const r of rows) {
+          if (!r.dataset) continue;
+          if (r.dataset.partId) {
+            addPart(parseInt(r.dataset.partId, 10));
+          } else if (r.dataset.groupId) {
+            // Group / cloner row → walk its descendants for parts.
+            const gid = parseInt(r.dataset.groupId, 10);
+            if (Number.isNaN(gid)) continue;
+            const descendants = (typeof _treeGroupDescendants === 'function') ? _treeGroupDescendants(gid) : [];
+            for (const pid of descendants) addPart(pid);
+          }
+        }
+        if (draggedPartIds.length) {
+          window._Cloner.addSources(cloner, draggedPartIds);
+        } else if (typeof toast === 'function') {
+          toast('Cloner', 'Nothing cloneable in the drop — instanced parts and cloners are skipped', 'warn');
+        }
+        return;
+      }
+    }
+  }
+
   const ranges = [];
   for (const r of rows) {
     const idx = _hierNodeIndex(r);
     if (idx < 0) continue;
     const n = all[idx];
     let range;
-    if (n.kind === 'group') range = _hierSubtreeRange(n.id);
+    // Groups AND cloners are containers — moving them must move their child
+    // rows too, otherwise depth-based hierarchy breaks (children would be
+    // orphaned at depth+1 but no parent at depth above them).
+    if (n.kind === 'group' || n.kind === 'cloner') range = _hierSubtreeRange(n.id);
     else range = { start: idx, end: idx + 1 };
     if (!range) continue;
     ranges.push({ ...range, rootNode: n });
@@ -27796,7 +28321,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-hue-cursor{position:absolute;top:-2px;width:6px;height:16px;border-radius:3px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.5);transform:translateX(-50%);pointer-events:none}
       .cp-row{display:flex;gap:var(--space-md);align-items:center;margin-top:10px}
       .cp-hex{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:5px;color:var(--tx);font:500 11.5px var(--font-sans);padding:5px 7px;outline:none;text-transform:uppercase}
-      .cp-hex:focus{border-color:var(--ac);background:rgba(107,141,255,.08)}
+      .cp-hex:focus{border-color:var(--ac);background:var(--ac-tint-08)}
       .cp-preview{width:24px;height:24px;border-radius:5px;border:1px solid rgba(255,255,255,.1);box-shadow:0 1px 3px rgba(0,0,0,.4);flex-shrink:0}
       .cp-presets{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--space-xs);margin-top:10px}
       .cp-preset{width:100%;aspect-ratio:1;border-radius:var(--r-xs);border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:transform 100ms var(--ease-out),border-color 100ms var(--ease-out)}
@@ -27804,11 +28329,11 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-actions{display:flex;gap:var(--space-sm);margin-top:12px;justify-content:flex-end}
       .cp-btn{padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:5px;color:var(--tx2);font-size:var(--fs-sm);font-weight:var(--fw-medium);cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
       .cp-btn:hover{background:rgba(255,255,255,.1);color:var(--tx)}
-      .cp-btn.primary{background:linear-gradient(180deg,var(--ac),#4f7ce0);color:#fff;border-color:transparent}
+      .cp-btn.primary{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:#fff;border-color:transparent}
       .cp-btn.primary:hover{filter:brightness(1.08)}
       #prop-body .prop-color,.mat-swatch{cursor:pointer}
-      #prop-body .prop-color:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px rgba(107,141,255,.45)}
-      .mat-swatch:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px rgba(107,141,255,.45)!important}
+      #prop-body .prop-color:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px var(--ac-tint-45)}
+      .mat-swatch:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px var(--ac-tint-45)!important}
     `;
     const style = document.createElement('style');
     style.textContent = css;

@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 0 . 6 . 0
+  O P T I M I S E R   ·   v 0 . 7 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
@@ -218,15 +218,15 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v0.6.0** — a C4D-style live Cloner, a Ctrl-click measure tool, per-group
-origin markers that follow your gizmo, a Spline-style two-panel Export
-modal, mesh simplification on the backend, and a CAD-correct mouse mapping.
+**v0.7.0** — a GPU path tracer wired to the viewport, a contextual hint
+strip that teaches the UI as you use it, a Cloner you can build C4D-style
+by dragging parts in, and a Revert-to-source escape hatch.
 
-- ![new][new] **Cloner** — C4D-style live instancing (Linear / Radial / Grid)
-- ![new][new] **Measure tool** — Ctrl-click two points, hover dot, Pixyz-style persistence
-- ![new][new] **Spline-style Export modal** — categorised left sidebar + sticky right panel
-- ![new][new] **Simplify + meshopt-by-default** — smaller GLBs out of the box
-- ![new][new] **CAD-correct mouse mapping** — middle-pan, Alt + RMB dolly
+- ![new][new] **Path tracer** — three-gpu-pathtracer aperture button, sample-accumulating modal, save via shared FSA picker
+- ![new][new] **Contextual hint strip** — bottom-center one-liners that change with selection / gizmo / measure mode
+- ![new][new] **Add-primitive long-hold picker** — click adds last-used shape, hold for 13-shape picker (now incl. hex bolt / nut / Allen / washer)
+- ![new][new] **Standalone Cloner** — drop an empty Cloner, drag parts into it C4D-style; `centerArray` + `hideSources` toggles
+- ![polish][polish] **Brand menu moved to top-left**, Cloner promoted to the top bar, status-bar / log-console layering cleaned up
 
 > **Pre-1.0 — breaking changes expected.** The CLI flags, in-app APIs,
 > and on-disk formats may shift between minor versions. `v1.0.0` will
@@ -234,11 +234,11 @@ modal, mesh simplification on the backend, and a CAD-correct mouse mapping.
 
 **Earlier**
 
+- **v0.6.0** — C4D-style live Cloner, Ctrl-click measure tool, per-group origin markers, Spline-style two-panel Export modal, `--simplify` + meshopt-by-default pipeline, CAD-correct mouse mapping.
 - **v0.5.0** — scene management (New scene, Import-merge, Scene settings modal), parametric-primitive polish with editable mm-snapped inputs, unit-aware transforms, banding-free dithered backgrounds, `/api/quit` clean shutdown.
 - **v0.4.0** — HDRI environment lighting, infinite floor grid + fog, parametric primitive insertion, top-center camera-view pill with `Ctrl/⌘+1..4`, borderless popup language, IBM-blue accent refresh.
 - **v0.3.0** — full material editor with shader-ball previews, scale gizmo + Shift-snap + live HUD, screenshot capture with custom resolutions, ortho Top/Front/Side viewport toggles, FBX legacy rescue.
 - **v0.2.0** — welcome modal, command palette (⌘K), shortcuts overlay, settings modal, section/clip planes, batch rename, hierarchy flatten/dissolve/ungroup, undo/redo, save scene.
-- **v0.1.0** — first public commit. STEP→GLB pipeline (XCAF, PCA instancing, Meshopt), WebGPU viewer, local server, one-click launchers.
 
 [Full changelog →](./CHANGELOG.md) · [Releases →](https://github.com/xpayn3/MeshOptimiser/releases)
 

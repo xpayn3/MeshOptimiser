@@ -312,7 +312,7 @@ body.resizing *{cursor:col-resize !important}
 .brand-right .brand-text{text-align:right}
 .brand-mark{position:relative;width:24px;height:24px;border-radius:var(--r-sm);background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 4px 14px var(--ac-tint-35);transition:box-shadow 260ms var(--ease-out),transform var(--dur-slower) var(--ease-out),filter 260ms var(--ease-out)}
 .brand-mark::before{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,0) 55%);opacity:0;transition:opacity 260ms var(--ease-out);pointer-events:none}
-.brand-mark::after{content:"";position:absolute;inset:-6px;border-radius:var(--r-2xl);background:radial-gradient(closest-side,var(--ac-tint-55),rgba(107,141,255,0) 70%);opacity:0;transition:opacity var(--dur-slower) var(--ease-out);pointer-events:none;z-index:-1}
+.brand-mark::after{content:"";position:absolute;inset:-6px;border-radius:var(--r-2xl);background:radial-gradient(closest-side,var(--ac-tint-55),transparent 70%);opacity:0;transition:opacity var(--dur-slower) var(--ease-out);pointer-events:none;z-index:-1}
 .brand-mark svg{width:16px;height:16px;stroke:white;fill:none;stroke-width:2;transition:transform var(--dur-slower) var(--ease-out),filter var(--dur-slower) var(--ease-out)}
 /* Brand button — replaces the app-name text. Click to open the brand-menu
    popover with About / GitHub / version / shortcuts. */
@@ -327,6 +327,9 @@ body.resizing *{cursor:col-resize !important}
 /* Brand menu — anchored to the brand button on the top-right. Right-aligned
    transform-origin so it grows out of the button corner. */
 .brand-menu{position:absolute;top:calc(100% + 8px);right:8px;width:300px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-xl);box-shadow:0 18px 48px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.4);padding:8px;z-index:var(--z-toolbar);opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 160ms var(--ease-out),transform 160ms var(--ease-out)}
+/* Left-anchored variant — brand button lives at the start of the top bar so
+   the dropdown opens from its left edge instead of off the right of the row. */
+.brand-left .brand-menu{right:auto;left:8px;transform-origin:top left}
 .brand-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 .brand-menu-head{display:flex;align-items:center;gap:var(--space-lg);padding:10px 10px 12px}
 .brand-menu-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 6px 20px var(--ac-tint-45);flex:0 0 auto}
@@ -870,6 +873,11 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 /* Top-center cluster — used by the camera-view pill so it floats centered
    above the GPU canvas without colliding with the corner toolbars. */
 .vpc.tc{top:8px;left:50%;transform:translateX(-50%);flex-direction:column;align-items:center;gap:var(--space-xs)}
+/* Bottom-center hint strip — small, subtle contextual tips that change with
+   the current selection / tool. Pointer-events:none so it never blocks the
+   gizmo or marquee under it. */
+.vpc.bc{bottom:10px;left:50%;transform:translateX(-50%);pointer-events:none;font-size:var(--fs-11);color:var(--tx3);letter-spacing:var(--tracking-wide);white-space:nowrap;opacity:.85;text-shadow:0 1px 2px rgba(0,0,0,.45)}
+.vpc.bc .vp-hint-sep{margin:0 var(--space-sm);opacity:.5}
 
 /* Camera-view pill: a single rounded button that exposes the current view
    (Cam / Top / Front / Side) and reveals a dropdown of the alternatives.
@@ -943,11 +951,16 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 }
 .vpb svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2}
 .vpb-sep{height:1px;width:22px;background:var(--bd);margin:2px auto}
-#vp-add-prim{--btn-tint:var(--ac)}
+#vp-add-prim{--btn-tint:var(--ac);position:relative}
 #vp-add-prim #vp-add-prim-img{width:20px;height:20px;display:block;object-fit:contain;pointer-events:none;user-select:none}
 #vp-add-prim:not(.has-thumb) #vp-add-prim-img{display:none}
 #vp-add-prim:not(.has-thumb)::before{content:"";display:block;width:14px;height:14px;border:1.5px solid currentColor;border-radius:3px;opacity:.85}
-.vp-prim-pop{position:absolute;right:38px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.45);padding:6px;min-width:160px;z-index:var(--z-toolbar)}
+/* Dropdown affordance — tiny triangle in the bottom-right corner so users
+   notice this button has a long-hold picker. Matches Figma / Photoshop tool
+   group convention. Pointer-events:none so the indicator doesn't eat clicks. */
+#vp-add-prim::after{content:"";position:absolute;right:3px;bottom:3px;width:0;height:0;border-left:4px solid transparent;border-top:4px solid currentColor;opacity:.55;pointer-events:none}
+#vp-add-prim:hover::after{opacity:.85}
+.vp-prim-pop{position:absolute;left:38px;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.45);padding:6px;min-width:160px;z-index:var(--z-toolbar)}
 .vp-prim-pop-item{all:unset;display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:var(--fs-sm);color:var(--tx);width:calc(100% - 20px)}
 .vp-prim-pop-item:hover{background:var(--ac-soft);color:var(--ac)}
 .vp-prim-pop-item img{width:22px;height:22px;flex:0 0 auto}
@@ -991,6 +1004,7 @@ body.msr-mode #canvas{cursor:crosshair}
 #tg-sun       {--btn-tint:var(--wn)}
 #tg-transform {--btn-tint:var(--ok)}
 #tg-screenshot{--btn-tint:#7dd3fc}
+#tg-render    {--btn-tint:#c4b5fd}
 .vp-info{background:var(--glass-soft);border:0;backdrop-filter:blur(10px);border-radius:var(--r-sm);padding:7px 11px;font-size:var(--fs-11);color:var(--tx2);line-height:var(--lh-relaxed);font-variant-numeric:tabular-nums;min-width:140px}
 .vp-info strong{color:var(--tx)}
 /* Triangle-count progress bar: 100% = starting tri count, shrinks as the
@@ -1168,7 +1182,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .loader-cancel button:hover{color:var(--er);border-color:var(--er-line)}
 
 /* Status bar */
-#sb{grid-column:1/-1;display:flex;align-items:center;padding:0 12px;background:var(--bg2);border-top:1px solid var(--bd);font-size:var(--fs-xs);color:var(--tx3);gap:11px;font-variant-numeric:tabular-nums;line-height:1}
+#sb{grid-column:1/-1;display:flex;align-items:center;padding:0 12px;background:var(--bg2);font-size:var(--fs-xs);color:var(--tx3);gap:11px;font-variant-numeric:tabular-nums;line-height:1;position:relative;z-index:calc(var(--z-toolbar) + 1);box-shadow:none}
 #sb .item{display:flex;gap:var(--space-xs);align-items:center}
 #sb strong{color:var(--tx2);font-weight:var(--fw-medium)}
 #sb .right{margin-left:auto}
@@ -1206,8 +1220,8 @@ body.msr-mode #canvas{cursor:crosshair}
 .fmt-grid{display:block}
 .fmt-card{all:unset;display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:var(--r-md);cursor:pointer;width:100%;box-sizing:border-box;transition:background 80ms}
 .fmt-card:hover{background:rgba(255,255,255,.05)}
-.fmt-card.selected{background:rgba(107,141,255,.12)}
-.fmt-card.selected .fmt-icon{background:rgba(107,141,255,.22);color:var(--ac)}
+.fmt-card.selected{background:var(--ac-tint-12)}
+.fmt-card.selected .fmt-icon{background:var(--ac-tint-20);color:var(--ac)}
 .fmt-card.selected .fmt-name{color:var(--ac)}
 .fmt-icon{width:28px;height:28px;background:var(--bg3);border-radius:var(--r-sm);display:grid;place-items:center;flex:0 0 28px;transition:background 80ms,color 80ms}
 .fmt-icon i{display:block;width:13px;height:13px}
@@ -1258,7 +1272,7 @@ body.msr-mode #canvas{cursor:crosshair}
 #file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);padding:12px 14px;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx);line-height:1.8}
 
 /* Global Log Console */
-#log-console{position:fixed;left:0;right:0;bottom:28px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:var(--z-toolbar);transform:translateY(calc(100% + 28px));transition:transform .22s cubic-bezier(.4,0,.2,1);font:11.5px/1.5 var(--font-sans)}
+#log-console{position:fixed;left:0;right:0;bottom:22px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px -16px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:var(--z-toolbar);transform:translateY(100%);transition:transform .22s cubic-bezier(.4,0,.2,1);font:11.5px/1.5 var(--font-sans)}
 #log-console.show{transform:translateY(0)}
 .lc-grip{position:absolute;top:-3px;left:0;right:0;height:6px;cursor:ns-resize;z-index:1}
 .lc-grip:hover{background:var(--ac-tint-15)}
@@ -1345,66 +1359,7 @@ body.msr-mode #canvas{cursor:crosshair}
 <div id="app">
 
   <header id="tb">
-    <div class="export-wrap" id="file-menu-wrap">
-      <button class="tbtn primary" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="File menu (New / Open / Import / Save / Scene settings)"><i data-lucide="file"></i>File <span class="caret"><i data-lucide="chevron-down"></i></span></button>
-      <div id="file-menu" class="export-menu" style="min-width:260px">
-        <button class="export-menu-item" data-file-cmd="new"><span class="fmt"><i data-lucide="file-plus" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>New scene</span><span class="hint">Ctrl N</span></button>
-        <button class="export-menu-item" data-file-cmd="open"><span class="fmt"><i data-lucide="folder-open" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Open…</span><span class="hint">Ctrl O</span></button>
-        <button class="export-menu-item" data-file-cmd="import"><span class="fmt"><i data-lucide="file-input" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Import…</span><span class="hint">Ctrl Shift O</span></button>
-        <div class="export-menu-sep"></div>
-        <button class="export-menu-item" data-file-cmd="save"><span class="fmt"><i data-lucide="save" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Save scene…</span><span class="hint">Ctrl S</span></button>
-        <button class="export-menu-item" data-file-cmd="export"><span class="fmt"><i data-lucide="download" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Export…</span></button>
-        <div class="export-menu-sep"></div>
-        <button class="export-menu-item" data-file-cmd="scene-settings"><span class="fmt"><i data-lucide="sliders-horizontal" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Scene settings…</span><span class="hint">Ctrl ;</span></button>
-        <button class="export-menu-item" data-file-cmd="welcome"><span class="fmt"><i data-lucide="home" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Welcome screen</span></button>
-        <div class="export-menu-sep"></div>
-        <button class="export-menu-item" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
-      </div>
-    </div>
-    <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
-    <button class="tbtn" id="btn-fit" disabled><i data-lucide="maximize"></i>Fit</button>
-    <button class="tbtn" id="btn-reset" disabled><i data-lucide="rotate-ccw"></i>Revert</button>
-    <div class="add-prim-wrap" style="position:relative;display:inline-block">
-      <button class="tbtn" id="btn-add-prim" title="Add a primitive shape (Cube, Sphere, Cylinder, Torus, Cone, Plane, Torus-knot)"><i data-lucide="plus-square"></i>Add <span class="caret"><i data-lucide="chevron-down"></i></span></button>
-      <div id="add-prim-menu" class="export-menu" style="min-width:200px">
-        <button class="export-menu-item" data-prim="cube"><span class="fmt">Cube</span></button>
-        <button class="export-menu-item" data-prim="sphere"><span class="fmt">Sphere</span></button>
-        <button class="export-menu-item" data-prim="cylinder"><span class="fmt">Cylinder</span></button>
-        <button class="export-menu-item" data-prim="cone"><span class="fmt">Cone</span></button>
-        <button class="export-menu-item" data-prim="torus"><span class="fmt">Torus</span></button>
-        <button class="export-menu-item" data-prim="plane"><span class="fmt">Plane</span></button>
-        <button class="export-menu-item" data-prim="capsule"><span class="fmt">Capsule</span></button>
-        <button class="export-menu-item" data-prim="icosahedron"><span class="fmt">Icosahedron</span></button>
-        <button class="export-menu-item" data-prim="dodecahedron"><span class="fmt">Dodecahedron</span></button>
-        <div class="export-menu-sep"></div>
-        <button class="export-menu-item" data-prim="hexbolt"><span class="prim-text"><span class="fmt">Hex bolt</span><span class="prim-sub">DIN 933</span></span></button>
-        <button class="export-menu-item" data-prim="hexnut"><span class="prim-text"><span class="fmt">Hex nut</span><span class="prim-sub">DIN 934</span></span></button>
-        <button class="export-menu-item" data-prim="allen"><span class="prim-text"><span class="fmt">Socket head screw</span><span class="prim-sub">DIN 912</span></span></button>
-        <button class="export-menu-item" data-prim="washer"><span class="prim-text"><span class="fmt">Washer</span><span class="prim-sub">DIN 125</span></span></button>
-      </div>
-    </div>
-    <button class="tbtn" id="btn-cloner" title="Wrap the current selection in a live C4D-style cloner (Linear / Radial / Grid)" disabled><i data-lucide="copy"></i>Cloner</button>
-    <div class="divider"></div>
-    <button class="tbtn" id="btn-undo" disabled><i data-lucide="undo-2"></i>Undo</button>
-    <button class="tbtn" id="btn-redo" disabled><i data-lucide="redo-2"></i>Redo</button>
-    <div class="export-wrap">
-      <button class="tbtn" id="btn-export" disabled><i data-lucide="download"></i>Export <span class="caret"><i data-lucide="chevron-down"></i></span></button>
-      <div id="export-menu" class="export-menu">
-        <button class="export-menu-item" data-fmt="glb"><span class="fmt">GLB</span><span class="hint">Best for web &amp; C4D</span></button>
-        <button class="export-menu-item" data-fmt="gltf"><span class="fmt">GLTF</span><span class="hint">JSON glTF 2.0</span></button>
-        <button class="export-menu-item" data-fmt="fbx"><span class="fmt">FBX</span><span class="hint">Blender, Maya, Unreal</span></button>
-        <button class="export-menu-item" data-fmt="usdz"><span class="fmt">USDZ</span><span class="hint">Apple Quick Look</span></button>
-        <button class="export-menu-item" data-fmt="obj"><span class="fmt">OBJ</span><span class="hint">Wavefront, universal</span></button>
-        <button class="export-menu-item" data-fmt="stl"><span class="fmt">STL</span><span class="hint">3D printing</span></button>
-        <button class="export-menu-item" data-fmt="ply"><span class="fmt">PLY</span><span class="hint">Geometry + colors</span></button>
-        <div class="export-menu-sep"></div>
-        <button class="export-menu-item" data-fmt="csv"><span class="fmt">CSV</span><span class="hint">Parts list (BOM)</span></button>
-      </div>
-    </div>
-    <button class="tbtn" id="btn-save-scene" disabled style="display:none"><i data-lucide="save"></i>Save Scene</button>
-    <div class="spacer"></div>
-    <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="font-size:var(--fs-sm);padding:4px 22px 4px 8px;min-width:80px"><option value="webgpu" data-logo="assets/webgpu.svg">WebGPU</option><option value="webgl2" data-logo="assets/webgl.png">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
-    <div class="brand brand-right">
+    <div class="brand brand-left">
       <button class="brand-btn" id="btn-brand" aria-haspopup="menu" aria-expanded="false">
         <span class="brand-mark"><i data-lucide="zap"></i></span>
       </button>
@@ -1415,18 +1370,18 @@ body.msr-mode #canvas{cursor:crosshair}
             <div class="brand-menu-title">STEP Optimizer</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.6.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.7.0</div>
         </div>
         <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / GLTF models in the browser. Real-time WebGPU rendering, lossless edits and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.6.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.7.0</span></div>
           <ul>
-            <li>Cloner — C4D-style live instancing (Linear / Radial / Grid)</li>
-            <li>Measure tool — Ctrl-click two points, hover dot, Pixyz-style persistence</li>
-            <li>Export modal — Spline-style two-panel redesign with categorised formats</li>
-            <li>Pipeline — <code>--simplify</code> + meshopt-by-default for smaller GLBs</li>
-            <li>Camera — CAD-correct mouse mapping (middle-pan, Alt + RMB dolly)</li>
+            <li>Path tracer — aperture button, GPU sample-accumulating render modal</li>
+            <li>Contextual hint strip — bottom-center tips that change with selection &amp; tool</li>
+            <li>Add-primitive — click repeats last shape, hold for 13-shape picker</li>
+            <li>Standalone Cloner — drag parts into an empty Cloner C4D-style</li>
+            <li>Brand menu moved to top-left, Cloner promoted to the top bar</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -1455,6 +1410,67 @@ body.msr-mode #canvas{cursor:crosshair}
         </div>
       </div>
     </div>
+    <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
+    <div class="export-wrap" id="file-menu-wrap">
+      <button class="tbtn" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="File menu (New / Open / Import / Save / Scene settings)"><i data-lucide="file"></i>File <span class="caret"><i data-lucide="chevron-down"></i></span></button>
+      <div id="file-menu" class="export-menu" style="min-width:260px">
+        <button class="export-menu-item" data-file-cmd="new"><span class="fmt"><i data-lucide="file-plus" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>New scene</span><span class="hint">Ctrl N</span></button>
+        <button class="export-menu-item" data-file-cmd="open"><span class="fmt"><i data-lucide="folder-open" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Open…</span><span class="hint">Ctrl O</span></button>
+        <button class="export-menu-item" data-file-cmd="import"><span class="fmt"><i data-lucide="file-input" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Import…</span><span class="hint">Ctrl Shift O</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-file-cmd="save"><span class="fmt"><i data-lucide="save" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Save scene…</span><span class="hint">Ctrl S</span></button>
+        <button class="export-menu-item" data-file-cmd="export"><span class="fmt"><i data-lucide="download" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Export…</span></button>
+        <button class="export-menu-item" data-file-cmd="revert" title="Discards every edit and re-parses the source file"><span class="fmt"><i data-lucide="rotate-ccw" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Revert to source…</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-file-cmd="scene-settings"><span class="fmt"><i data-lucide="sliders-horizontal" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Scene settings…</span><span class="hint">Ctrl ;</span></button>
+        <button class="export-menu-item" data-file-cmd="welcome"><span class="fmt"><i data-lucide="home" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Welcome screen</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
+      </div>
+    </div>
+    <button class="tbtn" id="btn-fit" disabled><i data-lucide="maximize"></i>Fit</button>
+    <div class="add-prim-wrap" style="position:relative;display:inline-block">
+      <button class="tbtn" id="btn-add-prim" title="Add a primitive shape (Cube, Sphere, Cylinder, Torus, Cone, Plane, Torus-knot)"><i data-lucide="plus-square"></i>Add <span class="caret"><i data-lucide="chevron-down"></i></span></button>
+      <div id="add-prim-menu" class="export-menu" style="min-width:200px">
+        <button class="export-menu-item" data-prim="cube"><span class="fmt">Cube</span></button>
+        <button class="export-menu-item" data-prim="sphere"><span class="fmt">Sphere</span></button>
+        <button class="export-menu-item" data-prim="cylinder"><span class="fmt">Cylinder</span></button>
+        <button class="export-menu-item" data-prim="cone"><span class="fmt">Cone</span></button>
+        <button class="export-menu-item" data-prim="torus"><span class="fmt">Torus</span></button>
+        <button class="export-menu-item" data-prim="plane"><span class="fmt">Plane</span></button>
+        <button class="export-menu-item" data-prim="capsule"><span class="fmt">Capsule</span></button>
+        <button class="export-menu-item" data-prim="icosahedron"><span class="fmt">Icosahedron</span></button>
+        <button class="export-menu-item" data-prim="dodecahedron"><span class="fmt">Dodecahedron</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-prim="hexbolt"><span class="prim-text"><span class="fmt">Hex bolt</span><span class="prim-sub">DIN 933</span></span></button>
+        <button class="export-menu-item" data-prim="hexnut"><span class="prim-text"><span class="fmt">Hex nut</span><span class="prim-sub">DIN 934</span></span></button>
+        <button class="export-menu-item" data-prim="allen"><span class="prim-text"><span class="fmt">Socket head screw</span><span class="prim-sub">DIN 912</span></span></button>
+        <button class="export-menu-item" data-prim="washer"><span class="prim-text"><span class="fmt">Washer</span><span class="prim-sub">DIN 125</span></span></button>
+      </div>
+    </div>
+    <button class="tbtn" id="btn-cloner" title="Create a Cloner — wraps the selection if any, otherwise an empty Cloner you drag parts into"><i data-lucide="copy"></i>Cloner</button>
+    <div class="divider"></div>
+    <button class="tbtn" id="btn-undo" disabled><i data-lucide="undo-2"></i>Undo</button>
+    <button class="tbtn" id="btn-redo" disabled><i data-lucide="redo-2"></i>Redo</button>
+    <div class="export-wrap">
+      <button class="tbtn" id="btn-export" disabled><i data-lucide="download"></i>Export <span class="caret"><i data-lucide="chevron-down"></i></span></button>
+      <div id="export-menu" class="export-menu">
+        <button class="export-menu-item" data-fmt="glb"><span class="fmt">GLB</span><span class="hint">Best for web &amp; C4D</span></button>
+        <button class="export-menu-item" data-fmt="gltf"><span class="fmt">GLTF</span><span class="hint">JSON glTF 2.0</span></button>
+        <button class="export-menu-item" data-fmt="fbx"><span class="fmt">FBX</span><span class="hint">Blender, Maya, Unreal</span></button>
+        <button class="export-menu-item" data-fmt="usdz"><span class="fmt">USDZ</span><span class="hint">Apple Quick Look</span></button>
+        <button class="export-menu-item" data-fmt="obj"><span class="fmt">OBJ</span><span class="hint">Wavefront, universal</span></button>
+        <button class="export-menu-item" data-fmt="stl"><span class="fmt">STL</span><span class="hint">3D printing</span></button>
+        <button class="export-menu-item" data-fmt="ply"><span class="fmt">PLY</span><span class="hint">Geometry + colors</span></button>
+        <div class="export-menu-sep"></div>
+        <button class="export-menu-item" data-fmt="csv"><span class="fmt">CSV</span><span class="hint">Parts list (BOM)</span></button>
+      </div>
+    </div>
+    <button class="tbtn icon-only" id="tg-screenshot" title="Capture viewport screenshot (share / copy / download)"><i data-lucide="camera"></i></button>
+    <button class="tbtn icon-only" id="tg-render" title="Render this view with a GPU path tracer (slow, beautiful)"><i data-lucide="aperture"></i></button>
+    <button class="tbtn" id="btn-save-scene" disabled style="display:none"><i data-lucide="save"></i>Save Scene</button>
+    <div class="spacer"></div>
+    <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="font-size:var(--fs-sm);padding:4px 22px 4px 8px;min-width:80px"><option value="webgpu" data-logo="assets/webgpu.svg">WebGPU</option><option value="webgl2" data-logo="assets/webgl.png">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
   </header>
 
   <aside id="sidebar-left" class="panel">
@@ -1519,15 +1535,14 @@ body.msr-mode #canvas{cursor:crosshair}
     <div id="gizmo-hud" aria-hidden="true"></div>
     <div id="vp-overlay">
       <div class="vpc tl">
-        <button class="vpb" id="vw-solid" data-mode="solid" title="Solid (1)"><i data-lucide="box"></i></button>
-        <button class="vpb" id="vw-wire" data-mode="wire" title="Wireframe (2)"><svg viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v10"/></svg></button>
-        <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
-        <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — colour parts by tri density (4)"><i data-lucide="flame"></i></button>
-        <div style="height:10px"></div>
+        <button class="vpb" id="vp-add-prim" title="Add object — click for cube, hold for shape picker"><img id="vp-add-prim-img" alt="" draggable="false"></button>
+        <div id="vp-add-pop" class="vp-prim-pop" style="display:none"></div>
+        <div class="vpb-sep"></div>
         <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to 10 units"><i data-lucide="move"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
         <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
-        <div style="height:10px"></div>
+        <button class="vpb" id="tg-transform" title="Toggle transform panel (position / rotation / size)"><i data-lucide="move-3d"></i></button>
+        <div class="vpb-sep"></div>
         <button class="vpb" id="msr-toggle" title="Measure (M) — right-click two points to measure · left-drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
       </div>
       <div class="vpc tc" id="vp-view-pill-wrap">
@@ -1543,16 +1558,17 @@ body.msr-mode #canvas{cursor:crosshair}
         </div>
       </div>
       <div class="vpc tr">
-        <button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button>
-        <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
-        <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
-        <button class="vpb" id="tg-materials" title="Materials in this file"><i data-lucide="palette"></i></button>
-        <button class="vpb" id="tg-sun" title="Toggle sun direction gizmo"><i data-lucide="sun"></i></button>
-        <button class="vpb" id="tg-transform" title="Toggle transform panel (position / rotation / size)"><i data-lucide="move-3d"></i></button>
-        <button class="vpb" id="tg-screenshot" title="Capture viewport screenshot (share / copy / download)"><i data-lucide="camera"></i></button>
+        <button class="vpb" id="vw-solid" data-mode="solid" title="Solid (1)"><i data-lucide="box"></i></button>
+        <button class="vpb" id="vw-wire" data-mode="wire" title="Wireframe (2)"><svg viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v10"/></svg></button>
+        <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
+        <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — colour parts by tri density (4)"><i data-lucide="flame"></i></button>
         <div class="vpb-sep"></div>
-        <button class="vpb" id="vp-add-prim" title="Add object — click for cube, hold for shape picker"><img id="vp-add-prim-img" alt="" draggable="false"></button>
-        <div id="vp-add-pop" class="vp-prim-pop" style="display:none"></div>
+        <button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button>
+        <button class="vpb" id="tg-sun" title="Toggle sun direction gizmo"><i data-lucide="sun"></i></button>
+        <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
+        <div class="vpb-sep"></div>
+        <button class="vpb" id="tg-materials" title="Materials in this file"><i data-lucide="palette"></i></button>
+        <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
         <div id="vp-materials-pop">
           <div class="mat-actions">
             <div class="mat-actions-icons">
@@ -1580,7 +1596,6 @@ body.msr-mode #canvas{cursor:crosshair}
         <div id="vp-settings-pop">
           <div class="pop-section">
             <div class="pop-section-title">Display</div>
-            <div class="toggle"><span>Auto-rotate</span><label><input type="checkbox" id="toggle-rotate"><span class="switch"></span></label></div>
             <!-- Highlight-small lives on the viewport button (tg-hilite). The
                  checkbox is kept hidden so existing state-mirror code that
                  reads/writes #toggle-highlight (scene save/restore, etc) still
@@ -1657,8 +1672,8 @@ body.msr-mode #canvas{cursor:crosshair}
           <svg id="sun-gizmo-svg" viewBox="-44 -44 88 88">
             <defs>
               <radialGradient id="sun-dome-grad" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="#1f2734" stop-opacity=".75"/>
-                <stop offset="80%" stop-color="#0d1219" stop-opacity=".55"/>
+                <stop offset="0%" stop-color="#252525" stop-opacity=".75"/>
+                <stop offset="80%" stop-color="#0d0d0d" stop-opacity=".55"/>
                 <stop offset="100%" stop-color="#000" stop-opacity=".30"/>
               </radialGradient>
               <radialGradient id="sun-dot-grad" cx="50%" cy="50%" r="50%">
@@ -1687,6 +1702,7 @@ body.msr-mode #canvas{cursor:crosshair}
         <div id="vp-fps" class="vp-stat" style="display:none">— fps</div>
         <div id="vp-stats" class="vp-stat" style="display:none">— calls</div>
       </div>
+      <div class="vpc bc" id="vp-hint"></div>
     </div>
 
     <div id="loader">
@@ -2627,13 +2643,17 @@ body.msr-mode #canvas{cursor:crosshair}
     "three/webgpu": "https://unpkg.com/three@0.172.0/build/three.webgpu.js",
     "three/tsl": "https://unpkg.com/three@0.172.0/build/three.webgpu.js",
     "three/addons/": "https://unpkg.com/three@0.172.0/examples/jsm/",
-    "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.8.3/build/index.module.js"
+    "three/examples/jsm/": "https://unpkg.com/three@0.172.0/examples/jsm/",
+    "three-classic": "https://unpkg.com/three@0.172.0/build/three.module.js",
+    "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.8.3/build/index.module.js",
+    "three-gpu-pathtracer": "https://unpkg.com/three-gpu-pathtracer@0.0.24/build/index.module.js"
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026050923-v0.6.0"></script>
+<script type="module" src="app-v2.js?v=2026051101-v0.7.0"></script>
 <!-- Feature modules — load after app-v2.js. cloner.js attaches via window._appFns / _appHooks. -->
-<script src="cloner.js?v=2026050808-v0.6.0"></script>
+<script src="cloner.js?v=2026051101-v0.7.0"></script>
+<script type="module" src="pathtracer.js?v=2026051101-v0.7.0"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

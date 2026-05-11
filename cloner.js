@@ -53,6 +53,13 @@
       return {
         mode: 'linear',
         useInstancing: true,
+        // Hide the source mesh(es) from the viewport so only generated clones
+        // render. Useful for symmetric arrays where the source-at-origin is
+        // already represented by clone-0.
+        hideSources: false,
+        // Center the array on the cloner's origin (linear/grid only). When
+        // false, clones grow in +direction from the source.
+        centerArray: false,
         linear: { count: 5, dx: 100, dy: 0, dz: 0, rxDeg: 0, ryDeg: 0, rzDeg: 0, sxStep: 1, syStep: 1, szStep: 1 },
         radial: { count: 8, radius: 150, axis: 'z', startDeg: 0, endDeg: 360, faceCenter: false },
         grid:   { nx: 3, ny: 3, nz: 1, dx: 100, dy: 100, dz: 100 },
@@ -82,16 +89,24 @@
     const _ONE = new THREE.Vector3(1, 1, 1);
     function _clonerOffsetMatrix(c, i, out) {
       out = out || _M;
-      if (i === 0) return out.identity();
+      const center = !!c.centerArray;
       if (c.mode === 'linear') {
         const L = c.linear;
-        _V.set(L.dx * i, L.dy * i, L.dz * i);
-        _E.set(L.rxDeg * i * Math.PI / 180, L.ryDeg * i * Math.PI / 180, L.rzDeg * i * Math.PI / 180, 'XYZ');
+        // When centered, shift every clone back by half the array span so the
+        // array straddles the origin. mid = (count - 1) / 2.
+        const mid = center ? (Math.max(1, L.count | 0) - 1) / 2 : 0;
+        const k = i - mid;
+        if (k === 0 && !center) return out.identity();
+        _V.set(L.dx * k, L.dy * k, L.dz * k);
+        _E.set(L.rxDeg * k * Math.PI / 180, L.ryDeg * k * Math.PI / 180, L.rzDeg * k * Math.PI / 180, 'XYZ');
         _Q.setFromEuler(_E);
-        _S.set(Math.pow(L.sxStep, i), Math.pow(L.syStep, i), Math.pow(L.szStep, i));
+        _S.set(Math.pow(L.sxStep, k), Math.pow(L.syStep, k), Math.pow(L.szStep, k));
         return out.compose(_V, _Q, _S);
       }
       if (c.mode === 'radial') {
+        // Radial is inherently centered around the cloner origin; centerArray
+        // is a no-op here.
+        if (i === 0) return out.identity();
         const R = c.radial;
         const denom = (R.count > 1 && Math.abs(R.endDeg - R.startDeg) % 360 !== 0) ? (R.count - 1) : R.count;
         const t = (denom > 0) ? i / denom : 0;
@@ -111,11 +126,15 @@
       }
       if (c.mode === 'grid') {
         const G = c.grid;
-        const nx = Math.max(1, G.nx | 0), ny = Math.max(1, G.ny | 0);
+        const nx = Math.max(1, G.nx | 0), ny = Math.max(1, G.ny | 0), nz = Math.max(1, G.nz | 0);
         const ix = i % nx;
         const iy = Math.floor(i / nx) % ny;
         const iz = Math.floor(i / (nx * ny));
-        _V.set(ix * G.dx, iy * G.dy, iz * G.dz);
+        const cx = center ? (nx - 1) / 2 : 0;
+        const cy = center ? (ny - 1) / 2 : 0;
+        const cz = center ? (nz - 1) / 2 : 0;
+        _V.set((ix - cx) * G.dx, (iy - cy) * G.dy, (iz - cz) * G.dz);
+        if (i === 0 && !center) return out.identity();
         _Q.identity();
         return out.compose(_V, _Q, _ONE);
       }
@@ -206,16 +225,25 @@
       }
 
       // ── Phase 3 ──────────────────────────────────────────────────────────
-      // Source role differs by mode:
-      //   linear / grid: source IS clone-0 (visible at offset 0). N-1
-      //     synthetic clones at offsets 1..N-1.
+      // Source role differs by mode + the centerArray pref:
+      //   linear / grid (uncentered): source IS clone-0 (visible at offset
+      //     0). N-1 synthetic clones at offsets 1..N-1.
+      //   linear / grid (centered): source is hidden — every position is a
+      //     synthetic clone at offsets 0..N-1 so the array straddles the
+      //     cloner origin instead of growing in +direction.
       //   radial: source is the instance GENERATOR (hidden). N synthetic
-      //     clones cover the full circle at offsets 0..N-1 — no clone
-      //     at the cloner-Group origin (which would sit at the centre
-      //     of the radial pattern, looking wrong).
+      //     clones cover the full circle at offsets 0..N-1 — no clone at
+      //     the cloner-Group origin (would sit at the centre of the radial
+      //     pattern, looking wrong).
       const radial = c.mode === 'radial';
-      const cloneCount = radial ? count : Math.max(0, count - 1);
-      const startIdx   = radial ? 0 : 1;
+      // True when the source mesh visibly serves as clone-0; false when it
+      // becomes a hidden generator.
+      const sourceIsClone0 = !radial && !c.centerArray;
+      const cloneCount = sourceIsClone0 ? Math.max(0, count - 1) : count;
+      const startIdx   = sourceIsClone0 ? 1 : 0;
+      // Final source visibility: only when (a) source is clone-0 AND (b) the
+      // user hasn't asked to hide sources for symmetric setups.
+      const sourceVisible = sourceIsClone0 && !c.hideSources;
 
       // ── Fast-path: reuse existing InstancedMeshes when only matrices
       // changed (slider drag with no count/mode/instancing/source change).
@@ -246,7 +274,7 @@
           for (let s = 0; s < sourceMeshes.length; s++) {
             const src = sourceMeshes[s];
             const inst = oldRefs[s];
-            src.visible = !radial;
+            src.visible = sourceVisible;
             const srcLocal = src.matrix; // read-only: setMatrixAt copies
             for (let i = 0; i < cloneCount; i++) {
               _clonerOffsetMatrix(c, i + startIdx, _M);
@@ -269,7 +297,7 @@
           }
           grp.userData._clonerCloneRefs = [];
           for (const src of sourceMeshes) {
-            src.visible = !radial;
+            src.visible = sourceVisible;
             if (cloneCount === 0) continue;
             const srcLocal = src.matrix;
             if (c.useInstancing) {
@@ -322,8 +350,12 @@
       return 'rebuilt';
     }
 
+    // sourceIds may be empty / null to create a "standalone" cloner with no
+    // sources yet — the user then drags parts into the cloner row in the
+    // tree to register them (C4D-style). The rebuild emits nothing for an
+    // empty source list but the cloner is fully functional otherwise.
     function _clonerCreateFromParts(sourceIds, opts) {
-      if (!Array.isArray(sourceIds) || !sourceIds.length) return null;
+      sourceIds = Array.isArray(sourceIds) ? sourceIds : [];
       const valid = [];
       for (const sid of sourceIds) {
         const sp = getPart(sid);
@@ -332,9 +364,12 @@
         if (sp.isCloner) continue;
         valid.push(sp);
       }
-      if (!valid.length) {
-        toast('Cloner', 'No cloneable selection (instanced parts skipped)', 'warn');
-        return null;
+      const standalone = !valid.length;
+      if (standalone && sourceIds.length > 0) {
+        // Caller passed ids but every one was filtered (instanced / deleted /
+        // cloner) — warn, but still proceed to create an empty cloner so the
+        // user can drag valid parts in instead.
+        toast('Cloner', 'Selection skipped (instanced / cloner) — empty cloner created. Drag parts into it.', 'info', 2400);
       }
       // Tear down the host's gizmo state BEFORE we reparent sources into the
       // cloner Group. If the user had a source selected (so its mesh was
@@ -448,8 +483,119 @@
       try { F.updateGizmo?.(); } catch (_) {}
       try { F.onSceneActivated?.(); } catch (_) {}
       requestRender();
-      toast('Cloner created', `${valid.length} source · ${_clonerCount(partInfo.cloner)} clones`, 'info', 1800);
+      if (standalone) {
+        toast('Cloner created', 'Empty — drag parts into the Cloner row in the tree to add sources', 'info', 2600);
+      } else {
+        toast('Cloner created', `${valid.length} source · ${_clonerCount(partInfo.cloner)} clones`, 'info', 1800);
+      }
       return partInfo;
+    }
+
+    // Append `sourceIds` to an existing cloner's source list, reparent the
+    // source meshes under the cloner Group, and rebuild. Used by the
+    // tree-drop integration so dropping parts onto a cloner row registers
+    // them — same effect as if they'd been part of the original selection.
+    function _clonerAddSources(clonerPart, sourceIds) {
+      if (!clonerPart?.isCloner || clonerPart.deleted) return 0;
+      if (!Array.isArray(sourceIds) || !sourceIds.length) return 0;
+      const grp = clonerPart.mesh;
+      if (!grp) return 0;
+      const c = clonerPart.cloner;
+      const already = new Set(c.sources || []);
+      const added = [];
+      const _prevParents = new Map();
+      for (const sid of sourceIds) {
+        const sp = getPart(sid);
+        if (!sp || sp.deleted || !sp.mesh) continue;
+        if (sp.instancedMesh || sp.isCloner) continue;
+        if (already.has(sid)) continue;
+        _prevParents.set(sid, sp.mesh.parent || state.partsRoot);
+        // attach() preserves world transform — the source visibly stays put
+        // while its parent flips to the cloner Group.
+        grp.attach(sp.mesh);
+        c.sources = c.sources || [];
+        c.sources.push(sid);
+        already.add(sid);
+        added.push(sp);
+      }
+      if (!added.length) return 0;
+      // Reparent the matching tree nodes under the cloner so the tree visually
+      // reflects the new ownership.
+      try {
+        const clonerNode = (state.treeNodes || []).find(n => n.kind === 'cloner' && n.obj3d === grp);
+        if (clonerNode) {
+          for (const sp of added) {
+            let idx = state.treeNodes.findIndex(n => n.kind === 'part' && n.partId === sp.partId);
+            if (idx >= 0) {
+              const tn = state.treeNodes[idx];
+              tn.parentId = clonerNode.id;
+              tn.depth = (clonerNode.depth || 0) + 1;
+              state.treeNodes.splice(idx, 1);
+              const insertAt = state.treeNodes.findIndex(n => n.id === clonerNode.id) + 1;
+              state.treeNodes.splice(insertAt, 0, tn);
+            } else {
+              const insertAt = state.treeNodes.findIndex(n => n.id === clonerNode.id) + 1;
+              state.treeNodes.splice(insertAt, 0, {
+                id: sp.partId, kind: 'part', name: sp.name,
+                depth: (clonerNode.depth || 0) + 1,
+                parentId: clonerNode.id, partId: sp.partId, instanceCount: 0,
+                obj3d: sp.mesh,
+              });
+            }
+          }
+        }
+      } catch (_) {}
+      _clonerRebuild(clonerPart);
+      try {
+        pushUndo({
+          type: 'clonerAddSources',
+          partId: clonerPart.partId,
+          sources: added.map(sp => ({
+            partId: sp.partId,
+            prevParent: _prevParents.get(sp.partId) || state.partsRoot,
+            prevLocalMat: sp.mesh.matrix.elements.slice(),
+          })),
+        });
+      } catch (_) {}
+      try { F.rebuildTree?.(); } catch (_) {}
+      try { F.refreshPropertiesPanel?.(); } catch (_) {}
+      try { F.applySelectionColors?.(); } catch (_) {}
+      requestRender();
+      toast('Cloner', `+${added.length} source${added.length === 1 ? '' : 's'} (${_clonerCount(c)} clones)`, 'info', 1600);
+      return added.length;
+    }
+
+    // Drop `sourceIds` from a cloner's source list. Called when the user
+    // drags a source row OUT of the cloner in the tree. Without this, the
+    // rebuild's "stray re-attach" path (which exists to defend against
+    // accidental post-gizmo detachment) would yank the part right back into
+    // the Group on the next rebuild and the user couldn't free it.
+    //
+    // We DON'T reparent the mesh here — the standard DnD splice already
+    // moves the THREE.Object3D for us; this function just edits the source
+    // list and rebuilds the clones to drop the now-orphaned generator.
+    function _clonerRemoveSources(clonerPart, sourceIds) {
+      if (!clonerPart?.isCloner || clonerPart.deleted) return 0;
+      if (!Array.isArray(sourceIds) || !sourceIds.length) return 0;
+      const c = clonerPart.cloner;
+      if (!c.sources || !c.sources.length) return 0;
+      const drop = new Set(sourceIds.map(n => +n));
+      const before = c.sources.slice();
+      c.sources = c.sources.filter(sid => !drop.has(+sid));
+      const removed = before.length - c.sources.length;
+      if (!removed) return 0;
+      // Restore the source meshes' own visibility flag — when sourceIsClone0
+      // was false (centerArray on, or hideSources on), the rebuild forced
+      // src.visible=false. Now that the source is no longer a clone
+      // generator, it should be visible again wherever the DnD placed it.
+      for (const sid of drop) {
+        const sp = getPart(sid);
+        if (sp && sp.mesh) sp.mesh.visible = sp.visible !== false;
+      }
+      _clonerRebuild(clonerPart);
+      try { F.refreshPropertiesPanel?.(); } catch (_) {}
+      requestRender();
+      return removed;
     }
 
     // Idempotent — safe to call multiple times; no-ops on already-dissolved.
@@ -498,43 +644,52 @@
       requestRender();
     }
 
-    // ── UI: Cloner section in the Properties panel ────────────────────────
-    function _renderClonerSection(p) {
+    // ── UI: Cloner card — replaces the full Properties body when a cloner
+    // is selected. The standard triangle/vertex/material stats don't apply
+    // to a Group container, so we render a dedicated card instead.
+    function _renderClonerCard(p) {
       if (!p?.isCloner) return '';
       const c = p.cloner;
       const u = _UNIT_LABEL[state.displayUnit] || 'mm';
-      const tab = (id, label) => `<button type="button" class="cln-tab${c.mode === id ? ' active' : ''}" data-cln-mode="${id}">${label}</button>`;
+      // Mode picker — icon cards instead of text tabs. Each card shows an
+      // icon + label; the active one gets the accent treatment.
+      const modeCard = (id, icon, label) => `
+        <button type="button" class="cln-mode-card${c.mode === id ? ' active' : ''}" data-cln-mode="${id}" title="${escapeHtml(label)} cloner">
+          <i data-lucide="${icon}"></i>
+          <span>${label}</span>
+        </button>`;
+      // Slider row — reuses .prim-row + .prim-slider + .prim-value classes
+      // so the cloner sliders are pixel-identical to the custom-shape sliders
+      // elsewhere. data-cln-* hooks keep the wiring distinct from primitives.
       const slider = (label, key, val, min, max, step, suffix='') => `
-        <div class="cln-row" data-cln-field="${key}">
-          <label class="cln-label">${escapeHtml(label)}</label>
-          <input type="range" data-cln-input min="${min}" max="${max}" step="${step}" value="${val}" class="cln-slider">
-          <span class="cln-val-wrap"><input type="number" data-cln-value min="${min}" max="${max}" step="${step}" value="${val}" class="cln-value">${suffix ? `<span class="cln-unit">${escapeHtml(suffix)}</span>` : ''}</span>
+        <div class="prim-row" data-cln-field="${key}">
+          <label class="prim-label">${escapeHtml(label)}</label>
+          <input type="range" data-cln-input min="${min}" max="${max}" step="${step}" value="${val}" class="prim-slider">
+          <span class="prim-val-wrap"><input type="number" class="prim-value" data-cln-value min="${min}" max="${max}" step="${step}" value="${val}">${suffix ? `<span class="prim-unit">${escapeHtml(suffix)}</span>` : ''}</span>
         </div>`;
       const intSlider = (label, key, val, min, max) => slider(label, key, val, min, max, 1, '');
       const distSlider = (label, key, val) => slider(label, key, val, -500, 500, 1, u);
       const angSlider = (label, key, val, min=-360, max=360) => slider(label, key, val, min, max, 1, '°');
       const scaleSlider = (label, key, val) => slider(label, key, val, 0.1, 3, 0.05, '×');
       const axisSel = (val) => `
-        <div class="cln-row">
-          <label class="cln-label">Axis</label>
-          <select class="cln-select" data-cln-axis>
+        <div class="prim-row">
+          <label class="prim-label">Axis</label>
+          <select class="prim-select" data-cln-axis>
             <option value="x"${val==='x'?' selected':''}>X</option>
             <option value="y"${val==='y'?' selected':''}>Y</option>
             <option value="z"${val==='z'?' selected':''}>Z</option>
           </select>
         </div>`;
-      const toggle = (label, key, val) => `
-        <div class="cln-row cln-row-toggle">
-          <label class="cln-label">${escapeHtml(label)}</label>
-          <label class="cln-toggle"><input type="checkbox" data-cln-toggle="${key}" ${val ? 'checked' : ''}><span></span></label>
+      const toggle = (label, key, val, hint='') => `
+        <div class="prim-row cln-toggle-row" data-cln-toggle-row="${key}">
+          <label class="prim-label">${escapeHtml(label)}${hint ? `<span class="cln-hint">${escapeHtml(hint)}</span>` : ''}</label>
+          <label class="prim-toggle"><input type="checkbox" data-cln-toggle="${key}" ${val ? 'checked' : ''}><span></span></label>
         </div>`;
       const subhead = (label) => `<div class="cln-subhead">${escapeHtml(label)}</div>`;
+
       let modeBody = '';
       if (c.mode === 'linear') {
         const L = c.linear;
-        // Grouped layout: Count up top, then Position / Rotation / Scale
-        // sub-sections — same vocabulary the C4D cloner uses, keeps the 10
-        // sliders scannable instead of one wall of identical-looking rows.
         modeBody =
           intSlider('Count', 'linear.count', L.count, 1, 200) +
           subhead('Position step') +
@@ -558,7 +713,7 @@
           subhead('Sweep') +
           angSlider('Start', 'radial.startDeg', R.startDeg) +
           angSlider('End',   'radial.endDeg', R.endDeg) +
-          toggle('Face center', 'radial.faceCenter', R.faceCenter);
+          toggle('Face center', 'radial.faceCenter', R.faceCenter, 'Rotate each clone so its front points at the centre');
       } else if (c.mode === 'grid') {
         const G = c.grid;
         modeBody =
@@ -571,23 +726,68 @@
           distSlider('Y', 'grid.dy', G.dy) +
           distSlider('Z', 'grid.dz', G.dz);
       }
+
       const totalCount = _clonerCount(c);
+      const sourceCount = (c.sources || []).filter(sid => {
+        const sp = getPart(sid); return sp && !sp.deleted && sp.mesh;
+      }).length;
+      const hasSources = sourceCount > 0;
+      const emptyHint = hasSources ? '' : `
+        <div class="cln-empty">
+          <i data-lucide="mouse-pointer-2" class="cln-empty-icon"></i>
+          <div class="cln-empty-text">No sources yet</div>
+          <div class="cln-empty-sub">Drag a part onto the <strong>Cloner</strong> row in the tree to add it.</div>
+        </div>`;
+      const sourcesChip = hasSources
+        ? `<span class="cln-source-chip" title="Source parts feeding this cloner"><i data-lucide="link"></i>${sourceCount} source${sourceCount === 1 ? '' : 's'}</span>`
+        : '';
+      // centerArray only makes sense for linear/grid — radial is centred by
+      // construction. Hide the toggle in radial mode to avoid confusion.
+      const centerToggle = (c.mode === 'radial') ? '' : toggle('Center array', 'centerArray', c.centerArray, 'Straddle the cloner origin instead of growing in +direction');
+
       return `
-        <div class="prop-section cln-section">
-          <div class="prop-section-title">
-            <span><i data-lucide="copy"></i> Cloner</span>
-            <span class="cln-count-badge">${totalCount} clone${totalCount === 1 ? '' : 's'}</span>
+        <div class="cln-card">
+          <div class="cln-card-head">
+            <div class="cln-card-head-row">
+              <div class="cln-card-icon"><i data-lucide="copy"></i></div>
+              <div class="cln-card-titles">
+                <div class="cln-card-title">${escapeHtml(p.name || 'Cloner')}</div>
+                <div class="cln-card-sub">
+                  <span class="cln-count-badge">${totalCount} clone${totalCount === 1 ? '' : 's'}</span>
+                  ${sourcesChip}
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="cln-tabs">${tab('linear','Linear')}${tab('radial','Radial')}${tab('grid','Grid')}</div>
-          <div class="cln-body">
+
+          ${emptyHint}
+
+          <div class="cln-mode-picker">
+            ${modeCard('linear', 'move-horizontal', 'Linear')}
+            ${modeCard('radial', 'rotate-cw', 'Radial')}
+            ${modeCard('grid',   'grid-3x3', 'Grid')}
+          </div>
+
+          <div class="cln-section-body">
             ${modeBody}
-            ${toggle('Use instancing', 'useInstancing', c.useInstancing)}
           </div>
+
+          <div class="cln-divider"></div>
+
+          <div class="cln-section-body">
+            ${centerToggle}
+            ${toggle('Hide sources', 'hideSources', c.hideSources, 'Only render generated clones')}
+            ${toggle('Use instancing', 'useInstancing', c.useInstancing, 'One GPU draw call per source — faster for big arrays')}
+          </div>
+
           <div class="cln-foot">
-            <button type="button" class="cln-btn cln-btn-warn" data-cln-act="dissolve" title="Dissolve cloner — restore source(s)"><i data-lucide="layers-2"></i> Dissolve</button>
+            <button type="button" class="cln-btn" data-cln-act="reset" title="Reset all parameters for the current mode"><i data-lucide="rotate-ccw"></i> Reset</button>
+            <button type="button" class="cln-btn cln-btn-warn" data-cln-act="dissolve" title="Dissolve cloner — restore source(s) to the scene"><i data-lucide="layers-2"></i> Dissolve</button>
           </div>
         </div>`;
     }
+    // Backward-compat alias — earlier code paths called this name.
+    function _renderClonerSection(p) { return _renderClonerCard(p); }
 
     function _wireClonerControls(rootEl, p) {
       if (!rootEl || !p?.isCloner) return;
@@ -614,7 +814,7 @@
         if (JSON.stringify(before) === JSON.stringify(after)) return;
         try { pushUndo({ type: 'clonerParams', partId: p.partId, before, after }); } catch (_) {}
       };
-      rootEl.querySelectorAll('.cln-tab').forEach(btn => {
+      rootEl.querySelectorAll('.cln-mode-card').forEach(btn => {
         btn.addEventListener('click', () => {
           const next = btn.dataset.clnMode;
           if (!next || next === c.mode) return;
@@ -627,7 +827,7 @@
       });
       const setField = (path, v) => { const [a, b] = path.split('.'); if (b == null) c[a] = v; else c[a][b] = v; };
       const getField = (path) => { const [a, b] = path.split('.'); return b == null ? c[a] : c[a][b]; };
-      rootEl.querySelectorAll('.cln-row').forEach(row => {
+      rootEl.querySelectorAll('.prim-row[data-cln-field]').forEach(row => {
         const fId = row.dataset.clnField;
         if (!fId) return;
         const input = row.querySelector('[data-cln-input]');
@@ -690,6 +890,17 @@
           try { pushUndo({ type: 'clonerParams', partId: p.partId, before, after: JSON.parse(JSON.stringify(c)) }); } catch (_) {}
         });
       });
+      // Reset — restore defaults for the currently-active mode while keeping
+      // unrelated mode params + sources + the cloner identity intact. One
+      // undo entry so Ctrl+Z brings the previous values back atomically.
+      rootEl.querySelector('[data-cln-act="reset"]')?.addEventListener('click', () => {
+        const before = JSON.parse(JSON.stringify(c));
+        const defaults = _clonerDefaults();
+        c[c.mode] = defaults[c.mode];
+        _clonerRebuild(p);
+        try { pushUndo({ type: 'clonerParams', partId: p.partId, before, after: JSON.parse(JSON.stringify(c)) }); } catch (_) {}
+        F.refreshPropertiesPanel?.();
+      });
       rootEl.querySelector('[data-cln-act="dissolve"]')?.addEventListener('click', () => {
         const snap = {
           partId: p.partId, name: p.name,
@@ -732,13 +943,16 @@
       }
       return null;
     }
-    // Append the cloner section to the Properties panel via the propsRender
-    // hook — fires after the host's refreshPropertiesPanel finishes.
+    // Replace the entire Properties panel body when a cloner is selected.
+    // The standard part stats (triangles, vertices, material thumbnail,
+    // bbox/diag/volume) don't apply to a Group container — surfacing them
+    // is just visual noise. The cloner card is a complete, self-contained
+    // UI: header, mode picker, parameter sliders, options, action buttons.
     H.propsRenderHooks.push((sel, el) => {
       if (!el) return;
       const cloner = _activeCloner(sel);
       if (!cloner) return;
-      el.insertAdjacentHTML('beforeend', _renderClonerSection(cloner));
+      el.innerHTML = _renderClonerCard(cloner);
       _wireClonerControls(el, cloner);
       try { F._lucide?.(); } catch (_) {}
     });
@@ -966,10 +1180,17 @@
           if (!tn || tn.kind !== 'cloner') return;
           row.dataset.clonerDeco = '1';
           row.classList.add('is-cloner');
-          const icon = row.querySelector('.tree-typeicon i');
-          if (icon) icon.setAttribute('data-lucide', 'copy');
           const ti = row.querySelector('.tree-typeicon');
-          if (ti) { ti.classList.remove('asm'); ti.classList.add('cln'); }
+          if (ti) {
+            ti.classList.remove('asm');
+            ti.classList.add('cln');
+            // Lucide replaces <i data-lucide="..."> with an <svg> at render
+            // time, so by the time the MutationObserver fires the original
+            // archive svg is already in place. Wipe the inner content and
+            // drop in a fresh <i data-lucide="copy"> so the next _lucide()
+            // pass renders the cloner icon instead.
+            ti.innerHTML = '<i data-lucide="copy"></i>';
+          }
           try { F._lucide?.(); } catch (_) {}
         });
       };
@@ -1076,6 +1297,39 @@
         requestRender();
         return true;
       }
+      if (op.type === 'clonerAddSources') {
+        // Undo a drag-into-cloner: detach the dropped sources from the
+        // cloner Group, restore their original parents + local matrices,
+        // and pop them off the cloner.sources list. Tree rows snap back
+        // to top level (parentId=null) so the rebuild reflects reality.
+        state.history.pop();
+        const p = getPart(op.partId);
+        if (p?.isCloner) {
+          const removeIds = new Set((op.sources || []).map(s => s.partId));
+          for (const s of op.sources || []) {
+            const sp = getPart(s.partId);
+            if (!sp || !sp.mesh) continue;
+            (s.prevParent || state.partsRoot).attach(sp.mesh);
+            sp.mesh.matrix.fromArray(s.prevLocalMat);
+            sp.mesh.matrix.decompose(sp.mesh.position, sp.mesh.quaternion, sp.mesh.scale);
+            sp.mesh.visible = sp.visible !== false;
+            sp.mesh.updateMatrixWorld(true);
+          }
+          if (p.cloner) p.cloner.sources = (p.cloner.sources || []).filter(sid => !removeIds.has(sid));
+          // Detach tree rows so they no longer appear under the cloner.
+          for (const sid of removeIds) {
+            const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.partId === sid);
+            if (tn) { tn.parentId = null; tn.depth = 0; }
+          }
+          _clonerRebuild(p);
+        }
+        state.redo.push(op);
+        try { F.rebuildTree?.(); } catch (_) {}
+        try { F.refreshPropertiesPanel?.(); } catch (_) {}
+        try { F.applySelectionColors?.(); } catch (_) {}
+        requestRender();
+        return true;
+      }
       return false;
     });
     H.redoHandlers.push((op) => {
@@ -1083,6 +1337,20 @@
         state.redo.pop();
         const sourceIds = (op.sources || []).map(s => s.partId);
         _clonerCreateFromParts(sourceIds);
+        state.history.push(op);
+        return true;
+      }
+      if (op.type === 'clonerAddSources') {
+        state.redo.pop();
+        const p = getPart(op.partId);
+        if (p?.isCloner) {
+          _clonerAddSources(p, (op.sources || []).map(s => s.partId));
+          // _clonerAddSources pushed a fresh undo entry — replace it with
+          // the original op so subsequent undo→redo cycles stay consistent.
+          if (state.history[state.history.length - 1]?.type === 'clonerAddSources') {
+            state.history.pop();
+          }
+        }
         state.history.push(op);
         return true;
       }
@@ -1111,28 +1379,29 @@
       return false;
     });
 
+    // With nothing selected, creates an empty standalone cloner (the user
+    // drags parts in afterward). With a selection, behaves as before —
+    // wrapping the cloneable parts as sources.
     function _clonerCreateFromSelection() {
       const ids = [...(state.selected || [])];
-      if (!ids.length) { toast('Cloner', 'Select a part first', 'warn'); return null; }
       return _clonerCreateFromParts(ids);
     }
 
-    // Surface "Cloner from selection" in the cmd-K command palette.
+    // Surface in the cmd-K command palette. Label adapts to whether a usable
+    // selection exists, but the action is always runnable.
     try {
       const Actions = F._Actions;
       if (Actions && Actions.list) {
         Actions.list.push({
-          id: 'cloner', group: 'Edit', label: 'Cloner from selection',
+          id: 'cloner', group: 'Edit', label: 'Cloner from selection (or empty)',
           run: () => { try { _clonerCreateFromSelection(); } catch (e) { console.warn('[cloner] create failed:', e); } },
         });
       }
     } catch (_) {}
 
-    // Toolbar button (#btn-cloner). Enabled only when the selection contains
-    // at least one cloneable part — instanced parts and existing cloners
-    // are skipped by createFromSelection so we mirror that gating in the
-    // disabled state. Polled at 200 ms (cheap; same cadence the existing
-    // dec-sel-count badge uses).
+    // Toolbar button (#btn-cloner). Always enabled — nothing-selected creates
+    // an empty cloner the user can drag parts into. Tooltip flips between the
+    // two modes so it's clear what will happen.
     const btnCloner = document.getElementById('btn-cloner');
     if (btnCloner) {
       btnCloner.addEventListener('click', () => {
@@ -1147,7 +1416,10 @@
             hasCloneable = true; break;
           }
         }
-        btnCloner.disabled = !hasCloneable;
+        btnCloner.disabled = false;
+        btnCloner.title = hasCloneable
+          ? 'Wrap the selection in a live C4D-style cloner (Linear / Radial / Grid)'
+          : 'Create an empty Cloner — drag parts into it in the tree to add sources';
       };
       setInterval(_refreshClonerBtn, 200);
       _refreshClonerBtn();
@@ -1157,41 +1429,70 @@
       const s = document.createElement('style');
       s.id = '_cloner-style';
       s.textContent = `
-        .cln-section{padding:var(--space-md) 0;border-top:1px solid var(--bd)}
-        .cln-section .prop-section-title{display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-md) var(--space-sm) var(--space-md);font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx3);text-transform:uppercase;letter-spacing:var(--tracking-wide)}
-        .cln-section .prop-section-title svg{width:13px;height:13px;margin-right:6px;vertical-align:-2px}
-        .cln-count-badge{font-size:var(--fs-10);color:var(--tx2);background:var(--s2);padding:2px 8px;border-radius:var(--r-pill);font-weight:var(--fw-medium);letter-spacing:0;text-transform:none}
-        .cln-tabs{display:flex;gap:4px;padding:0 var(--space-md) var(--space-sm) var(--space-md)}
-        .cln-tab{flex:1;padding:5px 8px;font-size:var(--fs-11);font-weight:var(--fw-medium);background:var(--bg2);color:var(--tx2);border:1px solid var(--bd);border-radius:var(--r-sm);cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
-        .cln-tab:hover{background:var(--bg3);color:var(--tx)}
-        .cln-tab.active{background:var(--ac-tint-12,rgba(107,141,255,.12));border-color:var(--ac-line,rgba(107,141,255,.45));color:var(--ac)}
-        .cln-body{padding:0 var(--space-md);display:flex;flex-direction:column;gap:4px}
-        /* All rows share one rigid 3-column grid so labels, sliders, and
-           value boxes align across modes. Toggle rows reuse the third
-           column with the toggle right-aligned for visual consistency. */
-        .cln-row{display:grid;grid-template-columns:60px 1fr 78px;gap:var(--space-sm);align-items:center;min-height:22px}
-        .cln-row-toggle .cln-toggle{justify-self:end;grid-column:3}
-        .cln-label{font-size:var(--fs-11);color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .cln-slider{width:100%;min-width:0}
-        .cln-val-wrap{display:flex;align-items:center;gap:3px;width:100%;box-sizing:border-box;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);padding:0 5px;height:22px;font-variant-numeric:tabular-nums}
-        .cln-value{flex:1;min-width:0;border:0;background:transparent;color:var(--tx);font-size:var(--fs-11);width:auto;outline:none;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
-        .cln-value::-webkit-outer-spin-button,.cln-value::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-        .cln-unit{font-size:var(--fs-10);color:var(--tx3);flex-shrink:0}
-        .cln-subhead{font-size:var(--fs-10);font-weight:var(--fw-semibold);color:var(--tx3);text-transform:uppercase;letter-spacing:var(--tracking-wide);margin:8px 0 2px;padding-top:6px;border-top:1px solid var(--s2)}
+        /* ════ Cloner card — a dedicated property-panel layout that replaces
+           the standard part stats (triangles/vertices/material) when a cloner
+           is selected. Sliders reuse .prim-row classes so they're pixel-
+           identical to the custom-shape sliders. ════ */
+
+        .cln-card{display:flex;flex-direction:column;padding:0}
+
+        /* ── Card header ── accent strip + icon tile + title + count chips */
+        .cln-card-head{padding:var(--space-lg) var(--space-md) var(--space-md);background:linear-gradient(180deg,var(--ac-tint-08) 0%,transparent 100%);border-bottom:1px solid var(--bd)}
+        .cln-card-head-row{display:flex;align-items:center;gap:10px}
+        .cln-card-icon{flex:0 0 36px;width:36px;height:36px;border-radius:var(--r-md);background:linear-gradient(135deg,var(--ac),var(--ac-active));display:grid;place-items:center;color:#fff;box-shadow:0 6px 18px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.18)}
+        .cln-card-icon svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
+        .cln-card-titles{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+        .cln-card-title{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
+        .cln-card-sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+        .cln-count-badge{display:inline-flex;align-items:center;font-size:var(--fs-10);color:var(--ac);background:var(--ac-tint-12);padding:2px 9px;border-radius:var(--r-pill);font-weight:var(--fw-semibold);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+        .cln-source-chip{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-10);color:var(--tx3);background:var(--s2);padding:2px 8px;border-radius:var(--r-pill);font-weight:var(--fw-medium)}
+        .cln-source-chip svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
+
+        /* ── Mode picker — three icon cards with a clear active state. */
+        .cln-mode-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:var(--space-md) var(--space-md) var(--space-sm)}
+        .cln-mode-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:9px 6px;background:var(--bg2);color:var(--tx3);border:1px solid var(--bd);border-radius:var(--r-md);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);font:inherit}
+        .cln-mode-card svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;transition:transform var(--dur-fast) var(--ease-out)}
+        .cln-mode-card span{font-size:var(--fs-11);font-weight:var(--fw-medium);letter-spacing:.01em}
+        .cln-mode-card:hover{background:var(--bg3);color:var(--tx2);border-color:var(--bd2)}
+        .cln-mode-card:hover svg{transform:scale(1.08)}
+        .cln-mode-card.active{background:var(--ac-tint-12);color:var(--ac);border-color:var(--ac-line);box-shadow:inset 0 0 0 1px var(--ac-tint-25)}
+        .cln-mode-card.active svg{stroke-width:2}
+
+        /* ── Section bodies — wrap sliders / toggles with consistent padding. */
+        .cln-section-body{padding:0 var(--space-md);display:flex;flex-direction:column}
+        .cln-section-body .prim-row{padding:5px 0}
+
+        /* ── Section subheads — small caps to group Pos/Rot/Scale clusters. */
+        .cln-subhead{font-size:var(--fs-10);font-weight:var(--fw-semibold);color:var(--tx3);text-transform:uppercase;letter-spacing:var(--tracking-wide);margin:10px 0 2px;padding-top:8px;border-top:1px solid var(--s2)}
         .cln-subhead:first-child{margin-top:2px;padding-top:0;border-top:0}
-        .cln-select{width:100%;background:var(--bg2);border:1px solid var(--bd);color:var(--tx);font-size:var(--fs-11);padding:3px 6px;border-radius:var(--r-sm);grid-column:2 / span 2}
-        .cln-toggle{position:relative;display:inline-block;width:30px;height:16px}
-        .cln-toggle input{position:absolute;opacity:0;width:0;height:0}
-        .cln-toggle span{position:absolute;inset:0;background:var(--bg3);border-radius:9px;transition:background 150ms var(--ease-out);cursor:pointer}
-        .cln-toggle span::before{content:"";position:absolute;width:12px;height:12px;left:2px;top:2px;background:var(--tx);border-radius:50%;transition:transform 150ms var(--ease-out),background 150ms var(--ease-out)}
-        .cln-toggle input:checked + span{background:var(--ac)}
-        .cln-toggle input:checked + span::before{transform:translateX(14px);background:var(--bg)}
-        .cln-foot{padding:var(--space-sm) var(--space-md) 0}
-        .cln-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;font-size:var(--fs-11);background:var(--bg2);border:1px solid var(--bd);color:var(--tx2);border-radius:var(--r-sm);cursor:pointer;transition:background 120ms var(--ease-out)}
-        .cln-btn:hover{background:var(--bg3);color:var(--tx)}
-        .cln-btn-warn:hover{border-color:var(--er-line);color:var(--er)}
-        .cln-btn svg{width:12px;height:12px}
-        .tree-typeicon.cln{color:var(--ac);background:var(--ac-tint-12,rgba(107,141,255,.12))}
+
+        /* ── Inline secondary hint (sits under the toggle label). */
+        .cln-hint{display:block;font-size:var(--fs-10);color:var(--tx3);font-weight:var(--fw-regular);margin-top:2px;line-height:var(--lh-base);max-width:200px;white-space:normal}
+
+        /* ── Toggle row — overrides .prim-row defaults to give the label
+              breathing room when it carries a hint underneath. */
+        .cln-toggle-row{padding:7px 0!important;align-items:start!important}
+
+        /* ── Divider between sections inside the card. */
+        .cln-divider{height:1px;background:var(--bd);margin:var(--space-md) var(--space-md) 0;opacity:.6}
+
+        /* ── Empty state — pop-out invite to drag a part in. */
+        .cln-empty{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 12px;margin:var(--space-md);font-size:var(--fs-11);color:var(--tx3);background:var(--ac-tint-04);border:1px dashed var(--ac-line);border-radius:var(--r-md);text-align:center;line-height:var(--lh-base)}
+        .cln-empty-icon{width:22px;height:22px;color:var(--ac);stroke:currentColor;fill:none;stroke-width:1.6;margin-bottom:2px}
+        .cln-empty-text{font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx2)}
+        .cln-empty-sub{font-size:var(--fs-11);color:var(--tx3)}
+        .cln-empty strong{color:var(--ac);font-weight:var(--fw-semibold)}
+
+        /* ── Foot — Reset + Dissolve, right-aligned. */
+        .cln-foot{display:flex;gap:8px;padding:var(--space-md);justify-content:flex-end;border-top:1px solid var(--bd);margin-top:var(--space-md)}
+        .cln-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);background:var(--bg2);border:1px solid var(--bd);color:var(--tx2);border-radius:var(--r-sm);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+        .cln-btn:hover{background:var(--bg3);color:var(--tx);border-color:var(--bd2)}
+        .cln-btn-warn:hover{background:var(--er-soft);border-color:var(--er-line);color:var(--er)}
+        .cln-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
+
+        /* ── Tree-row affordances (unchanged from prior session) ── */
+        .tree-node.is-cloner.cln-drop-active{outline:2px dashed var(--ac);outline-offset:-2px;background:var(--ac-tint-15)!important;border-radius:3px}
+        .tree-typeicon.cln{color:var(--ac);background:var(--ac-tint-12)}
         .tree-node.is-cloner .tree-label{color:var(--ac)}
       `;
       document.head.appendChild(s);
@@ -1290,6 +1591,8 @@
     window._Cloner = {
       createFromSelection: _clonerCreateFromSelection,
       createFromParts: _clonerCreateFromParts,
+      addSources: _clonerAddSources,
+      removeSources: _clonerRemoveSources,
       rebuild: _clonerRebuild,
       dissolve: _clonerDissolve,
       stress: _stress,
