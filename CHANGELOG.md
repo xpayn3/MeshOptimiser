@@ -4,6 +4,144 @@ All notable changes to STEP Optimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.8.0
+
+v0.7.0 made *presentation and discoverability* feel modern. v0.8.0 makes
+the *plumbing* feel modern: the floor grid rewritten as an
+industry-standard ray-marched shader, a single keycap-chip primitive
+that ties every shortcut surface together, the undo system rebuilt as a
+flat command registry (no more wrapper chains), and every runtime-
+injected `<style>` block lifted out of the JS and into the stylesheet.
+
+**Viewport — ray-marched infinite grid**
+
+- ![new][new] **Ray-marched floor grid** — `_makeShaderGrid` rewritten
+  to the industry-standard pattern (Blender / Godot / Bevy / Fyrestar's
+  `InfiniteGridHelper`). The shader runs on a fullscreen NDC quad,
+  reconstructs the eye ray per pixel, intersects with the active plane,
+  and writes its own analytic depth biased along the plane normal. No
+  more `PlaneGeometry(2e6, 2e6)` losing vertex precision at distance, no
+  plane edge to fall off the screen at oblique angles, no
+  `polygonOffset` quirks under WebGPU — coplanar geometry (e.g. a cube
+  bottom sitting at `z=0`) always wins the depth test cleanly.
+- ![fix][fix] **Sub-pixel grid jitter under orbit** — the previous
+  camera-follow shifted `mesh.position` by sub-pixel amounts every frame
+  which shifted `positionWorld` of each vertex which made `fwidth()` /
+  `fract()` read slightly different values per frame (visible 1–2 px
+  shimmer along the grid lines). The ray-marched shader is camera-
+  independent, so there's no mesh to drift.
+- ![fix][fix] **Cube-on-grid Z-fight** — solved analytically by the
+  shader's depth write + `uPlaneBias` instead of the previous
+  `depthFunc:LessDepth` strict-less trick that occasionally lost ties.
+
+**Keyboard shortcuts — unified across the app**
+
+- ![new][new] **Redesigned Shortcuts modal** — sticky search input at
+  the top, category headers with lucide icons (File / Edit / Selection /
+  View / App), 2-column grid per group, multi-key combos rendered as
+  separate keycap chips joined by a faint `+`. Footer hint points at
+  the command palette. Opens via `?` or the logo-dropdown "Keyboard
+  shortcuts" item.
+- ![polish][polish] **`.kbd-chip` shared primitive** — single class now
+  owns the keycap look on the bottom-center hint strip, tooltips, the
+  command palette rows, the brand menu's mini-changelog, the Shortcuts
+  modal, and the cmdk `↵` indicator. Combo splitting (`Ctrl+Shift+O` →
+  three chips joined by `+`) is consistent everywhere.
+- ![polish][polish] **Bottom-center hint strip — faint and chip-based**
+  — transparent (no card chrome), each input verb (`Click`, `Drag`,
+  `Scroll`, `Right-click`, `Esc`, `Shift`, `W` / `E` / `R`) renders as a
+  small keycap chip. The hint reads as a row of pills instead of a
+  paragraph of `<span>` separators.
+
+**Selection & Actions card — Smart fit polish**
+
+- ![polish][polish] **Smart fit + caret merged** — same background, no
+  inner seam, rounded outer corners only. Hover lights each half
+  independently (no `:has()` cross-highlight). Subtle hairline divider
+  between them. Yellow accent scoped to `--ac → --wn` inside the
+  popover so its sliders + checkbox match the warn-yellow trigger.
+- ![polish][polish] **Smart fit dropdown sliders** — switched from the
+  default 18 px white-thumb `<input type=range>` to the same
+  `.scrub-range` 4 px track + 12 px accent thumb the sidebar's
+  Threshold slider uses. Gradient fill animates with the value.
+- ![polish][polish] **Sidebar card spacing** — Selection & Actions,
+  Auto cleanup and Optimize cards converted from inline
+  `<div style="height:Npx">` spacer divs to flex+gap on `.section-b`.
+  Uniform 6 px gaps; no more arbitrary 6 / 10 mix.
+
+**Fixes**
+
+- ![fix][fix] **Tree summary stuck at "1 parts in hierarchy"** —
+  `totalParts` was counting every part-kind tree node, including
+  deleted-but-tracked ones. Now counts only live parts; deleting the
+  last part correctly shows "0 parts in hierarchy".
+- ![fix][fix] **Stranded group origin dot after delete** — when every
+  part inside a group was deleted, the group's origin-dot sprite
+  remained at the stale world position. The dot reconcile walk now
+  bubbles "has live descendant" up the ancestor chain and skips groups
+  with zero live parts.
+- ![fix][fix] **Group selection no longer prompts for a name** — the
+  toolbar "Group selection" button used to pop a "New group" dialog
+  asking for a name. Now it acts exactly like the `Ctrl+G` shortcut:
+  creates the group with `Group N` and lets you rename inline.
+- ![fix][fix] **Path tracer on empty scene** — clicking the aperture
+  button with no model loaded now toasts "Nothing to render — load a
+  model or add a primitive first" instead of throwing `Scene is empty`
+  into the console and opening a broken modal.
+- ![fix][fix] **Material panel: add no longer toasts a confusing hint**
+  — the "Material added — Select parts and use Duplicate to assign"
+  toast is gone. Creating a material just creates it; the new entry is
+  visually selected in the panel.
+- ![fix][fix] **Material panel: duplicate works without a part
+  selection** — duplicating a material previously demanded parts be
+  selected ("Select parts first" toast). Now duplicate always clones
+  the material into `state.userMaterials`; if parts happen to be
+  selected they receive the clone as a convenience.
+- ![fix][fix] **Material panel: merge cleans up properly** — absorbed
+  materials are now removed from `state.userMaterials` and disposed,
+  matching Delete's cleanup. Previously they lingered as zero-count
+  ghost rows in the panel and leaked GPU resources.
+
+**Internals — industry-standard rewrites**
+
+- ![refactor][refactor] **All runtime `<style>` injections lifted into
+  the stylesheet** — 8 blocks (~490 lines) across app dialog, Save
+  Screenshot dialog, material editor popup, custom select widget,
+  Advanced flatten dialog, `_DraggablePopup` chrome, Batch Rename
+  dialog, and tree drag-and-drop. Every block lives under a labelled
+  `── Section ──` comment header in `index.html`. No more sweep
+  gotchas where the same CSS exists in two places.
+- ![refactor][refactor] **Undo as a command registry** — 11
+  monkey-patches around `undoLast` / `redoLast` collapsed into a single
+  `_UndoOps.register('typename', {undo, redo})` dispatch table covering
+  21 op types (boxify, merge, group, flatten, batchRename, duplicate,
+  paste-group, measure-add / -delete / -clear, addPart, primParams,
+  vis, hierGroup, hierUngroup, userGroupRemove, materialEdit, color,
+  delete, split, transform, transformGroup, groupTransform). New op
+  types now register with one call; no more 19-deep chain-of-
+  responsibility indirection on every Ctrl+Z. The plugin-facing
+  `_appHooks.undoHandlers` extension API (used by `cloner.js`) is
+  preserved by design.
+- ![refactor][refactor] **Renderer lifecycle owner** — `_RendererOwner`
+  module encapsulates create + apply-config + device-lost glue. The
+  fallback retry no longer duplicates the option list; `applyConfig`
+  is re-usable for any future rebuild path.
+- ![refactor][refactor] **Popover dismiss helper** — `_Popover.dismiss`
+  centralises outside-click + Escape for the context menu, brand menu,
+  export menu, and add-primitive menu. ~20 lines of duplicated
+  `addEventListener('click') / keydown` boilerplate gone. Future
+  popovers declare intent (containers, isOpen, capture, escape) instead
+  of owning the glue.
+- ![refactor][refactor] **Right-click context menu CSS** — `_ctxBuild`
+  used to write `row.style.cssText` and add per-row `mouseenter` /
+  `mouseleave` listeners. Replaced with proper `.ctx-menu-row` /
+  `.ctx-menu-sep` / `.ctx-menu-icon` classes and a CSS `:hover` rule.
+  Shortcut chips inside rows reuse `.kbd-chip` for consistency.
+- ![refactor][refactor] **Off-grid design tokens audit** — dropped 5
+  unused space tokens (`--space-3`, `--space-5`, `--space-9`,
+  `--space-11`, `--space-18`). The remaining off-grid escape hatches
+  (`--space-7` and `--fs-9/10/11/12`) all have real callers.
+
 ## v0.7.0
 
 v0.6.0 made authoring feel modern. v0.7.0 makes *presentation and

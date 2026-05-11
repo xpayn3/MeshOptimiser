@@ -231,6 +231,51 @@ function toast(title, msg='', type='info', dur=2400) {
   }, dur);
 }
 
+// ─── Shared popover dismissal helper ──────────────────────────────────────
+// Every popover (context menu, brand menu, export menu, add-primitive menu)
+// historically wired its own document-level click + keydown listeners to
+// close on outside-click / Escape. This consolidates the pattern so each
+// call site declares INTENT — what counts as "inside", whether the close
+// is conditional on an isOpen check, and what to run — without owning the
+// glue. The single source of truth means we can later add focus-return,
+// focus-trap, or animation-aware delays in one place.
+const _Popover = (() => {
+  // Register outside-click + Escape dismissal. Returns a `dispose()` that
+  // detaches both listeners. Options:
+  //   - containers: elements whose descendants should NOT trigger close.
+  //     Skip if `capture:true` (then EVERY click closes — used by ctx-menu).
+  //   - isOpen: function returning bool. Listeners short-circuit when false.
+  //   - capture: use capture phase (closes BEFORE descendant handlers can
+  //     stopPropagation). Required for menus where rows themselves stop
+  //     propagation but should still close the menu.
+  //   - escape: set to false to skip the Escape handler.
+  function dismiss(onClose, opts = {}) {
+    const containers = opts.containers || [];
+    const isOpen = opts.isOpen || (() => true);
+    const capture = !!opts.capture;
+    const escape = opts.escape !== false;
+    const onClick = (e) => {
+      if (!isOpen()) return;
+      if (!capture) {
+        for (const c of containers) if (c && c.contains(e.target)) return;
+      }
+      onClose(e);
+    };
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (!isOpen()) return;
+      onClose(e);
+    };
+    document.addEventListener('click', onClick, capture);
+    if (escape) document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onClick, capture);
+      if (escape) document.removeEventListener('keydown', onKey);
+    };
+  }
+  return { dismiss };
+})();
+
 // ─── App-styled confirm / prompt (replaces native browser dialogs) ─────────
 // Single shared modal element, reused across calls. Returns a Promise so call
 // sites can `await appConfirm(...)` / `await appPrompt(...)`. Esc cancels,
@@ -238,47 +283,8 @@ function toast(title, msg='', type='info', dur=2400) {
 const _Dialog = (() => {
   let bg, card, msgEl, inputEl, cancelBtn, okBtn, titleEl, iconEl, onClose;
 
-  function _injectStyles() {
-    if (document.getElementById('_dlg-style')) return;
-    const s = document.createElement('style');
-    s.id = '_dlg-style';
-    s.textContent = `
-      .dlg-bg{position:fixed;inset:0;background:transparent;display:none;place-items:center;z-index:300;opacity:0;transition:opacity .18s ease}
-      .dlg-bg.show{display:grid;opacity:1}
-      .dlg-card{
-        width:min(420px,calc(100vw - 32px));
-        background:linear-gradient(180deg,rgba(28,33,44,.96),rgba(18,22,30,.96));
-        border:1px solid rgba(255,255,255,.08);
-        border-radius:16px;
-        box-shadow:0 30px 80px -20px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06) inset,0 -1px 0 rgba(0,0,0,.4) inset;
-        overflow:hidden;
-        transform:translateY(8px) scale(.97);
-        opacity:0;
-        transition:transform .22s cubic-bezier(.2,.8,.3,1),opacity .18s ease;
-      }
-      .dlg-bg.show .dlg-card{transform:translateY(0) scale(1);opacity:1}
-      .dlg-head{display:flex;align-items:flex-start;gap:14px;padding:22px 22px 0}
-      .dlg-icon{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:var(--ac-tint-12);color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac-tint-18)}
-      .dlg-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-      .dlg-card.danger .dlg-icon{background:rgba(255,107,107,.13);color:var(--er);box-shadow:inset 0 0 0 1px rgba(255,107,107,.2)}
-      .dlg-text{flex:1;min-width:0;padding-top:2px}
-      .dlg-title{font-size:15px;font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:-.01em;margin-bottom:6px}
-      .dlg-msg{color:var(--tx2);font-size:var(--fs-lg);line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
-      .dlg-input{display:none;width:100%;margin-top:14px;padding:10px 12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:var(--r-md);color:var(--tx);font-size:13.5px;font-family:inherit;outline:none;transition:border-color .15s,background .15s,box-shadow .15s}
-      .dlg-input:focus{border-color:var(--ac-tint-55);background:rgba(255,255,255,.06);box-shadow:0 0 0 3px var(--ac-tint-15)}
-      .dlg-foot{display:flex;justify-content:flex-end;gap:var(--space-md);padding:18px 22px 20px;margin-top:18px;border-top:1px solid rgba(255,255,255,.05);background:rgba(0,0,0,.18)}
-      .dlg-btn{font:inherit;padding:8px 16px;border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;font-size:var(--fs-lg);font-weight:var(--fw-medium);transition:transform .08s,filter .12s,background .12s,border-color .12s;letter-spacing:var(--tracking-snug)}
-      .dlg-btn:active{transform:translateY(.5px)}
-      .dlg-btn-cancel{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.06);color:var(--tx2)}
-      .dlg-btn-cancel:hover{background:rgba(255,255,255,.08);color:var(--tx);border-color:rgba(255,255,255,.1)}
-      .dlg-btn-ok{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:white;border-color:transparent;box-shadow:0 4px 14px var(--ac-tint-25),inset 0 1px 0 rgba(255,255,255,.18)}
-      .dlg-btn-ok:hover{filter:brightness(1.07)}
-      .dlg-btn-ok.danger{background:linear-gradient(180deg,#ff7a85,#e25151);box-shadow:0 4px 14px rgba(255,107,107,.32),inset 0 1px 0 rgba(255,255,255,.18)}
-      .dlg-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-xl);transition:color .12s,background .12s}
-      .dlg-close:hover{color:var(--tx);background:rgba(255,255,255,.06)}
-    `;
-    document.head.appendChild(s);
-  }
+  // CSS for .dlg-* classes lives in index.html (search "App dialog
+   // (appConfirm / appPrompt)") — migrated out of a runtime <style> inject.
 
   const ICON_INFO   = `<i data-lucide="info"></i>`;
   const ICON_DANGER = `<i data-lucide="triangle-alert"></i>`;
@@ -286,7 +292,6 @@ const _Dialog = (() => {
 
   function _ensure() {
     if (bg) return;
-    _injectStyles();
     bg = document.createElement('div');
     bg.className = 'dlg-bg';
     bg.id = '_app-dialog';
@@ -754,19 +759,24 @@ function _updateVpHint() {
   const selN  = (state.selected && state.selected.size) || 0;
   const gm    = state.gizmoMode;
   const msr   = (typeof _Measure !== 'undefined' && _Measure?.isActive?.()) ? true : false;
+  // Render helpers: keycap chips wrapped in <kbd>, joined by + (combo) or / (alts).
+  const KBD = k => `<kbd class="vp-kbd">${k}</kbd>`;
+  const JOIN = (ks, sep) => `<span class="vp-hint-keys">${ks.map(KBD).join(`<span class="vp-kbd-join">${sep}</span>`)}</span>`;
+  const tip = (ks, label, sep='+') => (ks && ks.length ? JOIN(ks, sep) : '') + (label ? `<span class="vp-hint-lbl">${label}</span>` : '');
+  const lbl = s => `<span class="vp-hint-lbl">${s}</span>`;
   let parts;
   if (msr) {
-    parts = ['Measure', 'Click two points', 'Esc to exit'];
+    parts = [lbl('Measure'), tip(['Click'], 'two points'), tip(['Esc'], 'to exit')];
   } else if (selN === 0) {
-    parts = ['Click to select', 'Drag to orbit', 'Scroll to zoom', 'Right-click for menu'];
+    parts = [tip(['Click'], 'to select'), tip(['Drag'], 'to orbit'), tip(['Scroll'], 'to zoom'), tip(['Right-click'], 'menu')];
   } else if (gm === 'rotate') {
-    parts = [`${selN} selected`, 'Drag to rotate', 'Shift to snap', 'W/E/R: move/rotate/scale'];
+    parts = [lbl(`${selN} selected`), tip(['Drag'], 'to rotate'), tip(['Shift'], 'to snap'), tip(['W','E','R'], 'move / rotate / scale', '/')];
   } else if (gm === 'scale') {
-    parts = [`${selN} selected`, 'Drag to scale', 'W/E/R: move/rotate/scale'];
+    parts = [lbl(`${selN} selected`), tip(['Drag'], 'to scale'), tip(['W','E','R'], 'move / rotate / scale', '/')];
   } else if (gm === 'translate') {
-    parts = [`${selN} selected`, 'Drag gizmo to move', 'Shift to snap', 'W/E/R: move/rotate/scale'];
+    parts = [lbl(`${selN} selected`), tip(['Drag'], 'gizmo to move'), tip(['Shift'], 'to snap'), tip(['W','E','R'], 'move / rotate / scale', '/')];
   } else {
-    parts = [`${selN} selected`, 'Ctrl+G group', 'Del to delete', 'Esc to deselect'];
+    parts = [lbl(`${selN} selected`), tip(['Ctrl','G'], 'group'), tip(['Del'], 'to delete'), tip(['Esc'], 'to deselect')];
   }
   el.innerHTML = parts.join(SEP);
 }
@@ -2282,20 +2292,20 @@ const _CmdK = (() => {
     visibleItems = items;
     if (activeIdx >= items.length) activeIdx = 0;
     list.innerHTML = items.length === 0
-      ? `<div style="padding:18px;text-align:center;color:var(--tx3);font-size:var(--fs-md)">No matches</div>`
+      ? `<div class="cmdk-empty">No matches</div>`
       : items.map((a, i) => `
-        <div class="cmdk-item${i === activeIdx ? ' active' : ''}" data-idx="${i}" style="display:flex;align-items:center;gap:var(--space-xl);padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:var(--fs-md);background:${i === activeIdx ? 'var(--ac-soft)' : 'transparent'}">
-          <span style="color:var(--tx3);font-size:var(--fs-sm);min-width:54px">${a.group}</span>
-          <span style="flex:1;color:var(--tx)">${a.label}</span>
-          ${a.kbd ? `<span style="color:var(--tx3);font-family:var(--font-sans);font-size:var(--fs-sm);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 7px">${a.kbd}</span>` : ''}
+        <div class="cmdk-item${i === activeIdx ? ' active' : ''}" data-idx="${i}">
+          <span class="cmdk-item-group">${a.group}</span>
+          <span class="cmdk-item-label">${a.label}</span>
+          ${a.kbd ? `<span class="cmdk-keys">${a.kbd.split('+').map(k => `<kbd class="kbd-chip">${k}</kbd>`).join('<span class="sc-plus">+</span>')}</span>` : ''}
         </div>
       `).join('');
     list.querySelectorAll('.cmdk-item').forEach(el => {
       el.addEventListener('mouseenter', () => {
         activeIdx = parseInt(el.dataset.idx, 10) || 0;
-        list.querySelectorAll('.cmdk-item').forEach((e, i) => {
-          e.style.background = i === activeIdx ? 'var(--ac-soft)' : 'transparent';
-        });
+        // Toggle the .active class — CSS handles the background swap. Avoids
+        // per-element inline-style writes that compete with the stylesheet.
+        list.querySelectorAll('.cmdk-item').forEach((e, i) => e.classList.toggle('active', i === activeIdx));
       });
       el.addEventListener('click', () => {
         const idx = parseInt(el.dataset.idx, 10);
@@ -2338,23 +2348,51 @@ const _CmdK = (() => {
 
 const _Shortcuts = (() => {
   let inited = false;
-  function _render() {
+  // Per-category icon + display order. Anything in _Actions.list outside this
+  // map still renders, sorted alphabetically after the known groups.
+  const GROUP_ICONS = { File:'folder', Edit:'pencil', Selection:'mouse-pointer-2', View:'eye', App:'settings-2' };
+  const GROUP_ORDER = ['File', 'Edit', 'Selection', 'View', 'App'];
+  function _esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function _renderKeys(kbd) {
+    // Split combos like "Ctrl+Shift+O" into separate keycap chips, joined by +.
+    return kbd.split('+').map(k => `<kbd class="kbd-chip">${_esc(k)}</kbd>`).join('<span class="sc-plus">+</span>');
+  }
+  function _render(query = '') {
     const body = document.getElementById('shortcuts-body');
     if (!body) return;
+    const q = query.trim().toLowerCase();
     const groups = {};
+    let total = 0;
     for (const a of _Actions.list) {
       if (!a.kbd) continue;
+      if (q) {
+        const hay = `${a.label} ${a.group} ${a.kbd}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
       (groups[a.group] = groups[a.group] || []).push(a);
+      total++;
     }
-    body.innerHTML = Object.entries(groups).map(([g, items]) => `
-      <div style="margin-bottom:14px">
-        <div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3);margin-bottom:6px">${g}</div>
-        ${items.map(a => `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:var(--fs-md)">
-          <span style="color:var(--tx)">${a.label}</span>
-          <span style="color:var(--tx2);font-family:var(--font-sans);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 8px;font-size:var(--fs-sm)">${a.kbd}</span>
-        </div>`).join('')}
+    if (total === 0) {
+      body.innerHTML = `<div class="sc-empty">No shortcuts match "${_esc(query)}"</div>`;
+      return;
+    }
+    const known = GROUP_ORDER.filter(g => groups[g]);
+    const unknown = Object.keys(groups).filter(g => !GROUP_ORDER.includes(g)).sort();
+    const ordered = [...known, ...unknown];
+    body.innerHTML = ordered.map(g => `
+      <div class="sc-group">
+        <div class="sc-group-h"><i data-lucide="${GROUP_ICONS[g] || 'square'}" aria-hidden="true"></i><span>${_esc(g)}</span></div>
+        <div class="sc-grid">
+          ${groups[g].map(a => `
+            <div class="sc-row">
+              <span class="sc-row-label" title="${_esc(a.label)}">${_esc(a.label)}</span>
+              <span class="sc-row-keys">${_renderKeys(a.kbd)}</span>
+            </div>
+          `).join('')}
+        </div>
       </div>
     `).join('');
+    try { window.lucide?.createIcons(); } catch(_){}
   }
   function _wire() {
     if (inited) return;
@@ -2363,12 +2401,33 @@ const _Shortcuts = (() => {
     if (!bg) return;
     document.getElementById('shortcuts-close')?.addEventListener('click', hide);
     bg.addEventListener('click', e => { if (e.target === bg) hide(); });
+    const search = document.getElementById('shortcuts-search');
+    if (search) {
+      search.addEventListener('input', () => _render(search.value));
+      search.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          // Esc: first clear the query, then close if already empty.
+          if (search.value) { e.preventDefault(); e.stopPropagation(); search.value = ''; _render(''); }
+          else { e.preventDefault(); hide(); }
+        }
+      });
+    }
     document.addEventListener('keydown', e => {
       if (!bg.classList.contains('show')) return;
-      if (e.key === 'Escape') { e.preventDefault(); hide(); }
+      const inSearch = document.activeElement === search;
+      if (e.key === 'Escape' && !inSearch) { e.preventDefault(); hide(); }
     });
+    // Render lucide icons in the static footer/search-icon on first wire.
+    try { window.lucide?.createIcons(); } catch(_){}
   }
-  function show() { _wire(); _render(); document.getElementById('shortcuts-modal')?.classList.add('show'); }
+  function show() {
+    _wire();
+    _render('');
+    const bg = document.getElementById('shortcuts-modal');
+    bg?.classList.add('show');
+    const search = document.getElementById('shortcuts-search');
+    if (search) { search.value = ''; setTimeout(() => search.focus(), 50); }
+  }
   function hide() { document.getElementById('shortcuts-modal')?.classList.remove('show'); }
   return { show, hide };
 })();
@@ -2484,16 +2543,14 @@ window.addEventListener('keydown', e => {
       e.stopPropagation();
       menu.classList.contains('show') ? close() : open();
     });
-    document.addEventListener('click', e => {
-      if (!menu.classList.contains('show')) return;
-      if (menu.contains(e.target) || btn.contains(e.target)) return;
-      close();
-    });
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && menu.classList.contains('show')) { close(); btn.focus(); }
-    });
+    // Shared dismiss helper handles outside-click + Escape. Esc additionally
+    // restores focus to the trigger (matches native menu behavior).
+    _Popover.dismiss(
+      (e) => { close(); if (e?.type === 'keydown') btn.focus(); },
+      { containers: [menu, btn], isOpen: () => menu.classList.contains('show') },
+    );
     $('brand-menu-settings')?.addEventListener('click', () => { close(); _Settings.show(); });
-    $('brand-menu-shortcuts')?.addEventListener('click', () => { close(); try { _CmdK.show(); } catch(_){} });
+    $('brand-menu-shortcuts')?.addEventListener('click', () => { close(); try { _Shortcuts.show(); } catch(_){} });
   })();
   input?.addEventListener('change', e => {
     const f = e.target.files[0]; e.target.value = '';
@@ -2553,45 +2610,89 @@ window.addEventListener('keydown', e => {
   console.log('[STEP] Early file picker wired');
 })();
 
+// ─── Renderer lifecycle owner ─────────────────────────────────────────────
+// Encapsulates the main viewport renderer's create + config + device-lost
+// glue. The `renderer` variable stays module-scoped (lots of call sites
+// reference it directly), so the owner is a sidecar that handles the
+// init/recovery surface without forcing every consumer to go through a
+// wrapper. Other renderers (the pathtracer modal, thumbnail snapshots) own
+// their own short-lived instances and are out of scope here.
+const _RendererOwner = (() => {
+  // Read user preferences: URL param + localStorage flag + capability sniff.
+  // Returns `true` if WebGL2 is forced. WebGPU's clipping-plane support on
+  // auto-converted standard materials is unreliable in three.js r0.172;
+  // WebGL2 is functionally identical for this app (no compute, no TSL).
+  function preferences() {
+    let forceWebGL = !navigator.gpu;
+    try {
+      if (new URLSearchParams(location.search).get('webgl') === '1') forceWebGL = true;
+      if (localStorage.getItem('stepopt-force-webgl') === '1') forceWebGL = true;
+    } catch (_) {}
+    return { forceWebGL };
+  }
+  // Create + init a renderer. Returns { instance, backendName }. Tries the
+  // requested backend first; on init failure retries with forceWebGL:true so
+  // the user gets SOMETHING rather than a black canvas. Caller is
+  // responsible for stashing the instance into the module-scoped `renderer`.
+  async function create({ canvas, forceWebGL }) {
+    const opts = { canvas, antialias: true, alpha: false };
+    try {
+      const r = new THREE.WebGPURenderer({ ...opts, forceWebGL });
+      await r.init();
+      const isGPU = !forceWebGL && r.backend && (r.backend.isWebGPUBackend || r.backend.constructor?.name?.includes('WebGPU'));
+      return { instance: r, backendName: isGPU ? 'WebGPU' : 'WebGL2' };
+    } catch (e) {
+      console.warn('[STEP] renderer init failed, retry forceWebGL:', e.message);
+      const r = new THREE.WebGPURenderer({ ...opts, forceWebGL: true });
+      await r.init();
+      return { instance: r, backendName: 'WebGL2' };
+    }
+  }
+  // Apply the standard config (pixel ratio, size, color space, tone mapping,
+  // dithering, local clipping). Hoisted so any future rebuild path can call
+  // it on the new instance to get identical state.
+  function applyConfig(r, { canvas }) {
+    r.setPixelRatio(Math.min(devicePixelRatio, 2));
+    r.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    r.setClearColor(0x222831, 1);
+    if (r.outputColorSpace !== undefined) r.outputColorSpace = THREE.SRGBColorSpace;
+    if (r.toneMapping !== undefined) {
+      r.toneMapping = THREE.NeutralToneMapping ?? THREE.ACESFilmicToneMapping;
+      r.toneMappingExposure = 1.0;
+    }
+    // Dithering breaks up 8-bit quantization banding in the background gradient.
+    try { if ('dithering' in r) r.dithering = true; } catch (_) {}
+    // Enable local clipping (per-material Plane lists). Required for the
+    // Section/Clip panel; harmless when no planes are set.
+    try { if ('localClippingEnabled' in r) r.localClippingEnabled = true; } catch (_) {}
+  }
+  // Attach a WebGPU device-lost handler. Fires exactly once when the GPU
+  // device dies (driver hiccup, OS-level GPU reset, laptop hybrid switch,
+  // long suspended tab). Without this every subsequent render() throws
+  // silently and the viewport just freezes.
+  function attachDeviceLostHandler(r) {
+    try {
+      const dev = r?.backend?.device;
+      if (dev && dev.lost && typeof dev.lost.then === 'function') {
+        dev.lost.then((info) => {
+          const reason = info?.reason || 'unknown';
+          const msg = info?.message || '(no message)';
+          console.warn('[GPU] device lost:', reason, msg);
+          try { toast('GPU lost', reason + ' — reload the page to recover', 'error', 10000); } catch (_) {}
+        });
+      }
+    } catch (e) { console.warn('[GPU] could not attach lost handler:', e); }
+  }
+  return { preferences, create, applyConfig, attachDeviceLostHandler };
+})();
+
 async function initRenderer() {
   const canvas = $('canvas');
-  let name = 'WebGL2';
-  // Allow forcing WebGL2 via ?webgl=1 URL param or localStorage flag.
-  // WebGPU's clipping-plane support on auto-converted standard materials is
-  // unreliable in three.js r0.172 — section cut may not appear in WebGPU mode
-  // even after material rebuild. WebGL2 is functionally identical for this app
-  // (no compute shaders, no TSL) so the fallback is a one-line escape hatch.
-  let forceWebGL = !navigator.gpu;
-  try {
-    if (new URLSearchParams(location.search).get('webgl') === '1') forceWebGL = true;
-    if (localStorage.getItem('stepopt-force-webgl') === '1') forceWebGL = true;
-  } catch (_) {}
-  try {
-    renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: false, forceWebGL });
-    await renderer.init();
-    const isGPU = !forceWebGL && renderer.backend && (renderer.backend.isWebGPUBackend || renderer.backend.constructor?.name?.includes('WebGPU'));
-    name = isGPU ? 'WebGPU' : 'WebGL2';
-  } catch (e) {
-    console.warn('[STEP] renderer init failed, retry forceWebGL:', e.message);
-    renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: false, forceWebGL: true });
-    await renderer.init();
-    name = 'WebGL2';
-  }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
-  renderer.setClearColor(0x222831, 1);
-  if (renderer.outputColorSpace !== undefined) renderer.outputColorSpace = THREE.SRGBColorSpace;
-  if (renderer.toneMapping !== undefined) {
-    renderer.toneMapping = THREE.NeutralToneMapping ?? THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
-  }
-  // Dithering breaks up 8-bit quantization banding in the background gradient.
-  // The tiny noise pattern is invisible in normal use but eliminates visible
-  // horizontal steps caused by the limited color range of dark gradient presets.
-  try { if ('dithering' in renderer) renderer.dithering = true; } catch (_) {}
-  // Enable local clipping (per-material Plane lists). Required for the
-  // Section/Clip panel; harmless when no planes are set.
-  try { if ('localClippingEnabled' in renderer) renderer.localClippingEnabled = true; } catch (_) {}
+  const { forceWebGL } = _RendererOwner.preferences();
+  const { instance, backendName } = await _RendererOwner.create({ canvas, forceWebGL });
+  renderer = instance;
+  _RendererOwner.applyConfig(renderer, { canvas });
+  const name = backendName;
   $('renderer-name').textContent = name;
   // Both WebGPU and WebGL2 are first-class user choices via the top-bar
   // dropdown — neither is a fallback/warning state.
@@ -2627,23 +2728,7 @@ async function initRenderer() {
     }
   } catch (_) {}
 
-  // Hook WebGPU device-lost. Without this, a GPU driver hiccup or OS-level
-  // GPU reset (e.g. screen lock + unlock, switching between integrated and
-  // discrete GPU on a laptop, long suspended tab) silently kills the device
-  // and every subsequent renderer.render() throws — the viewport just
-  // freezes with no indication. The lost.then() resolves exactly once when
-  // the device dies; we surface it explicitly.
-  try {
-    const dev = renderer?.backend?.device;
-    if (dev && dev.lost && typeof dev.lost.then === 'function') {
-      dev.lost.then((info) => {
-        const reason = info?.reason || 'unknown';
-        const msg = info?.message || '(no message)';
-        console.warn('[GPU] device lost:', reason, msg);
-        try { toast('GPU lost', reason + ' — reload the page to recover', 'error', 10000); } catch (_) {}
-      });
-    }
-  } catch (e) { console.warn('[GPU] could not attach lost handler:', e); }
+  _RendererOwner.attachDeviceLostHandler(renderer);
 }
 
 function initScene() {
@@ -4063,47 +4148,39 @@ function tick() {
     // decay window. This drops idle GPU usage to ~0 on a static 10k-part scene.
     const shouldRender = state.needsRender || state.activeFrames > 0;
     if (shouldRender && !state.renderPaused) {
-      // Keep shader grid centred under camera so world-space vertices stay
-      // within ±1e6 of the view origin, avoiding float32 precision jitter.
+      // Drive the ray-marched grid uniforms each frame. The shader runs over
+      // a fullscreen quad and reconstructs the eye ray per pixel from
+      // uInvViewProj, then intersects with the active plane — so there's no
+      // mesh position / rotation to track; we just push the active basis +
+      // the camera's inverse(P×V) matrix into uniforms.
       if (gridHelper?.userData?.isShaderGrid) {
         const u = gridHelper.userData.uniforms;
         // Pick the in-plane basis from the active grid plane. Default = XY
-        // (standard top/persp view). 'xz' & 'yz' are set when the user
+        // (standard top/persp view); 'xz' / 'yz' are set when the user
         // enters Front / Side ortho views — see _setStandardView.
         const plane = state.gridPlane || 'xy';
-        let uAx, vAx, nAx;   // in-plane axes + normal index ('x' | 'y' | 'z')
-        if (plane === 'xz')      { uAx = 'x'; vAx = 'z'; nAx = 'y'; }
-        else if (plane === 'yz') { uAx = 'y'; vAx = 'z'; nAx = 'x'; }
-        else                     { uAx = 'x'; vAx = 'y'; nAx = 'z'; }
-        // Push the basis vectors to the shader. Idempotent set; .value is a
-        // Vector3 and these are the only writers, so direct mutation is safe.
-        if (u.uAxisU) u.uAxisU.value.set(uAx === 'x' ? 1 : 0, uAx === 'y' ? 1 : 0, uAx === 'z' ? 1 : 0);
-        if (u.uAxisV) u.uAxisV.value.set(vAx === 'x' ? 1 : 0, vAx === 'y' ? 1 : 0, vAx === 'z' ? 1 : 0);
-        // Position the mesh so its local origin sits at the camera's
-        // projection onto the active plane. ONLY the in-plane axes track
-        // the camera; the out-of-plane axis keeps whatever _fitGridToModel
-        // set (the floor for the default XY plane), so panning the camera
-        // up/down doesn't drag the floor grid along with it.
-        const camP = camera.position;
-        if (uAx === 'x' || vAx === 'x') gridHelper.position.x = camP.x;
-        if (uAx === 'y' || vAx === 'y') gridHelper.position.y = camP.y;
-        if (uAx === 'z' || vAx === 'z') gridHelper.position.z = camP.z;
-        // Rotate the mesh so its physical plane matches the active grid
-        // plane. PlaneGeometry is XY by default; rotate as needed.
-        gridHelper.rotation.set(
-          plane === 'xz' ? -Math.PI / 2 : 0,
-          plane === 'yz' ?  Math.PI / 2 : 0,
-          0,
-        );
-        gridHelper.updateMatrix();
-        // Camera-follow uniforms — used by the in-shader distance fade.
-        u.uCamX.value = camP[uAx];
-        u.uCamY.value = camP[vAx];
+        let nAx;   // normal axis index for the angle-fade calc below
+        if (u.uPlaneN && u.uPlaneU && u.uPlaneV) {
+          if (plane === 'xz')      { u.uPlaneN.value.set(0, 1, 0); u.uPlaneU.value.set(1, 0, 0); u.uPlaneV.value.set(0, 0, 1); nAx = 'y'; }
+          else if (plane === 'yz') { u.uPlaneN.value.set(1, 0, 0); u.uPlaneU.value.set(0, 1, 0); u.uPlaneV.value.set(0, 0, 1); nAx = 'x'; }
+          else                     { u.uPlaneN.value.set(0, 0, 1); u.uPlaneU.value.set(1, 0, 0); u.uPlaneV.value.set(0, 1, 0); nAx = 'z'; }
+        } else {
+          nAx = plane === 'xz' ? 'y' : plane === 'yz' ? 'x' : 'z';
+        }
+        // Inverse(projection × view) — back-projects NDC pixels to world rays
+        // inside the shader. Three.js refreshes camera.matrixWorldInverse
+        // automatically when controls move, so this is always current.
+        if (u.uInvViewProj) {
+          if (!gridHelper.userData._scratchVP) gridHelper.userData._scratchVP = new THREE.Matrix4();
+          const vp = gridHelper.userData._scratchVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+          u.uInvViewProj.value.copy(vp).invert();
+        }
         // View-angle fade against the active plane's normal. |dot(view,n)|
-        // ranges 0 (edge-on) → 1 (looking straight down). Tight smoothstep
-        // 0..0.06 (~3.4°) — grid stays full strength almost everywhere and
-        // only blanks the moiré band right at the horizon.
+        // ranges 0 (edge-on) → 1 (looking straight at the plane). Tight
+        // smoothstep over the first 0.06 (~3.4°) — grid stays full strength
+        // almost everywhere and only blanks the moiré band at the horizon.
         if (u.uAngleFade && controls?.target) {
+          const camP = camera.position;
           const tgt = controls.target;
           const vx = camP.x - tgt.x;
           const vy = camP.y - tgt.y;
@@ -5576,56 +5653,7 @@ function _openScreenshotDialog() {
     toast('Screenshot failed', 'Renderer not ready', 'warn');
     return;
   }
-  // Inject the dialog-specific styles once. Scoped to #scrshot-dlg so they
-  // don't leak into other popups.
-  if (!document.getElementById('_scrshot-dlg-style')) {
-    const s = document.createElement('style');
-    s.id = '_scrshot-dlg-style';
-    s.textContent = `
-      #scrshot-dlg .ss-body{padding:14px 16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
-      #scrshot-dlg .ss-section-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;margin-bottom:6px}
-      #scrshot-dlg .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-sm)}
-      #scrshot-dlg .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:var(--r-md);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .14s ease,border-color .14s ease,transform .12s ease}
-      #scrshot-dlg .ss-preset:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
-      #scrshot-dlg .ss-preset.active{background:linear-gradient(180deg,var(--ac-tint-18),var(--ac-tint-08));border-color:var(--ac-tint-40);color:var(--tx)}
-      #scrshot-dlg .ss-preset .lbl{font-size:var(--fs-12);font-weight:var(--fw-semibold);line-height:1.1}
-      #scrshot-dlg .ss-preset .sub{font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
-      #scrshot-dlg .ss-preset.active .sub{color:var(--ac)}
-      #scrshot-dlg .ss-custom{display:flex;align-items:center;gap:var(--space-md)}
-      #scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:7px;font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
-      #scrshot-dlg .ss-custom input:focus{border-color:var(--ac-tint-55)}
-      #scrshot-dlg .ss-custom .x{color:var(--tx3);font-size:var(--fs-lg);font-weight:var(--fw-medium)}
-      #scrshot-dlg .ss-meta{display:flex;justify-content:space-between;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
-      #scrshot-dlg .ss-meta strong{color:var(--tx2);font-weight:var(--fw-medium)}
-      #scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:var(--space-sm)}
-      #scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:7px;font-size:var(--fs-md);outline:none}
-      #scrshot-dlg .ss-name input:focus{border-color:var(--ac-tint-55)}
-      #scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:7px;cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
-      #scrshot-dlg .ss-overlay-row:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.10)}
-      #scrshot-dlg .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
-      #scrshot-dlg .ss-overlay-row .lbl{flex:1;font-size:var(--fs-12);color:var(--tx);font-weight:var(--fw-medium)}
-      #scrshot-dlg .ss-overlay-row .hint{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-regular);margin-left:4px}
-      #scrshot-dlg .ss-stamp-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--bd);border-top:0;border-radius:0 0 7px 7px;margin-top:-7px}
-      #scrshot-dlg .ss-stamp-fields.disabled{opacity:.45;pointer-events:none}
-      #scrshot-dlg .ss-stamp-check{display:flex;align-items:center;gap:7px;font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none}
-      #scrshot-dlg .ss-stamp-check input{accent-color:var(--ac);width:12px;height:12px;cursor:pointer;margin:0}
-      #scrshot-dlg .ss-stamp-pos{display:flex;align-items:center;gap:6px;grid-column:1 / -1;padding-top:6px;margin-top:2px;border-top:1px solid var(--bd);font-size:var(--fs-11);color:var(--tx3)}
-      #scrshot-dlg .ss-stamp-pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;flex:1}
-      #scrshot-dlg .ss-stamp-pos-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:4px 8px;border-radius:5px;font-size:var(--fs-11);cursor:pointer;transition:background .12s,border-color .12s,color .12s;font-variant-numeric:tabular-nums}
-      #scrshot-dlg .ss-stamp-pos-btn:hover{background:rgba(255,255,255,.06);color:var(--tx)}
-      #scrshot-dlg .ss-stamp-pos-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac)}
-      #scrshot-dlg .ss-vmode{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-      #scrshot-dlg .ss-vmode-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:7px 8px;border-radius:7px;font-size:var(--fs-11);cursor:pointer;font-weight:var(--fw-medium);transition:background .12s,border-color .12s,color .12s}
-      #scrshot-dlg .ss-vmode-btn:hover{background:rgba(255,255,255,.06);color:var(--tx)}
-      #scrshot-dlg .ss-vmode-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac)}
-      #scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:var(--fs-12);border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:var(--fw-medium)}
-      #scrshot-dlg .dlg-foot .ss-cancel:hover{background:rgba(255,255,255,.05)}
-      #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,var(--ac-tint-35),var(--ac-tint-18));border-color:var(--ac-tint-55);color:var(--tx-on-accent)}
-      #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,var(--ac-tint-40),var(--ac-tint-25))}
-      #scrshot-dlg .dlg-foot .ss-save:disabled{opacity:.5;cursor:wait}
-    `;
-    document.head.appendChild(s);
-  }
+  // CSS for #scrshot-dlg lives in index.html (search "Save Screenshot dialog").
 
   // Compute viewport size up front so the "Match viewport" preset is exact.
   const cv = renderer.domElement;
@@ -6238,6 +6266,16 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
   return group;
 }
 
+// Ray-marched infinite grid (industry-standard pattern — Blender / Godot /
+// Bevy / Fyrestar all use a variant of this). Renders a fullscreen quad and,
+// for every screen pixel, reconstructs the eye ray through that pixel and
+// intersects it with the active grid plane. Cell math runs on the world-space
+// hit point, so there's no PlaneGeometry to give up vertex precision at
+// distance and no plane edge to fall off the screen at oblique angles.
+// Coplanar Z-fight is solved analytically: the shader writes its own depth
+// (the projected hit-point depth) biased by uPlaneBias along the plane normal,
+// so geometry sitting on z=0 always wins the depth test cleanly — no
+// polygonOffset hacks, no LessDepth strict-less special case.
 function _makeShaderGrid(opts = {}) {
   const minor      = opts.minor      ?? 1.0;
   const major      = opts.major      ?? minor * 10;
@@ -6245,105 +6283,152 @@ function _makeShaderGrid(opts = {}) {
   const fadeEnd    = opts.fadeEnd    ?? 2000;
   try {
     const tsl = THREE.TSL;
-    if (!THREE.MeshBasicNodeMaterial || !tsl?.positionWorld || !tsl?.fwidth || !tsl?.uniform)
+    if (!THREE.MeshBasicNodeMaterial || !tsl?.uniform || !tsl?.fwidth || !tsl?.fract)
       throw new Error('TSL nodes unavailable');
 
-    const { positionWorld, fwidth, fract, uniform, smoothstep,
-            vec2, vec3, float, color, mix, abs, min, max, dot, length: len } = tsl;
+    const { positionLocal, fwidth, fract, uniform, smoothstep,
+            vec2, vec3, vec4, float, color, mix, abs, min, max, dot,
+            length: len, normalize,
+            cameraPosition, cameraProjectionMatrix, cameraViewMatrix } = tsl;
 
+    // — Uniforms —
     const uMinor      = uniform(minor);
     const uMajorEvery = uniform(major / minor);
     const uFadeStart  = uniform(fadeStart);
     const uFadeEnd    = uniform(fadeEnd);
-    const uCamX       = uniform(0);
-    const uCamY       = uniform(0);
-    // View-angle fade: 1 when looking straight down, 0 when grid is edge-on.
+    // View-angle fade: 1 when looking straight at the plane, 0 when edge-on.
     const uAngleFade  = uniform(1);
-    // In-plane basis vectors. Default = world X / Y axes (XY grid plane).
-    // Per-frame update swaps these for X / Z (front view) or Y / Z (side
-    // view) so the grid always lies in the camera's facing plane in
-    // standard ortho views, instead of going edge-on and disappearing.
-    const uAxisU      = uniform(new THREE.Vector3(1, 0, 0));
-    const uAxisV      = uniform(new THREE.Vector3(0, 1, 0));
+    // Active grid plane: normal + two in-plane basis vectors. Default = XY
+    // plane (normal +Z, basis X & Y); the per-frame loop swaps these for
+    // Front (xz) / Side (yz) views so the grid always lies in the camera's
+    // facing plane in standard orthos instead of disappearing edge-on.
+    const uPlaneN     = uniform(new THREE.Vector3(0, 0, 1));
+    const uPlaneU     = uniform(new THREE.Vector3(1, 0, 0));
+    const uPlaneV     = uniform(new THREE.Vector3(0, 1, 0));
+    // Depth bias along plane normal (in world units). The grid's analytic
+    // depth-write is offset by this amount AWAY from the camera so coplanar
+    // geometry — cube bottom face on z=0 — always wins the depth comparison.
+    // 1e-4 is invisible at any reasonable scene scale and well above FP noise.
+    const uPlaneBias  = uniform(0.0001);
+    // Per-frame inverse(projection × view). Drives the eye-ray unproject;
+    // the JS-side renderer loop copies it from the active camera each frame.
+    const uInvViewProj = uniform(new THREE.Matrix4());
 
-    // Project the world-space vertex onto the active in-plane basis. For the
-    // default XY plane this just reads positionWorld.x / .y; for swapped
-    // bases it picks the right two world axes.
-    const xy = vec2(dot(positionWorld, uAxisU), dot(positionWorld, uAxisV));
+    // — Vertex stage: fullscreen quad —
+    // PlaneGeometry(2,2) at identity → vertices at (±1, ±1, 0). We emit them
+    // directly as clip-space coords (w=1) so the quad covers the entire
+    // viewport regardless of camera position or transform. No model-view-
+    // projection involved at the vertex level.
+    const ndcQuad = vec4(positionLocal.x, positionLocal.y, float(0), float(1));
 
-    // Minor grid lines
+    // — Fragment stage: per-pixel ray reconstruction + plane intersect —
+    // Because the quad spans NDC, positionLocal.xy is the NDC of this pixel
+    // (after rasterization-interpolation). Use uInvViewProj to back-project a
+    // far-plane point into world space, then take the ray from cameraPosition
+    // through that point. (Going via the FAR plane gives the longest baseline
+    // for direction precision; ray length is normalized so the actual choice
+    // doesn't matter.)
+    const farH = uInvViewProj.mul(vec4(positionLocal.x, positionLocal.y, float(1), float(1)));
+    const farW = farH.xyz.div(farH.w);
+    const rayDir = normalize(farW.sub(cameraPosition));
+
+    // Ray-plane intersection: plane passes through origin, normal = uPlaneN.
+    //   dot(O + t·D, N) = 0   ⇒   t = -dot(O, N) / dot(D, N)
+    // Pixels where the ray misses the plane (parallel) or hits behind the
+    // camera (t < 0) get masked to alpha=0 below.
+    const denom = dot(rayDir, uPlaneN);
+    const t     = float(0).sub(dot(cameraPosition, uPlaneN)).div(denom);
+
+    const hit = cameraPosition.add(rayDir.mul(t));
+    // Project the world-space hit onto the in-plane basis to get a 2D coord
+    // we can run modular cell math on.
+    const xy = vec2(dot(hit, uPlaneU), dot(hit, uPlaneV));
+
+    // Minor grid lines (every 1 minor-cell unit).
     const cellXY = xy.div(uMinor);
     const fwCell = fwidth(cellXY);
     const dMin   = abs(fract(cellXY.sub(0.5)).sub(0.5)).div(fwCell);
     const aMinor = float(1).sub(min(min(dMin.x, dMin.y), float(1)));
 
-    // Major grid lines (every N minor cells)
+    // Major grid lines (every N minor cells).
     const cellMaj = cellXY.div(uMajorEvery);
     const fwMaj   = fwidth(cellMaj);
     const dMaj    = abs(fract(cellMaj.sub(0.5)).sub(0.5)).div(fwMaj);
     const aMajor  = float(1).sub(min(min(dMaj.x, dMaj.y), float(1)));
 
-    // Axis lines (world X=0 and Y=0). The divisor `fwXY * N` is the radius
-    // (in pixels-equivalent) over which the alpha ramps from 1 → 0, so a
-    // SMALLER multiplier = narrower falloff = thinner-looking line. Was 2,
-    // now 0.9 — paired with the lower alpha below this makes the red/green
-    // origin cross a quiet reference instead of a heavy bar.
+    // Origin axis lines (planeU=0 and planeV=0). Narrow, quiet — see prior
+    // tuning notes: the divisor scales the falloff width in pixels.
     const fwXY   = fwidth(xy);
     const aAxisX = float(1).sub(min(abs(xy.y).div(fwXY.y.mul(0.9)), float(1)));
     const aAxisY = float(1).sub(min(abs(xy.x).div(fwXY.x.mul(0.9)), float(1)));
 
-    // Distance fade — centred on camera ground projection, updated each frame
-    const dist = len(xy.sub(vec2(uCamX, uCamY)));
+    // Distance fade — radial from the camera's projection onto the plane.
+    const camOnPlane = vec2(dot(cameraPosition, uPlaneU), dot(cameraPosition, uPlaneV));
+    const dist = len(xy.sub(camOnPlane));
     const fade = float(1).sub(smoothstep(uFadeStart, uFadeEnd, dist));
 
-    // Colors
+    // Colors (same palette as the previous grid).
     const cGrid  = color(0xa0a6b0);
     const cAxisX = color(0xff5050);
     const cAxisY = color(0x40d860);
     const col    = mix(mix(cGrid, cAxisX, aAxisX.clamp(0, 1)), cAxisY, aAxisY.clamp(0, 1));
 
-    // Alpha: minor subtle, major moderate, axis strong. Toned down from
-    // 0.07/0.22/0.9 — the previous values made the grid "loud" against
-    // dark and HDRI backgrounds, fighting with the model for attention.
-    // The angle-fade only attenuates the grid pattern itself; the world X/Y
-    // axis lines are exempt so a horizon reference still reads in front and
-    // side ortho views (where the XY plane is edge-on).
+    // Alpha composition — same tuning as the previous grid for visual parity.
     const aGrid  = max(aMinor.mul(0.035), aMajor.mul(0.11)).mul(uAngleFade);
-    // Axis alpha dropped from 0.6 → 0.32 — pairs with the thinner line above
-    // for an overall quieter origin cross.
     const aAxis  = max(aAxisX.mul(0.32), aAxisY.mul(0.32));
-    const alpha  = max(aGrid, aAxis).clamp(0, 1).mul(fade);
+    // Validity mask: t > 0 means the ray hits the plane IN FRONT of the
+    // camera; t <= 0 means behind us (camera on or below the plane → no grid
+    // for those pixels). A tight smoothstep over a tiny range gives a clean
+    // edge without artifacts at the horizon.
+    const tValid = smoothstep(float(0), float(0.001), t);
+    const alpha  = max(aGrid, aAxis).clamp(0, 1).mul(fade).mul(tValid);
 
-    // Grid draws LAST (renderOrder:999) with depth-test enabled but no depth
-    // write. By that point the depth buffer holds opaque scene depth, so the
-    // grid is correctly occluded behind anything in front of the plane.
-    // depthFunc:LessDepth (strict less) makes coplanar pixels — e.g. the
-    // bottom face of a cube sitting on the grid plane — FAIL the depth test
-    // (grid_d == existing_d ⇒ not strictly less), so the geometry wins ties
-    // and there's no Z-fight flicker.
-    // polygonOffset would also work in WebGL but produces visible flicker on
-    // coplanar transparent meshes under WebGPU; the renderOrder + LESS swap
-    // is renderer-agnostic and equally cheap.
+    // — Analytic depth write —
+    // Project the (slightly biased) hit point back through the camera. The
+    // bias is in world space along the plane normal AWAY from the camera, so
+    // coplanar geometry sitting on the plane is always strictly closer in
+    // depth space and wins the depth test cleanly. NDC z from a WebGPU
+    // projection is already 0..1, matching the depth-buffer convention.
+    const biasedHit = hit.sub(uPlaneN.mul(uPlaneBias));
+    const clipHit = cameraProjectionMatrix.mul(cameraViewMatrix).mul(
+      vec4(biasedHit.x, biasedHit.y, biasedHit.z, float(1)),
+    );
+    const ndcZ = clipHit.z.div(clipHit.w);
+
     const mat = new THREE.MeshBasicNodeMaterial({
       transparent: true,
-      depthWrite: false,
+      depthWrite: true,
+      depthTest: true,
       side: THREE.DoubleSide,
-      depthFunc: THREE.LessDepth,
     });
+    mat.vertexNode  = ndcQuad;
     mat.colorNode   = col;
     mat.opacityNode = alpha;
+    mat.depthNode   = ndcZ;
 
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2e6, 2e6, 1, 1), mat);
+    // Tiny 2×2 plane in local space — vertexNode places it as a fullscreen
+    // quad regardless. frustumCulled:false because there is no bounding box
+    // semantically — every pixel runs the shader.
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2, 1, 1), mat);
     mesh.matrixAutoUpdate = false;
-    mesh.renderOrder = 999;
+    mesh.frustumCulled    = false;
+    // Render BEFORE scene geometry. The grid writes its own analytic depth;
+    // anything closer (geometry on z=0 or above) will then occlude it via
+    // ordinary depth-test. The +1 over the default keeps it behind helpers
+    // that explicitly opt out of depth testing (gizmos, selection halos).
+    mesh.renderOrder = -1;
 
     const grp = new THREE.Group();
     grp.name = '_infiniteGrid';
     grp.add(mesh);
     grp.matrixAutoUpdate = false;
     grp.userData.isShaderGrid = true;
-    grp.userData.uniforms     = { uMinor, uMajorEvery, uFadeStart, uFadeEnd, uCamX, uCamY, uAngleFade, uAxisU, uAxisV };
-    grp.userData.gridParams   = { minor, major, planeSize: 2e6, fadeStart, fadeEnd };
+    grp.userData.isRaymarchedGrid = true;
+    grp.userData.uniforms = {
+      uMinor, uMajorEvery, uFadeStart, uFadeEnd, uAngleFade,
+      uPlaneN, uPlaneU, uPlaneV, uPlaneBias, uInvViewProj,
+    };
+    grp.userData.gridParams   = { minor, major, fadeStart, fadeEnd };
     grp.dispose = () => { mesh.geometry?.dispose(); mat.dispose(); };
     return grp;
   } catch (_e) {
@@ -6470,10 +6555,11 @@ function _fitGridToModel(box) {
     u.uMajorEvery.value = majorEvery;
     u.uFadeStart.value  = fadeStart;
     u.uFadeEnd.value    = fadeEnd;
-    gridHelper.userData.gridParams = { minor, major, planeSize: 2e6, fadeStart, fadeEnd };
-    gridHelper.position.set(0, 0, 0);
+    // Ray-marched grid has no PlaneGeometry — planeSize is intentionally
+    // absent. The mesh stays at identity transform; vertexNode emits NDC
+    // directly so position/rotation/scale on gridHelper are no-ops.
+    gridHelper.userData.gridParams = { minor, major, fadeStart, fadeEnd };
     gridHelper.visible = state.showGrid;
-    gridHelper.updateMatrix();
   } else {
     scene.remove(gridHelper);
     gridHelper.dispose?.();
@@ -8217,11 +8303,14 @@ function _rebuildTreeHierarchical() {
     while (ancestorStack.length && ancestorStack[ancestorStack.length - 1].depth >= n.depth) {
       ancestorStack.pop();
     }
-    if (n.kind === 'part') totalParts++;
     let searchHidden = visibleIds && !visibleIds.has(n.id);
     if (n.kind === 'part') {
       const p = getPart(n.partId);
       if (!p || p.deleted) searchHidden = true;
+      // Only count LIVE parts toward "N parts in hierarchy". Tree nodes for
+      // deleted parts stay in state.treeNodes so undo can resurrect them,
+      // but they must not inflate the summary count.
+      else totalParts++;
     }
     // collapseHidden: ANY ancestor group is in state.treeCollapsed
     let collapseHidden = false;
@@ -9144,15 +9233,43 @@ function _updateGroupOriginDot() {
   // When the user has opted into "only on select", non-selected groups skip
   // the dot entirely. Default (off) keeps the always-visible behaviour.
   const onlyOnSelect = !!state.groupOriginsOnSelectOnly;
+  // Pre-pass: compute the set of group ids that still have at least one LIVE
+  // (non-deleted) part somewhere in their subtree. Groups whose contents are
+  // all deleted otherwise keep a stranded dot at their stale origin — the
+  // tree node stays in state.treeNodes so undo can resurrect, but visually
+  // the dot reads as garbage. Single pre-pass: walk the DFS-ordered tree,
+  // bubble "has live descendant" up the ancestor chain whenever we see a
+  // live part.
+  const nodes = state.treeNodes || [];
+  const aliveGroups = new Set();
+  const ancestorStack = [];   // ids of currently-open ancestor groups
+  for (const n of nodes) {
+    while (ancestorStack.length && ancestorStack[ancestorStack.length - 1].depth >= n.depth) {
+      ancestorStack.pop();
+    }
+    if (n.kind === 'group') {
+      ancestorStack.push({ id: typeof n.id === 'number' ? n.id : parseInt(String(n.id), 10), depth: n.depth });
+      continue;
+    }
+    if (n.kind === 'part') {
+      const p = getPart(n.partId);
+      if (p && !p.deleted) {
+        for (const a of ancestorStack) aliveGroups.add(a.id);
+      }
+    }
+  }
   // Walk every tree group and reconcile the dot map. New groups gain a dot,
   // removed/empty groups drop theirs. Position-update is unconditional so
   // dots track gizmo drags + transform-panel writes without a separate hook.
   const seen = new Set();
-  for (const node of (state.treeNodes || [])) {
+  for (const node of nodes) {
     if (node?.kind !== 'group') continue;
     const numId = typeof node.id === 'number' ? node.id : parseInt(String(node.id), 10);
     if (!Number.isFinite(numId)) continue;
     if (onlyOnSelect && !selSet.has(numId)) continue;
+    // Skip groups with no live descendants — the dot at the stale origin is
+    // worse UX than no dot.
+    if (!aliveGroups.has(numId)) continue;
     const pos = _resolveGroupOriginPos(numId);
     if (!pos) continue;
     let dot = _groupOriginDots.get(numId);
@@ -9911,6 +10028,43 @@ function pushUndo(op) {
   state.redo.length = 0;
   _refreshUndoRedoButtons();
 }
+
+// ─── Undo / redo op registry ──────────────────────────────────────────────
+// Map of op.type → { undo(op), redo(op) } handlers. The core undoLast /
+// redoLast functions below dispatch through this map; an op type that
+// doesn't register here falls through to the historical monkey-patch chain
+// (a half-dozen modules wrap undoLast/redoLast to add their own types).
+//
+// New code should call `_UndoOps.register('typename', { undo, redo })`
+// instead of monkey-patching undoLast. Each handler is responsible for:
+//   - undo(op): revert the op. If successful, push it to state.redo so the
+//     user can redo. Call _finalizeUndo() (or pass { rebuildTree:true }) at
+//     the end. Returning anything truthy signals "handled".
+//   - redo(op): re-apply the op. If successful, push to state.history.
+//     Same finalization rules. Returning truthy = "handled".
+//
+// Handlers should return false / undefined to signal "couldn't handle this
+// op" (e.g. the referenced part was deleted by a prior action) — the
+// dispatcher then runs _refreshUndoRedoButtons() and exits cleanly.
+const _UndoOps = (() => {
+  const ops = new Map();
+  function register(type, handlers) {
+    if (ops.has(type)) console.warn('[undo] op type re-registered:', type);
+    ops.set(type, handlers);
+  }
+  function dispatchUndo(op) {
+    const h = ops.get(op.type);
+    if (!h?.undo) return false;
+    return h.undo(op) !== false;  // treat anything but explicit false as handled
+  }
+  function dispatchRedo(op) {
+    const h = ops.get(op.type);
+    if (!h?.redo) return false;
+    return h.redo(op) !== false;
+  }
+  function has(type) { return ops.has(type); }
+  return { register, dispatchUndo, dispatchRedo, has };
+})();
 function _refreshUndoRedoButtons() {
   const u = $('btn-undo'); if (u) u.disabled = state.history.length === 0;
   const r = $('btn-redo'); if (r) r.disabled = !state.redo || state.redo.length === 0;
@@ -10342,40 +10496,46 @@ function _applyGroupTransform(op, dir) {
   return true;
 }
 
-function undoLast() {
-  const op = state.history.pop();
-  if (!op) return;
-  if (op.type === 'groupTransform') {
-    if (_applyGroupTransform(op, 'before')) {
-      state.redo.push(op);
-      _finalizeUndo();
-      // Visual revert speaks for itself — no toast.
-    } else {
-      // Group no longer exists (e.g. user dissolved it) — drop the entry.
-      _refreshUndoRedoButtons();
-    }
-    return;
-  }
-  if (op.type === 'transform' || op.type === 'transformGroup') {
-    // 'transformGroup' wraps every per-part move performed by ONE gizmo
-    // gesture into a single undo entry, so dragging 50 parts and pressing
-    // Ctrl+Z reverts all 50 at once. 'transform' is the legacy single-part
-    // shape — normalize to a one-item array so the rest of the body has a
-    // single code path.
-    const items = op.type === 'transformGroup'
-      ? op.items
+// Core handlers register themselves into _UndoOps. Each migrated handler
+// keeps the same semantics as the previous switch case — return false to
+// signal "couldn't handle" so the dispatcher refreshes buttons and exits.
+_UndoOps.register('groupTransform', {
+  undo(op) {
+    if (!_applyGroupTransform(op, 'before')) return false;
+    state.redo.push(op);
+    _finalizeUndo();
+  },
+  redo(op) {
+    if (!_applyGroupTransform(op, 'after')) return false;
+    state.history.push(op);
+    _finalizeUndo();
+  },
+});
+// 'transform' is the legacy single-part shape; 'transformGroup' wraps every
+// per-part move from ONE gizmo gesture so Ctrl+Z reverts the whole gesture
+// at once. Both normalize to a one-item array before applying.
+const _transformHandlers = {
+  undo(op) {
+    const items = op.type === 'transformGroup' ? op.items
       : [{ partId: op.partId, before: op.before, after: op.after }];
     const n = _applyTransformOp(items, 'before');
-    if (n > 0) {
-      state.redo.push({ type: 'transformGroup', items });
-      _finalizeUndo();
-      // Visual revert speaks for itself — no toast.
-    } else {
-      _refreshUndoRedoButtons();
-    }
-    return;
-  }
-  if (op.type === 'delete') {
+    if (n <= 0) return false;
+    state.redo.push({ type: 'transformGroup', items });
+    _finalizeUndo();
+  },
+  redo(op) {
+    const items = op.type === 'transformGroup' ? op.items
+      : [{ partId: op.partId, before: op.before, after: op.after }];
+    const n = _applyTransformOp(items, 'after');
+    if (n <= 0) return false;
+    state.history.push(op);
+    _finalizeUndo();
+  },
+};
+_UndoOps.register('transform', _transformHandlers);
+_UndoOps.register('transformGroup', _transformHandlers);
+_UndoOps.register('delete', {
+  undo(op) {
     for (const it of op.items) {
       const p = getPart(it.partId);
       if (!p) continue;
@@ -10386,60 +10546,8 @@ function undoLast() {
     state.redo.push(op);
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
-    // Restored parts visible in viewport — no toast.
-    return;
-  }
-  if (op.type === 'split') {
-    _undoSplitBatch(op.batch);
-    state._explodeBaselineDone = false;
-    _reindexParts(); recomputeStats(); refreshFlagged();
-    // Split is not redoable (children's geometries were disposed by
-    // _undoSplitBatch). Leaving op out of state.redo is the intentional
-    // signal — the user can re-run Split via the toolbar if they want.
-    _finalizeUndo({ rebuildTree: true });
-    // Restored meshes visible in viewport — no toast.
-    return;
-  }
-  // 'boxify' is handled by a dedicated wrapper installed by the bbox-ify
-  // module (search for `_origUndoLastBB`) that runs before this core. It
-  // pops the op, restores geometry/transform/parent, and pushes to the
-  // redo stack. We don't re-handle it here.
-  // Unknown op type: don't re-push (avoid infinite loop) but warn so we
-  // notice if a new pushUndo type wasn't wired up here.
-  console.warn('[undo] unhandled op type:', op.type);
-  _refreshUndoRedoButtons();
-  requestRender();
-}
-
-function redoLast() {
-  if (!state.redo || state.redo.length === 0) return;
-  const op = state.redo.pop();
-  if (op.type === 'groupTransform') {
-    if (_applyGroupTransform(op, 'after')) {
-      state.history.push(op);
-      _finalizeUndo();
-      // Visual change speaks for itself — no toast.
-    } else {
-      _refreshUndoRedoButtons();
-    }
-    return;
-  }
-  if (op.type === 'transformGroup' || op.type === 'transform') {
-    const items = op.type === 'transformGroup'
-      ? op.items
-      : [{ partId: op.partId, before: op.before, after: op.after }];
-    const n = _applyTransformOp(items, 'after');
-    if (n > 0) {
-      state.history.push(op);
-      _finalizeUndo();
-      // Visual change speaks for itself — no toast.
-    } else {
-      _refreshUndoRedoButtons();
-    }
-    return;
-  }
-  if (op.type === 'delete') {
-    // Re-apply: re-hide each part (mirror of deleteParts' minimum behavior).
+  },
+  redo(op) {
     for (const it of op.items) {
       const p = getPart(it.partId);
       if (!p) continue;
@@ -10455,24 +10563,51 @@ function redoLast() {
     state.selected.clear();
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
-    // Visual change speaks for itself — no toast.
+  },
+});
+_UndoOps.register('split', {
+  undo(op) {
+    _undoSplitBatch(op.batch);
+    state._explodeBaselineDone = false;
+    _reindexParts(); recomputeStats(); refreshFlagged();
+    // Not pushed to redo: _undoSplitBatch disposed the children's geometries,
+    // so re-applying would be a no-op. The user can re-run Split via the
+    // toolbar if they want.
+    _finalizeUndo({ rebuildTree: true });
+  },
+  // No redo handler — split is one-way once undone.
+});
+// 'boxify' (Smart-fit) registers BOTH undo + redo together near the boxify
+// module (search for "_UndoOps.register('boxify'") — keeping its handlers
+// next to the rest of its code is more readable than splitting them.
+
+function undoLast() {
+  const op = state.history.pop();
+  if (!op) return;
+  // Registry dispatch. Handler returning false (or no handler at all) means
+  // we couldn't process the op — refresh buttons and bail. The historical
+  // monkey-patch chain wraps THIS function, so any op type they care about
+  // is intercepted before reaching this point.
+  if (_UndoOps.has(op.type)) {
+    if (!_UndoOps.dispatchUndo(op)) _refreshUndoRedoButtons();
     return;
   }
-  if (op.type === 'boxify') {
-    // Simplest correct path: re-run bboxifyParts on the same IDs. It pushes
-    // its own fresh undo entry + clears the redo stack (standard editor
-    // behaviour: redo, like any other action, makes future redos invalid).
-    const ids = op.items.map(it => it.partId).filter(id => getPart(id) && !getPart(id).deleted);
-    if (ids.length > 0 && typeof bboxifyParts === 'function') {
-      bboxifyParts(ids, op.label || 'Smart-fit parts', op.mode || 'smart');
-    } else {
-      _refreshUndoRedoButtons();
-    }
+  console.warn('[undo] unhandled op type:', op.type);
+  _refreshUndoRedoButtons();
+  requestRender();
+}
+
+function redoLast() {
+  if (!state.redo || state.redo.length === 0) return;
+  const op = state.redo.pop();
+  // Registry dispatch — see undoLast() above for the contract. Unlike undo,
+  // unhandled redos are PUSHED BACK onto the stack and surface a warn toast,
+  // since silently dropping a redo entry is more confusing than the user
+  // simply re-running the action manually.
+  if (_UndoOps.has(op.type)) {
+    if (!_UndoOps.dispatchRedo(op)) _refreshUndoRedoButtons();
     return;
   }
-  // Group / merge redo intentionally not implemented yet — they need to
-  // re-create disposed geometry / scene-graph state. Surface the limitation
-  // instead of silently dropping the redo entry.
   console.warn('[redo] not supported for op type:', op.type);
   state.redo.push(op);
   toast('Redo unavailable', `Cannot redo "${op.type}" — re-run the action manually`, 'warn');
@@ -13889,12 +14024,10 @@ function wireUI() {
     _closeExportMenu();
     _openExportModalForFormat(fmt);
   });
-  // Outside-click + Esc dismiss the dropdown.
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.export-wrap')) _closeExportMenu();
-  });
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && $('export-menu')?.classList.contains('show')) _closeExportMenu();
+  // Outside-click + Esc dismiss the dropdown (shared helper).
+  _Popover.dismiss(_closeExportMenu, {
+    containers: [document.querySelector('.export-wrap')],
+    isOpen: () => $('export-menu')?.classList.contains('show'),
   });
 
   // Source-compression banner — hoisted out of the click handler so the
@@ -14120,12 +14253,13 @@ function wireUI() {
       try { _addPrimitive(item.dataset.prim); }
       catch (err) { console.warn('[prim] add failed:', err); toast('Add failed', err.message || String(err), 'error', 4000); }
     });
-    document.addEventListener('click', () => {
-      if (_addPrimMenu.classList.contains('show')) {
-        _addPrimMenu.classList.remove('show');
-        _addPrimBtn.classList.remove('active');
-      }
-    });
+    // Any click anywhere closes the menu — including clicks ON the trigger
+    // button. The trigger's own click handler (which toggles `.show`) runs
+    // before this in source order, so toggling still works as expected.
+    _Popover.dismiss(
+      () => { _addPrimMenu.classList.remove('show'); _addPrimBtn.classList.remove('active'); },
+      { isOpen: () => _addPrimMenu.classList.contains('show'), escape: false },
+    );
   }
 
   $('vw-solid').addEventListener('click', () => setViewMode('solid'));
@@ -17735,169 +17869,8 @@ const _MatPreviewBall = (() => {
 function _openMaterialEditor(info) {
   const id = '_mat-editor-popup';
   const mat = info.mat;
-
-  // Inject editor stylesheet once. Restyles the popup chrome to match the
-  // viewport materials panel (#vp-materials-pop) so the editor and the
-  // grid feel like one surface — flat var(--bg1) background, 10 px radius,
-  // same hairline border + drop shadow, same section padding (10×12) and
-  // pop-section-head label vocabulary (uppercase tx3, .04em tracking).
-  if (!document.getElementById('_mat-edit-style')) {
-    const s = document.createElement('style');
-    s.id = '_mat-edit-style';
-    s.textContent = `
-      /* Override the generic _DraggablePopup chrome ONLY for the material
-         editor instance. Selector keys off the popup's id wrapper so other
-         draggable popups keep their default look.
-
-         height:auto + max-height makes the card wrap its sections instead
-         of locking to the create-time height = 860 baseline. With Base +
-         Emission + Surface visible the card sizes to that content; when
-         clearcoat / sheen / specular sections expand, the body's
-         overflow-y:auto (set by bodyScroll: true) kicks in once the card
-         hits the calc(100vh - 24px) viewport cap. Trade-off: vertical
-         drag-resize on the corner handles is suppressed for this popup;
-         users normally don't resize a properties panel anyway. */
-      #_mat-editor-popup .dlg-pop{background:var(--bg1);border:0;border-radius:var(--r-lg);box-shadow:0 12px 32px rgba(0,0,0,.5);height:auto !important;max-height:calc(100vh - 24px)}
-      #_mat-editor-popup .dlg-pop:has(.dlg-resize.nw:hover),
-      #_mat-editor-popup .dlg-pop:has(.dlg-resize.ne:hover),
-      #_mat-editor-popup .dlg-pop:has(.dlg-resize.sw:hover),
-      #_mat-editor-popup .dlg-pop:has(.dlg-resize.se:hover){background:var(--bg1)}
-      #_mat-editor-popup .dlg-head{padding:10px 12px;border-bottom:1px solid var(--bd)}
-      #_mat-editor-popup .dlg-head::after{display:none}
-      #_mat-editor-popup .dlg-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
-      #_mat-editor-popup .dlg-sub{display:none}
-      #_mat-editor-popup .dlg-head-icon{width:22px;height:22px;border-radius:var(--r-sm);background:var(--ac-tint-12);box-shadow:inset 0 0 0 1px var(--ac-tint-20)}
-      #_mat-editor-popup .dlg-head-icon svg{width:12px;height:12px}
-      #_mat-editor-popup .dlg-body[data-scroll="auto"]{padding:0}
-      #_mat-editor-popup .dlg-foot{padding:8px 10px;background:rgba(0,0,0,.18);border-top:1px solid rgba(255,255,255,.06);box-shadow:none}
-
-      .mat-edit-body{display:flex;flex-direction:column;gap:0;padding:0}
-      /* Hero preview row uses the same dark gradient as the materials grid
-         tile hover — subtle, just enough to lift the shaderball off the
-         flat panel surface without breaking the panel's read. */
-      .mat-edit-preview-wrap{position:relative;background:rgba(255,255,255,.02);padding:10px 12px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:var(--space-xl)}
-      .mat-edit-preview-canvas{flex:0 0 92px;width:92px;height:92px;border-radius:var(--r-md);background:var(--bg-checker);box-shadow:0 2px 10px rgba(0,0,0,.45),inset 0 0 0 1px rgba(255,255,255,.04);object-fit:cover;display:block}
-      .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-      .mat-edit-preview-name{font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-edit-preview-type{font-size:var(--fs-10);color:var(--tx3);font-family:var(--font-sans);letter-spacing:var(--tracking-wide);text-transform:uppercase}
-      .mat-edit-preview-uses{font-size:var(--fs-xs);color:var(--tx2)}
-
-      /* Sections: padding + uppercase title style mirror the materials
-         panel's pop-section / pop-section-head conventions. */
-      .mat-edit-section{padding:10px 12px;border-bottom:1px solid var(--s2)}
-      .mat-edit-section:last-child{border-bottom:none}
-      .mat-edit-section-h{display:flex;align-items:center;justify-content:space-between;font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3);cursor:pointer;user-select:none;margin-bottom:8px}
-      .mat-edit-section-h:hover{color:var(--tx2)}
-      .mat-edit-section-h .chev{font-size:var(--fs-xl);line-height:1;color:var(--tx3);transition:transform .15s var(--ease-out)}
-      .mat-edit-section.collapsed .chev{transform:rotate(-90deg)}
-      .mat-edit-section.collapsed .mat-edit-section-b{display:none}
-      .mat-edit-section-b{display:flex;flex-direction:column;gap:5px}
-
-      .mat-color-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
-      .mat-color-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx2)}
-      .mat-color-row input[type="color"]{width:28px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer}
-      .mat-color-hex{font-family:var(--font-sans);font-size:var(--fs-xs);color:var(--tx3);flex:1}
-      .mat-edit-toggle-row{display:flex;flex-wrap:wrap;gap:var(--space-xs);padding:3px 0}
-      .mat-edit-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
-      .mat-edit-toggle:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
-      .mat-edit-toggle input{accent-color:var(--ac);cursor:pointer;margin:0}
-      .mat-edit-select-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
-      .mat-edit-select-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx2)}
-      .mat-edit-select-row select{flex:1;font-size:var(--fs-sm);padding:5px 8px}
-
-      /* Texture slots: a thumb (or empty placeholder) + label + filename
-         + load/clear buttons. Compact rows, minimal chrome — matches the
-         color-row look. */
-      .mat-tex-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
-      .mat-tex-thumb{flex:0 0 28px;width:28px;height:28px;border-radius:5px;background:var(--bg-checker);border:1px solid var(--bd);display:grid;place-items:center;overflow:hidden;color:var(--tx3)}
-      .mat-tex-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-      .mat-tex-thumb svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;opacity:.45}
-      .mat-tex-thumb.has-tex{border-color:var(--ac-line)}
-      .mat-tex-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-      .mat-tex-label{font-size:var(--fs-11);color:var(--tx2);line-height:1.1}
-      .mat-tex-name{font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-tex-name.empty::before{content:'— no texture —';color:var(--tx3);opacity:.55}
-      .mat-tex-btn{flex:0 0 auto;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:4px 6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
-      .mat-tex-btn:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
-      .mat-tex-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
-      .mat-tex-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
-
-      /* C4D / Redshift-style row layout. Each property is a single row:
-         [diamond glyph] [label] [tex-attach circle] [value control].
-         The tex-attach circle (data-tex-prop) is a clickable indicator;
-         empty = outline-only, has-tex = filled with the accent. Click
-         opens a small popover for load/clear. */
-      .mat-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);align-items:center;gap:var(--space-lg);padding:4px 0;font-size:var(--fs-sm);line-height:1.2}
-      .mat-row + .mat-row{border-top:1px dashed var(--s2)}
-      .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-row-tex{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.10) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.10) 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0;cursor:pointer;padding:0;display:grid;place-items:center;transition:border-color 120ms,color 120ms;color:var(--tx3)}
-      .mat-row-tex:hover{border-color:var(--ac);color:var(--ac)}
-      .mat-row-tex svg{display:none}
-      .mat-row-tex.has-tex{background-image:none;background-color:var(--ac);border-color:var(--ac);border-style:solid}
-      .mat-row-tex.has-tex svg{display:block;width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:1.8;color:#fff}
-      .mat-row-val{display:flex;align-items:center;gap:var(--space-sm);min-width:0}
-      .mat-row-val > *:first-child{flex:1;min-width:0}
-      .mat-row-val .field{margin:0}
-      .mat-row-val .scrub-label{display:none}
-      /* Inline scrubber: [value pill] [range slider] on one line. */
-      .mat-row-val .scrub{flex-direction:row;align-items:center;gap:var(--space-md);padding:0;width:100%}
-      .mat-row-val .scrub-head{flex:0 0 auto;min-height:0;justify-content:flex-end;gap:0}
-      .mat-row-val .scrub-range{flex:1;min-width:0;width:auto}
-      .mat-row-val .scrub-rhs{display:flex;align-items:center;gap:3px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:2px 9px;height:20px;transition:background 120ms,border-color 120ms,color 120ms}
-      .mat-row-val .scrub-rhs:hover{background:var(--bg3);border-color:var(--bd2)}
-      .mat-row-val .scrub-value{font-size:var(--fs-11);font-weight:var(--fw-medium);min-width:0;height:auto;padding:0;border-radius:0;background:transparent;color:var(--tx2);font-family:var(--font-sans);letter-spacing:var(--tracking-mono)}
-      .mat-row-val .scrub-value:hover{background:transparent;color:var(--tx)}
-      .mat-row-val .scrub.editing .scrub-value{background:transparent;color:var(--tx)}
-      .mat-row-val .scrub-unit{font-size:var(--fs-10);color:var(--tx3)}
-      .mat-row-val .scrub-range::-webkit-slider-thumb{width:10px;height:10px;background:var(--ac);border:0;margin-top:-3px;box-shadow:0 0 0 2px var(--ac-tint-25),0 1px 2px rgba(0,0,0,.4)}
-      .mat-row-val .scrub-range::-moz-range-thumb{width:10px;height:10px;background:var(--ac);border:0;box-shadow:0 0 0 2px var(--ac-tint-25),0 1px 2px rgba(0,0,0,.4)}
-      .mat-row-val .scrub-range::-webkit-slider-runnable-track{height:3px}
-      .mat-row-val .scrub-range::-moz-range-track{height:3px}
-
-      /* Spline-style color row: [label] [swatch] [hex] [pct] [tex-trigger]. */
-      .mat-row.mat-color-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);gap:var(--space-lg);padding:4px 0}
-      .mat-row.mat-color-row .mat-row-val{gap:var(--space-md)}
-      .mat-row.mat-color-row .mat-row-val > *:first-child{flex:0 0 22px}
-      .mat-swatch{width:22px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer;overflow:hidden;flex:0 0 22px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
-      .mat-swatch::-webkit-color-swatch-wrapper{padding:0}
-      .mat-swatch::-webkit-color-swatch{border:none;border-radius:var(--r-xs)}
-      .mat-swatch::-moz-color-swatch{border:none;border-radius:var(--r-xs)}
-      .mat-swatch:hover{border-color:var(--bd2)}
-      .mat-color-hex-v2{flex:0 0 auto;width:11ch;min-width:0;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:center;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac)}
-      .mat-color-hex-v2:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
-      .mat-color-hex-v2:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px var(--ac-tint-18)}
-      .mat-color-hex-v2.invalid{border-color:var(--er);color:var(--er)}
-      .mat-color-pct{flex:0 0 52px;width:52px;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx3);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:4px 10px;outline:none;text-align:right;transition:background 120ms,border-color 120ms,color 120ms,box-shadow 120ms;caret-color:var(--ac);-moz-appearance:textfield}
-      .mat-color-pct::-webkit-outer-spin-button,.mat-color-pct::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-      .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
-      .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px var(--ac-tint-18)}
-
-      /* Eyedropper button — sits flush with the colour picker.  */
-      .mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
-      .mat-eyedrop:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
-      .mat-eyedrop:disabled{opacity:.35;cursor:default;pointer-events:none}
-      .mat-eyedrop svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
-
-      /* Floating texture-attach popover anchored to the .mat-row-tex.  */
-      .mat-tex-pop{position:fixed;z-index:9999;background:var(--bg1);border:1px solid var(--bd);border-radius:var(--r-md);box-shadow:0 12px 32px rgba(0,0,0,.5);padding:10px;width:240px;display:none}
-      .mat-tex-pop.show{display:block}
-      .mat-tex-pop-head{display:flex;align-items:center;gap:var(--space-md);margin-bottom:8px}
-      .mat-tex-pop-thumb{flex:0 0 40px;width:40px;height:40px;border-radius:var(--r-sm);background:var(--bg-checker);border:1px solid var(--bd);overflow:hidden;display:grid;place-items:center}
-      .mat-tex-pop-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-      .mat-tex-pop-thumb svg{width:18px;height:18px;stroke:var(--tx3);fill:none;stroke-width:1.6;opacity:.45}
-      .mat-tex-pop-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-      .mat-tex-pop-prop{font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx);text-transform:uppercase;letter-spacing:var(--tracking-wide)}
-      .mat-tex-pop-name{font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .mat-tex-pop-row{display:flex;gap:var(--space-sm)}
-      .mat-tex-pop-btn{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:6px 8px;color:var(--tx);font-size:var(--fs-11);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 120ms,border-color 120ms,color 120ms}
-      .mat-tex-pop-btn:hover{background:var(--bg3);border-color:var(--bd2)}
-      .mat-tex-pop-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
-      .mat-tex-pop-btn.danger{color:var(--er)}
-      .mat-tex-pop-btn.danger:hover{background:rgba(255,107,107,.10);border-color:rgba(255,107,107,.25)}
-      .mat-tex-pop-btn svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
-    `;
-    document.head.appendChild(s);
-  }
+  // CSS for #_mat-editor-popup + .mat-* classes lives in index.html
+  // (search "Material editor popup").
 
   const isPhysical = !!mat.isMeshPhysicalMaterial || mat.type === 'MeshPhysicalMaterial';
   const hasPBR = typeof mat.metalness === 'number';
@@ -18804,27 +18777,34 @@ function _wireMaterialActions() {
     _matPanelSelected.add(fresh);
     requestRender();
     _populateMaterialsList();
-    if (assigned === 0) {
-      toast?.('Material added', 'Select parts and use Duplicate to assign', 'info', 2200);
-    }
+    // No toast: the new material is visually selected in the panel; that's
+    // enough confirmation. The old "Select parts and use Duplicate to assign"
+    // hint was confusing because adding a material doesn't imply intent to
+    // assign it immediately.
   });
 
   dupBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (_matPanelSelected.size !== 1) return;
     const src = [..._matPanelSelected][0];
-    if (!state.selected?.size) {
-      toast?.('Select parts first', 'Pick parts to receive the duplicated material', 'info');
-      return;
-    }
+    // Duplicate the material in the panel regardless of part selection.
+    // If the user has parts selected, assign the clone to them as a
+    // convenience; if not, the clone goes into state.userMaterials so
+    // it still shows up in the panel for later assignment. (Without the
+    // userMaterials push, an unassigned clone would be invisible — the
+    // panel rebuild walks parts' materials + userMaterials, nothing else.)
     const clone = src.clone();
     clone.name = (src.name || 'material') + ' copy';
-    const seen = new Set();
-    for (const id of state.selected) {
-      const p = getPart(id);
-      if (!p || p.deleted || !p.mesh || seen.has(p.mesh)) continue;
-      seen.add(p.mesh);
-      p.mesh.material = clone;
+    state.userMaterials = state.userMaterials || new Set();
+    state.userMaterials.add(clone);
+    if (state.selected?.size) {
+      const seen = new Set();
+      for (const id of state.selected) {
+        const p = getPart(id);
+        if (!p || p.deleted || !p.mesh || seen.has(p.mesh)) continue;
+        seen.add(p.mesh);
+        p.mesh.material = clone;
+      }
     }
     _matPanelSelected.clear();
     _matPanelSelected.add(clone);
@@ -18839,6 +18819,16 @@ function _wireMaterialActions() {
     const target = arr[0];
     let migrated = 0;
     for (let i = 1; i < arr.length; i++) migrated += _reassignMaterial(arr[i], target);
+    // Drop the absorbed materials from the library and dispose them — mirror
+    // of what the Delete handler does so a merged-away mat doesn't linger in
+    // state.userMaterials as a zero-count panel entry AND its GPU resources
+    // don't leak. _reassignMaterial already cleared materialByColor.
+    for (let i = 1; i < arr.length; i++) {
+      const m = arr[i];
+      if (m === target) continue;
+      try { m.dispose?.(); } catch (_) {}
+      if (state.userMaterials) state.userMaterials.delete(m);
+    }
     _matPanelSelected.clear();
     _matPanelSelected.add(target);
     _populateMaterialsList();
@@ -19702,11 +19692,12 @@ async function bboxifyParts(partIds, label='Smart-fit parts', mode='smart') {
   }
 }
 
-const _origUndoLastBB = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (op && op.type === 'boxify') {
-    state.history.pop();
+// Boxify (Smart-fit) undo/redo handlers — migrated from the historical
+// monkey-patch wrapper around undoLast into the _UndoOps registry. The
+// dispatch lives in the registry now; this just declares HOW to revert /
+// re-apply a 'boxify' op.
+_UndoOps.register('boxify', {
+  undo(op) {
     for (const it of op.items) {
       const p = getPart(it.partId);
       if (!p || !p.mesh) continue;
@@ -19715,11 +19706,11 @@ undoLast = function() {
       // every sibling's mesh, leaving them rendering nothing. The shared
       // boxGeom will be GC'd naturally once no part references it.
       p.mesh.geometry = it.origGeom;
-      // Restore the original parent before applying the saved local transform
-      // — boxify re-parented the mesh to partsRoot to escape sheared parent
-      // chains. The saved origPos/Quat/Scale are in the ORIGINAL parent's
-      // local space, so they only restore the world position correctly when
-      // the mesh is back under that parent.
+      // Restore the original parent before applying the saved local
+      // transform — boxify re-parented the mesh to partsRoot to escape
+      // sheared parent chains. The saved origPos/Quat/Scale are in the
+      // ORIGINAL parent's local space, so they only restore the world
+      // position correctly when the mesh is back under that parent.
       if (it.origParent && p.mesh.parent !== it.origParent) {
         // Sanity-check the original parent is still attached to the scene.
         // If the user has done other ops that pruned that group, fall back
@@ -19734,11 +19725,8 @@ undoLast = function() {
       }
       p.mesh.position.copy(it.origPos); p.mesh.quaternion.copy(it.origQuat); p.mesh.scale.copy(it.origScale);
       p.mesh.updateMatrixWorld(true);
-      // Refresh selection-highlight snapshot to the restored matrix.
       p._exactWorld = p.mesh.matrixWorld.clone();
       // Restore explode baseline cache so the slider doesn't jump after undo.
-      // null-safe: the snapshot may have been taken before the part ever
-      // received a baseline (first-time slider use happens lazily).
       if (it.origOrigPos !== undefined) p._origPos = it.origOrigPos ? it.origOrigPos.clone() : null;
       if (it.origPartCenter !== undefined) p._partCenter = it.origPartCenter ? it.origPartCenter.clone() : null;
       if (it.origInstOrigMat !== undefined) p._instOrigMat = it.origInstOrigMat ? it.origInstOrigMat.clone() : null;
@@ -19746,24 +19734,28 @@ undoLast = function() {
       const s = p.bbox.getSize(new THREE.Vector3());
       p.sizeMetrics = { diag: s.length(), vol: s.x*s.y*s.z, max: Math.max(s.x, s.y, s.z) };
       // Drop the unique boxify hash entry from geomByHash and restore the
-      // original shared hash on the part. Without this, the geomByHash map
-      // grows with stale `boxify_<partId>` entries on every redo cycle.
+      // original shared hash so geomByHash doesn't grow with stale entries.
       if (it.origHash !== undefined && p.hash !== it.origHash) {
         state.geomByHash.delete(p.hash);
         p.hash = it.origHash;
       }
       state.geomByHash.set(p.hash, it.origGeom);
-      // Fingerprint cache invalidation — original geometry's bbox shape is restored.
+      // Fingerprint cache invalidation — original geometry's bbox restored.
       p._fp = null; p._fpKey = null;
     }
     state.redo.push(op);    // boxify is redoable — bboxifyParts re-runs cleanly
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
-    // Restored parts visible in viewport — no toast.
-    return;
-  }
-  return _origUndoLastBB();
-};
+  },
+  redo(op) {
+    // Re-run the fit on the same IDs. bboxifyParts pushes a fresh undo entry
+    // + clears the redo stack — standard editor behaviour (redo, like any
+    // other action, invalidates future redos).
+    const ids = op.items.map(it => it.partId).filter(id => getPart(id) && !getPart(id).deleted);
+    if (ids.length === 0 || typeof bboxifyParts !== 'function') return false;
+    bboxifyParts(ids, op.label || 'Smart-fit parts', op.mode || 'smart');
+  },
+});
 
 // Shared error reporter for fit ops — keeps catch handlers terse.
 function _onFitError(e) {
@@ -19820,11 +19812,11 @@ function _wireBboxButtonsFinal() {
         <div class="fit-sep"></div>
         <div class="fit-sliders">
           <div class="fit-row"><span>Cylinder circularity</span><span id="fit-circ-val">${cfg.cylCircularity.toFixed(2)}</span></div>
-          <input type="range" id="fit-circ" min="0.85" max="0.99" step="0.01" value="${cfg.cylCircularity}">
+          <input type="range" class="scrub-range" id="fit-circ" min="0.85" max="0.99" step="0.01" value="${cfg.cylCircularity}">
           <div class="fit-row"><span>Box-waste cutoff</span><span id="fit-waste-val">${cfg.cylBoxWaste.toFixed(2)}</span></div>
-          <input type="range" id="fit-waste" min="0.40" max="0.80" step="0.01" value="${cfg.cylBoxWaste}">
+          <input type="range" class="scrub-range" id="fit-waste" min="0.40" max="0.80" step="0.01" value="${cfg.cylBoxWaste}">
           <div class="fit-row"><span>Aspect-ratio gate</span><span id="fit-aspect-val">${cfg.cylAspect.toFixed(1)}</span></div>
-          <input type="range" id="fit-aspect" min="1.0" max="3.0" step="0.1" value="${cfg.cylAspect}">
+          <input type="range" class="scrub-range" id="fit-aspect" min="1.0" max="3.0" step="0.1" value="${cfg.cylAspect}">
           <label style="display:flex;align-items:center;gap:var(--space-sm);margin-top:8px;cursor:pointer">
             <input type="checkbox" id="fit-pca" ${cfg.pcaEnabled ? 'checked' : ''}>
             <span>PCA fallback</span>
@@ -19850,10 +19842,20 @@ function _wireBboxButtonsFinal() {
       });
       const wireSlider = (id, valId, key, fmt) => {
         const sl = pop.querySelector(`#${id}`); const lbl = pop.querySelector(`#${valId}`);
+        // Push the current value into --scrub-pct so the .scrub-range gradient
+        // fill paints the filled portion in accent. Runs on init + every input.
+        const syncPct = () => {
+          const mn = parseFloat(sl.min) || 0, mx = parseFloat(sl.max) || 100;
+          const v = parseFloat(sl.value);
+          const pct = Math.max(0, Math.min(100, ((v - mn) / (mx - mn)) * 100));
+          sl.style.setProperty('--scrub-pct', `${pct}%`);
+        };
+        syncPct();
         sl.addEventListener('input', () => {
           const v = parseFloat(sl.value);
           state.smartFit[key] = v;
           lbl.textContent = fmt(v);
+          syncPct();
           // Cache becomes stale once thresholds change.
           if (typeof _resetFitCache === 'function') _resetFitCache();
         });
@@ -19981,27 +19983,31 @@ rebuildTree = function() {
 };
 
 // ─── Right-click context menu
+// Container chrome is set inline on #ctx-menu in index.html; row & separator
+// classes live in the stylesheet (search "Right-click context menu").
 function _ctxClose() { const m = $('ctx-menu'); if (m) m.style.display = 'none'; }
 function _ctxBuild(items, x, y) {
   const m = $('ctx-menu'); if (!m) return;
   m.innerHTML = '';
   for (const it of items) {
-    if (it === '---') { const d = document.createElement('div'); d.style.cssText='height:1px;background:rgba(255,255,255,.06);margin:4px 0'; m.appendChild(d); continue; }
+    if (it === '---') {
+      const d = document.createElement('div');
+      d.className = 'ctx-menu-sep';
+      m.appendChild(d);
+      continue;
+    }
     const row = document.createElement('div');
-    row.style.cssText = 'padding:7px 14px;cursor:pointer;color:var(--tx);display:flex;align-items:center;gap:var(--space-lg);font-size:var(--fs-md)';
-    // Icon + label as two slots so the icon column lines up across rows.
-    // Icon is a Lucide name (string). Empty string skips the icon for that
-    // row but reserves the column width so labels stay aligned.
+    row.className = 'ctx-menu-row' + (it.danger ? ' danger' : '');
+    // Icon + label + optional kbd chip. The empty <span class="ctx-menu-spacer">
+    // reserves the icon column width so labels stay aligned when an item has
+    // no icon.
     const iconHtml = it.icon
-      ? `<i data-lucide="${it.icon}" style="width:14px;height:14px;flex:0 0 14px;color:${it.danger ? 'var(--er)' : 'var(--tx2)'};stroke-width:2"></i>`
-      : `<span style="width:14px;flex:0 0 14px"></span>`;
+      ? `<i class="ctx-menu-icon" data-lucide="${it.icon}"></i>`
+      : `<span class="ctx-menu-spacer"></span>`;
     const kbdHtml = it.kbd
-      ? `<span style="margin-left:auto;padding:1px 5px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-bottom-color:rgba(0,0,0,.35);border-radius:3px;font:600 10px var(--font-sans);color:var(--tx2)">${it.kbd}</span>`
+      ? `<kbd class="kbd-chip" style="margin-left:auto">${it.kbd}</kbd>`
       : '';
-    row.innerHTML = `${iconHtml}<span style="flex:1;min-width:0">${it.label}</span>${kbdHtml}`;
-    if (it.danger) row.style.color = 'var(--er)';
-    row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,.06)');
-    row.addEventListener('mouseleave', () => row.style.background = '');
+    row.innerHTML = `${iconHtml}<span class="ctx-menu-label">${it.label}</span>${kbdHtml}`;
     row.addEventListener('click', () => { _ctxClose(); it.fn(); });
     m.appendChild(row);
   }
@@ -20017,8 +20023,7 @@ function _ctxBuild(items, x, y) {
 // event, so we close reliably regardless. Clicks INSIDE the menu still work
 // because each row's own click handler runs in its bubble phase after
 // _ctxClose hides the element — hiding doesn't cancel in-flight events.
-document.addEventListener('click', _ctxClose, true);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') _ctxClose(); });
+_Popover.dismiss(_ctxClose, { capture: true });
 // ── Tree helpers used by the context menu ─────────────────────────────────
 // Group the currently-selected parts into a new group. Re-uses the dnd
 // "create group from rows" pathway (which already handles hier vs userGroups
@@ -21961,47 +21966,7 @@ function _wireRevealAndKeys() {
 // an item in the styled popup.
 
 function _initCustomSelects() {
-  // Inject one stylesheet for the popup + trigger button.
-  if (!document.getElementById('cs-style')) {
-    const s = document.createElement('style');
-    s.id = 'cs-style';
-    s.textContent = `
-      .cs-wrap { position: relative; display: block; }
-      .cs-trigger {
-        width: 100%; padding: 7px 28px 7px 10px;
-        background: var(--bg3);
-        border: 1px solid var(--bd);
-        border-radius: var(--r-md); color: var(--tx); font-size: var(--fs-md);
-        outline: none; cursor: pointer; text-align: left;
-        font: inherit; font-size: var(--fs-md);
-        background-image: var(--select-arrow);
-        background-repeat: no-repeat; background-position: right 9px center;
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        transition: background-color 120ms var(--ease-out), border-color 120ms var(--ease-out);
-      }
-      .cs-trigger:hover { background-color: var(--bg4); border-color: var(--bd2); }
-      .cs-trigger:focus { border-color: var(--ac); }
-      .cs-pop {
-        position: fixed; z-index:var(--z-tooltip); min-width: 160px;
-        background: var(--bg1); border: 1px solid var(--bd);
-        border-radius: var(--r-lg); padding: 5px 0; box-shadow: var(--sh-pop);
-        max-height: 320px; overflow-y: auto;
-        animation: cs-fade .12s var(--ease-out);
-      }
-      @keyframes cs-fade { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform: translateY(0); } }
-      .cs-opt {
-        padding: 5px 14px; cursor: pointer; color: var(--tx);
-        font-size: 10px; display: flex; align-items: center; gap: 8px;
-      }
-      .cs-opt:hover { background: var(--ac-soft); color: white; }
-      .cs-opt.cs-sel { color: var(--ac); }
-      .cs-opt.cs-sel::after { content: '●'; font-size: 6px; margin-left: auto; opacity: .9; line-height: 1; }
-      .cs-opt.cs-has-logo.cs-sel::after { display: none; }
-      .cs-opt .cs-logo { height: 13px; width: auto; margin-left: auto; filter: brightness(0) invert(.85); flex-shrink: 0; }
-      .cs-opt:hover .cs-logo { filter: brightness(0) invert(1); }
-    `;
-    document.head.appendChild(s);
-  }
+  // CSS for .cs-* classes lives in index.html (search "Custom select widget").
 
   const all = document.querySelectorAll('select.mac-sel');
   all.forEach(sel => {
@@ -22541,12 +22506,10 @@ async function mergeSelectedIntoOne() {
 // `let` binding here means the wireUI hook can reference it before assignment.
 let groupSelectedUnderNull = function() { /* installed below */ };
 
-// Extend undoLast for the new op types, via the existing chain pattern.
-const _origUndoLast_mergeGroup = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (op && op.type === 'merge') {
-    state.history.pop();
+// 'merge' — drop the merged buffer + material, restore hidden source parts.
+// Not redoable: merge destroys data that the redo would have to re-create.
+_UndoOps.register('merge', {
+  undo(op) {
     const mp = getPart(op.mergedPartId);
     if (mp && mp.mesh) {
       mp.mesh.parent?.remove(mp.mesh);
@@ -22556,7 +22519,7 @@ undoLast = function() {
     state.partById.delete(op.mergedPartId);
     state.geomByHash.delete('merged_' + op.mergedPartId);
     state.parts = state.parts.filter(p => p.partId !== op.mergedPartId);
-    // Pull the merged-part placeholder out of the hierarchy capture too;
+    // Pull the merged-part placeholder out of the hierarchy capture too —
     // otherwise the tree would still show the now-orphaned merged row.
     if (state.treeNodes && Array.isArray(state.treeNodes)) {
       state.treeNodes = state.treeNodes.filter(n => n.partId !== op.mergedPartId);
@@ -22573,16 +22536,17 @@ undoLast = function() {
       }
     }
     state.selected.clear();
-    // Merge undo destroys the merged buffer + material — there is no clean
-    // way to redo without re-running the merge from scratch, so we don't
-    // push to state.redo (matches split undo behavior).
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
-    // Restored parts visible in viewport — no toast.
-    return;
-  }
-  if (op && op.type === 'group') {
-    state.history.pop();
+  },
+  // No redo: merge destroys the merged buffer + material on undo. Matches
+  // split-undo behaviour.
+});
+// 'group' — re-parent children to their original parents and drop the
+// userGroup record. Combines what mergeGroup + userGroups wrappers used to
+// do separately. Not redoable for now.
+_UndoOps.register('group', {
+  undo(op) {
     const m4 = new THREE.Matrix4();
     for (const it of op.items) {
       const p = getPart(it.partId); if (!p || !p.mesh) continue;
@@ -22594,25 +22558,25 @@ undoLast = function() {
       p.mesh.updateMatrixWorld(true);
     }
     if (op.groupRef && op.groupRef.parent) op.groupRef.parent.remove(op.groupRef);
-    // Group is redoable — the data needed to re-create the group lives on
-    // the userGroup record (added back below by the user-groups extension)
-    // and op.items already carries prevParent + prevMatrix, which is the
-    // mirror of the destination state we'd want to reapply. We DON'T push
-    // here — the user-groups wrapper at the top of the chain decides
-    // whether to push, after it cleans up its own bookkeeping.
+    // Drop the userGroup record by id (used to be a separate wrapper).
+    if (op.groupRecordId) {
+      const idx = state.userGroups.findIndex(g => g.id === op.groupRecordId);
+      if (idx >= 0) state.userGroups.splice(idx, 1);
+    }
     _finalizeUndo({ rebuildTree: true });
-    // Tree change visible — no toast.
-    return;
-  }
-  return _origUndoLast_mergeGroup();
-};
+  },
+});
 
 function _wireMergeGroupButtons() {
   $('btn-merge-sel')?.addEventListener('click', mergeSelectedIntoOne);
   // Indirect through the live binding — the function is reassigned later
   // (by the user-groups extension) and we want the click to invoke whichever
   // implementation is current at click time.
-  $('btn-group-sel')?.addEventListener('click', () => groupSelectedUnderNull());
+  // Group selection button: bypass the name-prompt dialog and act exactly
+  // like the Ctrl+G shortcut — _treeGroupSelected() picks a default name
+  // ("Group N") and creates the group in one step. Users who want a custom
+  // name can rename the new group inline immediately after.
+  $('btn-group-sel')?.addEventListener('click', () => { try { _treeGroupSelected(); } catch (_) {} });
 }
 const _origWireUI_mergeGroup = wireUI;
 wireUI = function() { _origWireUI_mergeGroup(); _safeRun(_wireMergeGroupButtons, 'merge-group'); };
@@ -22906,19 +22870,9 @@ groupSelectedUnderNull = async function() {
   if (ctx === 'hier') rebuildTree();
 };
 
-// Extend undoLast: 'group' op also removes the userGroup record
-const _origUndoLast_userGroups = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (op && op.type === 'group' && op.groupRecordId) {
-    const result = _origUndoLast_userGroups();
-    const idx = state.userGroups.findIndex(g => g.id === op.groupRecordId);
-    if (idx >= 0) state.userGroups.splice(idx, 1);
-    rebuildTree();
-    return result;
-  }
-  return _origUndoLast_userGroups();
-};
+// (userGroups undo augmentation was merged into the 'group' op registration
+// near _UndoOps.register('group', ...) above — _finalizeUndo({rebuildTree:true})
+// covers the rebuildTree the old wrapper used to call.)
 
 // Clear groups when model is cleared
 const _origClearModel_userGroups = clearModel;
@@ -23218,47 +23172,8 @@ const _FlattenDialog = (() => {
   let bg, card;
   const STATE = { resolve: null };
 
-  function _injectStyles() {
-    if (document.getElementById('_flat-dlg-style')) return;
-    const s = document.createElement('style');
-    s.id = '_flat-dlg-style';
-    // Only flatten-specific content classes — chrome (bg, card, header, body,
-    // footer, buttons) reuses the global .modal pattern from index.html.
-    s.textContent = `
-      /* Chrome (card, head, body, footer) is provided by _DraggablePopup.
-         Only Advanced flatten content classes live here. */
-      #_flat-dialog .flat-section{margin-bottom:14px}
-      #_flat-dialog .flat-section:last-child{margin-bottom:0}
-      #_flat-dialog .flat-section-title{font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wider);color:var(--tx3);margin:0 0 8px 0}
-      #_flat-dialog .flat-opts{display:flex;flex-direction:column;gap:var(--space-sm)}
-      #_flat-dialog .flat-opt{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);cursor:pointer;transition:background .14s ease,border-color .14s ease}
-      #_flat-dialog .flat-opt:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
-      #_flat-dialog .flat-opt.active{background:var(--ac-tint-12);border-color:var(--ac-tint-35)}
-      #_flat-dialog .flat-opt input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:2px 0 0 0;transition:border-color .14s ease,background .14s ease}
-      #_flat-dialog .flat-opt input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
-      #_flat-dialog .flat-opt input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
-      #_flat-dialog .flat-opt input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff}
-      #_flat-dialog .flat-opt-text{flex:1;min-width:0}
-      #_flat-dialog .flat-opt-label{font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--tx);margin-bottom:3px;letter-spacing:var(--tracking-tight)}
-      #_flat-dialog .flat-opt-help{font-size:var(--fs-sm);color:var(--tx3);line-height:var(--lh-base)5}
-      #_flat-dialog .flat-opt-help code{font-family:var(--font-sans);color:var(--ac);background:rgba(0,0,0,.28);padding:0 5px;border-radius:var(--r-xs);font-size:var(--fs-11)}
-      #_flat-dialog .flat-row{display:flex;align-items:center;gap:var(--space-md);margin-top:9px}
-      #_flat-dialog .flat-row label{font-size:var(--fs-11);color:var(--tx3);font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
-      #_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      #_flat-dialog .flat-row input[type=number]:focus{border-color:var(--ac-tint-55);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
-      #_flat-dialog .flat-toggles{display:flex;flex-direction:column;gap:2px}
-      #_flat-dialog .flat-tog{display:flex;align-items:center;gap:var(--space-lg);font-size:var(--fs-md);color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:7px;transition:background .14s ease,color .14s ease}
-      #_flat-dialog .flat-tog:hover{background:rgba(255,255,255,.03);color:var(--tx)}
-      #_flat-dialog .flat-tog input[type=checkbox]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:var(--r-xs);border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
-      #_flat-dialog .flat-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
-      #_flat-dialog .flat-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
-      #_flat-dialog .flat-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
-      #_flat-dialog .flat-info{font-size:var(--fs-sm);color:var(--tx3);flex:1;min-width:0;text-align:left;letter-spacing:var(--tracking-snug)}
-      #_flat-dialog .dlg-foot #_flat-ok{box-shadow:0 4px 14px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
-      #_flat-dialog .dlg-foot #_flat-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
-    `;
-    document.head.appendChild(s);
-  }
+  // CSS for #_flat-dialog content classes lives in index.html (search
+  // "Advanced flatten dialog") — migrated out of a runtime <style> inject.
 
   function _close(result) {
     if (!bg) return;
@@ -23269,7 +23184,6 @@ const _FlattenDialog = (() => {
 
   function _ensure() {
     if (bg) return;
-    _injectStyles();
 
     const bodyHtml = `
       <div class="flat-section">
@@ -23844,14 +23758,12 @@ function _restoreFlattenSnapshot(s) {
   }
 }
 
-// Wrap undoLast to handle 'flatten' ops. Restoring the snapshots in reverse
-// order (shallowest first) puts each group back in its prev parent before
-// any deeper group needs to land inside it.
-const _origUndoLast_flatten = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (op && op.type === 'flatten') {
-    state.history.pop();
+// 'flatten' — Advanced flatten op. Restoring snapshots in reverse order
+// (shallowest first) puts each group back in its prev parent before any
+// deeper group needs to land inside it. Redo re-dissolves in original
+// order using the snapshot data alone.
+_UndoOps.register('flatten', {
+  undo(op) {
     for (let i = op.snapshots.length - 1; i >= 0; i--) {
       _restoreFlattenSnapshot(op.snapshots[i]);
     }
@@ -23871,19 +23783,8 @@ undoLast = function() {
     invalidateExplodeBaseline();
     state.redo.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-  return _origUndoLast_flatten();
-};
-
-// Redo: re-dissolve in original order. Children that need to move up are
-// already in place from the undo restore — re-running _dissolveContainer
-// (without snapshots) is enough.
-const _origRedoLast_flatten = redoLast;
-redoLast = function() {
-  const op = state.redo[state.redo.length - 1];
-  if (op && op.type === 'flatten') {
-    state.redo.pop();
+  },
+  redo(op) {
     for (const s of op.snapshots) {
       const parent = s.group.parent;
       if (!parent) continue;
@@ -23916,10 +23817,8 @@ redoLast = function() {
     invalidateExplodeBaseline();
     state.history.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-  return _origRedoLast_flatten();
-};
+  },
+});
 
 // =====================================================================
 // BATCH RENAME — Cinema 4D-style token engine + Find/Replace + Presets
@@ -24475,64 +24374,10 @@ const _DraggablePopup = (() => {
   let stylesInjected = false;
 
   function _injectChromeStyles() {
-    if (stylesInjected) return;
+    // CSS for .dlg-popup chrome lives in index.html (search "_DraggablePopup
+    // shared chrome") — migrated out of a runtime <style> inject. Kept as a
+    // no-op stub so any caller signature stays the same.
     stylesInjected = true;
-    const s = document.createElement('style');
-    s.id = '_dlg-popup-style';
-    s.textContent = `
-      .dlg-popup{position:fixed;inset:0;display:none;z-index:300;pointer-events:none}
-      .dlg-popup.show{display:block}
-      .dlg-popup .dlg-pop{
-        position:absolute;
-        max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);
-        background:linear-gradient(180deg,var(--bg3),var(--bg));
-        border:0;
-        border-radius:var(--r-2xl);
-        box-shadow:0 30px 80px -16px rgba(0,0,0,.7),0 8px 24px -8px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.04);
-        display:flex;flex-direction:column;
-        overflow:hidden;
-        pointer-events:auto;
-        transform:translateY(-8px) scale(.97);
-        opacity:0;
-        transition:transform .22s cubic-bezier(.2,.9,.3,1.1),opacity .16s ease;
-      }
-      .dlg-popup.show .dlg-pop{transform:translateY(0) scale(1);opacity:1}
-      .dlg-popup.dragging .dlg-pop,.dlg-popup.resizing .dlg-pop{transition:none}
-      .dlg-popup.dragging .dlg-pop{cursor:grabbing}
-
-      .dlg-popup .dlg-resize{position:absolute;z-index:2}
-      .dlg-popup .dlg-resize.n{top:-3px;left:12px;right:12px;height:6px;cursor:ns-resize}
-      .dlg-popup .dlg-resize.s{bottom:-3px;left:12px;right:12px;height:6px;cursor:ns-resize}
-      .dlg-popup .dlg-resize.w{left:-3px;top:12px;bottom:12px;width:6px;cursor:ew-resize}
-      .dlg-popup .dlg-resize.e{right:-3px;top:12px;bottom:12px;width:6px;cursor:ew-resize}
-      .dlg-popup .dlg-resize.nw{top:-3px;left:-3px;width:16px;height:16px;cursor:nwse-resize}
-      .dlg-popup .dlg-resize.ne{top:-3px;right:-3px;width:16px;height:16px;cursor:nesw-resize}
-      .dlg-popup .dlg-resize.sw{bottom:-3px;left:-3px;width:16px;height:16px;cursor:nesw-resize}
-      .dlg-popup .dlg-resize.se{bottom:-3px;right:-3px;width:16px;height:16px;cursor:nwse-resize}
-
-      .dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-      .dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-      .dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-      .dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-
-      .dlg-popup .dlg-head{display:flex;align-items:center;gap:11px;padding:13px 14px 12px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;position:relative;cursor:grab;user-select:none}
-      .dlg-popup .dlg-head:active{cursor:grabbing}
-      .dlg-popup .dlg-head::after{content:'';position:absolute;left:16px;right:16px;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06) 30%,rgba(255,255,255,.06) 70%,transparent);pointer-events:none}
-      .dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,var(--ac-tint-20),var(--ac-tint-12));color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
-      .dlg-popup .dlg-head-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-      .dlg-popup .dlg-head-titles{flex:1;min-width:0}
-      .dlg-popup .dlg-title{font-size:var(--fs-xl);font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:-.01em;line-height:1.2}
-      .dlg-popup .dlg-sub{font-size:var(--fs-11);color:var(--tx3);line-height:1.35;margin-top:2px;letter-spacing:var(--tracking-snug)}
-      .dlg-popup .dlg-x{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-11);flex-shrink:0;padding:0;transition:color .14s ease,background .14s ease,transform .14s ease}
-      .dlg-popup .dlg-x:hover{color:var(--tx);background:rgba(255,255,255,.07)}
-      .dlg-popup .dlg-x:active{transform:scale(.92)}
-
-      .dlg-popup .dlg-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
-      .dlg-popup .dlg-body[data-scroll="auto"]{overflow-y:auto;padding:14px 16px 16px 16px}
-      .dlg-popup .dlg-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:var(--space-md);box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .dlg-popup .dlg-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:7px}
-    `;
-    document.head.appendChild(s);
   }
 
   // Read/write a popup's last position+size from localStorage so reopening
@@ -24780,113 +24625,9 @@ const _BatchRenameDialog = (() => {
   const STATE = { resolve: null, mode: 'find-replace', debounce: null, candidates: [], previewRows: [] };
   const E = id => bg && bg.querySelector('#' + id);
 
-  function _injectStyles() {
-    if (document.getElementById('_brn-dlg-style')) return;
-    const s = document.createElement('style');
-    s.id = '_brn-dlg-style';
-    s.textContent = `
-      /* Chrome (card, head, resize, body) is provided by _DraggablePopup.
-         Only Batch Rename content classes live here. */
-      #_brn-dialog .brn-cols{display:flex;flex:1;min-height:0}
-      #_brn-dialog .brn-left{flex:0 0 360px;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.05);min-height:0;overflow:hidden}
-      #_brn-dialog .brn-right{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;background:rgba(0,0,0,.10)}
-      #_brn-dialog .brn-right-head{padding:13px 16px 9px 16px;font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);border-bottom:1px solid rgba(255,255,255,.04);flex-shrink:0;background:transparent}
-      .brn-tabs{display:inline-flex;gap:2px;padding:3px;margin:12px 14px 4px 14px;border-radius:var(--r-md);background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.04);box-shadow:inset 0 1px 0 rgba(0,0,0,.20);flex-shrink:0;align-self:flex-start}
-      .brn-tab{all:unset;padding:5px 11px;font-size:var(--fs-12);color:var(--tx2);border-radius:var(--r-sm);cursor:pointer;font-weight:var(--fw-medium);transition:color .14s ease,background .14s ease,box-shadow .14s ease;letter-spacing:var(--tracking-tight);text-align:center}
-      .brn-tab:hover{color:var(--tx)}
-      .brn-tab.active{background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.04));color:var(--tx);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 0 0 1px rgba(255,255,255,.05),0 1px 2px rgba(0,0,0,.30)}
-      .brn-pane{display:none;flex-direction:column;gap:11px;padding:10px 14px 14px 14px;overflow:auto;flex:1;min-height:0}
-      .brn-pane.active{display:flex}
-      .brn-row{display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap}
-      .brn-row label{font-size:var(--fs-11);color:var(--tx3);min-width:60px;font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
-      .brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=text]:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input[type=number]:focus{border-color:var(--ac-tint-55);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-row input::placeholder{color:var(--tx3);opacity:.55}
-      .brn-row select.mac-sel{padding:7px 9px;font-size:var(--fs-md)}
-      .brn-tog{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-12);color:var(--tx2);cursor:pointer;user-select:none;padding:5px 10px 5px 8px;border-radius:7px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .14s ease,border-color .14s ease,color .14s ease}
-      .brn-tog:hover{background:rgba(255,255,255,.05);color:var(--tx);border-color:rgba(255,255,255,.10)}
-      .brn-tog input[type=checkbox]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:var(--r-xs);border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
-      .brn-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
-      .brn-tog input[type=checkbox]:checked{background:var(--ac);border-color:var(--ac)}
-      .brn-tog input[type=checkbox]:checked::after{content:'';width:8px;height:8px;background:no-repeat center/8px url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 6.2 5 8.6l4.5-5.2' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>")}
-      .brn-tog:has(input[type=checkbox]:checked){background:var(--ac-tint-12);border-color:var(--ac-tint-35);color:var(--tx)}
-      .brn-tog input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
-      .brn-tog input[type=radio]:hover{border-color:rgba(255,255,255,.34)}
-      .brn-tog input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
-      .brn-tog input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff}
-      .brn-section-title{font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wider);color:var(--tx3);margin:8px 0 6px 0}
-      .brn-presets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-md)}
-      .brn-preset{all:unset;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.025);cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:border-color .14s ease,background .14s ease,transform .14s ease}
-      .brn-preset:hover{border-color:var(--ac-tint-35);background:var(--ac-tint-08)}
-      .brn-preset:active{transform:translateY(.5px)}
-      .brn-preset .n{font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--tx)}
-      .brn-preset .d{font-size:var(--fs-11);color:var(--tx3);font-family:var(--font-sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .brn-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 16px;background:rgba(0,0,0,.22);border-top:1px solid rgba(255,255,255,.04);font-size:var(--fs-sm);color:var(--tx3);flex-shrink:0;flex-wrap:wrap;gap:var(--space-sm);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-snug)}
-      .brn-summary .ok{color:var(--ok);font-weight:var(--fw-semibold)}
-      .brn-summary .warn{color:var(--wn);font-weight:var(--fw-semibold)}
-      .brn-summary .err{color:var(--er);font-weight:var(--fw-semibold)}
-      .brn-preview{flex:1 1 auto;min-height:0;overflow:auto;background:transparent}
-      .brn-preview-table{width:100%;border-collapse:collapse;font-size:var(--fs-12);font-family:var(--font-sans)}
-      .brn-preview-table tr{border-bottom:1px solid var(--bd)}
-      .brn-preview-table tr.warn{background:rgba(251,191,36,.05)}
-      .brn-preview-table tr.error{background:rgba(255,107,107,.06)}
-      .brn-preview-table tr.unchanged{opacity:.5}
-      .brn-preview-table tr.skipped{opacity:.35}
-      .brn-preview-table td{padding:5px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
-      .brn-preview-table td.kind{color:var(--tx3);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:var(--tracking-wide);width:60px;font-family:inherit}
-      .brn-preview-table td.arrow{color:var(--tx3);width:24px;text-align:center}
-      .brn-preview-table td.new{color:var(--ac)}
-      .brn-preview-table tr.warn td.new{color:var(--wn)}
-      .brn-preview-table tr.error td.new{color:var(--er)}
-      .brn-preview-table tr.unchanged td.new{color:var(--tx3)}
-      .brn-preview-table tr.skipped td.new{color:var(--tx3)}
-      .brn-preview-table td.reason{color:var(--tx3);font-size:var(--fs-11);font-family:inherit}
-      .brn-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:var(--space-md);box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-      .brn-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:7px}
-      .brn-foot #_brn-save{background:transparent;border-color:transparent;color:var(--tx3);padding:7px 4px;font-weight:var(--fw-medium)}
-      .brn-foot #_brn-save:hover{color:var(--ac);background:transparent;border-color:transparent;text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--ac-tint-55)}
-      .brn-foot #_brn-ok{box-shadow:0 4px 14px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
-      .brn-foot #_brn-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
-      .brn-foot #_brn-ok:disabled:hover{filter:grayscale(.3) brightness(.85)}
-      .brn-collapsible{border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);overflow:hidden;flex-shrink:0;transition:border-color .14s ease,background .14s ease}
-      .brn-collapsible:hover{border-color:rgba(255,255,255,.09)}
-      .brn-collapsible.open{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.08)}
-      .brn-collapsible-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);padding:10px 12px;cursor:pointer;font-size:var(--fs-12);color:var(--tx2);user-select:none;transition:background .12s ease,color .12s ease}
-      .brn-collapsible-h:hover{background:rgba(255,255,255,.025);color:var(--tx)}
-      .brn-collapsible-h strong{color:var(--tx);font-weight:var(--fw-semibold)}
-      .brn-collapsible-h .chev{
-        display:inline-grid;place-items:center;
-        width:18px;height:18px;border-radius:5px;
-        font-size:0;line-height:0;flex-shrink:0;
-        background:rgba(255,255,255,.04);
-        color:var(--tx2);opacity:.85;
-        transition:transform .2s cubic-bezier(.2,.85,.3,1.1),color .14s ease,background .14s ease,opacity .14s ease;
-      }
-      .brn-collapsible-h .chev::before{
-        content:'';width:8px;height:8px;
-        border-right:1.6px solid currentColor;
-        border-bottom:1.6px solid currentColor;
-        transform:translateX(-1px) rotate(-45deg);
-        transition:transform .2s cubic-bezier(.2,.85,.3,1.1);
-      }
-      .brn-collapsible-h:hover .chev{background:rgba(255,255,255,.07);color:var(--tx);opacity:1}
-      .brn-collapsible.open .chev{background:var(--ac-tint-15);color:var(--ac);opacity:1}
-      .brn-collapsible.open .chev::before{transform:translateY(-1px) rotate(45deg)}
-      .brn-collapsible-b{display:none;padding:10px 12px 12px 12px;border-top:1px solid rgba(255,255,255,.05);flex-direction:column;gap:var(--space-md)}
-      .brn-collapsible.open .brn-collapsible-b{display:flex}
-      .brn-token-pop{position:absolute;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:var(--r-lg);box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06);padding:4px;z-index:600;display:none;max-height:280px;overflow:auto;min-width:280px}
-      .brn-token-pop.show{display:block}
-      .brn-token-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx)}
-      .brn-token-item:hover,.brn-token-item.active{background:var(--ac-soft)}
-      .brn-token-item .desc{color:var(--tx3);font-size:var(--fs-11);font-family:inherit;font-weight:var(--fw-regular)}
-      .brn-token-item .tname{font-weight:var(--fw-semibold);color:var(--ac)}
-      .brn-help{font-size:var(--fs-xs);color:var(--tx3);padding-left:68px}
-      .brn-help code{font-family:var(--font-sans);color:var(--ac);background:rgba(0,0,0,.25);padding:0 4px;border-radius:3px}
-    `;
-    document.head.appendChild(s);
-  }
+  // CSS for #_brn-dialog content classes lives in index.html
+  // (search "Batch Rename dialog") — migrated out of a runtime <style>.
+  function _injectStyles() { /* no-op; CSS migrated to index.html */ }
 
   function _scopeRowHtml() {
     return `
@@ -25390,74 +25131,44 @@ const _BatchRenameDialog = (() => {
   };
 })();
 
-// Undo / redo wrappers for 'batchRename'
-const _origUndoLast_batchRename = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (op && op.type === 'batchRename') {
-    state.history.pop();
-    for (const ch of op.changes) {
-      if (ch.kind === 'part') {
-        const p = getPart(ch.partId);
-        if (p) { p.name = ch.oldName; if (p.mesh) p.mesh.name = ch.oldName; }
-        if (ch.treeNodeId != null) {
-          const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.id === ch.treeNodeId);
-          if (tn) tn.name = ch.oldName;
-        }
-      } else if (ch.kind === 'hier-group') {
-        const tn = (state.treeNodes || []).find(n => n.id === ch.treeNodeId);
-        if (tn) tn.name = ch.oldName;
-        if (ch.obj3dRef) ch.obj3dRef.name = ch.oldName;
-      } else if (ch.kind === 'user-group') {
-        const ug = (state.userGroups || []).find(g => g.id === ch.userGroupId);
-        if (ug) { ug.name = ch.oldName; if (ug.ref) ug.ref.name = ch.oldName; }
-      }
+// 'batchRename' — flips names back/forward across parts, hier-groups, and
+// user-groups in one atomic op. The two directions are mirror twins;
+// _renameOne handles the dispatch by `ch.kind`.
+function _renameOne(ch, name) {
+  if (ch.kind === 'part') {
+    const p = getPart(ch.partId);
+    if (p) { p.name = name; if (p.mesh) p.mesh.name = name; }
+    if (ch.treeNodeId != null) {
+      const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.id === ch.treeNodeId);
+      if (tn) tn.name = name;
     }
+  } else if (ch.kind === 'hier-group') {
+    const tn = (state.treeNodes || []).find(n => n.id === ch.treeNodeId);
+    if (tn) tn.name = name;
+    if (ch.obj3dRef) ch.obj3dRef.name = name;
+  } else if (ch.kind === 'user-group') {
+    const ug = (state.userGroups || []).find(g => g.id === ch.userGroupId);
+    if (ug) { ug.name = name; if (ug.ref) ug.ref.name = name; }
+  }
+}
+_UndoOps.register('batchRename', {
+  undo(op) {
+    for (const ch of op.changes) _renameOne(ch, ch.oldName);
     state.redo.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-  return _origUndoLast_batchRename();
-};
-
-const _origRedoLast_batchRename = redoLast;
-redoLast = function() {
-  const op = state.redo[state.redo.length - 1];
-  if (op && op.type === 'batchRename') {
-    state.redo.pop();
-    for (const ch of op.changes) {
-      if (ch.kind === 'part') {
-        const p = getPart(ch.partId);
-        if (p) { p.name = ch.newName; if (p.mesh) p.mesh.name = ch.newName; }
-        if (ch.treeNodeId != null) {
-          const tn = (state.treeNodes || []).find(n => n.kind === 'part' && n.id === ch.treeNodeId);
-          if (tn) tn.name = ch.newName;
-        }
-      } else if (ch.kind === 'hier-group') {
-        const tn = (state.treeNodes || []).find(n => n.id === ch.treeNodeId);
-        if (tn) tn.name = ch.newName;
-        if (ch.obj3dRef) ch.obj3dRef.name = ch.newName;
-      } else if (ch.kind === 'user-group') {
-        const ug = (state.userGroups || []).find(g => g.id === ch.userGroupId);
-        if (ug) { ug.name = ch.newName; if (ug.ref) ug.ref.name = ch.newName; }
-      }
-    }
+  },
+  redo(op) {
+    for (const ch of op.changes) _renameOne(ch, ch.newName);
     state.history.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-  return _origRedoLast_batchRename();
-};
+  },
+});
 
-// Undo / redo wrappers for 'duplicate'.
-// Undo deletes the cloned meshes outright (geometry + material are shared via
-// geomByHash / materialByColor — disposing them would wreck the source). Redo
-// re-runs the clone from the original source ids that we stash on the op.
-const _origUndoLast_duplicate = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (op && op.type === 'duplicate') {
-    state.history.pop();
+// 'duplicate' — undo deletes the cloned meshes (geometry + material are
+// shared via geomByHash / materialByColor — disposing them would wreck the
+// source). Redo re-runs the clone from the source ids stashed on the op.
+_UndoOps.register('duplicate', {
+  undo(op) {
     const idSet = new Set(op.partIds);
     // Drop membership from any user group the clones got pasted into so the
     // sidebar bucket count matches the live mesh count after undo.
@@ -25479,19 +25190,11 @@ undoLast = function() {
     state.redo.push(op);
     recomputeStats();
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-  return _origUndoLast_duplicate();
-};
-
-const _origRedoLast_duplicate = redoLast;
-redoLast = function() {
-  const op = state.redo[state.redo.length - 1];
-  if (op && op.type === 'duplicate') {
-    state.redo.pop();
+  },
+  redo(op) {
     // Re-resolve the original target. If the group has since been dissolved
-    // we silently fall back to "no target" (clones land at top level) rather
-    // than refuse the redo.
+    // we silently fall back to "no target" (clones land at top level)
+    // rather than refuse the redo.
     let target = null;
     if (op.targetUserGroupId != null) {
       const ug = (state.userGroups || []).find(g => g.id === op.targetUserGroupId);
@@ -25507,8 +25210,7 @@ redoLast = function() {
     }
     if (!newIds.length) {
       toast('Redo unavailable', 'Source parts are gone', 'warn', 1800);
-      _refreshUndoRedoButtons();
-      return;
+      return false;
     }
     op.partIds = newIds;          // keep the op consistent for a follow-up undo
     state.history.push(op);
@@ -25516,24 +25218,21 @@ redoLast = function() {
     $('del-sel-count').textContent = state.selected.size;
     recomputeStats();
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-  return _origRedoLast_duplicate();
-};
+  },
+});
 
 // =====================================================================
 // Undo / redo for 'paste-group' (folder-preserving paste).
 // Removes the cloned meshes AND the user-group container as one atomic op.
 // =====================================================================
-const _origUndoLast_pasteGroup = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (op && op.type === 'paste-group') {
-    state.history.pop();
+// 'paste-group' — Ctrl+V wrapped into a user-group. Undo drops the cloned
+// meshes + the user-group container as one atomic op; redo replays the
+// paste machinery which pushes its own fresh undo entry.
+_UndoOps.register('paste-group', {
+  undo(op) {
     const idSet = new Set(op.partIds);
-    // Drop the cloned meshes (geometry + materials are shared via
-    // geomByHash / materialByColor — disposing them would corrupt the
-    // sources).
+    // Drop the cloned meshes. Geometry + materials are shared via
+    // geomByHash / materialByColor — disposing them would corrupt sources.
     for (const id of op.partIds) {
       const p = getPart(id);
       if (p && p.mesh) p.mesh.parent?.remove(p.mesh);
@@ -25553,29 +25252,18 @@ undoLast = function() {
     state.redo.push(op);
     recomputeStats();
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-  return _origUndoLast_pasteGroup();
-};
-const _origRedoLast_pasteGroup = redoLast;
-redoLast = function() {
-  const op = state.redo[state.redo.length - 1];
-  if (op && op.type === 'paste-group') {
-    state.redo.pop();
-    // Rebuild from scratch using the same machinery as a fresh paste.
-    // _pasteAsUserGroup handles the THREE.Group container, the user-group
-    // record, _clonePart, and pushes its own undo entry — so we don't
-    // pushUndo here. The op's redo position is taken by the new entry.
+  },
+  redo(op) {
+    // Rebuild via the same machinery as a fresh paste. _pasteAsUserGroup
+    // pushes its own undo entry, so we don't pushUndo here — the op's
+    // redo position is taken by the new entry.
     const newIds = _pasteAsUserGroup(op.sourceIds, op.groupName);
     if (!newIds.length) {
       toast('Redo unavailable', 'Source parts are gone', 'warn', 1800);
-      _refreshUndoRedoButtons();
-      return;
+      return false;
     }
-    return;
-  }
-  return _origRedoLast_pasteGroup();
-};
+  },
+});
 
 // =====================================================================
 // Measurement tool — distance between two snapped points (MVP).
@@ -26487,78 +26175,71 @@ wireUI = function() {
   } catch (_) {}
 };
 
-// Undo/redo wrappers — dispatch the three measure op types ahead of the
-// chained core dispatcher. Snap data round-trips through both directions:
-// each cross-pop pushes the SAME snap onto the destination stack so a
-// later redo can resurrect with full point coordinates.
-const _origUndoLast_measure = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (op && (op.type === 'measure-add' || op.type === 'measure-delete' || op.type === 'measure-clear')) {
-    state.history.pop();
-    if (op.type === 'measure-add') {
-      // Capture full snap so redo can rebuild geometry+label.
-      const snap = _Measure._undoAdd(op.id);
-      if (snap) state.redo.push({ type: 'measure-add', snap });
-    } else if (op.type === 'measure-delete') {
-      // op.snap holds the original delete payload. Restore it, then carry
-      // the same snap forward so a redo of this delete can re-remove by id.
-      _Measure._undoDelete(op.snap);
-      state.redo.push({ type: 'measure-delete', snap: op.snap });
-    } else {
-      _Measure._undoClear(op.snaps);
-      state.redo.push({ type: 'measure-clear', snaps: op.snaps });
-    }
-    if (typeof _finalizeUndo === 'function') _finalizeUndo();
-    return;
-  }
-  return _origUndoLast_measure();
-};
-const _origRedoLast_measure = redoLast;
-redoLast = function() {
-  const op = state.redo && state.redo[state.redo.length - 1];
-  if (op && (op.type === 'measure-add' || op.type === 'measure-delete' || op.type === 'measure-clear')) {
-    state.redo.pop();
-    if (op.type === 'measure-add') {
-      _Measure._redoAdd(op.snap);
-      // The history op for an add only needs the id — undoLast captures a
-      // fresh snap from live items[] before disposing.
-      state.history.push({ type: 'measure-add', id: op.snap.id });
-    } else if (op.type === 'measure-delete') {
-      // Drop by id, then push the original snap back onto history so a
-      // subsequent undo can resurrect with the full coordinates.
-      _Measure._redoDelete(op.snap.id);
-      state.history.push({ type: 'measure-delete', snap: op.snap });
-    } else {
-      _Measure._redoClear();
-      state.history.push({ type: 'measure-clear', snaps: op.snaps });
-    }
-    if (typeof _refreshUndoRedoButtons === 'function') _refreshUndoRedoButtons();
+// Measure undo/redo — three op types ('measure-add', 'measure-delete',
+// 'measure-clear') registered in the _UndoOps table. Snap data round-trips
+// through both directions: each cross-pop pushes the SAME snap onto the
+// destination stack so a later redo can resurrect with full coordinates.
+_UndoOps.register('measure-add', {
+  undo(op) {
+    // Capture full snap so redo can rebuild geometry+label.
+    const snap = _Measure._undoAdd(op.id);
+    if (snap) state.redo.push({ type: 'measure-add', snap });
+    _finalizeUndo();
+  },
+  redo(op) {
+    _Measure._redoAdd(op.snap);
+    // The history op for an add only needs the id — undo captures a fresh
+    // snap from live items[] before disposing.
+    state.history.push({ type: 'measure-add', id: op.snap.id });
+    _refreshUndoRedoButtons();
     requestRender();
-    return;
-  }
-  return _origRedoLast_measure();
-};
+  },
+});
+_UndoOps.register('measure-delete', {
+  undo(op) {
+    // op.snap holds the original delete payload. Restore it, then carry
+    // the same snap forward so a redo of this delete can re-remove by id.
+    _Measure._undoDelete(op.snap);
+    state.redo.push({ type: 'measure-delete', snap: op.snap });
+    _finalizeUndo();
+  },
+  redo(op) {
+    // Drop by id, then push the original snap back onto history so a
+    // subsequent undo can resurrect with the full coordinates.
+    _Measure._redoDelete(op.snap.id);
+    state.history.push({ type: 'measure-delete', snap: op.snap });
+    _refreshUndoRedoButtons();
+    requestRender();
+  },
+});
+_UndoOps.register('measure-clear', {
+  undo(op) {
+    _Measure._undoClear(op.snaps);
+    state.redo.push({ type: 'measure-clear', snaps: op.snaps });
+    _finalizeUndo();
+  },
+  redo(op) {
+    _Measure._redoClear();
+    state.history.push({ type: 'measure-clear', snaps: op.snaps });
+    _refreshUndoRedoButtons();
+    requestRender();
+  },
+});
 
 // =================================================================
-// Bulletproof-undo extension: covers operations that previously had
-// no history entry — primitive add / param edits, hier-mode group /
-// ungroup, userGroup remove, single + bulk visibility toggles,
-// material edits. Adds new op types to the shared history+redo
-// stacks via the same chain-wrapper pattern used by the measure /
-// batchRename / duplicate / flatten extensions above.
+// Bulletproof-undo op types — primitive add / param edits, hier-mode
+// group / ungroup, userGroup remove, single + bulk visibility toggles,
+// material edits. Each registers a clean undo/redo pair in _UndoOps.
+// Migrated from a single 250-line chain wrapper that did the same
+// dispatch via if/else.
 // =================================================================
-const _origUndoLast_bp = undoLast;
-undoLast = function() {
-  const op = state.history[state.history.length - 1];
-  if (!op) return _origUndoLast_bp();
 
-  // ── addPart: a primitive (cube / sphere / etc.) was added. Undo
-  // hides + marks-deleted via the same path deleteParts() uses;
-  // redo restores. Primitives never go through the instanced-mesh
-  // path, so we don't touch instanceMatrix here.
-  if (op.type === 'addPart') {
-    state.history.pop();
+// 'addPart' — a primitive (cube / sphere / etc.) was added. Undo
+// hides + marks-deleted via the same path deleteParts() uses; redo
+// restores. Primitives never go through the instanced-mesh path, so
+// we don't touch instanceMatrix.
+_UndoOps.register('addPart', {
+  undo(op) {
     const p = getPart(op.partId);
     if (p) {
       p.deleted = true;
@@ -26568,13 +26249,23 @@ undoLast = function() {
     if (state.selected) state.selected.delete(op.partId);
     recomputeStats?.(); refreshFlagged?.();
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
+  },
+  redo(op) {
+    const p = getPart(op.partId);
+    if (p) {
+      p.deleted = false;
+      if (p.mesh) p.mesh.visible = p.visible !== false;
+    }
+    state.history.push(op);
+    recomputeStats?.(); refreshFlagged?.();
+    _finalizeUndo({ rebuildTree: true });
+  },
+});
 
-  // ── primParams: a primitive's shape parameters changed (slider /
-  // number / reset). before/after are plain {param: value} objects.
-  if (op.type === 'primParams') {
-    state.history.pop();
+// 'primParams' — a primitive's shape parameters changed (slider /
+// number / reset). before/after are plain {param: value} objects.
+_UndoOps.register('primParams', {
+  undo(op) {
     const p = getPart(op.partId);
     if (p && p.isPrimitive) {
       p.primParams = { ...op.before };
@@ -26584,14 +26275,24 @@ undoLast = function() {
     state.redo.push(op);
     refreshPropertiesPanel?.();
     _finalizeUndo();
-    return;
-  }
+  },
+  redo(op) {
+    const p = getPart(op.partId);
+    if (p && p.isPrimitive) {
+      p.primParams = { ...op.after };
+      if (op.afterBaseSize != null) p.primBaseSize = op.afterBaseSize;
+      try { _rebuildPrimitiveGeometry(p); } catch (e) { console.warn('[redo primParams] rebuild failed:', e); }
+    }
+    state.history.push(op);
+    refreshPropertiesPanel?.();
+    _finalizeUndo();
+  },
+});
 
-  // ── vis: per-part visibility change. items: [{partId, before, after}].
-  // Covers single eye-icon clicks + bulk hide-unselected / show-all /
-  // isolate.
-  if (op.type === 'vis') {
-    state.history.pop();
+// 'vis' — per-part visibility change. items: [{partId, before, after}].
+// Covers single eye-icon clicks + bulk hide-unselected / show-all / isolate.
+_UndoOps.register('vis', {
+  undo(op) {
     for (const it of op.items) {
       const p = getPart(it.partId);
       if (!p) continue;
@@ -26601,16 +26302,26 @@ undoLast = function() {
     if (op.prevIsolated != null) state._isolated = op.prevIsolated;
     state.redo.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
+  },
+  redo(op) {
+    for (const it of op.items) {
+      const p = getPart(it.partId);
+      if (!p) continue;
+      p.visible = it.after;
+      if (p.mesh) p.mesh.visible = it.after;
+    }
+    if (op.nextIsolated != null) state._isolated = op.nextIsolated;
+    state.history.push(op);
+    _finalizeUndo({ rebuildTree: true });
+  },
+});
 
-  // ── hierGroup: hierarchical-mode "group selected" created a new
-  // tree-node group + scene-graph THREE.Group and reparented the
-  // selected meshes/groups under it. Undo: restore each item's
-  // previous parent + local matrix, drop the new group, swap
-  // treeNodes back to the snapshot.
-  if (op.type === 'hierGroup') {
-    state.history.pop();
+// 'hierGroup' — hier-mode "group selected" created a new tree-node
+// group + THREE.Group and reparented selected meshes/groups under it.
+// Undo: restore each item's previous parent + local matrix, drop the
+// new group, swap treeNodes back to the snapshot.
+_UndoOps.register('hierGroup', {
+  undo(op) {
     for (const it of op.items) {
       if (!it.obj || !it.prevParent) continue;
       it.prevParent.attach(it.obj);
@@ -26624,14 +26335,31 @@ undoLast = function() {
     if (op.prevTreeNodes) state.treeNodes = _snapshotTreeNodes(op.prevTreeNodes);
     state.redo.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
+  },
+  redo(op) {
+    if (op.groupObj && op.groupHostObj && !op.groupObj.parent) {
+      op.groupHostObj.add(op.groupObj);
+    }
+    for (const it of op.items) {
+      if (!it.obj || !op.groupObj) continue;
+      op.groupObj.attach(it.obj);
+      if (it.nextLocalMat) {
+        it.obj.matrix.fromArray(it.nextLocalMat);
+        it.obj.matrix.decompose(it.obj.position, it.obj.quaternion, it.obj.scale);
+        it.obj.updateMatrixWorld(true);
+      }
+    }
+    if (op.nextTreeNodes) state.treeNodes = _snapshotTreeNodes(op.nextTreeNodes);
+    state.history.push(op);
+    _finalizeUndo({ rebuildTree: true });
+  },
+});
 
-  // ── hierUngroup: a hier group was dissolved, its children promoted
-  // up one level. Undo: re-create the group container in the host,
-  // reparent children back under it, restore local matrices.
-  if (op.type === 'hierUngroup') {
-    state.history.pop();
+// 'hierUngroup' — a hier group was dissolved, its children promoted
+// up one level. Undo: re-create the group container in the host,
+// reparent children back under it, restore local matrices.
+_UndoOps.register('hierUngroup', {
+  undo(op) {
     if (op.groupObj && op.groupHostObj) {
       op.groupHostObj.add(op.groupObj);
       for (const it of op.items) {
@@ -26647,14 +26375,31 @@ undoLast = function() {
     if (op.prevTreeNodes) state.treeNodes = _snapshotTreeNodes(op.prevTreeNodes);
     state.redo.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
+  },
+  redo(op) {
+    if (op.groupObj && op.groupHostObj) {
+      for (const it of op.items) {
+        if (!it.obj) continue;
+        op.groupHostObj.attach(it.obj);
+        if (it.nextLocalMat) {
+          it.obj.matrix.fromArray(it.nextLocalMat);
+          it.obj.matrix.decompose(it.obj.position, it.obj.quaternion, it.obj.scale);
+          it.obj.updateMatrixWorld(true);
+        }
+      }
+      if (op.groupObj.parent) op.groupObj.parent.remove(op.groupObj);
+    }
+    if (op.nextTreeNodes) state.treeNodes = _snapshotTreeNodes(op.nextTreeNodes);
+    state.history.push(op);
+    _finalizeUndo({ rebuildTree: true });
+  },
+});
 
-  // ── userGroupRemove: a userGroup was dissolved (members moved
-  // back to partsRoot). Undo: re-create the userGroup record, move
-  // members back under its container.
-  if (op.type === 'userGroupRemove') {
-    state.history.pop();
+// 'userGroupRemove' — a userGroup was dissolved (members moved back
+// to partsRoot). Undo: re-create the userGroup record, move members
+// back under its container.
+_UndoOps.register('userGroupRemove', {
+  undo(op) {
     if (op.groupRef && op.groupHostObj && !op.groupRef.parent) {
       op.groupHostObj.add(op.groupRef);
     }
@@ -26675,111 +26420,8 @@ undoLast = function() {
     }
     state.redo.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-
-  // ── materialEdit: a material property changed via the editor.
-  // Round-trips a snapshot of edit-relevant channels so every
-  // tweaked field is restored.
-  if (op.type === 'materialEdit') {
-    state.history.pop();
-    if (op.matRef && op.before) _applyMatSnapshot(op.matRef, op.before);
-    state.redo.push(op);
-    _finalizeUndo();
-    return;
-  }
-
-  return _origUndoLast_bp();
-};
-
-const _origRedoLast_bp = redoLast;
-redoLast = function() {
-  const op = state.redo[state.redo.length - 1];
-  if (!op) return _origRedoLast_bp();
-
-  if (op.type === 'addPart') {
-    state.redo.pop();
-    const p = getPart(op.partId);
-    if (p) {
-      p.deleted = false;
-      if (p.mesh) p.mesh.visible = p.visible !== false;
-    }
-    state.history.push(op);
-    recomputeStats?.(); refreshFlagged?.();
-    _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-
-  if (op.type === 'primParams') {
-    state.redo.pop();
-    const p = getPart(op.partId);
-    if (p && p.isPrimitive) {
-      p.primParams = { ...op.after };
-      if (op.afterBaseSize != null) p.primBaseSize = op.afterBaseSize;
-      try { _rebuildPrimitiveGeometry(p); } catch (e) { console.warn('[redo primParams] rebuild failed:', e); }
-    }
-    state.history.push(op);
-    refreshPropertiesPanel?.();
-    _finalizeUndo();
-    return;
-  }
-
-  if (op.type === 'vis') {
-    state.redo.pop();
-    for (const it of op.items) {
-      const p = getPart(it.partId);
-      if (!p) continue;
-      p.visible = it.after;
-      if (p.mesh) p.mesh.visible = it.after;
-    }
-    if (op.nextIsolated != null) state._isolated = op.nextIsolated;
-    state.history.push(op);
-    _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-
-  if (op.type === 'hierGroup') {
-    state.redo.pop();
-    if (op.groupObj && op.groupHostObj && !op.groupObj.parent) {
-      op.groupHostObj.add(op.groupObj);
-    }
-    for (const it of op.items) {
-      if (!it.obj || !op.groupObj) continue;
-      op.groupObj.attach(it.obj);
-      if (it.nextLocalMat) {
-        it.obj.matrix.fromArray(it.nextLocalMat);
-        it.obj.matrix.decompose(it.obj.position, it.obj.quaternion, it.obj.scale);
-        it.obj.updateMatrixWorld(true);
-      }
-    }
-    if (op.nextTreeNodes) state.treeNodes = _snapshotTreeNodes(op.nextTreeNodes);
-    state.history.push(op);
-    _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-
-  if (op.type === 'hierUngroup') {
-    state.redo.pop();
-    if (op.groupObj && op.groupHostObj) {
-      for (const it of op.items) {
-        if (!it.obj) continue;
-        op.groupHostObj.attach(it.obj);
-        if (it.nextLocalMat) {
-          it.obj.matrix.fromArray(it.nextLocalMat);
-          it.obj.matrix.decompose(it.obj.position, it.obj.quaternion, it.obj.scale);
-          it.obj.updateMatrixWorld(true);
-        }
-      }
-      if (op.groupObj.parent) op.groupObj.parent.remove(op.groupObj);
-    }
-    if (op.nextTreeNodes) state.treeNodes = _snapshotTreeNodes(op.nextTreeNodes);
-    state.history.push(op);
-    _finalizeUndo({ rebuildTree: true });
-    return;
-  }
-
-  if (op.type === 'userGroupRemove') {
-    state.redo.pop();
+  },
+  redo(op) {
     for (const it of op.items) {
       const p = getPart(it.partId);
       if (!p || !p.mesh) continue;
@@ -26790,19 +26432,24 @@ redoLast = function() {
     if (idx >= 0) state.userGroups.splice(idx, 1);
     state.history.push(op);
     _finalizeUndo({ rebuildTree: true });
-    return;
-  }
+  },
+});
 
-  if (op.type === 'materialEdit') {
-    state.redo.pop();
+// 'materialEdit' — a material property changed via the editor.
+// Round-trips a snapshot of edit-relevant channels so every tweaked
+// field is restored.
+_UndoOps.register('materialEdit', {
+  undo(op) {
+    if (op.matRef && op.before) _applyMatSnapshot(op.matRef, op.before);
+    state.redo.push(op);
+    _finalizeUndo();
+  },
+  redo(op) {
     if (op.matRef && op.after) _applyMatSnapshot(op.matRef, op.after);
     state.history.push(op);
     _finalizeUndo();
-    return;
-  }
-
-  return _origRedoLast_bp();
-};
+  },
+});
 
 // Snapshot a THREE.Material's edit-relevant scalar / boolean / Color
 // properties. Sticks to fields the Material editor exposes — textures
@@ -27150,67 +26797,9 @@ rebuildTree = function() {
 // ignored). Instanced parts (p.mesh === null) skip the scene-graph reparent
 // step but still update tree-array data — viewport rendering is unchanged.
 
-(function _injectDndStyle() {
-  if (document.getElementById('_dnd-style')) return;
-  const s = document.createElement('style');
-  s.id = '_dnd-style';
-  s.textContent = `
-    .tree-node.dnd-dragging{opacity:.45}
-    body.dnd-active, body.dnd-active .tree-node{cursor:grabbing!important}
-    /* C4D-style icon column for visibility + color swatch. STICKY to the
-       right edge of the scrollport (#tree has overflow-x:auto and rows are
-       width:max-content) so the eye/color stay visible when long part
-       names push the row content past the sidebar's right edge — and stay
-       at a consistent x when the sidebar gets narrowed via the resize
-       handle. The solid bg + left-edge gradient fade hides the label text
-       sliding underneath.
-
-       Items INSIDE the column are left-aligned (flex-start) so the eye
-       icon sits at the same x whether the row is a group (eye only) or a
-       part (eye + color swatch). z-index:2 keeps us above the row divider
-       (.tree-node::after, z-index:1) so we don't get a vertical line
-       cutting through the icons. */
-    /* Width math: 14px left fade + 18px eye + 6px gap + 10px color swatch
-       + 6px right pad = 54px. flex-shrink:0 so it never compresses; if you
-       widen the eye/color icons, bump this. */
-    .tree-iconcol{position:sticky;right:0;z-index:2;display:inline-flex;align-items:center;justify-content:flex-start;gap:var(--space-sm);width:54px;flex-shrink:0;margin-left:auto;padding:0 6px 0 14px;align-self:stretch;background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%)}
-    /* Vertical divider line: sits AT the iconcol's left edge so it inherits
-       the sticky-right anchoring. The previous .tree-node::after was
-       absolute-positioned on the row, which made the line scroll
-       horizontally with long names instead of staying glued to the
-       scrollport's right edge. */
-    .tree-iconcol::before{content:'';position:absolute;left:0;top:-1px;bottom:-1px;width:1px;background:rgba(255,255,255,.07);pointer-events:none}
-    .tree-iconcol .tree-vis{margin:0}
-    .tree-iconcol .tree-color{margin:0}
-    /* Selected/hover row backgrounds need to extend through the sticky icon
-       column too — otherwise the gradient + bg1 column shows over the
-       selection tint and looks like a missing chunk on the right side. */
-    .tree-node.selected .tree-iconcol{background:linear-gradient(90deg,transparent 0,var(--bg2) 12px,var(--bg2) 100%)}
-    .tree-node:hover .tree-iconcol{background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%)}
-    .tree-node.selected:hover .tree-iconcol{background:linear-gradient(90deg,transparent 0,var(--bg3) 12px,var(--bg3) 100%)}
-    /* Row-level divider that extends 1px above and below to overlap adjacent
-       rows. Right offset matches the iconcol width (38px) + its left
-       padding (14px) - 1px so the divider sits at the column's left edge
-       (where the gradient starts to fade in) instead of cutting across
-       the icons. */
-    .tree-node{padding-right:0;position:relative}
-    /* (Old .tree-node::after divider removed — it scrolled with the row.
-       The divider is now .tree-iconcol::before, which inherits the column's
-       sticky positioning and stays at the scrollport's right edge.) */
-    /* Hide on the synthetic "+ N more" / display-cap rows that have no iconcol */
-    .tree-node.tree-empty::after,#tree > div:not(.tree-node)::after{display:none}
-    /* Finder-style inline rename input — sits inside .tree-label, inherits
-       the row's font/colour, no chrome that would compete with the row. */
-    .tree-label-input{width:100%;background:rgba(255,255,255,.08);border:1px solid var(--ac);border-radius:3px;color:var(--tx);font:inherit;font-size:inherit;padding:1px 4px;margin:-2px 0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
-    .tree-node.dnd-drop-into{outline:2px solid var(--ac);outline-offset:-2px;background:var(--ac-tint-14)!important;border-radius:3px}
-    .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px var(--ac-tint-55);pointer-events:none;z-index:50}
-    .tree-drop-line::before{content:'';position:absolute;left:2px;top:-4px;width:6px;height:6px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px var(--ac)}
-    #tree-newgroup-zone{display:none!important}
-    #_dnd-ghost{position:fixed;pointer-events:none;z-index:9999;background:rgba(28,28,28,.95);border:1px solid var(--ac);border-radius:var(--r-sm);padding:6px 10px;font-size:var(--fs-12);color:var(--tx);box-shadow:0 4px 18px rgba(0,0,0,.5);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    #_dnd-ghost .badge{display:inline-block;margin-right:6px;padding:1px 6px;background:var(--ac);color:var(--bg);border-radius:var(--r-lg);font-weight:var(--fw-bold);font-variant-numeric:tabular-nums}
-  `;
-  document.head.appendChild(s);
-})();
+// Tree drag-and-drop CSS (.tree-iconcol, .tree-drop-line, .dnd-*, #_dnd-ghost)
+// lives in index.html (search "Tree drag-and-drop") — migrated out of the
+// runtime <style> IIFE that previously ran at module load.
 
 function _dndDecorateTree() {
   const tree = document.getElementById('tree');
@@ -28226,35 +27815,24 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
   }
 
-  // Patch undo/redo for type:'color'.
-  const _origUndo = undoLast;
-  undoLast = function () {
-    const top = state.history[state.history.length - 1];
-    if (top && top.type === 'color') {
-      const op = state.history.pop();
+  // 'color' — color-picker change. before/after carry per-part hex colors;
+  // _applyColorOpDir handles the direction swap.
+  _UndoOps.register('color', {
+    undo(op) {
       _applyColorOpDir(op, 'before');
       state.redo.push(op);
       try { buildMaterialsPanel?.(); } catch (_) {}
       try { rebuildTree?.(); } catch (_) {}
       _finalizeUndo();
-      return;
-    }
-    return _origUndo();
-  };
-  const _origRedo = redoLast;
-  redoLast = function () {
-    const top = state.redo && state.redo[state.redo.length - 1];
-    if (top && top.type === 'color') {
-      const op = state.redo.pop();
+    },
+    redo(op) {
       _applyColorOpDir(op, 'after');
       state.history.push(op);
       try { buildMaterialsPanel?.(); } catch (_) {}
       try { rebuildTree?.(); } catch (_) {}
       _finalizeUndo();
-      return;
-    }
-    return _origRedo();
-  };
+    },
+  });
 
   // ── HSV ↔ RGB ────────────────────────────────────────────────────────────
   function hsvToRgb(h, s, v) {

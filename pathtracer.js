@@ -63,6 +63,10 @@ function _openRenderModal() {
   if (_modal) return;
   const F = _F;
   if (!F.camera || !F.renderer) { F.toast?.('Render unavailable', 'Renderer not ready', 'warn'); return; }
+  // Empty scene → friendly toast, don't open the modal. Avoids the cosmetic
+  // "Render failed: Scene is empty" error path that previously fired when the
+  // user clicked the aperture button before loading or adding any geometry.
+  if (!window.state?.parts?.length) { F.toast?.('Nothing to render', 'Load a model or add a primitive first', 'warn'); return; }
 
   // Aspect ratio of the host viewport — used to keep the render the same
   // shape the user sees. Actual buffer dimensions are computed AFTER the
