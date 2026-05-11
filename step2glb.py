@@ -15,8 +15,13 @@ Usage:
     python step2glb.py input.step
     python step2glb.py input.step --quality 0.2 --min-size 0.5
     python step2glb.py input.step --no-instance     # disable instancing
-    python step2glb.py input.step --meshopt         # shell-out to gltfpack
+    python step2glb.py input.step --simplify 0.5    # halve triangle count (lossy)
+    python step2glb.py input.step --no-meshopt      # disable auto-meshopt
     python step2glb.py input.step --relative        # quality is fraction of diag
+
+Defaults:
+    EXT_meshopt_compression turns on automatically when gltfpack is on PATH.
+    Pass --no-meshopt to opt out, or --simplify <r> to additionally decimate.
 
 Requirements:
     pip install cadquery-ocp trimesh numpy
@@ -101,7 +106,7 @@ from OCP.IFSelect import IFSelect_RetDone
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRep import BRep_Tool
 from OCP.TopExp import TopExp_Explorer
-from OCP.TopAbs import TopAbs_FACE, TopAbs_SOLID
+from OCP.TopAbs import TopAbs_FACE, TopAbs_SOLID, TopAbs_REVERSED
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS_Shape, TopoDS
 from OCP.TDocStd import TDocStd_Document
@@ -132,7 +137,23 @@ class Config:
     colors: str = "auto"         # 'auto' | 'on' | 'off' — XCAF read mode
     meshopt: bool = False        # post-process via gltfpack for EXT_meshopt_compression
     quantize: bool = False       # KHR_mesh_quantization via gltfpack (-cc)
+    # Mesh simplification ratio passed to gltfpack -si <r>. 0.0 disables; values in
+    # (0, 1) keep that fraction of triangles (e.g. 0.5 = halve). gltfpack uses
+    # meshoptimizer's quadric-error simplifier with feature-edge preservation, so
+    # holes/chamfers/fillets stay sharp. Implies meshopt=True since gltfpack runs
+    # anyway. Lossy — the original GLB is replaced.
+    simplify: float = 0.0
     force: bool = False          # ignore cached output even if newer than source
+    # XCAF read-mode toggles. `Transfer(doc)` time scales with how many of these
+    # are enabled — SHUO in particular is expensive on instanced assemblies
+    # because per-instance attribute overrides are resolved combinatorially.
+    # Defaults match the historical behavior (everything ON) so plain CLI runs
+    # don't change shape; the import-settings UI flips these off opportunistically.
+    read_shuo: bool = True
+    read_layers: bool = True
+    read_materials: bool = True
+    read_names: bool = True
+    read_props: bool = True      # validation properties pass (NOT --props volume/area)
 
 
 # Module-level Config — set once by main() and read elsewhere. Cleaner than
@@ -153,9 +174,15 @@ def parse_step_xcaf_cached(path: Path):
         and overwrite the cache with a current-version copy.
     """
     cache_path = path.with_suffix(".xcaf-cache.xbf")
+    # Cached docs are always written with the full XCAF read set (names, layers,
+    # materials, props, SHUO). If the user disabled any of those for this run,
+    # a cache hit would silently give them attributes they asked us to skip —
+    # so bypass the cache entirely (read AND write) when any mode is off.
+    full_read = (CFG.read_shuo and CFG.read_layers and CFG.read_materials
+                 and CFG.read_names and CFG.read_props)
 
     # Cache hit?
-    if (not CFG.force
+    if (full_read and not CFG.force
         and cache_path.exists()
         and cache_path.stat().st_mtime > path.stat().st_mtime):
         cache_mb = cache_path.stat().st_size / 1048576
@@ -172,6 +199,11 @@ def parse_step_xcaf_cached(path: Path):
 
     # Fresh parse — slow path
     doc, shape_tool, color_tool, free_labels = parse_step_xcaf(path)
+
+    # Skip cache write if the doc isn't a full-read result — see note above.
+    if not full_read:
+        log("XCAF cache write skipped (partial read mode)")
+        return doc, shape_tool, color_tool, free_labels
 
     # Best-effort cache write. Failure here doesn't break the conversion;
     # the user just doesn't get the speedup on next run.
@@ -268,14 +300,24 @@ def parse_step_xcaf(path: Path):
         log(f"app.NewDocument failed ({e!r}); cache write may not work", "warn")
     reader = STEPCAFControl_Reader()
     # Different OCP / OpenCascade builds expose different setters — try each.
-    for setter, val in (("SetColorMode", True), ("SetNameMode", True),
-                        ("SetLayerMode", True), ("SetMaterialMode", True),
-                        ("SetPropsMode", True), ("SetSHUOMode", True)):
+    # ColorMode stays ON (we're inside the XCAF path because the caller wants
+    # colors); the rest are CFG-driven so the UI can trade them off for speed.
+    for setter, val in (("SetColorMode",    True),
+                        ("SetNameMode",     CFG.read_names),
+                        ("SetLayerMode",    CFG.read_layers),
+                        ("SetMaterialMode", CFG.read_materials),
+                        ("SetPropsMode",    CFG.read_props),
+                        ("SetSHUOMode",     CFG.read_shuo)):
         try:
             fn = getattr(reader, setter, None)
             if fn is not None: fn(val)
         except Exception:
             pass
+    _disabled = [k for k, v in (("names", CFG.read_names), ("layers", CFG.read_layers),
+                                 ("materials", CFG.read_materials), ("props", CFG.read_props),
+                                 ("shuo", CFG.read_shuo)) if not v]
+    if _disabled:
+        log(f"XCAF read modes disabled: {', '.join(_disabled)}")
     with Heartbeat("XCAF parsing"):
         status = reader.ReadFile(str(path))
     if status != IFSelect_RetDone:
@@ -933,7 +975,10 @@ def solid_to_mesh(solid: TopoDS_Shape):
             verts = v_world.astype(np.float32, copy=False)
 
         # ── triangles: collect once, vectorize orientation flip + offset
-        reverse = (face.Orientation() != 0)
+        # Only flip winding for REVERSED faces. Earlier `!= 0` flipped
+        # INTERNAL (2) and EXTERNAL (3) faces too, producing back-face
+        # artefacts on cellular / boundary faces.
+        reverse = (face.Orientation() == TopAbs_REVERSED)
         tris_buf = np.empty((n_tris, 3), dtype=np.uint32)
         for j in range(1, n_tris + 1):
             a, b, c = tri.Triangle(j).Get()
@@ -1016,8 +1061,15 @@ def hash_canonical(verts: np.ndarray, tris: np.ndarray) -> str:
     scale = max(diag, 1e-9)
     # Quantize at 1/2000 of bbox diagonal — tolerant to floating-point noise
     quant = np.round(verts * (2000.0 / scale)).astype(np.int64)
-    # Sort each row pair-wise to be robust to vertex-order differences
-    quant_sorted = np.sort(quant.reshape(-1)).tobytes()
+    # Sort along axis=0 (lexicographic on rows = vertex-order-insensitive)
+    # rather than flattening — flattening collapsed all axes into one bag and
+    # would hash-collide shapes that share a coordinate multiset but differ
+    # geometrically (e.g. a cube and its reflection through the diagonal).
+    # axis=0 keeps each (x,y,z) tuple intact; pca_canonical already
+    # canonicalised pose+sign so two equivalent shapes still hash equal.
+    rows = np.ascontiguousarray(quant)
+    order = np.lexsort((rows[:, 2], rows[:, 1], rows[:, 0]))
+    quant_sorted = rows[order].tobytes()
     h = hashlib.blake2b(quant_sorted, digest_size=10)
     h.update(np.asarray([len(verts), len(tris)], dtype=np.int64).tobytes())
     return h.hexdigest()
@@ -1141,6 +1193,7 @@ def convert(input_path: Path, output_path: Path) -> None:
         "relative": CFG.relative,
         "meshopt": CFG.meshopt,
         "quantize": CFG.quantize,
+        "simplify": CFG.simplify,
         "instance": CFG.instance,
         "colors": CFG.colors,
     }
@@ -1168,8 +1221,9 @@ def convert(input_path: Path, output_path: Path) -> None:
     print(f"│  colors:   {'XCAF (slow on big files)' if use_xcaf else 'OFF (plain reader, fast)'}"
           f"{'  -- forced --no-colors' if CFG.colors=='off' else ''}"
           f"{'  -- file > 1 GB, skipping XCAF' if CFG.colors=='auto' and not use_xcaf else ''}")
-    if CFG.meshopt or CFG.quantize:
+    if CFG.meshopt or CFG.quantize or CFG.simplify > 0:
         feats = []
+        if CFG.simplify > 0: feats.append(f"simplify {CFG.simplify:.2f}")
         if CFG.quantize: feats.append("KHR_mesh_quantization")
         if CFG.meshopt:  feats.append("EXT_meshopt_compression")
         print(f"│  post:     gltfpack ({', '.join(feats)})")
@@ -1265,7 +1319,7 @@ def convert(input_path: Path, output_path: Path) -> None:
                 roots = [r for r in (prune(r) for r in roots) if r is not None]
 
         build_glb_hierarchical(roots, products, output_path, scene_meta, instance=CFG.instance)
-        gltfpack_postprocess(output_path, CFG.meshopt, CFG.quantize)
+        gltfpack_postprocess(output_path, CFG.meshopt, CFG.quantize, CFG.simplify)
 
         try: params_path.write_text(_json.dumps(current_params))
         except OSError: pass
@@ -1296,25 +1350,36 @@ def convert(input_path: Path, output_path: Path) -> None:
         return _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total)
 
 
-def gltfpack_postprocess(glb_path: Path, meshopt: bool, quantize: bool) -> None:
+def gltfpack_postprocess(glb_path: Path, meshopt: bool, quantize: bool,
+                         simplify: float = 0.0) -> None:
     """Optional industry-standard compression via the `gltfpack` CLI.
 
     EXT_meshopt_compression is the modern replacement for Draco (faster decode,
     better ratio with brotli). KHR_mesh_quantization halves attribute byte size
     by storing positions/normals/UVs as int16 instead of float32.
 
+    Optional simplification (`-si <ratio>`) runs meshoptimizer's quadric-error
+    decimator with feature-edge preservation BEFORE compression, so holes,
+    chamfers, fillets keep sharp. ratio is the fraction of triangles to keep
+    (0.5 → halve). Lossy.
+
     Both extensions are read by GLTFLoader if MeshoptDecoder is registered on
     the loader (the web app does this when available).
     """
-    if not (meshopt or quantize):
+    if not (meshopt or quantize or simplify > 0):
         return
     gltfpack = shutil.which("gltfpack")
     if not gltfpack:
-        log("gltfpack not on PATH — skipping meshopt/quantize. Install with: npm i -g gltfpack", "warn")
+        log("gltfpack not on PATH — skipping meshopt/quantize/simplify. Install with: npm i -g gltfpack", "warn")
         return
     flags = []
     if quantize: flags.append("-cc")     # combined: quantize + meshopt
     elif meshopt: flags.append("-c")     # meshopt only (no quantization)
+    if simplify > 0:
+        # Clamp to (0, 1]. 1.0 is technically a no-op and gltfpack treats it
+        # that way, but values >1 would be a config error and gltfpack rejects them.
+        ratio = min(1.0, max(0.01, simplify))
+        flags += ["-si", f"{ratio:.3f}"]
     tmp = glb_path.with_suffix(".tmp.glb")
     # Prefix file args with ./ when the path begins with '-' so gltfpack can't
     # interpret a leading-dash filename as another flag.
@@ -1496,7 +1561,7 @@ def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
     build_glb(parts, output_path, scene_meta, instance=CFG.instance)
 
     # Optional industry-standard post-processing for ~10x smaller files
-    gltfpack_postprocess(output_path, CFG.meshopt, CFG.quantize)
+    gltfpack_postprocess(output_path, CFG.meshopt, CFG.quantize, CFG.simplify)
 
     # Mirror the cache sidecar from the XCAF success path so the fallback
     # output also gets re-generated when conversion params change.
@@ -1542,15 +1607,33 @@ def main() -> int:
     ap.add_argument("--parallel", type=int, default=0,
                     help="Use N worker processes for mesh extraction (default 0 = sequential)")
     ap.add_argument("--meshopt", action="store_true",
-                    help="Apply EXT_meshopt_compression via gltfpack (industry standard)")
+                    help="Apply EXT_meshopt_compression via gltfpack (industry standard, ~10x smaller)")
+    ap.add_argument("--no-meshopt", dest="no_meshopt", action="store_true",
+                    help="Disable the auto-meshopt-when-gltfpack-on-PATH default")
     ap.add_argument("--quantize", action="store_true",
                     help="Quantize positions/normals/uvs to int16 via gltfpack (KHR_mesh_quantization)")
+    ap.add_argument("--simplify", type=float, default=0.0,
+                    help="Mesh simplification ratio in (0,1] — fraction of triangles to keep "
+                         "(e.g. 0.5 halves triangle count). Uses gltfpack -si with feature-edge "
+                         "preservation. Lossy. Implies --meshopt.")
     ap.add_argument("--target-tris", type=int, default=0,
                     help="Auto-tune --quality to land at or under this triangle count. "
                          "Re-runs conversion up to 5 times, scaling deflection between iterations.")
     ap.add_argument("--target-size-mb", type=float, default=0.0,
                     help="Auto-tune --quality to land at or under this output GLB size (MB). "
                          "Combine with --target-tris; whichever budget is tighter wins.")
+    # XCAF read-mode toggles (all default ON = current behavior). Disabling
+    # them speeds up the slow STEPCAF Transfer pass — SHUO is the biggest win
+    # on instanced assemblies; the others are cheaper but stack up.
+    ap.add_argument("--no-shuo",      action="store_true",
+                    help="Skip Specified Higher-Usage Occurrence override resolution. "
+                         "Big speedup on instanced assemblies; lose per-instance color overrides.")
+    ap.add_argument("--no-layers",    action="store_true", help="Skip CAD layer attributes.")
+    ap.add_argument("--no-materials", action="store_true", help="Skip material attributes.")
+    ap.add_argument("--no-step-names",action="store_true",
+                    help="Skip product names — parts get generic IDs in the tree.")
+    ap.add_argument("--no-step-props",action="store_true",
+                    help="Skip validation properties (mass, area). Cheap; safe to disable.")
     args = ap.parse_args()
     if args.out and len(args.input) > 1:
         ap.error("--out can only be used with a single input file")
@@ -1563,6 +1646,21 @@ def main() -> int:
         ap.error(f"--angular {args.angular} out of sensible range (0.001 .. π)")
     if args.parallel < 0:
         ap.error("--parallel must be >= 0")
+    if args.simplify and not (0 < args.simplify <= 1.0):
+        ap.error(f"--simplify {args.simplify} out of range (must be in (0, 1])")
+
+    # Default meshopt to ON when gltfpack is available — most users want the
+    # smaller GLB but never remember to pass --meshopt. --no-meshopt opts out.
+    # --simplify implies meshopt regardless (simplify only runs through gltfpack).
+    _has_gltfpack = bool(shutil.which("gltfpack"))
+    if args.simplify > 0:
+        meshopt_resolved = True
+    elif args.no_meshopt:
+        meshopt_resolved = False
+    elif args.meshopt:
+        meshopt_resolved = True
+    else:
+        meshopt_resolved = _has_gltfpack
 
     # Populate the module-level config once. Conversion code reads CFG directly.
     global CFG
@@ -1576,16 +1674,26 @@ def main() -> int:
         with_props    = bool(args.props),
         parallel      = int(args.parallel) if args.parallel else 0,
         colors        = "off" if args.no_colors else ("on" if args.force_colors else "auto"),
-        meshopt       = bool(args.meshopt),
+        meshopt       = bool(meshopt_resolved),
         quantize      = bool(args.quantize),
+        simplify      = float(args.simplify) if args.simplify else 0.0,
         force         = bool(args.force),
+        read_shuo      = not args.no_shuo,
+        read_layers    = not args.no_layers,
+        read_materials = not args.no_materials,
+        read_names     = not args.no_step_names,
+        read_props     = not args.no_step_props,
     )
     if CFG.pca_instances:
         log("PCA instancing ENABLED -- may cause rotation glitches on symmetric parts", "warn")
     if CFG.parallel > 1:
         log(f"parallel mesh extraction: {CFG.parallel} workers", "ok")
-    if (CFG.meshopt or CFG.quantize) and not shutil.which("gltfpack"):
-        log("gltfpack not found on PATH — meshopt/quantize will be skipped. Install: npm i -g gltfpack", "warn")
+    if (CFG.meshopt or CFG.quantize or CFG.simplify > 0) and not _has_gltfpack:
+        log("gltfpack not found on PATH — meshopt/quantize/simplify will be skipped. Install: npm i -g gltfpack", "warn")
+    elif CFG.meshopt and not args.meshopt and not args.no_meshopt:
+        # User didn't explicitly opt in or out; we defaulted them on. Mention it
+        # once so the smaller-than-expected output isn't a surprise.
+        log("meshopt: ON (default — pass --no-meshopt to disable)", "ok")
 
     target_tris    = int(args.target_tris) if args.target_tris > 0 else 0
     target_size_mb = float(args.target_size_mb) if args.target_size_mb > 0 else 0.0
@@ -1615,22 +1723,43 @@ def main() -> int:
 def _glb_metrics(path: Path) -> tuple[int, float]:
     """Return (triangle_count, size_mb) for a GLB on disk.
 
-    Uses trimesh.load to traverse the scene. trimesh is already a hard
-    dependency of this script so this adds no install cost.
+    Reads the JSON chunk of the GLB directly and sums primitive accessor
+    counts. This works on meshopt-compressed GLBs (which trimesh cannot
+    decode) — the indices/POSITION accessor `count` field reflects the
+    decoded mesh size regardless of compression. Falls back to trimesh
+    only for malformed headers.
     """
     size_mb = path.stat().st_size / 1048576
+    tris = 0
     try:
-        scene = trimesh.load(str(path), force='scene', process=False)
+        with path.open("rb") as f:
+            magic = f.read(4)
+            if magic != b"glTF":
+                raise ValueError(f"not a GLB file ({path.name})")
+            f.read(8)  # version + total length
+            chunk_len = int.from_bytes(f.read(4), "little")
+            chunk_type = f.read(4)
+            if chunk_type != b"JSON":
+                raise ValueError(f"first chunk not JSON ({path.name})")
+            payload = f.read(chunk_len)
+            gltf = json.loads(payload.decode("utf-8"))
+        accessors = gltf.get("accessors", [])
+        for mesh in gltf.get("meshes", []):
+            for prim in mesh.get("primitives", []):
+                # mode 4 = TRIANGLES (default); 5/6 = strip/fan, both N-2 tris
+                mode = prim.get("mode", 4)
+                idx = prim.get("indices")
+                if idx is not None and 0 <= idx < len(accessors):
+                    n = accessors[idx].get("count", 0)
+                else:
+                    pos = prim.get("attributes", {}).get("POSITION")
+                    n = accessors[pos].get("count", 0) if pos is not None and 0 <= pos < len(accessors) else 0
+                if mode == 4:    tris += n // 3
+                elif mode in (5, 6): tris += max(0, n - 2)
+                else: tris += n // 3
     except Exception as e:
         log(f"could not parse {path.name} for metrics: {e}", "warn")
         return 0, size_mb
-    tris = 0
-    try:
-        for g in scene.geometry.values():
-            if hasattr(g, "faces") and g.faces is not None:
-                tris += len(g.faces)
-    except Exception:
-        pass
     return tris, size_mb
 
 

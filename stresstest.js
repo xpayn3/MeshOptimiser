@@ -40,7 +40,13 @@
 
     fns().clearModel();
     // clearModel queues old resources for deferred dispose; the build below
-    // creates fresh ones so there's no contention.
+    // creates fresh ones so there's no contention. Belt-and-braces resets
+    // in case clearModel ever gets wrapped to skip part of this — the
+    // stresstest must start from a known empty state regardless.
+    if (Array.isArray(S.parts)) S.parts.length = 0;
+    S.partById?.clear?.();
+    S.selected?.clear?.();
+    S.geomByHash?.clear?.();
 
     const partsRoot = S.partsRoot;
     const overallBox = new T.Box3();
@@ -149,9 +155,16 @@
       frameTimes.push(now - lastT);
       lastT = now;
     }
-    // Restore camera so we don't strand the user mid-orbit.
+    // Restore camera so we don't strand the user mid-orbit. Without
+    // syncing OrbitControls' internal spherical state the next user drag
+    // would jump from where it thinks the camera is back to where we
+    // actually moved it.
     cam.position.copy(start);
     cam.lookAt(target);
+    if (ctrls) {
+      try { ctrls.target?.copy?.(target); } catch (_) {}
+      try { ctrls.update?.(); } catch (_) {}
+    }
     fns().requestRender();
 
     frameTimes.sort((a, b) => a - b);
@@ -194,11 +207,29 @@
   function checkInstancedBounds() {
     const T = THREE();
     const issues = [];
+    const seen = new Set();
+    // Collect every InstancedMesh in the scene — auto-instanced groups,
+    // cloner-spawned instances, anything else added manually. Earlier
+    // versions only walked state.instancedGroups and missed cloner ones.
+    const _instances = [];
     for (const g of (st()?.instancedGroups || [])) {
-      const inst = g.instanced;
+      if (g.instanced) { _instances.push(g.instanced); seen.add(g.instanced); }
+    }
+    if (st()?.partsRoot?.traverse) {
+      st().partsRoot.traverse(o => { if (o?.isInstancedMesh && !seen.has(o)) { _instances.push(o); seen.add(o); } });
+    }
+    for (const inst of _instances) {
       if (!inst || !inst.geometry) continue;
-      const bs = inst.geometry.boundingSphere;
+      // Three.js stores InstancedMesh-aware bounds on `inst.boundingSphere`
+      // (set by inst.computeBoundingSphere()), and falls back to
+      // `inst.geometry.boundingSphere` for raycasting / culling. The geom's
+      // sphere only encloses the source vertices — it WILL NOT enclose
+      // translated instances, by design. The right bound to check is
+      // `inst.boundingSphere`. Earlier versions checked the wrong one and
+      // reported "OK" even on a fully-broken setup.
+      const bs = inst.boundingSphere || inst.geometry.boundingSphere;
       if (!bs) { issues.push({ name: inst.name, reason: 'no boundingSphere' }); continue; }
+      const which = inst.boundingSphere ? 'inst' : 'geom';
       const m = new T.Matrix4();
       const v = new T.Vector3();
       let maxOver = 0;
@@ -209,21 +240,29 @@
         const d = v.distanceTo(bs.center);
         if (d > bs.radius + 1e-3) maxOver = Math.max(maxOver, d - bs.radius);
       }
-      if (maxOver > 0) issues.push({ name: inst.name, instances: N, maxOverflow: maxOver, sphereRadius: bs.radius });
+      if (maxOver > 0) issues.push({ name: inst.name, instances: N, maxOverflow: maxOver, sphereRadius: bs.radius, sphereSource: which });
     }
     return issues;
   }
 
   async function selectAllBenchmark() {
     const S = st();
+    const r = fns().renderer;
     if (!S?.parts?.length) return null;
+    const startFrame = r?.info?.render?.frame ?? 0;
     const t0 = performance.now();
     S.selected = new Set(S.parts.map(p => p.partId));
     fns().applySelectionColors();
-    await new Promise(r => requestAnimationFrame(r));
-    await new Promise(r => requestAnimationFrame(r));
+    // Two rAFs is enough to cover applySelectionColors's internal
+    // coalesce + the next paint cycle in render-on-demand. Earlier
+    // versions tried to gate on `renderer.info.render.frame` ticking,
+    // but on WebGPU that counter can stay flat across visually-painted
+    // frames, producing misleading "30+ frame" stalls.
+    await new Promise(res => requestAnimationFrame(res));
+    await new Promise(res => requestAnimationFrame(res));
     const t1 = performance.now();
-    return { ms: t1 - t0, count: S.selected.size };
+    const endFrame = r?.info?.render?.frame ?? 0;
+    return { ms: t1 - t0, count: S.selected.size, framesDrew: Math.max(0, endFrame - startFrame) };
   }
 
   async function run(opts = {}) {

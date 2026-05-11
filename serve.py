@@ -84,6 +84,58 @@ def _prune_jobs() -> None:
             JOBS.pop(jid, None)
 
 
+# job-id prefix length used by /api/convert when staging an upload.
+# 12 lowercase hex chars from `uuid.uuid4().hex[:12]` — pinning the regex
+# so the boot-time sweep never deletes a real user file that happens to
+# contain an underscore.
+_JOB_PREFIX_RE = re.compile(r"^[0-9a-f]{12}_")
+# How long a stale upload artefact is allowed to sit before the boot sweep
+# claims it. Anything younger than this stays — the user could be mid-job
+# while a second `python serve.py` is launched (`allow_reuse_address`).
+_STALE_AGE_SEC = 24 * 3600
+
+
+def _sweep_stale_inbox() -> None:
+    """Drop orphaned upload artefacts from a previous run.
+
+    Two things accumulate in `inbox/` over time:
+      • `<job_id>_<name>.step|.stp` — staged uploads. The /api/convert
+        thread unlinks these after a successful conversion (line 206), but
+        a crash between upload and conversion (or a process kill mid-job)
+        leaves the source behind.
+      • `*.xcaf-cache.xbf` — XCAF binary caches written by step2glb.py
+        next to the source. Now orphaned because the source is gone.
+
+    Anything older than _STALE_AGE_SEC is removed; younger files might
+    belong to an in-flight job from a parallel server instance.
+
+    The user's real GLB outputs (no job-id prefix) and any STEP they
+    intentionally placed in `inbox/` (also no prefix) are left alone.
+    """
+    if not INBOX.exists(): return
+    now = time.time()
+    deleted = 0
+    for p in INBOX.iterdir():
+        try:
+            if not p.is_file(): continue
+            age = now - p.stat().st_mtime
+            if age < _STALE_AGE_SEC: continue
+            name = p.name.lower()
+            is_staged_upload = (
+                _JOB_PREFIX_RE.match(p.name) is not None
+                and (name.endswith(".step") or name.endswith(".stp"))
+            )
+            is_orphan_cache = name.endswith(".xcaf-cache.xbf")
+            if is_staged_upload or is_orphan_cache:
+                p.unlink()
+                deleted += 1
+        except OSError:
+            # Locked file, race with antivirus, etc. — ignore and try next run.
+            pass
+    if deleted:
+        print(f"  inbox sweep: removed {deleted} stale upload artefact(s)")
+
+
 def _ask(prompt: str, default: str = "") -> str:
     """Prompt the user; returns stripped answer or default if blank/EOF."""
     print(prompt, end="", flush=True)
@@ -103,10 +155,24 @@ def interactive_convert(src: Path) -> Path | None:
 
     if dst.exists() and dst.stat().st_mtime > src.stat().st_mtime:
         cache_age = time.time() - dst.stat().st_mtime
+        # Read the *.params.json sidecar that step2glb.py writes alongside
+        # successful conversions and surface the cached quality so the user
+        # isn't silently re-using a coarser/finer mesh than they wanted.
+        params_path = dst.with_suffix(dst.suffix + ".params.json")
+        cached_q_label = ""
+        try:
+            if params_path.exists():
+                with params_path.open("r", encoding="utf-8") as pf:
+                    p = json.load(pf)
+                q = p.get("quality")
+                if q is not None:
+                    cached_q_label = f", quality={q}"
+        except Exception:
+            pass
         ans = _ask(
             f"\n  Cached GLB found:\n"
             f"    {dst.name}  ({dst.stat().st_size/1048576:.1f} MB, "
-            f"converted {cache_age/60:.0f} min ago)\n"
+            f"converted {cache_age/60:.0f} min ago{cached_q_label})\n"
             f"  Re-convert? [y/N]: ", "n")
         if ans.lower() not in ("y", "yes"):
             print(f"  Using cached GLB.\n")
@@ -171,16 +237,36 @@ def interactive_convert(src: Path) -> Path | None:
 
 # ─── /api/convert background job runner (for in-browser drag-and-drop)
 def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
-                     quality: float, min_size: float) -> None:
+                     quality: float, min_size: float,
+                     opts: dict | None = None) -> None:
+    """Spawn step2glb.py for the queued upload.
+
+    `opts` carries the optional import-settings modal flags. None / missing
+    keys preserve the old defaults so existing callers (interactive_convert,
+    older clients without the modal) keep working unchanged.
+    """
+    opts = opts or {}
     with JOBS_LOCK:
         JOBS[job_id]["status"] = "running"
         JOBS[job_id]["log"] = []
     try:
-        # --force-colors keeps the XCAF reader on for any size — without it,
-        # the in-browser drag of a 300+ MB STEP would silently use the flat
-        # plain reader and lose hierarchy/instances/names.
+        # Color mode: 'on' = always XCAF (what we used to always do via
+        # --force-colors); 'auto' = step2glb.py's size-aware default; 'off'
+        # = plain reader, fastest, no colors/hierarchy.
+        colors = opts.get("colors", "on")
         cmd = [PYTHON_BIN, str(ROOT / "step2glb.py"), str(src_path),
-               "--out", str(dst_path), "--quality", str(quality), "--force-colors"]
+               "--out", str(dst_path), "--quality", str(quality)]
+        if colors == "on":   cmd += ["--force-colors"]
+        elif colors == "off": cmd += ["--no-colors"]
+        # XCAF read-mode toggles — only meaningful when colors != 'off'.
+        if colors != "off":
+            if not opts.get("shuo",      True): cmd += ["--no-shuo"]
+            if not opts.get("layers",    True): cmd += ["--no-layers"]
+            if not opts.get("materials", True): cmd += ["--no-materials"]
+            if not opts.get("names",     True): cmd += ["--no-step-names"]
+            if not opts.get("props",     True): cmd += ["--no-step-props"]
+        if not opts.get("instance", True):       cmd += ["--no-instance"]
+        if opts.get("force"):                    cmd += ["--force"]
         if min_size > 0: cmd += ["--min-size", str(min_size)]
         # Log which Python interpreter we're calling — makes it obvious in the
         # browser conversion log when a stale serve.py is still using the
@@ -301,6 +387,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not (0.0 <= min_size <= 100.0):
             return self._json({"error": "min_size out of range (0 .. 100)"}, 400)
 
+        # Optional import-settings modal flags. All have safe defaults that
+        # match the historical behavior, so missing/malformed values simply
+        # fall back. `colors` is a string enum; the rest are booleans encoded
+        # as "1"/"0".
+        def _qbool(key: str, default: bool) -> bool:
+            v = q.get(key, [None])[0]
+            if v is None: return default
+            return v not in ("0", "false", "False", "no", "off", "")
+        colors_in = (q.get("colors", ["on"])[0] or "on").lower()
+        if colors_in not in ("auto", "on", "off"): colors_in = "on"
+        opts = {
+            "colors":    colors_in,
+            "shuo":      _qbool("shuo",      True),
+            "layers":    _qbool("layers",    True),
+            "materials": _qbool("materials", True),
+            "names":     _qbool("names",     True),
+            "props":     _qbool("props",     True),
+            "instance":  _qbool("instance",  True),
+            "force":     _qbool("force",     False),
+        }
+
         try:
             size = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -351,7 +458,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 "log": [], "message": "queued", "progress": 0, "result": None,
             }
         threading.Thread(target=_convert_thread,
-                         args=(job_id, src, dst, quality, min_size),
+                         args=(job_id, src, dst, quality, min_size, opts),
                          daemon=True).start()
         return self._json({"job_id": job_id})
 
@@ -363,6 +470,10 @@ def main() -> int:
     ap.add_argument("--no-browser", action="store_true")
     args = ap.parse_args()
     os.chdir(ROOT)
+
+    # Reclaim space + clear orphaned uploads from prior runs before we start
+    # accepting new jobs. Cheap (single iterdir on a small directory).
+    _sweep_stale_inbox()
 
     auto_load = ""
     if args.open:
