@@ -185,6 +185,7 @@ python step2glb.py input.step --relative          # quality as fraction of diag
 
 - 🐍 **Python** 3.10 / 3.11 / 3.12 *(3.13 blocked on cadquery-ocp)*
 - 🌐 A **WebGPU-capable browser** (recent Chrome, Edge, Firefox, Safari)
+- 📴 **No internet needed to run** — the viewer's libraries are bundled. Only the path tracer and a few rarely used converters are fetched on demand
 - 💾 ~**2 GB** free for the venv on first install
 
 ---
@@ -204,9 +205,13 @@ tests/
  ├── selftest.js         in-app regression suite (?selftest)
  └── holefill.test.mjs   hole filler on synthetic shapes (node)
 vendor/
- ├── draco/        Draco encoder + decoder (WASM)
- ├── assimp/       Assimp.js (WASM)
- └── inter/        Inter variable font (SIL OFL)
+ ├── three/            three.js r172: WebGPU + classic builds and the add-ons in use
+ ├── three-mesh-bvh/   pick acceleration
+ ├── meshoptimizer/    simplifier (WASM, embedded)
+ ├── lucide/           icon set
+ ├── draco/            Draco encoder + decoder (WASM)
+ ├── assimp/           Assimp.js (WASM)
+ └── inter/            Inter variable font (SIL OFL)
 fbx_*.py           FBX inspection / diff utilities
 start.{bat,command}    one-click launchers
 step2glb.{bat,command} headless converters
@@ -234,6 +239,8 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 ---
 
 ## 🗒 What's New
+
+**v0.10.1** — libraries bundled: the app starts without a CDN and works offline.
 
 **v0.10.0** — the biggest release so far: new tools, and everything you touch is immediate.
 

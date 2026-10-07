@@ -2549,6 +2549,23 @@ input.prim-value,.prim-value{border-radius:6px}
 /* Selection box, in the manner of Plasticity: a soft tinted pane with a thin
    dashed edge and square corners — in the accent blue. */
 #marquee-box{border:1px dashed rgba(190,225,255,.75);background:rgba(13,153,255,.20);box-shadow:none;border-radius:0}
+/* Two-button rows are two equal halves whatever is in them (a split button
+   has a wider minimum than a plain one and used to take more than its half). */
+.btn-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.btn-row>.btn-split{min-width:0;display:flex}
+.btn-row>.btn-split>.btn{flex:1 1 auto;min-width:0}
+.btn-row>.btn{min-width:0}
+/* Typing a slider value: the field has the size and type of the number it
+   replaces, so nothing grows or shifts when it is clicked — only a ring. */
+.scrub .scrub-value{box-sizing:border-box;width:44px;min-width:44px;height:20px;padding:0 6px;justify-content:flex-end}
+.scrub .scrub-input,.scrub .scrub-input:focus{box-sizing:border-box;width:44px;min-width:36px;height:20px;padding:0 6px;margin:0;
+  font:inherit;font-size:var(--fs-md);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-tight);line-height:1;
+  color:var(--tx);background:transparent;border:0;border-radius:var(--r-xs);outline:1px solid var(--ac);outline-offset:0;text-align:right;transform:none;box-shadow:none}
+/* Control text is a soft grey, not white: buttons, dropdowns, slider values
+   and top-bar buttons. It brightens on hover; red (danger) keeps its colour. */
+:root{--tx-control:#c6c6c9}
+.btn:not(.danger):not(.primary):not(:disabled),.tbtn:not(:disabled),.mac-sel,.cs-btn,.scrub .scrub-value,.scrub .scrub-input{color:var(--tx-control)}
+.btn:not(.danger):not(.primary):not(:disabled):hover,.tbtn:not(:disabled):hover,.mac-sel:hover,.cs-btn:hover{color:var(--tx)}
 </style>
 </head>
 <body>
@@ -2567,13 +2584,14 @@ input.prim-value,.prim-value{border-radius:6px}
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.10.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.10.1</div>
         </div>
         <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.10.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.10.1</span></div>
           <ul>
+            <li>Libraries bundled: starts without a CDN, works offline</li>
             <li>Fill holes: closes holes in flat faces, leaves the rest untouched</li>
             <li>Decimate rebuilt — keeps normals and UVs, takes a triangle target</li>
             <li>Materials dock with filter, sort and inspector</li>
@@ -3912,27 +3930,33 @@ input.prim-value,.prim-value{border-radius:6px}
 })();
 </script>
 
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script src="vendor/lucide/lucide.min.js"></script>
 
+<!-- The libraries the app needs to start are bundled in vendor/ (three.js
+     r172 with the add-ons in use, three-mesh-bvh, meshoptimizer, lucide), so
+     startup does not wait on a CDN and the app works offline. Both three
+     builds are local so they share one core. Still fetched on demand from
+     the internet: the path tracer, the KTX2 transcoder and the in-browser
+     STEP / glTF-Transform / Assimp converters. -->
 <script type="importmap">
 {
   "imports": {
-    "three": "https://unpkg.com/three@0.172.0/build/three.webgpu.js",
-    "three/webgpu": "https://unpkg.com/three@0.172.0/build/three.webgpu.js",
-    "three/tsl": "https://unpkg.com/three@0.172.0/build/three.webgpu.js",
-    "three/addons/": "https://unpkg.com/three@0.172.0/examples/jsm/",
-    "three/examples/jsm/": "https://unpkg.com/three@0.172.0/examples/jsm/",
-    "three-classic": "https://unpkg.com/three@0.172.0/build/three.module.js",
-    "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.8.3/build/index.module.js",
+    "three": "./vendor/three/build/three.webgpu.js",
+    "three/webgpu": "./vendor/three/build/three.webgpu.js",
+    "three/tsl": "./vendor/three/build/three.webgpu.js",
+    "three/addons/": "./vendor/three/examples/jsm/",
+    "three/examples/jsm/": "./vendor/three/examples/jsm/",
+    "three-classic": "./vendor/three/build/three.module.js",
+    "three-mesh-bvh": "./vendor/three-mesh-bvh/index.module.js",
     "three-gpu-pathtracer": "https://unpkg.com/three-gpu-pathtracer@0.0.24/build/index.module.js",
-    "meshoptimizer-simplifier": "https://unpkg.com/meshoptimizer@0.22.0/meshopt_simplifier.module.js"
+    "meshoptimizer-simplifier": "./vendor/meshoptimizer/meshopt_simplifier.module.js"
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026100802-v0.10.0"></script>
+<script type="module" src="app-v2.js?v=2026100805-v0.10.1"></script>
 <!-- Feature modules — load after app-v2.js. cloner.js attaches via window._appFns / _appHooks. -->
-<script src="cloner.js?v=2026100802-v0.10.0"></script>
-<script type="module" src="pathtracer.js?v=2026100802-v0.10.0"></script>
+<script src="cloner.js?v=2026100805-v0.10.1"></script>
+<script type="module" src="pathtracer.js?v=2026100805-v0.10.1"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

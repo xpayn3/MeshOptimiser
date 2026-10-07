@@ -4,6 +4,25 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.10.1
+
+- ![perf][perf] **Starts without the internet.** The libraries the app
+  needs to start are bundled in `vendor/` instead of being fetched from
+  a CDN on every launch: three.js r172 (both builds and the add-ons in
+  use), three-mesh-bvh, meshoptimizer and the lucide icon set — 37
+  files, 4.2 MB, each with its licence. Startup no longer waits on
+  unpkg, and the app opens, edits and exports with no connection at
+  all. Still fetched on demand: the path tracer, the KTX2 texture
+  transcoder and the in-browser STEP / glTF-Transform / Assimp
+  converters.
+- ![fix][fix] **The icon set is pinned** (lucide 1.52.0). It was loaded
+  as "latest", so an upstream release could rename or drop an icon
+  without warning.
+- ![polish][polish] Text on buttons, dropdowns and slider values is a
+  soft grey instead of white (it brightens on hover); two-button rows
+  split evenly, including the Smart fit / Merge row; a slider's value
+  field keeps its size when you click it to type.
+
 ## v0.10.0
 
 The biggest release so far. v0.9.0 made the app trustworthy; this one

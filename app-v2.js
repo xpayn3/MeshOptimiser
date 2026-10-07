@@ -1040,7 +1040,8 @@ const _MeshWorkers = (() => {
 function _importMapUrl(name) {
   try {
     const el = document.querySelector('script[type="importmap"]');
-    return (el && JSON.parse(el.textContent).imports[name]) || null;
+    const v = el && JSON.parse(el.textContent).imports[name];
+    return v ? new URL(v, document.baseURI).href : null;     // absolute: a worker resolves from its own URL
   } catch (_) { return null; }
 }
 
