@@ -738,25 +738,46 @@
     T.assert(T.part('Cube').mesh.material !== m0, 'redo did not re-assign the new material');
   });
 
-  test('delete small parts: the slider recounts on release, the button says so meanwhile', async () => {
+  test('delete small parts: the slider is live, and an isolated view follows it', async () => {
     await T.fresh(['cube', 'sphere']);
     const range = document.querySelector('#thr-scrub .scrub-range'), btn = document.getElementById('btn-delete-small');
     if (!range || !btn) return 'skipped (no threshold slider)';
     const t0 = state.threshold, v0 = range.value;
+    // while the slider is held: the threshold, the count on the button and the sentence all follow
     range.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     range.value = String(+range.value + 200); range.dispatchEvent(new Event('input', { bubbles: true }));
-    await T.sleep(350);
-    T.eq(state.threshold, t0, 'the threshold was applied while the slider was still held');
-    T.assert(btn.disabled && btn.classList.contains('is-busy'), 'the Delete button does not show that its count is stale');
+    await T.sleep(120);
+    T.assert(state.threshold !== t0, 'the threshold did not follow the slider while it was held');
+    T.assert(!btn.disabled && !btn.classList.contains('is-busy'), 'the Delete button is blocked while the slider is held');
+    T.eq(document.getElementById('btn-delete-small-count').textContent, state.pendingFlagged.size.toLocaleString(), 'the count on the Delete button is stale');
     window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     await T.sleep(300);
-    T.assert(state.threshold !== t0, 'releasing the slider did not apply the threshold');
-    T.assert(!btn.disabled && !btn.classList.contains('is-busy'), 'the Delete button stayed in its Calculating state');
-    // typing-style change (no pointer): commits too, and the old value comes back
+    // a change without a drag commits too, and the old value comes back
     range.value = v0; range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true }));
     await T.sleep(300);
     T.assert(Math.abs(state.threshold - t0) < 0.05, 'a change without a drag did not commit: ' + state.threshold);
-    T.assert(!btn.disabled, 'the Delete button is still disabled');
+    // with the small parts isolated, what is shown is exactly what is flagged, whatever the slider says
+    const max = +range.max;
+    const visible = () => T.live().filter(p => p.visible).map(p => p.partId).sort().join(',');
+    const flagged = () => [...state.pendingFlagged].sort().join(',');
+    range.value = String(max); range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true }));
+    await T.sleep(300);
+    if (state.pendingFlagged.size) {
+      const steps = state.history.length;
+      document.getElementById('btn-isolate-small').click(); await T.sleep(300);
+      T.eq(visible(), flagged(), 'Isolate did not show the flagged parts');
+      range.value = String(Math.round(max * 0.5)); range.dispatchEvent(new Event('input', { bubbles: true }));
+      await T.sleep(120);
+      T.eq(visible(), flagged(), 'the isolated view did not follow the slider');
+      range.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(300);
+      T.eq(state.history.length, steps + 1, 'following the slider added undo steps of its own');
+      document.getElementById('btn-show-all').click(); await T.sleep(300);
+      T.eq(T.live().filter(p => !p.visible).length, 0, 'Show all left parts hidden');
+      range.value = String(max); range.dispatchEvent(new Event('input', { bubbles: true })); await T.sleep(150);
+      T.eq(T.live().filter(p => !p.visible).length, 0, 'the slider hid parts although nothing is isolated any more');
+    }
+    range.value = v0; range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true }));
+    await T.sleep(300);
   });
 
   test('materials dock: slides in like the console, filters, inspects', async () => {
@@ -916,6 +937,8 @@
     await T.pick(['Cube']);
     key('x'); await T.sleep(300);
     T.assert(!split.hidden && split.closest('#vp-overlay'), 'X did not open the Split panel over the viewport');
+    T.assert(document.getElementById('tg-split').classList.contains('active'), 'the Split toolbar button is not lit while its panel is open');
+    T.assert(/split\.webm/.test(split.querySelector('video')?.getAttribute('src') || ''), 'the Split panel has no clip');
     key('p'); await T.sleep(300);
     T.assert(!fill.hidden && split.hidden, 'P did not swap to the Fill holes panel');
     T.assert(document.getElementById('tg-fill-holes').classList.contains('active'), 'the toolbar button is not lit while its panel is open');

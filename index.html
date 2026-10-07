@@ -281,7 +281,7 @@ input,select{font:inherit;color:inherit}
 ::-webkit-scrollbar-thumb:hover{background:var(--bd2)}
 ::-webkit-scrollbar-thumb:active{background:var(--ac)}
 ::-webkit-scrollbar-corner{background:transparent}
-#app{display:grid;height:100vh;width:100vw;transition:grid-template-columns 320ms cubic-bezier(.4,0,.2,1);grid-template-rows:48px 1fr 22px;grid-template-columns:var(--side-l-w) minmax(0,1fr) var(--side-r-w);}
+#app{display:grid;height:100vh;width:100vw;transition:grid-template-columns 320ms cubic-bezier(.4,0,.2,1);grid-template-rows:44px 1fr 22px;grid-template-columns:var(--side-l-w) minmax(0,1fr) var(--side-r-w);}
 body.left-collapsed{--side-l-w:0px}
 body.left-collapsed #sidebar-left{opacity:0;transform:translateX(-12px);pointer-events:none}
 body.resizing #app{transition:none}
@@ -747,31 +747,35 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .off-empty{display:none}
 .off-list:empty + .off-empty,#offenders-body:has(.off-list:empty) .off-empty{display:block}
 
-/* ── Split preset segmented control ───────────────────────────────────────
-   Four-way segmented control for tolerance presets. Each segment fills
-   1/4 of the row; the active segment gets the accent treatment so the
-   current choice is obvious without reading numbers. */
-.split-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);overflow:hidden;padding:2px}
-.split-preset{padding:6px 2px;background:transparent;color:var(--tx2);font-size:var(--fs-11);font-weight:var(--fw-medium);border:none;border-radius:var(--r-xs);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);white-space:nowrap}
-.split-preset:hover{color:var(--tx);background:var(--hairline)}
-.split-preset.active{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:var(--tx-on-accent);box-shadow:0 1px 2px var(--ac-tint-25)}
 .split-preview .pv-warn{color:var(--wn)}
 .split-preview .pv-ok{color:var(--ok)}
-.split-advanced summary::marker{color:var(--tx3)}
-.split-advanced[open] summary{color:var(--tx2)}
 .btn-split{display:flex;width:100%;align-items:stretch}
 /* Specificity matches #sidebar-right .btn so the inner-right corners flatten in both contexts */
 #sidebar-right .btn-split > .btn,
 .btn-split > .btn{border-right:none}
 /* Caret keeps a 1px left border as a hairline divider between the two halves; each half hovers independently. */
 /* Match the sidebar's smaller button radius so caret's outer corners line up with the merged main button */
-/* A choice of one out of a few inside a command panel (Smart fit's shape).
-   Looks like Split's presets; a class of its own because Split wires every
-   .split-preset on the page to its tolerance. */
-.cmd-seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);overflow:hidden;padding:2px}
-.cmd-seg>button{padding:6px 2px;background:transparent;color:var(--tx2);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);border:none;border-radius:var(--r-xs);cursor:pointer;white-space:nowrap;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
-.cmd-seg>button:hover{color:var(--tx);background:var(--hairline)}
-.cmd-seg>button.active{background:rgba(255,255,255,.14);color:var(--tx-control-hover)}
+/* A choice of one out of a few inside a command panel: Smart fit's shape,
+   Split's sensitivity. (Split's buttons also carry .split-preset, which is
+   what its script looks for.) */
+.cmd-seg{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);overflow:hidden;padding:2px;--seg-n:4;--seg-i:0}
+.cmd-seg>button{position:relative;z-index:1;padding:6px 2px;background:transparent;color:var(--tx2);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);border:none;border-radius:var(--r-xs);cursor:pointer;white-space:nowrap;transition:color var(--dur-fast) var(--ease-out)}
+.cmd-seg>button:hover{color:var(--tx)}
+.cmd-seg>button.active{color:var(--tx-control-hover)}
+/* The highlight is one piece that slides to the chosen option. Its place is
+   worked out from which button carries .active, so whatever sets that class
+   (a click, a preset, undo) moves it. */
+.cmd-seg::before{content:'';position:absolute;z-index:0;top:2px;bottom:2px;left:2px;width:calc((100% - 4px)/var(--seg-n));border-radius:var(--r-xs);background:rgba(255,255,255,.14);
+  opacity:0;transform:translateX(calc(var(--seg-i)*100%));transition:transform .26s cubic-bezier(.32,.72,0,1),opacity .12s linear}
+.cmd-seg:has(>button.active)::before{opacity:1}
+.cmd-seg:has(>button:nth-child(2):last-child){--seg-n:2}
+.cmd-seg:has(>button:nth-child(3):last-child){--seg-n:3}
+.cmd-seg:has(>button:nth-child(5):last-child){--seg-n:5}
+.cmd-seg:has(>button:nth-child(2).active){--seg-i:1}
+.cmd-seg:has(>button:nth-child(3).active){--seg-i:2}
+.cmd-seg:has(>button:nth-child(4).active){--seg-i:3}
+.cmd-seg:has(>button:nth-child(5).active){--seg-i:4}
+@media (prefers-reduced-motion:reduce){.cmd-seg::before{transition:none}}
 .toggle{display:flex;justify-content:space-between;align-items:center;gap:var(--space-xl);padding:9px 0;font-size:var(--fs-lg);border-top:1px solid var(--hairline);min-width:0}
 .toggle > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .toggle:first-child{border-top:none}
@@ -946,6 +950,13 @@ body.msr-mode #canvas{cursor:crosshair}
 .export-wrap.open > .tbtn .caret,
 .tbtn.active .caret,
 .tbtn[aria-expanded="true"] .caret{transform:rotate(180deg)}
+/* the Menu button's arrow stays as it is when the menu is open */
+.export-wrap.open > #btn-file .caret,#btn-file[aria-expanded="true"] .caret{transform:none}
+/* One arrow for everything that opens a list: the one the dropdowns draw
+   (--select-arrow), on the toolbar buttons and the brand button too. */
+.tbtn .caret,.brand-caret{width:10px;height:10px;margin-left:5px;opacity:1;background:var(--select-arrow) center/10px 10px no-repeat}
+.brand-caret{margin-left:0}
+:is(.tbtn .caret>*,.brand-caret>*,#_a#_b){display:none}
 .export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
 .export-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 .export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);cursor:pointer;user-select:none}
@@ -1004,7 +1015,13 @@ body.msr-mode #canvas{cursor:crosshair}
 /* Subtle ring on materials used by the current viewport selection — gives a
    passive "you have parts of this material picked" hint without competing
    with the brighter .selected (panel-selection) state. */
-#vp-materials-pop .mat-cell.usedby-selection .mat-thumb{box-shadow:inset 0 0 0 1px var(--ac-tint-55),0 0 0 2px var(--ac-tint-20)}
+/* The ring and its glow are drawn on a layer over the picture. As an inset
+   shadow of the thumbnail itself they sat under the picture, which covered
+   all but a sliver. The count pill stays on top of the layer. */
+#vp-materials-pop .mat-cell .mat-thumb::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;transition:box-shadow var(--dur-fast) var(--ease-out)}
+#vp-materials-pop .mat-cell .mat-count{z-index:1}
+#vp-materials-pop .mat-cell.usedby-selection .mat-thumb{box-shadow:0 0 0 2px var(--ac-tint-20)}
+#vp-materials-pop .mat-cell.usedby-selection .mat-thumb::after{box-shadow:inset 0 0 0 1.5px var(--ac-tint-55),inset 0 0 12px var(--ac-tint-20)}
 
 /* Action toolbar at the bottom of the materials panel — add / delete /
    duplicate / merge / industry presets. Sticks to the bottom of the
@@ -1758,11 +1775,21 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .tbtn.icon-only svg,.tree-icon-btn svg,.vpb svg{width:var(--btn-icon);height:var(--btn-icon)}
 #sidebar-right .btn-split > .btn,.btn-split > .btn{border-top-right-radius:0;border-bottom-right-radius:0}
 /* dropdown triggers match buttons */
+/* ── Dropdown ──────────────────────────────────────────────────────────
+   One component (app-v2.js, "Dropdowns"): every <select> becomes it. Its size
+   is four tokens; the defaults are a medium control, the size of a button.
+   A place that needs another size sets the tokens on itself, and every
+   dropdown inside follows: set the tokens, do not restyle .cs-trigger. */
+:root{--dd-h:var(--btn-h-md);--dd-fs:var(--btn-fs-md);--dd-r:var(--btn-r-md);--dd-px:var(--btn-px-md)}
 .cs-trigger,#sidebar-right .cs-trigger{
-  box-sizing:border-box;height:var(--btn-h-md);padding:0 28px 0 var(--btn-px-md);
-  border-radius:var(--btn-r-md);font-size:var(--btn-fs-md);line-height:1;
+  box-sizing:border-box;height:var(--dd-h);padding:0 calc(var(--dd-px) + 16px) 0 var(--dd-px);
+  border-radius:var(--dd-r);font-size:var(--dd-fs);line-height:1;
+  background-position:right calc(var(--dd-px) - 2px) center;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
+.cs-trigger.is-open{border-color:var(--ac)}
+/* small: beside the 22px number fields of a card (a shape's parameters, a cloner's) */
+.prim-row,.dd-sm{--dd-h:22px;--dd-fs:var(--fs-11);--dd-r:var(--r-sm,6px);--dd-px:8px}
 .vp-pill{height:var(--btn-h-md);font-size:var(--btn-fs-sm);padding:0 12px}
 /* sm */
 .lc-icon-btn{width:var(--btn-h-sm);height:var(--btn-h-sm);border-radius:var(--btn-r-sm)}
@@ -1870,15 +1897,15 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .tree-typeicon.part,.tree-typeicon.inst{color:var(--tx3)}
 .tree-node.is-group{background:transparent}
 .tree-node.is-group:hover{background:rgba(255,255,255,.03)}
-/* Selection is shown on the label and the icon only — no filled strip. */
-.tree-node.selected,.tree-node.is-group.selected{background:transparent}
-.tree-node.selected:hover,.tree-node.is-group.selected:hover{background:rgba(255,255,255,.03)}
+/* Selection is the accent label and icon over a faint accent wash. */
+.tree-node.selected,.tree-node.is-group.selected{background:var(--ac-tint-12);--row-tint:var(--ac-tint-12)}
+.tree-node.selected:hover,.tree-node.is-group.selected:hover{background:var(--ac-tint-18);--row-tint:var(--ac-tint-18)}
 .mac-input{box-sizing:border-box;width:100%;height:var(--btn-h-md);padding:0 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--btn-r-md);color:var(--tx);font-size:var(--btn-fs-md);outline:none}
 .mac-input:focus{border-color:var(--ac)}
 .mac-input::placeholder{color:var(--tx3)}
-/* What is selected reads bright; the groups above it are only hinted. */
-.tree-node.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 26%, var(--tx2))}
-.tree-node.ancestor-selected .tree-typeicon{color:color-mix(in srgb, var(--ac-text) 26%, var(--tx3))}
+/* What is selected reads bright; the groups above it are a clear step down. */
+.tree-node.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 62%, var(--tx2))}
+.tree-node.ancestor-selected .tree-typeicon{color:color-mix(in srgb, var(--ac-text) 62%, var(--tx3))}
 
 /* ── Startup screen ──────────────────────────────────────────────────────
    Two columns: start something (drop, open, import, new, shapes, options)
@@ -1975,7 +2002,7 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
    lines beside it are no longer needed. */
 #sidebar-left{border-right-color:transparent;grid-column:1;grid-row:2 / 4;}
 #sidebar-right{scrollbar-width:none;border-left-color:transparent;grid-column:3;grid-row:2 / 4;padding:0;border:0;border-radius:10px;margin:0 12px 22px 12px;}
-#tb{border-bottom-color:transparent;height:48px;padding-top:4px;box-sizing:border-box;}
+#tb{border-bottom-color:transparent;height:44px;padding-top:2px;padding-bottom:2px;box-sizing:border-box;}   /* the 2px under the buttons is the gap to the panels below */
 /* The top bar sits 4px lower: its row is 4px taller and the space is above it. */
 /* bottom bar: a search button on its own, then the display controls */
 .vp-bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:10px}
@@ -2084,6 +2111,8 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
    reckons (_TREE_ROW_H). */
 #tree>.tree-node{flex:0 0 auto;height:25px;box-sizing:border-box}
 #tree>.tree-pad{flex:0 0 auto;pointer-events:none}
+/* while the tree is dragged with the wheel pressed */
+#tree.is-panning,#tree.is-panning .tree-node{cursor:grabbing}
 /* Tips next to the bottom toolbar: one column when two would overlap it,
    and above the bar when even that would. Set by _fitVpTips(). */
 .vp-tips.one-col{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:auto}
@@ -2173,9 +2202,76 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 #sidebar-right .section-h.collapsed{color:var(--tx2)}
 #sidebar-right .btn.primary{background:var(--ac);border-color:transparent;color:#fff}
 #sidebar-right .btn.primary:hover{background:color-mix(in srgb,var(--ac) 88%,#fff);border-color:transparent}
-.btn-list{display:flex;flex-direction:column;gap:1px}
-#sidebar-right .btn.quiet{background:transparent;border-color:transparent;color:var(--tx-control,var(--tx2));justify-content:flex-start}
-#sidebar-right .btn.quiet:hover{background:var(--bg3);border-color:transparent;color:var(--tx)}
+/* A column of commands (Auto cleanup, Tidy geometry, Optimize). They are the
+   same buttons as everywhere else in the sidebar, with the same gap between
+   them; `quiet` only sets the label to the left, after the icon. (They used
+   to be borderless rows, which read as a different kind of control.) */
+.btn-list{display:flex;flex-direction:column;gap:var(--space-sm)}
+#sidebar-right .btn.quiet{justify-content:flex-start;text-align:left}
+/* Align to floor */
+.align-box{display:flex;flex-direction:column;gap:var(--space-sm)}
+.align-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--fs-11);color:var(--tx3);min-height:20px}
+.align-head .size-field{height:24px;padding:0 8px}
+.align-head .size-field input{width:38px}
+.align-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.align-cell{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:var(--fs-11);color:var(--tx3)}
+.align-turn{display:grid;grid-template-columns:auto 1fr 1fr;align-items:center;gap:3px;min-width:0;font-size:var(--fs-11);color:var(--tx3)}
+.align-turn>span{width:12px}
+#sidebar-right .align-turn .btn{padding:0;justify-content:center;min-width:0}
+.align-box .field-help:empty{display:none}
+/* The switch beside File: parts tree or object library */
+.side-switch{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;flex:0 0 auto;height:var(--btn-h-md,32px);padding:3px;gap:0;border-radius:var(--btn-r-md,6px);background:var(--bg2)}
+.side-switch::before{content:'';position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:5px;background:rgba(255,255,255,.14);transition:transform .18s var(--ease-out)}
+.side-switch.is-lib::before{transform:translateX(100%)}
+.side-switch button{position:relative;display:inline-flex;align-items:center;justify-content:center;width:30px;padding:0;border:0;background:none;color:var(--tx3);cursor:pointer;border-radius:5px}
+.side-switch button:hover{color:var(--tx)}
+.side-switch button.active{color:var(--tx)}
+.side-switch svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9}
+/* The library panel takes the tree's place */
+#sidebar-left.lib-on>:is(.tree-search,.tree-toolbar,.tree-summary,#tree,#tree-hscroll,#tree-newgroup-zone){display:none}
+#lib-panel{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+#lib-panel[hidden]{display:none}
+#lib-panel>.tree-search{display:flex;flex:0 0 auto}
+.lib-opts{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:0 10px 8px;font-size:var(--fs-11);color:var(--tx3)}
+.lib-opts>span{flex:1 1 auto}
+.lib-opts .mac-sel{flex:0 0 68px}
+.lib-opts .size-field{height:var(--btn-h-md);padding:0 8px}
+#lib-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:0 10px 10px}
+.lib-shelf{padding:28px 2px 9px;font-size:var(--fs-10,10.5px);font-weight:var(--fw-semibold);letter-spacing:.09em;text-transform:uppercase;color:var(--tx3)}
+.lib-sec:first-child>.lib-shelf{padding-top:12px}
+.lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+/* A tile: the part's studio picture on a soft spot of light, its name under it. */
+.lib-item{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;border:0;border-radius:10px;overflow:hidden;background:#1d1d1f;box-shadow:0 0 0 1px rgba(255,255,255,.06);color:var(--tx2);font:inherit;text-align:center;cursor:grab;transition:box-shadow var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.lib-item:hover{color:#fff;background:var(--ac);box-shadow:0 0 0 1px rgba(255,255,255,.16),0 8px 22px rgba(0,0,0,.45)}
+.lib-item:active{cursor:grabbing;transform:scale(.97)}
+.lib-item[hidden],.lib-sec[hidden],.lib-empty[hidden]{display:none}
+.lib-pic{position:relative;display:block;aspect-ratio:1/0.86}
+.lib-pic img{position:absolute;inset:12px 16px 4px;width:calc(100% - 32px);height:calc(100% - 16px);object-fit:contain;transition:transform .18s var(--ease-out)}
+.lib-item:hover .lib-pic img{transform:scale(1.06)}
+.lib-pic svg{display:none}
+.lib-pic.no-pic svg{display:block;position:absolute;inset:0;margin:auto;width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:1.5;color:var(--tx)}
+.lib-name{display:block;padding:6px 6px 9px;font-size:var(--fs-11);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Recently used: one slim strip of small pictures, no names (the tooltip has them). */
+.lib-sec[data-shelf="Recently used"] .lib-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+.lib-sec[data-shelf="Recently used"] .lib-item{border-radius:8px}
+.lib-sec[data-shelf="Recently used"] .lib-pic{aspect-ratio:1/1}
+.lib-sec[data-shelf="Recently used"] .lib-pic img{inset:7px;width:calc(100% - 14px);height:calc(100% - 14px)}
+.lib-sec[data-shelf="Recently used"] .lib-name{display:none}
+.lib-empty{padding:18px 4px;font-size:var(--fs-12);color:var(--tx3);text-align:center}
+.lib-foot{flex:0 0 auto;padding:8px 12px 10px;border-top:1px solid var(--surface-line);font-size:var(--fs-11);line-height:1.45;color:var(--tx3)}
+/* Properties: the figures in the fact rows are plain and a touch smaller than
+   their labels, so the big triangle count above stays the one loud number. */
+#prop-body .prop-grid .prop-value{font-size:var(--fs-11);font-weight:400;color:var(--tx)}
+#prop-body .prop-grid .prop-label{font-size:var(--fs-11);font-weight:400}
+/* …and one rhythm down the card: name, tags, the count with its bar, the facts. */
+#prop-body .prop-head{margin-bottom:8px}
+#prop-body .prop-tags{margin-bottom:10px;min-height:0}
+#prop-body .prop-tags:empty{display:none}
+#prop-body .prop-hero{margin:0 0 14px}
+#prop-body .prop-hero .prop-bar{margin-top:10px}
+#prop-body .prop-hero-cap{margin-top:8px}
+#prop-body .prop-hero-sub{margin-top:4px}
+#prop-body .prop-grid{row-gap:8px;column-gap:10px;padding-top:12px;border-top:1px solid var(--surface-line)}
 /* Optimisation report */
 .rep-note{font-size:var(--fs-12);color:var(--tx3);line-height:1.5}
 .rep-note strong{color:var(--tx2);font-weight:var(--fw-medium)}
@@ -2216,8 +2312,8 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 
 .mat-dock-body{flex:1;min-height:0;display:flex}
 #vp-materials-pop.mat-dock .pop-section{flex:1 1 auto;min-width:0;min-height:0;overflow-y:auto;padding:12px 14px 16px;border:0;background-color:var(--mat-dock-bg);}
-#vp-materials-pop.mat-dock .mat-grid{grid-template-columns:repeat(auto-fill,minmax(82px,1fr));column-gap:8px;row-gap:10px;justify-content:start;justify-items:stretch}
-#vp-materials-pop.mat-dock .mat-cell{padding:5px 4px 4px;gap:5px}
+#vp-materials-pop.mat-dock .mat-grid{grid-template-columns:repeat(auto-fill,minmax(74px,1fr));column-gap:2px;row-gap:3px;justify-content:start;justify-items:stretch}
+#vp-materials-pop.mat-dock .mat-cell{padding:5px 4px 4px;gap:5px;width:auto;min-width:0;box-sizing:border-box}   /* as wide as its column: at the 60px of the popup the 64px picture stuck out of the tile, and the tile's outline cut across the picture's ring */
 #vp-materials-pop.mat-dock .mat-cell .mat-thumb{width:64px;height:64px}
 #vp-materials-pop.mat-dock .mat-cell .mat-name{font-size:var(--fs-11)}
 #vp-materials-pop.mat-dock .mat-list-view{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 18px;align-content:start}
@@ -2265,6 +2361,10 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 /* The buttons under it share the row's width, edge to edge with the field. */
 .tree-toolbar{padding:0 12px 6px;gap:5px;flex-wrap:nowrap}
 .tree-toolbar .tree-icon-btn{flex:1 1 0;width:auto;min-width:0}
+/* the tree's own tools: an icon over its name */
+.tree-toolbar .tree-icon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:44px;padding:0 2px}
+.tree-toolbar .tree-icon-btn span{font-size:10.5px;line-height:1;letter-spacing:.01em;white-space:nowrap;color:inherit}
+.tree-toolbar .tree-icon-btn svg{width:15px;height:15px;flex:0 0 auto}
 /* Scrollbars without arrow buttons: a slim thumb on a clear track. (The
    standard scrollbar-width / scrollbar-color pair draws the system bar,
    arrows included, so Chromium gets the ::-webkit- version instead.) */
@@ -2277,6 +2377,14 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
   ::-webkit-scrollbar-thumb:hover{background:#5a5a5a;background-clip:padding-box}
   ::-webkit-scrollbar-thumb:active{background:var(--ac);background-clip:padding-box}
   #sidebar-right{scrollbar-width:none}
+  /* The sidebars' scrollbars are easy to catch: the strip that takes the
+     pointer is 14px wide, the bar drawn in it stays slim and thickens while
+     the pointer is on it. (The parts tree is the long one: a model can have
+     tens of thousands of rows, and dragging the bar is how you cross them.) */
+  :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar{width:14px;height:14px}
+  :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb{border-width:4px;border-radius:7px;min-height:44px;min-width:44px;background:#4a4a4e;background-clip:padding-box}
+  :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb:hover{border-width:3px;background:#6a6a70;background-clip:padding-box}
+  :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb:active{border-width:3px;background:var(--ac);background-clip:padding-box}
 }
 /* A control the command search has just jumped to. */
 .cmdk-flash{outline:2px solid var(--ac);outline-offset:2px;border-radius:6px}
@@ -2312,7 +2420,7 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 #tree-hscroll > div{height:1px}
 /* Group names: a soft grey, regular weight — not pure white. */
 .tree-node.is-group .tree-label{color:#c4c4c6;font-weight:var(--fw-regular)}
-.tree-node.is-group.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 26%, var(--tx2))}
+.tree-node.is-group.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 62%, var(--tx2))}
 .tree-node.is-group.selected .tree-label{color:var(--ac)}
 /* View cube: soft plate on hover, accent on the face under the pointer. */
 #axis-gizmo .axg-face{transition:fill .12s var(--ease-out),stroke .12s var(--ease-out)}
@@ -2471,6 +2579,11 @@ input.scrub-drag:focus{cursor:text}
 html.is-scrubbing,html.is-scrubbing *{cursor:ew-resize!important;user-select:none!important;-webkit-user-select:none!important}
 .prim-row .prim-slider{display:none}
 .prim-row{grid-template-columns:minmax(0,1fr) auto;padding:3px 0;min-height:22px}
+.prim-row[hidden]{display:none}      /* a row that belongs to a switch that is off (the nut's kind and place) */
+/* Where a dropdown stands in a row of the Shape parameters card (its size
+   is the small one, from the tokens: see "Dropdown"). Wide enough for the
+   longest name in the lists. */
+.prim-row .cs-wrap{grid-column:2;grid-row:1;justify-self:end;width:118px}
 :is(.prim-val-wrap,#_a#_b){box-sizing:border-box;width:84px;height:22px;padding:0 8px;gap:4px;justify-content:flex-end;
   background:linear-gradient(90deg,rgba(255,255,255,.055) var(--scrub-pct,0%),transparent var(--scrub-pct,0%)),var(--bg2);
   border:1px solid var(--bd);border-radius:var(--r-sm,6px);transition:border-color var(--dur-fast) var(--ease-out)}
@@ -2562,9 +2675,30 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 .cmd-adv>summary:hover{color:var(--tx-control-hover)}
 .cmd-adv.is-changed>summary>span::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ac);margin-left:7px;vertical-align:2px}
 .cmd-adv-b{display:flex;flex-direction:column;gap:2px;padding:4px 0 2px}
+/* Advanced opens and closes by growing: the browser animates the height of
+   the details content between 0 and its own size, and the options fade in a
+   beat behind it. Where that is not supported it simply opens at once. */
+.cmd-adv{interpolate-size:allow-keywords}
+.cmd-adv::details-content{block-size:0;overflow:clip;opacity:0;
+  transition:block-size .24s cubic-bezier(.32,.72,0,1),opacity .14s linear,content-visibility .24s allow-discrete}
+.cmd-adv[open]::details-content{block-size:auto;opacity:1;
+  transition:block-size .28s cubic-bezier(.32,.72,0,1),opacity .2s linear .06s,content-visibility .28s allow-discrete}
+@media (prefers-reduced-motion:reduce){.cmd-adv::details-content,.cmd-adv[open]::details-content,.cmd-adv>summary::before{transition:none}}
 .cmd-adv-b .toggle{padding:4px 0;font-size:var(--fs-12)}
 .cmd-num{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0;font-size:var(--fs-12);color:var(--tx2)}
 .cmd-num .size-field{flex:0 0 auto}
+.cmd-num[hidden]{display:none}
+/* Delete small parts: the card reads top to bottom as a sentence (how small,
+   by what measure, what that catches, then what to do with them). */
+.small-card{display:flex;flex-direction:column;gap:10px}
+.small-card .cmd-lede{margin:0}
+.small-card .btn-row{margin:0}
+.small-by{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-12);color:var(--tx2)}
+.small-found{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border-radius:var(--r-md);background:var(--hairline);color:var(--tx2);font-size:var(--fs-12);line-height:1.45}
+.small-found svg{flex:0 0 auto;width:14px;height:14px;margin-top:2px;stroke:currentColor;fill:none;stroke-width:2;color:var(--tx3)}
+.small-found #thr-info{margin:0;color:inherit;font-size:inherit}
+.small-found.has{background:var(--wn-tint-08);color:var(--tx)}
+.small-found.has svg{color:var(--wn)}      /* (a row that belongs to another choice: see Smart fit's shapes) */
 :is(.cmd-link,#_a#_b){align-self:flex-start;margin-top:6px;padding:0;background:none;border:0;color:var(--tx3);font:inherit;font-size:var(--fs-11);cursor:pointer}
 :is(.cmd-link,#_a#_b):hover{color:var(--tx-control-hover);text-decoration:underline}
 .size-field .scrub-drag{cursor:ew-resize}
@@ -2698,6 +2832,28 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 .set-pane-b .toggle>span:first-child,.set-row>span:first-child{flex:1 1 auto;min-width:0;font-weight:var(--fw-regular)}
 .set-pane-b .field>:is(select,.cs-wrap,input[type=number],input[type=text]){flex:0 0 230px;width:230px!important;box-sizing:border-box}
 .set-pane-b .field>.cs-wrap .cs-trigger{width:100%}
+/* A field that is a box around a bare input (a number with its unit, a
+   search box) shows focus itself, by its border. The input inside shows none
+   of its own: the browser-style ring there is a second, square frame inside
+   the rounded one. */
+:is(.size-field,.prim-val-wrap,.tform-num,.mat-dock-search,.set-search,.tree-search,#_a#_b) :is(input,textarea):is(:focus,:focus-visible){outline:none;box-shadow:none}
+/* Numbers sit in the middle of their field. A line of text is centred by the
+   font's own box, and in this typeface that box reaches further above the
+   digits than below them, so a number on its own (no descenders to balance
+   it) reads as riding high: 1.4px too high in a 24px field. Every number
+   field gets the same small drop, --num-drop, so they all agree.
+   - A bare input inside a field's box (a number with its unit, a transform
+     value) is simply moved down by it.
+   - A number that is its own box cannot be moved without moving the box, so
+     there the room above the text grows by twice the drop (text is centred in
+     what is left, and moves by half of what is added). */
+:root{--num-drop:.115em}
+:is(.size-field input,.tform-num input,#_a#_b){transform:translateY(var(--num-drop))}
+:is(.scrub-value,.scrub-input,#_a#_b){padding-top:calc(var(--num-drop) * 2)}
+/* (The fields of the Shape parameters card are left out: measured, their
+   digits already sit in the middle.) */
+.brn-row input[type=number]{padding-top:calc(7px + var(--num-drop));padding-bottom:calc(7px - var(--num-drop))}
+#_flat-dialog .flat-row input[type=number]{padding-top:calc(6px + var(--num-drop));padding-bottom:calc(6px - var(--num-drop))}
 .set-pane-b .field>input[type=range]{flex:0 0 230px;width:230px}
 .set-help{display:block;margin-top:2px;font-size:var(--fs-11);color:var(--tx3);line-height:1.45;white-space:normal;font-weight:var(--fw-regular)}
 .set-action .btn{width:auto;flex:0 0 auto;min-width:86px;min-height:var(--btn-h-sm);height:var(--btn-h-sm);padding:0 12px;justify-content:center}
@@ -2716,12 +2872,16 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 /* Search: a popup standing on its button in the bottom toolbar. A search
    field, then suggestions (or results) with an icon, the name and the
    shortcut. */
-#cmdk-modal{align-items:flex-end}
-#cmdk-modal .modal{max-height:60vh;transform-origin:bottom left}
-#cmdk-modal .modal-h{padding:10px 12px;gap:9px}
+#cmdk-modal{align-items:flex-start}
+#cmdk-modal .modal{max-height:60vh;transform-origin:top center;transition:transform var(--dur-slow) var(--ease-out),opacity 180ms var(--ease-out),height 200ms cubic-bezier(.32,.72,0,1);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.09)}
+#cmdk-modal .modal-h{padding:14px 16px!important;gap:11px}
+#cmdk-modal .cmdk-search-icon{width:19px;height:19px;flex-basis:19px}
 .cmdk-search-icon{width:16px;height:16px;flex:0 0 16px;color:var(--tx3);stroke-width:1.8}
-:is(#cmdk-input,#_a#_b){flex:1;min-width:0;background:none;border:0;outline:none;font:inherit;font-size:var(--fs-13)}
-#cmdk-list{padding:4px 6px 6px!important;scrollbar-width:none}
+:is(#cmdk-input,#_a#_b){flex:1;min-width:0;background:none;border:0;outline:none;font:inherit;font-size:17px}
+#cmdk-list{padding:4px 6px 6px!important;scrollbar-width:none;flex:1 1 auto;min-height:0;overflow-y:auto}
+.cmdk-foot{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:8px 14px;border-top:1px solid var(--surface-line);background:var(--surface-pop);font-size:var(--fs-11);color:var(--tx3)}
+.cmdk-foot>span{display:inline-flex;align-items:center;gap:5px}
+.cmdk-foot .cmdk-foot-tip{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 #cmdk-list::-webkit-scrollbar{display:none}
 .cmdk-section{padding:7px 8px 5px;font-size:var(--fs-11);color:var(--tx3)}
 .cmdk-section:empty{display:none}
@@ -2752,22 +2912,42 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 /* The materials dock is a shade lighter than the sidebars around it. */
 #cmdk-list,#shortcuts-body,#scene-settings-body,.modal .modal-b{background-color:var(--surface-pop)}
 /* ── A command panel with a clip on top ────────────────────────────────────
-   The clip runs edge to edge across the top of the card and dissolves into
-   the card's own colour towards the bottom (the clip is rendered on that
-   colour, so only the object is seen). The title and the close button sit
-   on it; the text of the panel starts inside the fade. */
+   The clip runs edge to edge from the top edge of the card and dissolves
+   into the card's own colour towards the bottom (the clip is rendered on
+   that colour, so only the object is seen). The close button sits on its
+   top right corner; the title comes under it, inside the fade. */
 .section-cmd.has-hero{position:relative}
-.cmd-hero{position:relative;flex:0 0 auto;margin:0;padding-top:18px;line-height:0;background:var(--surface-pop);pointer-events:none}
+.cmd-hero{flex:0 0 auto;margin:0;line-height:0;background:var(--surface-pop);pointer-events:none}
 .cmd-hero video{display:block;width:100%;height:auto;aspect-ratio:592/370;object-fit:cover;background:var(--surface-pop);
   -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 58%,rgba(0,0,0,.55) 78%,transparent 100%);
           mask-image:linear-gradient(to bottom,#000 0,#000 58%,rgba(0,0,0,.55) 78%,transparent 100%)}
-.vp-cmd-host .section-cmd.has-hero>.section-h{position:absolute;top:0;left:0;right:0;z-index:2;padding:10px 8px 0 14px;background:none}
-.vp-cmd-host .section-cmd.has-hero>.section-h>span{color:var(--tx-control);text-shadow:0 1px 6px rgba(0,0,0,.5)}
-:is(.section-cmd.has-hero .section-h .cmd-close,#_a#_b){width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.34);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--tx-control)}
+.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:-30px;padding:0 12px 8px;background:none}
+:is(.section-cmd.has-hero .section-h .cmd-close,#_a#_b){position:absolute;top:8px;right:8px;z-index:2;width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.34);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--tx-control)}
 :is(.section-cmd.has-hero .section-h .cmd-close,#_a#_b):hover{background:rgba(255,255,255,.14);color:var(--tx-control-hover)}
-.vp-cmd-host .section-cmd.has-hero>.section-b{position:relative;z-index:1;margin-top:-34px;padding-top:0}
+/* The commands that come with a clip are the app's headline tools, and their
+   cards say so: the name set large over the foot of the clip, a line of
+   plain description under it, and one filled button that runs the command. */
+.vp-cmd-host>.section-cmd.has-hero{box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.09)}
+.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:-32px;padding:0 14px 10px}
+.vp-cmd-host .section-cmd.has-hero>.section-h>span{font-size:18px;line-height:1.2;font-weight:var(--fw-semibold);letter-spacing:-.015em;text-transform:none;color:#fff;text-shadow:0 1px 14px rgba(0,0,0,.7)}
+.vp-cmd-host .section-cmd.has-hero>.section-b{padding:0 14px 14px}
+.cmd-lede{color:var(--tx2);font-size:var(--fs-12);line-height:1.55;margin:0 0 12px}
+#vp-cmd-host .section-cmd.has-hero [data-cmd-primary]{height:34px;background:var(--ac);border-color:transparent;color:#fff!important;font-weight:var(--fw-semibold);justify-content:center;box-shadow:0 1px 0 rgba(255,255,255,.18) inset,0 6px 16px color-mix(in srgb,var(--ac) 30%,transparent)}
+#vp-cmd-host .section-cmd.has-hero [data-cmd-primary]:hover{background:color-mix(in srgb,var(--ac) 88%,#fff);border-color:transparent}
+#vp-cmd-host .section-cmd.has-hero [data-cmd-primary]:disabled{box-shadow:none}
+/* white on the blue, whatever colour the button's own class asks for (the label and the icon take it from here) */
+#vp-cmd-host .section-cmd.has-hero [data-cmd-primary] :is(span,svg,i){color:inherit!important}
+.vp-cmd-host .section-cmd.has-hero .cmd-foot{padding:8px 10px}
+.vp-cmd-host .section-cmd.has-hero .cmd-foot .cmd-ok{color:var(--tx)}
+@media (max-height:640px){.vp-cmd-host .section-cmd.has-hero>.section-h>span{text-shadow:none}}
+/* a small segmented choice on the right of an Advanced row; a text field there; the result line of a command */
+.cmd-seg.cmd-seg-sm{flex:0 0 auto;width:172px}
+.cmd-seg.cmd-seg-sm>button{padding:3px 2px}
+:is(.cmd-num .size-field input[type=text]:not([inputmode]),#_a#_b){text-align:left}
+.field-help.is-result{color:var(--tx)}
+#sh-after{margin:0 0 4px}
 /* on a short viewport the controls matter more than the clip */
-@media (max-height:640px){.cmd-hero{display:none}.vp-cmd-host .section-cmd.has-hero>.section-h{position:static;padding:10px 8px 8px 12px}.vp-cmd-host .section-cmd.has-hero>.section-b{margin-top:0}}
+@media (max-height:640px){.cmd-hero{display:none}.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:0;padding:10px 40px 8px 12px}}
 </style>
 </head>
 <body>
@@ -2786,19 +2966,19 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.11.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.12.0</div>
         </div>
         <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.11.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.12.0</span></div>
           <ul>
-            <li>Scene tabs: every tab is its own scene, New and Open never replace one</li>
-            <li>Command panels for Split (X) and Fill holes (P), by the viewport</li>
-            <li>Fill holes: advanced options, and a much harder test</li>
-            <li>Drag any number to change it; one line per shape parameter</li>
-            <li>One Settings window, with search</li>
-            <li>All commands behind “…”, and shortcuts that fit together</li>
+            <li>Object library: 86 parametric parts, dragged into the scene</li>
+            <li>Align to floor: stand any model on the grid in one card</li>
+            <li>Select hidden parts, and Fit to budget for the whole scene</li>
+            <li>Smart fit: Boxes and Blocks keep the outline</li>
+            <li>Clay view, a headlight and reflections for dark parts</li>
+            <li>Search finds parts and the library, and does sums</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -2829,7 +3009,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
     </div>
     <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
     <div class="export-wrap" id="file-menu-wrap">
-      <button class="tbtn" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="File menu (New / Open / Import / Save / Scene settings)"><i data-lucide="file"></i>File <span class="caret"><i data-lucide="chevron-down"></i></span></button>
+      <button class="tbtn" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="Menu (New / Open / Import / Save / Scene settings)"><i data-lucide="menu"></i>Menu <span class="caret"><i data-lucide="chevron-down"></i></span></button>
       <div id="file-menu" class="export-menu" style="min-width:260px">
         <button class="export-menu-item" data-file-cmd="new"><span class="fmt"><i data-lucide="file-plus" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>New scene</span><span class="hint">Ctrl+N</span></button>
         <button class="export-menu-item" data-file-cmd="open"><span class="fmt"><i data-lucide="folder-open" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Open…</span><span class="hint">Ctrl+O</span></button>
@@ -2845,6 +3025,11 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
         <div class="export-menu-sep"></div>
         <button class="export-menu-item" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
       </div>
+    </div>
+    <!-- What the left sidebar shows: the parts of the scene, or the object library. -->
+    <div class="side-switch" id="side-switch" role="tablist" aria-label="Left sidebar">
+      <button type="button" role="tab" data-side="tree" class="active" title="Parts: everything in the scene"><i data-lucide="list-tree"></i></button>
+      <button type="button" role="tab" data-side="lib" title="Library: shapes, fasteners, pipes, profiles and machine parts to add"><i data-lucide="shapes"></i></button>
     </div>
     <div class="add-prim-wrap" style="position:relative;display:inline-block">
       <button class="tbtn" id="btn-add-prim" title="Add a primitive shape or a standard fastener"><i data-lucide="plus-square"></i>Add <span class="caret"><i data-lucide="chevron-down"></i></span></button>
@@ -2900,26 +3085,33 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
   </header>
 
   <aside id="sidebar-left" class="panel">
+    <div id="lib-panel" hidden>
+      <div class="tree-search"><i data-lucide="search"></i><input type="text" id="lib-filter" placeholder="Search the library…" autocomplete="off"></div>
+      <div class="lib-opts" title="Screws, nuts and washers are added in this size">
+        <span>Fasteners</span>
+        <select id="lib-size" class="mac-sel"></select>
+        <label class="size-field"><span>length</span><input type="text" inputmode="decimal" id="lib-length" value="24"><span>mm</span></label>
+      </div>
+      <div id="lib-list"></div>
+      <div class="lib-foot">Click to add: onto the selected part, or on the floor at the origin. Drag into the view to place it.</div>
+    </div>
     <div id="resize-l" class="resize-handle" title="Drag to resize"></div>
     <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts…"><button type="button" class="tree-search-clear" id="tree-filter-clear" title="Clear the search" hidden><i data-lucide="x"></i></button></div>
     <div class="tree-toolbar">
-      <button class="tree-icon-btn" id="tree-hide-unsel" title="Hide everything not selected">
-        <i data-lucide="eye-off"></i>
+      <!-- Each button says what it does: an icon over one word. (Hide
+           unselected and Show all used to be here too; they are in the
+           right-click menu, the command search and on Alt+H / Shift+H.) -->
+      <button class="tree-icon-btn" id="tree-reveal" title="Scroll the tree to the selected part and open the groups it is in (Shift+S)">
+        <i data-lucide="locate-fixed"></i><span>Locate</span>
       </button>
-      <button class="tree-icon-btn" id="tree-show-all" title="Show all parts">
-        <i data-lucide="eye"></i>
+      <button class="tree-icon-btn" id="tree-collapse-toggle" title="Collapse all groups">
+        <i data-lucide="chevrons-down-up"></i><span>Collapse</span>
       </button>
-      <button class="tree-icon-btn" id="tree-reveal" title="Reveal selected in tree (Shift+S)">
-        <i data-lucide="crosshair"></i>
+      <button class="tree-icon-btn" id="tree-batch-rename" title="Rename many parts at once (F2): templates, find and replace, presets">
+        <i data-lucide="text-cursor-input"></i><span>Rename</span>
       </button>
-      <button class="tree-icon-btn" id="tree-collapse-toggle" title="Expand / collapse all groups">
-        <i data-lucide="chevrons-down-up"></i>
-      </button>
-      <button class="tree-icon-btn" id="tree-batch-rename" title="Batch rename (F2) — token templates, regex find/replace, presets">
-        <i data-lucide="signature"></i>
-      </button>
-      <button class="tree-icon-btn" id="tree-flatten" title="Advanced flatten — scope, depth, leaves, single-child chains, ungroup">
-        <i data-lucide="list-tree"></i>
+      <button class="tree-icon-btn" id="tree-flatten" title="Flatten the hierarchy: remove levels of grouping, by scope and depth">
+        <i data-lucide="list-tree"></i><span>Flatten</span>
       </button>
     </div>
     <div class="tree-summary" id="tree-summary">No model loaded</div>
@@ -2956,7 +3148,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
     <div id="gizmo-hud" aria-hidden="true"></div>
     <div id="vp-overlay">
       <div class="vpc tl">
-        <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to 10 units"><i data-lucide="move"></i></button>
+        <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to round steps sized to the model"><i data-lucide="move"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
         <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
         <button class="vpb" id="tg-transform" title="Toggle transform panel (position / rotation / size)"><i data-lucide="move-3d"></i></button>
@@ -2965,6 +3157,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
         <button class="vpb" id="vw-wire" data-mode="wire" title="Wireframe (2)"><svg viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v10"/></svg></button>
         <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
         <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — color parts by triangle density (4)"><i data-lucide="flame"></i></button>
+        <button class="vpb" id="vw-clay" data-mode="clay" title="Clay (5): every part in one plain material, to read the shape. Right-click for other looks: porcelain, steel, red wax."><i data-lucide="contrast"></i></button>
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
       </div>
       <div class="vpc tc" id="vp-view-pill-wrap">
@@ -2990,8 +3183,10 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
         <button class="vpb" id="vp-add-prim" title="Add object — click for cube, hold for shape picker"><img id="vp-add-prim-img" alt="" draggable="false"></button>
         <div id="vp-add-pop" class="vp-prim-pop" style="display:none"></div>
         <div class="vpb-sep"></div>
+        <button class="vpb" id="tg-split" data-cmd-toggle="split" title="Split (X)"><i data-lucide="split"></i></button>
         <button class="vpb" id="tg-fill-holes" data-cmd-toggle="fillholes" title="Fill holes (P)"><i data-lucide="circle-off"></i></button>
         <button class="vpb" id="tg-smart-fit" data-cmd-toggle="smartfit" title="Smart fit (Ctrl+B)"><i data-lucide="wand-2"></i></button>
+        <button class="vpb" id="tg-select-hidden" data-cmd-toggle="selhidden" title="Select hidden parts"><i data-lucide="eye-off"></i></button>
         <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
         <div class="vpb-sep"></div>
         <button class="vpb" id="tg-materials" title="Materials (Shift+M)"><i data-lucide="palette"></i></button>
@@ -3083,8 +3278,8 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
       </figure>
       <div class="section-h"><span>Fill holes</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
-        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
-          Closes holes in flat faces, and flattens engraved or raised lettering and logos. Everything else stays as it is. Works on the selection, or on every visible part when nothing is selected.
+        <div class="cmd-lede">
+          Closes holes and flattens lettering on flat faces, leaving the rest untouched.
         </div>
         <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
           <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Fill holes</span></button>
@@ -3111,13 +3306,13 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
     </div>
 
     <div class="section section-cmd has-hero" data-cmd="smartfit" hidden>
-      <figure class="cmd-hero" aria-label="Smart fit at work: a gear, a bolt and a housing each turn into the plain cylinder or box that fits them">
-        <video src="assets/help/smart-fit.webm" poster="assets/help/smart-fit-poster.webp" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+      <figure class="cmd-hero" aria-label="Smart fit at work: a gear, a bearing housing and a bolt, tilted the same way in a row, each turn into the plain cylinder or box that fits them">
+        <video src="assets/help/smart-fit.webm?v=3" poster="assets/help/smart-fit-poster.webp?v=3" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
       </figure>
       <div class="section-h"><span>Smart fit</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
-        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
-          Replaces each selected part with the plain shape that fits it best: a box, a turned box or a cylinder. The detail is lost; the size and place are kept.
+        <div class="cmd-lede">
+          Replaces selected parts with a best-fit box or cylinder, or with a few boxes or Blocks, which keep the part's outline. Size and position are kept.
         </div>
         <div class="cmd-seg" id="fit-modes" role="group" aria-label="Shape">
           <button type="button" class="active" data-mode="smart" title="Picks a box, a turned box or a cylinder for each part">Auto</button>
@@ -3125,6 +3320,13 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
           <button type="button" data-mode="obb" title="A box turned to follow the part">Turned box</button>
           <button type="button" data-mode="cyl" title="A cylinder along the part's long axis">Cylinder</button>
         </div>
+        <!-- the shapes that keep the part's outline -->
+        <div class="cmd-seg" id="fit-modes-more" role="group" aria-label="Shapes that keep the outline" style="margin-top:6px">
+          <button type="button" data-mode="boxes" title="A handful of boxes, each sized and turned to one piece of the part: a foot becomes a slab and a bar, a frame four bars">A few boxes</button>
+          <button type="button" data-mode="blocks" title="The part rebuilt from a coarse grid of boxes: boxy, but its steps, arms and openings stay where they are">Blocks</button>
+        </div>
+        <div class="cmd-num" id="fit-count-row" style="margin-top:8px" hidden title="A few boxes: the most boxes a part may become. Simple parts use fewer. Each box is 12 triangles."><span>At most</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-count" value="6"><span>boxes</span></label></div>
+        <div class="cmd-num" id="fit-detail-row" style="margin-top:8px" hidden title="Blocks: how many cells the part's longest side is cut into. More cells follow the outline more closely and cost more triangles. An opening narrower than a cell closes."><span>Blocks detail</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-detail" value="8"><span>cells</span></label></div>
         <button class="btn warn" id="btn-bbox-selected" data-cmd-primary style="margin-top:10px" title="Replace the selected parts with the shape chosen above. Undoable."><i data-lucide="wand-2"></i>Smart fit</button>
         <div class="field-help" id="smartfit-info">Select the parts to replace. Nuts, bolts, pins and housings are the ones it suits.</div>
         <details class="cmd-adv" id="fit-adv">
@@ -3141,13 +3343,56 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Smart fit</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
-    <div class="section section-cmd" data-cmd="split" hidden>
+    <div class="section section-cmd has-hero" data-cmd="selhidden" hidden>
+      <figure class="cmd-hero" aria-label="Select hidden at work: a housing turns see-through and the gear and the screws inside it light up">
+        <video src="assets/help/select-hidden.webm" poster="assets/help/select-hidden-poster.webp" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+      </figure>
+      <div class="section-h"><span>Select hidden</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div class="cmd-lede">
+          Selects the parts that cannot be seen from outside, from any direction.
+        </div>
+        <div class="cmd-seg" id="sh-scope" role="group" aria-label="Look in">
+          <button type="button" class="active" data-scope="all" title="Every visible part is checked">Whole scene</button>
+          <button type="button" data-scope="sel" title="Only the selected parts are checked; the rest of the scene still hides them">Selection only</button>
+        </div>
+        <button class="btn warn" id="btn-sh-run" data-cmd-primary style="margin-top:10px" title="Look at the scene from every side and select what never shows. Nothing is deleted."><i data-lucide="eye-off"></i>Select hidden parts</button>
+        <div class="field-help" id="sh-info">Screws, bearings and brackets inside a housing. Nothing is deleted until you press Delete.</div>
+        <div class="btn-row" id="sh-after" hidden>
+          <button class="btn" id="btn-sh-isolate" title="Show only the selected parts, to check them (S)"><i data-lucide="focus"></i>Isolate</button>
+          <button class="btn danger" id="btn-sh-delete" title="Delete the selected parts. Can be undone."><i data-lucide="trash-2"></i>Delete</button>
+        </div>
+        <details class="cmd-adv" id="sh-adv">
+          <summary><span>Advanced</span></summary>
+          <div class="cmd-adv-b">
+            <div class="cmd-num" title="How many directions the scene is looked at from. More directions find parts that show only through a narrow gap, and take longer."><span>Accuracy</span>
+              <div class="cmd-seg cmd-seg-sm" id="sh-views" role="group" aria-label="Accuracy">
+                <button type="button" data-views="26">Fast</button>
+                <button type="button" class="active" data-views="64">Normal</button>
+                <button type="button" data-views="160">Thorough</button>
+              </div>
+            </div>
+            <div class="toggle" title="Off: a see-through part (glass, a clear cover) hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part."><span>See-through parts hide what is behind</span><label><input type="checkbox" id="sh-glass"><span class="switch"></span></label></div>
+            <div class="toggle" title="Keep what is selected now and add the hidden parts to it"><span>Add to the selection</span><label><input type="checkbox" id="sh-add"><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Keep only hidden parts no larger than this share of the whole model's size. Empty: any size."><span>Largest part, of model size</span><label class="size-field"><input type="text" inputmode="decimal" id="sh-max" placeholder="any"><span>%</span></label></div>
+            <div class="cmd-num" title="Keep only hidden parts whose name contains this (screw, DIN, bearing…). Empty: any name."><span>Name contains</span><label class="size-field"><input type="text" id="sh-name" placeholder="any" spellcheck="false" autocomplete="off"></label></div>
+            <button type="button" class="cmd-link" id="sh-reset">Reset to defaults</button>
+          </div>
+        </details>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Select hidden</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <div class="section section-cmd has-hero" data-cmd="split" hidden>
+      <figure class="cmd-hero" aria-label="Split at work: a bracket, its pin and two bolts that arrived as one mesh come apart into separate parts">
+        <video src="assets/help/split.webm" poster="assets/help/split-poster.webp" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+      </figure>
       <div class="section-h"><span>Split</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
-        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
-          Recover individual parts from solids that were merged on export. Two vertices closer than the threshold are treated as the same point.
+        <div class="cmd-lede">
+          Separates solids that were merged into one mesh on export.
         </div>
-        <div class="split-presets" role="group" aria-label="Detection sensitivity">
+        <div class="split-presets cmd-seg" role="group" aria-label="Detection sensitivity">
           <button class="split-preset" data-eps="0" title="Maximum splits. Trusts the index buffer exactly — never merges. Use if you suspect the source has duplicated boundary vertices.">Strict</button>
           <button class="split-preset active" data-eps="1e-9" title="Default. Welds only bit-exact duplicates — fixes within-solid sharp-edge duplication without merging adjacent solids.">Tight</button>
           <button class="split-preset" data-eps="1e-6" title="Welds vertices within 0.0001% of model size — tolerant of small float drift between duplicates.">Normal</button>
@@ -3168,9 +3413,11 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
         <button class="btn" id="btn-split-selected" data-cmd-primary title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
         <div style="height:6px"></div>
         <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts"><i data-lucide="search"></i>Scan whole model</button>
-        <details class="split-advanced" style="margin-top:10px">
-          <summary style="cursor:pointer;color:var(--tx3);font-size:var(--fs-11);user-select:none;padding:4px 0">Advanced — custom tolerance</summary>
-          <div class="field" style="margin-top:6px"><div id="split-eps-scrub"></div></div>
+        <details class="cmd-adv" id="split-adv">
+          <summary><span>Advanced</span></summary>
+          <div class="cmd-adv-b">
+            <div class="field" style="margin:4px 0 0"><div id="split-eps-scrub"></div></div>
+          </div>
         </details>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Split selected</span><kbd class="kbd-chip">↵</kbd></button></div>
@@ -3241,7 +3488,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
       <div class="section-b" id="prop-body">
         <div class="prop-head"><span class="prop-name" style="color:var(--tx3)">Empty scene</span></div>
         <div class="prop-tags"></div>
-        <div class="prop-hero is-empty"><div class="prop-hero-top"><span class="prop-hero-num">—</span><span class="prop-hero-unit">triangles</span></div>
+        <div class="prop-hero is-empty"><div class="prop-hero-top"><span class="prop-hero-num">—</span><span class="prop-hero-unit">tris</span></div>
           <div class="prop-bar"><div class="prop-bar-fill" style="width:0%"></div></div></div>
         <div class="prop-grid">
           <span class="prop-icon"><i data-lucide="boxes"></i></span><span class="prop-label">Parts</span><strong class="prop-value">—</strong>
@@ -3317,43 +3564,30 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
       </div>
     </div>
 
-    <div class="section">
-      <div class="section-h"><span>Section / Clip</span><span class="chev">▾</span></div>
-      <div class="section-b">
-        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
-          Cut the model with a plane to see inside. Works with both the WebGPU and WebGL2 renderers (switch via the Renderer dropdown in the top bar).
-        </div>
-        <div class="field" style="margin-bottom:6px">
-          <label style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:3px">Axis</label>
-          <select id="clip-axis" class="mac-sel" style="width:100%">
-            <option value="off">Off</option>
-            <option value="x">X (cut along YZ)</option>
-            <option value="y">Y (cut along XZ)</option>
-            <option value="z">Z (cut along XY)</option>
-          </select>
-        </div>
-        <div class="field"><div id="clip-pos-scrub"></div></div>
-        <div style="display:flex;gap:var(--space-sm);margin-top:6px">
-          <button class="btn" id="btn-clip-flip" style="flex:1" title="Swap which side of the plane gets hidden">Flip side</button>
-          <button class="btn" id="btn-clip-reset" style="flex:1" title="Disable clipping and recenter the slider">Reset</button>
-        </div>
-        <div class="toggle" style="margin-top:4px"><span>Show cut plane</span><label><input type="checkbox" id="clip-show-plane"><span class="switch"></span></label></div>
-      </div>
-    </div>
-
     <div class="side-group">Clean up</div>
 
     <div class="section">
       <div class="section-h"><span>Delete small parts</span><span class="chev">▾</span></div>
-      <div class="section-b">
-        <div class="field"><label><span>Size threshold</span></label><div id="thr-scrub"></div></div>
-        <div class="field"><label><span>Metric</span></label><select id="thr-metric" class="mac-sel"><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select></div>
-        <div class="field-help" id="thr-info">Highlights parts smaller than the threshold.</div>
+      <div class="section-b small-card">
+        <div class="cmd-lede">Screws, washers, clips: the parts too small to matter.</div>
+        <!-- how small: a share of the whole model's size -->
+        <div id="thr-scrub"></div>
+        <!-- small by what measure (the select is what the rest of the app reads and sets; the buttons drive it) -->
+        <div class="small-by">
+          <span>Measured by</span>
+          <div class="cmd-seg" id="thr-metric-seg" role="group" aria-label="Measured by">
+            <button type="button" class="active" data-metric="diag" title="Corner to corner of the part's box. The usual choice.">Diagonal</button>
+            <button type="button" data-metric="max" title="The part's longest side. Keeps long thin parts (rods, pipes) that the diagonal also keeps, and is stricter with flat ones.">Longest side</button>
+            <button type="button" data-metric="vol" title="The volume of the part's box. Catches thin sheets and wires however long they are.">Volume</button>
+          </div>
+          <select id="thr-metric" hidden><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select>
+        </div>
+        <!-- what the two choices above catch -->
+        <div class="small-found" id="thr-found"><i data-lucide="scan-search"></i><span id="thr-info">Load a model to see what would go.</span></div>
         <div class="btn-row">
-          <button class="btn" id="btn-isolate-small" title="Hide every part NOT flagged by the size threshold"><i data-lucide="eye"></i>Isolate</button>
+          <button class="btn" id="btn-isolate-small" title="Show only the parts that would be deleted, to check them first"><i data-lucide="eye"></i>Isolate</button>
           <button class="btn" id="btn-show-all" title="Make every hidden part visible again"><i data-lucide="circle-plus"></i>Show all</button>
         </div>
-        <div style="height:6px"></div>
         <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
       </div>
     </div>
@@ -3361,11 +3595,34 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
     <div class="section">
       <div class="section-h"><span>Auto cleanup</span><span class="chev">▾</span></div>
       <div class="section-b btn-list">
-        <button class="btn quiet" id="btn-select-hidden" title="Select every part that cannot be seen from outside (screws, bearings and brackets inside a housing). Nothing is deleted until you press Delete."><i data-lucide="eye-off"></i>Select hidden parts</button>
         <button class="btn quiet" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Remove empty parts</button>
         <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy"></i>Deduplicate geometry</button>
         <button class="btn quiet" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="asterisk"></i>Fix degenerate parts</button>
         <button class="btn quiet" id="btn-clean-empty-groups" title="Remove user groups and hierarchy groups whose members are all deleted or empty"><i data-lucide="folder-x"></i>Delete empty groups</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Align to floor</span><span class="chev">▾</span></div>
+      <div class="section-b align-box" id="align-box">
+        <div class="align-head"><span>Turn</span><label class="size-field" title="How far one press turns the model: 90 for quarter turns, something small to straighten a tilted model"><span>step</span><input type="text" inputmode="decimal" id="align-step" value="90"><span>°</span></label></div>
+        <div class="align-grid" id="align-turns">
+          <div class="align-turn"><span>X</span><button type="button" class="btn" data-turn="x-" title="Turn the model about the scene's X axis, backwards by the step"><i data-lucide="rotate-ccw"></i></button><button type="button" class="btn" data-turn="x+" title="Turn the model about the scene's X axis, forwards by the step"><i data-lucide="rotate-cw"></i></button></div>
+          <div class="align-turn"><span>Y</span><button type="button" class="btn" data-turn="y-" title="Turn the model about the scene's Y axis, backwards by the step"><i data-lucide="rotate-ccw"></i></button><button type="button" class="btn" data-turn="y+" title="Turn the model about the scene's Y axis, forwards by the step"><i data-lucide="rotate-cw"></i></button></div>
+          <div class="align-turn"><span>Z</span><button type="button" class="btn" data-turn="z-" title="Turn the model about the scene's Z axis, backwards by the step"><i data-lucide="rotate-ccw"></i></button><button type="button" class="btn" data-turn="z+" title="Turn the model about the scene's Z axis, forwards by the step"><i data-lucide="rotate-cw"></i></button></div>
+        </div>
+        <div class="align-head"><span>Sits at zero with its</span></div>
+        <div class="align-grid">
+          <label class="align-cell" title="Which side of the model goes to 0 on this axis"><span id="align-a-label">X</span><select id="align-a" class="mac-sel"><option value="min">Low side</option><option value="center">Middle</option><option value="max">High side</option><option value="keep">Keep</option></select></label>
+          <label class="align-cell" title="Which side of the model goes to 0 on this axis"><span id="align-b-label">Y</span><select id="align-b" class="mac-sel"><option value="min">Low side</option><option value="center">Middle</option><option value="max">High side</option><option value="keep">Keep</option></select></label>
+          <label class="align-cell" title="Floor: the model stands on the grid. Top: it hangs from it."><span>Up</span><select id="align-up" class="mac-sel"><option value="min">Floor</option><option value="center">Middle</option><option value="max">Top</option><option value="keep">Keep</option></select></label>
+        </div>
+        <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
+          <button class="btn primary" id="btn-align-floor" title="Stand the model on the floor with its middle over 0,0,0 (or wherever the choices above say). Turning and the choices above apply at once; a run of adjustments is one undo step."><i data-lucide="arrow-down-to-line"></i>Align to floor</button>
+          <button class="btn" id="btn-align-reset" title="Put the model back where and how it was loaded">Reset</button>
+        </div>
+        <div class="field-help" id="align-info"></div>
+        <div class="toggle" title="Place every file as it is opened, with the choices above (it is not turned)"><span>Place every file I open</span><label><input type="checkbox" id="align-on-open"><span class="switch"></span></label></div>
       </div>
     </div>
 
@@ -3824,9 +4081,10 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
   <div class="modal" style="width:520px;max-height:60vh">
     <div class="modal-h" style="padding:10px 14px">
       <i data-lucide="search" class="cmdk-search-icon"></i>
-      <input type="text" id="cmdk-input" placeholder="Search" autocomplete="off" spellcheck="false">
+      <input type="text" id="cmdk-input" placeholder="Search commands, parts and the library, or type a sum" autocomplete="off" spellcheck="false">
     </div>
     <div class="modal-b" id="cmdk-list" style="padding:6px"></div>
+    <div class="cmdk-foot"><span><kbd class="kbd-chip">↑</kbd><kbd class="kbd-chip">↓</kbd>choose</span><span><kbd class="kbd-chip">↵</kbd>run</span><span><kbd class="kbd-chip">Esc</kbd>close</span><span class="cmdk-foot-tip">12*25.4 · 2 in · a part's name · add nut</span></div>
   </div>
 </div>
 
@@ -4248,9 +4506,9 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026100910-v0.11.0"></script>
+<script type="module" src="app-v2.js?v=20261008-v0.12.0"></script>
 <!-- Feature modules — load after app-v2.js. cloner.js attaches via window._appFns / _appHooks. -->
-<script src="cloner.js?v=2026100910-v0.11.0"></script>
+<script src="cloner.js?v=20261008-v0.12.0"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

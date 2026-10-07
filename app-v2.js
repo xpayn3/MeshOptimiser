@@ -676,6 +676,47 @@ function _scrubField(input, { min = 0, max = 1e6, step = 1, decimals = 0 } = {})
   if (wrap) { for (const lab of wrap.querySelectorAll('span')) _scrubDrag(lab, opts); wrap.title = (wrap.title ? wrap.title + ' · ' : '') + 'drag to change, click to type'; }
 }
 
+// Every number field in the app can be dragged sideways, not only the ones a
+// panel sets up itself (with _scrubField, which knows the right step and
+// limits). A field nobody set up is wired the first time the pointer comes
+// over it, with what it says about itself: its min / max / step attributes
+// where it has them, otherwise a step read off the number in it (12.50 moves
+// in hundredths, 24 in ones). Because it happens on the way in, fields that a
+// dialog or the Properties panel builds later are covered too, and a panel's
+// own set-up, which runs first, always wins.
+//   data-no-scrub on a field (or anything around it) leaves it alone.
+function _autoScrubField(input) {
+  if (!input || input._scrubDrag || input._noScrub) return;
+  const mode = input.inputMode || input.getAttribute('inputmode') || '';
+  const numeric = input.type === 'number' || ((input.type === 'text' || input.type === 'tel') && /^(decimal|numeric)$/.test(mode));
+  if (!numeric || input.readOnly || input.classList.contains('scrub-range') || input.closest('[data-no-scrub]')) { input._noScrub = true; return; }
+  const attr = (name) => { const v = parseFloat(input.getAttribute(name)); return Number.isFinite(v) ? v : null; };
+  const places = (t) => { const m = String(t).replace(',', '.').match(/\.(\d+)/); return m ? Math.min(4, m[1].length) : 0; };
+  // step: the field's own, or one unit of the last decimal place it shows
+  const stepAttr = attr('step');
+  const decimals = mode === 'numeric' ? 0 : stepAttr != null ? places(stepAttr) : places(input.value || '');
+  const step = stepAttr != null && stepAttr > 0 ? stepAttr : Math.pow(10, -decimals);
+  // limits: the field's own; a measure (a field with a unit beside it) does not go below zero
+  const sized = !!input.closest('.size-field, .prim-val-wrap');
+  const min = attr('min') ?? (sized ? 0 : -1e9), max = attr('max') ?? 1e9;
+  const read = () => { const v = parseFloat(String(input.value).replace(',', '.')); return Number.isFinite(v) ? v : Math.max(min, Math.min(max, 0)); };
+  let tail = '';
+  _scrubDrag(input, {
+    // a suffix typed with the number ("150k", "45°", "12 mm") stays on it
+    get: () => { tail = (String(input.value).match(/^\s*-?[\d.,]+(\s*[a-zA-Z%°µ"']+)\s*$/) || [])[1] || ''; return Math.round(read() / step); },
+    min: Math.ceil(min / step), max: Math.floor(max / step),
+    pxPerStep: 4,
+    set: (n) => { input.value = String(parseFloat((n * step).toFixed(decimals))) + tail; input.dispatchEvent(new Event('input', { bubbles: true })); },
+    end: () => input.dispatchEvent(new Event('change', { bubbles: true })),
+  });
+  if (!input.title && !input.closest('[title]')) input.title = 'Drag to change, click to type';
+}
+if (typeof document !== 'undefined') {
+  const wire = (e) => { const t = e.target; if (t && t.tagName === 'INPUT' && !t._scrubDrag && !t._noScrub && !t.disabled) _autoScrubField(t); };
+  document.addEventListener('pointerover', wire, true);
+  document.addEventListener('pointerdown', wire, true);          // touch and pen never hover first
+}
+
 function _initScrubberImpl({
   el, label = '', maxSteps, stepToVal, valToStep, format, onChange,
   initialValue = 0,
@@ -1382,10 +1423,12 @@ function _autoCleanCheck() {
 // with its contents; deleting only the parts inside a group leaves the group
 // (empty) in the tree.
 function _deleteSelection(label) {
-  if (!state.selected.size) return;
   const gids = new Set();
   for (const g of (state.selectedGroupIds || [])) { gids.add(g); const k = parseInt(String(g), 10); if (!Number.isNaN(k)) gids.add(k); }
-  deleteParts([...state.selected], label);
+  // A selected group with nothing in it selects no parts, and still has to go.
+  const hadParts = state.selected.size > 0;
+  if (!hadParts && !gids.size) return;
+  if (hadParts) deleteParts([...state.selected], label);
   if (!gids.size) return;
   const live = _groupLiveMap();
   const dead = [], open = [];
@@ -1397,7 +1440,10 @@ function _deleteSelection(label) {
     open.push({ depth: n.depth, inside });
   }
   try { state.selectedGroupIds.clear(); } catch (_) {}
-  _removeGroupRows(dead, { label: 'Deleted group', auto: true });
+  // after a delete of parts the groups go as part of that step (one undo);
+  // an empty group deleted on its own is a step of its own
+  _removeGroupRows(dead, { label: 'Deleted group', auto: hadParts });
+  if (!hadParts && dead.length) { try { rebuildTreeSelectionOnly(); } catch (_) {} }
 }
 
 // Change the visibility of many parts as ONE undoable step. `pairs` is a
@@ -2024,7 +2070,13 @@ async function _handleSelectedFile(file) {
   // flag and clear it — the modal's read-back is the source of truth.
   const forceAppend = !!state._importMode;
   state._importMode = false;
-  if (!forceAppend && !window.__moNoTabs && state.parts.some(p => !p.deleted)) { _Tabs.add({ file }); return; }
+  // A file that is opened or dropped always gets a tab of its own. The one
+  // exception is a tab that is still blank and untouched (no parts, nothing
+  // done in it): the file opens there instead of leaving an empty tab behind.
+  // (This used to look only at whether live parts were left, so a scene
+  // whose parts had all been deleted was replaced, undo history and all.)
+  const untouched = state.parts.length === 0 && !(state.history && state.history.length) && !(state.redo && state.redo.length);
+  if (!forceAppend && !window.__moNoTabs && !untouched) { _Tabs.add({ file }); return; }
 
   // If the welcome modal is open, hide it before showing the import-settings
   // modal — otherwise the two stack visually with the welcome popup still
@@ -2538,7 +2590,7 @@ const _Prefs = (() => {
     autoDeleteEmptyGroups: false,   // off: a group you empty stays in the tree
     showFps: true,
     // Camera behavior
-    orbitPivot: 'cursor',    // 'scene' | 'selection' | 'cursor'
+    orbitPivot: 'selection', // 'selection': about the selected parts when there are any, else the view's centre | 'scene': always the view's centre
     zoomToCursor: true,      // wheel zooms toward mouse, not toward target
   };
   function load() {
@@ -2701,7 +2753,7 @@ const _Settings = (() => {
     const cam = $s('set-camera-prefs');
     if (cam) cam.innerHTML =
       _group('Navigation') +
-      _selectRow('set-orbit-pivot', 'Orbit around', [['cursor', 'Point under the cursor'], ['selection', 'Selection'], ['scene', 'Scene centre']], p.orbitPivot) +
+      _toggleRow('set-orbit-pivot', 'Orbit around the selection', p.orbitPivot !== 'scene', 'With something selected, the view turns around it. Off, or with nothing selected: around the centre of the view.') +
       _toggleRow('set-zoom-cursor', 'Zoom toward the cursor', p.zoomToCursor, 'The wheel zooms toward the pointer instead of the orbit centre.');
     const vx = $s('set-viewport-extra');
     if (vx) vx.innerHTML = _toggleRow('set-hilite', 'Highlight small parts', !!$s('toggle-highlight')?.checked, 'Tint the parts that are under the size threshold of Delete small parts.');
@@ -2715,7 +2767,7 @@ const _Settings = (() => {
         if (key === 'zoomToCursor' && typeof controls !== 'undefined' && controls) controls.zoomToCursor = !!e.target.checked;
       });
     });
-    $s('set-orbit-pivot')?.addEventListener('change', e => { _Prefs.set('orbitPivot', e.target.value); });
+    $s('set-orbit-pivot')?.addEventListener('change', e => { _Prefs.set('orbitPivot', e.target.checked ? 'selection' : 'scene'); });
     try { window._enhanceSelects?.(); } catch (_) {}
     if ($s('settings-search')?.value) _search($s('settings-search').value);
   }
@@ -3043,6 +3095,17 @@ const _CmdCards = (() => {
     const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     for (const v of sec.querySelectorAll('video')) {
       try {
+        // The clip loops. A browser that cannot seek in the file (a server
+        // without range requests, a clip without an index) plays it once and
+        // stops at the end instead: start it again from scratch then.
+        if (!v._loopFix) {
+          v._loopFix = true;
+          v.loop = true;
+          v.addEventListener('ended', () => {
+            if (sec.hidden) return;
+            try { v.load(); const p = v.play(); if (p && p.catch) p.catch(() => {}); } catch (_) {}
+          });
+        }
         if (on && !calm) { v.currentTime = 0; const p = v.play(); if (p && p.catch) p.catch(() => {}); }
         else { v.pause(); }
       } catch (_) {}
@@ -3148,11 +3211,12 @@ const _Actions = (() => {
     { id:'reveal',       group:'Selection',  label:'Reveal selected in tree',    kbd:'Shift+S', run: () => { try { revealSelectedInTree(); } catch (_) {} } },
     { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undoLast(); } catch (_) {} } },
     { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', run: () => { try { redoLast(); } catch (_) {} } },
-    { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', run: () => { if (state.selected.size) _deleteSelection('Deleted via palette'); } },
+    { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', run: () => { if (state.selected.size || state.selectedGroupIds?.size) _deleteSelection('Deleted via palette'); } },
     { id:'copy',         group:'Edit',       label:'Copy selection',             kbd:'Ctrl+C', run: () => { if (state.selected.size) copyParts([...state.selected]); } },
     { id:'paste',        group:'Edit',       label:'Paste',                      kbd:'Ctrl+V', run: () => pasteParts() },
     { id:'duplicate',    group:'Edit',       label:'Duplicate selection',        kbd:'Ctrl+D', run: () => { if (state.selected.size) duplicateParts([...state.selected]); } },
     { id:'recenter',     group:'Edit',       label:'Recenter model',             run: _click('btn-recenter') },
+    { id:'alignFloor',   group:'Edit',       label:'Align model to the floor',   run: _click('btn-align-floor') },
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
     { id:'merge',        group:'Edit',       label:'Merge selection',            kbd:'Ctrl+M', run: _click('btn-merge-sel') },
     { id:'split',        group:'Edit',       label:'Split meshes…',              kbd:'X', run: () => _CmdCards.open('split') },
@@ -3161,13 +3225,14 @@ const _Actions = (() => {
     { id:'fillHoles',    group:'Edit',       label:'Fill holes…',                kbd:'P', run: () => _CmdCards.open('fillholes') },
     { id:'decimate',     group:'Edit',       label:'Decimate selection',         run: _click('btn-decimate-sel') },
     { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { const el = document.getElementById('budget-target'); if (el && el.offsetParent) { el.focus(); el.select(); } else _click('btn-budget')(); } },
-    { id:'selHidden',    group:'Selection',  label:'Select hidden parts',        run: () => window._MOpt?.selectHidden() },
+    { id:'selHidden',    group:'Selection',  label:'Select hidden parts…',       run: () => _CmdCards.open('selhidden') },
     { id:'report',       group:'File',       label:'Optimisation report',        run: () => window._MOpt?.showReport() },
     { id:'ungroup',      group:'Edit',       label:'Ungroup',                    kbd:'Ctrl+Shift+G', run: () => { for (const gid of (state.selectedGroupIds ? [...state.selectedGroupIds] : [])) { const row = document.querySelector('#tree .tree-node[data-group-id="' + gid + '"]'); if (row) _treeUngroupRow(row); } } },
     { id:'hideSel',      group:'Selection',  label:'Hide selected',              kbd:'H', run: () => { try { hideSelected(); } catch (_) {} } },
     { id:'materials',    group:'App',        label:'Materials',                  kbd:'Shift+M', run: _click('tg-materials') },
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
     { id:'heat',         group:'View',       label:'Heatmap view',               kbd:'4', run: () => { try { setViewMode('heat'); } catch (_) {} } },
+    { id:'clay',         group:'View',       label:'Clay view',                  kbd:'5', run: () => { try { setViewMode('clay'); } catch (_) {} } },
     { id:'flatten',      group:'Edit',       label:'Advanced flatten…',          run: _click('tree-flatten') },
     { id:'settings',     group:'App',        label:'Open settings',              kbd:'Ctrl+,', run: () => _Settings.show() },
     { id:'shortcuts',    group:'App',        label:'Keyboard shortcuts',         kbd:'?', run: () => _Shortcuts.show() },
@@ -3259,7 +3324,7 @@ const _CmdK = (() => {
   const ICON = {
     newscene: 'file-plus', open: 'folder-open', import: 'file-input', savescene: 'save', export: 'download', sceneSettings: 'box', revert: 'rotate-ccw',
     fit: 'scan', frameSel: 'scan', camPersp: 'video', camTop: 'square-arrow-down', camFront: 'square-arrow-right', camSide: 'square-arrow-left',
-    solid: 'box', wire: 'grid-3x3', xray: 'crosshair', gzMove: 'move', gzRotate: 'rotate-cw', gzScale: 'scaling', gzOff: 'circle-slash', tgGrid: 'grid-3x3',
+    solid: 'box', wire: 'grid-3x3', xray: 'crosshair', clay: 'contrast', gzMove: 'move', gzRotate: 'rotate-cw', gzScale: 'scaling', gzOff: 'circle-slash', tgGrid: 'grid-3x3',
     selAll: 'square-check', selInvert: 'square-dashed', selClear: 'square-x', isolate: 'focus', showAll: 'eye', hideUnsel: 'eye-off', hideSel: 'eye-off', reveal: 'list-tree',
     undo: 'undo-2', redo: 'redo-2', delete: 'trash-2', copy: 'copy', paste: 'clipboard', duplicate: 'copy-plus', recenter: 'target', group: 'folder-plus', ungroup: 'folder-minus',
     merge: 'combine', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'circle-off', decimate: 'triangle', flatten: 'list-tree', measure: 'ruler', materials: 'palette',
@@ -3275,57 +3340,146 @@ const _CmdK = (() => {
       : ['open', 'import', 'newscene', 'welcome', 'settings', 'shortcuts'];
     return ids.map(id => _Actions.list.find(a => a.id === id)).filter(Boolean);
   }
+  // ── What the search finds besides commands ──────────────────────────────
+  // Parts by name (Enter selects and frames one), library parts (Enter adds
+  // one), and a sum or a length typed in ("12*25.4", "2 in", "50 mm in in":
+  // Enter copies the answer). Commands that were run lately lead the list
+  // while nothing is typed.
+  const RECENT_KEY = 'stepopt-cmdk-recent';
+  const _recentIds = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, 5) : []; } catch (_) { return []; } };
+  const _remember = (it) => { if (!it || !it.id || it.noRecent) return; try { localStorage.setItem(RECENT_KEY, JSON.stringify([it.id, ..._recentIds().filter(x => x !== it.id)].slice(0, 5))); } catch (_) {} };
+  const _fmtNum = (v) => { const r = Math.abs(v) >= 1e9 || (v !== 0 && Math.abs(v) < 1e-6) ? v.toExponential(6) : String(+v.toPrecision(10)); return r; };
+  const _copy = (text, what) => { try { navigator.clipboard.writeText(text); toast('Copied', `${what} is on the clipboard`, 'success', 2200); } catch (_) { toast(what, text, 'info', 4000); } };
+  const UNIT = { mm: 1, cm: 10, m: 1000, um: 0.001, 'µm': 0.001, in: 25.4, inch: 25.4, inches: 25.4, '"': 25.4, ft: 304.8, foot: 304.8, feet: 304.8, thou: 0.0254, mil: 0.0254 };
+  function _answer(q) {
+    // a length with a unit, optionally "in/to <unit>"
+    const u = q.replace(',', '.').match(/^(-?\d*\.?\d+)\s*(mm|cm|m|um|µm|inches|inch|in|"|feet|foot|ft|thou|mil)(?:\s*(?:in|to|as|=|>|→)?\s*(mm|cm|m|um|µm|inches|inch|in|"|feet|foot|ft|thou|mil))?$/i);
+    if (u) {
+      const from = u[2].toLowerCase(), mm = parseFloat(u[1]) * UNIT[from];
+      const to = (u[3] || (UNIT[from] >= 25.4 || from === 'thou' || from === 'mil' ? 'mm' : 'in')).toLowerCase(), v = mm / UNIT[to];
+      const out = _fmtNum(+v.toPrecision(8)), unit = to === '"' || to === 'inch' || to === 'inches' ? 'in' : to === 'foot' || to === 'feet' ? 'ft' : to;
+      return { id: 'calc', noRecent: true, icon: 'ruler', group: 'Copy', label: `${u[1]} ${u[2]} = ${out} ${unit}`, run: () => _copy(out, `${out} ${unit}`) };
+    }
+    // a sum: digits, brackets and + - * / ^ % only, and at least one operator
+    const m = q.replace(/,/g, '.').replace(/[x×]/gi, '*').replace(/÷/g, '/');
+    if (!/^[\d\s+\-*/().^%]+$/.test(m) || !/\d\s*[+\-*/^%]\s*[\d(.-]/.test(m)) return null;
+    let v; try { v = Function('"use strict";return (' + m.replace(/\^/g, '**') + ')')(); } catch (_) { return null; }
+    if (typeof v !== 'number' || !isFinite(v)) return null;
+    const out = _fmtNum(v);
+    return { id: 'calc', noRecent: true, icon: 'calculator', group: 'Copy', label: `${q.trim()} = ${out}`, run: () => _copy(out, out) };
+  }
+  function _findParts(q) {
+    const out = [];
+    for (const p of state.parts) {
+      if (p.deleted || !p.name) continue;
+      const sc = _score(q, p.name);
+      if (sc > 0) out.push({ sc, p });
+    }
+    return out.sort((x, y) => y.sc - x.sc || x.p.name.length - y.p.name.length).slice(0, 6).map(({ p }) => ({
+      id: 'part:' + p.partId, noRecent: true, icon: 'box', group: p.visible === false ? 'Hidden part' : 'Part', label: p.name,
+      run: () => {
+        state.selected.clear(); state.selectedGroupIds?.clear?.(); state.selected.add(p.partId);
+        try { applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo(); } catch (_) {}
+        try { frameSelected(); } catch (_) {}
+        try { _Actions.list.find(a => a.id === 'reveal')?.run(); } catch (_) {}
+        requestRender();
+      },
+    }));
+  }
+  function _findLibrary(q) {
+    const out = [], qq = q.replace(/^(add|new|insert)\s+/i, '');
+    if (!qq) return out;
+    try {
+      for (const [shelf, kinds] of _LIB_SHELVES) for (const k of kinds) {
+        const name = _primitiveDefaultName(k), sc = Math.max(_score(qq, name), _score(qq, k) * 0.8, _score(qq, shelf) * 0.2);
+        if (sc > 0) out.push({ sc, k, name });
+      }
+    } catch (_) {}
+    return out.sort((x, y) => y.sc - x.sc).slice(0, 6).map(({ k, name }) => ({ id: 'lib:' + k, noRecent: true, icon: 'shapes', group: 'Add', label: name, run: () => { try { _libAdd(k); } catch (e) { toast('Could not add that part', String(e && e.message || e), 'error'); } } }));
+  }
+  const _shown = () => !!document.getElementById('cmdk-modal')?.classList.contains('show');
+  // The card grows and shrinks with its results instead of jumping: it is held
+  // at the height it had, then let go to the new one (the CSS eases `height`).
+  let _heightT = 0;
+  function _easeHeight(card, h0) {
+    if (!card) return;
+    clearTimeout(_heightT);
+    card.style.height = '';
+    if (!h0 || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+    const h1 = card.getBoundingClientRect().height;
+    if (Math.abs(h1 - h0) < 1) return;
+    card.style.height = h0 + 'px';
+    void card.offsetHeight;                      // take the starting height in before changing it
+    card.style.height = h1 + 'px';
+    _heightT = setTimeout(() => { card.style.height = ''; }, 240);
+  }
+  function _go(it) { if (!it) return; hide(); _remember(it); try { it.run(); } catch (e) { console.warn('[cmdk] run failed:', e); } }
   function _render(query) {
     const list = document.getElementById('cmdk-list');
     if (!list) return;
     const q = (query || '').trim();
-    const items = !q ? _suggest() : _Actions.list.concat(sidebarItems)
-      .map(a => ({ a, s: _score(q, a.label) + _score(q, a.group) * 0.3 }))
-      .filter(x => x.s > 0)
-      .sort((x, y) => y.s - x.s)
-      .slice(0, 24)
-      .map(x => x.a);
+    const card = list.closest('.modal'), h0 = card && _shown() ? card.getBoundingClientRect().height : 0;
+    const sections = [];
+    if (!q) {
+      const sug = _suggest(), recent = _recentIds().map(id => _Actions.list.find(a => a.id === id)).filter(Boolean);
+      if (recent.length) sections.push(['Recent', recent]);
+      sections.push(['Suggestions', sug.filter(a => !recent.includes(a))]);
+    } else {
+      const ans = _answer(q);
+      if (ans) sections.push(['Answer', [ans]]);
+      const cmds = _Actions.list.concat(sidebarItems)
+        .map(a => ({ a, s: _score(q, a.label) + _score(q, a.group) * 0.3 }))
+        .filter(x => x.s > 0)
+        .sort((x, y) => y.s - x.s)
+        .slice(0, 14)
+        .map(x => x.a);
+      if (cmds.length) sections.push(['Commands', cmds]);
+      const parts = _findParts(q); if (parts.length) sections.push(['Parts', parts]);
+      const lib = _findLibrary(q); if (lib.length) sections.push(['Library', lib]);
+    }
+    const items = sections.flatMap(sec => sec[1]);
     visibleItems = items;
     if (activeIdx >= items.length) activeIdx = 0;
-    list.innerHTML = `<div class="cmdk-section">${!q ? 'Suggestions' : items.length ? 'Results' : ''}</div>` + (items.length === 0
-      ? `<div class="cmdk-empty">Nothing found for “${escapeHtml(q)}”</div>`
-      : items.map((a, i) => `
-        <div class="cmdk-item${i === activeIdx ? ' active' : ''}" data-idx="${i}">
-          <i class="cmdk-item-icon" data-lucide="${ICON[a.id] || GROUP_ICON[a.group] || 'panel-right'}"></i>
-          <span class="cmdk-item-label">${a.label}</span>
+    let i = 0;
+    const row = (a) => { const idx = i++; return `
+        <div class="cmdk-item${idx === activeIdx ? ' active' : ''}" data-idx="${idx}">
+          <i class="cmdk-item-icon" data-lucide="${a.icon || ICON[a.id] || GROUP_ICON[a.group] || 'panel-right'}"></i>
+          <span class="cmdk-item-label">${a.icon ? escapeHtml(a.label) : a.label}</span>
           <span class="cmdk-item-group">${q ? a.group : ''}</span>
           ${a.kbd ? `<span class="cmdk-keys">${a.kbd.split('+').map(k => `<kbd class="kbd-chip">${k}</kbd>`).join('<span class="sc-plus">+</span>')}</span>` : ''}
-        </div>
-      `).join(''));
+        </div>`; };
+    list.innerHTML = items.length === 0
+      ? `<div class="cmdk-empty">Nothing found for “${escapeHtml(q)}”</div>`
+      : sections.filter(sec => sec[1].length).map(([title, its]) => `<div class="cmdk-section">${title}</div>` + its.map(row).join('')).join('');
     try { _lucide(); } catch (_) {}
     const act = list.querySelector('.cmdk-item.active'); if (act && act.scrollIntoView) { try { act.scrollIntoView({ block: 'nearest' }); } catch (_) {} }
+    if (activeIdx === 0) list.scrollTop = 0;                     // keep the first heading in view
+    _easeHeight(card, h0);
     list.querySelectorAll('.cmdk-item').forEach(el => {
       el.addEventListener('mousemove', () => {
         const idx = parseInt(el.dataset.idx, 10) || 0;
         if (idx === activeIdx) return;
         activeIdx = idx;
-        list.querySelectorAll('.cmdk-item').forEach((e, i) => e.classList.toggle('active', i === activeIdx));
+        list.querySelectorAll('.cmdk-item').forEach((e) => e.classList.toggle('active', (parseInt(e.dataset.idx, 10) || 0) === activeIdx));
       });
-      el.addEventListener('click', () => {
-        const idx = parseInt(el.dataset.idx, 10);
-        const it = visibleItems[idx];
-        if (it) { hide(); try { it.run(); } catch (e) { console.warn('[cmdk] run failed:', e); } }
-      });
+      el.addEventListener('click', () => _go(visibleItems[parseInt(el.dataset.idx, 10)]));
     });
   }
-  // The search opens as a popup standing on its button in the bottom toolbar
-  // (centred on the screen if the toolbar is not there).
+  // The search opens like Spotlight: centred across the viewport, a fifth of
+  // the way down it, and growing downwards as results come. Its top edge stays
+  // put while the list changes length, and it never grows past 440 px.
   function _place() {
-    const card = document.querySelector('#cmdk-modal .modal'), btn = document.getElementById('vp-cmdk');
+    const card = document.querySelector('#cmdk-modal .modal'), vp = document.getElementById('viewport');
     if (!card) return;
-    const r = btn && btn.offsetParent ? btn.getBoundingClientRect() : null;
-    if (!r) { card.style.cssText += ';position:relative;left:auto;bottom:auto'; return; }
-    const w = Math.min(440, window.innerWidth - 24);
+    const r = vp && vp.offsetParent ? vp.getBoundingClientRect() : null;
+    const v = r && r.width > 200 ? r : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight, bottom: window.innerHeight };
+    const w = Math.min(560, v.width - 24), top = v.top + Math.max(24, Math.round(v.height * 0.2));
     card.style.position = 'fixed';
     card.style.width = w + 'px';
-    card.style.left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left - 8)) + 'px';
-    card.style.bottom = Math.max(12, window.innerHeight - r.top + 10) + 'px';
-    card.style.maxHeight = Math.max(200, r.top - 34) + 'px';
+    card.style.left = Math.round(v.left + (v.width - w) / 2) + 'px';
+    card.style.top = top + 'px';
+    card.style.bottom = 'auto';
+    card.style.maxHeight = Math.max(200, Math.min(440, v.bottom - top - 24)) + 'px';      // results scroll inside it
   }
   function _wire() {
     if (inited) return;
@@ -3340,8 +3494,7 @@ const _CmdK = (() => {
       else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(0, activeIdx - 1); _render(input.value); }
       else if (e.key === 'Enter') {
         e.preventDefault();
-        const it = visibleItems[activeIdx];
-        if (it) { hide(); try { it.run(); } catch (err) { console.warn('[cmdk] run failed:', err); } }
+        _go(visibleItems[activeIdx]);
       }
       else if (e.key === 'Escape') { e.preventDefault(); hide(); }
     });
@@ -3695,7 +3848,7 @@ const _RendererOwner = (() => {
     }
   }
   // Apply the standard config (pixel ratio, size, color space, tone mapping,
-  // dithering, local clipping). Hoisted so any future rebuild path can call
+  // dithering). Hoisted so any future rebuild path can call
   // it on the new instance to get identical state.
   function applyConfig(r, { canvas }) {
     r.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -3708,9 +3861,6 @@ const _RendererOwner = (() => {
     }
     // Dithering breaks up 8-bit quantization banding in the background gradient.
     try { if ('dithering' in r) r.dithering = true; } catch (_) {}
-    // Enable local clipping (per-material Plane lists). Required for the
-    // Section/Clip panel; harmless when no planes are set.
-    try { if ('localClippingEnabled' in r) r.localClippingEnabled = true; } catch (_) {}
   }
   // Attach a WebGPU device-lost handler. Fires exactly once when the GPU
   // device dies (driver hiccup, OS-level GPU reset, laptop hybrid switch,
@@ -3905,6 +4055,69 @@ function initScene() {
       window.addEventListener('pointercancel', onUp);
     }, true /* capture */);
   })();
+  // ── Wheel zoom measured against what is under the pointer ────────────────
+  // The orbit controls zoom by a share of the distance to their target, and
+  // the target is wherever the last Fit, Frame or zoom left it — not the
+  // thing being looked at. Zooming toward a small part with the target far
+  // behind it overshot; with the target close in front of the camera (after
+  // zooming in on empty space, say) each notch moved almost nothing and it
+  // took dozens to get anywhere.
+  // Here one notch covers a fixed share of the distance to the SURFACE under
+  // the pointer (or to the selection, or the target, when the pointer is over
+  // nothing). Zooming in closes on it at the same pace from any distance and
+  // can never pass through it. The orbit target is left at that same depth
+  // straight ahead, so the picture does not shift and the next orbit turns
+  // about what was zoomed to. Orthographic views keep the controls' own zoom.
+  (function _wireWheelZoom() {
+    const cv = $('canvas');
+    const rc = new THREE.Raycaster(), ndc = new THREE.Vector2(), dir = new THREE.Vector3(), fwd = new THREE.Vector3(), P = new THREE.Vector3();
+    const memo = { at: 0, x: 0, y: 0, d: 0 };
+    const STEP = 0.82;                       // one notch leaves this share of the distance
+    function reach(e) {
+      const r = cv.getBoundingClientRect();
+      ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      rc.setFromCamera(ndc, camera);
+      const now = performance.now();
+      // the ray is cast again when the pointer has moved or a moment has passed;
+      // in between, the distance is the one worked out last, less what was covered
+      if (now - memo.at < 160 && Math.abs(e.clientX - memo.x) < 4 && Math.abs(e.clientY - memo.y) < 4 && memo.d > 0) return memo.d;
+      let d = 0;
+      try {
+        // selected parts hang off the gizmo's pivot, outside partsRoot
+        const roots = [state.partsRoot, state.pivot].filter(Boolean);
+        const hit = rc.intersectObjects(roots, true).find(h => h.object.isMesh && h.object.visible !== false);
+        if (hit) d = hit.distance;
+      } catch (_) {}
+      if (!(d > 0)) d = _selectionCentre(P) ? camera.position.distanceTo(P) : camera.position.distanceTo(controls.target);
+      memo.at = now; memo.x = e.clientX; memo.y = e.clientY; memo.d = d;
+      return d;
+    }
+    cv.addEventListener('wheel', (e) => {
+      if (!controls || !controls.enabled || controls.enableZoom === false || !camera || camera._isOrtho) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const d = reach(e);
+      if (!(d > 0)) return;
+      // a mouse wheel notch is about 100; trackpads and smooth wheels send many small steps
+      const raw = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+      const notches = Math.max(-4, Math.min(4, raw / 100));
+      if (!notches) return;
+      const left = d * Math.pow(STEP, -notches);          // distance to the surface afterwards
+      const floor = Math.max(state.modelDiag || 1, 1) * 1e-6;
+      if (notches < 0 && d <= floor) return;              // as close as it gets
+      const move = d - Math.max(left, floor);             // > 0: toward it
+      camera.getWorldDirection(fwd);
+      if (controls.zoomToCursor) dir.copy(rc.ray.direction); else dir.copy(fwd);
+      camera.position.addScaledVector(dir, move);
+      memo.d = Math.max(d - move, floor);
+      // the orbit target: straight ahead, at the depth of what was zoomed to
+      const depth = Math.max(memo.d * Math.max(0.05, dir.dot(fwd)), floor);
+      controls.target.copy(camera.position).addScaledVector(fwd, depth);
+      camera.updateMatrixWorld();
+      controls.update();
+      requestRender();
+    }, { capture: true, passive: false });
+  })();
   // Orbit-pivot mode: rebind controls.target on LEFT-button pointerdown so the
   // rotate gesture pivots around the selection / point under cursor instead of
   // a static target. Capture phase fires before OrbitControls reads target.
@@ -3923,16 +4136,66 @@ function initScene() {
   controls.addEventListener('start', () => requestRender());
   controls.addEventListener('change', () => requestRender());
   controls.addEventListener('end', () => requestRender());
+  // ── Orbit around the selection (Settings → Orbit around) ─────────────────
+  // The orbit controls turn the camera about their target, which is wherever
+  // the last Fit or Frame left it. With a part selected, the view should turn
+  // about that part instead, without the picture jumping when the drag starts
+  // (moving the target onto the part would re-aim the camera at it: that jump
+  // is why earlier attempts were taken out).
+  // So nothing is re-aimed. The controls turn the camera about their own
+  // target as always; after each step, that same turn is applied about the
+  // selection's centre instead, to the camera and to the target alike. The
+  // direction of view is exactly what the controls produced, the selection
+  // stays where it is on screen, and when the drag ends the controls carry on
+  // from where they are as if nothing had happened.
+  {
+    const P = new THREE.Vector3(), c0 = new THREE.Vector3(), t0 = new THREE.Vector3();
+    const q0 = new THREE.Quaternion(), turn = new THREE.Quaternion(), v = new THREE.Vector3();
+    const ROTATING = (st) => st === 0 || st === 3;          // OrbitControls: ROTATE, TOUCH_ROTATE
+    let about = false;
+    controls.addEventListener('start', () => {
+      about = false;
+      // (anything but 'scene' means the selection: saved settings may still hold 'cursor', an option that never did anything)
+      if (_Prefs.get('orbitPivot') === 'scene' || !ROTATING(controls.state)) return;
+      if (!_selectionCentre(P)) return;                       // nothing selected: about the target, as before
+      c0.copy(camera.position); t0.copy(controls.target); q0.copy(camera.quaternion);
+      about = true;
+    });
+    controls.addEventListener('change', () => {
+      if (!about) return;
+      if (!ROTATING(controls.state)) { about = false; return; }
+      turn.copy(q0).invert().premultiply(camera.quaternion);  // how the view turned in this step
+      camera.position.copy(v.copy(c0).sub(P).applyQuaternion(turn).add(P));
+      controls.target.copy(v.copy(t0).sub(P).applyQuaternion(turn).add(P));
+      camera.updateMatrixWorld();
+      c0.copy(camera.position); t0.copy(controls.target); q0.copy(camera.quaternion);
+    });
+    controls.addEventListener('end', () => { about = false; });
+  }
   // ── Lights ────────────────────────────────────────────────────────────
   // Final (target) intensities. Captured here so the boot fade-in below can
   // ramp from 0 to these values for a "lights turning on" reveal on first
   // load. The same target values are used for any subsequent re-init (model
   // reload, renderer swap), where the ramp is short enough to feel instant.
-  const _hemiTarget = 0.55, _dirTarget = 1.2, _fillTarget = 0.4;
+  // (The sky light was 0.55 before the plain backgrounds got studio
+  // reflections, which add fill of their own: see _ensureStudioReflections.)
+  const _hemiTarget = 0.4, _dirTarget = 1.05, _fillTarget = 0.4, _headTarget = 0.45;
   const hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0); scene.add(hemi);
   const dir  = new THREE.DirectionalLight(0xffffff, 0); dir.position.set(80, 60, 100); scene.add(dir);
   const fill = new THREE.DirectionalLight(0xb0c4ff, 0); fill.position.set(-80, -40, 60); scene.add(fill);
-  state._lights = { hemi, dir, fill, hemiTarget: _hemiTarget, dirTarget: _dirTarget, fillTarget: _fillTarget };
+  // The headlight: a soft light that travels with the camera, from just above
+  // and beside the eye. The three lights above are fixed in the scene, so a
+  // face turned away from all of them is flat however you orbit; this one
+  // always falls on what you are looking at, and its highlight slides across
+  // the surfaces as the view turns, which is what makes their shape readable
+  // (most of all on dark parts). It rides on the camera, so nothing has to
+  // move it. The key light is a little lower than it was to make room.
+  const head = new THREE.DirectionalLight(0xffffff, 0);
+  head.position.set(-0.35, 0.5, 0);
+  head.target.position.set(0, 0, -1);
+  camera.add(head); camera.add(head.target);
+  if (!camera.parent) scene.add(camera);          // a light is only found if it is in the scene
+  state._lights = { hemi, dir, fill, head, hemiTarget: _hemiTarget, dirTarget: _dirTarget, fillTarget: _fillTarget, headTarget: _headTarget };
   // Boot ramp: smoothstep over ~900ms from 0 to target. Re-renders on each
   // tick because the scene is render-on-demand; without requestRender the
   // intermediate frames wouldn't paint and the user would just see a hard
@@ -3947,6 +4210,7 @@ function initScene() {
       hemi.intensity = _hemiTarget * k;
       dir.intensity  = _dirTarget  * k;
       fill.intensity = _fillTarget * k;
+      head.intensity = _headTarget * k;
       requestRender?.();
       if (t < 1) requestAnimationFrame(tick);
     }
@@ -4672,10 +4936,26 @@ function setGizmoMode(mode) {
 // document-level Shift keydown/keyup listeners — the user holds Shift to
 // snap, releases to free-drag. Three's TransformControls reads these every
 // frame, so toggling mid-drag works without restarting the drag.
+// The step a move snaps to. A fixed 10 units cannot be seen on a model
+// metres across and is a jump larger than a model of a few millimetres, so
+// the step is a round number (1, 2 or 5 times a power of ten) near a
+// twentieth of the scene's size: always a visible notch, and always a
+// multiple of the floor grid's lines. A grid cell chosen by hand is used as is.
+function _gizmoMoveStep() {
+  if (state.gridCellMode !== 'auto') { const c = parseFloat(state.gridCellMode); if (isFinite(c) && c > 0) return c; }
+  const box = new THREE.Box3();
+  for (const root of [state.partsRoot, state.pivot]) if (root) box.expandByObject(root);
+  if (box.isEmpty()) return state.gizmoSnap.translate;
+  const sz = box.getSize(new THREE.Vector3()), target = Math.max(sz.x, sz.y, sz.z) * 0.05;
+  if (!(target > 0) || !isFinite(target)) return state.gizmoSnap.translate;
+  const mag = Math.pow(10, Math.floor(Math.log10(target))), m = target / mag;
+  return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * mag;
+}
 function _setGizmoSnap(on) {
   if (!state.gizmo) return;
   const s = state.gizmoSnap;
-  state.gizmo.setTranslationSnap(on ? s.translate : null);
+  state._gizmoSnapStep = on ? _gizmoMoveStep() : null;
+  state.gizmo.setTranslationSnap(on ? state._gizmoSnapStep : null);
   state.gizmo.setRotationSnap(on ? s.rotate : null);
   state.gizmo.setScaleSnap(on ? s.scale : null);
   state._gizmoSnapOn = !!on;
@@ -4751,7 +5031,8 @@ const _gizmoHud = (() => {
   function update() {
     if (!before || !el || !state.pivot) return;
     const mode = state.gizmoMode;
-    const snap = state._gizmoSnapOn ? '<span class="ghud-snap">SNAP</span>' : '';
+    const snapBy = state.gizmoMode === 'translate' && state._gizmoSnapStep ? ' ' + parseFloat(state._gizmoSnapStep.toPrecision(3)) : state.gizmoMode === 'rotate' ? ' 15°' : state.gizmoMode === 'scale' ? ' 0.1' : '';
+    const snap = state._gizmoSnapOn ? `<span class="ghud-snap">SNAP${snapBy}</span>` : '';
     // TransformControls.axis is set on grab and cleared on release. Possible
     // values: 'X' | 'Y' | 'Z' (single-axis arrow / ring), 'XY' | 'XZ' | 'YZ'
     // (planar handles), 'XYZ' / 'XYZE' (centre handle = uniform / free).
@@ -4884,6 +5165,8 @@ function setBackground(mode) {
     _ensureHdriEnvironment();
     renderer.setClearColor(0x0a0d12, 1);
   }
+  // Every other background still gets something to reflect (see below).
+  if (mode !== 'hdri') _ensureStudioReflections();
   // Sun gizmo + HDRI controls only appear in 'hdri' mode.
   _toggleHdriUI(mode === 'hdri');
   // Re-apply fog so its colour tracks the new background — without this
@@ -4898,6 +5181,64 @@ function setBackground(mode) {
 // re-pay the cost.
 let _defaultEnvTex = null;
 let _hdriPmrem = null;
+
+// ── Something to reflect, on the plain backgrounds ─────────────────────────
+// With a plain background the scene used to be lit by three lights and
+// nothing else. That is enough for a light or coloured part, whose shape
+// shows in how the light falls across it. A dark part gives almost none of
+// that light back: it came out as a flat near-black shape, and dark parts in
+// front of dark parts could not be told apart at all. What shows the form of
+// a dark object is what it REFLECTS, and there was nothing to reflect.
+//
+// So the plain backgrounds get a soft studio as their surroundings too: not
+// shown, only reflected and used as gentle fill. It is kept weak
+// (_STUDIO_REFL), and the sky light is lower than it used to be to make room
+// for it (_hemiTarget in initRenderer), so colours stay what they were while
+// dark parts get an edge, a sheen and a visible top and side.
+// HDRI mode replaces it with the chosen environment and puts it back on exit.
+const _STUDIO_REFL = 0.35;
+let _studioRefl = null;            // { renderer, tex }: built once per renderer
+let _studioReflTries = 0;
+let _studioReflTimer = 0;
+async function _ensureStudioReflections() {
+  if (!scene || !renderer || state.bgMode === 'hdri') return;
+  // Building the studio takes a moment of GPU work. The first time, it waits
+  // until the app has started and drawn (a scene tab starting up in the
+  // background must not be held up by it); after that it is there at once.
+  if ((!_studioRefl || _studioRefl.renderer !== renderer) && !_studioReflTimer) {
+    _studioReflTimer = setTimeout(() => { _studioReflTimer = -1; _ensureStudioReflections(); }, 900);
+    return;
+  }
+  if (_studioReflTimer > 0) return;               // already waiting
+  _studioReflTimer = 0;
+  try {
+    if (!_studioRefl || _studioRefl.renderer !== renderer) {
+      const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const room = new RoomEnvironment();
+      const tex = pmrem.fromScene(room, 0.04).texture;
+      room.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
+      _studioRefl = { renderer, tex };
+    }
+  } catch (e) {
+    // the renderer may not be ready this early: try again shortly, a few times
+    if (_studioReflTries++ < 5) setTimeout(_ensureStudioReflections, 1200);
+    else console.warn('[lighting] studio reflections unavailable:', e);
+    return;
+  }
+  if (state.bgMode === 'hdri') return;          // the mode changed while this was being built
+  scene.environment = _studioRefl.tex;
+  if (scene.environmentRotation) scene.environmentRotation.set(0, 0, 0);
+  if ('environmentIntensity' in scene) scene.environmentIntensity = _STUDIO_REFL;
+  // HDRI mode scales each material as well as the scene: undo that
+  if (state.partsRoot) {
+    state.partsRoot.traverse(o => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : null;
+      if (mats) for (const m of mats) if (typeof m.envMapIntensity === 'number' && m.envMapIntensity !== 1) m.envMapIntensity = 1;
+    });
+  }
+  requestRender();
+}
 
 // Procedural HDRI presets — each preset paints a 1024×512 equirect canvas
 // with a directional sky gradient + sun spot, then runs it through PMREM
@@ -5117,6 +5458,9 @@ function _applyHdriRotation() {
 // model uses MeshStandardMaterial or NodeMaterial.
 function _applyHdriIntensity() {
   if (!scene) return;
+  // The slider belongs to HDRI mode. On a plain background the surroundings
+  // are the soft studio at its own fixed strength.
+  if (state.bgMode !== 'hdri') { _ensureStudioReflections(); return; }
   const k = Math.max(0, state.hdriIntensity ?? 1);
   if ('environmentIntensity' in scene) scene.environmentIntensity = k;
   if ('backgroundIntensity'  in scene) scene.backgroundIntensity  = k;
@@ -5169,12 +5513,14 @@ function _applyHdriLightStash(on) {
     L._stashedForHdri = true;
     L.hemi.intensity = 0;
     L.fill.intensity = 0;
+    if (L.head) L.head.intensity = 0;             // the environment does the lighting there
     L.dir.intensity  = (L.dirTarget * 0.6) * (state.hdriIntensity ?? 1);
     _applyHdriSunPosition();
   } else {
     L.hemi.intensity = L.hemiTarget;
     L.dir.intensity  = L.dirTarget;
     L.fill.intensity = L.fillTarget;
+    if (L.head) L.head.intensity = L.headTarget;
     L._stashedForHdri = false;
   }
 }
@@ -5310,6 +5656,7 @@ function tick() {
           u.uAngleFade.value = t * t * (3 - 2 * t);
         }
       }
+      try { _fitNearToView(); } catch (_) {}
       let renderErr = null;
       try { renderer.render(scene, camera); }
       catch (e) { renderErr = e; }
@@ -6273,6 +6620,7 @@ async function _drainDisposeQueue() {
 // model loads. Don't redefine clearModel without preserving the chain.
 function clearModel() {
   _detachGizmo();
+  try { _alignForget(); } catch (_) {}         // (the turn "Align to floor" gave the last model)
   setTimeout(() => _Dirty.mark(), 0);          // a new or freshly opened scene has nothing unsaved
   // "Recenter on origin" moves partsRoot. A new model must start from zero
   // or it would load (and export) offset by the previous model's centre.
@@ -6466,7 +6814,10 @@ function onModelLoaded(filename) {
   // One way of counting for every read-out: the loaders add up memory per
   // part, the rest of the app per distinct mesh (shared geometry once), and
   // the two showed different sizes side by side until the first edit.
-  setTimeout(() => { try { recomputeStats(); } catch (_) {} try { _Dirty.mark(); } catch (_) {} try { window._MOpt?.captureBaseline(); } catch (_) {} }, 0);
+  setTimeout(() => {
+    // "Place every file I open": the move is part of opening, not an edit.
+    try { if (_alignPrefs().onOpen && alignModelToFloor({ quiet: true })) { if (_Prefs.get('autoFitOnLoad') !== false) fitToView(); toast('Aligned to the floor', 'Turn this off under Align to floor', 'info', 3500); } } catch (e) { console.warn('[align] on open failed:', e); }
+    try { recomputeStats(); } catch (_) {} try { _Dirty.mark(); } catch (_) {} try { window._MOpt?.captureBaseline(); } catch (_) {} }, 0);
   // C4D-style snapshot for the recent-files panel. Defer until the lights
   // ramp has finished and the renderer has had a chance to draw at least one
   // full-quality frame; otherwise we'd snapshot a half-lit / partially-loaded
@@ -7306,10 +7657,6 @@ function fitToView() {
   // Resize the floor grid to fit the model — a fixed 200-unit grid was getting
   // swallowed by typical mm-scale CAD assemblies (1000+ units across).
   _fitGridToModel(box);
-  if (state.clip && state.clip.enabled) {
-    _applyClipToAllMaterials();
-    updateClipPlane();
-  }
   requestRender();
 }
 
@@ -7862,7 +8209,9 @@ function _fmtVol(mm3, decimals = 2) {
 
 function _applySceneUpAxis() {
   if (!state.partsRoot) return;
-  state.partsRoot.rotation.x = (state.sceneUpAxis === 'y') ? -Math.PI / 2 : 0;
+  // (the up axis, then on top of it the turn "Align to floor" has applied)
+  state.partsRoot.rotation.set((state.sceneUpAxis === 'y') ? -Math.PI / 2 : 0, 0, 0);
+  try { state.partsRoot.quaternion.premultiply(_align.Q); } catch (_) {}
   state.partsRoot.updateMatrix();
   state.partsRoot.updateMatrixWorld(true);
   if (camera) camera.up.set(0, state.sceneUpAxis === 'y' ? 1 : 0, state.sceneUpAxis === 'z' ? 1 : 0);
@@ -7906,6 +8255,16 @@ function _applyCameraProjection() {
   if (state.gizmo) state.gizmo.camera = camera;
 }
 
+// The middle of what is selected, in world space (false if nothing is).
+function _selectionCentre(out) {
+  if (!state.selected || !state.selected.size) return false;
+  const box = new THREE.Box3();
+  for (const id of state.selected) { const p = getPart(id); if (p && !p.deleted && p.bbox && !p.bbox.isEmpty()) box.union(p.bbox); }
+  if (box.isEmpty()) return false;
+  box.getCenter(out);
+  return true;
+}
+
 function _applyCameraClip() {
   if (!camera) return;
   const diag = Math.max(state.modelDiag, 1);
@@ -7946,6 +8305,48 @@ function _applyCameraClip() {
     camera.far  = Math.max(diag * 1000,  50_000);
   }
   if (camera.updateProjectionMatrix) camera.updateProjectionMatrix();
+}
+
+// The near plane follows the camera, out and in. Depth precision at a distance z is
+// about z² / (near × 2²⁴), so with a near plane that stays put a thin cover
+// and the parts just under it get the same depth once the camera is far
+// enough away, and the parts show through. While the camera is outside the
+// model, everything nearer than the model is empty space: the near plane
+// moves out to half that gap (never closer than the clip preset's own near),
+// which keeps the precision roughly constant however far out the view is.
+const _nearFit = { box: new THREE.Box3(), sphere: new THREE.Sphere(), at: 0, base: 0, set: -1 };
+function _fitNearToView() {
+  if (!camera || camera._isOrtho || !state.partsRoot) return;
+  const now = performance.now();
+  if (now - _nearFit.at > 400) {              // the model's bounds, looked up a few times a second at most
+    _nearFit.at = now;
+    _nearFit.box.setFromObject(state.partsRoot);
+    if (!_nearFit.box.isEmpty()) _nearFit.box.getBoundingSphere(_nearFit.sphere);
+  }
+  if (camera.near !== _nearFit.set) _nearFit.base = camera.near;   // someone else set it (clip preset, fit, a loaded scene)
+  camera._baseNear = _nearFit.base;
+  // Up close, the near plane has to come in as well, or a small part is cut
+  // open before it fills the view: it stays within a fiftieth of the distance
+  // to what the view is centred on (the wheel zoom keeps the orbit target at
+  // the depth of what was zoomed to).
+  let want = _nearFit.base;
+  if (controls) want = Math.min(want, Math.max(camera.position.distanceTo(controls.target) * 0.02, _nearFit.base * 1e-4));
+  if (!_nearFit.box.isEmpty()) want = Math.max(want, (camera.position.distanceTo(_nearFit.sphere.center) - _nearFit.sphere.radius) * 0.5);
+  // ... and follows it in. The preset's near plane is sized for the whole
+  // model (a few centimetres on a machine a few metres across), so a nut
+  // looked at from a centimetre away was cut open by it, and the grid with
+  // it. Whatever the camera orbits is what is being looked at: the near plane
+  // is never further than a twentieth of the way to it. (Far away that is
+  // still far more precision than the screen can show; close up it is what
+  // lets the view go right up to a small part.)
+  if (controls && controls.target) {
+    const d = camera.position.distanceTo(controls.target);
+    if (d > 0) want = Math.min(want, Math.max(d * 0.05, _nearFit.base * 1e-4, 1e-4));
+  }
+  if (Math.abs(want - camera.near) > camera.near * 0.02) {
+    camera.near = _nearFit.set = want;
+    camera.updateProjectionMatrix();
+  }
 }
 
 function _applySunDirection() {
@@ -9944,6 +10345,33 @@ function _treeXWire() {
     const d = e.deltaX || (e.shiftKey ? e.deltaY : 0);
     if (d && bar.scrollWidth > bar.clientWidth) bar.scrollLeft += d;
   }, { passive: true });
+  // Press the wheel and drag: the tree follows the pointer, sideways and up
+  // and down, the way a canvas pans. (Sideways is otherwise only the thin bar
+  // under the tree or Shift + wheel.)
+  el.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });   // not the browser's own auto-scroll
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    let x = e.clientX, y = e.clientY;
+    try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    el.classList.add('is-panning');
+    const move = (ev) => {
+      if (bar.scrollWidth > bar.clientWidth) bar.scrollLeft -= ev.clientX - x;
+      el.scrollTop -= ev.clientY - y;
+      x = ev.clientX; y = ev.clientY;
+    };
+    const stop = () => {
+      el.classList.remove('is-panning');
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', stop);
+      el.removeEventListener('pointercancel', stop);
+      el.removeEventListener('lostpointercapture', stop);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', stop);
+    el.addEventListener('pointercancel', stop);
+    el.addEventListener('lostpointercapture', stop);
+  });
 }
 function _treeXSet(x) {
   x = Math.max(0, Math.round(x));
@@ -10049,8 +10477,9 @@ if (typeof ResizeObserver !== 'undefined' && typeof document !== 'undefined') {
 // ── Fast collapse/expand toggle ──────────────────────────────────────────
 // Only the rows under the toggled group are looked at (_treeSyncCollapsed),
 // and only their hidden mark changes: no rebuild.
+let _treeToggleSays = null;        // brings the Expand / Collapse button up to date (set where the button is wired)
 function _toggleGroupCollapseFast(gid) {
-  setTimeout(() => { try { _treeXMeasure(); } catch (_) {} }, 0);
+  setTimeout(() => { try { _treeXMeasure(); } catch (_) {} try { _treeToggleSays && _treeToggleSays(); } catch (_) {} }, 0);
   const wasCollapsed = state.treeCollapsed.has(gid);
   if (wasCollapsed) state.treeCollapsed.delete(gid);
   else state.treeCollapsed.add(gid);
@@ -11622,7 +12051,7 @@ function refreshPropertiesPanel() {
                `<span class="prop-name"${has ? '' : ' style="color:var(--tx3)"'} title="${escapeHtml(nm)}">${escapeHtml(nm)}</span>`;
     const tags = [];
     if (t.hidden)  tags.push(`<span class="tree-badge muted">${fmtNum(t.hidden)} hidden</span>`);
-    if (t.flagged) tags.push(`<span class="tree-badge warn">${fmtNum(t.flagged)} flagged</span>`);
+    // (no "N flagged" tag on the scene: the status bar already counts the flagged parts)
     tagsHtml = tags.join('');
     const start = Math.max(state._initialTris || 0, t.tris);
     triShare = has && start > 0 ? t.tris / start : 0;
@@ -11682,11 +12111,11 @@ function refreshPropertiesPanel() {
   // green badge, and the old count struck through.
   const saved = heroTris != null && heroWas > heroTris ? (heroWas - heroTris) / heroWas : 0;
   const heroHtml = heroTris == null
-    ? `<div class="prop-hero is-empty"><div class="prop-hero-top"><span class="prop-hero-num">—</span><span class="prop-hero-unit">triangles</span></div>
+    ? `<div class="prop-hero is-empty"><div class="prop-hero-top"><span class="prop-hero-num">—</span><span class="prop-hero-unit">tris</span></div>
          <div class="prop-bar" title="${barTitle}"><div class="prop-bar-fill" style="width:0%"></div></div></div>`
     : `<div class="prop-hero${saved ? ' is-reduced' : ''}">
          <div class="prop-hero-top">
-           <span class="prop-hero-num">${fmtNum(heroTris)}</span><span class="prop-hero-unit">triangle${heroTris === 1 ? '' : 's'}</span>
+           <span class="prop-hero-num">${fmtNum(heroTris)}</span><span class="prop-hero-unit">tris</span>
            ${saved ? `<span class="prop-hero-badge" title="${fmtNum(heroWas - heroTris)} fewer triangles than it arrived with">\u2212${saved * 100 < 10 ? (saved * 100).toFixed(1) : Math.round(saved * 100)}%</span>` : ''}
          </div>
          ${saved ? `<div class="prop-hero-sub"><span>was <s>${fmtNum(heroWas)}</s></span><span class="prop-hero-dot">·</span><span class="prop-hero-saved">saved ${fmtNum(heroWas - heroTris)}</span></div>` : ''}
@@ -11711,6 +12140,7 @@ function refreshPropertiesPanel() {
       if (html) {
         el.insertAdjacentHTML('beforeend', html);
         _wirePrimitiveSliders(el, _selPart);
+        try { _initCustomSelects(); } catch (_) {}      // its dropdowns, now rather than a frame later
       }
     }
   }
@@ -11863,7 +12293,12 @@ function _updateSelectedChip() {
   el.classList.toggle('active', n > 0);
 }
 
-function refreshFlagged() {
+// Which parts are under the size threshold. `live` is for the slider while it
+// is being dragged: the count, the sentence and (if the small parts are
+// isolated) what is on screen follow at once; the costlier work, the
+// highlight in the viewport and the marks in the tree, is left for the call
+// without `live` that comes when the slider stops.
+function refreshFlagged(live = false) {
   state.pendingFlagged.clear();
   const thr = state.threshold / 100;
   const metric = state.sizeMetricMode;
@@ -11876,13 +12311,42 @@ function refreshFlagged() {
     p.flagged = (v < cutoff);
     if (p.flagged) { count++; state.pendingFlagged.add(p.partId); }
   }
-  $('btn-delete-small-count').textContent = count;
-  const thrFmt = state.threshold < 1 ? state.threshold.toFixed(2) : state.threshold.toFixed(1);
-  $('thr-info').textContent = count > 0 ? `${count} part${count === 1 ? '' : 's'} below ${thrFmt}% (cutoff ${cutoff.toFixed(3)} ${metric}).` : `No parts below threshold.`;
+  $('btn-delete-small-count').textContent = fmtNum(count);
+  // In words, with the size the percentage comes to: "710 parts under 70.5 mm corner to corner".
+  {
+    const side = thr * state.modelDiag;                       // the length the threshold stands for
+    const len = _fmtLen(side, side >= 100 ? 0 : side >= 10 ? 1 : 2);   // in the unit the scene is shown in
+    const what = metric === 'max' ? `with no side longer than ${len}` : metric === 'vol' ? `whose box is smaller than a ${len} cube` : `under ${len} corner to corner`;
+    $('thr-info').textContent = !state.parts.some(p => !p.deleted) ? 'Load a model to see what would go.'
+      : count > 0 ? `${fmtNum(count)} part${count === 1 ? '' : 's'} ${what}.` : `No parts ${what}.`;
+    $('thr-found')?.classList.toggle('has', count > 0);
+    for (const b of document.querySelectorAll('#thr-metric-seg button')) b.classList.toggle('active', b.dataset.metric === metric);
+    const sel = $('thr-metric'); if (sel && sel.value !== metric) sel.value = metric;
+  }
   _updateFlaggedChip();
-  applySelectionColors();
-  _treeSyncFlagged();              // was a full rebuildTree(): a third of a second per slider move on a large tree
+  _isolateFollowFlagged(live);
+  if (!live) {
+    applySelectionColors();
+    _treeSyncFlagged();            // was a full rebuildTree(): a third of a second per slider move on a large tree
+  }
   requestRender();
+}
+
+// With the small parts isolated (Isolate on the Delete small parts card),
+// what is shown follows the threshold: moving the slider or changing the
+// measure shows exactly the parts that would be deleted now. It is the same
+// isolation, adjusted, so it adds no undo step of its own; the tree's eyes
+// are brought up to date when the slider stops.
+function _isolateFollowFlagged(live) {
+  if (!state._isolated || state._isolatedBy !== 'flagged') return;
+  let changed = false;
+  for (const p of state.parts) {
+    if (p.deleted) continue;
+    const on = state.pendingFlagged.has(p.partId);
+    if (p.visible !== on) { _setPartVisible(p, on); changed = true; }
+  }
+  if (changed) { state._isolateStale = true; _syncIsolatePill(); }     // "Isolated · N of M parts" follows too
+  if (!live && state._isolateStale) { state._isolateStale = false; try { rebuildTree(); } catch (_) {} }
 }
 
 // Status-bar flagged chip. Driven from refreshFlagged + the manual
@@ -13034,6 +13498,7 @@ function selectSimilar() {
 }
 
 function _isolateSet(idSet, label='Isolated') {
+  state._isolatedBy = null;             // (isolateFlagged sets it again)
   const m4zero = new THREE.Matrix4().makeScale(0, 0, 0);
   const m4restore = new THREE.Matrix4();
   let shown = 0, hidden = 0;
@@ -13100,6 +13565,7 @@ function isolateFlagged() {
   if (state.pendingFlagged.size === 0) return toast('Nothing flagged', 'Set a size threshold first', 'warn');
   _isolateSet(state.pendingFlagged, 'Isolated flagged parts');
   state._isolated = true;
+  state._isolatedBy = 'flagged';        // so the view follows the threshold from here on (_isolateFollowFlagged)
 }
 function showAllParts() {
   const m4restore = new THREE.Matrix4();
@@ -13171,7 +13637,13 @@ function setViewMode(mode) {
       // picture for half the drawing.
       m.forceSinglePass = true;
     }
-    if (mode !== 'xray') m.forceSinglePass = false;
+    if (mode !== 'xray') {
+      m.forceSinglePass = false;
+      // X-ray adds each surface to the picture. That has to be switched back
+      // too: left on, a solid model is drawn washed-out and see-through on
+      // the renderers that honour it for opaque materials.
+      m.blending = THREE.NormalBlending;
+    }
     m.needsUpdate = true;
   };
   // Pool materials from THREE distinct sources so view-mode covers every
@@ -15773,7 +16245,7 @@ function _collectSceneState() {
     target: controls ? controls.target.toArray() : [0,0,0],
     up:     camera.up.toArray(),
     fov:    camera.fov,
-    near:   camera.near,
+    near:   camera._baseNear || camera.near,   // (not the near plane that follows the camera out)
     far:    camera.far,
   } : null;
   return {
@@ -16105,7 +16577,115 @@ function _applySceneState(s) {
   }
 }
 
-// Wireframe, X-ray and Heatmap work by changing the live materials. Export
+// ── Clay view: the whole model in one plain material ───────────────────────
+// A model's own colours say what the parts are; they do not help to read its
+// shape, and dark or busy colours hide it. In Clay every part is drawn in the
+// same plain material, so all that is left to see is form: edges, curvature,
+// what stands in front of what. (What Plasticity and most modelling tools do
+// with a matcap. Here it is an ordinary lit material, so the scene's lights,
+// the headlight and the studio reflections shape it like everything else.)
+//
+// It is a view mode like Wireframe or Heatmap: the parts' own materials are
+// set aside while it is on and put back the moment any other mode is chosen,
+// and Export and Save switch to Solid for the time they run (_withSolidView),
+// so nothing of it ever reaches a file.
+// The look is one of _CLAY_LOOKS (a right-click on the button chooses it).
+const _CLAY_LOOKS = {
+  clay:      { label: 'Clay',      icon: 'circle',        color: 0xb7b3ac, roughness: 0.82, metalness: 0 },
+  porcelain: { label: 'Porcelain', icon: 'circle-dot',    color: 0xf1efea, roughness: 0.2,  metalness: 0 },
+  steel:     { label: 'Steel',     icon: 'disc',          color: 0xc2c7cd, roughness: 0.3,  metalness: 1 },
+  wax:       { label: 'Red wax',   icon: 'droplet',       color: 0xb23a2c, roughness: 0.42, metalness: 0 },
+};
+let _clayMat = null;
+const _clayOwn = new WeakMap();       // mesh → the material it had
+const _clayInst = new WeakMap();      // instanced mesh → { mat, col }: its material and per-instance colours
+const _clayLook = () => { const k = _Prefs.get('clayLook'); return _CLAY_LOOKS[k] ? k : 'clay'; };
+function _clayMaterial() {
+  const look = _CLAY_LOOKS[_clayLook()];
+  if (!_clayMat) _clayMat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
+  _clayMat.color.setHex(look.color);
+  _clayMat.roughness = look.roughness;
+  _clayMat.metalness = look.metalness;
+  _clayMat.needsUpdate = true;
+  return _clayMat;
+}
+// Dress every part in it. Safe to call again: after parts were added or their
+// meshes replaced, only the new ones are touched.
+function _clayApply() {
+  const m = _clayMaterial();
+  for (const p of state.parts) {
+    if (!p || p.deleted || !p.mesh) continue;
+    p.mesh.traverse(o => {
+      if (!o.isMesh || o.material === m) return;
+      _clayOwn.set(o, o.material);
+      o.material = m;
+    });
+  }
+  for (const g of (state.instancedGroups || [])) {
+    const inst = g.instanced;
+    if (!inst || inst.material === m) continue;
+    _clayInst.set(inst, { mat: inst.material, col: inst.instanceColor || null });
+    inst.material = m;
+    inst.instanceColor = null;                    // the copies' own colours would tint it
+  }
+  requestRender();
+}
+function _clayExit() {
+  const m = _clayMat;
+  if (!m) return;
+  for (const p of state.parts) {
+    if (!p || !p.mesh) continue;
+    p.mesh.traverse(o => {
+      if (!o.isMesh || !_clayOwn.has(o)) return;
+      if (o.material === m) o.material = _clayOwn.get(o);    // (if something gave it a new material meanwhile, that one stays)
+      _clayOwn.delete(o);
+    });
+  }
+  for (const g of (state.instancedGroups || [])) {
+    const inst = g.instanced, own = inst && _clayInst.get(inst);
+    if (!own) continue;
+    if (inst.material === m) inst.material = own.mat;
+    if (!inst.instanceColor && own.col) { inst.instanceColor = own.col; inst.instanceColor.needsUpdate = true; }
+    _clayInst.delete(inst);
+  }
+  requestRender();
+}
+{
+  const _setViewModeBeforeClay = setViewMode;
+  setViewMode = function (mode) {
+    if (mode === 'clay') {
+      try { _setViewModeBeforeClay('solid'); } catch (_) {}      // out of wireframe / x-ray / heatmap first
+      state.viewMode = 'clay';
+      _clayApply();
+      $('vw-solid')?.classList.remove('active');
+      $('vw-clay')?.classList.add('active');
+      return;
+    }
+    _clayExit();
+    $('vw-clay')?.classList.remove('active');
+    return _setViewModeBeforeClay.apply(this, arguments);
+  };
+  // parts added, replaced or brought back while it is on are dressed too
+  window._appHooks?.treePostBuildHooks.push(() => { if (state.viewMode === 'clay') _clayApply(); });
+  const btn = document.getElementById('vw-clay');
+  btn?.addEventListener('click', () => setViewMode(state.viewMode === 'clay' ? 'solid' : 'clay'));
+  // a right-click chooses the look
+  btn?.addEventListener('contextmenu', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const cur = _clayLook();
+    _ctxBuild(Object.entries(_CLAY_LOOKS).map(([k, look]) => ({
+      icon: k === cur ? 'check' : look.icon, label: look.label,
+      fn: () => { _Prefs.set('clayLook', k); if (state.viewMode === 'clay') { _clayMaterial(); requestRender(); } else setViewMode('clay'); },
+    })), e.clientX, e.clientY);
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === '5') setViewMode(state.viewMode === 'clay' ? 'solid' : 'clay');
+  });
+}
+
+// Wireframe, X-ray, Heatmap and Clay work by changing the live materials. Export
 // and Save clone those materials, so run them in Solid and put the user's
 // view mode back afterwards — otherwise the file gets line primitives,
 // see-through surfaces or heat colours.
@@ -17098,32 +17678,32 @@ function wireUI() {
   // Size threshold scrubber — quadratic curve so the useful sub-1% range gets
   // most of the bar's horizontal travel.
   const refreshFlaggedRaf = rafCoalesce(refreshFlagged);
+  let _thrSettle = 0;
   const THR_MAX = 30;
   initScrubber({
     el: 'thr-scrub',
-    label: 'Threshold',
+    label: 'Smaller than',
     maxSteps: 1000,
     stepToVal: (s) => (s / 1000) ** 2 * THR_MAX,
     valToStep: (v) => Math.sqrt(Math.max(0, Math.min(THR_MAX, v)) / THR_MAX) * 1000,
-    format: (v) => ({ value: v < 1 ? v.toFixed(2) : v.toFixed(1), unit: '%' }),
+    format: (v) => ({ value: v < 1 ? v.toFixed(2) : v.toFixed(1), unit: '% of the model' }),
     initialValue: 2,
     promptTitle: 'Size threshold',
     promptUnit: '%',
-    // Re-counting 1,500+ parts on every pixel of the drag made the slider
-    // stutter and hard to land on a value: count once, on release.
-    commitOnRelease: true,
-    // While the slider is away from the last counted value, the Delete button
-    // would show a stale count: it says "Calculating…" and cannot be clicked
-    // until the new count is in.
-    onPending: () => _smallBusy(true),
+    // Live: the count, the sentence under the slider and, with the small
+    // parts isolated, the view itself follow the drag. Counting is cheap; what
+    // made the slider stutter was redoing the viewport highlight and the tree
+    // marks on every step, so those wait until the slider has been still for
+    // a moment.
     onChange: (v) => {
       state.threshold = v;
-      _smallBusy(true);
-      // let "Calculating…" paint before the count blocks the thread
-      setTimeout(() => { try { refreshFlagged(); } finally { _smallBusy(false); } }, 30);
+      refreshFlagged(true);
+      clearTimeout(_thrSettle);
+      _thrSettle = setTimeout(() => refreshFlagged(), 180);
     },
   });
   $('thr-metric').addEventListener('change', e => { state.sizeMetricMode = e.target.value; refreshFlagged(); });
+  for (const b of document.querySelectorAll('#thr-metric-seg button')) b.addEventListener('click', () => { state.sizeMetricMode = b.dataset.metric; refreshFlagged(); b.blur(); });
 
   $('btn-delete-small').addEventListener('click', async () => {
     const ids = [...state.pendingFlagged];
@@ -17151,7 +17731,7 @@ function wireUI() {
   $('sel-clear').addEventListener('click', clearSelection);
   $('sel-similar').addEventListener('click', selectSimilar);
   $('btn-delete-sel').addEventListener('click', () => {
-    if (!state.selected.size) return;
+    if (!state.selected.size && !state.selectedGroupIds?.size) return;
     _deleteSelection('Deleted selected');
   });
   $('btn-show-all')?.addEventListener('click', showAllParts);
@@ -17221,8 +17801,9 @@ function wireUI() {
     washer:       '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>',
   };
   const _primLineIcon = (kind) =>
-    `<svg class="prim-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${_PRIM_ICON_PATHS[kind] || _PRIM_ICON_PATHS.cube}</svg>`;
+    `<svg class="prim-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${_PRIM_ICON_PATHS[kind] || (window._LIB_ICON_PATHS || {})[kind] || _PRIM_ICON_PATHS.cube}</svg>`;
   window._primLineIcon = _primLineIcon;
+  try { _libRender(); } catch (_) {}          // (the library drew itself before its icons existed)
 
   // Viewport add-primitive button: click → add the most-recently-used kind
   // (defaults to cube; updates whenever any primitive is added, mirroring
@@ -17344,6 +17925,8 @@ function wireUI() {
   $('scene-up-axis')?.addEventListener('change', e => {
     state.sceneUpAxis = e.target.value;
     _applySceneUpAxis();
+    // an aligned model was seated for the old up axis: seat it again
+    try { if (_align.D.elements.some((v, i) => Math.abs(v - (i % 5 === 0 ? 1 : 0)) > 1e-9)) alignModelToFloor({ quiet: true }); } catch (_) {}
     requestRender();
   });
   $('scene-scale')?.addEventListener('change', e => {
@@ -17888,7 +18471,7 @@ function wireUI() {
       if (typeof _treeGroupSelected === 'function') _treeGroupSelected();
     }
     else if (plain && !e.shiftKey && (e.key === 'g' || e.key === 'G')) $('tg-grid').click();
-    else if (e.key === 'Delete' || e.key === 'Backspace') { if (state.selected.size > 0) { e.preventDefault(); _deleteSelection('Deleted selected'); } }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { if (state.selected.size > 0 || state.selectedGroupIds?.size) { e.preventDefault(); _deleteSelection('Deleted selected'); } }
     else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redoLast(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoLast(); }
@@ -18070,13 +18653,13 @@ async function _buildBVHsForAllGeoms() {
 const _FASTENER_M_SIZES = {
   M3:  { d: 3,  hex_s: 5.5, hex_h: 2.0,  nut_h: 2.4,  cap_d: 5.5, cap_h: 3.0,  wash_od: 7,  wash_t: 0.5 },
   M4:  { d: 4,  hex_s: 7.0, hex_h: 2.8,  nut_h: 3.2,  cap_d: 7.0, cap_h: 4.0,  wash_od: 9,  wash_t: 0.8 },
-  M5:  { d: 5,  hex_s: 8.0, hex_h: 3.5,  nut_h: 4.7,  cap_d: 8.5, cap_h: 5.0,  wash_od: 10, wash_t: 1.0 },
-  M6:  { d: 6,  hex_s: 10,  hex_h: 4.0,  nut_h: 5.2,  cap_d: 10,  cap_h: 6.0,  wash_od: 12, wash_t: 1.6 },
-  M8:  { d: 8,  hex_s: 13,  hex_h: 5.3,  nut_h: 6.8,  cap_d: 13,  cap_h: 8.0,  wash_od: 16, wash_t: 1.6 },
-  M10: { d: 10, hex_s: 16,  hex_h: 6.4,  nut_h: 8.4,  cap_d: 16,  cap_h: 10,   wash_od: 20, wash_t: 2.0 },
-  M12: { d: 12, hex_s: 18,  hex_h: 7.5,  nut_h: 10.8, cap_d: 18,  cap_h: 12,   wash_od: 24, wash_t: 2.5 },
-  M16: { d: 16, hex_s: 24,  hex_h: 10,   nut_h: 14.8, cap_d: 24,  cap_h: 16,   wash_od: 30, wash_t: 3.0 },
-  M20: { d: 20, hex_s: 30,  hex_h: 12.5, nut_h: 18,   cap_d: 30,  cap_h: 20,   wash_od: 37, wash_t: 3.0 },
+  M5:  { d: 5,  hex_s: 8.0, hex_h: 3.5,  nut_h: 4.0,  cap_d: 8.5, cap_h: 5.0,  wash_od: 10, wash_t: 1.0 },
+  M6:  { d: 6,  hex_s: 10,  hex_h: 4.0,  nut_h: 5.0,  cap_d: 10,  cap_h: 6.0,  wash_od: 12, wash_t: 1.6 },
+  M8:  { d: 8,  hex_s: 13,  hex_h: 5.3,  nut_h: 6.5,  cap_d: 13,  cap_h: 8.0,  wash_od: 16, wash_t: 1.6 },
+  M10: { d: 10, hex_s: 17,  hex_h: 6.4,  nut_h: 8.0,  cap_d: 16,  cap_h: 10,   wash_od: 20, wash_t: 2.0 },
+  M12: { d: 12, hex_s: 19,  hex_h: 7.5,  nut_h: 10,   cap_d: 18,  cap_h: 12,   wash_od: 24, wash_t: 2.5 },
+  M16: { d: 16, hex_s: 24,  hex_h: 10,   nut_h: 13,   cap_d: 24,  cap_h: 16,   wash_od: 30, wash_t: 3.0 },
+  M20: { d: 20, hex_s: 30,  hex_h: 12.5, nut_h: 16,   cap_d: 30,  cap_h: 20,   wash_od: 37, wash_t: 3.0 },
 };
 const _FASTENER_M_KEYS = ['M3','M4','M5','M6','M8','M10','M12','M16','M20'];
 const _FASTENER_KINDS  = new Set(['hexbolt','hexnut','allen','washer']);
@@ -18410,7 +18993,1137 @@ function _applyPrimitiveOrientation(kind, geom, orient) {
     else if (orient === 'x') geom.rotateY( HALF_PI);
   }
 }
-function _addPrimitive(kind) {
+// ── Object library ───────────────────────────────────────────────────────
+// More ready-made parts than the basic shapes: pipes and flanges, profiles,
+// machine parts and a few more fasteners. Each is a primitive like the others
+// (parameters in the Properties panel, undo, export), described here by its
+// default parameters, the rows of its parameter panel and the function that
+// builds it. All are built standing along Z and centred.
+const _libExtrude = (shape, depth, segs = 24) => {
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments: Math.max(4, segs | 0), steps: 1 });
+  g.translate(0, 0, -depth / 2);
+  return g;
+};
+const _libCircleHole = (shape, x, y, r) => { const h = new THREE.Path(); h.absarc(x, y, r, 0, Math.PI * 2, true); shape.holes.push(h); };
+const _libRing = (od, id, depth, segs) => {
+  const s = new THREE.Shape();
+  s.absarc(0, 0, od / 2, 0, Math.PI * 2, false);
+  const inner = Math.min(id, od - 0.2);
+  if (inner > 0.01) _libCircleHole(s, 0, 0, inner / 2);
+  return _libExtrude(s, depth, segs);
+};
+const _libPoly = (pts) => { const s = new THREE.Shape(); pts.forEach(([x, y], i) => i ? s.lineTo(x, y) : s.moveTo(x, y)); s.closePath(); return s; };
+const _libLathe = (pts, segs) => {
+  const g = new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(Math.max(0, r), y)), Math.max(8, segs | 0));
+  g.rotateX(Math.PI / 2);                       // the lathe turns about Y; these parts stand along Z
+  return g;
+};
+// ── Nuts ─────────────────────────────────────────────────────────────────
+// Every nut is built from a few pieces merged into one mesh: prisms with a
+// bore (the hex, the square), turned pieces (collars, flanges, domes) and
+// the odd extruded profile (wings, crown teeth). The bore runs along Z through
+// the origin, so a nut dropped on a bolt lines up with it; the result is
+// centred in height. Dimensions are those of the DIN part named with each
+// one (the _DIN table below); only the details a sheet leaves open (a chamfer,
+// the shape of a wing) are proportions.
+const _nutPrism = (n, s, bore, z0, z1, segs, turn = Math.PI / n) => {
+  const R = s / 2 / Math.cos(Math.PI / n), pts = [];
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2 + turn; pts.push([Math.cos(a) * R, Math.sin(a) * R]); }
+  const sh = _libPoly(pts);
+  if (bore > 0.01) _libCircleHole(sh, 0, 0, bore / 2);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.05, z1 - z0), bevelEnabled: false, curveSegments: Math.max(4, segs | 0), steps: 1 });
+  g.translate(0, 0, z0);
+  return g;
+};
+// Turned pieces. Each run of [radius, z] points is turned on its own, so the
+// surface is smooth along a run and has a crisp edge where two runs meet.
+// Outside walls run upwards, undersides outwards, tops inwards, bores down:
+// that is what makes the faces look out of the part.
+const _nutTurn = (runs, segs) => runs.map(pts => _libLathe(pts, segs));
+// The closed end of a blind bore: a disc at height z, facing down.
+const _nutBoreEnd = (r, z, segs) => { const g = new THREE.CircleGeometry(r, Math.max(8, segs | 0)); g.rotateX(Math.PI); g.translate(0, 0, z); return g; };
+const _nutDone = (pieces) => {
+  const g = _mergeGeoms(pieces);
+  for (const x of pieces) { try { x.dispose(); } catch (_) {} }
+  g.computeBoundingBox();
+  g.translate(0, 0, -(g.boundingBox.min.z + g.boundingBox.max.z) / 2);
+  return g;
+};
+const _NUT_SCHEMA = [{ id: 'size', label: 'Size', choices: _FASTENER_M_KEYS }, { id: 'segs', label: 'Smoothness', int: true, min: 8, max: 64 }];
+// Dimensions from the DIN sheets, in mm, one value per thread size in the
+// order of _FASTENER_M_KEYS: M3 M4 M5 M6 M8 M10 M12 M16 M20. Across flats and
+// the height of a plain nut (DIN 934) come from _FASTENER_M_SIZES. A sheet
+// that does not go down to M3 or M4, or up to M20, is carried on in
+// proportion for those sizes (marked ~), so every nut exists in every size.
+const _DIN = {
+  thinM:    [1.8, 2.2, 2.7, 3.2, 4, 5, 6, 8, 10],                    // DIN 439   height
+  lockH:    [4, 5, 5, 6, 8, 10, 12, 16, 20],                         // DIN 985   height
+  flangeS:  [5.5, 7, 8, 10, 13, 15, 18, 24, 30],                     // DIN 6923  across flats (~M3 M4)
+  flangeD:  [8, 10, 11.8, 14.2, 17.9, 21.8, 26, 34.5, 42.8],         //           flange diameter
+  flangeM:  [3, 4, 5, 6, 8, 10, 12, 16, 20],                         //           height
+  capH:     [6.5, 8, 10, 12, 15, 18, 22, 28, 34],                    // DIN 1587  height (~M3)
+  capD:     [5, 6.5, 7.5, 9.5, 12.5, 16, 18, 23, 28],                //           dome diameter
+  castleM:  [4, 5, 6, 7.5, 9.5, 12, 15, 19, 22],                     // DIN 935   height (~M3)
+  castleN:  [1, 1.2, 1.4, 2, 2.5, 2.8, 3.5, 4.5, 4.5],               //           slot width
+  castleD:  [0, 0, 0, 0, 0, 0, 17, 22, 28],                          //           crown diameter (below M12 the crown is the hexagon)
+  wingE:    [20, 20, 26, 33, 39, 51, 65, 73, 90],                    // DIN 315   span (~M3)
+  wingH:    [10.5, 10.5, 13, 17, 20, 25, 33.5, 37.5, 46.5],          //           height
+  wingM:    [4.6, 4.6, 6.5, 8, 10, 12, 14, 17, 21],                  //           boss height
+  wingD:    [7, 8, 11, 13, 16, 20, 23, 29, 35],                      //           boss diameter
+  knurlD:   [12, 16, 20, 24, 30, 36, 42, 52, 64],                    // DIN 466   head diameter (~M12 M16 M20)
+  knurlK:   [7.5, 9.5, 11.5, 15, 18, 23, 27, 34, 42],                //           height
+  knurlS:   [6, 8, 10, 12, 16, 20, 24, 30, 36],                      //           collar diameter
+  knurlH:   [2.5, 3.5, 4, 5, 6, 8, 10, 12, 14],                      //           head thickness
+  tslotA:   [3.7, 4.7, 5.7, 7.7, 9.7, 11.7, 13.7, 17.7, 21.7],       // DIN 508   neck width (~M3)
+  tslotE:   [8, 9, 10, 13, 15, 18, 22, 28, 35],                      //           base, square
+  tslotH:   [5.5, 6.5, 8, 10, 12, 14, 16, 20, 28],                   //           height
+  tslotK:   [2, 2.5, 4, 6, 6, 7, 8, 10, 14],                         //           base thickness
+  eyeD2:    [10, 12, 16, 20, 20, 25, 30, 35, 40],                    // DIN 582 / 580  eye, inside (~M3 M4 M5)
+  eyeD3:    [10, 12, 16, 20, 20, 25, 30, 35, 40],                    //           collar diameter
+  eyeD4:    [18, 22, 29, 36, 36, 45, 54, 63, 72],                    //           eye, outside
+  eyeH:     [18, 22, 29, 36, 36, 45, 53, 62, 71],                    //           height
+  buttonD:  [5.7, 7.6, 9.5, 10.5, 14, 17.5, 21, 28, 35],             // ISO 7380  head diameter (~M20)
+  buttonK:  [1.65, 2.2, 2.75, 3.3, 4.4, 5.5, 6.6, 8.8, 11],          //           head height
+  cskD:     [6, 8, 10, 12, 16, 20, 24, 30, 36],                      // DIN 7991  head diameter
+  cskK:     [1.7, 2.3, 2.8, 3.3, 4.4, 5.5, 6.5, 7.5, 8.5],           //           head height
+};
+const _din = (p, row) => { const i = _FASTENER_M_KEYS.indexOf(p && p.size); return _DIN[row][i < 0 ? 3 : i]; };
+const _nut = (name, make) => ({
+  name, params: { size: 'M6', segs: 24 }, sized: true, schema: _NUT_SCHEMA,
+  // make(d thread, s across flats, m plain nut height, T(row) the DIN value for this size, segs)
+  build(p) { const D = _fasterDims(p), segs = Math.max(8, Math.min(64, p.segs | 0 || 24)); return _nutDone(make(D.d, D.hex_s, D.nut_h, (row) => _din(p, row), segs)); },
+});
+// The eye of DIN 582 / 580: a ring whose outside reaches down to the seat, on
+// a collar. Returns the pieces above z = 0 (the collar's underside is left to
+// the caller: a nut has a bore there, a bolt its shank).
+const _dinEye = (T, segs) => {
+  const d2 = T('eyeD2'), d3 = T('eyeD3'), d4 = T('eyeD4'), h = T('eyeH'), tube = (d4 - d2) / 4, f = Math.min(1, h / d4), zc = h - d4 / 2 * f, top = zc - d2 / 2 * f + tube * 0.25;   // f: from M12 up the sheet's height is a millimetre less than the eye is wide
+  const ring = new THREE.TorusGeometry((d2 + d4) / 4, tube, 14, Math.max(16, segs * 2));
+  ring.rotateX(Math.PI / 2); ring.scale(1, 1, f); ring.translate(0, 0, zc);
+  return { r3: d3 / 2, top, pieces: [ring, ..._nutTurn([[[d3 / 2, 0], [d3 / 2, top * 0.6]], [[d3 / 2, top * 0.6], [d3 / 2 * 0.7, top]], [[d3 / 2 * 0.7, top], [0, top]]], segs)] };
+};
+const _LIB_NUTS = {
+  // DIN 439: a hex nut of about half the height, for locking against another nut
+  jamnut: _nut('Thin nut', (d, s, m, T, segs) => [_nutPrism(6, s, d, 0, T('thinM'), segs)]),
+  // DIN 985: a hex nut with a collar that holds a nylon ring
+  locknut: _nut('Lock nut', (d, s, m, T, segs) => {
+    const rb = d / 2, H = T('lockH'), h1 = H * 0.65, rc = s * 0.45, c = Math.min(0.12 * d, rc - rb - 0.1);
+    return [_nutPrism(6, s, d, 0, h1, segs), ..._nutTurn([[[rc, h1], [rc, H - c]], [[rc, H - c], [rc - c, H]], [[rc - c, H], [rb, H]], [[rb, H], [rb, h1]]], segs)];
+  }),
+  // DIN 6923: a hex nut with a washer face of its own
+  flangenut: _nut('Flange nut', (d, s, m, T, segs) => {
+    const sf = T('flangeS'), rb = d / 2, H = T('flangeM'), rf = T('flangeD') / 2, t = 0.15 * d, z0 = t / 2;
+    return [_nutPrism(6, sf, d, z0, H, segs), ..._nutTurn([[[rb, 0], [rf, 0]], [[rf, 0], [rf, t]], [[rf, t], [sf / 2, 0.42 * H]], [[rb, z0], [rb, 0]]], segs)];
+  }),
+  // DIN 1587: a hex nut closed by a dome over the end of the thread
+  capnut: _nut('Cap nut', (d, s, m, T, segs) => {
+    const h1 = m, rk = Math.min(T('capD') / 2, s / 2), H = Math.max(T('capH'), h1 + 0.5), n = Math.max(6, segs >> 1), rise = H - h1, dome = [[rk, h1]];
+    // a short straight neck, then the dome: a quarter ellipse when the cap is lower than it is wide
+    const dr = Math.min(rk, rise), neck = rise - dr;
+    for (let i = 0; i <= n; i++) { const a = i / n * Math.PI / 2; dome.push([Math.cos(a) * rk, h1 + neck + Math.sin(a) * dr]); }
+    return [_nutPrism(6, s, d, 0, h1, segs), ..._nutTurn([dome], segs), _nutBoreEnd(d / 2, h1, segs)];
+  }),
+  // DIN 935: a hex nut with a slotted crown for a split pin
+  castlenut: _nut('Castle nut', (d, s, m, T, segs) => {
+    const rb = d / 2, w = m, H = Math.max(T('castleM'), w + 0.5), R = (T('castleD') || s * 0.94) / 2, slot = T('castleN') / 2;
+    const ao = Math.asin(slot / R), ai = Math.asin(Math.min(0.95, slot / rb)), step = Math.PI / 3, out = [_nutPrism(6, s, d, 0, w, segs)];
+    for (let k = 0; k < 6; k++) {
+      const a0 = k * step, a1 = a0 + step, sh = new THREE.Shape();
+      sh.moveTo(Math.cos(a0 + ao) * R, Math.sin(a0 + ao) * R);
+      sh.absarc(0, 0, R, a0 + ao, a1 - ao, false);
+      sh.lineTo(Math.cos(a1 - ai) * rb, Math.sin(a1 - ai) * rb);
+      sh.absarc(0, 0, rb, a1 - ai, a0 + ai, true);
+      sh.closePath();
+      const g = new THREE.ExtrudeGeometry(sh, { depth: H - w, bevelEnabled: false, curveSegments: Math.max(3, segs >> 2), steps: 1 });
+      g.translate(0, 0, w);
+      out.push(g);
+    }
+    return out;
+  }),
+  // DIN 557: four flats, for a slot or a channel that stops it turning
+  squarenut: _nut('Square nut', (d, s, m, T, segs) => [_nutPrism(4, s, d, 0, m, segs)]),
+  // DIN 6334: three diameters long, to join two threaded rods
+  couplingnut: _nut('Coupling nut', (d, s, m, T, segs) => [_nutPrism(6, s, d, 0, 3 * d, segs)]),
+  // DIN 315: tightened by hand
+  wingnut: _nut('Wing nut', (d, s, m, T, segs) => {
+    const rb = d / 2, R0 = T('wingD') / 2, R1 = Math.max(R0 * 0.8, rb + 0.4), hb = T('wingM'), X = T('wingE') / 2, Z = T('wingH'), t = Math.max(0.25 * d, 1);
+    const sh = new THREE.Shape();
+    sh.moveTo(Math.min(0.28 * X, R0 * 0.8), 0.05 * Z); sh.lineTo(0.61 * X, 0.21 * Z);
+    sh.quadraticCurveTo(X, 0.43 * Z, 0.99 * X, 0.8 * Z);
+    sh.quadraticCurveTo(0.97 * X, 1.05 * Z, 0.79 * X, 0.97 * Z);
+    sh.lineTo(Math.min(0.24 * X, R1 * 0.8), 0.4 * Z); sh.closePath();
+    const wing = new THREE.ExtrudeGeometry(sh, { depth: t, bevelEnabled: false, curveSegments: Math.max(6, segs >> 1), steps: 1 });
+    wing.rotateX(Math.PI / 2); wing.translate(0, t / 2, 0);
+    const other = wing.clone(); other.rotateZ(Math.PI);
+    return [..._nutTurn([[[rb, 0], [R0, 0]], [[R0, 0], [R1, hb]], [[R1, hb], [rb, hb]], [[rb, hb], [rb, 0]]], segs), wing, other];
+  }),
+  // DIN 466: a knurled head on a collar, tightened by hand
+  thumbnut: _nut('Knurled nut', (d, s, m, T, segs) => {
+    const rb = d / 2, H = T('knurlK'), hk = T('knurlH'), hc = H - hk, rs = T('knurlS') / 2, R = T('knurlD') / 2, dep = Math.min(R * 0.05, 0.6), n = Math.max(24, Math.min(90, Math.round(R * 2 * Math.PI / 1.6))), pts = [];
+    for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * Math.PI * 2, r = i % 2 ? R - dep : R; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+    const sh = _libPoly(pts); _libCircleHole(sh, 0, 0, rb);
+    const head = new THREE.ExtrudeGeometry(sh, { depth: hk, bevelEnabled: false, curveSegments: segs, steps: 1 });
+    head.translate(0, 0, hc);
+    return [head, ..._nutTurn([[[rb, 0], [rs, 0]], [[rs, 0], [rs, hc]], [[rb, hc], [rb, 0]]], segs)];
+  }),
+  // DIN 508: slides in the T-slot of a machine table or a profile
+  tslotnut: _nut('T-slot nut', (d, s, m, T, segs) => {
+    const e = T('tslotE'), k = T('tslotK'), H = T('tslotH'), a = Math.max(T('tslotA'), d + 0.6);
+    const block = (wx, wy, z0, z1) => { const sh = _libPoly([[-wx / 2, -wy / 2], [wx / 2, -wy / 2], [wx / 2, wy / 2], [-wx / 2, wy / 2]]); _libCircleHole(sh, 0, 0, d / 2); const g = new THREE.ExtrudeGeometry(sh, { depth: z1 - z0, bevelEnabled: false, curveSegments: segs, steps: 1 }); g.translate(0, 0, z0); return g; };
+    return [block(e, e, 0, k), block(a, e, k, H)];
+  }),
+  // DIN 582: a lifting eye on a threaded collar
+  eyenut: _nut('Eye nut', (d, s, m, T, segs) => {
+    const rb = d / 2, eye = _dinEye(T, segs), blind = eye.top * 0.85;
+    return [...eye.pieces, ..._nutTurn([[[rb, 0], [eye.r3, 0]], [[rb, blind], [rb, 0]]], segs), _nutBoreEnd(rb, blind, segs)];
+  }),
+};
+// ── More of everything ───────────────────────────────────────────────────
+// A second batch for every shelf, built with the same pieces as the nuts.
+const _S = (id, label) => ({ id, label, size: true });
+const _N = (id, label, min, max) => ({ id, label, int: true, min, max });
+const _SEGS = _N('segs', 'Smoothness', 8, 96);
+const _M_SIZE = { id: 'size', label: 'Size', choices: _FASTENER_M_KEYS };
+const _clampSegs = (p, dflt = 32) => Math.max(8, Math.min(96, p.segs | 0 || dflt));
+// A screw with a rounded head, turned in one go: shank down from z = 0, head above it.
+const _domeScrew = (d, dk, k, L, segs) => {
+  const head = [[dk / 2, 0], [dk / 2, k * 0.15]], n = Math.max(6, segs >> 1);
+  for (let i = 1; i <= n; i++) { const a = i / n * Math.PI / 2; head.push([Math.cos(a) * dk / 2, k * 0.15 + Math.sin(a) * k * 0.85]); }
+  return _nutTurn([[[0, -L], [d / 2, -L]], [[d / 2, -L], [d / 2, 0]], [[d / 2, 0], [dk / 2, 0]], head], segs);
+};
+const _rectHole = (x0, x1, y0, y1, holes, depth, segs) => {
+  const sh = _libPoly([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+  for (const [x, y, r] of holes) if (r > 0.1) _libCircleHole(sh, x, y, r);
+  return new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: false, curveSegments: Math.max(4, segs | 0), steps: 1 });
+};
+class _LibHelix extends THREE.Curve {
+  constructor(r, turns, len) { super(); this.r = r; this.turns = turns; this.len = len; }
+  getPoint(t, out = new THREE.Vector3()) { const a = t * this.turns * Math.PI * 2; return out.set(Math.cos(a) * this.r, Math.sin(a) * this.r, (t - 0.5) * this.len); }
+}
+const _LIB_MORE = {
+  // ── shapes
+  pyramid: {
+    name: 'Pyramid', params: { base: 100, height: 100, sides: 4 },
+    schema: [_S('base', 'Base'), _S('height', 'Height'), _N('sides', 'Sides', 3, 12)],
+    build(p) {
+      const n = Math.max(3, Math.min(12, p.sides | 0)), c = new THREE.ConeGeometry(p.base / 2 / Math.cos(Math.PI / n), p.height, n);
+      c.rotateY(Math.PI / n); c.rotateX(Math.PI / 2);
+      const g = c.toNonIndexed(); c.dispose(); g.computeVertexNormals();   // flat faces, not a rounded cone
+      return g;
+    },
+  },
+  prism: {
+    name: 'Prism', params: { across: 80, height: 100, sides: 6 },
+    schema: [_S('across', 'Across flats'), _S('height', 'Height'), _N('sides', 'Sides', 3, 12)],
+    build(p) { return _nutDone([_nutPrism(Math.max(3, Math.min(12, p.sides | 0)), p.across, 0, 0, p.height, 8)]); },
+  },
+  hemisphere: {
+    name: 'Hemisphere', params: { dia: 100, segs: 48 },
+    schema: [_S('dia', 'Diameter'), _SEGS],
+    build(p) {
+      const segs = _clampSegs(p, 48), dome = new THREE.SphereGeometry(p.dia / 2, segs, Math.max(4, segs >> 1), 0, Math.PI * 2, 0, Math.PI / 2);
+      dome.rotateX(Math.PI / 2);
+      return _nutDone([dome, _nutBoreEnd(p.dia / 2, 0, segs)]);
+    },
+  },
+  // ── fasteners
+  buttonhead: {       // ISO 7380
+    name: 'Button head screw', params: { size: 'M6', length: 24, segs: 24 }, sized: true,
+    schema: [_M_SIZE, _S('length', 'Length'), _N('segs', 'Smoothness', 8, 64)],
+    build(p) { const d = _fasterDims(p).d; return _nutDone(_domeScrew(d, _din(p, 'buttonD'), _din(p, 'buttonK'), Math.max(p.length, 1), _clampSegs(p, 24))); },
+  },
+  threadedrod: {      // DIN 976
+    name: 'Threaded rod', params: { size: 'M6', length: 24, segs: 24 }, sized: true,
+    schema: [_M_SIZE, _S('length', 'Length'), _N('segs', 'Smoothness', 8, 64)],
+    build(p) { const r = _fasterDims(p).d / 2, L = Math.max(p.length, 1) / 2, c = Math.min(0.15 * r * 2, L - 0.05); return _nutDone(_nutTurn([[[0, -L], [r - c, -L]], [[r - c, -L], [r, -L + c]], [[r, -L + c], [r, L - c]], [[r, L - c], [r - c, L]], [[r - c, L], [0, L]]], _clampSegs(p, 24))); },
+  },
+  eyebolt: {          // DIN 580
+    name: 'Eye bolt', params: { size: 'M6', length: 24, segs: 24 }, sized: true,
+    schema: [_M_SIZE, _S('length', 'Length'), _N('segs', 'Smoothness', 8, 64)],
+    build(p) {
+      const d = _fasterDims(p).d, L = Math.max(p.length, 1), segs = _clampSegs(p, 24), eye = _dinEye((row) => _din(p, row), segs);
+      return _nutDone([...eye.pieces, ..._nutTurn([[[0, -L], [d / 2, -L]], [[d / 2, -L], [d / 2, 0]], [[d / 2, 0], [eye.r3, 0]]], segs)]);
+    },
+  },
+  rivet: {
+    name: 'Rivet', params: { dia: 5, length: 12, segs: 24 },
+    schema: [_S('dia', 'Diameter'), _S('length', 'Length'), _N('segs', 'Smoothness', 8, 64)],
+    build(p) { return _nutDone(_domeScrew(p.dia, 1.75 * p.dia, 0.6 * p.dia, Math.max(p.length, 0.5), _clampSegs(p, 24))); },
+  },
+  key: {              // DIN 6885
+    name: 'Parallel key', params: { width: 8, height: 7, length: 32 },
+    schema: [_S('width', 'Width'), _S('height', 'Height'), _S('length', 'Length')],
+    build(p) {
+      const r = p.width / 2, x = Math.max(p.length / 2 - r, 0.01), sh = new THREE.Shape();
+      sh.absarc(x, 0, r, -Math.PI / 2, Math.PI / 2, false); sh.absarc(-x, 0, r, Math.PI / 2, Math.PI * 1.5, false); sh.closePath();
+      return _libExtrude(sh, p.height, 16);
+    },
+  },
+  // ── pipes
+  tee: {
+    name: 'Pipe tee', params: { od: 60, length: 160, branch: 80, segs: 32 },
+    schema: [_S('od', 'Pipe dia.'), _S('length', 'Length'), _S('branch', 'Branch'), _SEGS],
+    build(p) {
+      const r = p.od / 2, segs = _clampSegs(p), main = new THREE.CylinderGeometry(r, r, p.length, segs), br = new THREE.CylinderGeometry(r, r, p.branch, segs);
+      main.rotateX(Math.PI / 2); br.rotateZ(-Math.PI / 2); br.translate(p.branch / 2, 0, 0);
+      return _nutDone([main, br]);
+    },
+  },
+  reducer: {
+    name: 'Pipe reducer', params: { od1: 80, od2: 50, length: 80, wall: 4, segs: 48 },
+    schema: [_S('od1', 'Large dia.'), _S('od2', 'Small dia.'), _S('length', 'Length'), _S('wall', 'Wall'), _SEGS],
+    build(p) { const a = p.od1 / 2, b = p.od2 / 2, w = Math.min(p.wall, a - 0.1, b - 0.1), L = p.length; return _nutDone(_nutTurn([[[a - w, 0], [a, 0]], [[a, 0], [b, L]], [[b, L], [b - w, L]], [[b - w, L], [a - w, 0]]], _clampSegs(p, 48))); },
+  },
+  endcap: {
+    name: 'Pipe cap', params: { od: 60, height: 30, wall: 3, segs: 48 },
+    schema: [_S('od', 'Pipe dia.'), _S('height', 'Height'), _S('wall', 'Wall'), _SEGS],
+    build(p) { const r = p.od / 2, h = p.height, w = Math.min(p.wall, r - 0.1, h - 0.1); return _nutDone(_nutTurn([[[r - w, 0], [r, 0]], [[r, 0], [r, h]], [[r, h], [0, h]], [[0, h - w], [r - w, h - w]], [[r - w, h - w], [r - w, 0]]], _clampSegs(p, 48))); },
+  },
+  // ── profiles
+  tprofile: {
+    name: 'T profile', params: { width: 50, height: 50, t: 5, length: 200 },
+    schema: [_S('width', 'Width'), _S('height', 'Height'), _S('t', 'Thickness'), _S('length', 'Length')],
+    build(p) { const w = p.width / 2, H = p.height, t = Math.min(p.t, p.width - 0.1, H - 0.1), e = t / 2; const g = _libExtrude(_libPoly([[-e, 0], [e, 0], [e, H - t], [w, H - t], [w, H], [-w, H], [-w, H - t], [-e, H - t]]), p.length); g.center(); return g; },
+  },
+  zprofile: {
+    name: 'Z profile', params: { flange: 30, height: 60, t: 4, length: 200 },
+    schema: [_S('flange', 'Flange'), _S('height', 'Height'), _S('t', 'Thickness'), _S('length', 'Length')],
+    build(p) { const a = p.flange, H = p.height, t = Math.min(p.t, a - 0.1, H / 2 - 0.1), e = t / 2; const g = _libExtrude(_libPoly([[-e, 0], [a, 0], [a, t], [e, t], [e, H], [-a, H], [-a, H - t], [-e, H - t]]), p.length); g.center(); return g; },
+  },
+  flatbar: {
+    name: 'Flat bar', params: { width: 40, thickness: 6, length: 200 },
+    schema: [_S('width', 'Width'), _S('thickness', 'Thickness'), _S('length', 'Length')],
+    build(p) { const w = p.width / 2, t = p.thickness / 2; return _libExtrude(_libPoly([[-w, -t], [w, -t], [w, t], [-w, t]]), p.length); },
+  },
+  roundbar: {
+    name: 'Round bar', params: { dia: 20, length: 200, segs: 32 },
+    schema: [_S('dia', 'Diameter'), _S('length', 'Length'), _SEGS],
+    build(p) { const g = new THREE.CylinderGeometry(p.dia / 2, p.dia / 2, p.length, _clampSegs(p)); g.rotateX(Math.PI / 2); return g; },
+  },
+  hexbar: {
+    name: 'Hex bar', params: { across: 20, length: 200 },
+    schema: [_S('across', 'Across flats'), _S('length', 'Length')],
+    build(p) { return _nutDone([_nutPrism(6, p.across, 0, 0, p.length, 8)]); },
+  },
+  extrusion: {        // the aluminium T-slot profile: 20 × 20, 30 × 30, 40 × 40 …
+    name: 'T-slot extrusion', params: { size: 20, slot: 6, length: 200 },
+    schema: [_S('size', 'Size'), _S('slot', 'Slot'), _S('length', 'Length')],
+    build(p) {
+      const h = p.size / 2, sl = Math.min(p.slot / 2, h * 0.36), t = 0.18 * h, dp = 0.54 * h, c = Math.max(sl + 0.02 * h, 0.44 * h), pts = [];
+      const side = [[h, -h], [h, -sl], [h - t, -sl], [h - t, -c], [h - dp, -c * 0.55], [h - dp, c * 0.55], [h - t, c], [h - t, sl], [h, sl]];
+      for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2, cs = Math.round(Math.cos(a)), sn = Math.round(Math.sin(a)); for (const [x, y] of side) pts.push([x * cs - y * sn, x * sn + y * cs]); }
+      const sh = _libPoly(pts); _libCircleHole(sh, 0, 0, 0.25 * h);
+      return _libExtrude(sh, p.length, 16);
+    },
+  },
+  // ── machine parts
+  pulley: {
+    name: 'V pulley', params: { dia: 80, width: 20, bore: 12, segs: 64 },
+    schema: [_S('dia', 'Diameter'), _S('width', 'Width'), _S('bore', 'Bore'), _SEGS],
+    build(p) {
+      const R = p.dia / 2, w = p.width / 2, r0 = Math.min(p.bore / 2, R - 2), g = Math.max(0.5, Math.min(R - r0 - 1, p.width * 0.55)), gt = w * 0.6, gb = w * 0.16;
+      return _nutDone(_nutTurn([[[r0, -w], [R, -w]], [[R, -w], [R, -gt]], [[R, -gt], [R - g, -gb]], [[R - g, -gb], [R - g, gb]], [[R - g, gb], [R, gt]], [[R, gt], [R, w]], [[R, w], [r0, w]], [[r0, w], [r0, -w]]], _clampSegs(p, 64)));
+    },
+  },
+  sprocket: {
+    name: 'Sprocket', params: { teeth: 18, pitch: 12.7, thickness: 6, bore: 12 },
+    schema: [_N('teeth', 'Teeth', 6, 120), _S('pitch', 'Chain pitch'), _S('thickness', 'Thickness'), _S('bore', 'Bore')],
+    build(p) {
+      const z = Math.max(6, p.teeth | 0), pt = Math.max(1, p.pitch), rp = pt / (2 * Math.sin(Math.PI / z)), ra = rp + 0.3 * pt, rf = Math.max(rp - 0.3 * pt, 1), step = Math.PI * 2 / z, pts = [];
+      for (let i = 0; i < z; i++) for (const [r, f] of [[rf, 0.12], [rf, 0.3], [ra, 0.56], [ra, 0.66], [rf, 0.92]]) { const a = (i + f) * step; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+      const sh = _libPoly(pts), b = Math.min(p.bore, rf * 2 - 1);
+      if (b > 0.2) _libCircleHole(sh, 0, 0, b / 2);
+      return _libExtrude(sh, p.thickness, 24);
+    },
+  },
+  bushing: {
+    name: 'Flanged bushing', params: { id: 12, od: 16, length: 20, flange: 22, flangeT: 3, segs: 48 },
+    schema: [_S('id', 'Bore'), _S('od', 'Outer dia.'), _S('length', 'Length'), _S('flange', 'Flange dia.'), _S('flangeT', 'Flange thickness'), _SEGS],
+    build(p) { const ro = p.od / 2, ri = Math.min(p.id / 2, ro - 0.1), rf = Math.max(p.flange / 2, ro), L = p.length, ft = Math.min(p.flangeT, L - 0.1); return _nutDone(_nutTurn([[[ri, 0], [rf, 0]], [[rf, 0], [rf, ft]], [[rf, ft], [ro, ft]], [[ro, ft], [ro, L]], [[ro, L], [ri, L]], [[ri, L], [ri, 0]]], _clampSegs(p, 48))); },
+  },
+  spring: {
+    name: 'Spring', params: { dia: 30, wire: 3, coils: 8, length: 60 },
+    schema: [_S('dia', 'Diameter'), _S('wire', 'Wire'), _N('coils', 'Coils', 1, 60), _S('length', 'Length')],
+    build(p) { const n = Math.max(1, Math.min(60, p.coils | 0)), w = Math.max(0.1, p.wire) / 2; return new THREE.TubeGeometry(new _LibHelix(Math.max(p.dia / 2 - w, w), n, Math.max(p.length - p.wire, 0.1)), n * 28, w, 10, false); },
+  },
+  rack: {
+    name: 'Gear rack', params: { teeth: 12, module: 3, width: 15, height: 20 },
+    schema: [_N('teeth', 'Teeth', 2, 200), _S('module', 'Module'), _S('width', 'Width'), _S('height', 'Height')],
+    build(p) {
+      const z = Math.max(2, p.teeth | 0), m = Math.max(0.1, p.module), pt = Math.PI * m, h = p.height, top = h + 2.25 * m, pts = [[0, 0], [z * pt, 0], [z * pt, h]];
+      for (let i = z - 1; i >= 0; i--) { const x = i * pt; pts.push([x + 0.82 * pt, h], [x + 0.62 * pt, top], [x + 0.38 * pt, top], [x + 0.18 * pt, h]); }
+      pts.push([0, h]);
+      const g = _libExtrude(_libPoly(pts), p.width); g.rotateX(Math.PI / 2); g.center(); return g;
+    },
+  },
+  handwheel: {
+    name: 'Handwheel', params: { dia: 160, rim: 16, hub: 36, bore: 12, spokes: 3, segs: 64 },
+    schema: [_S('dia', 'Diameter'), _S('rim', 'Rim'), _S('hub', 'Hub dia.'), _S('bore', 'Bore'), _N('spokes', 'Spokes', 2, 8), _SEGS],
+    build(p) {
+      const segs = _clampSegs(p, 64), tr = p.rim / 2, R = Math.max(p.dia / 2 - tr, tr * 2), rh = Math.min(p.hub / 2, R - tr), n = Math.max(2, Math.min(8, p.spokes | 0));
+      const out = [new THREE.TorusGeometry(R, tr, 14, segs), _libRing(rh * 2, Math.min(p.bore, rh * 2 - 1), p.rim * 1.5, segs)];
+      for (let i = 0; i < n; i++) { const sp = new THREE.CylinderGeometry(tr * 0.6, tr * 0.6, R - rh * 0.8, 12); sp.translate(0, (R + rh * 0.8) / 2, 0); sp.rotateZ(i / n * Math.PI * 2); out.push(sp); }
+      return _nutDone(out);
+    },
+  },
+  knob: {
+    name: 'Star knob', params: { dia: 50, lobes: 5, height: 18, bore: 8 },
+    schema: [_S('dia', 'Diameter'), _N('lobes', 'Lobes', 3, 12), _S('height', 'Height'), _S('bore', 'Bore')],
+    build(p) {
+      const R = p.dia / 2, n = Math.max(3, Math.min(12, p.lobes | 0)), H = p.height, rb = Math.min(p.bore / 2, R * 0.25), rc = R * 0.42, hc = H * 0.6, pts = [];
+      for (let i = 0; i < 120; i++) { const a = i / 120 * Math.PI * 2, r = R * (0.86 + 0.14 * Math.cos(a * n)); pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+      const sh = _libPoly(pts); if (rb > 0.1) _libCircleHole(sh, 0, 0, rb);
+      const head = new THREE.ExtrudeGeometry(sh, { depth: H, bevelEnabled: false, curveSegments: 24, steps: 1 }); head.translate(0, 0, hc);
+      return _nutDone([head, ..._nutTurn([[[rb, 0], [rc, 0]], [[rc, 0], [rc, hc]], [[rb, hc], [rb, 0]]], 32)]);
+    },
+  },
+  bracket: {
+    name: 'Corner bracket', params: { leg: 50, width: 40, t: 4, holeDia: 6 },
+    schema: [_S('leg', 'Leg'), _S('width', 'Width'), _S('t', 'Thickness'), _S('holeDia', 'Hole dia.')],
+    build(p) {
+      const w = p.width / 2, t = Math.min(p.t, p.leg - 0.1), r = Math.min(p.holeDia / 2, w - 1, (p.leg - t) / 2 - 1);
+      const base = _rectHole(0, p.leg, -w, w, [[t + (p.leg - t) / 2, 0, r]], t, 24), up = base.clone();
+      up.rotateY(-Math.PI / 2);
+      return _nutDone([base, up]);
+    },
+  },
+  stepper: {          // NEMA 17 by default
+    name: 'Stepper motor', params: { size: 42.3, length: 40, shaft: 5, shaftLen: 24 },
+    schema: [_S('size', 'Face'), _S('length', 'Body length'), _S('shaft', 'Shaft dia.'), _S('shaftLen', 'Shaft length')],
+    build(p) {
+      const body = new THREE.BoxGeometry(p.size, p.size, p.length), boss = new THREE.CylinderGeometry(p.size * 0.26, p.size * 0.26, 2, 40), shaft = new THREE.CylinderGeometry(p.shaft / 2, p.shaft / 2, p.shaftLen, 24);
+      boss.rotateX(Math.PI / 2); boss.translate(0, 0, p.length / 2 + 1);
+      shaft.rotateX(Math.PI / 2); shaft.translate(0, 0, p.length / 2 + p.shaftLen / 2);
+      return _nutDone([body, boss, shaft]);
+    },
+  },
+};
+const _LIB_PARTS = {
+  wedge: {
+    name: 'Wedge', params: { width: 100, depth: 100, height: 60 },
+    schema: [{ id: 'width', label: 'Width', size: true }, { id: 'depth', label: 'Depth', size: true }, { id: 'height', label: 'Height', size: true }],
+    build(p) { const g = _libExtrude(_libPoly([[0, 0], [p.depth, 0], [0, p.height]]), p.width); g.rotateX(Math.PI / 2); g.rotateZ(Math.PI / 2); g.center(); return g; },
+  },
+  tube: {
+    name: 'Tube', params: { od: 60, id: 50, length: 100, segs: 48 },
+    schema: [{ id: 'od', label: 'Outer dia.', size: true }, { id: 'id', label: 'Inner dia.', size: true }, { id: 'length', label: 'Length', size: true }, { id: 'segs', label: 'Smoothness', int: true, min: 8, max: 128 }],
+    build(p) { return _libRing(p.od, p.id, p.length, p.segs); },
+  },
+  elbow: {
+    name: 'Pipe elbow', params: { od: 60, radius: 90, angle: 90, segs: 32 },
+    schema: [{ id: 'od', label: 'Pipe dia.', size: true }, { id: 'radius', label: 'Bend radius', size: true }, { id: 'angle', label: 'Angle', int: true, min: 5, max: 180 }, { id: 'segs', label: 'Smoothness', int: true, min: 8, max: 96 }],
+    build(p) { const g = new THREE.TorusGeometry(Math.max(p.radius, p.od / 2 + 0.1), p.od / 2, 16, Math.max(8, p.segs | 0), Math.max(5, Math.min(180, p.angle)) * Math.PI / 180); g.center(); return g; },
+  },
+  flange: {
+    name: 'Flange', params: { od: 160, id: 60, thickness: 16, holes: 6, holeDia: 14, pcd: 125, segs: 48 },
+    schema: [{ id: 'od', label: 'Outer dia.', size: true }, { id: 'id', label: 'Bore', size: true }, { id: 'thickness', label: 'Thickness', size: true }, { id: 'holes', label: 'Bolt holes', int: true, min: 0, max: 24 }, { id: 'holeDia', label: 'Hole dia.', size: true }, { id: 'pcd', label: 'Bolt circle', size: true }, { id: 'segs', label: 'Smoothness', int: true, min: 8, max: 128 }],
+    build(p) {
+      const s = new THREE.Shape(); s.absarc(0, 0, p.od / 2, 0, Math.PI * 2, false);
+      if (p.id > 0.01) _libCircleHole(s, 0, 0, Math.min(p.id, p.od - 1) / 2);
+      const n = Math.max(0, p.holes | 0), r = Math.min(p.pcd, p.od - p.holeDia - 1) / 2;
+      for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; _libCircleHole(s, Math.cos(a) * r, Math.sin(a) * r, p.holeDia / 2); }
+      return _libExtrude(s, p.thickness, p.segs);
+    },
+  },
+  plate: {
+    name: 'Plate', params: { width: 200, depth: 120, thickness: 8, holeDia: 9, inset: 15 },
+    schema: [{ id: 'width', label: 'Width', size: true }, { id: 'depth', label: 'Depth', size: true }, { id: 'thickness', label: 'Thickness', size: true }, { id: 'holeDia', label: 'Corner holes', size: true }, { id: 'inset', label: 'Hole inset', size: true }],
+    build(p) {
+      const w = p.width / 2, d = p.depth / 2, s = _libPoly([[-w, -d], [w, -d], [w, d], [-w, d]]);
+      const i = Math.min(p.inset, w - 1, d - 1), r = Math.min(p.holeDia / 2, i - 0.5);
+      if (r > 0.2) for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) _libCircleHole(s, sx * (w - i), sy * (d - i), r);
+      return _libExtrude(s, p.thickness, 24);
+    },
+  },
+  angle: {
+    name: 'Angle profile', params: { a: 50, b: 50, t: 5, length: 200 },
+    schema: [{ id: 'a', label: 'Leg A', size: true }, { id: 'b', label: 'Leg B', size: true }, { id: 't', label: 'Thickness', size: true }, { id: 'length', label: 'Length', size: true }],
+    build(p) { const t = Math.min(p.t, p.a - 0.1, p.b - 0.1); const g = _libExtrude(_libPoly([[0, 0], [p.a, 0], [p.a, t], [t, t], [t, p.b], [0, p.b]]), p.length); g.center(); return g; },
+  },
+  channel: {
+    name: 'U channel', params: { width: 60, height: 40, t: 5, length: 200 },
+    schema: [{ id: 'width', label: 'Width', size: true }, { id: 'height', label: 'Height', size: true }, { id: 't', label: 'Thickness', size: true }, { id: 'length', label: 'Length', size: true }],
+    build(p) { const w = p.width / 2, h = p.height, t = Math.min(p.t, w - 0.1, h - 0.1); const g = _libExtrude(_libPoly([[-w, 0], [w, 0], [w, h], [w - t, h], [w - t, t], [-w + t, t], [-w + t, h], [-w, h]]), p.length); g.center(); return g; },
+  },
+  ibeam: {
+    name: 'I beam', params: { width: 80, height: 120, web: 6, flange: 8, length: 300 },
+    schema: [{ id: 'width', label: 'Width', size: true }, { id: 'height', label: 'Height', size: true }, { id: 'web', label: 'Web', size: true }, { id: 'flange', label: 'Flange', size: true }, { id: 'length', label: 'Length', size: true }],
+    build(p) { const w = p.width / 2, h = p.height / 2, e = Math.min(p.web / 2, w - 0.1), f = Math.min(p.flange, h - 0.1); return _libExtrude(_libPoly([[-w, -h], [w, -h], [w, -h + f], [e, -h + f], [e, h - f], [w, h - f], [w, h], [-w, h], [-w, h - f], [-e, h - f], [-e, -h + f], [-w, -h + f]]), p.length); },
+  },
+  boxtube: {
+    name: 'Box tube', params: { width: 40, height: 40, t: 3, length: 200 },
+    schema: [{ id: 'width', label: 'Width', size: true }, { id: 'height', label: 'Height', size: true }, { id: 't', label: 'Wall', size: true }, { id: 'length', label: 'Length', size: true }],
+    build(p) {
+      const w = p.width / 2, h = p.height / 2, t = Math.min(p.t, w - 0.1, h - 0.1), s = _libPoly([[-w, -h], [w, -h], [w, h], [-w, h]]);
+      const hole = new THREE.Path(); [[-w + t, -h + t], [-w + t, h - t], [w - t, h - t], [w - t, -h + t]].forEach(([x, y], i) => i ? hole.lineTo(x, y) : hole.moveTo(x, y)); hole.closePath(); s.holes.push(hole);
+      return _libExtrude(s, p.length);
+    },
+  },
+  gear: {
+    name: 'Spur gear', params: { teeth: 24, module: 3, thickness: 15, bore: 12 },
+    schema: [{ id: 'teeth', label: 'Teeth', int: true, min: 6, max: 160 }, { id: 'module', label: 'Module', size: true }, { id: 'thickness', label: 'Thickness', size: true }, { id: 'bore', label: 'Bore', size: true }],
+    build(p) {
+      const z = Math.max(6, p.teeth | 0), m = Math.max(0.1, p.module), rp = m * z / 2, ra = rp + m, rf = Math.max(rp - 1.25 * m, 0.5), step = Math.PI * 2 / z, pts = [];
+      for (let i = 0; i < z; i++) for (const [r, f] of [[rf, 0.25], [ra, 0.37], [ra, 0.63], [rf, 0.75]]) { const a = (i + f) * step; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+      const s = _libPoly(pts);
+      const b = Math.min(p.bore, rf * 2 - 1);
+      if (b > 0.2) _libCircleHole(s, 0, 0, b / 2);
+      return _libExtrude(s, p.thickness, 24);
+    },
+  },
+  bearing: {
+    name: 'Ball bearing', params: { id: 20, od: 47, width: 14, segs: 48 },
+    schema: [{ id: 'id', label: 'Bore', size: true }, { id: 'od', label: 'Outer dia.', size: true }, { id: 'width', label: 'Width', size: true }, { id: 'segs', label: 'Smoothness', int: true, min: 12, max: 96 }],
+    build(p) {
+      const od = p.od, id = Math.min(p.id, od - 2), gap = (od - id) / 2, t = gap * 0.3, ball = gap * 0.42, rp = (od + id) / 4;
+      const parts = [{ geom: _libRing(od, od - 2 * t, p.width, p.segs) }, { geom: _libRing(id + 2 * t, id, p.width, p.segs) }];
+      const n = Math.max(6, Math.floor(Math.PI * 2 * rp / (ball * 1.5)));
+      const sphere = new THREE.SphereGeometry(ball / 2, 12, 8);
+      for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; parts.push({ geom: sphere, matrix: new THREE.Matrix4().makeTranslation(Math.cos(a) * rp, Math.sin(a) * rp, 0) }); }
+      const g = _mergeGeoms(parts);
+      for (const x of parts) { try { x.geom.dispose(); } catch (_) {} }
+      return g;
+    },
+  },
+  pin: {
+    name: 'Dowel pin', params: { dia: 8, length: 30, chamfer: 0.8, segs: 32 },
+    schema: [{ id: 'dia', label: 'Diameter', size: true }, { id: 'length', label: 'Length', size: true }, { id: 'chamfer', label: 'Chamfer', size: true }, { id: 'segs', label: 'Smoothness', int: true, min: 8, max: 64 }],
+    build(p) { const r = p.dia / 2, L = p.length / 2, c = Math.max(0, Math.min(p.chamfer, r - 0.05, L - 0.05)); return _libLathe([[0, -L], [r - c, -L], [r, -L + c], [r, L - c], [r - c, L], [0, L]], p.segs); },
+  },
+  countersunk: {
+    name: 'Countersunk screw', params: { size: 'M6', length: 24, segs: 24 }, sized: true,
+    schema: [{ id: 'size', label: 'Size', choices: _FASTENER_M_KEYS }, { id: 'length', label: 'Length', size: true }, { id: 'segs', label: 'Smoothness', int: true, min: 8, max: 64 }],
+    build(p) { const d = _fasterDims(p).d, rk = _din(p, 'cskD') / 2, k = _din(p, 'cskK'), L = Math.max(p.length, k + 0.5); const g = _libLathe([[0, 0], [rk, 0], [d / 2, -k], [d / 2, -L], [0, -L]], p.segs); g.center(); return g; },   // DIN 7991; the length includes the head
+  },
+  standoff: {
+    name: 'Hex standoff', params: { across: 8, length: 20, bore: 4 },
+    schema: [{ id: 'across', label: 'Across flats', size: true }, { id: 'length', label: 'Length', size: true }, { id: 'bore', label: 'Bore', size: true }],
+    build(p) {
+      const r = p.across / Math.sqrt(3), pts = [];
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+      const s = _libPoly(pts), b = Math.min(p.bore, p.across - 0.5);
+      if (b > 0.2) _libCircleHole(s, 0, 0, b / 2);
+      return _libExtrude(s, p.length, 24);
+    },
+  },
+};
+Object.assign(_LIB_PARTS, _LIB_NUTS, _LIB_MORE);
+// ── A further batch of library parts ─────────────────────────────────────
+// Same form as the ones above; put on their shelves by _LIB_EXTRA_SHELVES.
+const _libMerge = (list) => { const g = _mergeGeoms(list); for (const x of list) { try { (x.geom || x).dispose(); } catch (_) {} } return g; };
+const _libAt = (geom, x, y, z) => ({ geom, matrix: new THREE.Matrix4().makeTranslation(x, y, z) });
+// an open ring (a ring with a slit) as a flat shape: outer arc one way, inner arc back
+const _libOpenRing = (od, id, gapDeg) => {
+  const g = Math.max(0.5, Math.min(170, gapDeg)) * Math.PI / 360, s = new THREE.Shape();
+  s.absarc(0, 0, od / 2, g, Math.PI * 2 - g, false);
+  s.absarc(0, 0, Math.min(id, od - 0.2) / 2, Math.PI * 2 - g, g, true);
+  s.closePath();
+  return s;
+};
+const _libRoundRect = (w, d, r) => {
+  const x = w / 2, y = d / 2, k = Math.max(0, Math.min(r, x - 0.01, y - 0.01)), s = new THREE.Shape();
+  if (k < 0.05) return _libPoly([[-x, -y], [x, -y], [x, y], [-x, y]]);
+  s.moveTo(-x + k, -y); s.lineTo(x - k, -y); s.absarc(x - k, -y + k, k, -Math.PI / 2, 0, false);
+  s.lineTo(x, y - k); s.absarc(x - k, y - k, k, 0, Math.PI / 2, false);
+  s.lineTo(-x + k, y); s.absarc(-x + k, y - k, k, Math.PI / 2, Math.PI, false);
+  s.lineTo(-x, -y + k); s.absarc(-x + k, -y + k, k, Math.PI, Math.PI * 1.5, false);
+  return s;
+};
+const _LIB_EXTRA = {
+  // ── shapes
+  roundedbox: {
+    name: 'Rounded box', params: { width: 100, depth: 100, height: 60, radius: 12 },
+    schema: [_S('width', 'Width'), _S('depth', 'Depth'), _S('height', 'Height'), _S('radius', 'Corner radius')],
+    build(p) { return _libExtrude(_libRoundRect(p.width, p.depth, p.radius), p.height, 12); },
+  },
+  halfcyl: {
+    name: 'Half cylinder', params: { radius: 50, length: 100, segs: 32 },
+    schema: [_S('radius', 'Radius'), _S('length', 'Length'), _SEGS],
+    build(p) { const s = new THREE.Shape(); s.absarc(0, 0, p.radius, 0, Math.PI, false); s.closePath(); const g = _libExtrude(s, p.length, _clampSegs(p)); g.rotateX(Math.PI / 2); g.center(); return g; },
+  },
+  star: {
+    name: 'Star', params: { points: 5, outer: 50, inner: 22, thickness: 20 },
+    schema: [_N('points', 'Points', 3, 24), _S('outer', 'Outer radius'), _S('inner', 'Inner radius'), _S('thickness', 'Thickness')],
+    build(p) {
+      const n = Math.max(3, Math.min(24, p.points | 0)), pts = [];
+      for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * Math.PI * 2 + Math.PI / 2, r = i % 2 ? Math.min(p.inner, p.outer) : p.outer; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+      return _libExtrude(_libPoly(pts), p.thickness);
+    },
+  },
+  tetra: {
+    name: 'Tetrahedron', params: { radius: 50 },
+    schema: [_S('radius', 'Radius')],
+    build(p) { const g = new THREE.TetrahedronGeometry(p.radius, 0); g.rotateX(-Math.atan(Math.SQRT2)); g.rotateZ(Math.PI / 4); g.computeBoundingBox(); g.center(); return g; },
+  },
+  arrow: {
+    name: 'Arrow', params: { length: 120, width: 30, head: 50, headWidth: 70, thickness: 10 },
+    schema: [_S('length', 'Length'), _S('width', 'Shaft width'), _S('head', 'Head length'), _S('headWidth', 'Head width'), _S('thickness', 'Thickness')],
+    build(p) { const L = p.length, h = Math.min(p.head, L - 0.1), w = p.width / 2, hw = Math.max(p.headWidth / 2, w); const g = _libExtrude(_libPoly([[0, -w], [L - h, -w], [L - h, -hw], [L, 0], [L - h, hw], [L - h, w], [0, w]]), p.thickness); g.center(); return g; },
+  },
+  plus: {
+    name: 'Cross', params: { size: 100, arm: 30, thickness: 20 },
+    schema: [_S('size', 'Size'), _S('arm', 'Arm width'), _S('thickness', 'Thickness')],
+    build(p) { const s = p.size / 2, a = Math.min(p.arm / 2, s - 0.1); return _libExtrude(_libPoly([[-a, -s], [a, -s], [a, -a], [s, -a], [s, a], [a, a], [a, s], [-a, s], [-a, a], [-s, a], [-s, -a], [-a, -a]]), p.thickness); },
+  },
+  // ── fasteners
+  setscrew: {
+    name: 'Set screw', params: { size: 'M6', length: 10, segs: 24 }, sized: true,
+    schema: [{ id: 'size', label: 'Size', choices: _FASTENER_M_KEYS }, _S('length', 'Length'), _SEGS],
+    build(p) { const r = _fasterDims(p).d / 2, L = Math.max(p.length, r) / 2, c = r * 0.25; return _libLathe([[0, -L], [r - c, -L], [r, -L + c], [r, L - c], [r - c, L], [r * 0.55, L], [r * 0.55, L - r * 0.9], [0, L - r * 0.9]], _clampSegs(p)); },
+  },
+  carriagebolt: {
+    name: 'Carriage bolt', params: { size: 'M8', length: 40, segs: 24 }, sized: true,
+    schema: [{ id: 'size', label: 'Size', choices: _FASTENER_M_KEYS }, _S('length', 'Length'), _SEGS],
+    build(p) {
+      const d = _fasterDims(p).d, R = d * 1.1, k = d * 0.5, L = Math.max(p.length, d), pts = [[0, k]];
+      for (let i = 1; i <= 8; i++) { const a = i / 8 * Math.PI / 2; pts.push([Math.sin(a) * R, Math.cos(a) * k]); }
+      pts.push([d / 2, 0], [d / 2, -L], [0, -L]);
+      const g = _libLathe(pts, _clampSegs(p)); g.center(); return g;
+    },
+  },
+  ubolt: {
+    name: 'U bolt', params: { dia: 8, width: 50, leg: 60, segs: 24 },
+    schema: [_S('dia', 'Rod dia.'), _S('width', 'Inside width'), _S('leg', 'Leg length'), _SEGS],
+    build(p) {
+      const r = p.dia / 2, R = p.width / 2 + r, segs = _clampSegs(p);
+      const bend = new THREE.TorusGeometry(R, r, 12, segs, Math.PI); bend.rotateX(Math.PI / 2);        // the arc, in the X–Z plane, over the top
+      const leg = () => { const c = new THREE.CylinderGeometry(r, r, p.leg, 12); c.rotateX(Math.PI / 2); return c; };
+      const g = _libMerge([bend, _libAt(leg(), R, 0, -p.leg / 2), _libAt(leg(), -R, 0, -p.leg / 2)]); g.center(); return g;
+    },
+  },
+  circlip: {
+    name: 'Retaining ring', params: { od: 30, id: 24, thickness: 1.5, gap: 40 },
+    schema: [_S('od', 'Outer dia.'), _S('id', 'Inner dia.'), _S('thickness', 'Thickness'), _N('gap', 'Gap angle', 5, 170)],
+    build(p) { return _libExtrude(_libOpenRing(p.od, p.id, p.gap), p.thickness, 48); },
+  },
+  springwasher: {
+    name: 'Spring washer', params: { id: 6.4, od: 11, thickness: 1.6 },
+    schema: [_S('id', 'Inner dia.'), _S('od', 'Outer dia.'), _S('thickness', 'Thickness')],
+    build(p) { return _libExtrude(_libOpenRing(p.od, p.id, 8), p.thickness, 48); },
+  },
+  // ── pipes
+  pipecross: {
+    name: 'Pipe cross', params: { od: 60, length: 160, segs: 32 },
+    schema: [_S('od', 'Pipe dia.'), _S('length', 'Length'), _SEGS],
+    build(p) { const r = p.od / 2, segs = _clampSegs(p), a = new THREE.CylinderGeometry(r, r, p.length, segs), b = new THREE.CylinderGeometry(r, r, p.length, segs); a.rotateX(Math.PI / 2); b.rotateZ(Math.PI / 2); return _libMerge([a, b]); },
+  },
+  // ── profiles and plates
+  gusset: {
+    name: 'Gusset plate', params: { size: 100, thickness: 6, holeDia: 9 },
+    schema: [_S('size', 'Leg length'), _S('thickness', 'Thickness'), _S('holeDia', 'Holes')],
+    build(p) {
+      const s = p.size, c = s * 0.12, sh = _libPoly([[0, 0], [s, 0], [s, c], [c, s], [0, s]]), r = Math.min(p.holeDia / 2, s * 0.08);
+      if (r > 0.2) for (const [x, y] of [[s * 0.2, s * 0.2], [s * 0.75, s * 0.12], [s * 0.12, s * 0.75]]) _libCircleHole(sh, x, y, r);
+      const g = _libExtrude(sh, p.thickness); g.center(); return g;
+    },
+  },
+  cchannel: {
+    name: 'C channel', params: { width: 80, height: 40, lip: 15, t: 3, length: 200 },
+    schema: [_S('width', 'Width'), _S('height', 'Height'), _S('lip', 'Lip'), _S('t', 'Thickness'), _S('length', 'Length')],
+    build(p) {
+      const w = p.width / 2, h = p.height, t = Math.min(p.t, w - 0.1, h / 2 - 0.1), l = Math.max(t, Math.min(p.lip, w - t - 0.5));
+      const g = _libExtrude(_libPoly([[-w, 0], [w, 0], [w, h], [w - l, h], [w - l, h - t], [w - t, h - t], [w - t, t], [-w + t, t], [-w + t, h - t], [-w + l, h - t], [-w + l, h], [-w, h]]), p.length); g.center(); return g;
+    },
+  },
+  perfplate: {
+    name: 'Perforated plate', params: { width: 200, depth: 120, thickness: 3, holeDia: 8, pitch: 20 },
+    schema: [_S('width', 'Width'), _S('depth', 'Depth'), _S('thickness', 'Thickness'), _S('holeDia', 'Hole dia.'), _S('pitch', 'Pitch')],
+    build(p) {
+      const w = p.width / 2, d = p.depth / 2, sh = _libPoly([[-w, -d], [w, -d], [w, d], [-w, d]]), r = p.holeDia / 2;
+      let pitch = Math.max(p.pitch, p.holeDia + 1);
+      // (never more than a few hundred holes, however small the pitch)
+      while (Math.floor(p.width / pitch) * Math.floor(p.depth / pitch) > 400) pitch *= 1.25;
+      const nx = Math.floor((p.width - p.holeDia) / pitch), ny = Math.floor((p.depth - p.holeDia) / pitch);
+      if (r > 0.2) for (let i = 0; i <= nx; i++) for (let j = 0; j <= ny; j++) _libCircleHole(sh, (i - nx / 2) * pitch, (j - ny / 2) * pitch, r);
+      return _libExtrude(sh, p.thickness, 8);
+    },
+  },
+  slotplate: {
+    name: 'Slotted plate', params: { width: 160, depth: 40, thickness: 5, slotLength: 100, slotWidth: 9 },
+    schema: [_S('width', 'Width'), _S('depth', 'Depth'), _S('thickness', 'Thickness'), _S('slotLength', 'Slot length'), _S('slotWidth', 'Slot width')],
+    build(p) {
+      const w = p.width / 2, d = p.depth / 2, sh = _libPoly([[-w, -d], [w, -d], [w, d], [-w, d]]);
+      const r = Math.min(p.slotWidth / 2, d - 1), half = Math.max(0, Math.min(p.slotLength / 2, w - r - 1) - r);
+      if (r > 0.2) { const h = new THREE.Path(); h.absarc(half, 0, r, -Math.PI / 2, Math.PI / 2, false); h.absarc(-half, 0, r, Math.PI / 2, Math.PI * 1.5, false); h.closePath(); sh.holes.push(h); }
+      return _libExtrude(sh, p.thickness, 12);
+    },
+  },
+  hinge: {
+    name: 'Hinge', params: { width: 60, leaf: 30, thickness: 2.5, pin: 6 },
+    schema: [_S('width', 'Width'), _S('leaf', 'Leaf'), _S('thickness', 'Thickness'), _S('pin', 'Barrel dia.')],
+    build(p) {
+      const leaf = (sx) => { const b = new THREE.BoxGeometry(p.leaf, p.width, p.thickness); b.translate(sx * (p.leaf / 2 + p.pin * 0.3), 0, 0); return b; };
+      const barrel = new THREE.CylinderGeometry(p.pin / 2, p.pin / 2, p.width, 20); barrel.translate(0, 0, p.pin / 2 - p.thickness / 2);
+      const g = _libMerge([leaf(1), leaf(-1), barrel]); g.center(); return g;
+    },
+  },
+  // ── machine parts
+  collar: {
+    name: 'Shaft collar', params: { id: 12, od: 28, width: 12 },
+    schema: [_S('id', 'Bore'), _S('od', 'Outer dia.'), _S('width', 'Width')],
+    build(p) { return _libExtrude(_libOpenRing(p.od, p.id, 6), p.width, 48); },
+  },
+  pillowblock: {
+    name: 'Pillow block', params: { bore: 20, width: 120, height: 60, depth: 35, base: 14 },
+    schema: [_S('bore', 'Bore'), _S('width', 'Width'), _S('height', 'Height'), _S('depth', 'Depth'), _S('base', 'Base height')],
+    build(p) {
+      const w = p.width / 2, b = Math.min(p.base, p.height * 0.5), R = Math.min((p.height - b) * 0.72, w - 4), cy = p.height - R, s = new THREE.Shape();
+      const a0 = Math.asin(Math.max(-1, Math.min(1, (b - cy) / R)));          // where the housing meets the top of the base
+      s.moveTo(-w, 0); s.lineTo(w, 0); s.lineTo(w, b); s.lineTo(Math.cos(a0) * R, b);
+      s.absarc(0, cy, R, a0, Math.PI - a0, false);
+      s.lineTo(-w, b); s.closePath();
+      const r = Math.min(p.bore / 2, R - 2);
+      if (r > 0.2) _libCircleHole(s, 0, cy, r);
+      const g = _libExtrude(s, p.depth, 32); g.rotateX(Math.PI / 2); g.center(); return g;
+    },
+  },
+  wheel: {
+    name: 'Wheel', params: { od: 120, thickness: 24, bore: 12, holes: 6, holeDia: 22 },
+    schema: [_S('od', 'Diameter'), _S('thickness', 'Width'), _S('bore', 'Bore'), _N('holes', 'Lightening holes', 0, 12), _S('holeDia', 'Hole dia.')],
+    build(p) {
+      const s = new THREE.Shape(); s.absarc(0, 0, p.od / 2, 0, Math.PI * 2, false);
+      const b = Math.min(p.bore, p.od * 0.4);
+      if (b > 0.2) _libCircleHole(s, 0, 0, b / 2);
+      const n = Math.max(0, Math.min(12, p.holes | 0)), rr = p.od * 0.3, hr = Math.min(p.holeDia / 2, p.od * 0.12, n ? Math.PI * rr / n * 0.8 : 1e9);
+      if (hr > 0.5) for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; _libCircleHole(s, Math.cos(a) * rr, Math.sin(a) * rr, hr); }
+      return _libExtrude(s, p.thickness, 48);
+    },
+  },
+  enclosure: {
+    name: 'Enclosure', params: { width: 120, depth: 80, height: 40, wall: 2.5, radius: 6 },
+    schema: [_S('width', 'Width'), _S('depth', 'Depth'), _S('height', 'Height'), _S('wall', 'Wall'), _S('radius', 'Corner radius')],
+    build(p) {
+      const t = Math.min(p.wall, p.width / 2 - 0.5, p.depth / 2 - 0.5, p.height - 0.5), outer = _libRoundRect(p.width, p.depth, p.radius);
+      const inner = _libRoundRect(p.width - 2 * t, p.depth - 2 * t, Math.max(0, p.radius - t));
+      const walls = _libRoundRect(p.width, p.depth, p.radius); walls.holes.push(new THREE.Path(inner.getPoints(8).reverse()));
+      const g = _libMerge([_libAt(_libExtrude(walls, p.height - t, 8), 0, 0, t / 2), _libAt(_libExtrude(outer, t, 8), 0, 0, -(p.height - t) / 2)]); g.center(); return g;
+    },
+  },
+  rail: {
+    name: 'Linear rail', params: { length: 300, width: 15, height: 12.5, holePitch: 60, holeDia: 4.5 },
+    schema: [_S('length', 'Length'), _S('width', 'Width'), _S('height', 'Height'), _S('holePitch', 'Hole pitch'), _S('holeDia', 'Hole dia.')],
+    build(p) {
+      const l = p.length / 2, w = p.width / 2, sh = _libPoly([[-l, -w], [l, -w], [l, w], [-l, w]]), r = Math.min(p.holeDia / 2, w - 0.5), pitch = Math.max(p.holePitch, p.holeDia * 2, p.length / 60);
+      const n = Math.max(1, Math.floor((p.length - pitch * 0.5) / pitch) + 1);
+      if (r > 0.2) for (let i = 0; i < n; i++) _libCircleHole(sh, (i - (n - 1) / 2) * pitch, 0, r);
+      return _libExtrude(sh, p.height, 12);
+    },
+  },
+  foot: {
+    name: 'Levelling foot', params: { pad: 40, padHeight: 12, stem: 10, stemLength: 40, segs: 32 },
+    schema: [_S('pad', 'Pad dia.'), _S('padHeight', 'Pad height'), _S('stem', 'Stem dia.'), _S('stemLength', 'Stem length'), _SEGS],
+    build(p) { const R = p.pad / 2, r = Math.min(p.stem / 2, R - 0.5), h = p.padHeight; const g = _libLathe([[0, 0], [R, 0], [R, h * 0.35], [r * 1.8, h], [r, h], [r, h + p.stemLength], [0, h + p.stemLength]], _clampSegs(p)); g.center(); return g; },
+  },
+  handle: {
+    name: 'Pull handle', params: { width: 100, height: 40, dia: 10, segs: 16 },
+    schema: [_S('width', 'Width'), _S('height', 'Height'), _S('dia', 'Bar dia.'), _SEGS],
+    build(p) {
+      const r = p.dia / 2, R = Math.max(r * 1.6, Math.min(p.height * 0.5, p.width * 0.25)), w = p.width / 2, segs = _clampSegs(p);
+      const corner = (sx) => { const t = new THREE.TorusGeometry(R, r, 10, Math.max(6, segs >> 1), Math.PI / 2); t.rotateX(Math.PI / 2); if (sx < 0) t.rotateZ(Math.PI); t.translate(sx * (w - R), 0, p.height - R); return t; };   // quarter bends in the X–Z plane
+      const bar = new THREE.CylinderGeometry(r, r, Math.max(0.1, p.width - 2 * R), 12); bar.rotateZ(Math.PI / 2); bar.translate(0, 0, p.height);
+      const leg = (sx) => { const c = new THREE.CylinderGeometry(r, r, Math.max(0.1, p.height - R), 12); c.rotateX(Math.PI / 2); c.translate(sx * w, 0, (p.height - R) / 2); return c; };
+      const g = _libMerge([corner(1), corner(-1), bar, leg(1), leg(-1)]); g.center(); return g;
+    },
+  },
+};
+Object.assign(_LIB_PARTS, _LIB_EXTRA);
+const _LIB_EXTRA_SHELVES = {
+  'Shapes': ['roundedbox', 'halfcyl', 'tetra', 'star', 'plus', 'arrow'],
+  'Fasteners': ['setscrew', 'carriagebolt', 'ubolt', 'circlip', 'springwasher'],
+  'Pipes and flanges': ['pipecross'],
+  'Profiles and plates': ['cchannel', 'gusset', 'perfplate', 'slotplate', 'hinge'],
+  'Machine parts': ['collar', 'pillowblock', 'wheel', 'rail', 'foot', 'handle', 'enclosure'],
+};
+window._LIB_ICON_PATHS = {
+  wedge: '<path d="M3 19h18L3 7z"/>',
+  tube: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/>',
+  elbow: '<path d="M5 3v8a8 8 0 0 0 8 8h8"/><path d="M11 3v8a2 2 0 0 0 2 2h8"/>',
+  flange: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="M12 5.5v.01M18.5 12v.01M12 18.5v.01M5.5 12v.01"/>',
+  plate: '<rect x="3" y="6" width="18" height="12" rx="1"/><path d="M6.5 9.5v.01M17.5 9.5v.01M6.5 14.5v.01M17.5 14.5v.01"/>',
+  angle: '<path d="M5 4v16h15v-5H10V4z"/>',
+  channel: '<path d="M4 5v14h16V5h-4v10H8V5z"/>',
+  ibeam: '<path d="M5 4h14v4h-5v8h5v4H5v-4h5V8H5z"/>',
+  boxtube: '<rect x="4" y="4" width="16" height="16"/><rect x="8" y="8" width="8" height="8"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/><circle cx="12" cy="12" r="7"/>',
+  bearing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 5.5v.01M12 18.5v.01M5.5 12v.01M18.5 12v.01"/>',
+  pin: '<rect x="9" y="3" width="6" height="18" rx="2"/>',
+  countersunk: '<path d="M5 4h14l-5 5v11h-4V9z"/>',
+  standoff: '<path d="M8 3h8l3 4v10l-3 4H8l-3-4V7z"/><circle cx="12" cy="12" r="2.5"/>',
+  jamnut: '<path d="M4 9h16v6H4z"/><path d="M9 9v6M15 9v6"/>',
+  locknut: '<path d="M4 11h16v8H4z"/><path d="M9 11v8M15 11v8"/><path d="M6.5 11V7.5A1.5 1.5 0 0 1 8 6h8a1.5 1.5 0 0 1 1.5 1.5V11"/>',
+  flangenut: '<path d="M6 5h12v9H6z"/><path d="M10 5v9M14 5v9"/><path d="M6 14l-4 3v2h20v-2l-4-3"/>',
+  capnut: '<path d="M5 13h14v7H5z"/><path d="M9.5 13v7M14.5 13v7"/><path d="M7 13V9a5 5 0 0 1 10 0v4"/>',
+  castlenut: '<path d="M4 12h16v8H4z"/><path d="M9 12v8M15 12v8"/><path d="M5.5 12V5h3v4h2V5h3v4h2V5h3v7"/>',
+  squarenut: '<rect x="4" y="4" width="16" height="16" rx="1"/><circle cx="12" cy="12" r="4"/>',
+  couplingnut: '<path d="M7 2h10v20H7z"/><path d="M10.5 2v20M13.5 2v20"/>',
+  wingnut: '<path d="M8.5 20h7l-1-6h-5z"/><path d="M9.5 15C6 14 2.5 11 3 6.5c.3-2 2.4-2 3.2-.4L10 13"/><path d="M14.5 15c3.5-1 7-4 6.5-8.5-.3-2-2.4-2-3.2-.4L14 13"/>',
+  thumbnut: '<path d="M3 5h18v8H3z"/><path d="M6 5v8M9 5v8M12 5v8M15 5v8M18 5v8"/><path d="M8 13h8v6H8z"/>',
+  tslotnut: '<path d="M8 5h8v7h5v7H3v-7h5z"/><path d="M12 5v14"/>',
+  eyenut: '<circle cx="12" cy="8.5" r="5.5"/><circle cx="12" cy="8.5" r="2.5"/><path d="M8.5 14l-2 3v4h11v-4l-2-3"/>',
+  pyramid: '<path d="M12 3 3 19h18z"/><path d="M12 3v16"/>',
+  prism: '<path d="M7 3h10l4 5v8l-4 5H7l-4-5V8z"/><path d="M7 3v18M17 3v18"/>',
+  hemisphere: '<path d="M3 17a9 9 0 0 1 18 0z"/>',
+  buttonhead: '<path d="M6 8a6 4 0 0 1 12 0z"/><path d="M10 8v13h4V8"/>',
+  threadedrod: '<rect x="9" y="2" width="6" height="20" rx="1"/><path d="M9 6l6 2M9 10l6 2M9 14l6 2M9 18l6 2"/>',
+  eyebolt: '<circle cx="12" cy="6.5" r="4"/><path d="M9 11h6v2H9z"/><path d="M10.5 13v9h3v-9"/>',
+  rivet: '<path d="M6 9a6 5 0 0 1 12 0z"/><path d="M10 9v10h4V9"/>',
+  key: '<rect x="2" y="8" width="20" height="8" rx="4"/>',
+  tee: '<path d="M8 2v20h8v-6h6V8h-6V2z"/>',
+  reducer: '<path d="M4 20h16l-3-16H7z"/><path d="M8 20l2-16M16 20l-2-16"/>',
+  endcap: '<path d="M5 20V8a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v12"/><path d="M5 20h14"/>',
+  tprofile: '<path d="M4 4h16v4h-6v12h-4V8H4z"/>',
+  zprofile: '<path d="M4 4h10v12h6v4H10V8H4z"/>',
+  flatbar: '<rect x="3" y="9" width="18" height="6"/>',
+  roundbar: '<circle cx="12" cy="12" r="8"/>',
+  hexbar: '<path d="m12 3 7.8 4.5v9L12 21l-7.8-4.5v-9z"/>',
+  extrusion: '<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M10 3v3H9v2M14 3v3h1v2M10 21v-3H9v-2M14 21v-3h1v-2M3 10h3V9h2M3 14h3v1h2M21 10h-3V9h-2M21 14h-3v1h-2"/><circle cx="12" cy="12" r="1.5"/>',
+  pulley: '<path d="M7 3h10v4l-3 2v6l3 2v4H7v-4l3-2V9L7 7z"/>',
+  sprocket: '<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
+  bushing: '<path d="M3 17h18v4H3z"/><path d="M7 17V3h10v14"/><path d="M10 3v18M14 3v18"/>',
+  spring: '<path d="M6 21 18 18 6 15l12-3L6 9l12-3L6 3"/>',
+  rack: '<path d="M2 20V13h2l1-4h2l1 4h2l1-4h2l1 4h2l1-4h2l1 4h2v7z"/>',
+  handwheel: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3v6.5M4.2 16.5l5.6-3.2M19.8 16.5l-5.6-3.2"/>',
+  knob: '<path d="M12 3l2.2 3.2 3.8-.6.4 3.8 3.4 1.8-2.4 3 1.2 3.6-3.8.6L14.6 22 12 19.2 9.4 22 7.2 18.4l-3.8-.6 1.2-3.6-2.4-3 3.4-1.8.4-3.8 3.8.6z"/><circle cx="12" cy="12.5" r="2.5"/>',
+  bracket: '<path d="M4 3h4v13h13v4H4z"/><path d="M6 8v.01M15 18v.01"/>',
+  stepper: '<rect x="4" y="8" width="16" height="13" rx="1"/><path d="M9 8V7h6v1"/><path d="M11 7V2h2v5"/>',
+};
+{
+  const params0 = _primitiveDefaultParams, schema0 = _primitiveSchema, geom0 = _primitiveGeometry, name0 = _primitiveDefaultName;
+  _primitiveDefaultParams = function (kind, s) { const d = _LIB_PARTS[kind]; return d ? { ...d.params, orientation: 'z' } : params0(kind, s); };
+  _primitiveSchema = function (kind) { const d = _LIB_PARTS[kind]; return d ? d.schema.concat([{ id: 'orientation', label: 'Orientation', axis: true }]) : schema0(kind); };
+  _primitiveGeometry = function (kind, p) { const d = _LIB_PARTS[kind]; return d ? d.build(p) : geom0(kind, p); };
+  _primitiveDefaultName = function (kind) { const d = _LIB_PARTS[kind]; return d ? d.name : name0(kind); };
+}
+
+// ── A nut on the bolt ─────────────────────────────────────────────────────
+// Every bolt (anything with a threaded length) can carry a nut: a switch in
+// its Shape parameters, the kind of nut, and how far down the thread it sits,
+// measured from under the head to the nut's near face. The nut is part of the
+// bolt's own shape, in the bolt's thread size, so it follows Size, Length and
+// Orientation, is one part in the tree and one undo step like any other
+// parameter. It cannot sit beyond the end of the thread: the position is held
+// to what the length allows.
+// A nut with a side to it (the flange of a flange nut, the open end of a cap
+// nut, the plain face of a lock nut) is put on that side first, facing the
+// head, as it would be tightened.
+const _BOLT_KINDS = new Set(['hexbolt', 'allen', 'countersunk', 'buttonhead', 'threadedrod', 'eyebolt']);
+const _BOLT_NUTS = { 'Hex nut': (p) => _hexNutGeom(p) };            // what it is called → its shape, centred on its own height
+for (const k of Object.keys(_LIB_NUTS)) _BOLT_NUTS[_LIB_NUTS[k].name] = (p) => _LIB_NUTS[k].build(p);
+{
+  const params1 = _primitiveDefaultParams, schema1 = _primitiveSchema, geom1 = _primitiveGeometry;
+  _primitiveDefaultParams = function (kind, s) {
+    const p = params1(kind, s);
+    return _BOLT_KINDS.has(kind) ? { ...p, nut: false, nutType: 'Hex nut', nutAt: 12 } : p;
+  };
+  _primitiveSchema = function (kind) {
+    const rows = schema1(kind);
+    if (!_BOLT_KINDS.has(kind)) return rows;
+    const mine = [
+      { id: 'nut', label: 'Nut on the bolt', bool: true, def: false },
+      { id: 'nutType', label: 'Nut', choices: Object.keys(_BOLT_NUTS), def: 'Hex nut', when: 'nut' },
+      { id: 'nutAt', label: 'Nut from the head', size: true, def: 12, when: 'nut' },
+    ];
+    const at = rows.findIndex(f => f.axis);                           // before Orientation, which closes every card
+    return at < 0 ? rows.concat(mine) : [...rows.slice(0, at), ...mine, ...rows.slice(at)];
+  };
+  _primitiveGeometry = function (kind, p) {
+    const bolt = geom1(kind, p);
+    if (!p || !p.nut || !_BOLT_KINDS.has(kind)) return bolt;
+    let nut;
+    try { nut = (_BOLT_NUTS[p.nutType] || _BOLT_NUTS['Hex nut'])({ size: p.size, segs: p.segs }); } catch (_) { return bolt; }
+    bolt.computeBoundingBox(); nut.computeBoundingBox();
+    const tip = bolt.boundingBox.min.z;                               // the thread runs down -Z from under the head
+    const length = Math.max(1, +p.length || (bolt.boundingBox.max.z - tip));
+    const h = nut.boundingBox.max.z - nut.boundingBox.min.z;
+    const from = Math.max(0, Math.min(length - h, Number.isFinite(+p.nutAt) ? +p.nutAt : length * 0.5));
+    const place = new THREE.Matrix4().makeTranslation(0, 0, tip + length - from - h / 2).multiply(new THREE.Matrix4().makeRotationX(Math.PI));
+    const both = _mergeGeoms([bolt, { geom: nut, matrix: place }]);
+    try { bolt.dispose(); nut.dispose(); } catch (_) {}
+    return both;
+  };
+}
+
+// The library panel: what is in it, by shelf.
+const _LIB_SHELVES = [
+  ['Shapes', ['cube', 'sphere', 'cylinder', 'cone', 'torus', 'plane', 'capsule', 'wedge', 'pyramid', 'prism', 'hemisphere']],
+  ['Fasteners', ['hexbolt', 'allen', 'countersunk', 'buttonhead', 'threadedrod', 'eyebolt', 'washer', 'pin', 'rivet', 'key', 'standoff']],
+  ['Nuts', ['hexnut', ...Object.keys(_LIB_NUTS)]],
+  ['Pipes and flanges', ['tube', 'elbow', 'tee', 'reducer', 'endcap', 'flange']],
+  ['Profiles and plates', ['plate', 'flatbar', 'angle', 'channel', 'tprofile', 'zprofile', 'ibeam', 'boxtube', 'extrusion', 'roundbar', 'hexbar']],
+  ['Machine parts', ['gear', 'rack', 'sprocket', 'pulley', 'bearing', 'bushing', 'spring', 'handwheel', 'knob', 'bracket', 'stepper']],
+];
+const _LIB_SIZED = new Set(['hexbolt', 'allen', 'countersunk', 'hexnut', 'washer', ...Object.keys(_LIB_NUTS), ...Object.keys(_LIB_MORE).filter(k => _LIB_MORE[k].sized)]);   // take the size (and length) chosen in the panel
+for (const s of _LIB_SHELVES) if (_LIB_EXTRA_SHELVES[s[0]]) s[1].push(..._LIB_EXTRA_SHELVES[s[0]]);
+for (const k of Object.keys(_LIB_EXTRA)) if (_LIB_EXTRA[k].sized) _LIB_SIZED.add(k);
+const _LIB_KEY = 'stepopt-lib';
+function _libPrefs() {
+  try { return { size: 'M6', length: 24, recent: [], side: 'tree', ...(JSON.parse(localStorage.getItem(_LIB_KEY) || '{}') || {}) }; }
+  catch (_) { return { size: 'M6', length: 24, recent: [], side: 'tree' }; }
+}
+function _libSave(p) { try { localStorage.setItem(_LIB_KEY, JSON.stringify(p)); } catch (_) {} }
+// The turn that stands a part (built along the scene's up axis) along `normal`.
+function _libTilt(normal) {
+  const upY = state.sceneUpAxis === 'y';
+  return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, upY ? 1 : 0, upY ? 0 : 1), normal);
+}
+// The middle of a part's underside, in its own coordinates.
+function _libFoot(geom) {
+  if (!geom.boundingBox) geom.computeBoundingBox();
+  const up = state.sceneUpAxis === 'y' ? 'y' : 'z', foot = geom.boundingBox.getCenter(new THREE.Vector3());
+  foot[up] = geom.boundingBox.min[up];
+  return foot;
+}
+// Stand a part on a world point: its underside on the point, centred over it.
+// With `normal` (the surface it was dropped on) it is turned to stand square
+// to that surface instead of upright.
+function _libSeat(p, point, normal) {
+  if (!p || !p.mesh) return;
+  _detachGizmo();
+  const up = state.sceneUpAxis === 'y' ? 'y' : 'z';
+  let from;
+  if (normal) {
+    const parentQ = p.mesh.parent ? p.mesh.parent.getWorldQuaternion(new THREE.Quaternion()) : new THREE.Quaternion();
+    p.mesh.quaternion.copy(parentQ.invert().multiply(_libTilt(normal)));
+    p.mesh.updateMatrix();
+    p.mesh.updateMatrixWorld(true);
+    from = _libFoot(p.mesh.geometry).applyMatrix4(p.mesh.matrixWorld);
+  } else {
+    _refreshPartBBox(p);
+    from = p.bbox.getCenter(new THREE.Vector3()); from[up] = p.bbox.min[up];
+  }
+  const world = p.mesh.getWorldPosition(new THREE.Vector3()).add(point).sub(from);
+  p.mesh.position.copy(p.mesh.parent ? p.mesh.parent.worldToLocal(world) : world);
+  p.mesh.updateMatrix();
+  p.mesh.updateMatrixWorld(true);
+  p._exactWorld = p.mesh.matrixWorld.clone();
+  _refreshPartBBox(p);
+  p._partCenter = null; p._origPos = null; p._origWorldPos = null;
+  try { applySelectionColors(); updateGizmo(); refreshPropertiesPanel(); } catch (_) {}
+  requestRender();
+}
+// The size (and length) chosen in the panel, for the parts that take one.
+function _libPreset(kind, prefs) {
+  const preset = {};
+  if (_LIB_SIZED.has(kind)) {
+    preset.size = prefs.size;
+    const d = _LIB_PARTS[kind];                  // a nut or a washer has no length to set
+    if (d ? 'length' in d.params : (kind !== 'hexnut' && kind !== 'washer')) preset.length = Math.max(1, +prefs.length || 24);
+  }
+  return preset;
+}
+// Add a library part. `at`: a world point to stand it on (a drop in the view).
+// Without one it goes where shapes always go when a part is selected (onto
+// that part), and stands on the floor at the origin when nothing is.
+function _libAdd(kind, at, normal) {
+  const prefs = _libPrefs();
+  const preset = _libPreset(kind, prefs);
+  const hadSel = state.selected && state.selected.size > 0;
+  const p = _addPrimitive(kind, preset);
+  if (!p) return null;
+  if (at) _libSeat(p, at, normal);
+  else if (!hadSel) _libSeat(p, new THREE.Vector3(0, 0, 0));
+  prefs.recent = [kind, ...prefs.recent.filter(k => k !== kind)].slice(0, 6);
+  _libSave(prefs);
+  try { _libRender(); } catch (_) {}
+  return p;
+}
+// Where a drop in the viewport lands: on the model under the pointer, or on
+// the floor where there is none. `normal` is the direction that surface faces
+// (towards the viewer), which is the way the part will stand.
+function _libDropHit(ev) {
+  const cv = document.getElementById('canvas');
+  if (!cv || !camera) return null;
+  const r = cv.getBoundingClientRect();
+  const ndc = new THREE.Vector2((ev.clientX - r.left) / r.width * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  const rc = new THREE.Raycaster();
+  rc.setFromCamera(ndc, camera);
+  try {
+    state.partsRoot.updateMatrixWorld(true);
+    const hit = rc.intersectObject(state.partsRoot, true).find(h => h.object.visible !== false && !(h.object.userData && h.object.userData._outline));
+    if (hit) {
+      const n = new THREE.Vector3(0, upY0() ? 1 : 0, upY0() ? 0 : 1);
+      if (hit.face && hit.face.normal) {
+        n.copy(hit.face.normal);
+        if (hit.object.isInstancedMesh && hit.instanceId != null) { const im = new THREE.Matrix4(); hit.object.getMatrixAt(hit.instanceId, im); n.transformDirection(im); }
+        n.transformDirection(hit.object.matrixWorld);
+        if (n.dot(rc.ray.direction) > 0) n.negate();            // hit from behind: face the viewer
+      }
+      return { point: hit.point.clone(), normal: n };
+    }
+  } catch (_) {}
+  const upY = upY0(), floor = new THREE.Vector3(0, upY ? 1 : 0, upY ? 0 : 1);
+  const out = new THREE.Vector3();
+  return { point: rc.ray.intersectPlane(new THREE.Plane(floor, 0), out) ? out : new THREE.Vector3(), normal: floor };
+}
+function upY0() { return state.sceneUpAxis === 'y'; }
+// While a library part is dragged over the view, a see-through copy of it
+// follows the pointer, standing where a drop would put it: square to the
+// surface of the model under the pointer, or upright on the floor. It is built once per drag, lives in the scene
+// (not among the parts, so it is never picked, counted or exported) and is
+// thrown away when the drag ends.
+let _libDragKind = null, _libGhost = null, _libGhostRaf = 0, _libGhostEv = null;
+function _libGhostMake(kind) {
+  const params = Object.assign(_primitiveDefaultParams(kind, 100), _libPreset(kind, _libPrefs()));
+  const geom = _primitiveGeometry(kind, params);
+  _applyPrimitiveOrientation(kind, geom, params.orientation || 'z');
+  geom.computeBoundingBox();
+  if (!geom.attributes.normal) geom.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x4da3ff, metalness: 0.1, roughness: 0.5, side: THREE.DoubleSide, transparent: true, opacity: 0.5, depthWrite: false });
+  const m = new THREE.Mesh(geom, mat);
+  m.name = '_libGhost'; m.renderOrder = 999; m.raycast = () => {};
+  m.userData._outline = true; m.userData._kind = kind;
+  scene.add(m);
+  return m;
+}
+function _libGhostClear() {
+  if (_libGhostRaf) { cancelAnimationFrame(_libGhostRaf); _libGhostRaf = 0; }
+  _libGhostEv = null;
+  const g = _libGhost;
+  if (!g) return;
+  _libGhost = null;
+  try { g.parent?.remove(g); g.geometry.dispose(); g.material.dispose(); } catch (_) {}
+  requestRender();
+}
+function _libGhostMove(ev) {
+  _libGhostEv = { clientX: ev.clientX, clientY: ev.clientY };
+  if (_libGhostRaf) return;
+  _libGhostRaf = requestAnimationFrame(() => {
+    _libGhostRaf = 0;
+    const e = _libGhostEv, kind = _libDragKind;
+    if (!e || !kind || !scene) return;
+    try {
+      if (_libGhost && _libGhost.userData._kind !== kind) _libGhostClear();
+      if (!_libGhost) _libGhost = _libGhostMake(kind);
+      const hit = _libDropHit(e);
+      if (!hit) return;
+      _libGhost.quaternion.copy(_libTilt(hit.normal));
+      _libGhost.position.copy(hit.point).sub(_libFoot(_libGhost.geometry).applyQuaternion(_libGhost.quaternion));
+      _libGhost.updateMatrixWorld(true);
+      requestRender();
+    } catch (err) { console.warn('[library] ghost failed:', err); _libGhostClear(); _libDragKind = null; }
+  });
+}
+function _libIcon(kind) { try { return window._primLineIcon(kind); } catch (_) { return ''; } }
+function _libRender() {
+  const list = document.getElementById('lib-list');
+  if (!list) return;
+  const prefs = _libPrefs();
+  const q = (document.getElementById('lib-filter')?.value || '').trim().toLowerCase();
+  const label = (k) => _primitiveDefaultName(k);
+  // Each part has a studio picture (assets/library/<kind>.webp, rendered once
+  // from the part itself); the line icon stands in if one is missing.
+  const tile = (k) => `<button type="button" class="lib-item" draggable="true" data-lib="${k}" title="Click to add ${label(k)} · drag into the view to place it"><span class="lib-pic"><img src="assets/library/${k}.webp" alt="" width="192" height="192" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('no-pic');this.remove()">${_libIcon(k)}</span><span class="lib-name">${label(k)}</span></button>`;
+  const known = new Set(_LIB_SHELVES.flatMap(s => s[1]));
+  const recent = prefs.recent.filter(k => known.has(k));
+  // Every shelf and every tile is made once and stays in the list; searching
+  // only shows or hides them. (Making the tiles afresh for each search made
+  // every picture load again, on every letter typed.) "Recently used" is the
+  // one shelf whose tiles change: it is filled when a part is added.
+  const make = (html) => { const t = document.createElement('template'); t.innerHTML = html; return t.content.firstElementChild; };
+  const secs = new Map([...list.querySelectorAll(':scope > .lib-sec')].map(el => [el.dataset.shelf, el]));
+  const shelf = (name, after) => {
+    let sec = secs.get(name);
+    if (!sec) { sec = make(`<div class="lib-sec" data-shelf="${name}"><div class="lib-shelf">${name}</div><div class="lib-grid"></div></div>`); secs.set(name, sec); }
+    const want = after ? after.nextElementSibling : list.firstElementChild;
+    if (want !== sec) list.insertBefore(sec, want);
+    return sec;
+  };
+  const fill = (sec, kinds) => {
+    const grid = sec.lastElementChild, tiles = new Map([...grid.children].map(el => [el.dataset.lib, el]));
+    let at = grid.firstElementChild;
+    for (const k of kinds) {
+      const el = tiles.get(k) || make(tile(k)); tiles.delete(k);
+      if (el === at) at = at.nextElementSibling; else grid.insertBefore(el, at);
+    }
+    for (const el of tiles.values()) el.remove();
+    return grid;
+  };
+  let prev = shelf('Recently used', null), shown = 0;
+  fill(prev, recent);
+  prev.hidden = !!q || !recent.length;
+  for (const [name, kinds] of _LIB_SHELVES) {
+    const sec = shelf(name, prev), grid = sec.firstElementChild.nextElementSibling;
+    if (grid.childElementCount !== kinds.length) fill(sec, kinds);
+    let any = 0;
+    for (const el of grid.children) {
+      const k = el.dataset.lib, hit = !q || (label(k) + ' ' + k + ' ' + name).toLowerCase().includes(q);
+      if (el.hidden === hit) el.hidden = !hit;
+      if (hit) any++;
+    }
+    sec.hidden = !any;
+    shown += any;
+    prev = sec;
+  }
+  let empty = list.querySelector(':scope > .lib-empty');
+  if (!shown && !empty) { empty = make('<div class="lib-empty">Nothing in the library matches.</div>'); list.appendChild(empty); }
+  if (empty) empty.hidden = !!shown;
+}
+function _libShow(side) {
+  const lib = side === 'lib';
+  document.getElementById('sidebar-left')?.classList.toggle('lib-on', lib);
+  const panel = document.getElementById('lib-panel');
+  if (panel) panel.hidden = !lib;
+  const sw = document.getElementById('side-switch');
+  if (sw) { sw.classList.toggle('is-lib', lib); for (const b of sw.querySelectorAll('[data-side]')) { const on = b.dataset.side === side; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); } }
+  const p = _libPrefs(); if (p.side !== side) { p.side = side; _libSave(p); }
+  if (lib) _libRender();
+}
+(function _wireLibrary() {
+  const sw = document.getElementById('side-switch');
+  if (!sw) return;
+  const prefs = _libPrefs();
+  sw.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-side]');
+    if (!b) return;
+    // the switch is no use with the sidebar folded away: open it
+    if (document.body.classList.contains('left-collapsed')) document.getElementById('btn-toggle-left')?.click();
+    _libShow(b.dataset.side);
+  });
+  const size = document.getElementById('lib-size'), len = document.getElementById('lib-length');
+  if (size) {
+    size.innerHTML = _FASTENER_M_KEYS.map(k => `<option value="${k}">${k}</option>`).join('');
+    size.value = prefs.size;
+    size.addEventListener('change', () => { const p = _libPrefs(); p.size = size.value; _libSave(p); });
+  }
+  if (len) {
+    len.value = String(prefs.length);
+    len.addEventListener('change', () => { const v = Math.max(1, Math.min(2000, parseFloat(len.value) || 24)); len.value = String(v); const p = _libPrefs(); p.length = v; _libSave(p); });
+    len.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); len.blur(); } });
+  }
+  document.getElementById('lib-filter')?.addEventListener('input', _libRender);
+  const list = document.getElementById('lib-list');
+  list?.addEventListener('click', (e) => { const b = e.target.closest('[data-lib]'); if (b) { try { _libAdd(b.dataset.lib); } catch (err) { console.warn('[library] add failed:', err); toast('Could not add that part', String(err && err.message || err), 'error'); } } });
+  list?.addEventListener('dragstart', (e) => {
+    const b = e.target.closest('[data-lib]');
+    if (!b || !e.dataTransfer) return;
+    e.dataTransfer.setData('application/x-mo-lib', b.dataset.lib);
+    e.dataTransfer.effectAllowed = 'copy';
+    _libDragKind = b.dataset.lib;                  // a drag's data cannot be read until the drop
+    try { e.dataTransfer.setDragImage(_libNoDragImage, 0, 0); } catch (_) {}   // the ghost in the view is the preview
+  });
+  list?.addEventListener('dragend', () => { _libDragKind = null; _libGhostClear(); });
+  const vp = document.getElementById('viewport');
+  const _libNoDragImage = new Image();
+  _libNoDragImage.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const isLib = (e) => !!e.dataTransfer && [...(e.dataTransfer.types || [])].includes('application/x-mo-lib');
+  vp?.addEventListener('dragover', (e) => { if (isLib(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; if (_libDragKind) _libGhostMove(e); } });
+  vp?.addEventListener('dragleave', (e) => { if (!e.relatedTarget || !vp.contains(e.relatedTarget)) _libGhostClear(); });
+  vp?.addEventListener('drop', (e) => {
+    if (!isLib(e)) return;
+    e.preventDefault();
+    const kind = e.dataTransfer.getData('application/x-mo-lib');
+    _libGhostClear(); _libDragKind = null;
+    const hit = _libDropHit(e), at = hit && hit.point;
+    // nothing selected for this add: a dropped part goes where it was dropped
+    try { state.selected.clear(); state.selectedGroupIds?.clear?.(); } catch (_) {}
+    try { _libAdd(kind, at, hit && hit.normal); } catch (err) { console.warn('[library] drop failed:', err); }
+  });
+  _libShow(prefs.side === 'lib' ? 'lib' : 'tree');
+})();
+
+// `preset`: parameter values to start from instead of the defaults (the
+// library's chosen fastener size, for one).
+function _addPrimitive(kind, preset) {
   if (!scene || !state.partsRoot) return;
 
   // Always 100mm regardless of scene size — primitives are user-driven
@@ -18424,7 +20137,7 @@ function _addPrimitive(kind) {
   // Build params + geometry from the schema. baseSize gets baked into
   // size-like params so the geometry is born at the right scale (no
   // mesh.scale trick — that confused the bbox computation downstream).
-  const params = _primitiveDefaultParams(kind, baseSize);
+  const params = Object.assign(_primitiveDefaultParams(kind, baseSize), preset || {});
   const geom = _primitiveGeometry(kind, params);
   _applyPrimitiveOrientation(kind, geom, params.orientation || 'z');
   geom.computeBoundingBox();
@@ -18696,7 +20409,14 @@ function _renderPrimitiveSection(p) {
   if (!schema.length) return '';
   const cur = p.primParams;
   const baseSize = p.primBaseSize || 100;
+  // a shape made before a row existed gets the row's default
+  for (const f of schema) if (cur[f.id] === undefined && f.def !== undefined) cur[f.id] = f.def;
+  // a row with `when` belongs to a switch in the same card and is only shown while that is on
   const rows = schema.map(f => {
+    const html = row(f);
+    return f.when ? html.replace('<div class="prim-row"', `<div class="prim-row" data-prim-when="${f.when}"${cur[f.when] ? '' : ' hidden'}`) : html;
+  }).join('');
+  function row(f) {
     const v = cur[f.id];
     if (f.axis) {
       const axes = ['x', 'y', 'z'];
@@ -18739,7 +20459,7 @@ function _renderPrimitiveSection(p) {
       <input type="range" data-prim-input data-prim-size min="${min}" max="${max}" step="1" value="${Math.round(v)}" class="prim-slider" tabindex="-1">
       <span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" data-prim-value data-prim-size min="${min}" max="${max}" step="1" value="${Math.round(v)}"><span class="prim-unit">${escapeHtml(_ul)}</span></span>
     </div>`;
-  }).join('');
+  }
   // Locked primitives: render the section but disable interaction. Without
   // this the user can drag a slider, the rebuild kicks off (bypassing the
   // gizmo / transform-panel lock guards), and on a WebGPU device the rapid
@@ -18892,7 +20612,12 @@ function _wirePrimitiveSliders(rootEl, p) {
     // Range slider → sync number input
     const update = () => {
       let v;
-      if (input.type === 'checkbox') v = !!input.checked;
+      if (input.type === 'checkbox') {
+        _beginGesture(input);                    // before the value changes, so undo has what it was
+        v = !!input.checked;
+        // the rows that belong to this switch come and go with it
+        for (const r of rootEl.querySelectorAll('.prim-row[data-prim-when="' + fId + '"]')) r.hidden = !v;
+      }
       else v = parseInt(input.value, 10);
       if (valEl && valEl.tagName === 'INPUT' && document.activeElement !== valEl) valEl.value = v;
       applyVal(v);
@@ -19667,6 +21392,20 @@ _UndoOps.register('geomXform', {
     _finalizeUndo();
   },
 });
+// Groups remember where their origin is (and how it is turned) in WORLD space,
+// apart from the parts in them. When the whole model is moved or turned those
+// have to go along, or the group's dot, its gizmo and its position read-out
+// stay where the model used to be.
+function _moveGroupOrigins(M) {
+  if (_groupOrigins.size) for (const o of _groupOrigins.values()) o.applyMatrix4(M);
+  if (_groupRotations.size) {
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().extractRotation(M));
+    for (const r of _groupRotations.values()) r.premultiply(q);
+  }
+  _tfParentCentroidForChild = null;
+  try { _updateGroupOriginDot(); } catch (_) {}
+  try { _Measure.xform(M); } catch (_) {}       // (measurements are world points too)
+}
 function _shiftPartsRoot(v, sign) {
   // Selected parts hang off the gizmo pivot, outside partsRoot. Hand them
   // back first or they would be left behind by the move.
@@ -19682,8 +21421,21 @@ function _shiftPartsRoot(v, sign) {
       e[12] += v.x * sign; e[13] += v.y * sign; e[14] += v.z * sign;
     }
   }
-  invalidateExplodeBaseline({ parts: false });
-  for (const p of state.parts) p._partCenter = null;
+  // p.bbox is each part's box in world space: it moves too.
+  const d = new THREE.Vector3().copy(v).multiplyScalar(sign);
+  _moveGroupOrigins(new THREE.Matrix4().makeTranslation(d.x, d.y, d.z));
+  // "Align to floor" keeps the transform it has applied since the file was
+  // loaded; a Recenter is part of that, or its Reset would land short.
+  try { _align.D.premultiply(new THREE.Matrix4().makeTranslation(d.x, d.y, d.z)); } catch (_) {}
+  for (const p of state.parts) if (p.bbox && !p.bbox.isEmpty()) p.bbox.translate(d);
+  // The exploded view's rest positions and centres are world points: they
+  // move too. (They used to be thrown away instead, which made a Recenter
+  // done while exploded snap back as soon as the view was collapsed.)
+  for (const p of state.parts) {
+    if (p._origWorldPos) p._origWorldPos.add(d);
+    if (p._partCenter) p._partCenter.add(d);
+  }
+  if (state._modelCenter) state._modelCenter.add(d);
 }
 _UndoOps.register('recenter', {
   undo(op) { _shiftPartsRoot(op.offset, +1); state.redo.push(op); _finalizeUndo(); },
@@ -19734,7 +21486,8 @@ function recomputeNormals() {
 
 function recenterModel() {
   _detachGizmo();   // selected parts sit outside partsRoot until released
-  const box = new THREE.Box3().setFromObject(state.partsRoot);
+  // (the model at rest and without deleted parts: see _liveModelBox)
+  const box = _liveModelBox();
   if (box.isEmpty()) return toast('Nothing to recenter', '', 'warn');
   const center = box.getCenter(new THREE.Vector3());
   if (center.lengthSq() < 1e-12) return toast('Already centered', '', 'info');
@@ -19752,6 +21505,248 @@ function recenterModel() {
   toast('Recentered', `Translated by (${(-center.x).toFixed(1)}, ${(-center.y).toFixed(1)}, ${(-center.z).toFixed(1)})`, 'success');
   requestRender();
 }
+
+// ── Align to floor ───────────────────────────────────────────────────────
+// Files arrive anywhere and any way up: a part modelled 40 m from its origin,
+// an assembly lying on its side, a scan centred on nothing. This card puts
+// the model where a scene expects it. Two things are chosen:
+//   - how it is turned: steps about the scene's X, Y and Z (90° by default,
+//     any angle by changing the step);
+//   - where it sits: for each axis, which side of the model goes to zero —
+//     its low side, its middle, its high side, or "keep" to leave that axis
+//     alone. Middle / middle / floor stands it on the grid over 0,0,0.
+// Every control applies at once, and a run of adjustments is ONE undo step.
+// The model is moved as a whole; the camera and the grid are left alone, so
+// the move is seen happening (F frames the model if it ends up out of view).
+//
+// _align.D is the transform currently applied on top of the model as it was
+// loaded, _align.Q the turn inside it. A change works out the new transform
+// from scratch (turn, measure, place) and applies the difference, so steps
+// never pile up rounding or drift.
+const _ALIGN_KEY = 'stepopt-align';
+const _ALIGN_DEFAULT = { a: 'center', b: 'center', up: 'min', onOpen: false, step: 90 };
+const _align = { D: new THREE.Matrix4(), Q: new THREE.Quaternion() };
+function _alignPrefs() {
+  try { return { ..._ALIGN_DEFAULT, ...(JSON.parse(localStorage.getItem(_ALIGN_KEY) || '{}') || {}) }; }
+  catch (_) { return { ..._ALIGN_DEFAULT }; }
+}
+function _alignSave(p) { try { localStorage.setItem(_ALIGN_KEY, JSON.stringify(p)); } catch (_) {} }
+// A model that has just been loaded (or a cleared scene) starts unaligned.
+function _alignForget() {
+  _align.D.identity(); _align.Q.identity();
+  try { _applySceneUpAxis(); } catch (_) {}
+  try { _alignRefreshInfo(); } catch (_) {}
+}
+// The scene's axes by role: the two that span the floor, and the one that points up.
+function _alignAxes() { return state.sceneUpAxis === 'y' ? { a: 'x', b: 'z', up: 'y' } : { a: 'x', b: 'y', up: 'z' }; }
+// The box of what is really there (and would be exported), seen through an
+// extra transform `pre`. Deleted parts do not count. Measured on the vertices
+// while that is affordable, so a turned model really touches the floor; on
+// the corners of each part's box beyond that.
+const _ALIGN_EXACT_VERTS = 3e6;
+function _liveModelBox(pre, preIsExportSide) {
+  const list = _exportDrawList(false);
+  let verts = 0;
+  for (const it of list) verts += it.geom.attributes.position.count;
+  const exact = verts <= _ALIGN_EXACT_VERTS;
+  const box = new THREE.Box3(), tmp = new THREE.Box3(), m = new THREE.Matrix4(), v = new THREE.Vector3();
+  // The matrices the exporter reads leave out the scene's Up-axis turn (that
+  // one is for the view only; export has its own axis setting). Alignment is
+  // about what stands on the floor on screen, so it is measured with that
+  // turn in: K takes an export matrix to the one drawn.
+  const root = state.partsRoot;
+  root.updateMatrix();
+  const K = new THREE.Matrix4().compose(root.position, _align.Q, root.scale).invert().premultiply(root.matrix);
+  // `pre` given by alignModelToFloor is "undo what is applied, then turn":
+  // R · D⁻¹. On screen the model is D · up · (as loaded), and K · E is what is
+  // drawn, so R · D⁻¹ · K takes an export matrix to "turned, not yet placed".
+  const head = pre ? pre.clone().multiply(K) : K;
+  void preIsExportSide;
+  // While the view is exploded the parts are drawn (and their matrices kept)
+  // pushed apart. What is aligned is the model at rest, so each part is
+  // measured where it sits with the explosion taken out.
+  const ex = state.explode, exploded = !!(ex && (ex.x || ex.y || ex.z));
+  const rest = new THREE.Matrix4();
+  for (const it of list) {
+    let world = it.world;
+    const p = it.part;
+    if (exploded && p && !it.isClone) {
+      if (p.mesh && p._origWorldPos) world = rest.copy(it.world).setPosition(p._origWorldPos);
+      else if (p.instancedMesh && p._instOrigMat) world = rest.multiplyMatrices(p.instancedMesh.matrixWorld, p._instOrigMat);
+    }
+    m.multiplyMatrices(head, world);
+    const pos = it.geom.attributes.position;
+    if (exact) {
+      for (let i = 0; i < pos.count; i++) box.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(m));
+    } else {
+      if (!it.geom.boundingBox) it.geom.computeBoundingBox();
+      if (it.geom.boundingBox && !it.geom.boundingBox.isEmpty()) box.union(tmp.copy(it.geom.boundingBox).applyMatrix4(m));
+    }
+  }
+  return box;
+}
+// The point of the model that the chosen options bring to 0,0,0.
+function _alignAnchor(box, prefs) {
+  const ax = _alignAxes(), v = new THREE.Vector3();
+  for (const role of ['a', 'b', 'up']) {
+    const k = ax[role], mode = prefs[role];
+    v[k] = mode === 'min' ? box.min[k] : mode === 'max' ? box.max[k] : mode === 'center' ? (box.min[k] + box.max[k]) / 2 : 0;
+  }
+  return v;
+}
+// Move / turn the whole model by the rigid transform M (in world space).
+function _alignXformWorld(M) {
+  _detachGizmo();   // selected parts sit outside partsRoot until released
+  const root = state.partsRoot;
+  root.updateMatrix();
+  root.matrix.premultiply(M);
+  root.matrix.decompose(root.position, root.quaternion, root.scale);
+  root.updateMatrix();
+  root.updateMatrixWorld(true);
+  // Export reads p._exactWorld, and p.bbox is the part's box in world space.
+  const sz = new THREE.Vector3();
+  for (const p of state.parts) {
+    if (p._exactWorld) p._exactWorld.premultiply(M);
+    if (p._partCenter) p._partCenter.applyMatrix4(M);
+    const g = (p.mesh && p.mesh.geometry && p.mesh.geometry.attributes) ? p.mesh.geometry : state.geomByHash.get(p.hash);
+    if (!g || !p.bbox || p.isCloner) continue;
+    if (!g.boundingBox) g.computeBoundingBox();
+    if (!g.boundingBox || g.boundingBox.isEmpty()) continue;
+    p.bbox.copy(g.boundingBox).applyMatrix4(_resolvePartWorldMatrix(p));
+    p.bbox.getSize(sz);
+    p.sizeMetrics = { diag: sz.length(), vol: sz.x * sz.y * sz.z, max: Math.max(sz.x, sz.y, sz.z) };
+  }
+  // The exploded view keeps each part's rest position and centre, and the
+  // model's centre, as world points: they go along (throwing them away while
+  // the model is exploded would make the exploded state the new rest state).
+  for (const p of state.parts) {
+    if (p._origWorldPos) p._origWorldPos.applyMatrix4(M);
+  }
+  if (state._modelCenter) state._modelCenter.applyMatrix4(M);
+  _moveGroupOrigins(M);
+  // The camera and the grid stay where they are: the model is what moves, and
+  // seeing it move against a still floor is how you keep your bearings.
+}
+function _alignGoTo(D, Q) {
+  const delta = D.clone().multiply(_align.D.clone().invert());
+  _alignXformWorld(delta);
+  _align.D.copy(D); _align.Q.copy(Q);
+}
+function _alignAfter() {
+  // an exploded view is pushed apart along the scene's axes: do that again
+  // for the model as it now stands
+  try { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) applyExplode(); } catch (_) {}
+  try { refreshFlagged(); } catch (_) {}
+  applySelectionColors();
+  updateGizmo();
+  try { refreshPropertiesPanel(); } catch (_) {}
+  _alignRefreshInfo();
+  requestRender();
+}
+_UndoOps.register('align', {
+  undo(op) { _alignGoTo(op.before.D, op.before.Q); state.redo.push(op); _alignAfter(); _finalizeUndo(); },
+  redo(op) { _alignGoTo(op.after.D, op.after.Q); state.history.push(op); _alignAfter(); _finalizeUndo(); },
+});
+// Work the alignment out again from the current choices and apply it.
+// opts.Q: a new turn (otherwise the current one). opts.reset: back to as loaded.
+// opts.quiet: no toast and no undo step (used when a file has just been opened).
+function alignModelToFloor(opts = {}) {
+  _detachGizmo();
+  if (!state.parts.some(p => !p.deleted)) { if (!opts.quiet) toast('Nothing to align', '', 'warn'); return false; }
+  const Q = opts.reset ? new THREE.Quaternion() : (opts.Q || _align.Q).clone();
+  const D = new THREE.Matrix4();
+  if (!opts.reset) {
+    const R = new THREE.Matrix4().makeRotationFromQuaternion(Q);
+    // as loaded → turned: undo what is applied now, then turn
+    const box = _liveModelBox(R.clone().multiply(_align.D.clone().invert()), true);
+    if (box.isEmpty()) { if (!opts.quiet) toast('Nothing to align', '', 'warn'); return false; }
+    const a = _alignAnchor(box, _alignPrefs());
+    D.makeTranslation(-a.x, -a.y, -a.z).multiply(R);
+  }
+  // nothing to do?
+  const e0 = _align.D.elements, e1 = D.elements;
+  let diff = 0;
+  for (let i = 0; i < 16; i++) diff = Math.max(diff, Math.abs(e0[i] - e1[i]) / (i >= 12 && i < 15 ? Math.max(1, state.modelDiag || 1) : 1));
+  if (diff < 1e-7) { if (!opts.quiet && !opts.live) toast(opts.reset ? 'Already as loaded' : 'Already in place', '', 'info'); _alignRefreshInfo(); return false; }
+  const before = { D: _align.D.clone(), Q: _align.Q.clone() };
+  _alignGoTo(D, Q);
+  if (!opts.quiet) {
+    // a run of adjustments is one step: keep extending the align step on top
+    const top = state.history[state.history.length - 1];
+    if (top && top.type === 'align' && top.open) { top.after = { D: D.clone(), Q: Q.clone() }; state.redo.length = 0; _refreshUndoRedoButtons(); }
+    else pushUndo({ type: 'align', label: 'Align to floor', open: true, before, after: { D: D.clone(), Q: Q.clone() } });
+  }
+  _alignAfter();
+  return true;
+}
+// Turn by the step angle about one of the scene's axes, on top of the turn so far.
+function _alignTurn(axis, sign) {
+  const step = Math.max(0.01, Math.min(180, parseFloat(_alignPrefs().step) || 90));
+  const n = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
+  const q = new THREE.Quaternion().setFromAxisAngle(n, sign * step * Math.PI / 180).multiply(_align.Q).normalize();
+  alignModelToFloor({ Q: q, live: true });
+}
+// "Turned X 90° · Y 0° · Z 0°" and where the model stands now.
+function _alignRefreshInfo() {
+  const el = document.getElementById('align-info');
+  if (!el || !document.getElementById('btn-align-floor')?.offsetParent) return;   // (the line itself is not laid out while it is empty)
+  const box = state.parts.some(p => !p.deleted) ? _liveModelBox() : null;
+  if (!box || box.isEmpty()) { el.textContent = ''; return; }
+  const ax = _alignAxes(), c = box.getCenter(new THREE.Vector3());
+  const low = box.min[ax.up], off = Math.hypot(c[ax.a], c[ax.b]);
+  const eps = (box.getSize(new THREE.Vector3()).length() || 1) * 1e-6;
+  const f = (n) => fmtNum(Math.round(Math.abs(n) * 10) / 10);
+  const floor = Math.abs(low) < eps ? 'Stands on the floor' : `Lowest point ${f(low)} ${low < 0 ? 'below' : 'above'} the floor`;
+  const mid = off < eps ? 'middle over the origin' : `middle ${f(off)} from the origin`;
+  const e = new THREE.Euler().setFromQuaternion(_align.Q, 'ZYX');
+  const deg = (r) => { const d = Math.round(r * 1800 / Math.PI) / 10; return (Object.is(d, -0) ? 0 : d) + '°'; };
+  const turned = Math.abs(_align.Q.w) > 1 - 1e-9 ? '' : `Turned X ${deg(e.x)} · Y ${deg(e.y)} · Z ${deg(e.z)}. `;
+  el.textContent = turned + floor + ' · ' + mid;
+}
+(function _wireAlign() {
+  const ids = { a: 'align-a', b: 'align-b', up: 'align-up' };
+  const prefs = _alignPrefs();
+  const labels = () => {
+    const ax = _alignAxes();
+    const la = document.getElementById('align-a-label'), lb = document.getElementById('align-b-label');
+    if (la) la.textContent = ax.a.toUpperCase();
+    if (lb) lb.textContent = ax.b.toUpperCase();
+  };
+  const hasModel = () => state.parts.some(p => !p.deleted);
+  for (const role of ['a', 'b', 'up']) {
+    const el = document.getElementById(ids[role]);
+    if (!el) continue;
+    el.value = prefs[role];
+    el.addEventListener('change', () => {
+      const p = _alignPrefs(); p[role] = el.value; _alignSave(p);
+      if (hasModel()) alignModelToFloor({ live: true });
+    });
+  }
+  const step = document.getElementById('align-step');
+  if (step) {
+    step.value = String(prefs.step);
+    step.addEventListener('change', () => {
+      const v = Math.max(0.01, Math.min(180, parseFloat(step.value) || 90));
+      step.value = String(+v.toFixed(2));
+      const p = _alignPrefs(); p.step = v; _alignSave(p);
+    });
+    step.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); step.blur(); } });
+  }
+  document.getElementById('align-turns')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-turn]');
+    if (!b) return;
+    if (!hasModel()) { toast('Nothing to align', '', 'warn'); return; }
+    _alignTurn(b.dataset.turn[0], b.dataset.turn[1] === '-' ? -1 : 1);
+  });
+  const auto = document.getElementById('align-on-open');
+  if (auto) { auto.checked = !!prefs.onOpen; auto.addEventListener('change', () => { const p = _alignPrefs(); p.onOpen = auto.checked; _alignSave(p); }); }
+  document.getElementById('btn-align-floor')?.addEventListener('click', () => { if (alignModelToFloor()) toast('Aligned to the floor', '', 'success'); });
+  document.getElementById('btn-align-reset')?.addEventListener('click', () => { if (alignModelToFloor({ reset: true })) toast('Back to how it was loaded', '', 'success'); });
+  const box = document.getElementById('align-box');
+  box?.addEventListener('pointerenter', () => { labels(); _alignRefreshInfo(); });
+  box?.closest('.section')?.querySelector('.section-h')?.addEventListener('click', () => setTimeout(() => { labels(); _alignRefreshInfo(); }, 0));
+  labels();
+})();
 
 function bakeTransforms(opts = {}) {
   let count = 0, cloned = 0;
@@ -20532,7 +22527,6 @@ function _populateMaterialsList() {
     const name = (m.name && m.name.trim()) || ('mat_' + hex.slice(1));
     const cell = document.createElement('div');
     cell.className = 'mat-cell';
-    cell.title = `${m.type} · ${info.count} part${info.count === 1 ? '' : 's'} · double-click to edit`;
     const previewUrl = _renderMaterialPreview(m);
     const thumb = previewUrl
       ? `<img class="mat-thumb-img" src="${previewUrl}" alt="${escapeHtml(name)}" draggable="false">`
@@ -20614,7 +22608,6 @@ function _renderMatListRows(list, mats) {
     const previewUrl = _renderMaterialPreview(m);
     const row = document.createElement('div');
     row.className = 'mat-row';
-    row.title = `${m.type} · ${info.count} part${info.count === 1 ? '' : 's'} · double-click to edit`;
     row._mat = m;
     row._info = info;
     const thumbHtml = previewUrl
@@ -21744,8 +23737,18 @@ function _wireMaterialActions() {
 
   addBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    // A new material is always the plain default one, whatever is picked in
+    // the dock (Duplicate is the button that copies), and it is called
+    // "Material" and the next free number.
     const fresh = _newMaterial();
-    fresh.name = _matFallbackName(fresh);          // named after its colour; the name follows the colour
+    {
+      const used = new Set();
+      const note = (m) => { const k = /^Material (\d+)$/.exec((m && m.name || '').trim()); if (k) used.add(+k[1]); };
+      for (const m of state.userMaterials || []) note(m);
+      for (const p of state.parts) { if (p.deleted || !p.mesh) continue; const pm = p.mesh.material; if (Array.isArray(pm)) pm.forEach(note); else note(pm); }
+      let n = 1; while (used.has(n)) n++;
+      fresh.name = 'Material ' + n;
+    }
     // Track every user-created material in the scene-level library so it
     // shows up in the grid even with no parts assigned. Once assigned, it
     // also appears via the parts-walk in _collectLiveMaterials — Map dedup
@@ -21769,6 +23772,11 @@ function _wireMaterialActions() {
     _matPanelSelected.add(fresh);
     requestRender();
     _populateMaterialsList();
+    // bring it into view: with many materials it lands somewhere down the list
+    requestAnimationFrame(() => {
+      const el = [...document.querySelectorAll('#vp-materials-pop .mat-cell, #vp-materials-pop .mat-row')].find(c => c._mat === fresh);
+      if (el) { try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) { el.scrollIntoView(); } }
+    });
     // No toast: the new material is visually selected in the panel; that's
     // enough confirmation. The old "Select parts and use Duplicate to assign"
     // hint was confusing because adding a material doesn't imply intent to
@@ -21786,7 +23794,7 @@ function _wireMaterialActions() {
     // userMaterials push, an unassigned clone would be invisible — the
     // panel rebuild walks parts' materials + userMaterials, nothing else.)
     const clone = src.clone();
-    clone.name = (src.name || 'material') + ' copy';
+    clone.name = ((src.name && src.name.trim()) || _matFallbackName(src)) + ' copy';
     state.userMaterials = state.userMaterials || new Set();
     state.userMaterials.add(clone);
     if (state.selected?.size) {
@@ -21978,6 +23986,8 @@ state.smartFit = state.smartFit || {
   cylCircularity: 0.85,   // how round, looking down the axis, to become a cylinder (a hexagon is 0.87, a square 0.71)
   cylBoxWaste:    0.82,   // the cylinder's volume must be at most this share of the best box's (a cylinder in its own box is 0.79)
   cylAspect:      0,      // length must be at least this many diameters; 0 = flat round parts (gears, washers) are cylinders too
+  blockDetail:    8,      // Blocks: how many cells the part's longest side is cut into
+  boxCount:       6,      // Boxes: the most boxes a part may become
   pcaEnabled:     true,   // look for the part's own axes in the mesh; off = only the scene's and the mesh's stored axes
 };
 function _resetFitCache() {}        // fits are no longer remembered: one depends on where the part is, not only on its geometry
@@ -22220,7 +24230,308 @@ function _fitBox(geom, sample, axes, exact) {
   };
 }
 
-// mode ∈ {'smart','aabb','obb','cyl'}. Returns null only if the geometry
+// The part as a coarse grid of cells, in the frame of `box`: which cells its
+// surface runs through, and which the outside can reach. Everything else is
+// taken to be solid (so a hollow part is solid, and an opening the outside
+// can flow through stays an opening). N is how many cells the box's longest
+// side is cut into.
+//   G    one byte per cell, with a spare cell all round: 1 = surface, 2 = outside, 0 = inside
+//   n    cells along each axis (without the spare ones);  h  the size of a cell
+//   o    the box's low corner, measured along its own axes
+//   sx, sy, sz   how far apart neighbours are in G
+function _fitVoxels(sample, index, T, box, N) {
+  const ax = box.axes, size = box.size;
+  const L = Math.max(size[0], size[1], size[2]);
+  const o = [0, 1, 2].map(k => box.center[0] * ax[k][0] + box.center[1] * ax[k][1] + box.center[2] * ax[k][2] - size[k] / 2);
+  const n = size.map(v => Math.max(1, Math.min(N, Math.round(v / (L / N)))));
+  const h = size.map((v, k) => (v > 0 ? v / n[k] : L / N));
+  const gx = n[0] + 2, gy = n[1] + 2, gz = n[2] + 2, sx = 1, sy = gx, sz = gx * gy;
+  const G = new Uint8Array(gx * gy * gz);
+  const A = [0, 0, 0], B = [0, 0, 0], C = [0, 0, 0], ga = [0, 0, 0], gb = [0, 0, 0], gc = [0, 0, 0];
+  const cell = (g, k) => { const c = Math.floor(g); return (c < 0 ? 0 : c >= n[k] ? n[k] - 1 : c) + 1; };
+  const toGrid = (p, g) => { for (let k = 0; k < 3; k++) g[k] = (p[0] * ax[k][0] + p[1] * ax[k][1] + p[2] * ax[k][2] - o[k]) / h[k]; };
+  for (let t = 0; t < T; t++) {
+    sample.xyz(index ? index[t * 3] : t * 3, A); sample.xyz(index ? index[t * 3 + 1] : t * 3 + 1, B); sample.xyz(index ? index[t * 3 + 2] : t * 3 + 2, C);
+    toGrid(A, ga); toGrid(B, gb); toGrid(C, gc);
+    // points across the triangle, closer together than half a cell
+    const span = Math.max(Math.abs(gb[0] - ga[0]), Math.abs(gb[1] - ga[1]), Math.abs(gb[2] - ga[2]),
+                          Math.abs(gc[0] - ga[0]), Math.abs(gc[1] - ga[1]), Math.abs(gc[2] - ga[2]),
+                          Math.abs(gc[0] - gb[0]), Math.abs(gc[1] - gb[1]), Math.abs(gc[2] - gb[2]));
+    const m = Math.min(400, Math.ceil(span * 2) + 1);
+    for (let i = 0; i <= m; i++) {
+      for (let j = 0; i + j <= m; j++) {
+        const u = i / m, v = j / m;
+        G[cell(ga[0] + (gb[0] - ga[0]) * u + (gc[0] - ga[0]) * v, 0) * sx
+        + cell(ga[1] + (gb[1] - ga[1]) * u + (gc[1] - ga[1]) * v, 1) * sy
+        + cell(ga[2] + (gb[2] - ga[2]) * u + (gc[2] - ga[2]) * v, 2) * sz] = 1;
+      }
+    }
+  }
+  // the outside: everything reachable from a corner without crossing the surface
+  const todo = new Int32Array(G.length);
+  let head = 0, tail = 0;
+  G[0] = 2; todo[tail++] = 0;
+  while (head < tail) {
+    const c = todo[head++];
+    const x = c % gx, y = ((c / gx) | 0) % gy, z = (c / sz) | 0;
+    if (x > 0 && !G[c - sx]) { G[c - sx] = 2; todo[tail++] = c - sx; }
+    if (x < gx - 1 && !G[c + sx]) { G[c + sx] = 2; todo[tail++] = c + sx; }
+    if (y > 0 && !G[c - sy]) { G[c - sy] = 2; todo[tail++] = c - sy; }
+    if (y < gy - 1 && !G[c + sy]) { G[c + sy] = 2; todo[tail++] = c + sy; }
+    if (z > 0 && !G[c - sz]) { G[c - sz] = 2; todo[tail++] = c - sz; }
+    if (z < gz - 1 && !G[c + sz]) { G[c + sz] = 2; todo[tail++] = c + sz; }
+  }
+  return { G, n, h, o, sx, sy, sz };
+}
+
+// The smallest box around a set of points among those that have one side along
+// one of `dirs`; the other two sides are turned to how the points are spread
+// across it. `pts` is x,y,z..., `mean` their middle.
+function _fitBestBox(pts, mean, dirs) {
+  let best = null;
+  const only = { pts };
+  for (const d of dirs) {
+    const [u, v] = _fitPerp(d);
+    let suu = 0, svv = 0, suv = 0;
+    for (let i = 0; i < pts.length; i += 3) {
+      const dx = pts[i] - mean[0], dy = pts[i + 1] - mean[1], dz = pts[i + 2] - mean[2];
+      const x = dx * u[0] + dy * u[1] + dz * u[2], y = dx * v[0] + dy * v[1] + dz * v[2];
+      suu += x * x; svv += y * y; suv += x * y;
+    }
+    const ang = 0.5 * Math.atan2(2 * suv, suu - svv), c = Math.cos(ang), sn = Math.sin(ang);
+    for (const turn of [[c, sn], [1, 0]]) {                  // the principal directions, and as they came
+      const e1 = [u[0] * turn[0] + v[0] * turn[1], u[1] * turn[0] + v[1] * turn[1], u[2] * turn[0] + v[2] * turn[1]];
+      const e2 = [d[1] * e1[2] - d[2] * e1[1], d[2] * e1[0] - d[0] * e1[2], d[0] * e1[1] - d[1] * e1[0]];
+      const b = _fitBox(null, only, [d, e1, e2], false);
+      if (!best || b.vol < best.vol) best = b;
+    }
+  }
+  return best;
+}
+
+// ── Boxes: the part as a handful of boxes ──────────────────────────────────
+// Between one box (which loses the shape) and Blocks (which keeps it, in
+// stair-steps): a few boxes, each sized and turned to one piece of the part.
+// A levelling foot becomes a slab and a bar; an L two bars; a frame four.
+//   1. Cut the part's own box into a coarse grid and find the solid cells
+//      (_fitVoxels, as for Blocks).
+//   2. Cover the solid with boxes, one at a time: each time the box that
+//      takes in the most solid cells not yet covered, for the fewest empty
+//      ones. A box has to be mostly solid (which is what lets one box stand
+//      for a disc or a rounded body, and stops one box swallowing an L).
+//      It ends when `maxBoxes` are placed or nothing worth a box is left;
+//      what is left over (a lug, a chamfer) is dropped.
+//   3. Fit each box to the real surface inside it rather than to the grid:
+//      its true extent, and its own angle if the piece is clearly not
+//      square to the part (a brace, a slanted arm).
+// The result is the boxes as one mesh, 12 triangles each. They may overlap.
+function _fitBoxes(geom, sample, box, maxBoxes) {
+  const ax = box.axes, size = box.size;
+  if (!(Math.max(size[0], size[1], size[2]) > 0)) return null;
+  const index = geom.index ? geom.index.array : null;
+  const T = Math.floor((index ? index.length : sample.count) / 3);
+  maxBoxes = Math.max(1, Math.min(32, Math.round(maxBoxes) || 6));
+  if (T <= maxBoxes * 12) return null;                       // already as light as the boxes would be
+  // (asking for many boxes means asking for detail: a finer grid then, and smaller leftovers still count)
+  const { G, n, h, o, sx, sy, sz } = _fitVoxels(sample, index, T, box, maxBoxes > 8 ? 16 : 12);
+  const [nx, ny, nz] = n, px = nx + 1, py = ny + 1;
+  const solid = new Uint8Array(nx * ny * nz);
+  let total = 0;
+  for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    if (G[(x + 1) * sx + (y + 1) * sy + (z + 1) * sz] !== 2) { solid[x + nx * (y + ny * z)] = 1; total++; }
+  }
+  if (!total) return null;
+  // running totals, so the number of cells of a kind in any box is eight look-ups
+  const table = (src) => {
+    const P = new Int32Array(px * py * (nz + 1));
+    for (let z = 1; z <= nz; z++) for (let y = 1; y <= ny; y++) for (let x = 1; x <= nx; x++) {
+      const i = x + px * (y + py * z);
+      P[i] = src[(x - 1) + nx * ((y - 1) + ny * (z - 1))] + P[i - 1] + P[i - px] + P[i - px * py]
+           - P[i - 1 - px] - P[i - 1 - px * py] - P[i - px - px * py] + P[i - 1 - px - px * py];
+    }
+    return P;
+  };
+  const count = (P, x0, y0, z0, x1, y1, z1) => {
+    const a = px, b = px * py;
+    return P[x1 + a * y1 + b * z1] - P[x0 + a * y1 + b * z1] - P[x1 + a * y0 + b * z1] - P[x1 + a * y1 + b * z0]
+         + P[x0 + a * y0 + b * z1] + P[x0 + a * y1 + b * z0] + P[x1 + a * y0 + b * z0] - P[x0 + a * y0 + b * z0];
+  };
+  const S = table(solid), rest = solid.slice();
+  const FILL = 0.7, EMPTY = 1.2;                             // a box is at least this solid; an empty cell costs this many solid ones
+  const worth = Math.max(1.5, total * Math.min(0.02, 0.12 / maxBoxes));   // less than this is not worth a box
+  const cells = [];
+  while (cells.length < maxBoxes) {
+    const R = table(rest);
+    let best = null, bestScore = worth;
+    for (let x0 = 0; x0 < nx; x0++) for (let x1 = x0 + 1; x1 <= nx; x1++)
+      for (let y0 = 0; y0 < ny; y0++) for (let y1 = y0 + 1; y1 <= ny; y1++)
+        for (let z0 = 0; z0 < nz; z0++) for (let z1 = z0 + 1; z1 <= nz; z1++) {
+          const r = count(R, x0, y0, z0, x1, y1, z1);
+          if (r <= bestScore) continue;                        // cannot beat the best even with no empty cells
+          const v = (x1 - x0) * (y1 - y0) * (z1 - z0), sld = count(S, x0, y0, z0, x1, y1, z1);
+          if (sld < FILL * v) continue;
+          const score = r - EMPTY * (v - sld);
+          if (score > bestScore) { bestScore = score; best = [x0, y0, z0, x1, y1, z1]; }
+        }
+    if (!best) break;
+    cells.push(best);
+    for (let z = best[2]; z < best[5]; z++) for (let y = best[1]; y < best[4]; y++) for (let x = best[0]; x < best[3]; x++) rest[x + nx * (y + ny * z)] = 0;
+  }
+  if (!cells.length) return null;
+  // 3. each box against the real surface: the sample points that fall in its cells
+  const pts = sample.pts, np = pts.length / 3;
+  const owner = new Int16Array(nx * ny * nz).fill(-1);
+  for (let b = cells.length - 1; b >= 0; b--) {              // where boxes overlap, the earlier (bigger) one owns the cell
+    const c = cells[b];
+    for (let z = c[2]; z < c[5]; z++) for (let y = c[1]; y < c[4]; y++) for (let x = c[0]; x < c[3]; x++) owner[x + nx * (y + ny * z)] = b;
+  }
+  const mine = cells.map(() => []);
+  for (let i = 0; i < np; i++) {
+    const p0 = pts[i * 3], p1 = pts[i * 3 + 1], p2 = pts[i * 3 + 2];
+    let id = 0, f = 1;
+    for (let k = 0; k < 3; k++) {
+      let c = Math.floor((p0 * ax[k][0] + p1 * ax[k][1] + p2 * ax[k][2] - o[k]) / h[k]);
+      c = c < 0 ? 0 : c >= n[k] ? n[k] - 1 : c;
+      id += c * f; f *= n[k];
+    }
+    const b = owner[id];
+    if (b >= 0) mine[b].push(p0, p1, p2);
+  }
+  const pos = [], nor = [], idx = [];
+  let vol = 0;
+  const cx = box.center;
+  for (let b = 0; b < cells.length; b++) {
+    const c = cells[b];
+    // as the grid has it, in the part's frame
+    let fit = {
+      axes: ax, size: [0, 1, 2].map(k => (c[k + 3] - c[k]) * h[k]),
+      center: [0, 1, 2].map(k => { let v = 0; for (let j = 0; j < 3; j++) v += ax[j][k] * (o[j] + (c[j] + c[j + 3]) / 2 * h[j]); return v; }),
+    };
+    fit.vol = fit.size[0] * fit.size[1] * fit.size[2];
+    if (mine[b].length >= 24) {
+      const P = Float32Array.from(mine[b]);
+      const square = _fitBox(null, { pts: P }, ax, false);     // its true extent, square to the part
+      if (square.vol > 0) fit = square;
+      // turned to the piece itself, where that is clearly tighter
+      const m = [0, 0, 0];
+      for (let i = 0; i < P.length; i += 3) { m[0] += P[i]; m[1] += P[i + 1]; m[2] += P[i + 2]; }
+      const cnt = P.length / 3; m[0] /= cnt; m[1] /= cnt; m[2] /= cnt;
+      const V = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+      for (let i = 0; i < P.length; i += 3) {
+        const d = [P[i] - m[0], P[i + 1] - m[1], P[i + 2] - m[2]];
+        for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) V[r][q] += d[r] * d[q];
+      }
+      const own = _fitBestBox(P, m, _jacobi3(V).vectors);
+      if (own && own.vol > 0 && own.vol < fit.vol * 0.72) fit = own;
+    }
+    vol += fit.vol;
+    // its six faces, in the part's frame, about the part's middle
+    const half = fit.size.map(v => v / 2);
+    const rel = (p) => { const d = [p[0] - cx[0], p[1] - cx[1], p[2] - cx[2]]; return [0, 1, 2].map(k => d[0] * ax[k][0] + d[1] * ax[k][1] + d[2] * ax[k][2]); };
+    for (let a = 0; a < 3; a++) {
+      const u = (a + 1) % 3, w = (a + 2) % 3;
+      for (const dir of [1, -1]) {
+        const base = pos.length / 3;
+        const corners = dir > 0 ? [[-1, -1], [1, -1], [1, 1], [-1, 1]] : [[-1, -1], [-1, 1], [1, 1], [1, -1]];
+        for (const [su, sw] of corners) {
+          const p = [0, 1, 2].map(k => fit.center[k] + fit.axes[a][k] * half[a] * dir + fit.axes[u][k] * half[u] * su + fit.axes[w][k] * half[w] * sw);
+          pos.push(...rel(p));
+        }
+        const nrm = [0, 1, 2].map(k => dir * (fit.axes[a][0] * ax[k][0] + fit.axes[a][1] * ax[k][1] + fit.axes[a][2] * ax[k][2]));
+        for (let q = 0; q < 4; q++) nor.push(nrm[0], nrm[1], nrm[2]);
+        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3 * 2), 2));   // a material with a map expects one
+  g.setIndex(idx);
+  g.computeBoundingBox(); g.computeBoundingSphere();
+  return { kind: 'boxes', proxyGeom: g, position: new THREE.Vector3(cx[0], cx[1], cx[2]), quaternion: _basisToQuat(ax),
+           score: 1 - idx.length / 3 / T, tri: idx.length / 3, vert: pos.length / 3,
+           size: new THREE.Vector3(size[0], size[1], size[2]), boxVol: vol, boxes: cells.length };
+}
+
+// ── Blocks: the part rebuilt from a coarse grid of boxes ───────────────────
+// One box or one cylinder says where a part is and how big; it says nothing
+// of its shape. A bracket becomes a brick, a frame a slab, an L a block.
+// "Blocks" keeps the outline: the part's own box (turned to follow it, as for
+// a turned box) is cut into a coarse grid, the cells the part's surface runs
+// through are marked, and everything the outside cannot reach is taken to be
+// solid. What comes out is the skin of those cells, with every flat run of
+// cell faces merged into one rectangle: a blocky stand-in with the part's
+// steps, arms and openings in the right places and a few dozen to a few
+// hundred triangles, whatever the part had.
+//   - `detail` is how many cells the part's longest side is cut into. An
+//     opening narrower than a cell closes; a feature smaller than a cell
+//     rounds up to one.
+//   - A hollow part comes out solid (its inside cannot be reached from
+//     outside), which is what a stand-in should be.
+//   - If the result would not be clearly lighter than the part, the grid is
+//     coarsened and tried again; if nothing helps, null (the caller falls
+//     back to a box).
+function _fitBlocks(geom, sample, box, detail) {
+  const ax = box.axes, size = box.size;
+  const L = Math.max(size[0], size[1], size[2]);
+  if (!(L > 0)) return null;
+  const index = geom.index ? geom.index.array : null;
+  const T = Math.floor((index ? index.length : sample.count) / 3);
+  if (T < 24) return null;                                   // already as plain as a few boxes
+  for (let N = Math.max(2, Math.min(48, Math.round(detail) || 8)); N >= 2; N = Math.min(N - 1, Math.floor(N * 0.7))) {
+    const { G, n, h, sx, sy, sz } = _fitVoxels(sample, index, T, box, N);
+    // the skin: for each of the six directions, slice by slice, the cell faces
+    // that look out, merged greedily into rectangles
+    const pos = [], nor = [], idx = [];
+    const stride = [sx, sy, sz];
+    const corner = [0, 0, 0];
+    const put = (d, u, v, s, a, b) => { corner[d] = s; corner[u] = a; corner[v] = b; pos.push(corner[0] * h[0] - size[0] / 2, corner[1] * h[1] - size[1] / 2, corner[2] * h[2] - size[2] / 2); };
+    for (let d = 0; d < 3; d++) {
+      const u = (d + 1) % 3, v = (d + 2) % 3, nu = n[u], nv = n[v];
+      const mask = new Uint8Array(nu * nv);
+      for (let dir = -1; dir <= 1; dir += 2) {
+        for (let sl = 0; sl < n[d]; sl++) {
+          let any = false;
+          for (let b = 0; b < nv; b++) for (let a = 0; a < nu; a++) {
+            const c = (sl + 1) * stride[d] + (a + 1) * stride[u] + (b + 1) * stride[v];
+            const on = G[c] !== 2 && G[c + dir * stride[d]] === 2;
+            mask[b * nu + a] = on ? 1 : 0; if (on) any = true;
+          }
+          if (!any) continue;
+          for (let b = 0; b < nv; b++) for (let a = 0; a < nu; a++) {
+            if (!mask[b * nu + a]) continue;
+            let w = 1; while (a + w < nu && mask[b * nu + a + w]) w++;
+            let hgt = 1;
+            grow: for (; b + hgt < nv; hgt++) for (let k = 0; k < w; k++) if (!mask[(b + hgt) * nu + a + k]) break grow;
+            for (let y = 0; y < hgt; y++) for (let k = 0; k < w; k++) mask[(b + y) * nu + a + k] = 0;
+            const at = sl + (dir > 0 ? 1 : 0), base = pos.length / 3;
+            put(d, u, v, at, a, b); put(d, u, v, at, a + w, b); put(d, u, v, at, a + w, b + hgt); put(d, u, v, at, a, b + hgt);
+            for (let k = 0; k < 4; k++) nor.push(d === 0 ? dir : 0, d === 1 ? dir : 0, d === 2 ? dir : 0);
+            if (dir > 0) idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+            else idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+          }
+        }
+      }
+    }
+    const tris = idx.length / 3;
+    if (!tris) return null;
+    if (tris > Math.max(12, T * 0.6) && N > 2) continue;     // not clearly lighter than the part: a coarser grid
+    if (tris >= T) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3 * 2), 2));   // a material with a map expects one
+    g.setIndex(idx);
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    return { kind: 'blocks', proxyGeom: g, position: new THREE.Vector3(box.center[0], box.center[1], box.center[2]),
+             quaternion: _basisToQuat(ax), score: 1 - tris / T, tri: tris, vert: pos.length / 3,
+             size: new THREE.Vector3(size[0], size[1], size[2]), boxVol: box.vol, cells: n };
+  }
+  return null;
+}
+
+// mode ∈ {'smart','aabb','obb','cyl','boxes','blocks'}. Returns null only if the geometry
 // is degenerate (caller already filtered NaN/empty cases).
 function fitProxy(geom, localToPartsRoot, mode = 'smart') {
   const cfg = state.smartFit;
@@ -22242,33 +24553,23 @@ function fitProxy(geom, localToPartsRoot, mode = 'smart') {
   // The best turned box: every direction as the box's first axis, the other
   // two from how the part is spread across it. Judged on the sample, then
   // measured exactly for the winner.
-  let best = null;
-  {
-    for (const d of dirs) {
-      const [u, v] = _fitPerp(d);
-      // turn u, v about d to the part's principal directions in that plane
-      let suu = 0, svv = 0, suv = 0;
-      const pts = sample.pts, m = sample.mean;
-      for (let i = 0; i < pts.length; i += 3) {
-        const dx = pts[i] - m[0], dy = pts[i + 1] - m[1], dz = pts[i + 2] - m[2];
-        const x = dx * u[0] + dy * u[1] + dz * u[2], y = dx * v[0] + dy * v[1] + dz * v[2];
-        suu += x * x; svv += y * y; suv += x * y;
-      }
-      const ang = 0.5 * Math.atan2(2 * suv, suu - svv), c = Math.cos(ang), sn = Math.sin(ang);
-      for (const turn of [[c, sn], [1, 0]]) {                  // the principal directions, and as they came
-        const e1 = [u[0] * turn[0] + v[0] * turn[1], u[1] * turn[0] + v[1] * turn[1], u[2] * turn[0] + v[2] * turn[1]];
-        const e2 = [d[1] * e1[2] - d[2] * e1[1], d[2] * e1[0] - d[0] * e1[2], d[0] * e1[1] - d[1] * e1[0]];
-        const b = _fitBox(geom, sample, [d, e1, e2], false);
-        if (!best || b.vol < best.vol) best = b;
-      }
-    }
-    if (best) best = _fitBox(geom, sample, best.axes, true);
-  }
+  let best = _fitBestBox(sample.pts, sample.mean, dirs);
+  if (best) best = _fitBox(geom, sample, best.axes, true);
   // A turned box has to earn it: the scene-aligned one is kept unless the
   // turned one is clearly smaller (an unturned box is simpler for everything
   // that comes after).
   const turned = best && best.vol < aabb.vol * 0.95;
   const box = turned ? best : aabb;
+  if (mode === 'boxes') {
+    const r = _fitBoxes(geom, sample, box, cfg.boxCount || 6);
+    if (r) return r;
+    return boxResult(box, turned ? 'obb' : 'aabb');
+  }
+  if (mode === 'blocks') {
+    const r = _fitBlocks(geom, sample, box, cfg.blockDetail || 8);
+    if (r) return r;
+    return boxResult(box, turned ? 'obb' : 'aabb');          // too plain or too small to be worth blocks
+  }
   if (mode === 'obb') { const r = boxResult(best || aabb, best ? 'obb' : 'aabb'); r.score = aabb.vol > 0 ? Math.max(0, 1 - r.boxVol / aabb.vol) : 0; return r; }
 
   // The cylinder: the direction the part is roundest about.
@@ -22714,6 +25015,8 @@ async function bboxifyParts(partIds, label='Smart-fit parts', mode='smart') {
     if (kindCounts.aabb) kindParts.push(`${kindCounts.aabb} box`);
     if (kindCounts.obb)  kindParts.push(`${kindCounts.obb} OBB`);
     if (kindCounts.cyl)  kindParts.push(`${kindCounts.cyl} cyl`);
+    if (kindCounts.blocks) kindParts.push(`${kindCounts.blocks} blocks`);
+    if (kindCounts.boxes) kindParts.push(`${kindCounts.boxes} boxes`);
     const kindStr = kindParts.length ? ` (${kindParts.join(', ')})` : '';
     const detail =
       (coboxedSiblings ? ` +${coboxedSiblings} siblings` : '') +
@@ -22810,7 +25113,7 @@ function _onFitError(e) {
 // main button (mode='smart'), the caret popover, and the right-click menu.
 function smartFitSelection(mode = 'smart') {
   if (!state.selected.size) return toast('Nothing selected', '', 'warn');
-  const labels = { smart: 'Smart-fit selected', aabb: 'AABB box selected', obb: 'OBB box selected', cyl: 'Cylinder-fit selected' };
+  const labels = { smart: 'Smart-fit selected', aabb: 'AABB box selected', obb: 'OBB box selected', cyl: 'Cylinder-fit selected', blocks: 'Blocks-fit selected', boxes: 'Boxes-fit selected' };
   bboxifyParts([...state.selected], labels[mode] || labels.smart, mode).catch(_onFitError);
 }
 
@@ -22833,14 +25136,20 @@ function _wireBboxButtonsFinal() {
   // under Advanced write straight into state.smartFit.
   const sec = document.querySelector('.section-cmd[data-cmd="smartfit"]');
   if (sec) {
-    const modes = [...sec.querySelectorAll('#fit-modes button')];
+    const modes = [...sec.querySelectorAll('#fit-modes button, #fit-modes-more button')];
+    // the number that belongs to the chosen shape, and no other
+    const rows = () => { for (const [id, mode] of [['fit-count-row', 'boxes'], ['fit-detail-row', 'blocks']]) { const r = $(id); if (r) r.hidden = _fitMode !== mode; } };
+    rows();
     for (const b of modes) b.addEventListener('click', () => {
       _fitMode = b.dataset.mode;
+      rows();
       for (const m of modes) m.classList.toggle('active', m === b);
       b.blur();                                        // so Enter runs the command, not this button again
     });
-    const DEF = { cylCircularity: 0.85, cylBoxWaste: 0.82, cylAspect: 0, pcaEnabled: true };
+    const DEF = { cylCircularity: 0.85, cylBoxWaste: 0.82, cylAspect: 0, pcaEnabled: true, blockDetail: 8, boxCount: 6 };
     const FIELDS = [                                   // [input id, key in state.smartFit, min, max, step, decimals]
+      ['fit-count',  'boxCount',       1,    32,   1,    0],
+      ['fit-detail', 'blockDetail',    2,    48,   1,    0],
       ['fit-circ',   'cylCircularity', 0.60, 0.99, 0.01, 2],
       ['fit-waste',  'cylBoxWaste',    0.50, 1.00, 0.01, 2],
       ['fit-aspect', 'cylAspect',      0,    3.0,  0.1,  1],
@@ -23030,7 +25339,7 @@ function _ctxBuild(items, x, y) {
 // When the viewport is too narrow for both, toolbar buttons are folded away
 // from the right, one at a time; the search and "…" always stay, and "…"
 // lists whatever was folded so nothing is lost.
-const _TB_FOLD_ORDER = ['tg-materials', 'tg-fill-holes', 'vw-heat', 'vw-xray', 'vw-wire', 'vw-solid'];
+const _TB_FOLD_ORDER = ['tg-materials', 'tg-select-hidden', 'tg-split', 'tg-fill-holes','vw-heat', 'vw-xray', 'vw-wire', 'vw-solid'];
 function _fitBottomToolbar() {
   const bar = document.querySelector('#vp-overlay .vpc.tr'), tips = document.querySelector('#vp-overlay .vpc.br'), vp = document.getElementById('viewport');
   if (!bar || !vp) return;
@@ -23107,6 +25416,7 @@ function _openCommandsMenu(anchor) {
     { icon: 'eye',            label: 'Show all',             kbd: 'Alt+H',  off: needAny, fn: act('showAll') },
     { icon: 'scan',           label: 'Frame',                kbd: 'F',      off: needAny, fn: act('fit') },
     '---',
+    { icon: 'arrow-down-to-line', label: 'Align to the floor',              off: needAny, fn: act('alignFloor') },
     { icon: 'target',         label: 'Recenter on origin',                  off: needAny, fn: act('recenter') },
     { icon: 'crosshair',      label: 'Center pivot',                        off: needSel, fn: click('btn-center-pivot') },
     { icon: 'check',          label: 'Bake transforms',                     off: needAny, fn: click('btn-bake-transforms') },
@@ -23422,6 +25732,64 @@ window.addEventListener('contextmenu', e => {
   e.preventDefault();
 }, { capture: true });
 
+// Right-click a material in the dock. The menu acts on what is picked there:
+// a right-click on a material that is not picked picks it alone first, so the
+// menu, the inspector beside the list and the toolbar all speak of the same
+// materials. Most entries press the button that already does the job (the
+// inspector's, the toolbar's), so there is one implementation of each.
+document.addEventListener('contextmenu', function _matContextMenu(e) {
+  const cell = e.target.closest?.('#vp-materials-pop .mat-cell, #vp-materials-pop .mat-row');
+  if (!cell || !cell._mat) return;
+  e.preventDefault();
+  const m = cell._mat;
+  if (!_matPanelSelected.has(m)) {
+    _matPanelSelected.clear(); _matPanelSelected.add(m);
+    try { _refreshPanelSelection(); _renderMatInspector(); } catch (_) {}
+  }
+  const infos = _collectLiveMaterials().filter(i => _matPanelSelected.has(i.mat));
+  if (!infos.length) return;
+  const n = infos.length, many = n > 1, these = many ? `these ${n} materials` : 'this material';
+  const partIds = [];
+  for (const i of infos) for (const id of i.partIds) { const p = getPart(id); if (p && !p.deleted) partIds.push(id); }
+  const unused = partIds.length ? false : 'No part uses ' + these;
+  const nSel = state.selected.size;
+  // after the menu's own click has finished: a button that opens a popup would otherwise be closed by it
+  const press = (sel) => () => setTimeout(() => document.querySelector(sel)?.click(), 0);
+  const addToSelection = () => {
+    for (const id of partIds) state.selected.add(id);
+    try { applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo(); } catch (_) {}
+    const c = $('del-sel-count'); if (c) c.textContent = state.selected.size;
+    requestRender();
+  };
+  const hex = '#' + (m.color?.getHexString?.() || 'cccccc');
+  const copyHex = () => { try { navigator.clipboard.writeText(hex).then(() => toast('Copied', hex + ' is on the clipboard', 'success', 2000)).catch(() => toast('Colour', hex, 'info', 4000)); } catch (_) { toast('Colour', hex, 'info', 4000); } };
+  const items = many ? [
+    { icon: 'combine', label: `Merge ${n} materials into one`, fn: press('#mat-act-merge') },
+    '---',
+    { icon: 'mouse-pointer-2', label: `Select parts with ${these}`, off: unused, fn: press('#mat-inspector [data-mi="select"]') },
+    { icon: 'plus-circle', label: 'Add those parts to the selection', off: unused, fn: addToSelection },
+    { icon: 'focus', label: 'Isolate those parts', off: unused, fn: press('#mat-inspector [data-mi="isolate"]') },
+    '---',
+    { icon: 'sparkles', label: 'Apply a preset…', fn: press('#mat-act-presets') },
+    '---',
+    { icon: 'trash-2', label: `Delete ${n} materials`, danger: true, fn: press('#mat-act-delete') },
+  ] : [
+    { icon: 'sliders-horizontal', label: 'Edit…', fn: press('#mat-inspector [data-mi="edit"]') },
+    { icon: 'copy', label: 'Duplicate', fn: press('#mat-act-duplicate') },
+    '---',
+    { icon: 'mouse-pointer-2', label: 'Select parts with this material', off: unused, fn: press('#mat-inspector [data-mi="select"]') },
+    { icon: 'plus-circle', label: 'Add those parts to the selection', off: unused, fn: addToSelection },
+    { icon: 'focus', label: 'Isolate those parts', off: unused, fn: press('#mat-inspector [data-mi="isolate"]') },
+    { icon: 'paint-bucket', label: nSel ? `Assign to ${fmtNum(nSel)} selected ${nSel === 1 ? 'part' : 'parts'}` : 'Assign to the selected parts', off: nSel ? false : 'Select the parts that should get it first', fn: press('#mat-inspector [data-mi="assign"]') },
+    '---',
+    { icon: 'pipette', label: `Copy colour ${hex}`, fn: copyHex },
+    { icon: 'sparkles', label: 'Apply a preset…', fn: press('#mat-act-presets') },
+    '---',
+    { icon: 'trash-2', label: 'Delete', danger: true, fn: press('#mat-act-delete') },
+  ];
+  _ctxBuild(items, e.clientX, e.clientY);
+});
+
 document.addEventListener('contextmenu', e => {
   const node = e.target.closest('.tree-node');
   if (!node) return;
@@ -23487,6 +25855,8 @@ document.addEventListener('contextmenu', e => {
     { icon: 'square',         label: 'Force AABB box',         fn: () => smartFitSelection('aabb') },
     { icon: 'rotate-3d',      label: 'Force OBB box',          fn: () => smartFitSelection('obb') },
     { icon: 'cylinder',       label: 'Force cylinder',         fn: () => smartFitSelection('cyl') },
+    { icon: 'boxes',          label: 'A few boxes (keeps the outline)', fn: () => smartFitSelection('boxes') },
+    { icon: 'blocks',         label: 'Blocks (keeps the outline)', fn: () => smartFitSelection('blocks') },
     '---',
     { icon: 'chevrons-down',  label: 'Expand all groups',      fn: _treeExpandAll },
     { icon: 'chevrons-up',    label: 'Collapse all groups',    fn: _treeCollapseAll },
@@ -24804,209 +27174,6 @@ function _wireExplodeAndClip() {
   $('btn-explode-reset')?.addEventListener('click', resetExplode);
 }
 
-// ============== Section / Clipping plane ==============
-// Approach: TSL discardNode driven by two uniforms (plane normal + signed
-// constant). We can't use material.clippingPlanes — three.js r172's WebGPU
-// pipeline (used by the webgpu build even with forceWebGL) auto-converts
-// MeshStandardMaterial to a node material and silently drops clippingPlanes
-// during the conversion. discardNode is the supported NodeMaterial path:
-// it compiles into the fragment shader once per material and we just
-// animate the uniforms when the slider moves — no shader rebuild.
-//
-// Discard test: dot(positionWorld, normal) + constant < 0
-// where constant = -dot(point, normal). To DISABLE clipping we set
-// constant to a very large positive value so the test is never < 0.
-
-const CLIP_DISABLED_CONSTANT = 1e10;
-
-let _tslCached;
-function _resolveTSL() {
-  if (_tslCached !== undefined) return _tslCached;
-  // The webgpu build of three (the one mapped to "three" in index.html) bundles
-  // TSL nodes as named exports of the THREE namespace. Pick them off there.
-  if (typeof THREE.positionWorld !== 'undefined' && typeof THREE.uniform === 'function') {
-    _tslCached = { positionWorld: THREE.positionWorld, uniform: THREE.uniform };
-  } else {
-    console.warn('[CLIP] TSL primitives not present on THREE namespace — section/clip disabled');
-    _tslCached = null;
-  }
-  return _tslCached;
-}
-
-function _initClipUniforms() {
-  if (state.clipUniforms) return state.clipUniforms;
-  if (state.clipUniforms === null) return null; // tried and failed once
-  const tsl = _resolveTSL();
-  if (!tsl) { state.clipUniforms = null; return null; }
-  state.clipUniforms = {
-    normal: tsl.uniform(new THREE.Vector3(1, 0, 0)),
-    constant: tsl.uniform(CLIP_DISABLED_CONSTANT),
-    positionWorld: tsl.positionWorld,
-  };
-  return state.clipUniforms;
-}
-
-function _attachClipDiscard(material) {
-  if (!material || material._clipAttached) return false;
-  const u = _initClipUniforms();
-  if (!u) return false;
-  try {
-    material.discardNode = u.positionWorld
-      .dot(u.normal)
-      .add(u.constant)
-      .lessThan(0);
-    material._clipAttached = true;
-    material.needsUpdate = true;
-    return true;
-  } catch (e) {
-    console.warn('[CLIP] discardNode attach failed:', e?.message || e);
-    return false;
-  }
-}
-
-function _applyClipToAllMaterials() {
-  if (!state.partsRoot) return;
-  _initClipUniforms();
-  let attached = 0, meshCount = 0, matCount = 0;
-  state.partsRoot.traverse(obj => {
-    if (!obj.isMesh && !obj.isInstancedMesh) return;
-    meshCount++;
-    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const m of mats) {
-      if (!m) continue;
-      matCount++;
-      if (_attachClipDiscard(m)) attached++;
-    }
-  });
-  console.log(`[CLIP] discardNode attached to ${attached} new materials (total ${matCount} on ${meshCount} meshes)`);
-}
-
-function updateClipPlane() {
-  if (!state.clip || !state.partsRoot) return;
-  const u = _initClipUniforms();
-  const box = new THREE.Box3().setFromObject(state.partsRoot);
-  if (box.isEmpty()) return;
-  const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const axis = state.clip.axis;
-  const sign = state.clip.flipped ? -1 : 1;
-
-  const normal = new THREE.Vector3(
-    axis === 'x' ? sign : 0,
-    axis === 'y' ? sign : 0,
-    axis === 'z' ? sign : 0,
-  );
-  const min = box.min[axis], max = box.max[axis];
-  const along = min + (max - min) * state.clip.pos;
-  const point = center.clone();
-  point[axis] = along;
-  state.clip.plane.setFromNormalAndCoplanarPoint(normal, point);
-
-  if (u) {
-    if (state.clip.enabled) {
-      u.normal.value.copy(normal);
-      u.constant.value = -normal.dot(point);
-    } else {
-      u.constant.value = CLIP_DISABLED_CONSTANT;
-    }
-  }
-
-  if (state.clip.helper) {
-    state.clip.helper.size = Math.max(size.x, size.y, size.z) * 1.2;
-    state.clip.helper.visible = state.clip.enabled && state.clip.showHelper;
-  }
-  requestRender();
-}
-
-function setClipAxis(axis) {
-  if (!state.clip) return;
-  const u = _initClipUniforms();
-  if (axis === 'off') {
-    state.clip.enabled = false;
-    state.clip.axis = 'x';
-    if (u) u.constant.value = CLIP_DISABLED_CONSTANT;
-    if (state.clip.helper) state.clip.helper.visible = false;
-    requestRender();
-    return;
-  }
-  state.clip.axis = axis;
-  state.clip.enabled = true;
-  if (!state.clip.helper) {
-    const h = new THREE.PlaneHelper(state.clip.plane, 1, 0x6ea8ff);
-    if (h.material) {
-      h.material.transparent = true;
-      h.material.opacity = 0.6;
-      h.material.depthWrite = false;
-    }
-    h.visible = false;
-    state.clip.helper = h;
-    scene.add(h);
-  }
-  _applyClipToAllMaterials();
-  updateClipPlane();
-}
-
-function _wireClipPlane() {
-  state.clip = {
-    enabled: false,
-    axis: 'x',
-    pos: 0.5,
-    flipped: false,
-    plane: new THREE.Plane(new THREE.Vector3(1, 0, 0), 0),
-    helper: null,
-    showHelper: false,
-  };
-
-  $('clip-axis')?.addEventListener('change', e => setClipAxis(e.target.value));
-
-  initScrubber({
-    el: 'clip-pos-scrub',
-    label: 'Position',
-    maxSteps: 200,
-    stepToVal: s => s / 2,
-    valToStep: v => Math.max(0, Math.min(200, Math.round(v * 2))),
-    format: v => ({ value: v.toFixed(1), unit: '%' }),
-    initialValue: 50,
-    promptTitle: 'Cut position',
-    promptUnit: '%',
-    onChange: v => {
-      state.clip.pos = Math.max(0, Math.min(1, v / 100));
-      if (state.clip.enabled) updateClipPlane();
-    },
-  });
-
-  $('btn-clip-flip')?.addEventListener('click', () => {
-    state.clip.flipped = !state.clip.flipped;
-    if (state.clip.enabled) updateClipPlane();
-  });
-
-  $('btn-clip-reset')?.addEventListener('click', () => {
-    state.clip.pos = 0.5;
-    state.clip.flipped = false;
-    state.clip.enabled = false;
-    state.clip.showHelper = false;
-    const sel = $('clip-axis');
-    if (sel) {
-      sel.value = 'off';
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    const showCb = $('clip-show-plane'); if (showCb) showCb.checked = false;
-    const u = _initClipUniforms();
-    if (u) u.constant.value = CLIP_DISABLED_CONSTANT;
-    if (state.clip.helper) state.clip.helper.visible = false;
-    requestRender();
-  });
-
-  $('clip-show-plane')?.addEventListener('change', e => {
-    state.clip.showHelper = !!e.target.checked;
-    if (state.clip.helper) {
-      state.clip.helper.visible = state.clip.enabled && state.clip.showHelper;
-    }
-    requestRender();
-  });
-
-}
-
 // ============== UX: frame selected, reveal in tree, custom dropdowns, ctx menus ==============
 
 // Frame the camera onto the bbox of the current selection.
@@ -25100,106 +27267,120 @@ function _wireRevealAndKeys() {
   });
 }
 
-// ─── Custom select widget ─────────────────────────────────────────────────
-// Replaces the native dropdown popup with one that uses our color/typography.
-// The underlying <select> stays in the DOM (hidden) so existing change listeners
-// keep working — we just sync .value and dispatch 'change' when the user clicks
-// an item in the styled popup.
-
+// ─── Dropdowns ────────────────────────────────────────────────────────────
+// There is one dropdown in the app, and every <select> becomes it: the ones
+// in the page from the start and the ones drawn later (Settings, the material
+// editor, a shape's parameters, filters, batch rename), without their code
+// having to ask. A <select> is still what the code writes and listens to: it
+// stays in the page, out of sight, and the dropdown is a button that shows
+// its value and a popup that lists its options. Choosing one sets the
+// <select> and fires its `change` and `input`, so nothing that listens to it
+// knows the difference.
+//   - Setting the <select> from code (`sel.value = …`, `sel.selectedIndex = …`)
+//     or changing its options updates what the button says.
+//   - How big a dropdown is comes from tokens, set by where it stands
+//     (index.html, "Dropdown"): --dd-h, --dd-fs, --dd-r, --dd-px. A place that
+//     wants smaller dropdowns sets the tokens; it does not restyle the button.
+//   - To keep a plain <select>: give it `hidden` (a value holder driven by
+//     other controls) or `data-native`.
+let _csOpen = null;                 // the popup that is open, if any: { pop, trigger }
+function _csClose() { if (_csOpen) { _csOpen.pop.remove(); _csOpen.trigger.classList.remove('is-open'); _csOpen = null; } }
 function _initCustomSelects() {
-  // CSS for .cs-* classes lives in index.html (search "Custom select widget").
-
-  const all = document.querySelectorAll('select.mac-sel');
-  all.forEach(sel => {
-    if (sel.dataset.csReady === '1') return;
+  for (const sel of document.querySelectorAll('select')) {
+    if (sel.dataset.csReady === '1' || sel.hidden || sel.dataset.native !== undefined) continue;
     sel.dataset.csReady = '1';
-    // Capture original inline styles BEFORE we visually hide the select,
-    // so we can mirror them onto the trigger button.
-    const origStyle = {
-      fontSize: sel.style.fontSize,
-      flex: sel.style.flex,
-      padding: sel.style.padding,
-      width: sel.style.width,
-      minWidth: sel.style.minWidth,
-      maxWidth: sel.style.maxWidth,
-    };
-    // Hide native select, but keep it focusable / programmable.
+    // what the <select> asked for inline is what the button gets
+    const mirror = {};
+    for (const k of ['fontSize', 'flex', 'padding', 'width', 'minWidth', 'maxWidth']) if (sel.style[k]) mirror[k] = sel.style[k];
+    // the <select> stays, out of sight
     sel.style.position = 'absolute';
     sel.style.opacity = '0';
     sel.style.pointerEvents = 'none';
     sel.style.width = '0';
     sel.style.height = '0';
     sel.tabIndex = -1;
-
     const wrap = document.createElement('div');
     wrap.className = 'cs-wrap';
     sel.parentNode.insertBefore(wrap, sel);
     wrap.appendChild(sel);
-
     const trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'cs-trigger';
     trigger.id = sel.id ? sel.id + '__btn' : '';
-    // Mirror inline appearance fields from the original select (captured above).
-    for (const k of Object.keys(origStyle)) if (origStyle[k]) trigger.style[k] = origStyle[k];
+    if (sel.title) trigger.title = sel.title;
+    Object.assign(trigger.style, mirror);
     if (sel.disabled) { trigger.disabled = true; trigger.style.opacity = '.5'; trigger.style.cursor = 'not-allowed'; }
     wrap.appendChild(trigger);
 
-    const labelOf = idx => {
-      const o = sel.options[idx];
-      return o ? o.textContent.trim() : '';
-    };
-    const sync = () => { trigger.textContent = labelOf(sel.selectedIndex) || ' '; };
+    const sync = () => { const o = sel.options[sel.selectedIndex]; trigger.textContent = (o ? o.textContent.trim() : '') || ' '; };
     sync();
     sel.addEventListener('change', sync);
+    // set from code: the button follows
+    for (const prop of ['value', 'selectedIndex']) {
+      const d = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, prop);
+      if (d && d.set) Object.defineProperty(sel, prop, { configurable: true, get() { return d.get.call(this); }, set(v) { d.set.call(this, v); sync(); } });
+    }
+    try { new MutationObserver(sync).observe(sel, { childList: true, subtree: true, characterData: true }); } catch (_) {}
 
-    let pop = null;
-    const closePop = () => { if (pop) { pop.remove(); pop = null; } };
-    document.addEventListener('mousedown', ev => {
-      if (pop && !pop.contains(ev.target) && ev.target !== trigger) closePop();
-    });
-    window.addEventListener('blur', closePop);
-
-    trigger.addEventListener('click', ev => {
+    trigger.addEventListener('click', (ev) => {
       ev.preventDefault(); ev.stopPropagation();
-      if (pop) { closePop(); return; }
-      pop = document.createElement('div');
+      const mine = _csOpen && _csOpen.trigger === trigger;
+      _csClose();
+      if (mine) return;
+      const pop = document.createElement('div');
       pop.className = 'cs-pop';
       const rect = trigger.getBoundingClientRect();
       pop.style.left = rect.left + 'px';
       pop.style.minWidth = Math.max(rect.width, 160) + 'px';
-      // Show below the trigger; flip up if too close to bottom.
+      // below the button; above it when there is no room below
       const wantHeight = Math.min(320, sel.options.length * 30 + 16);
-      const spaceBelow = window.innerHeight - rect.bottom;
-      pop.style.top = (spaceBelow > wantHeight + 8 ? rect.bottom + 4 : rect.top - wantHeight - 4) + 'px';
+      pop.style.top = (window.innerHeight - rect.bottom > wantHeight + 8 ? rect.bottom + 4 : Math.max(8, rect.top - wantHeight - 4)) + 'px';
       Array.from(sel.options).forEach((opt, idx) => {
         const row = document.createElement('div');
         row.className = 'cs-opt' + (idx === sel.selectedIndex ? ' cs-sel' : '');
         if (opt.dataset?.logo) {
           row.classList.add('cs-has-logo');
           row.innerHTML = `<span>${escapeHtml(opt.textContent.trim())}</span><img class="cs-logo" src="${opt.dataset.logo}" alt="">`;
-        } else {
-          row.textContent = opt.textContent;
-        }
+        } else row.textContent = opt.textContent;
         if (opt.disabled) row.style.opacity = '.4';
         row.addEventListener('click', () => {
           if (opt.disabled) return;
           sel.selectedIndex = idx;
-          sync();
           sel.dispatchEvent(new Event('change', { bubbles: true }));
           sel.dispatchEvent(new Event('input', { bubbles: true }));
-          closePop();
+          _csClose();
         });
         pop.appendChild(row);
       });
       document.body.appendChild(pop);
-      // A trigger near the right edge would push the popup off-screen;
-      // slide it back in, keeping an 8px margin.
-      const pw = pop.getBoundingClientRect().width;
-      const maxLeft = window.innerWidth - pw - 8;
+      trigger.classList.add('is-open');
+      _csOpen = { pop, trigger };
+      // near the right edge it would hang off the window: slide it back in
+      const pw = pop.getBoundingClientRect().width, maxLeft = window.innerWidth - pw - 8;
       if (rect.left > maxLeft) pop.style.left = Math.max(8, maxLeft) + 'px';
+      pop.querySelector('.cs-sel')?.scrollIntoView({ block: 'nearest' });
     });
-  });
+  }
+}
+if (typeof document !== 'undefined') {
+  // one set of listeners for every dropdown (each used to add its own)
+  document.addEventListener('mousedown', (ev) => { if (_csOpen && !_csOpen.pop.contains(ev.target) && ev.target !== _csOpen.trigger) _csClose(); }, true);
+  document.addEventListener('keydown', (ev) => { if (_csOpen && ev.key === 'Escape') { ev.stopPropagation(); _csClose(); } }, true);
+  window.addEventListener('blur', _csClose);
+  window.addEventListener('resize', _csClose);
+  // a <select> that turns up later is dressed too
+  let due = 0;
+  const watch = () => {
+    new MutationObserver((list) => {
+      if (due) return;
+      for (const m of list) for (const n of m.addedNodes) {
+        if (n.nodeType !== 1 || !(n.tagName === 'SELECT' || n.querySelector?.('select'))) continue;
+        due = requestAnimationFrame(() => { due = 0; try { _initCustomSelects(); } catch (e) { console.warn('[dropdown]', e); } });
+        return;
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) watch(); else document.addEventListener('DOMContentLoaded', watch, { once: true });
 }
 
 // ─── Extended right-click context menus ───────────────────────────────────
@@ -25239,6 +27420,7 @@ function _initCustomSelects() {
     // which fires on EVERY non-input contextmenu. Checking defaultPrevented
     // therefore killed the viewport/material/tree-empty menus on every click.
     // Each branch below is target-scoped, so we can safely run unconditionally.)
+    if (e.target.closest && e.target.closest('#vw-clay')) return;      // the Clay button has a menu of its own
     // If the right button was dragged before this contextmenu fired, the user
     // was panning the camera — don't pop up a menu.
     if (_rmbDown) {
@@ -25337,7 +27519,6 @@ const _origWireUI_ux1 = wireUI;
 wireUI = function() {
   _origWireUI_ux1();
   _safeRun(_wireExplodeAndClip, 'explode-and-clip');
-  _safeRun(_wireClipPlane,      'clip-plane');
   _safeRun(_wireMeshSplitter,   'mesh-splitter');
   _safeRun(_wireRevealAndKeys,  'reveal-and-keys');
   _safeRun(_wireSidebarResize,  'sidebar-resize');
@@ -26276,13 +28457,15 @@ function _wireDeadTreeControls() {
     const anyUserExpanded   = (state.userGroups || []).some(g => g.expanded);
     const anyHierExpanded   = state.treeNodes && state.treeNodes.length > 0 && state.treeCollapsed.size === 0;
     const anyExpanded = anyUserExpanded || anyHierExpanded;
+    if (_toggleBtn._says === anyExpanded) return;      // already says so
+    _toggleBtn._says = anyExpanded;
     const iconName = anyExpanded ? 'chevrons-down-up' : 'chevrons-up-down';
     // Replace the entire content with a fresh <i> placeholder. After the
     // first Lucide pass the original <i> has been replaced with an <svg>,
     // so querySelector('i[data-lucide]') returns null and the previous
     // setAttribute approach silently did nothing — the icon never swapped.
     // Reset to a placeholder and re-run Lucide.
-    _toggleBtn.innerHTML = `<i data-lucide="${iconName}"></i>`;
+    _toggleBtn.innerHTML = `<i data-lucide="${iconName}"></i><span>${anyExpanded ? 'Collapse' : 'Expand'}</span>`;
     _toggleBtn.title = anyExpanded ? 'Collapse all groups' : 'Expand all groups';
     if (typeof _lucide === 'function') _lucide();
   };
@@ -26318,6 +28501,10 @@ function _wireDeadTreeControls() {
   });
   // Run once after wiring so the icon reflects initial (mostly-expanded) state.
   setTimeout(updateToggleIcon, 0);
+  // The button names what a press will do, so it has to follow the tree:
+  // after a model loads, and when the last collapsed group is opened by hand.
+  window._appHooks?.treePostBuildHooks.push(updateToggleIcon);
+  _treeToggleSays = updateToggleIcon;
 
   // ── Flatten ─────────────────────────────────────────────────────────────
   // Promote every Mesh in the partsRoot subtree to be a direct child of
@@ -29417,7 +31604,22 @@ const _Measure = (() => {
     _refreshButtonState();
   }
 
+  // The whole model was moved or turned (Align to floor, Recenter): the
+  // measurements are stored as world points, so they go with it.
+  function xform(M) {
+    if (!items.length) return;
+    const p = new THREE.Vector3();
+    for (const it of items) {
+      for (const k of ['a', 'b']) { p.fromArray(it[k]).applyMatrix4(M); it[k] = [p.x, p.y, p.z]; }
+      const shown = !!(it._line || it._label);
+      _disposeRendered(it);
+      if (shown) _addRendered(it);
+    }
+    if (pendingA) { pendingA.applyMatrix4(M); if (pendingMarker) pendingMarker.position.copy(pendingA); }
+  }
+
   return {
+    xform,
     setActive, isActive: () => active, toggle: () => setActive(!active),
     handleClick, handleHover, handleEsc, _hideHover, init, rebuildList,
     deleteOne, clearAll, getSerialized, setSerialized,
@@ -32682,12 +34884,22 @@ setTimeout(() => _dndDecorateTree(), 0);
   // It errs on the side of "visible": see-through parts hide nothing, and a
   // part too small to cover a pixel is never reported. The result is a
   // selection, not a deletion — the user looks, then presses Delete.
+  // `opts` (all optional; the Select hidden panel sets them):
+  //   views       how many directions to look from (more finds parts that
+  //               show only through a narrow gap; default 64)
+  //   scope       'sel': only the selected parts are candidates (everything
+  //               still hides them)
+  //   glassHides  see-through parts count as cover
+  //   maxPct      keep only parts no larger than this share of the model's size
+  //   name        keep only parts whose name contains this
+  //   add         add to the selection instead of replacing it
+  // Returns { count, tris, share, unsure, filtered } or null if it did not run.
   const _HIDDEN_VIEWS = 64;
-  function _hiddenViewDirs() {
+  function _hiddenViewDirs(total = _HIDDEN_VIEWS) {
     const dirs = [];
     for (const a of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]) dirs.push(new THREE.Vector3(...a));
     for (let x = -1; x <= 1; x += 2) for (let y = -1; y <= 1; y += 2) for (let z = -1; z <= 1; z += 2) dirs.push(new THREE.Vector3(x, y, z).normalize());
-    const n = _HIDDEN_VIEWS - dirs.length, golden = Math.PI * (3 - Math.sqrt(5));
+    const n = Math.max(0, total - dirs.length), golden = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < n; i++) {
       const y = 1 - (i + 0.5) / n * 2, r = Math.sqrt(1 - y * y), t = i * golden;
       dirs.push(new THREE.Vector3(Math.cos(t) * r, y, Math.sin(t) * r));
@@ -32695,29 +34907,32 @@ setTimeout(() => _dndDecorateTree(), 0);
     return dirs;
   }
   let _hiddenBusy = false;
-  async function _selectHiddenParts() {
-    if (_hiddenBusy) return;
+  async function _selectHiddenParts(opts) {
+    if (_hiddenBusy) return null;
+    opts = (opts && typeof opts === 'object' && !(opts instanceof Event)) ? opts : {};
+    const nViews = Math.max(14, Math.min(256, opts.views | 0 || _HIDDEN_VIEWS));
     const all = _exportDrawList(true);
     const seeThrough = (m) => state.viewMode !== 'xray' && !!m && !Array.isArray(m) && m.transparent && m.opacity < 0.99;
-    const items = all.filter(it => !seeThrough(it.srcMat));
-    const candidates = items.filter(it => it.part && !it.isClone);
-    if (candidates.length < 2) { toast('Select hidden parts', 'There is nothing that could be hidden', 'info', 3000); return; }
+    const items = opts.glassHides ? all : all.filter(it => !seeThrough(it.srcMat));
+    const within = opts.scope === 'sel' && state.selected.size ? new Set(state.selected) : null;
+    const candidates = items.filter(it => it.part && !it.isClone && (!within || within.has(it.part.partId)));
+    if (!candidates.length || items.length < 2) { toast('Select hidden parts', within ? 'Nothing in the selection could be hidden' : 'There is nothing that could be hidden', 'info', 3000); return null; }
     const box = new THREE.Box3(), tmpBox = new THREE.Box3();
     for (const it of items) {
       if (!it.geom.boundingBox) it.geom.computeBoundingBox();
       if (!it.geom.boundingBox || it.geom.boundingBox.isEmpty()) continue;
       box.union(tmpBox.copy(it.geom.boundingBox).applyMatrix4(it.world));
     }
-    if (box.isEmpty()) return;
+    if (box.isEmpty()) return null;
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     const R = Math.max(sphere.radius, 1e-6) * 1.01;
 
     const cv = document.createElement('canvas');
     cv.width = cv.height = 1;
     const gl = cv.getContext('webgl2', { antialias: false, alpha: true, depth: false, stencil: false });
-    if (!gl) { toast('Select hidden parts', 'WebGL2 is not available in this browser', 'error', 4000); return; }
+    if (!gl) { toast('Select hidden parts', 'WebGL2 is not available in this browser', 'error', 4000); return null; }
     _hiddenBusy = true;
-    setLoader(true, 'Looking for hidden parts…', `${fmtNum(candidates.length)} parts from ${_HIDDEN_VIEWS} directions`);
+    setLoader(true, 'Looking for hidden parts…', `${fmtNum(candidates.length)} parts from ${nViews} directions`);
     setLoaderProgress(2);
     const seen = new Uint8Array(candidates.length + 1);
     let ok = false, size = 0, cancelled = false;
@@ -32787,7 +35002,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const idOf = new Map();
       candidates.forEach((it, i) => idOf.set(it, i + 1));
       const pixels = new Uint8Array(size * size * 4), words = new Uint32Array(pixels.buffer);
-      const dirs = _hiddenViewDirs();
+      const dirs = _hiddenViewDirs(nViews);
       const proj = new THREE.Matrix4().makeOrthographic(-R, R, R, -R, 0, R * 4);
       const view = new THREE.Matrix4(), vp = new THREE.Matrix4(), mvp = new THREE.Matrix4();
       const eye = new THREE.Vector3(), up = new THREE.Vector3(), f32 = new Float32Array(16);
@@ -32831,27 +35046,33 @@ setTimeout(() => _dndDecorateTree(), 0);
       setLoader(false);
       _hiddenBusy = false;
     }
-    if (cancelled) { toast('Check cancelled', 'The selection was not changed', 'info', 3000); return; }
-    if (!ok) return;
+    if (cancelled) { toast('Check cancelled', 'The selection was not changed', 'info', 3000); return null; }
+    if (!ok) return null;
 
     // A part smaller than two pixels of the check could be in plain view and
     // still miss every pixel: it is left alone.
     const tooSmall = (R * 2 / size) * 2;
     const hidden = [];
-    let tris = 0, unsure = 0;
+    let tris = 0, unsure = 0, filtered = 0;
+    const maxLen = opts.maxPct > 0 ? box.getSize(new THREE.Vector3()).length() * opts.maxPct / 100 : Infinity;
+    const needle = String(opts.name || '').trim().toLowerCase();
     candidates.forEach((it, i) => {
       if (seen[i + 1]) return;
-      const p = it.part;
-      if (((p.sizeMetrics && p.sizeMetrics.max) || 0) < tooSmall) { unsure++; return; }
+      const p = it.part, len = (p.sizeMetrics && p.sizeMetrics.max) || 0;
+      if (len < tooSmall) { unsure++; return; }
+      if (len > maxLen || (needle && !String(p.name || '').toLowerCase().includes(needle))) { filtered++; return; }
       hidden.push(p.partId);
       tris += p.triCount || 0;
     });
     if (!hidden.length) {
-      toast('No hidden parts', unsure ? `Every part can be seen from outside (${fmtNum(unsure)} too small to judge)` : 'Every part can be seen from outside', 'success', 4000);
-      return;
+      const why = filtered ? `${fmtNum(filtered)} hidden ${filtered === 1 ? 'part was' : 'parts were'} left out by the filters` : unsure ? `Every part can be seen from outside (${fmtNum(unsure)} too small to judge)` : 'Every part can be seen from outside';
+      toast('No hidden parts', why, filtered ? 'info' : 'success', 4000);
+      return { count: 0, tris: 0, share: 0, unsure, filtered };
     }
-    state.selected.clear();
-    if (state.selectedGroupIds) state.selectedGroupIds.clear();
+    if (!opts.add) {
+      state.selected.clear();
+      if (state.selectedGroupIds) state.selectedGroupIds.clear();
+    }
     for (const id of hidden) state.selected.add(id);
     try { applySelectionColors(); } catch (_) {}
     try { rebuildTreeSelectionOnly(); } catch (_) {}
@@ -32862,8 +35083,68 @@ setTimeout(() => _dndDecorateTree(), 0);
     const total = _sceneTris();
     toast(`${fmtNum(hidden.length)} hidden ${hidden.length === 1 ? 'part' : 'parts'} selected`,
       `${fmtNum(tris)} triangles (${(tris / Math.max(1, total) * 100).toFixed(1)}% of the scene) cannot be seen from outside. Delete removes them; S isolates them first.`, 'success', 9000);
+    return { count: hidden.length, tris, share: tris / Math.max(1, total), unsure, filtered };
   }
-  document.getElementById('btn-select-hidden')?.addEventListener('click', _selectHiddenParts);
+
+  // The Select hidden panel (index.html, data-cmd="selhidden"): the toolbar
+  // button and the menus open it; its main button (or Enter) runs the check
+  // with what is chosen there, and the result stays in the panel with the two
+  // things one does next, look at them alone or delete them.
+  (function _wireSelectHidden() {
+    const sec = document.querySelector('.section-cmd[data-cmd="selhidden"]');
+    if (!sec) return;
+    const $id = (id) => document.getElementById(id);
+    const DEF = { scope: 'all', views: 64, glass: false, add: false, maxPct: 0, name: '' };
+    const o = { ...DEF };
+    const seg = (id, key, attr, num) => {
+      const btns = [...sec.querySelectorAll(`#${id} button`)];
+      const paint = () => { for (const b of btns) b.classList.toggle('active', String(o[key]) === b.dataset[attr]); };
+      for (const b of btns) b.addEventListener('click', () => { o[key] = num ? +b.dataset[attr] : b.dataset[attr]; paint(); b.blur(); changed(); });
+      return paint;
+    };
+    const paintScope = seg('sh-scope', 'scope', 'scope'), paintViews = seg('sh-views', 'views', 'views', true);
+    const glass = $id('sh-glass'), add = $id('sh-add'), pct = $id('sh-max'), name = $id('sh-name'), info = $id('sh-info'), after = $id('sh-after');
+    const idle = () => {
+      const n = state.selected.size;
+      return o.scope === 'sel' ? (n ? `Checks the ${fmtNum(n)} selected ${n === 1 ? 'part' : 'parts'} against the whole scene.` : 'Select the parts to check first, or look in the whole scene.')
+        : 'Screws, bearings and brackets inside a housing. Nothing is deleted until you press Delete.';
+    };
+    let result = null;
+    function show() {
+      paintScope(); paintViews();
+      if (glass) glass.checked = o.glass;
+      if (add) add.checked = o.add;
+      if (pct) pct.value = o.maxPct ? String(o.maxPct) : '';
+      if (name && document.activeElement !== name) name.value = o.name;
+      $id('sh-adv')?.classList.toggle('is-changed', ['views', 'glass', 'add', 'maxPct', 'name'].some(k => o[k] !== DEF[k]));
+      if (info) {
+        info.textContent = !result ? idle()
+          : result.count ? `${fmtNum(result.count)} hidden ${result.count === 1 ? 'part' : 'parts'} selected: ${fmtNum(result.tris)} triangles, ${(result.share * 100).toFixed(1)}% of the scene.${result.filtered ? ` ${fmtNum(result.filtered)} more left out by the filters.` : ''}`
+          : result.filtered ? `Selection unchanged: ${fmtNum(result.filtered)} hidden ${result.filtered === 1 ? 'part was' : 'parts were'} left out by the filters.`
+          : 'No hidden parts: everything can be seen from outside.';
+        info.classList.toggle('is-result', !!(result && result.count));
+      }
+      if (after) after.hidden = !(result && result.count && state.selected.size);
+    }
+    // a result belongs to the options it was found with: changing one puts the hint back
+    const changed = () => { result = null; show(); };
+    glass?.addEventListener('change', () => { o.glass = glass.checked; changed(); });
+    add?.addEventListener('change', () => { o.add = add.checked; changed(); });
+    pct?.addEventListener('change', () => { const v = parseFloat(pct.value); o.maxPct = isFinite(v) && v > 0 ? +Math.min(100, v).toFixed(2) : 0; changed(); });
+    name?.addEventListener('input', () => { o.name = name.value.trim(); changed(); });
+    $id('sh-reset')?.addEventListener('click', () => { Object.assign(o, { views: DEF.views, glass: DEF.glass, add: DEF.add, maxPct: DEF.maxPct, name: DEF.name }); changed(); });
+    $id('btn-sh-run')?.addEventListener('click', async () => {
+      const r = await _selectHiddenParts({ views: o.views, scope: o.scope, glassHides: o.glass, add: o.add, maxPct: o.maxPct, name: o.name });
+      if (r) { result = r; show(); }
+    });
+    $id('btn-sh-isolate')?.addEventListener('click', () => { try { isolateSelected(); } catch (_) {} });
+    $id('btn-sh-delete')?.addEventListener('click', () => { _Actions.list.find(a => a.id === 'delete')?.run(); result = null; show(); });
+    sec.addEventListener('cmd-open', () => { result = null; show(); });
+    // the "selected parts" line follows the selection while the panel is open
+    let seen = -1;
+    setInterval(() => { if (sec.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; show(); } }, 400);
+    show();
+  })();
 
   // ── Optimisation report ──────────────────────────────────────────────────
   // What the model was when it was opened against what it is now, and the
@@ -33404,8 +35685,22 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // to 0 to measure and then setting it again made the browser lay the page
     // out twice more on every step of a sidebar drag.)
     const place = () => {
+      // The parts / library switch sits at the right end of the sidebar's own
+      // stretch of the bar, in line with the search box under it. With the
+      // sidebar folded away, or too narrow for that, it stays next to File.
+      const sw = document.getElementById('side-switch'), side = document.getElementById('sidebar-left');
+      let moved = 0;
+      if (sw && side) {
+        const curS = parseFloat(sw.style.marginLeft) || 0;
+        const r = sw.getBoundingClientRect(), box = [...side.querySelectorAll('.tree-search')].map(e => e.getBoundingClientRect()).find(q => q.width);
+        const edge = box && box.width ? box.right : side.getBoundingClientRect().right - 12;
+        const folded = document.body.classList.contains('left-collapsed');
+        const wantS = folded ? 0 : Math.max(0, Math.round(edge - r.width - (r.left - curS)));
+        moved = wantS - curS;
+        if (curS !== wantS) sw.style.marginLeft = wantS ? wantS + 'px' : '';
+      }
       const cur = parseFloat(tabs.style.marginLeft) || 0;
-      const gap = vp.getBoundingClientRect().left - (tabs.getBoundingClientRect().left - cur);
+      const gap = vp.getBoundingClientRect().left - (tabs.getBoundingClientRect().left - cur + moved);
       const want = Math.max(6, Math.round(gap)) + 'px';
       if (tabs.style.marginLeft !== want) tabs.style.marginLeft = want;
     };

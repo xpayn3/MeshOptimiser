@@ -348,7 +348,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
         self.send_header('Cross-Origin-Embedder-Policy', 'credentialless')
-        self.send_header('Cache-Control', 'no-store')
+        # Everything is fetched fresh, so an edit shows on reload. The app's own
+        # pictures and clips (assets/) are the exception: the browser may keep
+        # them and only asks whether they changed (a 304 with no body).
+        own_asset = (getattr(self, 'path', '') or '').split('?')[0].startswith('/assets/')
+        self.send_header('Cache-Control', 'no-cache' if own_asset else 'no-store')
         super().end_headers()
 
     def log_message(self, format, *args):

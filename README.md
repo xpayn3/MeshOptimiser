@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 0 . 1 1 . 0
+  O P T I M I S E R   ·   v 0 . 1 2 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
@@ -72,7 +72,6 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
   dissolve, ungroup. All undoable.
 - **Two renderers** — WebGPU (default, with TSL nodes and `discardNode` clipping)
   and WebGL2. Hot-swap from the toolbar, no reload.
-- **GPU section planes** — real `discardNode`-based clipping, not a placeholder mesh.
 - **Resumable sessions** — FS Access API + IndexedDB persist file handles across
   reloads. Saved scenes for view/selection/recolour state.
 - **Keyboard-first UX** — command palette (⌘K), shortcuts overlay, batch rename
@@ -99,7 +98,6 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 | | |
 |---|---|
 | 🌐 **Dual renderer**            | **WebGPU** (default) with hot-swap to **WebGL2** — pick from the toolbar |
-| 🔪 **Section / Clip planes**    | Live cross-section via TSL `discardNode` — true GPU clipping, not fake plane meshes |
 | 💡 **PBR + AO + envmap**        | Studio lighting, ambient occlusion, screen-space reflections, fog |
 | 🎯 **Pixel-perfect picking**    | Hover, click, marquee-select; works on instanced meshes |
 | 👁 **Hide / Isolate / Solo**     | One key per mode — flatten the noise, focus on what matters |
@@ -260,18 +258,23 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v0.11.0** — how the app is used changes: scenes in tabs, tools beside the viewport, numbers you drag.
+**v0.12.0** — the app builds as well as reduces: a parts library, a model stood on the floor in one card, and a scene you can finally read.
 
-- ![new][new] **Scene tabs** — every tab is its own scene; *New* and *Open* never replace one. A spare tab is kept warm, so a new one is there at once.
-- ![new][new] **Command panels** — Split (`X`) and Fill holes (`P`) open beside the viewport, Plasticity-style. `Enter` runs, `Esc` puts the panel away.
-- ![new][new] **Fill holes, advanced** — through / blind / open holes, a smallest size, a depth limit, a flatness tolerance. Stress-tested on 5.4M triangles across nine option sets; 334 meshes compared edge by edge, none left with a new open edge.
-- ![new][new] **Drag any number** — one line per shape parameter, no slider underneath.
-- ![new][new] **One Settings window** with search; **all commands** behind "…"; a **shortcut map** that fits together (`H` hide, `Shift+H` hide the rest, `Alt+H` show all, `Ctrl+M` merge, `Ctrl+B` smart fit, `Ctrl+E` export…).
-- ![new][new] **Properties is never empty** — the scene's totals, or a part's triangles with what was saved, its share and its rank.
-- ![fix][fix] A hole fill can no longer leave a crack; material names follow their colour; scenes made of added shapes count their triangles.
-- ![perf][perf] **Speed pass** on a 1,583-part, 5.4M-triangle assembly — orbiting at the display's full rate (group dots are one draw), a click on a part 64 ms → 8–10, a switch to wireframe or x-ray 2.7 s → 0.3–0.5, and a tree that keeps its rows and scrolls as a layer.
-- ![fix][fix] Undoing a group no longer throws its parts across the scene; Hide selected is an undo step.
-- ![polish][polish] Darker, calmer, one tone. The GPU path tracer is gone; nothing is fetched from a CDN at start-up.
+- ![new][new] **Object library** — 86 parametric parts on six shelves: shapes, fasteners, nuts, pipes and flanges, profiles and plates, machine parts. Drag one into the scene and a see-through copy shows where it will stand, square to the surface under the pointer.
+- ![new][new] **A nut on the bolt** — bolts carry their own nut, in the bolt's thread, at a distance you set from the head.
+- ![new][new] **Align to floor** — turn the model in steps and choose which side of it goes to zero on each axis. One undo step, no drift, and it can run each time a file is opened.
+- ![new][new] **Select hidden parts** — finds what cannot be seen from outside and selects it.
+- ![new][new] **Fit to budget** — a triangle target for the whole scene, densest meshes first, with a preview and Cancel.
+- ![new][new] **Smart fit: Boxes and Blocks** — stand-ins that keep the outline: a handful of fitted boxes, or a coarse grid with the part's steps, arms and openings.
+- ![new][new] **Clay (`5`)** — every part in one plain material, to read the shape. Porcelain, steel and red wax on a right-click.
+- ![new][new] **Dark parts have a shape** — a studio to reflect on the plain backgrounds, and a headlight that follows the view.
+- ![fix][fix] **Parts no longer show through thin covers** when zoomed out: the near plane follows the camera.
+- ![new][new] **Search finds parts and the library**, and works out sums and lengths (`12*25.4`, `2 in`).
+- ![new][new] **Every number field drags**; Move snaps to a step that suits the scene's size.
+- ![new][new] **Optimisation report** — the scene as opened against the scene now.
+- ![polish][polish] Right sidebar grouped into Inspect / Clean up / Reduce; a clearer selection in the tree. The section plane is gone.
+
+**v0.11.0** — how the app is used changes: scenes in tabs, command panels beside the viewport, numbers you drag, one Settings window, and a speed pass on a 5.4M-triangle assembly.
 
 **v0.10.1** — libraries bundled: the app starts without a CDN and works offline.
 
