@@ -14,7 +14,7 @@
      should pull from these; new rgba/hex literals deserve a second look. */
 
   /* Solid surfaces (base layers) — neutral grey ramp (no blue tint) */
-  --bg:#0d0d0d; --bg1:#141414; --bg2:#1c1c1c; --bg3:#252525; --bg4:#2f2f2f;
+  --bg:#101010; --bg1:#141414; --bg2:#1c1c1c; --bg3:#252525; --bg4:#2f2f2f;
   --bg-checker:#181818;                  /* checkerboard fill behind material thumbs */
   --glass-soft:rgba(20,20,20,.70);       /* translucent dark fill (vp-info, gizmo-hud, vp-pills) */
   --glass-strong:rgba(20,20,20,.92);     /* opaque-ish glass (popovers, scrubber mask) */
@@ -924,7 +924,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .vp-pill-item.active .vp-pill-item-kbd{color:color-mix(in srgb, var(--ac) 70%, var(--tx3));border-color:color-mix(in srgb, var(--ac) 35%, var(--bd));background:color-mix(in srgb, var(--ac) 12%, rgba(0,0,0,.25))}
 .vp-pill-item-lbl{font-weight:var(--fw-semibold);letter-spacing:var(--tracking-snug)}
 .vp-pill-item-kbd{font-family:var(--font-sans);font-size:var(--fs-10);font-weight:var(--fw-medium);color:var(--tx3);background:rgba(0,0,0,.25);border:1px solid var(--bd);border-radius:var(--r-xs);padding:2px 6px;line-height:1;letter-spacing:var(--tracking-mono);flex-shrink:0;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
-.vp-stat{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx2);background:rgba(13,13,13,.72);border:1px solid var(--bd);border-radius:var(--r-sm);padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
+.vp-stat{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx2);background:rgba(16,16,16,.72);border:1px solid var(--bd);border-radius:var(--r-sm);padding:4px 9px;white-space:nowrap;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-variant-numeric:tabular-nums}
 /* Gizmo HUD — small DRO that pops next to the gizmo while a drag is active.
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
    per-axis Euler) for rotate, scale factor for scale. Position is updated
@@ -1028,7 +1028,6 @@ body.msr-mode #canvas{cursor:crosshair}
 #tg-sun       {--btn-tint:var(--wn)}
 #tg-transform {--btn-tint:var(--ok)}
 #tg-screenshot{--btn-tint:#7dd3fc}
-#tg-render    {--btn-tint:#c4b5fd}
 .vp-info{background:var(--glass-soft);border:0;backdrop-filter:blur(10px);border-radius:var(--r-sm);padding:7px 11px;font-size:var(--fs-11);color:var(--tx2);line-height:var(--lh-relaxed);font-variant-numeric:tabular-nums;min-width:140px}
 .vp-info strong{color:var(--tx)}
 /* Triangle-count progress bar: 100% = starting tri count, shrinks as the
@@ -1110,7 +1109,7 @@ body.msr-mode #canvas{cursor:crosshair}
 #vp-materials-pop .mat-cell .mat-name{font-size:var(--fs-xs);color:var(--tx2);line-height:var(--lh-tight);text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Count pill — pinned to the thumb's top-right. Subtle dark capsule with
    tabular numerics so 1-, 2-, 3-digit counts stay aligned. */
-#vp-materials-pop .mat-cell .mat-count{position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--tx);background:rgba(13,13,13,.75);border:1px solid rgba(255,255,255,.10);border-radius:6px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:var(--tracking-mono);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
+#vp-materials-pop .mat-cell .mat-count{position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--tx);background:rgba(16,16,16,.75);border:1px solid rgba(255,255,255,.10);border-radius:6px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:var(--tracking-mono);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
 #vp-materials-pop .mat-cell.selected{background:var(--ac-soft);border-color:var(--ac);box-shadow:0 0 0 2px var(--ac)}
 /* Subtle ring on materials used by the current viewport selection — gives a
    passive "you have parts of this material picked" hint without competing
@@ -1914,8 +1913,8 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 button.x,.modal-h .x{box-sizing:border-box;width:var(--btn-h-md);height:var(--btn-h-md);padding:0;display:inline-grid;place-items:center;border-radius:var(--btn-r-md);color:var(--tx3);font-size:13px;line-height:1;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 button.x:hover,.modal-h .x:hover{color:var(--tx);background:var(--s3)}
 /* Flat list (no groups): drop the column reserved for the expand arrow so rows start at the search field's edge */
-#tree:not(:has(.tree-expand)) .tree-expand-spacer{display:none}
-#tree:not(:has(.tree-expand)) .tree-typeicon{margin-left:2px}
+#tree:not(.has-groups) .tree-expand-spacer{display:none}
+#tree:not(.has-groups) .tree-typeicon{margin-left:2px}
 /* Nested parts, Cinema 4D style: the child's icon sits one step in from its
    parent's icon and the elbow connector runs right up to it, so there is no
    empty arrow column between the line and the icon. */
@@ -2093,7 +2092,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
    edge, display controls along the bottom centre. Buttons inside are bare
    icons; the pill is the only chrome. */
 .vpc.tl:not(#vp-perf),.vpc.tr{
-  background:rgba(17,17,17,.94);border-radius:10px;padding:4px;gap:2px;
+  background:rgba(16,16,16,.94);border-radius:10px;padding:4px;gap:2px;
   box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06);
 }
 .vpc.tl:not(#vp-perf){top:50%;left:8px;transform:translateY(-50%)}
@@ -2139,7 +2138,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 #tb{border-bottom-color:transparent}
 /* bottom bar: a search button on its own, then the display controls */
 .vpc.tr{background:transparent;box-shadow:none;padding:0;gap:6px}
-.vp-bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:10px;background:rgba(17,17,17,.94);box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06)}
+.vp-bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:10px;background:rgba(16,16,16,.94);box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06)}
 /* The status bar uses the same dark surface as the top bar and sidebars. */
 #sb{background:var(--bg)}
 /* Startup screen — room to breathe */
@@ -2200,14 +2199,14 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
    elements stay in the page because the shape thumbnails and the cloner
    wiring are built from them. */
 #tb .add-prim-wrap,#tb #btn-cloner{display:none!important}
-/* Top bar: Screenshot and Render sit on the right, beside the renderer switch. */
+/* Top bar: Screenshot sits on the right, beside the renderer switch. */
 #tb .spacer{order:1}
-#tb #tg-screenshot,#tb #tg-render{order:2}
-#tb .spacer ~ *:not(#tg-screenshot):not(#tg-render){order:3}
+#tb #tg-screenshot{order:2}
+#tb .spacer ~ *:not(#tg-screenshot){order:3}
 /* The renderer switch takes exactly the right sidebar's width, so the
-   Screenshot / Render buttons before it end at the viewport's right edge.
+   Screenshot button before it ends at the viewport's right edge.
    (12px is the bar's own padding, 6px its gap.) */
-#tb .spacer ~ *:not(#tg-screenshot):not(#tg-render):last-child,
+#tb .spacer ~ *:not(#tg-screenshot):last-child,
 #tb #stat-renderer,#tb .stat-renderer{flex:0 0 calc(var(--side-r-w) - 18px);box-sizing:border-box;display:flex;justify-content:flex-end;min-width:0}
 /* The shape picker opens beside the Add button at the top of the tool pill,
    not underneath the pill. */
@@ -2239,7 +2238,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
   --surface-shadow-win:0 24px 64px rgba(0,0,0,.6);    /* windows */
   --surface-line:rgba(255,255,255,.07);               /* dividers inside a surface */
   --surface-inset:rgba(0,0,0,.2);                     /* footers / wells inside a surface */
-  --surface-bar:rgba(17,17,17,.94);                   /* toolbars floating over the viewport */
+  --surface-bar:rgba(16,16,16,.94);                   /* toolbars floating over the viewport */
   --menu-bg:var(--surface-pop);--menu-r:var(--surface-pop-r);
 }
 /* small surfaces */
@@ -2274,11 +2273,12 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 .brand-btn{padding:0}
 .brand-mark,.brand-left .brand-mark{width:var(--btn-h-md);height:var(--btn-h-md);margin-left:0;border-radius:var(--btn-r-md)}
 .brand-mark svg{width:16px;height:16px}
-/* Tree rows the browser can skip. Finding the row under the pointer walked
-   all 1,500+ rows (about 7 ms a time, several times per mouse move), which is
-   what made hover feel late. Off-screen rows are now skipped for hit-testing
-   and painting; a row remembers its size once it has been shown. */
-.tree-node{content-visibility:auto;contain-intrinsic-size:auto 28px}
+/* Tree rows far from the view are empty shells (app-v2.js fills the ones near
+   it), so an empty row is a plain box: no containment and no positioning for
+   the browser to track per row. Rows used to be content-visibility:auto
+   instead; with 4,350 of them the browser spent more time each scroll step
+   deciding which rows to skip than the skipping saved. */
+.tree-node:empty{contain:none;position:static}
 /* Tips next to the bottom toolbar: one column when two would overlap it,
    and above the bar when even that would. Set by _fitVpTips(). */
 .vp-tips.one-col{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:auto}
@@ -2453,27 +2453,39 @@ body.mat-dock-open .vpc.br{bottom:calc(min(var(--mat-dock-h),56vh) + 10px)}
 }
 /* A control the command search has just jumped to. */
 .cmdk-flash{outline:2px solid var(--ac);outline-offset:2px;border-radius:6px}
-/* ── Parts tree: one column, nothing pinned ───────────────────────────────
-   The tree used to scroll sideways, with the eye / colour column pinned to
-   the right edge by position:sticky. Rows were as wide as their own text, so
-   a pinned column could only follow the rows that were wider than the panel:
-   scrolled sideways, the eyes of short rows slid left while the others
-   stayed (the "dance"), and the pinned column trailed behind the wheel.
-   Now the tree only scrolls up and down. Every row is exactly as wide as the
-   panel, the icon column is an ordinary last cell, long names end in an
-   ellipsis (the full name shows on hover), and deep hierarchies get a
-   narrower indent step (--ti, set from the deepest level) instead of
-   running off the edge. */
+/* The tree scrolls sideways (see "The tree scrolls sideways" in app-v2.js).
+   The indent is a fixed step per level and names are shown in full; a row
+   that is wider than the panel is reached with the scrollbar under the tree
+   (or Shift + wheel). The rows stay as wide as the panel: their contents are
+   shifted by the zero-width first cell (::before, its margin is set from the
+   scrollbar), and the eye / colour column is pinned to the right edge of its
+   row with a solid background, so it stays put while names slide under it.
+   An earlier version scrolled the panel itself and pinned that column with
+   position:sticky; rows were as wide as their own text then, so the eyes of
+   short rows slid away while the others stayed (the "dance"). */
 #tree{overflow-x:hidden}
 .tree-node{width:auto;min-width:0;max-width:100%}
-.tree-node .tree-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.tree-node .tree-meta{flex:0 1000 auto;min-width:0;overflow:hidden;white-space:nowrap}
-.tree-node .tree-iconcol,.tree-node:hover .tree-iconcol,.tree-node.selected .tree-iconcol,.tree-node.selected:hover .tree-iconcol{position:static;z-index:auto;background:none;flex:0 0 60px;margin-left:auto;padding:0 12px 0 10px}
+.tree-node:not(:empty)::before{content:'';flex:0 0 0px;width:0;margin-right:calc(-1 * var(--space-sm))}
+.tree-node > *{flex-shrink:0}
+.tree-node .tree-label{flex:0 0 auto;min-width:0;overflow:visible;text-overflow:clip}
+.tree-node .tree-meta{flex:0 0 auto;min-width:0;overflow:visible;white-space:nowrap}
+.tree-node .tree-iconcol,.tree-node:hover .tree-iconcol,.tree-node.selected .tree-iconcol,.tree-node.selected:hover .tree-iconcol{
+  position:absolute;right:0;top:0;bottom:0;z-index:1;box-sizing:border-box;width:60px;height:auto;margin:0;padding:0 12px 0 10px;
+  display:flex;align-items:center;
+  background:linear-gradient(var(--row-tint,transparent),var(--row-tint,transparent)),var(--bg)}
+/* the pinned column wears the row's own tint, over the panel colour */
+.tree-node:hover{--row-tint:rgba(255,255,255,.03)}
+#tree.flag-on .tree-node.flagged{--row-tint:var(--wn-tint-08)}
+#tree.flag-on .tree-node.flagged:hover{--row-tint:var(--wn-tint-13)}
+.tree-node.dnd-drop-into{--row-tint:var(--ac-tint-14)}
 .tree-iconcol::before{display:none}
-.tree-line{width:var(--ti,14px)}
-.tree-line::after{left:calc(var(--ti,14px) / 2)}
-.tree-line.elbow::before{left:calc(var(--ti,14px) / 2 + 1px);width:calc(var(--ti,14px) / 2 - 1px)}
-.tree-line.elbow:has(+ .tree-expand-spacer)::before{width:calc(var(--ti,14px) / 2 + 16px)}
+.tree-line{width:14px}
+.tree-line::after{left:7px}
+.tree-line.elbow::before{left:8px;width:6px}
+.tree-line.elbow:has(+ .tree-expand-spacer)::before{width:23px}
+/* The scrollbar under the tree. It takes no room while every row fits. */
+#tree-hscroll{flex:0 0 auto;overflow-x:auto;overflow-y:hidden;background:var(--bg)}
+#tree-hscroll > div{height:1px}
 /* Group names: a soft grey, regular weight — not pure white. */
 .tree-node.is-group .tree-label{color:#c4c4c6;font-weight:var(--fw-regular)}
 .tree-node.is-group.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 26%, var(--tx2))}
@@ -2561,11 +2573,397 @@ input.prim-value,.prim-value{border-radius:6px}
 .scrub .scrub-input,.scrub .scrub-input:focus{box-sizing:border-box;width:44px;min-width:36px;height:20px;padding:0 6px;margin:0;
   font:inherit;font-size:var(--fs-md);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-tight);line-height:1;
   color:var(--tx);background:transparent;border:0;border-radius:var(--r-xs);outline:1px solid var(--ac);outline-offset:0;text-align:right;transform:none;box-shadow:none}
-/* Control text is a soft grey, not white: buttons, dropdowns, slider values
-   and top-bar buttons. It brightens on hover; red (danger) keeps its colour. */
-:root{--tx-control:#c6c6c9}
-.btn:not(.danger):not(.primary):not(:disabled),.tbtn:not(:disabled),.mac-sel,.cs-btn,.scrub .scrub-value,.scrub .scrub-input{color:var(--tx-control)}
-.btn:not(.danger):not(.primary):not(:disabled):hover,.tbtn:not(:disabled):hover,.mac-sel:hover,.cs-btn:hover{color:var(--tx)}
+/* ── Text on controls: one set of tokens ───────────────────────────────────
+   Everything you can click or type into takes its text colour from these:
+   buttons, top-bar buttons, dropdowns and their lists, fields, menu rows.
+   No control is pure white at rest. White is kept for text that sits ON the
+   accent blue (the row under the pointer in a menu), where it is needed.
+
+     --tx-control              at rest
+     --tx-control-hover        under the pointer, focused, open, pressed, current
+     --tx-control-off          disabled
+     --tx-control-placeholder  hint text in an empty field
+     --tx-on-accent            on the accent fill (defined with the palette)
+
+   The selector list ends in `#_a#_b`, which matches nothing: it only lends
+   the whole list the weight of two ids, so these rules win over the older
+   per-component colours without !important. Order below = precedence. */
+:root{
+  --tx-control:#c6c6c9;
+  --tx-control-hover:#dededf;
+  --tx-control-off:#6e6e72;
+  --tx-control-placeholder:#77777b;
+}
+/* 1. at rest */
+:is(.btn,.btn-sm,.btn-caret,.tbtn,.cs-trigger,.mac-sel,.mac-input,.vp-pill,.wl-act,.fmt-card,.lc-pill,.lc-search,.mat-act,
+    .export-menu-item,.vp-pill-item,.vp-prim-pop-item,.cs-opt,.brand-menu-item,.fit-item,.ctx-menu-row,
+    .scrub-value,.scrub-input,.prim-value,input:not([type="range"],[type="checkbox"],[type="radio"],[type="file"],[type="color"]),textarea,#_a#_b):not(.danger,.mat-act-danger,.primary,.dlg-btn-ok){color:var(--tx-control)}
+/* 2. under the pointer, focused or open */
+:is(.btn,.btn-sm,.btn-caret,.tbtn,.cs-trigger,.mac-sel,.mac-input,.vp-pill,.wl-act,.fmt-card,.lc-pill,.mat-act,
+    .scrub-value,.scrub-input,.prim-value,input:not([type="range"],[type="checkbox"],[type="radio"],[type="file"],[type="color"]),textarea,#_a#_b):not(.danger,.mat-act-danger,.primary,.dlg-btn-ok):is(:hover,:focus,:focus-visible,[aria-expanded="true"]){color:var(--tx-control-hover)}
+/* 3. pressed / current */
+:is(.tbtn.active,.lc-pill.active,.fmt-card.selected,.vp-pill-item.active,.cs-opt.cs-sel,.mat-act.active,.mat-view-btn.active,.export-wrap.open>.tbtn,#_a#_b):not(.danger){color:var(--tx-control-hover)}
+/* 4. the row under the pointer in a menu sits on the accent */
+:is(.export-menu-item,.vp-pill-item,.vp-prim-pop-item,.cs-opt,.fit-item,.ctx-menu-row,.brand-menu-item,#_a#_b):not(.danger):is(:hover,:focus-visible){color:var(--tx-on-accent)}
+/* 5. disabled */
+:is(.btn,.btn-sm,.btn-caret,.tbtn,.cs-trigger,.mac-sel,.mac-input,.wl-act,.mat-act,.export-menu-item,input,textarea,#_a#_b):not(.danger):is(:disabled,[aria-disabled="true"]){color:var(--tx-control-off)}
+/* A few fields carry their colour in a style attribute; only !important
+   reaches those. */
+:is(input:not([type="range"],[type="checkbox"],[type="radio"],[type="file"],[type="color"]),textarea){color:var(--tx-control)!important}
+:is(input:not([type="range"],[type="checkbox"],[type="radio"],[type="file"],[type="color"]),textarea):is(:hover,:focus){color:var(--tx-control-hover)!important}
+:is(input:not([type="range"],[type="checkbox"],[type="radio"],[type="file"],[type="color"]),textarea):disabled{color:var(--tx-control-off)!important}
+/* 6. hint text */
+:is(input,textarea)::placeholder{color:var(--tx-control-placeholder);opacity:1}
+
+/* Slider thumb: a flat dot with no ring or glow. It grows a little while
+   it is under the pointer or held. */
+input[type=range]::-webkit-slider-thumb,input[type=range]:is(:hover,:active,:focus,:focus-visible)::-webkit-slider-thumb{box-shadow:none!important}
+input[type=range]::-moz-range-thumb,input[type=range]:is(:hover,:active,:focus,:focus-visible)::-moz-range-thumb{box-shadow:none!important}
+input[type=range]::-webkit-slider-thumb{transition:transform .12s var(--ease-out)}
+input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.15)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.25)}
+input[type=range]::-moz-range-thumb{transition:transform .12s var(--ease-out)}
+input[type=range]:hover::-moz-range-thumb{transform:scale(1.15)}
+input[type=range]:active::-moz-range-thumb{transform:scale(1.25)}
+
+/* Startup screen: the same plain white mark as the top bar, no blue tile. */
+.wl-mark{background:none;box-shadow:none;border-radius:0;width:30px;height:30px}
+.wl-mark svg{width:26px;height:26px;stroke:#fff;fill:#fff;stroke-width:1.5}
+/* Properties is the base info card: always open (no arrow, the header is not
+   a button) and on the dark UI black, so it reads apart from the tool cards
+   below it. */
+#sidebar-right .section.section-fixed{background:var(--bg)}
+.section-fixed>.section-h,.section-fixed>.section-h:hover{cursor:default;color:var(--tx2)}
+.section-fixed>.section-b{display:block!important}
+/* The part-count line under the tree toolbar is gone; it only appears while
+   a search is narrowing the tree ("12 of 1583 parts match"). */
+#sidebar-left>.tree-summary:not(.is-filter){display:none}
+/* Cards in the right sidebar have no outline: the fill alone sets them off
+   from the panel. The 1px is kept transparent so nothing moves. */
+:is(#sidebar-right .section,#_a#_b){border-color:transparent;box-shadow:none}
+/* Materials bar: every control is the same height (the small control size),
+   so the row reads as one line: filter, sort, view switch, actions, presets,
+   close. */
+:is(.mat-dock-h :is(.mat-dock-search,.cs-trigger,.mat-view-toggle,.mat-act,.lc-icon-btn),#_a#_b){box-sizing:border-box;height:var(--btn-h-sm);min-height:0;margin-top:0;margin-bottom:0}
+:is(.mat-dock-h :is(.mat-act-icon,.lc-icon-btn),#_a#_b){width:var(--btn-h-sm);flex:0 0 var(--btn-h-sm);padding:0}
+:is(.mat-dock-h .cs-trigger,#_a#_b){padding-top:0;padding-bottom:0}
+:is(.mat-dock-h .cs-wrap,.mat-dock-h .mat-actions,.mat-dock-h .mat-actions-icons,#_a#_b){height:var(--btn-h-sm);align-items:center}
+:is(.mat-dock-h .mat-view-toggle,#_a#_b){padding:2px;gap:2px;align-items:center}
+:is(.mat-dock-h .mat-view-btn,#_a#_b){width:22px;height:20px}
+/* ── Numbers you drag ──────────────────────────────────────────────────────
+   Shape parameters take one line each: label on the left, the number in a
+   box on the right, no slider underneath. Drag the box or the label sideways
+   to change the value, click the number to type it. The box carries a faint
+   fill showing where the value sits in its range. */
+.scrub-drag{cursor:ew-resize;touch-action:none}
+input.scrub-drag:focus{cursor:text}
+html.is-scrubbing,html.is-scrubbing *{cursor:ew-resize!important;user-select:none!important;-webkit-user-select:none!important}
+.prim-row .prim-slider{display:none}
+.prim-row{grid-template-columns:minmax(0,1fr) auto;padding:3px 0;min-height:22px}
+:is(.prim-val-wrap,#_a#_b){box-sizing:border-box;width:84px;height:22px;padding:0 8px;gap:4px;justify-content:flex-end;
+  background:linear-gradient(90deg,rgba(255,255,255,.055) var(--scrub-pct,0%),transparent var(--scrub-pct,0%)),var(--bg2);
+  border:1px solid var(--bd);border-radius:var(--r-sm,6px);transition:border-color var(--dur-fast) var(--ease-out)}
+:is(.prim-val-wrap,#_a#_b):hover{border-color:var(--bd2)}
+:is(.prim-val-wrap,#_a#_b):focus-within{border-color:var(--ac)}
+:is(.prim-val-wrap .prim-value,#_a#_b),:is(.prim-val-wrap .prim-value,#_a#_b):is(:hover,:focus){flex:1 1 auto;min-width:0;width:auto;height:100%;
+  padding:0;margin:0;border:0;border-radius:0;background:none;box-shadow:none;text-align:right;font-size:var(--fs-12)}
+.prim-val-wrap .prim-unit{flex:0 0 auto;pointer-events:none}
+
+/* Properties with nothing selected describes the whole scene. */
+.prop-type-icon.scene{color:var(--tx2)}
+
+/* What the last action did to the triangle count. */
+.vp-delta{margin-left:7px;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--tx2);opacity:0;transition:opacity .3s var(--ease-out)}
+.vp-delta.show{opacity:1}
+.vp-delta.down{color:var(--ok)}
+.vpc.vp-stats .vp-info:has(.vp-delta.show){opacity:.95}
+
+/* Materials dock: drag the top edge for height, the inspector's edge for its
+   width. */
+:root{--mat-insp-w:264px}
+#vp-materials-pop.mat-dock{height:min(var(--mat-dock-h),80vh)}
+body.mat-dock-open .vpc.tr{bottom:calc(min(var(--mat-dock-h),80vh) + 12px)}
+body.mat-dock-open .vpc.br{bottom:calc(min(var(--mat-dock-h),80vh) + 10px)}
+.mat-inspector{flex:0 0 var(--mat-insp-w)}
+.mat-dock-grip{position:absolute;top:0;left:0;right:0;height:5px;cursor:ns-resize;z-index:3}
+.mat-insp-grip{flex:0 0 5px;margin:0 -3px 0 -2px;cursor:col-resize;position:relative;z-index:3}
+:is(.mat-dock-grip,.mat-insp-grip):is(:hover,.dragging){background:var(--ac-tint-35)}
+body.dock-resizing{user-select:none;-webkit-user-select:none}
+body.dock-resizing :is(.vpc.tr,.vpc.br){transition:none}
+@media (max-width:1100px){.mat-insp-grip{display:none}}
+.mat-dock-h .mat-act-presets>span{display:inline-flex;align-items:center}
+/* ── Command panels ────────────────────────────────────────────────────────
+   A tool with settings of its own (Split, Fill holes) is not a card in the
+   sidebar. Running the command shows its panel over the bottom-left of the
+   viewport, beside the tool column; Esc or Cancel puts it away, Enter runs
+   it. One panel at a time. */
+.vp-cmd-host{position:absolute;left:52px;bottom:12px;width:296px;max-width:calc(100% - 64px);max-height:calc(100% - 24px);
+  display:flex;flex-direction:column;justify-content:flex-end;pointer-events:none;z-index:6;transition:bottom .2s var(--ease-out)}
+body.mat-dock-open .vp-cmd-host{bottom:calc(min(var(--mat-dock-h),80vh) + 12px);max-height:calc(100% - min(var(--mat-dock-h),80vh) - 24px)}
+.vp-cmd-host>.section-cmd{pointer-events:auto;margin:0;display:flex;flex-direction:column;min-height:0;max-height:100%;
+  background:var(--surface-bar);border:0;border-radius:var(--surface-pop-r);box-shadow:var(--surface-shadow),var(--surface-ring);overflow:hidden}
+.vp-cmd-host>.section-cmd[hidden]{display:none}
+.vp-cmd-host .section-h,.vp-cmd-host .section-h:hover{cursor:default;color:var(--tx2);padding:10px 8px 8px 12px;flex:0 0 auto}
+.vp-cmd-host .section-b{padding:2px 12px 12px;overflow-y:auto;min-height:0;flex:1 1 auto}
+.vp-cmd-host .section-b>.btn{justify-content:flex-start;text-align:left}
+.vp-cmd-host,.vp-cmd-host *{user-select:none;-webkit-user-select:none}
+.cmd-foot{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border-top:1px solid var(--surface-line);background:var(--surface-inset)}
+:is(.cmd-foot-btn,#_a#_b){display:inline-flex;align-items:center;gap:7px;height:var(--btn-h-sm);padding:0 7px;background:none;border:0;border-radius:var(--btn-r-sm);
+  color:var(--tx-control);font:inherit;font-size:var(--fs-12);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+:is(.cmd-foot-btn,#_a#_b):hover{background:rgba(255,255,255,.07);color:var(--tx-control-hover)}
+.cmd-foot-btn.cmd-ok.is-off{opacity:.45;pointer-events:none}
+.section-cmd.cmd-in{animation:cmd-in .16s var(--ease-out)}
+@keyframes cmd-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.section-cmd.cmd-in{animation:none}}
+
+/* Mode pill at the top of the viewport (isolate): sits beside the camera
+   pill, tinted with the accent so it reads as "you are in a mode". */
+.vpc.tc{flex-direction:row;flex-wrap:wrap;justify-content:center}
+.vpc.tc>.vp-pill-menu{position:absolute;top:calc(100% + 4px);left:50%;translate:-50% 0}
+.vp-pill[hidden]{display:none}
+:is(.vp-pill.vp-pill-mode,#_a#_b){background:color-mix(in srgb,var(--ac) 26%,rgba(0,0,0,.5));color:var(--tx-on-accent)}
+:is(.vp-pill.vp-pill-mode,#_a#_b):hover{background:color-mix(in srgb,var(--ac) 40%,rgba(0,0,0,.5));color:var(--tx-on-accent)}
+.vp-pill-mode .vp-pill-x{opacity:.6;width:12px;height:12px;margin-left:2px}
+.vp-pill-mode:hover .vp-pill-x{opacity:1}
+/* Tree rows a little tighter (25px, was 28). _TREE_ROW_H in app-v2.js
+   uses the same number. */
+.tree-node{min-height:25px;padding-top:3px;padding-bottom:3px}
+/* Command panel above the bottom toolbar when there is no room beside it. */
+.vp-cmd-host.lifted{bottom:58px;max-height:calc(100% - 70px)}
+body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) + 58px);max-height:calc(100% - min(var(--mat-dock-h),80vh) - 70px)}
+/* Bottom toolbar: what is switched on is marked in grey, not the accent
+   blue (blue stays for the active tool on the left and for selection). */
+:is(.vpc.tr .vpb.active,#_a#_b){background:rgba(255,255,255,.16);color:var(--tx-control-hover)}
+:is(.vpc.tr .vpb.active,#_a#_b):hover{background:rgba(255,255,255,.2)}
+/* Advanced options inside a command panel: an accordion, closed by default.
+   A dot on its title means something in it is not at its default. */
+.cmd-adv{margin-top:10px;border-top:1px solid var(--surface-line)}
+.cmd-adv>summary{list-style:none;display:flex;align-items:center;gap:6px;padding:9px 0 3px;cursor:pointer;color:var(--tx2);font-size:var(--fs-12);user-select:none}
+.cmd-adv>summary::-webkit-details-marker{display:none}
+.cmd-adv>summary::before{content:'';width:14px;height:14px;flex:0 0 14px;background:currentColor;opacity:.75;transition:transform .15s var(--ease-out);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center/contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center/contain no-repeat}
+.cmd-adv[open]>summary::before{transform:rotate(90deg)}
+.cmd-adv>summary:hover{color:var(--tx-control-hover)}
+.cmd-adv.is-changed>summary>span::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ac);margin-left:7px;vertical-align:2px}
+.cmd-adv-b{display:flex;flex-direction:column;gap:2px;padding:4px 0 2px}
+.cmd-adv-b .toggle{padding:4px 0;font-size:var(--fs-12)}
+.cmd-num{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0;font-size:var(--fs-12);color:var(--tx2)}
+.cmd-num .size-field{flex:0 0 auto}
+:is(.cmd-link,#_a#_b){align-self:flex-start;margin-top:6px;padding:0;background:none;border:0;color:var(--tx3);font:inherit;font-size:var(--fs-11);cursor:pointer}
+:is(.cmd-link,#_a#_b):hover{color:var(--tx-control-hover);text-decoration:underline}
+.size-field .scrub-drag{cursor:ew-resize}
+.size-field input.scrub-drag:focus{cursor:text}
+/* ── Top bar ───────────────────────────────────────────────────────────────
+   Undo / Redo are keyboard-only (Ctrl+Z / Ctrl+Y); their buttons stay in the
+   page, hidden, because the rest of the app talks to them. Export sits on
+   the right with Screenshot. The scene's name is a document tab. */
+#tb #btn-undo,#tb #btn-redo,#tb #btn-redo+.doc-tabs~.divider,#tb .divider:has(+#btn-undo){display:none}
+#tb .export-wrap:has(#btn-export){order:2}
+#tb #export-menu{left:auto;right:0;transform-origin:top right}
+.doc-tabs{display:flex;align-items:stretch;gap:4px;min-width:0;flex:0 1 auto;margin-left:6px}       /* margin-left is set by _alignDocTab: the tab starts at the viewport's left edge */
+.doc-tab{display:inline-flex;align-items:center;gap:7px;min-width:0;max-width:320px;height:var(--btn-h-md,32px);box-sizing:border-box;padding:0 10px;
+  background:var(--bg2);border-radius:var(--btn-r-md,6px);color:var(--tx-control);font-size:var(--fs-12)}
+.doc-tab>svg,.doc-tab>i{width:14px;height:14px;flex:0 0 14px;stroke-width:1.8;color:var(--tx3)}
+.doc-tab-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text}
+:is(.doc-unsaved,#_a#_b){flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;height:18px;padding:0 7px 0 6px;border:0;border-radius:9px;
+  background:color-mix(in srgb,var(--wn) 16%,transparent);color:var(--wn);font:inherit;font-size:var(--fs-10,10.5px);letter-spacing:.02em;cursor:pointer}
+:is(.doc-unsaved,#_a#_b)::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor}
+:is(.doc-unsaved,#_a#_b):hover{background:color-mix(in srgb,var(--wn) 28%,transparent);color:var(--wn)}
+:is(.doc-unsaved[hidden],#_a#_b){display:none}     /* (must outweigh the rule above, or the pill never hides) */
+@media (max-width:900px){.doc-tab{max-width:150px}.doc-unsaved{font-size:0;padding:0 6px;gap:0}}
+/* Properties: the triangle count leads the card. When triangles were saved
+   the percentage is the headline (green badge) and the old count is struck
+   through; the bar under it is the share of the scene (a part) or what is
+   left of the original (the scene). */
+.prop-hero{margin:4px 0 12px}
+.prop-hero-top{display:flex;align-items:baseline;gap:7px;min-width:0}
+.prop-hero-num{font-size:22px;line-height:1.1;letter-spacing:-.01em;color:var(--tx-control-hover);font-variant-numeric:tabular-nums;font-weight:var(--fw-regular)}
+.prop-hero-unit{font-size:var(--fs-12);color:var(--tx3)}
+.prop-hero-badge{margin-left:auto;align-self:center;padding:2px 8px;border-radius:10px;font-size:var(--fs-12);font-variant-numeric:tabular-nums;
+  color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,transparent)}
+.prop-hero-sub{display:flex;align-items:center;gap:6px;margin:3px 0 0;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
+.prop-hero-saved{color:var(--ok)}
+.prop-hero .prop-bar{margin-top:9px}
+.prop-hero-cap{display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.prop-hero-cap>span{overflow:hidden;text-overflow:ellipsis}
+.prop-hero-sub s{color:var(--tx3);text-decoration-color:color-mix(in srgb,var(--tx3) 70%,transparent)}
+.prop-hero-dot{opacity:.6}
+.prop-hero .prop-bar{height:3px;border-radius:2px}
+.prop-hero.is-reduced .prop-bar-fill:not(.heavy,.very-heavy){background:var(--ok)}
+.prop-hero.is-empty .prop-hero-num{color:var(--tx3)}
+.prop-hero.is-empty .prop-bar{margin-top:10px}
+/* A help line with nothing in it takes no room (it left a gap under Decimate). */
+.field-help:empty{display:none}
+/* The command list behind "…" on the bottom toolbar: tall, scrolls if the
+   window is short; what cannot run right now is dimmed. */
+#ctx-menu .ctx-menu-row.is-off{opacity:.38;cursor:default}
+#ctx-menu .ctx-menu-row.is-off:hover{background:none}
+#ctx-menu.is-commands{min-width:232px;max-height:calc(100vh - 90px);overflow-y:auto;scrollbar-width:none}
+#ctx-menu.is-commands::-webkit-scrollbar{display:none}
+#ctx-menu.is-commands .ctx-menu-row{padding-top:5px;padding-bottom:5px}
+/* ── Scene tabs ────────────────────────────────────────────────────────────
+   The scene on screen is the lit tab (name, Unsaved pill, close); the other
+   open scenes are quieter tabs beside it; "+" opens a new scene. */
+.doc-tabs{gap:2px;align-items:center}
+.doc-tab{position:relative;flex:0 1 auto}
+.doc-tab.other{background:none;color:var(--tx3);cursor:pointer;max-width:180px;padding:0 6px 0 10px;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.doc-tab.other:hover{background:rgba(255,255,255,.05);color:var(--tx-control)}
+.doc-tab.other .doc-tab-name{cursor:pointer}
+.doc-tab-dot{display:none;width:6px;height:6px;border-radius:50%;background:var(--wn);flex:0 0 6px}
+.doc-tab.is-dirty .doc-tab-dot{display:block}
+:is(.doc-tab-x,.doc-tab-add,#_a#_b){flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px;background:none;color:var(--tx3);cursor:pointer;position:relative;
+  transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),opacity var(--dur-fast) var(--ease-out)}
+:is(.doc-tab-x,.doc-tab-add,#_a#_b):hover{background:rgba(255,255,255,.1);color:var(--tx-control-hover)}
+.doc-tab-x::before,.doc-tab-x::after,.doc-tab-add::before,.doc-tab-add::after{content:'';position:absolute;left:50%;top:50%;width:9px;height:1.4px;background:currentColor;border-radius:1px}
+.doc-tab-x::before{transform:translate(-50%,-50%) rotate(45deg)}
+.doc-tab-x::after{transform:translate(-50%,-50%) rotate(-45deg)}
+.doc-tab-add::before{transform:translate(-50%,-50%)}
+.doc-tab-add::after{transform:translate(-50%,-50%) rotate(90deg)}
+.doc-tab.other .doc-tab-x{opacity:0}
+.doc-tab.other:hover .doc-tab-x{opacity:1}
+.doc-tab-x.own{margin-right:-4px}
+.doc-tab-add{width:26px;height:26px;margin-left:2px}
+/* the app menu opens flush with its button */
+.brand-left .brand-menu{left:0}
+/* Shape parameters: the X / Y / Z strip and the dropdowns are the same box
+   as the number fields, so the right-hand column is one width. */
+:is(.prim-row .prim-axis-group,#_a#_b){box-sizing:border-box;width:84px;height:22px;padding:1px;gap:1px;border-radius:var(--r-sm,6px)}
+:is(.prim-row .prim-axis-btn,#_a#_b){flex:1 1 0;min-width:0;height:100%;padding:0;border-radius:4px}
+:is(.prim-row .prim-select,#_a#_b){box-sizing:border-box;width:84px;min-width:0;height:22px;border-radius:var(--r-sm,6px)}
+/* The icon at the left of a tab turns into a close button under the
+   pointer. A tab that is still starting pulses and cannot be picked yet. */
+.doc-tab-lead{position:relative;flex:0 0 16px;width:16px;height:16px;display:inline-grid;place-items:center}
+.doc-tab-lead>svg,.doc-tab-lead>i{width:14px;height:14px;stroke-width:1.8;color:var(--tx3);transition:opacity var(--dur-fast) var(--ease-out)}
+.doc-tab.is-dirty .doc-tab-lead>svg{color:var(--wn)}
+:is(.doc-tab-lead .doc-tab-x,#_a#_b){position:absolute;inset:-2px;width:20px;height:20px;opacity:0;margin:0}
+.doc-tab:hover .doc-tab-lead>svg,.doc-tab:hover .doc-tab-lead>i{opacity:0}
+:is(.doc-tab:hover .doc-tab-lead .doc-tab-x,#_a#_b){opacity:1}
+.doc-tab.other{padding:0 10px 0 8px;gap:6px}
+.doc-tab.is-loading{pointer-events:none;animation:doc-tab-load 1s ease-in-out infinite}
+@keyframes doc-tab-load{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.doc-tab.is-loading{animation:none;opacity:.6}}
+/* Command panel details: no focus box on the Advanced row, rows and
+   fields in one quiet style, number fields one width. */
+.cmd-adv>summary{outline:none;border-radius:4px}
+.cmd-adv>summary:focus-visible{background:rgba(255,255,255,.05)}
+:is(.cmd-adv-b .toggle,#_a#_b){padding:4px 0;border-top:0;font-size:var(--fs-12);color:var(--tx2);font-weight:var(--fw-regular)}
+:is(.cmd-adv-b .toggle>span:first-child,#_a#_b){color:var(--tx2);font-weight:var(--fw-regular)}
+:is(.cmd-num .size-field,#_a#_b){box-sizing:border-box;width:104px;height:24px;padding:0 8px;justify-content:flex-end}
+:is(.cmd-num .size-field input,#_a#_b){flex:1 1 auto;min-width:0;width:auto;text-align:right}
+/* ── Settings window ───────────────────────────────────────────────────────
+   Sections on the left, the section on the right, search in the header. */
+.set-modal{width:860px;max-width:94vw;height:min(640px,88vh);max-height:88vh}
+.set-head{gap:14px;padding:12px 14px 12px 20px}
+.set-head h3{flex:0 0 auto}
+.set-search{margin-left:auto;display:inline-flex;align-items:center;gap:7px;width:240px;height:var(--btn-h-sm);box-sizing:border-box;padding:0 9px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--btn-r-sm);color:var(--tx3)}
+.set-search:focus-within{border-color:var(--ac)}
+.set-search svg{width:13px;height:13px;flex:0 0 13px;stroke-width:2}
+:is(.set-search input,#_a#_b){flex:1;min-width:0;height:100%;padding:0;border:0;background:none;outline:none;font:inherit;font-size:var(--fs-12)}
+#settings-body{padding:0;display:grid;grid-template-columns:196px minmax(0,1fr);overflow:hidden}
+.set-nav{display:flex;flex-direction:column;gap:2px;padding:10px 8px;border-right:1px solid var(--surface-line);background:var(--surface-inset);overflow-y:auto;min-height:0}
+:is(.set-nav-item,#_a#_b){display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border:0;border-radius:6px;background:none;color:var(--tx-control);font:inherit;font-size:var(--fs-12);text-align:left;cursor:pointer;
+  transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.set-nav-item svg{width:15px;height:15px;flex:0 0 15px;stroke-width:1.8;color:var(--tx3)}
+:is(.set-nav-item,#_a#_b):hover{background:rgba(255,255,255,.05);color:var(--tx-control-hover)}
+:is(.set-nav-item.active,#_a#_b){background:rgba(255,255,255,.1);color:var(--tx-control-hover)}
+.set-nav-item.active svg{color:var(--tx-control-hover)}
+.set-nav.searching .set-nav-item.active{background:none}
+.set-nav-gap{flex:1 1 auto;min-height:10px}
+.set-nav-ver{padding:8px 10px 2px;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
+.set-main{overflow-y:auto;min-height:0;padding:18px 24px 26px}
+.set-pane{display:none}
+.set-pane.active{display:block}
+.set-main.searching .set-pane{display:block;margin-bottom:22px}
+.set-main.searching .set-pane.set-none,.set-main.searching .set-pane-sub,.set-miss,.set-main.searching .set-group-title{display:none!important}
+.set-pane-h{margin:0 0 3px;font-size:15px;font-weight:var(--fw-regular);color:var(--tx-control-hover)}
+.set-pane-sub{margin:0 0 12px;font-size:var(--fs-12);color:var(--tx3);line-height:1.5}
+.set-group-title{margin:18px 0 2px;font-size:var(--fs-11);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
+.set-empty{padding:40px 0;text-align:center;color:var(--tx3);font-size:var(--fs-12)}
+/* one row style for everything in a section: label left, control right */
+.set-pane-b>.toggle,.set-pane-b>.field,.set-pane-b>div>.toggle,.set-pane-b>div>.field,.set-pane-b .pop-section>.toggle,.set-pane-b .pop-section>.field,.set-row{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;min-height:38px;box-sizing:border-box;padding:6px 0;margin:0!important;border-top:1px solid var(--hairline);font-size:var(--fs-13);color:var(--tx-control)}
+.set-pane-b>:first-child,.set-pane-b>div:first-child>:first-child,.set-group-title+.toggle,.set-group-title+.field,.set-group-title+.set-row{border-top:0}
+.set-pane-b .field>label{flex:1 1 auto;min-width:0;margin:0;font-size:var(--fs-13);font-weight:var(--fw-regular);color:var(--tx-control);justify-content:flex-start;gap:8px}
+.set-pane-b .toggle>span:first-child,.set-row>span:first-child{flex:1 1 auto;min-width:0;font-weight:var(--fw-regular)}
+.set-pane-b .field>:is(select,.cs-wrap,input[type=number],input[type=text]){flex:0 0 230px;width:230px!important;box-sizing:border-box}
+.set-pane-b .field>.cs-wrap .cs-trigger{width:100%}
+.set-pane-b .field>input[type=range]{flex:0 0 230px;width:230px}
+.set-help{display:block;margin-top:2px;font-size:var(--fs-11);color:var(--tx3);line-height:1.45;white-space:normal;font-weight:var(--fw-regular)}
+.set-action .btn{width:auto;flex:0 0 auto;min-width:86px;min-height:var(--btn-h-sm);height:var(--btn-h-sm);padding:0 12px;justify-content:center}
+.set-pane-b #fog-controls,.set-pane-b #hdri-controls{margin:4px 0 10px!important}
+.set-foot{align-items:center}
+.set-foot-note{font-size:var(--fs-11);color:var(--tx3)}
+@media (max-width:700px){#settings-body{grid-template-columns:1fr}.set-nav{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--surface-line)}.set-nav-gap,.set-nav-ver,.set-nav-link{display:none}
+  .set-pane-b .field>:is(select,.cs-wrap,input[type=number],input[type=text],input[type=range]){flex-basis:150px;width:150px!important}.set-search{width:150px}}
+/* ── Floating surfaces: one darker tone everywhere ─────────────────────────
+   Menus, popovers, tooltips, toasts, dialogs, windows and the command panels
+   all sit on --surface-pop. It is a step above the UI black (#101010) so a
+   surface reads against the page, and well below the old #1e1e1e. */
+:root{--surface-pop:#161616;--surface-line:rgba(255,255,255,.06);--surface-inset:rgba(0,0,0,.22)}
+.cp-pop,.vp-cmd-host>.section-cmd,.cs-pop,#add-prim-menu,#file-menu,#export-menu,.vp-pill-menu,.brand-menu{background:var(--surface-pop)}
+.brand-menu{background-image:none}
+
+/* Search: a popup standing on its button in the bottom toolbar. A search
+   field, then suggestions (or results) with an icon, the name and the
+   shortcut. */
+#cmdk-modal{align-items:flex-end}
+#cmdk-modal .modal{max-height:60vh;transform-origin:bottom left}
+#cmdk-modal .modal-h{padding:10px 12px;gap:9px}
+.cmdk-search-icon{width:16px;height:16px;flex:0 0 16px;color:var(--tx3);stroke-width:1.8}
+:is(#cmdk-input,#_a#_b){flex:1;min-width:0;background:none;border:0;outline:none;font:inherit;font-size:var(--fs-13)}
+#cmdk-list{padding:4px 6px 6px!important;scrollbar-width:none}
+#cmdk-list::-webkit-scrollbar{display:none}
+.cmdk-section{padding:7px 8px 5px;font-size:var(--fs-11);color:var(--tx3)}
+.cmdk-section:empty{display:none}
+:is(.cmdk-item,#_a#_b){gap:10px;padding:6px 8px;border-radius:6px;font-size:var(--fs-13);color:var(--tx-control)}
+.cmdk-item-icon{width:15px;height:15px;flex:0 0 15px;color:var(--tx2);stroke-width:1.8}
+:is(.cmdk-item .cmdk-item-label,#_a#_b){flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}
+:is(.cmdk-item .cmdk-item-group,#_a#_b){min-width:0;flex:0 0 auto;font-size:var(--fs-11);color:var(--tx3)}
+:is(.cmdk-item.active,#_a#_b){background:rgba(255,255,255,.08);color:var(--tx-control-hover)}
+.cmdk-item.active .cmdk-item-icon{color:var(--tx-control-hover)}
+
+/* The viewport settings button is gone from the toolbar: its controls are in
+   Settings (File menu, the app menu, Ctrl+,). The button stays in the page,
+   hidden, for the script that wires it. */
+#tg-settings{display:none}
+/* A toolbar button folded into the "…" list (the viewport is narrower than
+   the toolbar), and the shortcut tips hidden because the toolbar needs their
+   room. */
+.vpb-folded{display:none!important}
+.vpc.br.vp-tips-off{display:none}
+/* What a command does, shown inside its panel: a short silent loop that
+   plays only while the panel is open (a still frame for people who have
+   asked for less motion). */
+.cmd-figure{position:relative;margin:0 0 10px;border-radius:6px;overflow:hidden;background:#161616;line-height:0}
+.cmd-figure img,.cmd-figure video{display:block;width:100%;height:auto;pointer-events:none}
+.cmd-figure video{aspect-ratio:544/340;object-fit:cover}
+.cmd-figure figcaption{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr;column-gap:4px;padding:0 8px 6px;
+  font-size:var(--fs-10,10.5px);line-height:1.2;letter-spacing:.02em;color:rgba(255,255,255,.72);pointer-events:none}
+/* Scrolling lists have a solid background. With a see-through one the browser
+   redraws every visible row on each scroll step (on a standard-density
+   screen); with a solid one it slides what it has already drawn. The colour
+   is the one that was showing through. */
+#tree{background-color:var(--bg)}
+#vp-materials-pop.mat-dock .pop-section{background-color:var(--bg)}
+#cmdk-list,#shortcuts-body,#scene-settings-body,.modal .modal-b{background-color:var(--surface-pop)}
+/* ── A command panel with a clip on top ────────────────────────────────────
+   The clip runs edge to edge across the top of the card and dissolves into
+   the card's own colour towards the bottom (the clip is rendered on that
+   colour, so only the object is seen). The title and the close button sit
+   on it; the text of the panel starts inside the fade. */
+.section-cmd.has-hero{position:relative}
+.cmd-hero{position:relative;flex:0 0 auto;margin:0;padding-top:18px;line-height:0;background:var(--surface-pop);pointer-events:none}
+.cmd-hero video{display:block;width:100%;height:auto;aspect-ratio:592/370;object-fit:cover;background:var(--surface-pop);
+  -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 58%,rgba(0,0,0,.55) 78%,transparent 100%);
+          mask-image:linear-gradient(to bottom,#000 0,#000 58%,rgba(0,0,0,.55) 78%,transparent 100%)}
+.vp-cmd-host .section-cmd.has-hero>.section-h{position:absolute;top:0;left:0;right:0;z-index:2;padding:10px 8px 0 14px;background:none}
+.vp-cmd-host .section-cmd.has-hero>.section-h>span{color:var(--tx-control);text-shadow:0 1px 6px rgba(0,0,0,.5)}
+:is(.section-cmd.has-hero .section-h .cmd-close,#_a#_b){width:24px;height:24px;border-radius:50%;background:rgba(0,0,0,.34);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--tx-control)}
+:is(.section-cmd.has-hero .section-h .cmd-close,#_a#_b):hover{background:rgba(255,255,255,.14);color:var(--tx-control-hover)}
+.vp-cmd-host .section-cmd.has-hero>.section-b{position:relative;z-index:1;margin-top:-34px;padding-top:0}
+/* on a short viewport the controls matter more than the clip */
+@media (max-height:640px){.cmd-hero{display:none}.vp-cmd-host .section-cmd.has-hero>.section-h{position:static;padding:10px 8px 8px 12px}.vp-cmd-host .section-cmd.has-hero>.section-b{margin-top:0}}
 </style>
 </head>
 <body>
@@ -2584,19 +2982,19 @@ input.prim-value,.prim-value{border-radius:6px}
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.10.1</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.11.0</div>
         </div>
         <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.10.1</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.11.0</span></div>
           <ul>
-            <li>Libraries bundled: starts without a CDN, works offline</li>
-            <li>Fill holes: closes holes in flat faces, leaves the rest untouched</li>
-            <li>Decimate rebuilt — keeps normals and UVs, takes a triangle target</li>
-            <li>Materials dock with filter, sort and inspector</li>
-            <li>Immediate selection, delete, undo and view switching on large assemblies</li>
-            <li>View cube, axis views, and a tree that hides nothing</li>
+            <li>Scene tabs: every tab is its own scene, New and Open never replace one</li>
+            <li>Command panels for Split (X) and Fill holes (P), by the viewport</li>
+            <li>Fill holes: advanced options, and a much harder test</li>
+            <li>Drag any number to change it; one line per shape parameter</li>
+            <li>One Settings window, with search</li>
+            <li>All commands behind “…”, and shortcuts that fit together</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -2637,7 +3035,8 @@ input.prim-value,.prim-value{border-radius:6px}
         <button class="export-menu-item" data-file-cmd="export"><span class="fmt"><i data-lucide="download" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Export…</span></button>
         <button class="export-menu-item" data-file-cmd="revert" title="Discards every edit and re-parses the source file"><span class="fmt"><i data-lucide="rotate-ccw" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Revert to source…</span></button>
         <div class="export-menu-sep"></div>
-        <button class="export-menu-item" data-file-cmd="scene-settings"><span class="fmt"><i data-lucide="sliders-horizontal" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Scene settings…</span><span class="hint">Ctrl+;</span></button>
+        <button class="export-menu-item" data-file-cmd="scene-settings"><span class="fmt"><i data-lucide="box" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Scene settings…</span><span class="hint">Ctrl+;</span></button>
+        <button class="export-menu-item" data-file-cmd="settings"><span class="fmt"><i data-lucide="settings" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Settings…</span><span class="hint">Ctrl+,</span></button>
         <button class="export-menu-item" data-file-cmd="welcome"><span class="fmt"><i data-lucide="home" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Welcome screen</span></button>
         <div class="export-menu-sep"></div>
         <button class="export-menu-item" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
@@ -2666,6 +3065,16 @@ input.prim-value,.prim-value{border-radius:6px}
     <div class="divider"></div>
     <button class="tbtn" id="btn-undo" disabled><i data-lucide="undo-2"></i>Undo</button>
     <button class="tbtn" id="btn-redo" disabled><i data-lucide="redo-2"></i>Redo</button>
+    <!-- Document tab: the scene's name (double-click to rename) and, when
+         there are changes that are not in a saved scene file, an Unsaved pill
+         that saves on click. -->
+    <div class="doc-tabs" id="doc-tabs">
+      <div class="doc-tab active" id="doc-tab">
+        <span class="doc-tab-lead"><i data-lucide="box"></i><button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button></span>
+        <span class="doc-tab-name" id="sb-status">Untitled scene</span>
+        <button type="button" class="doc-unsaved" id="doc-unsaved" hidden title="There are changes that are not saved — click to save the scene (Ctrl+S)">Unsaved</button>
+      </div>
+    </div>
     <div class="export-wrap">
       <button class="tbtn" id="btn-export" disabled><i data-lucide="download"></i>Export <span class="caret"><i data-lucide="chevron-down"></i></span></button>
       <div id="export-menu" class="export-menu">
@@ -2681,7 +3090,6 @@ input.prim-value,.prim-value{border-radius:6px}
       </div>
     </div>
     <button class="tbtn icon-only" id="tg-screenshot" title="Capture viewport screenshot (share / copy / download)"><i data-lucide="camera"></i></button>
-    <button class="tbtn icon-only" id="tg-render" title="Render this view with a GPU path tracer (slow, beautiful)"><i data-lucide="aperture"></i></button>
     <button class="tbtn" id="btn-save-scene" disabled style="display:none"><i data-lucide="save"></i>Save scene</button>
     <div class="spacer"></div>
     <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="min-width:80px"><option value="webgpu" data-logo="assets/webgpu.svg">WebGPU</option><option value="webgl2" data-logo="assets/webgl.png">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
@@ -2754,6 +3162,11 @@ input.prim-value,.prim-value{border-radius:6px}
         <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
       </div>
       <div class="vpc tc" id="vp-view-pill-wrap">
+        <button id="vp-isolate-pill" class="vp-pill vp-pill-mode" type="button" hidden title="Only the isolated parts are shown. Click to show everything again (S)">
+          <i class="vp-pill-icon" data-lucide="focus" aria-hidden="true"></i>
+          <span class="vp-pill-label">Isolated</span>
+          <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
+        </button>
         <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="listbox" aria-expanded="false" title="Camera view — click to switch (Cam / Top / Front / Side)">
           <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
           <span class="vp-pill-label">Cam</span>
@@ -2777,8 +3190,12 @@ input.prim-value,.prim-value{border-radius:6px}
         <button class="vpb" id="tg-sun" title="Toggle sun direction gizmo"><i data-lucide="sun"></i></button>
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
         <div class="vpb-sep"></div>
-        <button class="vpb" id="tg-materials" title="Materials in this file"><i data-lucide="palette"></i></button>
-        <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
+        <button class="vpb" id="tg-fill-holes" data-cmd-toggle="fillholes" title="Fill holes (P)"><i data-lucide="circle-off"></i></button>
+        <div class="vpb-sep"></div>
+        <button class="vpb" id="tg-materials" title="Materials (Shift+M)"><i data-lucide="palette"></i></button>
+        <button class="vpb" id="tg-settings" title="Viewport settings"><i data-lucide="sliders-horizontal"></i></button>
+        <div class="vpb-sep"></div>
+        <button class="vpb" id="vp-more" title="All commands"><i data-lucide="ellipsis"></i></button>
         <div id="vp-settings-pop">
           <div class="pop-section">
             <div class="pop-section-title">Display</div>
@@ -2848,7 +3265,76 @@ input.prim-value,.prim-value{border-radius:6px}
         </div>
         </div>
       </div>
-      <div class="vpc vp-stats"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
+      <div class="vpc vp-stats"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles<span id="vp-tris-delta" class="vp-delta" aria-live="polite"></span></div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
+      <!-- Command panels (Split, Fill holes): hidden until their command runs,
+           then shown here, bottom-left of the viewport, the way Plasticity does. -->
+      <div class="vp-cmd-host" id="vp-cmd-host">
+    <div class="section section-cmd has-hero" data-cmd="fillholes" hidden>
+      <figure class="cmd-hero" aria-label="Fill holes at work: the holes in a flat face close a few at a time, and the raised ring stays">
+        <video src="assets/help/fill-holes.webm" poster="assets/help/fill-holes-poster.webp" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+      </figure>
+      <div class="section-h"><span>Fill holes</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
+          Closes holes in flat faces and leaves everything else as it is. Works on the selection, or on every visible part when nothing is selected.
+        </div>
+        <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
+          <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Fill holes</span></button>
+          <label class="size-field" title="Largest hole to fill, measured across its widest point"><span>up to</span><input type="text" inputmode="decimal" id="fill-holes-size" value="12"><span>mm</span></label>
+        </div>
+        <div class="field-help" id="fill-holes-info">Bolt holes, slots and pockets in flat faces. Bosses, the bore of a washer or nut, and openings into a cavity are left alone.</div>
+        <details class="cmd-adv" id="fh-adv">
+          <summary><span>Advanced</span></summary>
+          <div class="cmd-adv-b">
+            <div class="toggle" title="Holes that go right through: an opening on both sides"><span>Through holes</span><label><input type="checkbox" id="fh-through" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Holes and pockets with a floor: an opening on one side only"><span>Blind holes and pockets</span><label><input type="checkbox" id="fh-blind" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Openings with nothing behind them (a missing patch in a flat face)"><span>Open holes</span><label><input type="checkbox" id="fh-open" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="On: an opening that takes up much of its face and of the part is kept (the bore of a washer, a window in a frame). Off: only the size limit decides."><span>Keep openings that shape the part</span><label><input type="checkbox" id="fh-shape" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Holes narrower than this are left alone"><span>Smallest hole</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-min" value="0"><span>mm</span></label></div>
+            <div class="cmd-num" title="How far the inside of a hole may reach, as a multiple of the size limit. Lower it to leave deep bores alone."><span>Depth limit</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-depth" value="10"><span>× size</span></label></div>
+            <div class="cmd-num" title="How far apart the directions of two triangles may be and still count as one flat face. Raise it for meshes whose flat faces are slightly bent."><span>Flatness</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-flat" value="0.57"><span>°</span></label></div>
+            <button type="button" class="cmd-link" id="fh-reset">Reset to defaults</button>
+          </div>
+        </details>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Fill holes</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <div class="section section-cmd" data-cmd="split" hidden>
+      <div class="section-h"><span>Split</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
+          Recover individual parts from solids that were merged on export. Two vertices closer than the threshold are treated as the same point.
+        </div>
+        <div class="split-presets" role="group" aria-label="Detection sensitivity">
+          <button class="split-preset" data-eps="0" title="Maximum splits. Trusts the index buffer exactly — never merges. Use if you suspect the source has duplicated boundary vertices.">Strict</button>
+          <button class="split-preset active" data-eps="1e-9" title="Default. Welds only bit-exact duplicates — fixes within-solid sharp-edge duplication without merging adjacent solids.">Tight</button>
+          <button class="split-preset" data-eps="1e-6" title="Welds vertices within 0.0001% of model size — tolerant of small float drift between duplicates.">Normal</button>
+          <button class="split-preset" data-eps="1e-3" title="Welds vertices within 0.1% of model size — intentionally MERGES touching solids. Use when you want fewer, larger parts.">Loose</button>
+        </div>
+        <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:var(--fs-11);margin:8px 0 6px">≈ — at this model size</div>
+        <div class="field" style="margin-bottom:6px">
+          <label style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:3px">Algorithm</label>
+          <select id="split-method" class="mac-sel" style="width:100%">
+            <option value="vertex" title="Default. Connect triangles that share a vertex.">Vertex connectivity</option>
+            <option value="edge" title="Stricter than vertex. Connect only when triangles share a full edge — keeps solids meeting at a point separate.">Edge connectivity</option>
+            <option value="spatial" title="Group by triangle bbox overlap on a 3D grid. Doesn't read the index buffer at all — useful when topology is fused but solids are still spatially separate.">Spatial proximity (AABB)</option>
+            <option value="watertight" title="Find connected sets where every edge has 2 triangles (closed manifold). Most robust for genuine solids, slower.">Watertight regions</option>
+            <option value="hybrid" title="Vertex connectivity first, then re-split any dominant component (>50%) with spatial proximity.">Hybrid (vertex + spatial)</option>
+          </select>
+        </div>
+        <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:var(--fs-sm);margin:0 0 10px;min-height:16px">Select a mesh to preview the split.</div>
+        <button class="btn" id="btn-split-selected" data-cmd-primary title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
+        <div style="height:6px"></div>
+        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts"><i data-lucide="search"></i>Scan whole model</button>
+        <details class="split-advanced" style="margin-top:10px">
+          <summary style="cursor:pointer;color:var(--tx3);font-size:var(--fs-11);user-select:none;padding:4px 0">Advanced — custom tolerance</summary>
+          <div class="field" style="margin-top:6px"><div id="split-eps-scrub"></div></div>
+        </details>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Split selected</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+      </div>
       <div class="vpc br"><div class="vp-tips" id="vp-hint"></div></div>
       <div class="vpc bl"><div id="axis-gizmo"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
       <!-- Sun gizmo (HDRI rotation). Visible only when bg-mode === 'hdri'.
@@ -2861,7 +3347,7 @@ input.prim-value,.prim-value{border-radius:6px}
             <defs>
               <radialGradient id="sun-dome-grad" cx="50%" cy="50%" r="50%">
                 <stop offset="0%" stop-color="#252525" stop-opacity=".75"/>
-                <stop offset="80%" stop-color="#0d0d0d" stop-opacity=".55"/>
+                <stop offset="80%" stop-color="#101010" stop-opacity=".55"/>
                 <stop offset="100%" stop-color="#000" stop-opacity=".30"/>
               </radialGradient>
               <radialGradient id="sun-dot-grad" cx="50%" cy="50%" r="50%">
@@ -2909,22 +3395,18 @@ input.prim-value,.prim-value{border-radius:6px}
   <aside id="sidebar-right" class="panel">
     <div id="resize-r" class="resize-handle" title="Drag to resize"></div>
 
-    <div class="section">
-      <div class="section-h"><span>Properties</span><span class="chev">▾</span></div>
+    <div class="section section-fixed">
+      <div class="section-h"><span>Properties</span></div>
       <div class="section-b" id="prop-body">
-        <div class="prop-head"><span class="prop-name" style="color:var(--tx3)">No selection</span></div>
+        <div class="prop-head"><span class="prop-name" style="color:var(--tx3)">Empty scene</span></div>
         <div class="prop-tags"></div>
-        <div class="prop-bar-wrap" title="Triangle share of total scene">
-          <span class="prop-bar-icon"><i data-lucide="bar-chart-3"></i></span>
-          <div class="prop-bar"><div class="prop-bar-fill" style="width:0%"></div></div>
-          <span class="prop-bar-label">—</span>
-        </div>
+        <div class="prop-hero is-empty"><div class="prop-hero-top"><span class="prop-hero-num">—</span><span class="prop-hero-unit">triangles</span></div>
+          <div class="prop-bar"><div class="prop-bar-fill" style="width:0%"></div></div></div>
         <div class="prop-grid">
-          <span class="prop-icon"><i data-lucide="triangle"></i></span><span class="prop-label">Triangles</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="boxes"></i></span><span class="prop-label">Parts</span><strong class="prop-value">—</strong>
           <span class="prop-icon"><i data-lucide="circle-dot"></i></span><span class="prop-label">Vertices</span><strong class="prop-value">—</strong>
           <span class="prop-icon"><i data-lucide="box"></i></span><span class="prop-label">Size</span><strong class="prop-value">—</strong>
-          <span class="prop-icon"><i data-lucide="percent"></i></span><span class="prop-label">% of model</span><strong class="prop-value">—</strong>
-          <span class="prop-icon"><i data-lucide="package"></i></span><span class="prop-label">Volume</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="hard-drive"></i></span><span class="prop-label">Mesh data</span><strong class="prop-value">—</strong>
         </div>
       </div>
     </div>
@@ -3030,18 +3512,6 @@ input.prim-value,.prim-value{border-radius:6px}
         </div>
         <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
         <div class="field-help" id="decimate-info" style="margin-top:-2px"></div>
-        <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
-          <button class="btn warn" id="btn-fill-holes" title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Fill holes</span></button>
-          <label class="size-field" title="Largest hole to fill, measured across its widest point"><span>up to</span><input type="text" inputmode="decimal" id="fill-holes-size" value="12"><span>mm</span></label>
-        </div>
-        <div class="field-help" id="fill-holes-info" style="margin-top:-2px">Bolt holes, slots and pockets in flat faces. Bosses, the bore of a washer or nut, and openings into a cavity are left alone.</div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><span>Materials</span><span class="chev">▾</span></div>
-      <div class="section-b" id="materials-body">
-        <div style="color:var(--tx3);font-size:var(--fs-md);padding:4px 0">Load a model to see colors / materials.</div>
       </div>
     </div>
 
@@ -3080,40 +3550,6 @@ input.prim-value,.prim-value{border-radius:6px}
       </div>
     </div>
 
-    <div class="section">
-      <div class="section-h"><span>Separate fused meshes</span><span class="chev">▾</span></div>
-      <div class="section-b">
-        <div style="color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-base);margin:2px 0 10px">
-          Recover individual parts from solids that were merged on export. Two vertices closer than the threshold are treated as the same point.
-        </div>
-        <div class="split-presets" role="group" aria-label="Detection sensitivity">
-          <button class="split-preset" data-eps="0" title="Maximum splits. Trusts the index buffer exactly — never merges. Use if you suspect the source has duplicated boundary vertices.">Strict</button>
-          <button class="split-preset active" data-eps="1e-9" title="Default. Welds only bit-exact duplicates — fixes within-solid sharp-edge duplication without merging adjacent solids.">Tight</button>
-          <button class="split-preset" data-eps="1e-6" title="Welds vertices within 0.0001% of model size — tolerant of small float drift between duplicates.">Normal</button>
-          <button class="split-preset" data-eps="1e-3" title="Welds vertices within 0.1% of model size — intentionally MERGES touching solids. Use when you want fewer, larger parts.">Loose</button>
-        </div>
-        <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:var(--fs-11);margin:8px 0 6px">≈ — at this model size</div>
-        <div class="field" style="margin-bottom:6px">
-          <label style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:3px">Algorithm</label>
-          <select id="split-method" class="mac-sel" style="width:100%">
-            <option value="vertex" title="Default. Connect triangles that share a vertex.">Vertex connectivity</option>
-            <option value="edge" title="Stricter than vertex. Connect only when triangles share a full edge — keeps solids meeting at a point separate.">Edge connectivity</option>
-            <option value="spatial" title="Group by triangle bbox overlap on a 3D grid. Doesn't read the index buffer at all — useful when topology is fused but solids are still spatially separate.">Spatial proximity (AABB)</option>
-            <option value="watertight" title="Find connected sets where every edge has 2 triangles (closed manifold). Most robust for genuine solids, slower.">Watertight regions</option>
-            <option value="hybrid" title="Vertex connectivity first, then re-split any dominant component (>50%) with spatial proximity.">Hybrid (vertex + spatial)</option>
-          </select>
-        </div>
-        <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:var(--fs-sm);margin:0 0 10px;min-height:16px">Select a mesh to preview the split.</div>
-        <button class="btn" id="btn-split-selected" title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
-        <div style="height:6px"></div>
-        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts"><i data-lucide="search"></i>Scan whole model</button>
-        <details class="split-advanced" style="margin-top:10px">
-          <summary style="cursor:pointer;color:var(--tx3);font-size:var(--fs-11);user-select:none;padding:4px 0">Advanced — custom tolerance</summary>
-          <div class="field" style="margin-top:6px"><div id="split-eps-scrub"></div></div>
-        </details>
-      </div>
-    </div>
-
   </aside>
 
   <footer id="sb">
@@ -3123,7 +3559,6 @@ input.prim-value,.prim-value{border-radius:6px}
     <div class="item"><strong id="sb-mem">0 MB</strong>geom</div>
     <div class="item sb-action" id="sb-selected" title="Click to frame the current selection in the viewport"><i data-lucide="mouse-pointer-2"></i><strong id="sb-selected-n">0</strong>selected</div>
     <div class="item sb-action" id="sb-flagged" title="Click to isolate flagged parts in the viewport"><i data-lucide="flag"></i><strong id="sb-flagged-n">0</strong>flagged</div>
-    <div class="item right" id="sb-status">Ready</div>
     <div class="item sb-fps"><strong id="fps">0</strong>fps</div>
     <button id="sb-console-btn" title="Toggle log console (`)">
       <i data-lucide="terminal"></i>
@@ -3138,6 +3573,7 @@ input.prim-value,.prim-value{border-radius:6px}
      console (same width, same motion). Header: filter, order, view and the
      actions; body: the materials and an inspector for what is picked. -->
 <div id="vp-materials-pop" class="mat-dock" aria-label="Materials">
+  <div class="mat-dock-grip" id="mat-dock-grip" title="Drag to resize · double-click to reset"></div>
   <div class="lc-h mat-dock-h">
     <div class="lc-title">Materials</div>
     <span class="mat-dock-count" id="mat-dock-count"></span>
@@ -3171,6 +3607,7 @@ input.prim-value,.prim-value{border-radius:6px}
         <div class="mat-empty">No materials yet — load a model.</div>
       </div>
     </div>
+    <div class="mat-insp-grip" id="mat-insp-grip" title="Drag to resize · double-click to reset"></div>
     <aside class="mat-inspector" id="mat-inspector"></aside>
   </div>
 </div>
@@ -3426,14 +3863,16 @@ input.prim-value,.prim-value{border-radius:6px}
 </div>
 
 <div class="modal-bg" id="settings-modal">
-  <div class="modal" style="width:560px">
-    <div class="modal-h">
+  <div class="modal set-modal">
+    <div class="modal-h set-head">
       <h3>Settings</h3>
+      <label class="set-search" title="Search every section (Ctrl+F)"><i data-lucide="search"></i><input type="text" id="settings-search" placeholder="Search settings" autocomplete="off" spellcheck="false"></label>
       <button class="x" id="settings-close" title="Close (Esc)">✕</button>
     </div>
     <div class="modal-b" id="settings-body"></div>
-    <div class="modal-f">
-      <button class="btn danger" id="settings-reset" title="Restore default settings">Reset to defaults</button>
+    <div class="modal-f set-foot">
+      <button class="btn" id="settings-reset" title="Put every preference back to its default" style="display:none">Reset to defaults</button>
+      <span class="set-foot-note">Changes apply as you make them.</span>
       <button class="tbtn primary" id="settings-done" style="margin-left:auto">Done</button>
     </div>
   </div>
@@ -3526,8 +3965,8 @@ input.prim-value,.prim-value{border-radius:6px}
 <div class="modal-bg" id="cmdk-modal">
   <div class="modal" style="width:520px;max-height:60vh">
     <div class="modal-h" style="padding:10px 14px">
-      <input type="text" id="cmdk-input" placeholder="Search actions… (Esc to close)" style="flex:1;background:transparent;border:none;outline:none;color:var(--tx);font-size:var(--fs-xl);font-weight:var(--fw-medium)" autocomplete="off">
-      <span style="color:var(--tx3);font-size:var(--fs-sm);margin-left:10px"><kbd class="kbd-chip">↵</kbd></span>
+      <i data-lucide="search" class="cmdk-search-icon"></i>
+      <input type="text" id="cmdk-input" placeholder="Search" autocomplete="off" spellcheck="false">
     </div>
     <div class="modal-b" id="cmdk-list" style="padding:6px"></div>
   </div>
@@ -3732,7 +4171,7 @@ input.prim-value,.prim-value{border-radius:6px}
     // Viewport tools: the name and the shortcut, nothing else. Their titles
     // carry a description ("Measure (M) — click two points …") that is
     // useful in the command search but too much next to an icon.
-    if (target.closest('#vp-overlay')) {
+    if (target.closest('#vp-overlay') && !target.closest('.vp-cmd-host')) {
       const key = raw.match(/\(([^)]{1,12})\)/);
       const name = raw.split(/\s[—–·]\s|:\s/)[0].replace(/\s*\([^)]*\)\s*/g, ' ').trim();
       raw = (key && /[A-Za-z0-9]/.test(key[1])) ? name + ' (' + key[1] + ')' : name;
@@ -3765,7 +4204,8 @@ input.prim-value,.prim-value{border-radius:6px}
     clearTimeout(hideT);
     clearTimeout(showT);
     // viewport tools are icons only: say what they are straight away
-    showT = setTimeout(() => show(t), t.closest('#vp-overlay') ? 0 : SHOW_DELAY);
+    // (a command panel is not a row of icons: its tips wait like any other)
+    showT = setTimeout(() => show(t), (t.closest('#vp-overlay') && !t.closest('.vp-cmd-host')) ? 0 : SHOW_DELAY);
   }
 
   function onLeave(e) {
@@ -3884,12 +4324,12 @@ input.prim-value,.prim-value{border-radius:6px}
   // looks at where the click actually lands and ignores anything inside
   // the panel or its trigger button.
   if (sBtn && sPop) {
+    // Display, camera and performance settings live in the Settings window
+    // now (their controls were moved there); the button opens its Viewport
+    // section.
     sBtn.addEventListener('click', e => {
       e.stopPropagation();
-      const willOpen = !sPop.classList.contains('show');
-      if (willOpen) closeMaterials();
-      sPop.classList.toggle('show', willOpen);
-      sBtn.classList.toggle('active', willOpen);
+      if (window.__openSettings) window.__openSettings('viewport');
     });
     document.addEventListener('mousedown', e => {
       if (!sPop.classList.contains('show')) return;
@@ -3934,9 +4374,8 @@ input.prim-value,.prim-value{border-radius:6px}
 
 <!-- The libraries the app needs to start are bundled in vendor/ (three.js
      r172 with the add-ons in use, three-mesh-bvh, meshoptimizer, lucide), so
-     startup does not wait on a CDN and the app works offline. Both three
-     builds are local so they share one core. Still fetched on demand from
-     the internet: the path tracer, the KTX2 transcoder and the in-browser
+     startup does not wait on a CDN and the app works offline. Still fetched
+     on demand from the internet: the KTX2 transcoder and the in-browser
      STEP / glTF-Transform / Assimp converters. -->
 <script type="importmap">
 {
@@ -3946,17 +4385,14 @@ input.prim-value,.prim-value{border-radius:6px}
     "three/tsl": "./vendor/three/build/three.webgpu.js",
     "three/addons/": "./vendor/three/examples/jsm/",
     "three/examples/jsm/": "./vendor/three/examples/jsm/",
-    "three-classic": "./vendor/three/build/three.module.js",
     "three-mesh-bvh": "./vendor/three-mesh-bvh/index.module.js",
-    "three-gpu-pathtracer": "https://unpkg.com/three-gpu-pathtracer@0.0.24/build/index.module.js",
     "meshoptimizer-simplifier": "./vendor/meshoptimizer/meshopt_simplifier.module.js"
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026100805-v0.10.1"></script>
+<script type="module" src="app-v2.js?v=2026100910-v0.11.0"></script>
 <!-- Feature modules — load after app-v2.js. cloner.js attaches via window._appFns / _appHooks. -->
-<script src="cloner.js?v=2026100805-v0.10.1"></script>
-<script type="module" src="pathtracer.js?v=2026100805-v0.10.1"></script>
+<script src="cloner.js?v=2026100910-v0.11.0"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

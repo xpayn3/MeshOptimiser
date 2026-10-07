@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 0 . 8 . 0
+  O P T I M I S E R   ·   v 0 . 1 1 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
@@ -24,6 +24,23 @@
 [![Status](https://img.shields.io/badge/status-pre--1.0-orange)]()
 
 </div>
+
+---
+
+## Screenshots
+
+A 1,583-part, 5.4-million-triangle assembly in v0.11.
+
+| | |
+|---|---|
+| ![The viewer](docs/screenshots/meshoptimiser-viewer.webp)<br>**The viewer** — tree, viewport, and the scene's totals | ![A part selected](docs/screenshots/meshoptimiser-assembly-inspect.webp)<br>**Inspect** — a part's triangles, share of the scene and rank |
+| ![Fill holes](docs/screenshots/meshoptimiser-fill-holes.webp)<br>**Fill holes** — the command panel, and what the fill saved | ![Before and after](docs/screenshots/meshoptimiser-fill-holes-closeup.webp)<br>**Before / after** — 27 holes closed, the rest untouched |
+| ![All commands](docs/screenshots/meshoptimiser-commands.webp)<br>**All commands** — one list, with shortcuts | ![Search](docs/screenshots/meshoptimiser-palette.webp)<br>**Search** — suggestions follow the selection |
+| ![Scene tabs](docs/screenshots/meshoptimiser-tabs.webp)<br>**Scene tabs** — every tab is its own scene | ![Isolate](docs/screenshots/meshoptimiser-isolate.webp)<br>**Isolate** — one sub-assembly, 360 of 1,583 parts |
+| ![Exploded view](docs/screenshots/meshoptimiser-exploded.webp)<br>**Exploded view** — a slider per axis | ![X-ray](docs/screenshots/meshoptimiser-xray.webp)<br>**X-ray** |
+| ![Heatmap](docs/screenshots/meshoptimiser-heatmap.webp)<br>**Heatmap** — triangle density, beside the heavy-parts list | ![Materials](docs/screenshots/meshoptimiser-materials.webp)<br>**Materials dock** — filter, sort, inspect |
+| ![Material editor](docs/screenshots/meshoptimiser-recolour.webp)<br>**Recolour** — every part that shares a material | ![Settings](docs/screenshots/meshoptimiser-settings.webp)<br>**Settings** — one window, with search |
+| ![Right-click menu](docs/screenshots/meshoptimiser-context-menu.webp)<br>**Right-click menu** | ![Export](docs/screenshots/meshoptimiser-export.webp)<br>**Export** |
 
 ---
 
@@ -93,7 +110,7 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 ### 🧹 Mesh tools
 | | |
 |---|---|
-| 🕳 **Fill holes**               | Closes bolt holes, slots, pockets and engraved lettering in flat faces; leaves bosses, washer bores and cavity openings alone. Size limit in mm, watertight result, undoable |
+| 🕳 **Fill holes** (`P`)         | Closes bolt holes, slots, pockets and engraved lettering in flat faces; leaves bosses, washer bores and cavity openings alone. Size limit in mm, watertight result, undoable |
 | 🔻 **Decimate**                 | meshoptimizer simplifier — keeps normals, UVs and vertex colours; −25 … −90 % or a triangle target for the selection |
 | 📦 **Smart fit**                | Replace parts with the best low-poly proxy: box, oriented box or cylinder |
 | 🧽 **Clean-up**                 | Remove small, empty, duplicate and degenerate parts; delete empty groups; split fused meshes |
@@ -120,9 +137,13 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 | | |
 |---|---|
 | 👋 **Welcome modal**            | Drag-drop, browse, recent files (IndexedDB-persisted handles) |
-| ⌘ **Command palette (⌘K)**       | Every menu item and every sidebar button and control, one keystroke away |
+| 🗂 **Scene tabs**                | Every tab is its own scene, with its own undo history. New and Open never replace a scene that has something in it |
+| 🧩 **Command panels**            | Split (`X`) and Fill holes (`P`) open as a panel beside the viewport: `Enter` runs, `Esc` puts it away |
+| ⋯ **All commands**              | Every command that acts on the model in one list, with its shortcut; what cannot run now is dimmed |
+| ⌘ **Search (⌘K)**                | Every menu item and every sidebar button and control, one keystroke away, with suggestions for the selection |
+| 🔢 **Drag any number**           | Shape parameters and limits are numbers you drag sideways, or click to type. Shift ×10, Alt ÷10 |
 | ⌨️ **Shortcuts overlay**         | Discoverable cheatsheet with live key bindings |
-| ⚙️ **Settings modal**            | Persistent prefs (renderer, perf mode, background, toggles) |
+| ⚙️ **Settings window**           | General, Viewport, Camera, Performance, Scene and Storage in one place, with search |
 | 🎨 **Design-token system**      | Centralised CSS variables — surfaces, radii, type scale, easings |
 | 📋 **Copy log / Cancel load**   | Every long operation is observable and abortable |
 
@@ -185,7 +206,7 @@ python step2glb.py input.step --relative          # quality as fraction of diag
 
 - 🐍 **Python** 3.10 / 3.11 / 3.12 *(3.13 blocked on cadquery-ocp)*
 - 🌐 A **WebGPU-capable browser** (recent Chrome, Edge, Firefox, Safari)
-- 📴 **No internet needed to run** — the viewer's libraries are bundled. Only the path tracer and a few rarely used converters are fetched on demand
+- 📴 **No internet needed to run** — the viewer's libraries are bundled. Only a few rarely used converters are fetched on demand
 - 💾 ~**2 GB** free for the venv on first install
 
 ---
@@ -200,12 +221,11 @@ app-v2.js          viewer logic (scene graph, picking, colour groups)
 holefill.js        hole filler (pure module, no dependencies)
 mesh-worker.js     background worker for Fill holes and Decimate
 cloner.js          cloner (linear / grid / radial arrays)
-pathtracer.js      path-traced renders from the viewport
 tests/
  ├── selftest.js         in-app regression suite (?selftest)
  └── holefill.test.mjs   hole filler on synthetic shapes (node)
 vendor/
- ├── three/            three.js r172: WebGPU + classic builds and the add-ons in use
+ ├── three/            three.js r172: the WebGPU build and the add-ons in use
  ├── three-mesh-bvh/   pick acceleration
  ├── meshoptimizer/    simplifier (WASM, embedded)
  ├── lucide/           icon set
@@ -240,6 +260,17 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.11.0** — how the app is used changes: scenes in tabs, tools beside the viewport, numbers you drag.
+
+- ![new][new] **Scene tabs** — every tab is its own scene; *New* and *Open* never replace one. A spare tab is kept warm, so a new one is there at once.
+- ![new][new] **Command panels** — Split (`X`) and Fill holes (`P`) open beside the viewport, Plasticity-style. `Enter` runs, `Esc` puts the panel away.
+- ![new][new] **Fill holes, advanced** — through / blind / open holes, a smallest size, a depth limit, a flatness tolerance. Stress-tested on 5.4M triangles across nine option sets; 334 meshes compared edge by edge, none left with a new open edge.
+- ![new][new] **Drag any number** — one line per shape parameter, no slider underneath.
+- ![new][new] **One Settings window** with search; **all commands** behind "…"; a **shortcut map** that fits together (`H` hide, `Shift+H` hide the rest, `Alt+H` show all, `Ctrl+M` merge, `Ctrl+B` smart fit, `Ctrl+E` export…).
+- ![new][new] **Properties is never empty** — the scene's totals, or a part's triangles with what was saved, its share and its rank.
+- ![fix][fix] A hole fill can no longer leave a crack; material names follow their colour; scenes made of added shapes count their triangles.
+- ![polish][polish] Darker, calmer, one tone. The GPU path tracer is gone; nothing is fetched from a CDN at start-up.
+
 **v0.10.1** — libraries bundled: the app starts without a CDN and works offline.
 
 **v0.10.0** — the biggest release so far: new tools, and everything you touch is immediate.
@@ -253,7 +284,7 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 - ![new][new] **Command search** finds every sidebar button and control.
 - ![polish][polish] **Interface** — Plasticity-style viewport, one button scale, three corner radii, bundled Inter, fewer pop-ups.
 - ![fix][fix] **Reliability** — every editing action can be undone; a rendering freeze after repeated mesh edits is fixed; Import → Append keeps the tree; Cloner copies are exported.
-- ![new][new] **Tests** — `?selftest` runs 31 regression tests inside the live app; `node tests/holefill.test.mjs` checks the hole filler.
+- ![new][new] **Tests** — `?selftest` runs 31 regression tests inside the live app (37 as of v0.11); `node tests/holefill.test.mjs` checks the hole filler.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list and the known issues.
 

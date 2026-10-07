@@ -64,6 +64,7 @@
   };
   // Start from an empty scene with the given primitives.
   T.fresh = async (kinds = []) => {
+    window.__moNoTabs = true;            // the suite works in one scene; the tabs test lifts this itself
     document.getElementById('welcome-start-empty')?.offsetParent && document.getElementById('welcome-start-empty').click();
     await T.sleep(150);
     T.act('newscene'); await T.sleep(250); await T.ok(); await T.sleep(400);
@@ -854,6 +855,188 @@
     size.value = '12';
   });
 
+  test('properties: with nothing selected the card describes the scene; counters follow shapes', async () => {
+    await T.fresh(['cube', 'sphere']);
+    const txt = () => document.getElementById('prop-body').innerText.replace(/\s+/g, ' ');
+    const tris = () => T.live().reduce((a, p) => a + p.triCount, 0);
+    await T.sleep(200);
+    T.assert(/Parts 2\b/.test(txt()) && txt().includes(tris().toLocaleString() + ' triangles'), 'no scene totals with nothing selected: ' + txt());
+    T.assert(!/No selection/.test(txt()), 'the card still says "No selection"');
+    T.eq(document.getElementById('vp-tris').textContent, tris().toLocaleString(), 'viewport triangle count for a scene made of shapes');
+    T.eq(document.getElementById('sb-tris').textContent, tris().toLocaleString(), 'status-bar triangle count for a scene made of shapes');
+    await T.pick(['Cube']);
+    T.assert(/Cube/.test(txt()) && /% of scene/.test(txt()), 'a selected part is not described: ' + txt());
+    // deleting says what it saved, and the scene card follows
+    const before = tris();
+    await T.pick(['Sphere']); T.act('delete'); await T.sleep(500);
+    const d = document.getElementById('vp-tris-delta');
+    T.assert(d.classList.contains('show') && d.textContent.startsWith('\u2212') && d.textContent.includes((before - tris()).toLocaleString()), 'no triangle delta after a delete: "' + d.textContent + '"');
+    T.assert(/Parts 1\b/.test(txt()) && /% of original/.test(txt()) && document.querySelector('#prop-body .prop-hero-badge'), 'the scene card did not follow the delete: ' + txt());
+    await T.undo(); await T.sleep(200);
+    T.assert(d.classList.contains('show') && d.textContent.startsWith('+'), 'undo did not show the triangles coming back: "' + d.textContent + '"');
+  });
+
+  test('shape parameters: one line each, dragging the number changes the shape in one undo step', async () => {
+    await T.fresh(['sphere']);
+    await T.pick(['Sphere']);
+    const p = T.part('Sphere');
+    const row = [...document.querySelectorAll('.prim-row')].find(r => r.querySelector('input[type=range]:not([data-prim-size])'));
+    if (!row) return 'skipped (no numeric shape parameter)';
+    T.eq(getComputedStyle(row.querySelector('.prim-slider')).display, 'none', 'the slider row');
+    const fid = row.dataset.primField, f = row.querySelector('.prim-value'), v0 = +f.value, tri0 = p.triCount, h0 = state.history.length;
+    const b = f.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + b.height / 2;
+    const ev = (type, cx) => f.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, button: 0, clientX: cx, clientY: y }));
+    ev('pointerdown', x); ev('pointermove', x + 5); ev('pointermove', x + 65);
+    await T.sleep(250);
+    T.assert(+f.value > v0 && document.activeElement !== f, 'dragging the number did not change it (or focused the field): ' + f.value);
+    ev('pointerup', x + 65); await T.sleep(500);
+    T.assert(p.primParams[fid] > v0 && p.triCount !== tri0, 'the shape did not follow the drag');
+    T.eq(state.history.length - h0, 1, 'undo entries for one drag');
+    await T.undo();
+    T.eq(p.triCount, tri0, 'triangles after undo');
+    // a press without a move opens the field for typing
+    const f2 = document.querySelector('.prim-row[data-prim-field="' + fid + '"] .prim-value');
+    f2.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 8, button: 0, clientX: x, clientY: y }));
+    f2.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 8, button: 0, clientX: x, clientY: y }));
+    await T.sleep(100);
+    T.assert(document.activeElement === f2, 'a click on the number did not focus it');
+    f2.blur();
+  });
+
+  test('command panels: Split and Fill holes show on demand, Esc leaves the panel before the selection', async () => {
+    await T.fresh(['cube', 'sphere']);
+    const key = (k) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+    const split = document.querySelector('.section-cmd[data-cmd="split"]'), fill = document.querySelector('.section-cmd[data-cmd="fillholes"]');
+    if (!split || !fill) return 'skipped (no command panels)';
+    T.assert(split.hidden && fill.hidden, 'a command panel is showing before its command ran');
+    T.assert(!document.querySelector('#sidebar-right .section-cmd'), 'a command panel is still in the sidebar');
+    await T.pick(['Cube']);
+    key('x'); await T.sleep(300);
+    T.assert(!split.hidden && split.closest('#vp-overlay'), 'X did not open the Split panel over the viewport');
+    key('p'); await T.sleep(300);
+    T.assert(!fill.hidden && split.hidden, 'P did not swap to the Fill holes panel');
+    T.assert(document.getElementById('tg-fill-holes').classList.contains('active'), 'the toolbar button is not lit while its panel is open');
+    T.assert(fill.contains(document.getElementById('btn-fill-holes')), 'Fill holes is not in its own panel');
+    const clip = fill.querySelector('video');
+    T.assert(clip && clip.muted && clip.loop && /fill-holes\.webm/.test(clip.getAttribute('src')), 'the Fill holes panel has no looping clip');
+    key('Escape'); await T.sleep(250);
+    T.assert(fill.hidden && state.selected.size === 1, 'Esc did not just close the panel (selection ' + state.selected.size + ')');
+    T.assert(!clip || clip.paused, 'the clip keeps playing after its panel was put away');
+    key('Escape'); await T.sleep(250);
+    T.eq(state.selected.size, 0, 'selection after the second Esc');
+    T.act('split'); await T.sleep(250);
+    T.assert(!split.hidden, 'the Split command did not open its panel');
+    split.querySelector('.cmd-foot .cmd-close').click(); await T.sleep(200);
+    T.assert(split.hidden, 'Cancel did not close the panel');
+    document.getElementById('tg-fill-holes').click(); await T.sleep(200);
+    T.assert(!fill.hidden, 'the toolbar button did not open Fill holes');
+    document.getElementById('tg-fill-holes').click(); await T.sleep(200);
+    T.assert(fill.hidden, 'the toolbar button did not close Fill holes');
+  });
+
+  test('isolate: the viewport says so, the pill leaves the mode, undo returns to it', async () => {
+    await T.fresh(['cube', 'sphere']);
+    const pill = document.getElementById('vp-isolate-pill');
+    if (!pill) return 'skipped (no isolate pill)';
+    T.assert(pill.hidden, 'the pill shows with nothing isolated');
+    await T.pick(['Cube']); T.act('isolate'); await T.sleep(350);
+    T.assert(!pill.hidden && /1 of 2/.test(pill.textContent), 'no isolate indicator: "' + pill.textContent.trim() + '"');
+    pill.click(); await T.sleep(350);
+    T.assert(pill.hidden && T.part('Sphere').visible, 'clicking the pill did not show everything again');
+    await T.undo(); await T.sleep(200);
+    T.assert(!pill.hidden && !T.part('Sphere').visible, 'undo did not go back to the isolated view with its indicator');
+    T.act('showAll'); await T.sleep(300);
+    T.assert(pill.hidden, 'Show all left the indicator up');
+  });
+
+  test('materials: a colour name follows the colour; a preset and its undo refresh the open editor', async () => {
+    await T.fresh(['cube', 'sphere']);
+    const dock = document.getElementById('vp-materials-pop'), tg = document.getElementById('tg-materials');
+    if (!dock || !tg) return 'skipped (no materials dock)';
+    if (!dock.classList.contains('show')) { tg.click(); await T.sleep(450); }
+    const cells = () => [...dock.querySelectorAll('.mat-cell, .mat-row')].filter(c => c._mat);
+    await T.pick(['Cube']);
+    document.getElementById('mat-act-add').click(); await T.sleep(400);
+    const m = T.part('Cube').mesh.material;
+    T.eq(m.name, 'mat_' + m.color.getHexString(), 'name of a new material');
+    cells().find(c => c._mat === m).dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await T.sleep(700);
+    const nameEl = () => document.querySelector('.mat-edit-preview-name');
+    if (!nameEl()) return 'skipped (material editor did not open)';
+    const hex = document.getElementById('mat-edit-color-hex');
+    hex.value = '1CDA4D'; hex.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(700);
+    T.eq(m.name, 'mat_1cda4d', 'name after a colour change');
+    T.eq(nameEl().textContent, 'mat_1cda4d', 'name shown in the editor');
+    T.assert(cells().find(c => c._mat === m).textContent.includes('1cda4d'), 'the dock still lists the old colour');
+    // a preset from the dock, with the editor open
+    cells().find(c => c._mat === m).click(); await T.sleep(200);
+    document.getElementById('mat-act-presets').click(); await T.sleep(250);
+    [...document.querySelectorAll('#mat-presets-menu .mat-preset')].find(r => /Ceramic/.test(r.textContent)).click(); await T.sleep(700);
+    T.eq(nameEl().textContent, m.name, 'editor name after a preset');
+    T.eq(document.getElementById('mat-edit-color-hex').value.toLowerCase(), m.color.getHexString(), 'editor colour after a preset');
+    await T.undo(); await T.sleep(500);
+    T.eq(m.color.getHexString(), '1cda4d', 'colour after undoing the preset');
+    T.eq(m.name, 'mat_1cda4d', 'name after undoing the preset');
+    T.eq(nameEl().textContent, 'mat_1cda4d', 'editor name after undoing the preset');
+    // the dock can be made taller and its inspector wider, and both reset
+    const drag = (el, dx, dy) => { const b = el.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + 2;
+      const ev = (type, cx, cy) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 5, button: 0, clientX: cx, clientY: cy }));
+      ev('pointerdown', x, y); ev('pointermove', x + dx, y + dy); ev('pointerup', x + dx, y + dy); };
+    const g1 = document.getElementById('mat-dock-grip'), g2 = document.getElementById('mat-insp-grip'), insp = document.getElementById('mat-inspector');
+    // start from the default sizes: a size remembered from earlier use of this browser is not what a reset returns to
+    g1.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); g2.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await T.sleep(150);
+    const h0 = dock.getBoundingClientRect().height, w0 = insp.getBoundingClientRect().width;
+    drag(g1, 0, -60); await T.sleep(150);
+    T.assert(dock.getBoundingClientRect().height > h0 + 30, 'dragging the top edge did not make the dock taller');
+    if (g2.offsetParent) { drag(g2, -60, 0); await T.sleep(150); T.assert(insp.getBoundingClientRect().width > w0 + 30, 'dragging the inspector edge did not widen it'); }
+    g1.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); g2.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await T.sleep(150);
+    T.assert(Math.abs(dock.getBoundingClientRect().height - h0) < 2, 'double-click did not reset the dock height');
+    const pop = document.getElementById('_mat-editor-popup');
+    [...(pop?.querySelectorAll('button') || [])].find(b => /close/i.test(b.className + ' ' + (b.title || '') + ' ' + (b.getAttribute('aria-label') || '')))?.click();
+    await T.sleep(200);
+    tg.click(); await T.sleep(300);
+  });
+
+  test('scene tabs: New scene never replaces a scene with something in it', async () => {
+    await T.fresh(['cube']);
+    const Tabs = T.F()._Tabs;
+    if (!Tabs) return 'skipped (no tabs)';
+    const strip = document.getElementById('doc-tabs');
+    T.eq(Tabs.count(), 1, 'tabs at the start');
+    // the Unsaved pill: shown with an edit in the history, gone when the scene is as saved
+    const pill = document.getElementById('doc-unsaved');
+    T.assert(pill.offsetParent !== null, 'no Unsaved pill on a scene with an unsaved cube');
+    await T.undo(); await T.sleep(150);
+    T.assert(pill.offsetParent === null, 'the Unsaved pill is still drawn on a scene with nothing in it');
+    await T.redo(); await T.sleep(150);
+    T.assert(strip.querySelector('.doc-tab-add') && !strip.querySelector('.doc-tab.other'), 'the strip does not show one tab and a + button');
+    window.__moNoTabs = false;
+    try {
+      T.act('newscene'); await T.sleep(300);
+      T.eq(Tabs.count(), 2, 'tabs after New scene on a scene with a cube');
+      T.assert(T.part('Cube'), 'New scene replaced the scene it was pressed in');
+      const fr = document.querySelector('iframe.mo-tab-frame');
+      T.assert(fr, 'no second copy of the app was started for the new tab');
+      T.assert(strip.querySelector('.doc-tab.other'), 'the strip of the first tab does not list the second');
+      // (the copy is shown when it reports ready; here it is switched to by hand)
+      delete fr.dataset.booting; fr.style.opacity = ''; fr.style.pointerEvents = '';
+      Tabs.activate(fr.dataset.tab); await T.sleep(150);
+      T.eq(fr.style.display, 'block', 'second tab after switching to it');
+      Tabs.activate('main'); await T.sleep(150);
+      T.eq(fr.style.display, 'none', 'second tab after switching back');
+      strip.querySelector('.doc-tab.other .doc-tab-x').click(); await T.sleep(300);
+      T.eq(Tabs.count(), 1, 'tabs after closing the second');
+      T.assert(!document.querySelector('iframe.mo-tab-frame'), 'the closed tab left its frame behind');
+      // an empty scene is reused, not multiplied
+      window.__moNoTabs = true; T.act('newscene'); await T.sleep(300); window.__moNoTabs = false;
+      T.act('newscene'); await T.sleep(200);
+      T.eq(Tabs.count(), 1, 'tabs after New scene on an empty scene');
+    } finally {
+      window.__moNoTabs = true;
+      document.querySelectorAll('iframe.mo-tab-frame').forEach(f => f.remove());
+      if (window.__moTabs) { window.__moTabs.spare = null; window.__moTabs.pending = null; window.__moTabs.tabs = window.__moTabs.tabs.filter(x => x.id === 'main'); window.__moTabs.active = 'main'; }
+    }
+  });
+
   test('shortcuts: nothing acts on the scene behind a dialog; Ctrl+S does not isolate', async () => {
     await T.fresh(['cube', 'sphere']);
     await T.pick(['Cube']);
@@ -870,6 +1053,90 @@
     await T.sleep(400);
     document.getElementById('save-scene-cancel')?.click(); await T.sleep(200);
     T.eq(T.live().filter(p => p.visible).length, vis, 'Ctrl+S hid parts (Isolate fired)');
+  });
+
+  test('groups: undo and redo leave every part where it was, whatever is selected by then', async () => {
+    await T.fresh(['cube', 'cube', 'cube', 'sphere']);
+    await T.move('Cube', 300, 0, 0); await T.move('Cube.001', 0, 200, 0); await T.move('Sphere', -150, -150, 40);
+    const world = T.world(), tree = T.tree();
+    await T.group(['Cube', 'Cube.001']);
+    T.eq(T.world(), world, 'grouping moved a part');
+    await T.pick(['Sphere']);                         // the gizmo is now somewhere else
+    await T.undo();
+    T.eq(T.world(), world, 'undoing a group after selecting something else moved its parts');
+    T.eq(T.tree(), tree, 'tree after undoing the group');
+    await T.redo();
+    T.eq(T.world(), world, 'redoing the group moved its parts');
+    // a group grouped together with a part: what is inside the group must stay put
+    T.act('selClear'); await T.sleep(100);
+    T.row('Group 1').click(); await T.sleep(150);
+    T.row('Cube.002').dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true })); await T.sleep(200);
+    T.act('group'); await T.sleep(450);
+    T.eq(T.world(), world, 'grouping a group moved a part');
+    await T.pick(['Sphere']);
+    await T.undo(); T.eq(T.world(), world, 'undoing a group of a group moved parts');
+    await T.redo(); T.eq(T.world(), world, 'redoing a group of a group moved parts');
+    await T.pick(['Cube.002']);
+    await T.undo(); await T.undo();
+    T.eq(T.world(), world, 'undoing both groups moved parts');
+    T.eq(T.tree(), tree, 'tree after undoing both groups');
+  });
+
+  test('visibility: Hide selected is one undo step', async () => {
+    await T.fresh(['cube', 'cube', 'sphere']);
+    await T.pick(['Cube', 'Sphere']);
+    await T.undoable('hide selected', () => T.act('hideSel'), { wait: 300 });
+    T.eq(T.live().filter(p => p.visible).length, 1, 'visible parts after Hide');
+  });
+
+  test('tree: a rebuild keeps its rows, and the kept tree equals one built from nothing', async () => {
+    await T.fresh(['cube', 'cube', 'cube', 'sphere', 'cube', 'cube']);
+    const tree = document.getElementById('tree');
+    const rowsOf = () => [...tree.children].filter(r => r.classList.contains('tree-node'));
+    // (the row of a deleted part is out of sight either way: only that it is gone is compared)
+    const snap = () => rowsOf().map(r => r.classList.contains('is-gone') ? 'gone|' + (r.dataset.partId || '') : [[...r.classList].sort().join('.'), r.dataset.depth, r.dataset.ancestorGroups, r.dataset.groupId || '', r.dataset.partId || '', r._filled ? r.innerHTML : ''].join('|')).join('\n');
+    const same = async (label) => {
+      await T.sleep(250);
+      const kept = snap();
+      if (tree._rows) {                       // a hierarchy: a rebuild with nothing changed must not replace a single row
+        const before = rowsOf();
+        T.F().rebuildTree(); await T.sleep(80);
+        const after = rowsOf();
+        T.assert(after.length === before.length && after.every((r, i) => r === before[i]), label + ': a rebuild with nothing changed replaced rows');
+        T.eq(snap(), kept, label + ': a rebuild with nothing changed altered the tree');
+      }
+      tree._rows = null; T.F().rebuildTree(); await T.sleep(150);
+      T.eq(kept, snap(), label + ': the tree on screen differs from one built from nothing');
+    };
+    await same('new scene');
+    await T.group(['Cube', 'Cube.001']);            await same('group');
+    await T.undo();                                 await same('undo group');
+    await T.redo();                                 await same('redo group');
+    await T.pick(['Sphere']); T.act('hideSel');     await same('hide');
+    T.act('showAll');                               await same('show all');
+    await T.pick(['Cube.002']); T.act('isolate');   await same('isolate');
+    T.act('showAll');                               await same('show all again');
+    await T.pick(['Cube.003']); T.act('delete'); await T.ok(); await same('delete');
+    await T.undo();                                 await same('undo delete');
+    await T.group(['Group 1', 'Cube.004']);         await same('nest');
+    await T.ctx('Group 2', 'Ungroup');              await same('ungroup');
+    await T.undo();                                 await same('undo ungroup');
+  });
+
+  test('group dots: every group has one, and they are all one draw', async () => {
+    await T.fresh(['cube', 'cube', 'cube', 'cube']);
+    await T.group(['Cube', 'Cube.001']);
+    await T.group(['Cube.002', 'Cube.003']);
+    T.act('selClear'); await T.sleep(350);
+    let scene = state.partsRoot; while (scene.parent) scene = scene.parent;
+    const dots = []; scene.traverse(o => { if (o.isSprite && typeof o.count === 'number') dots.push(o); });
+    T.eq(dots.length, 1, 'sprites that draw group dots');
+    T.eq(dots[0].count, 2, 'dots drawn for two groups');
+    T.assert(dots[0].visible, 'the dots are hidden');
+    T.row('Group 1').click(); await T.sleep(350);
+    const again = []; scene.traverse(o => { if (o.isSprite && typeof o.count === 'number') again.push(o); });
+    T.eq(again.length, 1, 'sprites that draw group dots after selecting a group');
+    T.eq(again[0].count, 2, 'dots drawn after selecting a group');
   });
 
   // ══════════════════════════════ runner ════════════════════════════════

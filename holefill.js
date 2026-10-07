@@ -54,9 +54,12 @@ export function fillFlatHoles(positions, index, opts = {}) {
   const maxComponentTris = opts.maxComponentTris || 60000;
   const maxFaceRatio = opts.maxFaceRatio || 0.4;       // opening / outline of its face …
   const maxPartRatio = opts.maxPartRatio || 0.08;      // … and opening / size of the whole part
+  const minSize = +opts.minSize > 0 ? +opts.minSize : 0;   // a feature narrower than this is left alone
+  // which kinds to fill (all three unless switched off)
+  const want = { through: opts.through !== false, blind: opts.blind !== false, open: opts.open !== false };
   const result = { holes: 0, through: 0, blind: 0, open: 0, loops: 0, removedTris: 0, addedTris: 0,
                    removed: null, caps: null, capOwner: null,
-                   skipped: { raised: 0, leaking: 0, tooDeep: 0, tooLarge: 0, partOfShape: 0 } };
+                   skipped: { raised: 0, leaking: 0, tooDeep: 0, tooLarge: 0, partOfShape: 0, tooSmall: 0, kind: 0, uncappable: 0 } };
   if (!(maxSize > 0) || T < 4) return result;
 
   // ── bounding box, tolerances ─────────────────────────────────────────────
@@ -336,6 +339,39 @@ export function fillFlatHoles(positions, index, opts = {}) {
       }
     }
 
+    // The cut must be clean. Taking S out leaves an edge bare wherever a
+    // triangle of S meets one that stays; the caps cover exactly the edges of
+    // the cap loops. So: every such edge has to lie on a cap loop, and every
+    // edge of a cap loop has to have S behind it. Anything else would leave
+    // a crack or a doubled wall, and the feature is left as it is.
+    if (!reason && S.length) {
+      const capSet = new Set(capLoops);
+      outer:
+      for (const t of S) {
+        for (let e = 0; e < 3; e++) {
+          const o = nb[t * 3 + e];
+          if (o < 0 || stamp[(o / 3) | 0] === visit) continue;
+          if (!capSet.has(loopOfHe[o])) { reason = 'leaking'; break outer; }
+        }
+      }
+      if (!reason) {
+        outer2:
+        for (const id of capLoops) {
+          for (const h of loops[id].hes) {
+            const o = nb[h];
+            if (o < 0 || stamp[(o / 3) | 0] !== visit) { reason = 'leaking'; break outer2; }
+          }
+        }
+      }
+    }
+    // An enclosed feature: is it one the caller asked for? Its size is that
+    // of the loop we started from — the widest of the feature, since loops
+    // are taken largest first.
+    if (!reason) {
+      const kind = !S.length ? 'open' : capLoops.length >= 2 ? 'through' : 'blind';
+      if (loops[L].size < minSize) reason = 'tooSmall';
+      else if (!want[kind]) reason = 'kind';
+    }
     const all = [...bounding, ...absorbed];
     if (reason) {
       // Only the loop we started from is settled. The other loops this
@@ -347,10 +383,22 @@ export function fillFlatHoles(positions, index, opts = {}) {
       result.skipped[reason] = (result.skipped[reason] || 0) + 1;
       continue;
     }
-    // accepted
+    // Accepted — provided every opening can be closed completely. A cap of
+    // an n-point outline has n − 2 triangles; one that comes back short would
+    // leave a crack, so then nothing is removed and the hole stays as it is.
+    const capMark = caps.length, ownerMark = capOwner.length, addedMark = result.addedTris;
+    let nCaps = 0, whole = true;
+    for (const id of capLoops) {
+      if (capLoop(loops[id]) !== loops[id].hes.length - 2) { whole = false; break; }
+      nCaps++;
+    }
+    if (!whole) {
+      caps.length = capMark; capOwner.length = ownerMark; result.addedTris = addedMark;
+      loops[L].state = 2;
+      result.skipped.uncappable++;
+      continue;
+    }
     for (const t of S) removed[t] = 1;
-    let nCaps = 0;
-    for (const id of capLoops) if (capLoop(loops[id])) nCaps++;
     for (const id of all) loops[id].state = 1;
     result.holes++;
     result.loops += nCaps;
@@ -379,6 +427,37 @@ export function fillFlatHoles(positions, index, opts = {}) {
     }
     result.addedTris += tris.length / 3;
     return tris.length / 3;
+  }
+
+  // ── 7. slivers left behind ───────────────────────────────────────────────
+  // CAD meshes carry zero-area triangles (three points on a line) that stitch
+  // a T-junction. They belong to no face, so the steps above never see them.
+  // When everything such a sliver was stitched to has just been removed, it
+  // would be left hanging in mid-air: take it out too.
+  if (result.holes) {
+    let slivers = 0;
+    for (let t = 0; t < T; t++) if (!ok[t] && !removed[t] && tw[t * 3] !== tw[t * 3 + 1] && tw[t * 3 + 1] !== tw[t * 3 + 2] && tw[t * 3] !== tw[t * 3 + 2]) slivers++;
+    if (slivers) {
+      const ekey = (a, b) => a < b ? a * W + b : b * W + a;
+      const live = new Set();                           // edges of what stays: faces and caps
+      for (let t = 0; t < T; t++) {
+        if (!ok[t] || removed[t]) continue;
+        const a = tw[t * 3], b = tw[t * 3 + 1], c = tw[t * 3 + 2];
+        live.add(ekey(a, b)); live.add(ekey(b, c)); live.add(ekey(c, a));
+      }
+      for (let i = 0; i < caps.length; i += 3) {
+        const a = wid[caps[i]], b = wid[caps[i + 1]], c = wid[caps[i + 2]];
+        live.add(ekey(a, b)); live.add(ekey(b, c)); live.add(ekey(c, a));
+      }
+      for (let t = 0; t < T; t++) {
+        if (ok[t] || removed[t]) continue;
+        const a = tw[t * 3], b = tw[t * 3 + 1], c = tw[t * 3 + 2];
+        if (a === b || b === c || a === c) continue;
+        if (live.has(ekey(a, b)) || live.has(ekey(b, c)) || live.has(ekey(c, a))) continue;
+        removed[t] = 1;
+        result.removedTris++;
+      }
+    }
   }
 
   result.removed = removed;

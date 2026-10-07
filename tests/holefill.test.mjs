@@ -342,5 +342,53 @@ function plateThrough(r = 5, n = N) {
   check('triangle total adds up', total === g.index.length / 3 - res.removedTris + res.addedTris);
 }
 
+// a zero-area stitch triangle on the wall of a hole goes with the wall
+{
+  const g = plateThrough();
+  // three points on one vertical line of the hole's wall (r = 5, angle 0): bottom, middle, top
+  const pos = [...g.positions, 5, 0, 0, 5, 0, TH / 2, 5, 0, TH];
+  const n = g.positions.length / 3;
+  const withSliver = { positions: new Float32Array(pos), index: Uint32Array.from([...g.index, n, n + 1, n + 2]) };
+  console.log('through hole with a zero-area stitch triangle on its wall');
+  const a = run(withSliver, 12);
+  check('hole filled', a.res.holes === 1 && a.res.through === 1, brief(a.res));
+  check('the stitch triangle is not left hanging', a.res.removedTris === 33, 'removed ' + a.res.removedTris);
+  check('result is watertight', a.open === 0, a.open + ' open edges');
+  const b = run(withSliver, 8);
+  check('nothing filled → the stitch triangle stays', b.res.holes === 0 && b.out.length === withSliver.index.length);
+}
+
+// advanced options: which kinds to fill, a size floor, the shape guard
+{
+  const through = plateThrough();
+  console.log('options: kinds, smallest hole, shape guard');
+  const a = run(through, 12, { through: false });
+  check('through holes switched off: the hole stays', a.res.holes === 0 && a.res.skipped.kind >= 1 && a.out.length === through.index.length, brief(a.res));
+  const b = run(through, 12, { blind: false, open: false });
+  check('…and is still filled when only the other kinds are off', b.res.holes === 1 && b.res.through === 1 && b.open === 0, brief(b.res));
+  const c = run(through, 12, { minSize: 11 });
+  check('a Ø10 hole is under an 11 mm floor: left alone', c.res.holes === 0 && c.res.skipped.tooSmall >= 1 && c.out.length === through.index.length, brief(c.res));
+  const d = run(through, 12, { minSize: 9 });
+  check('…and filled with a 9 mm floor', d.res.holes === 1 && d.open === 0, brief(d.res));
+
+  // a blind hole, with blind switched off / on
+  const m = mesh();
+  const to = square(N, HALF, TH), bo = square(N, HALF, 0), ti = ring(N, 5, TH), fl = ring(N, 5, 1);
+  band(m, to, ti, true); disc(m, bo, false); wall(m, to, bo, true); wall(m, ti, fl, false); disc(m, fl, true);
+  const blind = m.done();
+  const e = run(blind, 12, { blind: false });
+  check('blind holes switched off: the hole stays', e.res.holes === 0 && e.res.skipped.kind >= 1, brief(e.res));
+  const f = run(blind, 12, { through: false });
+  check('…and is filled when only through holes are off', f.res.holes === 1 && f.res.blind === 1 && f.open === 0, brief(f.res));
+
+  // the depth limit: a hole 3 mm deep under a limit of 12 mm × 0.2 = 2.4 mm is too deep
+  const g2 = run(blind, 12, { depthFactor: 0.2 });
+  check('a depth limit below the hole leaves it alone', g2.res.holes === 0 && g2.res.skipped.tooDeep >= 1, brief(g2.res));
+
+  // a looser flatness must not change the result on a clean mesh
+  const h2 = run(through, 12, { cosTol: Math.cos(3 * Math.PI / 180) });
+  check('3° flatness on a clean plate: same single hole, watertight', h2.res.holes === 1 && h2.open === 0, brief(h2.res));
+}
+
 console.log(failed ? '\n' + failed + ' check(s) failed' : '\nall checks passed');
 process.exit(failed ? 1 : 0);

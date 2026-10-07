@@ -9,7 +9,7 @@
 //
 // Every reply carries the request's id and ok: true / false.
 
-import { fillFlatHoles } from './holefill.js?v=4';
+import { fillFlatHoles } from './holefill.js?v=8';
 
 let simplifier = null;          // meshoptimizer's simplifier, loaded on first use
 async function getSimplifier(url) {

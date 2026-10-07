@@ -4,6 +4,221 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## Unreleased
+
+A speed pass, measured in Chrome on a 1,583-part, 5.4-million-triangle
+assembly in two forms: flat, and with its full hierarchy (2,768 groups,
+ten levels deep). Every number below is that model on one machine.
+
+- ![new][new] **The tree scrolls sideways, and its indent holds still.**
+  The indent used to be recalculated from the width of the sidebar and
+  the depth of the hierarchy, so the whole tree slid left and right
+  while a sidebar edge was dragged; and long names ended in an ellipsis.
+  The indent is now one fixed step per level and names are shown in
+  full. When a row is wider than the panel a scrollbar appears under the
+  tree (Shift + wheel and a sideways swipe work too): the names slide,
+  the eye and colour column stays where it is.
+- ![perf][perf] **Group dots are one draw.** Every group has a dot at its
+  origin, and each dot was a sprite of its own: 2,768 extra draw calls
+  per frame on the nested model, four fifths of the frame. They are now
+  one instanced sprite. Orbiting went from 47–50 fps with dropped frames
+  to the display's full rate.
+- ![perf][perf] **Group origins in one pass.** They were worked out by walking
+  the whole tree once per group, and that was repeated once per group on
+  every selection change. A click on a part took 64 ms; it takes 8–10.
+  The same loop was the 4.5-second freeze while a nested model opened.
+- ![perf][perf] **The tree keeps its rows.** A rebuild used to throw every
+  row away and make it again. Rows that are still needed are now kept
+  and corrected, the ones whose place changed are moved, and the browser
+  is no longer asked for a layout in the middle of it. Hide, isolate and
+  show all: 55 ms → 16–20. Undo or redo of a group: 115 ms → 24.
+  Grouping 445 parts: 137 ms → 63. Typing in the search: 170 ms → 35–55.
+- ![perf][perf] **The tree scrolls as a layer.** It had a see-through
+  background, so the browser repainted every visible row on each scroll
+  step; and every row was `content-visibility:auto`, which with 4,350
+  rows cost more per frame than it saved. Rows away from the view are
+  plain empty boxes, rows are filled a screenful ahead rather than one
+  per scroll step, and rows left far behind are emptied again. Wheel
+  scrolling dropped 28 % of frames; it now drops about 1 %.
+- ![perf][perf] **Fewer, larger instance groups.** A shape that repeats was
+  drawn as one instanced object from three copies up. Each such object
+  needs a shader and a GPU pipeline of its own, rebuilt on every change
+  of view mode: 106 of them on the nested model, 2.7 seconds frozen per
+  switch to wireframe or x-ray. Instancing now starts at 32 copies.
+  A switch takes 0.3–0.5 s, and the frame rate is unchanged.
+- ![perf][perf] **X-ray draws each surface once**, not twice (its blending has
+  no order, so one pass gives the same picture).
+- ![perf][perf] **Select all on an assembly with instances** refreshed every
+  matrix in the model once per instance: half a second the first time.
+  It refreshes the one mesh it has just made.
+- ![perf][perf] **Dragging a sidebar edge** set a variable on the page root on
+  every mouse move, which restyled the whole document several times per
+  move (15 fps). The width is applied once per frame, directly, and the
+  variable is set when the drag ends: 20–30 fps on the nested model's
+  4,350-row tree, where every row still has to be laid out at the new
+  width. Dragging the materials dock is once per frame too.
+- ![perf][perf] The shortcut tips are measured in the next frame instead of
+  in the middle of a selection change (13 ms per change saved), the
+  document tab is aligned without laying the page out twice, and numbers
+  in the tree are formatted by one shared formatter.
+- ![fix][fix] **Undoing a group could throw its parts across the scene.**
+  A selected part hangs on the move gizmo's pivot, and the undo entry of
+  a new group recorded that pivot as the part's parent. Group some parts,
+  select something else, press Ctrl+Z: the grouped parts jumped (1,300
+  units in the test) and stayed attached to the gizmo. The gizmo now lets
+  go before the entry is recorded. The same for groups in a flat list.
+- ![fix][fix] **Redoing "group a group" moved everything inside it.** Clicking
+  a group selects its parts, so grouping it also listed every part in it;
+  redo re-attached each of those parts to the new group with a matrix
+  meant for its old parent. Only what the action really moved is redone.
+- ![fix][fix] **Hide selected (`H`) is an undo step.** It had none: Ctrl+Z
+  after `H` undid whatever came before it.
+- ![fix][fix] The flat-list rule that hides the expand column no longer
+  depends on which rows happen to be filled.
+- ![docs][docs] Four more regression tests (41 in all): a rebuilt tree equals
+  one built from nothing after every kind of change; group dots are one
+  draw; group undo and redo leave every part in place whatever is
+  selected by then; Hide is one undo step.
+
+## v0.11.0
+
+v0.10 made the app fast. This one changes how it is *used*. Scenes open
+in tabs, tools appear where you are working instead of sitting in a
+sidebar, every number can be dragged, and one Settings window replaces
+three places that used to hold options. The interface is darker,
+quieter and more of one piece — and Fill holes, the tool people came
+for, got options and a much harder test.
+
+**Highlights**
+
+- ![new][new] **Scene tabs.** Every tab is a scene of its own, with its own
+  parts, materials, undo history and camera. *New scene* and *Open* never
+  replace a scene that has something in it — they open a tab. A spare
+  tab is kept warm in the background, so a new one is there at once, and
+  switching does not reload anything. The tab shows the scene's name
+  (double-click to rename) and an **Unsaved** pill that saves on click;
+  hover a tab and its icon becomes the close button.
+- ![new][new] **Command panels.** Split and Fill holes are no longer cards in
+  the sidebar. Run the command — `X`, `P`, the search, the right-click
+  menu, the toolbar — and its panel appears over the bottom-left of the
+  viewport, the way Plasticity does it. `Enter` runs it, `Esc` puts it
+  away (and only then clears the selection).
+- ![new][new] **Fill holes shows itself.** A six-second silent loop runs
+  across the top of its panel and dissolves into the card: the holes of a
+  real part closing a few at a time (90 KB). It plays only while the
+  panel is open.
+- ![new][new] **Fill holes, advanced.** An *Advanced* fold in the panel: fill
+  through holes, blind holes and open holes separately; ignore holes
+  under a size; a depth limit; a flatness tolerance for meshes whose
+  flat faces are not quite flat; and a switch for the rule that keeps
+  openings which shape the part. Stress-tested on a 5.4-million-triangle
+  assembly across nine option sets — 334 meshes compared edge by edge
+  before and after, none left with a new open edge — and two ways it
+  could have left a crack are closed for good (see Fixes).
+- ![new][new] **Everything a number can be dragged.** Shape parameters take one
+  line each: no slider underneath, drag the number or its label
+  sideways, click to type. Shift is ten times faster, Alt ten times
+  finer. The size limit of Fill holes and the numbers beside the sidebar
+  sliders work the same way.
+- ![new][new] **One Settings window.** General, Viewport, Camera, Performance,
+  Scene and Storage in one place, with a search across all of them. The
+  viewport's display popover and the separate Scene settings window are
+  gone — their controls moved in, so nothing changed underneath.
+- ![new][new] **Properties always has something to say.** With nothing selected
+  it describes the scene. With a selection the triangle count leads the
+  card, and when triangles were saved that is the headline: "21,688
+  triangles −34% · was 32,728 · saved 11,040", the share of the scene,
+  and where the part ranks by weight.
+- ![new][new] **All commands in one list.** The "…" at the end of the bottom
+  toolbar opens every command that acts on the model, with its shortcut;
+  what cannot run right now is dimmed. The search is its own popup,
+  standing on its button, with suggestions that follow what is selected.
+- ![new][new] **Shortcuts that make sense together.** `H` hide · `Shift+H` hide
+  the rest · `Alt+H` show all · `S` isolate · `X` split · `P` fill holes
+  · `Ctrl+M` merge · `Ctrl+B` smart fit · `Ctrl+Shift+G` ungroup ·
+  `Ctrl+I` invert selection · `Ctrl+E` export · `Shift+M` materials. One
+  table, exact combinations, nothing fighting (Ctrl+R no longer also
+  switched the gizmo; `S` over the tree no longer did two things).
+
+**Also new**
+
+- ![new][new] **What an action saved** shows beside the triangle count for a few
+  seconds: "−427,543 (−38%)".
+- ![new][new] **Isolate says so:** a pill at the top of the viewport reads
+  "Isolated · 3 of 1,583 parts"; click it to show everything again.
+- ![new][new] **Materials dock can be resized** — drag its top edge and the edge
+  of its inspector; both are remembered, double-click resets.
+- ![new][new] The bottom toolbar never runs into the shortcut tips: when it
+  would, the tips step aside; on a viewport narrower than the toolbar
+  itself, buttons fold away from the right into the "…" list.
+
+**Fixes**
+
+- ![fix][fix] **Material names keep up.** A new material is named after its
+  colour (it used to get a random code that looked like one) and such a
+  name follows the colour. Applying a preset — or undoing one — while
+  the editor is open refreshes the editor's name, colour, sliders and
+  preview; undo gives the name back too.
+- ![fix][fix] **Fill holes can no longer leave a crack.** A fill is accepted only
+  if every edge it cuts is covered by a cap and every cap can be closed
+  completely; and the zero-area stitch triangles CAD meshes carry are
+  removed with the wall they were stitched to instead of being left
+  hanging.
+- ![fix][fix] A scene made only of added shapes showed 0 triangles in the status
+  bar and no viewport statistics.
+- ![fix][fix] The start screen's four shape tiles all showed the torus: their
+  thumbnails were rendered at the same time through one shared mesh.
+- ![fix][fix] The status bar and Properties gave different sizes for the same
+  mesh data right after loading; both count shared geometry once now.
+- ![fix][fix] Dragging a number in Shape parameters could go on following the
+  mouse after the button was released, and a click did not always put
+  the caret in the field.
+- ![fix][fix] Tooltips inside a command panel appeared instantly and cut to the
+  first words, like the toolbar's; they now wait and show the whole tip.
+
+**Faster**
+
+- ![perf][perf] **The tree and view switches, a further pass.** A tree
+  rebuild keeps the rows already on screen and only corrects, moves, adds
+  or drops what changed; scrolling fills a screenful ahead instead of a
+  row per step; a selection change no longer makes the browser lay the
+  page out twice. Only shapes that repeat many times are drawn as
+  instances now, which takes away a freeze of seconds when switching to
+  wireframe or x-ray on assemblies with many small repeated groups.
+- ![perf][perf] The split preview no longer runs on every selection change — only
+  while the Split panel is open.
+- ![perf][perf] The Materials card in the sidebar is gone, and with it a rebuild of
+  its list on every change to the tree.
+
+**Look**
+
+- ![polish][polish] The interface black is `#101010`, floating surfaces `#161616`:
+  menus, popups, tooltips, dialogs and panels are one darker tone.
+- ![polish][polish] No pure-white text on controls — one set of tokens
+  (`--tx-control…`) for buttons, dropdowns, fields and menu rows.
+- ![polish][polish] Flat slider dots, no outlines around sidebar cards, Properties as a
+  fixed dark card, tighter tree rows (25px), every control in the
+  materials bar one height, grey instead of blue for what is switched on
+  in the bottom toolbar (blue stays for the active tool).
+- ![polish][polish] Export sits on the right with Screenshot; Undo and Redo are
+  keyboard-only; the start screen uses the plain white mark.
+
+**Removed**
+
+- ![polish][polish] **The GPU path tracer** (the Render button, `pathtracer.js` and the
+  second three.js build only it used). Nothing is fetched from a CDN at
+  start-up any more.
+- ![polish][polish] The Materials card in the right sidebar (the dock is the one place
+  for materials), the "N parts in hierarchy" line, the viewport settings
+  popover and the Scene settings window (both now in Settings).
+
+**Tests**
+
+- ![new][new] 37 in-app tests (was 31) and 88 hole-filler checks (was 76): scene
+  tabs, command panels, dragging numbers, the scene card and triangle
+  delta, isolate, material names and presets, the fill options and the
+  stitch-triangle case.
+
 ## v0.10.1
 
 - ![perf][perf] **Starts without the internet.** The libraries the app
