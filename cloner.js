@@ -1174,6 +1174,9 @@
     const _treeEl = document.getElementById('tree');
     if (_treeEl) {
       const _decorateClonerRows = () => {
+        // The tree marks cloner rows itself now; this only runs for rows it
+        // has not seen, and not at all in a scene without cloners.
+        if (!window.__hasCloners) return;
         _treeEl.querySelectorAll('.tree-node.is-group:not([data-cloner-deco])').forEach(row => {
           const gid = parseInt(row.dataset.groupId || '0', 10);
           const tn = (state.treeNodes || []).find(n => n.id === gid);
@@ -1491,7 +1494,7 @@
         .cln-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
 
         /* ── Tree-row affordances (unchanged from prior session) ── */
-        .tree-node.is-cloner.cln-drop-active{outline:2px dashed var(--ac);outline-offset:-2px;background:var(--ac-tint-15)!important;border-radius:3px}
+        .tree-node.is-cloner.cln-drop-active{outline:2px dashed var(--ac);outline-offset:-2px;background:var(--ac-tint-15)!important;border-radius:4px}
         .tree-typeicon.cln{color:var(--ac-text);background:var(--ac-tint-12)}
         .tree-node.is-cloner .tree-label{color:var(--ac-text)}
       `;

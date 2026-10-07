@@ -1,5 +1,6 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
+import { fillFlatHoles, applyHoleFill } from './holefill.js?v=4';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // OBJ export uses our own streaming writer (_exportObjStreaming) to avoid
@@ -107,6 +108,7 @@ if (typeof window !== 'undefined') {
     get pushUndo() { return pushUndo; },
     get undoLast() { return undoLast; },
     get redoLast() { return redoLast; },
+    get _Prefs() { return _Prefs; },
     get refreshPropertiesPanel() { return refreshPropertiesPanel; },
     get updateGizmo() { return updateGizmo; },
     get onSceneActivated() { return (typeof onSceneActivated !== 'undefined') ? onSceneActivated : null; },
@@ -224,7 +226,27 @@ let frameCount = 0, lastFps = performance.now();
 let _sceneReady = false, _pendingFile = null, _pendingFileOpts = null;
 let _stepWorker = null, _activeParse = null;
 
+// Which messages are worth a toast.
+//
+// Warnings and errors always are. A success / info toast is for something
+// the user could not otherwise see or be sure of: the result of a mesh
+// clean-up or another heavy operation (how many holes, how many triangles),
+// a file that was written, or the reason a command did nothing. Everyday
+// editing is its own confirmation — the part is gone, the group is there,
+// the shape appeared — so those go to the log console (`) and nowhere else.
+function _toastIsRoutine(title, msg, type) {
+  if (type !== 'success' && type !== 'info') return false;
+  const t = String(title || ''), m = String(msg || '');
+  if (/^(Deleted\b|Pasted\b|Duplicated\b|Added\b|Grouped$|Group deleted$|New scene$|HDRI loaded$|STEP hierarchy$|Scene restored$|Settings reset$|No (previous|next) selection$)/.test(t)) return true;
+  if (t === 'Copied' && !/log line/.test(m)) return true;                 // parts copied for pasting
+  if (/^Cloner( created)?$/.test(t) && !/drag/i.test(m)) return true;     // keeps the "drag parts into it" hint
+  return false;
+}
 function toast(title, msg='', type='info', dur=2400) {
+  if (_toastIsRoutine(title, msg, type)) {
+    try { Log.info('[done] ' + title + (msg ? ' — ' + msg : '')); } catch (_) {}
+    return;
+  }
   const stack = $('toasts');
   const el = document.createElement('div');
   el.className = `toast ${type}`;
@@ -575,6 +597,13 @@ function initScrubber(opts) {
 function _initScrubberImpl({
   el, label = '', maxSteps, stepToVal, valToStep, format, onChange,
   initialValue = 0,
+  // true: onChange fires when the slider is let go, not while it is dragged.
+  // For sliders whose change re-evaluates the whole model (the number beside
+  // the slider still follows the drag).
+  commitOnRelease = false,
+  // With commitOnRelease: called as soon as the value starts to differ from
+  // what was last committed, so the owner can show that its result is stale.
+  onPending = null,
 }) {
   const cont = (typeof el === 'string') ? document.getElementById(el) : el;
   if (!cont) { console.warn(`[scrub] container not found: ${el}`); return null; }
@@ -623,12 +652,32 @@ function _initScrubberImpl({
   // input listener below reads range.value the snap already happened.
   _attachWheelStepBehavior(range);
 
+  let _held = false, _settle = 0;
+  if (commitOnRelease) {
+    cont.classList.add('scrub-on-release');
+    range.addEventListener('pointerdown', () => { _held = true; });
+    const letGo = () => {
+      if (!_held) return;
+      _held = false;
+      if (_pendingVal != null) { clearTimeout(_settle); _flush(); }
+    };
+    window.addEventListener('pointerup', letGo);
+    window.addEventListener('pointercancel', letGo);
+  }
   range.addEventListener('input', () => {
     _syncDisplay();
     _pendingVal = stepToVal(parseInt(range.value, 10) || 0);
+    if (commitOnRelease) {
+      if (onPending) { try { onPending(_pendingVal); } catch (_) {} }
+      // dragging: wait for the release. Wheel or arrow keys: wait for a pause.
+      clearTimeout(_settle);
+      if (!_held) _settle = setTimeout(_flush, 220);
+      return;
+    }
     if (!_rafId) _rafId = requestAnimationFrame(_flush);
   });
   range.addEventListener('change', () => {
+    if (commitOnRelease) { clearTimeout(_settle); _held = false; _flush(); return; }
     if (_rafId) { cancelAnimationFrame(_rafId); _rafId = 0; _flush(); }
   });
 
@@ -925,6 +974,334 @@ function _dropGroupsFromTree(isGone) {
     if (container) stack.push({ oldDepth, node: n, kept: !gone });
   }
   state.treeNodes = out;
+}
+
+// A small pool of background workers for per-mesh number crunching (Fill
+// holes, Decimate — see mesh-worker.js). One mesh per worker at a time; the
+// message is built only when a worker is free, so a whole-model run never
+// holds more than a few meshes' worth of copies. If workers cannot be
+// started (old browser, blocked script), `available()` is false and callers
+// do the work on the page as before.
+const _MeshWorkers = (() => {
+  let workers = null, broken = false, seq = 0;
+  const idle = [], waiting = [], pending = new Map();
+  function release(w) { const next = waiting.shift(); if (next) next(w); else idle.push(w); }
+  function giveUp(reason) {
+    if (broken) return;
+    broken = true;
+    try { console.warn('[workers] unavailable, falling back to the page thread:', reason); } catch (_) {}
+    for (const [, p] of pending) { try { p.resolve({ ok: false, error: 'worker failed' }); } catch (_) {} }
+    pending.clear();
+    for (const next of waiting.splice(0)) next(null);
+    if (workers) for (const w of workers) { try { w.terminate(); } catch (_) {} }
+    workers = null;
+  }
+  function init() {
+    if (workers || broken) return;
+    try {
+      const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
+      workers = [];
+      for (let i = 0; i < n; i++) {
+        const w = new Worker(new URL('./mesh-worker.js?v=1', import.meta.url), { type: 'module' });
+        w.onmessage = (e) => {
+          const p = pending.get(e.data && e.data.id);
+          if (!p) return;
+          pending.delete(e.data.id);
+          release(w);
+          p.resolve(e.data);
+        };
+        w.onerror = (e) => giveUp((e && e.message) || 'worker error');
+        w.onmessageerror = () => giveUp('message could not be read');
+        workers.push(w); idle.push(w);
+      }
+    } catch (e) { giveUp(e && e.message); }
+  }
+  // build() → { msg, transfer } is called when a worker is free. Resolves
+  // with the worker's reply ({ ok, … }); never rejects.
+  async function run(build) {
+    init();
+    if (broken) return { ok: false, error: 'no workers' };
+    const w = idle.length ? idle.pop() : await new Promise(r => waiting.push(r));
+    if (!w || broken) return { ok: false, error: 'no workers' };
+    let job;
+    try { job = build(); } catch (e) { release(w); return { ok: false, error: String((e && e.message) || e) }; }
+    const id = ++seq;
+    job.msg.id = id;
+    return new Promise((resolve) => {
+      pending.set(id, { resolve });
+      try { w.postMessage(job.msg, job.transfer || []); }
+      catch (e) { pending.delete(id); release(w); resolve({ ok: false, error: String((e && e.message) || e) }); }
+    });
+  }
+  return { run, available() { init(); return !broken && !!workers; }, get size() { return workers ? workers.length : 0; } };
+})();
+// Where a bare module name from the page's import map really lives (workers
+// do not get the import map).
+function _importMapUrl(name) {
+  try {
+    const el = document.querySelector('script[type="importmap"]');
+    return (el && JSON.parse(el.textContent).imports[name]) || null;
+  } catch (_) { return null; }
+}
+
+// Call this on every geometry that is put onto a mesh that has been drawn.
+//
+// The WebGPU renderer decides whether an object's buffers need uploading by
+// comparing the geometry's attribute NAMES and VERSION numbers with what it
+// drew last time — not the geometry's identity. A geometry a tool has just
+// built has the same attribute names as the one it replaces and version 0
+// like it, so the swap goes unnoticed whenever the object is not the first
+// one drawn with its material: the new buffers never reach the GPU and every
+// frame fails with "setIndexBuffer … is not of type GPUBuffer". (The first
+// swap of a loaded part happens to work, because building its BVH bumped the
+// index version; the second one does not.) Unique version numbers make every
+// swap visible. On a geometry that is already on the GPU this costs one
+// re-upload, which is why undo / redo can use it too.
+let _geomVersionSeq = 1 << 20;
+function _stampGeometry(g) {
+  if (!g || !g.attributes) return g;
+  const v = ++_geomVersionSeq;
+  const done = new Set();
+  const bump = (a) => {
+    const t = a && a.isInterleavedBufferAttribute ? a.data : a;
+    if (t && !done.has(t)) { done.add(t); t.version = v; }
+  };
+  for (const k in g.attributes) bump(g.attributes[k]);
+  if (g.index) bump(g.index);
+  return g;
+}
+
+// An icon for markup that is built thousands of rows at a time: one empty
+// <span> whose shape comes from a CSS mask. Measured on a 4,350-row tree
+// (about 10,000 icons): <i data-lucide> placeholders replaced by the icon
+// library afterwards — 325 ms per rebuild, 170 of them the replacement;
+// the full <svg> written into every row — 430 ms (5.6 MB of markup to
+// parse); a mask class — the cost of the rows alone. The mask is built once
+// per icon from the library's own path data, so the drawing is identical.
+// Falls back to a placeholder until the library is loaded.
+const _icoCache = new Map();
+function _ico(name) {
+  let str = _icoCache.get(name);
+  if (str !== undefined) return str;
+  try {
+    const L = window.lucide;
+    const key = name.replace(/(^|-)([a-z0-9])/g, (_, __, c) => c.toUpperCase());
+    const node = L && L.icons && L.icons[key];
+    if (node && L.createElement) {
+      let sheet = document.getElementById('ti-icons');
+      if (!sheet) { sheet = document.createElement('style'); sheet.id = 'ti-icons'; document.head.appendChild(sheet); }
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${L.createElement(node).innerHTML}</svg>`;
+      sheet.appendChild(document.createTextNode(`.ti-${name}{--ti-m:url("data:image/svg+xml,${encodeURIComponent(svg)}")}\n`));
+      str = `<span class="ti ti-${name}" data-icon="${name}"></span>`;
+      _icoCache.set(name, str);
+      return str;
+    }
+  } catch (_) {}
+  return `<i data-lucide="${name}"></i>`;      // not cached: the library may arrive later
+}
+
+// Per-group facts read from the tree: live parts under it, whether any of
+// them is visible, whether it is a cloner.
+function _treeGroupStats() {
+  const count = new Map(), visible = new Map(), cloner = new Set();
+  const stack = [];
+  for (const n of (state.treeNodes || [])) {
+    while (stack.length && stack[stack.length - 1].depth >= n.depth) stack.pop();
+    if (n.kind === 'part') {
+      const p = getPart(n.partId);
+      if (!p || p.deleted) continue;
+      for (const a of stack) { count.set(a.id, (count.get(a.id) || 0) + 1); if (p.visible) visible.set(a.id, true); }
+    } else {
+      if (n.kind === 'cloner' || n.obj3d?.userData?.isCloner) { cloner.add(n.id); if (n.obj3d && n.obj3d.visible !== false) visible.set(n.id, true); }
+      stack.push(n);
+    }
+  }
+  return { count, visible, cloner };
+}
+
+// The tree after parts were deleted, without rebuilding it: their rows go,
+// and each group row gets its new part count, its "empty" mark and its eye.
+// (A full rebuild of a 4,350-row tree takes a third of a second; this takes
+// a few milliseconds.) Falls back to the rebuild when a search is active or
+// the tree has not been drawn yet.
+function _treeAfterDelete(ids) {
+  const treeEl = $('tree');
+  const searching = !!(($('tree-filter') && $('tree-filter').value) || '').trim();
+  if (!treeEl || searching || !treeEl.querySelector('.tree-node')) { rebuildTree(); return; }
+  let idx = treeEl._selIndex;
+  if (!idx) {
+    idx = { parts: new Map(), groups: new Map() };
+    for (const node of treeEl.children) {
+      if (!node.dataset) continue;
+      if (node.dataset.partId) idx.parts.set(parseInt(node.dataset.partId, 10), node);
+      else if (node.dataset.groupId) idx.groups.set(parseInt(node.dataset.groupId, 10), node);
+    }
+    treeEl._selIndex = idx;
+  }
+  for (const id of ids) {
+    const r = idx.parts.get(id);
+    if (r) { r.classList.add('is-gone'); r.classList.remove('selected', 'ancestor-selected', 'flagged'); }
+  }
+  const st = _treeGroupStats();
+  _treeStatsCache = st;
+  for (const [gid, row] of idx.groups) {
+    const n = st.count.get(gid) || 0;
+    const empty = n === 0 && !st.cloner.has(gid);
+    if (row.classList.contains('is-empty-group') !== empty) row.classList.toggle('is-empty-group', empty);
+    const visNow = empty || st.visible.get(gid) === true;
+    if (!row._filled) {                           // nothing inside it yet: its classes are all there is to update
+      if (row.classList.contains('hidden-vis') === visNow) row.classList.toggle('hidden-vis', !visNow);
+      continue;
+    }
+    const text = n ? fmtNum(n) + (n === 1 ? ' part' : ' parts') : (empty ? 'empty' : '');
+    let meta = row.querySelector('.tree-meta');
+    if (text) {
+      if (!meta) { meta = document.createElement('span'); meta.className = 'tree-meta'; row.querySelector('.tree-label')?.after(meta); }
+      if (meta.textContent !== text) meta.textContent = text;
+    } else if (meta) meta.remove();
+    const vis = empty || st.visible.get(gid) === true;
+    if (row.classList.contains('hidden-vis') === vis) {
+      row.classList.toggle('hidden-vis', !vis);
+      const eye = row.querySelector('.tree-vis');
+      if (eye) eye.innerHTML = _ico(vis ? 'eye' : 'eye-off');
+    }
+  }
+  let total = 0;
+  for (const p of state.parts) if (!p.deleted) total++;
+  const sum = $('tree-summary');
+  if (sum) sum.textContent = `${total} part${total === 1 ? '' : 's'} in hierarchy`;
+  if (!_emptyWatch.nonEmpty) _emptyWatch.nonEmpty = new Set();
+  for (const [gid, n] of st.count) if (n > 0) _emptyWatch.nonEmpty.add(gid);
+  _invalidateTreeSelCache();
+  rebuildTreeSelectionOnly();
+  _treeShown = null;
+  _treeFillVisible();
+}
+
+// Flag marks on the rows that are already there (the size threshold changes
+// far more often than the tree does).
+function _treeSyncFlagged() {
+  const treeEl = $('tree');
+  if (!treeEl) return;
+  for (const row of treeEl.children) {
+    if (!row.dataset || !row.dataset.partId) continue;
+    const p = getPart(parseInt(row.dataset.partId, 10));
+    const on = !!(p && !p.deleted && p.flagged);
+    if (row.classList.contains('flagged') !== on) row.classList.toggle('flagged', on);
+  }
+}
+
+// Which group rows have something alive under them: Map<node, boolean>.
+// A cloner counts as alive (it is valid while empty) and keeps its ancestors
+// alive. The tree decides, never the scene graph.
+function _groupLiveMap() {
+  const aliveOf = new Map();
+  const open = [];
+  for (const n of (state.treeNodes || [])) {
+    while (open.length && open[open.length - 1].depth >= n.depth) open.pop();
+    if (n.kind === 'group' || n.kind === 'cloner') {
+      const isCloner = n.kind === 'cloner' || !!n.obj3d?.userData?.isCloner;
+      aliveOf.set(n, isCloner);
+      if (isCloner) for (const anc of open) aliveOf.set(anc, true);
+      open.push(n);
+    } else if (n.kind === 'part') {
+      const lp = getPart(n.partId);
+      if (lp && !lp.deleted) for (const anc of open) aliveOf.set(anc, true);
+    }
+  }
+  return aliveOf;
+}
+
+// Take group rows (and their scene objects) out, as an undo step that belongs
+// to the action just before it: `auto: true` makes Ctrl+Z undo both together
+// and Ctrl+Shift+Z redo both together (see the wrapper at the end of the
+// file). Used when a group itself is deleted and by the auto-delete setting.
+function _removeGroupRows(dead, { label = 'Removed groups', auto = true } = {}) {
+  dead = (dead || []).filter(n => n && (n.kind === 'group' || n.kind === 'cloner'));
+  if (!dead.length) return 0;
+  const liveMeshes = new Set();
+  for (const p of state.parts) {
+    if (p.deleted) continue;
+    if (p.mesh) liveMeshes.add(p.mesh);
+    if (p.instancedMesh) liveMeshes.add(p.instancedMesh);
+  }
+  try { _detachGizmo(); } catch (_) {}
+  const prevTreeNodes = _snapshotTreeNodes(state.treeNodes);
+  const removed = [], moved = [];
+  dead.sort((x, y) => y.depth - x.depth);          // children leave before parents
+  const deadSet = new Set(dead);
+  for (const n of dead) {
+    const o = n.obj3d;
+    if (o && o.parent && o !== state.partsRoot) {
+      // a live mesh can still be parented here although its row lives elsewhere
+      const rescue = [];
+      o.traverse(c => { if (c !== o && liveMeshes.has(c)) rescue.push(c); });
+      for (const c of rescue) { moved.push({ obj: c, from: c.parent, to: o.parent }); o.parent.attach(c); }
+      removed.push({ obj: o, parent: o.parent });
+      o.parent.remove(o);
+    }
+    try { state.selectedGroupIds?.delete(n.id); } catch (_) {}
+    try { state.treeCollapsed?.delete(n.id); } catch (_) {}
+  }
+  _dropGroupsFromTree(n => deadSet.has(n));
+  pushUndo({ type: 'cleanEmptyGroups', label, auto: !!auto, removed, moved,
+             prevTreeNodes, nextTreeNodes: _snapshotTreeNodes(state.treeNodes) });
+  rebuildTree();
+  applySelectionColors();
+  try { refreshPropertiesPanel(); } catch (_) {}
+  updateGizmo();
+  requestRender();
+  return dead.length;
+}
+
+// ── "Delete groups when they become empty" (Settings → Behavior) ────────────
+// Off (the default): a group you empty stays in the tree. On: a group that
+// held something before an action and holds nothing after it is removed as
+// part of that action. Groups that were already empty are left alone, so
+// turning the setting on never deletes anything by itself and a group you
+// have just created is safe.
+const _emptyWatch = { nonEmpty: null, queued: false };
+function _emptyWatchSeed() {
+  const s = new Set();
+  for (const [n, alive] of _groupLiveMap()) if (alive) s.add(n.id);
+  _emptyWatch.nonEmpty = s;
+}
+function _autoCleanCheck() {
+  _emptyWatch.queued = false;
+  const before = _emptyWatch.nonEmpty;
+  try {
+    if (before && _Prefs.get('autoDeleteEmptyGroups') === true) {
+      const dead = [];
+      for (const [n, alive] of _groupLiveMap()) if (!alive && before.has(n.id)) dead.push(n);
+      if (dead.length) {
+        const k = _removeGroupRows(dead, { label: 'Removed empty groups', auto: true });
+        try { Log.info(`Removed ${k} empty group${k === 1 ? '' : 's'} (Settings → Delete groups when they become empty)`); } catch (_) {}
+      }
+    }
+  } catch (e) { console.warn('[groups] auto-delete of empty groups failed:', e); }
+  finally { try { _emptyWatchSeed(); } catch (_) {} }
+}
+
+// Delete what is selected. When a group row itself is selected the group goes
+// with its contents; deleting only the parts inside a group leaves the group
+// (empty) in the tree.
+function _deleteSelection(label) {
+  if (!state.selected.size) return;
+  const gids = new Set();
+  for (const g of (state.selectedGroupIds || [])) { gids.add(g); const k = parseInt(String(g), 10); if (!Number.isNaN(k)) gids.add(k); }
+  deleteParts([...state.selected], label);
+  if (!gids.size) return;
+  const live = _groupLiveMap();
+  const dead = [], open = [];
+  for (const n of (state.treeNodes || [])) {
+    while (open.length && open[open.length - 1].depth >= n.depth) open.pop();
+    if (n.kind === 'part') continue;
+    const inside = gids.has(n.id) || open.some(a => a.inside);
+    if (inside && live.get(n) === false) dead.push(n);
+    open.push({ depth: n.depth, inside });
+  }
+  try { state.selectedGroupIds.clear(); } catch (_) {}
+  _removeGroupRows(dead, { label: 'Deleted group', auto: true });
 }
 
 // Change the visibility of many parts as ONE undoable step. `pairs` is a
@@ -1892,7 +2269,7 @@ function _confirmQuitDialog() {
       'display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
     const card = document.createElement('div');
     card.style.cssText =
-      'background:var(--bg1,#141414);border:1px solid var(--bg3,#252525);border-radius:8px;' +
+      'background:var(--bg1,#141414);border:1px solid var(--bg3,#252525);border-radius:10px;' +
       'padding:22px 24px;min-width:380px;max-width:480px;' +
       'box-shadow:0 12px 40px rgba(0,0,0,.5);color:var(--tx,#ededed);' +
       'font:13px/1.5 system-ui,-apple-system,Segoe UI,sans-serif';
@@ -1903,11 +2280,11 @@ function _confirmQuitDialog() {
       `</div>` +
       `<div style="display:flex;justify-content:flex-end;gap:8px">` +
         `<button data-act="cancel" style="padding:7px 14px;border:1px solid var(--bg3,#252525);` +
-          `background:transparent;color:var(--tx,#ededed);border-radius:5px;cursor:pointer;font:inherit">Cancel</button>` +
+          `background:transparent;color:var(--tx,#ededed);border-radius:6px;cursor:pointer;font:inherit">Cancel</button>` +
         `<button data-act="discard" style="padding:7px 14px;border:1px solid var(--bg3,#252525);` +
-          `background:transparent;color:var(--er,#ff6b6b);border-radius:5px;cursor:pointer;font:inherit">Don't save</button>` +
+          `background:transparent;color:var(--er,#ff6b6b);border-radius:6px;cursor:pointer;font:inherit">Don't save</button>` +
         `<button data-act="save" style="padding:7px 14px;border:1px solid var(--ac,#6b8dff);` +
-          `background:var(--ac,#6b8dff);color:#fff;border-radius:5px;cursor:pointer;font:inherit;font-weight:var(--fw-semibold)">Save</button>` +
+          `background:var(--ac,#6b8dff);color:#fff;border-radius:6px;cursor:pointer;font:inherit;font-weight:var(--fw-semibold)">Save</button>` +
       `</div>`;
     bg.appendChild(card);
     document.body.appendChild(bg);
@@ -2025,6 +2402,7 @@ const _Prefs = (() => {
     autoRestoreSession: true,
     autoFitOnLoad: true,
     confirmDestructive: true,
+    autoDeleteEmptyGroups: false,   // off: a group you empty stays in the tree
     showFps: true,
     // Camera behavior
     orbitPivot: 'cursor',    // 'scene' | 'selection' | 'cursor'
@@ -2113,7 +2491,8 @@ const _Settings = (() => {
         _toggleRow('set-welcome', 'Welcome screen on boot', p.welcomeOnBoot) +
         _toggleRow('set-restore', 'Restore last session', p.autoRestoreSession, 'Show a Resume button for your last opened file.') +
         _toggleRow('set-autofit', 'Auto-fit on load', p.autoFitOnLoad) +
-        _toggleRow('set-confirm', 'Confirm destructive actions', p.confirmDestructive, 'Ask before deletes and other irreversible ops.')
+        _toggleRow('set-confirm', 'Confirm destructive actions', p.confirmDestructive, 'Ask before deletes and other irreversible ops.') +
+        _toggleRow('set-auto-empty', 'Delete groups when they become empty', p.autoDeleteEmptyGroups === true, 'Off: a group you empty stays in the hierarchy, marked “empty”, until you delete it. On: it is removed with the action that emptied it (one undo brings both back).')
       ) +
       _section('Storage', `
         <div style="display:flex;gap:var(--space-md);flex-wrap:wrap;padding:8px 0">
@@ -2142,6 +2521,7 @@ const _Settings = (() => {
       ['set-restore', 'autoRestoreSession'],
       ['set-autofit', 'autoFitOnLoad'],
       ['set-confirm', 'confirmDestructive'],
+      ['set-auto-empty', 'autoDeleteEmptyGroups'],
       ['set-show-fps', 'showFps'],
       ['set-zoom-cursor', 'zoomToCursor'],
     ].forEach(([id, key]) => {
@@ -2475,7 +2855,7 @@ const _Actions = (() => {
     { id:'reveal',       group:'Selection',  label:'Reveal selected in tree',    kbd:'Shift+S', run: () => { try { revealSelectedInTree(); } catch (_) {} } },
     { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undoLast(); } catch (_) {} } },
     { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', run: () => { try { redoLast(); } catch (_) {} } },
-    { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', run: () => { if (state.selected.size) deleteParts([...state.selected], 'Deleted via palette'); } },
+    { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', run: () => { if (state.selected.size) _deleteSelection('Deleted via palette'); } },
     { id:'copy',         group:'Edit',       label:'Copy selection',             kbd:'Ctrl+C', run: () => { if (state.selected.size) copyParts([...state.selected]); } },
     { id:'paste',        group:'Edit',       label:'Paste',                      kbd:'Ctrl+V', run: () => pasteParts() },
     { id:'duplicate',    group:'Edit',       label:'Duplicate selection',        kbd:'Ctrl+D', run: () => { if (state.selected.size) duplicateParts([...state.selected]); } },
@@ -2484,6 +2864,7 @@ const _Actions = (() => {
     { id:'merge',        group:'Edit',       label:'Merge selection',            run: _click('btn-merge-sel') },
     { id:'smartFit',     group:'Edit',       label:'Smart-fit selection',        run: _click('btn-bbox-selected') },
     { id:'smartFitAll',  group:'Edit',       label:'Smart-fit all parts',        run: _click('btn-bbox-all') },
+    { id:'fillHoles',    group:'Edit',       label:'Fill holes in flat faces',   run: _click('btn-fill-holes') },
     { id:'flatten',      group:'Edit',       label:'Advanced flatten…',          run: _click('tree-flatten') },
     { id:'settings',     group:'App',        label:'Open settings',              kbd:'Ctrl+,', run: () => _Settings.show() },
     { id:'shortcuts',    group:'App',        label:'Keyboard shortcuts',         kbd:'?', run: () => _Shortcuts.show() },
@@ -2509,10 +2890,72 @@ const _CmdK = (() => {
     for (const ch of l) { if (ch === q[i]) i++; if (i === q.length) return 25 - (l.length - q.length); }
     return 0;
   }
+  // Every button and control in the sidebars, read from the page each time
+  // the palette opens, so the search covers them without a second list to
+  // keep in step. A button entry runs the button; a field, dropdown, slider
+  // or switch entry opens its card, scrolls to it and puts the cursor there.
+  let sidebarItems = [];
+  function _scanSidebar() {
+    const out = [];
+    const norm = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const have = new Set(_Actions.list.map(a => norm(a.label)));
+    const text = (el) => {
+      const c = el.cloneNode(true);
+      c.querySelectorAll('svg, i[data-lucide], .n, .badge, select, input, [id$="-count"], [id$="-n"]').forEach(x => x.remove());
+      return c.textContent.replace(/\(\s*\d*\s*\)/g, '').replace(/\s+\d[\d,.]*\s*$/, '').replace(/\s+/g, ' ').trim();
+    };
+    const reveal = (el) => {
+      const head = el.closest('.section')?.querySelector('.section-h');
+      if (head && head.classList.contains('collapsed')) head.click();
+      const target = el.closest('.toggle, .field, .size-field, .scrub') || el;
+      setTimeout(() => {
+        try { target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) {}
+        target.classList.add('cmdk-flash');
+        setTimeout(() => target.classList.remove('cmdk-flash'), 1500);
+      }, 40);
+    };
+    const add = (group, label, run) => {
+      label = (label || '').trim();
+      if (!label || label.length > 60) return;
+      const k = norm(label);
+      if (!k || have.has(k)) return;
+      have.add(k);
+      out.push({ id: 'sb:' + group + ':' + k, group, label, run });
+    };
+    for (const sec of document.querySelectorAll('#sidebar-right .section')) {
+      const group = (sec.querySelector('.section-h span')?.textContent || 'Sidebar').trim();
+      for (const el of sec.querySelectorAll('.section-b button, .section-b select, .section-b input, .section-b .scrub-label')) {
+        if (el.closest('[hidden]') || el.style.display === 'none') continue;
+        if (el.matches('button')) {
+          add(group, text(el) || el.title || el.dataset.tip, () => { reveal(el); setTimeout(() => {
+            if (el.disabled) toast(text(el) || 'Not available', 'Not available right now — it usually needs a selection', 'info', 2600);
+            else el.click();
+          }, 120); });
+        } else if (el.matches('.scrub-label')) {
+          const scrub = el.closest('.field') || el.parentElement;
+          add(group, el.textContent, () => { reveal(scrub); setTimeout(() => scrub.querySelector('.scrub-value')?.focus(), 200); });
+        } else if (el.matches('input[type=checkbox]')) {
+          const row = el.closest('.toggle');
+          add(group, row ? text(row) : el.title, () => { reveal(el); setTimeout(() => el.click(), 120); });
+        } else if (el.matches('input') && (el.type === 'file' || el.type === 'hidden' || el.classList.contains('scrub-range'))) {
+          continue;
+        } else {
+          const field = el.closest('.field, .size-field, .btn-row');
+          const lab = field?.querySelector('label span, label, :scope > span')?.textContent || el.title || el.placeholder || '';
+          const label = (el.matches('select') ? (lab || el.title) : (el.placeholder || lab || el.title)).split(/[.;—]/)[0];
+          add(group, label, () => { reveal(el); setTimeout(() => { try { el.focus(); el.select?.(); if (el.matches('select')) el.showPicker?.(); } catch (_) {} }, 220); });
+        }
+      }
+    }
+    for (const el of document.querySelectorAll('#sidebar-left .tree-toolbar button')) {
+      add('Parts tree', (el.title || el.dataset.tip || el.getAttribute('aria-label') || '').replace(/\s*\([^)]*\)\s*$/, ''), () => el.click());
+    }
+    return out;
+  }
   function _render(query) {
     const list = document.getElementById('cmdk-list');
     if (!list) return;
-    const items = _Actions.list
+    const items = _Actions.list.concat(sidebarItems)
       .map(a => ({ a, s: _score(query, a.label) + _score(query, a.group) * 0.3 }))
       .filter(x => x.s > 0)
       .sort((x, y) => y.s - x.s)
@@ -2567,6 +3010,7 @@ const _CmdK = (() => {
     const bg = document.getElementById('cmdk-modal');
     const input = document.getElementById('cmdk-input');
     if (!bg || !input) return;
+    try { sidebarItems = _scanSidebar(); } catch (e) { console.warn('[cmdk] sidebar scan failed:', e); sidebarItems = []; }
     input.value = ''; activeIdx = 0; _render('');
     bg.classList.add('show');
     setTimeout(() => input.focus(), 30);
@@ -2966,10 +3410,59 @@ async function initRenderer() {
   _RendererOwner.attachDeviceLostHandler(renderer);
 }
 
+// One camera object that can be perspective or orthographic.
+//
+// Switching between Cam and Top / Front / Side used to build a new camera
+// object. The WebGPU renderer keeps everything it has prepared for drawing —
+// one render object per part, with its bindings — per camera OBJECT, so a new
+// camera meant preparing all of it again: seconds on a 1,500-part model,
+// every time the view changed. This camera changes its projection in place
+// and stays the same object, so nothing is rebuilt.
+//
+// It is a PerspectiveCamera that can also produce an orthographic matrix and
+// then answers to isOrthographicCamera, with the left / right / top / bottom /
+// zoom that OrbitControls, TransformControls and the raycaster read.
+class DualCamera extends THREE.PerspectiveCamera {
+  constructor(fov, aspect, near, far) {
+    super(fov, aspect, near, far);
+    this._isOrtho = false;
+    this._orthoHalfH = 1;                 // half the visible height at zoom 1
+  }
+  get top() { return this._orthoHalfH; }
+  set top(v) { if (Number.isFinite(v) && v > 0) this._orthoHalfH = v; }
+  get bottom() { return -this._orthoHalfH; }
+  set bottom(_) {}
+  get right() { return this._orthoHalfH * this.aspect; }
+  set right(_) {}
+  get left() { return -this._orthoHalfH * this.aspect; }
+  set left(_) {}
+  setOrtho(on, halfH) {
+    this._isOrtho = !!on;
+    this.isPerspectiveCamera = !on;
+    this.isOrthographicCamera = !!on;
+    this.type = on ? 'OrthographicCamera' : 'PerspectiveCamera';
+    if (on && Number.isFinite(halfH) && halfH > 0) this._orthoHalfH = halfH;
+    this.zoom = 1;
+    this.updateProjectionMatrix();
+    return this;
+  }
+  updateProjectionMatrix() {
+    if (!this._isOrtho) return super.updateProjectionMatrix();
+    const h = this._orthoHalfH / (this.zoom || 1), w = h * this.aspect;
+    this.projectionMatrix.makeOrthographic(-w, w, h, -h, this.near, this.far, this.coordinateSystem);
+    this.projectionMatrixInverse.copy(this.projectionMatrix).invert();
+  }
+  copy(source, recursive) {
+    super.copy(source, recursive);
+    if (source && source._orthoHalfH !== undefined) { this._orthoHalfH = source._orthoHalfH; this.setOrtho(source._isOrtho, source._orthoHalfH); this.zoom = source.zoom; this.updateProjectionMatrix(); }
+    return this;
+  }
+}
+
 function initScene() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x222831);
-  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100000);
+  camera = new DualCamera(45, 1, 0.1, 100000);
   camera.up.set(0, 0, 1);
   // Empty-scene framing: position camera as if a 100 mm cube sat on the
   // floor at the origin (centre 0,0,50). Same dir + margin formula as
@@ -3869,6 +4362,13 @@ const _gizmoHud = (() => {
       pos:   state.pivot.position.clone(),
       quat:  state.pivot.quaternion.clone(),
       scale: state.pivot.scale.clone(),
+      // The readout is labelled with the GIZMO's axes, which are world axes
+      // (or the pivot's own, in local mode) — not the axes of whatever the
+      // pivot is parented to. In a Z-up scene the parts sit under a rotated
+      // root: dragging the gizmo's Y arrow changes the pivot's local Z, and
+      // a readout taken from pivot.position showed "Y +0.00" all the way.
+      wpos:  state.pivot.getWorldPosition(new THREE.Vector3()),
+      wquat: state.pivot.getWorldQuaternion(new THREE.Quaternion()),
     };
     update();
     el.classList.add('show');
@@ -3895,8 +4395,11 @@ const _gizmoHud = (() => {
     // fall back to showing all three so the readout never goes blank.
     if (!axis) { has.x = has.y = has.z = true; }
     let body = '';
+    const local = state.gizmo?.space === 'local';
     if (mode === 'translate') {
-      _v.copy(state.pivot.position).sub(before.pos);
+      // world-space travel, turned into the pivot's own axes in local mode
+      state.pivot.getWorldPosition(_v).sub(before.wpos);
+      if (local) _v.applyQuaternion(_qInv.copy(before.wquat).invert());
       const parts = [];
       if (has.x) parts.push(`<span class="ghud-x">X ${_signed(_v.x)}</span>`);
       if (has.y) parts.push(`<span class="ghud-y">Y ${_signed(_v.y)}</span>`);
@@ -3909,9 +4412,11 @@ const _gizmoHud = (() => {
       }
       body = `<span class="ghud-mode">MOVE</span>` + parts.join('');
     } else if (mode === 'rotate') {
-      // Δq = qNow * qBefore⁻¹  →  Euler XYZ in degrees
-      _qInv.copy(before.quat).invert();
-      _q.copy(state.pivot.quaternion).multiply(_qInv);
+      // Δq about the gizmo's axes → Euler XYZ in degrees.
+      // world mode: qNow · qBefore⁻¹ (world frame); local mode: qBefore⁻¹ · qNow.
+      _qInv.copy(before.wquat).invert();
+      state.pivot.getWorldQuaternion(_q);
+      if (local) _q.premultiply(_qInv); else _q.multiply(_qInv);
       _e.setFromQuaternion(_q, 'XYZ');
       const r = {
         x: THREE.MathUtils.radToDeg(_e.x),
@@ -3960,8 +4465,12 @@ function setBackground(mode) {
   }
 
   if (mode === 'dark') {
-    scene.background = new THREE.Color(0x3c3c3c);
-    renderer.setClearColor(0x3c3c3c, 1);
+    // Plasticity's viewport grey: a cool, slightly lifted #27272b on screen.
+    // The value here is what goes INTO the tone mapper — the neutral curve
+    // darkens low values, so #444446 is what comes out as #27272b (the old
+    // 0x3c3c3c came out as a near-black #1e1e1e).
+    scene.background = new THREE.Color(0x444446);
+    renderer.setClearColor(0x444446, 1);
   }
   else if (mode === 'grad') {
     // Studio gradient — computed entirely in the GPU shader via Three.js TSL
@@ -4326,15 +4835,9 @@ function onResize() {
   if (!camera || !renderer) return;
   const c = $('canvas');
   const w = c.clientWidth, h = Math.max(1, c.clientHeight);
-  if (camera.isOrthographicCamera) {
-    // Preserve vertical extent; rescale horizontal to match the new aspect.
-    const halfH = (camera.top - camera.bottom) / 2;
-    const halfW = halfH * (w / h);
-    camera.left = -halfW; camera.right = halfW;
-    camera.top  =  halfH; camera.bottom = -halfH;
-  } else {
-    camera.aspect = w / h;
-  }
+  // Both projections follow the aspect (orthographic keeps its vertical
+  // extent and derives the horizontal one from it).
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h, false);
   requestRender();
@@ -4378,9 +4881,13 @@ function tick() {
           // to Top/Front/Side. Skipped when rotation is disabled (i.e., we
           // locked the camera into a standard view) — pan + zoom alone
           // shouldn't drop us out of ortho top/front/side.
-          if (_stdViewActive && controls.enableRotate !== false) {
-            _syncViewPill('persp');
-            _stdViewActive = false;
+          // Only a rotation leaves it: the direction from the target to the
+          // camera changes. A pan moves both, a zoom moves neither. (The
+          // controls run without damping, so there is no leftover spin to
+          // mistake for one.)
+          if (_stdViewActive &&
+              _TICK_PREV_TGT.copy(camera.position).sub(controls.target).normalize().dot(_stdViewDir) < 0.999999) {
+            _leaveAxisView();
           }
         }
       } catch (e) { _logTickErr('controls', e); }
@@ -5121,9 +5628,16 @@ function _buildHierarchyFromScene(scene, meshToPart) {
       });
       leafCount++;
     } else {
-      // Group / null-object node. Skip nodes with no descendants — they only
-      // add visual noise (e.g., the gltf scene wrapper one level down).
-      if (!obj.children || obj.children.length === 0) return;
+      // Group / null-object node. An empty container (an assembly with
+      // nothing in it) is listed like any other group — the tree shows what
+      // the file holds. Only childless things that are not containers are
+      // skipped: geometry that was not turned into a part, cameras, lights,
+      // bones and the scene-file marker.
+      if (!obj.children || obj.children.length === 0) {
+        if (obj.isMesh || obj.isLine || obj.isPoints || obj.isCamera || obj.isLight || obj.isBone) return;
+        if (obj.name === '__stepOptimizerSceneState__' || (obj.userData && obj.userData.__stepOptimizerSceneState__)) return;   // Save scene's marker node
+        if (depth === 0 && !obj.name) return;      // anonymous top-level wrapper
+      }
       nodeId = nextGroupId--;
       const raw = obj.name && obj.name !== '' ? obj.name : 'Group';
       state.treeNodes.push({
@@ -6974,28 +7488,27 @@ function _applySceneScale() {
 
 function _applyCameraProjection() {
   if (!camera || !controls) return;
-  const target = controls.target.clone();
-  const pos = camera.position.clone();
-  const up = camera.up.clone();
-  const aspect = (camera.aspect != null) ? camera.aspect : (camera.right - camera.left) / (camera.top - camera.bottom);
-  const near = camera.near, far = camera.far;
-  let next;
-  if (state.cameraProjection === 'ortho') {
-    if (camera.isOrthographicCamera) return;
-    const dist = pos.distanceTo(target);
-    const halfH = dist * Math.tan((camera.fov || state.cameraFov) * Math.PI / 360);
-    const halfW = halfH * aspect;
-    next = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, near, far);
+  const wantOrtho = state.cameraProjection === 'ortho';
+  if (!!camera.isOrthographicCamera === wantOrtho) return;
+  const target = controls.target;
+  const dist = camera.position.distanceTo(target) || 1;
+  const tanHalf = Math.tan((state.cameraFov || camera.fov || 45) * Math.PI / 360);
+  if (wantOrtho) {
+    // same height on screen at the orbit target as the perspective view had
+    camera.setOrtho(true, dist * tanHalf);
   } else {
-    if (camera.isPerspectiveCamera) return;
-    next = new THREE.PerspectiveCamera(state.cameraFov, aspect, near, far);
+    // …and back: stand where a perspective camera sees that same height, so
+    // the model does not jump in size when the projection changes
+    const visHalf = camera._orthoHalfH / (camera.zoom || 1);
+    const d = visHalf / tanHalf;
+    const dir = camera.position.clone().sub(target);
+    if (dir.lengthSq() < 1e-12) dir.set(0, 0, 1); else dir.normalize();
+    camera.setOrtho(false);
+    camera.fov = state.cameraFov || camera.fov;
+    if (Number.isFinite(d) && d > 0) camera.position.copy(target).addScaledVector(dir, d);
+    camera.updateProjectionMatrix();
   }
-  next.position.copy(pos);
-  next.up.copy(up);
-  next.lookAt(target);
-  next.updateProjectionMatrix();
-  camera = next;
-  controls.object = camera;
+  camera.lookAt(target);
   controls.update();
   if (state.gizmo) state.gizmo.camera = camera;
 }
@@ -8228,40 +8741,61 @@ function _applySnap() {
   }
 }
 
-// ── Orientation gizmo (bottom-left) ─────────────────────────────────────────
-// SVG-based: zero GPU cost, refreshed only when the viewport renders.
+// ── Orientation gizmo (top-right) ───────────────────────────────────────────
+// A small shaded cube that turns with the camera. The three axes start at one
+// corner of the cube and run along its edges (the cube sits IN the corner of
+// the axes, as in Plasticity — they do not pass through its centre); each
+// ends just past the cube in a labelled dot. Click a dot or a face to look
+// along that axis. SVG: zero GPU cost, refreshed only when the viewport
+// renders.
 const _AXG = {
   built: false,
   m3: new THREE.Matrix3(),
   v: new THREE.Vector3(),
-  colors: { x: '#ff5d6c', y: '#5cd673', z: '#5fa8ff' },
-  // line endpoint length (svg coords; viewBox is -44..44)
-  R_LINE: 22,
-  // handle distance from origin
-  R_HANDLE: 32,
+  colors: { x: ['#ff8a8f', '#f0525f'], y: ['#7fe08f', '#3fb85a'], z: ['#7fbaff', '#3b8cf2'] },   // [highlight, body] of each dot
+  S: 11,            // half the cube's edge (svg units; viewBox is -44..44)
+  D: 10,            // how far past the cube an axis runs before its dot
+  R: 6.6,           // dot radius
+  // six faces: outward normal and the four corners, counter-clockwise from outside
+  faces: [
+    { id: 'px', n: [ 1, 0, 0], c: [[1,-1,-1],[1, 1,-1],[1, 1, 1],[1,-1, 1]] },
+    { id: 'nx', n: [-1, 0, 0], c: [[-1, 1,-1],[-1,-1,-1],[-1,-1, 1],[-1, 1, 1]] },
+    { id: 'py', n: [ 0, 1, 0], c: [[1, 1,-1],[-1, 1,-1],[-1, 1, 1],[1, 1, 1]] },
+    { id: 'ny', n: [ 0,-1, 0], c: [[-1,-1,-1],[1,-1,-1],[1,-1, 1],[-1,-1, 1]] },
+    { id: 'pz', n: [ 0, 0, 1], c: [[-1,-1, 1],[1,-1, 1],[1, 1, 1],[-1, 1, 1]] },
+    { id: 'nz', n: [ 0, 0,-1], c: [[-1, 1,-1],[1, 1,-1],[1,-1,-1],[-1,-1,-1]] },
+  ],
 };
 function buildAxisGizmo() {
   const svg = document.getElementById('axis-gizmo-svg');
   if (!svg || _AXG.built) return;
   const c = _AXG.colors;
-  let html = '';
-  // Origin dot
-  html += `<circle cx="0" cy="0" r="2" fill="#a0a0a0"/>`;
-  // Three axis lines (positive direction only)
+  let html = '<defs>';
   for (const a of ['x', 'y', 'z']) {
-    html += `<line id="axg-line-${a}" x1="0" y1="0" x2="0" y2="0" stroke="${c[a]}" stroke-width="2.4" stroke-linecap="round"/>`;
+    html += `<radialGradient id="axg-g-${a}" cx="34%" cy="30%" r="75%"><stop offset="0" stop-color="${c[a][0]}"/><stop offset="1" stop-color="${c[a][1]}"/></radialGradient>`;
   }
-  // Three handles: positive axes only — filled disc + white label.
+  html += `<filter id="axg-shadow" x="-40%" y="-40%" width="180%" height="190%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.8" flood-color="#000" flood-opacity=".42"/></filter>`;
+  html += '</defs>';
+  // the three axis stems, from the far end of a cube edge out to the dot
+  for (const a of ['x', 'y', 'z']) {
+    html += `<line class="axg-stem" id="axg-l-${a}" stroke="${c[a][1]}" stroke-width="1.5" stroke-linecap="round"/>`;
+  }
+  html += '<g id="axg-cube" filter="url(#axg-shadow)">';
+  for (const f of _AXG.faces) {
+    html += `<polygon class="axg-face" id="axg-f-${f.id}" data-axis="${f.id}" points="" stroke-width="1.1" stroke-linejoin="round" style="cursor:pointer;display:none"></polygon>`;
+  }
+  html += '</g>';
+  // Three handles: positive axes only — a small glossy dot with the axis letter.
   for (const a of ['x', 'y', 'z']) {
     const id = 'p' + a;
     html += `<g class="axg-handle" id="axg-h-${id}" data-axis="${id}" style="cursor:pointer">
-      <circle r="9" fill="${c[a]}" stroke="${c[a]}" stroke-width="1.6"/>
-      <text text-anchor="middle" dominant-baseline="central" font-size="10" font-weight="700" fill="#fff">${a.toUpperCase()}</text>
+      <circle r="${_AXG.R}" fill="url(#axg-g-${a})" stroke="rgba(255,255,255,.28)" stroke-width=".6"/>
+      <text text-anchor="middle" dominant-baseline="central" font-size="8" font-weight="600" fill="#fff" style="pointer-events:none;user-select:none">${a.toUpperCase()}</text>
     </g>`;
   }
   svg.innerHTML = html;
-  svg.querySelectorAll('.axg-handle').forEach(el => {
-    el.addEventListener('click', ev => { ev.stopPropagation(); alignViewToAxis(el.dataset.axis); });
+  svg.querySelectorAll('.axg-handle, .axg-face').forEach(el => {
+    el.addEventListener('click', ev => { ev.stopPropagation(); _goAxisView(el.dataset.axis); });
   });
   _AXG.built = true;
 }
@@ -8275,32 +8809,45 @@ function updateAxisGizmo() {
     _AXG.v.set(x, y, z).applyMatrix3(_AXG.m3);
     return { x: _AXG.v.x, y: -_AXG.v.y, z: _AXG.v.z }; // SVG y is flipped
   };
-  const dirs = {
-    px: project(1, 0, 0),
-    py: project(0, 1, 0),
-    pz: project(0, 0, 1),
-  };
-  // Lines: positive end only.
-  // In Three.js view space the camera looks down -Z, so a direction whose
-  // view-space z is POSITIVE points toward the viewer (out of the screen)
-  // and should stay bright; negative z points into the screen → dim.
-  for (const a of ['x', 'y', 'z']) {
-    const line = document.getElementById(`axg-line-${a}`);
-    const p = dirs['p' + a];
-    line.setAttribute('x2', (p.x * _AXG.R_LINE).toFixed(2));
-    line.setAttribute('y2', (p.y * _AXG.R_LINE).toFixed(2));
-    line.style.opacity = p.z < 0 ? 0.32 : 1;
+  // Cube: the faces that look at the viewer (view-space z > 0), shaded by how
+  // much they face a light from the upper left. The stroke takes the face's
+  // own colour, which rounds the corners off.
+  const S = _AXG.S;
+  for (const f of _AXG.faces) {
+    const el = document.getElementById('axg-f-' + f.id);
+    const n = project(f.n[0], f.n[1], f.n[2]);
+    if (n.z <= 0.02) { el.style.display = 'none'; continue; }
+    let pts = '';
+    for (const k of f.c) { const p = project(k[0] * S, k[1] * S, k[2] * S); pts += p.x.toFixed(2) + ',' + p.y.toFixed(2) + ' '; }
+    el.setAttribute('points', pts.trim());
+    const lit = Math.max(0, Math.min(1, -0.40 * n.x + -0.62 * n.y + 0.68 * n.z));   // n.y is already flipped (up = negative)
+    const g = Math.round(150 + 98 * lit);
+    const col = `rgb(${g},${g},${Math.min(255, g + 4)})`;
+    el.setAttribute('fill', col);
+    el.setAttribute('stroke', col);
+    el.style.display = '';
   }
-  // Handles: depth-sort so the farthest (most negative z) is painted first
-  // and the nearest (most positive z) ends up on top of the stack.
-  const order = Object.keys(dirs).sort((a, b) => dirs[a].z - dirs[b].z);
-  for (const id of order) {
-    const g = document.getElementById('axg-h-' + id);
-    const p = dirs[id];
-    g.setAttribute('transform', `translate(${(p.x * _AXG.R_HANDLE).toFixed(2)},${(p.y * _AXG.R_HANDLE).toFixed(2)})`);
-    g.style.opacity = p.z < 0 ? 0.42 : 1;
-    svg.appendChild(g);
+  // Axes: from the cube's corner (-S,-S,-S) along an edge, D past the cube.
+  const order = ['x', 'y', 'z'].map(a => {
+    const e = a === 'x' ? [1, 0, 0] : a === 'y' ? [0, 1, 0] : [0, 0, 1];
+    const at = (t) => project(-S + e[0] * t, -S + e[1] * t, -S + e[2] * t);
+    return { a, from: at(2 * S), to: at(2 * S + _AXG.D) };
+  }).sort((p, q) => p.to.z - q.to.z);
+  // Depth order: stems and dots that end behind the cube's centre are drawn
+  // before it, the others after it, nearest last.
+  const cube = document.getElementById('axg-cube');
+  let cubePlaced = false;
+  for (const o of order) {
+    const g = document.getElementById('axg-h-p' + o.a), l = document.getElementById('axg-l-' + o.a);
+    if (!cubePlaced && o.to.z >= 0) { svg.appendChild(cube); cubePlaced = true; }
+    l.setAttribute('x1', o.from.x.toFixed(2)); l.setAttribute('y1', o.from.y.toFixed(2));
+    l.setAttribute('x2', o.to.x.toFixed(2));   l.setAttribute('y2', o.to.y.toFixed(2));
+    g.setAttribute('transform', `translate(${o.to.x.toFixed(2)},${o.to.y.toFixed(2)})`);
+    const dim = o.to.z < -0.5 ? 0.55 : 1;
+    g.style.opacity = dim; l.style.opacity = dim * 0.9;
+    svg.appendChild(l); svg.appendChild(g);
   }
+  if (!cubePlaced) svg.appendChild(cube);
 }
 function alignViewToAxis(axisId) {
   if (!camera || !controls) return;
@@ -8328,7 +8875,6 @@ function alignViewToAxis(axisId) {
 // (Blender/glTF) scenes both come out right. The single-button counterpart
 // to the axis-gizmo's six face-arrows.
 function _setStandardView(view) {
-  if (!camera || !controls) return;
   const upAxis = (state.sceneUpAxis === 'y') ? 'y' : 'z';
   // axisId is the camera position vector ("p<axis>"=positive end of axis,
   // "n<axis>"=negative). Convention matches alignViewToAxis above.
@@ -8342,7 +8888,27 @@ function _setStandardView(view) {
     if (view === 'front') axisId = 'pz';
     if (view === 'side')  axisId = 'px';
   }
-  if (!axisId) return;
+  if (axisId) _goAxisView(axisId);
+}
+
+// Look straight along an axis, orthographic — from the view pill, a shortcut
+// or the view cube. Six directions, each with a name in the pill. It is not a
+// dead end: orbiting out of it drops back to the perspective camera where
+// you are (see _leaveAxisView), and pan and zoom stay inside it.
+const _stdViewDir = new THREE.Vector3();
+function _goAxisView(axisId) {
+  if (!camera || !controls) return;
+  const zUp = state.sceneUpAxis !== 'y';
+  const up = zUp ? 'z' : 'y', fwd = zUp ? 'y' : 'z';
+  const ax = axisId[1], pos = axisId[0] === 'p';
+  // name + which pill entry (if any) this is
+  let label, view = null;
+  if (ax === up) { label = pos ? 'Top' : 'Bottom'; if (pos) view = 'top'; }
+  else if (ax === 'x') { label = pos ? 'Side' : 'Left'; if (pos) view = 'side'; }
+  else {
+    const front = zUp ? !pos : pos;               // Z-up: front is seen from -Y; Y-up: from +Z
+    label = front ? 'Front' : 'Back'; if (front) view = 'front';
+  }
   // Standard CAD/CAM views are always orthographic — flip the projection
   // first so the alignment lands in ortho space.
   if (state.cameraProjection !== 'ortho') {
@@ -8354,17 +8920,33 @@ function _setStandardView(view) {
     if (fovRow) fovRow.style.opacity = '.42';
   }
   alignViewToAxis(axisId);
-  _syncViewPill(view);
+  _syncViewPill(view || 'axis', label);
   _stdViewActive = true;
-  // Standard ortho views are CAD "looking-down-an-axis" projections — rotating
-  // the camera off-axis would defeat their purpose (top no longer top, etc).
-  // Lock rotation while in any standard view; pan + zoom stay free so the
-  // user can still navigate the construction plane. _setPerspectiveView
-  // re-enables rotation when the user escapes back to free 3D.
-  if (controls) controls.enableRotate = false;
+  _stdViewDir.copy(camera.position).sub(controls.target).normalize();
+  controls.enableRotate = true;
   // Switch the grid plane to match the camera-facing plane so the user sees
   // a real grid in front / side ortho views (not just an edge-on smear).
-  state.gridPlane = (view === 'front') ? 'xz' : (view === 'side') ? 'yz' : 'xy';
+  state.gridPlane = (ax === up) ? 'xy' : (ax === 'x') ? 'yz' : 'xz';
+  if (!zUp) state.gridPlane = (ax === 'y') ? 'xy' : (ax === 'x') ? 'yz' : 'xz';
+  requestRender();
+}
+// The user orbited out of an axis view: back to the perspective camera,
+// looking from where they are now (no re-framing).
+function _leaveAxisView() {
+  _stdViewActive = false;
+  if (state.cameraProjection !== 'persp') {
+    state.cameraProjection = 'persp';
+    _applyCameraProjection();
+    const sel = document.getElementById('cam-projection');
+    if (sel) sel.value = 'persp';
+    const fovRow = document.getElementById('cam-fov-row');
+    if (fovRow) fovRow.style.opacity = '1';
+  }
+  const upY = (state.sceneUpAxis === 'y');
+  camera.up.set(0, upY ? 1 : 0, upY ? 0 : 1);
+  camera.lookAt(controls.target);
+  _syncViewPill('persp');
+  state.gridPlane = 'xy';
   requestRender();
 }
 
@@ -8406,9 +8988,9 @@ function _setPerspectiveView() {
 // by every code path that changes the active camera view (the pill itself,
 // the standard-view setters, and the tick orbit-detector that snaps back
 // to "Cam" the moment the user starts dragging).
-function _syncViewPill(view) {
+function _syncViewPill(view, label) {
   const labels = { persp: 'Cam', top: 'Top', front: 'Front', side: 'Side' };
-  const lbl = labels[view] || 'Cam';
+  const lbl = label || labels[view] || 'Cam';
   const lblEl = document.querySelector('#vp-view-pill .vp-pill-label');
   if (lblEl) lblEl.textContent = lbl;
   document.querySelectorAll('#vp-view-pill-menu .vp-pill-item').forEach(b => {
@@ -8500,8 +9082,8 @@ function rebuildTree() {
     node.dataset.partId = p.partId;
     const colorHex = '#' + p.originalColor.getHexString();
     const eye = p.visible
-      ? `<i data-lucide="eye"></i>`
-      : `<i data-lucide="eye-off"></i>`;
+      ? _ico('eye')
+      : _ico('eye-off');
     const inst = _instBadge(p.group ? p.group.parts.length : 0);
     node.innerHTML = `<span class="tree-label">${escapeHtml(p.name)}${inst}</span><span class="tree-meta">${fmtNum(p.triCount)} tri</span><span class="tree-iconcol"><span class="tree-vis">${eye}</span><span class="tree-color" style="background:${colorHex}"></span></span>`;
     frag.appendChild(node);
@@ -8609,6 +9191,9 @@ function _rebuildTreeHierarchical() {
     }
   }
 
+  if (!_emptyWatch.nonEmpty) _emptyWatch.nonEmpty = new Set();
+  for (const [gid, alive] of groupAnyAlive) if (alive) _emptyWatch.nonEmpty.add(gid);
+
   // ── Ancestor highlight (C4D-style) ───────────────────────────────────
   // When the user clicks a part (or a group), every ancestor group up to the
   // root gets a subdued highlight so they can quickly trace the selection
@@ -8661,19 +9246,14 @@ function _rebuildTreeHierarchical() {
     for (const a of ancestorStack) {
       if (collapsed.has(a.id)) { collapseHidden = true; break; }
     }
-    // emptyGroupHidden: this group has no surviving (non-deleted) parts in
-    // its subtree. Skip — phantom empty containers confuse users into
-    // thinking delete didn't work.
-    //
-    // EXCEPTION: cloner nodes are valid even when empty (the user creates a
-    // standalone Cloner and then drags parts into it C4D-style — hiding the
-    // row before they can drop anything would make the feature unreachable).
-    // The pre-hook in cloner.js temporarily flips kind to 'group' during
-    // render, so we can't use kind to identify them — check the backing
-    // THREE.Group's userData.isCloner flag instead.
-    let emptyGroupHidden = false;
-    if (n.kind === 'group' && groupAnyAlive.get(n.id) === false && !n.obj3d?.userData?.isCloner) emptyGroupHidden = true;
-    const hidden = searchHidden || (collapseHidden && !ft) || emptyGroupHidden;
+    // A group is never hidden for being empty. It used to be (once every
+    // part in it was deleted or dragged out), which made groups vanish from
+    // the hierarchy while they still existed in the scene. An empty group is
+    // listed, says "empty", and leaves the tree only when it is deleted — by
+    // hand, or by the "Delete groups when they become empty" setting.
+    // (Cloner rows are identified by userData.isCloner on their THREE.Group:
+    // cloner.js flips their kind to 'group' while the tree renders.)
+    const hidden = searchHidden || (collapseHidden && !ft);
     if (emitted < MAX) {
       const row = document.createElement('div');
       row.className = 'tree-node';
@@ -8686,13 +9266,12 @@ function _rebuildTreeHierarchical() {
       // Space-separated ancestor group ids — empty string for top-level rows.
       // Used by _toggleGroupCollapseFast to recompute visibility on toggle.
       row.dataset.ancestorGroups = ancestorStack.map(a => a.id).join(' ');
-      // Build the per-row indent prefix: N-1 plain vertical lines plus a
-      // single elbow connector at this row's own depth. Stitched once per
-      // row via string concat so it stays under the rebuild's frag-append
-      // budget on big trees.
-      let indentHtml = '';
-      for (let d = 0; d < n.depth - 1; d++) indentHtml += '<span class="tree-line"></span>';
-      if (n.depth > 0) indentHtml += '<span class="tree-line elbow"></span>';
+      // The row is only a shell here: its classes, ids and place in the
+      // list. What is inside it (indent lines, icons, name, counts) is
+      // written by _fillTreeRow when the row comes near the viewport — on a
+      // 4,350-row tree that is the difference between writing 4 MB of markup
+      // per rebuild and writing the sixty rows that can be seen.
+      row._n = n;
 
       if (n.kind === 'group') {
         row.classList.add('is-group', 'is-asm');
@@ -8705,22 +9284,15 @@ function _rebuildTreeHierarchical() {
         else if (state.selectedGroupIds.size && ancestorStack.some(a => state.selectedGroupIds.has(a.id))) row.classList.add('ancestor-selected');
         const isCollapsed = collapsed.has(n.id);
         if (isCollapsed) row.classList.add('collapsed');
-        // C4D-style row: small +/- box, colored type icon, colored label.
-        // 'archive' icon reads as "container of stuff" without colliding
-        // visually with the leaf 'box' icon.
-        const sign = isCollapsed ? '+' : '−';
-        const grpVisible = groupAnyVisible.get(n.id) !== false;
+        const isEmptyGroup = groupAnyAlive.get(n.id) === false && !n.obj3d?.userData?.isCloner;
+        if (isEmptyGroup) row.classList.add('is-empty-group');
+        const grpVisible = isEmptyGroup || groupAnyVisible.get(n.id) !== false;
         if (!grpVisible) row.classList.add('hidden-vis');
-        const grpEye = grpVisible ? `<i data-lucide="eye"></i>` : `<i data-lucide="eye-off"></i>`;
-        row.innerHTML = indentHtml +
-          `<span class="tree-expand" data-toggle="${n.id}">${sign}</span>` +
-          `<span class="tree-typeicon asm"><i data-lucide="archive"></i></span>` +
-          `<span class="tree-label">${escapeHtml(n.name)}</span>` +
-          (groupPartCount.get(n.id) ? `<span class="tree-meta">${fmtNum(groupPartCount.get(n.id))} part${groupPartCount.get(n.id) === 1 ? '' : 's'}</span>` : '') +
-          `<span class="tree-iconcol"><span class="tree-vis" data-act="vis">${grpEye}</span></span>`;
+        if (n.obj3d?.userData?.isCloner) { row.classList.add('is-cloner'); row.dataset.clonerDeco = '1'; }
       } else {
         const p = getPart(n.partId);
         row.classList.add('is-part');
+        if (p.deleted) row.classList.add('is-gone');
         // The bright highlight belongs to the row that was clicked. Clicking a
         // group also selects the parts inside it, but those rows only get the
         // subdued hint (C4D: "primary = clicked, secondary = related") — so a
@@ -8736,29 +9308,11 @@ function _rebuildTreeHierarchical() {
         if (!p.visible) row.classList.add('hidden-vis');
         if (p.flagged) row.classList.add('flagged');
         row.dataset.partId = p.partId;
-        const colorHex = '#' + p.originalColor.getHexString();
-        const eye = p.visible ? `<i data-lucide="eye"></i>` : `<i data-lucide="eye-off"></i>`;
-        const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10);margin-right:4px">🔒</span>` : '';
         // Two sources of instance count: (a) hashCount captured at hierarchy
         // build time, (b) p.group from the live _autoInstanceFromGLB pass.
         // Both should agree but (b) is the authoritative live one.
         const instN = (p.group && p.group.parts) ? p.group.parts.length : (n.instanceCount || 0);
-        const inst = _instBadge(instN);
-        // Instances get a purple icon so the icon + badge share a color
-        // language ("this is one of N copies"). Singletons get the green box.
-        const iconCls = instN > 1 ? 'inst' : 'part';
-        const iconName = instN > 1 ? 'copy' : 'box';
         if (instN > 1) row.classList.add('is-inst');
-        // tree-expand-spacer keeps leaf rows aligned with parent +/- boxes.
-        row.innerHTML = indentHtml +
-          `<span class="tree-expand-spacer"></span>` +
-          `<span class="tree-typeicon ${iconCls}"><i data-lucide="${iconName}"></i></span>` +
-          `${lockIcon}<span class="tree-label">${escapeHtml(n.name || _stripFrameSuffix(p.name))}${inst}</span>` +
-          `<span class="tree-meta">${fmtNum(p.triCount)} tri</span>` +
-          `<span class="tree-iconcol">` +
-            `<span class="tree-vis">${eye}</span>` +
-            `<span class="tree-color" style="background:${colorHex}"></span>` +
-          `</span>`;
         if (!hidden) shownParts++;
       }
       frag.appendChild(row);
@@ -8771,6 +9325,10 @@ function _rebuildTreeHierarchical() {
     }
   }
   root.appendChild(frag);
+  _treeStatsCache = _treeGroupStats();
+  _treeShown = null;
+  _treeFillVisible();
+  { let deepest = 0; for (const n of all) if (n.depth > deepest) deepest = n.depth; _treeFitIndent(deepest); }
   $('tree-summary').textContent = ft
     ? `${shownParts} of ${totalParts} part${totalParts === 1 ? '' : 's'} match`
     : `${totalParts} part${totalParts === 1 ? '' : 's'} in hierarchy`;
@@ -8781,6 +9339,117 @@ function _rebuildTreeHierarchical() {
     root.appendChild(more);
   }
   _lucide();
+}
+
+// ── Rows are filled when they come into view ────────────────────────────────
+let _treeStatsCache = null;        // group counts / visibility, as of the last rebuild or in-place update
+let _treeShown = null;             // rows that take up space, in order (rebuilt on demand)
+const _TREE_ROW_H = 28;
+function _treeShownRows() {
+  if (_treeShown) return _treeShown;
+  const out = [];
+  const el = $('tree');
+  if (el) for (const r of el.children) {
+    if (r._n && !r.classList.contains('is-hidden') && !r.classList.contains('is-gone')) out.push(r);
+  }
+  return (_treeShown = out);
+}
+// Fill what the panel shows, plus a margin above and below. Called after a
+// rebuild, on scroll, on resize and whenever rows are shown or hidden.
+function _treeFillVisible() {
+  const el = $('tree');
+  if (!el) return;
+  const rows = _treeShownRows();
+  if (!rows.length) return;
+  const first = Math.max(0, Math.floor(el.scrollTop / _TREE_ROW_H) - 14);
+  const count = Math.max(64, Math.ceil((el.clientHeight || 600) / _TREE_ROW_H) + 28);
+  const last = Math.min(rows.length, first + count);
+  for (let i = first; i < last; i++) if (!rows[i]._filled) _fillTreeRow(rows[i]);
+}
+// Make sure one particular row has its contents (before code reads them).
+function _ensureTreeRow(row) { if (row && row._n && !row._filled) _fillTreeRow(row); return row; }
+function _fillTreeRow(row) {
+  const n = row._n;
+  if (!n) return;
+  row._filled = true;
+  let indent = '';
+  for (let d = 0; d < n.depth - 1; d++) indent += '<span class="tree-line"></span>';
+  if (n.depth > 0) indent += '<span class="tree-line elbow"></span>';
+  if (row.classList.contains('is-group')) {
+    // the row's classes are kept current by whatever changes the tree in
+    // place, so they are the source for what the row shows
+    const collapsed = row.classList.contains('collapsed');
+    const empty = row.classList.contains('is-empty-group');
+    const cloner = row.classList.contains('is-cloner');
+    const count = (_treeStatsCache && _treeStatsCache.count.get(n.id)) || 0;
+    row.innerHTML = indent +
+      `<span class="tree-expand" data-toggle="${n.id}">${collapsed ? '+' : '−'}</span>` +
+      `<span class="tree-typeicon ${cloner ? 'cln' : 'asm'}">${_ico(cloner ? 'copy' : 'archive')}</span>` +
+      `<span class="tree-label">${escapeHtml(n.name)}</span>` +
+      (count ? `<span class="tree-meta">${fmtNum(count)} part${count === 1 ? '' : 's'}</span>`
+        : (empty ? '<span class="tree-meta">empty</span>' : '')) +
+      `<span class="tree-iconcol"><span class="tree-vis" data-act="vis">${_ico(row.classList.contains('hidden-vis') ? 'eye-off' : 'eye')}</span></span>`;
+    return;
+  }
+  const p = getPart(n.partId);
+  if (!p) return;
+  const colorHex = '#' + p.originalColor.getHexString();
+  const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10);margin-right:4px">🔒</span>` : '';
+  const instN = (p.group && p.group.parts) ? p.group.parts.length : (n.instanceCount || 0);
+  // Instances get their own icon so the icon + badge share a language
+  // ("this is one of N copies"). tree-expand-spacer keeps leaf rows aligned
+  // with their parents' +/- boxes.
+  row.innerHTML = indent +
+    `<span class="tree-expand-spacer"></span>` +
+    `<span class="tree-typeicon ${instN > 1 ? 'inst' : 'part'}">${_ico(instN > 1 ? 'copy' : 'box')}</span>` +
+    `${lockIcon}<span class="tree-label">${escapeHtml(n.name || _stripFrameSuffix(p.name))}${_instBadge(instN)}</span>` +
+    `<span class="tree-meta">${fmtNum(p.triCount)} tri</span>` +
+    `<span class="tree-iconcol">` +
+      `<span class="tree-vis">${_ico(p.visible ? 'eye' : 'eye-off')}</span>` +
+      `<span class="tree-color" style="background:${colorHex}"></span>` +
+    `</span>`;
+}
+if (typeof document !== 'undefined') {
+  const wire = () => {
+    const el = document.getElementById('tree');
+    if (!el) return;
+    el.addEventListener('scroll', _treeFillVisible, { passive: true });
+    // Backstop: the browser itself reports a row that has just become
+    // relevant for rendering (rows are content-visibility:auto).
+    el.addEventListener('contentvisibilityautostatechange', (e) => {
+      const r = e.target;
+      if (r && r._n && !r._filled && e.skipped === false) _fillTreeRow(r);
+    }, true);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
+}
+
+// Indent step of the parts tree. The tree does not scroll sideways, so a deep
+// hierarchy must not push the names out of the panel: past a certain depth
+// each level gets a narrower step (down to 5px). Recomputed when the tree is
+// rebuilt and when the sidebar is resized.
+let _treeDeepest = 0;
+function _treeFitIndent(deepest) {
+  if (typeof deepest === 'number') _treeDeepest = deepest;
+  const el = $('tree');
+  if (!el) return;
+  const w = el.clientWidth || 248;
+  const room = Math.max(40, w - 175);            // what the indent may take: the row keeps its box, icon, ~65px of name and the icon column
+  const GAP = 6;                                 // the row's own gap sits between the indent cells too
+  const step = Math.max(4, Math.min(14, Math.floor(room / Math.max(1, _treeDeepest)) - GAP));
+  el.style.setProperty('--ti', step + 'px');
+  try { _treeFillVisible(); } catch (_) {}
+}
+if (typeof ResizeObserver !== 'undefined' && typeof document !== 'undefined') {
+  const watch = () => { const el = document.getElementById('tree'); if (el) new ResizeObserver(() => { try { _treeFitIndent(); } catch (_) {} }).observe(el); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch, { once: true }); else watch();
+  // A name that does not fit shows in full on hover. window-capture runs
+  // before the tooltip script's own listener, so the tip is there in time.
+  window.addEventListener('mouseover', (e) => {
+    const l = e.target && e.target.closest ? e.target.closest('#tree .tree-label') : null;
+    if (!l || l.querySelector('input')) return;
+    if (l.scrollWidth > l.clientWidth + 1) l.dataset.tip = l.textContent; else if (l.dataset.tip) delete l.dataset.tip;
+  }, true);
 }
 
 // ── Fast collapse/expand toggle ──────────────────────────────────────────
@@ -8822,6 +9491,8 @@ function _toggleGroupCollapseFast(gid) {
     cur.classList.toggle('is-hidden', hide);
     cur = cur.nextElementSibling;
   }
+  _treeShown = null;
+  _treeFillVisible();
 }
 
 // Strip the trailing _NNNNNN uniqueness suffix that step2glb.py appends to
@@ -8843,7 +9514,7 @@ function _instBadge(n) {
   // data-act so the tree click handler can intercept and select all sibling
   // instances. Title hints the click action.
   return `<span class="tree-inst" data-act="select-instances" title="${n} occurrences share this geometry — click to select all">` +
-         `<i data-lucide="copy"></i>×${n}</span>`;
+         `${_ico('copy')}×${n}</span>`;
 }
 
 // Collect every part-id descendant of a group node in state.treeNodes.
@@ -9417,7 +10088,7 @@ function _syncPrimWireframe(p) {
     const wfGeom = _buildNgonEdgesGeom(p.mesh.geometry);
     if (existing) {
       try { existing.geometry?.dispose(); } catch (_) {}
-      existing.geometry = wfGeom;
+      existing.geometry = _stampGeometry(wfGeom);
       // Reset visibility — primitive-slider drag may have hidden it to skip
       // the per-frame outline rebuild; this is the catch-up call.
       existing.visible = true;
@@ -10528,7 +11199,7 @@ function refreshFlagged() {
   $('thr-info').textContent = count > 0 ? `${count} part${count === 1 ? '' : 's'} below ${thrFmt}% (cutoff ${cutoff.toFixed(3)} ${metric}).` : `No parts below threshold.`;
   _updateFlaggedChip();
   applySelectionColors();
-  rebuildTree();
+  _treeSyncFlagged();              // was a full rebuildTree(): a third of a second per slider move on a large tree
   requestRender();
 }
 
@@ -10552,6 +11223,8 @@ function pushUndo(op) {
   // the new action.
   state.redo.length = 0;
   _refreshUndoRedoButtons();
+  // one look at the groups after the action has settled (see _autoCleanCheck)
+  if (!op.auto && !_emptyWatch.queued) { _emptyWatch.queued = true; setTimeout(_autoCleanCheck, 0); }
 }
 
 // ─── Undo / redo op registry ──────────────────────────────────────────────
@@ -10611,6 +11284,7 @@ function _finalizeUndo({ rebuildTree: doRebuildTree = false } = {}) {
       if (!live.has(gid) && !live.has(parseInt(String(gid), 10))) state.selectedGroupIds.delete(gid);
     }
   }
+  try { _emptyWatchSeed(); } catch (_) {}
   applySelectionColors();          // rebuilds world-baked outline geometry
   if (doRebuildTree) rebuildTree(); else rebuildTreeSelectionOnly?.();
   refreshPropertiesPanel?.();
@@ -10654,7 +11328,13 @@ function deleteParts(ids, label='Deleted parts') {
   // Model center changes when parts disappear; per-part _origPos values are
   // still valid for survivors, so leave them alone.
   invalidateExplodeBaseline({ parts: false });
-  recomputeStats(); refreshFlagged(); rebuildTree(); refreshPropertiesPanel(); updateGizmo();
+  recomputeStats();
+  refreshFlagged();
+  // The tree used to be rebuilt twice here (once inside refreshFlagged, once
+  // directly) — two thirds of a second on a 4,350-row tree. The rows of the
+  // deleted parts are simply taken out.
+  _treeAfterDelete(hidden.map(h => h.partId));
+  refreshPropertiesPanel(); updateGizmo();
   toast(label, `${hidden.length} part${hidden.length === 1 ? '' : 's'} removed`, 'success');
   requestRender();
 }
@@ -14710,7 +15390,7 @@ function wireUI() {
           `Without compression on export, the file will be 2–20× larger than the original. ` +
           (isDraco
             ? `Tick "Draco compression" above to roughly match the source size.`
-            : `Three.js doesn't ship a quantization exporter — for the smallest file, post-process with <code style="background:rgba(0,0,0,.25);padding:0 4px;border-radius:3px">gltf-transform quantize</code>.`);
+            : `Three.js doesn't ship a quantization exporter — for the smallest file, post-process with <code style="background:rgba(0,0,0,.25);padding:0 4px;border-radius:4px">gltf-transform quantize</code>.`);
       } else {
         note.style.display = 'none';
       }
@@ -15042,6 +15722,13 @@ function wireUI() {
   // Tree search rebuilds every node on each keystroke — collapse to one rebuild
   // per frame so typing stays responsive on 5k-part trees.
   $('tree-filter').addEventListener('input', rafCoalesce(() => rebuildTree()));
+  {
+    const tf = $('tree-filter'), clr = $('tree-filter-clear');
+    const sync = () => { if (clr) clr.hidden = !tf.value; };
+    tf.addEventListener('input', sync);
+    clr?.addEventListener('click', () => { tf.value = ''; tf.dispatchEvent(new Event('input', { bubbles: true })); tf.focus(); });
+    sync();
+  }
   $('tree').addEventListener('click', e => {
     // Chevron toggle — only collapses/expands. The row body itself selects
     // (matches Blender / Cinema 4D / Maya / file explorer convention where
@@ -15379,6 +16066,13 @@ function wireUI() {
     });
   });
 
+  const _smallBusy = (on) => {
+    const b = $('btn-delete-small');
+    if (!b) return;
+    b.classList.toggle('is-busy', on);
+    b.disabled = on;
+    b.setAttribute('aria-busy', on ? 'true' : 'false');
+  };
   // Size threshold scrubber — quadratic curve so the useful sub-1% range gets
   // most of the bar's horizontal travel.
   const refreshFlaggedRaf = rafCoalesce(refreshFlagged);
@@ -15393,7 +16087,19 @@ function wireUI() {
     initialValue: 2,
     promptTitle: 'Size threshold',
     promptUnit: '%',
-    onChange: (v) => { state.threshold = v; refreshFlaggedRaf(); },
+    // Re-counting 1,500+ parts on every pixel of the drag made the slider
+    // stutter and hard to land on a value: count once, on release.
+    commitOnRelease: true,
+    // While the slider is away from the last counted value, the Delete button
+    // would show a stale count: it says "Calculating…" and cannot be clicked
+    // until the new count is in.
+    onPending: () => _smallBusy(true),
+    onChange: (v) => {
+      state.threshold = v;
+      _smallBusy(true);
+      // let "Calculating…" paint before the count blocks the thread
+      setTimeout(() => { try { refreshFlagged(); } finally { _smallBusy(false); } }, 30);
+    },
   });
   $('thr-metric').addEventListener('change', e => { state.sizeMetricMode = e.target.value; refreshFlagged(); });
 
@@ -15424,7 +16130,7 @@ function wireUI() {
   $('sel-similar').addEventListener('click', selectSimilar);
   $('btn-delete-sel').addEventListener('click', () => {
     if (!state.selected.size) return;
-    deleteParts([...state.selected], 'Deleted selected');
+    _deleteSelection('Deleted selected');
   });
   $('btn-show-all')?.addEventListener('click', showAllParts);
   $('btn-isolate-small')?.addEventListener('click', isolateFlagged);
@@ -16116,7 +16822,7 @@ function wireUI() {
       if (typeof _treeGroupSelected === 'function') _treeGroupSelected();
     }
     else if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.metaKey) $('tg-grid').click();
-    else if (e.key === 'Delete' || e.key === 'Backspace') { if (state.selected.size > 0) { e.preventDefault(); deleteParts([...state.selected], 'Deleted selected'); } }
+    else if (e.key === 'Delete' || e.key === 'Backspace') { if (state.selected.size > 0) { e.preventDefault(); _deleteSelection('Deleted selected'); } }
     else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redoLast(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoLast(); }
@@ -16207,6 +16913,7 @@ async function _buildBVHsForAllGeoms() {
   const myGen = state._bvhGen | 0;
   const t0 = performance.now();
   let built = 0, cached = 0, skipped = 0, failed = 0;
+  let sliceStart = performance.now();
   // try/finally guarantees _bvhBuilding is cleared. Without it, an exception
   // from the iterator (e.g. geomByHash mutated mid-iteration during a long
   // session of boxify/merge ops) would leave the flag true forever, locking
@@ -16229,27 +16936,19 @@ async function _buildBVHsForAllGeoms() {
     // Skip pathological inputs — e.g. point clouds, parts with degenerate index.
     if (triCount < 1) { skipped++; continue; }
     try {
-      // RACE FIX: computeBoundsTree REORDERS the geometry's index buffer
-      // in-place (replaces geom.index with a permuted BufferAttribute).
-      // If the renderer ticks between yields below and tries to draw this
-      // mesh, three.js's WebGPU backend can hand setIndexBuffer the OLD
-      // (now-disposed) GPU buffer, throwing:
-      //   "parameter 1 is not of type 'GPUBuffer'"
-      // and freezing the viewport. Setting state.renderPaused = true
-      // around the actual mutation guarantees no render happens against
-      // a half-mutated index. We release between batches so the UI stays
-      // responsive on huge assemblies.
-      state.renderPaused = true;
+      // indirect: the tree keeps its own triangle order instead of
+      // re-sorting the geometry's index buffer. Nothing the renderer uses is
+      // touched, so the build needs no render lock and no index re-upload
+      // (the old in-place sort was behind a "not of type GPUBuffer" freeze).
+      // The split strategy that gives the fastest picks (SAH) takes about
+      // three times as long to build; it is kept for the small meshes that
+      // make up most of an assembly and dropped for the heavy ones, which
+      // is where the build time was going.
       g.computeBoundsTree({
-        strategy: triCount > 500_000 ? 0 : state._bvhStrategy,
-        // maxLeafTris default 10 is good — bumping it saves memory at minor
-        // pick-time cost. Stick with default.
+        strategy: triCount > 20_000 ? 0 : state._bvhStrategy,
+        indirect: true,
         verbose: false,
       });
-      // Force three.js to re-upload the index buffer to GPU (it now points
-      // to a fresh BufferAttribute). Without an explicit needsUpdate, the
-      // backend can keep its stale per-attribute GPU buffer cache hit.
-      if (g.index) g.index.needsUpdate = true;
       built++;
     } catch (e) {
       failed++;
@@ -16257,13 +16956,15 @@ async function _buildBVHsForAllGeoms() {
       // index buffer. Default raycaster still works for these.
       console.warn('[STEP] BVH build failed for one geom:', e?.message || e);
     }
-    // Yield every 25 geoms so the UI thread stays responsive on a 1000-geom
-    // assembly. 25 is a balance: too small = many timer hops; too large = jank.
-    if ((built + failed) % 25 === 0) {
-      // Release the render lock during the yield so the next frame can draw.
-      // The next iteration re-acquires it before the next computeBoundsTree.
-      state.renderPaused = false;
-      await new Promise(r => setTimeout(r, 0));
+    // Work in slices of a few milliseconds and hand the thread back in
+    // between, preferably when the browser says it is idle — the build then
+    // never shows up as a stall, however many meshes there are. (It used to
+    // yield every 25 meshes, which could be most of a second at a time.)
+    if (performance.now() - sliceStart > 8) {
+      await new Promise(r => (typeof requestIdleCallback === 'function')
+        ? requestIdleCallback(() => r(), { timeout: 120 })
+        : setTimeout(r, 0));
+      sliceStart = performance.now();
     }
   }
   } finally {
@@ -16845,7 +17546,7 @@ function _rebuildPrimitiveGeometry(p) {
   _applyPrimitiveOrientation(p.primitiveKind, newGeom, p.primParams.orientation || 'z');
   newGeom.computeBoundingBox();
   if (!newGeom.attributes.normal) newGeom.computeVertexNormals();
-  p.mesh.geometry = newGeom;
+  p.mesh.geometry = _stampGeometry(newGeom);
   // Drop the boundsTree on oldGeom proactively (BVH builds happen later for
   // newGeom) — leaving it would keep an internal index reference alive.
   if (oldGeom?.boundsTree) {
@@ -17786,7 +18487,7 @@ function _ownGeometryFor(p, uses, tag) {
   const fresh = geom.clone();
   uses.set(geom, n - 1);
   uses.set(fresh, 1);
-  p.mesh.geometry = fresh;
+  p.mesh.geometry = _stampGeometry(fresh);
   p.hash = (p.hash || tag) + '_' + tag + p.partId;
   state.geomByHash.set(p.hash, fresh);
   return fresh;
@@ -17819,7 +18520,7 @@ function _restoreGeomXform(items) {
     const p = getPart(it.partId);
     if (!p || !p.mesh) continue;
     const g = it.geom;
-    p.mesh.geometry = g;
+    p.mesh.geometry = _stampGeometry(g);
     p.hash = it.hash;
     g.attributes.position.array.set(it.pos);
     g.attributes.position.needsUpdate = true;
@@ -18261,15 +18962,15 @@ function buildMaterialsPanel() {
     row.dataset.matName = name;
     row.style.cssText = 'display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;border-top:1px solid rgba(255,255,255,.04);font-size:var(--fs-12);border-radius:var(--r-sm);transition:background 120ms var(--ease-out)';
     const thumbHtml = previewUrl
-      ? `<img src="${previewUrl}" alt="" draggable="false" style="width:26px;height:26px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.3)">`
-      : `<span style="width:26px;height:26px;border-radius:5px;flex-shrink:0;background:${hex};border:1px solid rgba(255,255,255,.15);box-shadow:0 1px 3px rgba(0,0,0,.3)"></span>`;
+      ? `<img src="${previewUrl}" alt="" draggable="false" style="width:26px;height:26px;border-radius:6px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.3)">`
+      : `<span style="width:26px;height:26px;border-radius:6px;flex-shrink:0;background:${hex};border:1px solid rgba(255,255,255,.15);box-shadow:0 1px 3px rgba(0,0,0,.3)"></span>`;
     row.innerHTML = `
       ${thumbHtml}
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
         <span style="color:var(--tx);font-weight:var(--fw-medium)">${escapeHtml(name)}</span>
         <span style="display:block;font-family:var(--font-sans);font-size:var(--fs-xs);color:var(--tx3)">${hex} · ${info.count}</span>
       </span>
-      <button class="mat-row-edit" style="background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:5px;cursor:pointer;flex-shrink:0;transition:background 120ms,border-color 120ms,color 120ms">
+      <button class="mat-row-edit" style="background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background 120ms,border-color 120ms,color 120ms">
         <i data-lucide="sliders-horizontal" style="width:13px;height:13px"></i>
       </button>
     `;
@@ -18546,6 +19247,129 @@ function _renderMaterialPreview(mat) {
   return url;
 }
 
+// ── Materials dock: filter, order, inspector ─────────────────────────────
+function _matLabel(m) {
+  const hex = '#' + (m.color?.getHexString?.() || 'cccccc');
+  return { hex, name: (m.name && m.name.trim()) || ('mat_' + hex.slice(1)) };
+}
+function _matTriCount(info) {
+  let t = 0;
+  for (const id of info.partIds || []) { const p = getPart(id); if (p && !p.deleted) t += p.triCount || 0; }
+  return t;
+}
+function _matDockFilterSort(mats) {
+  const q = (document.getElementById('mat-search')?.value || '').trim().toLowerCase();
+  let out = mats;
+  if (q) {
+    out = mats.filter(info => {
+      const { hex, name } = _matLabel(info.mat);
+      return name.toLowerCase().includes(q) || hex.includes(q.replace(/^#?/, '#')) || hex.includes(q) || String(info.mat.type || '').toLowerCase().includes(q);
+    });
+  }
+  const order = document.getElementById('mat-sort')?.value || 'used';
+  if (order === 'name') out = [...out].sort((a, b) => _matLabel(a.mat).name.localeCompare(_matLabel(b.mat).name, undefined, { numeric: true }));
+  else if (order === 'tris') { const t = new Map(out.map(i => [i, _matTriCount(i)])); out = [...out].sort((a, b) => t.get(b) - t.get(a)); }
+  else if (order === 'hue') {
+    const key = (info) => { const c = { h: 0, s: 0, l: 0 }; try { info.mat.color.getHSL(c); } catch (_) {} return c.s < 0.08 ? 2 + c.l : c.h + c.l * 0.001; };   // colours by hue, then the greys dark to light
+    out = [...out].sort((a, b) => key(a) - key(b));
+  }
+  return out;                                  // 'used' is the order they arrive in
+}
+let _matDockWired = false;
+function _wireMatDock() {
+  if (_matDockWired) return;
+  const search = document.getElementById('mat-search'), sort = document.getElementById('mat-sort'), insp = document.getElementById('mat-inspector');
+  if (!search || !sort || !insp) return;
+  _matDockWired = true;
+  try { const saved = localStorage.getItem('stepopt-mat-sort'); if (saved && [...sort.options].some(o => o.value === saved)) sort.value = saved; } catch (_) {}
+  let t = 0;
+  search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(_populateMaterialsList, 90); });
+  search.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') { search.value = ''; _populateMaterialsList(); search.blur(); } });
+  sort.addEventListener('change', () => { try { localStorage.setItem('stepopt-mat-sort', sort.value); } catch (_) {} _populateMaterialsList(); });
+  insp.addEventListener('click', e => {
+    const b = e.target.closest('[data-mi]');
+    if (!b || b.disabled) return;
+    const infos = _collectLiveMaterials().filter(i => _matPanelSelected.has(i.mat));
+    if (!infos.length) return;
+    const act = b.dataset.mi;
+    if (act === 'edit') { try { _openMaterialEditor(infos[0]); } catch (err) { console.warn('[mat] editor:', err); } return; }
+    if (act === 'select' || act === 'isolate') {
+      const ids = [];
+      for (const i of infos) for (const id of i.partIds) { const p = getPart(id); if (p && !p.deleted) ids.push(id); }
+      if (!ids.length) { toast('Not in use', 'No part uses ' + (infos.length === 1 ? 'this material' : 'these materials'), 'info', 2500); return; }
+      state.selected.clear();
+      try { state.selectedGroupIds.clear(); } catch (_) {}
+      for (const id of ids) state.selected.add(id);
+      applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo();
+      const c = $('del-sel-count'); if (c) c.textContent = state.selected.size;
+      if (act === 'isolate') { try { isolateSelected(); } catch (err) { console.warn('[mat] isolate:', err); } }
+      return;
+    }
+    if (act === 'assign') {
+      if (!state.selected.size) { toast('Assign', 'Select the parts that should get this material first', 'warn', 3000); return; }
+      const before = _matStateSnap();
+      const seen = new Set(); let k = 0;
+      for (const id of state.selected) {
+        const p = getPart(id);
+        if (!p || p.deleted || !p.mesh || seen.has(p.mesh)) continue;
+        seen.add(p.mesh);
+        if (p.mesh.material !== infos[0].mat) { p.mesh.material = infos[0].mat; k++; }
+      }
+      if (k) { try { _pushMaterialUndo('Assign material', before, null); } catch (err) { console.warn('[mat-undo]', err); } }
+      requestRender();
+      _populateMaterialsList();
+      try { refreshPropertiesPanel(); } catch (_) {}
+    }
+  });
+}
+function _renderMatInspector() {
+  const el = document.getElementById('mat-inspector');
+  if (!el) return;
+  const infos = _collectLiveMaterials().filter(i => _matPanelSelected.has(i.mat));
+  const nSel = state.selected ? state.selected.size : 0;
+  if (!infos.length) {
+    el.innerHTML = '<div class="mi-empty">Click a material to see what it is and where it is used.<br><br>' +
+      'Double-click to edit it. <kbd>Ctrl</kbd>-click to pick several, then merge or delete them.</div>';
+    return;
+  }
+  let modelTris = 0;
+  for (const p of state.parts) if (!p.deleted) modelTris += p.triCount || 0;
+  const parts = infos.reduce((s, i) => s + i.count, 0);
+  const tris = infos.reduce((s, i) => s + _matTriCount(i), 0);
+  const share = modelTris > 0 ? (tris / modelTris * 100) : 0;
+  const L = (t) => `<span class="mi-l">${t}</span>`;
+  const usageRows = L('Used by') + `<span class="mi-wide">${fmtNum(parts)} ${parts === 1 ? 'part' : 'parts'}</span>` +
+    L('Triangles') + `<span class="mi-wide">${fmtNum(tris)}${share >= 0.05 ? ' · ' + share.toFixed(share < 10 ? 1 : 0) + '% of the model' : ''}</span>`;
+  const bar = (v) => `<span class="mi-bar"><i style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></i></span><span class="mi-num">${(+v).toFixed(2)}</span>`;
+  const actions = (one) =>
+    `<div class="mi-actions">` +
+      (one ? `<button class="btn" data-mi="edit" title="Open the material editor (same as a double-click)">Edit…</button>` : '') +
+      `<button class="btn" data-mi="select" title="Select every part that uses ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Select parts</button>` +
+      `<button class="btn" data-mi="isolate" title="Show only the parts that use ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Isolate</button>` +
+      (one ? `<button class="btn" data-mi="assign" title="Give this material to the ${nSel} selected part${nSel === 1 ? '' : 's'}"${nSel ? '' : ' disabled'}>Assign${nSel ? ' to ' + fmtNum(nSel) : ''}</button>` : '') +
+    `</div>`;
+  if (infos.length > 1) {
+    el.innerHTML = `<div class="mi-top"><div class="mi-id"><div class="mi-name">${infos.length} materials picked</div><div class="mi-type">Merge puts their parts on the first one</div></div></div>` +
+      `<div class="mi-rows">${usageRows}</div>` + actions(false);
+    return;
+  }
+  const m = infos[0].mat;
+  const { hex, name } = _matLabel(m);
+  const url = _renderMaterialPreview(m);
+  const kind = String(m.type || 'Material').replace(/^Mesh/, '').replace(/(Node)?Material$/, '') || 'Standard';
+  const textured = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'].filter(k => m[k]).length;
+  const rows = [L('Colour') + `<span class="mi-wide"><i class="mi-chip" style="background:${hex}"></i>${hex}</span>`];
+  if (typeof m.roughness === 'number') rows.push(L('Roughness') + bar(m.roughness));
+  if (typeof m.metalness === 'number') rows.push(L('Metalness') + bar(m.metalness));
+  rows.push(L('Opacity') + bar(m.transparent ? (m.opacity ?? 1) : 1));
+  if (textured) rows.push(L('Textures') + `<span class="mi-wide">${textured} map${textured === 1 ? '' : 's'}</span>`);
+  rows.push(usageRows);
+  el.innerHTML =
+    `<div class="mi-top">${url ? `<img class="mi-ball" src="${url}" alt="" draggable="false">` : `<span class="mi-ball" style="background:${hex}"></span>`}` +
+    `<div class="mi-id"><div class="mi-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div><div class="mi-type">${escapeHtml(kind)}${m.transparent ? ' · transparent' : ''}${m.side === THREE.DoubleSide ? ' · double-sided' : ''}</div></div></div>` +
+    `<div class="mi-rows">${rows.join('')}</div>` + actions(true);
+}
+
 // Persisted across sessions so the user's preferred materials view sticks.
 function _matViewMode() {
   try { return localStorage.getItem('stepopt-mat-view') === 'list' ? 'list' : 'grid'; } catch (_) { return 'grid'; }
@@ -18567,10 +19391,16 @@ function _populateMaterialsList() {
   if (!list) return;
   const mode = _matViewMode();
   _setMatViewMode(mode);
-  const mats = _collectLiveMaterials();
+  _wireMatDock();
+  const everything = _collectLiveMaterials();
+  const mats = _matDockFilterSort(everything);
+  const countEl = document.getElementById('mat-dock-count');
+  if (countEl) countEl.textContent = mats.length === everything.length ? String(everything.length) : mats.length + ' of ' + everything.length;
   if (mats.length === 0) {
-    list.innerHTML = '<div class="mat-empty">No materials yet — load a model.</div>';
+    const q = (document.getElementById('mat-search')?.value || '').trim();
+    list.innerHTML = '<div class="mat-empty">' + (everything.length ? 'No material matches “' + escapeHtml(q) + '”.' : 'No materials yet — load a model.') + '</div>';
     list.className = 'mat-empty';
+    _renderMatInspector();
     return;
   }
   list.innerHTML = '';
@@ -18763,6 +19593,7 @@ function _refreshPanelSelection() {
   // Add is always available — a new material lands in the library
   // (state.userMaterials) and gets assigned only if parts are selected.
   setEnabled('mat-act-add',       true);
+  try { _renderMatInspector(); } catch (e) { console.warn('[mat] inspector:', e); }
 }
 
 // Open the per-material editor as a _DraggablePopup. Every active editor
@@ -19539,6 +20370,12 @@ function _openMaterialEditor(info) {
     // Fall back to the right side if the editor would clip off-screen
     // on the left (narrow viewport / very wide editor card).
     if (left < 8) left = pr.right + gap;
+    // The materials panel is a dock along the bottom now: sit above it,
+    // against its right edge.
+    if (panel.classList.contains('mat-dock')) {
+      left = Math.max(8, pr.right - cardW - 12);
+      top = pr.top - cardH - 12;
+    }
     // Clamp vertically so the bottom never goes off-screen.
     top = Math.max(8, Math.min(top, window.innerHeight - cardH - 8));
     popup.card.style.left = left + 'px';
@@ -19954,6 +20791,8 @@ function _refreshUsedBySelection() {
   for (const cell of panel.querySelectorAll('.mat-cell, .mat-row')) {
     cell.classList.toggle('usedby-selection', used.has(cell._mat));
   }
+  // "Assign to N" in the inspector follows the selection
+  if (panel.classList.contains('show')) { try { _renderMatInspector(); } catch (_) {} }
 }
 
 // Hook usedby-selection refresh into refreshPropertiesPanel — that runs on
@@ -20528,7 +21367,7 @@ async function bboxifyParts(partIds, label='Smart-fit parts', mode='smart') {
       // Capture the original geometry BEFORE we replace it so we can find
       // siblings that share the same buffer (see partsByGeom build above).
       const sharedGeom = p.mesh.geometry;
-      p.mesh.geometry = boxGeom;
+      p.mesh.geometry = _stampGeometry(boxGeom);
       // Force the material to recompile its pipeline against the new
       // geometry's attribute layout. Without this, three.js r172 WebGPU
       // can keep using a pipeline cached against the OLD geometry and the
@@ -20636,7 +21475,7 @@ async function bboxifyParts(partIds, label='Smart-fit parts', mode='smart') {
           origPartCenter: sib._partCenter ? sib._partCenter.clone() : null,
           origInstOrigMat: sib._instOrigMat ? sib._instOrigMat.clone() : null,
         });
-        sib.mesh.geometry = boxGeom;
+        sib.mesh.geometry = _stampGeometry(boxGeom);
         if (sib.mesh.material) {
           if (Array.isArray(sib.mesh.material)) {
             for (const m of sib.mesh.material) if (m) m.needsUpdate = true;
@@ -20717,7 +21556,7 @@ _UndoOps.register('boxify', {
       // across co-boxified siblings. Disposing it once removes it from
       // every sibling's mesh, leaving them rendering nothing. The shared
       // boxGeom will be GC'd naturally once no part references it.
-      p.mesh.geometry = it.origGeom;
+      p.mesh.geometry = _stampGeometry(it.origGeom);
       // Restore the original parent before applying the saved local
       // transform — boxify re-parented the mesh to partsRoot to escape
       // sheared parent chains. The saved origPos/Quat/Scale are in the
@@ -21219,8 +22058,23 @@ async function _treeDeleteGroup(row) {
   }
   // Reversible via Ctrl+Z — no confirm prompt.
   deleteParts(partIds, `Deleted group "${grpNode.name}"`);
-  // The group node itself stays in state.treeNodes but is rendered hidden
-  // automatically (groupAnyAlive=false now), so no extra cleanup needed.
+  // Then the group itself and the groups inside it, as part of the same undo
+  // step. (The tree no longer hides empty groups, so leaving the node behind
+  // would leave an empty "deleted" group on screen.)
+  {
+    const live = _groupLiveMap();
+    const dead = [];
+    const at = state.treeNodes.indexOf(grpNode);
+    if (at >= 0) {
+      if (live.get(grpNode) === false) dead.push(grpNode);
+      for (let i = at + 1; i < state.treeNodes.length; i++) {
+        const n = state.treeNodes[i];
+        if (n.depth <= grpNode.depth) break;
+        if (n.kind !== 'part' && live.get(n) === false) dead.push(n);
+      }
+    }
+    _removeGroupRows(dead, { label: `Deleted group "${grpNode.name}"`, auto: true });
+  }
 }
 
 async function _treeRenameRow(row) {
@@ -21387,7 +22241,7 @@ document.addEventListener('contextmenu', e => {
     ...((state._clipboardParts || []).length ? [{ icon: 'clipboard-paste', label: 'Paste', kbd: 'Ctrl+V', fn: () => pasteParts() }] : []),
     { icon: 'copy-plus',      label: 'Duplicate',              kbd: 'Ctrl+D', fn: () => duplicateParts([...state.selected]) },
     '---',
-    { icon: 'trash-2',        label: 'Delete',                 danger: true, fn: () => deleteParts([...state.selected], 'Deleted via context menu') },
+    { icon: 'trash-2',        label: 'Delete',                 danger: true, fn: () => _deleteSelection('Deleted via context menu') },
   ];
   _ctxBuild(items, e.clientX, e.clientY);
 });
@@ -23187,7 +24041,7 @@ function _initCustomSelects() {
         if ((state._clipboardParts || []).length) items.push({ icon: 'clipboard-paste', label: 'Paste', kbd: 'Ctrl+V', fn: () => pasteParts() });
         items.push({ icon: 'copy-plus',       label: 'Duplicate',          kbd: 'Ctrl+D', fn: () => duplicateParts([...state.selected]) });
         items.push('---');
-        items.push({ icon: 'trash-2',         label: 'Delete selected',    danger: true, kbd: 'Del', fn: () => deleteParts([...state.selected], 'Deleted via context menu') });
+        items.push({ icon: 'trash-2',         label: 'Delete selected',    danger: true, kbd: 'Del', fn: () => _deleteSelection('Deleted via context menu') });
       } else {
         // Frame / camera reset
         items.push({ icon: 'maximize',         label: 'Fit view',            kbd: 'F',     fn: fitToView });
@@ -24193,6 +25047,8 @@ function _wireDeadTreeControls() {
         }
         row.classList.toggle('is-hidden', hide);
       }
+      _treeShown = null;
+      _treeFillVisible();
     } else {
       // Slow path: search filter or user groups force a full rebuild because
       // visibility composition gets non-trivial there.
@@ -29239,16 +30095,16 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-sv::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
       .cp-sv-cursor{position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 1px 3px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none;z-index:2}
       .cp-hue{position:relative;width:100%;height:12px;margin-top:10px;border-radius:var(--r-sm);cursor:pointer;background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%);touch-action:none;user-select:none}
-      .cp-hue-cursor{position:absolute;top:-2px;width:6px;height:16px;border-radius:3px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.5);transform:translateX(-50%);pointer-events:none}
+      .cp-hue-cursor{position:absolute;top:-2px;width:6px;height:16px;border-radius:4px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.5);transform:translateX(-50%);pointer-events:none}
       .cp-row{display:flex;gap:var(--space-md);align-items:center;margin-top:10px}
-      .cp-hex{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:5px;color:var(--tx);font:500 11.5px var(--font-sans);padding:5px 7px;outline:none;text-transform:uppercase}
+      .cp-hex{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:6px;color:var(--tx);font:500 11.5px var(--font-sans);padding:5px 7px;outline:none;text-transform:uppercase}
       .cp-hex:focus{border-color:var(--ac);background:var(--ac-tint-08)}
-      .cp-preview{width:24px;height:24px;border-radius:5px;border:1px solid rgba(255,255,255,.1);box-shadow:0 1px 3px rgba(0,0,0,.4);flex-shrink:0}
+      .cp-preview{width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,.1);box-shadow:0 1px 3px rgba(0,0,0,.4);flex-shrink:0}
       .cp-presets{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--space-xs);margin-top:10px}
       .cp-preset{width:100%;aspect-ratio:1;border-radius:var(--r-xs);border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:transform 100ms var(--ease-out),border-color 100ms var(--ease-out)}
       .cp-preset:hover{transform:scale(1.12);border-color:var(--ac)}
       .cp-actions{display:flex;gap:var(--space-sm);margin-top:12px;justify-content:flex-end}
-      .cp-btn{padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:5px;color:var(--tx2);font-size:var(--fs-sm);font-weight:var(--fw-medium);cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
+      .cp-btn{padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx2);font-size:var(--fs-sm);font-weight:var(--fw-medium);cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
       .cp-btn:hover{background:rgba(255,255,255,.1);color:var(--tx)}
       .cp-btn.primary{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:#fff;border-color:transparent}
       .cp-btn.primary:hover{filter:brightness(1.08)}
@@ -29893,6 +30749,14 @@ setTimeout(() => _dndDecorateTree(), 0);
       }
       outParts.push({ idx: res, materialIndex: g.materialIndex });
     }
+    return _geomFromIndexParts(src, outParts);
+  }
+
+  // Build a geometry from `src`'s attributes and a list of index ranges
+  // ({ idx, materialIndex }), dropping the vertices nothing points at any
+  // more. Shared by Decimate and Fill holes.
+  function _geomFromIndexParts(src, outParts) {
+    const vCount = src.attributes.position.count;
     let total = 0;
     for (const o of outParts) total += o.idx.length;
     if (total < 3) return null;
@@ -29949,7 +30813,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const p = getPart(it.partId);
       if (!p || !p.mesh) continue;
       const st = it[dir];
-      p.mesh.geometry = st.geom;
+      p.mesh.geometry = _stampGeometry(st.geom);
       if (st.hash != null) p.hash = st.hash;
       p.triCount = st.triCount;
       p.vertCount = st.vertCount;
@@ -30002,6 +30866,30 @@ setTimeout(() => _dndDecorateTree(), 0);
     const undoItems = [];
     let trisBefore = 0, trisAfter = 0, parts = 0;
 
+    // The simplifier runs in background workers, several parts at a time.
+    // Each job is queued here and awaited in order below; a part whose job
+    // fails (or that the workers cannot take: no index buffer, packed
+    // positions) is simplified on the page as before.
+    const queued = new Map();               // partId → Promise<index ranges | null>
+    const simplifierUrl = meshopt ? _importMapUrl('meshoptimizer-simplifier') : null;
+    if (simplifierUrl && _MeshWorkers.available()) {
+      for (const id of ids) {
+        const p = getPart(id);
+        const geom = p && !p.deleted && p.mesh ? p.mesh.geometry : null;
+        const posAttr = geom && geom.attributes ? geom.attributes.position : null;
+        if (!posAttr || !geom.index || geom.index.count < 36) continue;
+        if (posAttr.isInterleavedBufferAttribute || !(posAttr.array instanceof Float32Array) || posAttr.itemSize !== 3) continue;
+        queued.set(id, _MeshWorkers.run(() => {
+          const positions = posAttr.array.slice();
+          const index = Uint32Array.from(geom.index.array);
+          const groups = (geom.groups && geom.groups.length > 1)
+            ? geom.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
+            : [{ start: 0, count: index.length, materialIndex: 0 }];
+          return { msg: { op: 'simplify', positions, index, groups, keep, url: simplifierUrl }, transfer: [positions.buffer, index.buffer] };
+        }).then(reply => (reply && reply.ok) ? reply.parts : null));
+      }
+    }
+
     for (let i = 0; i < ids.length; i++) {
       const p = getPart(ids[i]);
       if (!p || p.deleted) continue;
@@ -30013,7 +30901,11 @@ setTimeout(() => _dndDecorateTree(), 0);
 
       try {
         let reduced = null;
-        if (meshopt) reduced = _simplifyKeepingAttributes(meshopt, geom, keep);
+        if (queued.has(p.partId)) {
+          const ranges = await queued.get(p.partId);
+          if (ranges && p.mesh.geometry === geom) reduced = _geomFromIndexParts(geom, ranges);
+        }
+        if (!reduced && meshopt) reduced = _simplifyKeepingAttributes(meshopt, geom, keep);
         if (!reduced) {
           // Fallback (offline, or no WebAssembly): positions only. The
           // modifier welds coincident vertices and then collapses `count`
@@ -30035,7 +30927,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         // state.geomByHash is left alone — other parts may still reference
         // the same cached geom. This part is now unique to itself.
         const before = _decSnap(p);
-        p.mesh.geometry = reduced;
+        p.mesh.geometry = _stampGeometry(reduced);
         // Export, merge, dedupe and the memory readout all look geometry up
         // by p.hash. Without its own entry the decimated part kept pointing
         // at the original buffer, so the reduction never reached the file.
@@ -30087,6 +30979,162 @@ setTimeout(() => _dndDecorateTree(), 0);
   }
 
   document.getElementById('btn-decimate-sel') && document.getElementById('btn-decimate-sel').addEventListener('click', _decimateSelected);
+
+  // ── Fill holes ────────────────────────────────────────────────────────
+  // Closes holes in flat faces and leaves the rest of each mesh exactly as it
+  // is (see holefill.js for how a hole is told apart from a boss, a bore that
+  // is the part's shape, or an opening into a cavity). Works on the selection,
+  // or on every visible part when nothing is selected. One undo step.
+  async function _fillHoles() {
+    const input = document.getElementById('fill-holes-size');
+    const info = document.getElementById('fill-holes-info');
+    const btn = document.getElementById('btn-fill-holes');
+    const label = document.getElementById('fill-holes-label');
+    const maxSize = parseFloat(String(input ? input.value : '').replace(',', '.'));
+    if (!(maxSize > 0)) { toast('Fill holes', 'Type the largest hole to fill, in mm', 'warn', 3000); input && input.focus(); return; }
+    const picked = !!(state.selected && state.selected.size);
+    const targets = (picked ? [...state.selected].map(id => getPart(id)) : state.parts)
+      .filter(p => p && !p.deleted && (picked || p.visible !== false));
+    if (!targets.length) { toast('Fill holes', 'There is nothing to work on', 'warn', 2500); return; }
+    if (btn) btn.disabled = true;
+
+    const undoItems = [], failed = [];
+    const done = new Map();                 // source geometry (+ scale) → what it became
+    const tally = { holes: 0, through: 0, blind: 0, open: 0, removedTris: 0, addedTris: 0, raised: 0, partOfShape: 0, leaking: 0, tooDeep: 0, tooLarge: 0 };
+    let parts = 0, instanced = 0;
+    const sv = new THREE.Vector3();
+    let lastYield = performance.now();
+    const keyOf = (p) => {
+      const geom = p.mesh.geometry;
+      const posAttr = geom && geom.attributes && geom.attributes.position;
+      if (!posAttr || posAttr.count < 12) return null;
+      p.mesh.updateWorldMatrix(true, false);
+      sv.setFromMatrixScale(p.mesh.matrixWorld);
+      const scale = Math.cbrt(Math.abs(sv.x * sv.y * sv.z)) || 1;       // the size limit is in world units
+      return { geom, posAttr, scale, key: geom.uuid + '|' + scale.toPrecision(6) };
+    };
+    const plainPositions = (posAttr) => {
+      if (!posAttr.isInterleavedBufferAttribute && posAttr.array instanceof Float32Array && posAttr.itemSize === 3) return posAttr.array;
+      const out = new Float32Array(posAttr.count * 3);
+      for (let v = 0; v < posAttr.count; v++) { out[v * 3] = posAttr.getX(v); out[v * 3 + 1] = posAttr.getY(v); out[v * 3 + 2] = posAttr.getZ(v); }
+      return out;
+    };
+    // The finding of holes — nearly all of the work — runs in background
+    // workers, one mesh each, while the page stays responsive. `found` maps a
+    // mesh to its result; anything missing from it is done here instead.
+    const found = new Map();
+    if (_MeshWorkers.available()) {
+      const jobs = [], seen = new Set();
+      for (const p of targets) {
+        if (!p.mesh) continue;
+        const k = keyOf(p);
+        if (!k || seen.has(k.key)) continue;
+        seen.add(k.key); jobs.push(k);
+      }
+      let finished = 0;
+      await Promise.all(jobs.map(j => _MeshWorkers.run(() => {
+        const src = plainPositions(j.posAttr);
+        const positions = src === j.posAttr.array ? src.slice() : src;      // the worker gets a copy of its own
+        const index = j.geom.index ? j.geom.index.array.slice() : null;
+        return { msg: { op: 'fill', positions, index, opts: { maxSize: maxSize / j.scale } },
+                 transfer: index ? [positions.buffer, index.buffer] : [positions.buffer] };
+      }).then(reply => {
+        if (reply && reply.ok) found.set(j.key, reply.res);
+        finished++;
+        if (label && (finished % 8 === 0 || finished === jobs.length)) label.textContent = 'Filling… ' + Math.round(finished / jobs.length * 90) + '%';
+      })));
+    }
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        const p = targets[i];
+        if (!p.mesh) { instanced++; continue; }
+        const k0 = keyOf(p);
+        if (!k0) continue;
+        const { geom, posAttr, scale, key } = k0;
+        let hit = done.get(key);
+        if (hit === undefined) {
+          hit = null;
+          try {
+            let index = geom.index ? geom.index.array : null;
+            const res = found.get(key) || fillFlatHoles(plainPositions(posAttr), index, { maxSize: maxSize / scale });
+            if (res.holes > 0) {
+              let src = geom;
+              if (!index) {
+                index = new Uint32Array(posAttr.count);
+                for (let v = 0; v < index.length; v++) index[v] = v;
+                src = geom.clone(); src.setIndex(new THREE.BufferAttribute(index, 1));
+              }
+              const out = _geomFromIndexParts(src, applyHoleFill(index, res, geom.groups));
+              if (out) {
+                if (geom.groups && geom.groups.length === 1) out.addGroup(0, out.index.count, geom.groups[0].materialIndex || 0);
+                out.computeBoundingBox(); out.computeBoundingSphere();
+                const hash = 'hf_' + (state._decSeq = (state._decSeq | 0) + 1);
+                state.geomByHash.set(hash, out);
+                hit = { out, hash, res };
+              }
+            } else hit = { out: null, res };
+          } catch (e) { failed.push(p.name + ' (' + (e.message || e) + ')'); }
+          done.set(key, hit);
+        }
+        if (hit && hit.res) {
+          const k = hit.res.skipped || {};
+          tally.raised += k.raised || 0; tally.partOfShape += k.partOfShape || 0;
+          tally.leaking += k.leaking || 0; tally.tooDeep += k.tooDeep || 0; tally.tooLarge += k.tooLarge || 0;
+        }
+        if (hit && hit.out) {
+          const before = _decSnap(p);
+          p.mesh.geometry = _stampGeometry(hit.out);
+          p.hash = hit.hash;
+          p.triCount = hit.out.index.count / 3;
+          p.vertCount = hit.out.attributes.position.count;
+          _refreshPartBBox(p);
+          p._fp = null; p._fpKey = null;
+          undoItems.push({ partId: p.partId, before, after: _decSnap(p) });
+          parts++;
+          for (const f of ['holes', 'through', 'blind', 'open', 'removedTris', 'addedTris']) tally[f] += hit.res[f];
+        }
+        if (performance.now() - lastYield > 60) {
+          if (label) label.textContent = 'Filling… ' + Math.round((i + 1) / targets.length * 100) + '%';
+          await _nextFrame();
+          lastYield = performance.now();
+        }
+      }
+    } finally {
+      if (btn) btn.disabled = false;
+      if (label) label.textContent = 'Fill holes';
+    }
+
+    if (undoItems.length) pushUndo({ type: 'decimate', label: 'Fill holes', items: undoItems });
+    try { recomputeStats(); } catch (_) {}
+    try { rebuildTree(); } catch (_) {}
+    try { refreshPropertiesPanel(); } catch (_) {}
+    try { applySelectionColors(); } catch (_) {}
+    if (state.viewMode === 'heat') { _exitHeatmap(); _enterHeatmap(); }
+    requestRender();
+
+    const n = (k, one, many) => fmtNum(k) + ' ' + (k === 1 ? one : many);
+    const left = [];
+    if (tally.partOfShape) left.push(n(tally.partOfShape, 'opening that is part of a shape', 'openings that are part of a shape'));
+    if (tally.raised) left.push(n(tally.raised, 'raised feature', 'raised features'));
+    if (tally.leaking + tally.tooDeep) left.push(n(tally.leaking + tally.tooDeep, 'opening into a cavity', 'openings into a cavity'));
+    if (tally.tooLarge) left.push(n(tally.tooLarge, 'opening over the size limit', 'openings over the size limit'));
+    if (instanced) left.push(n(instanced, 'instanced part (select it to include it)', 'instanced parts (select them to include them)'));
+    const kinds = [];
+    if (tally.through) kinds.push(fmtNum(tally.through) + ' through');
+    if (tally.blind) kinds.push(fmtNum(tally.blind) + ' blind');
+    if (tally.open) kinds.push(fmtNum(tally.open) + ' open');
+    const saved = tally.removedTris - tally.addedTris;
+    const summary = tally.holes
+      ? n(tally.holes, 'hole', 'holes') + ' filled in ' + n(parts, 'part', 'parts') + (kinds.length ? ' (' + kinds.join(', ') + ')' : '') +
+        ' · ' + (saved >= 0 ? '−' + fmtNum(saved) : '+' + fmtNum(-saved)) + ' triangles'
+      : 'No holes up to ' + maxSize + ' mm in ' + (picked ? 'the selection' : 'the visible parts');
+    if (info) info.textContent = summary + (left.length ? '. Left alone: ' + left.join(', ') + '.' : '.');
+    toast(tally.holes ? 'Holes filled' : 'Fill holes', summary, tally.holes ? 'success' : 'info', 4500);
+    if (failed.length) toast('Failed', failed.slice(0, 3).join(', ') + (failed.length > 3 ? ' +' + (failed.length - 3) + ' more' : ''), 'error', 5000);
+    try { Log.info('[fill holes] ' + summary + (left.length ? ' — left alone: ' + left.join(', ') : '')); } catch (_) {}
+  }
+  document.getElementById('btn-fill-holes')?.addEventListener('click', _fillHoles);
+  document.getElementById('fill-holes-size')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); _fillHoles(); } });
 
   // Keep the count badge on the Decimate button in sync with selection.
   function _updateDecCount() {
@@ -30204,6 +31252,28 @@ setTimeout(() => _dndDecorateTree(), 0);
     setTimeout(fillShapePics, 2500);    // thumbnails render a moment after boot
   }
 })();
+
+// Undo steps marked `auto` belong to the action before them (a group removed
+// because that action emptied or deleted it). One Ctrl+Z undoes the pair and
+// one redo re-applies it. Outermost wrapper, so it sees every op type.
+{
+  const _undoOne = undoLast, _redoOne = redoLast;
+  undoLast = function () {
+    for (let guard = 0; guard < 8; guard++) {
+      const top = state.history[state.history.length - 1];
+      _undoOne.apply(this, arguments);
+      if (!(top && top.auto)) break;
+    }
+  };
+  redoLast = function () {
+    _redoOne.apply(this, arguments);
+    for (let guard = 0; guard < 8; guard++) {
+      const nxt = state.redo && state.redo[state.redo.length - 1];
+      if (!(nxt && nxt.auto)) break;
+      _redoOne.apply(this, arguments);
+    }
+  };
+}
 
 // Regression suite: open the app with ?selftest (see tests/selftest.js).
 if (new URLSearchParams(location.search).has('selftest')) {

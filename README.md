@@ -90,10 +90,19 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 | 📐 **Wireframe / Shaded / Matcap** | Three viewport modes, switchable mid-flight |
 | 📊 **FPS pill**                 | Tabular-numeric FPS readout, colour-coded for stutter detection |
 
+### 🧹 Mesh tools
+| | |
+|---|---|
+| 🕳 **Fill holes**               | Closes bolt holes, slots, pockets and engraved lettering in flat faces; leaves bosses, washer bores and cavity openings alone. Size limit in mm, watertight result, undoable |
+| 🔻 **Decimate**                 | meshoptimizer simplifier — keeps normals, UVs and vertex colours; −25 … −90 % or a triangle target for the selection |
+| 📦 **Smart fit**                | Replace parts with the best low-poly proxy: box, oriented box or cylinder |
+| 🧽 **Clean-up**                 | Remove small, empty, duplicate and degenerate parts; delete empty groups; split fused meshes |
+| 🎨 **Materials dock**           | Filter, sort and inspect materials; select or isolate the parts that use one; assign, merge, duplicate, PBR presets |
+
 ### 🧬 Hierarchy editing
 | | |
 |---|---|
-| 🌳 **Live tree**                | 10 K+ nodes, virtualized, sticky right column, content-visibility tuned |
+| 🌳 **Live tree**                | 10 K+ nodes; only the rows on screen are built, so rebuilds stay in the tens of milliseconds |
 | 🔎 **Search + filters**         | Fuzzy name search, "highlight small parts" tinting |
 | ✂️ **Flatten / Dissolve**        | Collapse single-child chains, dissolve groups, ungroup scopes — all undoable |
 | ✏️ **Batch rename (F2)**         | Token templates (`{name}`, `{idx}`, `{depth}`) + regex find/replace + presets |
@@ -111,7 +120,7 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 | | |
 |---|---|
 | 👋 **Welcome modal**            | Drag-drop, browse, recent files (IndexedDB-persisted handles) |
-| ⌘ **Command palette (⌘K)**       | Searchable action registry — every menu item, one keystroke away |
+| ⌘ **Command palette (⌘K)**       | Every menu item and every sidebar button and control, one keystroke away |
 | ⌨️ **Shortcuts overlay**         | Discoverable cheatsheet with live key bindings |
 | ⚙️ **Settings modal**            | Persistent prefs (renderer, perf mode, background, toggles) |
 | 🎨 **Design-token system**      | Centralised CSS variables — surfaces, radii, type scale, easings |
@@ -187,9 +196,17 @@ step2glb.py        STEP → GLB converter (OCCT + instancing)
 serve.py           local HTTP server + /api/convert endpoint
 index.html         WebGPU viewer shell
 app-v2.js          viewer logic (scene graph, picking, colour groups)
+holefill.js        hole filler (pure module, no dependencies)
+mesh-worker.js     background worker for Fill holes and Decimate
+cloner.js          cloner (linear / grid / radial arrays)
+pathtracer.js      path-traced renders from the viewport
+tests/
+ ├── selftest.js         in-app regression suite (?selftest)
+ └── holefill.test.mjs   hole filler on synthetic shapes (node)
 vendor/
  ├── draco/        Draco encoder + decoder (WASM)
- └── assimp/       Assimp.js (WASM)
+ ├── assimp/       Assimp.js (WASM)
+ └── inter/        Inter variable font (SIL OFL)
 fbx_*.py           FBX inspection / diff utilities
 start.{bat,command}    one-click launchers
 step2glb.{bat,command} headless converters
@@ -218,20 +235,20 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v0.9.0** — a *reliability* release, plus a reworked interface. A stress
-test on a 1,583-part / 5.4M-triangle assembly and three code audits found
-tools that destroyed geometry, exports that ignored edits, and actions
-Ctrl+Z could not undo.
+**v0.10.0** — the biggest release so far: new tools, and everything you touch is immediate.
 
-- ![fix][fix] **Decimate** removed far more than asked (most parts ended at zero triangles) and its result never reached the export. It now runs on meshoptimizer, keeps normals / UVs / colours, and takes a triangle target.
-- ![fix][fix] **Save scene** keeps hidden parts, camera, view settings, measurements, real names and the hierarchy across a round trip.
-- ![fix][fix] **Undo / redo** covers every editing action: geometry tools, typed transforms, tree drag-and-drop, visibility, materials, groups.
-- ![fix][fix] **Flatten and "Delete empty groups"** follow the tree; grouping across levels no longer drags parts into the wrong group; Import → Append keeps the existing tree.
-- ![fix][fix] **Export** no longer bakes Wireframe / X-ray / Heatmap into the file, follows Recenter and Center pivot, includes Cloner copies, and PLY no longer hangs in a background tab.
-- ![perf][perf] **Selection is immediate** on large assemblies (about 140 ms → under 15 ms per click on the test model); tree rows select on press and heavy outlines are prepared in the background.
-- ![polish][polish] **Interface** — one button scale, Figma-style menus, Plasticity-style viewport toolbars, a new startup screen, zoom-adaptive floor grid, blue accent, bundled Inter.
-- ![new][new] **Self-test** — `?selftest` runs 25 regression tests inside the live app.
-- ![docs][docs] Renamed to **MeshOptimiser** throughout. See [CHANGELOG.md](CHANGELOG.md) for the full list and the known issues.
+- ![new][new] **Fill holes** — closes bolt holes, slots, pockets and engraved lettering in flat faces and leaves everything else untouched. It tells a hole from a boss, a washer's bore or an opening into a cavity. 4,136 holes (427,543 triangles) in about two seconds on the 1,583-part test assembly.
+- ![new][new] **Decimate, rebuilt** on meshoptimizer — keeps normals, UVs and colours, takes a triangle target, and reaches the export.
+- ![new][new] **Materials dock** — slides up like the console: filter, sort, and an inspector with Select parts / Isolate / Assign.
+- ![perf][perf] **Speed** — selection, hover, delete, undo and view switching are immediate on a 5.4M-triangle assembly; the parts tree only builds the rows on screen; Fill holes and Decimate run in background workers.
+- ![fix][fix] **Parts tree** — empty groups stay listed (a setting removes them automatically if you prefer), one scroll direction with every icon lined up, deleting a group deletes the group.
+- ![new][new] **View cube and axis views** — click a face for Top / Front / Side / Back / Left / Bottom; orbit out to return to perspective.
+- ![new][new] **Command search** finds every sidebar button and control.
+- ![polish][polish] **Interface** — Plasticity-style viewport, one button scale, three corner radii, bundled Inter, fewer pop-ups.
+- ![fix][fix] **Reliability** — every editing action can be undone; a rendering freeze after repeated mesh edits is fixed; Import → Append keeps the tree; Cloner copies are exported.
+- ![new][new] **Tests** — `?selftest` runs 31 regression tests inside the live app; `node tests/holefill.test.mjs` checks the hole filler.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full list and the known issues.
 
 ---
 
@@ -244,6 +261,16 @@ round trips and more; results appear in a panel at the bottom right and in
 the console. `?selftest=groups` runs only the tests whose name contains
 "groups". Nothing is downloaded — exports are captured in memory. Add a
 test to `tests/selftest.js` whenever a bug is fixed.
+
+The hole filler has its own suite, which needs only Node:
+
+```bash
+node tests/holefill.test.mjs
+```
+
+It builds plates, pockets, counterbores, engraved letters, a boss, a washer
+and a hollow box, runs the filler on them and checks that the result is
+closed, has the right volume, and is untouched where it should be.
 
 ---
 

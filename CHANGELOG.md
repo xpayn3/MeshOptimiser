@@ -4,18 +4,351 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.10.0
+
+The biggest release so far. v0.9.0 made the app trustworthy; this one
+makes it *fast* and gives it tools it did not have. There is a real
+hole filler now, a proper materials panel, a decimator that keeps your
+normals and UVs, and a parts tree that keeps up with 5 million
+triangles — plus a long list of bugs that only show up on real
+assemblies, found by working through one.
+
+**Highlights**
+
+- ![new][new] **Fill holes.** One click closes the bolt holes, slots,
+  pockets and engraved lettering in flat faces and leaves the rest of
+  every mesh untouched. It can tell a hole from a boss, from the bore of
+  a washer and from an opening into a cavity. 4,136 holes — 427,543
+  triangles — gone in about two seconds on the test assembly.
+- ![new][new] **Decimate, rebuilt** on meshoptimizer: keeps normals, UVs
+  and colours, takes a triangle budget, and its result reaches the
+  export.
+- ![new][new] **Materials dock** — slides up like the console: filter,
+  sort, inspect, select or isolate the parts that use a material,
+  assign it to the selection.
+- ![perf][perf] **Everything you touch is immediate.** Selecting,
+  hovering, deleting, undoing, switching views, dragging a slider: each
+  was measured on a 1,583-part / 5.4M-triangle assembly and the slow
+  step removed. Heavy tools run in background workers.
+- ![fix][fix] **The hierarchy shows what is there.** Empty groups stay
+  listed, the tree scrolls in one direction with everything lined up,
+  and every editing action can be undone.
+- ![polish][polish] **A calmer interface** — Plasticity-style viewport
+  and view cube, one button scale, three corner radii, Inter bundled,
+  fewer pop-ups.
+
+**Fill holes**
+
+- ![new][new] **Fill holes** (Optimize card, and the command palette)
+  closes holes in flat faces and leaves the rest of each mesh exactly as
+  it is — no remeshing, no decimation. It finds the flat faces, the
+  loops cut into them and the surface behind each loop, and only acts
+  when that surface is a hole:
+  - through holes, blind holes, counterbores, slots, pockets and
+    engraved lettering are closed; a counterbore or a pocket with a hole
+    in its floor goes as one feature or not at all;
+  - a boss or pin standing on a face is left alone (it rises above the
+    face instead of sinking into it);
+  - an opening that is what the part *is* — the bore of a washer, a nut
+    or a bushing — is left alone (it is wide both for its face and for
+    the part as a whole);
+  - an opening that leads into a cavity or out through a curved surface
+    is left alone;
+  - plunged and flow-drilled holes, which are a plain hole on one side
+    and a collar on the other, are filled from the hole's side and the
+    collar stays;
+  - "up to N mm" sets the largest hole, measured across its widest
+    point.
+  The cap is triangulated flush with the face from the face's own
+  vertices, so normals, UVs, vertex colours and material ranges carry
+  over and the mesh stays closed. Works on the selection, or on every
+  visible part when nothing is selected; one undo step; the result is
+  what gets exported. The search runs in background workers: on the
+  1,583-part test assembly at 12 mm it closes 4,136 holes in 438 parts
+  (427,543 triangles fewer) in about two seconds, and none of the 110
+  changed meshes that were checked gained an open edge.
+
+**Decimate**
+
+- ![new][new] **meshoptimizer simplifier** — reduction runs on the index
+  buffer and keeps normals, UVs and vertex colours (the old path
+  stripped parts to bare positions). Multi-material parts keep their
+  material ranges. Falls back to the basic simplifier offline.
+- ![new][new] **Target…** — a triangle budget for the whole selection,
+  next to the −25 … −90% presets, with a live "12,400 → about 6,200
+  triangles" readout.
+- ![perf][perf] Runs in background workers, several parts at a time; the
+  page stays responsive during a large run.
+
+**Materials**
+
+- ![new][new] **Materials dock** — the materials panel was a 228 px
+  popover that ran off the top of the viewport. It is now a dock that
+  slides up from the bottom like the console, as wide as the viewport:
+  filter by name, colour or type; order by use, triangles, name or
+  colour; a grid that uses the whole width; and an inspector for the
+  picked material (colour, roughness, metalness, opacity, textures, how
+  many parts and triangles use it) with Edit, Select parts, Isolate and
+  Assign to the selection. The bottom toolbar and the tips ride up with
+  it; the console and the dock take turns.
+
+**Parts tree and groups**
+
+- ![fix][fix] **The tree hides nothing.** A group vanished from the
+  hierarchy as soon as it had no live parts — after its parts were
+  dragged out or deleted — although it still existed in the scene. Every
+  group is now listed; one with nothing in it says "empty" and can be
+  filled again, renamed or deleted. Empty containers in an imported file
+  are listed too.
+- ![fix][fix] **Deleting a group deletes the group.** Delete on a
+  selected group, and "Delete group" in the context menu, remove the
+  group row with its contents, and one undo brings both back. (Deleting
+  only the parts inside a group leaves the group, empty.)
+- ![new][new] **Settings → Delete groups when they become empty** (off by
+  default). When on, a group that held something before an action and
+  holds nothing after it is removed with that action — one undo restores
+  both. Groups that were already empty are never touched.
+- ![fix][fix] **Parts tree scrolls in one direction.** It used to scroll
+  sideways with the eye / colour column pinned to the right edge; rows
+  were as wide as their own text, so pinning only worked for long rows —
+  scrolled sideways, the eyes of short rows slid left while the others
+  stayed, and the pinned column trailed behind the wheel. Every row is
+  now exactly as wide as the panel, the icon column is an ordinary last
+  cell, long names end in an ellipsis (the full name shows on hover),
+  and deep hierarchies get a narrower indent step instead of running
+  off the edge.
+- ![polish][polish] **Parts tree** — neutral icons, selection shown on
+  the label and icon in the accent blue, group rows show their part
+  count, more room at the right edge. Only the row that was clicked is
+  bright: clicking a group hints the parts inside it instead of lighting
+  them all up, and parents of a selected part are hinted the same way.
+- ![polish][polish] **Parts search** has a clear button, is dimmed while
+  empty and idle, and the six buttons under it span the panel's width.
+- ![fix][fix] **Import → Append keeps the existing tree** instead of
+  moving every existing part into "Untraced"; totals and model size
+  cover the whole scene afterwards. A failed load no longer turns the
+  next Open into an append, or replaces the file Revert reloads.
+
+**Speed**
+
+- ![perf][perf] **Selection is immediate on large models.** Every
+  selection change re-created every icon in the document (about 90 ms on
+  a 1,500-part tree); icons are now rendered once. Selection outlines no
+  longer block the click: cached edges are drawn at once, small parts
+  are built inline within a few milliseconds, and anything heavier gets
+  a bounding box while its edges are computed in a worker. On the
+  1,583-part assembly a click went from ~140 ms to under 15 ms, and the
+  first click on a 125k-triangle part from a one-second freeze to none.
+- ![perf][perf] **Highlight and gizmo appear with the press.** A tree row
+  is selected when the mouse button goes down rather than when it comes
+  back up, and the outline and gizmo are rebuilt before the next paint
+  instead of one frame later. Outlines of heavy parts are computed in
+  the background after a model loads, so the first click on a large
+  part shows its real outline at once. Measured on the same assembly:
+  selected 4–8 ms after the press, outline and gizmo ready by 15 ms.
+- ![perf][perf] **Hovering the parts tree keeps up with the pointer.**
+  Finding the row under the cursor walked all 1,500+ rows — about 7 ms
+  each time, several times per mouse move, so a row lit up some 22 ms
+  late. Off-screen rows are now skipped (`content-visibility`); the same
+  measurement is 0.3 ms and hover starts within about 2 ms.
+- ![perf][perf] **The parts tree only builds the rows you can see.** A
+  rebuild used to write every row and then replace ten thousand icon
+  placeholders: 325 ms on a 4,350-row tree, paid again by every undo,
+  search keystroke and visibility toggle. Rows are now empty shells
+  until they scroll into view and icons are CSS masks. A rebuild takes
+  about 60 ms, and undoing a 710-part delete went from 700 ms to 80.
+- ![perf][perf] **Delete is immediate.** Deleting parts rebuilt the tree
+  twice (once hidden inside the "recount flagged parts" step). The rows
+  of the deleted parts are now taken out and the group counts updated in
+  place: about 30 ms for 710 parts instead of 780, with a result
+  identical to a full rebuild.
+- ![perf][perf] **Fill holes and Decimate run in background workers**,
+  up to four meshes at a time. A whole-model hole fill went from 4–5
+  seconds of frozen page to 1.7 seconds of a page that still responds.
+  Where workers cannot start, the tools run on the page as before.
+- ![perf][perf] **Switching between Cam, Top, Front and Side is
+  instant.** Each switch built a new camera, and the renderer prepares
+  every part again for a camera it has not seen — seconds on a large
+  model, every time. One camera now changes its projection in place; the
+  first frame after a switch costs the same as any other frame.
+- ![perf][perf] **No stalls after loading.** The pick-acceleration trees
+  were built 25 meshes at a time with rendering paused. They are now
+  built in 8 ms slices while the browser is idle, without touching the
+  buffers the renderer uses.
+- ![perf][perf] **The size-threshold slider recounts when it is let
+  go**, not on every pixel of the drag, and no longer rebuilds the tree.
+  The Delete button reads "Calculating…" until the new count is in.
+- ![fix][fix] Collapsing and re-expanding a group no longer brings the
+  rows of deleted parts back.
+
+**Viewport and camera**
+
+- ![polish][polish] **Viewport** — Plasticity's cool grey background
+  (`#28282b` on screen; the old value came out near-black); a view cube
+  in the top-right corner, sitting in the corner of its three axes with
+  a labelled dot at the end of each — click a dot or a face to look
+  along that axis; triangle statistics moved to the
+  top-left as a quiet readout; the grid toggle left the toolbar (`G`
+  and the command palette still switch it); nothing drawn over the
+  viewport can be selected as text.
+- ![new][new] **View cube** — click a dot or a face for the orthographic
+  view along that axis; the view pill names it (Top, Bottom, Front,
+  Back, Side, Left). Orbiting out of an axis view returns to the
+  perspective camera from where you are, at the same size on screen —
+  it used to be locked until you picked "Cam". The face under the
+  pointer takes its axis colour.
+- ![polish][polish] **Viewport toolbars** — two dark pills in the manner
+  of Plasticity: tools down the left edge, display controls along the
+  bottom centre with a search button that opens the command palette.
+  Contextual shortcut tips sit, faintly, at the bottom right; the
+  triangle readout moved to the top right.
+- ![polish][polish] **Floor grid** adapts to zoom the way Cinema 4D,
+  Blender and Houdini do: finer lines fade out and the next decade
+  takes over, so density on screen stays constant and the horizon no
+  longer shimmers. Quieter overall.
+- ![polish][polish] The selection box is a soft blue pane with a thin
+  dashed edge and square corners.
+- ![fix][fix] **The move readout showed "Y +0.00" and "Z +0.00"** while
+  dragging a part that is rotated: it read the travel along the wrong
+  axes. Move and rotate readouts now follow the gizmo's own axes.
+- ![polish][polish] Scrollbars have no arrow buttons; tooltips on the
+  viewport tools appear at once and show only the name and the
+  shortcut, beside the tool pill rather than over its icons; group names
+  are a soft grey instead of white; the renderer picker ends level with
+  the sidebar.
+
+**Interface**
+
+- ![new][new] **The command search finds every sidebar control.** Every
+  button, dropdown, slider, switch and field in the sidebars is listed
+  under its card's name when the palette opens (read from the page, so
+  it cannot fall out of step). A button entry runs the button; any
+  other entry opens its card, scrolls to the control and focuses it.
+- ![polish][polish] **Startup screen** redesigned in two columns: drop
+  zone, Open / Import / New, start from a shape, and three option
+  switches on the left; resume and a filterable recent-files list on
+  the right.
+- ![polish][polish] **Top bar** — Add, Cloner and Fit are gone (shapes
+  are added from the tool pill, Cloner from the command palette);
+  Screenshot and Render sit on the right, ending at the viewport's
+  edge. The status bar spans the viewport only, so both sidebars run
+  to the bottom of the window.
+- ![polish][polish] **Top bar and edges** — the app icon is a plain
+  white mark with a menu arrow instead of a blue tile; the sidebar
+  toggle's pressed state is a quiet fill, not a glowing ring; the right
+  sidebar starts and ends level with the viewport, and so does the
+  search field; the FPS readout sits beside Console and keeps its
+  width.
+- ![polish][polish] **Three corner radii for the whole page** — 4px for
+  tiny chips, 6px for every control, 10px for every container (cards,
+  menus, tool pills, the viewport, dialogs, docks). The page used
+  thirteen values between 2 and 16px.
+- ![polish][polish] **One surface for everything that floats** — menus,
+  popovers, tooltips, toasts, dialogs and windows take their colour,
+  radius, ring and shadow from a single set of `--surface-*` tokens
+  instead of each defining its own.
+- ![polish][polish] **Inter is bundled** (`vendor/inter`, SIL Open Font
+  License), so the app looks the same on every machine, and nothing in
+  the interface is bold.
+- ![polish][polish] **Fewer status messages.** Everyday edits — delete,
+  paste, duplicate, group, add a shape, new scene — no longer pop a
+  toast; the result is on screen already. They are still written to the
+  log console. Toasts remain for what you could not otherwise see:
+  clean-up and mesh-operation results, files written, the reason a
+  command did nothing, and every warning and error.
+- ![polish][polish] **Card headers** have a real chevron in a small hit
+  area instead of a 7px text triangle, centred on whole pixels, with
+  equal space above and below; sliders keep the normal pointer over the
+  thumb as well as the track.
+- ![polish][polish] **Shape picker** uses flat line icons like the rest
+  of the toolbar (it showed small shaded renders) and opens beside its
+  button.
+- ![polish][polish] Properties rows fit on one line (Diagonal removed),
+  the viewport has rounded corners, the right sidebar scrolls without a
+  scrollbar and clips its cards on rounded corners, the app icon is the
+  same size as the other top-bar buttons, sliders keep the normal
+  cursor, and keyboard focus shows one consistent ring.
+- ![fix][fix] **Small windows** — the right sidebar was pushed off the
+  edge when the window got narrow (the status bar's text held the
+  viewport column open). The column now shrinks; the status bar drops
+  the vertex and memory counts, then the file name, instead of wrapping
+  or overlapping; the shortcut tips fold into one column and move above
+  the bottom toolbar rather than sitting on top of it.
+
+**Fixes**
+
+- ![fix][fix] **A second geometry edit on the same part could stop the
+  viewport from drawing** ("setIndexBuffer … is not of type GPUBuffer",
+  every frame). The WebGPU renderer decides whether an object's buffers
+  need uploading by comparing attribute names and version numbers, not
+  the geometry's identity, so a freshly built geometry that replaced
+  another freshly built one went unnoticed whenever the part shared its
+  material with other visible parts. Every tool that swaps geometry
+  (Fill holes, Decimate, Smart fit, bake, and their undo / redo) now
+  gives the new geometry version numbers of its own.
+- ![fix][fix] **The remaining gaps are closed** — values typed into the
+  transform panel (steppers, wheel and Reset included; a held stepper is
+  one step), tree drag-and-drop, the eye icon on a group row and every
+  other visibility toggle, Materials-panel Add / Duplicate / Merge /
+  Delete / presets, context-menu "Rename group" and deleting an empty
+  group are all undoable.
+- ![fix][fix] **Visibility toggles reach instanced parts** — the eye
+  icon, Hide unselected, group toggles and hide-by-colour all go through
+  one helper.
+- ![fix][fix] **Cloner copies are exported and saved** (only the source
+  part used to be written). Exports also reuse one material per
+  (material, colour) pair instead of one per part, "Origin: bbox centre"
+  is centred correctly, and a merged export keeps mirrored parts facing
+  outward.
+- ![fix][fix] **Cancel stops a STEP conversion** — the loader's Cancel
+  ends the polling and kills the converter on the server
+  (`POST /api/cancel/<job>`); opening another file does the same. A
+  conversion can no longer finish later and replace the scene, and the
+  loader no longer polls forever after a server restart.
+- ![fix][fix] Adding a shape highlighted the previously selected row in
+  the tree instead of the new part.
+- ![fix][fix] Undoing the creation of a selected group left Properties
+  showing a group that no longer existed ("Group -2").
+- ![fix][fix] Opening the Export menu flipped the arrow on the **File**
+  button instead of its own (both wrappers share a class and the code
+  took the first one).
+- ![polish][polish] The "Instances promoted" notice goes to the log
+  console instead of popping a toast on every click.
+
+**Testing**
+
+- ![new][new] **`tests/selftest.js`** — open the app with `?selftest` to
+  run 31 regression tests inside the live app (groups, flatten, every
+  undo path, export, save round trip, import-append, decimate,
+  shortcuts, selection speed). `?selftest=groups` runs a subset.
+- ![new][new] **`tests/holefill.test.mjs`** — `node tests/holefill.test.mjs`
+  checks the hole filler on shapes built in the test (through, blind,
+  counterbored, pockets, engraved letters, a boss, a washer, a hollow
+  box): the result must be closed, the right volume, and untouched
+  where it should be.
+
+**Known issues**
+
+- Fill holes works on flat faces; holes in curved surfaces are left
+  alone. A flow-drilled hole is closed but its collar stays, as a small
+  stub on the inside.
+- Merge cannot be redone after an undo.
+- Dragging a part out of a cloner is not undoable, and undoing a cloner
+  does not always return its sources to their original group.
+- Values typed into the transform panel do not refresh a group's stored
+  origin on undo.
+- A newly created group appears collapsed.
+- `serve.py` never clears converted files out of `inbox/`.
+
 ## v0.9.0
 
 v0.8.0 modernised the plumbing. v0.9.0 is a *reliability* release: a
 stress test on a 1,583-part / 5.4M-triangle assembly plus three code
 audits turned up tools that destroyed geometry, exports that ignored
 edits, and a group of actions that Ctrl+Z could not undo. Those are
-fixed, and a regression suite now ships with the app to keep them
-fixed. Decimation was rebuilt on meshoptimizer, selection on large
-models is immediate, and the interface was reworked: one button scale,
-Figma-style menus, Plasticity-style viewport toolbars, a new startup
-screen and a bundled font. The app is now called **MeshOptimiser**
-everywhere.
+fixed. The interface also gets one button scale, readable secondary
+text, and a full proofreading pass. The app is now called
+**MeshOptimiser** everywhere.
 
 **Data loss and wrong output**
 
@@ -61,20 +394,6 @@ everywhere.
 - ![fix][fix] An export that fails before the writer starts now takes
   the loader down and reports the error instead of leaving
   "Preparing export…" on screen.
-- ![fix][fix] **Import → Append keeps the existing tree** instead of
-  moving every existing part into "Untraced"; totals and model size
-  cover the whole scene afterwards. A failed load no longer turns the
-  next Open into an append, or replaces the file Revert reloads.
-- ![fix][fix] **Cloner copies are exported and saved** (only the source
-  part used to be written). Exports also reuse one material per
-  (material, colour) pair instead of one per part, "Origin: bbox centre"
-  is centred correctly, and a merged export keeps mirrored parts facing
-  outward.
-- ![fix][fix] **Cancel stops a STEP conversion** — the loader's Cancel
-  ends the polling and kills the converter on the server
-  (`POST /api/cancel/<job>`); opening another file does the same. A
-  conversion can no longer finish later and replace the scene, and the
-  loader no longer polls forever after a server restart.
 
 **Undo / redo**
 
@@ -90,48 +409,6 @@ everywhere.
 - ![fix][fix] A change too large to keep an undo copy of now clears the
   history (with a notice) instead of leaving Ctrl+Z pointing at an
   older step.
-- ![fix][fix] **The remaining gaps are closed** — values typed into the
-  transform panel (steppers, wheel and Reset included; a held stepper is
-  one step), tree drag-and-drop, the eye icon on a group row and every
-  other visibility toggle, Materials-panel Add / Duplicate / Merge /
-  Delete / presets, context-menu "Rename group" and deleting an empty
-  group are all undoable.
-- ![fix][fix] **Visibility toggles reach instanced parts** — the eye
-  icon, Hide unselected, group toggles and hide-by-colour all go through
-  one helper.
-
-**Decimate**
-
-- ![new][new] **meshoptimizer simplifier** — reduction runs on the index
-  buffer and keeps normals, UVs and vertex colours (the old path
-  stripped parts to bare positions). Multi-material parts keep their
-  material ranges. Falls back to the basic simplifier offline.
-- ![new][new] **Target…** — a triangle budget for the whole selection,
-  next to the −25 … −90% presets, with a live "12,400 → about 6,200
-  triangles" readout.
-
-**Speed**
-
-- ![perf][perf] **Selection is immediate on large models.** Every
-  selection change re-created every icon in the document (about 90 ms on
-  a 1,500-part tree); icons are now rendered once. Selection outlines no
-  longer block the click: cached edges are drawn at once, small parts
-  are built inline within a few milliseconds, and anything heavier gets
-  a bounding box while its edges are computed in a worker. On the
-  1,583-part assembly a click went from ~140 ms to under 15 ms, and the
-  first click on a 125k-triangle part from a one-second freeze to none.
-- ![perf][perf] **Highlight and gizmo appear with the press.** A tree row
-  is selected when the mouse button goes down rather than when it comes
-  back up, and the outline and gizmo are rebuilt before the next paint
-  instead of one frame later. Outlines of heavy parts are computed in
-  the background after a model loads, so the first click on a large
-  part shows its real outline at once. Measured on the same assembly:
-  selected 4–8 ms after the press, outline and gizmo ready by 15 ms.
-- ![perf][perf] **Hovering the parts tree keeps up with the pointer.**
-  Finding the row under the cursor walked all 1,500+ rows — about 7 ms
-  each time, several times per mouse move, so a row lit up some 22 ms
-  late. Off-screen rows are now skipped (`content-visibility`); the same
-  measurement is 0.3 ms and hover starts within about 2 ms.
 
 **Groups, Flatten and cleanup**
 
@@ -174,15 +451,6 @@ everywhere.
   Optimize) would not collapse.
 - ![polish][polish] The Measurements card only appears while there is a
   measurement to list.
-- ![fix][fix] Adding a shape highlighted the previously selected row in
-  the tree instead of the new part.
-- ![fix][fix] Undoing the creation of a selected group left Properties
-  showing a group that no longer existed ("Group -2").
-- ![fix][fix] Opening the Export menu flipped the arrow on the **File**
-  button instead of its own (both wrappers share a class and the code
-  took the first one).
-- ![polish][polish] The "Instances promoted" notice goes to the log
-  console instead of popping a toast on every click.
 
 **Interface**
 
@@ -192,64 +460,22 @@ everywhere.
   40px, text from 10 to 13px and radius from 4 to 8px depending on the
   panel. Full-width action buttons are left-aligned so their icons form
   one column.
-- ![polish][polish] **Viewport toolbars** — two dark pills in the manner
-  of Plasticity: tools down the left edge, display controls along the
-  bottom centre with a search button that opens the command palette.
-  Contextual shortcut tips sit, faintly, at the bottom right; the
-  triangle readout moved to the top right.
-- ![polish][polish] **Top bar** — Add, Cloner and Fit are gone (shapes
-  are added from the tool pill, Cloner from the command palette);
-  Screenshot and Render sit on the right, ending at the viewport's
-  edge. The status bar spans the viewport only, so both sidebars run
-  to the bottom of the window.
-- ![polish][polish] **Startup screen** redesigned in two columns: drop
-  zone, Open / Import / New, start from a shape, and three option
-  switches on the left; resume and a filterable recent-files list on
-  the right.
-- ![polish][polish] **Floor grid** adapts to zoom the way Cinema 4D,
-  Blender and Houdini do: finer lines fade out and the next decade
-  takes over, so density on screen stays constant and the horizon no
-  longer shimmers. Quieter overall.
+- ![polish][polish] **Readable secondary text** — tertiary text (labels,
+  triangle counts, status bar) measured about 3:1 against the 4.5:1
+  minimum and now passes. Accent-coloured text uses a lighter tint;
+  fills and borders keep the brand colour.
+- ![polish][polish] **Selected rows** get a filled background as well as
+  the label colour, and keyboard focus shows one consistent ring.
+- ![polish][polish] More room at the right edge of the parts list.
+- ![polish][polish] The top bar uses the same dark surface as the two
+  sidebars.
 - ![polish][polish] **Menus restyled** — every dropdown and context menu
   is a dark rounded panel with a solid accent bar under the pointer and
   white text; shortcuts are plain text at the right, and menus that pick
   a value mark the current one with a check.
-- ![polish][polish] **One surface for everything that floats** — menus,
-  popovers, tooltips, toasts, dialogs and windows take their colour,
-  radius, ring and shadow from a single set of `--surface-*` tokens
-  instead of each defining its own.
-- ![polish][polish] **Colour and type** — the accent is blue (`#0d99ff`)
-  instead of indigo; tertiary text (labels, triangle counts, status
-  bar) measured about 3:1 against the 4.5:1 minimum and now passes;
-  nothing in the interface is bold; **Inter is bundled**
-  (`vendor/inter`, SIL Open Font License) so the app looks the same on
-  every machine.
-- ![polish][polish] **Parts tree** — neutral icons, selection shown on
-  the label and icon in the accent blue, group rows show their part
-  count, more room at the right edge. Only the row that was clicked is
-  bright: clicking a group hints the parts inside it instead of lighting
-  them all up, and parents of a selected part are hinted the same way.
-- ![polish][polish] **Shape picker** uses flat line icons like the rest
-  of the toolbar (it showed small shaded renders) and opens beside its
-  button.
-- ![polish][polish] Properties rows fit on one line (Diagonal removed),
-  the viewport has rounded corners, the right sidebar scrolls without a
-  scrollbar and clips its cards on rounded corners, the app icon is the
-  same size as the other top-bar buttons, sliders keep the normal
-  cursor, and keyboard focus shows one consistent ring.
-- ![fix][fix] **Small windows** — the right sidebar was pushed off the
-  edge when the window got narrow (the status bar's text held the
-  viewport column open). The column now shrinks; the status bar drops
-  the vertex and memory counts, then the file name, instead of wrapping
-  or overlapping; the shortcut tips fold into one column and move above
-  the bottom toolbar rather than sitting on top of it.
-
-**Testing**
-
-- ![new][new] **`tests/selftest.js`** — open the app with `?selftest` to
-  run 25 regression tests inside the live app (groups, flatten, every
-  undo path, export, save round trip, import-append, decimate,
-  shortcuts, selection speed). `?selftest=groups` runs a subset.
+- ![polish][polish] **New primary colour** — the accent is now blue
+  (`#0d99ff`) instead of indigo, across buttons, sliders, highlights and
+  the primitive thumbnails.
 
 **Copy**
 
@@ -270,12 +496,16 @@ everywhere.
 
 **Known issues**
 
+- No undo yet for: values typed into the transform panel, tree
+  drag-and-drop, the eye icon on a group row, Materials-panel actions
+  (Add, Duplicate, Merge, Delete, presets) and context-menu "Rename
+  group". Ctrl+Z after any of these undoes the action before it.
+- Import → Append replaces the existing tree hierarchy.
+- Cloner output is not included in exports or saved scenes.
+- Cancel does not stop a STEP conversion that is already running.
+- The eye icon on a single part and "Hide unselected" have no visible
+  effect on instanced parts.
 - Merge cannot be redone after an undo.
-- Dragging a part out of a cloner is not undoable, and undoing a cloner
-  does not always return its sources to their original group.
-- Values typed into the transform panel do not refresh a group's stored
-  origin on undo.
-- `serve.py` never clears converted files out of `inbox/`.
 
 ## v0.8.0
 

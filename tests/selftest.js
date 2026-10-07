@@ -367,6 +367,102 @@
     await T.redo(); T.eq(T.tree(), '[G] Group 1\n  Cube\n  Cube.001\n  Cube.002', 'redo of a tree move');
   });
 
+  test('status messages: everyday edits stay quiet, clean-ups report', async () => {
+    await T.fresh(['cube', 'cube', 'sphere']);
+    const stack = document.getElementById('toasts');
+    const shown = () => [...stack.querySelectorAll('.toast')].map(t => t.textContent);
+    const clear = () => stack.querySelectorAll('.toast').forEach(t => t.remove());
+    clear();
+    // delete, duplicate, group, add a shape: no toast, but a line in the log
+    const logged = () => window.Log.entries().filter(e => /^\[done\]/.test(e.msg || '')).length;
+    const l0 = logged();
+    await T.pick(['Cube']); T.act('delete'); await T.sleep(350);
+    await T.pick(['Cube.001']); T.act('duplicate'); await T.sleep(350);
+    await T.group(['Cube.001', 'Sphere']);
+    await Promise.race([Promise.resolve(window._addPrimitive('cone')), T.sleep(1500)]); await T.sleep(300);
+    T.eq(shown().join(' | '), '', 'an everyday edit showed a status message');
+    T.assert(logged() >= l0 + 2, 'quiet messages are not kept in the log console');
+    // a clean-up that finds nothing still says so, and so does one that does something
+    document.getElementById('btn-clean-dupes').click(); await T.sleep(300); await T.ok(); await T.sleep(400);
+    T.assert(shown().length >= 1, 'a clean-up gave no feedback at all');
+    clear();
+    T.F().toast('Could not read file', 'broken.glb', 'error'); T.F().toast('Careful', '', 'warn');
+    T.eq(shown().length, 2, 'warnings and errors must always be shown');
+    clear();
+  });
+
+  test('tree drag-and-drop: a group emptied by hand stays in the tree', async () => {
+    await T.fresh(['cube', 'cube', 'cube']);
+    await T.group(['Cube', 'Cube.001']);
+    T.act('selClear'); await T.sleep(200);
+    const drop = T.F()._dndCommitHier;
+    for (const n of ['Cube.001', 'Cube']) {
+      drop([T.row(n)], { kind: 'row', row: T.row('Cube.002'), intent: 'after' });
+      await T.sleep(400);
+    }
+    const g = T.row('Group 1');
+    T.assert(!!g, 'the group disappeared from the tree once its last part was dragged out');
+    T.eq(+g.dataset.depth || 0, 0, 'the emptied group moved');
+    T.assert(T.tree().split('\n').every(l => !l.startsWith('  ')), 'a part is still shown inside the emptied group:\n' + T.tree());
+    T.assert(/empty/.test(g.textContent), 'the emptied group does not say it is empty');
+    T.assert(!g.classList.contains('hidden-vis'), 'the emptied group is drawn as hidden');
+    // it still takes a drop
+    drop([T.row('Cube.002')], { kind: 'row', row: T.row('Group 1'), intent: 'into' });
+    await T.sleep(400);
+    T.assert(T.tree().includes('[G] Group 1\n  Cube.002'), 'dropping into the emptied group failed:\n' + T.tree());
+    await T.undo(); await T.undo(); await T.undo();
+    T.eq(T.tree(), '[G] Group 1\n  Cube\n  Cube.001\nCube.002', 'three undos put everything back');
+    const grouped = T.tree();
+    // deleting the parts inside a group leaves the group, empty — nothing is hidden
+    await T.pick(['Cube', 'Cube.001']); T.act('delete'); await T.sleep(450);
+    T.assert(!!T.row('Group 1') && /empty/.test(T.row('Group 1').textContent), 'a group whose parts were deleted is no longer listed');
+    await T.undo(); T.eq(T.tree(), grouped, 'undo of deleting the parts in a group');
+    // deleting the group itself removes the row too, and one undo brings back both
+    T.act('selClear'); await T.sleep(150);
+    T.row('Group 1').querySelector('.tree-label').dispatchEvent(new MouseEvent('click', { bubbles: true })); await T.sleep(250);
+    T.act('delete'); await T.sleep(500);
+    T.eq(T.tree(), 'Cube.002', 'deleting a selected group left something behind');
+    await T.undo(); T.eq(T.tree(), grouped, 'one undo did not restore a deleted group with its parts');
+    await T.redo(); T.eq(T.tree(), 'Cube.002', 'one redo did not delete the group and its parts again');
+    await T.undo();
+    await T.ctx('Group 1', 'Delete group'); await T.ok(); await T.sleep(500);
+    T.eq(T.tree(), 'Cube.002', '"Delete group" left something behind');
+    await T.undo(); T.eq(T.tree(), grouped, 'one undo did not restore "Delete group"');
+    // "Delete empty groups" removes a group that was emptied by hand
+    for (const n of ['Cube.001', 'Cube']) { drop([T.row(n)], { kind: 'row', row: T.row('Cube.002'), intent: 'after' }); await T.sleep(400); }
+    document.getElementById('btn-clean-empty-groups').click(); await T.sleep(300); await T.ok(); await T.sleep(400);
+    T.assert(!T.row('Group 1'), '"Delete empty groups" left an emptied group behind');
+  });
+
+  test('settings: "Delete groups when they become empty" removes them with the action', async () => {
+    const P = T.F()._Prefs;
+    T.assert(!!P, 'preferences are not exposed to the tests');
+    try {
+      await T.fresh(['cube', 'cube', 'cube']);
+      await T.group(['Cube', 'Cube.001']);
+      T.act('selClear'); await T.sleep(250);
+      const grouped = T.tree();
+      P.set('autoDeleteEmptyGroups', true);
+      const drop = T.F()._dndCommitHier;
+      drop([T.row('Cube.001')], { kind: 'row', row: T.row('Cube.002'), intent: 'after' }); await T.sleep(450);
+      T.assert(!!T.row('Group 1'), 'a group that still holds a part was removed');
+      const mid = T.tree();
+      drop([T.row('Cube')], { kind: 'row', row: T.row('Cube.002'), intent: 'after' }); await T.sleep(500);
+      T.assert(!T.row('Group 1'), 'the emptied group was not removed although the setting is on');
+      await T.undo(); T.eq(T.tree(), mid, 'one undo did not bring back the group with the part in it');
+      await T.redo(); T.assert(!T.row('Group 1'), 'redo did not remove the emptied group again');
+      await T.undo(); await T.undo(); T.eq(T.tree(), grouped, 'two undos did not restore the starting tree');
+      // deleting the last parts in a group counts as emptying it
+      await T.pick(['Cube', 'Cube.001']); T.act('delete'); await T.sleep(500);
+      T.eq(T.tree(), 'Cube.002', 'deleting the parts of a group did not remove the group with the setting on');
+      await T.undo(); T.eq(T.tree(), grouped, 'one undo did not restore the parts and their group');
+      // with the setting off again the group stays
+      P.set('autoDeleteEmptyGroups', false);
+      await T.pick(['Cube', 'Cube.001']); T.act('delete'); await T.sleep(500);
+      T.assert(!!T.row('Group 1'), 'the group was removed although the setting is off');
+    } finally { P.set('autoDeleteEmptyGroups', false); }
+  });
+
   test('geometry tools: recenter, bake, center pivot, normals — undoable, nothing jumps', async () => {
     await T.fresh(['cube', 'sphere', 'cylinder', 'torus']);
     await T.move('Cylinder', 150, 40, -60);
@@ -454,7 +550,7 @@
   test('selection: clicking stays fast and icons are not re-rendered', async () => {
     await T.fresh(['cube', 'sphere', 'torus', 'cone', 'cylinder']);
     await T.pick(['Cube']);
-    const icon = document.querySelector('#tree .tree-node svg');
+    const icon = document.querySelector('#tree .tree-node .ti, #tree .tree-node svg');
     T.assert(!!icon, 'no rendered icon found in the tree');
     icon.__keep = true;
     const t0 = performance.now();
@@ -462,7 +558,7 @@
     const per = (performance.now() - t0) / 5;
     T.assert(per < 40, 'a selection click took ' + per.toFixed(1) + ' ms');
     await T.sleep(300);
-    T.assert(document.querySelector('#tree .tree-node svg').__keep === true, 'tree icons were re-created by a selection change');
+    T.assert(document.querySelector('#tree .tree-node .ti, #tree .tree-node svg').__keep === true, 'tree icons were re-created by a selection change');
     // pressing an unselected row selects it at once, without waiting for the release
     T.act('selClear'); await T.sleep(150);
     T.row('Torus').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
@@ -638,6 +734,126 @@
     T.assert(T.part('Cube').mesh.material !== m0, 'redo did not re-assign the new material');
   });
 
+  test('delete small parts: the slider recounts on release, the button says so meanwhile', async () => {
+    await T.fresh(['cube', 'sphere']);
+    const range = document.querySelector('#thr-scrub .scrub-range'), btn = document.getElementById('btn-delete-small');
+    if (!range || !btn) return 'skipped (no threshold slider)';
+    const t0 = state.threshold, v0 = range.value;
+    range.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    range.value = String(+range.value + 200); range.dispatchEvent(new Event('input', { bubbles: true }));
+    await T.sleep(350);
+    T.eq(state.threshold, t0, 'the threshold was applied while the slider was still held');
+    T.assert(btn.disabled && btn.classList.contains('is-busy'), 'the Delete button does not show that its count is stale');
+    window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    await T.sleep(300);
+    T.assert(state.threshold !== t0, 'releasing the slider did not apply the threshold');
+    T.assert(!btn.disabled && !btn.classList.contains('is-busy'), 'the Delete button stayed in its Calculating state');
+    // typing-style change (no pointer): commits too, and the old value comes back
+    range.value = v0; range.dispatchEvent(new Event('input', { bubbles: true })); range.dispatchEvent(new Event('change', { bubbles: true }));
+    await T.sleep(300);
+    T.assert(Math.abs(state.threshold - t0) < 0.05, 'a change without a drag did not commit: ' + state.threshold);
+    T.assert(!btn.disabled, 'the Delete button is still disabled');
+  });
+
+  test('materials dock: slides in like the console, filters, inspects', async () => {
+    await T.fresh(['cube', 'sphere']);
+    const dock = document.getElementById('vp-materials-pop'), tg = document.getElementById('tg-materials');
+    if (!dock || !tg) return 'skipped (no materials dock)';
+    if (dock.classList.contains('show')) { tg.click(); await T.sleep(300); }
+    const bar = document.querySelector('#vp-overlay .vpc.tr');
+    const barBottom0 = bar.getBoundingClientRect().bottom;
+    tg.click(); await T.sleep(450);
+    T.assert(dock.classList.contains('show') && document.body.classList.contains('mat-dock-open'), 'the dock did not open');
+    const vp = document.getElementById('viewport').getBoundingClientRect(), d = dock.getBoundingClientRect();
+    T.assert(Math.abs(d.left - vp.left) < 2 && Math.abs(d.right - vp.right) < 14, 'the dock does not span the viewport: ' + [d.left, d.right, vp.left, vp.right].map(Math.round));
+    T.assert(bar.getBoundingClientRect().bottom < barBottom0 - 100 && bar.getBoundingClientRect().bottom <= d.top, 'the bottom toolbar is covered by the dock');
+    // a new material shows up, can be found by name, and is described in the inspector
+    await T.pick(['Cube']);
+    document.getElementById('mat-act-add').click(); await T.sleep(400);
+    const name = T.part('Cube').mesh.material.name;
+    const cells = () => [...dock.querySelectorAll('.mat-cell, .mat-row')];
+    T.assert(cells().some(c => c._mat === T.part('Cube').mesh.material), 'the new material is not listed');
+    T.assert(document.getElementById('mat-inspector').textContent.includes(name), 'the inspector does not show the picked material');
+    T.assert(/Roughness/.test(document.getElementById('mat-inspector').textContent), 'the inspector lists no properties');
+    const search = document.getElementById('mat-search');
+    search.value = 'zzz-no-such-material'; search.dispatchEvent(new Event('input', { bubbles: true })); await T.sleep(250);
+    T.eq(cells().length, 0, 'the filter did not narrow the list');
+    T.assert(/No material matches/.test(dock.textContent), 'no message for an empty filter result');
+    search.value = name.slice(0, 6); search.dispatchEvent(new Event('input', { bubbles: true })); await T.sleep(250);
+    T.assert(cells().length >= 1, 'filtering by name found nothing');
+    search.value = ''; search.dispatchEvent(new Event('input', { bubbles: true })); await T.sleep(250);
+    // the console and the dock take turns
+    document.getElementById('sb-console-btn').click(); await T.sleep(400);
+    T.assert(!dock.classList.contains('show'), 'the dock stayed open under the console');
+    document.getElementById('sb-console-btn').click(); await T.sleep(300);
+    tg.click(); await T.sleep(350);
+    document.getElementById('mat-dock-close').click(); await T.sleep(350);
+    T.assert(!dock.classList.contains('show') && !document.body.classList.contains('mat-dock-open'), 'the close button did not close the dock');
+    await T.undo();
+  });
+
+  test('fill holes: a recess in a flat face is closed, undo brings it back', async () => {
+    await T.fresh(['cube', 'sphere']);
+    const THREE = T.F().THREE, p = T.part('Cube');
+    // a 17 × 17 plate with a plus-shaped recess, one quad per grid cell
+    const rows = ['.....', '..#..', '.###.', '..#..', '.....'], PAD = 6, TOP = 4, D = 1.5;
+    const pit = (x, y) => { const r = rows[y - PAD]; return !!r && r[x - PAD] === '#'; };
+    const pos = [];
+    const quad = (a, b, c, d) => pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+    const N = rows.length + PAD * 2;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const z = pit(x, y) ? TOP - D : TOP;
+      quad([x, y, z], [x + 1, y, z], [x + 1, y + 1, z], [x, y + 1, z]);
+      if (!pit(x, y)) continue;
+      if (!pit(x + 1, y)) quad([x + 1, y, TOP - D], [x + 1, y, TOP], [x + 1, y + 1, TOP], [x + 1, y + 1, TOP - D]);
+      if (!pit(x - 1, y)) quad([x, y + 1, TOP - D], [x, y + 1, TOP], [x, y, TOP], [x, y, TOP - D]);
+      if (!pit(x, y + 1)) quad([x + 1, y + 1, TOP - D], [x + 1, y + 1, TOP], [x, y + 1, TOP], [x, y + 1, TOP - D]);
+      if (!pit(x, y - 1)) quad([x, y, TOP - D], [x, y, TOP], [x + 1, y, TOP], [x + 1, y, TOP - D]);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    g.computeVertexNormals(); g.computeBoundingBox(); g.computeBoundingSphere();
+    p.mesh.geometry = g; p.hash = 'selftest_plate'; state.geomByHash.set(p.hash, g);
+    p.triCount = pos.length / 9; p.vertCount = pos.length / 3;
+    const tris0 = p.triCount, sphere0 = T.part('Sphere').triCount;
+    const lowest = () => { const a = p.mesh.geometry.attributes.position, ix = p.mesh.geometry.index; let z = Infinity; const n = ix ? ix.count : a.count; for (let i = 0; i < n; i++) z = Math.min(z, a.getZ(ix ? ix.getX(i) : i)); return z; };
+    T.eq(lowest(), TOP - D, 'test plate has no recess');
+    const btn = document.getElementById('btn-fill-holes'), size = document.getElementById('fill-holes-size');
+    T.assert(!!btn && !!size, 'no Fill holes control');
+    await T.pick(['Cube']);
+    const run = async () => { btn.click(); await T.sleep(200); for (let i = 0; i < 100 && btn.disabled; i++) await T.sleep(50); await T.sleep(300); };
+    // too small a limit: nothing happens and nothing lands on the undo stack
+    size.value = '1'; const h0 = state.history.length;
+    await run();
+    T.eq(p.triCount, tris0, 'a hole over the size limit was filled');
+    T.eq(state.history.length, h0, 'a fill that changed nothing pushed an undo entry');
+    size.value = '12';
+    await run();
+    T.assert(p.triCount < tris0, 'the recess was not filled (' + document.getElementById('fill-holes-info').textContent + ')');
+    T.eq(lowest(), TOP, 'geometry is left below the surface');
+    T.assert(/1 hole filled/.test(document.getElementById('fill-holes-info').textContent), 'readout: ' + document.getElementById('fill-holes-info').textContent);
+    T.assert(state.geomByHash.get(p.hash) === p.mesh.geometry, 'the filled geometry is not registered for export');
+    // The renderer tells geometries apart by attribute versions, not identity:
+    // a swapped-in geometry with the same versions as the old one is never
+    // uploaded and every frame fails. Each swap must carry versions of its own.
+    const ver = (geo) => geo.attributes.position.version + ':' + (geo.index ? geo.index.version : '-');
+    T.assert(ver(p.mesh.geometry) !== ver(g), 'the new geometry has the same buffer versions as the one it replaced: ' + ver(g));
+    const first = p.mesh.geometry;
+    T.eq(T.part('Sphere').triCount, sphere0, 'a part outside the selection changed');
+    const filled = p.triCount;
+    await T.undo(); T.eq(p.triCount, tris0, 'undo did not restore the triangle count'); T.eq(lowest(), TOP - D, 'undo did not bring the recess back');
+    await T.redo(); T.eq(p.triCount, filled, 'redo did not fill it again');
+    T.assert(p.mesh.geometry === first && ver(first) !== ver(g), 'redo put back a geometry the renderer cannot tell from the previous one');
+    // decimate swaps geometry the same way
+    const vBefore = ver(p.mesh.geometry), gBefore = p.mesh.geometry;
+    document.getElementById('decimate-strength').value = '0.5';
+    document.getElementById('btn-decimate-sel').click();
+    for (let i = 0; i < 80 && p.mesh.geometry === gBefore; i++) await T.sleep(100);
+    T.assert(p.mesh.geometry !== gBefore, 'decimate did not replace the geometry');
+    T.assert(ver(p.mesh.geometry) !== vBefore, 'decimate swapped in a geometry with the same buffer versions');
+    size.value = '12';
+  });
+
   test('shortcuts: nothing acts on the scene behind a dialog; Ctrl+S does not isolate', async () => {
     await T.fresh(['cube', 'sphere']);
     await T.pick(['Cube']);
@@ -673,6 +889,16 @@
     window.addEventListener('error', e => T.errors.push(e.message + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno));
     window.addEventListener('unhandledrejection', e => T.errors.push('unhandled rejection: ' + String(e.reason && (e.reason.message || e.reason)).slice(0, 200)));
 
+    // CSS transitions only advance with frames, so in a hidden window a
+    // sliding panel never arrives and layout checks read the starting
+    // position. The suite checks where things end up, not how they move:
+    // run it without transitions.
+    {
+      const st = document.createElement('style');
+      st.textContent = '*,*::before,*::after{transition:none!important;animation:none!important}';
+      document.head.appendChild(st);
+    }
+
     const box = document.createElement('div');
     box.id = 'selftest-panel';
     box.style.cssText = 'position:fixed;right:12px;bottom:34px;z-index:99999;width:440px;max-height:60vh;overflow:auto;background:#161616;border:1px solid #333;border-radius:10px;padding:10px 12px;font:11.5px/1.5 ui-monospace,Consolas,monospace;color:#ddd;box-shadow:0 12px 36px rgba(0,0,0,.6);white-space:pre-wrap';
@@ -683,6 +909,10 @@
     // wait for the app to finish booting
     for (let i = 0; i < 100 && !(window._appFns && window._addPrimitive && window.state && state.partsRoot); i++) await T.sleep(100);
     await T.sleep(600);
+
+    const prefs = window._appFns._Prefs;
+    const autoEmptyWas = prefs ? prefs.get('autoDeleteEmptyGroups') === true : false;
+    if (prefs) prefs.set('autoDeleteEmptyGroups', false);
 
     for (const t of list) {
       T.errors.length = 0;
@@ -705,6 +935,7 @@
            status === 'pass' ? '#34c759' : status === 'skip' ? '#9a9a9a' : '#ff6b6b');
       (status === 'fail' ? console.error : console.log)('[selftest] ' + status.toUpperCase() + ' ' + t.name + (detail ? ' — ' + detail : ''));
     }
+    if (prefs) prefs.set('autoDeleteEmptyGroups', autoEmptyWas);
     res.done = true;
     line('\n' + res.passed + ' passed, ' + res.failed + ' failed' + (res.skipped ? ', ' + res.skipped + ' skipped' : ''), res.failed ? '#ff6b6b' : '#34c759');
     console.log('[selftest] done: ' + res.passed + ' passed, ' + res.failed + ' failed, ' + res.skipped + ' skipped');

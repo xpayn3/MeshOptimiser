@@ -237,7 +237,7 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
    visually quiet; opacity transition prevents a flash on first paint. */
 .welcome-recent .wr-del{
   flex-shrink:0;width:24px;height:24px;display:grid;place-items:center;
-  background:transparent;border:none;border-radius:5px;color:var(--tx3);
+  background:transparent;border:none;border-radius:6px;color:var(--tx3);
   cursor:pointer;opacity:0;
   transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
 }
@@ -342,12 +342,12 @@ body.resizing *{cursor:col-resize !important}
 .brand-left .brand-mark{margin-left:-5px} /* cancel .brand-btn left padding so the chip's visible left edge aligns with the search bar below (both at 12px from window edge) */
 .brand-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
 .brand-menu-head{display:flex;align-items:center;gap:var(--space-lg);padding:10px 10px 12px}
-.brand-menu-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 6px 20px var(--ac-tint-45);flex:0 0 auto}
+.brand-menu-mark{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;box-shadow:0 6px 20px var(--ac-tint-45);flex:0 0 auto}
 .brand-menu-mark svg{width:18px;height:18px;stroke:white;fill:none;stroke-width:2}
 .brand-menu-titles{flex:1 1 auto;min-width:0}
 .brand-menu-title{font-size:13.5px;font-weight:var(--fw-semibold);color:var(--tx);line-height:var(--lh-tight)}
 .brand-menu-tagline{font-size:var(--fs-11);color:var(--tx3);margin-top:2px;line-height:var(--lh-tight)}
-.brand-menu-ver{font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:2px 7px;letter-spacing:var(--tracking-mono);flex:0 0 auto}
+.brand-menu-ver{font-size:var(--fs-xs);font-weight:var(--fw-semibold);color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:2px 7px;letter-spacing:var(--tracking-mono);flex:0 0 auto}
 .brand-menu-about{font-size:var(--fs-sm);color:var(--tx2);line-height:var(--lh-relaxed);padding:0 10px 4px}
 .brand-menu-changelog{padding:6px 10px 4px}
 .brand-menu-changelog-head{display:flex;align-items:center;gap:var(--space-sm);font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx2);text-transform:uppercase;letter-spacing:var(--tracking-wide);margin-bottom:6px}
@@ -356,7 +356,7 @@ body.resizing *{cursor:col-resize !important}
 .brand-menu-changelog li{font-size:var(--fs-sm);color:var(--tx2);line-height:var(--lh-snug);padding-left:10px;position:relative}
 .brand-menu-changelog li::before{content:"";position:absolute;left:2px;top:8px;width:3px;height:3px;border-radius:50%;background:var(--tx3)}
 .brand-menu-sep{height:1px;background:var(--s3);margin:8px 4px}
-.brand-menu-item{all:unset;display:flex;align-items:center;gap:var(--space-lg);padding:8px 10px;border-radius:7px;cursor:pointer;font-size:var(--fs-md);color:var(--tx);user-select:none;transition:background 80ms,color 80ms;width:calc(100% - 20px)}
+.brand-menu-item{all:unset;display:flex;align-items:center;gap:var(--space-lg);padding:8px 10px;border-radius:6px;cursor:pointer;font-size:var(--fs-md);color:var(--tx);user-select:none;transition:background 80ms,color 80ms;width:calc(100% - 20px)}
 .brand-menu-item:hover,.brand-menu-item:focus-visible{background:var(--ac-soft);outline:none;box-shadow:inset 0 0 0 1px var(--ac-line)}
 .brand-menu-item svg{width:14px;height:14px;stroke:var(--tx2);fill:none;stroke-width:2;flex:0 0 auto}
 .brand-menu-item svg.brand-gh{stroke:none;fill:currentColor;color:var(--tx2)}
@@ -400,7 +400,7 @@ body.resizing *{cursor:col-resize !important}
 i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-style:normal}
 .brand h1{font-size:var(--fs-sm);font-weight:var(--fw-semibold);line-height:1.05}
 .brand small{color:var(--tx3);font-size:var(--fs-2xs);line-height:1.05}
-.tbtn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:26px;gap:5px;padding:0 9px;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);border-radius:5px;font-size:var(--fs-sm);line-height:1;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out),filter var(--dur-base) var(--ease-out)}
+.tbtn{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:26px;gap:5px;padding:0 9px;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);border-radius:6px;font-size:var(--fs-sm);line-height:1;transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out),filter var(--dur-base) var(--ease-out)}
 .tbtn.icon-only{padding:0;width:26px}
 .tbtn.icon-only i,.tbtn.icon-only svg{width:14px;height:14px}
 .tbtn.icon-only.active{background:var(--ac-soft);border-color:var(--ac-line);color:var(--ac-text)}
@@ -442,14 +442,14 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 #transform-panel .tform-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);padding:8px 10px 6px;font-size:var(--fs-11);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3)}
 #transform-panel .tform-head .tform-title{display:inline-flex;align-items:center;gap:var(--space-sm)}
 #transform-panel .tform-head .tform-title svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
-#transform-panel .tform-head .tform-reset{font:inherit;font-size:var(--fs-xs);font-weight:var(--fw-medium);text-transform:none;letter-spacing:0;color:var(--tx3);background:transparent;border:1px solid rgba(255,255,255,.06);border-radius:5px;padding:3px 8px;cursor:pointer;transition:background var(--dur-fast) ease,color var(--dur-fast) ease,border-color var(--dur-fast) ease}
+#transform-panel .tform-head .tform-reset{font:inherit;font-size:var(--fs-xs);font-weight:var(--fw-medium);text-transform:none;letter-spacing:0;color:var(--tx3);background:transparent;border:1px solid rgba(255,255,255,.06);border-radius:6px;padding:3px 8px;cursor:pointer;transition:background var(--dur-fast) ease,color var(--dur-fast) ease,border-color var(--dur-fast) ease}
 #transform-panel .tform-head .tform-reset:hover{color:var(--tx);background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12)}
 /* Transposed layout: rows = X/Y/Z, columns = Position/Rotation/Size.
    Same shape as Cinema 4D's transform inspector. The first column is a
    thin axis tag (X/Y/Z); the header row labels each transform channel. */
 #transform-panel .tform-grid{display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:var(--space-xs) 6px;padding:2px 10px 10px 10px}
 #transform-panel .tform-col-label{font-size:var(--fs-2xs);color:var(--tx3);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px}
-#transform-panel .tform-col-label[data-tform-col]{cursor:context-menu;user-select:none;border-radius:3px;transition:background var(--dur-fast) ease,color var(--dur-fast) ease}
+#transform-panel .tform-col-label[data-tform-col]{cursor:context-menu;user-select:none;border-radius:4px;transition:background var(--dur-fast) ease,color var(--dur-fast) ease}
 #transform-panel .tform-col-label[data-tform-col]:hover{color:var(--tx2);background:rgba(255,255,255,.04)}
 #transform-panel .tform-row-label{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-semibold);align-self:center;text-align:center;font-family:var(--font-sans)}
 #transform-panel .tform-row-label.x{color:var(--er)}
@@ -461,7 +461,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 /* Number-input cell with custom stepper buttons on each side. The native
    spinner is hidden (-webkit-/Firefox) since the visible buttons own the
    increment/decrement action and the input itself is just a value field. */
-#transform-panel .tform-num{display:grid;grid-template-columns:18px 1fr 18px;align-items:stretch;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.06);border-radius:5px;overflow:hidden;transition:border-color var(--dur-fast) ease,box-shadow var(--dur-fast) ease,background var(--dur-fast) ease}
+#transform-panel .tform-num{display:grid;grid-template-columns:18px 1fr 18px;align-items:stretch;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.06);border-radius:6px;overflow:hidden;transition:border-color var(--dur-fast) ease,box-shadow var(--dur-fast) ease,background var(--dur-fast) ease}
 #transform-panel .tform-num:hover{border-color:rgba(255,255,255,.12)}
 #transform-panel .tform-num:focus-within{border-color:var(--ac-tint-55);background:rgba(0,0,0,.30);box-shadow:0 0 0 3px var(--ac-tint-18)}
 #transform-panel .tform-num.disabled{opacity:.5}
@@ -523,8 +523,8 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    when long part names push the row content into horizontal scroll. The
    solid bg + soft fade-in hides the label text that scrolls underneath. */
 .tree-iconcol{position:sticky;right:0;margin-left:auto;display:inline-flex;align-items:center;gap:var(--space-sm);flex-shrink:0;padding:0 10px 0 14px;background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%);z-index:1;height:100%}
-.tree-badge{display:inline-block;padding:1px 5px;font-size:var(--fs-2xs);background:var(--ac-tint-15);color:var(--ac-text);border-radius:3px;margin-left:4px}
-.tree-inst{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;font-size:var(--fs-2xs);background:rgba(167,139,250,.18);color:var(--ac2);border-radius:3px;margin-left:6px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 100ms var(--ease-out),color 100ms var(--ease-out),transform var(--dur-instant) var(--ease-out)}
+.tree-badge{display:inline-block;padding:1px 5px;font-size:var(--fs-2xs);background:var(--ac-tint-15);color:var(--ac-text);border-radius:4px;margin-left:4px}
+.tree-inst{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;font-size:var(--fs-2xs);background:rgba(167,139,250,.18);color:var(--ac2);border-radius:4px;margin-left:6px;font-variant-numeric:tabular-nums;cursor:pointer;transition:background 100ms var(--ease-out),color 100ms var(--ease-out),transform var(--dur-instant) var(--ease-out)}
 .tree-inst:hover{background:rgba(167,139,250,.32);color:#d8c5ff}
 .tree-inst:active{transform:scale(.92)}
 .tree-inst svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2.2}
@@ -538,7 +538,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-type-icon.asm{color:var(--icon-asm)}      /* warm amber for assemblies */
 .prop-type-icon.part{color:var(--icon-part)}    /* emerald for leaves */
 .prop-type-icon.inst{color:var(--icon-inst)}    /* purple for shared-geometry leaves (instances) */
-.prop-color{flex-shrink:0;width:18px;height:18px;border-radius:5px;border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
+.prop-color{flex-shrink:0;width:18px;height:18px;border-radius:6px;border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
 .prop-name{font-size:var(--fs-lg);font-weight:var(--fw-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
 .prop-tags{display:flex;flex-wrap:wrap;gap:var(--space-xs);margin-bottom:8px;min-height:14px}
 .prop-material-row{margin:10px 0 10px}
@@ -546,7 +546,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    sphere preview, the material name, a usage hint, and quick-access action
    icons. Reuses the same preview thumbs as the materials grid so the
    sphere and the cell stay in sync. */
-.prop-mat-btn{display:flex;align-items:center;gap:var(--space-lg);padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:9px;font-size:var(--fs-md);color:var(--tx2);cursor:pointer;max-width:100%;width:100%;text-align:left;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast)}
+.prop-mat-btn{display:flex;align-items:center;gap:var(--space-lg);padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:10px;font-size:var(--fs-md);color:var(--tx2);cursor:pointer;max-width:100%;width:100%;text-align:left;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast)}
 .prop-mat-btn:hover{background:var(--ac-soft);border-color:var(--ac-line);color:var(--tx)}
 .prop-mat-btn .prop-mat-sphere{flex-shrink:0;width:36px;height:36px;border-radius:var(--r-sm);overflow:hidden;display:grid;place-items:center}
 .prop-mat-btn .prop-mat-sphere img{width:100%;height:100%;display:block;object-fit:cover}
@@ -556,7 +556,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-sans);font-size:var(--fs-md);color:var(--tx);font-weight:var(--fw-medium)}
 .prop-mat-btn .prop-mat-sub{font-size:var(--fs-xs);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:var(--tracking-snug)}
 .prop-mat-btn .prop-mat-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
-.prop-mat-btn .prop-mat-action{width:24px;height:24px;border-radius:5px;border:none;background:transparent;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background 100ms ease,color 100ms ease}
+.prop-mat-btn .prop-mat-action{width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background 100ms ease,color 100ms ease}
 .prop-mat-btn .prop-mat-action:hover{background:rgba(255,255,255,.07);color:var(--tx)}
 .prop-mat-btn .prop-mat-action svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .prop-mat-btn.prop-mat-mixed{cursor:default;color:var(--tx3)}
@@ -590,11 +590,11 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prim-section{margin-top:14px;padding:10px 0 0 0;border-top:1px solid var(--s2)}
 .prim-section .prop-section-title{display:flex;align-items:center;justify-content:space-between;font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin-bottom:8px}
 .prim-section .prop-section-title > span svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;margin-right:6px;vertical-align:-2px}
-.prim-section .prim-reset{background:transparent;border:1px solid var(--bd);border-radius:5px;padding:3px 6px;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast)}
+.prim-section .prim-reset{background:transparent;border:1px solid var(--bd);border-radius:6px;padding:3px 6px;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast)}
 .prim-section .prim-reset:hover{background:var(--bg2);color:var(--tx);border-color:var(--bd2)}
 .prim-section .prim-reset svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 .prim-axis-group{grid-column:2;grid-row:1;justify-self:end;display:inline-flex;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm);padding:1px;gap:1px}
-.prim-axis-btn{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:18px;padding:0 6px;background:transparent;border:0;border-radius:3px;color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-wide);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.prim-axis-btn{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:18px;padding:0 6px;background:transparent;border:0;border-radius:4px;color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-wide);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .prim-axis-btn:hover{color:var(--tx2);background:var(--s2)}
 .prim-axis-btn.active{color:var(--tx-on-accent);background:var(--ac)}
 .prim-row{display:grid;grid-template-columns:1fr auto;column-gap:var(--space-lg);row-gap:var(--space-xs);align-items:center;padding:4px 0;font-size:var(--fs-sm)}
@@ -619,7 +619,7 @@ input.prim-value:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.25)
 .prim-row .prim-slider:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.18);box-shadow:0 0 0 4px rgba(110,168,255,.18),var(--sh-thumb)}
 .prim-row .prim-toggle{position:relative;display:inline-flex;align-items:center;cursor:pointer;width:30px;height:16px;justify-self:start;grid-column:2 / span 2}
 .prim-row .prim-toggle input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
-.prim-row .prim-toggle span{position:relative;display:block;width:30px;height:16px;background:var(--bg3);border:1px solid var(--bd);border-radius:9px;transition:background .14s ease,border-color .14s ease}
+.prim-row .prim-toggle span{position:relative;display:block;width:30px;height:16px;background:var(--bg3);border:1px solid var(--bd);border-radius:10px;transition:background .14s ease,border-color .14s ease}
 .prim-row .prim-toggle span::after{content:'';position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:var(--tx3);transition:left .14s ease,background .14s ease}
 .prim-row .prim-toggle input:checked + span{background:rgba(110,168,255,.32);border-color:rgba(110,168,255,.5)}
 .prim-row .prim-toggle input:checked + span::after{left:15px;background:var(--tx-on-accent)}
@@ -733,7 +733,7 @@ input.prim-value:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.25)
 .tree-node.in-group .tree-color{margin-left:0}
 .tree-group-actions{display:none;gap:2px;flex-shrink:0}
 .tree-node.is-group:hover .tree-group-actions{display:inline-flex}
-.tree-group-actions button{padding:2px 4px;background:transparent;border:1px solid transparent;border-radius:3px;color:var(--tx3);cursor:pointer;font-size:var(--fs-10)}
+.tree-group-actions button{padding:2px 4px;background:transparent;border:1px solid transparent;border-radius:4px;color:var(--tx3);cursor:pointer;font-size:var(--fs-10)}
 .tree-group-actions button:hover{color:var(--tx);background:var(--s4);border-color:var(--bd)}
 .tree-group-actions svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 
@@ -820,8 +820,8 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .off-rank{color:var(--tx3);font-variant-numeric:tabular-nums;text-align:center;font-size:var(--fs-xs)}
 .off-mid{display:flex;flex-direction:column;gap:2px;min-width:0}
 .off-name{color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.off-bar{display:block;height:5px;background:var(--s4);border-radius:3px;overflow:hidden;margin-top:2px;width:100%}
-.off-bar-fill{height:100%;border-radius:3px;transition:width 200ms var(--ease-out);min-width:2px;display:block}
+.off-bar{display:block;height:5px;background:var(--s4);border-radius:4px;overflow:hidden;margin-top:2px;width:100%}
+.off-bar-fill{height:100%;border-radius:4px;transition:width 200ms var(--ease-out);min-width:2px;display:block}
 .off-tri{color:var(--tx2);font-variant-numeric:tabular-nums;font-size:var(--fs-xs);flex-shrink:0}
 .off-empty{display:none}
 .off-list:empty + .off-empty,#offenders-body:has(.off-list:empty) .off-empty{display:block}
@@ -936,7 +936,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #gizmo-hud .ghud-x{color:var(--er)}
 #gizmo-hud .ghud-y{color:var(--ok)}
 #gizmo-hud .ghud-z{color:var(--ac-text)}
-#gizmo-hud .ghud-snap{margin-left:6px;font-size:var(--fs-9);font-weight:var(--fw-bold);color:var(--ac-text);background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:3px;padding:1px 5px;letter-spacing:var(--tracking-wider)}
+#gizmo-hud .ghud-snap{margin-left:6px;font-size:var(--fs-9);font-weight:var(--fw-bold);color:var(--ac-text);background:var(--ac-soft);border:1px solid var(--ac-line);border-radius:4px;padding:1px 5px;letter-spacing:var(--tracking-wider)}
 #axis-gizmo{width:56px;height:56px;display:grid;place-items:center;opacity:.75;transition:opacity .15s}
 #axis-gizmo:hover{opacity:1}
 #axis-gizmo svg{width:54px;height:54px;display:block;overflow:visible}
@@ -978,7 +978,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 #vp-add-prim{--btn-tint:var(--ac);position:relative}
 #vp-add-prim #vp-add-prim-img{width:20px;height:20px;display:block;object-fit:contain;pointer-events:none;user-select:none}
 #vp-add-prim:not(.has-thumb) #vp-add-prim-img{display:none}
-#vp-add-prim:not(.has-thumb)::before{content:"";display:block;width:14px;height:14px;border:1.5px solid currentColor;border-radius:3px;opacity:.85}
+#vp-add-prim:not(.has-thumb)::before{content:"";display:block;width:14px;height:14px;border:1.5px solid currentColor;border-radius:4px;opacity:.85}
 /* Dropdown affordance — tiny triangle in the bottom-right corner so users
    notice this button has a long-hold picker. Matches Figma / Photoshop tool
    group convention. Pointer-events:none so the indicator doesn't eat clicks. */
@@ -1110,7 +1110,7 @@ body.msr-mode #canvas{cursor:crosshair}
 #vp-materials-pop .mat-cell .mat-name{font-size:var(--fs-xs);color:var(--tx2);line-height:var(--lh-tight);text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Count pill — pinned to the thumb's top-right. Subtle dark capsule with
    tabular numerics so 1-, 2-, 3-digit counts stay aligned. */
-#vp-materials-pop .mat-cell .mat-count{position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--tx);background:rgba(13,13,13,.75);border:1px solid rgba(255,255,255,.10);border-radius:7px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:var(--tracking-mono);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
+#vp-materials-pop .mat-cell .mat-count{position:absolute;top:3px;right:3px;min-width:14px;height:14px;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;font-size:var(--fs-2xs);font-weight:var(--fw-semibold);color:var(--tx);background:rgba(13,13,13,.75);border:1px solid rgba(255,255,255,.10);border-radius:6px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:var(--tracking-mono);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);pointer-events:none}
 #vp-materials-pop .mat-cell.selected{background:var(--ac-soft);border-color:var(--ac);box-shadow:0 0 0 2px var(--ac)}
 /* Subtle ring on materials used by the current viewport selection — gives a
    passive "you have parts of this material picked" hint without competing
@@ -1138,7 +1138,7 @@ body.msr-mode #canvas{cursor:crosshair}
    clicks the presets button. Same blur/shadow as other system popovers. */
 .mat-presets-menu{position:fixed;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);box-shadow:0 12px 32px rgba(0,0,0,.55);padding:4px;z-index:var(--z-popover);display:none;max-height:280px;overflow-y:auto}
 .mat-presets-menu.show{display:block}
-.mat-presets-menu .mat-preset{display:flex;align-items:center;gap:var(--space-md);padding:6px 8px;border-radius:5px;cursor:pointer;font-size:var(--fs-sm);color:var(--tx2);transition:background .1s ease,color .1s ease}
+.mat-presets-menu .mat-preset{display:flex;align-items:center;gap:var(--space-md);padding:6px 8px;border-radius:6px;cursor:pointer;font-size:var(--fs-sm);color:var(--tx2);transition:background .1s ease,color .1s ease}
 .mat-presets-menu .mat-preset:hover{background:var(--ac-soft);color:var(--tx)}
 .mat-presets-menu .mat-preset .mat-preset-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.18)}
 .mat-presets-menu .mat-preset-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1151,7 +1151,7 @@ body.msr-mode #canvas{cursor:crosshair}
    control next to the section title. Mirrors the visual language of other
    small icon toggles (s2 surface, ac highlight on the active segment). */
 #vp-materials-pop .mat-view-toggle{display:inline-flex;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm);padding:1px;gap:1px}
-#vp-materials-pop .mat-view-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:18px;padding:0;background:transparent;border:0;border-radius:3px;color:var(--tx3);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+#vp-materials-pop .mat-view-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:18px;padding:0;background:transparent;border:0;border-radius:4px;color:var(--tx3);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 #vp-materials-pop .mat-view-btn:hover{color:var(--tx2);background:var(--s2)}
 #vp-materials-pop .mat-view-btn.active{color:var(--tx);background:var(--s3)}
 #vp-materials-pop .mat-view-btn i,#vp-materials-pop .mat-view-btn svg{width:11px;height:11px;stroke-width:2}
@@ -1163,11 +1163,11 @@ body.msr-mode #canvas{cursor:crosshair}
 #vp-materials-pop .mat-row{display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;border-top:1px solid rgba(255,255,255,.04);font-size:var(--fs-12);border-radius:var(--r-sm);transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);user-select:none;border:1px solid transparent}
 #vp-materials-pop .mat-row:first-child{border-top-color:transparent}
 #vp-materials-pop .mat-row:hover{background:rgba(255,255,255,.04)}
-#vp-materials-pop .mat-row .mat-row-thumb{width:26px;height:26px;border-radius:5px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.3);overflow:hidden;display:block;object-fit:cover}
+#vp-materials-pop .mat-row .mat-row-thumb{width:26px;height:26px;border-radius:6px;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.3);overflow:hidden;display:block;object-fit:cover}
 #vp-materials-pop .mat-row .mat-row-info{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #vp-materials-pop .mat-row .mat-row-name{color:var(--tx);font-weight:var(--fw-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 #vp-materials-pop .mat-row .mat-row-meta{display:block;font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
-#vp-materials-pop .mat-row .mat-row-edit{background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:5px;cursor:pointer;flex-shrink:0;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);display:inline-flex;align-items:center;justify-content:center}
+#vp-materials-pop .mat-row .mat-row-edit{background:transparent;border:1px solid rgba(255,255,255,.06);color:var(--tx2);padding:4px 6px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);display:inline-flex;align-items:center;justify-content:center}
 #vp-materials-pop .mat-row .mat-row-edit:hover{background:rgba(255,255,255,.06);color:var(--tx);border-color:rgba(255,255,255,.12)}
 #vp-materials-pop .mat-row .mat-row-edit i,#vp-materials-pop .mat-row .mat-row-edit svg{width:13px;height:13px}
 #vp-materials-pop .mat-row.selected{background:var(--ac-soft);border-color:var(--ac);box-shadow:0 0 0 1px var(--ac)}
@@ -1177,7 +1177,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-edit-body{display:flex;flex-direction:column;gap:var(--space-2xl);padding:14px 16px}
 .mat-edit-body .mat-color-row{display:flex;align-items:center;gap:var(--space-lg)}
 .mat-edit-body .mat-color-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx3);font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
-.mat-edit-body input[type=color]{width:36px;height:24px;border:1px solid rgba(255,255,255,.10);border-radius:5px;background:transparent;cursor:pointer;padding:0;flex-shrink:0}
+.mat-edit-body input[type=color]{width:36px;height:24px;border:1px solid rgba(255,255,255,.10);border-radius:6px;background:transparent;cursor:pointer;padding:0;flex-shrink:0}
 .mat-edit-body .mat-color-hex{font-family:var(--font-sans);font-size:var(--fs-sm);color:var(--tx2);margin-left:auto}
 
 /* ── Material editor popup (#_mat-editor-popup) ─────────────────────────
@@ -1220,7 +1220,7 @@ body.msr-mode #canvas{cursor:crosshair}
 
 .mat-color-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
 .mat-color-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx2)}
-.mat-color-row input[type="color"]{width:28px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer}
+.mat-color-row input[type="color"]{width:28px;height:22px;padding:0;border:1px solid var(--bd);border-radius:6px;background:transparent;cursor:pointer}
 .mat-color-hex{font-family:var(--font-sans);font-size:var(--fs-xs);color:var(--tx3);flex:1}
 .mat-edit-toggle-row{display:flex;flex-wrap:wrap;gap:var(--space-xs);padding:3px 0}
 .mat-edit-toggle{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
@@ -1231,7 +1231,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-edit-select-row select{flex:1;font-size:var(--fs-sm);padding:5px 8px}
 
 .mat-tex-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
-.mat-tex-thumb{flex:0 0 28px;width:28px;height:28px;border-radius:5px;background:var(--bg-checker);border:1px solid var(--bd);display:grid;place-items:center;overflow:hidden;color:var(--tx3)}
+.mat-tex-thumb{flex:0 0 28px;width:28px;height:28px;border-radius:6px;background:var(--bg-checker);border:1px solid var(--bd);display:grid;place-items:center;overflow:hidden;color:var(--tx3)}
 .mat-tex-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .mat-tex-thumb svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;opacity:.45}
 .mat-tex-thumb.has-tex{border-color:var(--ac-line)}
@@ -1239,7 +1239,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-tex-label{font-size:var(--fs-11);color:var(--tx2);line-height:1.1}
 .mat-tex-name{font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mat-tex-name.empty::before{content:'— no texture —';color:var(--tx3);opacity:.55}
-.mat-tex-btn{flex:0 0 auto;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:4px 6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
+.mat-tex-btn{flex:0 0 auto;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:4px 6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
 .mat-tex-btn:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
 .mat-tex-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
 .mat-tex-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
@@ -1248,7 +1248,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);align-items:center;gap:var(--space-lg);padding:4px 0;font-size:var(--fs-sm);line-height:1.2}
 .mat-row + .mat-row{border-top:1px dashed var(--s2)}
 .mat-row-label{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mat-row-tex{width:14px;height:14px;border-radius:3px;border:1px dashed var(--tx3);flex:0 0 14px;background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.10) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.10) 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0;cursor:pointer;padding:0;display:grid;place-items:center;transition:border-color 120ms,color 120ms;color:var(--tx3)}
+.mat-row-tex{width:14px;height:14px;border-radius:4px;border:1px dashed var(--tx3);flex:0 0 14px;background-color:var(--bg-checker);background-image:linear-gradient(45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(-45deg,rgba(255,255,255,.10) 25%,transparent 25%),linear-gradient(45deg,transparent 75%,rgba(255,255,255,.10) 75%),linear-gradient(-45deg,transparent 75%,rgba(255,255,255,.10) 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0;cursor:pointer;padding:0;display:grid;place-items:center;transition:border-color 120ms,color 120ms;color:var(--tx3)}
 .mat-row-tex:hover{border-color:var(--ac);color:var(--ac-text)}
 .mat-row-tex svg{display:none}
 .mat-row-tex.has-tex{background-image:none;background-color:var(--ac);border-color:var(--ac);border-style:solid}
@@ -1275,7 +1275,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-row.mat-color-row{display:grid;grid-template-columns:96px 14px minmax(0,1fr);gap:var(--space-lg);padding:4px 0}
 .mat-row.mat-color-row .mat-row-val{gap:var(--space-md)}
 .mat-row.mat-color-row .mat-row-val > *:first-child{flex:0 0 22px}
-.mat-swatch{width:22px;height:22px;padding:0;border:1px solid var(--bd);border-radius:5px;background:transparent;cursor:pointer;overflow:hidden;flex:0 0 22px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+.mat-swatch{width:22px;height:22px;padding:0;border:1px solid var(--bd);border-radius:6px;background:transparent;cursor:pointer;overflow:hidden;flex:0 0 22px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
 .mat-swatch::-webkit-color-swatch-wrapper{padding:0}
 .mat-swatch::-webkit-color-swatch{border:none;border-radius:var(--r-xs)}
 .mat-swatch::-moz-color-swatch{border:none;border-radius:var(--r-xs)}
@@ -1289,7 +1289,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
 .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px var(--ac-tint-18)}
 
-.mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
+.mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
 .mat-eyedrop:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
 .mat-eyedrop:disabled{opacity:.35;cursor:default;pointer-events:none}
 .mat-eyedrop svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
@@ -1304,7 +1304,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-tex-pop-prop{font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx);text-transform:uppercase;letter-spacing:var(--tracking-wide)}
 .mat-tex-pop-name{font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mat-tex-pop-row{display:flex;gap:var(--space-sm)}
-.mat-tex-pop-btn{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;padding:6px 8px;color:var(--tx);font-size:var(--fs-11);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 120ms,border-color 120ms,color 120ms}
+.mat-tex-pop-btn{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:6px 8px;color:var(--tx);font-size:var(--fs-11);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:background 120ms,border-color 120ms,color 120ms}
 .mat-tex-pop-btn:hover{background:var(--bg3);border-color:var(--bd2)}
 .mat-tex-pop-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
 .mat-tex-pop-btn.danger{color:var(--er)}
@@ -1338,7 +1338,7 @@ body.msr-mode #canvas{cursor:crosshair}
 #_flat-dialog .flat-section:last-child{margin-bottom:0}
 #_flat-dialog .flat-section-title{font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wider);color:var(--tx3);margin:0 0 8px 0}
 #_flat-dialog .flat-opts{display:flex;flex-direction:column;gap:var(--space-sm)}
-#_flat-dialog .flat-opt{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);cursor:pointer;transition:background .14s ease,border-color .14s ease}
+#_flat-dialog .flat-opt{display:flex;align-items:flex-start;gap:11px;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:rgba(255,255,255,.02);cursor:pointer;transition:background .14s ease,border-color .14s ease}
 #_flat-dialog .flat-opt:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.10)}
 #_flat-dialog .flat-opt.active{background:var(--ac-tint-12);border-color:var(--ac-tint-35)}
 #_flat-dialog .flat-opt input[type=radio]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:2px 0 0 0;transition:border-color .14s ease,background .14s ease}
@@ -1351,10 +1351,10 @@ body.msr-mode #canvas{cursor:crosshair}
 #_flat-dialog .flat-opt-help code{font-family:var(--font-sans);color:var(--ac-text);background:rgba(0,0,0,.28);padding:0 5px;border-radius:var(--r-xs);font-size:var(--fs-11)}
 #_flat-dialog .flat-row{display:flex;align-items:center;gap:var(--space-md);margin-top:9px}
 #_flat-dialog .flat-row label{font-size:var(--fs-11);color:var(--tx3);font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
-#_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+#_flat-dialog .flat-row input[type=number]{width:72px;padding:6px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
 #_flat-dialog .flat-row input[type=number]:focus{border-color:var(--ac-tint-55);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
 #_flat-dialog .flat-toggles{display:flex;flex-direction:column;gap:2px}
-#_flat-dialog .flat-tog{display:flex;align-items:center;gap:var(--space-lg);font-size:var(--fs-md);color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:7px;transition:background .14s ease,color .14s ease}
+#_flat-dialog .flat-tog{display:flex;align-items:center;gap:var(--space-lg);font-size:var(--fs-md);color:var(--tx2);cursor:pointer;padding:7px 8px;border-radius:6px;transition:background .14s ease,color .14s ease}
 #_flat-dialog .flat-tog:hover{background:rgba(255,255,255,.03);color:var(--tx)}
 #_flat-dialog .flat-tog input[type=checkbox]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:var(--r-xs);border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
 #_flat-dialog .flat-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
@@ -1394,7 +1394,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .dlg-popup .dlg-head{display:flex;align-items:center;gap:11px;padding:13px 14px 12px 16px;border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0;position:relative;cursor:grab;user-select:none}
 .dlg-popup .dlg-head:active{cursor:grabbing}
 .dlg-popup .dlg-head::after{content:'';position:absolute;left:16px;right:16px;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06) 30%,rgba(255,255,255,.06) 70%,transparent);pointer-events:none}
-.dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:linear-gradient(180deg,var(--ac-tint-20),var(--ac-tint-12));color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
+.dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(180deg,var(--ac-tint-20),var(--ac-tint-12));color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.12),0 1px 2px rgba(0,0,0,.30);flex-shrink:0}
 .dlg-popup .dlg-head-icon svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .dlg-popup .dlg-head-titles{flex:1;min-width:0}
 .dlg-popup .dlg-title{font-size:var(--fs-xl);font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:-.01em;line-height:1.2}
@@ -1406,7 +1406,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .dlg-popup .dlg-body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .dlg-popup .dlg-body[data-scroll="auto"]{overflow-y:auto;padding:14px 16px 16px 16px}
 .dlg-popup .dlg-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:var(--space-md);box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-.dlg-popup .dlg-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:7px}
+.dlg-popup .dlg-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:6px}
 
 /* ── Batch Rename dialog (#_brn-dialog) ──────────────────────────────────
    Migrated from the JS-injected _brn-dlg-style block in _BatchRenameDialog.
@@ -1424,13 +1424,13 @@ body.msr-mode #canvas{cursor:crosshair}
 .brn-pane.active{display:flex}
 .brn-row{display:flex;align-items:center;gap:var(--space-md);flex-wrap:wrap}
 .brn-row label{font-size:var(--fs-11);color:var(--tx3);min-width:60px;font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
-.brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+.brn-row input[type=text]{flex:1;min-width:140px;padding:7px 10px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease,background .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
 .brn-row input[type=text]:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.32);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
-.brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:7px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
+.brn-row input[type=number]{width:68px;padding:7px 9px;background:rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx);font:inherit;font-size:var(--fs-md);outline:none;font-family:var(--font-sans);transition:border-color .14s ease,box-shadow .14s ease;box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
 .brn-row input[type=number]:focus{border-color:var(--ac-tint-55);box-shadow:0 0 0 3px var(--ac-tint-18),inset 0 1px 0 rgba(0,0,0,.25)}
 .brn-row input::placeholder{color:var(--tx3);opacity:.55}
 .brn-row select.mac-sel{padding:7px 9px;font-size:var(--fs-md)}
-.brn-tog{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-12);color:var(--tx2);cursor:pointer;user-select:none;padding:5px 10px 5px 8px;border-radius:7px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .14s ease,border-color .14s ease,color .14s ease}
+.brn-tog{display:inline-flex;align-items:center;gap:7px;font-size:var(--fs-12);color:var(--tx2);cursor:pointer;user-select:none;padding:5px 10px 5px 8px;border-radius:6px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:background .14s ease,border-color .14s ease,color .14s ease}
 .brn-tog:hover{background:rgba(255,255,255,.05);color:var(--tx);border-color:rgba(255,255,255,.10)}
 .brn-tog input[type=checkbox]{appearance:none;-webkit-appearance:none;width:14px;height:14px;border-radius:var(--r-xs);border:1.5px solid rgba(255,255,255,.22);background:transparent;cursor:pointer;flex-shrink:0;display:grid;place-items:center;margin:0;transition:border-color .14s ease,background .14s ease}
 .brn-tog input[type=checkbox]:hover{border-color:rgba(255,255,255,.34)}
@@ -1443,7 +1443,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .brn-tog input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff}
 .brn-section-title{font-size:var(--fs-xs);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wider);color:var(--tx3);margin:8px 0 6px 0}
 .brn-presets-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:var(--space-md)}
-.brn-preset{all:unset;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.025);cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:border-color .14s ease,background .14s ease,transform .14s ease}
+.brn-preset{all:unset;padding:10px 12px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:rgba(255,255,255,.025);cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:border-color .14s ease,background .14s ease,transform .14s ease}
 .brn-preset:hover{border-color:var(--ac-tint-35);background:var(--ac-tint-08)}
 .brn-preset:active{transform:translateY(.5px)}
 .brn-preset .n{font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--tx)}
@@ -1469,19 +1469,19 @@ body.msr-mode #canvas{cursor:crosshair}
 .brn-preview-table tr.skipped td.new{color:var(--tx3)}
 .brn-preview-table td.reason{color:var(--tx3);font-size:var(--fs-11);font-family:inherit}
 .brn-foot{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.04);flex-shrink:0;gap:var(--space-md);box-shadow:inset 0 1px 0 rgba(0,0,0,.25)}
-.brn-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:7px}
+.brn-foot .dlg-btn{padding:7px 13px;font-size:var(--fs-12);border-radius:6px}
 .brn-foot #_brn-save{background:transparent;border-color:transparent;color:var(--tx3);padding:7px 4px;font-weight:var(--fw-medium)}
 .brn-foot #_brn-save:hover{color:var(--ac-text);background:transparent;border-color:transparent;text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--ac-tint-55)}
 .brn-foot #_brn-ok{box-shadow:0 4px 14px var(--ac-tint-35),inset 0 1px 0 rgba(255,255,255,.20),inset 0 0 0 1px rgba(255,255,255,.06)}
 .brn-foot #_brn-ok:disabled{opacity:.40;filter:grayscale(.3) brightness(.85);cursor:not-allowed;box-shadow:none}
 .brn-foot #_brn-ok:disabled:hover{filter:grayscale(.3) brightness(.85)}
-.brn-collapsible{border:1px solid rgba(255,255,255,.06);border-radius:9px;background:rgba(255,255,255,.02);overflow:hidden;flex-shrink:0;transition:border-color .14s ease,background .14s ease}
+.brn-collapsible{border:1px solid rgba(255,255,255,.06);border-radius:10px;background:rgba(255,255,255,.02);overflow:hidden;flex-shrink:0;transition:border-color .14s ease,background .14s ease}
 .brn-collapsible:hover{border-color:rgba(255,255,255,.09)}
 .brn-collapsible.open{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.08)}
 .brn-collapsible-h{display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);padding:10px 12px;cursor:pointer;font-size:var(--fs-12);color:var(--tx2);user-select:none;transition:background .12s ease,color .12s ease}
 .brn-collapsible-h:hover{background:rgba(255,255,255,.025);color:var(--tx)}
 .brn-collapsible-h strong{color:var(--tx);font-weight:var(--fw-semibold)}
-.brn-collapsible-h .chev{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:5px;font-size:0;line-height:0;flex-shrink:0;background:rgba(255,255,255,.04);color:var(--tx2);opacity:.85;transition:transform .2s cubic-bezier(.2,.85,.3,1.1),color .14s ease,background .14s ease,opacity .14s ease}
+.brn-collapsible-h .chev{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:6px;font-size:0;line-height:0;flex-shrink:0;background:rgba(255,255,255,.04);color:var(--tx2);opacity:.85;transition:transform .2s cubic-bezier(.2,.85,.3,1.1),color .14s ease,background .14s ease,opacity .14s ease}
 .brn-collapsible-h .chev::before{content:'';width:8px;height:8px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:translateX(-1px) rotate(-45deg);transition:transform .2s cubic-bezier(.2,.85,.3,1.1)}
 .brn-collapsible-h:hover .chev{background:rgba(255,255,255,.07);color:var(--tx);opacity:1}
 .brn-collapsible.open .chev{background:var(--ac-tint-15);color:var(--ac-text);opacity:1}
@@ -1490,12 +1490,12 @@ body.msr-mode #canvas{cursor:crosshair}
 .brn-collapsible.open .brn-collapsible-b{display:flex}
 .brn-token-pop{position:absolute;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:var(--r-lg);box-shadow:0 16px 40px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06);padding:4px;z-index:600;display:none;max-height:280px;overflow:auto;min-width:280px}
 .brn-token-pop.show{display:block}
-.brn-token-item{padding:6px 10px;border-radius:5px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx)}
+.brn-token-item{padding:6px 10px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:14px;align-items:center;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx)}
 .brn-token-item:hover,.brn-token-item.active{background:var(--ac-soft)}
 .brn-token-item .desc{color:var(--tx3);font-size:var(--fs-11);font-family:inherit;font-weight:var(--fw-regular)}
 .brn-token-item .tname{font-weight:var(--fw-semibold);color:var(--ac-text)}
 .brn-help{font-size:var(--fs-xs);color:var(--tx3);padding:0 0 0 68px}
-.brn-help code{font-family:var(--font-sans);color:var(--ac-text);background:rgba(0,0,0,.25);padding:0 4px;border-radius:3px}
+.brn-help code{font-family:var(--font-sans);color:var(--ac-text);background:rgba(0,0,0,.25);padding:0 4px;border-radius:4px}
 
 /* ── Tree drag-and-drop ──────────────────────────────────────────────────
    Migrated from the JS-injected _dnd-style IIFE. Drives the drag-ghost,
@@ -1520,8 +1520,8 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .tree-node{padding-right:0;position:relative}
 .tree-node.tree-empty::after,#tree > div:not(.tree-node)::after{display:none}
 /* Finder-style inline rename input — sits inside .tree-label. */
-.tree-label-input{width:100%;background:rgba(255,255,255,.08);border:1px solid var(--ac);border-radius:3px;color:var(--tx);font:inherit;font-size:inherit;padding:1px 4px;margin:-2px 0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
-.tree-node.dnd-drop-into{outline:2px solid var(--ac);outline-offset:-2px;background:var(--ac-tint-14)!important;border-radius:3px}
+.tree-label-input{width:100%;background:rgba(255,255,255,.08);border:1px solid var(--ac);border-radius:4px;color:var(--tx);font:inherit;font-size:inherit;padding:1px 4px;margin:-2px 0;outline:none;box-shadow:0 0 0 2px var(--ac-tint-18)}
+.tree-node.dnd-drop-into{outline:2px solid var(--ac);outline-offset:-2px;background:var(--ac-tint-14)!important;border-radius:4px}
 .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px var(--ac-tint-55);pointer-events:none;z-index:50}
 .tree-drop-line::before{content:'';position:absolute;left:2px;top:-4px;width:6px;height:6px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px var(--ac)}
 #tree-newgroup-zone{display:none!important}
@@ -1542,7 +1542,7 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 #ctx-menu .ctx-menu-row .ctx-menu-label{flex:1;min-width:0}
 #ctx-menu .ctx-menu-sep{height:1px;background:rgba(255,255,255,.06);margin:4px 0}
 
-.kbd{display:inline-block;padding:1px 5px;font-size:var(--fs-10);background:var(--bg3);border:1px solid var(--bd);border-radius:3px;color:var(--tx2);font-family:var(--font-sans)}
+.kbd{display:inline-block;padding:1px 5px;font-size:var(--fs-10);background:var(--bg3);border:1px solid var(--bd);border-radius:4px;color:var(--tx2);font-family:var(--font-sans)}
 /* Shared keycap chip used by the bottom-center hint strip, tooltips, the
    Keyboard Shortcuts popup, and any other surface that lists key tokens.
    Subtle by default — readable but never demands attention. */
@@ -1590,11 +1590,11 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 #loader-msg{color:var(--tx);font-weight:var(--fw-semibold);font-size:var(--fs-xl);margin-bottom:2px}
 #loader-sub{color:var(--tx2);font-size:var(--fs-12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #loader-time{color:var(--tx2);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;padding:4px 8px;background:var(--hairline);border-radius:var(--r-sm)}
-.loader-bar{height:6px;background:var(--s3);border-radius:3px;margin-top:14px;overflow:hidden;position:relative}
-.loader-bar-fill{height:100%;width:35%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:3px;transition:width .3s ease;position:absolute;left:0}
+.loader-bar{height:6px;background:var(--s3);border-radius:4px;margin-top:14px;overflow:hidden;position:relative}
+.loader-bar-fill{height:100%;width:35%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:4px;transition:width .3s ease;position:absolute;left:0}
 .loader-bar-fill.indeterminate{animation:slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
 @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
-.loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid var(--hairline);border-radius:7px;padding:8px 10px;font:11px/1.55 var(--font-sans);color:var(--tx2)}
+.loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid var(--hairline);border-radius:6px;padding:8px 10px;font:11px/1.55 var(--font-sans);color:var(--tx2)}
 .log-line{display:flex;gap:var(--space-md)}
 .log-time{color:var(--tx3);flex-shrink:0;width:48px}
 .log-msg.ok{color:var(--ok)}.log-msg.warn{color:var(--wn)}.log-msg.err{color:var(--er)}
@@ -1640,10 +1640,10 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
    sweep is a follow-up cleanup, not this one). */
 .dlg-bg{position:fixed;inset:0;background:transparent;display:none;place-items:center;z-index:300;opacity:0;transition:opacity .18s ease}
 .dlg-bg.show{display:grid;opacity:1}
-.dlg-card{width:min(420px,calc(100vw - 32px));background:linear-gradient(180deg,rgba(28,33,44,.96),rgba(18,22,30,.96));border:1px solid rgba(255,255,255,.08);border-radius:16px;box-shadow:0 30px 80px -20px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06) inset,0 -1px 0 rgba(0,0,0,.4) inset;overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform .22s cubic-bezier(.2,.8,.3,1),opacity .18s ease}
+.dlg-card{width:min(420px,calc(100vw - 32px));background:linear-gradient(180deg,rgba(28,33,44,.96),rgba(18,22,30,.96));border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 30px 80px -20px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.06) inset,0 -1px 0 rgba(0,0,0,.4) inset;overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform .22s cubic-bezier(.2,.8,.3,1),opacity .18s ease}
 .dlg-bg.show .dlg-card{transform:translateY(0) scale(1);opacity:1}
 .dlg-head{display:flex;align-items:flex-start;gap:14px;padding:22px 22px 0}
-.dlg-icon{flex-shrink:0;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:var(--ac-tint-12);color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-18)}
+.dlg-icon{flex-shrink:0;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--ac-tint-12);color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-18)}
 .dlg-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .dlg-card.danger .dlg-icon{background:rgba(255,107,107,.13);color:var(--er);box-shadow:inset 0 0 0 1px rgba(255,107,107,.2)}
 .dlg-text{flex:1;min-width:0;padding-top:2px}
@@ -1675,33 +1675,33 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 #scrshot-dlg .ss-preset .sub{font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
 #scrshot-dlg .ss-preset.active .sub{color:var(--ac-text)}
 #scrshot-dlg .ss-custom{display:flex;align-items:center;gap:var(--space-md)}
-#scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:7px;font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
+#scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:6px;font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
 #scrshot-dlg .ss-custom input:focus{border-color:var(--ac-tint-55)}
 #scrshot-dlg .ss-custom .x{color:var(--tx3);font-size:var(--fs-lg);font-weight:var(--fw-medium)}
 #scrshot-dlg .ss-meta{display:flex;justify-content:space-between;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
 #scrshot-dlg .ss-meta strong{color:var(--tx2);font-weight:var(--fw-medium)}
 #scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:var(--space-sm)}
-#scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:7px;font-size:var(--fs-md);outline:none}
+#scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:6px;font-size:var(--fs-md);outline:none}
 #scrshot-dlg .ss-name input:focus{border-color:var(--ac-tint-55)}
-#scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:7px;cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
+#scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:10px;background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:6px;cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
 #scrshot-dlg .ss-overlay-row:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.10)}
 #scrshot-dlg .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
 #scrshot-dlg .ss-overlay-row .lbl{flex:1;font-size:var(--fs-12);color:var(--tx);font-weight:var(--fw-medium)}
 #scrshot-dlg .ss-overlay-row .hint{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-regular);margin-left:4px}
-#scrshot-dlg .ss-stamp-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--bd);border-top:0;border-radius:0 0 7px 7px;margin-top:-7px}
+#scrshot-dlg .ss-stamp-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--bd);border-top:0;border-radius:0 0 6px 6px;margin-top:-7px}
 #scrshot-dlg .ss-stamp-fields.disabled{opacity:.45;pointer-events:none}
 #scrshot-dlg .ss-stamp-check{display:flex;align-items:center;gap:7px;font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none}
 #scrshot-dlg .ss-stamp-check input{accent-color:var(--ac);width:12px;height:12px;cursor:pointer;margin:0}
 #scrshot-dlg .ss-stamp-pos{display:flex;align-items:center;gap:6px;grid-column:1 / -1;padding-top:6px;margin-top:2px;border-top:1px solid var(--bd);font-size:var(--fs-11);color:var(--tx3)}
 #scrshot-dlg .ss-stamp-pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;flex:1}
-#scrshot-dlg .ss-stamp-pos-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:4px 8px;border-radius:5px;font-size:var(--fs-11);cursor:pointer;transition:background .12s,border-color .12s,color .12s;font-variant-numeric:tabular-nums}
+#scrshot-dlg .ss-stamp-pos-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:4px 8px;border-radius:6px;font-size:var(--fs-11);cursor:pointer;transition:background .12s,border-color .12s,color .12s;font-variant-numeric:tabular-nums}
 #scrshot-dlg .ss-stamp-pos-btn:hover{background:rgba(255,255,255,.06);color:var(--tx)}
 #scrshot-dlg .ss-stamp-pos-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
 #scrshot-dlg .ss-vmode{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-#scrshot-dlg .ss-vmode-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:7px 8px;border-radius:7px;font-size:var(--fs-11);cursor:pointer;font-weight:var(--fw-medium);transition:background .12s,border-color .12s,color .12s}
+#scrshot-dlg .ss-vmode-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:7px 8px;border-radius:6px;font-size:var(--fs-11);cursor:pointer;font-weight:var(--fw-medium);transition:background .12s,border-color .12s,color .12s}
 #scrshot-dlg .ss-vmode-btn:hover{background:rgba(255,255,255,.06);color:var(--tx)}
 #scrshot-dlg .ss-vmode-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
-#scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:var(--fs-12);border-radius:7px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:var(--fw-medium)}
+#scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:var(--fs-12);border-radius:6px;border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:var(--fw-medium)}
 #scrshot-dlg .dlg-foot .ss-cancel:hover{background:rgba(255,255,255,.05)}
 #scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,var(--ac-tint-35),var(--ac-tint-18));border-color:var(--ac-tint-55);color:var(--tx-on-accent)}
 #scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,var(--ac-tint-40),var(--ac-tint-25))}
@@ -1774,13 +1774,13 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .lc-h{display:flex;align-items:center;gap:var(--space-md);padding:6px 10px;border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:var(--font-sans)}
 .lc-h .lc-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);padding-right:4px}
 .lc-filters{display:flex;gap:3px}
-.lc-pill{padding:3px 9px;background:var(--hairline);border:1px solid var(--s2);border-radius:5px;color:var(--tx2);font-size:var(--fs-11);cursor:pointer;font-variant-numeric:tabular-nums;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out);font-family:inherit}
+.lc-pill{padding:3px 9px;background:var(--hairline);border:1px solid var(--s2);border-radius:6px;color:var(--tx2);font-size:var(--fs-11);cursor:pointer;font-variant-numeric:tabular-nums;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out);font-family:inherit}
 .lc-pill:hover{color:var(--tx);background:rgba(255,255,255,.07)}
 .lc-pill:active{transform:scale(.95)}
 .lc-pill.active{color:var(--tx);background:var(--ac-tint-12);border-color:var(--ac-line)}
 .lc-pill .n{color:var(--tx3);margin-left:4px;font-size:var(--fs-10)}
 .lc-pill.active .n{color:var(--ac-text)}
-.lc-search{flex:1;max-width:220px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-family:inherit}
+.lc-search{flex:1;max-width:220px;padding:4px 9px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-family:inherit}
 .lc-search:focus{border-color:var(--ac)}
 .lc-spacer{flex:1}
 .lc-icon-btn{width:24px;height:24px;display:grid;place-items:center;background:transparent;border:1px solid transparent;border-radius:var(--r-xs);color:var(--tx2);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform 100ms var(--ease-out)}
@@ -2044,14 +2044,14 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 .wl-tag{font-size:12px;color:var(--tx2);margin-top:1px}
 .wl-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
 .wl-col{min-width:0;display:flex;flex-direction:column}
-.wl-drop{border:1px dashed var(--bd2);border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;background:var(--bg2);display:flex;flex-direction:column;align-items:center;gap:8px;transition:border-color var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out)}
+.wl-drop{border:1px dashed var(--bd2);border-radius:10px;padding:18px 14px;text-align:center;cursor:pointer;background:var(--bg2);display:flex;flex-direction:column;align-items:center;gap:8px;transition:border-color var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out)}
 .wl-drop:hover,.wl-drop.drag-over{border-color:var(--ac);background:var(--ac-tint-08)}
 .wl-drop>svg,.wl-drop>i{width:26px;height:26px;stroke:var(--ac-text);fill:none;stroke-width:1.6}
 .wl-drop-title{font-size:13px;color:var(--tx)}
 .wl-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
-.wl-chips span{font-size:10.5px;letter-spacing:.02em;color:var(--tx2);background:var(--bg3);border:1px solid var(--bd);border-radius:5px;padding:2px 6px}
+.wl-chips span{font-size:10.5px;letter-spacing:.02em;color:var(--tx2);background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:2px 6px}
 .wl-actions{display:flex;flex-direction:column;gap:2px;margin-top:12px}
-.wl-act{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--tx)}
+.wl-act{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--tx)}
 .wl-act svg,.wl-act i{width:15px;height:15px;stroke:var(--tx2);fill:none;stroke-width:2;flex:0 0 auto}
 .wl-act span{flex:1 1 auto}
 .wl-act kbd{font:inherit;font-size:11px;color:var(--tx3)}
@@ -2059,7 +2059,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 .wl-act:hover svg,.wl-act:focus-visible svg,.wl-act:hover kbd,.wl-act:focus-visible kbd{stroke:#fff;color:#fff}
 .wl-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:16px 0 7px}
 .wl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.wl-shape{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px 7px;border-radius:9px;background:var(--bg2);border:1px solid var(--bd);cursor:pointer;font-size:11px;color:var(--tx2);transition:border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+.wl-shape{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px 7px;border-radius:10px;background:var(--bg2);border:1px solid var(--bd);cursor:pointer;font-size:11px;color:var(--tx2);transition:border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
 .wl-shape:hover,.wl-shape:focus-visible{border-color:var(--ac);color:var(--tx);background:var(--bg3)}
 .wl-shape-pic{width:34px;height:34px;display:grid;place-items:center}
 .wl-shape-pic img{width:34px;height:34px;object-fit:contain}
@@ -2076,7 +2076,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 #welcome-resume:empty + .wl-recents-head{margin-top:0}
 .wl-search{position:relative;margin-bottom:8px}
 .wl-search svg,.wl-search i{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;stroke:var(--tx3);fill:none;stroke-width:2}
-.wl-search input{box-sizing:border-box;width:100%;height:30px;padding:0 10px 0 28px;background:var(--bg2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:12px;outline:none}
+.wl-search input{box-sizing:border-box;width:100%;height:30px;padding:0 10px 0 28px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:12px;outline:none}
 .wl-search input:focus{border-color:var(--ac)}
 .wl-recents{display:flex;flex-direction:column;gap:6px;max-height:268px;overflow-y:auto;padding-right:2px}
 .wl-recents-empty{font-size:12px;color:var(--tx3);padding:10px 2px}
@@ -2093,14 +2093,14 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
    edge, display controls along the bottom centre. Buttons inside are bare
    icons; the pill is the only chrome. */
 .vpc.tl:not(#vp-perf),.vpc.tr{
-  background:rgba(17,17,17,.94);border-radius:11px;padding:4px;gap:2px;
+  background:rgba(17,17,17,.94);border-radius:10px;padding:4px;gap:2px;
   box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06);
 }
 .vpc.tl:not(#vp-perf){top:50%;left:8px;transform:translateY(-50%)}
 .vpc.tr{top:auto;right:auto;bottom:10px;left:50%;transform:translateX(-50%);flex-direction:row;align-items:center}
 .vpc .vpb{
   --btn-tint:var(--tx2);
-  width:30px;height:30px;flex:0 0 30px;background:transparent;border:0;border-radius:7px;
+  width:30px;height:30px;flex:0 0 30px;background:transparent;border:0;border-radius:6px;
   backdrop-filter:none;color:var(--tx2);
 }
 .vpc .vpb:hover{background:rgba(255,255,255,.09);border:0;color:var(--tx)}
@@ -2133,13 +2133,13 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 #sidebar-right::-webkit-scrollbar{display:none;width:0;height:0}
 /* The viewport is a rounded panel set into the dark frame; the dividing
    lines beside it are no longer needed. */
-#viewport{border-radius:8px;overflow:hidden}
+#viewport{border-radius:10px;overflow:hidden}
 #sidebar-left{border-right-color:transparent}
 #sidebar-right{border-left-color:transparent}
 #tb{border-bottom-color:transparent}
 /* bottom bar: a search button on its own, then the display controls */
 .vpc.tr{background:transparent;box-shadow:none;padding:0;gap:6px}
-.vp-bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:11px;background:rgba(17,17,17,.94);box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06)}
+.vp-bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:10px;background:rgba(17,17,17,.94);box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06)}
 /* The status bar uses the same dark surface as the top bar and sidebars. */
 #sb{background:var(--bg)}
 /* Startup screen — room to breathe */
@@ -2147,18 +2147,18 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 .wl-modal .modal-b{padding:32px 36px 28px}
 .wl-modal #welcome-close{top:22px!important;right:22px!important}
 .wl-head{gap:14px;margin-bottom:28px}
-.wl-mark{width:42px;height:42px;border-radius:12px}
+.wl-mark{width:42px;height:42px;border-radius:10px}
 .wl-mark svg{width:22px;height:22px}
 .wl-title{font-size:18px}
 .wl-tag{font-size:13px;margin-top:3px}
 .wl-cols{gap:40px}
-.wl-drop{padding:30px 20px;gap:12px;border-radius:14px}
+.wl-drop{padding:30px 20px;gap:12px;border-radius:10px}
 .wl-drop>svg,.wl-drop>i{width:30px;height:30px}
 .wl-drop-title{font-size:14px}
 .wl-chips{gap:6px}
 .wl-chips span{font-size:11px;padding:3px 8px}
 .wl-actions{gap:4px;margin-top:18px}
-.wl-act{height:40px;padding:0 12px;gap:12px;font-size:13.5px;border-radius:8px}
+.wl-act{height:40px;padding:0 12px;gap:12px;font-size:13.5px;border-radius:6px}
 .wl-act svg,.wl-act i{width:16px;height:16px}
 .wl-act kbd{font-size:12px}
 .wl-label{font-size:11px;margin:26px 0 12px}
@@ -2189,8 +2189,8 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 #log-console{left:var(--side-l-w,0px);right:var(--side-r-w,0px);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform .2s var(--ease-out),visibility 0s linear .2s}
 #log-console.show{transform:translateY(0);visibility:visible;transition:transform .2s var(--ease-out),visibility 0s}
 /* Triangle / part readout sits in the viewport's top-right corner. */
-.vpc.vp-topright{top:8px;right:8px;flex-direction:column;align-items:flex-end;pointer-events:none}
-.vpc.vp-topright .vp-info{pointer-events:auto}
+.vpc.vp-stats{top:8px;right:8px;flex-direction:column;align-items:flex-end;pointer-events:none}
+.vpc.vp-stats .vp-info{pointer-events:auto}
 /* Shortcut tips are a quiet reference, not part of the scene. */
 .vp-tips{opacity:.5}
 .vp-tips .vp-kbd{background:rgba(255,255,255,.06);color:var(--tx2)}
@@ -2216,7 +2216,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
    scrolls out at the top or bottom is cut with round corners rather than a
    straight line. (The inset replaces the padding it had before, so the cards
    keep their width.) */
-#sidebar-right{margin:12px;padding:0;border:0;border-radius:12px}
+#sidebar-right{margin:12px;padding:0;border:0;border-radius:10px}
 /* Shape picker and Add button: flat line icons, like the rest of the toolbar. */
 .prim-ico{width:16px;height:16px;flex:0 0 16px;display:block}
 .vp-prim-pop-item .prim-ico{color:var(--tx2)}
@@ -2262,7 +2262,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 }
 /* toolbars over the viewport */
 .vp-bar,.vpc.tl:not(#vp-perf){background:var(--surface-bar);box-shadow:0 6px 20px rgba(0,0,0,.4),var(--surface-ring)}
-.tip-pop{border-radius:8px}
+.tip-pop{border-radius:6px}
 /* The selected row's label and icon are the accent blue itself. */
 .tree-node.selected .tree-label,.tree-node.is-group.selected .tree-label{color:var(--ac)}
 .tree-node.selected .tree-typeicon{color:var(--ac)}
@@ -2297,6 +2297,258 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 #sb{container-type:inline-size;container-name:sb}
 @container sb (max-width:620px){#sb .item:has(#sb-verts),#sb .item:has(#sb-mem){display:none}}
 @container sb (max-width:430px){#sb #sb-status,#sb .item:has(#fps){display:none}}
+/* Popovers of the bottom toolbar open upwards, so their height has to fit
+   between the toolbar and the top of the viewport: 100vh minus the top bar
+   (44), the status bar (22), the toolbar and its offset (56) and a 16px
+   margin — and never taller than 520px. The materials list scrolls inside
+   while its buttons stay put. */
+.vpc.tr #vp-settings-pop,.vpc.tr #vp-materials-pop{max-height:min(520px,calc(100vh - 138px))}
+.vpc.tr #vp-materials-pop{display:flex;flex-direction:column;overflow:hidden}
+.vpc.tr #vp-materials-pop .mat-actions{flex:0 0 auto}
+.vpc.tr #vp-materials-pop .pop-section{flex:1 1 auto;min-height:0;overflow-y:auto}
+.tree-node.is-empty-group .tree-meta{font-style:normal;opacity:.7}
+/* ── Viewport corners ─────────────────────────────────────────────────────
+   Triangle statistics top-left, view gizmo top-right (where Plasticity,
+   Blender and Fusion keep theirs). The HDRI sun dial stays bottom-left. */
+.vpc.vp-stats{top:8px;left:8px;right:auto;align-items:flex-start}
+.vpc.bl:not(#sun-gizmo-wrap){top:6px;right:8px;bottom:auto;left:auto}
+#sun-gizmo-wrap{left:8px!important}
+
+/* ── Right sidebar: same top and bottom edge as the viewport ───────────── */
+#sidebar-right{margin:0 12px 22px 12px}
+
+/* ── App icon: a plain white mark with a menu arrow ────────────────────────
+   No coloured tile, no glow, no hover animation — it behaves like the other
+   top-bar buttons. */
+.brand-btn{display:inline-flex;align-items:center;gap:2px;height:var(--btn-h-md);padding:0 6px 0 8px;border-radius:var(--btn-r-md);transition:background var(--dur-fast) var(--ease-out)}
+.brand-btn:hover,.brand-btn[aria-expanded="true"]{background:rgba(255,255,255,.07)}
+.brand-btn:focus-visible{box-shadow:none;outline:2px solid var(--ac);outline-offset:2px}
+.brand-mark,.brand-left .brand-mark{width:20px;height:20px;margin:0;border-radius:0;background:none;box-shadow:none;transition:none;filter:none}
+.brand-mark::before,.brand-mark::after{display:none}
+.brand-mark svg{width:18px;height:18px;stroke:#fff;fill:#fff;stroke-width:1.5;transition:none}
+.brand-btn:hover .brand-mark,.brand-btn:active .brand-mark,.brand-btn[aria-expanded="true"] .brand-mark{transform:none;box-shadow:none;filter:none}
+.brand-btn:hover .brand-mark svg{transform:none;filter:none}
+.brand-caret{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;color:var(--tx2);transition:transform 140ms var(--ease-out)}
+.brand-caret svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;display:block}
+.brand-btn[aria-expanded="true"] .brand-caret{transform:rotate(180deg)}
+.brand-menu-mark{background:rgba(255,255,255,.08);box-shadow:none}
+.brand-menu-mark svg{stroke:#fff;fill:#fff;stroke-width:1.5}
+
+/* ── Sidebar toggle: pressed is a quiet fill, not a glowing blue ring ──── */
+.tbtn.icon-only.active,#btn-toggle-left.active{background:rgba(255,255,255,.09);border-color:transparent;color:var(--tx);box-shadow:none}
+#btn-toggle-left:focus:not(:focus-visible){outline:none;box-shadow:none}
+/* Search field starts level with the top of the viewport. */
+.tree-search{margin-top:0}
+/* Triangle statistics: a quiet readout, not a card — same weight as the tips. */
+.vpc.vp-stats .vp-info{background:none;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;padding:2px 4px;min-width:118px;opacity:.55;color:var(--tx3)}
+.vpc.vp-stats .vp-info strong{color:var(--tx2);font-weight:var(--fw-regular)}
+.vpc.vp-stats .vp-tribar{height:2px;opacity:.7;margin:4px 0 5px}
+.vpc.vp-stats .vp-tribar-mask{background:var(--bg)}
+/* FPS readout keeps its width, so the items after it don't shift as it changes. */
+#sb #fps{display:inline-block;min-width:3ch;text-align:right}
+/* "up to [ 12 ] mm" beside the Fill holes button */
+.size-field{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;height:var(--btn-h-md);padding:0 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--btn-r-md);color:var(--tx3);font-size:var(--fs-12);white-space:nowrap}
+.size-field:focus-within{border-color:var(--ac)}
+.size-field input{width:34px;background:none;border:0;outline:none;color:var(--tx);font:inherit;text-align:right;padding:0;font-variant-numeric:tabular-nums}
+/* FPS lives at the right end of the status bar, beside Console. */
+#sb .sb-fps{margin-left:4px}
+@container sb (max-width:430px){#sb .sb-fps{display:none}}
+/* ── Materials dock ───────────────────────────────────────────────────────
+   Same place, width and motion as the console: fixed above the status bar,
+   between the sidebars, sliding up from below. (It used to be a 228px
+   popover hanging off the bottom toolbar.) */
+:root{--mat-dock-h:300px}
+#vp-materials-pop.mat-dock{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;width:auto;
+  height:min(var(--mat-dock-h),56vh);max-height:none;display:flex;flex-direction:column;overflow:hidden;padding:0;
+  background:linear-gradient(180deg,var(--bg1),var(--bg));border:0;border-top:1px solid var(--bd);border-radius:0;
+  box-shadow:0 -8px 24px -16px rgba(0,0,0,.5);z-index:var(--z-toolbar);opacity:1;pointer-events:auto;transform-origin:50% 100%;
+  transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform .2s var(--ease-out),visibility 0s linear .2s;
+  font:11.5px/1.5 var(--font-sans)}
+#vp-materials-pop.mat-dock.show{transform:translateY(0);visibility:visible;transition:transform .2s var(--ease-out),visibility 0s}
+/* the toolbar and the tips move up with it, so nothing is covered */
+.vpc.tr,.vpc.br{transition:bottom .2s var(--ease-out)}
+body.mat-dock-open .vpc.tr{bottom:calc(min(var(--mat-dock-h),56vh) + 12px)}
+body.mat-dock-open .vpc.br{bottom:calc(min(var(--mat-dock-h),56vh) + 10px)}
+
+.mat-dock-h{gap:10px}
+.mat-dock-count{color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mat-dock-search{display:inline-flex;align-items:center;gap:6px;flex:0 1 200px;min-width:110px;height:var(--btn-h-sm);padding:0 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--btn-r-sm);color:var(--tx3)}
+.mat-dock-search:focus-within{border-color:var(--ac)}
+.mat-dock-search svg{width:13px;height:13px;flex:0 0 13px;stroke:currentColor;fill:none;stroke-width:2}
+.mat-dock-search input{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--tx);font:inherit;font-size:var(--fs-12);padding:0}
+.mat-dock-h #mat-sort{width:auto;flex:0 0 auto;height:var(--btn-h-sm);min-height:0;padding:0 24px 0 9px;font-size:var(--fs-12)}
+#vp-materials-pop.mat-dock .mat-actions{display:flex;flex-direction:row;align-items:center;gap:6px;padding:0;border:0;background:none;border-radius:0;flex:0 0 auto}
+#vp-materials-pop.mat-dock .mat-actions-icons{display:flex;gap:4px}
+#vp-materials-pop.mat-dock .mat-actions-icons .mat-act-icon{flex:0 0 auto;width:var(--btn-h-sm);height:var(--btn-h-sm);padding:0}
+#vp-materials-pop.mat-dock .mat-act-presets{height:var(--btn-h-sm);padding:0 9px;white-space:nowrap}
+
+.mat-dock-body{flex:1;min-height:0;display:flex}
+#vp-materials-pop.mat-dock .pop-section{flex:1 1 auto;min-width:0;min-height:0;overflow-y:auto;padding:12px 14px 16px;border:0}
+#vp-materials-pop.mat-dock .mat-grid{grid-template-columns:repeat(auto-fill,minmax(82px,1fr));column-gap:8px;row-gap:10px;justify-content:start;justify-items:stretch}
+#vp-materials-pop.mat-dock .mat-cell{padding:5px 4px 4px;gap:5px}
+#vp-materials-pop.mat-dock .mat-cell .mat-thumb{width:64px;height:64px}
+#vp-materials-pop.mat-dock .mat-cell .mat-name{font-size:var(--fs-11)}
+#vp-materials-pop.mat-dock .mat-list-view{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 18px;align-content:start}
+#vp-materials-pop.mat-dock .mat-empty{padding:26px 8px;color:var(--tx3);text-align:center}
+
+/* inspector: what the picked material is, and where it is used */
+.mat-inspector{flex:0 0 264px;min-height:0;overflow-y:auto;padding:12px 14px 14px;border-left:1px solid var(--surface-line);background:rgba(0,0,0,.16);display:flex;flex-direction:column;gap:10px}
+.mat-inspector .mi-empty{color:var(--tx3);font-size:var(--fs-12);line-height:1.55;margin:auto 0}
+.mat-inspector .mi-empty kbd{font:inherit;color:var(--tx2);background:rgba(255,255,255,.06);border-radius:4px;padding:0 4px}
+.mat-inspector .mi-top{display:flex;align-items:center;gap:10px}
+.mat-inspector .mi-ball{width:52px;height:52px;border-radius:6px;flex:0 0 52px;object-fit:cover;background:var(--bg3)}
+.mat-inspector .mi-name{color:var(--tx);font-size:var(--fs-13);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mat-inspector .mi-type{color:var(--tx3);font-size:var(--fs-11)}
+.mat-inspector .mi-id{min-width:0}
+.mat-inspector .mi-rows{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:10px;row-gap:6px;align-items:center;font-size:var(--fs-12)}
+.mat-inspector .mi-rows>span:nth-child(3n+1){color:var(--tx3)}
+.mat-inspector .mi-num{color:var(--tx2);font-variant-numeric:tabular-nums;text-align:right}
+.mat-inspector .mi-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+.mat-inspector .mi-bar i{display:block;height:100%;background:var(--tx3);border-radius:2px}
+.mat-inspector .mi-chip{display:inline-block;width:12px;height:12px;border-radius:4px;vertical-align:-2px;margin-right:6px;box-shadow:0 0 0 1px rgba(255,255,255,.14)}
+.mat-inspector .mi-wide{grid-column:2 / 4;color:var(--tx2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mat-inspector .mi-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:auto}
+.mat-inspector .mi-actions .btn{min-height:var(--btn-h-sm);height:var(--btn-h-sm);font-size:var(--fs-12);justify-content:center;padding:0 8px}
+@media (max-width:1100px){.mat-inspector{display:none}}
+/* View cube (top-right): a little larger, fully opaque, faces light up on hover. */
+#axis-gizmo{width:76px;height:76px;opacity:1}
+#axis-gizmo svg{width:74px;height:74px}
+#axis-gizmo .axg-face:hover{filter:brightness(1.12)}
+#axis-gizmo .axg-handle:hover circle{filter:brightness(1.15)}
+.vpc.bl:not(#sun-gizmo-wrap){top:4px;right:6px}
+/* Nothing drawn over the viewport is selectable text. */
+#vp-overlay,#vp-overlay *{user-select:none;-webkit-user-select:none}
+#vp-overlay input,#vp-overlay textarea{user-select:text;-webkit-user-select:text}
+.mat-inspector .mi-rows>span{color:var(--tx2);font-weight:var(--fw-regular)}
+.mat-inspector .mi-rows>.mi-l{color:var(--tx3)}
+.mat-inspector .mi-rows{row-gap:5px}
+:root{--mat-dock-h:330px}
+/* The grid toggle is off the toolbar (the command palette and Scene settings
+   still switch the grid). The button stays in the page for its state. */
+#tg-grid{display:none}
+/* View cube at Plasticity's size. */
+#axis-gizmo{width:92px;height:92px}
+#axis-gizmo svg{width:90px;height:90px}
+/* Parts search: a clear button at the right end of the field. */
+.tree-search input{padding-right:30px}
+.tree-search-clear{all:unset;position:absolute;right:5px;top:50%;transform:translateY(-50%);width:22px;height:22px;display:grid;place-items:center;border-radius:6px;color:var(--tx3);cursor:pointer}
+.tree-search-clear[hidden]{display:none}
+.tree-search-clear:hover{color:var(--tx);background:rgba(255,255,255,.08)}
+.tree-search .tree-search-clear svg{position:static;transform:none;width:13px;height:13px;stroke:currentColor}
+/* The buttons under it share the row's width, edge to edge with the field. */
+.tree-toolbar{padding:0 12px 6px;gap:5px;flex-wrap:nowrap}
+.tree-toolbar .tree-icon-btn{flex:1 1 0;width:auto;min-width:0}
+/* Scrollbars without arrow buttons: a slim thumb on a clear track. (The
+   standard scrollbar-width / scrollbar-color pair draws the system bar,
+   arrows included, so Chromium gets the ::-webkit- version instead.) */
+@supports selector(::-webkit-scrollbar){
+  *{scrollbar-width:auto;scrollbar-color:auto}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-button{display:none;width:0;height:0}
+  ::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--bg4);background-clip:padding-box;border:2px solid transparent;border-radius:6px;min-height:32px;min-width:32px}
+  ::-webkit-scrollbar-thumb:hover{background:#5a5a5a;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:active{background:var(--ac);background-clip:padding-box}
+  #sidebar-right{scrollbar-width:none}
+}
+/* A control the command search has just jumped to. */
+.cmdk-flash{outline:2px solid var(--ac);outline-offset:2px;border-radius:6px}
+/* ── Parts tree: one column, nothing pinned ───────────────────────────────
+   The tree used to scroll sideways, with the eye / colour column pinned to
+   the right edge by position:sticky. Rows were as wide as their own text, so
+   a pinned column could only follow the rows that were wider than the panel:
+   scrolled sideways, the eyes of short rows slid left while the others
+   stayed (the "dance"), and the pinned column trailed behind the wheel.
+   Now the tree only scrolls up and down. Every row is exactly as wide as the
+   panel, the icon column is an ordinary last cell, long names end in an
+   ellipsis (the full name shows on hover), and deep hierarchies get a
+   narrower indent step (--ti, set from the deepest level) instead of
+   running off the edge. */
+#tree{overflow-x:hidden}
+.tree-node{width:auto;min-width:0;max-width:100%}
+.tree-node .tree-label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tree-node .tree-meta{flex:0 1000 auto;min-width:0;overflow:hidden;white-space:nowrap}
+.tree-node .tree-iconcol,.tree-node:hover .tree-iconcol,.tree-node.selected .tree-iconcol,.tree-node.selected:hover .tree-iconcol{position:static;z-index:auto;background:none;flex:0 0 60px;margin-left:auto;padding:0 12px 0 10px}
+.tree-iconcol::before{display:none}
+.tree-line{width:var(--ti,14px)}
+.tree-line::after{left:calc(var(--ti,14px) / 2)}
+.tree-line.elbow::before{left:calc(var(--ti,14px) / 2 + 1px);width:calc(var(--ti,14px) / 2 - 1px)}
+.tree-line.elbow:has(+ .tree-expand-spacer)::before{width:calc(var(--ti,14px) / 2 + 16px)}
+/* Group names: a soft grey, regular weight — not pure white. */
+.tree-node.is-group .tree-label{color:#c4c4c6;font-weight:var(--fw-regular)}
+.tree-node.is-group.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 26%, var(--tx2))}
+.tree-node.is-group.selected .tree-label{color:var(--ac)}
+/* View cube: soft plate on hover, accent on the face under the pointer. */
+#axis-gizmo .axg-plate{fill:rgba(255,255,255,0);transition:fill .18s var(--ease-out)}
+#axis-gizmo .axg-face{transition:fill .12s var(--ease-out),stroke .12s var(--ease-out)}
+/* the face under the pointer takes the colour of the axis it looks along */
+#axis-gizmo .axg-face[data-axis$="x"]:hover{fill:#f0525f!important;stroke:#f0525f!important;filter:none}
+#axis-gizmo .axg-face[data-axis$="y"]:hover{fill:#3fb85a!important;stroke:#3fb85a!important;filter:none}
+#axis-gizmo .axg-face[data-axis$="z"]:hover{fill:#3b8cf2!important;stroke:#3b8cf2!important;filter:none}
+#axis-gizmo .axg-handle circle{transition:transform .12s var(--ease-out);transform-box:fill-box;transform-origin:center}
+#axis-gizmo .axg-handle:hover circle{transform:scale(1.14);filter:none}
+/* Indent of the tree: the 6px gap between cells counts as part of each level. */
+/* Parts search: quiet while it is empty and not in use, full strength on
+   hover, on focus, and for as long as something is typed in it. */
+.tree-search{transition:opacity .15s var(--ease-out)}
+.tree-search:has(input:placeholder-shown:not(:focus)){opacity:.5}
+.tree-search:has(input:placeholder-shown:not(:focus)):hover{opacity:.85}
+/* Renderer picker ends on the same line as the right sidebar's cards. */
+#stat-renderer{padding-right:0}
+/* ── Corner radii: three sizes for the whole page ─────────────────────────
+   4px  tiny things: key caps, tags, the +/- box, colour chips
+   6px  every control: buttons, fields, dropdowns, rows, icon buttons
+   10px every container: cards, menus, popovers, tool pills, the viewport,
+        dialogs, docks
+   (Round things — switches, dots, pills — stay round.) The old scale had
+   thirteen values between 2 and 16px. */
+:root{--r-xs:4px;--r-sm:6px;--r-md:6px;--r-lg:10px;--r-xl:10px;--r-2xl:10px;
+  --btn-r-sm:6px;--btn-r-md:6px;--btn-r-lg:6px;--surface-pop-r:10px;--surface-win-r:10px;--menu-r:10px}
+.tree-expand{border-radius:4px}
+/* A button whose result is being recalculated. */
+.btn .when-busy{display:none}
+.btn.is-busy .when-idle{display:none}
+.btn.is-busy .when-busy{display:inline}
+.btn.is-busy{opacity:.6;cursor:progress}
+/* Sliders keep the normal pointer — track and thumb, at rest and while held.
+   (Separate rules per engine: one unknown pseudo-element would void a list.) */
+input[type=range],input[type=range]:active{cursor:default!important}
+input[type=range]::-webkit-slider-thumb{cursor:default!important}
+input[type=range]:active::-webkit-slider-thumb{cursor:default!important}
+input[type=range]::-moz-range-thumb{cursor:default!important}
+input[type=range]:active::-moz-range-thumb{cursor:default!important}
+/* Card headers: a real chevron in a small hit area instead of a 7px text
+   triangle. Points down when the card is open, right when it is closed. */
+.section-h .chev{font-size:0;line-height:0;width:22px;height:22px;margin-right:0;border-radius:6px;position:relative;display:block;flex:0 0 22px;
+  color:var(--tx2);opacity:1;transition:transform .18s var(--ease-out),background .12s var(--ease-out),color .12s var(--ease-out)}
+.section-h .chev::before{content:'';position:absolute;left:3px;top:3px;width:16px;height:16px;background:currentColor;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center/contain no-repeat}
+.section-h:hover .chev{color:var(--tx);background:rgba(255,255,255,.07)}
+.section-h.collapsed .chev{transform:rotate(-90deg);color:var(--tx3)}
+.section-h.collapsed:hover .chev{color:var(--tx)}
+/* The last two pill shapes join the scale: the camera pill is a viewport
+   container like the tool pills, the value fields are controls. (Switches
+   and dots stay round.) */
+#vp-view-pill{border-radius:10px}
+input.prim-value,.prim-value{border-radius:6px}
+/* Card header: equal space above and below (it was 11px / 9px, which left
+   the chevron's box a pixel low), and the chevron's box ends where the
+   card's content ends, the same distance from the edge as the title. */
+.section-h{padding-top:10px;padding-bottom:10px}
+/* A row whose part has been deleted. (Separate from .is-hidden, which the
+   collapse / expand code switches on and off.) */
+.tree-node.is-gone{display:none!important}
+/* Mask icons (see _ico in app-v2.js): the shape comes from --ti-m, the
+   colour from the text colour. */
+.ti{display:inline-block;flex:0 0 auto;width:14px;height:14px;background:currentColor;
+  -webkit-mask:var(--ti-m) center/contain no-repeat;mask:var(--ti-m) center/contain no-repeat}
+.tree-vis .ti,.tree-typeicon .ti{width:13px;height:13px}
+/* Console button fits inside the status bar (it was taller than the bar, so
+   its highlight ran up over the viewport's edge). */
+#sb-console-btn{height:18px;min-height:0;padding:0 8px;align-self:center;line-height:1}
+/* Selection box, in the manner of Plasticity: a soft tinted pane with a thin
+   dashed edge and square corners — in the accent blue. */
+#marquee-box{border:1px dashed rgba(190,225,255,.75);background:rgba(13,153,255,.20);box-shadow:none;border-radius:0}
 </style>
 </head>
 <body>
@@ -2306,7 +2558,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
   <header id="tb">
     <div class="brand brand-left">
       <button class="brand-btn" id="btn-brand" aria-label="About MeshOptimiser" aria-haspopup="menu" aria-expanded="false">
-        <span class="brand-mark"><i data-lucide="zap"></i></span>
+        <span class="brand-mark"><i data-lucide="zap"></i></span><span class="brand-caret"><i data-lucide="chevron-down"></i></span>
       </button>
       <div class="brand-menu" id="brand-menu" role="menu" aria-hidden="true">
         <div class="brand-menu-head">
@@ -2315,18 +2567,18 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.9.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.10.0</div>
         </div>
         <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.9.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.10.0</span></div>
           <ul>
-            <li>Decimate rebuilt — keeps normals and UVs, takes a triangle target, reaches the export</li>
-            <li>Undo for every editing action; Save scene keeps hidden parts, names and hierarchy</li>
-            <li>Flatten, grouping and Import → Append follow the tree</li>
-            <li>Selection is immediate on large assemblies</li>
-            <li>New toolbars, menus, startup screen and floor grid</li>
+            <li>Fill holes: closes holes in flat faces, leaves the rest untouched</li>
+            <li>Decimate rebuilt — keeps normals and UVs, takes a triangle target</li>
+            <li>Materials dock with filter, sort and inspector</li>
+            <li>Immediate selection, delete, undo and view switching on large assemblies</li>
+            <li>View cube, axis views, and a tree that hides nothing</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -2419,7 +2671,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
 
   <aside id="sidebar-left" class="panel">
     <div id="resize-l" class="resize-handle" title="Drag to resize"></div>
-    <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts…"></div>
+    <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts…"><button type="button" class="tree-search-clear" id="tree-filter-clear" title="Clear the search" hidden><i data-lucide="x"></i></button></div>
     <div class="tree-toolbar">
       <button class="tree-icon-btn" id="tree-hide-unsel" title="Hide everything not selected">
         <i data-lucide="eye-off"></i>
@@ -2509,30 +2761,6 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
         <div class="vpb-sep"></div>
         <button class="vpb" id="tg-materials" title="Materials in this file"><i data-lucide="palette"></i></button>
         <button class="vpb" id="tg-settings" title="Display & performance settings"><i data-lucide="sliders-horizontal"></i></button>
-        <div id="vp-materials-pop">
-          <div class="mat-actions">
-            <div class="mat-actions-icons">
-              <button class="mat-act mat-act-icon" id="mat-act-add" title="New material"><i data-lucide="plus"></i></button>
-              <button class="mat-act mat-act-icon" id="mat-act-duplicate" title="Duplicate" disabled><i data-lucide="copy"></i></button>
-              <button class="mat-act mat-act-icon" id="mat-act-merge" title="Merge" disabled><i data-lucide="combine"></i></button>
-              <button class="mat-act mat-act-icon mat-act-danger" id="mat-act-delete" title="Delete" disabled><i data-lucide="trash-2"></i></button>
-            </div>
-            <button class="mat-act mat-act-presets" id="mat-act-presets" title="Apply an industry-standard PBR preset"><span><i data-lucide="sparkles" style="margin-right:4px"></i>Industry presets</span><i data-lucide="chevron-up"></i></button>
-            <div class="mat-presets-menu" id="mat-presets-menu"></div>
-          </div>
-          <div class="pop-section">
-            <div class="pop-section-head">
-              <span>Materials</span>
-              <div class="mat-view-toggle" role="tablist" aria-label="Materials view">
-                <button type="button" id="mat-view-grid" class="mat-view-btn" data-view="grid" title="Grid view" aria-pressed="true"><i data-lucide="layout-grid"></i></button>
-                <button type="button" id="mat-view-list" class="mat-view-btn" data-view="list" title="List view" aria-pressed="false"><i data-lucide="list"></i></button>
-              </div>
-            </div>
-            <div class="mat-list" id="mat-list">
-              <div class="mat-empty">No materials yet — load a model.</div>
-            </div>
-          </div>
-        </div>
         <div id="vp-settings-pop">
           <div class="pop-section">
             <div class="pop-section-title">Display</div>
@@ -2545,14 +2773,14 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
             <div class="toggle" title="Show group origin dots only while a group is selected (off = always visible)."><span>Group origins on select</span><label><input type="checkbox" id="toggle-group-origins-sel"><span class="switch"></span></label></div>
             <div class="toggle"><span>Renderer stats</span><label><input type="checkbox" id="toggle-stats"><span class="switch"></span></label></div>
             <div class="toggle" title="Atmospheric fog — fades the grid and distant geometry into the background."><span>Fog</span><label><input type="checkbox" id="toggle-fog"><span class="switch"></span></label></div>
-            <div id="fog-controls" style="display:none;flex-direction:column;gap:var(--space-md);margin:6px 0 0 0;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
-              <div class="field" style="margin:0" title="Distance from the camera at which fog starts. 'auto' = 3× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input type="number" id="fog-near" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-variant-numeric:tabular-nums"></div>
-              <div class="field" style="margin:0" title="Distance at which fog is fully opaque. 'auto' = 30× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog end</span><span class="v" id="fog-far-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input type="number" id="fog-far" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:5px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-variant-numeric:tabular-nums"></div>
+            <div id="fog-controls" style="display:none;flex-direction:column;gap:var(--space-md);margin:6px 0 0 0;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:6px">
+              <div class="field" style="margin:0" title="Distance from the camera at which fog starts. 'auto' = 3× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input type="number" id="fog-near" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-variant-numeric:tabular-nums"></div>
+              <div class="field" style="margin:0" title="Distance at which fog is fully opaque. 'auto' = 30× model footprint."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog end</span><span class="v" id="fog-far-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input type="number" id="fog-far" step="any" placeholder="auto" style="width:100%;padding:5px 8px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:var(--fs-sm);outline:none;font-variant-numeric:tabular-nums"></div>
               <div class="field" style="margin:0" title="Multiplier on the fog falloff. >1 = denser (fog ramps in faster); <1 = gentler."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="fog-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">1.0×</span></label><input type="range" id="fog-int" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
               <button id="fog-reset" type="button" class="btn-sm" title="Clear overrides and use the auto-tuned distances + intensity 1.0">Reset to auto</button>
             </div>
             <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral gray</option><option value="white">White</option><option value="hdri">HDRI environment</option></select></div>
-            <div id="hdri-controls" style="display:none;flex-direction:column;gap:var(--space-sm);margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:7px">
+            <div id="hdri-controls" style="display:none;flex-direction:column;gap:var(--space-sm);margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:6px">
               <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:var(--lh-base)">Drag the <span style="color:#ffd76b">sun</span> in the viewport to rotate the environment. Its brightness lights every PBR material in the scene.</div>
               <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-xs)">
                 <button class="hdri-preset btn-sm" data-hdri-preset="studio"   title="Built-in neutral studio (RoomEnvironment)">Studio</button>
@@ -2602,9 +2830,9 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
         </div>
         </div>
       </div>
-      <div class="vpc vp-topright"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
+      <div class="vpc vp-stats"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
       <div class="vpc br"><div class="vp-tips" id="vp-hint"></div></div>
-      <div class="vpc bl"><div id="axis-gizmo" title="Click an axis to align the view"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
+      <div class="vpc bl"><div id="axis-gizmo"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
       <!-- Sun gizmo (HDRI rotation). Visible only when bg-mode === 'hdri'.
            Top-down dome view: drag the sun marker around to rotate the
            environment around the scene up axis. Distance from centre maps
@@ -2739,7 +2967,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
           <button class="btn" id="btn-show-all" title="Make every hidden part visible again"><i data-lucide="circle-plus"></i>Show all</button>
         </div>
         <div style="height:6px"></div>
-        <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i>Delete <span id="btn-delete-small-count">0</span> small parts</button>
+        <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
       </div>
     </div>
 
@@ -2784,6 +3012,11 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
         </div>
         <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
         <div class="field-help" id="decimate-info" style="margin-top:-2px"></div>
+        <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
+          <button class="btn warn" id="btn-fill-holes" title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Fill holes</span></button>
+          <label class="size-field" title="Largest hole to fill, measured across its widest point"><span>up to</span><input type="text" inputmode="decimal" id="fill-holes-size" value="12"><span>mm</span></label>
+        </div>
+        <div class="field-help" id="fill-holes-info" style="margin-top:-2px">Bolt holes, slots and pockets in flat faces. Bosses, the bore of a washer or nut, and openings into a cavity are left alone.</div>
       </div>
     </div>
 
@@ -2870,10 +3103,10 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
     <div class="item" style="display:none"><strong id="sb-tris">0</strong>triangles</div>
     <div class="item"><strong id="sb-verts">0</strong>vertices</div>
     <div class="item"><strong id="sb-mem">0 MB</strong>geom</div>
-    <div class="item"><strong id="fps">0</strong>fps</div>
     <div class="item sb-action" id="sb-selected" title="Click to frame the current selection in the viewport"><i data-lucide="mouse-pointer-2"></i><strong id="sb-selected-n">0</strong>selected</div>
     <div class="item sb-action" id="sb-flagged" title="Click to isolate flagged parts in the viewport"><i data-lucide="flag"></i><strong id="sb-flagged-n">0</strong>flagged</div>
     <div class="item right" id="sb-status">Ready</div>
+    <div class="item sb-fps"><strong id="fps">0</strong>fps</div>
     <button id="sb-console-btn" title="Toggle log console (`)">
       <i data-lucide="terminal"></i>
       <span>Console</span>
@@ -2881,6 +3114,47 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
     </button>
   </footer>
 
+</div>
+
+<!-- Materials dock: slides up over the bottom of the viewport like the
+     console (same width, same motion). Header: filter, order, view and the
+     actions; body: the materials and an inspector for what is picked. -->
+<div id="vp-materials-pop" class="mat-dock" aria-label="Materials">
+  <div class="lc-h mat-dock-h">
+    <div class="lc-title">Materials</div>
+    <span class="mat-dock-count" id="mat-dock-count"></span>
+    <label class="mat-dock-search" title="Filter by name, colour (hex) or type"><i data-lucide="search"></i><input type="text" id="mat-search" placeholder="Filter…" autocomplete="off" spellcheck="false"></label>
+    <select id="mat-sort" class="mac-sel" title="Order of the materials">
+      <option value="used">Most used</option>
+      <option value="tris">Most triangles</option>
+      <option value="name">Name</option>
+      <option value="hue">Colour</option>
+    </select>
+    <div class="mat-view-toggle" role="tablist" aria-label="Materials view">
+      <button type="button" id="mat-view-grid" class="mat-view-btn" data-view="grid" title="Grid view" aria-pressed="true"><i data-lucide="layout-grid"></i></button>
+      <button type="button" id="mat-view-list" class="mat-view-btn" data-view="list" title="List view" aria-pressed="false"><i data-lucide="list"></i></button>
+    </div>
+    <div class="lc-spacer"></div>
+    <div class="mat-actions">
+      <div class="mat-actions-icons">
+        <button class="mat-act mat-act-icon" id="mat-act-add" title="New material (assigned to the selected parts, if any)"><i data-lucide="plus"></i></button>
+        <button class="mat-act mat-act-icon" id="mat-act-duplicate" title="Duplicate the picked material" disabled><i data-lucide="copy"></i></button>
+        <button class="mat-act mat-act-icon" id="mat-act-merge" title="Merge the picked materials into one" disabled><i data-lucide="combine"></i></button>
+        <button class="mat-act mat-act-icon mat-act-danger" id="mat-act-delete" title="Delete the picked materials" disabled><i data-lucide="trash-2"></i></button>
+      </div>
+      <button class="mat-act mat-act-presets" id="mat-act-presets" title="Apply an industry-standard PBR preset"><span><i data-lucide="sparkles" style="margin-right:4px"></i>Industry presets</span><i data-lucide="chevron-up"></i></button>
+      <div class="mat-presets-menu" id="mat-presets-menu"></div>
+    </div>
+    <button class="lc-icon-btn" id="mat-dock-close" title="Close"><i data-lucide="x"></i></button>
+  </div>
+  <div class="mat-dock-body">
+    <div class="pop-section">
+      <div class="mat-list" id="mat-list">
+        <div class="mat-empty">No materials yet — load a model.</div>
+      </div>
+    </div>
+    <aside class="mat-inspector" id="mat-inspector"></aside>
+  </div>
 </div>
 
 <div id="log-console">
@@ -3007,8 +3281,8 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
       <div class="field" style="margin:0">
         <label><span>Filename</span></label>
         <div style="display:flex;align-items:stretch;gap:0">
-          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-right:none;border-radius:7px 0 0 7px;color:var(--tx);font-size:var(--fs-md);outline:none">
-          <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid var(--s3);border-left:none;border-radius:0 7px 7px 0;color:var(--tx3);font-size:var(--fs-12)">.glb</span>
+          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-right:none;border-radius:6px 0 0 6px;color:var(--tx);font-size:var(--fs-md);outline:none">
+          <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid var(--s3);border-left:none;border-radius:0 6px 6px 0;color:var(--tx3);font-size:var(--fs-12)">.glb</span>
         </div>
       </div>
     </div>
@@ -3062,7 +3336,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
             </select>
           </div>
           <div class="field" style="margin:0"><label><span>Custom scale</span></label>
-            <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" disabled>
+            <input type="number" id="exp-scale-custom" step="any" value="1" placeholder="e.g. 0.001" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" disabled>
           </div>
           <div class="field" style="margin:0"><label><span>Up axis</span></label>
             <select id="exp-axis" class="mac-sel">
@@ -3176,7 +3450,7 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
             <option value="y">Y-up (Maya, glTF, Unity)</option>
           </select>
         </div>
-        <div class="field" style="margin-bottom:0"><label><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the whole scene. 0.001 turns mm → m; 1000 turns m → mm."></div>
+        <div class="field" style="margin-bottom:0"><label><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the whole scene. 0.001 turns mm → m; 1000 turns m → mm."></div>
       </div>
       <!-- Lighting controls moved to the in-scene Sun gizmo (tg-sun button
            in the viewport overlay). Inputs stay hidden so existing scene
@@ -3398,6 +3672,17 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
     // Measure first
     el.style.left = '0px'; el.style.top = '0px';
     const tr = el.getBoundingClientRect();
+    // The tool pill on the viewport's left edge is a column of icons: a tip
+    // above a button would cover the button over it. It goes beside the
+    // pill instead, level with its button, on the viewport side (the other
+    // side is the parts tree and its eye icons).
+    const pill = anchor.closest('.vpc.tl');
+    if (pill && pill.id !== 'vp-perf') {
+      const pr = pill.getBoundingClientRect();
+      el.style.left = Math.min(window.innerWidth - tr.width - 6, pr.right + 8) + 'px';
+      el.style.top = Math.max(6, Math.min(window.innerHeight - tr.height - 6, r.top + r.height / 2 - tr.height / 2)) + 'px';
+      return;
+    }
     let top = r.top - tr.height - 9;
     let left = r.left + r.width / 2 - tr.width / 2;
     if (top < 6) {
@@ -3424,8 +3709,16 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
     // leave it stranded in space when the dialog/popup that replaced the
     // anchor paints over the (now empty) coordinates.
     if (!target || !document.contains(target)) { hide(); return; }
-    const raw = getText(target);
+    let raw = getText(target);
     if (!raw) return;
+    // Viewport tools: the name and the shortcut, nothing else. Their titles
+    // carry a description ("Measure (M) — click two points …") that is
+    // useful in the command search but too much next to an icon.
+    if (target.closest('#vp-overlay')) {
+      const key = raw.match(/\(([^)]{1,12})\)/);
+      const name = raw.split(/\s[—–·]\s|:\s/)[0].replace(/\s*\([^)]*\)\s*/g, ' ').trim();
+      raw = (key && /[A-Za-z0-9]/.test(key[1])) ? name + ' (' + key[1] + ')' : name;
+    }
     const el = ensureEl();
     render(el, raw);
     position(el, target);
@@ -3453,7 +3746,8 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
     currentTarget = t;
     clearTimeout(hideT);
     clearTimeout(showT);
-    showT = setTimeout(() => show(t), SHOW_DELAY);
+    // viewport tools are icons only: say what they are straight away
+    showT = setTimeout(() => show(t), t.closest('#vp-overlay') ? 0 : SHOW_DELAY);
   }
 
   function onLeave(e) {
@@ -3591,18 +3885,29 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
   }
 
   if (mBtn && mPop) {
-    mBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      const willOpen = !mPop.classList.contains('show');
-      if (willOpen) closeSettings();
-      mPop.classList.toggle('show', willOpen);
-      mBtn.classList.toggle('active', willOpen);
-      if (willOpen && typeof window._populateMaterialsList === 'function') {
-        try { window._populateMaterialsList(); } catch (err) { console.warn('[mat] populate failed:', err); }
+    const consoleEl = document.getElementById('log-console');
+    const setOpen = (open) => {
+      mPop.classList.toggle('show', open);
+      mBtn.classList.toggle('active', open);
+      // the bottom toolbar and the tips ride up with the dock (see the CSS)
+      document.body.classList.toggle('mat-dock-open', open);
+      if (open) {
+        closeSettings();
+        // one dock at a time: the console gives way
+        if (consoleEl && consoleEl.classList.contains('show')) document.getElementById('lc-close')?.click();
+        if (typeof window._populateMaterialsList === 'function') {
+          try { window._populateMaterialsList(); } catch (err) { console.warn('[mat] populate failed:', err); }
+        }
       }
-    });
-    // Materials panel is sticky — only its own button (mBtn) toggles it.
-    // No outside-click or Esc dismissal, by design.
+    };
+    mBtn.addEventListener('click', e => { e.stopPropagation(); setOpen(!mPop.classList.contains('show')); });
+    document.getElementById('mat-dock-close')?.addEventListener('click', () => setOpen(false));
+    // …and the materials give way when the console opens
+    if (consoleEl) new MutationObserver(() => {
+      if (consoleEl.classList.contains('show') && mPop.classList.contains('show')) setOpen(false);
+    }).observe(consoleEl, { attributes: true, attributeFilter: ['class'] });
+    // The dock is sticky — its button, its close button or the console
+    // toggle it. No outside-click or Esc dismissal, by design.
   }
 })();
 </script>
@@ -3624,10 +3929,10 @@ input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[ty
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026100705-v0.9.0"></script>
+<script type="module" src="app-v2.js?v=2026100802-v0.10.0"></script>
 <!-- Feature modules — load after app-v2.js. cloner.js attaches via window._appFns / _appHooks. -->
-<script src="cloner.js?v=2026100705-v0.9.0"></script>
-<script type="module" src="pathtracer.js?v=2026100705-v0.9.0"></script>
+<script src="cloner.js?v=2026100802-v0.10.0"></script>
+<script type="module" src="pathtracer.js?v=2026100802-v0.10.0"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
