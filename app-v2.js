@@ -114,6 +114,8 @@ if (typeof window !== 'undefined') {
     get toast() { return toast; },
     get _UNIT_LABEL() { return _UNIT_LABEL; },
     get _Actions() { return _Actions; },
+    // Used by tests/selftest.js to exercise a tree drop without faking a drag.
+    get _dndCommitHier() { return _dndCommitHier; },
     get _lucide() { return (typeof _lucide !== 'undefined') ? _lucide : null; },
     // Screenshot helpers — reused by external feature modules (pathtracer.js)
     // for "save the rendered image" flows so they share FSA picker + naming.
@@ -160,9 +162,24 @@ function _reindexParts() {
 // Render any pending <i data-lucide="..."> placeholders into actual SVGs.
 // Idempotent — Lucide skips already-rendered icons. Safe to call after any
 // DOM injection that may have introduced new placeholders.
+//
+// Lucide leaves the data-lucide attribute on the <svg> it renders, so a plain
+// createIcons() finds and re-creates EVERY icon in the document on every
+// call — about 4,000 of them with a 1,500-part tree, roughly 90 ms, and this
+// runs on every selection change. So: do nothing unless an unrendered <i>
+// placeholder exists, and afterwards move the attribute on rendered icons
+// to data-icon so they are never picked up again.
 function _lucide() {
-  try { window.lucide && window.lucide.createIcons && window.lucide.createIcons(); }
-  catch (_) { /* lucide CDN failed to load; silently fall back to placeholders */ }
+  try {
+    const L = window.lucide;
+    if (!L || !L.createIcons) return;
+    if (!document.querySelector('i[data-lucide]')) return;
+    L.createIcons();
+    for (const svg of document.querySelectorAll('svg[data-lucide]')) {
+      svg.setAttribute('data-icon', svg.getAttribute('data-lucide'));
+      svg.removeAttribute('data-lucide');
+    }
+  } catch (_) { /* lucide CDN failed to load; silently fall back to placeholders */ }
 }
 
 // Tiny "listener bag" — collect per-modal listeners at open, remove them all
@@ -749,36 +766,63 @@ if (typeof document !== 'undefined') {
   else queueMicrotask(() => { try { _updateVpHint(); } catch (_) {} });
 }
 
-// Bottom-center contextual hint strip in the viewport. Reads current state
-// (selection, gizmo mode, measure mode) and emits a one-line tip. Cheap —
+// Contextual shortcut tips at the bottom-right of the viewport: what the keys
+// do right now, given the selection, the gizmo mode and measure mode. Cheap —
 // callers fire on state transitions, no per-frame poll.
 function _updateVpHint() {
   const el = document.getElementById('vp-hint');
   if (!el) return;
-  const SEP = '<span class="vp-hint-sep">•</span>';
   const selN  = (state.selected && state.selected.size) || 0;
   const gm    = state.gizmoMode;
   const msr   = (typeof _Measure !== 'undefined' && _Measure?.isActive?.()) ? true : false;
-  // Render helpers: keycap chips wrapped in <kbd>, joined by + (combo) or / (alts).
-  const KBD = k => `<kbd class="vp-kbd">${k}</kbd>`;
-  const JOIN = (ks, sep) => `<span class="vp-hint-keys">${ks.map(KBD).join(`<span class="vp-kbd-join">${sep}</span>`)}</span>`;
-  const tip = (ks, label, sep='+') => (ks && ks.length ? JOIN(ks, sep) : '') + (label ? `<span class="vp-hint-lbl">${label}</span>` : '');
-  const lbl = s => `<span class="vp-hint-lbl">${s}</span>`;
-  let parts;
+  // [keys, label] — several keys are a combo ("Ctrl" + "G").
+  let tips;
   if (msr) {
-    parts = [lbl('Measure'), tip(['Click'], 'two points'), tip(['Esc'], 'to exit')];
+    tips = [[['Click'], 'Pick a point'], [['Drag'], 'Orbit'], [['Scroll'], 'Zoom'], [['M'], 'Leave measure'], [['Esc'], 'Cancel']];
   } else if (selN === 0) {
-    parts = [tip(['Click'], 'to select'), tip(['Drag'], 'to orbit'), tip(['Scroll'], 'to zoom'), tip(['Right-click'], 'for menu')];
-  } else if (gm === 'rotate') {
-    parts = [lbl(`${selN} selected`), tip(['Drag'], 'to rotate'), tip(['Shift'], 'to snap'), tip(['E','R','T'], 'move / rotate / scale', '/')];
-  } else if (gm === 'scale') {
-    parts = [lbl(`${selN} selected`), tip(['Drag'], 'to scale'), tip(['E','R','T'], 'move / rotate / scale', '/')];
-  } else if (gm === 'translate') {
-    parts = [lbl(`${selN} selected`), tip(['Drag'], 'gizmo to move'), tip(['Shift'], 'to snap'), tip(['E','R','T'], 'move / rotate / scale', '/')];
+    tips = [[['Click'], 'Select'], [['Ctrl', 'Drag'], 'Box select'], [['Drag'], 'Orbit'], [['Scroll'], 'Zoom'],
+            [['F'], 'Fit view'], [['M'], 'Measure'], [['Right-click'], 'Menu'], [['Ctrl', 'K'], 'Commands']];
   } else {
-    parts = [lbl(`${selN} selected`), tip(['Ctrl','G'], 'to group'), tip(['Del'], 'to delete'), tip(['Esc'], 'to deselect')];
+    tips = [[['E'], gm === 'translate' ? 'Move (active)' : 'Move'], [['R'], gm === 'rotate' ? 'Rotate (active)' : 'Rotate'],
+            [['T'], gm === 'scale' ? 'Scale (active)' : 'Scale'], [['Q'], 'Hide gizmo'], [['Shift'], 'Snap while dragging'],
+            [['F'], 'Frame selection'], [['S'], 'Isolate'], [['Ctrl', 'G'], 'Group'], [['Ctrl', 'D'], 'Duplicate'],
+            [['Del'], 'Delete'], [['Esc'], 'Deselect']];
   }
-  el.innerHTML = parts.join(SEP);
+  const KBD = k => `<kbd class="vp-kbd">${k}</kbd>`;
+  const html = tips.map(([ks, label]) =>
+    `<div class="vp-tip"><span class="vp-hint-keys">${ks.map(KBD).join('<span class="vp-kbd-join">+</span>')}</span><span class="vp-hint-lbl">${label}</span></div>`
+  ).join('');
+  if (el._tipsHtml === html) return;
+  el._tipsHtml = html;
+  el.style.setProperty('--tip-rows', String(Math.ceil(tips.length / 2)));
+  el.innerHTML = html;
+  _fitVpTips();
+}
+
+// Keep the tips clear of the bottom toolbar: two columns while there is room
+// beside it, one column on a narrower viewport, and lifted above the bar when
+// even one column would touch it. Re-run when the tips change and when the
+// viewport is resized (sidebars dragged, window resized).
+function _fitVpTips() {
+  const el = document.getElementById('vp-hint');
+  const bar = document.querySelector('#vp-overlay .vpc.tr');
+  if (!el || !bar) return;
+  el.classList.remove('one-col', 'lifted');
+  const hits = () => {
+    const a = el.getBoundingClientRect(), b = bar.getBoundingClientRect();
+    return a.width > 0 && b.width > 0 && a.left < b.right + 16 && a.bottom > b.top - 4;
+  };
+  if (!hits()) return;
+  el.classList.add('one-col');
+  if (hits()) el.classList.add('lifted');
+}
+if (typeof ResizeObserver !== 'undefined' && typeof document !== 'undefined') {
+  const _watchVp = () => {
+    const ov = document.getElementById('vp-overlay');
+    if (ov) new ResizeObserver(() => { try { _fitVpTips(); } catch (_) {} }).observe(ov);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _watchVp, { once: true });
+  else _watchVp();
 }
 
 // Mutual exclusion across top-bar dropdowns. Each open-handler calls this
@@ -797,7 +841,7 @@ function _closeAllTopbarMenus(exceptId) {
   }
   if (exceptId !== 'export-menu') {
     document.getElementById('export-menu')?.classList.remove('show');
-    document.querySelector('.export-wrap')?.classList.remove('open');
+    document.getElementById('btn-export')?.closest('.export-wrap')?.classList.remove('open');
   }
   if (exceptId !== 'brand-menu') {
     const bm = document.getElementById('brand-menu');
@@ -882,6 +926,77 @@ function _dropGroupsFromTree(isGone) {
   }
   state.treeNodes = out;
 }
+
+// Change the visibility of many parts as ONE undoable step. `pairs` is a
+// list of [part, shouldBeVisible]. Returns how many parts actually changed.
+function _applyVisibility(pairs, extra) {
+  const items = [];
+  for (const [p, on] of pairs) {
+    if (!p || p.deleted) continue;
+    const before = !!p.visible;
+    if (before === !!on) continue;
+    _setPartVisible(p, on);
+    items.push({ partId: p.partId, before, after: !!on });
+  }
+  if (items.length) { try { pushUndo({ type: 'vis', items, ...(extra || {}) }); } catch (_) {} }
+  return items.length;
+}
+
+// World matrix of every live mesh part, for before/after comparison.
+function _snapWorldMats() {
+  const out = new Map();
+  try { state.pivot && state.pivot.updateMatrixWorld(true); } catch (_) {}
+  for (const p of state.parts) {
+    if (p.deleted || !p.mesh) continue;
+    p.mesh.updateWorldMatrix(true, false);
+    out.set(p.partId, p.mesh.matrixWorld.toArray());
+  }
+  return out;
+}
+// Run a transform edit that does not go through the gizmo (typed values,
+// steppers, wheel, Reset in the transform panel) and record it for undo.
+// Rapid repeats of the same edit — holding a stepper, three pasted axes —
+// fold into the previous entry so one gesture is one Ctrl+Z.
+function _withTransformUndo(tag, fn) {
+  const before = _snapWorldMats();
+  try { return fn(); }
+  finally {
+    try {
+      const items = [];
+      try { state.pivot && state.pivot.updateMatrixWorld(true); } catch (_) {}
+      for (const p of state.parts) {
+        if (p.deleted || !p.mesh) continue;
+        const b = before.get(p.partId);
+        if (!b) continue;
+        p.mesh.updateWorldMatrix(true, false);
+        const a = p.mesh.matrixWorld.elements;
+        let moved = false;
+        for (let i = 0; i < 16; i++) if (Math.abs(a[i] - b[i]) > 1e-9) { moved = true; break; }
+        if (moved) items.push({ partId: p.partId, before: b, after: Array.from(a) });
+      }
+      if (items.length) {
+        const now = performance.now();
+        const last = state.history[state.history.length - 1];
+        const sameGesture = last && last.type === 'transformGroup' && last._panelTag &&
+          ((last._panelTag === tag && now - last._panelAt < 1200) || now - last._panelAt < 250);
+        if (sameGesture) {
+          const byId = new Map(last.items.map(it => [it.partId, it]));
+          for (const it of items) {
+            const prev = byId.get(it.partId);
+            if (prev) prev.after = it.after; else last.items.push(it);
+          }
+          last._panelAt = now;
+        } else {
+          pushUndo({ type: 'transformGroup', label: 'Transform', items, _panelTag: tag, _panelAt: now });
+        }
+      }
+    } catch (e) { console.warn('[transform-undo]', e); }
+  }
+}
+
+// Part id the tree's mousedown handler has just selected, so the click that
+// follows the same press doesn't select it a second time.
+let _treePressSelected = null;
 
 // Yield to the browser between chunks of a long job. requestAnimationFrame
 // alone never fires while the tab is in the background, which would freeze a
@@ -1487,9 +1602,10 @@ async function convertStepViaServer(file, opts = {}) {
   // Cancel any earlier conversion still polling — opening a second STEP
   // mid-flight previously left the original poll loop running, which would
   // overwrite loader text and try to load() into already-replaced state.
-  try { state._activeConvertAbort?.abort('superseded'); } catch (_) {}
+  _cancelStepConversion('superseded');
   const ac = new AbortController();
   state._activeConvertAbort = ac;
+  state._activeConvertJob = null;
   try {
     // Build the query string from the import-settings modal opts. The server
     // has safe defaults for any param we omit, so older callers keep working.
@@ -1512,8 +1628,14 @@ async function convertStepViaServer(file, opts = {}) {
       body: file,
       signal: ac.signal,
     });
-    if (!res.ok) throw new Error('upload failed: HTTP ' + res.status);
+    if (!res.ok) {
+      // Pass on the server's own explanation when it sent one.
+      let why = '';
+      try { why = (await res.json()).error || ''; } catch (_) {}
+      throw new Error('upload failed: HTTP ' + res.status + (why ? ' — ' + why : ''));
+    }
     const { job_id } = await res.json();
+    state._activeConvertJob = job_id;
     logProgress('conversion job started: ' + job_id, 'ok');
     setLoader(true, 'Converting STEP locally (Python)…', 'job ' + job_id);
     setLoaderProgress(null);
@@ -1527,7 +1649,12 @@ async function convertStepViaServer(file, opts = {}) {
         const onAbort = () => { clearTimeout(tid); rej(new DOMException('aborted', 'AbortError')); };
         ac.signal.addEventListener('abort', onAbort, { once: true });
       });
-      const j = await (await fetch('/api/job/' + job_id, { signal: ac.signal })).json();
+      const jr = await fetch('/api/job/' + job_id, { signal: ac.signal });
+      const j = await jr.json().catch(() => ({}));
+      // A restarted server no longer knows the job: stop instead of
+      // polling "Converting…" forever.
+      if (!jr.ok || !j.status) throw new Error('The converter lost track of this job (was the server restarted?). Open the file again.');
+      if (j.status === 'cancelled') throw new DOMException('cancelled', 'AbortError');
       if (j.message) $('loader-sub').textContent = j.message;
       if (Array.isArray(j.log) && j.log.length > lastSeenLogIdx) {
         for (let i = lastSeenLogIdx; i < j.log.length; i++) {
@@ -1543,7 +1670,15 @@ async function convertStepViaServer(file, opts = {}) {
         const glbRes = await fetch('inbox/' + j.result);
         if (!glbRes.ok) throw new Error('GLB fetch failed');
         const buf = await glbRes.arrayBuffer();
-        const glbFile = new File([new Blob([buf])], j.result);
+        // Cancelled or superseded while the GLB was downloading: the result
+        // must not replace whatever the user has opened since.
+        if (ac.signal.aborted) return;
+        // Name the scene after the file the user opened, not the server's
+        // "<job id>_name.glb" working copy.
+        const glbFile = new File([new Blob([buf])], file.name.replace(/\.[^.\\/]+$/, '') + '.glb');
+        // From here on this is an ordinary load; it is no longer a
+        // conversion that a later Open should cancel.
+        if (state._activeConvertAbort === ac) { state._activeConvertAbort = null; state._activeConvertJob = null; }
         await loadGlbFile(glbFile);
         return;
       }
@@ -1568,8 +1703,20 @@ async function convertStepViaServer(file, opts = {}) {
     toast('Conversion failed', 'Use the Copy log button below to grab the error', 'error', 12000);
     // Don't auto-close — user dismisses via Cancel after copying the log
   } finally {
-    if (state._activeConvertAbort === ac) state._activeConvertAbort = null;
+    if (state._activeConvertAbort === ac) { state._activeConvertAbort = null; state._activeConvertJob = null; }
   }
+}
+// Stop a STEP conversion that is still running: end the polling loop here and
+// ask the server to kill the converter process. Returns true if there was one.
+function _cancelStepConversion(reason) {
+  const ac = state._activeConvertAbort;
+  if (!ac) return false;
+  const job = state._activeConvertJob;
+  try { ac.abort(reason || 'cancelled'); } catch (_) {}
+  state._activeConvertAbort = null;
+  state._activeConvertJob = null;
+  if (job) { try { fetch('/api/cancel/' + encodeURIComponent(job), { method: 'POST' }).catch(() => {}); } catch (_) {} }
+  return true;
 }
 // ── Welcome modal ────────────────────────────────────────────────────────
 // Shown on first boot and any time the user hits the toolbar's Open button
@@ -2304,7 +2451,7 @@ const _Actions = (() => {
     { id:'savescene',    group:'File',       label:'Save scene…',                kbd:'Ctrl+S', run: _click('btn-save-scene') },
     { id:'export',       group:'File',       label:'Export model…',              run: _click('btn-export') },
     { id:'sceneSettings',group:'File',       label:'Scene settings…',            kbd:'Ctrl+;', run: () => { try { _openSceneSettings(); } catch (_) {} } },
-    { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: _click('btn-fit') },
+    { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: () => { try { if (state.selected.size > 0 && typeof frameSelected === 'function') frameSelected(); else fitToView(); } catch (_) {} } },
     { id:'revert',       group:'File',       label:'Revert to source file…',     run: () => { try { _revertToSourceFile(); } catch (_) {} } },
     { id:'frameSel',     group:'View',       label:'Frame selection',            run: () => { try { frameSelected(); } catch (_) {} } },
     { id:'camPersp',     group:'View',       label:'Camera view (Perspective)',  kbd:'Ctrl+1', run: () => { try { _setPerspectiveView(); } catch (_) {} } },
@@ -2657,6 +2804,12 @@ window.addEventListener('keydown', e => {
       // we're killing the worker, so the URL is now garbage.
       try { if (_stepWorkerUrl) URL.revokeObjectURL(_stepWorkerUrl); } catch(_){}
       _stepWorkerUrl = null;
+      logProgress('cancelled by user', 'warn');
+      setTimeout(() => setLoader(false), 400);
+    } else if (_cancelStepConversion('cancelled')) {
+      // Server-side STEP conversion: stop polling and kill the converter.
+      // Without this the job kept running and its result replaced the
+      // scene minutes later.
       logProgress('cancelled by user', 'warn');
       setTimeout(() => setLoader(false), 400);
     } else {
@@ -3350,7 +3503,9 @@ function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   }
   if (promoted > 0) {
     Log.info(`promoted ${promoted} instance${promoted === 1 ? '' : 's'} to standalone mesh for gizmo`, { tag: 'gizmo' });
-    toast('Instances promoted', `${promoted} part${promoted === 1 ? '' : 's'} popped out of instance group so the gizmo can move them`, 'info', 4000);
+    // Housekeeping the user didn't ask about: note it in the log console
+    // instead of popping a toast on every click of an instanced part.
+    try { Log?.info?.(`Promoted ${promoted} instanced part${promoted === 1 ? '' : 's'} to a mesh so the gizmo can move ${promoted === 1 ? 'it' : 'them'}`, { tag: 'instancing' }); } catch (_) {}
   }
 
   parts = (parts || []).filter(p => p && p.mesh && !p.deleted);
@@ -3576,12 +3731,17 @@ function _detachGizmo() {
   state._pivotedTreeGroupId = null;
 }
 
-let _updateGizmoRaf = 0;
+// Microtask-coalesced for the same reason as applySelectionColors: the gizmo
+// appears in the frame of the click instead of one frame later.
+let _updateGizmoQueued = false;
 function updateGizmo() {
-  if (_updateGizmoRaf) return;
-  _updateGizmoRaf = requestAnimationFrame(() => {
-    _updateGizmoRaf = 0;
-    _updateGizmoImpl();
+  if (_updateGizmoQueued) return;
+  _updateGizmoQueued = true;
+  queueMicrotask(() => {
+    _updateGizmoQueued = false;
+    try { _updateGizmoImpl(); }
+    catch (e) { console.warn('[gizmo] update failed:', e); }
+    try { requestRender(); } catch (_) {}
   });
 }
 function _updateGizmoImpl() {
@@ -4894,6 +5054,41 @@ function applyPerfMode() {
 // `depth`. If the GLB has no hierarchy (legacy flat output, or the `plain`
 // reader path), this function exits early and rebuildTree falls back to its
 // flat rendering of state.parts.
+// After an appended import: `prevTree` is the tree from before, and
+// state.treeNodes is what _buildHierarchyFromScene just produced for the new
+// file — the new rows, plus an "Untraced" group holding every part that was
+// already in the scene (it only walked the new file, so the old parts look
+// like strays to it). Put the old tree back in front, drop the stray rows
+// for parts the old tree already lists, and move the new groups' ids below
+// the old ones so no two rows share an id.
+function _mergeImportedTree(prevTree, partIdBase) {
+  const fresh = state.treeNodes || [];
+  prevTree = prevTree || [];
+  const known = new Set();
+  let minId = 0;
+  for (const n of prevTree) {
+    if (n.kind === 'part' && n.partId != null) known.add(n.partId);
+    if (typeof n.id === 'number' && n.id < minId) minId = n.id;
+  }
+  const remap = (id) => (typeof id === 'number' && id < 0) ? id + minId : id;
+  const out = [];
+  let untraced = null, untracedKept = 0;
+  for (const n of fresh) {
+    if (n.kind === 'group' && n.obj3d == null && /^Untraced \(/.test(n.name || '')) { untraced = n; untracedKept = 0; out.push(n); continue; }
+    if (untraced && n.parentId === untraced.id && n.kind === 'part') {
+      if (known.has(n.partId)) continue;          // already has a row in the old tree
+      untracedKept++;
+    }
+    out.push(n);
+  }
+  if (untraced) {
+    if (untracedKept === 0) out.splice(out.indexOf(untraced), 1);
+    else untraced.name = `Untraced (${untracedKept})`;
+  }
+  for (const n of out) { n.id = n.kind === 'part' ? n.id : remap(n.id); n.parentId = remap(n.parentId); }
+  state.treeNodes = prevTree.concat(out);
+}
+
 function _buildHierarchyFromScene(scene, meshToPart) {
   state.treeNodes = [];
   // Skip a degenerate single-root wrapper (gltf.scene is itself a Group).
@@ -5296,7 +5491,7 @@ function clearModel() {
   // torn down ahead of a fresh load (`_sceneActive` cleared first).
   $('btn-export').disabled = true;
   if (!state._sceneActive) {
-    $('btn-fit').disabled = true;
+    if ($('btn-fit')) $('btn-fit').disabled = true;
     const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = true;
   }
   requestRender();
@@ -5354,7 +5549,7 @@ function newScene() {
 // `onModelLoaded` calls this then layers on the model-specific bits
 // (recent-thumb capture, status name).
 function onSceneActivated() {
-  $('btn-fit').disabled = false;
+  if ($('btn-fit')) $('btn-fit').disabled = false;
   const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = false;
   // Export still requires geometry — re-evaluated on every part add/remove.
   const _exp = $('btn-export'); if (_exp) _exp.disabled = state.parts.length === 0;
@@ -6387,11 +6582,12 @@ function _makeShaderGrid(opts = {}) {
   const fadeEnd    = opts.fadeEnd    ?? 2000;
   try {
     const tsl = THREE.TSL;
-    if (!THREE.MeshBasicNodeMaterial || !tsl?.uniform || !tsl?.fwidth || !tsl?.fract)
+    if (!THREE.MeshBasicNodeMaterial || !tsl?.uniform || !tsl?.fwidth || !tsl?.fract || !tsl?.log2 || !tsl?.pow || !tsl?.floor)
       throw new Error('TSL nodes unavailable');
 
     const { positionLocal, fwidth, fract, uniform, smoothstep,
             vec2, vec3, vec4, float, color, mix, abs, min, max, dot,
+            log2, pow, floor,
             length: len, normalize,
             cameraPosition, cameraProjectionMatrix, cameraViewMatrix } = tsl;
 
@@ -6448,21 +6644,41 @@ function _makeShaderGrid(opts = {}) {
     // we can run modular cell math on.
     const xy = vec2(dot(hit, uPlaneU), dot(hit, uPlaneV));
 
-    // Minor grid lines (every 1 minor-cell unit).
-    const cellXY = xy.div(uMinor);
-    const fwCell = fwidth(cellXY);
-    const dMin   = abs(fract(cellXY.sub(0.5)).sub(0.5)).div(fwCell);
-    const aMinor = float(1).sub(min(min(dMin.x, dMin.y), float(1)));
-
-    // Major grid lines (every N minor cells).
-    const cellMaj = cellXY.div(uMajorEvery);
-    const fwMaj   = fwidth(cellMaj);
-    const dMaj    = abs(fract(cellMaj.sub(0.5)).sub(0.5)).div(fwMaj);
-    const aMajor  = float(1).sub(min(min(dMaj.x, dMaj.y), float(1)));
-
-    // Origin axis lines (planeU=0 and planeV=0). Narrow, quiet — see prior
-    // tuning notes: the divisor scales the falloff width in pixels.
+    // — Adaptive grid levels (the Cinema 4D / Blender / Houdini behaviour) —
+    // Those viewports never show lines packed tighter than a few pixels:
+    // as you pull back, the finest lines melt away and the next decade
+    // takes over, so line density on screen stays roughly constant and the
+    // grid never turns into a grey moiré sheet at the horizon.
+    //
+    // fwXY is how many world units one pixel covers here. From it, pick the
+    // decade level L whose cell (uMinor·10^L) is the first to be at least
+    // GRID_MIN_PX pixels wide. Three levels are drawn: L (fading out as it
+    // gets too dense), L+1 and L+2. The configured cell size is the finest
+    // level ever shown (L is clamped at 0), so the Scene-settings cell
+    // still means what it says.
+    const GRID_MIN_PX = 14;
     const fwXY   = fwidth(xy);
+    const pxSize = max(max(fwXY.x, fwXY.y), float(1e-9));
+    const lodF   = max(log2(pxSize.mul(GRID_MIN_PX).div(uMinor)).mul(0.30103), float(0));   // log10
+    const lod0   = floor(lodF);
+    const lodMix = fract(lodF);
+    const cell0  = uMinor.mul(pow(float(10), lod0));
+    const cell1  = cell0.mul(10);
+    const cell2  = cell1.mul(10);
+    // One-pixel anti-aliased lines. The pixel footprint is fwXY / cell —
+    // NOT fwidth(xy / cell), whose derivative would spike wherever the level
+    // changes from one pixel to the next.
+    const lineOf = (cell) => {
+      const c = xy.div(cell);
+      const d = abs(fract(c.sub(0.5)).sub(0.5)).div(fwXY.div(cell));
+      return float(1).sub(min(min(d.x, d.y), float(1)));
+    };
+    const aL0 = lineOf(cell0);
+    const aL1 = lineOf(cell1);
+    const aL2 = lineOf(cell2);
+
+    // Origin axis lines (planeU=0 and planeV=0). Narrow, quiet — the
+    // divisor scales the falloff width in pixels.
     const aAxisX = float(1).sub(min(abs(xy.y).div(fwXY.y.mul(0.9)), float(1)));
     const aAxisY = float(1).sub(min(abs(xy.x).div(fwXY.x.mul(0.9)), float(1)));
 
@@ -6477,9 +6693,18 @@ function _makeShaderGrid(opts = {}) {
     const cAxisY = color(0x40d860);
     const col    = mix(mix(cGrid, cAxisX, aAxisX.clamp(0, 1)), cAxisY, aAxisY.clamp(0, 1));
 
-    // Alpha composition — same tuning as the previous grid for visual parity.
-    const aGrid  = max(aMinor.mul(0.035), aMajor.mul(0.11)).mul(uAngleFade);
-    const aAxis  = max(aAxisX.mul(0.32), aAxisY.mul(0.32));
+    // Alpha composition. Level L fades out as it crowds; L+1 slides from
+    // "major" down to "minor" strength; L+2 is always the major line. At
+    // the moment L+1 becomes the new L the values line up, so nothing pops.
+    // Kept deliberately quiet — the grid is a reference, not a subject.
+    const A_MINOR = 0.028, A_MAJOR = 0.075;
+    // Per-pixel grazing fade: lines seen nearly edge-on (toward the horizon)
+    // dissolve instead of shimmering.
+    const grazing = smoothstep(float(0.0), float(0.14), abs(denom));
+    const aGrid  = max(max(aL0.mul(float(1).sub(lodMix)).mul(A_MINOR),
+                           aL1.mul(mix(float(A_MAJOR), float(A_MINOR), lodMix))),
+                       aL2.mul(A_MAJOR)).mul(uAngleFade).mul(grazing);
+    const aAxis  = max(aAxisX.mul(0.26), aAxisY.mul(0.26)).mul(grazing);
     // Validity mask: t > 0 means the ray hits the plane IN FRONT of the
     // camera; t <= 0 means behind us (camera on or below the plane → no grid
     // for those pixels). A tight smoothstep over a tiny range gives a clean
@@ -6693,6 +6918,15 @@ function _fitGridToModel(box) {
 
 const _UNIT_FACTOR = { mm: 1, cm: 0.1, m: 0.001, in: 1 / 25.4, ft: 1 / 304.8, none: 1 };
 const _UNIT_LABEL  = { mm: 'mm', cm: 'cm', m: 'm', in: 'in', ft: 'ft', none: '' };
+// "12.5 × 40 × 8.25 mm": three dimensions with the unit written once and
+// trailing zeros dropped, so the whole size fits on one line of the panel.
+function _fmtDims(sz, decimals = 2) {
+  const u = state.displayUnit || 'mm';
+  const f = _UNIT_FACTOR[u] ?? 1;
+  const n = (v) => String(parseFloat(((v ?? 0) * f).toFixed(decimals)));
+  const lbl = _UNIT_LABEL[u];
+  return `${n(sz.x)} × ${n(sz.y)} × ${n(sz.z)}${lbl ? ' ' + lbl : ''}`;
+}
 function _fmtLen(mm, decimals = 2) {
   const u = state.displayUnit || 'mm';
   const v = (mm ?? 0) * (_UNIT_FACTOR[u] ?? 1);
@@ -7599,7 +7833,8 @@ function _wireTransformPanel() {
   for (const ax of ['px','py','pz','rx','ry','rz','sx','sy','sz']) {
     const el = document.getElementById('tform-' + ax);
     if (!el) continue;
-    el.addEventListener('change', handle(ax));
+    const commitEdit = handle(ax);
+    el.addEventListener('change', (ev) => _withTransformUndo('panel:' + ax, () => commitEdit(ev)));
     // Enter / Tab / Esc — number inputs don't reliably fire `change` on
     // Enter across browsers, so commit explicitly. Esc reverts by
     // re-running refresh, which clobbers the in-flight value.
@@ -7702,7 +7937,7 @@ function _wireTransformPanel() {
   // zero when a non-identity pivot is in the chain leaves the object stuck
   // at the pivot's world transform — confusing — so we route through world
   // → local conversion for the pivoted case.
-  document.getElementById('tform-reset')?.addEventListener('click', () => {
+  document.getElementById('tform-reset')?.addEventListener('click', () => _withTransformUndo('panel:reset', () => {
     const target = _transformTarget();
     if (!target?.obj) return;
     const obj = target.obj;
@@ -7755,7 +7990,7 @@ function _wireTransformPanel() {
     requestRender();
     refreshPropertiesPanel?.();
     _transformPanelRefresh();
-  });
+  }));
 
   // ── Right-click on Position / Rotation / Size column headers ─────────
   // Pops a small context menu with Copy XYZ / Paste XYZ / Reset XYZ for
@@ -8466,6 +8701,8 @@ function _rebuildTreeHierarchical() {
         // collapse / search filter.
         if (state.selectedGroupIds.has(n.id)) row.classList.add('selected');
         else if (ancestorSelected.has(n.id)) row.classList.add('ancestor-selected');
+        // a group inside a clicked group is part of its contents: hinted too
+        else if (state.selectedGroupIds.size && ancestorStack.some(a => state.selectedGroupIds.has(a.id))) row.classList.add('ancestor-selected');
         const isCollapsed = collapsed.has(n.id);
         if (isCollapsed) row.classList.add('collapsed');
         // C4D-style row: small +/- box, colored type icon, colored label.
@@ -8484,16 +8721,18 @@ function _rebuildTreeHierarchical() {
       } else {
         const p = getPart(n.partId);
         row.classList.add('is-part');
-        if (state.selected.has(p.partId)) row.classList.add('selected');
-        // Subdued highlight for parts whose ancestor group is currently clicked
-        // (so the user can visually trace the group's contents). Different
-        // class so the CSS can paint these rows at half intensity — matches
-        // the C4D pattern of "primary = clicked, secondary = related".
-        else if (state.selectedGroupIds && state.selectedGroupIds.size) {
+        // The bright highlight belongs to the row that was clicked. Clicking a
+        // group also selects the parts inside it, but those rows only get the
+        // subdued hint (C4D: "primary = clicked, secondary = related") — so a
+        // part is bright only when it is selected on its own.
+        let underClickedGroup = false;
+        if (state.selectedGroupIds && state.selectedGroupIds.size) {
           for (const a of ancestorStack) {
-            if (state.selectedGroupIds.has(a.id)) { row.classList.add('ancestor-selected'); break; }
+            if (state.selectedGroupIds.has(a.id)) { underClickedGroup = true; break; }
           }
         }
+        if (underClickedGroup) row.classList.add('ancestor-selected');
+        else if (state.selected.has(p.partId)) row.classList.add('selected');
         if (!p.visible) row.classList.add('hidden-vis');
         if (p.flagged) row.classList.add('flagged');
         row.dataset.partId = p.partId;
@@ -8743,7 +8982,6 @@ function _computeAncestorGroupHighlights() {
 function rebuildTreeSelectionOnly() {
   const treeEl = $('tree');
   if (!treeEl) return;
-  const next = state.selected;
   // Two tiers of group highlight:
   //   nextGFull = directly clicked groups → full-intensity yellow (.selected)
   //   nextGAnc  = ancestors of any selected part/group → subdued (.ancestor-selected)
@@ -8764,11 +9002,21 @@ function rebuildTreeSelectionOnly() {
     const stack = [];
     for (const n of all) {
       while (stack.length && stack[stack.length - 1].depth >= n.depth) stack.pop();
-      if (n.kind === 'group') stack.push({ id: n.id, depth: n.depth });
-      else if (n.kind === 'part') {
+      if (n.kind === 'group') {
+        // a group inside a clicked group is hinted, like the parts in it
+        if (!explicitG.has(n.id)) for (const a of stack) if (explicitG.has(a.id)) { nextGAnc.add(n.id); break; }
+        stack.push({ id: n.id, depth: n.depth });
+      } else if (n.kind === 'part') {
         for (const a of stack) if (explicitG.has(a.id)) { ancestorPartSet.add(n.partId); break; }
       }
     }
+  }
+  // Bright rows: parts selected on their own. Parts that are selected only
+  // because their group was clicked stay in `ancestorPartSet` (dim).
+  let next = state.selected;
+  if (ancestorPartSet.size) {
+    next = new Set();
+    for (const id of state.selected) if (!ancestorPartSet.has(id)) next.add(id);
   }
 
   // Cold path — first call after a tree rebuild; do the full sweep AND seed
@@ -8857,12 +9105,20 @@ function rebuildTreeSelectionOnly() {
 // call rebuilds the merged edge geometry from scratch, which on 1000+ parts
 // takes long enough that the user perceives the highlight as appearing seconds
 // after their click.
-let _selColorsRaf = 0;
+//
+// Coalesced with a MICROTASK, not requestAnimationFrame. A frame callback
+// runs the rebuild one frame after the click and the render one frame after
+// that; a microtask runs it as soon as the click handler returns, so the
+// same frame's render already shows the highlight. Several calls from one
+// handler still collapse into a single rebuild.
+let _selColorsQueued = false;
 function applySelectionColors() {
-  if (_selColorsRaf) return;
-  _selColorsRaf = requestAnimationFrame(() => {
-    _selColorsRaf = 0;
-    _applySelectionColorsImpl();
+  if (_selColorsQueued) return;
+  _selColorsQueued = true;
+  queueMicrotask(() => {
+    _selColorsQueued = false;
+    try { _applySelectionColorsImpl(); }
+    catch (e) { console.warn('[selection] highlight rebuild failed:', e); try { requestRender(); } catch (_) {} }
     try { _updateVpHint(); } catch (_) {}
   });
 }
@@ -8893,6 +9149,155 @@ function _getEdgesGeom(g) {
 function _disposeEdgesFor(g) {
   const e = _edgesCache.get(g);
   if (e) { e.dispose?.(); _edgesCache.delete(g); }
+}
+
+// Feature-edge extraction is the slow part of drawing a selection: about a
+// second for a 125k-triangle part, and it used to run inside the click. Now
+// the click draws at once — cached edges where they exist, small parts built
+// inline within a few-millisecond budget, a bounding box for anything else —
+// and the missing edges are computed in a worker and swapped in when ready.
+const _EDGES_PENDING = Symbol('edges-pending');
+const _EDGES_INLINE_TRIS = 3000;      // small enough to build inline without a hitch
+const _EDGES_INLINE_BUDGET_MS = 8;    // total inline build time per highlight pass
+const _edgesWaiting = [];             // geometries not yet sent to the worker
+const _edgesWaitingSet = new Set();
+const _edgesInFlight = new Map();     // job id → geometry
+const _edgesNoWorker = new WeakSet(); // geometries the worker can't take (non-float positions)
+let _edgesWorker = null, _edgesWorkerBroken = false, _edgesSeq = 0, _edgesRefreshTimer = 0;
+const _EDGES_WORKER_SRC = `
+self.onmessage = function (e) {
+  var d = e.data, pos = d.pos, idx = d.idx;
+  var vCount = pos.length / 3, triCount = idx ? idx.length / 3 : vCount / 3;
+  var cosT = Math.cos(d.thresholdDeg * Math.PI / 180), P = 1e4;
+  var ids = new Uint32Array(vCount), map = new Map(), next = 0, i, k, w;
+  for (i = 0; i < vCount; i++) {
+    k = Math.round(pos[i*3]*P) + ',' + Math.round(pos[i*3+1]*P) + ',' + Math.round(pos[i*3+2]*P);
+    w = map.get(k);
+    if (w === undefined) { w = next++; map.set(k, w); }
+    ids[i] = w;
+  }
+  map = null;
+  var N = next, edges = new Map(), out = [];
+  var push = function (a, b) { out.push(pos[a*3], pos[a*3+1], pos[a*3+2], pos[b*3], pos[b*3+1], pos[b*3+2]); };
+  var v = [0, 0, 0], h = [0, 0, 0];
+  for (var t = 0; t < triCount; t++) {
+    v[0] = idx ? idx[t*3] : t*3; v[1] = idx ? idx[t*3+1] : t*3+1; v[2] = idx ? idx[t*3+2] : t*3+2;
+    h[0] = ids[v[0]]; h[1] = ids[v[1]]; h[2] = ids[v[2]];
+    if (h[0] === h[1] || h[1] === h[2] || h[2] === h[0]) continue;
+    var ax = pos[v[0]*3], ay = pos[v[0]*3+1], az = pos[v[0]*3+2];
+    var e1x = pos[v[1]*3]-ax, e1y = pos[v[1]*3+1]-ay, e1z = pos[v[1]*3+2]-az;
+    var e2x = pos[v[2]*3]-ax, e2y = pos[v[2]*3+1]-ay, e2z = pos[v[2]*3+2]-az;
+    var nx = e1y*e2z - e1z*e2y, ny = e1z*e2x - e1x*e2z, nz = e1x*e2y - e1y*e2x;
+    var len = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1; nx /= len; ny /= len; nz /= len;
+    for (var j = 0; j < 3; j++) {
+      var j1 = (j + 1) % 3, key = h[j] * N + h[j1], rkey = h[j1] * N + h[j];
+      var o = edges.get(rkey);
+      if (o) {
+        if (nx*o[2] + ny*o[3] + nz*o[4] <= cosT) push(v[j], v[j1]);
+        edges.set(rkey, null);
+      } else if (!edges.has(key)) {
+        edges.set(key, [v[j], v[j1], nx, ny, nz]);
+      }
+    }
+  }
+  edges.forEach(function (o) { if (o) push(o[0], o[1]); });
+  var arr = new Float32Array(out);
+  self.postMessage({ id: d.id, edges: arr }, [arr.buffer]);
+};`;
+function _edgesWorkerGet() {
+  if (_edgesWorker || _edgesWorkerBroken) return _edgesWorker;
+  try {
+    _edgesWorker = new Worker(URL.createObjectURL(new Blob([_EDGES_WORKER_SRC], { type: 'application/javascript' })));
+    _edgesWorker.onmessage = (ev) => {
+      const g = _edgesInFlight.get(ev.data.id);
+      _edgesInFlight.delete(ev.data.id);
+      if (g) {
+        const eg = new THREE.BufferGeometry();
+        eg.setAttribute('position', new THREE.BufferAttribute(ev.data.edges, 3));
+        _edgesCache.set(g, eg);
+        _edgesPrewarmFloats += ev.data.edges.length;
+        // Redraw only if something selected is waiting on this geometry.
+        let wanted = false;
+        for (const id of state.selected) {
+          const p = getPart(id);
+          if (p && ((p.mesh && p.mesh.geometry === g) || (p.instancedMesh && p.instancedMesh.geometry === g))) { wanted = true; break; }
+        }
+        if (wanted && !_edgesRefreshTimer) {
+          _edgesRefreshTimer = setTimeout(() => { _edgesRefreshTimer = 0; applySelectionColors(); }, 60);
+        }
+      }
+      _edgesPump();
+    };
+    _edgesWorker.onerror = () => { _edgesWorkerBroken = true; _edgesWorker = null; _edgesInFlight.clear(); };
+  } catch (_) { _edgesWorkerBroken = true; _edgesWorker = null; }
+  return _edgesWorker;
+}
+// Background warm-up: after a model loads, the heavy geometries (the ones too
+// big to build inline) have their edges computed in the worker while it is
+// idle, biggest first, so even the first click on a large part shows its real
+// outline at once. Bounded by _EDGES_PREWARM_FLOATS so a huge assembly can't
+// fill memory with outlines nobody asked for.
+const _edgesPrewarm = [];
+const _EDGES_PREWARM_FLOATS = 30e6;      // about 120 MB of outline data
+let _edgesPrewarmFloats = 0;
+function _prewarmEdges() {
+  _edgesPrewarm.length = 0;
+  if (_edgesWorkerBroken) return;
+  const seen = new Set();
+  for (const p of state.parts) {
+    if (p.deleted) continue;
+    const g = p.mesh ? p.mesh.geometry : (p.instancedMesh ? p.instancedMesh.geometry : null);
+    const pos = g && g.attributes && g.attributes.position;
+    if (!pos || seen.has(g) || _edgesCache.has(g)) continue;
+    seen.add(g);
+    const tris = g.index ? g.index.count / 3 : pos.count / 3;
+    if (tris <= _EDGES_INLINE_TRIS) continue;
+    if (pos.isInterleavedBufferAttribute || !(pos.array instanceof Float32Array) || pos.itemSize !== 3 || pos.normalized) continue;
+    _edgesPrewarm.push({ g, tris });
+  }
+  _edgesPrewarm.sort((a, b) => b.tris - a.tris);
+  _edgesPump();
+}
+function _edgesPump() {
+  const wk = _edgesWorkerGet();
+  if (!wk) return;
+  while (_edgesInFlight.size < 2 && (_edgesWaiting.length || _edgesPrewarm.length)) {
+    let g;
+    if (_edgesWaiting.length) { g = _edgesWaiting.shift(); _edgesWaitingSet.delete(g); }
+    else {
+      if (_edgesPrewarmFloats > _EDGES_PREWARM_FLOATS) { _edgesPrewarm.length = 0; break; }
+      g = _edgesPrewarm.shift().g;
+      let busy = false;
+      for (const fg of _edgesInFlight.values()) if (fg === g) { busy = true; break; }
+      if (busy) continue;
+    }
+    if (_edgesCache.has(g)) continue;
+    const pos = g.attributes && g.attributes.position;
+    if (!pos || !pos.array) continue;
+    const id = ++_edgesSeq;
+    const p = new Float32Array(pos.array);                   // the worker gets its own copy
+    const ix = g.index ? new Uint32Array(g.index.array) : null;
+    _edgesInFlight.set(id, g);
+    wk.postMessage({ id, pos: p, idx: ix, thresholdDeg: 30 }, ix ? [p.buffer, ix.buffer] : [p.buffer]);
+  }
+}
+// Edges for a geometry without ever stalling: the cached result, an inline
+// build for a small part while the pass still has time, or _EDGES_PENDING
+// (the caller draws a bounding box for now and a worker job is queued).
+function _edgesFor(g, deadline) {
+  const cached = _edgesCache.get(g);
+  if (cached) return cached;
+  const pos = g.attributes && g.attributes.position;
+  if (!pos) return null;
+  const tris = g.index ? g.index.count / 3 : pos.count / 3;
+  const workerOk = !_edgesWorkerBroken && !_edgesNoWorker.has(g) &&
+    !pos.isInterleavedBufferAttribute && pos.array instanceof Float32Array && pos.itemSize === 3 && !pos.normalized;
+  if (!workerOk) { if (!_edgesWorkerBroken) _edgesNoWorker.add(g); return _getEdgesGeom(g); }
+  if (tris <= _EDGES_INLINE_TRIS && performance.now() < deadline) return _getEdgesGeom(g);
+  let inFlight = false;
+  for (const fg of _edgesInFlight.values()) if (fg === g) { inFlight = true; break; }
+  if (!inFlight && !_edgesWaitingSet.has(g)) { _edgesWaiting.push(g); _edgesWaitingSet.add(g); }
+  return _EDGES_PENDING;
 }
 
 // Shared materials for highlight overlays — re-used across every highlighted
@@ -9097,6 +9502,10 @@ function _applySelectionColorsImpl() {
   let totalFloats = 0;
   let drawn = 0;
   let usedBboxFallback = false;
+  // Jobs queued for an earlier selection but not yet sent are dropped; this
+  // pass re-queues whatever the current selection still needs.
+  _edgesWaiting.length = 0; _edgesWaitingSet.clear();
+  const edgeDeadline = performance.now() + _EDGES_INLINE_BUDGET_MS;
 
   for (const id of state.selected) {
     if (drawn >= MAX_SELECTION_HIGHLIGHTS) break;
@@ -9130,9 +9539,11 @@ function _applySelectionColorsImpl() {
 
     // Pick the cheaper edge source once we cross the budget.
     let epos = null;
+    let edgesPending = false;
     if (!usedBboxFallback && totalFloats < SELECTION_EDGE_VERT_BUDGET) {
-      const edgesGeom = _getEdgesGeom(geom);
-      epos = edgesGeom?.attributes?.position?.array || null;
+      const edgesGeom = _edgesFor(geom, edgeDeadline);
+      if (edgesGeom === _EDGES_PENDING) edgesPending = true;
+      else epos = edgesGeom?.attributes?.position?.array || null;
       // Skip parts whose feature-edges blew up on construction (returned null);
       // they'll fall through to the bbox path below for this iteration only.
       if (epos && totalFloats + epos.length > SELECTION_EDGE_VERT_BUDGET) {
@@ -9146,7 +9557,9 @@ function _applySelectionColorsImpl() {
         try { geom.computeBoundingBox(); } catch (_) {}
       }
       epos = _bboxEdgeVerts(geom.boundingBox);
-      usedBboxFallback = true;
+      // A part still waiting on its edges gets a box for now; that must not
+      // push every later part onto boxes the way running out of budget does.
+      if (!edgesPending) usedBboxFallback = true;
     }
     if (!epos || epos.length === 0) continue;
 
@@ -9222,6 +9635,7 @@ function _applySelectionColorsImpl() {
   for (const p of state.parts) { if (p.isPrimitive) _syncPrimWireframe(p); }
   _updateGroupOriginDot();
   requestRender();
+  _edgesPump();
 }
 
 // Cinema-4D-style group origin markers. One tiny circular dot per group,
@@ -9787,7 +10201,7 @@ function refreshPropertiesPanel() {
     tagsHtml = tags.join('');
     tris  = fmtNum(p.triCount);
     verts = fmtNum(p.vertCount);
-    bbox  = `${_fmtLen(sz.x)} × ${_fmtLen(sz.y)} × ${_fmtLen(sz.z)}`;
+    bbox  = _fmtDims(sz);
     diag  = _fmtLen(p.sizeMetrics.diag, 3);
     pct   = (p.sizeMetrics.diag / _liveSceneDiag() * 100).toFixed(2) + '%';
     vol   = _fmtVol(p.sizeMetrics.vol);
@@ -9900,7 +10314,7 @@ function refreshPropertiesPanel() {
     if (!combined.isEmpty()) {
       const sz = combined.getSize(new THREE.Vector3());
       const d = sz.length();
-      bbox = `${_fmtLen(sz.x)} × ${_fmtLen(sz.y)} × ${_fmtLen(sz.z)}`;
+      bbox = _fmtDims(sz);
       diag = _fmtLen(d, 3);
       pct  = (d / _liveSceneDiag() * 100).toFixed(2) + '%';
     }
@@ -9957,8 +10371,7 @@ function refreshPropertiesPanel() {
     <div class="prop-grid">
       <span class="prop-icon"><i data-lucide="triangle"></i></span><span class="prop-label">Triangles</span><strong class="prop-value">${tris}</strong>
       <span class="prop-icon"><i data-lucide="circle-dot"></i></span><span class="prop-label">Vertices</span><strong class="prop-value">${verts}</strong>
-      <span class="prop-icon"><i data-lucide="box"></i></span><span class="prop-label">Bbox</span><strong class="prop-value" title="${bbox}">${bbox}</strong>
-      <span class="prop-icon"><i data-lucide="ruler"></i></span><span class="prop-label">Diagonal</span><strong class="prop-value">${diag}</strong>
+      <span class="prop-icon"><i data-lucide="box"></i></span><span class="prop-label">Size</span><strong class="prop-value" title="${bbox}">${bbox}</strong>
       <span class="prop-icon"><i data-lucide="percent"></i></span><span class="prop-label">% of model</span><strong class="prop-value">${pct}</strong>
       <span class="prop-icon"><i data-lucide="package"></i></span><span class="prop-label">Volume</span><strong class="prop-value">${vol}</strong>
     </div>`;
@@ -10188,6 +10601,16 @@ function _refreshUndoRedoButtons() {
 // cyan outline stayed in place" or "tree row stayed selected after a
 // destructive undo".
 function _finalizeUndo({ rebuildTree: doRebuildTree = false } = {}) {
+  // A group that the undo / redo just removed cannot stay selected: its id
+  // would show up as "Group -2" in Properties and aim the gizmo at nothing.
+  if (state.selectedGroupIds && state.selectedGroupIds.size) {
+    const live = new Set();
+    for (const n of (state.treeNodes || [])) if (n.kind !== 'part') live.add(n.id);
+    for (const ug of (state.userGroups || [])) live.add(ug.id);
+    for (const gid of [...state.selectedGroupIds]) {
+      if (!live.has(gid) && !live.has(parseInt(String(gid), 10))) state.selectedGroupIds.delete(gid);
+    }
+  }
   applySelectionColors();          // rebuilds world-baked outline geometry
   if (doRebuildTree) rebuildTree(); else rebuildTreeSelectionOnly?.();
   refreshPropertiesPanel?.();
@@ -11155,25 +11578,79 @@ function _resolvePartWorldMatrix(p) {
 // formats with no transform hierarchy — anything not baked here ends up at
 // the geometry's stored origin (which after auto-instancing is the canonical
 // pose-normalized position, i.e. the model origin).
+// Everything an export has to write: one entry per part, plus one entry per
+// copy a Cloner draws. The copies are not parts (they live only as
+// InstancedMesh slots or plain meshes under the cloner's group), so an
+// export that walked state.parts alone wrote just the source part of a
+// 12-bolt radial cloner.
+function _exportDrawList(visibleOnly) {
+  const out = [];
+  for (const p of state.parts) {
+    if (p.deleted || p.isCloner) continue;
+    if (visibleOnly && !p.visible) continue;
+    // The geometry on the mesh is what the user sees; the hash table is the
+    // fallback for instanced parts, which have no mesh of their own.
+    const g = (p.mesh && p.mesh.geometry && p.mesh.geometry.attributes) ? p.mesh.geometry : state.geomByHash.get(p.hash);
+    if (!g || !g.attributes || !g.attributes.position) continue;
+    // In radial / centred modes a cloner hides its source part and draws
+    // only the copies; the hidden generator must not be exported as well.
+    const hiddenGenerator = !!(p.mesh && p.mesh.visible === false && p.mesh.parent?.userData?.isCloner);
+    if (hiddenGenerator) continue;
+    out.push({
+      part: p, geom: g, world: _resolvePartWorldMatrix(p), color: p.originalColor, name: p.name,
+      srcMat: p.mesh ? p.mesh.material : (p.instancedMesh ? p.instancedMesh.material : null),
+    });
+  }
+  const local = new THREE.Matrix4();
+  for (const c of state.parts) {
+    if (!c.isCloner || c.deleted || !c.mesh) continue;
+    if (visibleOnly && (!c.visible || c.mesh.visible === false)) continue;
+    const refs = c.mesh.userData?._clonerCloneRefs;
+    if (!Array.isArray(refs) || !refs.length) continue;
+    c.mesh.updateWorldMatrix(true, true);
+    const sources = state.parts.filter(q => !q.deleted && !q.isCloner && q.mesh && q.mesh.parent === c.mesh);
+    const serial = new Map();   // source name → running copy number
+    for (const ref of refs) {
+      if (!ref || !ref.geometry?.attributes?.position || ref.visible === false) continue;
+      const src = sources.find(q => q.mesh.geometry === ref.geometry) || null;
+      if (src && visibleOnly && !src.visible) continue;
+      const color = src ? src.originalColor : ((ref.material && ref.material.color) || new THREE.Color(0xaaaaaa));
+      const base = src ? src.name : (c.name || 'Clone');
+      const copies = ref.isInstancedMesh ? ref.count : 1;
+      for (let i = 0; i < copies; i++) {
+        const world = new THREE.Matrix4();
+        if (ref.isInstancedMesh) { ref.getMatrixAt(i, local); world.multiplyMatrices(ref.matrixWorld, local); }
+        else world.copy(ref.matrixWorld);
+        const k = (serial.get(base) || 0) + 1;
+        serial.set(base, k);
+        out.push({ part: src, isClone: true, geom: ref.geometry, world, color, name: `${base} clone ${k}`, srcMat: ref.material });
+      }
+    }
+  }
+  return out;
+}
+
 function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
   const root = new THREE.Group();
   let count = 0;
+  const drawList = _exportDrawList(visibleOnly);
 
   // Pre-compute the bbox-center offset if needed for origin recentering.
   let originOffset = new THREE.Vector3(0, 0, 0);
   if (origin === 'bbox') {
     const box = new THREE.Box3();
     const tmp = new THREE.Vector3();
-    for (const p of state.parts) {
-      if (p.deleted) continue;
-      if (visibleOnly && !p.visible) continue;
-      const m = _resolvePartWorldMatrix(p);
-      const local = p.bbox || (state.geomByHash.get(p.hash)?.boundingBox);
-      if (!local) continue;
-      // Transform the part's local bbox corners through its world matrix.
-      const min = local.min, max = local.max;
+    // Measured from what will actually be written: each entry's geometry
+    // box taken through its world matrix. (This used to push the part's
+    // bbox, which is already in world space, through the world matrix a
+    // second time, so the result was not centred.)
+    for (const it of drawList) {
+      if (!it.geom.boundingBox) it.geom.computeBoundingBox();
+      const lb = it.geom.boundingBox;
+      if (!lb || lb.isEmpty()) continue;
+      const min = lb.min, max = lb.max;
       for (let xi = 0; xi < 2; xi++) for (let yi = 0; yi < 2; yi++) for (let zi = 0; zi < 2; zi++) {
-        tmp.set(xi ? max.x : min.x, yi ? max.y : min.y, zi ? max.z : min.z).applyMatrix4(m);
+        tmp.set(xi ? max.x : min.x, yi ? max.y : min.y, zi ? max.z : min.z).applyMatrix4(it.world);
         box.expandByPoint(tmp);
       }
     }
@@ -11205,7 +11682,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
     // is exactly what we want so DCC tools (Blender, C4D) reload the same tree.
     const treeNodes = state.treeNodes || [];
     const treeNodeById = new Map();
-    for (const n of treeNodes) if (n.kind === 'group') treeNodeById.set(n.id, n);
+    for (const n of treeNodes) if (n.kind === 'group' || n.kind === 'cloner') treeNodeById.set(n.id, n);
 
     // partId → ordered ancestor-group-id chain (outermost → innermost).
     const partToTreeChain = new Map();
@@ -11293,13 +11770,12 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
       return geom;
     };
 
-    for (const p of state.parts) {
-      if (p.deleted) continue;
-      if (visibleOnly && !p.visible) continue;
-      // The geometry on the mesh is what the user sees; the hash table is the
-      // fallback for instanced parts, which have no mesh of their own.
-      const g = (p.mesh && p.mesh.geometry && p.mesh.geometry.attributes) ? p.mesh.geometry : state.geomByHash.get(p.hash);
-      if (!g || !g.attributes || !g.attributes.position) continue;
+    // One cloned material per (source material, colour) pair. Cloning per
+    // part gave a 10,000-part model 10,000 materials in the file.
+    const matCache = new Map();
+    for (const item of drawList) {
+      const p = item.part;
+      const g = item.geom;
 
       // Clone the LIVE material so any user edits (color, metalness, roughness,
       // textures) survive the export. Override .color from p.originalColor in
@@ -11307,15 +11783,20 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
       // highlight. Fall back to a fresh PBR mat when the part has no live
       // material (e.g., instanced mesh path where mat lives on instancedMesh).
       let mat;
-      const srcMat = p.mesh?.material;
-      if (srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) {
-        mat = srcMat.clone();
-        if (mat.color) mat.color.copy(p.originalColor);
-      } else {
-        mat = new THREE.MeshStandardMaterial({ color: p.originalColor.clone(), metalness: 0.15, roughness: 0.55 });
+      const srcMat = item.srcMat;
+      const matKey = ((srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) ? srcMat.uuid : 'plain') + '|' + item.color.getHexString();
+      mat = matCache.get(matKey);
+      if (!mat) {
+        if (srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) {
+          mat = srcMat.clone();
+          if (mat.color) mat.color.copy(item.color);
+        } else {
+          mat = new THREE.MeshStandardMaterial({ color: item.color.clone(), metalness: 0.15, roughness: 0.55 });
+        }
+        matCache.set(matKey, mat);
       }
 
-      const world = _resolvePartWorldMatrix(p);
+      const world = item.world;
       const final = new THREE.Matrix4().multiplyMatrices(postMat, world);
       // Cinema-4D / Blender exported GLBs frequently carry SHEAR in deep
       // ancestor transforms (rotation × non-uniform scale). FBX's
@@ -11336,18 +11817,18 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
         baked.applyMatrix4(final);
         geom = baked;
         m = new THREE.Mesh(geom, mat);
-        m.name = p.name;
+        m.name = item.name;
       } else {
         geom = getSharedGeom(g, g);
         m = new THREE.Mesh(geom, mat);
-        m.name = p.name;
+        m.name = item.name;
         // No shear — safe to live on mesh.matrix. Container groups are at
         // identity, so the baked world transform on the mesh produces the
         // correct world pose. Geometry remains shareable across instances.
         m.applyMatrix4(final);
       }
-      getContainer(p).add(m);
-      meshByPart.set(p.partId, m);
+      (p ? getContainer(p) : root).add(m);
+      if (p && !item.isClone) meshByPart.set(p.partId, m);
       count++;
     }
     return { root, count, meshByPart };
@@ -11361,11 +11842,8 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
   const validParts = [];
   let totalVerts = 0, totalIdxLen = 0;
   let hasNormals = true;
-  for (const p of state.parts) {
-    if (p.deleted) continue;
-    if (visibleOnly && !p.visible) continue;
-    const g = state.geomByHash.get(p.hash);
-    if (!g) continue;
+  for (const item of drawList) {
+    const g = item.geom;
     const pos = g.attributes.position?.array;
     if (!pos) continue;
     const nrm = g.attributes.normal?.array;
@@ -11373,7 +11851,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
     const vCount = pos.length / 3;
     const iLen   = idx ? idx.length : vCount;
     if (!nrm) hasNormals = false;
-    validParts.push({ p, pos, nrm, idx, vCount, iLen });
+    validParts.push({ item, pos, nrm, idx, vCount, iLen });
     totalVerts  += vCount;
     totalIdxLen += iLen;
   }
@@ -11388,11 +11866,13 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
   let posOff = 0, idxOff = 0, vertBase = 0;
   const v3 = new THREE.Vector3();
   const n3 = new THREE.Vector3();
-  for (const { p, pos, nrm, idx, vCount, iLen } of validParts) {
-    const world = _resolvePartWorldMatrix(p);
-    const final = new THREE.Matrix4().multiplyMatrices(postMat, world);
+  for (const { item, pos, nrm, idx, vCount, iLen } of validParts) {
+    const final = new THREE.Matrix4().multiplyMatrices(postMat, item.world);
     const normalMat = new THREE.Matrix3().getNormalMatrix(final);
-    const cr = p.originalColor.r, cg = p.originalColor.g, cb = p.originalColor.b;
+    const cr = item.color.r, cg = item.color.g, cb = item.color.b;
+    // A mirrored part (negative determinant) turns its triangles inside
+    // out; swap two corners of each to keep them facing outward.
+    const flip = final.determinant() < 0;
 
     for (let i = 0; i < vCount; i++) {
       v3.set(pos[i*3], pos[i*3+1], pos[i*3+2]).applyMatrix4(final);
@@ -11418,6 +11898,13 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
       for (let i = 0; i < iLen; i++) indices[idxOff + i] = idx[i] + vertBase;
     } else {
       for (let i = 0; i < iLen; i++) indices[idxOff + i] = i + vertBase;
+    }
+    if (flip) {
+      for (let i = 0; i + 2 < iLen; i += 3) {
+        const sw = indices[idxOff + i + 1];
+        indices[idxOff + i + 1] = indices[idxOff + i + 2];
+        indices[idxOff + i + 2] = sw;
+      }
     }
     idxOff   += iLen;
     vertBase += vCount;
@@ -14162,7 +14649,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
 
 function wireUI() {
   new ResizeObserver(onResize).observe($('canvas'));
-  $('btn-fit').addEventListener('click', fitToView);
+  $('btn-fit')?.addEventListener('click', fitToView);
   $('btn-undo').addEventListener('click', () => undoLast());
   $('btn-redo')?.addEventListener('click', () => redoLast());
   $('btn-save-scene')?.addEventListener('click', () => { saveScene(); });
@@ -14179,11 +14666,11 @@ function wireUI() {
   }
   function _closeExportMenu() {
     $('export-menu')?.classList.remove('show');
-    document.querySelector('.export-wrap')?.classList.remove('open');
+    document.getElementById('btn-export')?.closest('.export-wrap')?.classList.remove('open');
   }
   function _toggleExportMenu() {
     const menu = $('export-menu');
-    const wrap = document.querySelector('.export-wrap');
+    const wrap = document.getElementById('btn-export')?.closest('.export-wrap');
     if (!menu || !wrap) return;
     const open = !menu.classList.contains('show');
     if (open) _closeAllTopbarMenus('export-menu');
@@ -14199,7 +14686,7 @@ function wireUI() {
   });
   // Outside-click + Esc dismiss the dropdown (shared helper).
   _Popover.dismiss(_closeExportMenu, {
-    containers: [document.querySelector('.export-wrap')],
+    containers: [document.getElementById('btn-export')?.closest('.export-wrap')],
     isOpen: () => $('export-menu')?.classList.contains('show'),
   });
 
@@ -14668,12 +15155,7 @@ function wireUI() {
             if (p && p.visible) { anyVisible = true; break; }
           }
           const next = !anyVisible;
-          for (const id of descendants) {
-            const p = getPart(id);
-            if (!p) continue;
-            p.visible = next;
-            if (p.mesh) p.mesh.visible = next;
-          }
+          _applyVisibility(descendants.map(id => [getPart(id), next]));
           rebuildTree();
           requestRender();
         } else if (isCloner && tn.obj3d) {
@@ -14747,12 +15229,16 @@ function wireUI() {
     }
     if (!node.dataset.partId) return; // unhandled group row variant
     const id = parseInt(node.dataset.partId, 10);
-    if (e.target.closest('.tree-vis')) { const p = getPart(id); if (p) { const before = p.visible; p.visible = !p.visible; if (p.mesh) p.mesh.visible = p.visible; try { pushUndo({ type: 'vis', items: [{ partId: id, before, after: p.visible }] }); } catch (_) {} rebuildTree(); requestRender(); } e.stopPropagation(); return; }
+    if (e.target.closest('.tree-vis')) { const p = getPart(id); if (p) { _applyVisibility([[p, !p.visible]]); rebuildTree(); requestRender(); } e.stopPropagation(); return; }
     // Industry-standard list selection (Windows Explorer / Finder):
     //   click           → single, anchor = clicked
     //   ctrl/cmd+click  → toggle, anchor = clicked
     //   shift+click     → range from anchor to clicked, replacing selection
     //   ctrl+shift+click → range from anchor, ADD to existing selection
+    // The press already selected this row (see the mousedown handler below).
+    const pressed = _treePressSelected === id;
+    _treePressSelected = null;
+    if (pressed && !e.shiftKey && !e.ctrlKey && !e.metaKey && state.selected.size === 1 && state.selected.has(id)) return;
     if (e.shiftKey && state._selAnchorId != null && state._selAnchorId !== id) {
       _treeSelectRange(state._selAnchorId, id, e.ctrlKey || e.metaKey);
       // anchor stays put across shift-clicks (Explorer behaviour)
@@ -14760,6 +15246,25 @@ function wireUI() {
       selectPart(id, e.ctrlKey || e.metaKey ? 'toggle' : 'single');
       state._selAnchorId = id;
     }
+  });
+  // Select on PRESS. A click only fires when the button comes back up, which
+  // is 80–120 ms after the press — most of the delay people feel. Pressing a
+  // part row that is not selected selects it at once (what Explorer and
+  // Finder do); a row that is already selected waits for the click, so a
+  // multi-selection survives the press that starts dragging it. Modifier
+  // clicks, the eye, the +/- box and rename fields are left to the click.
+  $('tree').addEventListener('mousedown', e => {
+    if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    const node = e.target.closest('.tree-node');
+    if (!node || !node.dataset.partId) return;
+    if (e.target.closest('.tree-vis,.tree-expand,.tree-chev,.tree-group-actions,[data-act],input,textarea')) return;
+    const id = parseInt(node.dataset.partId, 10);
+    if (state.selected.has(id)) return;
+    const p = getPart(id);
+    if (!p || p.deleted) return;
+    selectPart(id, 'single');
+    state._selAnchorId = id;
+    _treePressSelected = id;
   });
   // Double-click to rename — works for both parts and user groups.
   $('tree').addEventListener('dblclick', e => {
@@ -14958,6 +15463,28 @@ function wireUI() {
   $('tg-transform')?.addEventListener('click', () => _toggleTransformPanel());
   $('tg-screenshot')?.addEventListener('click', () => _captureViewportScreenshot());
 
+  // Flat line icons for the shapes, drawn in the same 24px / 2px-stroke style
+  // as the rest of the toolbar (the shape picker used to show small shaded
+  // 3D renders, which looked like a different app next to the line icons).
+  const _PRIM_ICON_PATHS = {
+    cube:         '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+    sphere:       '<circle cx="12" cy="12" r="9"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/>',
+    cylinder:     '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/>',
+    cone:         '<path d="m20 18.5-7.1-15.4a1 1 0 0 0-1.8 0L4 18.5"/><ellipse cx="12" cy="18.5" rx="8" ry="3"/>',
+    torus:        '<ellipse cx="12" cy="12" rx="10" ry="7.5"/><ellipse cx="12" cy="11" rx="3.5" ry="2"/>',
+    plane:        '<path d="M2.5 16.5 7.5 7.5h14l-5 9z"/>',
+    capsule:      '<rect x="7.5" y="2.5" width="9" height="19" rx="4.5"/>',
+    icosahedron:  '<path d="m12 2.5 8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z"/><path d="M12 2.5 17 13H7z"/><path d="m7 13 5 8.5 5-8.5"/><path d="M3.8 7.25 7 13"/><path d="M20.2 7.25 17 13"/>',
+    dodecahedron: '<path d="m12 2.5 5.6 1.8 3.5 4.8v5.8l-3.5 4.8-5.6 1.8-5.6-1.8-3.5-4.8V9.1l3.5-4.8z"/><path d="m12 7.5 4.3 3.1-1.6 5H9.3l-1.6-5z"/><path d="M12 2.5v5"/><path d="m16.3 10.6 4.8-1.5"/><path d="m14.7 15.6 2.9 4.1"/><path d="m9.3 15.6-2.9 4.1"/><path d="M7.7 10.6 2.9 9.1"/>',
+    hexbolt:      '<path d="M7 3h10l2 3.5-2 3.5H7L5 6.5z"/><path d="M9.5 10v11h5V10"/><path d="M9.5 14h5"/><path d="M9.5 18h5"/>',
+    hexnut:       '<path d="m12 2.5 8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z"/><circle cx="12" cy="12" r="3.5"/>',
+    allen:        '<rect x="6.5" y="3" width="11" height="7" rx="1.5"/><path d="M9.5 10v11h5V10"/><path d="M9.5 14h5"/><path d="M9.5 18h5"/>',
+    washer:       '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>',
+  };
+  const _primLineIcon = (kind) =>
+    `<svg class="prim-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${_PRIM_ICON_PATHS[kind] || _PRIM_ICON_PATHS.cube}</svg>`;
+  window._primLineIcon = _primLineIcon;
+
   // Viewport add-primitive button: click → add the most-recently-used kind
   // (defaults to cube; updates whenever any primitive is added, mirroring
   // C4D's "last tool used" convention), hold → shape picker.
@@ -14978,15 +15505,13 @@ function wireUI() {
       thumbImg.src = url;
       btn.classList.add('has-thumb');
     };
+    // The button shows the line icon of the shape a click will add.
     const _refreshThumbFor = (kind) => {
-      try {
-        const cached = JSON.parse(localStorage.getItem('stepopt-prim-thumbs-v8') || '{}');
-        if (cached[kind]) { _setThumb(cached[kind]); return; }
-      } catch (_) {}
-      // No cached thumb yet — render once and persist.
-      if (window._primThumb?.render) {
-        Promise.resolve(window._primThumb.render(kind)).then(_setThumb).catch(() => {});
-      }
+      let ico = btn.querySelector('.vp-add-ico');
+      if (!ico) { ico = document.createElement('span'); ico.className = 'vp-add-ico'; btn.appendChild(ico); }
+      ico.innerHTML = _primLineIcon(kind);
+      btn.classList.add('has-icon');
+      btn.classList.remove('has-thumb');
     };
     // Initial paint reflects the persisted last-added kind.
     _refreshThumbFor(_readLast());
@@ -15028,9 +15553,7 @@ function wireUI() {
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'vp-prim-pop-item';
-        const thumbCache = (() => { try { return new Map(Object.entries(JSON.parse(localStorage.getItem('stepopt-prim-thumbs-v8') || '{}'))); } catch(_) { return new Map(); } })();
-        const url = thumbCache.get(kind);
-        row.innerHTML = url ? `<img src="${url}" alt="">` : '';
+        row.innerHTML = _primLineIcon(kind);
         row.appendChild(Object.assign(document.createTextNode(LABELS[kind] || kind), {}));
         row.addEventListener('click', () => { closePop(); try { _addPrimitive(kind); } catch(e) {} });
         pop.appendChild(row);
@@ -15038,15 +15561,18 @@ function wireUI() {
       const btnRect = btn.getBoundingClientRect();
       const vpRect = btn.closest('#vp-overlay')?.getBoundingClientRect() || { top: 0, height: 600 };
       pop.style.display = 'block';
-      // Center vertically on the button, but clamp so the popup never sticks
-      // off the top or bottom of the viewport. The button now lives at the
-      // top of the left cluster, so a naive "btnTop - popHeight/2" goes
-      // negative — clamp to a small viewport padding.
+      // Open level with the button, right beside it. `top` is relative to
+      // the popup's own positioned ancestor (the tool pill), so measure
+      // from that — the pill is centred on the viewport edge, not pinned to
+      // its top. Then nudge up just enough to stay inside the viewport.
       const popH = pop.offsetHeight;
-      const ideal = btnRect.top - vpRect.top - popH / 2;
-      const minTop = 8;
-      const maxTop = Math.max(8, (vpRect.height || window.innerHeight) - popH - 8);
-      pop.style.top = Math.max(minTop, Math.min(maxTop, ideal)) + 'px';
+      const hostRect = (pop.offsetParent || btn.parentElement).getBoundingClientRect();
+      const vpBottom = vpRect.top + (vpRect.height || window.innerHeight) - 8;
+      let top = btnRect.top - hostRect.top;
+      const over = (hostRect.top + top + popH) - vpBottom;
+      if (over > 0) top -= over;
+      const minTop = (vpRect.top + 8) - hostRect.top;
+      pop.style.top = Math.max(minTop, top) + 'px';
       _lucide?.();
     };
 
@@ -15669,6 +16195,9 @@ state._bvhStrategy = 0;   // 0 = CENTER (fast build), 1 = AVERAGE, 2 = SAH (best
 state._bvhGen = 0;        // bumped on every clearModel; in-flight builds bail when stale
 
 async function _buildBVHsForAllGeoms() {
+  // Geometry just changed (load, bake, decimate …): queue outline warm-up too.
+  clearTimeout(_buildBVHsForAllGeoms._warm);
+  _buildBVHsForAllGeoms._warm = setTimeout(() => { try { _prewarmEdges(); } catch (_) {} }, 1200);
   if (!state._bvhReady) return;
   if (state._bvhBuilding) return;            // re-entrancy guard
   state._bvhBuilding = true;
@@ -16252,9 +16781,13 @@ function _addPrimitive(kind) {
 
   // UI refresh: tree, status, selection, gizmo.
   try {
+    // Select the new part BEFORE the tree is rebuilt, so its row is the one
+    // drawn as selected (the rebuild used to run first and the highlight
+    // stayed on whatever had been selected before).
+    if (state.selected) { state.selected.clear(); state.selected.add(partId); }
+    state.selectedGroupIds?.clear?.();
     if (typeof rebuildTree === 'function') rebuildTree();
     if (typeof refreshStatusBar === 'function') refreshStatusBar();
-    if (state.selected) { state.selected.clear(); state.selected.add(partId); }
     if (typeof applySelectionColors === 'function') applySelectionColors();
     if (typeof refreshPropertiesPanel === 'function') refreshPropertiesPanel();
     if (typeof updateGizmo === 'function') updateGizmo();
@@ -16711,8 +17244,20 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (!state.geomByHash.has(partInfo.hash)) state.geomByHash.set(partInfo.hash, geom);
     i++;
   }
+  // Append: _buildHierarchyFromScene starts a fresh tree for the file being
+  // read. Keep the tree that was there and add the new rows after it
+  // (see _mergeImportedTree) instead of replacing it.
+  const treeBeforeImport = importMode ? (state.treeNodes || []) : null;
   try { _buildHierarchyFromScene(sceneRoot, meshToPart); }
   catch (err) { console.warn('[STEP] hierarchy build failed:', err); state.treeNodes = []; }
+  if (importMode) {
+    _mergeImportedTree(treeBeforeImport, partIdBase);
+    // The import itself is not an undo step, and older steps hold tree
+    // snapshots from before these rows existed. Start the history fresh.
+    state.history.length = 0;
+    if (state.redo) state.redo.length = 0;
+    _refreshUndoRedoButtons();
+  }
   state.partsRoot.add(sceneRoot);
   state.partsRoot.updateMatrixWorld(true);
   // Capture each mesh's EXACT world matrix BEFORE anything can corrupt it
@@ -16734,6 +17279,16 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   }
   setLoaderProgress(90);
   state.bboxBuilt = false;
+  if (importMode) {
+    // Totals and the model size describe the whole scene, not just the
+    // file that was appended.
+    totalTris = 0; totalVerts = 0;
+    for (const lp of state.parts) {
+      if (lp.deleted) continue;
+      totalTris += lp.triCount || 0; totalVerts += lp.vertCount || 0;
+      if (lp.bbox && !lp.bbox.isEmpty()) overallBox.union(lp.bbox);
+    }
+  }
   const size = overallBox.getSize(new THREE.Vector3());
   state.modelDiag = Math.max(size.length(), 0.0001);
   // Refresh camera near/far now that we know the model size — without
@@ -16771,7 +17326,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     const _savedState = _extractSceneState(sceneRoot);
     if (_savedState) _applySceneState(_savedState);
   }
-  if (importMode) onSceneActivated();
+  if (importMode) { try { recomputeStats(); } catch (_) {} onSceneActivated(); }
   else onModelLoaded(file.name);
   _buildBVHsForAllGeoms();
   requestRender();
@@ -16793,22 +17348,40 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
 // re-enable + loader-overlay teardown all live here so the format functions
 // stay tiny.
 async function _runLoad(file, formatLabel, parser) {
-  setLoader(true, `Reading ${formatLabel}...`, file.name);
+  setLoader(true, `Reading ${formatLabel}…`, file.name);
   setLoaderProgress(10);
+  // Only a successful, non-appending load becomes the "source file" that
+  // Revert reloads and the export name comes from. Setting these up front
+  // meant a failed load, or an append, replaced them.
+  const wasImport = !!state._importMode;
+  const prevSource = state._sourceFile, prevSceneName = state.sceneName;
+  const partsBefore = state.parts.length;
+  // A newer load supersedes this one: its result must not land on top.
+  const myLoadGen = (state._loadGen = (state._loadGen | 0) + 1);
+  _cancelStepConversion('superseded');
   state._sourceFile = file;
   state.sceneName = null;
   state.renderPaused = true;
+  let loadedOk = false;
   try {
     await parser();
+    loadedOk = true;
   } catch (e) {
     console.error(e);
     toast(`${formatLabel} load failed`, e.message || String(e), 'error', 7000);
     await new Promise(r => setTimeout(r, 1500));
   } finally {
-    state.renderPaused = false;
-    if (controls) controls.enabled = true;
-    setLoader(false);
-    requestRender();
+    // Append mode is one-shot: if the parser failed before the scene
+    // was ingested the flag would still be set and silently turn the NEXT
+    // plain Open into an append.
+    state._importMode = false;
+    if (!loadedOk || wasImport) { state._sourceFile = prevSource; state.sceneName = prevSceneName; }
+    if (myLoadGen === state._loadGen) {
+      state.renderPaused = false;
+      if (controls) controls.enabled = true;
+      setLoader(false);
+      requestRender();
+    }
   }
 }
 
@@ -19102,7 +19675,11 @@ function _renderPresetMenu() {
         toast?.('Select a material first', 'Click a material card, then choose a preset', 'info');
         return;
       }
+      const presetBefore = _matStateSnap();
+      const presetEdits = targets.map(m => ({ matRef: m, before: _snapshotMat(m), after: null }));
       for (const m of targets) _applyPresetTo(m, p);
+      for (const e of presetEdits) e.after = _snapshotMat(e.matRef);
+      try { _pushMaterialUndo('Apply preset', presetBefore, presetEdits); } catch (_) {}
       requestRender();
       _populateMaterialsList();
       menu.classList.remove('show');
@@ -19113,6 +19690,52 @@ function _renderPresetMenu() {
 }
 
 let _matActionsWired = false;
+// Which material every part uses, plus the two material registries. Taken
+// before and after a Materials-panel action so the action can be undone.
+function _matStateSnap() {
+  const assign = new Map();
+  for (const p of state.parts || []) if (!p.deleted && p.mesh) assign.set(p.partId, p.mesh.material);
+  return {
+    assign,
+    user: state.userMaterials ? new Set(state.userMaterials) : null,
+    byColor: state.materialByColor ? new Map(state.materialByColor) : null,
+  };
+}
+function _pushMaterialUndo(label, before, edits) {
+  const after = _matStateSnap();
+  const assigns = [];
+  for (const [id, b] of before.assign) {
+    const a = after.assign.get(id);
+    if (a !== undefined && a !== b) assigns.push({ partId: id, before: b, after: a });
+  }
+  const sameSet = (x, y) => (!x && !y) || (!!x && !!y && x.size === y.size && [...x].every(v => y.has(v)));
+  edits = (edits || []).filter(e => JSON.stringify(e.before) !== JSON.stringify(e.after));
+  if (!assigns.length && !edits.length && sameSet(before.user, after.user)) return;
+  pushUndo({ type: 'matBatch', label, assigns, edits,
+             userBefore: before.user, userAfter: after.user,
+             byColorBefore: before.byColor, byColorAfter: after.byColor });
+}
+function _applyMatBatch(op, dir) {
+  for (const it of op.assigns || []) {
+    const p = getPart(it.partId);
+    if (p && p.mesh) p.mesh.material = it[dir];
+  }
+  for (const e of op.edits || []) if (e.matRef && e[dir]) _applyMatSnapshot(e.matRef, e[dir]);
+  const user = dir === 'before' ? op.userBefore : op.userAfter;
+  if (user) state.userMaterials = new Set(user);
+  const byColor = dir === 'before' ? op.byColorBefore : op.byColorAfter;
+  if (byColor && state.materialByColor) {
+    state.materialByColor.clear();
+    for (const [k, v] of byColor) state.materialByColor.set(k, v);
+  }
+  try { _populateMaterialsList?.(); } catch (_) {}
+  try { buildMaterialsPanel?.(); } catch (_) {}
+}
+_UndoOps.register('matBatch', {
+  undo(op) { _applyMatBatch(op, 'before'); state.redo.push(op); _finalizeUndo(); },
+  redo(op) { _applyMatBatch(op, 'after'); state.history.push(op); _finalizeUndo(); },
+});
+
 function _wireMaterialActions() {
   if (_matActionsWired) return;
   const addBtn = document.getElementById('mat-act-add');
@@ -19123,6 +19746,20 @@ function _wireMaterialActions() {
   const menu   = document.getElementById('mat-presets-menu');
   if (!addBtn || !dupBtn || !mrgBtn || !delBtn || !preBtn || !menu) return;
   _matActionsWired = true;
+  // Undo for the four buttons: a capture listener records the state before
+  // the button's own (synchronous) handler runs, and a listener added after
+  // all of them compares and pushes one entry.
+  {
+    let pending = null;
+    const labels = new Map([[addBtn, 'Add material'], [dupBtn, 'Duplicate material'], [mrgBtn, 'Merge materials'], [delBtn, 'Delete materials']]);
+    for (const b of labels.keys()) b.addEventListener('click', () => { pending = _matStateSnap(); }, true);
+    setTimeout(() => {
+      for (const [b, label] of labels) b.addEventListener('click', () => {
+        if (pending) { try { _pushMaterialUndo(label, pending, null); } catch (e) { console.warn('[mat-undo]', e); } }
+        pending = null;
+      });
+    }, 0);
+  }
 
   addBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -19199,7 +19836,8 @@ function _wireMaterialActions() {
     for (let i = 1; i < arr.length; i++) {
       const m = arr[i];
       if (m === target) continue;
-      try { m.dispose?.(); } catch (_) {}
+      // Not disposed: undo re-assigns this material, and a disposed one
+      // renders magenta. It is released with the model.
       if (state.userMaterials) state.userMaterials.delete(m);
     }
     _matPanelSelected.clear();
@@ -19243,7 +19881,7 @@ function _wireMaterialActions() {
     // material whose colour matched 0x9aa0a6.
     for (const m of removed) {
       if (m === defaultMat) continue;
-      try { m.dispose?.(); } catch (_) {}
+      // Not disposed, for the same reason as Merge: undo hands it back.
       if (state.userMaterials) state.userMaterials.delete(m);
       if (state.materialByColor) {
         for (const [k, v] of state.materialByColor) {
@@ -20565,9 +21203,16 @@ async function _treeDeleteGroup(row) {
     }
   }
   if (partIds.length === 0) {
-    // Empty group — just drop the node + its scene-graph object.
-    all.splice(idx, 1);
+    // Empty group — drop the node + its scene-graph object. Recorded for
+    // undo the same way Ungroup records an empty group.
+    const prevTreeNodesDG = _snapshotTreeNodes(all);
+    const hostObjDG = grpNode.obj3d?.parent || state.partsRoot;
+    _dropGroupsFromTree(n => n === grpNode);
     if (grpNode.obj3d?.parent) grpNode.obj3d.parent.remove(grpNode.obj3d);
+    try {
+      pushUndo({ type: 'hierUngroup', groupObj: grpNode.obj3d, groupHostObj: hostObjDG, items: [],
+                 prevTreeNodes: prevTreeNodesDG, nextTreeNodes: _snapshotTreeNodes(state.treeNodes) });
+    } catch (_) {}
     rebuildTree();
     toast('Group deleted', 'Empty group removed', 'success');
     return;
@@ -20591,8 +21236,10 @@ async function _treeRenameRow(row) {
   if (ug) { renameUserGroup(gid, trimmed); return; }
   const node = state.treeNodes?.find(n => n.kind === 'group' && n.id === gid);
   if (node) {
+    const oldName = node.name;
     node.name = trimmed;
     if (node.obj3d) node.obj3d.name = trimmed;
+    try { pushUndo({ type: 'batchRename', label: 'Renamed group', changes: [{ kind: 'hier-group', treeNodeId: node.id, obj3dRef: node.obj3d, oldName, newName: trimmed }] }); } catch (_) {}
     rebuildTree();
   }
 }
@@ -20689,12 +21336,13 @@ document.addEventListener('contextmenu', e => {
           if (node.dataset.groupId && state.userGroups?.find(g => g.id === parseInt(node.dataset.groupId, 10))) {
             toggleGroupVisibility(parseInt(node.dataset.groupId, 10));
           } else {
-            _treeSelectGroupParts(node, 'single');
-            const anyVisible = [...state.selected].some(id => { const p = getPart(id); return p && p.visible; });
-            for (const id of state.selected) {
-              const p = getPart(id); if (!p) continue;
-              p.visible = !anyVisible; if (p.mesh) p.mesh.visible = p.visible;
-            }
+            // Toggle the group's parts directly; this must not change what
+            // is selected, and deleted parts stay untouched.
+            const gidTV = parseInt(node.dataset.groupId, 10);
+            const membersTV = (Number.isNaN(gidTV) ? [] : _treeGroupDescendants(gidTV))
+              .map(id => getPart(id)).filter(p => p && !p.deleted);
+            const anyVisible = membersTV.some(p => p.visible);
+            _applyVisibility(membersTV.map(p => [p, !anyVisible]));
             rebuildTree(); requestRender();
           }
         }
@@ -20716,7 +21364,7 @@ document.addEventListener('contextmenu', e => {
   const items = [
     { icon: 'crosshair',      label: `Frame selected${selSize > 1 ? ` (${selSize})` : ''}`, fn: frameSelected },
     { icon: 'focus',          label: 'Isolate',                fn: isolateSelected },
-    { icon: 'eye',            label: 'Toggle visibility',      fn: () => { const before = p.visible; p.visible = !p.visible; if (p.mesh) p.mesh.visible = p.visible; try { pushUndo({ type: 'vis', items: [{ partId: p.partId, before, after: p.visible }] }); } catch (_) {} rebuildTree(); } },
+    { icon: 'eye',            label: 'Toggle visibility',      fn: () => { _applyVisibility([[p, !p.visible]]); rebuildTree(); requestRender(); } },
     { icon: 'eye-off',        label: 'Hide unselected',        fn: hideUnselected },
     { icon: 'circle-plus',    label: 'Show all',               fn: showAllParts },
     '---',
@@ -20782,8 +21430,7 @@ function hideUnselected() {
   for (const p of state.parts) {
     if (p.deleted) continue;
     const before = p.visible;
-    p.visible = state.selected.has(p.partId);
-    if (p.mesh) p.mesh.visible = p.visible;
+    _setPartVisible(p, state.selected.has(p.partId));
     if (before !== p.visible) _items.push({ partId: p.partId, before, after: p.visible });
   }
   if (_items.length) {
@@ -22437,6 +23084,11 @@ function _initCustomSelects() {
         pop.appendChild(row);
       });
       document.body.appendChild(pop);
+      // A trigger near the right edge would push the popup off-screen;
+      // slide it back in, keeping an 8px margin.
+      const pw = pop.getBoundingClientRect().width;
+      const maxLeft = window.innerWidth - pw - 8;
+      if (rect.left > maxLeft) pop.style.left = Math.max(8, maxLeft) + 'px';
     });
   });
 }
@@ -22510,10 +23162,9 @@ function _initCustomSelects() {
       _ctxBuild([
         { icon: 'palette', label: 'Select all parts with this color', fn: () => { matRow.click(); } },
         { icon: 'eye-off', label: 'Hide all parts with this color',   fn: () => {
-            for (const p of state.parts) {
-              if (p.deleted) continue;
-              if ('#' + p.originalColor.getHexString() === colorHex) { p.visible = false; if (p.mesh) p.mesh.visible = false; }
-            }
+            _applyVisibility(state.parts
+              .filter(p => !p.deleted && '#' + p.originalColor.getHexString() === colorHex)
+              .map(p => [p, false]));
             rebuildTree(); requestRender();
           }
         },
@@ -23234,12 +23885,7 @@ function toggleGroupVisibility(groupId) {
     if (p && p.visible) { allHidden = false; break; }
   }
   const next = allHidden;
-  for (const partId of g.partIds) {
-    const p = getPart(partId);
-    if (!p) continue;
-    p.visible = next;
-    if (p.mesh) p.mesh.visible = next;
-  }
+  _applyVisibility([...g.partIds].map(partId => [getPart(partId), next]));
   rebuildTree(); requestRender();
 }
 
@@ -23473,12 +24119,9 @@ function _wireDeadTreeControls() {
   $('tree-hide-unsel')?.addEventListener('click', () => {
     if (!state.parts.length) return;
     if (state.selected.size === 0) { toast('Nothing selected', '', 'warn'); return; }
-    let n = 0;
-    for (const p of state.parts) {
-      if (p.deleted) continue;
-      const keep = state.selected.has(p.partId);
-      if (!keep && p.visible) { p.visible = false; if (p.mesh) p.mesh.visible = false; n++; }
-    }
+    _applyVisibility(state.parts
+      .filter(p => !p.deleted && !state.selected.has(p.partId))
+      .map(p => [p, false]));
     rebuildTree(); requestRender();
     // Visibility change is visible in the viewport — no toast.
   });
@@ -28024,8 +28667,80 @@ function _dndCommitHier(rows, t) {
       beforeNodeId = (after && after.parentId === targNode.parentId) ? after.id : null;
     }
   }
+  // Record the move so Ctrl+Z reverts it. Cloner drops push their own entry
+  // (and drag-out of a cloner is handled by the cloner), so this only
+  // records a plain move — detected by the history not having grown.
+  _detachGizmo();   // dragged meshes may be parked under the gizmo pivot
+  const prevTreeNodesDnd = _snapshotTreeNodes(all);
+  const movedDnd = [];
+  let touchesCloner = false;
+  for (const r of rows) {
+    const idx = _hierNodeIndex(r);
+    if (idx < 0) continue;
+    const n = all[idx];
+    const parentNode = n.parentId != null ? all.find(x => x.id === n.parentId) : null;
+    if (n.kind === 'cloner' || (parentNode && parentNode.kind === 'cloner')) touchesCloner = true;
+    let obj = n.obj3d;
+    if (n.kind === 'part') { const dp = getPart(n.partId); obj = dp ? dp.mesh : null; }
+    if (obj) movedDnd.push({ obj, prevParent: obj.parent });
+  }
+  if (newParentId != null && all.some(x => x.id === newParentId && x.kind === 'cloner')) touchesCloner = true;
+  const histLenDnd = state.history.length;
   _dndMoveHier(rows, newParentId, beforeNodeId);
+  const sameTree = (a, b) => a.length === b.length && a.every((n, i) => n.id === b[i].id && n.kind === b[i].kind && n.depth === b[i].depth && n.parentId === b[i].parentId);
+  if (!touchesCloner && state.history.length === histLenDnd && !sameTree(prevTreeNodesDnd, state.treeNodes)) {
+    for (const it of movedDnd) it.nextParent = it.obj.parent;
+    pushUndo({ type: 'treeMove', label: 'Move in tree', items: movedDnd, prevTreeNodes: prevTreeNodesDnd, nextTreeNodes: _snapshotTreeNodes(state.treeNodes) });
+  }
+  updateGizmo();
 }
+
+// 'treeMove' — rows dragged to a new place in the tree. attach() keeps the
+// world pose, so only the parent and the row order need restoring.
+_UndoOps.register('treeMove', {
+  undo(op) {
+    _detachGizmo();
+    for (const it of op.items) if (it.obj && it.prevParent && it.obj.parent !== it.prevParent) { try { it.prevParent.attach(it.obj); } catch (_) {} }
+    state.treeNodes = _snapshotTreeNodes(op.prevTreeNodes);
+    state.redo.push(op);
+    _finalizeUndo({ rebuildTree: true });
+  },
+  redo(op) {
+    _detachGizmo();
+    for (const it of op.items) if (it.obj && it.nextParent && it.obj.parent !== it.nextParent) { try { it.nextParent.attach(it.obj); } catch (_) {} }
+    state.treeNodes = _snapshotTreeNodes(op.nextTreeNodes);
+    state.history.push(op);
+    _finalizeUndo({ rebuildTree: true });
+  },
+});
+
+// User-group mode (flat models): the whole grouping state is small, so undo
+// keeps a copy of it from before and after the drop.
+function _ugSnap() {
+  return {
+    groups: (state.userGroups || []).map(g => ({ g, ids: [...(g.partIds || [])], refParent: g.ref ? g.ref.parent : null })),
+    parents: state.parts.filter(p => !p.deleted && p.mesh).map(p => [p, p.mesh.parent]),
+    order: state._manualOrder ? new Map(state._manualOrder) : null,
+    sortMode: state.sortMode,
+  };
+}
+function _ugApply(snap) {
+  _detachGizmo();
+  const keep = new Set(snap.groups.map(x => x.g));
+  for (const g of (state.userGroups || [])) if (!keep.has(g) && g.ref && g.ref.parent) g.ref.parent.remove(g.ref);
+  state.userGroups = snap.groups.map(x => x.g);
+  for (const x of snap.groups) {
+    x.g.partIds = new Set(x.ids);
+    if (x.g.ref && !x.g.ref.parent && x.refParent) x.refParent.add(x.g.ref);
+  }
+  for (const [p, par] of snap.parents) if (p.mesh && par && p.mesh.parent !== par) { try { par.attach(p.mesh); } catch (_) {} }
+  if (snap.order) state._manualOrder = new Map(snap.order);
+  if (snap.sortMode) state.sortMode = snap.sortMode;
+}
+_UndoOps.register('ugState', {
+  undo(op) { _ugApply(op.before); state.redo.push(op); _finalizeUndo({ rebuildTree: true }); },
+  redo(op) { _ugApply(op.after); state.history.push(op); _finalizeUndo({ rebuildTree: true }); },
+});
 
 // Core hierarchical move: extract dragged subtrees, fix depth/parentId, splice
 // in at (newParentId, beforeNodeId), reparent THREE.Object3D via attach().
@@ -28233,6 +28948,13 @@ function _hierResolveDestObj(newParentId) {
 }
 
 function _dndCommitUg(rows, t) {
+  _detachGizmo();
+  const beforeUg = _ugSnap();
+  _dndCommitUgImpl(rows, t);
+  pushUndo({ type: 'ugState', label: 'Move in tree', before: beforeUg, after: _ugSnap() });
+  updateGizmo();
+}
+function _dndCommitUgImpl(rows, t) {
   let targetUgId = null;
   let beforeKey = null;
   if (t.kind === 'root-end') {
@@ -29118,6 +29840,95 @@ setTimeout(() => _dndDecorateTree(), 0);
     return _SimplifyModifier;
   }
 
+  // meshoptimizer's simplifier (WebAssembly). It works on the index buffer
+  // and leaves the vertex buffer alone, so normals, UVs and vertex colours
+  // survive — the old SimplifyModifier path had to throw them away — and
+  // it is far faster. Loaded on first use; null if it can't be fetched.
+  let _meshopt = undefined;
+  async function _loadMeshopt() {
+    if (_meshopt !== undefined) return _meshopt;
+    try {
+      const mod = await import('meshoptimizer-simplifier');
+      await mod.MeshoptSimplifier.ready;
+      _meshopt = mod.MeshoptSimplifier.supported ? mod.MeshoptSimplifier : null;
+    } catch (e) {
+      console.warn('[decimate] meshoptimizer unavailable, using the basic simplifier:', e && e.message);
+      _meshopt = null;
+    }
+    return _meshopt;
+  }
+
+  // Reduce `geom` to about `keep` (0..1) of its triangles. Returns a new
+  // BufferGeometry that carries every attribute of the original, or null if
+  // the mesh can't be reduced.
+  function _simplifyKeepingAttributes(S, geom, keep) {
+    // An index buffer is required; weld a non-indexed mesh first (this
+    // keeps attributes and only joins vertices that match in all of them).
+    const src = geom.index ? geom : _mergeVertices(geom.clone());
+    const posAttr = src.attributes.position;
+    const vCount = posAttr.count;
+    let positions = posAttr.array;
+    if (posAttr.isInterleavedBufferAttribute || !(positions instanceof Float32Array) || posAttr.itemSize !== 3) {
+      positions = new Float32Array(vCount * 3);
+      for (let i = 0; i < vCount; i++) { positions[i * 3] = posAttr.getX(i); positions[i * 3 + 1] = posAttr.getY(i); positions[i * 3 + 2] = posAttr.getZ(i); }
+    }
+    const index = src.index.array instanceof Uint32Array ? src.index.array : new Uint32Array(src.index.array);
+    // Multi-material meshes are reduced one material range at a time so the
+    // ranges stay valid.
+    const groups = (src.groups && src.groups.length > 1)
+      ? src.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
+      : [{ start: 0, count: index.length, materialIndex: 0 }];
+    const outParts = [];
+    for (const g of groups) {
+      const sub = index.subarray(g.start, g.start + g.count);
+      const target = Math.max(3, Math.floor((sub.length / 3) * keep) * 3);
+      if (sub.length <= target) { outParts.push({ idx: sub, materialIndex: g.materialIndex }); continue; }
+      // Open edges are locked first so outlines don't creep. If that stops
+      // the reduction well short of the target (a mesh that is mostly
+      // border), run again without the lock.
+      let res = S.simplify(sub, positions, 3, target, 1.0, ['LockBorder'])[0];
+      if (res.length > target * 1.25) {
+        const free = S.simplify(sub, positions, 3, target, 1.0)[0];
+        if (free.length < res.length) res = free;
+      }
+      outParts.push({ idx: res, materialIndex: g.materialIndex });
+    }
+    let total = 0;
+    for (const o of outParts) total += o.idx.length;
+    if (total < 3) return null;
+
+    // Drop the vertices nothing points at any more and renumber the rest.
+    const remap = new Int32Array(vCount).fill(-1);
+    let used = 0;
+    for (const o of outParts) for (let i = 0; i < o.idx.length; i++) { const v = o.idx[i]; if (remap[v] < 0) remap[v] = used++; }
+    const out = new THREE.BufferGeometry();
+    for (const name of Object.keys(src.attributes)) {
+      const a = src.attributes[name];
+      const size = a.itemSize;
+      const ArrayType = (a.isInterleavedBufferAttribute || !a.array) ? Float32Array : a.array.constructor;
+      const arr = new ArrayType(used * size);
+      const direct = !a.isInterleavedBufferAttribute && a.array;
+      for (let v = 0; v < vCount; v++) {
+        const n = remap[v];
+        if (n < 0) continue;
+        if (direct) { for (let c = 0; c < size; c++) arr[n * size + c] = a.array[v * size + c]; }
+        else { for (let c = 0; c < size; c++) arr[n * size + c] = a.getComponent(v, c); }
+      }
+      out.setAttribute(name, new THREE.BufferAttribute(arr, size, !!a.normalized));
+    }
+    const IndexType = used > 65535 ? Uint32Array : Uint16Array;
+    const newIndex = new IndexType(total);
+    let w = 0;
+    for (const o of outParts) {
+      const start = w;
+      for (let i = 0; i < o.idx.length; i++) newIndex[w++] = remap[o.idx[i]];
+      if (outParts.length > 1) out.addGroup(start, o.idx.length, o.materialIndex);
+    }
+    out.setIndex(new THREE.BufferAttribute(newIndex, 1));
+    if (!out.attributes.normal) out.computeVertexNormals();
+    return out;
+  }
+
   function _stripToPositionsOnly(geom) {
     const out = new THREE.BufferGeometry();
     const pos = geom.attributes.position;
@@ -29160,16 +29971,32 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (typeof toast === 'function') toast('Decimate', 'Select parts first', 'warn', 2500);
       return;
     }
-    const strength = parseFloat(document.getElementById('decimate-strength') ? document.getElementById('decimate-strength').value : '0.5');
-    if (!(strength > 0 && strength < 1)) return;
+    // Either a share to remove (−25 … −90%) or a triangle budget for the
+    // whole selection ("Target…"), which is turned into one keep-ratio so
+    // every part gives up the same share.
+    const strengthSel = document.getElementById('decimate-strength');
+    const ids = [...sel];
+    let selTris = 0;
+    for (const id of ids) { const sp = getPart(id); if (sp && !sp.deleted && sp.mesh) selTris += sp.triCount || 0; }
+    let keep;
+    if (strengthSel && strengthSel.value === 'target') {
+      const want = parseInt((document.getElementById('decimate-target')?.value || '').replace(/[^0-9]/g, ''), 10);
+      if (!(want > 0)) { toast('Decimate', 'Type a target triangle count first', 'warn', 3000); return; }
+      if (want >= selTris) { toast('Decimate', `The selection already has ${fmtNum(selTris)} triangles`, 'info', 3000); return; }
+      keep = want / selTris;
+    } else {
+      const strength = parseFloat(strengthSel ? strengthSel.value : '0.5');
+      if (!(strength > 0 && strength < 1)) return;
+      keep = 1 - strength;
+    }
     let SM;
     try { SM = await _loadSimplifier(); }
     catch (e) {
-      if (typeof toast === 'function') toast('Decimate failed', 'SimplifyModifier load error: ' + e.message, 'error', 4000);
+      if (typeof toast === 'function') toast('Decimate failed', 'Simplifier load error: ' + e.message, 'error', 4000);
       return;
     }
+    const meshopt = await _loadMeshopt();
     const simp = new SM();
-    const ids = [...sel];
     const skipped = [];
     const failed = [];
     const undoItems = [];
@@ -29185,21 +30012,22 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (triBefore < 12) { skipped.push(p.name + ' (too few tris)'); continue; }
 
       try {
-        const stripped = _stripToPositionsOnly(geom);
-        // The modifier welds coincident vertices and then collapses `count`
-        // of them, so the count has to be a share of the WELDED vertices.
-        // It used to be taken from the un-indexed corner count (three per
-        // triangle, several times the real vertex count), which asked the
-        // modifier to remove more vertices than exist — at −50% most parts
-        // were reduced to zero triangles.
-        const welded = _mergeVertices(stripped);
-        const weldedCount = welded.attributes.position.count;
-        const targetRemoveCount = Math.min(Math.floor(weldedCount * strength), weldedCount - 4);
-        if (targetRemoveCount < 1) { skipped.push(p.name + ' (target too low)'); continue; }
-        const reduced = simp.modify(welded, targetRemoveCount);
+        let reduced = null;
+        if (meshopt) reduced = _simplifyKeepingAttributes(meshopt, geom, keep);
+        if (!reduced) {
+          // Fallback (offline, or no WebAssembly): positions only. The
+          // modifier welds coincident vertices and then collapses `count`
+          // of them, so the count has to be a share of the WELDED vertices.
+          const welded = _mergeVertices(_stripToPositionsOnly(geom));
+          const weldedCount = welded.attributes.position.count;
+          const targetRemoveCount = Math.min(Math.floor(weldedCount * (1 - keep)), weldedCount - 4);
+          if (targetRemoveCount < 1) { skipped.push(p.name + ' (target too low)'); continue; }
+          reduced = simp.modify(welded, targetRemoveCount);
+          reduced.computeVertexNormals();
+        }
         const reducedTris = reduced.index ? reduced.index.count / 3 : reduced.attributes.position.count / 3;
         if (!(reducedTris >= 1)) { skipped.push(p.name + ' (would collapse to nothing)'); continue; }
-        reduced.computeVertexNormals();
+        if (reducedTris >= triBefore) { skipped.push(p.name + ' (cannot be reduced further)'); continue; }
         reduced.computeBoundingBox();
         reduced.computeBoundingSphere();
 
@@ -29264,6 +30092,24 @@ setTimeout(() => _dndDecorateTree(), 0);
   function _updateDecCount() {
     const el = document.getElementById('dec-sel-count');
     if (el) el.textContent = state.selected ? state.selected.size : 0;
+    // "12,400 → about 6,200 triangles" for the current selection and setting.
+    const info = document.getElementById('decimate-info');
+    const sel = document.getElementById('decimate-strength');
+    const tgt = document.getElementById('decimate-target');
+    if (tgt) tgt.style.display = (sel && sel.value === 'target') ? '' : 'none';
+    if (!info || !sel) return;
+    let tris = 0, n = 0;
+    for (const id of (state.selected || [])) { const p = getPart(id); if (p && !p.deleted && p.mesh) { tris += p.triCount || 0; n++; } }
+    let text = '';
+    if (n > 0) {
+      let after;
+      if (sel.value === 'target') {
+        const want = parseInt(((tgt && tgt.value) || '').replace(/[^0-9]/g, ''), 10);
+        after = want > 0 ? Math.min(want, tris) : null;
+      } else after = Math.round(tris * (1 - parseFloat(sel.value)));
+      text = after == null ? `${fmtNum(tris)} triangles selected` : `${fmtNum(tris)} → about ${fmtNum(after)} triangles`;
+    }
+    if (info.textContent !== text) info.textContent = text;
   }
   setInterval(_updateDecCount, 200);
 
@@ -29273,3 +30119,95 @@ setTimeout(() => _dndDecorateTree(), 0);
     try { if (typeof _lucide === 'function') _lucide(); } catch (_) {}
   }, 200);
 })();
+
+// ── Startup screen extras ───────────────────────────────────────────────
+// The drop zone, Open and New-scene buttons and the recents list are wired by
+// _Welcome above (same element ids as before). This adds what the redesigned
+// screen introduced: Import, start-from-a-shape, the three option switches,
+// the recents filter and the footer links.
+(function _wireWelcomeExtras() {
+  const $id = (x) => document.getElementById(x);
+  const run = (id) => { try { _Actions.list.find(a => a.id === id)?.run(); } catch (e) { console.warn('[welcome]', e); } };
+
+  const ver = $id('wl-ver');
+  if (ver) ver.textContent = ($id('brand-menu-ver')?.textContent || '').trim();
+
+  $id('welcome-import')?.addEventListener('click', () => {
+    if (!state.parts.some(p => !p.deleted)) { run('open'); return; }   // nothing to import into yet
+    run('import');
+  });
+  // Search button on the viewport's bottom bar opens the command palette.
+  $id('vp-cmdk')?.addEventListener('click', (e) => { e.stopPropagation(); run('palette'); });
+  $id('welcome-shortcuts')?.addEventListener('click', () => run('shortcuts'));
+  $id('welcome-settings')?.addEventListener('click', () => run('settings'));
+
+  // Start from a shape: an empty scene with one primitive in it.
+  $id('welcome-shapes')?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.wl-shape');
+    if (!btn) return;
+    $id('welcome-start-empty')?.click();
+    await new Promise(r => setTimeout(r, 60));
+    try { await window._addPrimitive?.(btn.dataset.shape); } catch (err) { console.warn('[welcome] shape', err); }
+  });
+  // Same rendered thumbnails as the Add menu; a plain icon until they are ready.
+  const fillShapePics = () => {
+    for (const b of document.querySelectorAll('#welcome-shapes .wl-shape')) {
+      const pic = b.querySelector('.wl-shape-pic');
+      if (!pic || pic.querySelector('img') || pic.dataset.loading) continue;
+      if (!pic.firstChild) pic.innerHTML = '<i data-lucide="box"></i>';
+      const render = window._primThumb && window._primThumb.render;
+      if (!render) continue;
+      pic.dataset.loading = '1';
+      Promise.resolve(render(b.dataset.shape)).then((url) => {
+        if (!url) return;
+        pic.innerHTML = '';
+        const im = document.createElement('img'); im.src = url; im.alt = ''; im.draggable = false;
+        pic.appendChild(im);
+      }).catch(() => {}).finally(() => { delete pic.dataset.loading; });
+    }
+    try { _lucide(); } catch (_) {}
+  };
+
+  // Option switches mirror Settings.
+  const opts = [['wl-opt-fit', 'autoFitOnLoad'], ['wl-opt-resume', 'autoRestoreSession'], ['wl-opt-boot', 'welcomeOnBoot']];
+  const syncOpts = () => { for (const [id, key] of opts) { const el = $id(id); if (el) el.checked = _Prefs.get(key) !== false; } };
+  for (const [id, key] of opts) $id(id)?.addEventListener('change', (e) => { _Prefs.set(key, !!e.target.checked); });
+
+  // Recents filter.
+  const filter = $id('welcome-recents-filter');
+  const applyFilter = () => {
+    const list = $id('welcome-recents');
+    if (!list) return;
+    const q = (filter?.value || '').trim().toLowerCase();
+    let shown = 0, total = 0;
+    for (const row of list.children) {
+      total++;
+      const hit = !q || row.textContent.toLowerCase().includes(q);
+      row.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    }
+    const none = $id('welcome-recents-nomatch');
+    if (none) none.style.display = (q && total > 0 && shown === 0) ? '' : 'none';
+    const wrap = filter?.closest('.wl-search');
+    if (wrap) wrap.style.display = total > 4 || q ? '' : 'none';   // no point filtering a handful
+  };
+  filter?.addEventListener('input', applyFilter);
+  const recents = $id('welcome-recents');
+  if (recents) new MutationObserver(applyFilter).observe(recents, { childList: true });
+
+  // Refresh whenever the screen is shown.
+  const modal = $id('welcome-modal');
+  if (modal) {
+    const onShow = () => { if (modal.classList.contains('show')) { syncOpts(); fillShapePics(); applyFilter(); } };
+    new MutationObserver(onShow).observe(modal, { attributes: true, attributeFilter: ['class'] });
+    setTimeout(onShow, 400);
+    setTimeout(fillShapePics, 2500);    // thumbnails render a moment after boot
+  }
+})();
+
+// Regression suite: open the app with ?selftest (see tests/selftest.js).
+if (new URLSearchParams(location.search).has('selftest')) {
+  const st = document.createElement('script');
+  st.src = 'tests/selftest.js?' + Date.now();
+  document.head.appendChild(st);
+}

@@ -44,6 +44,21 @@ _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._\- ]")
 # Background conversion job registry for the /api/convert browser endpoint
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
+# Converter processes still running, by job id (kept out of JOBS, which is
+# served as JSON). /api/cancel/<id> uses this to stop one.
+PROCS: dict[str, subprocess.Popen] = {}
+
+
+def _kill_tree(proc: subprocess.Popen) -> None:
+    """Stop a converter and anything it started (its heartbeat helper)."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            proc.terminate()
+    except Exception:
+        pass
 
 # Module-level reference set by main() once the server binds. The /api/quit
 # handler reads this to schedule a clean shutdown — keeping it module-level
@@ -274,8 +289,13 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
         with JOBS_LOCK:
             JOBS[job_id]["log"].append(f"using Python: {PYTHON_BIN}")
             JOBS[job_id]["message"] = f"using Python: {PYTHON_BIN}"
+        # The converter prints UTF-8. Decoding with the Windows code page
+        # garbled its log and could raise on a path with accented letters.
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, bufsize=1, cwd=ROOT)
+                                text=True, encoding="utf-8", errors="replace",
+                                bufsize=1, cwd=ROOT)
+        with JOBS_LOCK:
+            PROCS[job_id] = proc
         for line in proc.stdout:
             line = line.rstrip()
             with JOBS_LOCK:
@@ -284,6 +304,14 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
                     JOBS[job_id]["log"] = JOBS[job_id]["log"][-200:]
                 JOBS[job_id]["message"] = line
         rc = proc.wait()
+        with JOBS_LOCK:
+            PROCS.pop(job_id, None)
+            cancelled = JOBS[job_id].get("status") == "cancelled"
+        if cancelled:
+            for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf"), dst_path):
+                try: stale.unlink(missing_ok=True)
+                except OSError: pass
+            return
         if rc != 0:
             raise RuntimeError(f"step2glb.py exited with code {rc}")
         # Drop the uploaded STEP + its XCAF binary cache — both are large
@@ -298,8 +326,14 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
             JOBS[job_id]["progress"] = 100
     except Exception as e:
         with JOBS_LOCK:
-            JOBS[job_id]["status"] = "error"
-            JOBS[job_id]["message"] = str(e)
+            PROCS.pop(job_id, None)
+            if JOBS[job_id].get("status") != "cancelled":
+                JOBS[job_id]["status"] = "error"
+                JOBS[job_id]["message"] = str(e)
+        # A failed job leaves nothing worth keeping; don't let uploads pile up.
+        for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf")):
+            try: stale.unlink(missing_ok=True)
+            except OSError: pass
 
 
 # ─── HTTP handler ─────────────────────────────────────────────────────────
@@ -339,7 +373,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         u = urlparse(self.path)
         if u.path == "/api/convert": return self._handle_convert()
         if u.path == "/api/quit":    return self._handle_quit()
+        if u.path.startswith("/api/cancel/"):
+            return self._handle_cancel(u.path.rsplit("/", 1)[-1])
         return self._json({"error": "unknown endpoint"}, 404)
+
+    def _handle_cancel(self, job_id: str):
+        """Stop a running conversion (the loader's Cancel button)."""
+        with JOBS_LOCK:
+            job = JOBS.get(job_id)
+            proc = PROCS.get(job_id)
+            if job is None:
+                return self._json({"error": "not found"}, 404)
+            if job.get("status") in ("queued", "running"):
+                job["status"] = "cancelled"
+                job["message"] = "cancelled"
+        if proc is not None:
+            _kill_tree(proc)
+        return self._json({"ok": True})
 
     def _handle_quit(self):
         """Graceful shutdown triggered by the in-app Quit menu item.

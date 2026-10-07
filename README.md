@@ -218,17 +218,32 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v0.9.0** — a *reliability* release. A stress test on a 1,583-part /
-5.4M-triangle assembly and three code audits found tools that destroyed
-geometry, exports that ignored edits, and actions Ctrl+Z could not undo.
+**v0.9.0** — a *reliability* release, plus a reworked interface. A stress
+test on a 1,583-part / 5.4M-triangle assembly and three code audits found
+tools that destroyed geometry, exports that ignored edits, and actions
+Ctrl+Z could not undo.
 
-- ![fix][fix] **Decimate** removed far more than asked (most parts ended at zero triangles) and its result never reached the export. Both fixed.
-- ![fix][fix] **Save scene** now keeps hidden parts, camera, view settings, measurements, real names and the hierarchy across a round trip.
-- ![fix][fix] **Undo / redo** added for Decimate, Recenter, Bake transforms, Center pivot, Recompute normals and Delete empty groups.
-- ![fix][fix] **Flatten and "Delete empty groups"** rebuilt to follow the tree; grouping across levels no longer drags parts into the wrong group.
-- ![fix][fix] **Export** no longer bakes Wireframe / X-ray / Heatmap into the file, follows Recenter and Center pivot, and PLY no longer hangs in a background tab.
-- ![polish][polish] **One button scale**, restyled menus, a blue accent, readable secondary text, filled selection rows, click-to-measure, and a full proofreading pass.
+- ![fix][fix] **Decimate** removed far more than asked (most parts ended at zero triangles) and its result never reached the export. It now runs on meshoptimizer, keeps normals / UVs / colours, and takes a triangle target.
+- ![fix][fix] **Save scene** keeps hidden parts, camera, view settings, measurements, real names and the hierarchy across a round trip.
+- ![fix][fix] **Undo / redo** covers every editing action: geometry tools, typed transforms, tree drag-and-drop, visibility, materials, groups.
+- ![fix][fix] **Flatten and "Delete empty groups"** follow the tree; grouping across levels no longer drags parts into the wrong group; Import → Append keeps the existing tree.
+- ![fix][fix] **Export** no longer bakes Wireframe / X-ray / Heatmap into the file, follows Recenter and Center pivot, includes Cloner copies, and PLY no longer hangs in a background tab.
+- ![perf][perf] **Selection is immediate** on large assemblies (about 140 ms → under 15 ms per click on the test model); tree rows select on press and heavy outlines are prepared in the background.
+- ![polish][polish] **Interface** — one button scale, Figma-style menus, Plasticity-style viewport toolbars, a new startup screen, zoom-adaptive floor grid, blue accent, bundled Inter.
+- ![new][new] **Self-test** — `?selftest` runs 25 regression tests inside the live app.
 - ![docs][docs] Renamed to **MeshOptimiser** throughout. See [CHANGELOG.md](CHANGELOG.md) for the full list and the known issues.
+
+---
+
+## 🧪 Self-test
+
+Open the app with `?selftest` (`http://localhost:4242/?selftest`) to run the
+regression suite inside the live app. It drives the tree, toolbar, dialogs
+and context menu like a user would and checks undo/redo, exports, save
+round trips and more; results appear in a panel at the bottom right and in
+the console. `?selftest=groups` runs only the tests whose name contains
+"groups". Nothing is downloaded — exports are captured in memory. Add a
+test to `tests/selftest.js` whenever a bug is fixed.
 
 ---
 

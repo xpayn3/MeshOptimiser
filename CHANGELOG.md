@@ -10,9 +10,12 @@ v0.8.0 modernised the plumbing. v0.9.0 is a *reliability* release: a
 stress test on a 1,583-part / 5.4M-triangle assembly plus three code
 audits turned up tools that destroyed geometry, exports that ignored
 edits, and a group of actions that Ctrl+Z could not undo. Those are
-fixed. The interface also gets one button scale, readable secondary
-text, and a full proofreading pass. The app is now called
-**MeshOptimiser** everywhere.
+fixed, and a regression suite now ships with the app to keep them
+fixed. Decimation was rebuilt on meshoptimizer, selection on large
+models is immediate, and the interface was reworked: one button scale,
+Figma-style menus, Plasticity-style viewport toolbars, a new startup
+screen and a bundled font. The app is now called **MeshOptimiser**
+everywhere.
 
 **Data loss and wrong output**
 
@@ -58,6 +61,20 @@ text, and a full proofreading pass. The app is now called
 - ![fix][fix] An export that fails before the writer starts now takes
   the loader down and reports the error instead of leaving
   "Preparing export…" on screen.
+- ![fix][fix] **Import → Append keeps the existing tree** instead of
+  moving every existing part into "Untraced"; totals and model size
+  cover the whole scene afterwards. A failed load no longer turns the
+  next Open into an append, or replaces the file Revert reloads.
+- ![fix][fix] **Cloner copies are exported and saved** (only the source
+  part used to be written). Exports also reuse one material per
+  (material, colour) pair instead of one per part, "Origin: bbox centre"
+  is centred correctly, and a merged export keeps mirrored parts facing
+  outward.
+- ![fix][fix] **Cancel stops a STEP conversion** — the loader's Cancel
+  ends the polling and kills the converter on the server
+  (`POST /api/cancel/<job>`); opening another file does the same. A
+  conversion can no longer finish later and replace the scene, and the
+  loader no longer polls forever after a server restart.
 
 **Undo / redo**
 
@@ -73,6 +90,48 @@ text, and a full proofreading pass. The app is now called
 - ![fix][fix] A change too large to keep an undo copy of now clears the
   history (with a notice) instead of leaving Ctrl+Z pointing at an
   older step.
+- ![fix][fix] **The remaining gaps are closed** — values typed into the
+  transform panel (steppers, wheel and Reset included; a held stepper is
+  one step), tree drag-and-drop, the eye icon on a group row and every
+  other visibility toggle, Materials-panel Add / Duplicate / Merge /
+  Delete / presets, context-menu "Rename group" and deleting an empty
+  group are all undoable.
+- ![fix][fix] **Visibility toggles reach instanced parts** — the eye
+  icon, Hide unselected, group toggles and hide-by-colour all go through
+  one helper.
+
+**Decimate**
+
+- ![new][new] **meshoptimizer simplifier** — reduction runs on the index
+  buffer and keeps normals, UVs and vertex colours (the old path
+  stripped parts to bare positions). Multi-material parts keep their
+  material ranges. Falls back to the basic simplifier offline.
+- ![new][new] **Target…** — a triangle budget for the whole selection,
+  next to the −25 … −90% presets, with a live "12,400 → about 6,200
+  triangles" readout.
+
+**Speed**
+
+- ![perf][perf] **Selection is immediate on large models.** Every
+  selection change re-created every icon in the document (about 90 ms on
+  a 1,500-part tree); icons are now rendered once. Selection outlines no
+  longer block the click: cached edges are drawn at once, small parts
+  are built inline within a few milliseconds, and anything heavier gets
+  a bounding box while its edges are computed in a worker. On the
+  1,583-part assembly a click went from ~140 ms to under 15 ms, and the
+  first click on a 125k-triangle part from a one-second freeze to none.
+- ![perf][perf] **Highlight and gizmo appear with the press.** A tree row
+  is selected when the mouse button goes down rather than when it comes
+  back up, and the outline and gizmo are rebuilt before the next paint
+  instead of one frame later. Outlines of heavy parts are computed in
+  the background after a model loads, so the first click on a large
+  part shows its real outline at once. Measured on the same assembly:
+  selected 4–8 ms after the press, outline and gizmo ready by 15 ms.
+- ![perf][perf] **Hovering the parts tree keeps up with the pointer.**
+  Finding the row under the cursor walked all 1,500+ rows — about 7 ms
+  each time, several times per mouse move, so a row lit up some 22 ms
+  late. Off-screen rows are now skipped (`content-visibility`); the same
+  measurement is 0.3 ms and hover starts within about 2 ms.
 
 **Groups, Flatten and cleanup**
 
@@ -115,6 +174,15 @@ text, and a full proofreading pass. The app is now called
   Optimize) would not collapse.
 - ![polish][polish] The Measurements card only appears while there is a
   measurement to list.
+- ![fix][fix] Adding a shape highlighted the previously selected row in
+  the tree instead of the new part.
+- ![fix][fix] Undoing the creation of a selected group left Properties
+  showing a group that no longer existed ("Group -2").
+- ![fix][fix] Opening the Export menu flipped the arrow on the **File**
+  button instead of its own (both wrappers share a class and the code
+  took the first one).
+- ![polish][polish] The "Instances promoted" notice goes to the log
+  console instead of popping a toast on every click.
 
 **Interface**
 
@@ -124,22 +192,64 @@ text, and a full proofreading pass. The app is now called
   40px, text from 10 to 13px and radius from 4 to 8px depending on the
   panel. Full-width action buttons are left-aligned so their icons form
   one column.
-- ![polish][polish] **Readable secondary text** — tertiary text (labels,
-  triangle counts, status bar) measured about 3:1 against the 4.5:1
-  minimum and now passes. Accent-coloured text uses a lighter tint;
-  fills and borders keep the brand colour.
-- ![polish][polish] **Selected rows** get a filled background as well as
-  the label colour, and keyboard focus shows one consistent ring.
-- ![polish][polish] More room at the right edge of the parts list.
-- ![polish][polish] The top bar uses the same dark surface as the two
-  sidebars.
+- ![polish][polish] **Viewport toolbars** — two dark pills in the manner
+  of Plasticity: tools down the left edge, display controls along the
+  bottom centre with a search button that opens the command palette.
+  Contextual shortcut tips sit, faintly, at the bottom right; the
+  triangle readout moved to the top right.
+- ![polish][polish] **Top bar** — Add, Cloner and Fit are gone (shapes
+  are added from the tool pill, Cloner from the command palette);
+  Screenshot and Render sit on the right, ending at the viewport's
+  edge. The status bar spans the viewport only, so both sidebars run
+  to the bottom of the window.
+- ![polish][polish] **Startup screen** redesigned in two columns: drop
+  zone, Open / Import / New, start from a shape, and three option
+  switches on the left; resume and a filterable recent-files list on
+  the right.
+- ![polish][polish] **Floor grid** adapts to zoom the way Cinema 4D,
+  Blender and Houdini do: finer lines fade out and the next decade
+  takes over, so density on screen stays constant and the horizon no
+  longer shimmers. Quieter overall.
 - ![polish][polish] **Menus restyled** — every dropdown and context menu
   is a dark rounded panel with a solid accent bar under the pointer and
   white text; shortcuts are plain text at the right, and menus that pick
   a value mark the current one with a check.
-- ![polish][polish] **New primary colour** — the accent is now blue
-  (`#0d99ff`) instead of indigo, across buttons, sliders, highlights and
-  the primitive thumbnails.
+- ![polish][polish] **One surface for everything that floats** — menus,
+  popovers, tooltips, toasts, dialogs and windows take their colour,
+  radius, ring and shadow from a single set of `--surface-*` tokens
+  instead of each defining its own.
+- ![polish][polish] **Colour and type** — the accent is blue (`#0d99ff`)
+  instead of indigo; tertiary text (labels, triangle counts, status
+  bar) measured about 3:1 against the 4.5:1 minimum and now passes;
+  nothing in the interface is bold; **Inter is bundled**
+  (`vendor/inter`, SIL Open Font License) so the app looks the same on
+  every machine.
+- ![polish][polish] **Parts tree** — neutral icons, selection shown on
+  the label and icon in the accent blue, group rows show their part
+  count, more room at the right edge. Only the row that was clicked is
+  bright: clicking a group hints the parts inside it instead of lighting
+  them all up, and parents of a selected part are hinted the same way.
+- ![polish][polish] **Shape picker** uses flat line icons like the rest
+  of the toolbar (it showed small shaded renders) and opens beside its
+  button.
+- ![polish][polish] Properties rows fit on one line (Diagonal removed),
+  the viewport has rounded corners, the right sidebar scrolls without a
+  scrollbar and clips its cards on rounded corners, the app icon is the
+  same size as the other top-bar buttons, sliders keep the normal
+  cursor, and keyboard focus shows one consistent ring.
+- ![fix][fix] **Small windows** — the right sidebar was pushed off the
+  edge when the window got narrow (the status bar's text held the
+  viewport column open). The column now shrinks; the status bar drops
+  the vertex and memory counts, then the file name, instead of wrapping
+  or overlapping; the shortcut tips fold into one column and move above
+  the bottom toolbar rather than sitting on top of it.
+
+**Testing**
+
+- ![new][new] **`tests/selftest.js`** — open the app with `?selftest` to
+  run 25 regression tests inside the live app (groups, flatten, every
+  undo path, export, save round trip, import-append, decimate,
+  shortcuts, selection speed). `?selftest=groups` runs a subset.
 
 **Copy**
 
@@ -160,16 +270,12 @@ text, and a full proofreading pass. The app is now called
 
 **Known issues**
 
-- No undo yet for: values typed into the transform panel, tree
-  drag-and-drop, the eye icon on a group row, Materials-panel actions
-  (Add, Duplicate, Merge, Delete, presets) and context-menu "Rename
-  group". Ctrl+Z after any of these undoes the action before it.
-- Import → Append replaces the existing tree hierarchy.
-- Cloner output is not included in exports or saved scenes.
-- Cancel does not stop a STEP conversion that is already running.
-- The eye icon on a single part and "Hide unselected" have no visible
-  effect on instanced parts.
 - Merge cannot be redone after an undo.
+- Dragging a part out of a cloner is not undoable, and undoing a cloner
+  does not always return its sources to their original group.
+- Values typed into the transform panel do not refresh a group's stored
+  origin on undo.
+- `serve.py` never clears converted files out of `inbox/`.
 
 ## v0.8.0
 

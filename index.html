@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MeshOptimiser</title>
+<link rel="preload" href="vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+@font-face{font-family:'Inter';src:url('vendor/inter/InterVariable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+
 :root{
   /* ── Design tokens ──────────────────────────────────────────────────────
      Single source of truth for the app's visual language. Every component
@@ -109,13 +112,17 @@
   /* Font stack — sans only. Monospace was retired; numeric alignment is
      handled via font-variant-numeric:tabular-nums where digits need to line
      up (counters, transform inputs). */
-  --font-sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
+  /* Inter ships with the app (vendor/inter), so the interface looks the same
+     on every machine; the system fonts are only a fallback while it loads. */
+  --font-sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 
   /* Font weights */
+  /* No bold in the interface: labels, buttons and menu items are regular;
+     only headings and titles step up, and only to medium. */
   --fw-regular:400;
-  --fw-medium:500;
-  --fw-semibold:600;
-  --fw-bold:700;
+  --fw-medium:400;
+  --fw-semibold:500;
+  --fw-bold:600;
 
   /* Line heights — semantic ramp from flat (icons/inline labels) to loose (help text) */
   --lh-flat:1;          /* badges, tightly stacked icons */
@@ -1895,7 +1902,7 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
   font-size:var(--btn-fs-sm);line-height:1;white-space:nowrap;
 }
 /* lg — dialog footers and welcome actions */
-.dlg-btn,#welcome-pick,#welcome-start-empty,
+.dlg-btn,
 .modal-f .btn,.modal-f .tbtn,.exp-content-f .tbtn{
   box-sizing:border-box;height:var(--btn-h-lg);min-height:var(--btn-h-lg);padding:0 var(--btn-px-lg);
   border-radius:var(--btn-r-lg);font-size:var(--btn-fs-lg);line-height:1;
@@ -1979,13 +1986,317 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
 .vp-prim-pop-item:hover img{filter:saturate(0) brightness(2.4)}
 /* value menus: check-mark column at the left */
 .cs-opt,.vp-pill-item{justify-content:flex-start;gap:8px}
-.cs-opt::before,.vp-pill-item::before{content:'';flex:0 0 12px;width:12px;font-size:12px;line-height:1;text-align:center}
-.cs-opt.cs-sel::before,.vp-pill-item.active::before{content:'¹3'}
+.cs-opt::before,.vp-pill-item::before{content:'';flex:0 0 12px;width:12px;height:12px}
+/* the check is drawn, not typed, so it looks the same in every font */
+.cs-opt.cs-sel::before,.vp-pill-item.active::before{background:currentColor;
+  -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.2 6.4l2.6 2.6 5-5.6' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/12px 12px no-repeat;
+  mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.2 6.4l2.6 2.6 5-5.6' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/12px 12px no-repeat}
 .cs-opt.cs-sel,.vp-pill-item.active{color:var(--tx);background:transparent}
 .cs-opt.cs-sel::after{display:none}
 .cs-opt .cs-logo{margin-left:auto}
 .vp-pill-item .vp-pill-item-kbd{margin-left:auto}
 .vp-pill-item.active:hover,.cs-opt.cs-sel:hover{background:var(--ac);color:var(--tx-on-accent)}
+/* Browser defaults make these 700; keep them on the scale above. */
+strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
+/* Sliders keep the normal arrow: no grab / grabbing hand on the thumb. */
+input[type=range],input[type=range]::-webkit-slider-thumb,input[type=range]::-moz-range-thumb,
+input[type=range]:active,input[type=range]:active::-webkit-slider-thumb,input[type=range]:active::-moz-range-thumb{cursor:default!important}
+/* Properties rows: the label never wraps and the value takes the rest of
+   the row, so a size like "93.42 × 93.42 × 93.42 mm" fits on one line. */
+.prop-grid{grid-template-columns:14px auto minmax(0,1fr);gap:9px 10px;font-size:12px}
+.prop-grid .prop-label{white-space:nowrap;color:var(--tx2)}
+.prop-grid .prop-value{max-width:none;min-width:0;font-size:12px;color:var(--tx)}
+/* Tree icons are neutral: the row's kind is told by the icon's shape and
+   the indent, not by colour. Colour is kept for selection only. */
+.tree-typeicon.asm{color:var(--tx2)}
+.tree-typeicon.part,.tree-typeicon.inst{color:var(--tx3)}
+.tree-node.is-group,.tree-node.is-group:hover{background:transparent}
+.tree-node.is-group:hover{background:rgba(255,255,255,.03)}
+.tree-node.is-group .tree-label{color:var(--tx)}
+/* Selection is shown on the label and the icon only — no filled strip. */
+.tree-node.selected,.tree-node.is-group.selected{background:transparent}
+.tree-node.selected:hover,.tree-node.is-group.selected:hover{background:rgba(255,255,255,.03)}
+.tree-node.selected .tree-iconcol{background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%)}
+.tree-node.selected:hover .tree-iconcol{background:linear-gradient(90deg,transparent 0,var(--bg1) 12px,var(--bg1) 100%)}
+.tree-node.selected .tree-label{color:var(--ac-text)}
+.tree-node.selected .tree-typeicon{color:var(--ac-text)}
+.tree-node.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 55%, var(--tx2))}
+.tree-node.ancestor-selected .tree-typeicon{color:color-mix(in srgb, var(--ac-text) 55%, var(--tx3))}
+.mac-input{box-sizing:border-box;width:100%;height:var(--btn-h-md);padding:0 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--btn-r-md);color:var(--tx);font-size:var(--btn-fs-md);outline:none}
+.mac-input:focus{border-color:var(--ac)}
+.mac-input::placeholder{color:var(--tx3)}
+/* What is selected reads bright; the groups above it are only hinted. */
+.tree-node.selected .tree-label{color:#7cc8ff}
+.tree-node.selected .tree-typeicon{color:#7cc8ff}
+.tree-node.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 26%, var(--tx2))}
+.tree-node.ancestor-selected .tree-typeicon{color:color-mix(in srgb, var(--ac-text) 26%, var(--tx3))}
+
+/* ── Startup screen ──────────────────────────────────────────────────────
+   Two columns: start something (drop, open, import, new, shapes, options)
+   on the left; pick up where you left off (resume, searchable recents) on
+   the right. Collapses to one column on a narrow window. */
+.wl-modal{width:min(860px,calc(100vw - 32px))}
+.wl-head{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-right:36px}
+.wl-mark{width:36px;height:36px;border-radius:10px;background:var(--ac);display:grid;place-items:center;flex:0 0 auto}
+.wl-mark svg{width:19px;height:19px;stroke:#fff;fill:none;stroke-width:2}
+.wl-title{font-size:16px;font-weight:var(--fw-semibold);color:var(--tx);display:flex;align-items:baseline;gap:8px}
+.wl-ver{font-size:11px;font-weight:var(--fw-regular);color:var(--tx3)}
+.wl-tag{font-size:12px;color:var(--tx2);margin-top:1px}
+.wl-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px}
+.wl-col{min-width:0;display:flex;flex-direction:column}
+.wl-drop{border:1px dashed var(--bd2);border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;background:var(--bg2);display:flex;flex-direction:column;align-items:center;gap:8px;transition:border-color var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out)}
+.wl-drop:hover,.wl-drop.drag-over{border-color:var(--ac);background:var(--ac-tint-08)}
+.wl-drop>svg,.wl-drop>i{width:26px;height:26px;stroke:var(--ac-text);fill:none;stroke-width:1.6}
+.wl-drop-title{font-size:13px;color:var(--tx)}
+.wl-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
+.wl-chips span{font-size:10.5px;letter-spacing:.02em;color:var(--tx2);background:var(--bg3);border:1px solid var(--bd);border-radius:5px;padding:2px 6px}
+.wl-actions{display:flex;flex-direction:column;gap:2px;margin-top:12px}
+.wl-act{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--tx)}
+.wl-act svg,.wl-act i{width:15px;height:15px;stroke:var(--tx2);fill:none;stroke-width:2;flex:0 0 auto}
+.wl-act span{flex:1 1 auto}
+.wl-act kbd{font:inherit;font-size:11px;color:var(--tx3)}
+.wl-act:hover,.wl-act:focus-visible{background:var(--ac);color:#fff}
+.wl-act:hover svg,.wl-act:focus-visible svg,.wl-act:hover kbd,.wl-act:focus-visible kbd{stroke:#fff;color:#fff}
+.wl-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);margin:16px 0 7px}
+.wl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.wl-shape{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px 7px;border-radius:9px;background:var(--bg2);border:1px solid var(--bd);cursor:pointer;font-size:11px;color:var(--tx2);transition:border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+.wl-shape:hover,.wl-shape:focus-visible{border-color:var(--ac);color:var(--tx);background:var(--bg3)}
+.wl-shape-pic{width:34px;height:34px;display:grid;place-items:center}
+.wl-shape-pic img{width:34px;height:34px;object-fit:contain}
+.wl-shape-pic svg{width:20px;height:20px;stroke:var(--tx3);fill:none;stroke-width:1.6}
+.wl-opts{display:flex;flex-direction:column;gap:2px}
+.wl-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;height:30px;padding:0 2px;font-size:12.5px;color:var(--tx);cursor:pointer}
+.wl-opt input{position:absolute;opacity:0;pointer-events:none}
+.wl-opt .switch{flex:0 0 28px;width:28px;height:16px;border-radius:999px;background:var(--bg4);position:relative;transition:background var(--dur-base) var(--ease-out)}
+.wl-opt .switch::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:transform var(--dur-base) var(--ease-out)}
+.wl-opt input:checked + .switch{background:var(--ac)}
+.wl-opt input:checked + .switch::after{transform:translateX(12px)}
+.wl-opt input:focus-visible + .switch{outline:2px solid var(--ac-text);outline-offset:2px}
+.wl-recents-head{display:flex;align-items:center;justify-content:space-between;margin:14px 0 7px}
+#welcome-resume:empty + .wl-recents-head{margin-top:0}
+.wl-search{position:relative;margin-bottom:8px}
+.wl-search svg,.wl-search i{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;stroke:var(--tx3);fill:none;stroke-width:2}
+.wl-search input{box-sizing:border-box;width:100%;height:30px;padding:0 10px 0 28px;background:var(--bg2);border:1px solid var(--bd);border-radius:7px;color:var(--tx);font-size:12px;outline:none}
+.wl-search input:focus{border-color:var(--ac)}
+.wl-recents{display:flex;flex-direction:column;gap:6px;max-height:268px;overflow-y:auto;padding-right:2px}
+.wl-recents-empty{font-size:12px;color:var(--tx3);padding:10px 2px}
+.wl-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:18px;padding-top:12px;border-top:1px solid var(--bd);font-size:11.5px;color:var(--tx3)}
+.wl-foot kbd{font:inherit;color:var(--tx2);background:var(--bg3);border:1px solid var(--bd);border-radius:4px;padding:1px 5px;margin-right:5px}
+.wl-foot code{font-family:var(--font-sans);color:var(--ac-text)}
+.wl-dot{margin:0 8px;opacity:.6}
+.wl-link{all:unset;cursor:pointer;color:var(--tx2)}
+.wl-link:hover,.wl-link:focus-visible{color:var(--ac-text);text-decoration:underline}
+@media (max-width:720px){.wl-cols{grid-template-columns:1fr}.wl-recents{max-height:180px}}
+
+/* ── Viewport toolbars, Plasticity-style ─────────────────────────────────
+   Two dark pills instead of rows of boxed buttons: tools down the left
+   edge, display controls along the bottom centre. Buttons inside are bare
+   icons; the pill is the only chrome. */
+.vpc.tl:not(#vp-perf),.vpc.tr{
+  background:rgba(17,17,17,.94);border-radius:11px;padding:4px;gap:2px;
+  box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06);
+}
+.vpc.tl:not(#vp-perf){top:50%;left:8px;transform:translateY(-50%)}
+.vpc.tr{top:auto;right:auto;bottom:10px;left:50%;transform:translateX(-50%);flex-direction:row;align-items:center}
+.vpc .vpb{
+  --btn-tint:var(--tx2);
+  width:30px;height:30px;flex:0 0 30px;background:transparent;border:0;border-radius:7px;
+  backdrop-filter:none;color:var(--tx2);
+}
+.vpc .vpb:hover{background:rgba(255,255,255,.09);border:0;color:var(--tx)}
+.vpc .vpb.active{background:var(--ac);border:0;color:#fff}
+.vpc .vpb svg{width:16px;height:16px}
+.vpc.tl .vpb-sep{height:1px;width:18px;margin:3px auto;background:rgba(255,255,255,.1)}
+.vpc.tr .vpb-sep{width:1px;height:18px;margin:0 3px;background:rgba(255,255,255,.1)}
+/* popovers of the bottom bar open upwards */
+.vpc.tr #vp-settings-pop,.vpc.tr #vp-materials-pop{top:auto;bottom:44px;right:0;transform-origin:bottom right}
+.vpc.tl .vp-prim-pop{left:42px}
+/* the triangle readout sits clear of the bottom bar */
+.vpc.br{bottom:10px}
+
+/* ── Shortcut tips, bottom-right of the viewport ─────────────────────────
+   A short list of what the keys do right now (it changes with the
+   selection and the active tool), each as a key cap and a label. Filled
+   top to bottom in two columns. Never intercepts the mouse. */
+.vp-tips{display:grid;grid-auto-flow:column;grid-template-rows:repeat(var(--tip-rows,4),auto);column-gap:22px;row-gap:6px;
+  justify-content:end;pointer-events:none;margin:0 6px 8px 0;font-size:11.5px;color:var(--tx2);white-space:nowrap}
+.vp-tips:empty{display:none}
+.vp-tips .vp-tip{display:flex;align-items:center;gap:7px}
+.vp-tips .vp-hint-keys{display:inline-flex;align-items:center;gap:3px}
+.vp-tips .vp-kbd{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;box-sizing:border-box;padding:0 5px;
+  font:inherit;font-size:11px;color:var(--tx);background:rgba(255,255,255,.09);border:0;border-radius:4px;line-height:1}
+.vp-tips .vp-kbd-join{opacity:.45;font-size:10px}
+.vp-tips .vp-hint-lbl{color:var(--tx2)}
+/* The right sidebar scrolls (wheel, trackpad, keys) without showing a
+   scrollbar, so opening a card doesn't shift everything sideways. */
+#sidebar-right{scrollbar-width:none}
+#sidebar-right::-webkit-scrollbar{display:none;width:0;height:0}
+/* The viewport is a rounded panel set into the dark frame; the dividing
+   lines beside it are no longer needed. */
+#viewport{border-radius:8px;overflow:hidden}
+#sidebar-left{border-right-color:transparent}
+#sidebar-right{border-left-color:transparent}
+#tb{border-bottom-color:transparent}
+/* bottom bar: a search button on its own, then the display controls */
+.vpc.tr{background:transparent;box-shadow:none;padding:0;gap:6px}
+.vp-bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:11px;background:rgba(17,17,17,.94);box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.06)}
+/* The status bar uses the same dark surface as the top bar and sidebars. */
+#sb{background:var(--bg)}
+/* Startup screen — room to breathe */
+.wl-modal{width:min(980px,calc(100vw - 48px))}
+.wl-modal .modal-b{padding:32px 36px 28px}
+.wl-modal #welcome-close{top:22px!important;right:22px!important}
+.wl-head{gap:14px;margin-bottom:28px}
+.wl-mark{width:42px;height:42px;border-radius:12px}
+.wl-mark svg{width:22px;height:22px}
+.wl-title{font-size:18px}
+.wl-tag{font-size:13px;margin-top:3px}
+.wl-cols{gap:40px}
+.wl-drop{padding:30px 20px;gap:12px;border-radius:14px}
+.wl-drop>svg,.wl-drop>i{width:30px;height:30px}
+.wl-drop-title{font-size:14px}
+.wl-chips{gap:6px}
+.wl-chips span{font-size:11px;padding:3px 8px}
+.wl-actions{gap:4px;margin-top:18px}
+.wl-act{height:40px;padding:0 12px;gap:12px;font-size:13.5px;border-radius:8px}
+.wl-act svg,.wl-act i{width:16px;height:16px}
+.wl-act kbd{font-size:12px}
+.wl-label{font-size:11px;margin:26px 0 12px}
+.wl-shapes{gap:10px}
+.wl-shape{padding:14px 6px 12px;gap:8px;font-size:12px;border-radius:10px}
+.wl-shape-pic,.wl-shape-pic img{width:40px;height:40px}
+.wl-opts{gap:6px}
+.wl-opt{height:36px;font-size:13.5px}
+.wl-opt .switch{flex:0 0 32px;width:32px;height:18px}
+.wl-opt .switch::after{width:14px;height:14px}
+.wl-opt input:checked + .switch::after{transform:translateX(14px)}
+.wl-recents-head{margin:26px 0 12px}
+.wl-search{margin-bottom:12px}
+.wl-search input{height:34px;font-size:13px}
+.wl-recents{gap:10px;max-height:320px}
+.wl-foot{margin-top:30px;padding-top:18px;font-size:12px}
+/* The command palette's field is the whole bar; it needs no focus box of its own. */
+#cmdk-input,#cmdk-input:focus,#cmdk-input:focus-visible{outline:none!important;border:0!important;box-shadow:none!important}
+/* Layout: the status bar belongs to the viewport column only; both
+   sidebars run from under the top bar to the bottom of the window. */
+#sidebar-left{grid-column:1;grid-row:2 / 4}
+#viewport{grid-column:2;grid-row:2}
+#sidebar-right{grid-column:3;grid-row:2 / 4}
+#sb{grid-column:2;grid-row:3}
+/* The log console slides up inside the viewport column and is fully out of
+   sight when closed (its top edge used to rest behind the status bar, which
+   no longer spans the sidebars). */
+#log-console{left:var(--side-l-w,0px);right:var(--side-r-w,0px);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform .2s var(--ease-out),visibility 0s linear .2s}
+#log-console.show{transform:translateY(0);visibility:visible;transition:transform .2s var(--ease-out),visibility 0s}
+/* Triangle / part readout sits in the viewport's top-right corner. */
+.vpc.vp-topright{top:8px;right:8px;flex-direction:column;align-items:flex-end;pointer-events:none}
+.vpc.vp-topright .vp-info{pointer-events:auto}
+/* Shortcut tips are a quiet reference, not part of the scene. */
+.vp-tips{opacity:.5}
+.vp-tips .vp-kbd{background:rgba(255,255,255,.06);color:var(--tx2)}
+.vp-tips .vp-hint-lbl{color:var(--tx3)}
+/* Add and Cloner are no longer in the top bar. Shapes are added from the
+   viewport's tool pill; Cloner is in the command palette (Ctrl+K). The
+   elements stay in the page because the shape thumbnails and the cloner
+   wiring are built from them. */
+#tb .add-prim-wrap,#tb #btn-cloner{display:none!important}
+/* Top bar: Screenshot and Render sit on the right, beside the renderer switch. */
+#tb .spacer{order:1}
+#tb #tg-screenshot,#tb #tg-render{order:2}
+#tb .spacer ~ *:not(#tg-screenshot):not(#tg-render){order:3}
+/* The renderer switch takes exactly the right sidebar's width, so the
+   Screenshot / Render buttons before it end at the viewport's right edge.
+   (12px is the bar's own padding, 6px its gap.) */
+#tb .spacer ~ *:not(#tg-screenshot):not(#tg-render):last-child,
+#tb #stat-renderer,#tb .stat-renderer{flex:0 0 calc(var(--side-r-w) - 18px);box-sizing:border-box;display:flex;justify-content:flex-end;min-width:0}
+/* The shape picker opens beside the Add button at the top of the tool pill,
+   not underneath the pill. */
+.vpc.tl .vp-prim-pop{top:0;left:46px}
+/* The right sidebar's scrolling area is inset and rounded, so a card that
+   scrolls out at the top or bottom is cut with round corners rather than a
+   straight line. (The inset replaces the padding it had before, so the cards
+   keep their width.) */
+#sidebar-right{margin:12px;padding:0;border:0;border-radius:12px}
+/* Shape picker and Add button: flat line icons, like the rest of the toolbar. */
+.prim-ico{width:16px;height:16px;flex:0 0 16px;display:block}
+.vp-prim-pop-item .prim-ico{color:var(--tx2)}
+.vp-prim-pop-item:hover .prim-ico{color:#fff}
+#vp-add-prim.has-icon::before{display:none}
+#vp-add-prim .vp-add-ico{display:grid;place-items:center;pointer-events:none}
+#vp-add-prim.has-icon #vp-add-prim-img{display:none}
+
+/* ── Floating surfaces: one set of tokens ────────────────────────────────
+   Everything that floats above the page draws from these: menus, popovers,
+   tooltips, toasts, dialogs and windows. Same surface colour, same hairline
+   ring, same shadow family; only the corner radius differs between small
+   things (menus, popovers) and windows. Change a token and all follow. */
+:root{
+  --surface-pop:#1e1e1e;                              /* background of every floating surface */
+  --surface-pop-r:13px;                               /* menus, popovers, tooltips */
+  --surface-win-r:14px;                               /* dialogs and windows */
+  --surface-ring:0 0 0 1px rgba(255,255,255,.07);     /* hairline edge instead of a border */
+  --surface-shadow:0 12px 36px rgba(0,0,0,.55);       /* small surfaces */
+  --surface-shadow-win:0 24px 64px rgba(0,0,0,.6);    /* windows */
+  --surface-line:rgba(255,255,255,.07);               /* dividers inside a surface */
+  --surface-inset:rgba(0,0,0,.2);                     /* footers / wells inside a surface */
+  --surface-bar:rgba(17,17,17,.94);                   /* toolbars floating over the viewport */
+  --menu-bg:var(--surface-pop);--menu-r:var(--surface-pop-r);
+}
+/* small surfaces */
+.export-menu,.vp-pill-menu,.vp-prim-pop,.cs-pop,#ctx-menu,
+#vp-settings-pop,#vp-materials-pop,.mat-presets-menu,.mat-tex-pop,.brn-token-pop,.fit-pop,
+.brand-menu,.tip-pop{
+  background:var(--surface-pop);border:0;border-radius:var(--surface-pop-r);
+  box-shadow:var(--surface-shadow),var(--surface-ring);backdrop-filter:none;
+}
+.toast{background:var(--surface-pop);border:0;box-shadow:var(--surface-shadow),var(--surface-ring)}
+/* windows */
+.modal,.dlg-card,.dlg-popup .dlg-pop,#_mat-editor-popup .dlg-pop,.loader-card,#file-warn .card{
+  background:var(--surface-pop);border:0;border-radius:var(--surface-win-r);
+  box-shadow:var(--surface-shadow-win),var(--surface-ring);
+}
+.modal-h,.dlg-popup .dlg-head,#_mat-editor-popup .dlg-head{border-bottom:1px solid var(--surface-line)}
+.dlg-popup .dlg-head::after{display:none}
+.modal-f,.dlg-foot,.dlg-popup .dlg-foot,#_mat-editor-popup .dlg-foot{
+  background:var(--surface-inset);border-top:1px solid var(--surface-line);box-shadow:none;
+}
+/* toolbars over the viewport */
+.vp-bar,.vpc.tl:not(#vp-perf){background:var(--surface-bar);box-shadow:0 6px 20px rgba(0,0,0,.4),var(--surface-ring)}
+.tip-pop{border-radius:8px}
+/* The selected row's label and icon are the accent blue itself. */
+.tree-node.selected .tree-label,.tree-node.is-group.selected .tree-label{color:var(--ac)}
+.tree-node.selected .tree-typeicon{color:var(--ac)}
+/* Shape names stay on one line; the picker grows to fit the longest. */
+#vp-add-pop{width:max-content;min-width:160px}
+.vp-prim-pop-item{white-space:nowrap}
+/* App icon: the same box as every other top-bar button (it was a 24px chip
+   inside 5px of padding, so it read as smaller than its neighbours). */
+.brand-btn{padding:0}
+.brand-mark,.brand-left .brand-mark{width:var(--btn-h-md);height:var(--btn-h-md);margin-left:0;border-radius:var(--btn-r-md)}
+.brand-mark svg{width:16px;height:16px}
+/* Tree rows the browser can skip. Finding the row under the pointer walked
+   all 1,500+ rows (about 7 ms a time, several times per mouse move), which is
+   what made hover feel late. Off-screen rows are now skipped for hit-testing
+   and painting; a row remembers its size once it has been shown. */
+.tree-node{content-visibility:auto;contain-intrinsic-size:auto 28px}
+/* Tips next to the bottom toolbar: one column when two would overlap it,
+   and above the bar when even that would. Set by _fitVpTips(). */
+.vp-tips.one-col{grid-auto-flow:row;grid-template-rows:none;grid-template-columns:auto}
+.vp-tips.lifted{margin-bottom:56px}
+/* Small windows. The viewport column may shrink below the width of what is
+   in it: the status bar's text used to hold it open, which pushed the right
+   sidebar off the edge of the window. The status bar keeps its items on one
+   line and gives up the file name first. */
+#app{grid-template-columns:var(--side-l-w) minmax(0,1fr) var(--side-r-w)}
+#viewport{min-width:0}
+#sb{min-width:0;overflow:hidden}
+#sb .item,#sb-console-btn{white-space:nowrap;flex-shrink:0}
+#sb #sb-status{flex:0 1 auto;min-width:0;display:block;overflow:hidden;text-overflow:ellipsis}
+/* …and on a narrow status bar the vertex and memory counts step aside, then
+   the file name, so the selection chips and Console are never cut off. */
+#sb{container-type:inline-size;container-name:sb}
+@container sb (max-width:620px){#sb .item:has(#sb-verts),#sb .item:has(#sb-mem){display:none}}
+@container sb (max-width:430px){#sb #sb-status,#sb .item:has(#fps){display:none}}
 </style>
 </head>
 <body>
@@ -2011,11 +2322,11 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.9.0</span></div>
           <ul>
-            <li>Decimate fixed — it removes the share it says, and the result reaches the export</li>
-            <li>Save scene keeps hidden parts, camera, names and hierarchy</li>
-            <li>Undo for Decimate, Recenter, Bake, Center pivot, normals and group cleanup</li>
-            <li>Flatten and “Delete empty groups” rebuilt to follow the tree</li>
-            <li>One button scale, readable secondary text, click-to-measure</li>
+            <li>Decimate rebuilt — keeps normals and UVs, takes a triangle target, reaches the export</li>
+            <li>Undo for every editing action; Save scene keeps hidden parts, names and hierarchy</li>
+            <li>Flatten, grouping and Import → Append follow the tree</li>
+            <li>Selection is immediate on large assemblies</li>
+            <li>New toolbars, menus, startup screen and floor grid</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -2062,7 +2373,6 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
         <button class="export-menu-item" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
       </div>
     </div>
-    <button class="tbtn" id="btn-fit" disabled><i data-lucide="maximize"></i>Fit</button>
     <div class="add-prim-wrap" style="position:relative;display:inline-block">
       <button class="tbtn" id="btn-add-prim" title="Add a primitive shape or a standard fastener"><i data-lucide="plus-square"></i>Add <span class="caret"><i data-lucide="chevron-down"></i></span></button>
       <div id="add-prim-menu" class="export-menu" style="min-width:200px">
@@ -2129,12 +2439,6 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
       <button class="tree-icon-btn" id="tree-flatten" title="Advanced flatten — scope, depth, leaves, single-child chains, ungroup">
         <i data-lucide="list-tree"></i>
       </button>
-      <button class="tree-icon-btn" id="tree-sel-back" title="Previous selection">
-        <i data-lucide="chevron-left"></i>
-      </button>
-      <button class="tree-icon-btn" id="tree-sel-fwd" title="Next selection">
-        <i data-lucide="chevron-right"></i>
-      </button>
     </div>
     <div class="tree-summary" id="tree-summary">No model loaded</div>
     <div id="tree"><div class="tree-empty"><i data-lucide="box"></i><div>No model loaded</div><div style="font-size:var(--fs-11);margin-top:4px">Open or drop a 3D model file</div></div></div>
@@ -2192,6 +2496,8 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
         </div>
       </div>
       <div class="vpc tr">
+        <div class="vp-bar vp-bar-solo"><button class="vpb" id="vp-cmdk" title="Search commands (Ctrl+K)"><i data-lucide="search"></i></button></div>
+        <div class="vp-bar">
         <button class="vpb" id="vw-solid" data-mode="solid" title="Solid (1)"><i data-lucide="box"></i></button>
         <button class="vpb" id="vw-wire" data-mode="wire" title="Wireframe (2)"><svg viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v10"/></svg></button>
         <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
@@ -2294,8 +2600,10 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
             <div class="toggle"><span>Share materials by color</span><label><input type="checkbox" id="toggle-share-mat" checked><span class="switch"></span></label></div>
           </div>
         </div>
+        </div>
       </div>
-      <div class="vpc br"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
+      <div class="vpc vp-topright"><div class="vp-info" id="vp-info" style="display:none"><div><strong id="vp-tris">0</strong> triangles</div><div id="vp-tribar" class="vp-tribar" title="Triangle count vs. starting count"><div id="vp-tribar-mask" class="vp-tribar-mask"></div></div><div><strong id="vp-parts">0</strong> parts</div><div><strong id="vp-instances">0</strong> instanced</div></div></div>
+      <div class="vpc br"><div class="vp-tips" id="vp-hint"></div></div>
       <div class="vpc bl"><div id="axis-gizmo" title="Click an axis to align the view"><svg id="axis-gizmo-svg" viewBox="-44 -44 88 88"></svg></div></div>
       <!-- Sun gizmo (HDRI rotation). Visible only when bg-mode === 'hdri'.
            Top-down dome view: drag the sun marker around to rotate the
@@ -2336,7 +2644,6 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
         <div id="vp-fps" class="vp-stat" style="display:none">— fps</div>
         <div id="vp-stats" class="vp-stat" style="display:none">— calls</div>
       </div>
-      <div class="vpc bc" id="vp-hint"></div>
     </div>
 
     <div id="loader">
@@ -2369,8 +2676,7 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
         <div class="prop-grid">
           <span class="prop-icon"><i data-lucide="triangle"></i></span><span class="prop-label">Triangles</span><strong class="prop-value">—</strong>
           <span class="prop-icon"><i data-lucide="circle-dot"></i></span><span class="prop-label">Vertices</span><strong class="prop-value">—</strong>
-          <span class="prop-icon"><i data-lucide="box"></i></span><span class="prop-label">Bbox</span><strong class="prop-value">—</strong>
-          <span class="prop-icon"><i data-lucide="ruler"></i></span><span class="prop-label">Diagonal</span><strong class="prop-value">—</strong>
+          <span class="prop-icon"><i data-lucide="box"></i></span><span class="prop-label">Size</span><strong class="prop-value">—</strong>
           <span class="prop-icon"><i data-lucide="percent"></i></span><span class="prop-label">% of model</span><strong class="prop-value">—</strong>
           <span class="prop-icon"><i data-lucide="package"></i></span><span class="prop-label">Volume</span><strong class="prop-value">—</strong>
         </div>
@@ -2467,14 +2773,17 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
         <button class="btn" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox center (visual position unchanged)"><i data-lucide="crosshair"></i>Center pivot</button>
         <button class="btn warn" id="btn-bbox-all" title="Smart-fit EVERY part — picks tight box, OBB, or cylinder per part. Heavy poly reduction, lossy."><i data-lucide="square-dashed"></i>Smart-fit all parts</button>
         <div class="btn-row">
-          <button class="btn warn" id="btn-decimate-sel" title="Reduce triangle count of selected parts using edge-collapse simplification. Lossy."><i data-lucide="triangle-alert"></i>Decimate <span id="dec-sel-count">0</span></button>
+          <button class="btn warn" id="btn-decimate-sel" title="Reduce the triangle count of the selected parts. Normals, UVs and vertex colours are kept. Lossy, but undoable."><i data-lucide="triangle-alert"></i>Decimate <span id="dec-sel-count">0</span></button>
           <select id="decimate-strength" class="mac-sel" title="How many triangles to remove from each selected part" style="flex:0 0 96px">
             <option value="0.25">−25%</option>
             <option value="0.5" selected>−50%</option>
             <option value="0.75">−75%</option>
             <option value="0.9">−90%</option>
+            <option value="target">Target…</option>
           </select>
         </div>
+        <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
+        <div class="field-help" id="decimate-info" style="margin-top:-2px"></div>
       </div>
     </div>
 
@@ -2933,31 +3242,65 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
 </div>
 
 <div class="modal-bg" id="welcome-modal">
-  <div class="modal" style="width:520px;position:relative">
+  <div class="modal wl-modal" style="position:relative">
     <button class="x" id="welcome-close" title="Close (Esc)" style="position:absolute;top:14px;right:14px;z-index:1">✕</button>
     <div class="modal-b">
       <div id="welcome-pick-pane">
-        <div id="welcome-resume"></div>
-        <div id="welcome-drop" style="border:1px dashed var(--bd);border-radius:var(--r-xl);padding:32px 20px;margin-top:32px;text-align:center;cursor:pointer;background:var(--bg2);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:border-color var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out)">
-          <i data-lucide="upload" style="width:40px;height:40px;stroke:var(--ac);fill:none;stroke-width:1.5;display:inline-block;margin-bottom:10px"></i>
-          <div style="font-size:var(--fs-xl);font-weight:var(--fw-semibold);margin-bottom:4px;color:var(--tx)">Open a 3D model</div>
-          <div style="color:var(--tx2);font-size:var(--fs-md);line-height:var(--lh-relaxed);margin-bottom:14px">Drop a <span style="color:var(--ac-text)">.step</span>, <span style="color:var(--ac-text)">.stp</span>, <span style="color:var(--ac-text)">.glb</span>, <span style="color:var(--ac-text)">.gltf</span>, <span style="color:var(--ac-text)">.fbx</span>, <span style="color:var(--ac-text)">.obj</span>, <span style="color:var(--ac-text)">.3mf</span>, or <span style="color:var(--ac-text)">.stl</span> here.</div>
-          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-            <button class="tbtn primary" id="welcome-pick"><i data-lucide="folder-open"></i>Browse…</button>
-            <button class="tbtn" id="welcome-start-empty" type="button"><i data-lucide="file-plus"></i>New scene</button>
+        <div class="wl-head">
+          <span class="wl-mark"><i data-lucide="zap"></i></span>
+          <div class="wl-titles">
+            <div class="wl-title">MeshOptimiser <span class="wl-ver" id="wl-ver"></span></div>
+            <div class="wl-tag">Open, clean up and convert CAD and mesh files</div>
           </div>
         </div>
 
-        <div style="margin-top:18px">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-size:var(--fs-sm);font-weight:var(--fw-semibold);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3)">Recent files</div>
-            <button id="welcome-recents-clear" title="Remove every entry from the recent files list" style="display:none;gap:5px;background:transparent;border:1px solid transparent;color:var(--tx3);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)"><i data-lucide="trash-2" style="width:11px;height:11px"></i>Clear all</button>
+        <div class="wl-cols">
+          <!-- left: start something -->
+          <div class="wl-col">
+            <div id="welcome-drop" class="wl-drop">
+              <i data-lucide="upload"></i>
+              <div class="wl-drop-title">Drop a file here</div>
+              <div class="wl-chips"><span>STEP</span><span>GLB</span><span>glTF</span><span>FBX</span><span>OBJ</span><span>3MF</span><span>STL</span></div>
+            </div>
+
+            <div class="wl-actions">
+              <button class="wl-act" id="welcome-pick"><i data-lucide="folder-open"></i><span>Open file…</span><kbd>Ctrl+O</kbd></button>
+              <button class="wl-act" id="welcome-import" type="button" title="Add a file to the scene that is already open"><i data-lucide="file-input"></i><span>Import into scene…</span><kbd>Ctrl+Shift+O</kbd></button>
+              <button class="wl-act" id="welcome-start-empty" type="button"><i data-lucide="file-plus"></i><span>New empty scene</span><kbd>Ctrl+N</kbd></button>
+            </div>
+
+            <div class="wl-label">Start from a shape</div>
+            <div class="wl-shapes" id="welcome-shapes">
+              <button class="wl-shape" data-shape="cube" title="New scene with a cube"><span class="wl-shape-pic"></span><span>Cube</span></button>
+              <button class="wl-shape" data-shape="sphere" title="New scene with a sphere"><span class="wl-shape-pic"></span><span>Sphere</span></button>
+              <button class="wl-shape" data-shape="cylinder" title="New scene with a cylinder"><span class="wl-shape-pic"></span><span>Cylinder</span></button>
+              <button class="wl-shape" data-shape="torus" title="New scene with a torus"><span class="wl-shape-pic"></span><span>Torus</span></button>
+            </div>
+
+            <div class="wl-label">Options</div>
+            <div class="wl-opts">
+              <label class="wl-opt" title="Frame the model in the viewport once it has loaded"><span>Fit view after loading</span><input type="checkbox" id="wl-opt-fit"><span class="switch"></span></label>
+              <label class="wl-opt" title="Show the last file at the top of this screen so it can be reopened in one click"><span>Offer to resume the last file</span><input type="checkbox" id="wl-opt-resume"><span class="switch"></span></label>
+              <label class="wl-opt" title="Show this screen when the app starts"><span>Show this screen at startup</span><input type="checkbox" id="wl-opt-boot"><span class="switch"></span></label>
+            </div>
           </div>
-          <div id="welcome-recents" style="display:flex;flex-direction:column;gap:var(--space-sm)"></div>
+
+          <!-- right: pick up where you left off -->
+          <div class="wl-col">
+            <div id="welcome-resume"></div>
+            <div class="wl-recents-head">
+              <div class="wl-label" style="margin:0">Recent files</div>
+              <button id="welcome-recents-clear" title="Remove every entry from the recent files list" style="display:none;gap:5px;background:transparent;border:1px solid transparent;color:var(--tx3);cursor:pointer"><i data-lucide="trash-2" style="width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2"></i>Clear all</button>
+            </div>
+            <div class="wl-search"><i data-lucide="search"></i><input type="text" id="welcome-recents-filter" placeholder="Filter recent files…" autocomplete="off"></div>
+            <div id="welcome-recents" class="wl-recents"></div>
+            <div class="wl-recents-empty" id="welcome-recents-nomatch" style="display:none">No recent file matches.</div>
+          </div>
         </div>
 
-        <div style="margin-top:16px;color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-relaxed)">
-          Huge assemblies (&gt;200 MB) load faster if you pre-convert with <code style="font-family:var(--font-sans);color:var(--ac-text)">step2glb.py</code>.
+        <div class="wl-foot">
+          <span class="wl-foot-hints"><kbd>Ctrl+K</kbd> command palette<span class="wl-dot">·</span><button class="wl-link" id="welcome-shortcuts" type="button">Keyboard shortcuts</button><span class="wl-dot">·</span><button class="wl-link" id="welcome-settings" type="button">Settings</button></span>
+          <span class="wl-foot-tip">Assemblies over 200 MB load faster pre-converted with <code>step2glb.py</code></span>
         </div>
       </div>
 
@@ -3276,14 +3619,15 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
     "three/examples/jsm/": "https://unpkg.com/three@0.172.0/examples/jsm/",
     "three-classic": "https://unpkg.com/three@0.172.0/build/three.module.js",
     "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.8.3/build/index.module.js",
-    "three-gpu-pathtracer": "https://unpkg.com/three-gpu-pathtracer@0.0.24/build/index.module.js"
+    "three-gpu-pathtracer": "https://unpkg.com/three-gpu-pathtracer@0.0.24/build/index.module.js",
+    "meshoptimizer-simplifier": "https://unpkg.com/meshoptimizer@0.22.0/meshopt_simplifier.module.js"
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=2026100701-v0.9.0"></script>
+<script type="module" src="app-v2.js?v=2026100705-v0.9.0"></script>
 <!-- Feature modules — load after app-v2.js. cloner.js attaches via window._appFns / _appHooks. -->
-<script src="cloner.js?v=2026100701-v0.9.0"></script>
-<script type="module" src="pathtracer.js?v=2026100701-v0.9.0"></script>
+<script src="cloner.js?v=2026100705-v0.9.0"></script>
+<script type="module" src="pathtracer.js?v=2026100705-v0.9.0"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser
