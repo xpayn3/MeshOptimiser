@@ -4,82 +4,6 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
-## Unreleased
-
-A speed pass, measured in Chrome on a 1,583-part, 5.4-million-triangle
-assembly in two forms: flat, and with its full hierarchy (2,768 groups,
-ten levels deep). Every number below is that model on one machine.
-
-- ![new][new] **The tree scrolls sideways, and its indent holds still.**
-  The indent used to be recalculated from the width of the sidebar and
-  the depth of the hierarchy, so the whole tree slid left and right
-  while a sidebar edge was dragged; and long names ended in an ellipsis.
-  The indent is now one fixed step per level and names are shown in
-  full. When a row is wider than the panel a scrollbar appears under the
-  tree (Shift + wheel and a sideways swipe work too): the names slide,
-  the eye and colour column stays where it is.
-- ![perf][perf] **Group dots are one draw.** Every group has a dot at its
-  origin, and each dot was a sprite of its own: 2,768 extra draw calls
-  per frame on the nested model, four fifths of the frame. They are now
-  one instanced sprite. Orbiting went from 47–50 fps with dropped frames
-  to the display's full rate.
-- ![perf][perf] **Group origins in one pass.** They were worked out by walking
-  the whole tree once per group, and that was repeated once per group on
-  every selection change. A click on a part took 64 ms; it takes 8–10.
-  The same loop was the 4.5-second freeze while a nested model opened.
-- ![perf][perf] **The tree keeps its rows.** A rebuild used to throw every
-  row away and make it again. Rows that are still needed are now kept
-  and corrected, the ones whose place changed are moved, and the browser
-  is no longer asked for a layout in the middle of it. Hide, isolate and
-  show all: 55 ms → 16–20. Undo or redo of a group: 115 ms → 24.
-  Grouping 445 parts: 137 ms → 63. Typing in the search: 170 ms → 35–55.
-- ![perf][perf] **The tree scrolls as a layer.** It had a see-through
-  background, so the browser repainted every visible row on each scroll
-  step; and every row was `content-visibility:auto`, which with 4,350
-  rows cost more per frame than it saved. Rows away from the view are
-  plain empty boxes, rows are filled a screenful ahead rather than one
-  per scroll step, and rows left far behind are emptied again. Wheel
-  scrolling dropped 28 % of frames; it now drops about 1 %.
-- ![perf][perf] **Fewer, larger instance groups.** A shape that repeats was
-  drawn as one instanced object from three copies up. Each such object
-  needs a shader and a GPU pipeline of its own, rebuilt on every change
-  of view mode: 106 of them on the nested model, 2.7 seconds frozen per
-  switch to wireframe or x-ray. Instancing now starts at 32 copies.
-  A switch takes 0.3–0.5 s, and the frame rate is unchanged.
-- ![perf][perf] **X-ray draws each surface once**, not twice (its blending has
-  no order, so one pass gives the same picture).
-- ![perf][perf] **Select all on an assembly with instances** refreshed every
-  matrix in the model once per instance: half a second the first time.
-  It refreshes the one mesh it has just made.
-- ![perf][perf] **Dragging a sidebar edge** set a variable on the page root on
-  every mouse move, which restyled the whole document several times per
-  move (15 fps). The width is applied once per frame, directly, and the
-  variable is set when the drag ends: 20–30 fps on the nested model's
-  4,350-row tree, where every row still has to be laid out at the new
-  width. Dragging the materials dock is once per frame too.
-- ![perf][perf] The shortcut tips are measured in the next frame instead of
-  in the middle of a selection change (13 ms per change saved), the
-  document tab is aligned without laying the page out twice, and numbers
-  in the tree are formatted by one shared formatter.
-- ![fix][fix] **Undoing a group could throw its parts across the scene.**
-  A selected part hangs on the move gizmo's pivot, and the undo entry of
-  a new group recorded that pivot as the part's parent. Group some parts,
-  select something else, press Ctrl+Z: the grouped parts jumped (1,300
-  units in the test) and stayed attached to the gizmo. The gizmo now lets
-  go before the entry is recorded. The same for groups in a flat list.
-- ![fix][fix] **Redoing "group a group" moved everything inside it.** Clicking
-  a group selects its parts, so grouping it also listed every part in it;
-  redo re-attached each of those parts to the new group with a matrix
-  meant for its old parent. Only what the action really moved is redone.
-- ![fix][fix] **Hide selected (`H`) is an undo step.** It had none: Ctrl+Z
-  after `H` undid whatever came before it.
-- ![fix][fix] The flat-list rule that hides the expand column no longer
-  depends on which rows happen to be filled.
-- ![docs][docs] Four more regression tests (41 in all): a rebuilt tree equals
-  one built from nothing after every kind of change; group dots are one
-  draw; group undo and redo leave every part in place whatever is
-  selected by then; Hide is one undo step.
-
 ## v0.11.0
 
 v0.10 made the app fast. This one changes how it is *used*. Scenes open
@@ -87,7 +11,9 @@ in tabs, tools appear where you are working instead of sitting in a
 sidebar, every number can be dragged, and one Settings window replaces
 three places that used to hold options. The interface is darker,
 quieter and more of one piece — and Fill holes, the tool people came
-for, got options and a much harder test.
+for, got options and a much harder test. Underneath, a speed pass on a
+5.4-million-triangle assembly took the pauses out of orbiting, selecting,
+scrolling the tree and switching view modes.
 
 **Highlights**
 
@@ -151,6 +77,14 @@ for, got options and a much harder test.
 - ![new][new] The bottom toolbar never runs into the shortcut tips: when it
   would, the tips step aside; on a viewport narrower than the toolbar
   itself, buttons fold away from the right into the "…" list.
+- ![new][new] **The tree scrolls sideways, and its indent holds still.**
+  The indent used to be recalculated from the width of the sidebar and
+  the depth of the hierarchy, so the whole tree slid left and right
+  while a sidebar edge was dragged; and long names ended in an ellipsis.
+  The indent is now one fixed step per level and names are shown in
+  full. When a row is wider than the panel a scrollbar appears under the
+  tree (Shift + wheel and a sideways swipe work too): the names slide,
+  the eye and colour column stays where it is.
 
 **Fixes**
 
@@ -175,16 +109,70 @@ for, got options and a much harder test.
   the caret in the field.
 - ![fix][fix] Tooltips inside a command panel appeared instantly and cut to the
   first words, like the toolbar's; they now wait and show the whole tip.
+- ![fix][fix] **Undoing a group could throw its parts across the scene.**
+  A selected part hangs on the move gizmo's pivot, and the undo entry of
+  a new group recorded that pivot as the part's parent. Group some parts,
+  select something else, press Ctrl+Z: the grouped parts jumped (1,300
+  units in the test) and stayed attached to the gizmo. The gizmo now lets
+  go before the entry is recorded. The same for groups in a flat list.
+- ![fix][fix] **Redoing "group a group" moved everything inside it.** Clicking
+  a group selects its parts, so grouping it also listed every part in it;
+  redo re-attached each of those parts to the new group with a matrix
+  meant for its old parent. Only what the action really moved is redone.
+- ![fix][fix] **Hide selected (`H`) is an undo step.** It had none: Ctrl+Z
+  after `H` undid whatever came before it.
+- ![fix][fix] The flat-list rule that hides the expand column no longer
+  depends on which rows happen to be filled.
 
 **Faster**
 
-- ![perf][perf] **The tree and view switches, a further pass.** A tree
-  rebuild keeps the rows already on screen and only corrects, moves, adds
-  or drops what changed; scrolling fills a screenful ahead instead of a
-  row per step; a selection change no longer makes the browser lay the
-  page out twice. Only shapes that repeat many times are drawn as
-  instances now, which takes away a freeze of seconds when switching to
-  wireframe or x-ray on assemblies with many small repeated groups.
+A speed pass, measured in Chrome on a 1,583-part, 5.4-million-triangle
+assembly in two forms: flat, and with its full hierarchy (2,768 groups,
+ten levels deep). Every number below is that model on one machine.
+
+- ![perf][perf] **Group dots are one draw.** Every group has a dot at its
+  origin, and each dot was a sprite of its own: 2,768 extra draw calls
+  per frame on the nested model, four fifths of the frame. They are now
+  one instanced sprite. Orbiting went from 47–50 fps with dropped frames
+  to the display's full rate.
+- ![perf][perf] **Group origins in one pass.** They were worked out by walking
+  the whole tree once per group, and that was repeated once per group on
+  every selection change. A click on a part took 64 ms; it takes 8–10.
+  The same loop was the 4.5-second freeze while a nested model opened.
+- ![perf][perf] **The tree keeps its rows.** A rebuild used to throw every
+  row away and make it again. Rows that are still needed are now kept
+  and corrected, the ones whose place changed are moved, and the browser
+  is no longer asked for a layout in the middle of it. Hide, isolate and
+  show all: 55 ms → 16–20. Undo or redo of a group: 115 ms → 24.
+  Grouping 445 parts: 137 ms → 63. Typing in the search: 170 ms → 35–55.
+- ![perf][perf] **The tree scrolls as a layer.** It had a see-through
+  background, so the browser repainted every visible row on each scroll
+  step; and every row was `content-visibility:auto`, which with 4,350
+  rows cost more per frame than it saved. Rows away from the view are
+  plain empty boxes, rows are filled a screenful ahead rather than one
+  per scroll step, and rows left far behind are emptied again. Wheel
+  scrolling dropped 28 % of frames; it now drops about 1 %.
+- ![perf][perf] **Fewer, larger instance groups.** A shape that repeats was
+  drawn as one instanced object from three copies up. Each such object
+  needs a shader and a GPU pipeline of its own, rebuilt on every change
+  of view mode: 106 of them on the nested model, 2.7 seconds frozen per
+  switch to wireframe or x-ray. Instancing now starts at 32 copies.
+  A switch takes 0.3–0.5 s, and the frame rate is unchanged.
+- ![perf][perf] **X-ray draws each surface once**, not twice (its blending has
+  no order, so one pass gives the same picture).
+- ![perf][perf] **Select all on an assembly with instances** refreshed every
+  matrix in the model once per instance: half a second the first time.
+  It refreshes the one mesh it has just made.
+- ![perf][perf] **Dragging a sidebar edge** set a variable on the page root on
+  every mouse move, which restyled the whole document several times per
+  move (15 fps). The width is applied once per frame, directly, and the
+  variable is set when the drag ends: 20–30 fps on the nested model's
+  4,350-row tree, where every row still has to be laid out at the new
+  width. Dragging the materials dock is once per frame too.
+- ![perf][perf] The shortcut tips are measured in the next frame instead of
+  in the middle of a selection change (13 ms per change saved), the
+  document tab is aligned without laying the page out twice, and numbers
+  in the tree are formatted by one shared formatter.
 - ![perf][perf] The split preview no longer runs on every selection change — only
   while the Split panel is open.
 - ![perf][perf] The Materials card in the sidebar is gone, and with it a rebuild of
@@ -214,10 +202,14 @@ for, got options and a much harder test.
 
 **Tests**
 
-- ![new][new] 37 in-app tests (was 31) and 88 hole-filler checks (was 76): scene
+- ![new][new] 41 in-app tests (was 31) and 88 hole-filler checks (was 76): scene
   tabs, command panels, dragging numbers, the scene card and triangle
   delta, isolate, material names and presets, the fill options and the
-  stitch-triangle case.
+  stitch-triangle case; a rebuilt tree equals one built from nothing
+  after every kind of change; group dots are one draw; group undo and
+  redo leave every part in place; Hide is one undo step.
+- ![docs][docs] A performance driver in `tests/perf/` measures frame gaps under
+  real input in a Chrome it starts itself.
 
 ## v0.10.1
 

@@ -269,6 +269,8 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 - ![new][new] **One Settings window** with search; **all commands** behind "…"; a **shortcut map** that fits together (`H` hide, `Shift+H` hide the rest, `Alt+H` show all, `Ctrl+M` merge, `Ctrl+B` smart fit, `Ctrl+E` export…).
 - ![new][new] **Properties is never empty** — the scene's totals, or a part's triangles with what was saved, its share and its rank.
 - ![fix][fix] A hole fill can no longer leave a crack; material names follow their colour; scenes made of added shapes count their triangles.
+- ![perf][perf] **Speed pass** on a 1,583-part, 5.4M-triangle assembly — orbiting at the display's full rate (group dots are one draw), a click on a part 64 ms → 8–10, a switch to wireframe or x-ray 2.7 s → 0.3–0.5, and a tree that keeps its rows and scrolls as a layer.
+- ![fix][fix] Undoing a group no longer throws its parts across the scene; Hide selected is an undo step.
 - ![polish][polish] Darker, calmer, one tone. The GPU path tracer is gone; nothing is fetched from a CDN at start-up.
 
 **v0.10.1** — libraries bundled: the app starts without a CDN and works offline.
@@ -284,7 +286,7 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 - ![new][new] **Command search** finds every sidebar button and control.
 - ![polish][polish] **Interface** — Plasticity-style viewport, one button scale, three corner radii, bundled Inter, fewer pop-ups.
 - ![fix][fix] **Reliability** — every editing action can be undone; a rendering freeze after repeated mesh edits is fixed; Import → Append keeps the tree; Cloner copies are exported.
-- ![new][new] **Tests** — `?selftest` runs 31 regression tests inside the live app (37 as of v0.11); `node tests/holefill.test.mjs` checks the hole filler.
+- ![new][new] **Tests** — `?selftest` runs 31 regression tests inside the live app (41 as of v0.11); `node tests/holefill.test.mjs` checks the hole filler.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full list and the known issues.
 
