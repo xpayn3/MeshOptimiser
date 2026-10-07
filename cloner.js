@@ -1022,7 +1022,7 @@
         if (state.selectedGroupIds) state.selectedGroupIds.clear();
         state.selected.add(cloner.partId);
         // Mirror the row visual.
-        document.querySelectorAll('.tree-node.selected').forEach(r => r.classList.remove('selected'));
+        { const t = document.getElementById('tree'); for (const r of ((t && t._rows) || document.querySelectorAll('.tree-node.selected'))) r.classList.remove('selected'); }   // every row: most are not in the document
         row.classList.add('selected');
         try { F.applySelectionColors?.(); } catch (_) {}
         try { F.refreshPropertiesPanel?.(); } catch (_) {}

@@ -405,7 +405,8 @@
     T.assert(!!g, 'the group disappeared from the tree once its last part was dragged out');
     T.eq(+g.dataset.depth || 0, 0, 'the emptied group moved');
     T.assert(T.tree().split('\n').every(l => !l.startsWith('  ')), 'a part is still shown inside the emptied group:\n' + T.tree());
-    T.assert(/empty/.test(g.textContent), 'the emptied group does not say it is empty');
+    // (the tree shows names only: an empty group is told by its dimmed name, not by a word beside it)
+    T.assert(g.classList.contains('is-empty-group'), 'the emptied group is not marked as empty');
     T.assert(!g.classList.contains('hidden-vis'), 'the emptied group is drawn as hidden');
     // it still takes a drop
     drop([T.row('Cube.002')], { kind: 'row', row: T.row('Group 1'), intent: 'into' });
@@ -416,7 +417,7 @@
     const grouped = T.tree();
     // deleting the parts inside a group leaves the group, empty — nothing is hidden
     await T.pick(['Cube', 'Cube.001']); T.act('delete'); await T.sleep(450);
-    T.assert(!!T.row('Group 1') && /empty/.test(T.row('Group 1').textContent), 'a group whose parts were deleted is no longer listed');
+    T.assert(!!T.row('Group 1') && T.row('Group 1').classList.contains('is-empty-group'), 'a group whose parts were deleted is no longer listed');
     await T.undo(); T.eq(T.tree(), grouped, 'undo of deleting the parts in a group');
     // deleting the group itself removes the row too, and one undo brings back both
     T.act('selClear'); await T.sleep(150);
@@ -503,7 +504,9 @@
     await T.pick(['Cylinder', 'Torus']);
     await T.undoable('merge', async () => { T.act('merge'); }, { wait: 900, redo: false });
     await T.pick(['Sphere']);
-    await T.undoable('smart fit', async () => { T.act('smartFit'); }, { wait: 1200 });
+    // the command opens its panel; the panel's main button runs it
+    await T.undoable('smart fit', async () => { T.act('smartFit'); await T.sleep(100); document.getElementById('btn-bbox-selected').click(); }, { wait: 1200 });
+    T.F()._Actions && document.querySelector('.section-cmd[data-cmd="smartfit"] .cmd-close')?.click();
   });
 
   test('decimate: removes the share it says, keeps the part, undoes, reaches the export', async () => {

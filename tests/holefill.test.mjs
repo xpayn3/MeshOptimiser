@@ -124,6 +124,43 @@ function plateThrough(r = 5, n = N) {
   check('volume is the solid plate', Math.abs(a.vol - 100 * 100 * TH) < 1, 'vol ' + a.vol);
 }
 
+// 3b. raised details: a low boss goes when asked for, a tall one never does
+{
+  const boss = (h) => {
+    const m = mesh();
+    const to = square(N, HALF, TH), bo = square(N, HALF, 0), ti = ring(N, 5, TH), tp = ring(N, 5, TH + h);
+    band(m, to, ti, true); disc(m, bo, false); wall(m, to, bo, true); wall(m, tp, ti, true); disc(m, tp, true);
+    return m.done();
+  };
+  console.log('raised details');
+  const low = boss(0.3);
+  check('input is watertight', watertight(low.positions, low.index) === 0);
+  const off = run(low, 12);
+  check('left alone unless asked for', off.res.holes === 0 && off.res.skipped.raised === 1, brief(off.res));
+  const on = run(low, 12, { raised: true, raisedMax: 0.5 });
+  check('a 0.3 mm one is flattened when the limit is 0.5', on.res.holes === 1 && on.res.flattened === 1 && on.res.blind === 0, brief(on.res));
+  check('result is watertight', on.open === 0, on.open + ' open edges');
+  check('volume is the plain plate', Math.abs(on.vol - 100 * 100 * TH) < 1, 'vol ' + on.vol);
+  const tall = run(boss(6), 12, { raised: true, raisedMax: 0.5 });
+  check('a 6 mm boss stays', tall.res.holes === 0 && tall.res.skipped.raisedTall === 1, brief(tall.res));
+  const wide = run(low, 8, { raised: true, raisedMax: 0.5 });
+  check('one wider than the size limit stays', wide.res.holes === 0, brief(wide.res));
+  // a raised letter O: a ring 0.2 high, with the face showing through its middle
+  const m = mesh();
+  const to = square(N, HALF, TH), bo = square(N, HALF, 0);
+  const oo = ring(N, 8, TH), oi = ring(N, 4, TH), po = ring(N, 8, TH + 0.2), pi = ring(N, 4, TH + 0.2);
+  band(m, to, oo, true); disc(m, oi, true);            // the face around the letter, and inside it
+  band(m, po, pi, true);                               // the letter's top
+  wall(m, po, oo, true); wall(m, pi, oi, false);       // its outer and inner sides
+  disc(m, bo, false); wall(m, to, bo, true);
+  const O = m.done();
+  check('letter O: input is watertight', watertight(O.positions, O.index) === 0);
+  const o = run(O, 20, { raised: true, raisedMax: 0.5 });
+  check('letter O: flattened as one feature', o.res.holes === 1 && o.res.flattened === 1, brief(o.res));
+  check('letter O: result is watertight', o.open === 0, o.open + ' open edges');
+  check('letter O: volume is the plain plate', Math.abs(o.vol - 100 * 100 * TH) < 1, 'vol ' + o.vol);
+}
+
 // 3. boss standing on the plate: same loop, but it rises above the face
 {
   const m = mesh();

@@ -39,6 +39,17 @@
 // holes are all the same case here. An opening with nothing behind it (a hole
 // in a single-sheet surface) is simply capped.
 //
+// Raised details (opts.raised). Lettering and logos are modelled both ways on
+// the same part: some engraved, which is a shallow pocket and filled like any
+// other, and some standing a fraction of a millimetre proud of the face. The
+// proud ones are found by the very same steps (the loop round a raised letter
+// looks exactly like the loop round a hole; what lies behind it rises instead
+// of sinking) and, when asked for, are removed the same way: the letter's
+// walls and top go and its footprint is closed flush with the face. Only a
+// LOW feature qualifies (opts.raisedMax, its height above the face), standing
+// on a single face: that is what tells embossed type from a boss, a pin or a
+// rib, which are part of what the part is and stay.
+//
 // Pure function, no dependencies: the app calls it per part, the tests call
 // it from Node.
 
@@ -57,9 +68,13 @@ export function fillFlatHoles(positions, index, opts = {}) {
   const minSize = +opts.minSize > 0 ? +opts.minSize : 0;   // a feature narrower than this is left alone
   // which kinds to fill (all three unless switched off)
   const want = { through: opts.through !== false, blind: opts.blind !== false, open: opts.open !== false };
-  const result = { holes: 0, through: 0, blind: 0, open: 0, loops: 0, removedTris: 0, addedTris: 0,
+  // raised details: off unless asked for, and then only up to this height above their face
+  const wantRaised = opts.raised === true && +opts.raisedMax > 0;
+  const raisedMax = wantRaised ? +opts.raisedMax : 0;
+  // `holes` counts everything that was closed; `flattened` is how many of those were raised details
+  const result = { holes: 0, through: 0, blind: 0, open: 0, flattened: 0, loops: 0, removedTris: 0, addedTris: 0,
                    removed: null, caps: null, capOwner: null,
-                   skipped: { raised: 0, leaking: 0, tooDeep: 0, tooLarge: 0, partOfShape: 0, tooSmall: 0, kind: 0, uncappable: 0 } };
+                   skipped: { raised: 0, raisedTall: 0, leaking: 0, tooDeep: 0, tooLarge: 0, partOfShape: 0, tooSmall: 0, kind: 0, uncappable: 0 } };
   if (!(maxSize > 0) || T < 4) return result;
 
   // ── bounding box, tolerances ─────────────────────────────────────────────
@@ -317,6 +332,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
     if (!reason && !capLoops.length) reason = 'leaking';
 
     // which side of each face does the surface lie on?
+    let isRaised = false;
     if (!reason && S.length) {
       let cx = 0, cy = 0, cz = 0, wsum = 0;
       for (const t of S) {
@@ -336,6 +352,26 @@ export function fillFlatHoles(positions, index, opts = {}) {
         const v = I[lp.hes[0]];
         const side = nx[s] * (cx - P[v * 3]) + ny[s] * (cy - P[v * 3 + 1]) + nz[s] * (cz - P[v * 3 + 2]);
         if (!(side < -distTol * 4)) { reason = 'raised'; break; }
+      }
+      // It stands on its face instead of going into it. Left alone, unless
+      // raised details were asked for and this is one: on a single face,
+      // nowhere below it, and no higher than the limit.
+      if (reason === 'raised' && wantRaised && capLoops.length === 1) {
+        const lp = loops[capLoops[0]];
+        const s = rSeed[lp.r], v0 = I[lp.hes[0]];
+        const fx = P[v0 * 3], fy = P[v0 * 3 + 1], fz = P[v0 * 3 + 2];
+        let lo = 0, hi = 0;
+        for (const t of S) {
+          for (let c = 0; c < 3; c++) {
+            const v = I[t * 3 + c];
+            const d = nx[s] * (P[v * 3] - fx) + ny[s] * (P[v * 3 + 1] - fy) + nz[s] * (P[v * 3 + 2] - fz);
+            if (d < lo) lo = d; if (d > hi) hi = d;
+          }
+        }
+        if (lo >= -distTol * 4) {
+          if (hi <= raisedMax) { reason = ''; isRaised = true; }
+          else reason = 'raisedTall';
+        }
       }
     }
 
@@ -370,7 +406,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
     if (!reason) {
       const kind = !S.length ? 'open' : capLoops.length >= 2 ? 'through' : 'blind';
       if (loops[L].size < minSize) reason = 'tooSmall';
-      else if (!want[kind]) reason = 'kind';
+      else if (!isRaised && !want[kind]) reason = 'kind';
     }
     const all = [...bounding, ...absorbed];
     if (reason) {
@@ -403,7 +439,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
     result.holes++;
     result.loops += nCaps;
     result.removedTris += S.length;
-    if (!S.length) result.open++; else if (nCaps >= 2) result.through++; else result.blind++;
+    if (isRaised) result.flattened++; else if (!S.length) result.open++; else if (nCaps >= 2) result.through++; else result.blind++;
   }
 
   // Triangulate one loop flush with its face, using the face's own vertices.
