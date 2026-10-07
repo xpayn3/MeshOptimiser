@@ -6,80 +6,109 @@ Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &n
 
 ## v0.12.0
 
-v0.11 changed how the app is used. This one changes what it is *for*.
-Until now MeshOptimiser opened a model and made it lighter. Now it also
-builds: a library of 86 parametric parts — fasteners, pipes, profiles,
-machine parts — that you drag into the scene and that stand on whatever
-they are dropped on. A file that arrives lying on its side forty metres
-from the origin is stood on the floor in one card. A whole scene is
-brought down to a triangle budget in one step, and the parts nobody can
-see are found for you. And the model itself is finally readable: dark
-parts have a shape, a headlight follows the view, and Clay strips the
-colours away so that only form is left.
+**The biggest release yet.** Until now MeshOptimiser opened a model and
+made it lighter. From today it also *builds*. There is a library drawer
+full of real parts — hex bolts, wing nuts, pillow blocks, I-beams, gears,
+a stepper motor — and you drag them straight onto your model. A file
+that arrives lying on its side forty metres from the origin stands up on
+the floor from one card. A five-million-triangle scene comes down to the
+budget you type. The screws nobody will ever see are found for you. And
+for the first time a black part on a dark background actually looks like
+something.
 
-**Highlights — building**
+**New: the library drawer**
 
-- ![new][new] **Object library.** The left sidebar has a second face: the
-  parts tree, or a library of 86 parts on six shelves — Shapes, Fasteners,
-  Nuts, Pipes and flanges, Profiles and plates, Machine parts — each with
-  its own picture, a search field and the six used last. Fasteners take
-  the thread size and length chosen at the top of the panel. A click adds
-  a part (onto the selected part, or on the floor at the origin); every
-  one stays parametric and is edited from its Shape card afterwards.
-- ![new][new] **Drag a part into the scene.** While a library part is dragged
-  over the viewport a see-through copy follows the pointer, standing where
-  the drop would put it: square to the surface of the model under the
-  pointer, or upright on the floor where there is none. The ghost lives
-  outside the parts, so it is never picked, counted or exported.
-- ![new][new] **A nut on the bolt.** Bolts, threaded rod and eye bolts can
-  carry a nut: which kind, and how far from the head. It is part of the
-  bolt's own shape, in the bolt's thread, so it follows Size, Length and
-  Orientation, is one row in the tree and one undo step, and cannot sit
-  past the end of the thread. A nut with a side to it (flange, cap, lock)
-  goes on facing the head, as it would be tightened.
-- ![new][new] **Align to floor.** Files arrive anywhere and any way up. One
-  card chooses how the model is turned (steps about X, Y and Z, 90° or any
-  angle) and where it sits (for each axis: low side, middle, high side, or
-  keep). Every control applies at once, a run of adjustments is one undo
-  step, and the transform is worked out from scratch each time so steps
-  never pile up drift. Group origins and the exploded view go along with
-  it, and it can run by itself each time a file is opened.
+- ![new][new] **86 parts, one drawer.** Flip the left sidebar from the
+  parts tree to the library and there they are, each with its own
+  picture, on six shelves:
+  - **Shapes** — cube, sphere, torus, capsule, wedge, rounded box, star…
+  - **Fasteners** — hex bolt, Allen screw, countersunk, button head,
+    carriage bolt, U-bolt, eye bolt, set screw, threaded rod, rivet,
+    washer, spring washer, retaining ring, standoff…
+  - **Nuts** — hex, lock, jam, flange, cap, castle, wing, thumb, square,
+    coupling, eye and T-slot nuts.
+  - **Pipes and flanges** — tube, elbow, tee, cross, reducer, pipe cap,
+    flange.
+  - **Profiles and plates** — I-beam, box tube, angle, C-channel, T and Z
+    profiles, T-slot extrusion, flat bar, round and hex bar,
+    perforated and slotted plate, gusset, hinge.
+  - **Machine parts** — gear, rack, sprocket, pulley, bearing, bushing,
+    pillow block, shaft collar, linear rail, spring, handwheel, star
+    knob, pull handle, levelling foot, wheel, enclosure, a stepper motor.
 
-**Highlights — reducing**
+  Search the drawer, pick a thread size and length once at the top (M6 ×
+  24 by default) and every fastener comes out in it. The six parts used
+  last wait at the top. Nothing in it is a dead mesh: every part stays
+  parametric, and its Shape card changes it afterwards.
+- ![new][new] **Drag it onto the model.** Pull a part out of the drawer
+  and a see-through copy follows the pointer, already standing where it
+  will land: square to the face under the pointer, or upright on the floor
+  where there is none. Let go and a bolt sits on the plate, the right way
+  up. The ghost lives outside the parts, so it is never picked, counted
+  or exported.
+- ![new][new] **A bolt that brings its own nut.** Tick *Nut on the bolt*
+  on a hex bolt, an Allen screw, a threaded rod or an eye bolt, choose
+  the nut (a wing nut, a castle nut, a flange nut…) and how far from the
+  head it sits. It is part of the bolt's own shape, in the bolt's
+  thread, so it follows Size, Length and Orientation, is one row in the
+  tree and one undo step, and cannot sit past the end of the thread. A
+  nut with a side to it goes on facing the head, as it would be tightened.
+- ![new][new] **Type "add flange".** The search (`Ctrl+K`) reaches into
+  the drawer too: `Enter` adds the part.
 
-- ![new][new] **Select hidden parts.** Finds the parts that cannot be seen
-  from outside — the screws inside a housing, the board under a cover —
-  and selects them, ready to delete or isolate. It has a panel of its own
-  with a looping clip of what it does.
-- ![new][new] **Fit to budget.** A triangle target for the whole scene: the
-  densest meshes are reduced first until the total fits. One undo step,
-  with a preview before anything is committed and Cancel while it runs.
-- ![new][new] **Smart fit: Boxes and Blocks.** One box says where a part is
-  and nothing of its shape: a bracket becomes a brick, a frame a slab.
-  *Boxes* covers the part with a handful of boxes, each sized and turned
-  to one piece of it (a levelling foot becomes a slab and a bar, an L two
-  bars), 12 triangles each. *Blocks* rebuilds it from a coarse grid with
-  its steps, arms and openings in the right places and a few dozen to a
-  few hundred triangles, whatever the part had. Both fall back to a plain
-  box when they would not be clearly lighter.
+**New: stand it up**
+
+- ![new][new] **Align to floor.** Files arrive anywhere and any way up: a
+  part modelled 40 m from its origin, an assembly on its side, a scan
+  centred on nothing. One card fixes all of it. Turn the model in steps
+  about X, Y and Z (90° by default, any angle you like) and say, for each
+  axis, which side goes to zero: low, middle, high, or leave it. Middle /
+  middle / floor stands it on the grid over 0,0,0. You watch it move,
+  a whole run of adjustments is one undo step, and the transform is worked
+  out from scratch each time, so nothing drifts. Group origins and the
+  exploded view go along with it. Switch it on for every file you open and
+  never see a model lying down again.
+
+**New: make it lighter, faster**
+
+- ![new][new] **Select hidden parts.** The screws inside a housing, the
+  board under a cover, the bearing nobody will ever see: one command finds
+  every part that cannot be seen from outside and selects it, ready to
+  delete or isolate. It has a panel of its own, with a looping clip of
+  what it does.
+- ![new][new] **Fit to budget.** Type the number of triangles the scene is
+  allowed to have. The densest meshes are reduced first until the total
+  fits. One undo step, a preview before anything is committed, and Cancel
+  while it runs.
+- ![new][new] **Smart fit learned shapes.** One box says where a part is
+  and nothing of what it is: a bracket becomes a brick, a frame a slab.
+  Two new stand-ins keep the outline.
+  - **Boxes** covers the part with a handful of boxes, each sized and
+    turned to one piece of it. A levelling foot becomes a slab and a bar,
+    an L two bars, a frame four. 12 triangles a box.
+  - **Blocks** rebuilds it from a coarse grid, with its steps, arms and
+    openings in the right places, in a few dozen to a few hundred
+    triangles — whatever the part had.
+
+  Both fall back to a plain box when they would not be clearly lighter.
 - ![new][new] **Optimisation report.** The scene as it was opened against
-  the scene now, plus the size of the last export.
-- ![new][new] **Preview and Cancel.** Decimate and Fit to budget show their
-  result before it is applied; the long jobs can be stopped.
+  the scene now, plus the size of the last export: the number to show
+  whoever asked for a lighter file.
+- ![new][new] **Preview and Cancel.** Decimate and Fit to budget show
+  their result before it is applied, and the long jobs can be stopped.
 - ![polish][polish] **Delete small parts shows what it will delete.** With
-  the small parts isolated, what is shown follows the threshold as the
-  slider moves. It is the same isolation, adjusted, so it adds no undo
-  step of its own.
+  the small parts isolated, what is on screen follows the threshold as
+  you drag the slider. It is the same isolation, adjusted, so it adds no
+  undo step of its own.
 
-**Highlights — seeing the model**
+**New: see what you are looking at**
 
-- ![new][new] **Clay (`5`).** A view mode like Wireframe or Heatmap: every
-  part in one plain material, so all that is left to see is form — edges,
-  curvature, what stands in front of what. It is an ordinary lit material,
-  so the lights, the headlight and the studio reflections shape it.
-  Right-click the button for other looks: porcelain, steel, red wax.
-  Export and Save switch to Solid while they run; nothing of it reaches a
-  file.
+- ![new][new] **Clay (`5`).** One key and the colours are gone: every
+  part in the same plain material, so all that is left is form — edges,
+  curvature, what stands in front of what. It is a real lit material, so
+  the lights, the headlight and the studio reflections shape it.
+  Right-click the button for porcelain, steel or red wax. Export and Save
+  switch to Solid while they run; nothing of it reaches a file.
 - ![fix][fix] **Parts no longer show through thin covers from a distance.**
   Zoomed out, the parts under a sheet-metal cover or a thin panel used to
   flicker through it, worse the further away the camera was. The depth
