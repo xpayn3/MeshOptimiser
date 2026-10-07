@@ -437,7 +437,7 @@ function _startRenderSession(opts) {
       const saver = window._saveScreenshotBlob || null;
       if (saver) {
         const finalName = await saver(blob, name);
-        F.toast?.('Render saved', `${finalName} (${opts.width}×${opts.height}, ${pt.samples} spp)`, 'info', 2400);
+        if (finalName) F.toast?.('Render saved', `${finalName} (${opts.width}×${opts.height}, ${pt.samples} spp)`, 'info', 2400);
       } else {
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);

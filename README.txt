@@ -1,4 +1,4 @@
-STEP Optimizer - quick start
+MeshOptimiser - quick start
 ============================
 
 ONE CLICK:

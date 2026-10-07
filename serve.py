@@ -517,7 +517,7 @@ def main() -> int:
     with httpd:
         url = f"http://localhost:{chosen_port}/index.html"
         if auto_load: url += "?file=" + quote(auto_load)
-        print(f"\n  STEP Optimizer running at  {url}\n  (press Ctrl+C to stop)\n")
+        print(f"\n  MeshOptimiser running at  {url}\n  (press Ctrl+C to stop)\n")
         if not args.no_browser:
             try: webbrowser.open(url)
             except Exception: pass

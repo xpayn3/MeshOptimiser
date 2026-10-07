@@ -436,7 +436,7 @@
 
       state.treeNodes ||= [];
       let minId = -100;
-      for (const n of state.treeNodes) if (n.kind === 'group' && n.id < minId) minId = n.id - 1;
+      for (const n of state.treeNodes) if ((n.kind === 'group' || n.kind === 'cloner') && typeof n.id === 'number' && n.id <= minId) minId = n.id - 1;
       const clonerNodeId = Math.min(minId - 1, -200);
       state.treeNodes.unshift({
         id: clonerNodeId, kind: 'cloner', name: grp.name,
@@ -486,7 +486,7 @@
       if (standalone) {
         toast('Cloner created', 'Empty — drag parts into the Cloner row in the tree to add sources', 'info', 2600);
       } else {
-        toast('Cloner created', `${valid.length} source · ${_clonerCount(partInfo.cloner)} clones`, 'info', 1800);
+        toast('Cloner created', `${valid.length} source${valid.length === 1 ? '' : 's'} · ${_clonerCount(partInfo.cloner)} clones`, 'info', 1800);
       }
       return partInfo;
     }
@@ -713,7 +713,7 @@
           subhead('Sweep') +
           angSlider('Start', 'radial.startDeg', R.startDeg) +
           angSlider('End',   'radial.endDeg', R.endDeg) +
-          toggle('Face center', 'radial.faceCenter', R.faceCenter, 'Rotate each clone so its front points at the centre');
+          toggle('Face center', 'radial.faceCenter', R.faceCenter, 'Rotate each clone so its front points at the center');
       } else if (c.mode === 'grid') {
         const G = c.grid;
         modeBody =
@@ -743,7 +743,7 @@
         : '';
       // centerArray only makes sense for linear/grid — radial is centred by
       // construction. Hide the toggle in radial mode to avoid confusion.
-      const centerToggle = (c.mode === 'radial') ? '' : toggle('Center array', 'centerArray', c.centerArray, 'Straddle the cloner origin instead of growing in +direction');
+      const centerToggle = (c.mode === 'radial') ? '' : toggle('Center array', 'centerArray', c.centerArray, 'Straddle the cloner origin instead of growing in the positive direction');
 
       return `
         <div class="cln-card">
@@ -1274,7 +1274,7 @@
           _clonerRebuild(partInfo);
           state.treeNodes ||= [];
           let minId = -100;
-          for (const n of state.treeNodes) if (n.kind === 'group' && n.id < minId) minId = n.id - 1;
+          for (const n of state.treeNodes) if ((n.kind === 'group' || n.kind === 'cloner') && typeof n.id === 'number' && n.id <= minId) minId = n.id - 1;
           const nodeId = Math.min(minId - 1, -200);
           state.treeNodes.unshift({
             id: nodeId, kind: 'cloner', name: s.name, depth: 0, parentId: null, partId: null, obj3d: grp,
@@ -1444,7 +1444,7 @@
         .cln-card-titles{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
         .cln-card-title{font-size:var(--fs-md);font-weight:var(--fw-semibold);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
         .cln-card-sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-        .cln-count-badge{display:inline-flex;align-items:center;font-size:var(--fs-10);color:var(--ac);background:var(--ac-tint-12);padding:2px 9px;border-radius:var(--r-pill);font-weight:var(--fw-semibold);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+        .cln-count-badge{display:inline-flex;align-items:center;font-size:var(--fs-10);color:var(--ac-text);background:var(--ac-tint-12);padding:2px 9px;border-radius:var(--r-pill);font-weight:var(--fw-semibold);letter-spacing:.02em;font-variant-numeric:tabular-nums}
         .cln-source-chip{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-10);color:var(--tx3);background:var(--s2);padding:2px 8px;border-radius:var(--r-pill);font-weight:var(--fw-medium)}
         .cln-source-chip svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2}
 
@@ -1455,7 +1455,7 @@
         .cln-mode-card span{font-size:var(--fs-11);font-weight:var(--fw-medium);letter-spacing:.01em}
         .cln-mode-card:hover{background:var(--bg3);color:var(--tx2);border-color:var(--bd2)}
         .cln-mode-card:hover svg{transform:scale(1.08)}
-        .cln-mode-card.active{background:var(--ac-tint-12);color:var(--ac);border-color:var(--ac-line);box-shadow:inset 0 0 0 1px var(--ac-tint-25)}
+        .cln-mode-card.active{background:var(--ac-tint-12);color:var(--ac-text);border-color:var(--ac-line);box-shadow:inset 0 0 0 1px var(--ac-tint-25)}
         .cln-mode-card.active svg{stroke-width:2}
 
         /* ── Section bodies — wrap sliders / toggles with consistent padding. */
@@ -1478,10 +1478,10 @@
 
         /* ── Empty state — pop-out invite to drag a part in. */
         .cln-empty{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 12px;margin:var(--space-md);font-size:var(--fs-11);color:var(--tx3);background:var(--ac-tint-04);border:1px dashed var(--ac-line);border-radius:var(--r-md);text-align:center;line-height:var(--lh-base)}
-        .cln-empty-icon{width:22px;height:22px;color:var(--ac);stroke:currentColor;fill:none;stroke-width:1.6;margin-bottom:2px}
+        .cln-empty-icon{width:22px;height:22px;color:var(--ac-text);stroke:currentColor;fill:none;stroke-width:1.6;margin-bottom:2px}
         .cln-empty-text{font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx2)}
         .cln-empty-sub{font-size:var(--fs-11);color:var(--tx3)}
-        .cln-empty strong{color:var(--ac);font-weight:var(--fw-semibold)}
+        .cln-empty strong{color:var(--ac-text);font-weight:var(--fw-semibold)}
 
         /* ── Foot — Reset + Dissolve, right-aligned. */
         .cln-foot{display:flex;gap:8px;padding:var(--space-md);justify-content:flex-end;border-top:1px solid var(--bd);margin-top:var(--space-md)}
@@ -1492,8 +1492,8 @@
 
         /* ── Tree-row affordances (unchanged from prior session) ── */
         .tree-node.is-cloner.cln-drop-active{outline:2px dashed var(--ac);outline-offset:-2px;background:var(--ac-tint-15)!important;border-radius:3px}
-        .tree-typeicon.cln{color:var(--ac);background:var(--ac-tint-12)}
-        .tree-node.is-cloner .tree-label{color:var(--ac)}
+        .tree-typeicon.cln{color:var(--ac-text);background:var(--ac-tint-12)}
+        .tree-node.is-cloner .tree-label{color:var(--ac-text)}
       `;
       document.head.appendChild(s);
     }

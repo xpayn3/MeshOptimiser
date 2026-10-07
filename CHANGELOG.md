@@ -1,8 +1,175 @@
 # Changelog
 
-All notable changes to STEP Optimiser. Newest on top.
+All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
+
+## v0.9.0
+
+v0.8.0 modernised the plumbing. v0.9.0 is a *reliability* release: a
+stress test on a 1,583-part / 5.4M-triangle assembly plus three code
+audits turned up tools that destroyed geometry, exports that ignored
+edits, and a group of actions that Ctrl+Z could not undo. Those are
+fixed. The interface also gets one button scale, readable secondary
+text, and a full proofreading pass. The app is now called
+**MeshOptimiser** everywhere.
+
+**Data loss and wrong output**
+
+- ![fix][fix] **Decimate destroyed parts** — the removal count was taken
+  from the un-indexed corner count (three per triangle) instead of the
+  welded vertex count, so at −50% most parts were reduced to zero
+  triangles. −25 / −50 / −75% now remove that share (a 2,208-triangle
+  sphere becomes 1,656 / 1,102 / 550).
+- ![fix][fix] **Decimate never reached the export** — the reduced
+  geometry was not registered under the part's hash, so export, merge
+  and the memory readout still used the original mesh. Export now reads
+  the geometry the part is actually drawing.
+- ![fix][fix] **Save scene lost its state** — the state marker node was
+  flagged invisible and `GLTFExporter` skips invisible objects, so the
+  camera, view settings, hidden parts and measurements were never
+  written. Hidden / flagged state now travels on each part's own node,
+  so duplicate part names can no longer mis-assign it.
+- ![fix][fix] **Save scene mangled names and nested the scene** — glTF
+  loaders rewrite node names (`Group 2` → `Group_2`, `Cube.001` →
+  `Cube001`) and every save / reopen wrapped the scene in one more
+  `Group`. Real names are stored in node extras and restored on load;
+  the wrapper is gone. Two consecutive round trips now return an
+  identical tree.
+- ![fix][fix] **Exporting in Wireframe / X-ray / Heatmap** baked the view
+  mode into the file (line primitives, see-through or heat-coloured
+  materials). Export and Save scene run in Solid and restore the view
+  mode afterwards.
+- ![fix][fix] **Recenter and Center pivot did not reach the export** —
+  the exported file kept the old positions. Bake transforms also
+  displaced parts that sat under a moved parent.
+- ![fix][fix] **PLY export hung on "Preparing export…"** whenever the tab
+  was in the background. Long jobs (load, decimate, screenshots) no
+  longer stall in a background tab either.
+- ![fix][fix] **Hidden instanced parts exported with NaN transforms**;
+  they now export from the matrix they were built with.
+- ![fix][fix] **Bake / Center pivot on shared geometry** — a part that
+  shared its buffer with another part (any duplicate) was transformed
+  twice, or moved a part that was not selected. Shared buffers are now
+  copied before they are edited.
+- ![fix][fix] A new model no longer inherits the previous model's
+  Recenter offset, and Save scene no longer silently overwrites the
+  previous model's file.
+- ![fix][fix] An export that fails before the writer starts now takes
+  the loader down and reports the error instead of leaving
+  "Preparing export…" on screen.
+
+**Undo / redo**
+
+- ![fix][fix] **Six tools pushed no undo entry**, so Ctrl+Z reverted an
+  older, unrelated action: Decimate, Recenter on origin, Bake
+  transforms, Center pivot, Recompute normals and Delete empty groups.
+  All six now undo and redo.
+- ![fix][fix] **Undo of Isolate / Show all / Hide unselected** now
+  restores instanced parts as well.
+- ![fix][fix] **Redo of Smart fit and Paste group** no longer discards
+  the rest of the redo stack; a co-fitted sibling is restored to its
+  real parent.
+- ![fix][fix] A change too large to keep an undo copy of now clears the
+  history (with a notice) instead of leaving Ctrl+Z pointing at an
+  older step.
+
+**Groups, Flatten and cleanup**
+
+- ![fix][fix] **Flatten and "Delete empty groups" now work from the
+  tree.** Selecting a part moves its mesh out of its group in the scene
+  graph, and both tools trusted the scene graph: "last level" and
+  "keep N levels" over-flattened, rows reshuffled, and a group full of
+  live parts could be judged empty. All five Flatten modes, scoped and
+  whole-tree, pass with undo and redo; rows keep their order and group
+  ids.
+- ![fix][fix] **Grouping parts from different levels** no longer pulls
+  the outside part into the first part's group; the new group is
+  created at the level the selection shares.
+- ![polish][polish] A flatten that changes nothing says why instead of
+  reporting success, "Preserve user groups" defaults off when every
+  group is one you created, and the depth readout is no longer off by
+  one.
+- ![polish][polish] **Group rows show their part count**, so a collapsed
+  group says what it holds. New groups no longer reuse a name.
+- ![polish][polish] **Cinema 4D-style nesting** — a child's icon sits one
+  step in from its parent's and the connector runs right up to it; a
+  flat list drops the empty arrow column.
+
+**Selection, shortcuts and measuring**
+
+- ![fix][fix] **The ruler only measured on Ctrl+click** while the
+  on-screen hint said "Click two points". A plain click now picks,
+  dragging still orbits, and picking no longer changes the selection.
+- ![fix][fix] **Delete acted on the scene behind an open dialog**, and
+  Ctrl+S also toggled Isolate. Global shortcuts are ignored while a
+  dialog is open or a dropdown has focus.
+- ![fix][fix] **Shift-click range** no longer sweeps up rows hidden by a
+  search or a collapsed group; a search shows matches inside collapsed
+  groups; selection back / forward never restores deleted parts.
+- ![fix][fix] Wrong shortcut hints: move / rotate / scale are `E` / `R`
+  / `T` (not `W` / `E` / `R`), and Reveal in tree is `Shift+S`.
+- ![fix][fix] "% of model" showed 173% for a single cube in a new
+  scene; it now measures against what is in the scene.
+- ![fix][fix] Three sidebar cards (Selection & actions, Auto cleanup,
+  Optimize) would not collapse.
+- ![polish][polish] The Measurements card only appears while there is a
+  measurement to list.
+
+**Interface**
+
+- ![polish][polish] **One button scale** — every button, dropdown
+  trigger and close button uses three sizes (26 / 32 / 40px) from
+  tokens at the end of the stylesheet. Heights previously ran from 17 to
+  40px, text from 10 to 13px and radius from 4 to 8px depending on the
+  panel. Full-width action buttons are left-aligned so their icons form
+  one column.
+- ![polish][polish] **Readable secondary text** — tertiary text (labels,
+  triangle counts, status bar) measured about 3:1 against the 4.5:1
+  minimum and now passes. Accent-coloured text uses a lighter tint;
+  fills and borders keep the brand colour.
+- ![polish][polish] **Selected rows** get a filled background as well as
+  the label colour, and keyboard focus shows one consistent ring.
+- ![polish][polish] More room at the right edge of the parts list.
+- ![polish][polish] The top bar uses the same dark surface as the two
+  sidebars.
+- ![polish][polish] **Menus restyled** — every dropdown and context menu
+  is a dark rounded panel with a solid accent bar under the pointer and
+  white text; shortcuts are plain text at the right, and menus that pick
+  a value mark the current one with a check.
+- ![polish][polish] **New primary colour** — the accent is now blue
+  (`#0d99ff`) instead of indigo, across buttons, sliders, highlights and
+  the primitive thumbnails.
+
+**Copy**
+
+- ![docs][docs] **Proofreading pass** — about a hundred corrections to
+  labels, tooltips, toasts and loader messages: stale or wrong
+  information (the Add tooltip listed a shape that isn't in the menu,
+  Blender listed as Y-up, "Open or drop a .step file" ignoring seven
+  other formats), self-contradicting tooltips, developer jargon in
+  user-facing text, plurals ("1 parts"), and consistent American
+  spelling and `…`.
+- ![fix][fix] "Decimated" / "Decimate failed" toasts used a type with no
+  styling; cancelling the path-tracer save showed "Render saved — null";
+  every FBX load failure was titled "FBX too old to read".
+- ![docs][docs] **Renamed to MeshOptimiser** in the app, launchers,
+  server banner and exported-file headers. The default export name is
+  now `mesh_optimised`. The saved-scene format id and browser storage
+  keys are unchanged, so existing scenes and settings keep working.
+
+**Known issues**
+
+- No undo yet for: values typed into the transform panel, tree
+  drag-and-drop, the eye icon on a group row, Materials-panel actions
+  (Add, Duplicate, Merge, Delete, presets) and context-menu "Rename
+  group". Ctrl+Z after any of these undoes the action before it.
+- Import → Append replaces the existing tree hierarchy.
+- Cloner output is not included in exports or saved scenes.
+- Cancel does not stop a STEP conversion that is already running.
+- The eye icon on a single part and "Hide unselected" have no visible
+  effect on instanced parts.
+- Merge cannot be redone after an undo.
 
 ## v0.8.0
 

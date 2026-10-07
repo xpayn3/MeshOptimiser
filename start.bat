@@ -1,10 +1,10 @@
 @echo off
-title STEP Optimizer
+title MeshOptimiser
 cd /d "%~dp0"
 
 echo.
 echo  ============================================================
-echo    STEP Optimizer
+echo    MeshOptimiser
 echo  ============================================================
 echo.
 if "%~1"=="" (

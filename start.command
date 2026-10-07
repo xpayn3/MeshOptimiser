@@ -1,5 +1,5 @@
 #!/bin/bash
-# STEP Optimizer launcher (macOS)
+# MeshOptimiser launcher (macOS)
 # Double-click to start the local server. First run sets up a venv + installs deps.
 set -e
 cd "$(dirname "$0")"
@@ -16,7 +16,7 @@ xattr -d com.apple.quarantine "$0" 2>/dev/null || true
 xattr -dr com.apple.quarantine . 2>/dev/null || true
 
 echo
-echo "  STEP Optimizer (macOS)"
+echo "  MeshOptimiser (macOS)"
 echo "  ======================"
 echo
 

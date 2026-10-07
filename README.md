@@ -218,31 +218,17 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v0.8.0** — the *plumbing* feels modern: an industry-standard ray-marched
-floor grid (no plane mesh, no Z-fight), a unified keycap chip across every
-shortcut surface, the undo system rebuilt as a flat command registry, and
-all runtime-injected CSS lifted into the stylesheet.
+**v0.9.0** — a *reliability* release. A stress test on a 1,583-part /
+5.4M-triangle assembly and three code audits found tools that destroyed
+geometry, exports that ignored edits, and actions Ctrl+Z could not undo.
 
-- ![new][new] **Ray-marched ground grid** — fullscreen NDC quad, eye-ray + plane intersect, analytic depth write. No vertex precision loss at distance, no sub-pixel jitter under orbit, no coplanar Z-fight.
-- ![new][new] **Redesigned Shortcuts modal** — sticky search input, category headers with lucide icons, 2-column grid, multi-key combos rendered as separate keycap chips joined by `+`. Opens via `?`.
-- ![polish][polish] **`.kbd-chip` shared primitive** — single class on the hint strip, tooltips, command palette, brand menu, Shortcuts modal — consistent combo splitting everywhere.
-- ![polish][polish] **Smart fit + caret merged** + Smart-fit popover sliders now use the same `.scrub-range` style as the sidebar's Threshold scrubber.
-- ![refactor][refactor] **Big internal cleanups** — 8 runtime `<style>` injections (~490 lines) lifted into `index.html`; undo monkey-patches (11 of them) collapsed into a single `_UndoOps` registry covering 21 op types; renderer + popover dismissal helpers extracted.
-- ![fix][fix] Tree summary stuck at "1 parts in hierarchy" after delete · stranded group origin dot after deleting all members · group-selection button popping a name dialog · path tracer error spam on empty scene · materials panel duplicate / add / merge each had their own confusing toast or selection requirement.
-
-> **Pre-1.0 — breaking changes expected.** The CLI flags, in-app APIs,
-> and on-disk formats may shift between minor versions. `v1.0.0` will
-> mark the first commitment to backward compatibility.
-
-**Earlier**
-
-- **v0.7.0** — GPU path tracer aperture button + sample-accumulating modal, contextual hint strip, long-hold add-primitive picker, standalone Cloner you can drag parts into, Revert-to-source escape hatch.
-- **v0.6.0** — C4D-style live Cloner, Ctrl-click measure tool, per-group origin markers, Spline-style two-panel Export modal, `--simplify` + meshopt-by-default pipeline, CAD-correct mouse mapping.
-- **v0.5.0** — scene management (New scene, Import-merge, Scene settings modal), parametric-primitive polish with editable mm-snapped inputs, unit-aware transforms, banding-free dithered backgrounds, `/api/quit` clean shutdown.
-- **v0.4.0** — HDRI environment lighting, infinite floor grid + fog, parametric primitive insertion, top-center camera-view pill with `Ctrl/⌘+1..4`, borderless popup language, IBM-blue accent refresh.
-- **v0.3.0** — full material editor with shader-ball previews, scale gizmo + Shift-snap + live HUD, screenshot capture with custom resolutions, ortho Top/Front/Side viewport toggles, FBX legacy rescue.
-
-[Full changelog →](./CHANGELOG.md) · [Releases →](https://github.com/xpayn3/MeshOptimiser/releases)
+- ![fix][fix] **Decimate** removed far more than asked (most parts ended at zero triangles) and its result never reached the export. Both fixed.
+- ![fix][fix] **Save scene** now keeps hidden parts, camera, view settings, measurements, real names and the hierarchy across a round trip.
+- ![fix][fix] **Undo / redo** added for Decimate, Recenter, Bake transforms, Center pivot, Recompute normals and Delete empty groups.
+- ![fix][fix] **Flatten and "Delete empty groups"** rebuilt to follow the tree; grouping across levels no longer drags parts into the wrong group.
+- ![fix][fix] **Export** no longer bakes Wireframe / X-ray / Heatmap into the file, follows Recenter and Center pivot, and PLY no longer hangs in a background tab.
+- ![polish][polish] **One button scale**, restyled menus, a blue accent, readable secondary text, filled selection rows, click-to-measure, and a full proofreading pass.
+- ![docs][docs] Renamed to **MeshOptimiser** throughout. See [CHANGELOG.md](CHANGELOG.md) for the full list and the known issues.
 
 ---
 
