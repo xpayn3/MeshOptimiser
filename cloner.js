@@ -1459,32 +1459,6 @@
       }
     } catch (_) {}
 
-    // Toolbar button (#btn-cloner). Always enabled — nothing-selected creates
-    // an empty cloner the user can drag parts into. Tooltip flips between the
-    // two modes so it's clear what will happen.
-    const btnCloner = document.getElementById('btn-cloner');
-    if (btnCloner) {
-      btnCloner.addEventListener('click', () => {
-        try { _clonerCreateFromSelection(); } catch (e) { console.warn('[cloner] toolbar create failed:', e); }
-      });
-      const _refreshClonerBtn = () => {
-        const ids = [...(state.selected || [])];
-        let hasCloneable = false;
-        for (const id of ids) {
-          const sp = getPart(id);
-          if (sp && !sp.deleted && sp.mesh && !sp.instancedMesh && !sp.isCloner) {
-            hasCloneable = true; break;
-          }
-        }
-        btnCloner.disabled = false;
-        btnCloner.title = hasCloneable
-          ? 'Wrap the selection in a live C4D-style cloner (Linear / Radial / Grid)'
-          : 'Create an empty Cloner — drag parts into it in the tree to add sources';
-      };
-      setInterval(_refreshClonerBtn, 200);
-      _refreshClonerBtn();
-    }
-
     if (!document.getElementById('_cloner-style')) {
       const s = document.createElement('style');
       s.id = '_cloner-style';
