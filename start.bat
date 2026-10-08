@@ -1,5 +1,10 @@
 @echo off
 title MeshOptimiser
+REM The file to open, as a full path, taken before the folder changes: a path
+REM typed relative to wherever the launcher was called from would not be found
+REM from the project folder.
+set "SRC="
+if not "%~1"=="" set "SRC=%~f1"
 cd /d "%~dp0"
 
 echo.
@@ -7,26 +12,38 @@ echo  ============================================================
 echo    MeshOptimiser
 echo  ============================================================
 echo.
-if "%~1"=="" (
+if not defined SRC (
   echo    No file dropped - starting viewer empty.
 ) else (
-  echo    Dropped file:  "%~1"
+  echo    Dropped file:  "%SRC%"
 )
-echo    Working dir:   %CD%
+echo    Working dir:   "%CD%"
 echo.
 
-REM --- Step 1: find a real Python -----------------------------
-REM Probe each candidate by actually running --version. The Microsoft Store
-REM stub at WindowsApps\python.exe is found by `where python` but exits
-REM non-zero with "Python was not found", so we filter it out by exit code.
+REM --- Step 1: a Python that can run this ----------------------
+REM MeshOptimiser needs Python 3.10, 3.11 or 3.12: the versions the CAD
+REM library it depends on is built for. Any other version is turned down here,
+REM with a message, instead of failing later in the middle of pip install.
 echo  [1/4] Checking Python...
+
+REM An environment that is already set up has a Python of its own. That is the
+REM one that runs, so that is the one to check, and the PC is not searched.
+if exist ".venv\Scripts\python.exe" goto venv_check
+
 call :find_python
 if defined PY goto py_found
 
-REM --- No Python: offer to install it ------------------------
+REM --- No usable Python: say why, and offer to install one -----
 echo.
-echo    Python was not found on this PC.
+if defined PYBAD (
+  echo    Found Python %PYBAD%, but MeshOptimiser needs Python 3.10, 3.11 or 3.12.
+  echo    Python 3.12 can be installed next to it; the one you have stays as it is.
+) else (
+  echo    Python was not found on this PC.
+)
 echo.
+REM Started without a window there is nobody to answer the question below.
+if defined MESHOPTIMISER_HIDDEN exit /b 1
 choice /c YN /m "    Install Python 3.12 automatically now"
 if errorlevel 2 (
   echo.
@@ -34,29 +51,28 @@ if errorlevel 2 (
   echo    During install, CHECK "Add Python to PATH".
   echo    Then close this window and double-click start.bat again.
   echo.
-  pause
+  call :hold
   exit /b 1
 )
 
 call :install_python
 if errorlevel 1 (
   echo.
-  echo    Auto-install failed. Install Python manually from
+  echo    Auto-install failed. Install Python 3.10 - 3.12 manually from
   echo    https://www.python.org/downloads/ and re-run start.bat.
   echo.
-  pause
+  call :hold
   exit /b 1
 )
 
-REM Re-probe — installer adds `py` launcher under C:\Windows which is
-REM already on PATH, so a new shell isn't required.
+REM Look again: the installer's folders are on this window's PATH now.
 call :find_python
 if not defined PY (
   echo.
   echo    Python was installed but is not yet visible on PATH.
   echo    Close this window, open a new terminal, and re-run start.bat.
   echo.
-  pause
+  call :hold
   exit /b 1
 )
 
@@ -66,18 +82,43 @@ echo.
 
 REM --- Step 2: virtualenv -------------------------------------
 echo  [2/4] Checking local Python environment...
-if exist ".venv\Scripts\python.exe" goto venv_exists
-
 echo        First-time setup - creating .venv (takes ~30 seconds)...
 %PY% -m venv .venv
 if errorlevel 1 (
   echo.
   echo    ERROR: Failed to create virtual environment.
-  echo    Make sure Python 3.10+ is installed and the venv module is available.
+  echo    Make sure Python 3.10 to 3.12 is installed and the venv module is available.
   echo.
-  pause
+  call :hold
   exit /b 1
 )
+goto venv_exists
+
+:venv_check
+REM The environment's own Python: does it still run, and is it a supported
+REM version? (It stops running when the Python it was made from is removed.)
+".venv\Scripts\python.exe" --version
+if errorlevel 1 (
+  echo.
+  echo    The Python environment in the .venv folder no longer works: the
+  echo    Python it was made with has probably been removed or replaced.
+  echo    Delete the .venv folder and run start.bat again to rebuild it.
+  echo.
+  call :hold
+  exit /b 1
+)
+".venv\Scripts\python.exe" -c "import sys; sys.exit(0 if (3,10) <= sys.version_info[:2] <= (3,12) else 1)"
+if errorlevel 1 (
+  echo.
+  echo    The environment in the .venv folder was made with the Python above.
+  echo    MeshOptimiser needs Python 3.10, 3.11 or 3.12.
+  echo    Delete the .venv folder and run start.bat again to rebuild it.
+  echo.
+  call :hold
+  exit /b 1
+)
+echo.
+echo  [2/4] Checking local Python environment...
 
 :venv_exists
 REM The packages are installed once per requirements.txt: a copy of the file is
@@ -96,7 +137,7 @@ if errorlevel 1 (
   echo    ERROR: pip install failed.
   echo    Check your internet connection, and that Python is 3.10 to 3.12.
   echo.
-  pause
+  call :hold
   exit /b 1
 )
 copy /y requirements.txt ".venv\.requirements.installed" >nul
@@ -111,13 +152,14 @@ call .venv\Scripts\activate.bat
 echo.
 
 REM --- Step 3: launch -----------------------------------------
-echo  [3/4] Starting local server on http://localhost:4242
+REM (serve.py prints the address itself: the port is not always the same one)
+echo  [3/4] Starting the local server...
 echo.
 
-if "%~1"=="" (
+if not defined SRC (
   python serve.py
 ) else (
-  python serve.py --open "%~1"
+  python serve.py --open "%SRC%"
 )
 
 set EXITCODE=%ERRORLEVEL%
@@ -129,7 +171,7 @@ REM the window open so the user can see the failure.
 if not %EXITCODE%==0 (
   echo    Exit code: %EXITCODE%
   echo.
-  pause
+  call :hold
 )
 exit /b %EXITCODE%
 
@@ -138,22 +180,57 @@ REM ============================================================
 REM Subroutines
 REM ============================================================
 
+:hold
+REM Keeps the window open so that a message can be read. Started without a
+REM window (start_hidden.vbs sets MESHOPTIMISER_HIDDEN) nobody could press the
+REM key, and the launcher would sit there for good: then it is skipped, and
+REM start_hidden.vbs reports the failure from the exit code.
+if not defined MESHOPTIMISER_HIDDEN pause
+exit /b 0
+
+
 :find_python
+REM Sets PY to a command that starts a supported Python (3.10 to 3.12). When
+REM the only Python found is some other version, PYBAD is that version.
 set "PY="
-py -3 --version >nul 2>nul
-if not errorlevel 1 (set "PY=py -3" & exit /b 0)
-python --version >nul 2>nul
-if not errorlevel 1 (
-  REM Reject the Microsoft Store stub: it lives in WindowsApps and exits 9009
-  REM on real use. `python --version` returns 0 on the stub in newer builds
-  REM though, so check for the WindowsApps path explicitly.
-  for /f "delims=" %%P in ('where python 2^>nul') do (
-    echo %%P | findstr /i "WindowsApps" >nul
-    if errorlevel 1 (set "PY=python" & exit /b 0)
+set "PYBAD="
+REM The py launcher starts a version by number. Newest supported one first,
+REM so 3.12 is used even where a newer Python is installed as well.
+for %%V in (3.12 3.11 3.10) do (
+  if not defined PY (
+    py -%%V --version >nul 2>nul
+    if not errorlevel 1 set "PY=py -%%V"
   )
 )
-python3 --version >nul 2>nul
-if not errorlevel 1 (set "PY=python3" & exit /b 0)
+if defined PY exit /b 0
+call :try_python py -3
+if defined PY exit /b 0
+REM `python` on PATH, unless all there is is the Microsoft Store stub: that
+REM one lives in WindowsApps, is found by `where python`, and does not run
+REM anything (newer builds even answer --version with exit code 0).
+set "REALPY="
+for /f "delims=" %%P in ('where python 2^>nul') do (
+  echo "%%P" | findstr /i "WindowsApps" >nul
+  if errorlevel 1 set "REALPY=1"
+)
+if defined REALPY call :try_python python
+if defined PY exit /b 0
+call :try_python python3
+if defined PY exit /b 0
+exit /b 1
+
+
+:try_python
+REM %* is a command that starts Python. PY becomes that command when it runs
+REM a supported version; when it runs another version, PYBAD is that version.
+%* --version >nul 2>nul
+if errorlevel 1 exit /b 1
+%* -c "import sys; sys.exit(0 if (3,10) <= sys.version_info[:2] <= (3,12) else 1)" >nul 2>nul
+if not errorlevel 1 (
+  set "PY=%*"
+  exit /b 0
+)
+for /f "tokens=2" %%v in ('%* --version 2^>nul') do set "PYBAD=%%v"
 exit /b 1
 
 
@@ -191,8 +268,12 @@ del /q "%PYINST%" >nul 2>nul
 
 :install_ok
 echo    Python installed.
-REM Refresh this shell's PATH so newly installed binaries are visible.
-for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul ^| findstr /i "REG_"') do set "USRPATH=%%B"
-for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul ^| findstr /i "REG_"') do set "SYSPATH=%%B"
-set "PATH=%SYSPATH%;%USRPATH%"
+REM This window read its PATH before the installer ran, so the new Python is
+REM not on it. The folders the installer uses are put in front of it here, the
+REM way the installer does it for new windows (in front, so that `python` is
+REM not the Microsoft Store stub). PATH used to be rebuilt from the registry at
+REM this point: the value stored there names the Windows folder by a variable
+REM that is not expanded when it is read back, so this window lost System32,
+REM and with it where, findstr, fc and choice.
+set "PATH=%LocalAppData%\Programs\Python\Launcher;%LocalAppData%\Programs\Python\Python312;%LocalAppData%\Programs\Python\Python312\Scripts;%ProgramFiles%\Python312;%ProgramFiles%\Python312\Scripts;%PATH%"
 exit /b 0

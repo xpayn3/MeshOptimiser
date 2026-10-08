@@ -28,6 +28,10 @@
 // In the page, window.__stress gives: step(name, fn) to time one action,
 // frameCost() for the cost of a frame measured around the renderer itself,
 // rafFps() for what the screen really gets, mem(), table().
+//
+// Needs Node 22 or newer: the connection to Chrome uses the WebSocket that is
+// built into Node from that version on (no package to install). On an older
+// Node it stops at "WebSocket is not defined".
 import fs from 'node:fs';
 const PORT = process.env.CDP_PORT || 9333;
 const [, , cmd, arg, arg2] = process.argv;
@@ -40,7 +44,9 @@ let id = 0; const pending = new Map();
 ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && pending.has(d.id)) { pending.get(d.id)(d); pending.delete(d.id); } };
 const send = (method, params = {}) => new Promise(r => { const i = ++id; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const summarise = (pr, N = 30) => {
+// Prints a CPU profile as self time and inclusive time per function, the top
+// N rows of each. `hide` is the rows left out of the two lists.
+const summarise = (pr, N = 30, hide = /^\(idle\)|^\(root\)/) => {
   const byId = new Map(pr.nodes.map(n => [n.id, n]));
   const parent = new Map(); for (const n of pr.nodes) for (const c of (n.children || [])) parent.set(c, n.id);
   const self = new Map(), incl = new Map();
@@ -53,7 +59,7 @@ const summarise = (pr, N = 30) => {
     const seen = new Set(); let cur = id;
     while (cur !== undefined) { const kk = key(byId.get(cur)); if (!seen.has(kk)) { seen.add(kk); incl.set(kk, (incl.get(kk) || 0) + dt); } cur = parent.get(cur); }
   });
-  const fmt = (m) => [...m.entries()].filter(([k]) => !/^\(idle\)|^\(root\)/.test(k)).sort((a, b) => b[1] - a[1]).slice(0, N).map(([k, v]) => v.toFixed(1).padStart(8) + '  ' + k).join('\n');
+  const fmt = (m) => [...m.entries()].filter(([k]) => !hide.test(k)).sort((a, b) => b[1] - a[1]).slice(0, N).map(([k, v]) => v.toFixed(1).padStart(8) + '  ' + k).join('\n');
   console.log('total ms', total.toFixed(0), ' idle', (self.get('(idle) :1') || 0).toFixed(0));
   console.log('--- SELF\n' + fmt(self)); console.log('--- INCLUSIVE\n' + fmt(incl));
 };
@@ -72,22 +78,8 @@ try {
     const pr = (await send('Profiler.stop')).result.profile;
     if (r.result?.exceptionDetails) console.log('EXCEPTION', r.result.exceptionDetails.exception?.description);
     else console.log('RESULT', JSON.stringify(r.result?.result?.value));
-    const byId = new Map(pr.nodes.map(n => [n.id, n]));
-    const parent = new Map(); for (const n of pr.nodes) for (const c of (n.children || [])) parent.set(c, n.id);
-    const self = new Map(), incl = new Map();
-    const dts = pr.timeDeltas; let total = 0;
-    const key = (n) => `${n.callFrame.functionName || '(anon)'} ${(n.callFrame.url || '').split('/').pop().split('?')[0]}:${n.callFrame.lineNumber + 1}`;
-    pr.samples.forEach((id, i) => {
-      const dt = (dts[i] || 0) / 1000; total += dt;
-      const n = byId.get(id); const k = key(n);
-      self.set(k, (self.get(k) || 0) + dt);
-      const seen = new Set(); let cur = id;
-      while (cur !== undefined) { const kk = key(byId.get(cur)); if (!seen.has(kk)) { seen.add(kk); incl.set(kk, (incl.get(kk) || 0) + dt); } cur = parent.get(cur); }
-    });
-    const N = +arg2 || 30;
-    const fmt = (m) => [...m.entries()].filter(([k]) => !/^\(idle\)|^\(program\)|^\(root\)/.test(k)).sort((a, b) => b[1] - a[1]).slice(0, N).map(([k, v]) => v.toFixed(1).padStart(8) + '  ' + k).join('\n');
-    console.log('total ms', total.toFixed(0), ' idle', (self.get('(idle) :1') || 0).toFixed(0));
-    console.log('--- SELF\n' + fmt(self)); console.log('--- INCLUSIVE\n' + fmt(incl));
+    // (here the browser's own "(program)" time is left out of the lists as well)
+    summarise(pr, +arg2 || 30, /^\(idle\)|^\(program\)|^\(root\)/);
   } else if (cmd === 'gesture') {
     // node cdp.mjs gesture <gestures.json>   [{name, events:[...mouse/key events...], settle}]
     // Real input through the browser; reports animation-frame gaps while each gesture ran.

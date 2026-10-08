@@ -53,6 +53,10 @@
 // Pure function, no dependencies: the app calls it per part, the tests call
 // it from Node.
 
+// The most triangles a mesh may have: three half-edges each have to fit in
+// one Map (2^24 entries).
+const MAX_TRIS = Math.floor(16777216 / 3);
+
 export function fillFlatHoles(positions, index, opts = {}) {
   const P = positions;
   const vCount = (P.length / 3) | 0;
@@ -74,8 +78,13 @@ export function fillFlatHoles(positions, index, opts = {}) {
   // `holes` counts everything that was closed; `flattened` is how many of those were raised details
   const result = { holes: 0, through: 0, blind: 0, open: 0, flattened: 0, loops: 0, removedTris: 0, addedTris: 0,
                    removed: null, caps: null, capOwner: null,
-                   skipped: { raised: 0, raisedTall: 0, leaking: 0, tooDeep: 0, tooLarge: 0, partOfShape: 0, tooSmall: 0, kind: 0, uncappable: 0 } };
+                   skipped: { raised: 0, raisedTall: 0, leaking: 0, tooDeep: 0, tooLarge: 0, partOfShape: 0, tooSmall: 0, kind: 0, uncappable: 0, tooBig: 0 } };
   if (!(maxSize > 0) || T < 4) return result;
+  // The adjacency below keeps one Map entry per triangle edge, and a Map
+  // holds 2^24 entries at most: past that, set() throws. A mesh that large
+  // (about 5.6 million triangles) is left as it is, and says so in
+  // skipped.tooBig (1 = this mesh was not looked at).
+  if (T > MAX_TRIS) { result.skipped.tooBig = 1; return result; }
 
   // ── bounding box, tolerances ─────────────────────────────────────────────
   let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;

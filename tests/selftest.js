@@ -674,6 +674,59 @@
     T.eq(a.Cylinder[0] - a.Cube[0], b.Cylinder[0] - b.Cube[0], 'Recenter changed the spacing between parts in the export');
   });
 
+  // Up axis and Scene scale (Settings › Scene) are how the scene is shown and
+  // measured. The file gets the model itself, and Export has its own Scale and
+  // Axis. A part that was moved after the setting changed used to be written
+  // with the setting baked in, and the others without.
+  test('export: the viewport up axis and scene scale stay out of the file, for every part', async () => {
+    await T.fresh(['cube', 'cylinder']);
+    await T.move('Cylinder', 180, 60, 40);
+    const THREE = T.F().THREE;
+    const set = async (id, v) => { const el = document.getElementById(id); el.value = String(v); el.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(450); };
+    // every mesh node's place in the file: position, turn and size
+    const sig = (j) => {
+      const out = [];
+      const walk = (i, parent) => {
+        const n = j.nodes[i], m = new THREE.Matrix4();
+        if (n.matrix) m.fromArray(n.matrix);
+        else m.compose(new THREE.Vector3(...(n.translation || [0, 0, 0])), new THREE.Quaternion(...(n.rotation || [0, 0, 0, 1])), new THREE.Vector3(...(n.scale || [1, 1, 1])));
+        m.premultiply(parent);
+        if (n.mesh !== undefined) out.push(n.name + ' ' + m.elements.map(x => (Math.round(x * 10) / 10) || 0).join(','));
+        (n.children || []).forEach(c => walk(c, m));
+      };
+      j.scenes[0].nodes.forEach(i => walk(i, new THREE.Matrix4()));
+      return out.sort().join(' | ');
+    };
+    // move a part away and back, the way a user would: its place is the same, its stored matrix is new
+    const touch = async (name) => {
+      await T.pick([name]); await T.openTransformPanel();
+      const v = parseFloat(document.getElementById('tform-px').value) || 0;
+      await T.typeInto('tform-px', v + 25); await T.typeInto('tform-px', v);
+      T.act('selClear'); await T.sleep(250);
+    };
+    const base = sig(await T.gltf());
+    try {
+      await set('scene-up-axis', 'y');
+      T.eq(sig(await T.gltf()), base, 'switching the viewport to Y-up changed the exported file');
+      await touch('Cylinder');
+      T.eq(sig(await T.gltf()), base, 'a part moved while the viewport is Y-up was written turned');
+      await set('scene-up-axis', 'z');
+      await set('scene-scale', 2);
+      T.eq(sig(await T.gltf()), base, 'scene scale was baked into the exported file');
+      await touch('Cylinder');
+      T.eq(sig(await T.gltf()), base, 'a part moved in a scaled scene was written at another size than the rest');
+      // a shape added while the scene is scaled and Y-up is written like the others
+      await set('scene-up-axis', 'y');
+      await Promise.race([Promise.resolve(window._addPrimitive('sphere')), T.sleep(2000)]); await T.sleep(350);
+      T.act('selClear'); await T.sleep(150);
+      const withSphere = sig(await T.gltf());
+      await set('scene-up-axis', 'z'); await set('scene-scale', 1);
+      T.eq(sig(await T.gltf()), withSphere, 'a shape added in a scaled Y-up scene changed in the file when the settings went back');
+    } finally {
+      await set('scene-up-axis', 'z'); await set('scene-scale', 1);
+    }
+  });
+
   test('export: cloner copies are written', async () => {
     await T.fresh(['cube']);
     if (!window._Cloner) return 'skipped (no cloner module)';

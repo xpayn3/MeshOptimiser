@@ -157,7 +157,8 @@
     //           to partsRoot; some external code reparented it). We can
     //           reattach with grp.attach() preserving world transform.
     //       (d) source deleted or missing → counted as dead.
-    //     If all sources end up dead → auto-dissolve the cloner.
+    //     If all sources end up dead the clones are emptied and the cloner
+    //     itself stays (the delete may be undone, or new sources dragged in).
     //
     //   PHASE 2 — Tear down previous clones.
     //     Reached only when phase 1 produced ≥1 source mesh under grp.
@@ -170,8 +171,8 @@
     //     Non-instanced path: count-1 standalone Meshes sharing the
     //       source's geometry + material — each is a real Object3D.
     //
-    // Returns 'rebuilt' | 'deferred' | 'dissolved' | 'noop' so the wrapper
-    // (and the poll) can decide whether to re-snap source refs.
+    // Returns 'rebuilt' | 'deferred' | 'noop' so the wrapper (and the poll)
+    // can decide whether to re-snap source refs.
     function _clonerRebuild(p) {
       if (!p?.isCloner || !p.mesh || p.deleted) return 'noop';
       const c = p.cloner;
@@ -355,8 +356,21 @@
     // sources yet — the user then drags parts into the cloner row in the
     // tree to register them (C4D-style). The rebuild emits nothing for an
     // empty source list but the cloner is fully functional otherwise.
-    function _clonerCreateFromParts(sourceIds, opts) {
+    //
+    // redoOp is only passed by the redo handler: the undo entry of a "create
+    // cloner" that was undone and is now being redone. The cloner then comes
+    // back as the SAME part (its partId, name and tree row id), so the steps
+    // still waiting on the redo stack (a parameter change, parts dragged in)
+    // find it, and no new undo entry is made: the entry is brought up to date
+    // and the handler puts it back on the undo stack itself.
+    function _clonerCreateFromParts(sourceIds, opts, redoOp) {
       sourceIds = Array.isArray(sourceIds) ? sourceIds : [];
+      // The part the undo left behind (deleted, still in state.parts). Its
+      // place and id are taken over; should anything else be sitting on that
+      // id by now, the cloner gets a new one like any other.
+      const prev = redoOp ? getPart(redoOp.partId) : null;
+      const reuseId = !!redoOp && (!prev || (prev.isCloner && prev.deleted));
+      if (redoOp) opts = redoOp.opts ? JSON.parse(JSON.stringify(redoOp.opts)) : null;
       const valid = [];
       for (const sid of sourceIds) {
         const sp = getPart(sid);
@@ -398,7 +412,7 @@
       state._pivotedTreeGroupId = null;
       state._pivotOrigParent = null;
       const grp = new THREE.Group();
-      grp.name = 'Cloner ' + ((state._clonerCount || 0) + 1);
+      grp.name = (reuseId && prev && prev.name) || 'Cloner ' + ((state._clonerCount || 0) + 1);
       grp.userData.isCloner = true;
       grp.userData._clonerCloneRefs = [];
       state.partsRoot.add(grp);
@@ -414,14 +428,31 @@
       }
       // Snapshot original parents BEFORE attach() rewrites them, so undo
       // can restore nested-source meshes back to their host (vs always
-      // dumping them at partsRoot).
+      // dumping them at partsRoot). The same goes for each mesh's own
+      // matrix: attach() rewrites it to be relative to the cloner Group,
+      // and undo puts it back under the old parent, where only the old
+      // matrix is right. (Taken after the attach, as it used to be, undo
+      // moved every source by the Group's offset.)
       const _prevParents = new Map();
-      for (const sp of valid) _prevParents.set(sp.partId, sp.mesh.parent || state.partsRoot);
+      const _prevMats = new Map();
+      for (const sp of valid) {
+        _prevParents.set(sp.partId, sp.mesh.parent || state.partsRoot);
+        if (sp.mesh.matrixAutoUpdate) sp.mesh.updateMatrix();
+        _prevMats.set(sp.partId, sp.mesh.matrix.elements.slice());
+      }
       for (const sp of valid) grp.attach(sp.mesh);
       grp.updateMatrixWorld(true);
 
-      const partId = (state.parts.length ? Math.max(...state.parts.map(p => p.partId)) : -1) + 1;
-      state._clonerCount = (state._clonerCount || 0) + 1;
+      // One past the highest id in use. (A loop: spreading every part into
+      // Math.max(...) runs out of call stack on a very large scene.)
+      let partId;
+      if (reuseId) partId = redoOp.partId;
+      else {
+        partId = -1;
+        for (const q of state.parts) if (q.partId > partId) partId = q.partId;
+        partId += 1;
+        state._clonerCount = (state._clonerCount || 0) + 1;
+      }
       const partInfo = {
         partId, name: grp.name, hash: 'cloner_' + partId,
         triCount: 0, vertCount: 0, bbox: aabb.clone(),
@@ -432,13 +463,17 @@
         userExtras: {}, isCloner: true,
         cloner: Object.assign(_clonerDefaults(), { sources: valid.map(sp => sp.partId) }, opts || {}),
       };
-      state.parts.push(partInfo);
+      const slot = (reuseId && prev) ? state.parts.indexOf(prev) : -1;
+      if (slot >= 0) state.parts[slot] = partInfo;
+      else state.parts.push(partInfo);
       if (state.partById) state.partById.set(partId, partInfo);
 
       state.treeNodes ||= [];
       let minId = -100;
       for (const n of state.treeNodes) if ((n.kind === 'group' || n.kind === 'cloner') && typeof n.id === 'number' && n.id <= minId) minId = n.id - 1;
-      const clonerNodeId = Math.min(minId - 1, -200);
+      let clonerNodeId = Math.min(minId - 1, -200);
+      // (on a redo, the row id it had before, unless something has taken it)
+      if (redoOp && typeof redoOp.clonerNodeId === 'number' && !state.treeNodes.some(n => n.id === redoOp.clonerNodeId)) clonerNodeId = redoOp.clonerNodeId;
       state.treeNodes.unshift({
         id: clonerNodeId, kind: 'cloner', name: grp.name,
         depth: 0, parentId: null, partId: null, obj3d: grp,
@@ -464,18 +499,22 @@
 
       _clonerRebuild(partInfo);
 
-      try {
-        pushUndo({
-          type: 'clonerAdd',
-          partId: partInfo.partId,
-          clonerNodeId,
-          sources: valid.map(sp => ({
-            partId: sp.partId,
-            prevParent: _prevParents.get(sp.partId) || state.partsRoot,
-            prevLocalMat: sp.mesh.matrix.elements.slice(),
-          })),
-        });
-      } catch (_) {}
+      const entry = {
+        type: 'clonerAdd',
+        partId: partInfo.partId,
+        clonerNodeId,
+        opts: opts ? JSON.parse(JSON.stringify(opts)) : null,
+        sources: valid.map(sp => ({
+          partId: sp.partId,
+          prevParent: _prevParents.get(sp.partId) || state.partsRoot,
+          prevLocalMat: _prevMats.get(sp.partId),
+        })),
+      };
+      // A redo keeps its own entry. pushUndo here would add a second entry
+      // for the one cloner and empty the redo stack under the steps that are
+      // still waiting on it.
+      if (redoOp) Object.assign(redoOp, entry);
+      else { try { pushUndo(entry); } catch (_) {} }
 
       if (state.selected) { state.selected.clear(); state.selected.add(partId); }
       try { F.rebuildTree?.(); } catch (_) {}
@@ -496,7 +535,9 @@
     // source meshes under the cloner Group, and rebuild. Used by the
     // tree-drop integration so dropping parts onto a cloner row registers
     // them — same effect as if they'd been part of the original selection.
-    function _clonerAddSources(clonerPart, sourceIds) {
+    // (redoOp: as in _clonerCreateFromParts, the undo entry being redone. It
+    // is brought up to date instead of a new entry being pushed.)
+    function _clonerAddSources(clonerPart, sourceIds, redoOp) {
       if (!clonerPart?.isCloner || clonerPart.deleted) return 0;
       if (!Array.isArray(sourceIds) || !sourceIds.length) return 0;
       const grp = clonerPart.mesh;
@@ -505,12 +546,15 @@
       const already = new Set(c.sources || []);
       const added = [];
       const _prevParents = new Map();
+      const _prevMats = new Map();      // each mesh's matrix under its old parent (see _clonerCreateFromParts)
       for (const sid of sourceIds) {
         const sp = getPart(sid);
         if (!sp || sp.deleted || !sp.mesh) continue;
         if (sp.instancedMesh || sp.isCloner) continue;
         if (already.has(sid)) continue;
         _prevParents.set(sid, sp.mesh.parent || state.partsRoot);
+        if (sp.mesh.matrixAutoUpdate) sp.mesh.updateMatrix();
+        _prevMats.set(sid, sp.mesh.matrix.elements.slice());
         // attach() preserves world transform — the source visibly stays put
         // while its parent flips to the cloner Group.
         grp.attach(sp.mesh);
@@ -547,17 +591,17 @@
         }
       } catch (_) {}
       _clonerRebuild(clonerPart);
-      try {
-        pushUndo({
-          type: 'clonerAddSources',
-          partId: clonerPart.partId,
-          sources: added.map(sp => ({
-            partId: sp.partId,
-            prevParent: _prevParents.get(sp.partId) || state.partsRoot,
-            prevLocalMat: sp.mesh.matrix.elements.slice(),
-          })),
-        });
-      } catch (_) {}
+      const entry = {
+        type: 'clonerAddSources',
+        partId: clonerPart.partId,
+        sources: added.map(sp => ({
+          partId: sp.partId,
+          prevParent: _prevParents.get(sp.partId) || state.partsRoot,
+          prevLocalMat: _prevMats.get(sp.partId),
+        })),
+      };
+      if (redoOp) Object.assign(redoOp, entry);
+      else { try { pushUndo(entry); } catch (_) {} }
       try { F.rebuildTree?.(); } catch (_) {}
       try { F.refreshPropertiesPanel?.(); } catch (_) {}
       try { F.applySelectionColors?.(); } catch (_) {}
@@ -662,13 +706,16 @@
       // Slider row — reuses .prim-row + .prim-slider + .prim-value classes
       // so the cloner sliders are pixel-identical to the custom-shape sliders
       // elsewhere. data-cln-* hooks keep the wiring distinct from primitives.
-      const slider = (label, key, val, min, max, step, suffix='') => `
-        <div class="prim-row" data-cln-field="${key}">
+      // `whole` marks a field that only takes whole numbers (the counts). The
+      // others move in steps of `step` on the slider but take any number
+      // typed into the box: a distance of 12.5 or an angle of 22.5.
+      const slider = (label, key, val, min, max, step, suffix='', whole=false) => `
+        <div class="prim-row" data-cln-field="${key}"${whole ? ' data-cln-int="1"' : ''}>
           <label class="prim-label">${escapeHtml(label)}</label>
           <input type="range" data-cln-input min="${min}" max="${max}" step="${step}" value="${val}" class="prim-slider">
-          <span class="prim-val-wrap"><input type="number" class="prim-value" data-cln-value min="${min}" max="${max}" step="${step}" value="${val}">${suffix ? `<span class="prim-unit">${escapeHtml(suffix)}</span>` : ''}</span>
+          <span class="prim-val-wrap"><input type="number" class="prim-value" data-cln-value min="${min}" max="${max}" step="${whole ? step : 'any'}" value="${val}">${suffix ? `<span class="prim-unit">${escapeHtml(suffix)}</span>` : ''}</span>
         </div>`;
-      const intSlider = (label, key, val, min, max) => slider(label, key, val, min, max, 1, '');
+      const intSlider = (label, key, val, min, max) => slider(label, key, val, min, max, 1, '', true);
       const distSlider = (label, key, val) => slider(label, key, val, -500, 500, 1, u);
       const angSlider = (label, key, val, min=-360, max=360) => slider(label, key, val, min, max, 1, '°');
       const scaleSlider = (label, key, val) => slider(label, key, val, 0.1, 3, 0.05, '×');
@@ -787,8 +834,6 @@
           </div>
         </div>`;
     }
-    // Backward-compat alias — earlier code paths called this name.
-    function _renderClonerSection(p) { return _renderClonerCard(p); }
 
     function _wireClonerControls(rootEl, p) {
       if (!rootEl || !p?.isCloner) return;
@@ -834,7 +879,10 @@
         const input = row.querySelector('[data-cln-input]');
         const valEl = row.querySelector('[data-cln-value]');
         if (!input) return;
-        const isInt = parseFloat(input.step) >= 1;
+        // Whole numbers for the counts only. (This used to be read off the
+        // slider's step, so every field with a step of 1, the distances, the
+        // radius and the angles, lost what was typed after the decimal point.)
+        const isInt = row.dataset.clnInt === '1';
         const parse = (s) => isInt ? parseInt(s, 10) : parseFloat(s);
         const sync = () => {
           const v = parse(input.value);
@@ -1042,8 +1090,8 @@
     // The poll DEFERS re-bake during a gizmo gesture (source.parent ===
     // state.pivot) so we don't yank the source out from under the user.
     // _clonerRebuild is the source-of-truth dispatcher that returns
-    // 'rebuilt' / 'deferred' / 'dissolved' / 'noop'; we only re-snap the
-    // baseline on 'rebuilt'.
+    // 'rebuilt' / 'deferred' / 'noop'; the baseline is only left as it was
+    // on 'deferred'.
     function _snapSourceRefs(p) {
       if (!p?.isCloner || p.deleted) return;
       p._lastSourceRefs = new Map();
@@ -1070,7 +1118,6 @@
     //   'rebuilt'  → re-snap (capture post-build baseline)
     //   'deferred' → DO NOT snap (we want the next post-gesture poll to
     //                still detect the drift and rebuild)
-    //   'dissolved'→ clear (cloner no longer exists)
     //   'noop'     → snap to current state (prevents an infinite poll
     //                loop in unusual states like an orphaned source with
     //                parent === null — drift would never reconcile)
@@ -1078,7 +1125,6 @@
     _clonerRebuild = function(p) {
       const result = _rawRebuild(p);
       if (result === 'rebuilt' || result === 'noop') _snapSourceRefs(p);
-      else if (result === 'dissolved' && p) p._lastSourceRefs = null;
       return result;
     };
 
@@ -1178,10 +1224,14 @@
         // The tree marks cloner rows itself now; this only runs for rows it
         // has not seen, and not at all in a scene without cloners.
         if (!window.__hasCloners) return;
+        // Which rows are cloners, gathered once. (Looking every group row up
+        // in the node list, on every change to the tree, was a search of the
+        // whole list per row.)
+        let clonerIds = null;
+        for (const n of (state.treeNodes || [])) if (n.kind === 'cloner') (clonerIds ||= new Set()).add(n.id);
+        if (!clonerIds) return;
         _treeEl.querySelectorAll('.tree-node.is-group:not([data-cloner-deco])').forEach(row => {
-          const gid = parseInt(row.dataset.groupId || '0', 10);
-          const tn = (state.treeNodes || []).find(n => n.id === gid);
-          if (!tn || tn.kind !== 'cloner') return;
+          if (!clonerIds.has(parseInt(row.dataset.groupId || '0', 10))) return;
           row.dataset.clonerDeco = '1';
           row.classList.add('is-cloner');
           const ti = row.querySelector('.tree-typeicon');
@@ -1336,26 +1386,32 @@
       }
       return false;
     });
+    // The Undo / Redo buttons follow the two stacks. The app refreshes them
+    // inside pushUndo, which a redo does not go through.
+    const _syncUndoButtons = () => {
+      const u = document.getElementById('btn-undo'); if (u) u.disabled = state.history.length === 0;
+      const r = document.getElementById('btn-redo'); if (r) r.disabled = !state.redo || state.redo.length === 0;
+    };
     H.redoHandlers.push((op) => {
+      // A redo moves ONE entry from the redo stack to the undo stack and
+      // leaves the rest of both alone. So the two that re-run an action
+      // (create, add sources) hand it the entry, and it makes no new one:
+      // going through pushUndo would add a second entry for the same step
+      // and throw away every redo still waiting.
       if (op.type === 'clonerAdd') {
         state.redo.pop();
-        const sourceIds = (op.sources || []).map(s => s.partId);
-        _clonerCreateFromParts(sourceIds);
+        // The cloner comes back as the same part (see _clonerCreateFromParts).
+        _clonerCreateFromParts((op.sources || []).map(s => s.partId), null, op);
         state.history.push(op);
+        _syncUndoButtons();
         return true;
       }
       if (op.type === 'clonerAddSources') {
         state.redo.pop();
         const p = getPart(op.partId);
-        if (p?.isCloner) {
-          _clonerAddSources(p, (op.sources || []).map(s => s.partId));
-          // _clonerAddSources pushed a fresh undo entry — replace it with
-          // the original op so subsequent undo→redo cycles stay consistent.
-          if (state.history[state.history.length - 1]?.type === 'clonerAddSources') {
-            state.history.pop();
-          }
-        }
+        if (p?.isCloner) _clonerAddSources(p, (op.sources || []).map(s => s.partId), op);
         state.history.push(op);
+        _syncUndoButtons();
         return true;
       }
       if (op.type === 'clonerParams') {
@@ -1502,104 +1558,15 @@
       document.head.appendChild(s);
     }
 
-    // Stress-test entrypoint — paste `_Cloner.stress(N)` in the DevTools
-    // console (default N=20) to exercise creation, mode swaps, slider
-    // sweeps, source-mesh edits, gizmo-style detach simulation, and
-    // dissolve. Runs in the foreground; logs a per-step PASS/FAIL line
-    // and a summary so regressions are obvious.
-    function _stress(N) {
-      N = Math.max(1, N | 0 || 20);
-      const log  = (...a) => console.log('[stress]', ...a);
-      const pass = (m)   => console.log('%c[stress] PASS', 'color:#10b981', m);
-      const fail = (m)   => console.warn('%c[stress] FAIL', 'color:#ef4444', m);
-      let passes = 0, fails = 0;
-      const ok = (cond, msg) => { if (cond) { passes++; pass(msg); } else { fails++; fail(msg); } };
-
-      // Need at least one cloneable part — bail with a hint if the scene
-      // is empty.
-      const ids = state.parts.filter(p => !p.deleted && p.mesh && !p.instancedMesh && !p.isCloner).map(p => p.partId);
-      if (!ids.length) { fail('no cloneable parts — load or add a part first'); return; }
-      const sourceId = ids[0];
-
-      // 1. Create cloner.
-      const cloner = _clonerCreateFromParts([sourceId]);
-      ok(cloner && cloner.isCloner, 'cloner created');
-      if (!cloner) return;
-
-      // 2. Verify children: source + InstancedMesh.
-      ok(cloner.mesh.children.length === 2,
-        `phase 1 children = 2 (got ${cloner.mesh.children.length})`);
-
-      // 3. Sweep slider params.
-      const c = cloner.cloner;
-      for (const v of [10, 50, 100, 200, 50]) {
-        c.linear.count = v;
-        const r = _clonerRebuild(cloner);
-        ok(r === 'rebuilt', `rebuild count=${v} → ${r}`);
-      }
-
-      // 4. Mode swap to radial.
-      c.mode = 'radial';
-      ok(_clonerRebuild(cloner) === 'rebuilt', 'rebuild in radial mode');
-
-      // 5. Mode swap to grid.
-      c.mode = 'grid';
-      ok(_clonerRebuild(cloner) === 'rebuilt', 'rebuild in grid mode');
-
-      // 6. Toggle instancing off.
-      c.useInstancing = false;
-      ok(_clonerRebuild(cloner) === 'rebuilt', 'non-instanced rebuild');
-      ok(!cloner.mesh.children.some(ch => ch.isInstancedMesh),
-        'no InstancedMesh in non-instanced mode');
-
-      // 7. Toggle back on.
-      c.useInstancing = true;
-      ok(_clonerRebuild(cloner) === 'rebuilt', 'instanced rebuild');
-
-      // 8. Simulate gizmo: move source under state.pivot. Rebuild should defer.
-      const src = getPart(sourceId).mesh;
-      const origParent = src.parent;
-      if (state.pivot) {
-        state.pivot.attach(src);
-        ok(_clonerRebuild(cloner) === 'deferred', 'rebuild deferred under gizmo');
-        // Restore — should self-heal back into grp.
-        state.partsRoot.attach(src);
-        ok(_clonerRebuild(cloner) === 'rebuilt', 'self-heal after gizmo release');
-        ok(src.parent === cloner.mesh, 'source reattached to cloner Group');
-      } else {
-        log('skip gizmo simulation (no state.pivot)');
-      }
-
-      // 9. N rapid rebuilds — make sure no refs leak.
-      for (let i = 0; i < N; i++) {
-        c.mode = (['linear', 'radial', 'grid'])[i % 3];
-        _clonerRebuild(cloner);
-      }
-      ok(true, `${N} rapid mode-swap rebuilds completed`);
-
-      // 10. Dissolve. Verify source returned to partsRoot, grp removed.
-      _clonerDissolve(cloner);
-      ok(cloner.deleted === true, 'cloner marked deleted on dissolve');
-      ok(cloner.mesh.parent === null, 'cloner Group removed from scene');
-      ok(getPart(sourceId).mesh.parent === state.partsRoot, 'source returned to partsRoot');
-
-      // 11. Idempotent dissolve.
-      _clonerDissolve(cloner);
-      ok(true, 'second dissolve is no-op');
-
-      console.log(`%c[stress] complete — ${passes} pass / ${fails} fail`,
-        fails ? 'color:#ef4444;font-weight:bold' : 'color:#10b981;font-weight:bold');
-      try { F.rebuildTree?.(); F.refreshPropertiesPanel?.(); } catch (_) {}
-    }
-
+    // (createFromParts and addSources take a third argument that only the
+    // redo handlers above may pass, so it is not offered here.)
     window._Cloner = {
       createFromSelection: _clonerCreateFromSelection,
-      createFromParts: _clonerCreateFromParts,
-      addSources: _clonerAddSources,
+      createFromParts: (sourceIds, opts) => _clonerCreateFromParts(sourceIds, opts),
+      addSources: (clonerPart, sourceIds) => _clonerAddSources(clonerPart, sourceIds),
       removeSources: _clonerRemoveSources,
       rebuild: _clonerRebuild,
       dissolve: _clonerDissolve,
-      stress: _stress,
     };
   }
 

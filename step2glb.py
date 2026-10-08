@@ -14,22 +14,28 @@ Features:
 Usage:
     python step2glb.py input.step
     python step2glb.py input.step --quality 0.2 --min-size 0.5
-    python step2glb.py input.step --no-instance     # disable instancing
     python step2glb.py input.step --simplify 0.5    # halve triangle count (lossy)
     python step2glb.py input.step --no-meshopt      # disable auto-meshopt
     python step2glb.py input.step --relative        # quality is fraction of diag
+    python step2glb.py input.step --no-colors --no-instance   # plain reader, no instancing
 
 Defaults:
     EXT_meshopt_compression turns on automatically when gltfpack is on PATH.
     Pass --no-meshopt to opt out, or --simplify <r> to additionally decimate.
+
+Exit codes:
+    0  converted (or the cached GLB is still current)
+    1  the conversion failed
+    3  the file was read but there was nothing to write: it has no solid
+       bodies, or --min-size removed every part. No GLB is written.
 
 Requirements:
     pip install cadquery-ocp trimesh numpy
     optional: gltfpack on PATH (https://meshoptimizer.org/gltf/)
 """
 from __future__ import annotations
-import argparse, hashlib, json, shutil, subprocess, sys, time
-from dataclasses import dataclass
+import argparse, hashlib, json, os, shutil, subprocess, sys, tempfile, time, traceback
+from dataclasses import dataclass, replace as _dc_replace
 from pathlib import Path
 from collections import defaultdict
 
@@ -53,25 +59,31 @@ class Heartbeat:
         self.label = label; self.every = every_s
         self._proc = None; self._t0 = 0.0
     def __enter__(self):
-        import subprocess
         self._t0 = time.time()
         # Inline heartbeat script. -u keeps stdout unbuffered on Windows where
         # the cmd.exe pipe sometimes line-buffers Python output. We deliberately
         # do NOT check parent liveness via os.kill(ppid, 0) — it works on Linux
         # but raises OSError on Windows for signal 0, which silently killed the
-        # subprocess after the first tick. Instead we rely on Popen.terminate()
-        # in __exit__ to clean up. On a hard parent crash this leaves a brief
-        # orphan that prints into a dead console, but that's strictly better
-        # than a heartbeat that silently quits after 5 seconds.
+        # subprocess after the first tick. Popen.terminate() in __exit__ is the
+        # normal way out.
+        #
+        # A converter that is killed never reaches __exit__. Away from Windows
+        # the helper notices on its next tick: an orphan is handed to another
+        # parent, so os.getppid() stops being the converter's pid. On Windows
+        # getppid() keeps returning the old pid, so the check is skipped there
+        # (the server stops the whole process tree with taskkill /T instead).
         safe_label = self.label.encode("ascii", "replace").decode("ascii")
         code = (
-            "import sys, time\n"
+            "import os, sys, time\n"
             f"EVERY = {float(self.every)}\n"
             f"LABEL = {safe_label!r}\n"
+            f"PARENT = {os.getpid()}\n"
             "n = 0.0\n"
             "try:\n"
             "    while True:\n"
             "        time.sleep(EVERY)\n"
+            "        if os.name != 'nt' and os.getppid() != PARENT:\n"
+            "            break\n"
             "        n += EVERY\n"
             "        sys.stdout.write(f'  . ({LABEL}) still working... {n:.0f}s elapsed\\n')\n"
             "        sys.stdout.flush()\n"
@@ -121,6 +133,23 @@ from OCP.TCollection import TCollection_AsciiString
 def log(msg: str, kind: str = "") -> None:
     icon = {"ok": "✓", "warn": "!", "err": "✗"}.get(kind, "·")
     print(f"  {icon} {msg}", flush=True)
+
+
+class NothingToWrite(RuntimeError):
+    """The STEP was read, but nothing in it ends up in a GLB. main() reports
+    the message and exits with code 3; no GLB and no params file are written."""
+
+
+class NoSolids(NothingToWrite):
+    """A STEP that holds only surfaces or wires: there is no solid to mesh."""
+    def __init__(self):
+        super().__init__("no solid bodies found in this STEP")
+
+
+class AllTooSmall(NothingToWrite):
+    """--min-size was set so high that no part is left."""
+    def __init__(self):
+        super().__init__(f"--min-size {CFG.min_size_pct} removed every part: nothing left to write")
 
 
 @dataclass
@@ -238,8 +267,6 @@ def _xcaf_app():
 
 def _save_xcaf_cache(doc, path: Path) -> None:
     """Serialize an OCAF doc to OCCT's BinXCAF binary format."""
-    from OCP.TCollection import TCollection_ExtendedString
-
     app = _xcaf_app()
     doc.ChangeStorageFormat(TCollection_ExtendedString("BinXCAF"))
     # InitDocument registers an existing standalone doc with the application
@@ -259,10 +286,6 @@ def _save_xcaf_cache(doc, path: Path) -> None:
 def _load_xcaf_cache(path: Path):
     """Read an OCCT binary OCAF/XCAF file, returning the same 4-tuple as
     parse_step_xcaf so callers don't need to special-case the cached path."""
-    from OCP.TDocStd import TDocStd_Document
-    from OCP.TCollection import TCollection_ExtendedString
-    from OCP.XCAFDoc import XCAFDoc_DocumentTool
-
     app = _xcaf_app()
     doc = TDocStd_Document(TCollection_ExtendedString("step-doc"))
     status = app.Open(TCollection_ExtendedString(str(path)), doc)
@@ -428,69 +451,23 @@ def get_label_name(label: TDF_Label) -> str | None:
     return None
 
 
-def collect_solids_with_meta(shape_tool, color_tool, free_labels) -> list[dict]:
-    """Walk the assembly tree, return [{shape, color, name}, ...] per solid."""
-    out = []
-    def visit(label, parent_color):
-        # Try to read color and name on this label; inherit from parent if absent
-        col = get_label_color(label, color_tool) or parent_color
-        name = get_label_name(label)
-        # Recurse into components
-        if shape_tool.IsAssembly_s(label):
-            comps = TDF_LabelSequence()
-            shape_tool.GetComponents_s(label, comps)
-            for i in range(1, comps.Length() + 1):
-                ref_label = TDF_Label()
-                if shape_tool.GetReferredShape_s(comps.Value(i), ref_label):
-                    # Component may override color
-                    comp_col = get_label_color(comps.Value(i), color_tool) or col
-                    visit(ref_label, comp_col)
-            return
-        # Leaf: get the shape
-        try:
-            shape = shape_tool.GetShape_s(label)
-        except Exception:
-            return
-        # Walk solids inside this leaf
-        exp = TopExp_Explorer(shape, TopAbs_SOLID)
-        idx = 0
-        while exp.More():
-            solid = exp.Current()
-            # Solid-specific color override?
-            scol = None
-            try:
-                slbl = TDF_Label()
-                if shape_tool.FindShape_s(solid, slbl):
-                    scol = get_label_color(slbl, color_tool)
-            except Exception:
-                pass
-            out.append({
-                "shape": solid,
-                "color": scol or col,
-                "name": (name or "part") + f"_{idx:04d}",
-            })
-            idx += 1
-            exp.Next()
-
-    for i in range(1, free_labels.Length() + 1):
-        visit(free_labels.Value(i), None)
-    return out
-
-
 # ── Hierarchical XCAF walker ───────────────────────────────────────────────
-# The flat collect_solids_with_meta path drops two pieces of information that
-# C4D and other proper STEP importers preserve:
-#   1. The assembly hierarchy (NEXT_ASSEMBLY_USAGE_OCCURRENCE structure).
-#      That's why our tree shows a flat list while C4D shows nested groups
-#      with "Null Object" containers for each assembly node.
+# A flat list of solids (what the plain reader gives) drops two pieces of
+# information that C4D and other proper STEP importers preserve:
+#   1. The assembly hierarchy (NEXT_ASSEMBLY_USAGE_OCCURRENCE structure):
+#      nested groups, with a "Null Object" container for each assembly node.
 #   2. Explicit instancing — when an assembly references the same product
 #      multiple times, that's the STEP file telling you "these are instances
-#      of one part." The flat path extracts each occurrence as a separate
-#      solid, losing the reference-based instancing the file already encodes.
+#      of one part." A flat list holds each occurrence as a separate solid,
+#      losing the reference-based instancing the file already encodes.
 #
 # walk_xcaf_tree below preserves both: products are cached by their TDF_Label
 # entry (so the same product is extracted exactly once) and the instance tree
 # carries each component's local transform from the parent's TopLoc_Location.
+#
+# Colour is per product (and per solid inside it). A colour given to one
+# occurrence of a product only, or to an assembly as a whole, is not carried
+# over: every occurrence shares the product's mesh and with it its material.
 
 @dataclass
 class XcafProduct:
@@ -517,7 +494,6 @@ class XcafNode:
     """
     name: str
     transform: np.ndarray  # 4x4
-    color: tuple | None
     children: list         # list[XcafNode]
     product_key: str | None
 
@@ -564,7 +540,6 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
       - On a SimpleShape label encountered directly (a free top-level part),
         cache it as a product and emit a leaf with identity transform.
     """
-    from OCP.TopLoc import TopLoc_Location
     from OCP.XCAFDoc import XCAFDoc_ShapeTool
 
     products: dict[str, XcafProduct] = {}
@@ -618,13 +593,12 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
                                      meshes=[], solid_colors=solid_colors)
         return key
 
-    def visit(label: TDF_Label, location: TopLoc_Location, parent_color):
+    def visit(label: TDF_Label, location: TopLoc_Location):
         # Better default name by context: "Assembly" for nested assemblies,
         # "Part" for leaf products. Was "node" / "part" — too generic to be
         # useful when scanning a tree of 5000 nodes.
         is_asm = shape_tool.IsAssembly_s(label)
         name = get_label_name(label) or ("Assembly" if is_asm else "Part")
-        own_color = get_label_color(label, color_tool) or parent_color
         local_t = _trsf_to_4x4(location.Transformation()) if location is not None else np.eye(4)
 
         if is_asm:
@@ -633,7 +607,6 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
             kids = []
             for i in range(1, comps.Length() + 1):
                 comp = comps.Value(i)
-                comp_color = get_label_color(comp, color_tool) or own_color
                 # TDF_Label has no .Location() method directly. The location
                 # of a component-instance label lives in its XCAFDoc_Location
                 # attribute, which XCAFDoc_ShapeTool.GetLocation_s reads for us.
@@ -650,7 +623,7 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
                 comp_name = (get_label_name(comp) or get_label_name(ref_label)
                              or ("Subassembly" if shape_tool.IsAssembly_s(ref_label) else "Component"))
                 if shape_tool.IsAssembly_s(ref_label):
-                    sub = visit(ref_label, comp_loc, comp_color)
+                    sub = visit(ref_label, comp_loc)
                     if sub is not None:
                         sub.name = comp_name
                         kids.append(sub)
@@ -659,21 +632,20 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
                     kids.append(XcafNode(
                         name=comp_name,
                         transform=_trsf_to_4x4(comp_loc.Transformation()),
-                        color=comp_color,
                         children=[],
                         product_key=prod_key,
                     ))
-            return XcafNode(name=name, transform=local_t, color=own_color,
+            return XcafNode(name=name, transform=local_t,
                             children=kids, product_key=None)
         else:
             prod_key = get_or_create_product(label)
-            return XcafNode(name=name, transform=local_t, color=own_color,
+            return XcafNode(name=name, transform=local_t,
                             children=[], product_key=prod_key)
 
     roots: list[XcafNode] = []
     identity = TopLoc_Location()
     for i in range(1, free_labels.Length() + 1):
-        n = visit(free_labels.Value(i), identity, None)
+        n = visit(free_labels.Value(i), identity)
         if n is not None:
             roots.append(n)
     return products, roots
@@ -757,9 +729,10 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
             n_geoms += 1
     log(f"applied colors to {n_colored}/{n_geoms} mesh geometries", "ok" if n_colored else "warn")
 
+    # Nothing to put in a GLB (surfaces or wires only). The caller decides
+    # what happens next; no file is written here.
     if n_geoms == 0:
-        log("no geometry to write — everything was empty", "err")
-        return
+        raise NoSolids()
 
     # ─── Walk the tree. Track frame uniqueness with a counter so duplicate
     # node names (very common in CAD: "Bolt", "Bolt", "Bolt") don't collide
@@ -767,7 +740,6 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     n_nodes = [0]
     n_geom_refs = [0]
     n_product_uses: dict[str, int] = defaultdict(int)
-    seen_frames: set = set()
 
     def safe_frame(parent: str, name: str) -> str:
         n_nodes[0] += 1
@@ -1170,6 +1142,80 @@ def _node_meta(p: dict) -> dict:
     return md
 
 
+def _params_path(output_path: Path) -> Path:
+    """<name>.glb.params.json, the record kept beside a converted GLB."""
+    return output_path.with_suffix(output_path.suffix + ".params.json")
+
+
+def _cache_params(input_path: Path) -> dict:
+    """What a GLB was made from, and with which settings. Written beside the
+    GLB after a conversion and compared on the next run: a GLB is only reused
+    for the same file with the same settings. (serve.py reads "source" and
+    "quality" from it too.) Built in this one place, so the two ways a
+    conversion can end, hierarchical and flat, record the same things."""
+    return {
+        "source": str(input_path.resolve()),
+        "quality": CFG.quality,
+        "min_size_pct": CFG.min_size_pct,
+        "relative": CFG.relative,
+        "meshopt": CFG.meshopt,
+        "quantize": CFG.quantize,
+        "simplify": CFG.simplify,
+        "instance": CFG.instance,
+        "colors": CFG.colors,
+    }
+
+
+def _write_params(input_path: Path, output_path: Path) -> None:
+    """Record what the GLB was made from. Only for a GLB that exists: a
+    record with no GLB beside it would describe a conversion that never
+    happened."""
+    if not output_path.exists(): return
+    try: _params_path(output_path).write_text(json.dumps(_cache_params(input_path)))
+    except OSError: pass
+
+
+def _assembled_bbox(roots: list, products: dict) -> tuple[np.ndarray, np.ndarray]:
+    """Bounding box of the model as it is put together: every occurrence of
+    every product, at its place in the assembly.
+
+    A product's mesh is in the product's own frame (that is what lets its
+    occurrences share it), so the boxes of the meshes alone say nothing about
+    how large the assembly is: a hundred bolts along a two-metre rail are all
+    the same small box at the origin. Here each product's box is carried
+    through the transforms on the way down from the root, corner by corner.
+    Returns (min, max); min is +inf when there is nothing to measure.
+    """
+    corners: dict[str, np.ndarray] = {}                 # product key → the 8 corners of its box
+    for key, prod in products.items():
+        lo = np.full(3,  np.inf, dtype=np.float64)
+        hi = np.full(3, -np.inf, dtype=np.float64)
+        for verts, _ in prod.meshes:
+            if len(verts) == 0: continue
+            np.minimum(lo, verts.min(axis=0), out=lo)
+            np.maximum(hi, verts.max(axis=0), out=hi)
+        if np.all(np.isfinite(lo)):
+            corners[key] = np.array([(x, y, z) for x in (lo[0], hi[0])
+                                               for y in (lo[1], hi[1])
+                                               for z in (lo[2], hi[2])], dtype=np.float64)
+    bbox_min = np.full(3,  np.inf, dtype=np.float64)
+    bbox_max = np.full(3, -np.inf, dtype=np.float64)
+
+    def walk(node, parent_world: np.ndarray) -> None:
+        world = parent_world @ node.transform
+        c = corners.get(node.product_key) if node.product_key is not None else None
+        if c is not None:
+            placed = c @ world[:3, :3].T + world[:3, 3]
+            np.minimum(bbox_min, placed.min(axis=0), out=bbox_min)
+            np.maximum(bbox_max, placed.max(axis=0), out=bbox_max)
+        for child in node.children:
+            walk(child, world)
+
+    for r in roots:
+        walk(r, np.eye(4, dtype=np.float64))
+    return bbox_min, bbox_max
+
+
 def convert(input_path: Path, output_path: Path) -> None:
     """Run the full STEP→GLB pipeline using the module-level CFG.
 
@@ -1189,24 +1235,14 @@ def convert(input_path: Path, output_path: Path) -> None:
     # ─── cache check: skip conversion if output is newer than input AND the
     # sidecar params match. mtime alone misses the "user re-ran with a tighter
     # --quality but got the stale GLB" footgun.
-    import json as _json
-    params_path = output_path.with_suffix(output_path.suffix + ".params.json")
-    current_params = {
-        "quality": CFG.quality,
-        "min_size_pct": CFG.min_size_pct,
-        "relative": CFG.relative,
-        "meshopt": CFG.meshopt,
-        "quantize": CFG.quantize,
-        "simplify": CFG.simplify,
-        "instance": CFG.instance,
-        "colors": CFG.colors,
-    }
+    params_path = _params_path(output_path)
+    current_params = _cache_params(input_path)
     if not CFG.force and output_path.exists():
         if output_path.stat().st_mtime > input_path.stat().st_mtime:
             cached_params = None
             if params_path.exists():
                 try:
-                    cached_params = _json.loads(params_path.read_text())
+                    cached_params = json.loads(params_path.read_text())
                 except Exception:
                     cached_params = None
             if cached_params == current_params:
@@ -1281,10 +1317,10 @@ def convert(input_path: Path, output_path: Path) -> None:
         tessellate(comp, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
 
         # ── Hierarchical path: walk the XCAF tree, cache products, write GLB
-        # with proper parent/child structure and reference-based instancing.
-        # This replaces the flat collect_solids_with_meta + flat build_glb path
+        # with proper parent/child structure and reference-based instancing,
         # so the assembly hierarchy and explicit STEP instances survive into
-        # the GLB (and thence the viewer).
+        # the GLB (and thence the viewer). The flat build_glb path further
+        # down is what the plain reader uses.
         log("walking XCAF assembly tree...")
         t_walk = time.time()
         products, roots = walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=doc)
@@ -1298,13 +1334,12 @@ def convert(input_path: Path, output_path: Path) -> None:
             # in the tree that referenced them. Hierarchy threshold deliberately
             # keeps assembly group nodes even if their children are gone — it's
             # less surprising than collapsing nulls behind the user's back.
-            bbox_min = np.full(3,  np.inf, dtype=np.float64)
-            bbox_max = np.full(3, -np.inf, dtype=np.float64)
-            for prod in products.values():
-                for verts, _ in prod.meshes:
-                    if len(verts) == 0: continue
-                    np.minimum(bbox_min, verts.min(axis=0), out=bbox_min)
-                    np.maximum(bbox_max, verts.max(axis=0), out=bbox_max)
+            #
+            # The cutoff is a share of the size of the whole model, so the
+            # model is measured as assembled. (The product meshes on their own
+            # all sit at their own origins: measured that way a large assembly
+            # of small parts looked small, and the cutoff came out too low.)
+            bbox_min, bbox_max = _assembled_bbox(roots, products)
             model_diag = float(np.linalg.norm(bbox_max - bbox_min)) if np.all(np.isfinite(bbox_min)) else 0.0
             cutoff = (CFG.min_size_pct / 100.0) * model_diag
             dropped = set()
@@ -1321,12 +1356,12 @@ def convert(input_path: Path, output_path: Path) -> None:
                         return None  # empty group — collapse
                     return node
                 roots = [r for r in (prune(r) for r in roots) if r is not None]
+                if not roots:
+                    raise AllTooSmall()
 
         build_glb_hierarchical(roots, products, output_path, scene_meta, instance=CFG.instance)
         gltfpack_postprocess(output_path, CFG.meshopt, CFG.quantize, CFG.simplify)
-
-        try: params_path.write_text(_json.dumps(current_params))
-        except OSError: pass
+        _write_params(input_path, output_path)
 
         in_mb = input_path.stat().st_size / 1048576
         out_mb = output_path.stat().st_size / 1048576
@@ -1335,23 +1370,29 @@ def convert(input_path: Path, output_path: Path) -> None:
         print(f"  done in {time.time() - t_total:.1f}s  {in_mb:.1f} MB -> {out_mb:.1f} MB ({ratio:.1f}x smaller)")
         print()
         return
+    except AllTooSmall:
+        raise                # the plain reader would only remove them all again
+    except NoSolids:
+        # The plain reader gets its turn before the file is given up on; it
+        # is the one that raises for good when it finds no solid either.
+        log("no solid bodies in the XCAF document, trying the plain reader", "warn")
     except Exception as e:
         log(f"XCAF reader failed ({e}), falling back to plain reader (no hierarchy)", "warn")
-        import traceback; traceback.print_exc()
-        scene_meta = {}
-        reader = STEPControl_Reader()
-        if reader.ReadFile(str(input_path)) != IFSelect_RetDone:
-            raise RuntimeError("plain STEP read also failed")
-        reader.TransferRoots()
-        shape = reader.OneShape()
-        tessellate(shape, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
-        # Build solid_meta without color/name — flat output
-        solid_meta = []
-        exp = TopExp_Explorer(shape, TopAbs_SOLID); idx = 0
-        while exp.More():
-            solid_meta.append({"shape": exp.Current(), "color": None, "name": f"solid_{idx:05d}"})
-            idx += 1; exp.Next()
-        return _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total)
+        traceback.print_exc()
+    scene_meta = {}
+    reader = STEPControl_Reader()
+    if reader.ReadFile(str(input_path)) != IFSelect_RetDone:
+        raise RuntimeError("plain STEP read also failed")
+    reader.TransferRoots()
+    shape = reader.OneShape()
+    tessellate(shape, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
+    # Build solid_meta without color/name — flat output
+    solid_meta = []
+    exp = TopExp_Explorer(shape, TopAbs_SOLID); idx = 0
+    while exp.More():
+        solid_meta.append({"shape": exp.Current(), "color": None, "name": f"solid_{idx:05d}"})
+        idx += 1; exp.Next()
+    return _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total)
 
 
 def gltfpack_postprocess(glb_path: Path, meshopt: bool, quantize: bool,
@@ -1360,7 +1401,14 @@ def gltfpack_postprocess(glb_path: Path, meshopt: bool, quantize: bool,
 
     EXT_meshopt_compression is the modern replacement for Draco (faster decode,
     better ratio with brotli). KHR_mesh_quantization halves attribute byte size
-    by storing positions/normals/UVs as int16 instead of float32.
+    by storing positions/normals/UVs as int16 instead of float32. gltfpack
+    quantizes unless told not to (-noq), so that flag is passed whenever
+    `quantize` is off: positions then stay the floats the converter wrote.
+
+    gltfpack also merges nodes and materials and drops extras by default. The
+    app builds its tree from the node names and reads the scene's extras, so
+    -kn (keep named nodes), -km (keep named materials) and -ke (keep extras)
+    are always passed.
 
     Optional simplification (`-si <ratio>`) runs meshoptimizer's quadric-error
     decimator with feature-edge preservation BEFORE compression, so holes,
@@ -1376,9 +1424,10 @@ def gltfpack_postprocess(glb_path: Path, meshopt: bool, quantize: bool,
     if not gltfpack:
         log("gltfpack not on PATH — skipping meshopt/quantize/simplify. Install with: npm i -g gltfpack", "warn")
         return
-    flags = []
-    if quantize: flags.append("-cc")     # combined: quantize + meshopt
-    elif meshopt: flags.append("-c")     # meshopt only (no quantization)
+    flags = ["-kn", "-km", "-ke"]        # keep node names, material names, extras
+    if quantize: flags.append("-cc")     # quantized attributes + meshopt, the higher compression level
+    elif meshopt: flags.append("-c")     # meshopt compression
+    if not quantize: flags.append("-noq")   # ... and no quantization unless it was asked for
     if simplify > 0:
         # Clamp to (0, 1]. 1.0 is technically a no-op and gltfpack treats it
         # that way, but values >1 would be a config error and gltfpack rejects them.
@@ -1413,12 +1462,10 @@ def gltfpack_postprocess(glb_path: Path, meshopt: bool, quantize: bool,
 def _worker_extract(args):
     """Worker process: load compound BREP, extract assigned solids' meshes."""
     brep_path, indices = args
-    # Re-import inside worker — multiprocessing fresh process needs the imports
-    from OCP.TopoDS import TopoDS_Shape
+    # (the rest of what this needs is imported at the top of the module, which
+    # a worker process loads like any other)
     from OCP.BRepTools import BRepTools
     from OCP.BRep import BRep_Builder
-    from OCP.TopExp import TopExp_Explorer
-    from OCP.TopAbs import TopAbs_SOLID
     shape = TopoDS_Shape()
     BRepTools.Read_s(shape, brep_path, BRep_Builder())
     solids = []
@@ -1431,7 +1478,7 @@ def _worker_extract(args):
         if 0 <= i < len(solids):
             try:
                 out[i] = solid_to_mesh(solids[i])
-            except Exception as ex:
+            except Exception:
                 out[i] = None
     return out
 
@@ -1439,7 +1486,6 @@ def _worker_extract(args):
 def parallel_extract_meshes(solid_meta, num_workers):
     """Distribute solid_to_mesh across `num_workers` processes.
     Returns list aligned with solid_meta: [(verts, tris) or None, ...]."""
-    import os, tempfile
     from concurrent.futures import ProcessPoolExecutor
     from OCP.TopoDS import TopoDS_Compound
     from OCP.BRep import BRep_Builder
@@ -1538,7 +1584,12 @@ def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
     log(f"extracted {len(parts)} meshes in {time.time() - t0:.1f}s"
         + (f", {skipped} skipped (empty)" if skipped else ""), "ok")
 
-    if CFG.min_size_pct > 0 and parts:
+    # No solid came out of the file at all: nothing is written, and the run
+    # ends with an error instead of a quiet "done" and no GLB.
+    if not parts:
+        raise NoSolids()
+
+    if CFG.min_size_pct > 0:
         # Streaming bbox: avoids np.vstack(all parts) which on 100k-part assemblies
         # could allocate gigabytes. min/max accumulators per axis are O(n) memory
         # in part count, not in total vertices.
@@ -1556,7 +1607,7 @@ def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
         log(f"size threshold removed {before - len(parts)} parts (cutoff {cutoff:.3f})", "warn")
 
     if not parts:
-        log("nothing to write", "err"); return
+        raise AllTooSmall()
 
     total_tris = sum(len(p["tris"]) for p in parts)
     total_verts = sum(len(p["verts"]) for p in parts)
@@ -1567,18 +1618,9 @@ def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
     # Optional industry-standard post-processing for ~10x smaller files
     gltfpack_postprocess(output_path, CFG.meshopt, CFG.quantize, CFG.simplify)
 
-    # Mirror the cache sidecar from the XCAF success path so the fallback
-    # output also gets re-generated when conversion params change.
-    try:
-        import json as _json
-        params_path = output_path.with_suffix(output_path.suffix + ".params.json")
-        params_path.write_text(_json.dumps({
-            "quality": CFG.quality, "min_size_pct": CFG.min_size_pct,
-            "relative": CFG.relative, "meshopt": CFG.meshopt,
-            "quantize": CFG.quantize, "instance": CFG.instance,
-            "colors": CFG.colors,
-        }))
-    except OSError: pass
+    # The same record the XCAF path writes, so this output is found in the
+    # cache again, and is made again when the settings change.
+    _write_params(input_path, output_path)
 
     in_mb = input_path.stat().st_size / 1048576
     out_mb = output_path.stat().st_size / 1048576
@@ -1599,17 +1641,26 @@ def main() -> int:
     ap.add_argument("--angular", type=float, default=0.5,
                     help="Angular deflection in radians. Default 0.5 (~28.6°).")
     ap.add_argument("--min-size", type=float, default=0.0)
-    ap.add_argument("--no-instance", action="store_true")
+    # Four options below only do something in the plain (non-XCAF) reader:
+    # the one --no-colors asks for, and the one a file over 1 GB gets unless
+    # --force-colors is given. The XCAF reader takes its instancing from the
+    # assembly structure in the file and has no use for them.
+    ap.add_argument("--no-instance", action="store_true",
+                    help="Do not merge identical solids into instances. Plain (non-XCAF) reader only: "
+                         "the XCAF reader takes its instances from the assembly structure of the file.")
     ap.add_argument("--no-colors", action="store_true")
     ap.add_argument("--force-colors", action="store_true")
     ap.add_argument("--pca-instances", action="store_true",
-                    help="Experimental aggressive PCA-based instance detection")
+                    help="Experimental aggressive PCA-based instance detection. "
+                         "Plain (non-XCAF) reader only.")
     ap.add_argument("--props", action="store_true",
-                    help="Compute per-solid volume + surface area (slow on big files)")
+                    help="Compute per-solid volume + surface area (slow on big files). "
+                         "Plain (non-XCAF) reader only.")
     ap.add_argument("--force", action="store_true",
                     help="Re-convert even if cached output is newer than source")
     ap.add_argument("--parallel", type=int, default=0,
-                    help="Use N worker processes for mesh extraction (default 0 = sequential)")
+                    help="Use N worker processes for mesh extraction (default 0 = sequential). "
+                         "Plain (non-XCAF) reader only.")
     ap.add_argument("--meshopt", action="store_true",
                     help="Apply EXT_meshopt_compression via gltfpack (industry standard, ~10x smaller)")
     ap.add_argument("--no-meshopt", dest="no_meshopt", action="store_true",
@@ -1631,7 +1682,8 @@ def main() -> int:
     # on instanced assemblies; the others are cheaper but stack up.
     ap.add_argument("--no-shuo",      action="store_true",
                     help="Skip Specified Higher-Usage Occurrence override resolution. "
-                         "Big speedup on instanced assemblies; lose per-instance color overrides.")
+                         "Big speedup on instanced assemblies. Parts are coloured per product: "
+                         "per-occurrence colour overrides are not applied, with or without this option.")
     ap.add_argument("--no-layers",    action="store_true", help="Skip CAD layer attributes.")
     ap.add_argument("--no-materials", action="store_true", help="Skip material attributes.")
     ap.add_argument("--no-step-names",action="store_true",
@@ -1717,9 +1769,14 @@ def main() -> int:
                 _convert_with_budget(in_path, out_path, target_tris, target_size_mb)
             else:
                 convert(in_path, out_path)
+        except NothingToWrite as e:
+            # Not a crash, so no traceback: say what is wrong with the file.
+            # 3 lets a caller (serve.py) tell this apart from a failure.
+            log(str(e) + (f" ({in_path.name})" if len(args.input) > 1 else ""), "err")
+            rc = rc or 3
         except Exception as e:
             log(f"conversion failed: {e}", "err")
-            import traceback; traceback.print_exc()
+            traceback.print_exc()
             rc = 1
     return rc
 
@@ -1787,7 +1844,6 @@ def _convert_with_budget(in_path: Path, out_path: Path, target_tris: int, target
     for it in range(1, MAX_ITERS + 1):
         log(f"budget pass {it}/{MAX_ITERS}: --quality {CFG.quality:.4f}", "ok")
         if it > 1:
-            from dataclasses import replace as _dc_replace
             CFG = _dc_replace(CFG, force=True)
         convert(in_path, out_path)
         if not out_path.exists():
@@ -1818,7 +1874,6 @@ def _convert_with_budget(in_path: Path, out_path: Path, target_tris: int, target
         if abs(new_quality - CFG.quality) / max(CFG.quality, 1e-9) < 0.02:
             log("converged (Δ<2%) but still over budget — increase --angular or relax target", "warn")
             return
-        from dataclasses import replace as _dc_replace
         CFG = _dc_replace(CFG, quality=new_quality)
     log(f"budget not hit after {MAX_ITERS} passes (started at q={initial_quality}, ended at q={CFG.quality:.4f})", "warn")
 

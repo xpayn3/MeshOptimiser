@@ -8539,11 +8539,13 @@ function _fmtVol(mm3, decimals = 2) {
 
 function _applySceneUpAxis() {
   if (!state.partsRoot) return;
+  const before = _rootWorldNow();
   // (the up axis, then on top of it the turn "Align to floor" has applied)
   state.partsRoot.rotation.set((state.sceneUpAxis === 'y') ? -Math.PI / 2 : 0, 0, 0);
   try { state.partsRoot.quaternion.premultiply(_align.Q); } catch (_) {}
   state.partsRoot.updateMatrix();
   state.partsRoot.updateMatrixWorld(true);
+  _rootChangedFrom(before);
   if (camera) camera.up.set(0, state.sceneUpAxis === 'y' ? 1 : 0, state.sceneUpAxis === 'z' ? 1 : 0);
   // OrbitControls turns about the up it read from the camera when it was
   // built; without this, orbiting in a Y-up scene still turned about Z.
@@ -8564,10 +8566,49 @@ function _applySceneUpAxis() {
 
 function _applySceneScale() {
   if (!state.partsRoot) return;
+  const before = _rootWorldNow();
   state.partsRoot.scale.setScalar(state.sceneScale);
   state.partsRoot.updateMatrix();
   state.partsRoot.updateMatrixWorld(true);
+  _rootChangedFrom(before);
   _refreshAllPartBBoxes();
+}
+
+// The up axis and the scene scale are set on partsRoot, so changing one moves
+// every part on screen. What is kept per part in world space (the matrix it is
+// read from, its box, the exploded view's rest points, measurements) has to
+// go along, or a part moved afterwards and one left alone disagree about
+// where the model is: the export wrote the first turned and the second not.
+function _rootWorldNow() {
+  state.partsRoot.updateWorldMatrix(true, false);
+  return state.partsRoot.matrixWorld.clone();
+}
+function _rootChangedFrom(before) {
+  const M = new THREE.Matrix4().copy(before).invert().premultiply(state.partsRoot.matrixWorld);   // now · before⁻¹
+  const e = M.elements;
+  let same = true;
+  for (let i = 0; i < 16; i++) if (Math.abs(e[i] - (i % 5 === 0 ? 1 : 0)) > 1e-12) { same = false; break; }
+  if (same) return;
+  try { _modelMovedBy(M); } catch (err) { console.warn('[scene] root change:', err); }
+}
+
+// What the scene settings add to the picture, taken out again. The viewport's
+// up axis and the scene scale are how the scene is shown and measured; a file
+// gets the model itself (Export has its own Scale and Axis, and a saved scene
+// is opened into a scene that applies these settings again). Returns the
+// matrix that takes a part's world matrix to the one a file gets: where the
+// part would be with Up = Z and scale 1. Moves, Recentre and Align to floor
+// stay in.
+function _sceneSettingsOut() {
+  const out = new THREE.Matrix4(), root = state.partsRoot;
+  if (!root) return out;
+  const upY = state.sceneUpAxis === 'y', k = root.scale.x || 1;
+  if (!upY && Math.abs(k - 1) < 1e-12) return out;
+  root.updateWorldMatrix(true, false);
+  const q = root.quaternion.clone();
+  if (upY) q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));   // (the up turn, undone)
+  const plain = new THREE.Matrix4().compose(root.position.clone().divideScalar(k), q, new THREE.Vector3(1, 1, 1));
+  return out.copy(root.matrixWorld).invert().premultiply(plain);
 }
 
 // Every part's box in world space, measured again. Needed after anything
@@ -9366,8 +9407,13 @@ function _wireTransformPanel() {
             state._pivotOrigParent.updateWorldMatrix(true, false);
             const _wOld = new THREE.Vector3();
             obj.getWorldPosition(_wOld);
-            const _lPos = state._pivotOrigParent.worldToLocal(_wOld.clone());
-            // v is parent-group-relative; _lPos is in partsRoot frame (= world).
+            // A part's value is its world position (less its group's origin),
+            // so it is written as one: partsRoot may be turned (Up = Y) or
+            // scaled, and then "inside the parent" is another place. A user
+            // group's value is read inside its parent, and written there.
+            const _asWorld = target.kind === 'part';
+            const _lPos = _asWorld ? _wOld.clone() : state._pivotOrigParent.worldToLocal(_wOld.clone());
+            // v is parent-group-relative.
             // World target = v + parent_group_origin.
             const _pnWr = state.treeNodes?.find(n => n.kind === 'part' && n.partId === target.part?.partId);
             if (_pnWr?.parentId != null) _initGroupOrigins();
@@ -9375,7 +9421,7 @@ function _wireTransformPanel() {
             if (axis === 'px') _lPos.x = v + (_pgWr?.x || 0);
             if (axis === 'py') _lPos.y = v + (_pgWr?.y || 0);
             if (axis === 'pz') _lPos.z = v + (_pgWr?.z || 0);
-            const _wNew = state._pivotOrigParent.localToWorld(_lPos.clone());
+            const _wNew = _asWorld ? _lPos.clone() : state._pivotOrigParent.localToWorld(_lPos.clone());
             state.pivot.position.add(_wNew.sub(_wOld));
           } else {
             // Display = pivot.worldPos - parentCentroid, so to write display value v:
@@ -9403,13 +9449,18 @@ function _wireTransformPanel() {
           // Instance inputs are disabled; nothing to write. Bail cleanly.
           _transformPanelRefresh(); return;
         } else if (target.kind === 'part') {
-          // v is parent-group-relative; obj.position is world (partsRoot-local = world).
+          // v is parent-group-relative, in world space (that is what the field
+          // shows): the part's parent may be turned or scaled, so the new
+          // world position is taken into the parent rather than written as is.
           const _pnNP = state.treeNodes?.find(n => n.kind === 'part' && n.partId === target.part?.partId);
           if (_pnNP?.parentId != null) _initGroupOrigins();
           const _pgNP = _pnNP?.parentId != null ? _groupOrigins.get(_pnNP.parentId) : null;
-          if (axis === 'px') obj.position.x = v + (_pgNP?.x || 0);
-          if (axis === 'py') obj.position.y = v + (_pgNP?.y || 0);
-          if (axis === 'pz') obj.position.z = v + (_pgNP?.z || 0);
+          obj.updateWorldMatrix(true, false);
+          const _wp = obj.getWorldPosition(new THREE.Vector3());
+          if (axis === 'px') _wp.x = v + (_pgNP?.x || 0);
+          if (axis === 'py') _wp.y = v + (_pgNP?.y || 0);
+          if (axis === 'pz') _wp.z = v + (_pgNP?.z || 0);
+          obj.position.copy(obj.parent ? obj.parent.worldToLocal(_wp) : _wp);
         } else {
           // user-group without pivot: write to ug.ref.position directly
           if (axis === 'px') obj.position.x = v;
@@ -14308,6 +14359,8 @@ function _resolvePartWorldMatrix(p) {
 // InstancedMesh slots or plain meshes under the cloner's group), so an
 // export that walked state.parts alone wrote just the source part of a
 // 12-bolt radial cloner.
+// Each entry's `world` is the matrix the part is drawn with, the scene's up
+// axis and scale included; a file writer takes those out (_sceneSettingsOut).
 function _exportDrawList(visibleOnly) {
   const out = [];
   for (const p of state.parts) {
@@ -14359,6 +14412,9 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
   const root = new THREE.Group();
   let count = 0;
   const drawList = _exportDrawList(visibleOnly);
+  // The viewport's up axis and the scene scale do not go into a file.
+  const settingsOut = _sceneSettingsOut();
+  for (const it of drawList) it.world.premultiply(settingsOut);
 
   // Pre-compute the bbox-center offset if needed for origin recentering.
   let originOffset = new THREE.Vector3(0, 0, 0);
@@ -18613,16 +18669,20 @@ function wireUI() {
   });
   $('scene-up-axis')?.addEventListener('change', e => {
     state.sceneUpAxis = e.target.value;
+    try { _detachGizmo(); } catch (_) {}          // (selected parts sit outside partsRoot until released)
     _applySceneUpAxis();
     // an aligned model was seated for the old up axis: seat it again
     try { if (_align.D.elements.some((v, i) => Math.abs(v - (i % 5 === 0 ? 1 : 0)) > 1e-9)) alignModelToFloor({ quiet: true }); } catch (_) {}
+    try { updateGizmo(); refreshPropertiesPanel(); } catch (_) {}
     requestRender();
   });
   $('scene-scale')?.addEventListener('change', e => {
     const v = parseFloat(e.target.value);
     if (!isFinite(v) || v <= 0) { e.target.value = state.sceneScale; return; }
     state.sceneScale = v;
+    try { _detachGizmo(); } catch (_) {}
     _applySceneScale();
+    try { updateGizmo(); refreshPropertiesPanel(); } catch (_) {}
     requestRender();
   });
   $('toggle-fps')?.addEventListener('change', e => {
@@ -22272,17 +22332,12 @@ function _liveModelBox(pre, preIsExportSide) {
   for (const it of list) verts += it.geom.attributes.position.count;
   const exact = verts <= _ALIGN_EXACT_VERTS;
   const box = new THREE.Box3(), tmp = new THREE.Box3(), m = new THREE.Matrix4(), v = new THREE.Vector3();
-  // The matrices the exporter reads leave out the scene's Up-axis turn (that
-  // one is for the view only; export has its own axis setting). Alignment is
-  // about what stands on the floor on screen, so it is measured with that
-  // turn in: K takes an export matrix to the one drawn.
-  const root = state.partsRoot;
-  root.updateMatrix();
-  const K = new THREE.Matrix4().compose(root.position, _align.Q, root.scale).invert().premultiply(root.matrix);
-  // `pre` given by alignModelToFloor is "undo what is applied, then turn":
-  // R · D⁻¹. On screen the model is D · up · (as loaded), and K · E is what is
-  // drawn, so R · D⁻¹ · K takes an export matrix to "turned, not yet placed".
-  const head = pre ? pre.clone().multiply(K) : K;
+  // The list holds each part's matrix as it is drawn, the scene's up-axis turn
+  // and scale included: alignment is about what stands on the floor on
+  // screen. `pre` given by alignModelToFloor is "undo what is applied, then
+  // turn": R · D⁻¹. On screen the model is D · up · (as loaded), so that takes
+  // a drawn matrix to "turned, not yet placed".
+  const head = pre ? pre : new THREE.Matrix4();
   void preIsExportSide;
   // While the view is exploded the parts are drawn (and their matrices kept)
   // pushed apart. What is aligned is the model at rest, so each part is
@@ -22325,7 +22380,12 @@ function _alignXformWorld(M) {
   root.matrix.decompose(root.position, root.quaternion, root.scale);
   root.updateMatrix();
   root.updateMatrixWorld(true);
-  // Export reads p._exactWorld, and p.bbox is the part's box in world space.
+  _modelMovedBy(M);
+}
+// The whole model has been moved by M (partsRoot already has the move):
+// everything kept per part in world space goes along.
+function _modelMovedBy(M) {
+  // p._exactWorld is the part's world matrix, and p.bbox its box in world space.
   const sz = new THREE.Vector3();
   for (const p of state.parts) {
     if (p._exactWorld) p._exactWorld.premultiply(M);

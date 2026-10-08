@@ -7,7 +7,7 @@ Run via:
                                     # (asks about re-convert + quality if STEP)
 """
 from __future__ import annotations
-import argparse, http.server, json, os, re, shutil, subprocess
+import argparse, http.server, json, os, re, shutil, signal, subprocess
 import sys, threading, time, uuid, webbrowser
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, quote
@@ -37,6 +37,11 @@ MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024
 # Keep at most this many completed jobs in memory. Prevents the JOBS dict from
 # growing unbounded over a long-running server session.
 MAX_JOBS_RETAINED = 50
+# A job keeps the last this-many lines of the converter's output in "log".
+# "log_base" counts the lines dropped before them, so line i of the whole
+# output is log[i - log_base]: a client that remembers how many lines it has
+# shown can carry on from there after the log has been trimmed.
+MAX_LOG_LINES = 200
 # Safe filename pattern: alphanum + a few separators. Strips path traversal,
 # null bytes, control chars, etc. before we ever touch disk.
 _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._\- ]")
@@ -56,9 +61,29 @@ def _kill_tree(proc: subprocess.Popen) -> None:
             subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            proc.terminate()
+            # The converter runs in a session of its own (see _convert_thread),
+            # so its process group is the converter and its helpers and nothing
+            # else. Should the group turn out to be the server's own, only the
+            # converter is stopped.
+            try:
+                group = os.getpgid(proc.pid)
+            except OSError:
+                group = None
+            if group is not None and group != os.getpgrp():
+                os.killpg(group, signal.SIGTERM)
+            else:
+                proc.terminate()
     except Exception:
         pass
+
+
+def _stop_converters() -> None:
+    """Stop every conversion still running: once the server goes, nobody is
+    left to read what they produce."""
+    with JOBS_LOCK:
+        running = list(PROCS.values())
+    for proc in running:
+        _kill_tree(proc)
 
 # Module-level reference set by main() once the server binds. The /api/quit
 # handler reads this to schedule a clean shutdown — keeping it module-level
@@ -92,7 +117,7 @@ def _prune_jobs() -> None:
         if len(JOBS) <= MAX_JOBS_RETAINED: return
         # Sort by start time; finished jobs evict before running ones.
         finished = [(jid, j) for jid, j in JOBS.items()
-                    if j.get("status") in ("done", "error")]
+                    if j.get("status") in ("done", "error", "cancelled")]
         finished.sort(key=lambda kv: kv[1].get("started_at", 0))
         excess = len(JOBS) - MAX_JOBS_RETAINED
         for jid, _ in finished[:excess]:
@@ -111,21 +136,26 @@ _STALE_AGE_SEC = 24 * 3600
 
 
 def _sweep_stale_inbox() -> None:
-    """Drop orphaned upload artefacts from a previous run.
+    """Drop what earlier imports left behind in `inbox/`.
 
-    Two things accumulate in `inbox/` over time:
+    Three things accumulate there over time:
       • `<job_id>_<name>.step|.stp` — staged uploads. The /api/convert
-        thread unlinks these after a successful conversion (line 206), but
-        a crash between upload and conversion (or a process kill mid-job)
-        leaves the source behind.
+        thread removes these when a conversion ends, but a crash between
+        upload and conversion (or a process kill mid-job) leaves the
+        source behind.
+      • `<job_id>_<name>.glb` and `<job_id>_<name>.glb.params.json` — the
+        result of every STEP opened in the app. The app fetches the GLB
+        once, straight after the conversion, and never asks for it again.
       • `*.xcaf-cache.xbf` — XCAF binary caches written by step2glb.py
         next to the source. Now orphaned because the source is gone.
 
     Anything older than _STALE_AGE_SEC is removed; younger files might
     belong to an in-flight job from a parallel server instance.
 
-    The user's real GLB outputs (no job-id prefix) and any STEP they
-    intentionally placed in `inbox/` (also no prefix) are left alone.
+    Only names that start with a job id (_JOB_PREFIX_RE, the prefix this
+    server puts on an upload) are touched. The user's own models in
+    `inbox/` (`coral.glb`, the result of `--open part.step`) and any STEP
+    they put there have no such prefix and are left alone.
     """
     if not INBOX.exists(): return
     now = time.time()
@@ -136,19 +166,19 @@ def _sweep_stale_inbox() -> None:
             age = now - p.stat().st_mtime
             if age < _STALE_AGE_SEC: continue
             name = p.name.lower()
-            is_staged_upload = (
+            is_job_file = (
                 _JOB_PREFIX_RE.match(p.name) is not None
-                and (name.endswith(".step") or name.endswith(".stp"))
+                and name.endswith((".step", ".stp", ".glb", ".glb.params.json"))
             )
             is_orphan_cache = name.endswith(".xcaf-cache.xbf")
-            if is_staged_upload or is_orphan_cache:
+            if is_job_file or is_orphan_cache:
                 p.unlink()
                 deleted += 1
         except OSError:
             # Locked file, race with antivirus, etc. — ignore and try next run.
             pass
     if deleted:
-        print(f"  inbox sweep: removed {deleted} stale upload artefact(s)")
+        print(f"  inbox sweep: removed {deleted} stale file(s) left by earlier imports")
 
 
 def _ask(prompt: str, default: str = "") -> str:
@@ -159,6 +189,29 @@ def _ask(prompt: str, default: str = "") -> str:
         return a if a else default
     except EOFError:
         return default
+
+
+def _same_path(a: str, b: str) -> bool:
+    """Two spellings of one path (Windows ignores case and mixes slashes)."""
+    return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
+
+
+def _gltf_side_files(path: Path) -> list[str]:
+    """The separate files a .gltf keeps its data in (.bin buffers, textures).
+    Empty for a .gltf that carries everything inside itself."""
+    try:
+        with path.open("r", encoding="utf-8-sig") as f:
+            doc = json.load(f)
+    except Exception:
+        return []        # not readable as glTF: the app says so when it loads it
+    if not isinstance(doc, dict): return []
+    side = []
+    for key in ("buffers", "images"):
+        for item in doc.get(key) or []:
+            uri = item.get("uri") if isinstance(item, dict) else None
+            if isinstance(uri, str) and uri and not uri.lower().startswith("data:"):
+                side.append(uri)
+    return side
 
 
 def interactive_convert(src: Path) -> Path | None:
@@ -174,24 +227,32 @@ def interactive_convert(src: Path) -> Path | None:
         # successful conversions and surface the cached quality so the user
         # isn't silently re-using a coarser/finer mesh than they wanted.
         params_path = dst.with_suffix(dst.suffix + ".params.json")
-        cached_q_label = ""
+        cached = {}
         try:
             if params_path.exists():
                 with params_path.open("r", encoding="utf-8") as pf:
-                    p = json.load(pf)
-                q = p.get("quality")
-                if q is not None:
-                    cached_q_label = f", quality={q}"
+                    cached = json.load(pf)
         except Exception:
-            pass
-        ans = _ask(
-            f"\n  Cached GLB found:\n"
-            f"    {dst.name}  ({dst.stat().st_size/1048576:.1f} MB, "
-            f"converted {cache_age/60:.0f} min ago{cached_q_label})\n"
-            f"  Re-convert? [y/N]: ", "n")
-        if ans.lower() not in ("y", "yes"):
-            print(f"  Using cached GLB.\n")
-            return dst
+            cached = {}
+        if not isinstance(cached, dict): cached = {}
+        # inbox/<name>.glb is named after the file alone, so B/assembly.step
+        # finds the GLB that A/assembly.step left there. The sidecar records
+        # which file a GLB was made from; only that file may reuse it. (A GLB
+        # with no record, from an older version, is converted again.)
+        made_from = cached.get("source")
+        if isinstance(made_from, str) and _same_path(made_from, str(src)):
+            q = cached.get("quality")
+            cached_q_label = f", quality={q}" if q is not None else ""
+            ans = _ask(
+                f"\n  Cached GLB found:\n"
+                f"    {dst.name}  ({dst.stat().st_size/1048576:.1f} MB, "
+                f"converted {cache_age/60:.0f} min ago{cached_q_label})\n"
+                f"  Re-convert? [y/N]: ", "n")
+            if ans.lower() not in ("y", "yes"):
+                print(f"  Using cached GLB.\n")
+                return dst
+        else:
+            print(f"\n  inbox/{dst.name} was not made from this file - converting again.")
 
         force = True
 
@@ -213,35 +274,21 @@ def interactive_convert(src: Path) -> Path | None:
     else: quality = "0.5"
 
     print()
-    # Sensible default: physical cores - 1, capped at 8. Past ~8 the per-worker
-    # BREP-load overhead (each worker re-loads the serialized compound) starts
-    # to dominate the per-solid extraction time, so more workers stop helping.
-    # Users with beefy CPUs can override and try higher numbers — the full
-    # range is just bounded below by 0.
-    try:
-        cpu_count = os.cpu_count() or 4
-    except Exception:
-        cpu_count = 4
-    suggested = min(8, max(2, cpu_count - 1))
-    par_ans = _ask(
-        f"  Parallel workers for mesh extraction (0 = sequential, "
-        f"recommended = {suggested} on your {cpu_count}-core CPU, max useful ~{cpu_count}): ",
-        str(suggested))
-    try: parallel = int(par_ans)
-    except ValueError: parallel = 0
-
-    print()
     cmd = [PYTHON_BIN, str(ROOT / "step2glb.py"), str(src),
-           "--out", str(dst), "--quality", quality, "--force-colors"]
+           "--out", str(dst), "--quality", quality, "--force-colors",
+           "--no-meshopt"]
     # --force-colors guarantees the XCAF reader runs regardless of file size,
     # so the new hierarchical path (assembly tree + instance detection) always
     # fires. Without this, files over the auto-threshold silently fall back to
     # the flat plain reader and you lose names + hierarchy + instances.
+    # --no-meshopt: left alone, the converter compresses the GLB whenever
+    # gltfpack happens to be installed; what the app opens should not depend
+    # on that.
+    # (No question about worker processes here: --parallel only applies to the
+    # plain reader, and --force-colors rules that reader out.)
     if force: cmd.append("--force")
-    if parallel > 1: cmd += ["--parallel", str(parallel)]
-    print(f"  Running: step2glb.py {src.name} --quality {quality} --force-colors"
-          + (" --force" if force else "")
-          + (f" --parallel {parallel}" if parallel > 1 else ""))
+    print(f"  Running: step2glb.py {src.name} --quality {quality} --force-colors --no-meshopt"
+          + (" --force" if force else ""))
     print()
     rc = subprocess.call(cmd, cwd=ROOT)
     if rc != 0:
@@ -262,15 +309,28 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
     """
     opts = opts or {}
     with JOBS_LOCK:
-        JOBS[job_id]["status"] = "running"
-        JOBS[job_id]["log"] = []
+        # Cancel can arrive before this thread gets going. Then there is
+        # nothing to start, and the job must stay "cancelled".
+        cancelled = JOBS[job_id].get("status") == "cancelled"
+        if not cancelled:
+            JOBS[job_id]["status"] = "running"
+            JOBS[job_id]["log"] = []
+            JOBS[job_id]["log_base"] = 0
+    if cancelled:
+        try: src_path.unlink(missing_ok=True)
+        except OSError: pass
+        return
     try:
         # Color mode: 'on' = always XCAF (what we used to always do via
         # --force-colors); 'auto' = step2glb.py's size-aware default; 'off'
         # = plain reader, fastest, no colors/hierarchy.
         colors = opts.get("colors", "on")
+        # --no-meshopt: left alone, the converter compresses the GLB whenever
+        # gltfpack happens to be installed; what the app gets should not
+        # depend on that.
         cmd = [PYTHON_BIN, str(ROOT / "step2glb.py"), str(src_path),
-               "--out", str(dst_path), "--quality", str(quality)]
+               "--out", str(dst_path), "--quality", str(quality),
+               "--no-meshopt"]
         if colors == "on":   cmd += ["--force-colors"]
         elif colors == "off": cmd += ["--no-colors"]
         # XCAF read-mode toggles — only meaningful when colors != 'off'.
@@ -291,27 +351,45 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
             JOBS[job_id]["message"] = f"using Python: {PYTHON_BIN}"
         # The converter prints UTF-8. Decoding with the Windows code page
         # garbled its log and could raise on a path with accented letters.
+        # Away from Windows the converter gets a session of its own, so that
+        # Cancel can stop it together with its heartbeat helper (_kill_tree
+        # signals the whole process group). On Windows taskkill /T does that.
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                 text=True, encoding="utf-8", errors="replace",
-                                bufsize=1, cwd=ROOT)
+                                bufsize=1, cwd=ROOT,
+                                start_new_session=(os.name != "nt"))
         with JOBS_LOCK:
             PROCS[job_id] = proc
+            cancelled = JOBS[job_id].get("status") == "cancelled"
+        # Cancelled while the process was starting: /api/cancel found nothing
+        # to stop then, so it is stopped here.
+        if cancelled: _kill_tree(proc)
         for line in proc.stdout:
             line = line.rstrip()
             with JOBS_LOCK:
-                JOBS[job_id]["log"].append(line)
-                if len(JOBS[job_id]["log"]) > 200:
-                    JOBS[job_id]["log"] = JOBS[job_id]["log"][-200:]
-                JOBS[job_id]["message"] = line
+                job = JOBS[job_id]
+                job["log"].append(line)
+                dropped = len(job["log"]) - MAX_LOG_LINES
+                if dropped > 0:
+                    job["log"] = job["log"][dropped:]
+                    job["log_base"] = job.get("log_base", 0) + dropped
+                job["message"] = line
         rc = proc.wait()
         with JOBS_LOCK:
             PROCS.pop(job_id, None)
             cancelled = JOBS[job_id].get("status") == "cancelled"
+            # the converter's last error line, for the message below
+            said = next((l.strip()[1:].strip() for l in reversed(JOBS[job_id]["log"])
+                         if l.strip().startswith("✗")), "")
         if cancelled:
             for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf"), dst_path):
                 try: stale.unlink(missing_ok=True)
                 except OSError: pass
             return
+        # 3 is the converter's "read the file, found nothing to write": no
+        # solid bodies in it, or the minimum-size setting removed every part.
+        if rc == 3:
+            raise RuntimeError("Nothing to convert: " + (said or "this STEP file has no solid bodies in it"))
         if rc != 0:
             raise RuntimeError(f"step2glb.py exited with code {rc}")
         # The converter can finish without an error and without a file: a STEP
@@ -402,7 +480,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, "Not found"); return
         if u.path.startswith("/api/job/"):
             job_id = u.path.rsplit("/", 1)[-1]
-            with JOBS_LOCK: job = JOBS.get(job_id)
+            # A copy taken under the lock, so "log" and "log_base" belong together.
+            with JOBS_LOCK:
+                job = JOBS.get(job_id)
+                if job is not None: job = {**job, "log": list(job.get("log") or [])}
             if job is None: return self._json({"error": "not found"}, 404)
             return self._json(job)
         return super().do_GET()
@@ -449,10 +530,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self._json({"status": "shutting down"})
         def _stop():
             time.sleep(0.1)
-            with JOBS_LOCK: running = list(PROCS.values())
-            for proc in running:                      # a conversion still going has nobody left to read it
-                try: _kill_tree(proc)
-                except Exception: pass
+            _stop_converters()
             try:
                 if HTTPD is not None: HTTPD.shutdown()
             except Exception: pass
@@ -555,7 +633,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             JOBS[job_id] = {
                 "id": job_id, "status": "queued", "started_at": time.time(),
                 "src_name": name, "src_size_mb": size / 1048576,
-                "log": [], "message": "queued", "progress": 0, "result": None,
+                "log": [], "log_base": 0, "message": "queued", "progress": 0, "result": None,
             }
         threading.Thread(target=_convert_thread,
                          args=(job_id, src, dst, quality, min_size, opts),
@@ -570,12 +648,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 # It uses the browser's usual profile, so settings and recent files are the
 # ones the app already had in a tab. Returns False when no such browser is
 # found, and the caller falls back to an ordinary tab.
+def _default_browser_exe() -> str | None:
+    """Windows: the program file of the default browser, when it is one that
+    can open an app window (Chrome, Edge, Brave). None for anything else."""
+    if sys.platform != "win32": return None
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice") as key:
+            prog_id = str(winreg.QueryValueEx(key, "ProgId")[0])
+    except Exception:
+        return None
+    # ChromeHTML, MSEdgeHTM, BraveHTML; an install for one user only adds a
+    # suffix to the name (ChromeHTML.ABC123…).
+    for prefix, exe in (("ChromeHTML", "chrome.exe"), ("MSEdgeHTM", "msedge.exe"), ("BraveHTML", "brave.exe")):
+        if prog_id.startswith(prefix): return exe
+    return None
+
 def _app_browsers():
     if sys.platform == "win32":
         roots = [os.environ.get(k) for k in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData")]
         tails = [r"Google\Chrome\Application\chrome.exe", r"Microsoft\Edge\Application\msedge.exe",
                  r"BraveSoftware\Brave-Browser\Application\brave.exe"]
-        return [os.path.join(r, t) for t in tails for r in roots if r]
+        found = [os.path.join(r, t) for t in tails for r in roots if r]
+        # The browser the user has chosen as their default goes first. The
+        # others stay behind it, in the same order, as fallbacks.
+        default = _default_browser_exe()
+        if default:
+            found.sort(key=lambda p: os.path.basename(p).lower() != default)
+        return found
     if sys.platform == "darwin":
         return [f"/Applications/{n}.app/Contents/MacOS/{n}" for n in ("Google Chrome", "Microsoft Edge", "Brave Browser")]
     return [p for p in (shutil.which(n) for n in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge", "brave-browser")) if p]
@@ -622,13 +723,25 @@ def main() -> int:
             print(f"  ERROR: file not found: {src}"); return 1
         ext = src.suffix.lower()
         if ext in (".step", ".stp"):
-            # Always interactive: ask about cache + quality + parallel
+            # Always interactive: ask about the cached result and the quality
             dst = interactive_convert(src)
             if dst is None: return 1
             auto_load = "inbox/" + dst.name
         elif ext in (".glb", ".gltf"):
+            # A .gltf may keep its geometry and textures in files beside it.
+            # The app loads the one file it is given and would not find them.
+            side = _gltf_side_files(src) if ext == ".gltf" else []
+            if side:
+                shown = ", ".join(side[:3]) + (f" and {len(side) - 3} more" if len(side) > 3 else "")
+                print(f"  {src.name} keeps part of the model in separate files ({shown}),")
+                print(f"  and --open can only hand the app a single file.")
+                print(f"  Save the model as one .glb and open that instead.")
+                return 1
             dst = INBOX / src.name
-            shutil.copy2(src, dst)
+            # Already in inbox/ (`--open inbox/x.glb`): nothing to copy, and
+            # copying a file onto itself is an error.
+            if not (dst.exists() and os.path.samefile(src, dst)):
+                shutil.copy2(src, dst)
             auto_load = "inbox/" + dst.name
         else:
             print(f"  Unsupported file type: {ext}"); return 1
@@ -685,6 +798,8 @@ def main() -> int:
                 except Exception: pass
         try: httpd.serve_forever()
         except KeyboardInterrupt:
+            # A converter in a session of its own does not get the Ctrl+C.
+            _stop_converters()
             print("\n  stopped."); return 0
 
 

@@ -91,7 +91,7 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 | 🧬 **PCA pose-normalized hash** | Same shape at any rotation/translation → **one** GPU mesh + N transforms |
 | 🔷 **Adaptive tessellation**    | Absolute or relative to bbox diagonal · size culling for the tiny stuff |
 | 📦 **Meshopt + Draco**          | Optional `EXT_meshopt_compression` via `gltfpack` — **~10× smaller GLBs** |
-| ⚡ **One-click launch**          | `start.bat` / `start.command` bootstraps the venv and opens the browser |
+| ⚡ **One-click launch**          | `start.bat` / `start.command` bootstraps the venv and opens the app in a window of its own |
 | 🔁 **Background jobs**          | Long conversions run as server jobs with live progress streamed to the UI |
 
 ### 🖥 Viewer & rendering
