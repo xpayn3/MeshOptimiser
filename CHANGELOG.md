@@ -163,9 +163,43 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   click on it leaves the mode) and the Measure button is yellow. A click
   on a row in the Measurements card picks that measurement: its line is
   drawn thicker and its label turns yellow, and it stays on show after
-  the mode is left.
+  the mode is left. The pills along the top of the viewport (camera view,
+  isolate, measure, snap) now share the toolbars' surface, and the camera
+  pill has a caret because it opens a list.
+
+**Views**
+
+- ![new][new] **An *Exploded* pill.** While the view is exploded a pill
+  beside the camera pill says so (with the amount); a click on it puts
+  the parts back and zeroes the sliders. Status pills (isolate, exploded,
+  measure, snap) always sit just right of the camera pill, in that order,
+  filled with their own colour, and the camera pill never moves when one
+  comes or goes. The camera pill is smaller and has no tooltip.
+- ![polish][polish] **Exploding is for looking.** Moving a slider lets go
+  of the selection; parts can still be picked (and are outlined) but carry
+  no transform gizmo until they are put back.
+- ![fix][fix] **Orbiting out of a 2D view** drops back to the perspective
+  camera again (the check ran once a frame and never saw a drag, which
+  OrbitControls applies inside its own handler). Pan and zoom stay in the
+  view, and switching from one 2D view to another stays in 2D.
+
+- ![fix][fix] **The 2D views have their grid back.** The grid shader cast
+  its rays from the camera position, which is wrong for an orthographic
+  camera (the rays run parallel), so Top / Front / Side showed no grid.
+  The ray now runs from the pixel's near-plane point to its far-plane
+  point, right for both projections.
+- ![polish][polish] **Turn a library part freely.** Dragging the preview
+  in the library drawer is a trackball: it turns about every axis, so a
+  part can be rolled over and seen from underneath. Double-click returns
+  to the first view.
 
 **Tabs**
+
+- ![fix][fix] **The top bar follows a sidebar steadily.** Folding or
+  opening the left sidebar slides the tabs and the fold button on the
+  same curve as the sidebar (the Menu word no longer blinks away
+  half-way), and dragging the sidebar's edge keeps the button on the
+  sidebar's edge at every width.
 
 - ![new][new] **Right-click a tab.** *Duplicate scene* opens a copy of that
   tab's scene in a new tab, *Close all* (`Ctrl+Shift+F4`) and *Close others*

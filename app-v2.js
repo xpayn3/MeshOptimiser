@@ -4023,6 +4023,16 @@ function initScene() {
   // autoscroll trigger fires on mousedown before the pointer chain runs, so
   // we suppress it here for button 1 (middle) on the canvas only.
   $('canvas').addEventListener('mousedown', e => { if (e.button === 1) e.preventDefault(); });
+  // Orbiting out of a 2D (axis) view drops back to the perspective camera.
+  // OrbitControls applies a drag by calling update() inside its own pointer
+  // handler, so the per-frame check in tick() never sees the move: listen to
+  // the controls' own change event. Pan and zoom keep the direction and stay.
+  const _orbitDir = new THREE.Vector3();
+  controls.addEventListener('change', () => {
+    if (!_stdViewActive || !camera) return;
+    _orbitDir.copy(camera.position).sub(controls.target).normalize();
+    if (_orbitDir.dot(_stdViewDir) < 0.999999) _leaveAxisView();
+  });
 
   // C4D-style Alt + RMB-drag = dolly (zoom). Drag UP zooms in, drag DOWN
   // zooms out, exponential so the speed feels constant at any scale. We
@@ -4869,6 +4879,10 @@ function updateGizmo() {
 function _updateGizmoImpl() {
   if (!state.gizmo) return;
   if (state.gizmoMode === 'off') { _detachGizmo(); return; }
+  // An exploded view is for looking: parts can be picked and are outlined, but
+  // carry no transform gizmo (a move made here would only be undone by the
+  // next change of the explosion). It comes back when the parts are put back.
+  { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { _detachGizmo(); return; } }
   const ids = [...state.selected];
   // Include instanced parts (p.mesh is null but p.instancedMesh is set) — the
   // promotion code inside _attachGizmoToParts pops them out of the InstancedMesh
@@ -8225,16 +8239,22 @@ function _makeShaderGrid(opts = {}) {
     // doesn't matter.)
     const farH = uInvViewProj.mul(vec4(positionLocal.x, positionLocal.y, float(1), float(1)));
     const farW = farH.xyz.div(farH.w);
-    const rayDir = normalize(farW.sub(cameraPosition));
+    // The ray runs from the pixel's point on the near plane to its point on the
+    // far plane. That is the eye ray for a perspective camera and the parallel
+    // ray an orthographic one casts (from cameraPosition it is wrong there:
+    // the 2D views lost their grid).
+    const nearH = uInvViewProj.mul(vec4(positionLocal.x, positionLocal.y, float(0), float(1)));
+    const rayOrg = nearH.xyz.div(nearH.w);
+    const rayDir = normalize(farW.sub(rayOrg));
 
     // Ray-plane intersection: plane passes through origin, normal = uPlaneN.
     //   dot(O + t·D, N) = 0   ⇒   t = -dot(O, N) / dot(D, N)
     // Pixels where the ray misses the plane (parallel) or hits behind the
     // camera (t < 0) get masked to alpha=0 below.
     const denom = dot(rayDir, uPlaneN);
-    const t     = float(0).sub(dot(cameraPosition, uPlaneN)).div(denom);
+    const t     = float(0).sub(dot(rayOrg, uPlaneN)).div(denom);
 
-    const hit = cameraPosition.add(rayDir.mul(t));
+    const hit = rayOrg.add(rayDir.mul(t));
     // Project the world-space hit onto the in-plane basis to get a 2D coord
     // we can run modular cell math on.
     const xy = vec2(dot(hit, uPlaneU), dot(hit, uPlaneV));
@@ -10151,6 +10171,7 @@ function _floorPlane() { return state.sceneUpAxis === 'y' ? 'xz' : 'xy'; }
 
 function _goAxisView(axisId) {
   if (!camera || !controls) return;
+  _stdViewActive = false;     // (moving the camera here must not look like orbiting out of the old view)
   const zUp = state.sceneUpAxis !== 'y';
   const up = zUp ? 'z' : 'y', fwd = zUp ? 'y' : 'z';
   const ax = axisId[1], pos = axisId[0] === 'p';
@@ -14220,7 +14241,17 @@ function _isolateSet(idSet) {
 // While parts are isolated a pill at the top of the viewport says so, and
 // clicking it shows everything again. It follows state._isolated itself, so
 // every way in and out (S, the tree buttons, undo, a new scene) is covered.
+// The same for an exploded view: a pill beside the camera pill says so, and
+// a click on it puts the parts back (resetExplode, which also zeroes the sliders).
+function _syncExplodePill() {
+  const el = document.getElementById('vp-explode-pill');
+  if (!el) return;
+  const ex = state.explode, amt = ex ? Math.max(ex.x || 0, ex.y || 0, ex.z || 0) : 0;
+  el.hidden = !(amt > 0);
+  if (amt > 0) { const lab = el.querySelector('.vp-pill-label'); if (lab) lab.textContent = `Exploded · ${Math.round(amt)}%`; }
+}
 function _syncIsolatePill() {
+  try { _syncExplodePill(); } catch (_) {}
   const el = document.getElementById('vp-isolate-pill');
   if (!el) return;
   const on = !!state._isolated;
@@ -14238,8 +14269,10 @@ function _syncIsolatePill() {
     get() { return _iso; },
     set(v) { _iso = !!v; clearTimeout(_isoT); _isoT = setTimeout(() => { _syncIsolatePill(); try { _scenePropsSoon(); } catch (_) {} }, 0); },
   });
-  const wire = () => document.getElementById('vp-isolate-pill')?.addEventListener('click', () => { try { showAllParts(); requestRender(); } catch (_) {} });
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
+  const wire = () => document.getElementById('vp-explode-pill')?.addEventListener('click', () => { try { resetExplode(); } catch (_) {} });
+  const wire0 = () => document.getElementById('vp-isolate-pill')?.addEventListener('click', () => { try { showAllParts(); requestRender(); } catch (_) {} });
+  const wireAll = () => { wire(); wire0(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireAll, { once: true }); else wireAll();
 }
 
 function isolateSelected() {
@@ -20880,7 +20913,9 @@ function _libHeadChanged(field) { for (const t of _libTweaks.values()) delete t[
 
 // The view of the picked part: a small renderer of its own (WebGL), which
 // draws only when something changes: the part, a parameter, the view.
-const _libView = { renderer: null, scene: null, camera: null, mesh: null, mat: null, ready: false, failed: false, starting: null, raf: 0, yaw: -0.65, pitch: 0.42, zoom: 1, r: 1, w: 0, h: 0, dpr: 0 };
+// The first view of a part (turned a little, seen from above) as a rotation of the camera.
+function _libViewHome() { return new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -0.65).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.42)); }
+const _libView = { renderer: null, scene: null, camera: null, mesh: null, mat: null, ready: false, failed: false, starting: null, raf: 0, q: null, zoom: 1, r: 1, w: 0, h: 0, dpr: 0 };
 function _libViewStart() {
   const v = _libView;
   if (v.ready || v.failed) return Promise.resolve(v.ready);
@@ -20902,13 +20937,24 @@ function _libViewStart() {
       sc.add(camera, new THREE.HemisphereLight(0xffffff, 0x2a2a2e, 1.0));
       Object.assign(v, { renderer, scene: sc, camera, mat: new THREE.MeshStandardMaterial({ color: 0xb4b4b8, metalness: 0.08, roughness: 0.58, side: THREE.DoubleSide }), ready: true });
       // drag to turn it, the wheel to come closer, a double-click for the first view
+      v.q = _libViewHome();
       const box = canvas.parentElement; let from = null;
-      box.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; from = { x: e.clientX, y: e.clientY, yaw: v.yaw, pitch: v.pitch }; try { box.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
-      box.addEventListener('pointermove', (e) => { if (!from) return; v.yaw = from.yaw - (e.clientX - from.x) * 0.01; v.pitch = Math.max(-1.45, Math.min(1.45, from.pitch + (e.clientY - from.y) * 0.01)); _libViewSoon(); });
+      // Dragging turns the part freely about every axis (a trackball, not a turntable):
+      // sideways about the screen's up, vertically about the screen's right, so it
+      // can be rolled over and seen from underneath too.
+      const AX = new THREE.Vector3(), AY = new THREE.Vector3(), QD = new THREE.Quaternion();
+      box.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; from = { x: e.clientX, y: e.clientY }; try { box.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      box.addEventListener('pointermove', (e) => {
+        if (!from) return;
+        const dx = e.clientX - from.x, dy = e.clientY - from.y; from.x = e.clientX; from.y = e.clientY;
+        AY.set(0, 0, 1).applyQuaternion(v.q); AX.set(1, 0, 0).applyQuaternion(v.q);
+        v.q.premultiply(QD.setFromAxisAngle(AY, -dx * 0.01)).premultiply(QD.setFromAxisAngle(AX, -dy * 0.01)).normalize();
+        _libViewSoon();
+      });
       const up = () => { from = null; };
       box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
       box.addEventListener('wheel', (e) => { e.preventDefault(); v.zoom = Math.max(0.5, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12))); _libViewSoon(); }, { passive: false });
-      box.addEventListener('dblclick', () => { v.yaw = -0.65; v.pitch = 0.42; v.zoom = 1; _libViewSoon(); });
+      box.addEventListener('dblclick', () => { v.q = _libViewHome(); v.zoom = 1; _libViewSoon(); });
       try { new ResizeObserver(() => _libViewSoon()).observe(box); } catch (_) {}
       return true;
     } catch (err) {
@@ -20930,8 +20976,9 @@ function _libViewDraw() {
   if (v.w !== w || v.h !== h || v.dpr !== dpr) { v.renderer.setPixelRatio(dpr); v.renderer.setSize(w, h, false); v.camera.aspect = w / h; v.w = w; v.h = h; v.dpr = dpr; }
   // far enough away to hold the whole part in the narrower of the two directions
   const half = v.camera.fov * Math.PI / 360, fit = Math.min(half, Math.atan(Math.tan(half) * v.camera.aspect));
-  const d = v.r / Math.sin(fit) * 1.1 / v.zoom, cp = Math.cos(v.pitch);
-  v.camera.position.set(d * cp * Math.sin(v.yaw), -d * cp * Math.cos(v.yaw), d * Math.sin(v.pitch));
+  const d = v.r / Math.sin(fit) * 1.1 / v.zoom;
+  v.camera.position.set(0, -d, 0).applyQuaternion(v.q);
+  v.camera.up.set(0, 0, 1).applyQuaternion(v.q);
   v.camera.near = Math.max(d / 1000, d - v.r * 2); v.camera.far = d + v.r * 2;
   v.camera.lookAt(0, 0, 0);
   v.camera.updateProjectionMatrix();
@@ -27853,7 +27900,8 @@ function applyExplode() {
   // Re-pivot the gizmo at the new centroid so its handles follow the
   // exploded position. updateGizmo is rAF-coalesced so back-to-back slider
   // ticks don't thrash the scene graph.
-  if (_isGizmoPivotActive()) updateGizmo();
+  updateGizmo();      // (it leaves the gizmo off while exploded)
+  try { _syncExplodePill(); } catch (_) {}
   requestRender();
 }
 
@@ -27913,8 +27961,15 @@ function resetExplode() {
   // rebuild against the rest pose now that meshes have moved back.
   if (state.selected && state.selected.size > 0) applySelectionColors();
   // Re-pivot gizmo at the new (rest) centroid if it was on before.
-  if (_isGizmoPivotActive()) updateGizmo();
+  updateGizmo();      // (and gives it back to what is selected)
+  try { _syncExplodePill(); } catch (_) {}
   requestRender();
+}
+
+// Exploding the view lets go of what is selected: the outline and the gizmo
+// would otherwise stay behind at the parts' old places.
+function _explodeDeselect() {
+  try { if (state.selected && state.selected.size > 0) clearSelection(); } catch (_) {}
 }
 
 function _wireExplode() {
@@ -27926,24 +27981,28 @@ function _wireExplode() {
   const _explodeAll = initScrubber({ ...explodeOpts, el: 'explode-all-scrub', label: 'All axes', onChange: (v) => {
     state.explode = { x: v, y: v, z: v };
     _explodeX?.setValue(v); _explodeY?.setValue(v); _explodeZ?.setValue(v);
+    _explodeDeselect();
     applyExplode();
   }});
   const _explodeX = initScrubber({ ...explodeOpts, el: 'explode-x-scrub', label: 'X axis', onChange: (v) => {
     state.explode.x = v;
     const m = Math.max(state.explode.x, state.explode.y, state.explode.z);
     _explodeAll?.setValue(m);
+    _explodeDeselect();
     applyExplode();
   }});
   const _explodeY = initScrubber({ ...explodeOpts, el: 'explode-y-scrub', label: 'Y axis', onChange: (v) => {
     state.explode.y = v;
     const m = Math.max(state.explode.x, state.explode.y, state.explode.z);
     _explodeAll?.setValue(m);
+    _explodeDeselect();
     applyExplode();
   }});
   const _explodeZ = initScrubber({ ...explodeOpts, el: 'explode-z-scrub', label: 'Z axis', onChange: (v) => {
     state.explode.z = v;
     const m = Math.max(state.explode.x, state.explode.y, state.explode.z);
     _explodeAll?.setValue(m);
+    _explodeDeselect();
     applyExplode();
   }});
   state._explodeScrubbers = { all: _explodeAll, x: _explodeX, y: _explodeY, z: _explodeZ };
@@ -36556,43 +36615,71 @@ if (new URLSearchParams(location.search).has('selftest')) {
   const go = () => {
     const tabs = document.getElementById('doc-tabs'), vp = document.getElementById('viewport'), tb = document.getElementById('tb');
     if (!tabs || !vp || !tb) return;
-    // Read first, write once, and only when it changes. (Setting the margin
-    // to 0 to measure and then setting it again made the browser lay the page
-    // out twice more on every step of a sidebar drag.)
+    // Everything here is worked out for where the layout is GOING, never from
+    // where it is mid-way: folding a sidebar animates the grid for 320 ms, and
+    // measuring that moving target made the Menu word blink away and the tab
+    // chase the viewport. The final width of the sidebar column is the
+    // --side-l-w variable (it does not animate); the margins below are then
+    // written once and slide on the same curve as the grid (body.tb-slide).
+    // Read first, write once, and only when it changes.
+    const app = document.getElementById('app'), body = document.body;
+    let insetR = 13;                      // sidebar's right edge to its search box's, learned when settled
     const place = () => {
-      // The button that folds the left sidebar away sits at the right end of
-      // the sidebar's own stretch of the bar, in line with the search box
-      // under it (where the parts / library switch was). With the sidebar
-      // folded away, or too narrow for that, it stays next to Menu.
       const sw = document.getElementById('btn-toggle-left'), side = document.getElementById('sidebar-left');
+      const appL = app ? app.getBoundingClientRect().left : 0;
+      const col0 = app ? (parseFloat(getComputedStyle(app).gridTemplateColumns) || 0) : 0;
+      // While the sidebar's edge is dragged the column is set directly (the
+      // variable is only written on release, and nothing animates): the
+      // column as drawn IS where it is. Otherwise the variable is the end point.
+      const W = body.classList.contains('resizing') ? col0 : (parseFloat(getComputedStyle(body).getPropertyValue('--side-l-w')) || 0);
+      const folded = body.classList.contains('left-collapsed');
       let moved = 0;
       if (sw && side) {
-        const curS = parseFloat(sw.style.marginLeft) || 0;
+        const boxOf = () => [...side.querySelectorAll('.tree-search')].map(e => e.getBoundingClientRect()).find(q => q.width);
+        if (!folded && Math.abs(col0 - W) < 1 && W > 100) { const q = boxOf(); if (q) insetR = side.getBoundingClientRect().right - q.right; }
+        const edge = appL + W - insetR;                                   // where the sidebar's content ends, when it has got there
+        const curS = parseFloat(getComputedStyle(sw).marginLeft) || 0;     // (the margin as it is drawn right now)
         // The Menu button gives up its word when the toggle would otherwise
         // run past the sidebar's edge, and takes it back when there is room
         // again (its width with the word is remembered from when it had it).
         const menu = document.getElementById('btn-file');
         if (menu) {
-          const box0 = [...side.querySelectorAll('.tree-search')].map(e => e.getBoundingClientRect()).find(q => q.width);
-          const edge0 = box0 && box0.width ? box0.right : side.getBoundingClientRect().right - 12;
           const r0 = sw.getBoundingClientRect(), short = menu.classList.contains('icon-only'), mw = menu.getBoundingClientRect().width;
           if (!short && mw) menu._fullW = mw;
           const end = r0.right - curS + (short ? Math.max(0, (menu._fullW || mw) - mw) : 0);   // where the toggle ends with the word shown
-          const want = !document.body.classList.contains('left-collapsed') && end > edge0 + 0.5;
+          const want = !folded && end > edge + 0.5;
           if (want !== short) menu.classList.toggle('icon-only', want);
         }
-        const r = sw.getBoundingClientRect(), box = [...side.querySelectorAll('.tree-search')].map(e => e.getBoundingClientRect()).find(q => q.width);
-        const edge = box && box.width ? box.right : side.getBoundingClientRect().right - 12;
-        const folded = document.body.classList.contains('left-collapsed');
+        const r = sw.getBoundingClientRect();
         const wantS = folded ? 0 : Math.max(0, Math.round(edge - r.width - (r.left - curS)));
-        moved = wantS - curS;
-        if (curS !== wantS) sw.style.marginLeft = wantS ? wantS + 'px' : '';
+        if ((parseFloat(sw.style.marginLeft) || 0) !== wantS) sw.style.marginLeft = wantS ? wantS + 'px' : '';
+        // What is still to come for the tab: all of it when the toggle's margin
+        // slides, none when it has taken its value at once (the layout the tab
+        // is measured in already has it).
+        moved = wantS - (parseFloat(getComputedStyle(sw).marginLeft) || 0);
       }
-      const cur = parseFloat(tabs.style.marginLeft) || 0;
-      const gap = vp.getBoundingClientRect().left - (tabs.getBoundingClientRect().left - cur + moved);
+      const cur = parseFloat(getComputedStyle(tabs).marginLeft) || 0;
+      const vpFinal = appL + W + (vp.getBoundingClientRect().left - appL - col0);
+      const gap = vpFinal - (tabs.getBoundingClientRect().left - cur + moved);
       const want = Math.max(6, Math.round(gap)) + 'px';
       if (tabs.style.marginLeft !== want) tabs.style.marginLeft = want;
     };
+    // A sidebar folding or opening: let the top bar slide with it.
+    let slideT = 0, armed = false;
+    try {
+      let wasFolded = body.classList.contains('left-collapsed');
+      new MutationObserver(() => {
+        const f = body.classList.contains('left-collapsed');
+        if (f === wasFolded) return;          // (only a fold / unfold: not tb-slide itself, not a drag)
+        wasFolded = f;
+        if (!armed) return;
+        body.classList.add('tb-slide');
+        void tabs.offsetWidth;            // the transition must be on before the margins change
+        place();
+        clearTimeout(slideT); slideT = setTimeout(() => body.classList.remove('tb-slide'), 420);
+      }).observe(body, { attributes: true, attributeFilter: ['class'] });
+    } catch (_) {}
+    setTimeout(() => { armed = true; }, 900);
     place();
     try { const ro = new ResizeObserver(place); ro.observe(vp); ro.observe(tb); } catch (_) {}
     window.addEventListener('resize', place);

@@ -2915,14 +2915,33 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
    weight trick as the other pills, so these outrank the generic rules. */
 :is(.vpc .vpb#msr-toggle.active,.vpc:is(.tr,.tl) .vpb#msr-toggle.active,#_a#_b){background:rgba(251,191,36,.18);color:#fbbf24;box-shadow:inset 0 0 0 1px rgba(251,191,36,.55)}
 :is(.vpc .vpb#msr-toggle.active,.vpc:is(.tr,.tl) .vpb#msr-toggle.active,#_a#_b):hover{background:rgba(251,191,36,.28);color:#fbbf24}
-:is(#vp-measure-pill.vp-pill,#_a#_b){background:rgba(251,191,36,.22);color:#fbbf24;box-shadow:inset 0 0 0 1px rgba(251,191,36,.45)}
-:is(#vp-measure-pill.vp-pill,#_a#_b):hover{background:rgba(251,191,36,.34);color:#fbbf24}
-#vp-measure-pill.vp-pill[hidden]{display:none}
-#vp-measure-pill.vp-pill :is(.vp-pill-icon,.vp-pill-label){color:#fbbf24}
+/* Top-of-viewport pills (camera view, isolate, measure, snap) are cut from the
+   same cloth as the toolbars: the near-black bar surface, its hairline ring and
+   shadow, no blur, 30 px high. A mode pill keeps that surface and says which
+   mode with a coloured ring, icon and label. The camera pill shows a caret
+   because it opens a list. */
+:is(.vp-pill,#_a#_b){height:30px;padding:0 10px;gap:6px;min-width:0;border-radius:10px;background:rgba(16,16,16,.94);color:var(--tx-control);backdrop-filter:none;
+  box-shadow:0 6px 20px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.07);font-size:var(--fs-12,12px);font-weight:var(--fw-regular)}
+:is(.vp-pill,#_a#_b):hover{background:rgba(34,34,36,.96);color:var(--tx)}
+:is(.vp-pill,#_a#_b)[aria-expanded="true"]{background:rgba(34,34,36,.96);color:var(--tx)}
+:is(.vp-pill,#_a#_b) .vp-pill-icon{opacity:.7}
+:is(.vp-pill,#_a#_b):hover .vp-pill-icon{opacity:1}
+:is(#vp-view-pill,#_a#_b)::after{content:"";width:10px;height:10px;margin-left:-3px;background:var(--select-arrow) center/10px 10px no-repeat;opacity:.6;transition:transform 140ms var(--ease-out)}
+:is(#vp-view-pill,#_a#_b)[aria-expanded="true"]::after{transform:rotate(180deg)}
+:is(.vp-pill.vp-pill-mode,#_a#_b){--pc:var(--ac);background:color-mix(in srgb,var(--pc) 22%,rgba(16,16,16,.94));color:var(--pc);box-shadow:0 6px 20px rgba(0,0,0,.4),inset 0 0 0 1px color-mix(in srgb,var(--pc) 65%,transparent)}
+:is(.vp-pill.vp-pill-mode,#_a#_b):hover{background:color-mix(in srgb,var(--pc) 32%,rgba(16,16,16,.96));color:var(--pc)}
+:is(.vp-pill.vp-pill-mode,#_a#_b) .vp-pill-icon{opacity:1}
+:is(#vp-measure-pill.vp-pill,#_a#_b){--pc:#fbbf24}
+#vp-mode-pills{position:absolute;left:calc(100% + 6px);top:0;display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap}
 .msr-row{cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .msr-row:hover{border-color:rgba(251,191,36,.35)}
 .msr-row.sel{border-color:#fbbf24;background:rgba(251,191,36,.12)}
 .msr-row.sel .msr-kind{color:#fbbf24}
+
+/* The top bar follows a sidebar folding or opening on the grid's own curve
+   (app-v2.js, _alignDocTab sets the margins once, to where they end up). */
+body.tb-slide:not(.resizing) :is(.doc-tabs,#btn-toggle-left){transition:margin-left 320ms cubic-bezier(.4,0,.2,1)}
+body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubic-bezier(.4,0,.2,1)}
 </style>
 </head>
 <body>
@@ -3099,24 +3118,33 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
       </div>
       <div class="vpc tc">
-        <button id="vp-isolate-pill" class="vp-pill vp-pill-mode" type="button" hidden title="Only the isolated parts are shown. Click to show everything again (S)">
-          <i class="vp-pill-icon" data-lucide="focus" aria-hidden="true"></i>
-          <span class="vp-pill-label">Isolated</span>
-          <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
-        </button>
-        <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="menu" aria-expanded="false" title="Camera view — click to switch (Cam / Top / Front / Side)">
+        <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Camera view">
           <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
           <span class="vp-pill-label">Cam</span>
         </button>
-        <button id="vp-measure-pill" class="vp-pill vp-pill-mode vp-pill-measure" type="button" hidden title="Measure mode: click two points on the model. Click to leave (M, Esc)">
-          <i class="vp-pill-icon" data-lucide="ruler" aria-hidden="true"></i>
-          <span class="vp-pill-label">Measure</span>
-          <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
-        </button>
-        <!-- Snap is on (Shift is held and a gizmo is on a part): what a drag snaps to. -->
-        <div id="vp-snap-pill" class="vp-pill vp-pill-mode" hidden role="status" aria-live="polite" title="Snap is on while Shift is held. Turn the wheel during a drag to change the step.">
-          <i class="vp-pill-icon" data-lucide="magnet" aria-hidden="true"></i>
-          <span class="vp-pill-label" id="vp-snap-label">Snap</span>
+        <!-- Status pills (a mode that is on): always just right of the camera pill, in this order,
+             out of the flow so the camera pill never moves when one comes or goes. -->
+        <div id="vp-mode-pills">
+          <button id="vp-isolate-pill" class="vp-pill vp-pill-mode" type="button" hidden title="Only the isolated parts are shown. Click to show everything again (S)">
+            <i class="vp-pill-icon" data-lucide="focus" aria-hidden="true"></i>
+            <span class="vp-pill-label">Isolated</span>
+            <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
+          </button>
+          <button id="vp-explode-pill" class="vp-pill vp-pill-mode" type="button" hidden title="The parts are exploded. Click to put them back together">
+            <i class="vp-pill-icon" data-lucide="expand" aria-hidden="true"></i>
+            <span class="vp-pill-label">Exploded</span>
+            <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
+          </button>
+          <button id="vp-measure-pill" class="vp-pill vp-pill-mode vp-pill-measure" type="button" hidden title="Measure mode: click two points on the model. Click to leave (M, Esc)">
+            <i class="vp-pill-icon" data-lucide="ruler" aria-hidden="true"></i>
+            <span class="vp-pill-label">Measure</span>
+            <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
+          </button>
+          <!-- Snap is on (Shift is held and a gizmo is on a part): what a drag snaps to. -->
+          <div id="vp-snap-pill" class="vp-pill vp-pill-mode" hidden role="status" aria-live="polite" title="Snap is on while Shift is held. Turn the wheel during a drag to change the step.">
+            <i class="vp-pill-icon" data-lucide="magnet" aria-hidden="true"></i>
+            <span class="vp-pill-label" id="vp-snap-label">Snap</span>
+          </div>
         </div>
         <div id="vp-view-pill-menu" class="vp-pill-menu" role="menu">
           <button class="vp-pill-item active" type="button" data-view="persp" role="menuitem"><span class="vp-pill-item-lbl">Cam</span><kbd class="vp-pill-item-kbd" data-kbd="1"></kbd></button>
