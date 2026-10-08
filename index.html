@@ -3043,6 +3043,24 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #welcome-load-pane{padding-top:6px}
 @media (max-width:720px){.wl-cover .wl-tag{display:none}.wl-cover .wl-title{font-size:22px}}
 @media (max-height:700px){.wl-cover video{aspect-ratio:860/170}}
+/* ── Save scene ─────────────────────────────────────────────────────────── */
+.sv-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sv-sum>div{padding:9px 10px;border-radius:8px;background:rgba(255,255,255,.035);min-width:0}
+.sv-sum b{display:block;font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sv-sum span{display:block;margin-top:2px;font-size:var(--fs-11);color:var(--tx3)}
+.sv-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.sv-chip{all:unset;box-sizing:border-box;cursor:pointer;padding:3px 9px;border-radius:999px;font-size:var(--fs-11);color:var(--tx2);background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.sv-chip:hover,.sv-chip:focus-visible{color:#fff;background:var(--ac);box-shadow:none}
+.sv-chip.is-on{color:#fff;background:var(--ac-soft);box-shadow:inset 0 0 0 1px var(--ac)}
+.sv-chip[hidden]{display:none}
+.sv-chip-plain{background:none}
+.sv-where{margin-top:9px;font-size:var(--fs-11);color:var(--tx3);line-height:1.45}
+.sv-where b{color:var(--tx2);font-weight:var(--fw-medium)}
+.sv-where.is-over b{color:var(--wn)}
+.sv-opts{margin-top:14px;padding-top:6px;border-top:1px solid var(--surface-line)}
+:is(.sv-opts .toggle,#_a#_b){padding:6px 0;border-top:0;font-size:var(--fs-13);color:var(--tx)}
+.sv-opts .toggle.is-off{opacity:.45}
+.sv-note{margin-left:8px;font-size:var(--fs-11);color:var(--tx3)}
 /* on a short viewport the controls matter more than the clip */
 @media (max-height:640px){.cmd-hero{display:none}.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:0;padding:10px 40px 8px 12px}}
 </style>
@@ -3940,18 +3958,42 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 </div>
 
 <div class="modal-bg" id="save-scene-modal">
-  <div class="modal" style="width:420px">
+  <div class="modal sv-modal" style="width:460px">
     <div class="modal-h"><h3>Save scene</h3><button class="x" id="save-scene-close" title="Close (Esc)">✕</button></div>
     <div class="modal-b">
-      <div class="field" style="margin:0">
+      <!-- what is about to be written -->
+      <div class="sv-sum" id="save-scene-sum"></div>
+      <div class="field" style="margin:14px 0 0">
         <label><span>Filename</span></label>
         <div style="display:flex;align-items:stretch;gap:0">
-          <input type="text" id="save-scene-name" style="flex:1;min-width:0;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-right:none;border-radius:6px 0 0 6px;color:var(--tx);font-size:var(--fs-md);outline:none">
+          <input type="text" id="save-scene-name" spellcheck="false" autocomplete="off" style="flex:1;min-width:0;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-right:none;border-radius:6px 0 0 6px;color:var(--tx);font-size:var(--fs-md);outline:none">
           <span style="display:inline-flex;align-items:center;padding:0 10px;background:rgba(255,255,255,.03);border:1px solid var(--s3);border-left:none;border-radius:0 6px 6px 0;color:var(--tx3);font-size:var(--fs-12)">.glb</span>
         </div>
+        <!-- Pieces for the name. Each adds its piece once (pressing it again takes it
+             off); the counts and the size are those of what is about to be written
+             and follow the options below. -->
+        <div class="sv-chips" id="save-scene-chips">
+          <button type="button" class="sv-chip" data-tok="date" title="Today's date, 2026-10-08">+ date</button>
+          <button type="button" class="sv-chip" data-tok="time" title="The time now, 1432h">+ time</button>
+          <button type="button" class="sv-chip" data-tok="ver" title="A version number; press again to raise it (Shift takes it off)">+ version</button>
+          <button type="button" class="sv-chip" data-tok="tris" title="The triangle count of what is saved, 17k-tris">+ triangles</button>
+          <button type="button" class="sv-chip" data-tok="parts" title="The number of parts saved, 67-parts">+ parts</button>
+          <button type="button" class="sv-chip" data-tok="size" title="The file size, about, 370KB">+ size</button>
+          <button type="button" class="sv-chip" data-tok="saved" title="How much lighter than the file that was opened, -42pct">+ saving</button>
+          <button type="button" class="sv-chip" data-tok="opt" title="Marks the file as the optimised one">+ optimised</button>
+          <button type="button" class="sv-chip" data-tok="sel" title="Marks the file as a part of the scene">+ selection</button>
+          <button type="button" class="sv-chip sv-chip-plain" data-tok="src" title="Start again from the name of the file that was opened">Source name</button>
+        </div>
+        <div class="sv-where" id="save-scene-where"></div>
+      </div>
+      <div class="sv-opts">
+        <div class="toggle" title="Off: only the selected parts are written. On: the whole scene."><span>Whole scene<span class="sv-note" id="save-scene-sel-note"></span></span><label><input type="checkbox" id="save-scene-all" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Hidden parts are written too, and come back hidden when the scene is opened again"><span>Include hidden parts<span class="sv-note" id="save-scene-hid-note"></span></span><label><input type="checkbox" id="save-scene-hidden" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="The camera, the display settings, flags and measurements are stored in the file and restored when it is opened here again. Other apps ignore them."><span>Remember the view and settings</span><label><input type="checkbox" id="save-scene-view" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Write the file without making it this scene's file: the scene keeps its unsaved mark, and the next Save goes where it went before."><span>Save as a copy</span><label><input type="checkbox" id="save-scene-copy"><span class="switch"></span></label></div>
       </div>
     </div>
-    <div class="modal-f"><button class="btn" id="save-scene-cancel" title="Close without saving (Esc)">Cancel</button><button class="tbtn primary" id="save-scene-confirm" title="Choose where to save the .glb">Save…</button></div>
+    <div class="modal-f"><button class="btn" id="save-scene-cancel" title="Close without saving (Esc)">Cancel</button><button class="tbtn primary" id="save-scene-confirm" title="Write the .glb">Save…</button></div>
   </div>
 </div>
 

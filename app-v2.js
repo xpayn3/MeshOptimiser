@@ -16632,38 +16632,131 @@ function _collectSceneState() {
   };
 }
 
+// The Save scene dialog. Resolves to null (cancelled) or
+//   { name, all, hidden, view, copy }
+// all: the whole scene (false = only the selected parts); hidden: hidden parts
+// too; view: store the camera / display / flags / measurements in the file;
+// copy: write the file without making it this scene's file.
+// The dialog says what is about to be written (parts, triangles, a size) and
+// whether Save will go over the file saved last time or ask where to put it.
+const _saveSceneOpts = { hidden: true, view: true };     // these two stick for the session
 function _openSaveSceneDialog(suggested) {
   return new Promise((resolve) => {
-    const bg = document.getElementById('save-scene-modal');
-    const input = document.getElementById('save-scene-name');
-    const okBtn = document.getElementById('save-scene-confirm');
-    const cancelBtn = document.getElementById('save-scene-cancel');
-    const closeBtn = document.getElementById('save-scene-close');
-    if (!bg || !input || !okBtn) { resolve(window.prompt('Save scene as:', suggested)); return; }
+    const $i = (id) => document.getElementById(id);
+    const bg = $i('save-scene-modal'), input = $i('save-scene-name'), okBtn = $i('save-scene-confirm');
+    const cancelBtn = $i('save-scene-cancel'), closeBtn = $i('save-scene-close');
+    if (!bg || !input || !okBtn) { const v = window.prompt('Save scene as:', suggested); resolve(v === null ? null : { name: v, all: true, hidden: true, view: true, copy: false }); return; }
+    const all = $i('save-scene-all'), hid = $i('save-scene-hidden'), view = $i('save-scene-view'), copy = $i('save-scene-copy');
+    const live = state.parts.filter(p => !p.deleted);
+    const nSel = live.filter(p => state.selected.has(p.partId)).length, nHidden = live.filter(p => !p.visible).length;
+    if (all) { all.checked = true; all.disabled = !nSel; all.closest('.toggle')?.classList.toggle('is-off', !nSel); }
+    if (hid) { hid.checked = _saveSceneOpts.hidden; hid.disabled = !nHidden; hid.closest('.toggle')?.classList.toggle('is-off', !nHidden); }
+    if (view) view.checked = _saveSceneOpts.view;
+    if (copy) copy.checked = false;
+    const note = (id, t) => { const el = $i(id); if (el) el.textContent = t; };
+    note('save-scene-sel-note', nSel ? `${fmtNum(nSel)} selected` : 'nothing selected');
+    note('save-scene-hid-note', nHidden ? `${fmtNum(nHidden)} hidden` : 'none hidden');
+    const clean = (v) => String(v || '').trim().replace(/\.glb$/i, '').replace(/[\\/:*?"<>|]/g, '_');
+    // bytes of geometry behind a part (shared geometry is counted once)
+    const geomBytes = (parts) => {
+      const seen = new Set(); let n = 0;
+      for (const p of parts) {
+        const g = (p.mesh || p.instancedMesh)?.geometry;
+        if (!g || seen.has(g)) continue;
+        seen.add(g);
+        for (const k in g.attributes) n += g.attributes[k].array?.byteLength || 0;
+        if (g.index) n += g.index.array?.byteLength || 0;
+      }
+      return n;
+    };
+    // ── The pieces a name can be built from ──────────────────────────────
+    // Each has a pattern that finds it in the name (with the separator before
+    // it) and a function that writes it from what is about to be saved. A
+    // piece is in the name at most once; pressing its pill puts it there or
+    // takes it off, and when an option changes what is saved the counts and
+    // the size already in the name are rewritten to match.
+    const now = { parts: 0, tris: 0, bytes: 0 };
+    const short = (n) => n >= 1e6 ? +(n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M' : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
+    const sizeTok = (b) => b >= 1073741824 ? +(b / 1073741824).toFixed(1) + 'GB' : b >= 1048576 ? Math.round(b / 1048576) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB';
+    const srcBytes = (state._sourceFile && state._sourceFile.size) || 0;
+    const z2 = (n) => String(n).padStart(2, '0');
+    const TOK = {
+      date:  { re: /[ _-]?\d{4}-\d{2}-\d{2}/, make: () => { const d = new Date(); return `${d.getFullYear()}-${z2(d.getMonth() + 1)}-${z2(d.getDate())}`; } },
+      time:  { re: /[ _-]?\d{4}h(?![a-z])/i, make: () => { const d = new Date(); return z2(d.getHours()) + z2(d.getMinutes()) + 'h'; } },
+      ver:   { re: /[ _-]?v\d+(?![a-z0-9])/i, make: () => 'v2' },
+      tris:  { re: /[ _-]?\d+(?:\.\d+)?[kM]?-tris/, make: () => short(now.tris) + '-tris', live: true },
+      parts: { re: /[ _-]?\d+-parts?/, make: () => now.parts + (now.parts === 1 ? '-part' : '-parts'), live: true },
+      size:  { re: /[ _-]?\d+(?:\.\d+)?(?:KB|MB|GB)/, make: () => sizeTok(now.bytes), live: true },
+      saved: { re: /[ _-]?-?\d+pct/, make: () => '-' + Math.max(0, Math.round((1 - now.bytes / srcBytes) * 100)) + 'pct', live: true, ok: () => srcBytes > 0 && now.bytes < srcBytes },
+      opt:   { re: /[ _-]?optimi[sz]ed/i, make: () => 'optimised' },
+      sel:   { re: /[ _-]?selection/i, make: () => 'selection' },
+    };
+    const has = (k) => TOK[k].re.test(clean(input.value));
+    const strip = (k, name) => name.replace(TOK[k].re, '').replace(/^[ _-]+/, '');
+    function toggleTok(k, e) {
+      let name = clean(input.value);
+      if (k === 'src') { name = clean(state._loadedFilename || 'scene').replace(/\.[^.]+$/, ''); }
+      else if (k === 'ver' && has(k) && !(e && e.shiftKey)) { name = name.replace(/v(\d+)(?![a-z0-9])/i, (m, d) => 'v' + String(+d + 1).padStart(d.length, '0')); }   // press again: the next version
+      else if (has(k)) name = strip(k, name);
+      else name = (name ? name + '_' : '') + TOK[k].make();
+      input.value = name; refresh(); input.focus();
+    }
+    function paintToks(rewrite) {
+      let name = clean(input.value), changed = false;
+      for (const b of bg.querySelectorAll('#save-scene-chips [data-tok]')) {
+        const k = b.dataset.tok, t = TOK[k];
+        if (!t) continue;
+        if (t.ok) b.hidden = !t.ok() && !has(k);
+        const on = t.re.test(name);
+        b.classList.toggle('is-on', on);
+        b.textContent = (on ? '− ' : '+ ') + b.textContent.replace(/^[+−] /, '');
+        // a count or a size already in the name follows what is about to be saved
+        if (rewrite && on && t.live) { const m = name.match(t.re), sep = (m[0].match(/^[ _-]/) || [''])[0], next = sep + t.make(); if (m[0] !== next) { name = name.replace(t.re, next); changed = true; } }
+      }
+      if (changed) input.value = name;
+    }
+    function refresh(ev) {
+      const whole = !all || all.checked || !nSel;
+      let parts = whole ? live : live.filter(p => state.selected.has(p.partId));
+      if (hid && !hid.checked) parts = parts.filter(p => p.visible);
+      const tris = parts.reduce((t, p) => t + (p.triCount || 0), 0);
+      now.parts = parts.length; now.tris = tris; now.bytes = Math.round(geomBytes(parts) * 1.02 + 4096);
+      paintToks(!(ev && ev.type === 'input'));               // not while the name is being typed
+      const sum = $i('save-scene-sum');
+      if (sum) sum.innerHTML = `<div><b>${fmtNum(parts.length)}</b><span>${parts.length === 1 ? 'part' : 'parts'}</span></div><div><b>${fmtNum(tris)}</b><span>triangles</span></div><div><b>≈ ${fmtBytes(now.bytes)}</b><span>file size</span></div>`;
+      const name = clean(input.value) || clean(suggested), prev = state._lastSaveSceneHandle;
+      const over = !!prev && prev.name === name + '.glb' && !(copy && copy.checked);
+      const where = $i('save-scene-where');
+      if (where) {
+        where.classList.toggle('is-over', over);
+        where.innerHTML = over ? `Saves over <b>${escapeHtml(prev.name)}</b>, the file this scene was saved to last.`
+          : typeof window.showSaveFilePicker === 'function' ? 'You will be asked where to put it' + (prev ? ', starting in the folder used last time.' : '.')
+          : 'It goes to your Downloads folder.';
+      }
+      okBtn.textContent = over ? 'Save' : 'Save…';
+      okBtn.disabled = !parts.length;
+      // a part of the scene is never the scene's own file
+      const partial = !whole || (hid && !hid.checked && nHidden > 0);
+      if (copy) { if (partial) copy.checked = true; copy.disabled = partial; copy.closest('.toggle')?.classList.toggle('is-off', partial); }
+    }
+    const onChip = (e) => { const b = e.target.closest('[data-tok]'); if (b) toggleTok(b.dataset.tok, e); };
     input.value = suggested;
+    refresh();
     bg.classList.add('show');
     setTimeout(() => { input.focus(); input.select(); }, 50);
-    const finish = (val) => {
+    const wired = [[okBtn, 'click', () => finish(true)], [cancelBtn, 'click', () => finish(false)], [closeBtn, 'click', () => finish(false)],
+      [input, 'input', refresh], [all, 'change', refresh], [hid, 'change', refresh], [copy, 'change', refresh],
+      [$i('save-scene-chips'), 'click', onChip],
+      [bg, 'keydown', (e) => { if (e.key === 'Enter' && !e.target.matches('button')) { e.preventDefault(); if (!okBtn.disabled) finish(true); } else if (e.key === 'Escape') { e.preventDefault(); finish(false); } }],
+      [bg, 'click', (e) => { if (e.target === bg) finish(false); }]];
+    for (const [el, ev, fn] of wired) el?.addEventListener(ev, fn);
+    function finish(ok) {
       bg.classList.remove('show');
-      okBtn.removeEventListener('click', onOk);
-      cancelBtn.removeEventListener('click', onCancel);
-      closeBtn.removeEventListener('click', onCancel);
-      input.removeEventListener('keydown', onKey);
-      bg.removeEventListener('click', onBgClick);
-      resolve(val);
-    };
-    const onOk = () => finish(input.value);
-    const onCancel = () => finish(null);
-    const onKey = (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); onOk(); }
-      else if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-    };
-    const onBgClick = (e) => { if (e.target === bg) onCancel(); };
-    okBtn.addEventListener('click', onOk);
-    cancelBtn.addEventListener('click', onCancel);
-    closeBtn.addEventListener('click', onCancel);
-    input.addEventListener('keydown', onKey);
-    bg.addEventListener('click', onBgClick);
+      for (const [el, ev, fn] of wired) el?.removeEventListener(ev, fn);
+      if (!ok) { resolve(null); return; }
+      _saveSceneOpts.hidden = !hid || hid.checked; _saveSceneOpts.view = !view || view.checked;
+      resolve({ name: input.value, all: !all || all.checked || !nSel, hidden: !hid || hid.checked, view: !view || view.checked, copy: !!(copy && copy.checked) });
+    }
   });
 }
 
@@ -16677,11 +16770,12 @@ async function _saveSceneImpl() {
   // asked to keep it stable so they can overwrite the same file.
   const baseName = (state._loadedFilename || 'scene').replace(/\.[^.]+$/, '');
   const suggested = state._lastSavedSceneName || baseName;
-  const entered = await _openSaveSceneDialog(suggested);
-  if (entered === null) return false;
-  let chosenName = (entered || '').trim() || suggested;
+  const ask = await _openSaveSceneDialog(suggested);
+  if (ask === null) return false;
+  let chosenName = (ask.name || '').trim() || suggested;
   chosenName = chosenName.replace(/\.glb$/i, '').replace(/[\\/:*?"<>|]/g, '_');
-  state._lastSavedSceneName = chosenName;
+  // A copy leaves the scene's own name and file as they were.
+  if (!ask.copy) state._lastSavedSceneName = chosenName;
   const fname = `${chosenName}.glb`;
   // If the browser supports the File System Access API, reuse the previously
   // chosen file handle when the name matches — that lets the user "Save"
@@ -16692,7 +16786,7 @@ async function _saveSceneImpl() {
   let fileHandle = null;
   if (typeof window.showSaveFilePicker === 'function') {
     const prev = state._lastSaveSceneHandle || null;
-    if (prev && prev.name === fname) {
+    if (prev && prev.name === fname && !ask.copy) {
       // Verify we still have write permission — handles can lapse if the
       // browser revokes the grant (e.g., page reload). queryPermission is
       // synchronous-ish and cheap; on denial we fall through to the picker.
@@ -16715,7 +16809,7 @@ async function _saveSceneImpl() {
           startIn: prev || undefined,
           types: [{ description: 'glTF Binary', accept: { 'model/gltf-binary': ['.glb'] } }],
         });
-        state._lastSaveSceneHandle = fileHandle;
+        if (!ask.copy) state._lastSaveSceneHandle = fileHandle;
       } catch (e) {
         if (e && e.name === 'AbortError') return false;
         console.warn('[scene-save] save picker failed, falling back to download', e);
@@ -16728,13 +16822,26 @@ async function _saveSceneImpl() {
   // stored in the sidecar and re-applied on load. Identity axis/scale/origin
   // means the saved file overlays the live scene exactly when reopened.
   let root, count, meshByPart;
+  // "Only the selected parts" and "without the hidden ones" are both done the
+  // way Export does it: the parts that stay out are made invisible for the
+  // moment the file is built, and put back as they were straight after.
+  const partial = !ask.all || !ask.hidden, flipped = [];
+  if (!ask.all) {
+    for (const p of state.parts) {
+      if (p.deleted) continue;
+      const want = state.selected.has(p.partId) && (ask.hidden || p.visible);
+      if (p.visible !== want) { flipped.push([p, p.visible]); p.visible = want; if (p.mesh) p.mesh.visible = want; }
+    }
+  }
   try {
-    ({ root, count, meshByPart } = buildExportRoot({ visibleOnly: false, merge: false, scale: 1, axis: 'z-up', origin: 'model' }));
+    ({ root, count, meshByPart } = buildExportRoot({ visibleOnly: partial, merge: false, scale: 1, axis: 'z-up', origin: 'model' }));
   } catch (e) {
     console.error('[scene-save]', e);
     setLoader(false);
     toast('Save failed', e.message || String(e), 'error', 6000);
     return false;
+  } finally {
+    for (const [p, was] of flipped) { p.visible = was; if (p.mesh) p.mesh.visible = was; }
   }
   if (count === 0) { setLoader(false); toast('Nothing to save', 'No parts in scene', 'warn'); return false; }
   root.updateMatrixWorld(true);
@@ -16762,7 +16869,7 @@ async function _saveSceneImpl() {
   // settings, hidden parts, measurements). It is an empty Object3D, so
   // there is nothing to draw either way.
   marker.userData[SCENE_STATE_KEY] = _collectSceneState();
-  root.add(marker);
+  if (ask.view) root.add(marker);
   // Export the root's children rather than the root itself, otherwise every
   // save / reopen cycle nests the whole scene inside one more "Group".
   const exportNodes = [...root.children];
@@ -16787,8 +16894,8 @@ async function _saveSceneImpl() {
     } else {
       downloadBlob(blob, fname);
     }
-    _Dirty.mark();
-    toast('Scene saved', fname, 'success', 4000);
+    if (!ask.copy) _Dirty.mark();
+    toast(ask.copy ? 'Copy saved' : 'Scene saved', `${fname} · ${fmtBytes(blob.size)}`, 'success', 4000);
     return true;
   } catch (e) {
     console.error('[scene-save]', e);
