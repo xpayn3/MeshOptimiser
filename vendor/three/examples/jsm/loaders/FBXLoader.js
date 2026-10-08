@@ -1529,6 +1529,9 @@ class GeometryParser {
 			for ( const nodeID in geoNodes ) {
 
 				const relationships = connections.get( parseInt( nodeID ) );
+				// MeshOptimiser patch: a geometry connected to nothing (left behind by a
+				// deleted object) has no entry here; skip it instead of failing the file.
+				if ( relationships === undefined ) continue;
 				const geo = this.parseGeometry( relationships, geoNodes[ nodeID ], deformers );
 
 				geometryMap.set( parseInt( nodeID ), geo );

@@ -79,6 +79,12 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   are set to 0, with a notice; before, the camera became not-a-number
   and the viewport never recovered. A broken or empty file gets a plain
   message, and a file with no meshes says so.
+- ![fix][fix] **FBX files with leftover geometry open directly.** A
+  geometry attached to no object, left behind when its object was deleted
+  before export, made the FBX reader give up, and the file went through
+  the slower Assimp conversion instead. Such geometry is now skipped. The
+  fix is a patch to the bundled three.js `FBXLoader.js` and has to be
+  carried over when three.js is updated.
 - ![fix][fix] **Import no longer turns later Opens into appends**, and
   "Don't ask again" can be undone under Settings › Storage.
 - ![fix][fix] **Quit asks about every open scene**, not only the one in
