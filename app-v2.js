@@ -23307,7 +23307,7 @@ function _openMaterialEditor(info) {
      </div>`
   );
 
-  const _mapOnly ='<span style="color:var(--tx3);font-size:var(--fs-11);font-style:italic;opacity:.7">map only</span>';
+  const _mapOnly = '<span style="color:var(--tx3);font-size:var(--fs-11);font-style:italic;opacity:.7">map only</span>';
   const physicalSection = isPhysical ? section('physical', 'Clearcoat / IOR / Transmission',
     row('Clearcoat',           sliderVal('mat-edit-clearcoat-scrub'),           'clearcoatMap') +
     row('Clearcoat roughness', sliderVal('mat-edit-clearcoatRough-scrub'),      'clearcoatRoughnessMap') +
@@ -27334,13 +27334,11 @@ function _isGizmoPivotActive() {
   );
 }
 
-// Explode/reset write `mesh.position = _origPos + localDelta` where _origPos
-// is captured in partsRoot-local frame. If the mesh has been reparented under
-// state.pivot by the gizmo, that assignment is interpreted in pivot-local
-// frame and the part lands somewhere arbitrary in world space. Detaching the
-// gizmo before mutating brings every selected mesh back under partsRoot via
-// state.partsRoot.attach(), which preserves world transform — the per-mesh
-// math then runs in a single consistent frame.
+// Explode and reset work in world space: each part's target is its rest
+// position in the world (plus the explode offset), converted into the frame
+// of whatever its parent is at that moment (partsRoot, a group, or the
+// gizmo's pivot while the part is selected). So the gizmo does not have to
+// be detached first.
 
 function applyExplode() {
   if (!state.parts.length) return;
@@ -27910,8 +27908,12 @@ function _wireSidebarResize() {
     handle.addEventListener('mousedown', (e) => {
       dragging = true;
       startX = e.clientX;
-      const cs = getComputedStyle(root);
-      startW = parseInt(cs.getPropertyValue(prop).trim(), 10) || (side === 'left' ? 280 : 320);
+      // Both widths as the layout has them: read on <body>, where a folded
+      // left sidebar sets its width to 0 (the root still holds the unfolded
+      // width, and dragging the right handle then opened an empty left
+      // column). The fallbacks are the stylesheet's defaults.
+      const cs = getComputedStyle(document.body);
+      startW = parseInt(cs.getPropertyValue(prop).trim(), 10) || (side === 'left' ? 248 : 280);
       otherW = parseInt(cs.getPropertyValue(side === 'left' ? '--side-r-w' : '--side-l-w').trim(), 10) || 0;
       curW = wantW = startW;
       handle.classList.add('dragging');
@@ -28122,6 +28124,9 @@ async function mergeSelectedIntoOne() {
   if (normals) merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   merged.setIndex(new THREE.BufferAttribute(indices, 1));
+  // Normals are carried over only when every source has them. One without
+  // would leave the whole merge with none (and unlit): work them out instead.
+  if (!normals) merged.computeVertexNormals();
   merged.computeBoundingBox(); merged.computeBoundingSphere();
 
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide });
@@ -28248,9 +28253,6 @@ _UndoOps.register('group', {
 
 function _wireMergeGroupButtons() {
   $('btn-merge-sel')?.addEventListener('click', mergeSelectedIntoOne);
-  // Indirect through the live binding — the function is reassigned later
-  // (by the user-groups extension) and we want the click to invoke whichever
-  // implementation is current at click time.
   // Group selection button: bypass the name-prompt dialog and act exactly
   // like the Ctrl+G shortcut — _treeGroupSelected() picks a default name
   // ("Group N") and creates the group in one step. Users who want a custom
@@ -28377,19 +28379,6 @@ function renameUserGroup(groupId, name, opts = {}) {
   rebuildTree();
 }
 
-// Sweep the tree for groups that no longer have any LIVE members and remove
-// them. Runs in two passes:
-//   1. user groups — empty when every member partId is missing or deleted.
-//      Iterating over a snapshot of the array because removeUserGroup splices
-//      state.userGroups in place.
-//   2. hierarchy groups — every Object3D in the partsRoot subtree that's not
-//      an instanced mesh container and has no live-mesh descendants. Walks
-//      bottom-up so a leaf-empty group becomes a candidate for its parent.
-//      Skips state.partsRoot itself and any node holding an InstancedMesh
-//      (those share-children semantics confuse the "no live mesh" check).
-//
-// Lives meshes are ones whose corresponding partInfo isn't deleted. Hidden
-// parts still count as live — invisibility isn't deletion.
 _UndoOps.register('cleanEmptyGroups', {
   // Groups were detached deepest-first, so put them back in reverse: a parent
   // returns to the scene before the child that hangs off it.
@@ -28414,6 +28403,19 @@ _UndoOps.register('cleanEmptyGroups', {
   },
 });
 
+// Sweep the tree for groups that no longer have any LIVE members and remove
+// them. Runs in two passes:
+//   1. user groups — empty when every member partId is missing or deleted.
+//      Iterating over a snapshot of the array because removeUserGroup splices
+//      state.userGroups in place.
+//   2. hierarchy groups — every Object3D in the partsRoot subtree that's not
+//      an instanced mesh container and has no live-mesh descendants. Walks
+//      bottom-up so a leaf-empty group becomes a candidate for its parent.
+//      Skips state.partsRoot itself and any node holding an InstancedMesh
+//      (those share-children semantics confuse the "no live mesh" check).
+//
+// Live meshes are ones whose corresponding partInfo isn't deleted. Hidden
+// parts still count as live — invisibility isn't deletion.
 function cleanEmptyGroups() {
   const liveMeshes = new Set();
   for (const p of state.parts) {
@@ -28678,7 +28680,7 @@ rebuildTree = function() {
 };
 
 // =================================================================
-// Tree click handlers — group rows + dead control buttons
+// Tree click handlers — group rows + the tree toolbar's buttons
 // =================================================================
 function _wireUserGroupTreeHandlers() {
   $('tree')?.addEventListener('click', e => {
@@ -28710,7 +28712,10 @@ function _wireUserGroupTreeHandlers() {
   });
 }
 
-// Hook up the previously-dead controls in the search/sort row
+// The tree toolbar's buttons: expand / collapse all, and Flatten. (The name
+// is from when they were not wired up. The first five handlers below are for
+// controls that are no longer in the page: #tree-sort, #tree-hide-unsel,
+// #tree-show-all, #tree-sel-back and #tree-sel-fwd.)
 function _wireDeadTreeControls() {
   $('tree-sort')?.addEventListener('change', e => {
     state.sortMode = e.target.value;
@@ -28992,9 +28997,6 @@ const _FlattenDialog = (() => {
   };
 })();
 
-// Build the list of THREE.Group containers we'll iterate based on dialog scope.
-// Returns an array of { root, label } where root is a THREE.Object3D under
-// which we'll process containers. If scope='all', returns [{ root: partsRoot }].
 // Work out which group rows a flatten removes, from the tree alone.
 //
 // The tree (state.treeNodes) is the record of what sits in which group. The
@@ -29134,6 +29136,9 @@ function _syncSceneOrderToTree() {
   for (const n of (state.treeNodes || [])) if (n.kind === 'group' && n.obj3d) fix(n.obj3d);
 }
 
+// The scope chosen in the dialog, as a list of { root, label }: the whole
+// tree is [{ root: partsRoot }], "selected" is one entry per selected group
+// (root is that group's THREE.Object3D).
 function _flattenScopeRoots(scope) {
   if (scope !== 'selected') return [{ root: state.partsRoot, label: 'tree' }];
   const ids = state.selectedGroupIds ? Array.from(state.selectedGroupIds) : [];
@@ -30880,8 +30885,8 @@ _UndoOps.register('paste-group', {
 //   items[]                — committed measurements: { id, kind, a[3], b[3], value, _line, _label }
 //
 // Persistence: getSerialized() / setSerialized() for Save Scene.
-// Undo/redo: 'measure-add', 'measure-delete', 'measure-clear' op types
-// handled by the wrappers around undoLast/redoLast at the bottom.
+// Undo/redo: 'measure-add', 'measure-delete', 'measure-clear' op types,
+// registered in the _UndoOps table after this module.
 const _Measure = (() => {
   let active = false;
   let pendingA = null;
@@ -30892,15 +30897,12 @@ const _Measure = (() => {
   // Snap radius in screen pixels. Below this, the click snaps to the nearest
   // triangle vertex of the hit face. Above, fall back to the raw hit point.
   const PIXEL_SNAP_RADIUS = 22;
-  const _v = new THREE.Vector3();
-  const _v2 = new THREE.Vector3();
   const _instM = new THREE.Matrix4();
 
   // World-units-per-screen-pixel at a given world position. Used to scale
   // sprite labels, sphere markers, and the line cylinder so each maintains
   // a constant on-screen size regardless of camera zoom — the standard CAD
   // viewer convention. Reused per-frame via onBeforeRender callbacks.
-  const _wppPos = new THREE.Vector3();
   function _wppAt(renderer, cam, posVec3) {
     if (!cam || !renderer) return 0.001;
     const el = renderer.domElement;
@@ -31035,7 +31037,6 @@ const _Measure = (() => {
     });
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = 1000;
-    sprite.userData._isMeasureLabel = true;
     const aspect = cw / ch;
     // Small + readable: aim for ≈ 19 px tall on screen at any zoom.
     const targetPx = 19;
@@ -31110,7 +31111,6 @@ const _Measure = (() => {
       };
     }
     grp.add(dotA); grp.add(dotB);
-    grp.userData._isMeasureLine = true;
     grp.userData._sharedGeoms = [cylGeom, sphereGeom];
     grp.userData._sharedMats = [cylMat, dotMat];
     return grp;
@@ -31314,7 +31314,6 @@ const _Measure = (() => {
     );
     sphere.position.copy(p);
     sphere.renderOrder = 1001;
-    sphere.userData._isMeasurePending = true;
     sphere.onBeforeRender = (renderer, _scene, cam) => {
       const r = _wppAt(renderer, cam, sphere.position) * 6.0; // ≈ 6 px radius
       sphere.scale.setScalar(r);
@@ -31578,9 +31577,9 @@ const _Measure = (() => {
     requestRender();
   }
 
-  // Undo/redo helpers exposed to the wrappers below. They mutate items[]
-  // directly — pushing to state.history is the wrappers' job since they
-  // dispatch on op type.
+  // Undo/redo helpers for the _UndoOps handlers registered after this
+  // module. They mutate items[] directly — pushing to state.history /
+  // state.redo is the handlers' job.
   function _undoAdd(opId) {
     const idx = _findIndexById(opId);
     if (idx < 0) return null;
@@ -31722,9 +31721,10 @@ wireUI = function() {
   sideBtn?.addEventListener('click', () => _Measure.toggle());
   clrBtn?.addEventListener('click',  () => _Measure.clearAll());
 
-  // Capture-phase canvas pointer interception. Picks happen on Ctrl+Left click
-  // so the right button stays free for OrbitControls pan and the existing
-  // app selection-on-click is unchanged. We have two concerns:
+  // Capture-phase canvas pointer interception. While measure mode is on, a
+  // point is picked with a plain left click (further down) or Ctrl+Left
+  // click; the right button stays free for OrbitControls pan. For the
+  // Ctrl+click there are two concerns:
   //  1. Stop OrbitControls' left-button orbit from kicking in while we pick
   //     (its pointerdown listener is on the canvas in bubble phase).
   //  2. Run _Measure.handleClick on mouseup before any other listener can.
@@ -32241,43 +32241,6 @@ refreshPropertiesPanel = function() {
 };
 
 // =================================================================
-// STEP assembly hierarchy → user groups
-// occt-import-js returns result.root with {name, meshes, children}
-// =================================================================
-const _origParseStepInWorker_groups = parseStepInWorker;
-parseStepInWorker = function(...args) {
-  return _origParseStepInWorker_groups(...args).then(out => {
-    state._pendingStepRoot = (out && out.result && out.result.root) || null;
-    return out;
-  });
-};
-
-function _importStepAssemblyAsGroups(rootNode) {
-  if (!rootNode) return 0;
-  if (!Array.isArray(rootNode.children) || rootNode.children.length === 0) return 0;
-  let made = 0;
-  for (const child of rootNode.children) {
-    // collect every mesh index reachable under this child
-    const meshIds = [];
-    (function collect(n) {
-      if (!n) return;
-      if (Array.isArray(n.meshes)) for (const mi of n.meshes) meshIds.push(mi);
-      if (Array.isArray(n.children)) for (const c of n.children) collect(c);
-    })(child);
-    if (meshIds.length < 2) continue;
-    // mesh index → partId is identity (state.parts[i].partId === i, by construction)
-    const partIds = meshIds.filter(mi => {
-      const p = getPart(mi);
-      return p && !p.deleted && p.mesh; // skip instanced (no standalone mesh)
-    });
-    if (partIds.length < 2) continue;
-    const ug = addUserGroup(child.name || `Assembly ${made + 1}`, partIds, { skipUndo: true, expanded: false });
-    if (ug) made++;
-  }
-  return made;
-}
-
-// =================================================================
 // Reveal-on-pick — scroll the left tree to the part picked in viewport
 // =================================================================
 function _scrollTreeToPart(partId) {
@@ -32305,65 +32268,15 @@ function _scrollTreeToPart(partId) {
 // meant the tree also jumped when the user navigated INSIDE the tree (click
 // or arrow keys) — disorienting. Now only the viewport pick handler calls
 // _scrollTreeToPart directly. Tree-side selections leave scroll alone.
-
-// Press S while hovering the left sidebar → jump-scroll to first selected part
-let _mouseOverLeftSidebar = false;
-function _wireSidebarHoverScroll() {
-  const sb = document.getElementById('sidebar-left');
-  if (!sb) return;
-  sb.addEventListener('mouseenter', () => { _mouseOverLeftSidebar = true; });
-  sb.addEventListener('mouseleave', () => { _mouseOverLeftSidebar = false; });
-}
-window.addEventListener('keydown', e => {
-  return;      // S is Isolate everywhere; finding the selection in the tree is Shift+S
-  if (!_mouseOverLeftSidebar) return;
-  const tag = (e.target?.tagName || '').toUpperCase();
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
-  if (e.key !== 's' && e.key !== 'S') return;
-  if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return; // leave the global Shift+S alone
-  e.preventDefault();
-  if (state.selected.size === 0) return;
-  const firstId = state.selected.values().next().value;
-  _scrollTreeToPart(firstId);
-});
-const _origWireUI_revealHover = wireUI;
-wireUI = function() { _origWireUI_revealHover(); _safeRun(_wireSidebarHoverScroll, 'sidebar-hover'); };
-
-const _origOnModelLoaded_groups = onModelLoaded;
-onModelLoaded = function(filename) {
-  _origOnModelLoaded_groups(filename);
-  if (state._pendingStepRoot) {
-    try {
-      const n = _importStepAssemblyAsGroups(state._pendingStepRoot);
-      if (n > 0) {
-        rebuildTree();
-        Log.success(`Imported ${n} STEP assembly group${n === 1 ? '' : 's'}`, { tag: 'step' });
-        toast('STEP hierarchy', `${n} assembly group${n === 1 ? '' : 's'} from STEP`, 'success', 4000);
-      } else {
-        Log.info('STEP file has no assembly hierarchy (or all leaves)', { tag: 'step' });
-      }
-    } catch (e) {
-      Log.error(`STEP hierarchy import failed: ${e.message || e}`, { tag: 'step' });
-    }
-    state._pendingStepRoot = null;
-  }
-};
+// (S is Isolate everywhere; finding the selection in the tree is Shift+S.)
 
 // Final wrapper: every rebuildTree pass injects <i data-lucide="…"> placeholders
 // (eye, eye-off, folder, pencil, x). Render them once the tree DOM is in place.
 // Done here so it covers all the earlier reassignments of rebuildTree above.
 //
-// Preserves visual scroll position across the rebuild. Naive scrollTop
-// save/restore drifted ("jumps a little randomly") because:
-//   1. `root.innerHTML = ''` resets scroll to 0 mid-rebuild.
-//   2. `content-visibility:auto` skeletons (contain-intrinsic-size 28px) and
-//      real rendered rows (~30px) pack differently, so a saved absolute
-//      scrollTop number lands at a slightly different visual offset.
-// Fix: anchor on the FIRST VISIBLE ROW (by data-part-id / data-group-id).
-// After the rebuild, find the same row in the new DOM and adjust scrollTop
-// so that row sits at the same offset from the top. Robust against height
-// drift from content-visibility, lucide SVG materialization, and per-row
-// class/badge changes that swap heights by a pixel or two.
+// It also keeps the tree where the user was looking across the rebuild: see
+// the note inside for how (a flat list has its scrollTop put back; a
+// hierarchy keeps its own).
 const _finalRebuildTree = rebuildTree;
 rebuildTree = function() {
   // Bulletproof scroll preservation. The previous version anchored on the
@@ -33559,75 +33472,14 @@ setTimeout(() => _dndDecorateTree(), 0);
 //   • Hue slider
 //   • Hex input
 //   • Preset row of common CAD palette colors
-//   • Live preview while interacting; Apply commits, Esc / outside click
-//     cancels (reverts to the captured baseline)
+//   • Live preview while interacting; a click outside or Enter keeps the
+//     colour, Esc goes back to the one it was opened with
 //
-// Triggered from two places:
-//   1. The swatch in the Properties panel — recolors the current selection.
-//   2. The swatch in a Materials row — selects all parts of that color and
-//      then opens the picker so the recolor applies to every matching part.
-//
-// We only read color from the source file (STEP carries one diffuse RGB per
-// part; GLB is collapsed to the same model). No textures or PBR maps are
-// applied — every part renders with metalness 0.15 / roughness 0.55.
-// Editing rewrites that single uniform.
+// Opened by the swatches in the material editor, through
+// window._openColorPickerForCallback: the picker hands every colour to the
+// caller's callbacks (onPreview / onCommit / onCancel) and changes nothing
+// itself. Undo is the caller's too (the material editor records its own).
 (function () {
-  // ── Geometry helpers ────────────────────────────────────────────────────
-  function _setPartColorImmediate(p, color) {
-    if (!p) return false;
-    if (!p.mesh && p.instancedMesh && typeof _promoteInstanceToMesh === 'function') {
-      _promoteInstanceToMesh(p);
-    }
-    if (p.mesh) {
-      // vertexColors meshes (post-merge) ignore material.color — swap to a
-      // fresh shared material keyed by the new color. shareMaterials honored.
-      const mat = (typeof getOrCreateMaterial === 'function')
-        ? getOrCreateMaterial(color)
-        : new THREE.MeshStandardMaterial({ color: color.clone(), metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide });
-      p.mesh.material = mat;
-      p.originalColor.copy(color);
-      return true;
-    }
-    if (p.instancedMesh) {
-      const inst = p.instancedMesh;
-      if (!inst.instanceColor) {
-        const seed = inst.material?.color || new THREE.Color(0xaaaaaa);
-        inst.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(inst.count * 3), 3);
-        for (let i = 0; i < inst.count; i++) inst.instanceColor.setXYZ(i, seed.r, seed.g, seed.b);
-      }
-      inst.setColorAt(p.instanceIndex, color);
-      inst.instanceColor.needsUpdate = true;
-      p.originalColor.copy(color);
-      return true;
-    }
-    return false;
-  }
-
-  function _applyColorOpDir(op, dir) {
-    for (const it of op.items) {
-      const p = getPart(it.partId); if (!p) continue;
-      const target = new THREE.Color(dir === 'before' ? it.before : it.after);
-      _setPartColorImmediate(p, target);
-    }
-  }
-
-  // 'color' — color-picker change. before/after carry per-part hex colors;
-  // _applyColorOpDir handles the direction swap.
-  _UndoOps.register('color', {
-    undo(op) {
-      _applyColorOpDir(op, 'before');
-      state.redo.push(op);
-      try { rebuildTree?.(); } catch (_) {}
-      _finalizeUndo();
-    },
-    redo(op) {
-      _applyColorOpDir(op, 'after');
-      state.history.push(op);
-      try { rebuildTree?.(); } catch (_) {}
-      _finalizeUndo();
-    },
-  });
-
   // ── HSV ↔ RGB ────────────────────────────────────────────────────────────
   function hsvToRgb(h, s, v) {
     const i = Math.floor(h * 6);
@@ -33674,9 +33526,9 @@ setTimeout(() => _dndDecorateTree(), 0);
   }
 
   // ── Picker state ────────────────────────────────────────────────────────
-  let popEl = null, svEl, svCursor, hueEl, hueCursor, hexInput, presetsEl, applyBtn, cancelBtn;
+  let popEl = null, svEl, svCursor, hueEl, hueCursor, hexInput, presetsEl;
   let h = 0, s = 1, v = 1;
-  let session = null;          // { ids:[], originals: Map<partId, hexnum>, anchor }
+  let session = null;          // { callbacks: { onPreview, onCommit, onCancel }, anchor }
 
   const PRESETS = ['#e6edf3','#8b95a7','#5a6275','#1d2330','#000000','#ff6b6b','#fbbf24','#34c759','#6b8dff','#a78bfa','#f59e0b','#10b981','#ef4444','#3b82f6'];
 
@@ -33703,8 +33555,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-btn:hover{background:rgba(255,255,255,.1);color:var(--tx)}
       .cp-btn.primary{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:#fff;border-color:transparent}
       .cp-btn.primary:hover{filter:brightness(1.08)}
-      #prop-body .prop-color,.mat-swatch{cursor:pointer}
-      #prop-body .prop-color:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px var(--ac-tint-45)}
+      .mat-swatch{cursor:pointer}
       .mat-swatch:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px var(--ac-tint-45)!important}
     `;
     const style = document.createElement('style');
@@ -33728,8 +33579,6 @@ setTimeout(() => _dndDecorateTree(), 0);
     hueCursor  = popEl.querySelector('.cp-hue-cursor');
     hexInput   = popEl.querySelector('.cp-hex');
     presetsEl  = popEl.querySelector('.cp-presets');
-    applyBtn   = null;
-    cancelBtn  = null;
 
     presetsEl.innerHTML = PRESETS.map(c =>
       `<div class="cp-preset" data-c="${c}" style="background:${c}"></div>`).join('');
@@ -33743,13 +33592,17 @@ setTimeout(() => _dndDecorateTree(), 0);
       v = 1 - y / r.height;
       _syncFromHsv();
     }
+    // A drag can end without a pointerup (the pointer is cancelled, or the
+    // capture is lost): the listeners come off for those too, or each such
+    // drag would leave a pointermove listener behind.
+    const DRAG_END = ['pointerup', 'pointercancel', 'lostpointercapture'];
     svEl.addEventListener('pointerdown', e => {
       svEl.setPointerCapture(e.pointerId);
       onSvPointer(e);
       const move = ev => onSvPointer(ev);
-      const up = () => { svEl.removeEventListener('pointermove', move); svEl.removeEventListener('pointerup', up); };
+      const up = () => { svEl.removeEventListener('pointermove', move); for (const t of DRAG_END) svEl.removeEventListener(t, up); };
       svEl.addEventListener('pointermove', move);
-      svEl.addEventListener('pointerup', up);
+      for (const t of DRAG_END) svEl.addEventListener(t, up);
     });
     function onHuePointer(e) {
       const r = hueEl.getBoundingClientRect();
@@ -33761,9 +33614,9 @@ setTimeout(() => _dndDecorateTree(), 0);
       hueEl.setPointerCapture(e.pointerId);
       onHuePointer(e);
       const move = ev => onHuePointer(ev);
-      const up = () => { hueEl.removeEventListener('pointermove', move); hueEl.removeEventListener('pointerup', up); };
+      const up = () => { hueEl.removeEventListener('pointermove', move); for (const t of DRAG_END) hueEl.removeEventListener(t, up); };
       hueEl.addEventListener('pointermove', move);
-      hueEl.addEventListener('pointerup', up);
+      for (const t of DRAG_END) hueEl.addEventListener(t, up);
     });
     hexInput.addEventListener('input', () => {
       const val = hexInput.value.trim();
@@ -33801,16 +33654,9 @@ setTimeout(() => _dndDecorateTree(), 0);
     const prev = popEl.querySelector('.cp-preview');
     if (prev) prev.style.background = hex;
     if (!opts.skipHexUpdate) hexInput.value = hex.toUpperCase();
-    // Live preview — generic-callback mode wins; otherwise per-part legacy path.
+    // Live preview: the caller applies it.
     if (session?.callbacks) {
       try { session.callbacks.onPreview?.(hex); } catch (_) {}
-    } else if (session) {
-      const c = new THREE.Color(hex);
-      for (const id of session.ids) {
-        const p = getPart(id); if (!p) continue;
-        _setPartColorImmediate(p, c);
-      }
-      requestRender();
     }
   }
 
@@ -33826,39 +33672,12 @@ setTimeout(() => _dndDecorateTree(), 0);
     popEl.style.top  = top  + 'px';
   }
 
-  function _open(anchor, ids, seedHex) {
-    _buildPopover();
-    if (!ids.length) return;
-    // Capture per-part baselines for revert / undo
-    const originals = new Map();
-    for (const id of ids) {
-      const p = getPart(id); if (!p) continue;
-      originals.set(id, p.originalColor.getHex());
-    }
-    session = { ids: [...ids], originals, anchor };
-    // Seed picker state from the chosen color
-    const rgb = hexToRgb(seedHex);
-    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-    h = hsv.h; s = hsv.s; v = hsv.v;
-    popEl.classList.add('show');
-    // Position AFTER show so dimensions are real
-    requestAnimationFrame(() => _position(anchor));
-    _syncFromHsv();
-    // Outside-click + Esc handlers (one-shot per session)
-    setTimeout(() => {
-      document.addEventListener('click',   _onDocClick,   true);
-      document.addEventListener('keydown', _onKeyDown,    true);
-      window.addEventListener('resize',    _onWindow);
-      window.addEventListener('scroll',    _onWindow, true);
-    }, 0);
-  }
-
   function _onDocClick(e) {
     if (popEl && popEl.contains(e.target)) return;
     // Clicking another swatch should re-open with new context, not close. The
-    // swatch handler runs after this in bubble phase and will call _open
-    // which re-seeds session — let it through without canceling.
-    if (e.target.closest('#prop-body .prop-color, #materials-body .mat-swatch, #_mat-editor-popup .mat-swatch')) return;
+    // swatch handler runs after this in bubble phase and opens the picker
+    // again, which re-seeds session — let it through without canceling.
+    if (e.target.closest('#_mat-editor-popup .mat-swatch')) return;
     // Auto-apply on outside click — change has been live-previewing the whole
     // time, so commit is what the user expects. Esc still reverts.
     _commit();
@@ -33879,90 +33698,21 @@ setTimeout(() => _dndDecorateTree(), 0);
 
   function _cancel() {
     if (!session) { _cleanup(); return; }
-    if (session.callbacks) {
-      try { session.callbacks.onCancel?.(); } catch (_) {}
-      session = null;
-      _cleanup();
-      return;
-    }
-    // Revert each part to its captured baseline
-    for (const id of session.ids) {
-      const p = getPart(id); if (!p) continue;
-      const beforeHex = session.originals.get(id);
-      _setPartColorImmediate(p, new THREE.Color(beforeHex));
-    }
-    requestRender();
+    try { session.callbacks?.onCancel?.(); } catch (_) {}
     session = null;
     _cleanup();
   }
 
   function _commit() {
     if (!session) { _cleanup(); return; }
-    const rgb = hsvToRgb(h, s, v);
-    if (session.callbacks) {
-      const hex = rgbToHex(rgb);
-      try { session.callbacks.onCommit?.(hex); } catch (_) {}
-      session = null;
-      _cleanup();
-      return;
-    }
-    const c = new THREE.Color(rgb.r, rgb.g, rgb.b);
-    const items = [];
-    for (const id of session.ids) {
-      const p = getPart(id); if (!p) continue;
-      const beforeHex = session.originals.get(id);
-      _setPartColorImmediate(p, c);
-      const afterHex = p.originalColor.getHex();
-      if (beforeHex !== afterHex) items.push({ partId: id, before: beforeHex, after: afterHex });
-    }
+    const hex = rgbToHex(hsvToRgb(h, s, v));
+    try { session.callbacks?.onCommit?.(hex); } catch (_) {}
     session = null;
     _cleanup();
-    if (items.length) {
-      pushUndo({ type: 'color', items, label: 'Change color' });
-      try { rebuildTree?.(); } catch (_) {}
-      try { refreshPropertiesPanel?.(); } catch (_) {}
-      requestRender();
-    }
   }
 
-  // ── Triggers ────────────────────────────────────────────────────────────
-  // Properties panel swatch → recolor current selection.
-  document.addEventListener('click', (e) => {
-    const swatch = e.target.closest('#prop-body .prop-color');
-    if (!swatch) return;
-    if (state.selected.size === 0) return;
-    e.stopPropagation();
-    const ids = [...state.selected];
-    const seed = '#' + (getPart(ids[0])?.originalColor.getHexString() || 'aaaaaa');
-    _open(swatch, ids, seed);
-  });
-
-  // Materials row swatch → select all parts of that color, then open picker.
-  document.addEventListener('click', (e) => {
-    const swatch = e.target.closest('#materials-body .mat-swatch');
-    if (!swatch) return;
-    e.stopPropagation();
-    const hex = swatch.dataset.matHex || '#aaaaaa';
-    const targetHexNum = new THREE.Color(hex).getHex();
-    const ids = [];
-    for (const p of state.parts) {
-      if (!p.deleted && p.originalColor.getHex() === targetHexNum) ids.push(p.partId);
-    }
-    if (!ids.length) return;
-    // Update selection so the user sees what they're editing.
-    state.selected.clear();
-    for (const id of ids) state.selected.add(id);
-    try { applySelectionColors?.(); } catch (_) {}
-    try { rebuildTreeSelectionOnly?.(); } catch (_) {}
-    try { refreshPropertiesPanel?.(); } catch (_) {}
-    if (typeof updateGizmo === 'function') try { updateGizmo(); } catch (_) {}
-    const $del = $('del-sel-count'); if ($del) $del.textContent = ids.length;
-    _open(swatch, ids, hex);
-  });
-
-  // Generic callback-mode opener — used by the material editor swatches to
-  // route HSV picker output into mat.color / mat.emissive / etc. directly,
-  // bypassing the per-part recolor pipeline.
+  // The opener — used by the material editor swatches to route the picker's
+  // output into mat.color / mat.emissive / etc.
   window._openColorPickerForCallback = function (anchor, seedHex, callbacks) {
     _buildPopover();
     session = { callbacks: callbacks || {}, anchor };
@@ -34001,9 +33751,10 @@ setTimeout(() => _dndDecorateTree(), 0);
 //     handful of pathological parts can't compress the rest into one colour.
 //
 //  3. Per-part decimation ('Decimate' button)
-//     Edge-collapse simplification via three.js SimplifyModifier on the
-//     selected parts only. Skips instanced parts (geometry is shared with
-//     siblings — collapsing one would warp every instance).
+//     Simplification of the selected parts only, with meshoptimizer's
+//     simplifier (three.js SimplifyModifier when that cannot be loaded).
+//     Skips instanced parts (geometry is shared with siblings — collapsing
+//     one would warp every instance).
 // ════════════════════════════════════════════════════════════════════════════
 // _appHooks consumer — outermost wrappers around four extension points so
 // external feature modules (cloner.js, future plugins) can chain in without
@@ -34163,7 +33914,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   // means no whole-mesh-disappearing under orbit) and lets dense interior
   // parts contribute brightness through the outer shell. Opacity ramps with
   // the bucket index — high-density (red, bad) buckets get more opacity so
-  // the offending parts pop out clearly; low-density (blue, fine) buckets
+  // the offending parts pop out clearly; low-density (green, fine) buckets
   // stay dim so they don't drown the high signal.
   function _applyXrayFlags(m, bucket = 0) {
     const rank = bucket / (_HEAT_BUCKETS - 1);          // 0..1, low=cold, high=hot
@@ -34259,7 +34010,11 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (!inst) continue;
       const saved = _heatOriginalInstColor.get(inst);
       if (saved) {
+        // The copy of the material made for this view goes with it (a new one
+        // is made each time the heatmap is switched on).
+        const heatMat = inst.material;
         inst.material = saved.mat;
+        if (heatMat && heatMat !== saved.mat && heatMat.userData && heatMat.userData._heatClone) { try { heatMat.dispose(); } catch (_) {} }
         inst.instanceColor = saved.col;
         if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
         _heatOriginalInstColor.delete(inst);
@@ -34658,6 +34413,16 @@ setTimeout(() => _dndDecorateTree(), 0);
       p._fp = null; p._fpKey = null;
     }
   }
+  // A geometry a run made and then stopped using (a later pass reduced it
+  // again, or the run was cancelled): taken out of the geometry table and
+  // freed. Nothing else can hold it: undo keeps the geometry from before the
+  // run and the final one, not the ones in between.
+  function _budgetDropGeometry(geom, hash) {
+    if (!geom) return;
+    if (hash != null && state.geomByHash.get(hash) === geom) state.geomByHash.delete(hash);
+    try { _disposeEdgesFor(geom); } catch (_) {}
+    try { geom.dispose(); } catch (_) {}
+  }
   function _applyBudgetOp(op, dir) {
     for (const u of op.units) {
       const parts = u.items.map(it => getPart(it.partId));
@@ -34722,9 +34487,17 @@ setTimeout(() => _dndDecorateTree(), 0);
     state._cancelJob = () => { cancelled = true; };
     const PASSES = 4;
     try {
-      await _loadSimplifier();               // (_mergeVertices, for meshes without an index)
-      const meshopt = await _loadMeshopt();
-      const creased = (await import('three/addons/utils/BufferGeometryUtils.js')).toCreasedNormals;
+      // A module that cannot be fetched (offline, a blocked request) is the
+      // same case as no simplifier: say so, once, and leave the scene alone.
+      let meshopt = null, creased = null;
+      try {
+        await _loadSimplifier();               // (_mergeVertices, for meshes without an index)
+        meshopt = await _loadMeshopt();
+        creased = (await import('three/addons/utils/BufferGeometryUtils.js')).toCreasedNormals;
+      } catch (e) {
+        console.warn('[budget] the simplifier could not be loaded:', e && e.message || e);
+        meshopt = null;
+      }
       if (!meshopt) { noTool = true; toast('Fit to budget', 'The simplifier could not be loaded', 'error', 4000); return; }
       // The simplifier can stop short of what it was asked for (locked
       // borders, tiny meshes), so the shares are worked out again from what
@@ -34760,7 +34533,8 @@ setTimeout(() => _dndDecorateTree(), 0);
               p.hash = hash; p.triCount = rt; p.vertCount = verts;
               if (p.mesh) _refreshPartBBox(p);
             });
-            done.set(reduced, { before, ims: u.ims, parts: u.parts });
+            done.set(reduced, { before, ims: u.ims, parts: u.parts, hash });
+            if (prev) _budgetDropGeometry(u.geom, prev.hash);     // what an earlier pass made of it, now replaced
             dropped += (u.tris - rt) * u.n;
           } catch (e) {
             failed++;
@@ -34779,7 +34553,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       // Stopped half way: put back what was already reduced, so Cancel leaves
       // the scene exactly as it was.
       if (cancelled) {
-        for (const [, r] of done) {
+        for (const [geom, r] of done) {
           _budgetSetGeometry(r, r.before.geom, (p) => {
             const st = r.before.stats.get(p.partId);
             if (!st) return;
@@ -34787,6 +34561,7 @@ setTimeout(() => _dndDecorateTree(), 0);
             if (st.bbox) { if (p.bbox) p.bbox.copy(st.bbox); else p.bbox = st.bbox.clone(); }
             if (st.sizeMetrics) p.sizeMetrics = { ...st.sizeMetrics };
           });
+          _budgetDropGeometry(geom, r.hash);                      // the reduced one is not used after all
         }
         done.clear();
       }
@@ -35488,7 +35263,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     if (tally.tooSmall) left.push(n(tally.tooSmall, 'hole under ' + adv.minSize + ' mm', 'holes under ' + adv.minSize + ' mm'));
     if (tally.kind) left.push(n(tally.kind, 'hole of a kind that is switched off', 'holes of a kind that is switched off'));
     if (tally.uncappable) left.push(n(tally.uncappable, 'hole whose outline could not be closed cleanly', 'holes whose outline could not be closed cleanly'));
-    if (instanced) left.push(n(instanced, 'instanced part (select it to include it)', 'instanced parts (select them to include them)'));
+    // (instanced parts are passed over whether they are selected or not)
+    if (instanced) left.push(n(instanced, 'instanced part (a copy of a shared shape: not filled)', 'instanced parts (copies of a shared shape: not filled)'));
     const kinds = [];
     if (tally.through) kinds.push(fmtNum(tally.through) + ' through');
     if (tally.blind) kinds.push(fmtNum(tally.blind) + ' blind');
@@ -35763,7 +35539,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
 })();
 
 // The document tab starts where the viewport starts (not right after the
-// File button), and follows when the left sidebar is resized or folded away.
+// Menu button), and follows when the left sidebar is resized or folded away.
 (function _alignDocTab() {
   const go = () => {
     const tabs = document.getElementById('doc-tabs'), vp = document.getElementById('viewport'), tb = document.getElementById('tb');
@@ -35774,7 +35550,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     const place = () => {
       // The parts / library switch sits at the right end of the sidebar's own
       // stretch of the bar, in line with the search box under it. With the
-      // sidebar folded away, or too narrow for that, it stays next to File.
+      // sidebar folded away, or too narrow for that, it stays next to Menu.
       const sw = document.getElementById('side-switch'), side = document.getElementById('sidebar-left');
       let moved = 0;
       if (sw && side) {
