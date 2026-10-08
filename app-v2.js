@@ -2055,6 +2055,21 @@ const _ImportSettings = (() => {
 })();
 window._ImportSettings = _ImportSettings;
 
+// The bytes of a file, as an ArrayBuffer of THIS tab. Every tab after the
+// first is its own frame, with its own copies of the built-in types. A file
+// picked in one tab and opened in another (Open from a tab that already holds
+// a scene, a recent file, Resume) is still an object of the tab it was picked
+// in, and so is the ArrayBuffer it hands back: here it fails
+// `instanceof ArrayBuffer`, the loaders take it for something else, and the
+// load dies at once (the glTF loader with "Unsupported asset"). Moving the
+// buffer into this tab's world costs nothing; copying is the fallback.
+async function _fileBytes(file) {
+  const buf = await file.arrayBuffer();
+  if (buf instanceof ArrayBuffer) return buf;
+  try { const own = structuredClone(buf, { transfer: [buf] }); if (own instanceof ArrayBuffer) return own; } catch (_) {}
+  return new Uint8Array(buf).slice().buffer;
+}
+
 async function _handleSelectedFile(file) {
   if (!file) return;
   const isStep = /\.(step|stp)$/i.test(file.name);
@@ -6148,7 +6163,7 @@ async function loadStepFile(file) {
   };
   const stopHB = () => { clearInterval(heartbeat); heartbeat = 0; };
   try {
-    const buffer = await file.arrayBuffer();
+    const buffer = await _fileBytes(file);
     setLoaderProgress(8);
     logProgress(`file read: ${(buffer.byteLength/1048576).toFixed(2)} MB`, 'ok');
     if (ctrl.cancelled) throw new Error('cancelled');
@@ -21261,7 +21276,7 @@ async function _runLoad(file, formatLabel, parser) {
 
 async function loadGlbFile(file) {
   return _runLoad(file, 'GLB', async () => {
-    const buffer = await file.arrayBuffer();
+    const buffer = await _fileBytes(file);
     setLoaderProgress(35);
     const loader = _getGlbLoader();
     setLoader(true, 'Parsing GLB scene…', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
@@ -21327,7 +21342,7 @@ function _flattenSkinnedMeshes(root) {
 
 async function loadFbxFile(file) {
   return _runLoad(file, 'FBX', async () => {
-    const buffer = await file.arrayBuffer();
+    const buffer = await _fileBytes(file);
     setLoaderProgress(35);
     setLoader(true, 'Parsing FBX scene…', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
     let root;
@@ -21418,7 +21433,7 @@ async function loadObjFile(file) {
 
 async function load3mfFile(file) {
   return _runLoad(file, '3MF', async () => {
-    const buffer = await file.arrayBuffer();
+    const buffer = await _fileBytes(file);
     setLoaderProgress(35);
     setLoader(true, 'Parsing 3MF scene…', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
     const root = new ThreeMFLoader().parse(buffer);
@@ -21428,7 +21443,7 @@ async function load3mfFile(file) {
 
 async function loadStlFile(file) {
   return _runLoad(file, 'STL', async () => {
-    const buffer = await file.arrayBuffer();
+    const buffer = await _fileBytes(file);
     setLoaderProgress(35);
     setLoader(true, 'Parsing STL…', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
     // STL is single-mesh, no scene graph. Wrap in a Group so the ingestion
