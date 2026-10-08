@@ -9,19 +9,197 @@ Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &n
 A read of the whole code base and a round of beta testing after v0.13.0:
 what was found to be wrong is fixed, and the start screen is rebuilt.
 
+**The library is a drawer**
+
+- ![new][new] **A drawer along the bottom.** The library no longer takes
+  the tree's place in the left sidebar: it slides up under the viewport,
+  like the materials, from a button of its own on the bottom toolbar
+  (Shift + L). Drag its top edge for the height. One drawer is open at a
+  time: the library, the materials and the console give way to each other.
+- ![new][new] **Look before you place.** A click on a tile now picks the
+  part instead of adding it, and the right side of the drawer shows it: a
+  view you can turn with the mouse and zoom with the wheel, its triangles
+  and its size, and the same rows as Shape parameters. What is set there is
+  what the part has when it goes in: by a double-click on its tile, by a
+  drag into the view (the see-through copy follows the parameters too), or
+  by *Add to scene*. The size chosen in the drawer's head still goes for
+  every fastener.
+- ![new][new] **More in the drawer.** One shelf at a time from a dropdown,
+  a star that keeps a part on a *Favourites* shelf, large or small tiles,
+  and *Clear* on the recently used.
+- ![polish][polish] The button that folds the left sidebar away stands where
+  the parts / library switch was, at the right end of the sidebar's stretch
+  of the top bar; with the sidebar folded it stays next to Menu.
+- ![polish][polish] The help clips in the command cards share one
+  background and have their subject in the middle; the Smart fit clip loops
+  without a jump (each part pops into its stand-in with a small swell, then
+  the stand-ins fade away).
+
+**New: fasteners**
+
+- ![new][new] **Fasteners.** One command finds the bolts, screws, nuts and
+  washers of a scene and selects them, ready to isolate or delete. It goes
+  by shape, not by name: an exported assembly calls its screws
+  `=>0_1_1_9_000009`, and on the 1,583-part test assembly two parts in all
+  had a name that said what they were. A part is cut across its own axis
+  and read as a profile — a round shank with a wider head, six flats around
+  a hole, a flat ring — against the proportions in the ISO tables, so a hex
+  bolt, a socket screw, a countersunk screw, a set screw, a hex, flange,
+  cap or coupling nut and a plain or cup washer are told from the things
+  that look like them: bushings, bearings, O-rings, grommets, shafts, pipe
+  fittings and cable glands stay. 130 fasteners on the test assembly, in
+  two to three seconds.
+  - It has a panel of its own (the bolt on the bottom toolbar, the command
+    list and the search), with a looping clip of what it does: the three
+    kinds as switches, the largest thread to look for, and what was found
+    as a short list — *102 bolts and screws · M4 ×80 · M6 ×22*. A click on a
+    row narrows the selection to that kind.
+  - Advanced: whole scene or the selection, certain finds only, pins and
+    studs (plain round bars, off by default because a shaft is one too),
+    shapes used at least so many times, a smallest thread.
+  - A file saved in metres or inches is read at the unit in which its
+    fasteners have fastener sizes, and the panel says so.
+  - `fasteners.js` is a module of its own with no dependencies;
+    `node tests/fasteners.test.mjs` checks it on 47 built shapes, and the
+    self-test drives the panel on the library's own bolt, nut and washer.
+
+**New: Smart optimise**
+
+- ![new][new] **One card, one button.** At the top of *Reduce* in the right
+  sidebar: every clean-up the app has, run one after another on the whole
+  scene. Pick a level (Light, Balanced, Strong) or leave it on Auto, which
+  chooses from how heavy the scene is and says what it chose. A line under
+  the controls spells out what the run will do before you press Optimise.
+- ![new][new] **A level is a starting point.** Under *Steps* each one has
+  its own switch: empty and broken parts, parts hidden inside, bolts, nuts
+  and washers (keep, simplify to cylinders, or delete), parts under a share
+  of the model's size, and holes in flat faces (with the Fill holes panel's
+  settings). *Reduce triangles* is a switch of its own with the triangle
+  target beside it (`150k`, `1.5m`): off, the run only removes and tidies
+  and every mesh that stays keeps all its triangles.
+- ![new][new] **One undo for the whole run.** The steps report once, at the
+  end (triangles before and after, parts removed); their own messages go to
+  the log. One `Ctrl+Z` takes the whole run back and one redo re-applies
+  it. Cancel stops before the next step and keeps what has already run.
+  Also in the search as *Smart optimise*.
+
+**Number fields and the Transform card**
+
+- ![polish][polish] **Number fields are bigger, and no number is cut
+  off.** A slider's value is a field you can see, 28 px tall and at least
+  60 wide, and it grows with what is in it, as does the field it turns into
+  when you type. The fields of the command panels and of the Shape card
+  follow the same height.
+- ![fix][fix] **Position, rotation and size show the whole number.** The −
+  and + of each field took half its width and the unit was printed over
+  the digits, so −1091.234 read as −1091. The steppers now stand over the
+  ends of the field while the pointer is on it, the unit follows the
+  number, and when both do not fit it is the unit that gives way.
+- ![polish][polish] **Transform is a floating card.** It rises into place
+  at the foot of the left sidebar on the same surface as the command
+  panels, clear of the sidebar's edges, instead of a strip docked to it. It
+  still takes its own room under the tree and covers nothing.
+
+**Right sidebar**
+
+- ![polish][polish] **Cards slide open and shut.** A card of the right
+  sidebar grows from its header and shrinks back into it instead of
+  appearing at once, and its arrow turns with it. What is inside keeps its
+  final layout while the card grows and is simply uncovered. A second click
+  half-way turns it round from where it is. With "reduce motion" on, cards
+  open at once as before.
+- ![fix][fix] **A card opened at the foot of the sidebar stays in view.** It
+  used to unfold below the edge of the window; the sidebar now scrolls with
+  it as it grows, never so far that the card's header leaves at the top.
+- ![new][new] **Heavy parts: tick, tick, delete.** A click on a row ticks
+  it — a tick box takes the place of its rank — and a second click takes
+  the tick off; rows ticked before stay ticked, and `Shift`+click ticks a
+  run of them. The button under the list deletes the ticked rows and says
+  what they weigh: *Delete 3 parts · 171.3k triangles*. One undo step. The
+  first tick still shows where the part is; further ticks leave the camera
+  alone.
+- ![fix][fix] **The Heavy parts list follows the scene.** A part deleted
+  with the Delete key stayed listed until the tree was next rebuilt, and an
+  undo did not bring it back into the list.
+- ![polish][polish] **A button that cannot be pressed is grey.** A primary
+  button that was switched off kept its blue at 40%, like a blue button
+  behind glass (Optimise with no model loaded). It takes the plain surface
+  and the dimmed text now, in the sidebar and in the command panels.
+
+- ![polish][polish] **Cards start folded.** Every card in the right sidebar
+  opens folded the first time (Properties has no fold). The ones you open
+  or close are remembered, as before.
+
+**Gizmo and selection**
+
+- ![new][new] **Shift + wheel sets the snap step.** Holding `Shift` while
+  dragging a handle snaps, as before; turning the wheel during that drag now
+  sets what it snaps to — up for a coarser step, down for a finer one. A
+  move steps through 1 · 2 · 5 × powers of ten, a turn through 1, 5, 10, 15,
+  30, 45 and 90°, a scale through 0.01 to 1. The part takes the new step at
+  once, and the step is kept for the drags after it.
+- ![polish][polish] **A Snap pill beside Cam.** While snap is on, a pill at
+  the top of the viewport says so and shows the step in the units on
+  screen: *Snap 10 mm*, *Snap 15°*, *Snap × 0.1*. It follows the wheel and
+  the gizmo's mode, and it stands beside the Cam pill without moving it.
+  The SNAP badge in the readout beside the gizmo is gone (it also said 15°
+  and 0.1 whatever the step was).
+- ![fix][fix] **Reset in the Transform card took the part and left its
+  outline behind.** The outline is built again where the part stands.
+- ![fix][fix] **A hidden part kept its outline, and a part shown again had
+  none.** `H` on a selected part left its outline on screen; Show all and
+  the eye in the tree brought a selected part back without one. Every way
+  of hiding and showing now ends with the outline of exactly the selected
+  parts that can be seen.
+- ![fix][fix] **`Shift`+`M` opened Materials and switched Measure on or
+  off as well.** The Measure key now leaves the shifted key alone.
+- ![polish][polish] **Menu comes first in the top bar**, the sidebar toggle
+  after it.
+
+**Measure**
+
+- ![polish][polish] **Measure is yellow everywhere.** While measuring, a
+  yellow *Measure* pill sits in the viewport beside the isolate pill (a
+  click on it leaves the mode) and the Measure button is yellow. A click
+  on a row in the Measurements card picks that measurement: its line is
+  drawn thicker and its label turns yellow, and it stays on show after
+  the mode is left.
+
+**Tabs**
+
+- ![new][new] **Right-click a tab.** *Duplicate scene* opens a copy of that
+  tab's scene in a new tab, *Close all* (`Ctrl+Shift+F4`) and *Close others*
+  ask once for all the unsaved scenes together, and *Open…* and *Open
+  recent* are there too, the recent files in a list beside the row. The
+  three scene commands are also in the search.
+- ![polish][polish] **Every tab is one width.** A long name is cut in the
+  middle, so its end (and the file's type) stays readable:
+  `Menerga…O HP.fbx`. Nothing in a tab moves when it is picked: the open
+  tab and the others share one layout.
+- ![polish][polish] **A dot instead of the cube.** The icon is gone; the
+  status dot leads every tab, open or not: yellow with unsaved changes,
+  green when saved, faint while the scene is empty. A click on the open
+  tab's dot still saves. The name no longer shows a text cursor
+  (double-click still renames).
+
 **Start screen**
 
-- ![polish][polish] **Recent files are a list you can read.** One row a
-  file: its picture, its name, type and size, and when it was last opened.
-  The rows no longer shrink into slivers when there are many; the list
-  scrolls, and fades at the edge that has more. At most ten are kept.
-- ![polish][polish] **Continue where you left off.** The file that was open
-  last has a card of its own, with its picture across it, and is not
-  listed a second time below.
-- ![polish][polish] The filter sits in the heading's line and `Enter` opens
-  the first match; the arrow keys walk the list; the remove button takes
-  the place of the age while the pointer is on a row. An empty list says
-  what will appear there.
+- ![new][new] **Rebuilt.** The banner clip is gone. From the top: a search
+  bar for the recent files (`Enter` opens the first match), a row of four
+  tiles to start from (Open file… in the accent colour, New scene, Import…
+  and the four shapes), then the recent files as cards with their
+  pictures, name, type, size and when they were opened. The file opened
+  last leads the cards at twice the width, marked *Continue*.
+- ![new][new] **Drop a file anywhere.** There is no drop box: the whole
+  window takes a file, and says *Drop to open* while one is held over it.
+- ![fix][fix] **Settings and Keyboard shortcuts open in front.** They used
+  to open behind the start screen, so nothing seemed to happen. The start
+  screen now steps aside for them and comes back when they close, if there
+  is still no scene. Settings opens on General, where the start-up options
+  are; the separate Options popup that repeated them is gone.
+- ![polish][polish] The arrow keys walk the cards (up and down by a row),
+  the search hides while there are four files or fewer, and at most ten
+  recent files are kept.
 
 **Export and scene settings**
 
@@ -92,6 +270,13 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
 
 **Viewport**
 
+- ![fix][fix] **New scene takes the selection outline with it.** With the
+  gizmo on, the outline of a selected part is not kept with the parts, and
+  emptying the scene forgot it without removing it: the old part's cyan
+  outline stayed drawn in the new scene for good. (It is also why the
+  top-view screenshot test failed only in a full run: the picture was
+  right, with the previous test's outlines in it.)
+
 - ![fix][fix] **HDRI works the second time.** Leaving it disposed the
   environment it would need again.
 - ![fix][fix] **One slow frame no longer doubles the render loop**, and a
@@ -101,6 +286,9 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   moving-view culling measured boxes from before the change.
 
 **Interface**
+
+- ![polish][polish] **Fill holes: the button is on the right**, after the
+  size field, in line with the panel's other buttons.
 
 - ![fix][fix] **Switches can be reached with Tab and flipped with Space.**
   All of them were out of the tab order.

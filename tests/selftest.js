@@ -1121,11 +1121,11 @@
     if (!Tabs) return 'skipped (no tabs)';
     const strip = document.getElementById('doc-tabs');
     T.eq(Tabs.count(), 1, 'tabs at the start');
-    // the unsaved dot on the tab's icon: shown with an edit in the history, gone when the scene is as saved
+    // the status dot on the tab: yellow with an edit in the history, faint when the scene has nothing in it
     const pill = document.getElementById('doc-unsaved');
-    T.assert(pill.offsetParent !== null, 'no unsaved dot on a scene with an unsaved cube');
+    T.assert(pill.offsetParent !== null && !pill.classList.contains('is-saved') && !pill.classList.contains('is-empty'), 'no unsaved dot on a scene with an unsaved cube');
     await T.undo(); await T.sleep(150);
-    T.assert(pill.offsetParent === null, 'the unsaved dot is still drawn on a scene with nothing in it');
+    T.assert(pill.classList.contains('is-empty'), 'the dot still reads unsaved on a scene with nothing in it');
     await T.redo(); await T.sleep(150);
     T.assert(strip.querySelector('.doc-tab-add') && !strip.querySelector('.doc-tab.other'), 'the strip does not show one tab and a + button');
     window.__moNoTabs = false;
@@ -1256,6 +1256,153 @@
     const again = []; scene.traverse(o => { if (o.isSprite && typeof o.count === 'number') again.push(o); });
     T.eq(again.length, 1, 'sprites that draw group dots after selecting a group');
     T.eq(again[0].count, 2, 'dots drawn after selecting a group');
+  });
+
+  test('fasteners: the bolt, the screw, the nut and the washer are found by shape; the cube, the ball, the ring and the bar are not', async () => {
+    await T.fresh(['cube', 'hexbolt', 'allen', 'hexnut', 'washer', 'sphere', 'torus', 'cylinder']);
+    const named = () => [...state.selected].map(id => T.F().getPart(id).name).sort().join(', ');
+    const r = await window._MOpt.selectFasteners({ quiet: true });
+    T.assert(r, 'the search did not run');
+    T.eq(named(), 'Hex bolt, Hex nut, Socket head screw, Washer', 'what the search selected');
+    T.eq([r.kinds.bolt?.count, r.kinds.nut?.count, r.kinds.washer?.count].join('/'), '2/1/1', 'bolts / nuts / washers');
+    // a size limit below the parts leaves them alone, and says how many
+    T.act('selClear'); await T.sleep(120);
+    const small = await window._MOpt.selectFasteners({ quiet: true, maxD: 2 });
+    T.eq(state.selected.size, 0, 'selected under a limit of M2');
+    T.eq(small.tooBig, 4, 'fasteners reported as too big');
+    // the panel: run, narrow to the nuts, delete them, undo
+    T.act('selFasteners'); await T.sleep(250);
+    const sec = document.querySelector('.section-cmd[data-cmd="fasteners"]');
+    T.assert(sec && !sec.hidden, 'the Fasteners panel did not open');
+    document.getElementById('btn-fa-run').click();
+    for (let i = 0; i < 40 && document.getElementById('fa-list').hidden; i++) await T.sleep(100);
+    const rows = [...document.querySelectorAll('#fa-list .fa-row')];
+    T.eq(rows.length, 3, 'rows in the result list');
+    T.eq(state.selected.size, 4, 'selected by the panel');
+    rows.find(b => /nut/.test(b.textContent)).click(); await T.sleep(250);
+    T.eq(named(), 'Hex nut', 'selected after a click on the nuts row');
+    const before = T.live().length;
+    document.getElementById('btn-fa-delete').click(); await T.sleep(450);
+    T.eq(T.live().length, before - 1, 'parts after Delete');
+    T.assert(!T.part('Hex nut') && T.part('Hex bolt') && T.part('Cube'), 'Delete took something other than the nut');
+    await T.undo();
+    T.eq(T.live().length, before, 'parts after undo');
+    T.F()._CmdCards?.close?.('fasteners');
+    if (!sec.hidden) sec.querySelector('.cmd-close').click();
+  });
+
+  test('heavy parts: a click ticks a row, more clicks add to it, Delete takes the ticked rows only, the list follows undo', async () => {
+    await T.fresh(['cube', 'sphere', 'torus', 'cylinder']);
+    const list = document.getElementById('offenders-list'), btn = document.getElementById('btn-off-delete');
+    const rows = () => [...list.querySelectorAll('.off-row')];
+    const names = () => rows().map(r => r.querySelector('.off-name').textContent + (r.classList.contains('selected') ? '*' : '')).join(' ');
+    const click = async (name, o) => { rows().find(r => r.querySelector('.off-name').textContent === name).dispatchEvent(new MouseEvent('click', { bubbles: true, ...(o || {}) })); await T.sleep(250); };
+    T.eq(names(), 'Torus Sphere Cylinder Cube', 'the list, heaviest first');
+    T.assert(btn.disabled, 'Delete is live with nothing ticked');
+    await click('Torus'); await click('Cube');
+    T.eq(names(), 'Torus* Sphere Cylinder Cube*', 'after two clicks');
+    T.eq(state.selected.size, 2, 'parts selected');
+    await click('Torus');
+    T.eq(names(), 'Torus Sphere Cylinder Cube*', 'a second click takes the tick off');
+    await click('Sphere', { shiftKey: true });
+    T.eq(names(), 'Torus* Sphere* Cylinder Cube*', 'Shift+click ticks the rows between');
+    await click('Sphere');
+    T.assert(!btn.disabled && /Delete 2 parts/.test(btn.textContent), 'the button says "' + btn.textContent.trim() + '"');
+    btn.click(); await T.sleep(450);
+    T.eq(T.live().map(p => p.name).sort().join(' '), 'Cylinder Sphere', 'parts left after Delete');
+    T.eq(names(), 'Sphere Cylinder', 'the list after Delete');
+    T.assert(btn.disabled, 'Delete is still live after deleting');
+    await T.undo();
+    T.eq(names(), 'Torus Sphere Cylinder Cube', 'the list after undo');
+    // a part deleted somewhere else leaves the list too
+    await T.pick(['Sphere']); T.act('delete'); await T.sleep(450);
+    T.eq(names(), 'Torus Cylinder Cube', 'the list after a delete made in the tree');
+  });
+
+  test('selection outline: it follows Reset in the transform panel; a hidden part has none, and has it back when shown', async () => {
+    await T.fresh(['cube', 'cube']);
+    const THREE = T.F().THREE;
+    const outline = () => {
+      const l = (state.activeHighlights || []).find(o => o && o.isLineSegments && o.parent);
+      if (!l || !l.geometry.attributes.position.count) return null;
+      l.updateWorldMatrix(true, false);
+      return new THREE.Box3().setFromBufferAttribute(l.geometry.attributes.position).applyMatrix4(l.matrixWorld).getCenter(new THREE.Vector3());
+    };
+    const centre = () => { const m = T.part('Cube').mesh; m.geometry.computeBoundingBox(); m.updateWorldMatrix(true, false); return m.geometry.boundingBox.clone().applyMatrix4(m.matrixWorld).getCenter(new THREE.Vector3()); };
+    const off = () => { const o = outline(); return o ? o.distanceTo(centre()) : -1; };
+    const at = (what) => { const d = off(); T.assert(d >= 0 && d < 1, what + ': the outline is ' + (d < 0 ? 'missing' : d.toFixed(1) + ' away from the part')); };
+    await T.pick(['Cube']);
+    if (!document.getElementById('transform-panel').classList.contains('show')) { document.getElementById('tg-transform').click(); await T.sleep(300); }
+    const px = document.getElementById('tform-px');
+    px.value = '300'; px.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(350);
+    T.assert(centre().length() > 100, 'the typed position did not move the part');
+    at('after a typed move');
+    document.getElementById('tform-reset').click(); await T.sleep(350);
+    at('after Reset');
+    await T.undo(); at('after the undo of Reset');
+    await T.redo(); at('after the redo of Reset');
+    T.act('hideSel'); await T.sleep(350);
+    T.assert(outline() === null, 'a hidden part is still outlined');
+    await T.undo(); at('after the undo of Hide selected');
+    T.act('hideSel'); await T.sleep(350);
+    T.act('showAll'); await T.sleep(350);
+    at('after Show all');
+  });
+
+  test('gizmo snap: Shift + wheel during a drag sets the step, coarser up and finer down', async () => {
+    await T.fresh(['cube']);
+    await T.pick(['Cube']);
+    T.act('gzMove'); await T.sleep(300);
+    const g = state.gizmo, was = g.dragging;
+    const wheel = (d) => window.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: d, deltaY: 0, shiftKey: true }));
+    const key = (type) => document.dispatchEvent(new KeyboardEvent(type, { key: 'Shift', bubbles: true }));
+    try {
+      key('keydown'); await T.sleep(50);
+      const s0 = state._gizmoSnapStep;
+      T.assert(s0 > 0, 'Shift did not switch snap on');
+      const pill = document.getElementById('vp-snap-pill');
+      T.assert(pill && !pill.hidden && pill.offsetParent, 'no Snap pill at the top while Shift is held');
+      T.assert(pill.textContent.trim().startsWith('Snap ' + parseFloat(s0.toPrecision(3))), 'the pill says "' + pill.textContent.trim() + '", the step is ' + s0);
+      T.assert(!document.querySelector('#gizmo-hud .ghud-snap'), 'the tooltip beside the gizmo still carries a SNAP badge');
+      wheel(-100); await T.sleep(50);
+      T.eq(state._gizmoSnapStep, s0, 'the step after a wheel notch with no drag going on');
+      g.dragging = true;                                      // (as while a handle is held)
+      wheel(-100); await T.sleep(50);
+      const up = state._gizmoSnapStep;
+      T.assert(up > s0, 'wheel up: the step went from ' + s0 + ' to ' + up);
+      T.assert(pill.textContent.trim().startsWith('Snap ' + parseFloat(up.toPrecision(3))), 'after the wheel the pill says "' + pill.textContent.trim() + '", the step is ' + up);
+      wheel(100); wheel(100); await T.sleep(50);
+      T.assert(state._gizmoSnapStep < s0, 'two notches down: the step is ' + state._gizmoSnapStep + ', not below ' + s0);
+      const series = [];
+      for (let i = 0; i < 6; i++) { wheel(-100); series.push(state._gizmoSnapStep); }
+      T.assert(series.every(v => /^[125]0*$|^0\.0*[125]$/.test(String(v))), 'steps are not 1 · 2 · 5 × a power of ten: ' + series.join(' '));
+      T.act('gzRotate'); await T.sleep(200); g.dragging = true;
+      const r0 = Math.round(state.gizmoSnap.rotate * 180 / Math.PI);
+      wheel(-100); await T.sleep(50);
+      T.assert(Math.round(state.gizmoSnap.rotate * 180 / Math.PI) > r0, 'wheel up did not coarsen the turn step from ' + r0 + '°');
+      wheel(100); await T.sleep(50);
+      T.eq(Math.round(state.gizmoSnap.rotate * 180 / Math.PI), r0, 'the turn step after up and down');
+    } finally { g.dragging = was; key('keyup'); state._gizmoSnapUser = null; T.act('gzMove'); }
+    await T.sleep(60);
+    T.assert(document.getElementById('vp-snap-pill').hidden, 'the Snap pill stays after Shift is let go');
+  });
+
+  test('shortcuts: Shift+M opens Materials and leaves Measure alone; M alone is Measure', async () => {
+    await T.fresh(['cube']);
+    const msr = document.getElementById('msr-toggle'), mat = document.getElementById('tg-materials');
+    const press = async (o) => { window.dispatchEvent(new KeyboardEvent('keydown', { key: o.shiftKey ? 'M' : 'm', bubbles: true, cancelable: true, ...o })); await T.sleep(250); };
+    const measuring = () => msr.classList.contains('active');
+    const was = measuring(), dockWas = document.body.classList.contains('mat-dock-open');
+    await press({ shiftKey: true });
+    T.eq(measuring(), was, 'Measure after Shift+M');
+    T.assert(document.body.classList.contains('mat-dock-open') !== dockWas, 'Shift+M did not open or close the Materials dock');
+    await press({ shiftKey: true });
+    T.eq(measuring(), was, 'Measure after a second Shift+M');
+    T.eq(document.body.classList.contains('mat-dock-open'), dockWas, 'the Materials dock after a second Shift+M');
+    await press({});
+    T.eq(measuring(), !was, 'Measure after M');
+    await press({});
+    T.eq(measuring(), was, 'Measure after a second M');
   });
 
   // ══════════════════════════════ runner ════════════════════════════════

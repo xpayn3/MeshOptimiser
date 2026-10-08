@@ -194,72 +194,8 @@ body{font:var(--fs-lg)/1.4 var(--font-sans);color:var(--tx);background:var(--bg)
 body.app-ready{opacity:1}
 #welcome-modal{transition:opacity .3s ease .1s}
 body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
-/* Recent files: one row a file, every row the same height. The rows do not
-   shrink (ten of them in a short list were once squeezed into slivers one on
-   top of the other): the list scrolls instead, and fades at an edge that has
-   more rows beyond it. A thumbnail, the name over its type and size, when it
-   was last opened, and a "forget this one" button that shows with the pointer. */
-.welcome-recent{
-  position:relative;flex:0 0 auto;display:flex;align-items:center;gap:11px;width:100%;height:44px;padding:0 9px 0 7px;
-  border-radius:8px;color:var(--tx);text-align:left;cursor:pointer;
-  transition:background var(--dur-fast) var(--ease-out);
-}
-.welcome-recent:hover,.welcome-recent:focus-visible{background:var(--bg3)}
-.welcome-recent:focus-visible{outline:none;box-shadow:inset 0 0 0 1.5px var(--ac)}
-.welcome-recent .wr-thumb{
-  flex:0 0 auto;width:32px;height:32px;border-radius:7px;background:var(--bg);overflow:hidden;
-  border:1px solid rgba(255,255,255,.07);display:grid;place-items:center;color:var(--tx3);
-}
-.welcome-recent .wr-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.welcome-recent .wr-thumb svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6}
-.welcome-recent .wr-meta{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
-.welcome-recent .wr-name{font-size:13px;line-height:16px;font-weight:var(--fw-medium);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.welcome-recent .wr-sub{display:flex;align-items:center;gap:7px;font-size:11.5px;line-height:14px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
-.welcome-recent .wr-ext{font-size:9.5px;font-weight:var(--fw-medium);letter-spacing:.05em;color:var(--tx2);background:var(--bg3);border-radius:4px;padding:0 5px;line-height:14px}
-.welcome-recent:hover .wr-ext,.welcome-recent:focus-visible .wr-ext{background:var(--bg4)}
-.welcome-recent .wr-age{flex:0 0 auto;font-size:11.5px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap;transition:opacity var(--dur-fast) var(--ease-out)}
 /* (the button takes the place of the age while the pointer is on the row) */
-.welcome-recent:hover .wr-age,.welcome-recent:focus-within .wr-age{opacity:0}
-.welcome-recent .wr-del{
-  position:absolute;right:6px;top:10px;width:24px;height:24px;display:grid;place-items:center;
-  background:transparent;border:none;border-radius:6px;color:var(--tx3);
-  cursor:pointer;opacity:0;
-  transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
-}
-.welcome-recent .wr-del svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
-.welcome-recent:hover .wr-del,.welcome-recent:focus-within .wr-del{opacity:1}
-.welcome-recent .wr-del:hover{background:var(--er-soft-strong);color:var(--er)}
-#welcome-recents-clear:hover{color:var(--er);border-color:var(--er-line);background:var(--er-tint-10)}
 
-/* The file that was open last, as a card: its picture across the whole card
-   under a shade that keeps the text readable, the name, and an arrow. */
-.welcome-resume{
-  position:relative;display:flex;align-items:flex-end;gap:12px;width:100%;height:88px;
-  padding:11px 14px;
-  background:var(--bg2) center/cover no-repeat;
-  border:0;border-radius:10px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);
-  color:var(--tx);text-align:left;cursor:pointer;overflow:hidden;
-}
-.welcome-resume::before{
-  content:'';position:absolute;inset:0;
-  background:linear-gradient(90deg,rgba(15,15,15,.88) 0%,rgba(15,15,15,.62) 55%,rgba(15,15,15,.25) 100%);
-  transition:opacity var(--dur-base) var(--ease-out);
-}
-.welcome-resume:not(.has-thumb)::before{display:none}
-.welcome-resume:hover::before,.welcome-resume:focus-visible::before{opacity:.82}
-.welcome-resume:focus-visible{outline:none;box-shadow:inset 0 0 0 1.5px var(--ac)}
-.welcome-resume > *{position:relative;z-index:1}
-.welcome-resume .wr-info{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
-.welcome-resume .wr-heading{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ac-text);margin-bottom:3px}
-.welcome-resume .wr-name{font-size:15px;line-height:19px;font-weight:var(--fw-semibold);color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.welcome-resume .wr-sub{font-size:11.5px;color:rgba(255,255,255,.62);font-variant-numeric:tabular-nums}
-.welcome-resume .wr-play{
-  flex:0 0 auto;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
-  background:var(--ac);color:#fff;
-  transition:transform var(--dur-base) var(--ease-out);
-}
-.welcome-resume:hover .wr-play,.welcome-resume:focus-visible .wr-play{transform:translateX(3px)}
-.welcome-resume .wr-play svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2}
 button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
 input,select{font:inherit;color:inherit}
 #app{display:grid;height:100vh;width:100vw;transition:grid-template-columns 320ms cubic-bezier(.4,0,.2,1);grid-template-rows:44px 1fr 22px;grid-template-columns:var(--side-l-w) minmax(0,1fr) var(--side-r-w);}
@@ -1708,67 +1644,6 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .tree-node.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 62%, var(--tx2))}
 .tree-node.ancestor-selected .tree-typeicon{color:color-mix(in srgb, var(--ac-text) 62%, var(--tx3))}
 
-/* ── Startup screen ──────────────────────────────────────────────────────
-   Two columns: start something (drop, open, import, new, shapes, options)
-   on the left; pick up where you left off (resume, searchable recents) on
-   the right. Collapses to one column on a narrow window. */
-.wl-head{display:flex;align-items:center;padding-right:36px;gap:14px;margin-bottom:28px;}
-.wl-mark{display:grid;place-items:center;flex:0 0 auto}
-.wl-title{font-weight:var(--fw-semibold);color:var(--tx);display:flex;align-items:baseline;gap:8px;font-size:18px;}
-.wl-ver{font-size:11px;font-weight:var(--fw-regular);color:var(--tx3)}
-.wl-tag{color:var(--tx2);font-size:13px;margin-top:3px;}
-.wl-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:40px;}
-.wl-col{min-width:0;display:flex;flex-direction:column}
-.wl-drop{border:1px dashed var(--bd2);text-align:center;cursor:pointer;background:var(--bg2);display:flex;flex-direction:column;align-items:center;transition:border-color var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out)}
-.wl-drop:hover,.wl-drop.drag-over{border-color:var(--ac);background:var(--ac-tint-08)}
-.wl-drop>svg,.wl-drop>i{stroke:var(--ac-text);fill:none;stroke-width:1.6}
-.wl-drop-title{color:var(--tx);font-size:14px;}
-.wl-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;}
-.wl-chips span{letter-spacing:.02em;color:var(--tx2);background:var(--bg3);border:1px solid var(--bd);border-radius:6px}
-.wl-actions{display:flex;flex-direction:column;gap:4px;margin-top:18px;}
-.wl-act{all:unset;box-sizing:border-box;width:100%;display:flex;align-items:center;cursor:pointer;color:var(--tx);height:40px;padding:0 12px;gap:12px;font-size:13.5px;border-radius:6px;}
-.wl-act svg,.wl-act i{stroke:var(--tx2);fill:none;stroke-width:2;flex:0 0 auto}
-.wl-act span{flex:1 1 auto}
-.wl-act kbd{font:inherit;color:var(--tx3)}
-.wl-act:hover,.wl-act:focus-visible{background:var(--ac);color:#fff}
-.wl-act:hover svg,.wl-act:focus-visible svg,.wl-act:hover kbd,.wl-act:focus-visible kbd{stroke:#fff;color:#fff}
-.wl-label{text-transform:uppercase;letter-spacing:.06em;color:var(--tx3);font-size:11px;margin:26px 0 12px;}
-.wl-shapes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
-.wl-shape{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;background:var(--bg2);border:1px solid var(--bd);cursor:pointer;color:var(--tx2);transition:border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
-.wl-shape:hover,.wl-shape:focus-visible{border-color:var(--ac);color:var(--tx);background:var(--bg3)}
-.wl-shape-pic{display:grid;place-items:center}
-.wl-shape-pic img{object-fit:contain}
-.wl-shape-pic svg{width:20px;height:20px;stroke:var(--tx3);fill:none;stroke-width:1.6}
-.wl-opts{display:flex;flex-direction:column;gap:6px;}
-.wl-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 2px;color:var(--tx);cursor:pointer;height:36px;font-size:13.5px;}
-.wl-opt input{position:absolute;opacity:0;pointer-events:none}
-.wl-opt .switch{border-radius:999px;background:var(--bg4);position:relative;transition:background var(--dur-base) var(--ease-out);flex:0 0 32px;width:32px;height:18px;}
-.wl-opt .switch::after{content:'';position:absolute;top:2px;left:2px;border-radius:50%;background:#fff;transition:transform var(--dur-base) var(--ease-out);width:14px;height:14px;}
-.wl-opt input:checked + .switch{background:var(--ac)}
-.wl-opt input:focus-visible + .switch{outline:2px solid var(--ac-text);outline-offset:2px}
-#welcome-resume:empty + .wl-recents-head{margin-top:0}
-.wl-search{position:relative;flex:0 1 168px;min-width:0}
-.wl-search svg,.wl-search i{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;stroke:var(--tx3);fill:none;stroke-width:2}
-.wl-search input{box-sizing:border-box;width:100%;padding:0 8px 0 27px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);outline:none;height:26px;font-size:12px;}
-.wl-search input:focus{border-color:var(--ac)}
-/* The list takes the height the left column leaves it (the rows line up with
-   the column's edges: the list reaches 7px past them, the rows' own padding). */
-.wl-recents{display:flex;flex-direction:column;gap:2px;flex:1 1 0;min-height:136px;overflow-y:auto;margin:0 -7px;scrollbar-gutter:stable}
-.wl-recents.more-below{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent)}
-.wl-recents.more-above{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 22px);mask-image:linear-gradient(to bottom,transparent,#000 22px)}
-.wl-recents.more-above.more-below{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 22px,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(to bottom,transparent,#000 22px,#000 calc(100% - 26px),transparent)}
-.wl-recents-empty{font-size:12px;color:var(--tx3);padding:10px 0}
-.wl-recents:has(.wl-recents-none){scrollbar-gutter:auto}
-.wl-recents-none{flex:1 1 auto;margin:0 7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:16px 12px;border:1px dashed var(--bd);border-radius:10px;text-align:center;color:var(--tx2);font-size:13px}
-.wl-recents-none svg{width:20px;height:20px;stroke:var(--tx3);fill:none;stroke-width:1.6;margin-bottom:5px}
-.wl-recents-none span{font-size:12px;color:var(--tx3)}
-.wl-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border-top:1px solid var(--bd);color:var(--tx3);margin-top:30px;padding-top:18px;font-size:12px;}
-.wl-foot kbd{font:inherit;color:var(--tx2);background:var(--bg3);border:1px solid var(--bd);border-radius:4px;padding:1px 5px;margin-right:5px}
-.wl-foot code{font-family:var(--font-sans);color:var(--ac-text)}
-.wl-dot{margin:0 8px;opacity:.6}
-.wl-link{all:unset;cursor:pointer;color:var(--tx2)}
-.wl-link:hover,.wl-link:focus-visible{color:var(--ac-text);text-decoration:underline}
-@media (max-width:720px){.wl-cols{grid-template-columns:1fr}.wl-recents{flex:0 0 auto;max-height:236px}}
 
 /* ── Viewport toolbars, Plasticity-style ─────────────────────────────────
    Two dark pills instead of rows of boxed buttons: tools down the left
@@ -1814,15 +1689,6 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 #tb{border-bottom-color:transparent;height:44px;padding-top:2px;padding-bottom:2px;box-sizing:border-box;}   /* the 2px under the buttons is the gap to the panels below */
 /* bottom bar: a search button on its own, then the display controls */
 .vp-bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:10px}
-/* Startup screen — room to breathe */
-.wl-drop{padding:30px 20px;gap:12px;border-radius:10px}
-.wl-chips span{font-size:11px;padding:3px 8px}
-.wl-act svg,.wl-act i{width:16px;height:16px}
-.wl-act kbd{font-size:12px}
-.wl-shape{padding:14px 6px 12px;gap:8px;font-size:12px;border-radius:10px}
-.wl-opt input:checked + .switch::after{transform:translateX(14px)}
-.wl-recents-head{display:flex;align-items:center;gap:8px;min-height:26px;margin:26px 0 12px;}
-.wl-recents-head .wl-label{margin:0 auto 0 0}
 /* The command palette's field is the whole bar; it needs no focus box of its own. */
 #cmdk-input,#cmdk-input:focus,#cmdk-input:focus-visible{outline:none!important;border:0!important;box-shadow:none!important}
 /* The log console slides up inside the viewport column and is fully out of
@@ -1991,19 +1857,6 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .align-turn>span{width:12px}
 #sidebar-right .align-turn .btn{padding:0;justify-content:center;min-width:0}
 .align-box .field-help:empty{display:none}
-/* The switch beside File: parts tree or object library */
-.side-switch{position:relative;display:inline-grid;grid-template-columns:1fr 1fr;flex:0 0 auto;height:var(--btn-h-md,32px);padding:3px;gap:0;border-radius:var(--btn-r-md,6px);background:var(--bg2)}
-.side-switch::before{content:'';position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:5px;background:rgba(255,255,255,.14);transition:transform .18s var(--ease-out)}
-.side-switch.is-lib::before{transform:translateX(100%)}
-.side-switch button{position:relative;display:inline-flex;align-items:center;justify-content:center;width:30px;padding:0;border:0;background:none;color:var(--tx3);cursor:pointer;border-radius:5px}
-.side-switch button:hover{color:var(--tx)}
-.side-switch button.active{color:var(--tx)}
-.side-switch svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9}
-/* The library panel takes the tree's place */
-#sidebar-left.lib-on>:is(.tree-search,.tree-toolbar,.tree-summary,#tree,#tree-hscroll){display:none}
-#lib-panel{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
-#lib-panel[hidden]{display:none}
-#lib-panel>.tree-search{display:flex;flex:0 0 auto}
 .lib-opts{flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:0 10px 8px;font-size:var(--fs-11);color:var(--tx3)}
 .lib-opts>span{flex:1 1 auto}
 .lib-opts .mac-sel{flex:0 0 68px}
@@ -2319,8 +2172,6 @@ input[type=range]:active::-moz-range-thumb{cursor:default !important;transform:s
 input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 2px rgba(0,0,0,.55),0 0 0 4px var(--ac-text)!important}
 input[type=range]:focus-visible::-moz-range-thumb{box-shadow:0 0 0 2px rgba(0,0,0,.55),0 0 0 4px var(--ac-text)!important}
 
-/* Startup screen: the same plain white mark as the top bar, no blue tile. */
-.wl-mark svg{width:26px;height:26px;stroke:#fff;fill:#fff;stroke-width:1.5}
 /* Properties is the base info card: always open (no arrow, the header is not
    a button) and on the dark UI black, so it reads apart from the tool cards
    below it. */
@@ -2475,17 +2326,21 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 #tb .export-wrap:has(#btn-export){order:2}
 #tb #export-menu{left:auto;right:0;transform-origin:top right}
 .doc-tabs{display:flex;min-width:0;flex:0 1 auto;margin-left:6px;gap:2px;align-items:center;}       /* margin-left is set by _alignDocTab: the tab starts at the viewport's left edge */
-.doc-tab{display:inline-flex;align-items:center;gap:7px;min-width:0;max-width:320px;height:var(--btn-h-md,32px);box-sizing:border-box;padding:0 10px;
+.doc-tab{display:inline-flex;align-items:center;gap:7px;min-width:0;width:var(--doc-tab-w,172px);height:var(--btn-h-md,32px);box-sizing:border-box;padding:0 10px;
   background:var(--bg2);border-radius:var(--btn-r-md,6px);color:var(--tx-control);font-size:var(--fs-12)}
 .doc-tab>svg,.doc-tab>i{width:14px;height:14px;flex:0 0 14px;stroke-width:1.8;color:var(--tx3)}
-.doc-tab-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text}
-/* the status dot sits on the bottom right corner of the tab's icon: yellow
-   with unsaved changes, green when saved. The ring is the tab's own colour. */
-:is(.doc-unsaved,#_a#_b){position:absolute;right:-3px;bottom:-3px;width:7px;height:7px;border-radius:50%;background:var(--wn);
-  box-shadow:0 0 0 2px var(--bg2);pointer-events:none}
+/* Every tab is one width. A long name is cut in the middle: its first piece
+   gives way, its last few letters always show (_tabNameSet in app-v2.js). */
+.doc-tab-name{flex:1 1 auto;min-width:0;display:flex;overflow:hidden;white-space:pre;cursor:default}
+.doc-tab-name>.dtn-a{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.doc-tab-name>.dtn-b{flex:0 0 auto}
+/* the status dot leads every tab, the open one and the others alike: yellow
+   with unsaved changes, green when saved, faint while the scene is empty. */
+:is(.doc-unsaved,#_a#_b){display:block;width:8px;height:8px;border-radius:50%;background:var(--wn);pointer-events:none}
 :is(.doc-unsaved.is-saved,#_a#_b){background:var(--ok)}
+:is(.doc-unsaved.is-empty,#_a#_b){background:var(--tx3);opacity:.45}
 :is(.doc-unsaved[hidden],#_a#_b){display:none}     /* (must outweigh the rule above, or the dot never hides) */
-@media (max-width:900px){.doc-tab{max-width:150px}}
+@media (max-width:900px){.doc-tab{width:132px}}
 /* Properties: the triangle count leads the card. When triangles were saved
    the percentage is the headline (green badge) and the old count is struck
    through; the bar under it is the share of the scene (a part) or what is
@@ -2512,6 +2367,12 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
    window is short; what cannot run right now is dimmed. */
 #ctx-menu .ctx-menu-row.is-off{opacity:.38;cursor:default}
 #ctx-menu .ctx-menu-row.is-off:hover{background:none}
+/* a row that opens a list beside it (Open recent on a tab's menu) */
+#ctx-menu .ctx-menu-chev{width:14px;height:14px;flex:0 0 14px;margin-left:auto;stroke-width:2;color:inherit;opacity:.7}
+:is(#ctx-menu .ctx-menu-row.is-open,#_a#_b){background:var(--ac);color:var(--tx-on-accent)}
+#ctx-menu .ctx-sub{position:absolute;z-index:1;box-sizing:border-box;min-width:220px;max-width:360px;max-height:calc(100vh - 12px);overflow-y:auto;scrollbar-width:none;
+  padding:var(--menu-pad);background:var(--surface-pop);border-radius:var(--surface-pop-r);box-shadow:var(--surface-shadow),var(--surface-ring)}
+#ctx-menu .ctx-sub .ctx-menu-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #ctx-menu.is-commands{min-width:232px;max-height:calc(100vh - 90px);overflow-y:auto;scrollbar-width:none}
 #ctx-menu.is-commands::-webkit-scrollbar{display:none}
 #ctx-menu.is-commands .ctx-menu-row{padding-top:5px;padding-bottom:5px}
@@ -2519,7 +2380,8 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
    The scene on screen is the lit tab (icon with the unsaved dot, name, close); the other
    open scenes are quieter tabs beside it; "+" opens a new scene. */
 .doc-tab{position:relative;flex:0 1 auto}
-.doc-tab.other{background:none;color:var(--tx3);cursor:pointer;max-width:180px;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);padding:0 10px 0 8px;gap:6px;}
+/* (same padding and gap as the open tab: nothing in a tab moves when it is picked) */
+.doc-tab.other{background:none;color:var(--tx3);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);}
 .doc-tab.other:hover{background:rgba(255,255,255,.05);color:var(--tx-control)}
 .doc-tab.other .doc-tab-name{cursor:pointer}
 :is(.doc-tab-x,.doc-tab-add,#_a#_b){flex:0 0 auto;width:20px;height:20px;padding:0;border:0;border-radius:5px;background:none;color:var(--tx3);cursor:pointer;position:relative;
@@ -2539,23 +2401,19 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 :is(.prim-row .prim-axis-group,#_a#_b){box-sizing:border-box;width:84px;height:22px;padding:1px;gap:1px;border-radius:var(--r-sm,6px)}
 :is(.prim-row .prim-axis-btn,#_a#_b){flex:1 1 0;min-width:0;height:100%;padding:0;border-radius:4px}
 :is(.prim-row .prim-select,#_a#_b){box-sizing:border-box;width:84px;min-width:0;height:22px;border-radius:var(--r-sm,6px)}
-/* The icon at the left of a tab carries the status dot; on the open tab it
-   is a button that saves. The close button is at the right end: always there
+/* The status dot at the left of a tab; on the open tab it is a button that
+   saves. The close button is at the right end: always there
    on the open tab, under the pointer on the others. A tab that is still
    starting pulses and cannot be picked yet. */
-.doc-tab-lead{position:relative;flex:0 0 16px;width:16px;height:16px;display:inline-grid;place-items:center}
+.doc-tab-lead{position:relative;flex:0 0 12px;width:12px;height:16px;display:inline-grid;place-items:center}
 :is(button.doc-tab-lead,#_a#_b){padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer;border-radius:4px;overflow:visible}
 button.doc-tab-lead::after{content:'';position:absolute;inset:-4px;border-radius:5px;background:transparent;transition:background var(--dur-fast) var(--ease-out)}
 button.doc-tab-lead:hover::after{background:rgba(255,255,255,.08)}
-.doc-tab-lead>svg,.doc-tab-lead>i{width:14px;height:14px;stroke-width:1.8;color:var(--tx3)}
-button.doc-tab-lead:hover>svg{color:var(--tx-control-hover)}
-.doc-tab.other .doc-unsaved{box-shadow:0 0 0 2px var(--bg)}
 /* a tab being dragged to a new place in the strip rides above the others */
 .doc-tabs.is-reordering,.doc-tabs.is-reordering *{user-select:none;-webkit-user-select:none;cursor:grabbing!important}
 /* (solid, whatever the tab is: an unopened tab has no background of its own,
    and the tabs it passes over must not show through it) */
 :is(.doc-tabs .doc-tab.is-dragged,.doc-tabs .doc-tab.is-dragged:hover,#_a#_b){z-index:2;background:var(--bg3);opacity:1;box-shadow:0 4px 14px rgba(0,0,0,.45);transition:none}
-.doc-tab.is-dragged .doc-unsaved{box-shadow:0 0 0 2px var(--bg3)}
 body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name tip trailing a tab that is being moved */
 :is(.doc-tab>.doc-tab-x,#_a#_b){margin:0 -5px 0 -1px}
 .doc-tab.is-loading{pointer-events:none;animation:doc-tab-load 1s ease-in-out infinite}
@@ -2734,48 +2592,100 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
      Only when the window's buttons are wider than that does it give way. */
   #tb .spacer ~ #stat-renderer:last-child,#tb .spacer ~ .stat-renderer:last-child,#tb #stat-renderer,#tb .stat-renderer{flex-basis:max(0px,calc(var(--side-r-w) - 6px - (100vw - env(titlebar-area-x,0px) - env(titlebar-area-width,100vw))))}
 }
-/* ── Welcome: a cover on top, the essentials under it ───────────────────────
-   The cover is a wide clip rendered on the window's own colour, so it has no
-   edges; the name sits on its empty left half. Under it: open something
-   (left) or pick up something (right). The three options live in a small
-   popup opened from the footer, and the long tip is gone. */
-.wl-modal{width:min(860px,calc(100vw - 48px));border-radius:16px}
-.wl-cover{position:relative;flex:0 0 auto;margin:0;line-height:0;background:var(--surface-pop)}
-.wl-cover video{display:block;width:100%;height:auto;aspect-ratio:860/240;object-fit:cover;background:var(--surface-pop);
-  /* fades out at the bottom and at both sides, so no edge of the clip can show against the window */
-  -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 74%,transparent 100%),linear-gradient(to right,transparent 0,#000 7%,#000 93%,transparent 100%);-webkit-mask-composite:source-in;
-          mask-image:linear-gradient(to bottom,#000 0,#000 74%,transparent 100%),linear-gradient(to right,transparent 0,#000 7%,#000 93%,transparent 100%);mask-composite:intersect}
-.wl-cover .wl-head{position:absolute;left:36px;top:50%;transform:translateY(-58%);margin:0;padding:0;gap:14px;line-height:normal}
-.wl-cover .wl-mark{width:38px;height:38px}
-.wl-cover .wl-mark svg{width:34px;height:34px}
-.wl-cover .wl-title{font-size:27px;letter-spacing:-.02em;line-height:1.1;gap:10px}
-.wl-cover .wl-tag{font-size:13px;margin-top:6px;color:var(--tx2)}
-:is(.wl-modal #welcome-close,#_a#_b){top:14px!important;right:14px!important;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.34);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--tx-control);display:grid;place-items:center;font-size:12px;border:0}
-:is(.wl-modal #welcome-close:hover,#_a#_b){background:rgba(255,255,255,.14);color:#fff}
-.wl-modal .modal-b{padding:0 36px 20px;position:relative}
-.wl-cols{gap:32px}
-.wl-drop{padding:28px 16px 24px;gap:9px}
-.wl-drop>svg,.wl-drop>i{width:24px;height:24px}
-.wl-actions{margin-top:12px;gap:2px}
-.wl-act{height:38px}
-.wl-label{margin:16px 0 8px}
-.wl-shapes{gap:8px}
-.wl-shape{flex-direction:row;justify-content:center;padding:7px 6px;gap:7px;border-radius:8px}
-.wl-shape-pic,.wl-shape-pic img{width:22px;height:22px}
-.wl-recents-head{margin:12px 0 6px}
-.wl-foot{margin-top:18px;padding-top:12px;position:relative}
-/* the options: a popup standing on its word in the footer */
-.wl-optd{position:relative}
-.wl-optd>summary{list-style:none;display:inline-flex;align-items:center;gap:6px}
-.wl-optd>summary::-webkit-details-marker{display:none}
-.wl-optd>summary::after{content:'';width:10px;height:10px;background:var(--select-arrow) center/10px 10px no-repeat;opacity:.7;transform:rotate(180deg)}
-.wl-optd[open]>summary{color:var(--tx)}
-.wl-optd>.wl-opts{position:absolute;right:0;bottom:calc(100% + 10px);width:280px;padding:6px 14px;gap:0;border-radius:10px;background:var(--surface-pop);box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.09);z-index:5;animation:cmd-in .16s var(--ease-out)}
-.wl-optd .wl-opt{font-size:13px;height:34px}
-/* while a file loads the cover stays and the progress sits where the lists were */
-#welcome-load-pane{padding-top:6px}
-@media (max-width:720px){.wl-cover .wl-tag{display:none}.wl-cover .wl-title{font-size:22px}}
-@media (max-height:700px){.wl-cover video{aspect-ratio:860/170}}
+/* ── Start screen ──────────────────────────────────────────────────────────
+   One window, read from the top: a search bar, the ways to start as a row of
+   tiles, then the recent files as cards with their pictures. There is no drop
+   box: the whole window takes a dropped file. The file opened last leads the
+   cards, twice as wide. The same window shows the progress while a file
+   loads. */
+.wl-modal{width:min(980px,calc(100vw - 48px));max-height:min(820px,calc(100vh - 48px));border-radius:16px}
+.wl-top{flex:0 0 auto;display:flex;align-items:center;gap:10px;height:56px;padding:0 14px 0 24px}
+.wl-mark{display:grid;place-items:center;flex:0 0 auto}
+.wl-mark svg{width:18px;height:18px;stroke:#fff;fill:#fff;stroke-width:1.5}
+.wl-title{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:var(--fw-medium);color:var(--tx)}
+.wl-ver{font-size:11px;font-weight:var(--fw-regular);color:var(--tx3)}
+.wl-nav{margin-left:auto;display:flex;align-items:center;gap:2px}
+.wl-link{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:6px;font-size:12px;color:var(--tx2);cursor:pointer}
+.wl-link:hover,.wl-link:focus-visible{background:rgba(255,255,255,.06);color:var(--tx)}
+.wl-x{all:unset;box-sizing:border-box;display:grid;place-items:center;width:28px;height:28px;margin-left:6px;border-radius:6px;color:var(--tx3);cursor:pointer}
+.wl-x:hover,.wl-x:focus-visible{background:rgba(255,255,255,.08);color:var(--tx)}
+.wl-x svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2}
+.wl-modal .modal-b{padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+#welcome-pick-pane{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.wl-stage{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:4px 24px 0}
+/* the search: one bar across the window */
+.wl-search{position:relative;flex:0 0 auto}
+.wl-search svg,.wl-search i{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--tx3);fill:none;stroke-width:2;pointer-events:none}
+.wl-search input{box-sizing:border-box;width:100%;height:44px;padding:0 14px 0 42px;background:var(--bg2);border:0;border-radius:10px;color:var(--tx);font-size:14px;outline:none;transition:background var(--dur-fast) var(--ease-out)}
+.wl-search input::placeholder{color:var(--tx3)}
+.wl-search input:hover,.wl-search input:focus{background:var(--bg3)}
+.wl-label{flex:0 0 auto;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin:22px 0 10px}
+/* ways to start: three tiles and the four shapes, on the cards' own columns */
+.wl-start{flex:0 0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.wl-tile{all:unset;box-sizing:border-box;position:relative;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;min-width:0;height:92px;padding:12px 14px;border-radius:10px;background:var(--bg2);color:var(--tx);cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
+.wl-tile:hover,.wl-tile:focus-visible{background:var(--bg3)}
+.wl-tile>svg,.wl-tile>i{position:absolute;left:14px;top:13px;width:18px;height:18px;stroke:var(--tx2);fill:none;stroke-width:1.8}
+.wl-tile kbd{position:absolute;right:13px;top:14px;font:inherit;font-size:11px;color:var(--tx3)}
+.wl-tile-t{font-size:13px}
+.wl-tile-s{font-size:11.5px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wl-tile.is-primary{background:var(--ac);color:#fff}
+.wl-tile.is-primary:hover,.wl-tile.is-primary:focus-visible{background:color-mix(in srgb,var(--ac) 88%,#fff)}
+.wl-tile.is-primary>svg{stroke:#fff}
+.wl-tile.is-primary kbd,.wl-tile.is-primary .wl-tile-s{color:rgba(255,255,255,.8)}
+.wl-shapes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:1fr 1fr;gap:6px;height:92px}
+.wl-shape{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;min-width:0;padding:0 10px;border-radius:8px;background:var(--bg2);color:var(--tx2);font-size:12px;cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.wl-shape:hover,.wl-shape:focus-visible{background:var(--bg3);color:var(--tx)}
+.wl-shape>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wl-shape-pic{flex:0 0 22px;display:grid;place-items:center;width:22px;height:22px}
+.wl-shape-pic img{width:22px;height:22px;object-fit:contain}
+.wl-shape-pic svg{width:16px;height:16px;stroke:var(--tx3);fill:none;stroke-width:1.6}
+:is(.wl-tile,.wl-shape,.wl-link,.wl-x):focus-visible{box-shadow:inset 0 0 0 1.5px var(--ac)}
+.wl-tile.is-primary:focus-visible{box-shadow:inset 0 0 0 1.5px #fff}
+/* recent files: a card a file. The cards scroll under the head; the row of
+   cards fades at an edge that has more beyond it. */
+.wl-recents-head{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;min-height:22px;margin:22px 0 10px}
+.wl-recents-head .wl-label{margin:0}
+#welcome-recents-clear{all:unset;box-sizing:border-box;align-items:center;height:22px;padding:0 8px;margin-right:-8px;border-radius:6px;font-size:12px;color:var(--tx3);cursor:pointer}
+#welcome-recents-clear:hover,#welcome-recents-clear:focus-visible{color:var(--er);background:var(--er-tint-10)}
+.wl-recents{flex:1 1 auto;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:max-content;align-content:start;gap:12px;padding-bottom:20px;scrollbar-width:none}
+.wl-recents::-webkit-scrollbar{display:none}
+.wl-recents.more-below{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 30px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 30px),transparent)}
+.wl-recents.more-above{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 24px);mask-image:linear-gradient(to bottom,transparent,#000 24px)}
+.wl-recents.more-above.more-below{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 24px,#000 calc(100% - 30px),transparent);mask-image:linear-gradient(to bottom,transparent,#000 24px,#000 calc(100% - 30px),transparent)}
+.welcome-recent{position:relative;display:flex;flex-direction:column;min-width:0;border-radius:10px;background:var(--bg2);color:var(--tx);overflow:hidden;cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
+.welcome-recent:hover,.welcome-recent:focus-visible{background:var(--bg3)}
+.welcome-recent:focus-visible{outline:none;box-shadow:inset 0 0 0 1.5px var(--ac)}
+.welcome-recent .wr-thumb{position:relative;flex:0 0 auto;aspect-ratio:16/10;display:grid;place-items:center;background:var(--bg);overflow:hidden}
+.welcome-recent .wr-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;transition:transform 260ms var(--ease-out)}
+.welcome-recent:hover .wr-thumb img{transform:scale(1.03)}
+.welcome-recent .wr-noimg{font-size:12px;letter-spacing:.1em;color:var(--tx3)}
+.welcome-recent .wr-tag{position:absolute;left:8px;top:8px;display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:10px;background:var(--ac);color:#fff;font-size:11px}
+.welcome-recent .wr-meta{display:flex;flex-direction:column;gap:3px;min-width:0;padding:9px 11px 10px}
+.welcome-recent .wr-name{font-size:12.5px;line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-recent .wr-sub{display:flex;align-items:center;gap:6px;font-size:11px;line-height:14px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.welcome-recent .wr-sub span+span:not(.wr-age)::before{content:'·';margin-right:6px}
+.welcome-recent .wr-age{margin-left:auto}
+.welcome-recent .wr-del{position:absolute;right:6px;top:6px;width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;background:rgba(16,16,16,.72);color:var(--tx2);opacity:0;cursor:pointer;
+  transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.welcome-recent .wr-del svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2}
+.welcome-recent:hover .wr-del,.welcome-recent:focus-within .wr-del{opacity:1}
+.welcome-recent .wr-del:hover{background:var(--er);color:#fff}
+/* the file opened last: two columns wide, as tall as the cards beside it */
+.welcome-recent.is-resume{grid-column:span 2}
+.welcome-recent.is-resume .wr-thumb{flex:1 1 auto;aspect-ratio:auto;min-height:112px}
+.wl-recents-none{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:190px;border:1px dashed var(--bd2);border-radius:12px;color:var(--tx2);font-size:13px;text-align:center}
+.wl-recents-none svg{width:22px;height:22px;stroke:var(--tx3);fill:none;stroke-width:1.6;margin-bottom:6px}
+.wl-recents-none span{font-size:12px;color:var(--tx3)}
+.wl-recents-empty{flex:0 0 auto;font-size:12px;color:var(--tx3);padding:2px 0 20px}
+/* a file held over the window */
+.wl-dropveil{position:absolute;inset:0 12px 10px;z-index:4;display:none;place-items:center;border:1.5px dashed var(--ac);border-radius:12px;background:color-mix(in srgb,var(--surface-pop) 90%,var(--ac));color:var(--tx);font-size:14px;pointer-events:none}
+.wl-stage.drag-over .wl-dropveil{display:grid}
+.wl-foot{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:14px;height:44px;padding:0 24px;border-top:1px solid rgba(255,255,255,.06);font-size:11.5px;color:var(--tx3);white-space:nowrap;overflow:hidden}
+.wl-foot>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wl-foot kbd{font:inherit;color:var(--tx2);background:var(--bg3);border-radius:4px;padding:1px 5px;margin-right:6px}
+#welcome-load-pane{padding:6px 24px 20px}
+@media (max-width:860px){.wl-start,.wl-recents{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.wl-nav .wl-link:first-child{display:none}.wl-tile kbd{display:none}}
 /* ── Save scene ─────────────────────────────────────────────────────────── */
 .sv-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .sv-sum>div{padding:9px 10px;border-radius:8px;background:rgba(255,255,255,.035);min-width:0}
@@ -2796,6 +2706,223 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .sv-note{margin-left:8px;font-size:var(--fs-11);color:var(--tx3)}
 /* on a short viewport the controls matter more than the clip */
 @media (max-height:640px){.cmd-hero{display:none}.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:0;padding:10px 40px 8px 12px}}
+/* ── Number fields: one size ────────────────────────────────────────────────
+   Every field a number is typed or dragged in is the same height and wide
+   enough for its longest value, and it is a field to look at: a box, not bare
+   digits. A field grows with what is in it instead of cutting it off.
+   --num-h  height of every number field
+   --num-w  the least width of a slider's value
+   --num-px room left and right of the digits */
+:root{--num-h:28px;--num-w:60px;--num-px:9px}
+/* the value on a slider's line (the materials dock has its own pill, below) */
+:is(.scrub:not(.mat-row-val,.mat-row-val *) .scrub-value,#_a#_b),
+:is(.scrub:not(.mat-row-val,.mat-row-val *) .scrub-input,#_a#_b){box-sizing:border-box;width:auto;min-width:var(--num-w);max-width:132px;height:var(--num-h);
+  padding:calc(var(--num-drop)*2) var(--num-px) 0;border:1px solid var(--bd);border-radius:var(--r-sm,6px);background:var(--bg3);white-space:nowrap;
+  transition:border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+:is(.scrub:not(.mat-row-val,.mat-row-val *) .scrub-value,#_a#_b):hover{border-color:var(--bd2);background:var(--bg3)}
+:is(.scrub:not(.mat-row-val,.mat-row-val *) .scrub-input,#_a#_b){width:var(--num-w);outline:0;border-color:var(--ac)}
+@supports (field-sizing:content){
+  :is(.scrub:not(.mat-row-val,.mat-row-val *) .scrub-input,#_a#_b){width:auto;field-sizing:content}
+  :is(.size-field:not(.cmd-num *) input,#_a#_b){width:auto;min-width:34px;max-width:132px;field-sizing:content}
+  :is(.size-field.budget-field input,#_a#_b){min-width:58px}
+  :is(.align-head .size-field input,#_a#_b){min-width:38px}
+}
+.scrub:not(.mat-row-val,.mat-row-val *) .scrub-head{min-height:var(--num-h)}
+.scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs{gap:6px}
+/* a number in a row of a command panel, and a Shape parameter */
+:is(.cmd-num .size-field,#_a#_b){width:116px;height:var(--num-h);padding:0 var(--num-px)}
+:is(.prim-val-wrap,#_a#_b){width:104px;height:var(--num-h);padding:0 var(--num-px)}
+.prim-row{min-height:var(--num-h)}
+.align-head .size-field{height:var(--num-h);padding:0 var(--num-px)}
+/* materials dock: the same height for its value pill */
+.mat-row-val .scrub-rhs{height:24px;padding:0 10px}
+/* position, rotation and scale: the − and + stand over the ends of the field
+   and show only while the pointer is on it, so the number has the whole
+   width (−1091.000 used to be cut to −1091) */
+#transform-panel .tform-num{box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;align-content:flex-start;height:var(--num-h)}
+#transform-panel .tform-num .tform-input{box-sizing:border-box;flex:1 1 0;width:auto;min-width:0;height:calc(var(--num-h) - 2px);text-align:right;padding:0 2px}
+/* the unit stands after the number, in the row, not on top of it. When the
+   number is too long for both, the unit drops to a second line that the
+   field does not show: it is the unit that gives way, never the digits */
+#transform-panel .tform-num .tform-unit{position:static;transform:none;flex:0 0 auto;white-space:nowrap;padding-right:5px}
+#transform-panel .tform-num .tform-unit:empty{padding-right:4px}
+@supports (field-sizing:content){#transform-panel .tform-num .tform-input{flex:1 0 auto;max-width:calc(100% - 4px);field-sizing:content}}
+#transform-panel .tform-num .tform-step{position:absolute;top:0;bottom:0;z-index:1;width:16px;opacity:0;background:var(--bg2);transition:opacity var(--dur-fast) var(--ease-out)}
+#transform-panel .tform-num .tform-step[data-step="-"]{left:0}
+#transform-panel .tform-num .tform-step[data-step="+"]{right:0}
+#transform-panel .tform-num:hover .tform-step:not(:disabled){opacity:1}
+#transform-panel .tform-num:hover .tform-unit{visibility:hidden}      /* (the + stands where the unit is) */
+/* ── Transform: a floating card ────────────────────────────────────────────
+   It used to be a strip docked to the foot of the left sidebar. Now it is a
+   card of the same surface as the command panels, standing clear of the
+   sidebar's edges; it rises into place and fades in. It still takes its own
+   room under the tree, so it covers no rows and not the tree's scrollbar. */
+#transform-panel{box-sizing:border-box;margin:0 6px;border:0;border-radius:var(--surface-pop-r);background:var(--surface-pop);
+  box-shadow:var(--surface-shadow),var(--surface-ring);max-height:0;opacity:0;transform:translateY(14px) scale(.985);transform-origin:50% 100%;
+  transition:max-height 280ms cubic-bezier(.32,.72,0,1),margin 280ms cubic-bezier(.32,.72,0,1),transform 280ms cubic-bezier(.32,.72,0,1),opacity 160ms linear}
+#transform-panel.show{max-height:240px;margin:6px;opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){#transform-panel{transition:none}}
+#transform-panel .tform-head{padding:10px 10px 8px 12px;font-size:var(--fs-12);font-weight:var(--fw-medium);text-transform:none;letter-spacing:0;color:var(--tx-control-hover)}
+#transform-panel .tform-head .tform-title svg{width:14px;height:14px;stroke-width:1.8;color:var(--tx3)}
+#transform-panel .tform-grid{grid-template-columns:14px 1fr 1fr 1fr;padding:0 10px 10px;gap:6px}
+#transform-panel .tform-col-label{font-size:var(--fs-11);font-weight:var(--fw-regular);text-transform:none;letter-spacing:0;padding-bottom:0}
+#transform-panel .tform-row-label{font-weight:var(--fw-regular)}
+#transform-panel .tform-num{background:rgba(0,0,0,.28)}
+#transform-panel .tform-num .tform-step{background:color-mix(in srgb,var(--surface-pop) 72%,#000)}
+/* ── Fasteners panel ───────────────────────────────────────────────────────
+   The three kinds as switches under the main button, and what was found as a
+   short list: a row per kind, its thread sizes on the right. A click on a
+   row narrows the selection to that kind. */
+.fa-kinds{display:flex;flex-direction:column;gap:2px;margin-top:10px}
+:is(.fa-kinds .toggle,#_a#_b){padding:4px 0;border-top:0;font-size:var(--fs-12);color:var(--tx2);font-weight:var(--fw-regular)}
+:is(.fa-kinds .toggle>span:first-child,#_a#_b){color:var(--tx2);font-weight:var(--fw-regular)}
+.fa-list{display:flex;flex-direction:column;gap:2px;margin:0 -8px 10px}
+.fa-list[hidden]{display:none}
+.fa-row{all:unset;box-sizing:border-box;display:flex;align-items:baseline;gap:8px;min-height:26px;padding:5px 8px;border-radius:var(--r-sm,6px);cursor:pointer;font-size:var(--fs-12);color:var(--tx-control)}
+.fa-row:hover,.fa-row:focus-visible{background:rgba(255,255,255,.05);color:var(--tx-control-hover)}
+.fa-row.is-on{background:rgba(255,255,255,.09);color:var(--tx-control-hover)}
+.fa-row>b{flex:0 0 auto;min-width:3ch;text-align:right;font-weight:var(--fw-regular);font-variant-numeric:tabular-nums;color:var(--tx-control-hover)}
+.fa-row>span{flex:0 0 auto}
+.fa-row>small{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
+/* ── Smart optimise (right sidebar, top of Reduce) ───────────────────────── */
+.smart-card .toggle{padding:0;border-top:0}
+:is(.smart-card>.toggle,.smart-card>.toggle>span:first-child,#_a#_b){font-size:var(--fs-12);color:var(--tx2);font-weight:var(--fw-regular)}
+.smart-card .cmd-adv{margin-top:0}
+.smart-card .cmd-num[aria-disabled="true"]{opacity:.45;pointer-events:none}
+.smart-card .cmd-num>.cs-wrap,.smart-card .cmd-num>select{flex:0 0 104px;width:104px}
+.smart-info{margin:0;line-height:1.45}
+.smart-info:empty{display:none}
+/* ── Right sidebar: cards slide open and shut ──────────────────────────────
+   (_wireSectionSlide in app-v2.js plays it; the arrow turns with it.) While a
+   card is part-way, its body is shorter than what is in it. A body that is a
+   column would squeeze its rows to fit and let them go at the end; they keep
+   their size instead, and the body's edge uncovers them. */
+#sidebar-right .section-b.is-sliding{min-height:0}
+#sidebar-right .section-b.is-sliding>*{flex-shrink:0!important}
+#sidebar-right .section-h .chev{transition:transform 260ms cubic-bezier(.32,.72,0,1),color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+@media (prefers-reduced-motion:reduce){#sidebar-right .section-h .chev{transition:none}}
+/* ── Heavy parts: tick rows ────────────────────────────────────────────────
+   A click on a row ticks it (its rank gives way to the tick box), another
+   click takes the tick off, and the button under the list deletes the ticked
+   rows. The box shows empty under the pointer, so it can be found. */
+.off-check{position:absolute;left:12px;top:9.5px;width:14px;height:14px;box-sizing:border-box;border-radius:4px;border:1.5px solid var(--tx3);opacity:0;pointer-events:none;
+  transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.off-check::after{content:'';position:absolute;left:3.2px;top:.2px;width:3.6px;height:7.4px;border:solid var(--tx-on-accent,#fff);border-width:0 1.7px 1.7px 0;transform:rotate(45deg);opacity:0}
+.off-row:hover .off-check{opacity:1}
+.off-row.selected .off-check{opacity:1;background:var(--ac);border-color:var(--ac)}
+.off-row.selected .off-check::after{opacity:1}
+.off-row:hover .off-rank,.off-row.selected .off-rank{visibility:hidden}
+#btn-off-delete{width:100%;margin-top:10px}
+#offenders-body:has(.off-list:empty) #btn-off-delete{display:none}
+/* ── A button that cannot be pressed is grey ───────────────────────────────
+   The accent is for what can be done now. A primary button that is switched
+   off used to be the same blue at 40%, which read as a blue button behind
+   glass; it takes the plain surface and the "off" text colour instead. */
+:is(.btn.primary,.tbtn.primary,#_a#_b):is(:disabled,[aria-disabled="true"]),
+:is(#vp-cmd-host .section-cmd.has-hero [data-cmd-primary],#_a#_b):is(:disabled,[aria-disabled="true"]){background:var(--bg3)!important;border-color:transparent!important;
+  color:var(--tx-control-off)!important;box-shadow:none!important;opacity:1;cursor:default}
+:is(.btn.primary,.tbtn.primary,#_a#_b):is(:disabled,[aria-disabled="true"]) :is(span,svg,i),
+:is(#vp-cmd-host .section-cmd.has-hero [data-cmd-primary],#_a#_b):is(:disabled,[aria-disabled="true"]) :is(span,svg,i){color:inherit!important}
+/* ── Library drawer ───────────────────────────────────────────────────────
+   The library is a drawer along the bottom of the viewport, between the
+   sidebars, like the materials dock (it used to take the tree's place in the
+   left sidebar). Drag its top edge for the height. The bottom toolbar, the
+   tips, the tool pill and an open command panel ride up with it. */
+:root{--lib-dock-h:316px}
+#vp-library-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--lib-dock-h),80vh);
+  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:#1a1a1a;box-shadow:0 -8px 24px -16px rgba(0,0,0,.5);
+  z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform .2s var(--ease-out),visibility 0s linear .2s;
+  font:11.5px/1.5 var(--font-sans)}
+#vp-library-pop.show{transform:translateY(0);visibility:visible;transition:transform .2s var(--ease-out),visibility 0s}
+body.lib-dock-open .vpc.tr{bottom:calc(min(var(--lib-dock-h),80vh) + 12px)}
+body.lib-dock-open .vpc.br{bottom:calc(min(var(--lib-dock-h),80vh) + 10px)}
+body.lib-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--lib-dock-h),80vh) / 2)}
+body.lib-dock-open .vp-cmd-host{bottom:calc(min(var(--lib-dock-h),80vh) + 12px);max-height:calc(100% - min(var(--lib-dock-h),80vh) - 24px)}
+body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) + 58px);max-height:calc(100% - min(var(--lib-dock-h),80vh) - 70px)}
+/* its head: title, search, the size fasteners come out in, a line of help, close */
+#vp-library-pop .mat-dock-search{flex:0 1 200px}
+#vp-library-pop .lib-opts{padding:0;gap:8px;white-space:nowrap}
+#vp-library-pop .lib-opts>span{flex:0 0 auto}
+#vp-library-pop .lib-foot{flex:0 1 auto;min-width:0;padding:0;border:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* its shelves: one under the other, each as wide as the drawer */
+#vp-library-pop #lib-list{padding:2px 14px 18px}
+#vp-library-pop .lib-shelf{padding-top:20px}
+#vp-library-pop .lib-sec:first-child>.lib-shelf{padding-top:12px}
+#vp-library-pop .lib-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+#vp-library-pop .lib-sec[data-shelf="Recently used"] .lib-grid{grid-template-columns:repeat(auto-fill,58px);gap:6px}
+/* In a narrow drawer the head gives things up in turn, by the drawer's own
+   width (the window's says little: both sidebars take from it): the line of
+   help, the word "Fasteners", the word "length", the title, and last the length itself. */
+/* The drawer's body: the shelves, and on the right the inspector for the
+   picked part: a view of it beside its name, what it weighs, its parameters
+   (the same rows as Shape parameters) and the button that adds it. */
+:root{--lib-insp-w:470px}
+.lib-dock-body{flex:1 1 auto;min-height:0;display:flex}
+#vp-library-pop #lib-list{flex:1 1 auto;min-width:0}
+.lib-inspector{flex:0 0 var(--lib-insp-w);min-width:0;min-height:0;display:flex;gap:14px;padding:12px 14px 14px;border-left:1px solid var(--surface-line);background:rgba(0,0,0,.16)}
+.lib-inspector .li-view{flex:0 0 44%;min-width:0;border-radius:10px;overflow:hidden;background:#1d1d1f;touch-action:none}
+.lib-inspector .li-view canvas{display:block;width:100%;height:100%}
+.lib-inspector:is(.is-empty,.no-view) .li-view{display:none}
+.lib-inspector .li-side{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px}
+.lib-inspector .li-top{flex:0 0 auto;display:flex;align-items:flex-start;gap:8px}
+.lib-inspector .li-id{flex:1 1 auto;min-width:0}
+.lib-inspector .li-name{color:var(--tx);font-size:var(--fs-13);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-inspector .li-facts{margin-top:2px;color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-inspector .li-fav.active{color:#e8b64c}
+.lib-inspector .li-fav.active svg{fill:currentColor}
+.lib-inspector .li-params{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:none}
+.lib-inspector .li-params::-webkit-scrollbar{display:none}
+.lib-inspector .li-params .prim-section{margin-top:0;padding-top:0;border-top:0}
+.lib-inspector .li-actions{flex:0 0 auto;display:flex;gap:6px}
+.lib-inspector .li-actions .btn{flex:1 1 auto;justify-content:center;height:var(--btn-h-md,32px)}
+.lib-inspector .btn.primary{background:var(--ac);border-color:transparent;color:#fff}
+.lib-inspector .btn.primary:hover{background:color-mix(in srgb,var(--ac) 88%,#fff)}
+.lib-inspector .li-empty{margin:auto 0;color:var(--tx3);font-size:var(--fs-12);line-height:1.55}
+/* the picked tile: an accent ring and a bright name */
+.lib-item.is-picked{color:var(--tx);box-shadow:0 0 0 1.5px var(--ac)}
+/* a shelf's heading can carry a command (Clear, on the recently used) */
+.lib-shelf{display:flex;align-items:center;gap:10px}
+.lib-shelf-act{padding:0;border:0;background:none;color:var(--tx3);font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}
+.lib-shelf-act:hover{color:var(--tx)}
+/* small tiles: more of them at once */
+#lib-list.is-small .lib-sec:not([data-shelf="Recently used"]) .lib-grid{grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px}
+#lib-list.is-small .lib-sec:not([data-shelf="Recently used"]) .lib-name{padding:4px 4px 7px;font-size:var(--fs-10,10.5px)}
+#lib-list.is-small .lib-sec:not([data-shelf="Recently used"]) .lib-pic img{inset:8px 10px 2px;width:calc(100% - 20px);height:calc(100% - 10px)}
+/* large or small tiles: the same two-way switch as the materials' grid / list */
+.lib-view-toggle{display:inline-flex;align-items:center;flex:0 0 auto;box-sizing:border-box;height:var(--btn-h-sm);padding:2px;gap:2px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm)}
+.lib-view-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:20px;padding:0;background:transparent;border:0;border-radius:4px;color:var(--tx3);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.lib-view-btn:hover{color:var(--tx2);background:var(--s2)}
+.lib-view-btn.active{color:var(--tx-control-hover);background:var(--s3)}
+.lib-view-btn :is(i,svg){width:11px;height:11px;stroke-width:2}
+@container libdock (max-width:900px){.lib-inspector{flex-basis:min(var(--lib-insp-w),330px)}.lib-inspector .li-view{display:none}}
+@container libdock (max-width:640px){.lib-inspector,#lib-insp-grip{display:none}#vp-library-pop .lib-view-toggle{display:none}}
+@container libdock (max-width:500px){#vp-library-pop .cs-wrap:has(#lib-shelf){display:none}}
+#vp-library-pop{container:libdock / inline-size}
+#vp-library-pop .lc-h{min-width:0}
+#vp-library-pop .mat-dock-search{min-width:84px}
+@container libdock (max-width:1060px){#vp-library-pop .lib-foot{display:none}}
+@container libdock (max-width:700px){#vp-library-pop .lib-opts>span{display:none}}
+@container libdock (max-width:440px){#vp-library-pop .lib-opts .size-field>span:first-child{display:none}}
+@container libdock (max-width:400px){#vp-library-pop .lc-title{display:none}}
+@container libdock (max-width:340px){#vp-library-pop .lib-opts .size-field{display:none}}
+/* ── Snap pill ─────────────────────────────────────────────────────────────
+   Beside the Cam pill while snap is on, with the step a drag snaps to. It
+   stands outside the row (to the right of it), so the Cam pill does not move
+   when Shift goes down and up. */
+#vp-snap-pill{position:absolute;left:calc(100% + var(--space-xs));top:0;white-space:nowrap;cursor:default;pointer-events:none;font-variant-numeric:tabular-nums}
+
+/* Measure is yellow everywhere: toolbar button, mode pill, picked card. Same
+   weight trick as the other pills, so these outrank the generic rules. */
+:is(.vpc .vpb#msr-toggle.active,.vpc:is(.tr,.tl) .vpb#msr-toggle.active,#_a#_b){background:rgba(251,191,36,.18);color:#fbbf24;box-shadow:inset 0 0 0 1px rgba(251,191,36,.55)}
+:is(.vpc .vpb#msr-toggle.active,.vpc:is(.tr,.tl) .vpb#msr-toggle.active,#_a#_b):hover{background:rgba(251,191,36,.28);color:#fbbf24}
+:is(#vp-measure-pill.vp-pill,#_a#_b){background:rgba(251,191,36,.22);color:#fbbf24;box-shadow:inset 0 0 0 1px rgba(251,191,36,.45)}
+:is(#vp-measure-pill.vp-pill,#_a#_b):hover{background:rgba(251,191,36,.34);color:#fbbf24}
+#vp-measure-pill.vp-pill[hidden]{display:none}
+#vp-measure-pill.vp-pill :is(.vp-pill-icon,.vp-pill-label){color:#fbbf24}
+.msr-row{cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.msr-row:hover{border-color:rgba(251,191,36,.35)}
+.msr-row.sel{border-color:#fbbf24;background:rgba(251,191,36,.12)}
+.msr-row.sel .msr-kind{color:#fbbf24}
 </style>
 </head>
 <body>
@@ -2852,7 +2979,6 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
         </div>
       </div>
     </div>
-    <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
     <div class="export-wrap" id="file-menu-wrap">
       <button class="tbtn" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="Menu (New / Open / Import / Save / Scene settings)" aria-label="Menu"><i data-lucide="menu"></i><span class="tbtn-label">Menu</span></button>
       <div id="file-menu" class="export-menu" role="menu" style="min-width:260px">
@@ -2871,11 +2997,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
         <button class="export-menu-item" role="menuitem" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
       </div>
     </div>
-    <!-- What the left sidebar shows: the parts of the scene, or the object library. -->
-    <div class="side-switch" id="side-switch" role="tablist" aria-label="Left sidebar">
-      <button type="button" role="tab" data-side="tree" class="active" title="Parts: everything in the scene"><i data-lucide="list-tree"></i></button>
-      <button type="button" role="tab" data-side="lib" title="Library: shapes, fasteners, pipes, profiles and machine parts to add"><i data-lucide="shapes"></i></button>
-    </div>
+    <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
     <div class="divider"></div>
     <button class="tbtn" id="btn-undo" disabled><i data-lucide="undo-2"></i>Undo</button>
     <button class="tbtn" id="btn-redo" disabled><i data-lucide="redo-2"></i>Redo</button>
@@ -2885,7 +3007,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
          is as saved; a click on the icon saves. -->
     <div class="doc-tabs" id="doc-tabs">
       <div class="doc-tab active" id="doc-tab">
-        <button type="button" class="doc-tab-lead" id="doc-save" title="Save the scene (Ctrl+S)" aria-label="Save the scene"><i data-lucide="box"></i><span class="doc-unsaved" id="doc-unsaved" hidden></span></button>
+        <button type="button" class="doc-tab-lead" id="doc-save" title="Save the scene (Ctrl+S)" aria-label="Save the scene"><span class="doc-unsaved is-empty" id="doc-unsaved"></span></button>
         <span class="doc-tab-name" id="sb-status">Untitled scene</span>
         <button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button>
       </div>
@@ -2911,16 +3033,6 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
   </header>
 
   <aside id="sidebar-left" class="panel">
-    <div id="lib-panel" hidden>
-      <div class="tree-search"><i data-lucide="search"></i><input type="text" id="lib-filter" placeholder="Search the library…" autocomplete="off"></div>
-      <div class="lib-opts" title="Screws, nuts and washers are added in this size">
-        <span>Fasteners</span>
-        <select id="lib-size" class="mac-sel"></select>
-        <label class="size-field"><span>length</span><input type="text" inputmode="decimal" id="lib-length" value="24"><span>mm</span></label>
-      </div>
-      <div id="lib-list"></div>
-      <div class="lib-foot">Click to add: onto the selected part, or on the floor at the origin. Drag into the view to place it.</div>
-    </div>
     <div id="resize-l" class="resize-handle" title="Drag to resize"></div>
     <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts…"><button type="button" class="tree-search-clear" id="tree-filter-clear" title="Clear the search" hidden><i data-lucide="x"></i></button></div>
     <div class="tree-toolbar">
@@ -2996,6 +3108,16 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
           <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
           <span class="vp-pill-label">Cam</span>
         </button>
+        <button id="vp-measure-pill" class="vp-pill vp-pill-mode vp-pill-measure" type="button" hidden title="Measure mode: click two points on the model. Click to leave (M, Esc)">
+          <i class="vp-pill-icon" data-lucide="ruler" aria-hidden="true"></i>
+          <span class="vp-pill-label">Measure</span>
+          <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
+        </button>
+        <!-- Snap is on (Shift is held and a gizmo is on a part): what a drag snaps to. -->
+        <div id="vp-snap-pill" class="vp-pill vp-pill-mode" hidden role="status" aria-live="polite" title="Snap is on while Shift is held. Turn the wheel during a drag to change the step.">
+          <i class="vp-pill-icon" data-lucide="magnet" aria-hidden="true"></i>
+          <span class="vp-pill-label" id="vp-snap-label">Snap</span>
+        </div>
         <div id="vp-view-pill-menu" class="vp-pill-menu" role="menu">
           <button class="vp-pill-item active" type="button" data-view="persp" role="menuitem"><span class="vp-pill-item-lbl">Cam</span><kbd class="vp-pill-item-kbd" data-kbd="1"></kbd></button>
           <button class="vp-pill-item" type="button" data-view="top" role="menuitem"><span class="vp-pill-item-lbl">Top</span><kbd class="vp-pill-item-kbd" data-kbd="2"></kbd></button>
@@ -3013,8 +3135,10 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
         <button class="vpb" id="tg-fill-holes" data-cmd-toggle="fillholes" title="Fill holes (P)"><i data-lucide="circle-off"></i></button>
         <button class="vpb" id="tg-smart-fit" data-cmd-toggle="smartfit" title="Smart fit (Ctrl+B)"><i data-lucide="wand-2"></i></button>
         <button class="vpb" id="tg-select-hidden" data-cmd-toggle="selhidden" title="Select hidden parts"><i data-lucide="eye-off"></i></button>
+        <button class="vpb" id="tg-fasteners" data-cmd-toggle="fasteners" title="Fasteners: select bolts, nuts and washers"><i data-lucide="bolt"></i></button>
         <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
         <div class="vpb-sep"></div>
+        <button class="vpb" id="tg-library" title="Library (Shift+L)"><i data-lucide="shapes"></i></button>
         <button class="vpb" id="tg-materials" title="Materials (Shift+M)"><i data-lucide="palette"></i></button>
         <button class="vpb" id="tg-settings" title="Viewport settings"><i data-lucide="sliders-horizontal"></i></button>
         <div class="vpb-sep"></div>
@@ -3100,16 +3224,16 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
       <div class="vp-cmd-host" id="vp-cmd-host">
     <div class="section section-cmd has-hero" data-cmd="fillholes" hidden>
       <figure class="cmd-hero" aria-label="Fill holes at work: the holes in a flat face close a few at a time, and the raised ring stays">
-        <video src="assets/help/fill-holes.webm" poster="assets/help/fill-holes-poster.webp" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+        <video src="assets/help/fill-holes.webm?v=2" poster="assets/help/fill-holes-poster.webp?v=2" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
       </figure>
       <div class="section-h"><span>Fill holes</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-lede">
           Closes holes and flattens lettering on flat faces, leaving the rest untouched.
         </div>
-        <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
-          <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Fill holes</span></button>
+        <div class="btn-row" style="grid-template-columns:auto minmax(0,1fr)">
           <label class="size-field" title="Largest hole to fill, measured across its widest point"><span>up to</span><input type="text" inputmode="decimal" id="fill-holes-size" value="12"><span>mm</span></label>
+          <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Fill holes</span></button>
         </div>
         <div class="field-help" id="fill-holes-info">Bolt holes, slots, pockets and lettering in flat faces. Bosses, the bore of a washer or nut, and openings into a cavity are left alone.</div>
         <details class="cmd-adv" id="fh-adv">
@@ -3133,7 +3257,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 
     <div class="section section-cmd has-hero" data-cmd="smartfit" hidden>
       <figure class="cmd-hero" aria-label="Smart fit at work: a gear, a bearing housing and a bolt, tilted the same way in a row, each turning into the plain cylinder or box that fits it">
-        <video src="assets/help/smart-fit.webm?v=3" poster="assets/help/smart-fit-poster.webp?v=3" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+        <video src="assets/help/smart-fit.webm?v=4" poster="assets/help/smart-fit-poster.webp?v=4" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
       </figure>
       <div class="section-h"><span>Smart fit</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
@@ -3171,7 +3295,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 
     <div class="section section-cmd has-hero" data-cmd="selhidden" hidden>
       <figure class="cmd-hero" aria-label="Select hidden at work: a housing turns see-through and the gear and the screws inside it light up">
-        <video src="assets/help/select-hidden.webm" poster="assets/help/select-hidden-poster.webp" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+        <video src="assets/help/select-hidden.webm?v=2" poster="assets/help/select-hidden-poster.webp?v=2" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
       </figure>
       <div class="section-h"><span>Select hidden</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
@@ -3209,9 +3333,59 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Select hidden</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
+    <div class="section section-cmd has-hero" data-cmd="fasteners" hidden>
+      <figure class="cmd-hero" aria-label="Fasteners at work: on a bracket bolted to a plate, the bolts, the nuts and the washers light up and are taken away; the bracket and the plate stay">
+        <video src="assets/help/fasteners.webm" poster="assets/help/fasteners-poster.webp" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+      </figure>
+      <div class="section-h"><span>Fasteners</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div class="cmd-lede">
+          Finds bolts, screws, nuts and washers by their shape, whatever they are called, and selects them.
+        </div>
+        <div class="btn-row" style="grid-template-columns:auto minmax(0,1fr)">
+          <label class="size-field" title="The largest thread to look for. A bolt, nut or washer for a bigger thread is left alone."><span>up to M</span><input type="text" inputmode="decimal" id="fa-max" value="30"></label>
+          <button class="btn warn" id="btn-fa-run" data-cmd-primary title="Look at the shape of every visible part and select the fasteners. Nothing is deleted."><i data-lucide="bolt"></i>Select fasteners</button>
+        </div>
+        <div class="fa-kinds">
+          <div class="toggle" title="Hex bolts, socket screws, countersunk, button and pan heads, set screws, rivets: a round shank with a head"><span id="fa-bolts-lbl">Bolts and screws</span><label><input type="checkbox" id="fa-bolts" aria-labelledby="fa-bolts-lbl" checked><span class="switch"></span></label></div>
+          <div class="toggle" title="Hex, flange, square, cap and coupling nuts: six or four flats around a threaded hole"><span id="fa-nuts-lbl">Nuts</span><label><input type="checkbox" id="fa-nuts" aria-labelledby="fa-nuts-lbl" checked><span class="switch"></span></label></div>
+          <div class="toggle" title="Flat rings: plain, large and thick washers, shims"><span id="fa-washers-lbl">Washers</span><label><input type="checkbox" id="fa-washers" aria-labelledby="fa-washers-lbl" checked><span class="switch"></span></label></div>
+        </div>
+        <div class="field-help" id="fa-info">Bushings, bearings, O-rings, shafts and pipe fittings are told apart and left alone. Nothing is deleted until you press Delete.</div>
+        <div class="fa-list" id="fa-list" hidden></div>
+        <div class="btn-row" id="fa-after" hidden>
+          <button class="btn" id="btn-fa-isolate" title="Show only the selected parts, to check them (S)"><i data-lucide="focus"></i>Isolate</button>
+          <button class="btn danger" id="btn-fa-delete" title="Delete the selected parts. Can be undone."><i data-lucide="trash-2"></i>Delete</button>
+        </div>
+        <details class="cmd-adv" id="fa-adv">
+          <summary><span>Advanced</span></summary>
+          <div class="cmd-adv-b">
+            <div class="cmd-num" title="Where to look. Selection only checks just the selected parts."><span>Look in</span>
+              <div class="cmd-seg cmd-seg-sm" id="fa-scope" role="group" aria-label="Look in">
+                <button type="button" class="active" data-scope="all">Whole scene</button>
+                <button type="button" data-scope="sel">Selection</button>
+              </div>
+            </div>
+            <div class="cmd-num" title="Certain: a hex head, a key socket, a hex nut, a washer of standard proportions. Likely too: also plain two-cylinder screws and headed pins, which have the proportions of a fastener and nothing else to show for it."><span>How sure</span>
+              <div class="cmd-seg cmd-seg-sm" id="fa-sure" role="group" aria-label="How sure">
+                <button type="button" data-min="0.75">Certain</button>
+                <button type="button" class="active" data-min="0.6">Likely too</button>
+              </div>
+            </div>
+            <div class="toggle" title="Plain round bars up to the size limit: studs, dowel pins, threaded rods. Off by default, because a shaft and a roller are round bars too."><span id="fa-pins-lbl">Pins, studs and threaded rods</span><label><input type="checkbox" id="fa-pins" aria-labelledby="fa-pins-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Keep what is selected now and add the fasteners to it"><span id="fa-add-lbl">Add to the selection</span><label><input type="checkbox" id="fa-add" aria-labelledby="fa-add-lbl"><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Take a fastener only if the scene holds at least this many of the same shape and size. Fasteners come in sets; 1 takes single ones too."><span>Used at least</span><label class="size-field"><input type="text" inputmode="numeric" id="fa-uses" value="1"><span>times</span></label></div>
+            <div class="cmd-num" title="Leave the fasteners for threads below this alone. 0: no lower limit."><span>Smallest thread</span><label class="size-field"><span>M</span><input type="text" inputmode="decimal" id="fa-min" value="0"></label></div>
+            <button type="button" class="cmd-link" id="fa-reset">Reset to defaults</button>
+          </div>
+        </details>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Select fasteners</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
     <div class="section section-cmd has-hero" data-cmd="split" hidden>
       <figure class="cmd-hero" aria-label="Split at work: a bracket, its pin and two bolts that arrived as one mesh come apart into separate parts">
-        <video src="assets/help/split.webm" poster="assets/help/split-poster.webp" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+        <video src="assets/help/split.webm?v=2" poster="assets/help/split-poster.webp?v=2" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
       </figure>
       <div class="section-h"><span>Split</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
@@ -3352,6 +3526,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
       <div class="section-b" id="offenders-body">
         <div class="off-empty" style="color:var(--tx3);font-size:var(--fs-12);padding:4px 0">Load a model to see heavy parts.</div>
         <div class="off-list" id="offenders-list"></div>
+        <button class="btn danger" id="btn-off-delete" disabled title="Delete the ticked parts. Can be undone."><i data-lucide="trash-2"></i><span id="off-delete-label">Delete</span></button>
       </div>
     </div>
 
@@ -3463,6 +3638,33 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 
     <div class="side-group">Reduce</div>
 
+    <div class="section" id="smart-section">
+      <div class="section-h"><span>Smart optimise</span><span class="chev">▾</span></div>
+      <div class="section-b small-card smart-card">
+        <div class="cmd-lede">Every clean-up the scene needs, in one run. One undo takes it all back.</div>
+        <div class="cmd-seg" id="smart-level" role="group" aria-label="How far to go">
+          <button type="button" class="active" data-level="auto" title="The app picks the level from how heavy the scene is">Auto</button>
+          <button type="button" data-level="light" title="Only what cannot be seen: empty and broken parts, empty groups">Light</button>
+          <button type="button" data-level="balanced" title="Also removes hidden and very small parts, simplifies fasteners and halves the triangles">Balanced</button>
+          <button type="button" data-level="strong" title="Removes more small parts, fills holes and keeps a quarter of the triangles">Strong</button>
+        </div>
+        <div class="toggle" title="Off: the run only removes and tidies parts; the meshes that stay keep every triangle"><span id="smart-remesh-lbl">Reduce triangles</span><label><input type="checkbox" id="smart-remesh" aria-labelledby="smart-remesh-lbl" checked><span class="switch"></span></label></div>
+        <div class="cmd-num" id="smart-target-row" title="How many triangles the whole scene may have after the run (150000, 150k, 1.5m). The densest meshes give up the most."><span>Triangle target</span><label class="size-field"><input type="text" inputmode="numeric" id="smart-target" value="" aria-label="Triangle target"><span>tris</span></label></div>
+        <details class="cmd-adv" id="smart-adv">
+          <summary><span>Steps</span></summary>
+          <div class="cmd-adv-b">
+            <div class="toggle" title="Parts with no triangles, parts whose triangles have no area, and groups left with nothing in them"><span id="smart-clean-lbl">Remove empty and broken parts</span><label><input type="checkbox" id="smart-clean" aria-labelledby="smart-clean-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Parts that cannot be seen from outside the model, from any direction"><span id="smart-hidden-lbl">Remove parts hidden inside</span><label><input type="checkbox" id="smart-hidden" aria-labelledby="smart-hidden-lbl"><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Bolts, nuts and washers found by their shape. Simplify turns each into a plain cylinder; Delete removes them."><span>Bolts, nuts, washers</span><select id="smart-fast" class="mac-sel" aria-label="Bolts, nuts and washers"><option value="keep">Keep</option><option value="cyl">Simplify</option><option value="delete">Delete</option></select></div>
+            <div class="cmd-num" title="Parts whose box, corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone."><span>Remove parts under</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-small" value="0" aria-label="Remove parts smaller than, in percent of the model"><span>%</span></label></div>
+            <div class="toggle" title="Closes holes in flat faces, with the settings of the Fill holes panel"><span id="smart-holes-lbl">Fill holes</span><label><input type="checkbox" id="smart-holes" aria-labelledby="smart-holes-lbl"><span class="switch"></span></label></div>
+          </div>
+        </details>
+        <div class="field-help smart-info" id="smart-info"></div>
+        <button class="btn primary" id="btn-smart-run" title="Run every step that is switched on, on the whole scene. Lossy, but one undo takes the whole run back."><i data-lucide="sparkles"></i>Optimise</button>
+      </div>
+    </div>
+
     <div class="section">
       <div class="section-h"><span>Reduce triangles</span><span class="chev">▾</span></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
@@ -3549,6 +3751,39 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
     </div>
     <div class="mat-insp-grip" id="mat-insp-grip" title="Drag to resize · double-click to reset"></div>
     <aside class="mat-inspector" id="mat-inspector"></aside>
+  </div>
+</div>
+
+<!-- The library: a drawer along the bottom of the viewport, like the materials
+     dock. Its button on the bottom toolbar (tg-library, Shift+L) opens and
+     closes it; one drawer is open at a time. -->
+<div id="vp-library-pop" class="lib-dock" role="region" aria-label="Library">
+  <div class="mat-dock-grip" id="lib-dock-grip" title="Drag to resize · double-click to reset"></div>
+  <div class="lc-h mat-dock-h">
+    <div class="lc-title">Library</div>
+    <label class="mat-dock-search" title="Search the library by name or shelf"><i data-lucide="search"></i><input type="text" id="lib-filter" placeholder="Search…" autocomplete="off" spellcheck="false"></label>
+    <select id="lib-shelf" class="mac-sel" title="Show one shelf"></select>
+    <div class="lib-view-toggle" role="group" aria-label="Tile size">
+      <button type="button" class="lib-view-btn" data-lib-view="grid" title="Large tiles" aria-pressed="true"><i data-lucide="layout-grid"></i></button>
+      <button type="button" class="lib-view-btn" data-lib-view="small" title="Small tiles" aria-pressed="false"><i data-lucide="grid-3x3"></i></button>
+    </div>
+    <div class="lib-opts" title="Screws, nuts and washers are added in this size">
+      <span>Fasteners</span>
+      <select id="lib-size" class="mac-sel"></select>
+      <label class="size-field"><span>length</span><input type="text" inputmode="decimal" id="lib-length" value="24"><span>mm</span></label>
+    </div>
+    <div class="lc-spacer"></div>
+    <span class="lib-foot">Click to look · double-click or drag to add</span>
+    <button class="lc-icon-btn" id="lib-dock-close" title="Close (Shift+L)"><i data-lucide="x"></i></button>
+  </div>
+  <div class="lib-dock-body">
+    <div id="lib-list"></div>
+    <div class="mat-insp-grip" id="lib-insp-grip" title="Drag to resize · double-click to reset"></div>
+    <!-- The picked part: a view of it to turn, and its parameters before it is placed (app-v2.js: _libInspectorRender) -->
+    <aside class="lib-inspector is-empty" id="lib-inspector" aria-label="The picked part">
+      <div class="li-view" id="lib-view" title="Drag to turn · scroll to zoom · double-click for the first view"><canvas id="lib-preview"></canvas></div>
+      <div class="li-side" id="lib-side"></div>
+    </aside>
   </div>
 </div>
 
@@ -3928,71 +4163,48 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 </div>
 
 <div class="modal-bg" id="welcome-modal">
-  <div class="modal wl-modal" role="dialog" aria-labelledby="wl-heading" style="position:relative">
-    <button class="x" id="welcome-close" title="Close (Esc)" style="position:absolute;top:14px;right:14px;z-index:3">✕</button>
-    <!-- The cover: what the app does, in one loop (a dense mesh stepping down to a
-         simple one). It stays on top while a file loads, so the same screen is
-         the splash and the progress window. -->
-    <figure class="wl-cover">
-      <video src="assets/help/cover.webm" poster="assets/help/cover-poster.webp" width="1290" height="360" muted loop playsinline preload="auto" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
-      <figcaption class="wl-head">
-        <span class="wl-mark"><i data-lucide="zap"></i></span>
-        <div>
-          <div class="wl-title" id="wl-heading">MeshOptimiser <span class="wl-ver" id="wl-ver"></span></div>
-          <div class="wl-tag">Open, clean up and convert CAD and mesh files</div>
-        </div>
-      </figcaption>
-    </figure>
+  <div class="modal wl-modal" role="dialog" aria-labelledby="wl-heading">
+    <header class="wl-top">
+      <span class="wl-mark"><i data-lucide="zap"></i></span>
+      <div class="wl-title" id="wl-heading">MeshOptimiser <span class="wl-ver" id="wl-ver"></span></div>
+      <nav class="wl-nav">
+        <button class="wl-link" id="welcome-shortcuts" type="button">Keyboard shortcuts</button>
+        <button class="wl-link" id="welcome-settings" type="button" title="Settings, opening on the start-up options (this screen at start-up, the last file, fitting the view)">Settings</button>
+      </nav>
+      <button class="wl-x" id="welcome-close" type="button" title="Close (Esc)" aria-label="Close"><i data-lucide="x"></i></button>
+    </header>
     <div class="modal-b">
       <div id="welcome-pick-pane">
-        <div class="wl-cols">
-          <!-- left: start something -->
-          <div class="wl-col">
-            <div id="welcome-drop" class="wl-drop">
-              <i data-lucide="upload"></i>
-              <div class="wl-drop-title">Drop a file here</div>
-              <div class="wl-chips"><span>STEP</span><span>GLB</span><span>glTF</span><span>FBX</span><span>OBJ</span><span>3MF</span><span>STL</span></div>
-            </div>
+        <!-- the whole of this takes a dropped file -->
+        <div id="welcome-drop" class="wl-stage">
+          <div class="wl-search"><i data-lucide="search"></i><input type="text" id="welcome-recents-filter" placeholder="Search recent files" autocomplete="off" spellcheck="false" aria-label="Search recent files"></div>
 
-            <div class="wl-actions">
-              <button class="wl-act" id="welcome-pick"><i data-lucide="folder-open"></i><span>Open file…</span><kbd>Ctrl+O</kbd></button>
-              <button class="wl-act" id="welcome-import" type="button" title="Add a file to the scene that is already open"><i data-lucide="file-input"></i><span>Import into scene…</span><kbd>Ctrl+Shift+O</kbd></button>
-              <button class="wl-act" id="welcome-start-empty" type="button"><i data-lucide="file-plus"></i><span>New scene</span><kbd>Ctrl+N</kbd></button>
-            </div>
-
-            <div class="wl-label">Or start from a shape</div>
-            <div class="wl-shapes" id="welcome-shapes">
+          <div class="wl-label">Start</div>
+          <div class="wl-start">
+            <button class="wl-tile is-primary" id="welcome-pick" type="button"><i data-lucide="folder-open"></i><kbd>Ctrl+O</kbd><span class="wl-tile-t">Open file…</span><span class="wl-tile-s">or drop one anywhere here</span></button>
+            <button class="wl-tile" id="welcome-start-empty" type="button"><i data-lucide="file-plus"></i><kbd>Ctrl+N</kbd><span class="wl-tile-t">New scene</span><span class="wl-tile-s">Start with nothing</span></button>
+            <button class="wl-tile" id="welcome-import" type="button" title="Add a file to the scene that is already open"><i data-lucide="file-input"></i><kbd>Ctrl+Shift+O</kbd><span class="wl-tile-t">Import…</span><span class="wl-tile-s">Add to the open scene</span></button>
+            <div class="wl-shapes" id="welcome-shapes" aria-label="Start from a shape">
               <button class="wl-shape" data-shape="cube" title="New scene with a cube"><span class="wl-shape-pic"></span><span>Cube</span></button>
               <button class="wl-shape" data-shape="sphere" title="New scene with a sphere"><span class="wl-shape-pic"></span><span>Sphere</span></button>
               <button class="wl-shape" data-shape="cylinder" title="New scene with a cylinder"><span class="wl-shape-pic"></span><span>Cylinder</span></button>
               <button class="wl-shape" data-shape="torus" title="New scene with a torus"><span class="wl-shape-pic"></span><span>Torus</span></button>
             </div>
-
           </div>
 
-          <!-- right: pick up where you left off -->
-          <div class="wl-col">
-            <div id="welcome-resume"></div>
-            <div class="wl-recents-head">
-              <div class="wl-label">Recent files</div>
-              <div class="wl-search"><i data-lucide="search"></i><input type="text" id="welcome-recents-filter" placeholder="Filter…" autocomplete="off" aria-label="Filter recent files"></div>
-              <button id="welcome-recents-clear" title="Remove every entry from the recent files list" style="display:none;gap:5px;background:transparent;border:1px solid transparent;color:var(--tx3);cursor:pointer"><i data-lucide="trash-2" style="width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2"></i>Clear all</button>
-            </div>
-            <div id="welcome-recents" class="wl-recents"></div>
-            <div class="wl-recents-empty" id="welcome-recents-nomatch" style="display:none">No recent file matches.</div>
+          <div class="wl-recents-head">
+            <div class="wl-label">Recent</div>
+            <button id="welcome-recents-clear" type="button" title="Remove every entry from the recent files list" style="display:none">Clear all</button>
           </div>
+          <div id="welcome-recents" class="wl-recents"></div>
+          <div class="wl-recents-empty" id="welcome-recents-nomatch" style="display:none">No recent file matches.</div>
+
+          <div class="wl-dropveil" aria-hidden="true">Drop to open</div>
         </div>
 
         <div class="wl-foot">
-          <span><kbd>Ctrl+K</kbd> command palette<span class="wl-dot">·</span><button class="wl-link" id="welcome-shortcuts" type="button">Keyboard shortcuts</button><span class="wl-dot">·</span><button class="wl-link" id="welcome-settings" type="button">Settings</button></span>
-          <details class="wl-optd">
-            <summary class="wl-link">Options</summary>
-            <div class="wl-opts">
-              <label class="wl-opt" title="Frame the model in the viewport once it has loaded"><span>Fit view after loading</span><input type="checkbox" id="wl-opt-fit"><span class="switch"></span></label>
-              <label class="wl-opt" title="Show the last file at the top of this screen so it can be reopened in one click"><span>Offer to resume the last file</span><input type="checkbox" id="wl-opt-resume"><span class="switch"></span></label>
-              <label class="wl-opt" title="Show this screen when the app starts"><span>Show this screen at startup</span><input type="checkbox" id="wl-opt-boot"><span class="switch"></span></label>
-            </div>
-          </details>
+          <span>Opens STEP · GLB · glTF · FBX · OBJ · 3MF · STL</span>
+          <span><kbd>Ctrl+K</kbd>Search commands</span>
         </div>
       </div>
 

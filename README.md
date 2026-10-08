@@ -109,6 +109,7 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 | | |
 |---|---|
 | 🕳 **Fill holes** (`P`)         | Closes bolt holes, slots, pockets and engraved lettering in flat faces; leaves bosses, washer bores and cavity openings alone. Size limit in mm, watertight result, undoable |
+| 🔩 **Fasteners**                | Finds bolts, screws, nuts and washers by their shape, whatever they are called, and selects them to isolate or delete; bushings, bearings, O-rings and pipe fittings are left alone |
 | 🔻 **Decimate**                 | meshoptimizer simplifier — keeps normals, UVs and vertex colours; −25 … −90 % or a triangle target for the selection |
 | 📦 **Smart fit**                | Replace parts with the best low-poly proxy: box, oriented box or cylinder |
 | 🧽 **Clean-up**                 | Remove small, empty, duplicate and degenerate parts; delete empty groups; split fused meshes |
@@ -217,11 +218,13 @@ serve.py           local HTTP server + /api/convert endpoint
 index.html         WebGPU viewer shell
 app-v2.js          viewer logic (scene graph, picking, colour groups)
 holefill.js        hole filler (pure module, no dependencies)
+fasteners.js       fastener recogniser (pure module, no dependencies)
 mesh-worker.js     background worker for Fill holes and Decimate
 cloner.js          cloner (linear / grid / radial arrays)
 tests/
  ├── selftest.js         in-app regression suite (?selftest)
- └── holefill.test.mjs   hole filler on synthetic shapes (node)
+ ├── holefill.test.mjs   hole filler on synthetic shapes (node)
+ └── fasteners.test.mjs  fastener recogniser on built bolts, nuts, washers and look-alikes (node)
 vendor/
  ├── three/            three.js r172: the WebGPU build and the add-ons in use
  ├── three-mesh-bvh/   pick acceleration
@@ -310,6 +313,16 @@ node tests/holefill.test.mjs
 It builds plates, pockets, counterbores, engraved letters, a boss, a washer
 and a hollow box, runs the filler on them and checks that the result is
 closed, has the right volume, and is untouched where it should be.
+
+The fastener recogniser has one too:
+
+```bash
+node tests/fasteners.test.mjs
+```
+
+It builds bolts, screws, nuts and washers to the ISO sizes, turns and scales
+them, and checks that each is recognised with the right thread — and that
+bushings, bearings, O-rings, cable glands, shafts and boxes are not.
 
 ---
 

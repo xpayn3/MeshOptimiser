@@ -1,6 +1,7 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
 import { fillFlatHoles, applyHoleFill } from './holefill.js?v=9';
+import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // OBJ export uses our own streaming writer (_exportObjStreaming) to avoid
@@ -209,6 +210,8 @@ function _toastIsRoutine(title, msg, type) {
   return false;
 }
 function toast(title, msg='', type='info', dur=2400) {
+  // (a run of several tools reports once, at its end: see Smart optimise)
+  if (window.__moQuietToasts && type !== 'error') { try { Log.info('[step] ' + title + (msg ? ' — ' + msg : '')); } catch (_) {} return; }
   if (_toastIsRoutine(title, msg, type)) {
     try { Log.info('[done] ' + title + (msg ? ' — ' + msg : '')); } catch (_) {}
     return;
@@ -894,7 +897,19 @@ function logProgress(msg, kind='') {
   const lvl = kind === 'err' ? 'error' : kind === 'warn' ? 'warn' : kind === 'ok' ? 'success' : 'info';
   Log[lvl](msg, { tag: 'loader' });
 }
-function setStatus(s) { $('sb-status').textContent = s; try { _Tabs.report({ title: String(s) }); } catch (_) {} }
+function setStatus(s) { _tabNameSet($('sb-status'), s); try { _Tabs.report({ title: String(s) }); } catch (_) {} }
+// The name on a tab. Tabs are all one width, so a long name is cut in the
+// middle ("Menerga Co…HP.fbx"): it is written as two pieces, and only the
+// first one gives way (see .doc-tab-name in the stylesheet). The element's
+// text is still the whole name.
+function _tabNameSet(el, text) {
+  if (!el) return;
+  const s = String(text == null ? '' : text), cut = s.length > 16 ? s.length - 8 : s.length;
+  const a = document.createElement('span'), b = document.createElement('span');
+  a.className = 'dtn-a'; a.textContent = s.slice(0, cut);
+  b.className = 'dtn-b'; b.textContent = s.slice(cut);
+  el.replaceChildren(a, b);
+}
 
 // Paint the viewport's shortcut tips once the DOM is ready so the user sees
 // the default tips on load (before any selection / mode change fires).
@@ -921,7 +936,7 @@ function _updateVpHint() {
             [['F'], 'Fit view'], [['M'], 'Measure'], [['Right-click'], 'Menu'], [['Ctrl', 'K'], 'Commands']];
   } else {
     tips = [[['E'], gm === 'translate' ? 'Move (active)' : 'Move'], [['R'], gm === 'rotate' ? 'Rotate (active)' : 'Rotate'],
-            [['T'], gm === 'scale' ? 'Scale (active)' : 'Scale'], [['Q'], 'Hide gizmo'], [['Shift'], 'Snap while dragging'],
+            [['T'], gm === 'scale' ? 'Scale (active)' : 'Scale'], [['Q'], 'Hide gizmo'], [['Shift'], 'Snap while dragging'], [['Shift', 'Scroll'], 'Snap step'],
             [['F'], 'Frame selection'], [['S'], 'Isolate'], [['H'], 'Hide'], [['Ctrl', 'G'], 'Group'], [['Ctrl', 'D'], 'Duplicate'],
             [['Del'], 'Delete'], [['Esc'], 'Deselect']];
   }
@@ -999,8 +1014,24 @@ function _closeAllTopbarMenus(exceptId) {
 // Everything that changes visibility should go through here — setting
 // p.mesh.visible alone leaves instanced parts on screen (or gone for good).
 const _m4VisTmp = new THREE.Matrix4();
+// The selection's outline is drawn for the selected parts that can be seen.
+// Hiding or showing a selected part changes what that is, and many paths do
+// it (H, the eye in the tree, Show all, Isolate, a menu, an undo); not all of
+// them rebuilt the outline, so a hidden part kept one and a part shown again
+// had none. Two nets catch every path: the one setter below, and a check
+// after each rebuild of the tree (which every bulk action ends with) that
+// what is outlined is still what should be.
+function _selVisSig() {
+  let n = 0, h = 0;
+  for (const id of state.selected) { const p = getPart(id); if (p && !p.deleted && p.visible) { n++; h = (h * 31 + id) | 0; } }
+  return n + ':' + h;
+}
+function _selOutlineVerify() {
+  if (state._selDrawnSig !== undefined && state._selDrawnSig !== _selVisSig()) applySelectionColors();
+}
 function _setPartVisible(p, on) {
   if (!p) return;
+  if (!!p.visible !== !!on && state.selected && state.selected.has(p.partId)) applySelectionColors();     // (runs once, after the change)
   p.visible = !!on;
   if (p.mesh) p.mesh.visible = !!on;
   if (p.instancedMesh && p.instanceIndex >= 0) {
@@ -1394,6 +1425,8 @@ function _applyVisibility(pairs, extra) {
     items.push({ partId: p.partId, before, after: !!on });
   }
   if (items.length) { try { pushUndo({ type: 'vis', items, ...(extra || {}) }); } catch (_) {} }
+  // a selected part that was hidden or shown: its outline goes or comes with it
+  if (items.some(it => state.selected.has(it.partId))) { try { applySelectionColors(); } catch (_) {} }
   return items.length;
 }
 
@@ -1484,7 +1517,6 @@ function _snapshotTreeNodes(arr) {
     if (!el || el.dataset.renameWired) return;
     el.dataset.renameWired = '1';
     el.title = 'Double-click to rename the scene';
-    el.style.cursor = 'text';
     el.addEventListener('dblclick', () => {
       if (el.querySelector('input')) return;
       const current = (state.sceneName || el.textContent || '').trim();
@@ -1492,7 +1524,7 @@ function _snapshotTreeNodes(arr) {
       input.type = 'text';
       input.value = current;
       input.spellcheck = false;
-      input.style.cssText = 'all:unset;font:inherit;color:inherit;background:var(--s2);padding:0 var(--space-xs);border-radius:var(--r-2xs);min-width:8ch;max-width:32ch;';
+      input.style.cssText = 'all:unset;font:inherit;color:inherit;background:var(--s2);padding:0 var(--space-xs);border-radius:var(--r-2xs);box-sizing:border-box;flex:1 1 auto;min-width:0;width:100%;cursor:text;';
       el.textContent = '';
       el.appendChild(input);
       input.focus();
@@ -1505,11 +1537,11 @@ function _snapshotTreeNodes(arr) {
         if (save && next) {
           // Strip a trailing extension if user pasted a filename.
           state.sceneName = next.replace(/\.[^.]+$/, '');
-          el.textContent = state.sceneName;
+          _tabNameSet(el, state.sceneName);
           try { _Tabs.report({ title: state.sceneName }); } catch (_) {}
           try { _scenePropsSoon(); } catch (_) {}
         } else {
-          el.textContent = current || 'Untitled scene';
+          _tabNameSet(el, current || 'Untitled scene');
         }
       };
       input.addEventListener('keydown', e => {
@@ -2684,8 +2716,8 @@ const _Settings = (() => {
     });
     $s('set-clear-layout')?.addEventListener('click', () => {
       const root = document.documentElement;
-      for (const k of ['stepopt-mat-dock-h', 'stepopt-mat-insp-w', 'stepopt-console-h']) { try { localStorage.removeItem(k); } catch (_) {} }
-      for (const p of ['--mat-dock-h', '--mat-insp-w']) root.style.removeProperty(p);
+      for (const k of ['stepopt-mat-dock-h', 'stepopt-mat-insp-w', 'stepopt-lib-dock-h', 'stepopt-lib-insp-w', 'stepopt-console-h']) { try { localStorage.removeItem(k); } catch (_) {} }
+      for (const p of ['--mat-dock-h', '--mat-insp-w', '--lib-dock-h', '--lib-insp-w']) root.style.removeProperty(p);
       document.getElementById('resize-l')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       document.getElementById('resize-r')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       toast('Panel sizes reset', '', 'success');
@@ -2824,8 +2856,7 @@ const _Welcome = (() => {
     const clearBtn = document.getElementById('welcome-recents-clear');
     if (clearBtn) clearBtn.style.display = list.length ? 'inline-flex' : 'none';
     if (!list.length) {
-      box.innerHTML = `<div class="wl-recents-none"><i data-lucide="clock"></i><div>No recent files yet</div><span>Files you open are listed here</span></div>`;
-      _renderResume(null);
+      box.innerHTML = `<div class="wl-recents-none"><i data-lucide="upload"></i><div>Drop a file here to begin</div><span>Files you open are kept here as cards</span></div>`;
       try { _lucide(); } catch (_) {}
       _recentsEdges();
       return;
@@ -2839,31 +2870,25 @@ const _Welcome = (() => {
         resumed = handle ? top : null;
       } catch (_) {}
     }
-    _renderResume(resumed);
-    // (the file on the Resume card is not listed a second time right below it,
-    // unless it is the only one)
-    const skipTop = !!resumed && list.length > 1;
     box.innerHTML = list.map((r, i) => {
-      if (skipTop && i === 0) return '';
       const safeName = r.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-      const thumbInner = r.thumb
-        ? `<img src="${r.thumb}" alt="" draggable="false">`
-        : `<i data-lucide="box"></i>`;
-      // the file's type, as a small tag after its name
       const ext = (/\.([a-z0-9]{2,5})$/i.exec(r.name) || [])[1] || '';
+      const kind = ext ? (/^gltf$/i.test(ext) ? 'glTF' : ext.toUpperCase()) : '';
       const stem = ext ? safeName.slice(0, safeName.length - ext.length - 1) : safeName;
       const size = r.size > 0 ? _fmtBytes(r.size) : '';
-      // <div> wrapper (not <button>) because the row hosts a nested <button>
+      // the file opened last leads the cards, twice as wide ("Continue")
+      const lead = !!resumed && i === 0;
+      const pic = r.thumb ? `<img src="${r.thumb}" alt="" draggable="false">` : `<span class="wr-noimg">${kind || 'FILE'}</span>`;
+      // <div> wrapper (not <button>) because the card hosts a nested <button>
       // for the hover-revealed × delete affordance, and HTML disallows nested
-      // buttons. Click bubbling on the row still triggers the open handler.
+      // buttons. Click bubbling on the card still triggers the open handler.
       return `
-      <div class="welcome-recent" data-idx="${i}" title="${safeName}" tabindex="0" role="button" aria-label="Open ${safeName}">
-        <div class="wr-thumb">${thumbInner}</div>
+      <div class="welcome-recent${lead ? ' is-resume' : ''}" data-idx="${i}" title="${safeName}" tabindex="0" role="button" aria-label="Open ${safeName}">
+        <div class="wr-thumb">${pic}${lead ? '<span class="wr-tag">Continue</span>' : ''}</div>
         <div class="wr-meta">
           <div class="wr-name">${stem}</div>
-          <div class="wr-sub">${ext ? `<span class="wr-ext">${/^gltf$/i.test(ext) ? 'glTF' : ext.toUpperCase()}</span>` : ''}${size ? `<span>${size}</span>` : ''}</div>
+          <div class="wr-sub">${kind ? `<span>${kind}</span>` : ''}${size ? `<span>${size}</span>` : ''}<span class="wr-age">${_fmtAge(r.ts)}</span></div>
         </div>
-        <span class="wr-age">${_fmtAge(r.ts)}</span>
         <button class="wr-del" data-act="delete" title="Remove from recent files" aria-label="Remove ${safeName} from recent files"><i data-lucide="x"></i></button>
       </div>`;
     }).join('');
@@ -2878,15 +2903,16 @@ const _Welcome = (() => {
         if (!rec) return;
         _openRecentByKey(_recKey(rec.name, rec.size));
       });
-      // a row is reached with Tab: Enter or Space opens it, as a click does,
-      // and the arrow keys walk the list
+      // a card is reached with Tab: Enter or Space opens it, as a click does,
+      // and the arrow keys walk the cards (up and down by a row of them)
       el.addEventListener('keydown', (e) => {
         if (e.target !== el) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); return; }
-        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        if (!/^Arrow(Down|Up|Left|Right)$/.test(e.key)) return;
         e.preventDefault();
         const rows = [...box.querySelectorAll('.welcome-recent')].filter(r => r.style.display !== 'none');
-        const to = rows[rows.indexOf(el) + (e.key === 'ArrowDown' ? 1 : -1)];
+        const perRow = Math.max(1, rows.filter(r => r.offsetTop === el.offsetTop).length);
+        const to = rows[rows.indexOf(el) + ({ ArrowRight: 1, ArrowLeft: -1, ArrowDown: perRow, ArrowUp: -perRow })[e.key]];
         if (to) to.focus();
         else if (e.key === 'ArrowUp') document.getElementById('welcome-recents-filter')?.focus();
       });
@@ -2937,36 +2963,8 @@ const _Welcome = (() => {
     box.classList.toggle('more-below', box.scrollTop + box.clientHeight < box.scrollHeight - 2);
   }
 
-  function _renderResume(rec) {
-    const slot = document.getElementById('welcome-resume');
-    if (!slot) return;
-    if (!rec) { slot.innerHTML = ''; return; }
-    const safeName = rec.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-    // Hero card. The captured viewport thumb (when present) becomes a
-    // full-bleed background with a darkening gradient overlay so the
-    // accent label + filename stay legible. C4D / IDE "continue working
-    // on…" pattern. Style for `style="background-image..."` is inline
-    // because it's data-driven from the persisted thumb data URL.
-    const bgStyle = rec.thumb
-      ? `style="background-image:url('${rec.thumb}')"`
-      : '';
-    slot.innerHTML = `
-      <button id="welcome-resume-btn" class="welcome-resume${rec.thumb ? ' has-thumb' : ''}" ${bgStyle} title="Open ${safeName}">
-        <span class="wr-info">
-          <span class="wr-heading">Continue where you left off</span>
-          <span class="wr-name">${safeName}</span>
-          <span class="wr-sub">${[rec.size > 0 ? _fmtBytes(rec.size) : '', 'opened ' + _fmtAge(rec.ts)].filter(Boolean).join(' · ')}</span>
-        </span>
-        <span class="wr-play"><i data-lucide="arrow-right"></i></span>
-      </button>`;
-    document.getElementById('welcome-resume-btn')?.addEventListener('click', () => {
-      _openRecentByKey(_recKey(rec.name, rec.size));
-    });
-    try { _lucide(); } catch (_) {}
-  }
-
   function pushRecent(file) {
-    if (!file || !file.name) return;
+    if (!file || !file.name || file.__moNoRecent) return;      // (a duplicated scene is not a file on disk)
     const list = _load().filter(r => r.name !== file.name);
     list.unshift({ name: file.name, size: file.size || 0, ts: Date.now() });
     _save(list);
@@ -2983,12 +2981,6 @@ const _Welcome = (() => {
     if (!bg || !drop || !pick || !input) return;
 
     pick.addEventListener('click', () => _openWithPicker());
-    drop.addEventListener('click', e => {
-      // Don't let the browse button or the start-empty link bubble into the dropzone click.
-      if (e.target.closest('#welcome-pick')) return;
-      if (e.target.closest('#welcome-start-empty')) return;
-      _openWithPicker();
-    });
     document.getElementById('welcome-start-empty')?.addEventListener('click', e => {
       e.stopPropagation();
       try { newScene(); } catch (_) {}
@@ -3019,7 +3011,8 @@ const _Welcome = (() => {
     });
 
     drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
-    drop.addEventListener('dragleave', () => { drop.classList.remove('drag-over'); });
+    // (the drop target is the whole window: leaving one thing in it for another is not leaving it)
+    drop.addEventListener('dragleave', e => { if (!drop.contains(e.relatedTarget)) drop.classList.remove('drag-over'); });
     drop.addEventListener('drop', e => {
       e.preventDefault();
       drop.classList.remove('drag-over');
@@ -3049,7 +3042,7 @@ const _Welcome = (() => {
       if (load) load.style.display = 'block';
       if (closeBtn) closeBtn.style.display = 'none';
     } else {
-      if (pick) pick.style.display = 'block';
+      if (pick) pick.style.display = '';
       if (load) load.style.display = 'none';
       if (closeBtn) closeBtn.style.display = '';
     }
@@ -3071,28 +3064,9 @@ const _Welcome = (() => {
     if (bg) bg.classList.remove('show');
     _setMode('pick'); // reset so next show starts on the picker
   }
-  return { show, hide, pushRecent, enterLoading, enterPick };
+  return { show, hide, pushRecent, enterLoading, enterPick, recents: _load };
 })();
 
-// The welcome screen's cover clip runs only while that screen is showing (it
-// is also what is on screen while a file loads), and closes its options popup
-// when the screen goes away or a click lands outside it.
-(function _welcomeCover() {
-  const bg = document.getElementById('welcome-modal');
-  const clip = bg && bg.querySelector('.wl-cover video');
-  if (!bg) return;
-  const sync = () => {
-    const on = bg.classList.contains('show');
-    if (clip) {
-      const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      try { if (on && !calm) { const p = clip.play(); if (p && p.catch) p.catch(() => {}); } else clip.pause(); } catch (_) {}
-    }
-    if (!on) bg.querySelector('.wl-optd')?.removeAttribute('open');
-  };
-  try { new MutationObserver(sync).observe(bg, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
-  bg.addEventListener('click', (e) => { const d = bg.querySelector('.wl-optd[open]'); if (d && !d.contains(e.target)) d.removeAttribute('open'); });
-  sync();
-})();
 
 // ── Action registry, command palette, shortcuts overlay ────────────────
 // ── Command panels ────────────────────────────────────────────────────────
@@ -3202,6 +3176,9 @@ const _Actions = (() => {
     { id:'open',         group:'File',       label:'Open file…',                 kbd:'Ctrl+O', run: () => _openWithPicker() },
     { id:'import',       group:'File',       label:'Import…',                    kbd:'Ctrl+Shift+O', run: () => _importWithPicker() },
     { id:'savescene',    group:'File',       label:'Save scene…',                kbd:'Ctrl+S', run: _click('btn-save-scene') },
+    { id:'dupscene',     group:'File',       label:'Duplicate scene',            run: () => _Tabs.duplicate() },
+    { id:'closeall',     group:'File',       label:'Close all scenes',           kbd:'Ctrl+Shift+F4', run: () => _Tabs.closeAll() },
+    { id:'closeothers',  group:'File',       label:'Close other scenes',         run: () => _Tabs.closeOthers() },
     { id:'export',       group:'File',       label:'Export model…',              kbd:'Ctrl+E', run: _click('btn-export') },
     { id:'sceneSettings',group:'File',       label:'Scene settings…',            kbd:'Ctrl+;', run: () => { try { _openSceneSettings(); } catch (_) {} } },
     { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: () => { try { if (state.selected.size > 0 && typeof frameSelected === 'function') frameSelected(); else fitToView(); } catch (_) {} } },
@@ -3241,12 +3218,15 @@ const _Actions = (() => {
     { id:'smartFitAll',  group:'Edit',       label:'Smart fit all parts',        run: _click('btn-bbox-all') },
     { id:'fillHoles',    group:'Edit',       label:'Fill holes…',                kbd:'P', run: () => _CmdCards.open('fillholes') },
     { id:'decimate',     group:'Edit',       label:'Decimate selection',         run: _click('btn-decimate-sel') },
+    { id:'smartopt',     group:'Edit',       label:'Smart optimise',             run: () => window.__moSmartOptimise?.() },
     { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { const el = document.getElementById('budget-target'); if (el && el.offsetParent) { el.focus(); el.select(); } else _click('btn-budget')(); } },
     { id:'selHidden',    group:'Selection',  label:'Select hidden parts…',       run: () => _CmdCards.open('selhidden') },
+    { id:'selFasteners', group:'Selection',  label:'Select fasteners…',          run: () => _CmdCards.open('fasteners') },
     { id:'report',       group:'File',       label:'Optimisation report',        run: () => window._MOpt?.showReport() },
     { id:'ungroup',      group:'Edit',       label:'Ungroup',                    kbd:'Ctrl+Shift+G', run: () => { for (const gid of (state.selectedGroupIds ? [...state.selectedGroupIds] : [])) { const row = document.querySelector('#tree .tree-node[data-group-id="' + gid + '"]'); if (row) _treeUngroupRow(row); } } },
     { id:'hideSel',      group:'Selection',  label:'Hide selected',              kbd:'H', run: () => { try { hideSelected(); } catch (_) {} } },
     { id:'materials',    group:'App',        label:'Materials',                  kbd:'Shift+M', run: _click('tg-materials') },
+    { id:'library',      group:'App',        label:'Library',                    kbd:'Shift+L', run: _click('tg-library') },
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
     { id:'heat',         group:'View',       label:'Heatmap view',               kbd:'4', run: () => { try { setViewMode('heat'); } catch (_) {} } },
     { id:'clay',         group:'View',       label:'Clay view',                  kbd:'5', run: () => { try { setViewMode('clay'); } catch (_) {} } },
@@ -4945,6 +4925,7 @@ function setGizmoMode(mode) {
   ['gz-translate','gz-rotate','gz-scale'].forEach(id => $(id)?.classList.remove('active'));
   $('gz-' + mode)?.classList.add('active');
   try { _updateVpHint(); } catch (_) {}
+  try { _snapPillSync(); } catch (_) {}
 }
 
 // Toggle snap on/off across all three gizmo modes. Called from the
@@ -4957,6 +4938,7 @@ function setGizmoMode(mode) {
 // twentieth of the scene's size: always a visible notch, and always a
 // multiple of the floor grid's lines. A grid cell chosen by hand is used as is.
 function _gizmoMoveStep() {
+  if (state._gizmoSnapUser > 0) return state._gizmoSnapUser;       // chosen with the wheel during a drag (see _gizmoSnapNudge)
   if (state.gridCellMode !== 'auto') { const c = parseFloat(state.gridCellMode); if (isFinite(c) && c > 0) return c; }
   const box = new THREE.Box3();
   for (const root of [state.partsRoot, state.pivot]) if (root) box.expandByObject(root);
@@ -4977,6 +4959,89 @@ function _setGizmoSnap(on) {
   // If a drag is live, refresh the HUD so the SNAP badge appears/disappears
   // immediately when the user taps Shift mid-gesture.
   if (state._gizmoHudActive) _gizmoHud.update();
+  _snapPillSync();
+}
+
+// The pill beside "Cam" at the top of the viewport: there while snap is on
+// (Shift held, a gizmo on something), with the step in the units on screen.
+function _snapPillSync() {
+  const pill = document.getElementById('vp-snap-pill'), label = document.getElementById('vp-snap-label');
+  if (!pill || !label) return;
+  const on = !!state._gizmoSnapOn && !!state.gizmo && !!state.gizmo.object && state.gizmoMode !== 'off';
+  if (on) {
+    const mode = state.gizmoMode, num = (v) => String(parseFloat(Number(v).toPrecision(3)));
+    let step;
+    if (mode === 'rotate') step = Math.round(state.gizmoSnap.rotate * 180 / Math.PI) + '°';
+    else if (mode === 'scale') step = '× ' + num(state.gizmoSnap.scale);
+    else {
+      const unit = state.displayUnit && state.displayUnit !== 'none' ? state.displayUnit : '';
+      step = num((state._gizmoSnapStep || 0) * (_UNIT_FACTOR[state.displayUnit] || 1)) + (unit ? ' ' + unit : '');
+    }
+    label.textContent = 'Snap ' + step;
+  }
+  if (pill.hidden === on) pill.hidden = !on;
+}
+
+// While a handle is being dragged with Shift held, the wheel sets what the
+// drag snaps to: up for a coarser step, down for a finer one. A move steps
+// through 1 · 2 · 5 × powers of ten, a turn through the usual angles, a scale
+// through the usual fractions. The part jumps to the new step at once (the
+// drag is run again where the pointer is), the SNAP badge beside the gizmo
+// shows the step, and the step is kept for the drags that follow.
+const _SNAP_TURNS = [1, 5, 10, 15, 30, 45, 90];                    // degrees
+const _SNAP_SCALES = [0.01, 0.05, 0.1, 0.25, 0.5, 1];
+let _snapLastPointer = null, _snapWheelAcc = 0;
+function _gizmoSnapNudge(dir) {
+  const g = state.gizmo;
+  if (!g || !state._gizmoSnapOn) return false;
+  const s = state.gizmoSnap, mode = state.gizmoMode;
+  const near = (list, v) => { let b = 0; for (let i = 1; i < list.length; i++) if (Math.abs(list[i] - v) < Math.abs(list[b] - v)) b = i; return b; };
+  if (mode === 'translate') {
+    const cur = state._gizmoSnapStep > 0 ? state._gizmoSnapStep : _gizmoMoveStep();
+    const e = Math.floor(Math.log10(cur) + 1e-9), m = cur / Math.pow(10, e);
+    const k = e * 3 + (m < 1.5 ? 0 : m < 3.5 ? 1 : 2) + dir;      // its place in … 0.5 1 2 5 10 20 50 …
+    const next = [1, 2, 5][((k % 3) + 3) % 3] * Math.pow(10, Math.floor(k / 3));
+    if (!(next >= 1e-4 && next <= 1e6)) return true;
+    state._gizmoSnapUser = state._gizmoSnapStep = parseFloat(next.toPrecision(6));
+    g.setTranslationSnap(state._gizmoSnapStep);
+  } else if (mode === 'rotate') {
+    const i = Math.max(0, Math.min(_SNAP_TURNS.length - 1, near(_SNAP_TURNS, s.rotate * 180 / Math.PI) + dir));
+    s.rotate = _SNAP_TURNS[i] * Math.PI / 180;
+    g.setRotationSnap(s.rotate);
+  } else if (mode === 'scale') {
+    const i = Math.max(0, Math.min(_SNAP_SCALES.length - 1, near(_SNAP_SCALES, s.scale) + dir));
+    s.scale = _SNAP_SCALES[i];
+    g.setScaleSnap(s.scale);
+  } else return false;
+  // run the drag again where the pointer is, so the part takes the new step now
+  const p = _snapLastPointer;
+  if (p && g.dragging && g.domElement) {
+    try { g.domElement.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y, button: -1, buttons: 1, pointerId: p.id, pointerType: p.type, isPrimary: true, shiftKey: true })); } catch (_) {}
+  }
+  if (state._gizmoHudActive) _gizmoHud.update();
+  _snapPillSync();
+  requestRender();
+  return true;
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointermove', (e) => { if (state.gizmo && state.gizmo.dragging && e.isTrusted !== false) _snapLastPointer = { x: e.clientX, y: e.clientY, id: e.pointerId, type: e.pointerType || 'mouse' }; }, true);
+  window.addEventListener('pointerdown', (e) => { _snapLastPointer = { x: e.clientX, y: e.clientY, id: e.pointerId, type: e.pointerType || 'mouse' }; _snapWheelAcc = 0; }, true);
+  window.addEventListener('wheel', (e) => {
+    if (!e.shiftKey || !state.gizmo || !state.gizmo.dragging || !state._gizmoSnapOn) return;
+    // the wheel belongs to the snap step now: no zoom, no scrolling
+    e.preventDefault(); e.stopImmediatePropagation();
+    // (with Shift held a browser reports a vertical wheel as a sideways one)
+    const d = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+    if (!d) return;
+    // a mouse wheel sends a notch at a time; a touchpad a stream of small moves, gathered into notches
+    const unit = e.deltaMode === 1 ? 1 : e.deltaMode === 2 ? 0.2 : 60;
+    if ((_snapWheelAcc > 0) !== (d > 0)) _snapWheelAcc = 0;
+    _snapWheelAcc += d;
+    const notches = Math.trunc(_snapWheelAcc / unit);
+    if (!notches) return;
+    _snapWheelAcc -= notches * unit;
+    for (let i = 0; i < Math.min(4, Math.abs(notches)); i++) _gizmoSnapNudge(notches < 0 ? 1 : -1);      // up = coarser
+  }, { capture: true, passive: false });
 }
 
 // Live HUD that pops next to the gizmo while dragging and shows the delta
@@ -5046,8 +5111,8 @@ const _gizmoHud = (() => {
   function update() {
     if (!before || !el || !state.pivot) return;
     const mode = state.gizmoMode;
-    const snapBy = state.gizmoMode === 'translate' && state._gizmoSnapStep ? ' ' + parseFloat(state._gizmoSnapStep.toPrecision(3)) : state.gizmoMode === 'rotate' ? ' 15°' : state.gizmoMode === 'scale' ? ' 0.1' : '';
-    const snap = state._gizmoSnapOn ? `<span class="ghud-snap">SNAP${snapBy}</span>` : '';
+    const snapBy = mode === 'translate' && state._gizmoSnapStep ? ' ' + parseFloat(state._gizmoSnapStep.toPrecision(3)) : mode === 'rotate' ? ' ' + Math.round(state.gizmoSnap.rotate * 180 / Math.PI) + '°' : mode === 'scale' ? ' ' + parseFloat(state.gizmoSnap.scale.toPrecision(3)) : '';
+    const snap = '';                                   // (snap and its step are on the pill at the top: _snapPillSync)
     // TransformControls.axis is set on grab and cleared on release. Possible
     // values: 'X' | 'Y' | 'Z' (single-axis arrow / ring), 'XY' | 'XZ' | 'YZ'
     // (planar handles), 'XYZ' / 'XYZE' (centre handle = uniform / free).
@@ -6910,7 +6975,13 @@ function clearModel() {
   state.sceneName = null;
   state._selAnchorId = null;
   state.materialByColor.clear(); state.geomByHash.clear(); state.instancedGroups = [];
+  // The selection outline is not always under partsRoot (cleared above): with
+  // the gizmo on it hangs on the pivot, and is handed to the scene root when
+  // the gizmo lets go. Forgetting it here without taking it out left the old
+  // scene's outline drawn in the new one for good.
+  if (state.activeHighlights) { for (const h of state.activeHighlights) { try { h.parent?.remove(h); } catch (_) {} } }
   state.activeHighlights = [];
+  if (state._selMergedGeom) { try { state._selMergedGeom.dispose?.(); } catch (_) {} }
   state._selMergedGeom = null;
   // Per-model derived state — would otherwise reference parts from the old model.
   state.explode = { x: 0, y: 0, z: 0 };
@@ -6987,6 +7058,16 @@ function _newSceneHere() {
 }
 window.__moResetScene = () => _newSceneHere();
 window.__moOpenFile = (file) => _handleSelectedFile(file);
+// For the tab strip (any tab's menu may ask about, or copy, this scene).
+window.__moHasParts = () => state.parts.some(p => !p.deleted);
+window.__moDuplicateScene = async () => {
+  const blob = await _withSolidView(() => _saveSceneImpl(true));
+  if (!blob) return;
+  const base = state.sceneName || state._lastSavedSceneName || (state._loadedFilename || '').replace(/\.[^.]+$/, '') || _Tabs.blankName();
+  const file = new File([blob], base + ' copy.glb', { type: 'model/gltf-binary' });
+  file.__moNoRecent = true;
+  _Tabs.add({ file });
+};
 
 // Marks the scene as "active" — fires for both file loads AND `New scene` /
 // first primitive add on an empty scene. Unblocks the toolbar (Fit / Save /
@@ -9647,6 +9728,10 @@ function _wireTransformPanel() {
         try { _detachGizmo(); updateGizmo?.(); } catch (_) {}
       }
     } catch (err) { console.warn('[transform-panel] reset failed:', err); return; }
+    // The selection's outline is built where the part stood: build it again
+    // where it stands now (typing a value does the same; Reset left the
+    // outline behind at the old place).
+    try { applySelectionColors?.(); } catch (_) {}
     requestRender();
     refreshPropertiesPanel?.();
     _transformPanelRefresh();
@@ -11171,7 +11256,7 @@ function applySelectionColors() {
   _selColorsQueued = true;
   queueMicrotask(() => {
     _selColorsQueued = false;
-    try { _applySelectionColorsImpl(); }
+    try { _applySelectionColorsImpl(); state._selDrawnSig = _selVisSig(); }
     catch (e) { console.warn('[selection] highlight rebuild failed:', e); try { requestRender(); } catch (_) {} }
     try { _updateVpHint(); } catch (_) {}
   });
@@ -12984,6 +13069,54 @@ const _Tabs = (() => {
     if (REG.active === id) activate(next.id); else renderAll();
     return true;
   }
+  // Close several tabs in one go (Close all, Close others): one question for
+  // all the unsaved ones together instead of one each.
+  async function closeMany(ids) {
+    const tabs = ids.map(find).filter(t => t && !t.closed);
+    const unsaved = tabs.filter(t => t.dirty);
+    if (unsaved.length) {
+      const what = unsaved.length === 1 ? '"' + unsaved[0].title + '" has' : unsaved.length + ' scenes have';
+      let ok = false;
+      try { ok = await appConfirm(what + ' changes that are not saved. Close anyway?', { title: tabs.length === 1 ? 'Close scene' : 'Close scenes', okLabel: 'Close without saving', danger: true }); } catch (_) {}
+      if (!ok) return false;
+      for (const t of unsaved) t.dirty = false;                // asked once, above
+    }
+    // the tab this runs in goes last: its window is the one doing the closing
+    tabs.sort((a, b) => (a.id === myId) - (b.id === myId));
+    for (const t of tabs) close(t.id);
+    return true;
+  }
+  const closeAll = () => closeMany(listed().map(t => t.id));
+  const closeOthers = (id = myId) => closeMany(listed().filter(t => t.id !== id).map(t => t.id));
+
+  // A copy of a tab's scene in a new tab. The scene is written the way Save
+  // writes it and opened from that, by the tab's own window, so the tab is
+  // brought to the front first.
+  function duplicate(id = myId) {
+    const t = find(id);
+    if (!t || t.closed || t.loading) return;
+    if (REG.active !== id) activate(id);
+    try { REG.wins[id].__moDuplicateScene(); } catch (e) { console.warn('[tabs] duplicate:', e); }
+  }
+
+  // Right-click on a tab.
+  function menu(id, x, y) {
+    const t = find(id);
+    if (!t || t.closed) return;
+    let any = false;
+    try { any = !!REG.wins[id].__moHasParts(); } catch (_) {}
+    const others = listed().some(o => o.id !== id);
+    let recent = [];
+    try { recent = _Welcome.recents().map(r => ({ label: escapeHtml(r.name), fn: () => _openRecentByKey(_recKey(r.name, r.size)) })); } catch (_) {}
+    _ctxBuild([
+      { label: 'Duplicate scene', off: any ? false : 'The scene is empty', fn: () => duplicate(id) },
+      { label: 'Close all', kbd: 'Ctrl+Shift+F4', fn: () => closeAll() },
+      { label: 'Close others', off: others ? false : 'No other scene is open', fn: () => closeOthers(id) },
+      '---',
+      { icon: 'folder-open', label: 'Open…', kbd: 'Ctrl+O', fn: () => _openWithPicker() },
+      { label: 'Open recent', off: recent.length ? false : 'No recent files yet', sub: recent },
+    ], x, y);
+  }
 
   // This copy tells the list what its scene is called and whether it is saved.
   function report(patch) {
@@ -13010,8 +13143,8 @@ const _Tabs = (() => {
       b.className = 'doc-tab other' + (t.dirty ? ' is-dirty' : '') + (t.loading ? ' is-loading' : '');
       b.dataset.tab = t.id;
       b.title = t.title + (t.dirty ? ' — not saved' : '');
-      b.innerHTML = '<span class="doc-tab-lead"><i data-lucide="box"></i>' + (t.dirty ? '<span class="doc-unsaved"></span>' : '') + '</span><span class="doc-tab-name"></span><button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button>';
-      b.querySelector('.doc-tab-name').textContent = t.title;
+      b.innerHTML = '<span class="doc-tab-lead"><span class="doc-unsaved' + (t.dirty ? '' : t.empty === false ? ' is-saved' : ' is-empty') + '"></span></span><span class="doc-tab-name"></span><button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button>';
+      _tabNameSet(b.querySelector('.doc-tab-name'), t.title);
       if (before) host.insertBefore(b, own); else host.appendChild(b);
     }
     const plus = document.createElement('button');
@@ -13034,6 +13167,13 @@ const _Tabs = (() => {
     });
     // middle-click closes, as in a browser
     host.addEventListener('auxclick', (e) => { if (e.button !== 1) return; const tab = e.target.closest('.doc-tab'); if (tab) { e.preventDefault(); close(tab.classList.contains('other') ? tab.dataset.tab : myId); } });
+    // right-click: the tab's menu (a name being typed keeps the browser's own)
+    host.addEventListener('contextmenu', (e) => {
+      const tab = e.target.closest('.doc-tab');
+      if (!tab || tab.classList.contains('is-loading') || e.target.closest('input')) return;
+      e.preventDefault();
+      menu(tab.classList.contains('other') ? tab.dataset.tab : myId, e.clientX, e.clientY);
+    });
     wireReorder(host);
     render();
   }
@@ -13178,7 +13318,7 @@ const _Tabs = (() => {
     if (t && !isHost) { for (let k = 2; ; k++) { const c = 'Untitled scene ' + k; if (!REG.tabs.some(x => x !== t && !x.closed && x.title === c)) return (t.blank = c); } }
     return 'Untitled scene';
   };
-  return { add, close, activate, report, render, onReady, blankName, warmSoon, isHost, sameSidebars, setSameSidebars, id: myId, count: () => listed().length, list: () => listed().map(t => ({ ...t })) };
+  return { add, close, closeAll, closeOthers, duplicate, activate, report, render, onReady, blankName, warmSoon, isHost, sameSidebars, setSameSidebars, id: myId, count: () => listed().length, list: () => listed().map(t => ({ ...t })) };
 })();
 
 // Unsaved changes. The scene is "as saved" while the newest entry of the undo
@@ -13192,17 +13332,17 @@ const _Dirty = (() => {
   const dirty = () => top() !== savedTop && state.parts.some(p => !p.deleted);
   function sync() {
     const el = document.getElementById('doc-unsaved'), btn = document.getElementById('doc-save');
-    const d = dirty();
+    const d = dirty(), any = state.parts.some(p => !p.deleted);
     if (el) {
-      // Nothing in the scene: no dot. Otherwise yellow (unsaved) or green (as saved).
-      el.hidden = !state.parts.some(p => !p.deleted);
-      el.classList.toggle('is-saved', !d);
+      // Nothing in the scene: a faint dot. Otherwise yellow (unsaved) or green (as saved).
+      el.classList.toggle('is-empty', !any);
+      el.classList.toggle('is-saved', any && !d);
     }
     if (btn) {
-      btn.title = d ? 'There are changes that are not saved — click to save the scene (Ctrl+S)' : 'All changes are saved';
+      btn.title = d ? 'There are changes that are not saved — click to save the scene (Ctrl+S)' : any ? 'All changes are saved' : 'Nothing in the scene yet';
       btn.setAttribute('aria-label', d ? 'Unsaved changes: save the scene' : 'Saved');
     }
-    try { _Tabs.report({ dirty: d }); } catch (_) {}
+    try { _Tabs.report({ dirty: d, empty: !any }); } catch (_) {}
   }
   function mark() { savedTop = top(); sync(); }
   // The history keeps 30 entries; `op` is one that has just fallen off its
@@ -16938,14 +17078,17 @@ function _openSaveSceneDialog(suggested) {
 async function saveScene() {
   return _withSolidView(_saveSceneImpl);
 }
-async function _saveSceneImpl() {
+// With toBlob the file is not written: the scene comes back as a GLB blob,
+// whole, with no dialog (Duplicate scene opens it in a new tab).
+async function _saveSceneImpl(toBlob = false) {
+  const failed = toBlob ? 'Duplicate failed' : 'Save failed';
   if (!state.parts.length) { toast('Nothing to save', 'Load a model or add a primitive first', 'warn'); return false; }
   // Suggest the last name the user typed (sticky across saves in the same
   // session), falling back to the loaded filename. No timestamp — the user
   // asked to keep it stable so they can overwrite the same file.
   const baseName = (state._loadedFilename || 'scene').replace(/\.[^.]+$/, '');
   const suggested = state._lastSavedSceneName || baseName;
-  const ask = await _openSaveSceneDialog(suggested);
+  const ask = toBlob ? { name: suggested, all: true, hidden: true, view: true, copy: true } : await _openSaveSceneDialog(suggested);
   if (ask === null) return false;
   let chosenName = (ask.name || '').trim() || suggested;
   chosenName = chosenName.replace(/\.glb$/i, '').replace(/[\\/:*?"<>|]/g, '_');
@@ -16957,7 +17100,7 @@ async function _saveSceneImpl() {
   // the same folder. Falling back to <a download> means the file lands in
   // the user's default Downloads folder when the picker isn't available.
   let fileHandle = null;
-  if (typeof window.showSaveFilePicker === 'function') {
+  if (!toBlob && typeof window.showSaveFilePicker === 'function') {
     const prev = state._lastSaveSceneHandle || null;
     if (prev && prev.name === fname && !ask.copy) {
       // Verify we still have write permission — handles can lapse if the
@@ -17011,7 +17154,7 @@ async function _saveSceneImpl() {
   } catch (e) {
     console.error('[scene-save]', e);
     setLoader(false);
-    toast('Save failed', e.message || String(e), 'error', 6000);
+    toast(failed, e.message || String(e), 'error', 6000);
     return false;
   } finally {
     for (const [p, was] of flipped) { p.visible = was; if (p.mesh) p.mesh.visible = was; }
@@ -17060,6 +17203,7 @@ async function _saveSceneImpl() {
       result = await new Promise((res, rej) => exp.parse(exportNodes, res, rej, { binary: true, embedImages: true }));
     } finally { console.warn = _origWarn; }
     const blob = new Blob([result], { type: 'model/gltf-binary' });
+    if (toBlob) return blob;
     if (fileHandle) {
       const w = await fileHandle.createWritable();
       await w.write(blob);
@@ -17080,7 +17224,7 @@ async function _saveSceneImpl() {
     return true;
   } catch (e) {
     console.error('[scene-save]', e);
-    toast('Save failed', e.message || String(e), 'error', 6000);
+    toast(failed, e.message || String(e), 'error', 6000);
     return false;
   } finally {
     setLoader(false);
@@ -18784,7 +18928,7 @@ function wireUI() {
   // every section open, each interaction meant scrolling). State is keyed by
   // header text so a section reorder doesn't reset the user's preference.
   const SEC_LS_KEY = 'stepopt-section-collapsed';
-  const SEC_OPEN_BY_DEFAULT = new Set(['Properties', 'Selection & actions', 'Reduce triangles']);
+  const SEC_OPEN_BY_DEFAULT = new Set(['Properties']);      // (Properties is fixed open; every other card starts folded)
   const _readSecState = () => {
     try { return JSON.parse(localStorage.getItem(SEC_LS_KEY) || '{}') || {}; }
     catch (_) { return {}; }
@@ -19003,8 +19147,8 @@ function wireUI() {
   //   visibility  H hide · Shift+H hide the rest · Alt+H show all · S isolate / back
   //   selection   Ctrl+A all · Ctrl+I invert · Esc none · Shift+S find in the tree
   //   view        F frame · 1-5 shading · Ctrl+1-4 camera · G grid · E R T Q gizmo · M measure
-  //   panels      Ctrl+K search · Shift+M materials · ` console · Ctrl+, settings · Ctrl+; scene · ? shortcuts
-  //   file        Ctrl+N new · Ctrl+O open · Ctrl+Shift+O import · Ctrl+S save · Ctrl+E export
+  //   panels      Ctrl+K search · Shift+M materials · Shift+L library · ` console · Ctrl+, settings · Ctrl+; scene · ? shortcuts
+  //   file        Ctrl+N new · Ctrl+O open · Ctrl+Shift+O import · Ctrl+S save · Ctrl+E export · Ctrl+Shift+F4 close all
   // Lossy tools (decimate) deliberately have no single key.
   const _comboOf = (e) => (e.ctrlKey || e.metaKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + (e.key.length === 1 ? e.key.toUpperCase() : e.key);
   const _ungroupSelection = () => {
@@ -19024,6 +19168,8 @@ function wireUI() {
     'Ctrl+B':       () => _CmdCards.open('smartfit'),
     'Ctrl+E':       () => { const b = $('btn-export'); if (b && !b.disabled) b.click(); },
     'Shift+M':      () => $('tg-materials')?.click(),
+    'Shift+L':      () => $('tg-library')?.click(),
+    'Ctrl+Shift+F4': () => _Tabs.closeAll(),
   };
   window.addEventListener('keydown', e => {
     if (_typingTarget(e) || _modalOpen()) return;
@@ -20469,12 +20615,14 @@ for (const s of _LIB_SHELVES) if (_LIB_EXTRA_SHELVES[s[0]]) s[1].push(..._LIB_EX
 for (const k of Object.keys(_LIB_EXTRA)) if (_LIB_EXTRA[k].sized) _LIB_SIZED.add(k);
 const _LIB_KEY = 'stepopt-lib';
 function _libPrefs() {
-  const base = { size: 'M6', length: 24, recent: [], side: 'tree' };
+  const base = { size: 'M6', length: 24, recent: [], fav: [], view: 'grid' };
   try {
     const v = JSON.parse(localStorage.getItem(_LIB_KEY) || '{}');
     const out = (v && typeof v === 'object' && !Array.isArray(v)) ? { ...base, ...v } : base;
     if (!Array.isArray(out.recent)) out.recent = [];
     out.recent = out.recent.filter(k => typeof k === 'string');
+    out.fav = Array.isArray(out.fav) ? out.fav.filter(k => typeof k === 'string') : [];
+    if (out.view !== 'small') out.view = 'grid';
     return out;
   } catch (_) { return base; }
 }
@@ -20536,7 +20684,7 @@ function _libPreset(kind, prefs) {
 // that part), and stands on the floor at the origin when nothing is.
 function _libAdd(kind, at, normal) {
   const prefs = _libPrefs();
-  const preset = _libPreset(kind, prefs);
+  const preset = Object.assign(_libPreset(kind, prefs), _libTweaks.get(kind) || {});
   const hadSel = state.selected && state.selected.size > 0;
   const p = _addPrimitive(kind, preset);
   if (!p) return null;
@@ -20583,7 +20731,7 @@ function upY0() { return state.sceneUpAxis === 'y'; }
 // thrown away when the drag ends.
 let _libDragKind = null, _libGhost = null, _libGhostRaf = 0, _libGhostEv = null;
 function _libGhostMake(kind) {
-  const params = Object.assign(_primitiveDefaultParams(kind, 100), _libPreset(kind, _libPrefs()));
+  const params = _libParams(kind);
   const geom = _primitiveGeometry(kind, params);
   _applyPrimitiveOrientation(kind, geom, params.orientation || 'z');
   geom.computeBoundingBox();
@@ -20632,7 +20780,7 @@ function _libRender() {
   const label = (k) => _primitiveDefaultName(k);
   // Each part has a studio picture (assets/library/<kind>.webp, rendered once
   // from the part itself); the line icon stands in if one is missing.
-  const tile = (k) => `<button type="button" class="lib-item" draggable="true" data-lib="${k}" title="Click to add ${label(k)} · drag into the view to place it"><span class="lib-pic"><img src="assets/library/${k}.webp" alt="" width="192" height="192" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('no-pic');this.remove()">${_libIcon(k)}</span><span class="lib-name">${label(k)}</span></button>`;
+  const tile = (k) => `<button type="button" class="lib-item" draggable="true" data-lib="${k}" title="${label(k)}: click to look at it · double-click to add it · drag into the view to place it"><span class="lib-pic"><img src="assets/library/${k}.webp" alt="" width="192" height="192" loading="lazy" decoding="async" draggable="false" onerror="this.parentNode.classList.add('no-pic');this.remove()">${_libIcon(k)}</span><span class="lib-name">${label(k)}</span></button>`;
   const known = new Set(_LIB_SHELVES.flatMap(s => s[1]));
   const recent = prefs.recent.filter(k => known.has(k));
   // Every shelf and every tile is made once and stays in the list; searching
@@ -20643,7 +20791,7 @@ function _libRender() {
   const secs = new Map([...list.querySelectorAll(':scope > .lib-sec')].map(el => [el.dataset.shelf, el]));
   const shelf = (name, after) => {
     let sec = secs.get(name);
-    if (!sec) { sec = make(`<div class="lib-sec" data-shelf="${name}"><div class="lib-shelf">${name}</div><div class="lib-grid"></div></div>`); secs.set(name, sec); }
+    if (!sec) { sec = make(`<div class="lib-sec" data-shelf="${name}"><div class="lib-shelf"><span>${name}</span>${name === 'Recently used' ? '<button type="button" class="lib-shelf-act" data-lib-clear title="Forget the recently used parts">Clear</button>' : ''}</div><div class="lib-grid"></div></div>`); secs.set(name, sec); }
     const want = after ? after.nextElementSibling : list.firstElementChild;
     if (want !== sec) list.insertBefore(sec, want);
     return sec;
@@ -20658,9 +20806,15 @@ function _libRender() {
     for (const el of tiles.values()) el.remove();
     return grid;
   };
+  const only = q ? '' : _libShelf;            // one shelf, unless a search is on: that looks on all of them
   let prev = shelf('Recently used', null), shown = 0;
   fill(prev, recent);
-  prev.hidden = !!q || !recent.length;
+  prev.hidden = !!q || !recent.length || !!only;
+  const favs = prefs.fav.filter(k => known.has(k)), favSec = shelf('Favourites', prev);
+  fill(favSec, favs);
+  favSec.hidden = !!q || !favs.length || (!!only && only !== 'Favourites');
+  if (only === 'Favourites') shown += favs.length;
+  prev = favSec;
   for (const [name, kinds] of _LIB_SHELVES) {
     const sec = shelf(name, prev), grid = sec.firstElementChild.nextElementSibling;
     if (grid.childElementCount !== kinds.length) fill(sec, kinds);
@@ -20670,49 +20824,262 @@ function _libRender() {
       if (el.hidden === hit) el.hidden = !hit;
       if (hit) any++;
     }
-    sec.hidden = !any;
-    shown += any;
+    const on = !!any && (!only || only === name);
+    sec.hidden = !on;
+    if (on) shown += any;
     prev = sec;
   }
   let empty = list.querySelector(':scope > .lib-empty');
   if (!shown && !empty) { empty = make('<div class="lib-empty">Nothing in the library matches.</div>'); list.appendChild(empty); }
-  if (empty) empty.hidden = !!shown;
+  if (empty) { empty.hidden = !!shown; empty.textContent = only === 'Favourites' ? 'No favourites yet. Pick a part and press its star.' : 'Nothing in the library matches.'; }
+  list.classList.toggle('is-small', prefs.view === 'small');
+  for (const el of list.querySelectorAll('.lib-item')) el.classList.toggle('is-picked', el.dataset.lib === _libSel);
 }
-function _libShow(side) {
-  const lib = side === 'lib';
-  document.getElementById('sidebar-left')?.classList.toggle('lib-on', lib);
-  const panel = document.getElementById('lib-panel');
-  if (panel) panel.hidden = !lib;
-  const sw = document.getElementById('side-switch');
-  if (sw) { sw.classList.toggle('is-lib', lib); for (const b of sw.querySelectorAll('[data-side]')) { const on = b.dataset.side === side; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); } }
-  const p = _libPrefs(); if (p.side !== side) { p.side = side; _libSave(p); }
-  if (lib) _libRender();
+// The library is a drawer along the bottom of the viewport (#vp-library-pop),
+// like the materials dock: its button on the bottom toolbar (tg-library,
+// Shift+L) opens and closes it, and it stays until it is closed. One drawer
+// at a time: the materials and the console give way to it, and it to them.
+function _libOpen() { return !!document.getElementById('vp-library-pop')?.classList.contains('show'); }
+function _libShow(open) {
+  const dock = document.getElementById('vp-library-pop');
+  if (!dock) return;
+  open = !!open;
+  if (open === dock.classList.contains('show')) return;
+  if (open) {
+    if (document.getElementById('vp-materials-pop')?.classList.contains('show')) document.getElementById('mat-dock-close')?.click();
+    if (document.getElementById('log-console')?.classList.contains('show')) document.getElementById('lc-close')?.click();
+  }
+  dock.classList.toggle('show', open);
+  document.getElementById('tg-library')?.classList.toggle('active', open);
+  document.body.classList.toggle('lib-dock-open', open);     // the toolbar and the tips ride up with it (see the CSS)
+  if (open) {
+    _libRender();
+    if (_libSel) _libViewSoon(); else _libInspect(_libPrefs().recent[0] || null);
+  }
+}
+
+// ── The library's inspector ──────────────────────────────────────────────
+// The right side of the drawer shows the part that is picked: a view of it
+// that can be turned, what it weighs, and its parameters, which are the ones
+// it will have when it is added. A click on a tile picks; a double-click, a
+// drag into the view or "Add to scene" adds.
+let _libSel = null;                         // the kind that is picked
+let _libShelf = '';                         // the one shelf shown ('' = all of them)
+const _libTweaks = new Map();               // kind → the parameters changed in the inspector, until the page is closed
+function _libParams(kind) {
+  return Object.assign(_primitiveDefaultParams(kind, 100), _libPreset(kind, _libPrefs()), _libTweaks.get(kind) || {});
+}
+function _libShelfOf(kind) { const s = _LIB_SHELVES.find(x => x[1].includes(kind)); return s ? s[0] : ''; }
+function _libAddSafe(kind, at, normal) {
+  try { return _libAdd(kind, at, normal); }
+  catch (err) { console.warn('[library] add failed:', err); toast('Could not add that part', String(err && err.message || err), 'error'); return null; }
+}
+// The size the fasteners come out in was changed in the drawer's head: that
+// goes for every fastener, also one whose size was set in the inspector.
+function _libHeadChanged(field) { for (const t of _libTweaks.values()) delete t[field]; if (_libSel) _libInspectorRender(); }
+
+// The view of the picked part: a small renderer of its own (WebGL), which
+// draws only when something changes: the part, a parameter, the view.
+const _libView = { renderer: null, scene: null, camera: null, mesh: null, mat: null, ready: false, failed: false, starting: null, raf: 0, yaw: -0.65, pitch: 0.42, zoom: 1, r: 1, w: 0, h: 0, dpr: 0 };
+function _libViewStart() {
+  const v = _libView;
+  if (v.ready || v.failed) return Promise.resolve(v.ready);
+  if (v.starting) return v.starting;
+  const canvas = document.getElementById('lib-preview');
+  if (!canvas) { v.failed = true; return Promise.resolve(false); }
+  v.starting = (async () => {
+    try {
+      const renderer = new THREE.WebGPURenderer({ canvas, antialias: true, forceWebGL: true });
+      await renderer.init();
+      renderer.setClearColor(0x1d1d1f, 1);
+      const sc = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100000);
+      camera.up.set(0, 0, 1);
+      // lit from the viewer's side, so the part reads the same from wherever it is looked at
+      const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(-0.6, 0.9, 1.4);
+      const rim = new THREE.DirectionalLight(0xffffff, 0.7); rim.position.set(1.2, -0.4, 0.3);
+      camera.add(key, rim);
+      sc.add(camera, new THREE.HemisphereLight(0xffffff, 0x2a2a2e, 1.0));
+      Object.assign(v, { renderer, scene: sc, camera, mat: new THREE.MeshStandardMaterial({ color: 0xb4b4b8, metalness: 0.08, roughness: 0.58, side: THREE.DoubleSide }), ready: true });
+      // drag to turn it, the wheel to come closer, a double-click for the first view
+      const box = canvas.parentElement; let from = null;
+      box.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; from = { x: e.clientX, y: e.clientY, yaw: v.yaw, pitch: v.pitch }; try { box.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      box.addEventListener('pointermove', (e) => { if (!from) return; v.yaw = from.yaw - (e.clientX - from.x) * 0.01; v.pitch = Math.max(-1.45, Math.min(1.45, from.pitch + (e.clientY - from.y) * 0.01)); _libViewSoon(); });
+      const up = () => { from = null; };
+      box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
+      box.addEventListener('wheel', (e) => { e.preventDefault(); v.zoom = Math.max(0.5, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12))); _libViewSoon(); }, { passive: false });
+      box.addEventListener('dblclick', () => { v.yaw = -0.65; v.pitch = 0.42; v.zoom = 1; _libViewSoon(); });
+      try { new ResizeObserver(() => _libViewSoon()).observe(box); } catch (_) {}
+      return true;
+    } catch (err) {
+      console.warn('[library] no view of the part:', err);
+      v.failed = true;
+      document.getElementById('lib-inspector')?.classList.add('no-view');
+      return false;
+    }
+  })();
+  return v.starting;
+}
+function _libViewSoon() { const v = _libView; if (!v.ready || v.raf) return; v.raf = requestAnimationFrame(() => { v.raf = 0; _libViewDraw(); }); }
+function _libViewDraw() {
+  const v = _libView, box = document.getElementById('lib-view');
+  if (!v.ready || !box || !_libOpen()) return;
+  const w = box.clientWidth, h = box.clientHeight;
+  if (w < 8 || h < 8) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (v.w !== w || v.h !== h || v.dpr !== dpr) { v.renderer.setPixelRatio(dpr); v.renderer.setSize(w, h, false); v.camera.aspect = w / h; v.w = w; v.h = h; v.dpr = dpr; }
+  // far enough away to hold the whole part in the narrower of the two directions
+  const half = v.camera.fov * Math.PI / 360, fit = Math.min(half, Math.atan(Math.tan(half) * v.camera.aspect));
+  const d = v.r / Math.sin(fit) * 1.1 / v.zoom, cp = Math.cos(v.pitch);
+  v.camera.position.set(d * cp * Math.sin(v.yaw), -d * cp * Math.cos(v.yaw), d * Math.sin(v.pitch));
+  v.camera.near = Math.max(d / 1000, d - v.r * 2); v.camera.far = d + v.r * 2;
+  v.camera.lookAt(0, 0, 0);
+  v.camera.updateProjectionMatrix();
+  try { v.renderer.render(v.scene, v.camera); } catch (err) { console.warn('[library] the view failed:', err); }
+}
+// Build the picked part with these parameters and put it in the view.
+// Returns what it weighs: its triangles and its size.
+function _libViewSet(kind, params) {
+  const geom = _primitiveGeometry(kind, params);
+  _applyPrimitiveOrientation(kind, geom, params.orientation || 'z');
+  geom.computeBoundingBox();
+  if (!geom.attributes.normal) geom.computeVertexNormals();
+  const size = geom.boundingBox.getSize(new THREE.Vector3());
+  const facts = { tris: Math.round(geom.index ? geom.index.count / 3 : (geom.attributes.position?.count || 0) / 3), size };
+  const v = _libView;
+  if (!v.ready) { geom.dispose(); return facts; }
+  // a new mesh for a new shape (the renderer goes by the mesh, not by what geometry it holds)
+  const old = v.mesh, mesh = new THREE.Mesh(geom, v.mat);
+  mesh.position.copy(geom.boundingBox.getCenter(new THREE.Vector3())).negate();      // its middle in the middle of the view
+  v.r = Math.max(1e-3, size.length() / 2);
+  v.scene.add(mesh); v.mesh = mesh;
+  if (old) { v.scene.remove(old); const g = old.geometry; requestAnimationFrame(() => requestAnimationFrame(() => { try { g.dispose(); } catch (_) {} })); }
+  _libViewSoon();
+  return facts;
+}
+function _libInspect(kind) {
+  _libSel = kind && _libShelfOf(kind) ? kind : null;
+  for (const el of document.querySelectorAll('#lib-list .lib-item')) el.classList.toggle('is-picked', el.dataset.lib === _libSel);
+  _libInspectorRender();
+}
+// the view and the line of facts, after the part or one of its parameters changed
+function _libInspectorRefresh() {
+  const kind = _libSel, facts = document.getElementById('lib-facts');
+  if (!kind) return;
+  try {
+    const f = _libViewSet(kind, _libParams(kind)), n = (x) => String(Math.round(x * 100) / 100), u = _UNIT_LABEL[state.displayUnit] || '';
+    if (facts) facts.textContent = `${f.tris.toLocaleString('en-US')} triangles · ${n(f.size.x)} × ${n(f.size.y)} × ${n(f.size.z)}${u ? ' ' + u : ''}`;
+  } catch (err) { if (facts) facts.textContent = 'Cannot be built at this size'; console.warn('[library] the part could not be built:', err); }
+}
+function _libInspectorRender() {
+  const box = document.getElementById('lib-inspector'), side = document.getElementById('lib-side');
+  if (!box || !side) return;
+  const kind = _libSel;
+  box.classList.toggle('is-empty', !kind);
+  if (!kind) { side.innerHTML = '<div class="li-empty">Pick a part to look at it and to set its size before it goes into the scene.</div>'; return; }
+  const params = _libParams(kind), fav = _libPrefs().fav.includes(kind);
+  // the same rows as a placed shape's Shape parameters card
+  const card = _renderPrimitiveSection({ isPrimitive: true, primitiveKind: kind, primParams: params, locked: false });
+  side.innerHTML = `
+    <div class="li-top">
+      <div class="li-id"><div class="li-name">${escapeHtml(_primitiveDefaultName(kind))}</div><div class="li-facts" id="lib-facts"></div></div>
+      <button type="button" class="lc-icon-btn li-fav${fav ? ' active' : ''}" id="lib-fav" aria-pressed="${fav}" title="${fav ? 'Take it off the Favourites shelf' : 'Keep it on the Favourites shelf'}"><i data-lucide="star"></i></button>
+    </div>
+    <div class="li-params">${card || '<div class="li-empty">Nothing to set on this part.</div>'}</div>
+    <div class="li-actions"><button type="button" class="btn primary" id="lib-add" title="Add it with these parameters. A double-click on its tile does the same; a drag into the view places it.">Add to scene</button></div>`;
+  try { _lucide(); } catch (_) {}
+  _libWireParams(side, kind, params);
+  side.querySelector('#lib-fav')?.addEventListener('click', () => {
+    const p = _libPrefs();
+    p.fav = p.fav.includes(kind) ? p.fav.filter(k => k !== kind) : [...p.fav, kind];
+    _libSave(p); _libRender(); _libInspectorRender();
+  });
+  side.querySelector('#lib-add')?.addEventListener('click', () => _libAddSafe(kind));
+  _libViewStart().then(() => { if (_libSel === kind) _libInspectorRefresh(); });
+}
+// The parameter rows of the inspector. They are the rows of the Shape
+// parameters card, but what they change is the part that is about to be
+// added, so there is no scene, no selection and no undo behind them.
+function _libWireParams(root, kind, params) {
+  const store = (id, v) => { params[id] = v; const t = _libTweaks.get(kind) || {}; t[id] = v; _libTweaks.set(kind, t); _libInspectorRefresh(); };
+  for (const row of root.querySelectorAll('.prim-row')) {
+    const id = row.dataset.primField, input = row.querySelector('[data-prim-input]'), val = row.querySelector('[data-prim-value]');
+    if (!id || !input) continue;
+    if (input.classList.contains('prim-axis-group')) {
+      input.addEventListener('click', (e) => {
+        const b = e.target.closest('.prim-axis-btn');
+        if (!b || params[id] === b.dataset.primAxis) return;
+        for (const x of input.querySelectorAll('.prim-axis-btn')) x.classList.toggle('active', x === b);
+        store(id, b.dataset.primAxis);
+      });
+      continue;
+    }
+    if (input.tagName === 'SELECT') { input.addEventListener('change', () => { if (params[id] !== input.value) store(id, input.value); }); continue; }
+    if (input.type === 'checkbox') {
+      input.addEventListener('change', () => {
+        const on = !!input.checked;
+        for (const r of root.querySelectorAll('.prim-row[data-prim-when="' + id + '"]')) r.hidden = !on;   // the rows that belong to this switch
+        store(id, on);
+      });
+      continue;
+    }
+    // a number: typed, or dragged sideways on the number, its box or its label
+    const lo = parseInt(input.min, 10), hi = parseInt(input.max, 10), wrap = val ? val.closest('.prim-val-wrap') : null;
+    const fill = () => { if (wrap) wrap.style.setProperty('--scrub-pct', (hi > lo ? Math.max(0, Math.min(1, (+input.value - lo) / (hi - lo))) * 100 : 0).toFixed(1) + '%'); };
+    const set = (v) => { v = Math.max(lo, Math.min(hi, v)); input.value = v; if (val && document.activeElement !== val) val.value = v; fill(); if (params[id] !== v) store(id, v); };
+    fill();
+    if (!val) continue;
+    val.addEventListener('change', () => { const v = parseInt(val.value, 10); if (Number.isNaN(v)) { val.value = params[id]; return; } set(v); val.value = Math.max(lo, Math.min(hi, v)); });
+    val.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); val.blur(); }
+      if (e.key === 'Escape') { val.value = params[id] ?? ''; val.blur(); }
+    });
+    for (const grab of [val, wrap, row.querySelector('.prim-label')]) _scrubDrag(grab, {
+      get: () => { const c = parseInt(input.value, 10); return Number.isNaN(c) ? lo : c; },
+      min: lo, max: hi, pxPerStep: (hi - lo) > 100 ? 1.5 : 6, set,
+    });
+  }
+  root.querySelector('.prim-reset')?.addEventListener('click', () => { _libTweaks.delete(kind); _libInspectorRender(); });
 }
 (function _wireLibrary() {
-  const sw = document.getElementById('side-switch');
-  if (!sw) return;
+  const dock = document.getElementById('vp-library-pop');
+  if (!dock) return;
   const prefs = _libPrefs();
-  sw.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-side]');
-    if (!b) return;
-    // the switch is no use with the sidebar folded away: open it
-    if (document.body.classList.contains('left-collapsed')) document.getElementById('btn-toggle-left')?.click();
-    _libShow(b.dataset.side);
-  });
+  document.getElementById('tg-library')?.addEventListener('click', (e) => { e.stopPropagation(); _libShow(!_libOpen()); });
+  document.getElementById('lib-dock-close')?.addEventListener('click', () => _libShow(false));
+  for (const id of ['vp-materials-pop', 'log-console']) {
+    const other = document.getElementById(id);
+    if (other) new MutationObserver(() => { if (other.classList.contains('show')) _libShow(false); }).observe(other, { attributes: true, attributeFilter: ['class'] });
+  }
   const size = document.getElementById('lib-size'), len = document.getElementById('lib-length');
   if (size) {
     size.innerHTML = _FASTENER_M_KEYS.map(k => `<option value="${k}">${k}</option>`).join('');
     size.value = prefs.size;
-    size.addEventListener('change', () => { const p = _libPrefs(); p.size = size.value; _libSave(p); });
+    size.addEventListener('change', () => { const p = _libPrefs(); p.size = size.value; _libSave(p); _libHeadChanged('size'); });
   }
   if (len) {
     len.value = String(prefs.length);
-    len.addEventListener('change', () => { const v = Math.max(1, Math.min(2000, parseFloat(len.value) || 24)); len.value = String(v); const p = _libPrefs(); p.length = v; _libSave(p); });
+    len.addEventListener('change', () => { const v = Math.max(1, Math.min(2000, parseFloat(len.value) || 24)); len.value = String(v); const p = _libPrefs(); p.length = v; _libSave(p); _libHeadChanged('length'); });
     len.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); len.blur(); } });
   }
   document.getElementById('lib-filter')?.addEventListener('input', _libRender);
   const list = document.getElementById('lib-list');
-  list?.addEventListener('click', (e) => { const b = e.target.closest('[data-lib]'); if (b) { try { _libAdd(b.dataset.lib); } catch (err) { console.warn('[library] add failed:', err); toast('Could not add that part', String(err && err.message || err), 'error'); } } });
+  const shelfSel = document.getElementById('lib-shelf');
+  if (shelfSel) {
+    shelfSel.innerHTML = ['<option value="">All shelves</option>', '<option value="Favourites">Favourites</option>', ..._LIB_SHELVES.map(s => `<option value="${s[0]}">${s[0]}</option>`)].join('');
+    shelfSel.addEventListener('change', () => { _libShelf = shelfSel.value; _libRender(); if (list) list.scrollTop = 0; });
+  }
+  const views = [...dock.querySelectorAll('[data-lib-view]')];
+  const syncView = () => { const cur = _libPrefs().view; for (const b of views) { const on = b.dataset.libView === cur; b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on)); } };
+  for (const b of views) b.addEventListener('click', () => { const p = _libPrefs(); p.view = b.dataset.libView === 'small' ? 'small' : 'grid'; _libSave(p); syncView(); _libRender(); });
+  syncView();
+  // a click on a tile picks the part (the inspector shows it); a double-click adds it
+  list?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-lib-clear]')) { const p = _libPrefs(); p.recent = []; _libSave(p); _libRender(); return; }
+    const b = e.target.closest('[data-lib]');
+    if (b) _libInspect(b.dataset.lib);
+  });
+  list?.addEventListener('dblclick', (e) => { const b = e.target.closest('[data-lib]'); if (b) _libAddSafe(b.dataset.lib); });
   list?.addEventListener('dragstart', (e) => {
     const b = e.target.closest('[data-lib]');
     if (!b || !e.dataTransfer) return;
@@ -20738,7 +21105,6 @@ function _libShow(side) {
     try { state.selected.clear(); state.selectedGroupIds?.clear?.(); } catch (_) {}
     try { _libAdd(kind, at, hit && hit.normal); } catch (err) { console.warn('[library] drop failed:', err); }
   });
-  _libShow(prefs.side === 'lib' ? 'lib' : 'tree');
 })();
 
 // `preset`: parameter values to start from instead of the defaults (the
@@ -21899,6 +22265,8 @@ function selectByColor() {
 // Hide selected (non-destructive — restorable via "Show everything")
 function hideSelected() {
   if (state.selected.size === 0) return toast('Nothing selected', '', 'warn');
+  // (a hidden part has no outline: once the parts are hidden, the selection's outline is built again without them)
+  queueMicrotask(() => { try { applySelectionColors(); requestRender(); } catch (_) {} });
   setTimeout(() => { try { _scenePropsSoon(); } catch (_) {} }, 0);          // the scene card counts hidden parts
   const m4zero = new THREE.Matrix4().makeScale(0,0,0);
   // One 'vis' undo entry for the whole action, like Isolate and Show all.
@@ -25730,14 +26098,14 @@ rebuildTree = function() {
 // Container chrome is set inline on #ctx-menu in index.html; row & separator
 // classes live in the stylesheet (search "Right-click context menu").
 function _ctxClose() { const m = $('ctx-menu'); if (m) { m.style.display = 'none'; m.classList.remove('is-commands'); } document.getElementById('vp-more')?.classList.remove('active'); }
-function _ctxBuild(items, x, y) {
-  const m = $('ctx-menu'); if (!m) return;
-  m.innerHTML = '';
+// An item with `sub` (a list of items) opens that list beside its row while
+// the pointer is on it.
+function _ctxFill(box, items, m) {
   for (const it of items) {
     if (it === '---') {
       const d = document.createElement('div');
       d.className = 'ctx-menu-sep';
-      m.appendChild(d);
+      box.appendChild(d);
       continue;
     }
     const row = document.createElement('div');
@@ -25751,11 +26119,36 @@ function _ctxBuild(items, x, y) {
     const kbdHtml = it.kbd
       ? `<kbd class="kbd-chip" style="margin-left:auto">${it.kbd}</kbd>`
       : '';
-    row.innerHTML = `${iconHtml}<span class="ctx-menu-label">${it.label}</span>${kbdHtml}`;
+    const subHtml = it.sub ? '<i class="ctx-menu-chev" data-lucide="chevron-right"></i>' : '';
+    row.innerHTML = `${iconHtml}<span class="ctx-menu-label">${it.label}</span>${kbdHtml}${subHtml}`;
     if (it.off) row.title = typeof it.off === 'string' ? it.off : 'Not available right now';
+    else if (it.sub) { row.classList.add('has-sub'); row.addEventListener('mouseenter', () => _ctxSub(m, row, it.sub)); }
     else row.addEventListener('click', () => { _ctxClose(); it.fn(); });
-    m.appendChild(row);
+    if (box === m && !(it.sub && !it.off)) row.addEventListener('mouseenter', () => _ctxSub(m, null));
+    box.appendChild(row);
   }
+}
+function _ctxSub(m, row, items) {
+  if (row && row.classList.contains('is-open')) return;
+  m.querySelector('.ctx-sub')?.remove();
+  m.querySelector('.ctx-menu-row.is-open')?.classList.remove('is-open');
+  if (!row) return;
+  const sub = document.createElement('div');
+  sub.className = 'ctx-sub';
+  _ctxFill(sub, items, m);
+  m.appendChild(sub);
+  row.classList.add('is-open');
+  _lucide();
+  // beside the row, on the side that has room; never past the window's edges
+  const mr = m.getBoundingClientRect(), rr = row.getBoundingClientRect(), w = sub.offsetWidth, h = sub.offsetHeight;
+  const right = mr.right - 4 + w <= window.innerWidth - 6;
+  sub.style.left = (right ? mr.width - 4 : 4 - w) + 'px';
+  sub.style.top = Math.max(6 - mr.top, Math.min(rr.top - mr.top - 8, window.innerHeight - 6 - h - mr.top)) + 'px';
+}
+function _ctxBuild(items, x, y) {
+  const m = $('ctx-menu'); if (!m) return;
+  m.innerHTML = '';
+  _ctxFill(m, items, m);
   m.style.display = 'block';
   m.style.left = Math.min(x, window.innerWidth - 220) + 'px';
   m.style.top = Math.min(y, window.innerHeight - m.offsetHeight - 10) + 'px';
@@ -25769,7 +26162,7 @@ function _ctxBuild(items, x, y) {
 // When the viewport is too narrow for both, toolbar buttons are folded away
 // from the right, one at a time; the search and "…" always stay, and "…"
 // lists whatever was folded so nothing is lost.
-const _TB_FOLD_ORDER = ['tg-materials', 'tg-select-hidden', 'tg-split', 'tg-fill-holes','vw-heat', 'vw-xray', 'vw-wire', 'vw-solid'];
+const _TB_FOLD_ORDER = ['tg-materials', 'tg-library', 'tg-select-hidden', 'tg-split', 'tg-fill-holes','vw-heat', 'vw-xray', 'vw-wire', 'vw-solid'];
 function _fitBottomToolbar() {
   const bar = document.querySelector('#vp-overlay .vpc.tr'), tips = document.querySelector('#vp-overlay .vpc.br'), vp = document.getElementById('viewport');
   if (!bar || !vp) return;
@@ -25831,6 +26224,7 @@ function _openCommandsMenu(anchor) {
     { icon: 'triangle',       label: 'Decimate',                            off: needSel, fn: click('btn-decimate-sel') },
     { icon: 'gauge',          label: 'Fit to triangle budget',              off: needAny, fn: click('btn-budget') },
     { icon: 'eye-off',        label: 'Select hidden parts',                 off: needAny, fn: act('selHidden') },
+    { icon: 'bolt',           label: 'Select fasteners',                    off: needAny, fn: act('selFasteners') },
     { icon: 'clipboard-list', label: 'Optimisation report',                 off: needAny, fn: act('report') },
     { icon: 'wand-2',         label: 'Smart fit',            kbd: 'Ctrl+B', off: needSel, fn: act('smartFit') },
     { icon: 'box-select',     label: 'Smart fit all parts',                 off: needAny, fn: act('smartFitAll') },
@@ -25872,7 +26266,8 @@ function _openCommandsMenu(anchor) {
 // event, so we close reliably regardless. Clicks INSIDE the menu still work
 // because each row's own click handler runs in its bubble phase after
 // _ctxClose hides the element — hiding doesn't cancel in-flight events.
-_Popover.dismiss(_ctxClose, { capture: true });
+// (a click on a row that only opens a list beside it leaves the menu open)
+_Popover.dismiss((e) => { if (e && e.type === 'click' && e.target.closest?.('#ctx-menu .ctx-menu-row.has-sub')) return; _ctxClose(); }, { capture: true });
 // ── Tree helpers used by the context menu ─────────────────────────────────
 // Group the currently-selected parts into a new group. Re-uses the dnd
 // "create group from rows" pathway (which already handles hier vs userGroups
@@ -27923,7 +28318,7 @@ function _wireSidebarResize() {
     // columns directly, the few other things that use the variable get it
     // on themselves, and the root is set once when the drag ends.
     const app = document.getElementById('app');
-    const followers = () => [document.getElementById('log-console'), document.getElementById('vp-materials-pop'),
+    const followers = () => [document.getElementById('log-console'), document.getElementById('vp-materials-pop'), document.getElementById('vp-library-pop'),
                              document.getElementById('stat-renderer') || document.querySelector('#tb .stat-renderer')].filter(Boolean);
     const apply = () => {
       raf = 0;
@@ -30962,7 +31357,7 @@ const _Measure = (() => {
     if (group.parent !== scene) scene.add(group);
     // Match the current visibility state — important when the group is
     // first created mid-session (lazy) while measure mode is already off.
-    group.visible = active;
+    group.visible = active || selId != null;
     return group;
   }
 
@@ -30995,7 +31390,7 @@ const _Measure = (() => {
   // allocate a fresh Vector3 per sprite per frame.
   const _labelWP = new THREE.Vector3();
 
-  function _makeLabelSprite(text) {
+  function _makeLabelSprite(text, hl) {
     // Canvas-backed sprite. Two problems we have to solve together:
     //
     // 1) **Pixelation on zoom-in.** A sprite samples its texture at whatever
@@ -31043,10 +31438,10 @@ const _Measure = (() => {
     // Solid near-black pill. No stroke — rgba(255,255,255,.07) at dpr=4
     // mipmap-downsamples to a visible white halo around the corners on
     // some GPUs. The pill stands on its own against any background.
-    m.fillStyle = 'rgba(14,14,14,.92)';
+    m.fillStyle = hl ? '#fbbf24' : 'rgba(14,14,14,.92)';
     _roundRect(m, margin, margin, pillW, pillH, radius);
     m.fill();
-    m.fillStyle = '#ededed';
+    m.fillStyle = hl ? '#141414' : '#ededed';
     m.textBaseline = 'middle';
     m.textAlign = 'center';
     m.fillText(text, cw / 2, ch / 2 + 0.5);
@@ -31113,7 +31508,7 @@ const _Measure = (() => {
     cyl.scale.set(1, len, 1);
     cyl.renderOrder = 999;
     cyl.onBeforeRender = (renderer, _scene, cam) => {
-      const r = _wppAt(renderer, cam, cyl.position) * 1.6; // ≈ 1.6 px radius
+      const r = _wppAt(renderer, cam, cyl.position) * 1.6 * (grp.userData.k || 1); // ≈ 1.6 px radius (wider when picked)
       cyl.scale.x = r;
       cyl.scale.z = r;
       // scale.y stays at the world-length set above so endpoints stay
@@ -31129,7 +31524,7 @@ const _Measure = (() => {
     for (const dot of [dotA, dotB]) {
       dot.renderOrder = 1000;
       dot.onBeforeRender = (renderer, _scene, cam) => {
-        const r = _wppAt(renderer, cam, dot.position) * 4.5; // ≈ 4.5 px radius
+        const r = _wppAt(renderer, cam, dot.position) * 4.5 * (grp.userData.k || 1); // ≈ 4.5 px radius
         dot.scale.setScalar(r);
       };
     }
@@ -31156,6 +31551,7 @@ const _Measure = (() => {
       it._label.material.map?.dispose();
       it._label.material.dispose();
       it._label = null;
+      it._labelHl = false;
     }
   }
 
@@ -31173,6 +31569,42 @@ const _Measure = (() => {
     grp.add(label);
     it._line = line;
     it._label = label;
+    _styleItem(it);
+  }
+
+  // The picked measurement (a click on its card) is bright and thick, the rest
+  // dim. While measure mode is off only the picked one is drawn.
+  let selId = null;
+  function _styleItem(it) {
+    if (!it._line || !it._label) return;
+    const sel = it.id === selId, dim = selId != null && !sel;
+    it._line.userData.k = sel ? 1.9 : 1;
+    const [cylMat, dotMat] = it._line.userData._sharedMats || [];
+    if (cylMat) cylMat.opacity = dim ? 0.35 : 0.95;
+    if (dotMat) dotMat.opacity = dim ? 0.35 : 1;
+    const vis = active || sel;
+    it._line.visible = vis;
+    it._label.visible = vis;
+    it._label.material.opacity = dim ? 0.45 : 1;
+    if (!!it._labelHl !== sel) {
+      const old = it._label, pos = old.position.clone();
+      group?.remove(old); old.material.map?.dispose(); old.material.dispose();
+      const nl = _makeLabelSprite(_fmtVal(it.value), sel);
+      nl.position.copy(pos);
+      group?.add(nl);
+      it._label = nl; it._labelHl = sel;
+      nl.visible = vis;
+    }
+  }
+  function _restyleAll() {
+    if (group) group.visible = active || selId != null;
+    for (const it of items) _styleItem(it);
+    document.querySelectorAll('#msr-list .msr-row').forEach(r => r.classList.toggle('sel', r.dataset.id === selId));
+    requestRender();
+  }
+  function select(id) {
+    selId = (id && id !== selId && items.some(i => i.id === id)) ? id : null;
+    _restyleAll();
   }
 
   function _hit(ev) {
@@ -31302,6 +31734,8 @@ const _Measure = (() => {
   function _refreshButtonState() {
     document.getElementById('msr-toggle')?.classList.toggle('active', active);
     document.getElementById('msr-add')?.classList.toggle('active', active);
+    const pill = document.getElementById('vp-measure-pill');
+    if (pill) pill.hidden = !active;
   }
 
   function setActive(on) {
@@ -31314,7 +31748,8 @@ const _Measure = (() => {
     // keep measurements visible after exiting pick mode, but the user
     // explicitly asked for the button to act as a show/hide switch:
     // ON = pick + display, OFF = hide and stop picking.
-    if (group) group.visible = active;
+    if (group) group.visible = active || selId != null;
+    for (const it of items) _styleItem(it);
     // Don't disable OrbitControls outright — the user may need to orbit
     // (right-click pan / middle drag) between picks to reach the back of
     // the model. The capture-phase canvas listeners further down stop
@@ -31648,6 +32083,12 @@ const _Measure = (() => {
   }
 
   function rebuildList() {
+    // (a picked measurement that was deleted, cleared or replaced is no longer picked)
+    if (selId != null && !items.some(i => i.id === selId)) {
+      selId = null;
+      if (group) group.visible = active;
+      for (const it of items) _styleItem(it);
+    }
     const list = document.getElementById('msr-list');
     if (!list) return;
     // The Measurements card only shows while there is something to list.
@@ -31660,7 +32101,7 @@ const _Measure = (() => {
     // Everything is escaped: measurements can come from a scene saved inside
     // a file (setSerialized), so neither the id nor the kind can be trusted.
     list.innerHTML = items.map(it => `
-      <div class="msr-row" data-id="${escapeHtml(it.id)}">
+      <div class="msr-row${it.id === selId ? ' sel' : ''}" data-id="${escapeHtml(it.id)}" title="Click to highlight this measurement in the viewport">
         <span class="msr-kind">${escapeHtml(it.kind)}</span>
         <span class="msr-val" title="${escapeHtml(_fmtVal(it.value))}">${escapeHtml(_fmtVal(it.value))}</span>
         <button class="msr-del" type="button" title="Delete this measurement"><i data-lucide="x"></i></button>
@@ -31670,6 +32111,12 @@ const _Measure = (() => {
         const row = btn.closest('.msr-row');
         const id = row?.dataset?.id;
         if (id) deleteOne(id);
+      });
+    });
+    list.querySelectorAll('.msr-row').forEach(row => {
+      row.addEventListener('click', ev => {
+        if (ev.target.closest('.msr-del')) return;
+        select(row.dataset.id);
       });
     });
     _lucide();
@@ -31726,7 +32173,7 @@ const _Measure = (() => {
   return {
     xform,
     setActive, isActive: () => active, toggle: () => setActive(!active),
-    handleClick, handleHover, handleEsc, _hideHover, init, rebuildList,
+    handleClick, handleHover, handleEsc, _hideHover, init, rebuildList, select,
     deleteOne, clearAll, getSerialized, setSerialized,
     _undoAdd, _redoAdd, _undoDelete, _redoDelete, _undoClear, _redoClear,
   };
@@ -31741,6 +32188,7 @@ wireUI = function() {
   const sideBtn = document.getElementById('msr-add');
   const clrBtn  = document.getElementById('msr-clear');
   tbBtn?.addEventListener('click',   () => _Measure.toggle());
+  document.getElementById('vp-measure-pill')?.addEventListener('click', () => _Measure.setActive(false));
   sideBtn?.addEventListener('click', () => _Measure.toggle());
   clrBtn?.addEventListener('click',  () => _Measure.clearAll());
 
@@ -31807,7 +32255,8 @@ wireUI = function() {
     if (_typingTarget(e)) return;
     if (e.key === 'm' || e.key === 'M') {
       if (_modalOpen()) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // (Shift+M is Materials: it used to open the dock AND switch Measure on or off)
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       e.preventDefault();
       _Measure.toggle();
       return;
@@ -33870,7 +34319,8 @@ setTimeout(() => _dndDecorateTree(), 0);
       const sel = state.selected.has(p.partId) ? ' selected' : '';
       const safeName = esc(p.name);
       const triShort = p.triCount >= 1000 ? (p.triCount/1000).toFixed(1) + 'k' : p.triCount;
-      return '<div class="off-row' + sel + '" data-part-id="' + p.partId + '" data-tip="' + safeName + ' · ' + p.triCount.toLocaleString() + ' tri · rank ' + (i+1) + '">'
+      return '<div class="off-row' + sel + '" role="checkbox" aria-checked="' + (sel ? 'true' : 'false') + '" data-part-id="' + p.partId + '" data-tip="' + safeName + ' · ' + p.triCount.toLocaleString() + ' tri · rank ' + (i+1) + '">'
+        + '<span class="off-check" aria-hidden="true"></span>'
         + '<span class="off-rank">' + (i+1) + '</span>'
         + '<span class="off-name">' + safeName + '</span>'
         + '<span class="off-tri">' + triShort + '</span>'
@@ -33878,6 +34328,38 @@ setTimeout(() => _dndDecorateTree(), 0);
         + '</div>';
     });
     list.innerHTML = rows.join('');
+    _offDeleteSync();
+  }
+
+  // The button under the list deletes the ticked rows: the selected parts
+  // that are in this list (a part selected elsewhere and not listed is not
+  // touched). It says how many they are and what they weigh.
+  const _offTicked = () => [...document.querySelectorAll('#offenders-list .off-row.selected')].map(r => parseInt(r.dataset.partId, 10)).filter(Number.isFinite);
+  function _offDeleteSync() {
+    const btn = document.getElementById('btn-off-delete'), label = document.getElementById('off-delete-label');
+    if (!btn || !label) return;
+    const ids = _offTicked();
+    let tris = 0;
+    for (const id of ids) tris += getPart(id)?.triCount || 0;
+    const short = tris >= 1e6 ? (tris / 1e6).toFixed(2) + 'M' : tris >= 1000 ? (tris / 1000).toFixed(1) + 'k' : String(tris);
+    btn.disabled = !ids.length;
+    label.textContent = ids.length ? 'Delete ' + fmtNum(ids.length) + (ids.length === 1 ? ' part' : ' parts') + ' · ' + short + ' triangles' : 'Delete';
+  }
+  document.getElementById('btn-off-delete')?.addEventListener('click', () => {
+    const ids = _offTicked();
+    if (!ids.length) return;
+    _offClicked = true;
+    try { deleteParts(ids, ids.length === 1 ? 'Deleted a heavy part' : 'Deleted ' + ids.length + ' heavy parts'); } catch (e) { console.warn('[heavy parts] delete failed:', e); }
+    try { _refreshOffenders(); } catch (_) {}
+  });
+  // The list follows the scene's totals. A delete, an undo or a decimate
+  // changes what is heavy without rebuilding the tree, and used to leave
+  // deleted parts listed here until the next rebuild.
+  {
+    let timer = 0;
+    const soon = () => { clearTimeout(timer); timer = setTimeout(() => { try { _refreshOffenders(); } catch (_) {} }, 120); };
+    const mo = new MutationObserver(soon);
+    for (const id of ['vp-tris', 'vp-parts']) { const el = document.getElementById(id); if (el) mo.observe(el, { childList: true, characterData: true, subtree: true }); }
   }
 
   // Light the rows of the parts that are selected, however they were selected
@@ -33890,9 +34372,10 @@ setTimeout(() => _dndDecorateTree(), 0);
     let first = null;
     for (const row of list.children) {
       const on = state.selected.has(parseInt(row.dataset.partId, 10));
-      if (row.classList.contains('selected') !== on) row.classList.toggle('selected', on);
+      if (row.classList.contains('selected') !== on) { row.classList.toggle('selected', on); row.setAttribute('aria-checked', on ? 'true' : 'false'); }
       if (on && !first) first = row;
     }
+    _offDeleteSync();
     if (first && !_offClicked && list.clientHeight) {
       const top = first.offsetTop - list.offsetTop, bot = top + first.offsetHeight;
       if (top < list.scrollTop) list.scrollTop = top;
@@ -33909,12 +34392,22 @@ setTimeout(() => _dndDecorateTree(), 0);
     _offClicked = true;
     const id = parseInt(row.dataset.partId, 10);
     if (!Number.isFinite(id)) return;
-    const mode = (e.ctrlKey || e.metaKey || e.shiftKey) ? 'add' : 'single';
-    try { selectPart(id, mode); } catch (_) {}
-    if (typeof frameSelected === 'function' && mode === 'single') {
+    // A click ticks the row, or takes its tick off; rows ticked before stay
+    // ticked. Shift+click ticks every row from the one clicked last to this.
+    const rows = [...row.parentElement.children], at = rows.indexOf(row);
+    const anchor = e.shiftKey ? rows.findIndex(r => r.dataset.partId === _offLastId) : -1;
+    try {
+      if (anchor >= 0 && anchor !== at) {
+        for (let i = Math.min(anchor, at); i <= Math.max(anchor, at); i++) { const k = parseInt(rows[i].dataset.partId, 10); if (Number.isFinite(k) && !state.selected.has(k)) selectPart(k, 'add'); }
+      } else selectPart(id, 'toggle');
+    } catch (_) {}
+    _offLastId = row.dataset.partId;
+    // the first tick shows where the part is; further ticks leave the camera alone
+    if (typeof frameSelected === 'function' && state.selected.size === 1 && state.selected.has(id)) {
       try { frameSelected(); } catch (_) {}
     }
   });
+  let _offLastId = null;
 
   // Wrap rebuildTree at the very end of the chain so we run after scroll
   // restore + lucide pass; offenders list stays in sync without thrashing.
@@ -33923,6 +34416,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     rebuildTree = function () {
       _prevRebuild.apply(this, arguments);
       try { _refreshOffenders(); } catch (e) { console.warn('offenders refresh failed', e); }
+      try { _selOutlineVerify(); } catch (_) {}
     };
   }
 
@@ -35039,6 +35533,318 @@ setTimeout(() => _dndDecorateTree(), 0);
     show();
   })();
 
+  // ── Right sidebar: cards slide open and shut ──────────────────────────
+  // A card's state is still the `collapsed` class on its header, set at
+  // once by whoever changes it (a click, the search, a command). This only
+  // watches that class and plays the change: the body grows from nothing or
+  // shrinks to it, and a card opened near the foot of the sidebar is kept in
+  // view as it grows instead of unfolding below the edge of the window.
+  (function _wireSectionSlide() {
+    const side = document.getElementById('sidebar-right');
+    if (!side || typeof MutationObserver === 'undefined') return;
+    const MS = 260, EASE = 'cubic-bezier(.32,.72,0,1)';
+    const quiet = /[?&]selftest\b/.test(location.search);         // the suite checks where things end up, at once
+    const ready = performance.now() + 1500;                      // the saved state is applied at start-up: nothing slides then
+    const still = () => quiet || performance.now() < ready || document.visibilityState === 'hidden'
+      || !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    const scrollerOf = (el) => {
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) { const o = getComputedStyle(p).overflowY; if (o === 'auto' || o === 'scroll') return p; }
+      return null;
+    };
+    // Bring an open card into view: its foot up to the sidebar's foot, but
+    // never so far that its header leaves at the top.
+    function reveal(card, sc) {
+      if (!card || !sc) return;
+      const s = sc.getBoundingClientRect(), c = card.getBoundingClientRect();
+      const over = c.bottom + 10 - s.bottom, room = c.top - 8 - s.top;
+      if (over > 0.5 && room > 0.5) sc.scrollTo({ top: sc.scrollTop + Math.min(over, room), behavior: 'instant' });
+    }
+    // A closing body has to stay on screen while it shrinks, laid out the way
+    // it is when open (some are a column with gaps, not a plain block): ask
+    // what that is with the card open for an instant, then pin it.
+    function hold(head, body) {
+      head.classList.remove('collapsed');
+      const shown = getComputedStyle(body).display;
+      head.classList.add('collapsed');
+      watch.takeRecords();                                        // (that was not a change of state)
+      body._held = { value: body.style.getPropertyValue('display'), prio: body.style.getPropertyPriority('display') };
+      body.style.setProperty('display', shown === 'none' ? 'block' : shown, 'important');
+    }
+    function unhold(body) {
+      if (!body._held) return;
+      const h = body._held; body._held = null;
+      if (h.value) body.style.setProperty('display', h.value, h.prio); else body.style.removeProperty('display');
+    }
+    function play(head, open) {
+      const body = head.nextElementSibling;
+      if (!body || !body.classList.contains('section-b')) return;
+      const card = head.closest('.section'), sc = scrollerOf(head);
+      // caught half-way (a second click): carry on from where it stands
+      let from = null;
+      if (body._slide) {
+        const c = getComputedStyle(body);
+        from = { height: c.height, opacity: c.opacity, paddingTop: c.paddingTop, paddingBottom: c.paddingBottom };
+        const old = body._slide; body._slide = null; old.cancel();
+      }
+      unhold(body);
+      body.style.overflow = '';
+      body.classList.remove('is-sliding');
+      if (still()) { if (open) reveal(card, sc); return; }
+      if (!open) hold(head, body);                                // it stays laid out until the slide is over
+      const c = getComputedStyle(body);
+      const full = { height: body.getBoundingClientRect().height + 'px', opacity: 1, paddingTop: c.paddingTop, paddingBottom: c.paddingBottom };
+      const none = { height: '0px', opacity: 0, paddingTop: c.paddingTop, paddingBottom: '0px' };
+      body.style.overflow = 'hidden';
+      body.classList.add('is-sliding');                           // (its rows keep their size while it is short: see the stylesheet)
+      const a = body.animate([from || (open ? none : full), open ? full : none], { duration: MS, easing: EASE });
+      body._slide = a;
+      const done = () => {
+        if (body._slide !== a) return;                            // replaced by a newer slide
+        body._slide = null;
+        body.style.overflow = '';
+        body.classList.remove('is-sliding');
+        unhold(body);
+        if (open) reveal(card, sc);
+      };
+      a.onfinish = done; a.oncancel = done;
+      if (open && sc) {
+        const follow = () => { if (body._slide !== a) return; reveal(card, sc); requestAnimationFrame(follow); };
+        requestAnimationFrame(follow);
+      }
+    }
+    const watch = new MutationObserver((list) => {
+      const seen = new Set();
+      for (const m of list) {
+        const h = m.target;
+        if (seen.has(h) || !h.classList || !h.classList.contains('section-h') || h.closest('.section-fixed, .section-cmd')) continue;
+        seen.add(h);                                              // (the first record of a header holds what it was before)
+        const was = (' ' + (m.oldValue || '') + ' ').includes(' collapsed '), is = h.classList.contains('collapsed');
+        if (was !== is) play(h, !is);
+      }
+    });
+    watch.observe(side, { subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+  })();
+
+  // ── Fasteners ─────────────────────────────────────────────────────────
+  // Finds the bolts, screws, nuts and washers of the scene by their shape
+  // (fasteners.js: names say nothing in an exported assembly) and selects
+  // them. Nothing is deleted here; the panel shows what was found, by kind
+  // and thread size, with Isolate and Delete beside it.
+  const _fastSeen = new WeakMap();          // geometry → what fasteners.js said about it, in the mesh's own units
+  const _FAST_KINDS = { bolt: ['bolt or screw', 'bolts and screws'], nut: ['nut', 'nuts'], washer: ['washer', 'washers'], pin: ['pin or stud', 'pins and studs'] };
+  let _fastBusy = false;
+  function _fastSelect(ids, add) {
+    if (!add) {
+      state.selected.clear();
+      if (state.selectedGroupIds) state.selectedGroupIds.clear();
+    }
+    for (const id of ids) state.selected.add(id);
+    try { applySelectionColors(); } catch (_) {}
+    try { rebuildTreeSelectionOnly(); } catch (_) {}
+    try { refreshPropertiesPanel(); } catch (_) {}
+    try { updateGizmo(); } catch (_) {}
+    const dc = document.getElementById('del-sel-count'); if (dc) dc.textContent = state.selected.size;
+    requestRender();
+  }
+  // opts: { bolts, nuts, washers (all on unless false), pins (off unless true),
+  //         maxD / minD: thread size limits in mm, minScore: 0.6 likely · 0.75 certain,
+  //         minUses, scope: 'all' | 'sel', add, quiet }
+  // Returns { count, tris, share, kinds: { bolt: { count, tris, ids, sizes }, … }, tooBig, unit } or null.
+  async function _selectFasteners(opts) {
+    if (_fastBusy) return null;
+    opts = (opts && typeof opts === 'object' && !(opts instanceof Event)) ? opts : {};
+    const want = { bolt: opts.bolts !== false, nut: opts.nuts !== false, washer: opts.washers !== false, pin: !!opts.pins };
+    const maxD = opts.maxD > 0 ? +opts.maxD : 30, minD = opts.minD > 0 ? +opts.minD : 0;
+    const minScore = opts.minScore > 0 ? +opts.minScore : 0.6, minUses = Math.max(1, opts.minUses | 0);
+    const say = (t, m, k, ms) => { if (!opts.quiet) toast(t, m, k, ms); };
+    const within = opts.scope === 'sel' && state.selected.size ? new Set(state.selected) : null;
+    const items = _exportDrawList(true).filter(it => it.part && !it.isClone && (!within || within.has(it.part.partId)));
+    if (!items.length) { say('Fasteners', within ? 'Nothing in the selection to look at' : 'There is nothing to look at', 'info', 3000); return null; }
+    _fastBusy = true;
+    const big = items.length > 300;
+    let cancelled = false;
+    const found = [];
+    const sv = new THREE.Vector3(), v3 = new THREE.Vector3();
+    try {
+      if (big) {
+        setLoader(true, 'Looking for fasteners…', fmtNum(items.length) + ' parts, by shape');
+        setLoaderProgress(2);
+        state._cancelJob = () => { cancelled = true; };
+        await _nextFrame();
+      }
+      let slice = performance.now();
+      for (let i = 0; i < items.length && !cancelled; i++) {
+        const it = items[i], g = it.geom, pos = g.attributes.position;
+        sv.setFromMatrixScale(it.world);
+        const lo = Math.min(sv.x, sv.y, sv.z), hi = Math.max(sv.x, sv.y, sv.z);
+        const even = hi - lo <= 0.02 * hi;                       // the same scale on every axis: the shape is the mesh's own
+        const stamp = pos.count + ':' + (g.index ? g.index.count : 0) + ':' + (pos.version | 0);
+        let c = even ? _fastSeen.get(g) : null;
+        if (!c || c.stamp !== stamp) {
+          let arr = pos.array;
+          if (!even || pos.isInterleavedBufferAttribute || !(arr instanceof Float32Array) || pos.itemSize !== 3) {
+            arr = new Float32Array(pos.count * 3);
+            for (let k = 0; k < pos.count; k++) {
+              v3.fromBufferAttribute(pos, k);
+              if (!even) v3.applyMatrix4(it.world);              // a stretched part is judged as it stands in the scene
+              arr[k * 3] = v3.x; arr[k * 3 + 1] = v3.y; arr[k * 3 + 2] = v3.z;
+            }
+          }
+          let r = null;
+          try { r = classifyFastener(arr, g.index ? g.index.array : null); } catch (e) { console.warn('[fasteners] ' + it.name + ':', e); }
+          c = { stamp, r };
+          if (even) _fastSeen.set(g, c);
+        }
+        if (c.r) found.push({ part: it.part, r: c.r, s: even ? (Math.cbrt(Math.abs(sv.x * sv.y * sv.z)) || 1) : 1 });
+        if (performance.now() - slice > 14) {
+          if (big) setLoaderProgress(2 + Math.round((i + 1) / items.length * 96));
+          await _nextFrame();
+          slice = performance.now();
+        }
+      }
+    } finally {
+      state._cancelJob = null;
+      if (big) setLoader(false);
+      _fastBusy = false;
+    }
+    if (cancelled) { say('Check cancelled', 'The selection was not changed', 'info', 3000); return null; }
+
+    // The file's unit. Scene units are millimetres; a model saved in metres or
+    // in inches has fasteners of impossible sizes read that way, and ordinary
+    // ones read the right way.
+    const firm = found.filter(f => f.r.kind !== 'pin' && f.r.score >= minScore);
+    const sane = (u) => firm.reduce((n, f) => { const d = f.r.d * f.s * u; return n + (d >= 1.2 && d <= 72 ? 1 : 0); }, 0);
+    let unit = 1;
+    if (firm.length && sane(1) < firm.length * 0.5) for (const u of [1000, 10, 25.4]) if (sane(u) > sane(unit)) unit = u;
+
+    let picks = [], tooBig = 0;
+    for (const f of found) {
+      const r = scaleFastener(f.r, f.s * unit);
+      if (!want[r.kind] || r.score < (r.kind === 'pin' ? 0.5 : minScore)) continue;
+      // (a nut's hole is at or under its thread, a washer's a little over)
+      const over = r.kind === 'washer' ? 1.16 : 1.05, under = r.kind === 'nut' ? 0.74 : 0.8;
+      if (r.d > maxD * over + (r.kind === 'washer' ? 0.3 : 0)) { tooBig++; continue; }
+      if (minD > 0 && r.d < minD * under) continue;
+      picks.push({ part: f.part, r, label: fastenerLabel(r), thread: fastenerThread(r) });
+    }
+    if (minUses > 1) {
+      const n = new Map(), key = (p) => p.label + '|' + (p.part.triCount || 0);
+      for (const p of picks) n.set(key(p), (n.get(key(p)) || 0) + 1);
+      picks = picks.filter(p => n.get(key(p)) >= minUses);
+    }
+    const total = _sceneTris();
+    const kinds = {};
+    let tris = 0;
+    for (const p of picks) {
+      const k = kinds[p.r.kind] || (kinds[p.r.kind] = { count: 0, tris: 0, ids: [], sizes: new Map() });
+      k.count++; k.tris += p.part.triCount || 0; k.ids.push(p.part.partId);
+      k.sizes.set(p.thread, (k.sizes.get(p.thread) || 0) + 1);
+      tris += p.part.triCount || 0;
+    }
+    const res = { count: picks.length, tris, share: tris / Math.max(1, total), kinds, tooBig, unit, ids: picks.map(p => p.part.partId), labels: picks.map(p => p.label) };
+    if (!picks.length) {
+      say('No fasteners found', tooBig ? fmtNum(tooBig) + ' larger than M' + maxD + ' left alone' : 'No part has the shape of a bolt, a nut or a washer', 'info', 4000);
+      return res;
+    }
+    _fastSelect(res.ids, opts.add);
+    say(fmtNum(picks.length) + (picks.length === 1 ? ' fastener selected' : ' fasteners selected'),
+      fmtNum(tris) + ' triangles (' + (res.share * 100).toFixed(1) + '% of the scene). Delete removes them; S isolates them first.', 'success', 8000);
+    return res;
+  }
+
+  // The Fasteners panel (index.html, data-cmd="fasteners"): the toolbar button
+  // and the menus open it; its main button (or Enter) runs the search with
+  // what is chosen there. The result stays in the panel as a short list — a
+  // row per kind, a click narrows the selection to it — with the two things
+  // one does next: look at them alone, or delete them.
+  (function _wireFasteners() {
+    const sec = document.querySelector('.section-cmd[data-cmd="fasteners"]');
+    if (!sec) return;
+    const $id = (id) => document.getElementById(id);
+    const DEF = { maxD: 30, bolts: true, nuts: true, washers: true, scope: 'all', min: 0.6, pins: false, add: false, uses: 1, minD: 0 };
+    const o = { ...DEF };
+    const seg = (id, key, attr, num) => {
+      const btns = [...sec.querySelectorAll('#' + id + ' button')];
+      const paint = () => { for (const b of btns) b.classList.toggle('active', String(o[key]) === b.dataset[attr]); };
+      for (const b of btns) b.addEventListener('click', () => { o[key] = num ? +b.dataset[attr] : b.dataset[attr]; paint(); b.blur(); changed(); });
+      return paint;
+    };
+    const paintScope = seg('fa-scope', 'scope', 'scope'), paintSure = seg('fa-sure', 'min', 'min', true);
+    const el = { maxD: $id('fa-max'), bolts: $id('fa-bolts'), nuts: $id('fa-nuts'), washers: $id('fa-washers'), pins: $id('fa-pins'), add: $id('fa-add'), uses: $id('fa-uses'), minD: $id('fa-min') };
+    const info = $id('fa-info'), list = $id('fa-list'), after = $id('fa-after'), run = $id('btn-fa-run');
+    let result = null, only = null;          // only: the kind the selection was narrowed to
+    const sizes = (m) => [...m].sort((a, b) => (a[0] || 1e9) - (b[0] || 1e9)).map(([t, n]) => (t ? 'M' + t : 'other') + (n > 1 ? ' ×' + fmtNum(n) : '')).join(' · ');
+    const idle = () => {
+      const n = state.selected.size;
+      if (!o.bolts && !o.nuts && !o.washers && !o.pins) return 'Switch on at least one kind.';
+      if (o.scope === 'sel') return n ? 'Looks at the ' + fmtNum(n) + ' selected ' + (n === 1 ? 'part' : 'parts') + ' only.' : 'Select the parts to look at first, or look in the whole scene.';
+      return 'Bushings, bearings, O-rings, shafts and pipe fittings are told apart and left alone. Nothing is deleted until you press Delete.';
+    };
+    function show() {
+      paintScope(); paintSure();
+      for (const k of ['bolts', 'nuts', 'washers', 'pins', 'add']) if (el[k]) el[k].checked = !!o[k];
+      if (el.maxD && document.activeElement !== el.maxD) el.maxD.value = String(o.maxD);
+      if (el.uses && document.activeElement !== el.uses) el.uses.value = String(o.uses);
+      if (el.minD && document.activeElement !== el.minD) el.minD.value = String(o.minD);
+      $id('fa-adv')?.classList.toggle('is-changed', ['scope', 'min', 'pins', 'add', 'uses', 'minD'].some(k => o[k] !== DEF[k]));
+      if (run) run.disabled = !(o.bolts || o.nuts || o.washers || o.pins);
+      const got = !!(result && result.count);
+      if (info) {
+        info.textContent = !result ? idle()
+          : got ? fmtNum(result.count) + (result.count === 1 ? ' fastener' : ' fasteners') + ' selected: ' + fmtNum(result.tris) + ' triangles, ' + (result.share * 100).toFixed(1) + '% of the scene.'
+            + (result.tooBig ? ' ' + fmtNum(result.tooBig) + ' larger than M' + o.maxD + ' left alone.' : '')
+            + (result.unit !== 1 ? ' Sizes read as ' + (result.unit === 1000 ? 'metres' : result.unit === 10 ? 'centimetres' : 'inches') + '.' : '')
+          : result.tooBig ? 'Selection unchanged: ' + fmtNum(result.tooBig) + (result.tooBig === 1 ? ' fastener is' : ' fasteners are') + ' larger than M' + o.maxD + '.'
+          : 'No part has the shape of a bolt, a nut or a washer.';
+        info.classList.toggle('is-result', got);
+      }
+      if (list) {
+        list.hidden = !got;
+        list.textContent = '';
+        if (got) for (const kind of ['bolt', 'nut', 'washer', 'pin']) {
+          const k = result.kinds[kind];
+          if (!k) continue;
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'fa-row' + (only === kind ? ' is-on' : '');
+          b.title = only === kind ? 'Back to all the fasteners found' : 'Select only these';
+          const n = document.createElement('b'), t = document.createElement('span'), s = document.createElement('small');
+          n.textContent = fmtNum(k.count); t.textContent = _FAST_KINDS[kind][k.count === 1 ? 0 : 1]; s.textContent = sizes(k.sizes);
+          b.append(n, t, s);
+          b.addEventListener('click', () => {
+            only = only === kind ? null : kind;
+            _fastSelect(only ? k.ids : result.ids, false);
+            seen = state.selected.size;
+            show();
+          });
+          list.appendChild(b);
+        }
+      }
+      if (after) after.hidden = !(got && state.selected.size);
+    }
+    // a result belongs to the options it was found with: changing one puts the hint back
+    const changed = () => { result = null; only = null; show(); };
+    for (const k of ['bolts', 'nuts', 'washers', 'pins', 'add']) el[k]?.addEventListener('change', () => { o[k] = el[k].checked; changed(); });
+    const num = (k, lo, hi, dec) => el[k]?.addEventListener('change', () => {
+      const v = parseFloat(String(el[k].value).replace(',', '.'));
+      o[k] = isFinite(v) ? +Math.max(lo, Math.min(hi, v)).toFixed(dec) : DEF[k];
+      changed();
+    });
+    num('maxD', 1, 100, 1); num('uses', 1, 9999, 0); num('minD', 0, 100, 1);
+    try { _scrubField(el.maxD, { min: 1, max: 100, step: 1 }); _scrubField(el.uses, { min: 1, max: 999, step: 1 }); _scrubField(el.minD, { min: 0, max: 100, step: 1 }); } catch (_) {}
+    $id('fa-reset')?.addEventListener('click', () => { Object.assign(o, { scope: DEF.scope, min: DEF.min, pins: DEF.pins, add: DEF.add, uses: DEF.uses, minD: DEF.minD }); changed(); });
+    run?.addEventListener('click', async () => {
+      const r = await _selectFasteners({ bolts: o.bolts, nuts: o.nuts, washers: o.washers, pins: o.pins, maxD: o.maxD, minD: o.minD, minScore: o.min, minUses: o.uses, scope: o.scope, add: o.add, quiet: true });
+      if (r) { result = r; only = null; seen = state.selected.size; show(); }
+    });
+    $id('btn-fa-isolate')?.addEventListener('click', () => { try { isolateSelected(); } catch (_) {} });
+    $id('btn-fa-delete')?.addEventListener('click', () => { _Actions.list.find(a => a.id === 'delete')?.run(); result = null; only = null; show(); });
+    sec.addEventListener('cmd-open', () => { result = null; only = null; show(); });
+    // the lines that name the selection follow it while the panel is open
+    let seen = -1;
+    setInterval(() => { if (sec.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; if (result && !n) { result = null; only = null; } show(); } }, 400);
+    show();
+  })();
+
   // ── Optimisation report ──────────────────────────────────────────────────
   // What the model was when it was opened against what it is now, and the
   // size of the last file written. The "original" column is a set of numbers
@@ -35145,7 +35951,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     bg.classList.add('show');
   }
   document.getElementById('btn-report')?.addEventListener('click', _showReport);
-  window._MOpt = { fitToBudget: _fitToBudget, selectHidden: _selectHiddenParts, showReport: _showReport, captureBaseline: _captureBaseline, noteExport: _noteExport, stats: _sceneStats };
+  window._MOpt = { fitToBudget: _fitToBudget, selectHidden: _selectHiddenParts, selectFasteners: _selectFasteners, showReport: _showReport, captureBaseline: _captureBaseline, noteExport: _noteExport, stats: _sceneStats };
 
   // ── Fill holes ────────────────────────────────────────────────────────
   // Closes holes in flat faces and leaves the rest of each mesh exactly as it
@@ -35351,6 +36157,160 @@ setTimeout(() => _dndDecorateTree(), 0);
     _scrubField(_fhEl('rise'),  { min: 0.01, max: 1000, step: 0.05, decimals: 2 });
   }
   document.getElementById('btn-fill-holes')?.addEventListener('click', _fillHoles);
+
+  // ── Smart optimise ───────────────────────────────────────────────────────
+  // The card at the top of "Reduce" (index.html, #smart-section): the app's
+  // clean-ups run one after another on the whole scene. A level is a set of
+  // answers to "which steps, and how far"; Auto picks the level from how
+  // heavy the scene is, and any answer can be changed before the run. Every
+  // step is the tool that could have been run by hand, so there is one
+  // implementation of each. The entries the steps add to the history are
+  // chained (`auto`), so one Ctrl+Z takes the whole run back.
+  (function _wireSmartOptimise() {
+    const el = (id) => document.getElementById(id);
+    const run = el('btn-smart-run');
+    if (!run) return;
+    // keep: the share of the triangles the level's own target leaves
+    const LEVELS = {
+      light:    { clean: true, hidden: false, fast: 'keep', small: 0, holes: false, remesh: false, keep: 0.5 },
+      balanced: { clean: true, hidden: true,  fast: 'cyl',  small: 1, holes: false, remesh: true,  keep: 0.5 },
+      strong:   { clean: true, hidden: true,  fast: 'cyl',  small: 2, holes: true,  remesh: true,  keep: 0.25 },
+    };
+    const NAMES = { light: 'Light', balanced: 'Balanced', strong: 'Strong' };
+    let level = 'auto', targetTyped = false, busy = false, applying = false;
+    const liveParts = () => { let n = 0; for (const p of state.parts) if (!p.deleted) n++; return n; };
+    // Auto: a light scene is only tidied, a heavy one is cut hard.
+    const autoLevel = (tris) => tris < 200e3 ? 'light' : tris < 2e6 ? 'balanced' : 'strong';
+    const resolved = () => level === 'auto' ? autoLevel(_sceneTris()) : level;
+    const short = (n) => n >= 1e6 ? +(n / 1e6).toFixed(2) + 'm' : n >= 1e4 ? Math.round(n / 1e3) + 'k' : String(Math.round(n));
+    const parseTris = (raw) => {     // "150000", "150 000", "150k", "1.5m"
+      const m = String(raw || '').trim().toLowerCase().replace(/[\s,_']/g, '').match(/^([0-9]*\.?[0-9]+)([km]?)$/);
+      return m ? Math.round(parseFloat(m[1]) * (m[2] === 'k' ? 1e3 : m[2] === 'm' ? 1e6 : 1)) : NaN;
+    };
+    const read = () => ({
+      clean: el('smart-clean').checked, hidden: el('smart-hidden').checked, fast: el('smart-fast').value,
+      small: Math.max(0, parseFloat(String(el('smart-small').value).replace(',', '.')) || 0),
+      holes: el('smart-holes').checked, remesh: el('smart-remesh').checked, target: parseTris(el('smart-target').value),
+    });
+    // a level's answers, written into the controls
+    function apply(name) {
+      const L = LEVELS[name];
+      if (!L) return;
+      applying = true;
+      try {
+        el('smart-clean').checked = L.clean; el('smart-hidden').checked = L.hidden; el('smart-holes').checked = L.holes;
+        el('smart-remesh').checked = L.remesh; el('smart-small').value = String(L.small);
+        const sel = el('smart-fast');
+        if (sel.value !== L.fast) { sel.value = L.fast; sel.dispatchEvent(new Event('change', { bubbles: true })); }   // (the dropdown redraws on change)
+        if (!targetTyped) { const t = _sceneTris(); el('smart-target').value = t ? short(Math.max(1, Math.round(t * L.keep))) : ''; }
+      } finally { applying = false; }
+    }
+    function refresh() {
+      const tris = _sceneTris(), n = liveParts(), c = read();
+      for (const b of document.querySelectorAll('#smart-level button')) b.classList.toggle('active', b.dataset.level === level);
+      el('smart-target-row').setAttribute('aria-disabled', c.remesh ? 'false' : 'true');
+      run.disabled = busy || !n;
+      const info = el('smart-info');
+      if (!n) { info.textContent = 'Load a model first.'; return; }
+      const steps = [];
+      if (c.clean) steps.push('tidy up');
+      if (c.hidden) steps.push('remove hidden parts');
+      if (c.fast === 'cyl') steps.push('simplify fasteners'); else if (c.fast === 'delete') steps.push('delete fasteners');
+      if (c.small > 0) steps.push(`remove parts under ${c.small}%`);
+      if (c.holes) steps.push('fill holes');
+      if (c.remesh && c.target > 0 && c.target < tris) steps.push(`reduce ${fmtNum(tris)} triangles to ${fmtNum(c.target)}`);
+      const picked = level === 'auto' ? `Auto picked ${NAMES[resolved()]} for ${fmtNum(tris)} triangles in ${fmtNum(n)} ${n === 1 ? 'part' : 'parts'}. ` : '';
+      const last = steps.length > 1 ? steps.slice(0, -1).join(', ') + ' and ' + steps[steps.length - 1] : steps[0];
+      info.textContent = picked + (steps.length ? 'It will ' + last + '.' : 'Every step is switched off.');
+    }
+    // the scene changed (a file opened, something deleted): a level's own
+    // numbers follow it; answers changed by hand are left as they are
+    let soonT = 0;
+    const soon = () => { if (busy) return; clearTimeout(soonT); soonT = setTimeout(() => { if (level !== 'custom') apply(resolved()); refresh(); }, 200); };
+    { const _rs = recomputeStats; recomputeStats = function () { const r = _rs.apply(this, arguments); soon(); return r; }; }
+
+    for (const b of document.querySelectorAll('#smart-level button')) b.addEventListener('click', () => {
+      level = b.dataset.level; targetTyped = false;
+      apply(resolved()); refresh(); b.blur();
+    });
+    for (const id of ['smart-clean', 'smart-hidden', 'smart-fast', 'smart-holes', 'smart-remesh', 'smart-small']) {
+      el(id)?.addEventListener('change', () => { if (applying) return; level = 'custom'; refresh(); });
+    }
+    el('smart-small')?.addEventListener('input', () => { if (applying) return; level = 'custom'; refresh(); });
+    el('smart-target')?.addEventListener('input', () => { targetTyped = true; refresh(); });
+    el('smart-target')?.addEventListener('change', () => { targetTyped = true; refresh(); });
+
+    async function smartRun() {
+      if (busy) return;
+      if (!liveParts()) { toast('Smart optimise', 'The scene is empty', 'warn', 2500); return; }
+      const c = read();
+      if (c.remesh && !(c.target > 0)) { toast('Smart optimise', 'Type a triangle target, or switch "Reduce triangles" off', 'warn', 3500); el('smart-target')?.focus(); return; }
+      busy = true; refresh();
+      const t0 = _sceneTris(), p0 = liveParts();
+      const before = new Set(state.history);
+      const cancelBtn = el('loader-cancel-btn');
+      let stopped = false, failed = 0;
+      const onCancel = () => { stopped = true; };
+      cancelBtn?.addEventListener('click', onCancel, true);
+      // the steps' own messages go to the log; one summary is shown at the end
+      window.__moQuietToasts = true;
+      const done = [];
+      const step = async (name, fn) => {
+        if (stopped) return;
+        setLoader(true, 'Smart optimise', name + '…');
+        await _nextFrame();
+        const tb = _sceneTris(), pb = liveParts();
+        try { await fn(); } catch (e) { failed++; console.warn('[smart] ' + name + ':', e && e.message || e); }
+        const dt = tb - _sceneTris(), dp = pb - liveParts();
+        if (dt > 0 || dp > 0) done.push({ name, dt, dp });
+        try { Log.info(`[smart] ${name}: ${fmtNum(dp)} parts, ${fmtNum(dt)} triangles`); } catch (_) {}
+      };
+      try {
+        if (c.clean) await step('Tidying up', () => { cleanEmpty(); cleanDegenerate(); cleanEmptyGroups(); });
+        if (c.hidden) await step('Removing hidden parts', async () => {
+          const r = await _selectHiddenParts({});
+          if (r && r.count) deleteParts([...state.selected], 'Removed hidden parts');
+        });
+        if (c.fast !== 'keep') await step(c.fast === 'delete' ? 'Deleting fasteners' : 'Simplifying fasteners', async () => {
+          const r = await _selectFasteners({ quiet: true, bolts: true, nuts: true, washers: true, pins: false, maxD: 30, minD: 0, minScore: 0.6, minUses: 1, scope: 'all', add: false });
+          const ids = r && r.ids ? r.ids.filter(id => { const p = getPart(id); return p && !p.deleted; }) : [];
+          if (!ids.length) return;
+          if (c.fast === 'delete') deleteParts(ids, 'Removed fasteners');
+          else await bboxifyParts(ids, 'Simplified fasteners', 'cyl');
+        });
+        if (c.small > 0) await step('Removing small parts', () => {
+          const cut = c.small / 100 * (state.modelDiag || 0);
+          const ids = cut > 0 ? state.parts.filter(p => !p.deleted && p.sizeMetrics && p.sizeMetrics.diag < cut).map(p => p.partId) : [];
+          if (ids.length && ids.length < liveParts()) deleteParts(ids, 'Removed small parts');
+        });
+        if (c.holes) await step('Filling holes', async () => { clearSelection(); await _fillHoles(); });
+        if (c.remesh && c.target > 0 && _sceneTris() > c.target) await step('Reducing triangles', () => _fitToBudget(c.target));
+      } finally {
+        cancelBtn?.removeEventListener('click', onCancel, true);
+        window.__moQuietToasts = false;
+        setLoader(false);
+        // one undo for the whole run: every entry after the first follows the one before it
+        const mine = state.history.filter(op => !before.has(op));
+        for (let i = 1; i < mine.length; i++) mine[i].auto = true;
+        try { clearSelection(); } catch (_) {}
+        try { refreshFlagged(); } catch (_) {}
+        busy = false;
+        targetTyped = false;
+        if (level !== 'custom') apply(resolved());
+        refresh();
+        const t1 = _sceneTris(), gone = p0 - liveParts();
+        const bits = [];
+        if (t1 < t0) bits.push(`${fmtNum(t0)} → ${fmtNum(t1)} triangles (−${((t0 - t1) / Math.max(1, t0) * 100).toFixed(1)}%)`);
+        if (gone > 0) bits.push(`${fmtNum(gone)} ${gone === 1 ? 'part' : 'parts'} removed`);
+        if (!mine.length) toast('Smart optimise', stopped ? 'Stopped: nothing was changed' : 'Nothing to do: the scene is already clean at this level', 'info', 4000);
+        else toast(stopped ? 'Smart optimise stopped' : 'Smart optimise done', bits.concat(stopped ? ['the steps already run are kept'] : [], ['Ctrl+Z takes it all back']).join(' · '), stopped || failed ? 'warn' : 'success', 9000);
+        if (failed) toast('Smart optimise', `${failed} ${failed === 1 ? 'step' : 'steps'} could not run; see the log`, 'warn', 5000);
+      }
+    }
+    run.addEventListener('click', smartRun);
+    window.__moSmartOptimise = smartRun;
+    apply(resolved()); refresh();
+  })();
   document.getElementById('fill-holes-size')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); _fillHoles(); } });
 
   // Keep the count badge on the Decimate button in sync with selection.
@@ -35420,8 +36380,21 @@ setTimeout(() => _dndDecorateTree(), 0);
       more.classList.add('active');
     });
   }
-  $id('welcome-shortcuts')?.addEventListener('click', () => run('shortcuts'));
-  $id('welcome-settings')?.addEventListener('click', () => run('settings'));
+  // Keyboard shortcuts and Settings are windows of their own. The start
+  // screen steps aside for them (it used to stay in front, so the window
+  // opened unseen behind it) and comes back when they close, if there is
+  // still no scene. Settings opens on General, where the start-up options are.
+  const aside = (modalId, open) => {
+    const m = $id(modalId);
+    try { _Welcome.hide(); } catch (_) {}
+    try { open(); } catch (e) { console.warn('[welcome]', e); }
+    const back = () => { if (!state.parts.some(p => !p.deleted) && !document.querySelector('.modal-bg.show, .dlg-bg.show')) { try { _Welcome.show(); } catch (_) {} } };
+    if (!m || !m.classList.contains('show')) { back(); return; }
+    const mo = new MutationObserver(() => { if (m.classList.contains('show')) return; mo.disconnect(); back(); });
+    mo.observe(m, { attributes: true, attributeFilter: ['class'] });
+  };
+  $id('welcome-shortcuts')?.addEventListener('click', () => aside('shortcuts-modal', () => run('shortcuts')));
+  $id('welcome-settings')?.addEventListener('click', () => aside('settings-modal', () => _Settings.show('general')));
 
   // Start from a shape: an empty scene with one primitive in it.
   $id('welcome-shapes')?.addEventListener('click', async (e) => {
@@ -35457,11 +36430,6 @@ setTimeout(() => _dndDecorateTree(), 0);
     try { _lucide(); } catch (_) {}
   };
 
-  // Option switches mirror Settings.
-  const opts = [['wl-opt-fit', 'autoFitOnLoad'], ['wl-opt-resume', 'autoRestoreSession'], ['wl-opt-boot', 'welcomeOnBoot']];
-  const syncOpts = () => { for (const [id, key] of opts) { const el = $id(id); if (el) el.checked = _Prefs.get(key) !== false; } };
-  for (const [id, key] of opts) $id(id)?.addEventListener('change', (e) => { _Prefs.set(key, !!e.target.checked); });
-
   // Recents filter.
   const filter = $id('welcome-recents-filter');
   const applyFilter = () => {
@@ -35487,7 +36455,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   // Refresh whenever the screen is shown.
   const modal = $id('welcome-modal');
   if (modal) {
-    const onShow = () => { if (modal.classList.contains('show')) { syncOpts(); fillShapePics(); applyFilter(); } };
+    const onShow = () => { if (modal.classList.contains('show')) { fillShapePics(); applyFilter(); } };
     new MutationObserver(onShow).observe(modal, { attributes: true, attributeFilter: ['class'] });
     setTimeout(onShow, 400);
     setTimeout(fillShapePics, 2500);    // thumbnails render a moment after boot
@@ -35500,7 +36468,7 @@ setTimeout(() => _dndDecorateTree(), 0);
 {
   const _undoOne = undoLast, _redoOne = redoLast;
   undoLast = function () {
-    for (let guard = 0; guard < 8; guard++) {
+    for (let guard = 0; guard < 24; guard++) {
       const top = state.history[state.history.length - 1];
       _undoOne.apply(this, arguments);
       if (!(top && top.auto)) break;
@@ -35508,7 +36476,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   };
   redoLast = function () {
     _redoOne.apply(this, arguments);
-    for (let guard = 0; guard < 8; guard++) {
+    for (let guard = 0; guard < 24; guard++) {
       const nxt = state.redo && state.redo[state.redo.length - 1];
       if (!(nxt && nxt.auto)) break;
       _redoOne.apply(this, arguments);
@@ -35571,6 +36539,12 @@ if (new URLSearchParams(location.search).has('selftest')) {
       () => dock.getBoundingClientRect().height, () => 170, () => Math.round(window.innerHeight * 0.8));
     drag(document.getElementById('mat-insp-grip'), '--mat-insp-w', 'stepopt-mat-insp-w', false,
       () => insp.getBoundingClientRect().width, () => 200, () => Math.max(200, dock.getBoundingClientRect().width - 280));
+    const lib = document.getElementById('vp-library-pop');
+    if (lib) drag(document.getElementById('lib-dock-grip'), '--lib-dock-h', 'stepopt-lib-dock-h', true,
+      () => lib.getBoundingClientRect().height, () => 170, () => Math.round(window.innerHeight * 0.8));
+    const libInsp = document.getElementById('lib-inspector');
+    if (lib && libInsp) drag(document.getElementById('lib-insp-grip'), '--lib-insp-w', 'stepopt-lib-insp-w', false,
+      () => libInsp.getBoundingClientRect().width, () => 330, () => Math.max(330, lib.getBoundingClientRect().width - 300));
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go, { once: true });
   else go();
@@ -35586,14 +36560,15 @@ if (new URLSearchParams(location.search).has('selftest')) {
     // to 0 to measure and then setting it again made the browser lay the page
     // out twice more on every step of a sidebar drag.)
     const place = () => {
-      // The parts / library switch sits at the right end of the sidebar's own
-      // stretch of the bar, in line with the search box under it. With the
-      // sidebar folded away, or too narrow for that, it stays next to Menu.
-      const sw = document.getElementById('side-switch'), side = document.getElementById('sidebar-left');
+      // The button that folds the left sidebar away sits at the right end of
+      // the sidebar's own stretch of the bar, in line with the search box
+      // under it (where the parts / library switch was). With the sidebar
+      // folded away, or too narrow for that, it stays next to Menu.
+      const sw = document.getElementById('btn-toggle-left'), side = document.getElementById('sidebar-left');
       let moved = 0;
       if (sw && side) {
         const curS = parseFloat(sw.style.marginLeft) || 0;
-        // The Menu button gives up its word when the switch would otherwise
+        // The Menu button gives up its word when the toggle would otherwise
         // run past the sidebar's edge, and takes it back when there is room
         // again (its width with the word is remembered from when it had it).
         const menu = document.getElementById('btn-file');
@@ -35602,7 +36577,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
           const edge0 = box0 && box0.width ? box0.right : side.getBoundingClientRect().right - 12;
           const r0 = sw.getBoundingClientRect(), short = menu.classList.contains('icon-only'), mw = menu.getBoundingClientRect().width;
           if (!short && mw) menu._fullW = mw;
-          const end = r0.right - curS + (short ? Math.max(0, (menu._fullW || mw) - mw) : 0);   // where the switch ends with the word shown
+          const end = r0.right - curS + (short ? Math.max(0, (menu._fullW || mw) - mw) : 0);   // where the toggle ends with the word shown
           const want = !document.body.classList.contains('left-collapsed') && end > edge0 + 0.5;
           if (want !== short) menu.classList.toggle('icon-only', want);
         }
