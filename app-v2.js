@@ -2898,12 +2898,14 @@ const _Settings = (() => {
 
 const _Welcome = (() => {
   const REC_KEY = 'stepopt-recents';
-  const REC_MAX = 8;
+  const REC_MAX = 10;               // how many recent files the start screen keeps and shows
   let inited = false;
 
   function _load() {
-    try { return JSON.parse(localStorage.getItem(REC_KEY) || '[]'); }
-    catch (_) { return []; }
+    try {
+      const v = JSON.parse(localStorage.getItem(REC_KEY) || '[]');
+      return Array.isArray(v) ? v.filter(r => r && typeof r.name === 'string').slice(0, REC_MAX) : [];
+    } catch (_) { return []; }
   }
   function _save(list) {
     try { localStorage.setItem(REC_KEY, JSON.stringify(list.slice(0, REC_MAX))); }
@@ -2943,18 +2945,22 @@ const _Welcome = (() => {
       const safeName = r.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
       const thumbInner = r.thumb
         ? `<img src="${r.thumb}" alt="" draggable="false">`
-        : `<i data-lucide="file"></i>`;
+        : `<i data-lucide="box"></i>`;
+      // the file's type, as a small tag after its name
+      const ext = (/\.([a-z0-9]{2,5})$/i.exec(r.name) || [])[1] || '';
+      const stem = ext ? safeName.slice(0, safeName.length - ext.length - 1) : safeName;
+      const sub = [_fmtBytes(r.size), _fmtAge(r.ts)].filter(Boolean).join(' · ');
       // <div> wrapper (not <button>) because the row hosts a nested <button>
       // for the hover-revealed × delete affordance, and HTML disallows nested
       // buttons. Click bubbling on the row still triggers the open handler.
       return `
-      <div class="welcome-recent" data-idx="${i}" title="${safeName}" tabindex="0">
+      <div class="welcome-recent" data-idx="${i}" title="${safeName}" tabindex="0" role="button" aria-label="Open ${safeName}">
         <div class="wr-thumb">${thumbInner}</div>
         <div class="wr-meta">
-          <div class="wr-name">${safeName}</div>
-          <div class="wr-sub">${_fmtBytes(r.size)} · ${_fmtAge(r.ts)}</div>
+          <div class="wr-name"><span class="wr-stem">${stem}</span>${ext ? `<span class="wr-ext">${ext.toUpperCase()}</span>` : ''}</div>
+          <div class="wr-sub">${sub}</div>
         </div>
-        <button class="wr-del" data-act="delete" title="Remove from recent files"><i data-lucide="x"></i></button>
+        <button class="wr-del" data-act="delete" title="Remove from recent files" aria-label="Remove ${safeName} from recent files"><i data-lucide="x"></i></button>
       </div>`;
     }).join('');
     box.querySelectorAll('.welcome-recent').forEach(el => {
@@ -2967,6 +2973,11 @@ const _Welcome = (() => {
         const rec = _load()[idx];
         if (!rec) return;
         _openRecentByKey(_recKey(rec.name, rec.size));
+      });
+      // a row is reached with Tab: Enter or Space opens it, as a click does
+      el.addEventListener('keydown', (e) => {
+        if ((e.key !== 'Enter' && e.key !== ' ') || e.target !== el) return;
+        e.preventDefault(); el.click();
       });
     });
     // Per-row delete: drop the entry from the persisted list, drop the
@@ -5873,7 +5884,7 @@ function tick() {
         // Pick the in-plane basis from the active grid plane. Default = XY
         // (standard top/persp view); 'xz' / 'yz' are set when the user
         // enters Front / Side ortho views — see _setStandardView.
-        const plane = state.gridPlane || 'xy';
+        const plane = state.gridPlane || _floorPlane();
         let nAx;   // normal axis index for the angle-fade calc below
         if (u.uPlaneN && u.uPlaneU && u.uPlaneV) {
           if (plane === 'xz')      { u.uPlaneN.value.set(0, 1, 0); u.uPlaneU.value.set(1, 0, 0); u.uPlaneV.value.set(0, 0, 1); nAx = 'y'; }
@@ -6746,11 +6757,15 @@ function _autoInstanceFromGLB() {
     };
 
     const m4 = new THREE.Matrix4();
+    // The set goes under partsRoot, which may be turned or scaled (Y-up,
+    // scene scale, Align to floor). A copy's world matrix already contains
+    // that; used as it is, the copies got it twice.
+    state.partsRoot.updateWorldMatrix(true, false);
+    const rootInv = new THREE.Matrix4().copy(state.partsRoot.matrixWorld).invert();
     for (let k = 0; k < N; k++) {
       const p = g.parts[k];
-      // Use the part's current world matrix as its instance transform.
       p.mesh.updateWorldMatrix(true, false);
-      m4.copy(p.mesh.matrixWorld);
+      m4.multiplyMatrices(rootInv, p.mesh.matrixWorld);
       inst.setMatrixAt(k, m4);
       // Snapshot the build-time matrix. _isolateSet / showAllParts use this to
       // restore the part's transform when re-showing — restoring to identity
@@ -6879,6 +6894,14 @@ async function _drainDisposeQueue() {
 function clearModel() {
   _detachGizmo();
   try { _MotionPerf.reset(); } catch (_) {}
+  // Heatmap, Clay, X-ray and Wireframe dress the materials of the model that
+  // is here now. Back to Solid while that model still exists: otherwise the
+  // mode stays "on" with nothing dressed (Heatmap could not be entered again
+  // after Revert), and the next model inherits a button that lies.
+  if (state.viewMode && state.viewMode !== 'solid') { try { setViewMode('solid'); } catch (_) {} }
+  // The Materials dock's picks and the materials added by hand belong to the old model.
+  try { _matPanelSelected.clear(); } catch (_) {}
+  state.userMaterials = null;
   try { _alignForget(); } catch (_) {}         // (the turn "Align to floor" gave the last model)
   setTimeout(() => _Dirty.mark(), 0);          // a new or freshly opened scene has nothing unsaved
   // "Recenter on origin" moves partsRoot. A new model must start from zero
@@ -7125,7 +7148,32 @@ function _doCameraFlash(durMs = 360) {
 // Render the scene into an offscreen target at the requested resolution and
 // return a PNG blob. Adjusts camera aspect for non-viewport sizes so the
 // composition isn't squashed; restores the camera afterwards.
+// A capture borrows the viewport: another view mode, the grid hidden, the
+// camera's aspect set for the picture's shape. Whatever happens inside (a
+// render target too large to allocate, a read-back that throws) all of it is
+// given back here, so a failed screenshot cannot leave the viewport in
+// wireframe, without its grid, or stretched.
 async function _captureFrameAsBlob(outW, outH, opts = {}) {
+  const hasGrid = (typeof gridHelper !== 'undefined' && gridHelper);
+  const prevMode = state?.viewMode, prevGrid = hasGrid ? gridHelper.visible : null;
+  const prevOrigin = state?._originMarker ? state._originMarker.visible : null, prevAspect = camera ? camera.aspect : null;
+  // Past this a render target is refused by most graphics cards (and is a
+  // gigabyte of pixels): the picture is scaled to fit, keeping its shape.
+  const MAX_SIDE = 8192;
+  if (outW > MAX_SIDE || outH > MAX_SIDE) {
+    const k = MAX_SIDE / Math.max(outW, outH);
+    outW = Math.round(outW * k); outH = Math.round(outH * k);
+    try { toast('Screenshot', `Scaled to ${outW} × ${outH}, the largest size that can be drawn in one piece`, 'info', 5000); } catch (_) {}
+  }
+  try { return await _captureFrameAsBlobRun(outW, outH, opts); }
+  finally {
+    try { if (prevMode && state.viewMode !== prevMode && typeof setViewMode === 'function') setViewMode(prevMode); } catch (_) {}
+    try { if (hasGrid && prevGrid != null && gridHelper.visible !== prevGrid) { gridHelper.visible = prevGrid; requestRender(); } } catch (_) {}
+    try { if (state?._originMarker && prevOrigin != null && state._originMarker.visible !== prevOrigin) { state._originMarker.visible = prevOrigin; requestRender(); } } catch (_) {}
+    try { if (camera && prevAspect != null && camera.aspect !== prevAspect) { camera.aspect = prevAspect; camera.updateProjectionMatrix(); requestRender(); } } catch (_) {}
+  }
+}
+async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
   if (!renderer || !scene || !camera) throw new Error('renderer not ready');
   outW = Math.max(2, Math.round(outW));
   outH = Math.max(2, Math.round(outH));
@@ -7927,7 +7975,8 @@ function fitToView() {
   // 2.0× margin gives Blender / C4D-like breathing room around the model
   // (was 1.4×, which filled ~70% of viewport height — felt cropped).
   const dist = (maxDim / (2 * Math.tan(fov / 2))) * 2.0;
-  const dir = new THREE.Vector3(0.7, -0.9, 0.5).normalize();
+  // (the same three-quarter view as _setPerspectiveView, for either up axis)
+  const dir = (state.sceneUpAxis === 'y' ? new THREE.Vector3(0.7, 0.5, 0.9) : new THREE.Vector3(0.7, -0.9, 0.5)).normalize();
   camera.position.copy(center).add(dir.multiplyScalar(dist));
   camera.near = Math.max(0.001, dist / 1000); camera.far = dist * 1000;
   // An orthographic view is sized by its own half-height and zoom, not by how
@@ -8496,6 +8545,16 @@ function _applySceneUpAxis() {
   state.partsRoot.updateMatrix();
   state.partsRoot.updateMatrixWorld(true);
   if (camera) camera.up.set(0, state.sceneUpAxis === 'y' ? 1 : 0, state.sceneUpAxis === 'z' ? 1 : 0);
+  // OrbitControls turns about the up it read from the camera when it was
+  // built; without this, orbiting in a Y-up scene still turned about Z.
+  try {
+    if (camera && controls && controls._quat && controls._quatInverse) {
+      controls._quat.setFromUnitVectors(camera.up, new THREE.Vector3(0, 1, 0));
+      controls._quatInverse.copy(controls._quat).invert();
+      controls.update();
+    }
+  } catch (_) {}
+  if (!_stdViewActive) state.gridPlane = _floorPlane();
   if (gridHelper) {
     gridHelper.rotation.x = (state.sceneUpAxis === 'y') ? 0 : Math.PI / 2;
     gridHelper.updateMatrix();
@@ -8843,7 +8902,10 @@ function _transformTarget() {
       // stored origin (bbox centroid), and rotation/size from descendants,
       // which works fine without a live Object3D. Use partsRoot as a stand-in
       // so any code that touches obj.matrixWorld doesn't blow up.
-      if (hn) return { obj: state.partsRoot, kind: 'group' };
+      // (`synthetic` tells the write paths to keep their hands off it: the
+      // stand-in is the whole scene's root, and a scale or a reset typed into
+      // the panel would rescale or un-place every part in the scene.)
+      if (hn) return { obj: state.partsRoot, kind: 'group', synthetic: true };
     }
     if (state.userGroups) {
       const ug = state.userGroups.find(g => String(g.id) === String(gid));
@@ -9286,6 +9348,8 @@ function _wireTransformPanel() {
     // Use the pivot whenever it's set up for this selection.
     const pivotActive = state.pivot && (state._pivotedGroup || state._pivotedParts?.length);
     const usePivot = (usingWorld && state.pivot) || (isGroup && pivotActive);
+    // A synthetic group can be moved and turned through the gizmo's pivot; it has no size or transform of its own.
+    if (target.synthetic && (!(isGroup && pivotActive) || axis === 'sx' || axis === 'sy' || axis === 'sz')) { _transformPanelRefresh(); return; }
     try {
       if (axis === 'px' || axis === 'py' || axis === 'pz') {
         if (usePivot) {
@@ -9567,9 +9631,13 @@ function _wireTransformPanel() {
         state.pivot.rotation.set(0, 0, 0);
         state.pivot.updateMatrixWorld(true);
         // Also reset the real object's scale (pivot has no scale of its own).
-        obj.scale.set(1, 1, 1);
-        obj.updateMatrix();
-        obj.updateMatrixWorld(true);
+        if (!target.synthetic) {
+          obj.scale.set(1, 1, 1);
+          obj.updateMatrix();
+          obj.updateMatrixWorld(true);
+        }
+      } else if (target.synthetic) {
+        // nothing of its own to reset (and the stand-in object is the scene's root)
       } else if (_hasPivotAncestor(obj)) {
         // obj is under pivot but pivotActive is false — edge case; fall back
         // to the world-to-local path.
@@ -9668,6 +9736,22 @@ function _wireTransformPanel() {
   }
   function _resetTformChan(kind) {
     const identity = kind === 'scale' ? 1 : 0;
+    // For a part the Size column is its bounding box in length units, so
+    // writing 1 into the fields would shrink it to a 1 x 1 x 1 box. Its size
+    // is reset the way the Reset button does it: scale back to 1.
+    if (kind === 'scale') {
+      const t = _transformTarget();
+      if (t && t.kind !== 'group' && t.kind !== 'user-group' && t.obj && t.obj.scale && !t.part?.locked) {
+        _withTransformUndo('panel:reset-size', () => {
+          t.obj.scale.set(1, 1, 1);
+          t.obj.updateMatrix(); t.obj.updateMatrixWorld(true);
+          try { if (t.part) _refreshPartBBox(t.part); } catch (_) {}
+        });
+        try { _transformPanelRefresh(); applySelectionColors(); requestRender(); } catch (_) {}
+        toast?.(`Reset ${_tformChanLabel[kind]}`, '', 'info', 1600);
+        return;
+      }
+    }
     const inputs = _tformChanInputs(kind);
     let n = 0;
     inputs.forEach(inp => {
@@ -9997,6 +10081,9 @@ function _setStandardView(view) {
 // dead end: orbiting out of it drops back to the perspective camera where
 // you are (see _leaveAxisView), and pan and zoom stay inside it.
 const _stdViewDir = new THREE.Vector3();
+// The grid plane that is the floor: XY in a Z-up scene, XZ in a Y-up one.
+function _floorPlane() { return state.sceneUpAxis === 'y' ? 'xz' : 'xy'; }
+
 function _goAxisView(axisId) {
   if (!camera || !controls) return;
   const zUp = state.sceneUpAxis !== 'y';
@@ -10027,8 +10114,9 @@ function _goAxisView(axisId) {
   controls.enableRotate = true;
   // Switch the grid plane to match the camera-facing plane so the user sees
   // a real grid in front / side ortho views (not just an edge-on smear).
-  state.gridPlane = (ax === up) ? 'xy' : (ax === 'x') ? 'yz' : 'xz';
-  if (!zUp) state.gridPlane = (ax === 'y') ? 'xy' : (ax === 'x') ? 'yz' : 'xz';
+  // (the plane the camera looks straight at: the one whose normal is the view
+  // axis, whichever way up the scene is)
+  state.gridPlane = (ax === 'z') ? 'xy' : (ax === 'x') ? 'yz' : 'xz';
   requestRender();
 }
 // The user orbited out of an axis view: back to the perspective camera,
@@ -10047,7 +10135,7 @@ function _leaveAxisView() {
   camera.up.set(0, upY ? 1 : 0, upY ? 0 : 1);
   camera.lookAt(controls.target);
   _syncViewPill('persp');
-  state.gridPlane = 'xy';
+  state.gridPlane = _floorPlane();
   requestRender();
 }
 
@@ -10079,9 +10167,9 @@ function _setPerspectiveView() {
   _stdViewActive = false;
   // Free rotation again — counterpart to the lock applied in _setStandardView.
   controls.enableRotate = true;
-  // Restore the floor (XY) grid plane so persp / Cam shows the standard
+  // Restore the floor grid plane so persp / Cam shows the standard
   // top-down construction plane.
-  state.gridPlane = 'xy';
+  state.gridPlane = _floorPlane();
   requestRender();
 }
 
@@ -12031,6 +12119,7 @@ function _commitMarqueeSelection(m) {
     }
   } else {
     state.selected = new Set(matched);
+    state.selectedGroupIds?.clear?.();           // (a marquee replaces what was selected: the group row included)
   }
   if (matched.size) state._selAnchorId = [...matched].pop();
   applySelectionColors();
@@ -12066,7 +12155,7 @@ function _treeSelectRange(anchorId, clickedId, additive) {
     return;
   }
   const lo = Math.min(iA, iB), hi = Math.max(iA, iB);
-  if (!additive) state.selected.clear();
+  if (!additive) { state.selected.clear(); state.selectedGroupIds?.clear?.(); }
   for (let i = lo; i <= hi; i++) {
     const id = parseInt(nodes[i].dataset.partId, 10);
     const p = getPart(id);
@@ -12797,12 +12886,14 @@ const _Tabs = (() => {
   }
 
   // A new tab. With a file, the new tab opens that file.
-  function add({ file = null } = {}) {
+  function add({ file = null, shape = null } = {}) {
+    const putShape = (id) => { if (shape) { try { REG.wins[id]._addPrimitive?.(shape); } catch (e) { console.warn('[tabs] shape:', e); } } };
     const main = find('main');
     if (main && main.closed) {                    // the first tab was closed (it only hides): bring it back, empty
       main.closed = false; main.title = 'Untitled scene'; main.dirty = false;
       activate('main');
       if (file) { try { REG.wins.main.__moOpenFile(file); } catch (e) { console.warn('[tabs] open in first tab:', e); } }
+      putShape('main');
       return 'main';
     }
     // "Untitled scene 2", "… 3": the lowest number no open scene is using
@@ -12817,18 +12908,20 @@ const _Tabs = (() => {
       if (sp.ready) {
         entry(sp.id, false);
         try { REG.wins[sp.id].__moAdopt(name, file); } catch (e) { console.warn('[tabs] adopt:', e); }
+        putShape(sp.id);
         activate(sp.id);
         warmSoon();
         return sp.id;
       }
       // the spare is still starting: it becomes this tab when it is ready
       entry(sp.id, true);
-      const fr = frameOf(sp.id); if (fr) fr.__moBoot = { file, name };
+      const fr = frameOf(sp.id); if (fr) fr.__moBoot = { file, name, shape };
       REG.pending = sp.id;
       renderAll();
+      { const sid = sp.id; TOP.setTimeout(() => { if (REG.pending === sid) { const f2 = frameOf(sid); if (f2) reveal(f2); REG.pending = null; const t2 = find(sid); if (t2) t2.loading = false; activate(sid); } }, 9000); }
       return sp.id;
     }
-    const id = spawn({ file, name });
+    const id = spawn({ file, name, shape });
     entry(id, true);
     REG.pending = id;
     renderAll();
@@ -13087,6 +13180,7 @@ const _Tabs = (() => {
       childReady();
       try { boot = window.frameElement.__moBoot || boot; } catch (_) {}
       if (boot && boot.file) { try { window.__moOpenFile(boot.file); } catch (e) { console.warn('[tabs] open:', e); } }
+      if (boot && boot.shape) { try { window._addPrimitive?.(boot.shape); } catch (e) { console.warn('[tabs] shape:', e); } }
     }, 420);
     return true;
   }
@@ -13381,6 +13475,7 @@ function duplicateParts(ids, label='Duplicated', opts = {}) {
   pushUndo(undoOp);
 
   state.selected = new Set(newIds);
+  state.selectedGroupIds?.clear?.();             // the copies are what is selected now, not the group the originals were in
   $('del-sel-count').textContent = state.selected.size;
 
   recomputeStats(); rebuildTree(); applySelectionColors();
@@ -14062,12 +14157,18 @@ function setViewMode(mode) {
   // (saved view state from older sessions) onto plain solid.
   if (mode === 'mesh') mode = 'solid';
   state.viewMode = mode;
+  // Wireframe and X-ray overwrite how a material is drawn (opacity, which
+  // side, depth, blending). Those are also things the material editor sets:
+  // an Opacity of 0.4, a double-sided sheet. So what a material had is put
+  // aside the first time a view mode takes it over, and Solid puts it back,
+  // instead of writing "opaque, front side only" over everything.
+  const KEEP = ['transparent', 'opacity', 'depthWrite', 'depthTest', 'alphaToCoverage', 'side', 'blending'];
   const apply = (m) => {
+    if (mode !== 'solid' && !m.userData._vm) { const own = {}; for (const k of KEEP) own[k] = m[k]; m.userData._vm = own; }
     if (mode === 'solid') {
       m.wireframe = false;
-      m.transparent = false; m.opacity = 1; m.depthWrite = true; m.depthTest = true;
-      m.alphaToCoverage = false;
-      m.side = THREE.FrontSide;
+      const own = m.userData._vm;
+      if (own) { for (const k of KEEP) if (own[k] !== undefined) m[k] = own[k]; delete m.userData._vm; }
     } else if (mode === 'wire') {
       m.wireframe = true;
       m.transparent = false; m.opacity = 1; m.depthWrite = true; m.depthTest = true;
@@ -16718,7 +16819,7 @@ function _collectSceneState() {
     sourceName: state._loadedFilename || null,
     camera: cam,
     view: {
-      viewMode:        state.viewMode,
+      viewMode:        state._viewModeShown || state.viewMode,
       showGrid:        state.showGrid,
       showBboxes:      state.showBboxes,
       threshold:       state.threshold,
@@ -16821,6 +16922,7 @@ function _openSaveSceneDialog(suggested) {
       }
       if (changed) input.value = name;
     }
+    let copyChoice = !!(copy && copy.checked);
     function refresh(ev) {
       const whole = !all || all.checked || !nSel;
       let parts = whole ? live : live.filter(p => state.selected.has(p.partId));
@@ -16830,6 +16932,13 @@ function _openSaveSceneDialog(suggested) {
       paintToks(!(ev && ev.type === 'input'));               // not while the name is being typed
       const sum = $i('save-scene-sum');
       if (sum) sum.innerHTML = `<div><b>${fmtNum(parts.length)}</b><span>${parts.length === 1 ? 'part' : 'parts'}</span></div><div><b>${fmtNum(tris)}</b><span>triangles</span></div><div><b>≈ ${fmtBytes(now.bytes)}</b><span>file size</span></div>`;
+      // a part of the scene is never the scene's own file
+      const partial = !whole || (hid && !hid.checked && nHidden > 0);
+      if (copy) {
+        if (ev && ev.target === copy && !copy.disabled) copyChoice = copy.checked;      // the user's own setting
+        copy.checked = partial ? true : copyChoice;
+        copy.disabled = partial; copy.closest('.toggle')?.classList.toggle('is-off', partial);
+      }
       const name = clean(input.value) || clean(suggested), prev = state._lastSaveSceneHandle;
       const over = !!prev && prev.name === name + '.glb' && !(copy && copy.checked);
       const where = $i('save-scene-where');
@@ -16841,9 +16950,6 @@ function _openSaveSceneDialog(suggested) {
       }
       okBtn.textContent = over ? 'Save' : 'Save…';
       okBtn.disabled = !parts.length;
-      // a part of the scene is never the scene's own file
-      const partial = !whole || (hid && !hid.checked && nHidden > 0);
-      if (copy) { if (partial) copy.checked = true; copy.disabled = partial; copy.closest('.toggle')?.classList.toggle('is-off', partial); }
     }
     const onChip = (e) => { const b = e.target.closest('[data-tok]'); if (b) toggleTok(b.dataset.tok, e); };
     input.value = suggested;
@@ -17273,9 +17379,10 @@ function _clayExit() {
 async function _withSolidView(fn) {
   const prev = state.viewMode;
   const swap = !!prev && prev !== 'solid';
+  state._viewModeShown = prev;                  // what a saved scene should record (_collectSceneState)
   if (swap) { try { setViewMode('solid'); } catch (_) {} }
   try { return await fn(); }
-  finally { if (swap) { try { setViewMode(prev); } catch (_) {} } }
+  finally { state._viewModeShown = null; if (swap) { try { setViewMode(prev); } catch (_) {} } }
 }
 async function doExport(opts) {
   try { return await _withSolidView(() => _doExportImpl(opts)); }
@@ -20448,16 +20555,18 @@ function _libPrefs() {
   } catch (_) { return base; }
 }
 function _libSave(p) { try { localStorage.setItem(_LIB_KEY, JSON.stringify(p)); } catch (_) {} }
-// The turn that stands a part (built along the scene's up axis) along `normal`.
+// The turn that stands a part along `normal`. Every part is built along its
+// own Z axis, so that is the axis that goes along the normal, in a Z-up scene
+// and a Y-up one alike (turning from the scene's up axis left a part dropped
+// on the floor of a Y-up scene lying on its side).
 function _libTilt(normal) {
-  const upY = state.sceneUpAxis === 'y';
-  return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, upY ? 1 : 0, upY ? 0 : 1), normal);
+  return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
 }
 // The middle of a part's underside, in its own coordinates.
 function _libFoot(geom) {
   if (!geom.boundingBox) geom.computeBoundingBox();
-  const up = state.sceneUpAxis === 'y' ? 'y' : 'z', foot = geom.boundingBox.getCenter(new THREE.Vector3());
-  foot[up] = geom.boundingBox.min[up];
+  const foot = geom.boundingBox.getCenter(new THREE.Vector3());
+  foot.z = geom.boundingBox.min.z;                // (its own Z: the axis it is built along)
   return foot;
 }
 // Stand a part on a world point: its underside on the point, centred over it.
@@ -20766,6 +20875,8 @@ function _addPrimitive(kind, preset) {
       selPart.mesh.updateMatrixWorld(true);
       selPart.mesh.getWorldPosition(spawnPos);
     }
+    state.partsRoot.updateWorldMatrix(true, false);
+    state.partsRoot.worldToLocal(spawnPos);
   }
   mesh.position.copy(spawnPos);
   mesh.updateMatrixWorld(true);
@@ -20774,7 +20885,7 @@ function _addPrimitive(kind, preset) {
   const vertCount = geom.attributes.position?.count || 0;
   const bbox = geom.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
   const sz = bbox.getSize(new THREE.Vector3());
-  const partId = (state.parts.length ? Math.max(...state.parts.map(p => p.partId)) : -1) + 1;
+  const partId = _allocPartId();
   const partInfo = {
     partId, name, hash: 'prim_' + kind + '_' + partId,
     triCount, vertCount, bbox,
@@ -20791,6 +20902,7 @@ function _addPrimitive(kind, preset) {
   if (state.partById) state.partById.set(partId, partInfo);
   state.partsRoot.add(mesh);
   state.partsRoot.updateMatrixWorld(true);
+  try { _refreshPartBBox(partInfo); } catch (_) {}        // its box in world space, now that it has a parent
   if (state.geomByHash && !state.geomByHash.has(partInfo.hash)) {
     state.geomByHash.set(partInfo.hash, geom);
   }
@@ -21387,11 +21499,14 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   state.partsRoot.add(sceneRoot);
   state.partsRoot.updateMatrixWorld(true);
   // Capture each mesh's EXACT world matrix BEFORE anything can corrupt it
-  // — see the GLB-shear note that used to live here for the rationale.
+  // (taken first, before anything else can touch the meshes).
+  const rootMoved = !state.partsRoot.matrixWorld.equals(new THREE.Matrix4());
   for (const p of state.parts) {
     if (p.mesh) {
       p.mesh.updateWorldMatrix(true, false);
       p._exactWorld = p.mesh.matrixWorld.clone();
+      // (measured before the file was attached; right unless partsRoot is turned, scaled or moved)
+      if (rootMoved && p.mesh.geometry && p.mesh.geometry.attributes) { try { _refreshPartBBox(p); } catch (_) {} }
     }
   }
   // Auto-instance only meaningful for GLBs from step2glb.py — that pipeline
@@ -22753,12 +22868,31 @@ rebuildTree = function() { _origRebuildTree2(); buildMaterialsPanel(); };
 // of { mat, count, partIds } sorted by count desc. Also unions in
 // state.userMaterials so user-created materials that haven't been assigned
 // yet still show up as a library entry (count 0).
+// A part that is one copy of an instanced set has no mesh of its own: the set
+// carries the material, for all its copies at once. The Materials dock reads
+// and writes through these two, so such parts are counted, listed and
+// undone like any other.
+//   _matHolder(p)            the object whose .material is this part's
+//   _matPromoteSelected()    before a material is given to the SELECTED parts:
+//                            a selected copy becomes a mesh of its own, so the
+//                            rest of its set keeps what it had
+function _matHolder(p) { return p ? (p.mesh || p.instancedMesh || null) : null; }
+function _matPromoteSelected() {
+  let k = 0;
+  for (const id of state.selected || []) {
+    const p = getPart(id);
+    if (p && !p.deleted && !p.mesh && p.instancedMesh) { try { if (_promoteInstanceToMesh(p)) k++; } catch (_) {} }
+  }
+  if (k) { try { recomputeStats(); } catch (_) {} }
+  return k;
+}
+
 function _collectLiveMaterials() {
   const seen = new Map();
   for (const p of state.parts || []) {
     if (p.deleted) continue;
     if (p.isPrimitive) continue;
-    let m = p.mesh?.material;
+    let m = _matHolder(p)?.material;
     if (Array.isArray(m)) m = m[0];
     if (!m || !m.isMaterial) continue;
     let entry = seen.get(m);
@@ -23039,6 +23173,7 @@ function _wireMatDock() {
     }
     if (act === 'assign') {
       if (!state.selected.size) { toast('Assign', 'Select the parts that should get this material first', 'warn', 3000); return; }
+      _matPromoteSelected();
       const before = _matStateSnap();
       const seen = new Set(); let k = 0;
       for (const id of state.selected) {
@@ -24150,15 +24285,14 @@ function _openMaterialEditor(info) {
 // =====================================================================
 
 // Reassign every part whose live material === src to use dst instead.
-// Handles instanced parts where p.mesh is the InstancedMesh (shared
-// material reference covers all instances of that mesh).
+// An instanced set is reassigned as one (its material covers all its copies).
 function _reassignMaterial(src, dst) {
   if (!src || !dst || src === dst) return 0;
   const seen = new Set();
   let n = 0;
   for (const p of state.parts || []) {
     if (p.deleted) continue;
-    const mesh = p.mesh;
+    const mesh = _matHolder(p);
     if (!mesh || seen.has(mesh)) continue;
     seen.add(mesh);
     if (Array.isArray(mesh.material)) {
@@ -24296,7 +24430,7 @@ let _matActionsWired = false;
 // before and after a Materials-panel action so the action can be undone.
 function _matStateSnap() {
   const assign = new Map();
-  for (const p of state.parts || []) if (!p.deleted && p.mesh) assign.set(p.partId, p.mesh.material);
+  for (const p of state.parts || []) { const h = p.deleted ? null : _matHolder(p); if (h) assign.set(p.partId, h.material); }
   return {
     assign,
     user: state.userMaterials ? new Set(state.userMaterials) : null,
@@ -24319,8 +24453,8 @@ function _pushMaterialUndo(label, before, edits) {
 }
 function _applyMatBatch(op, dir) {
   for (const it of op.assigns || []) {
-    const p = getPart(it.partId);
-    if (p && p.mesh) p.mesh.material = it[dir];
+    const h = _matHolder(getPart(it.partId));
+    if (h) h.material = it[dir];
   }
   for (const e of op.edits || []) if (e.matRef && e[dir]) _applyMatSnapshot(e.matRef, e[dir]);
   const user = dir === 'before' ? op.userBefore : op.userAfter;
@@ -24375,7 +24509,7 @@ function _wireMaterialActions() {
       const used = new Set();
       const note = (m) => { const k = /^Material (\d+)$/.exec((m && m.name || '').trim()); if (k) used.add(+k[1]); };
       for (const m of state.userMaterials || []) note(m);
-      for (const p of state.parts) { if (p.deleted || !p.mesh) continue; const pm = p.mesh.material; if (Array.isArray(pm)) pm.forEach(note); else note(pm); }
+      for (const p of state.parts) { const h = p.deleted ? null : _matHolder(p); if (!h) continue; const pm = h.material; if (Array.isArray(pm)) pm.forEach(note); else note(pm); }
       let n = 1; while (used.has(n)) n++;
       fresh.name = 'Material ' + n;
     }
@@ -24389,6 +24523,7 @@ function _wireMaterialActions() {
     // No selection → new material lands in the library only.
     let assigned = 0;
     if (state.selected?.size) {
+      _matPromoteSelected();
       const seen = new Set();
       for (const id of state.selected) {
         const p = getPart(id);
@@ -24428,6 +24563,7 @@ function _wireMaterialActions() {
     state.userMaterials = state.userMaterials || new Set();
     state.userMaterials.add(clone);
     if (state.selected?.size) {
+      _matPromoteSelected();
       const seen = new Set();
       for (const id of state.selected) {
         const p = getPart(id);
@@ -24481,14 +24617,15 @@ function _wireMaterialActions() {
     const seen = new Set();
     let n = 0;
     for (const p of state.parts || []) {
-      if (p.deleted || !p.mesh || seen.has(p.mesh)) continue;
-      seen.add(p.mesh);
-      let cur = p.mesh.material;
+      const h = p.deleted ? null : _matHolder(p);
+      if (!h || seen.has(h)) continue;
+      seen.add(h);
+      let cur = h.material;
       const isArr = Array.isArray(cur);
       if (isArr) cur = cur[0];
       if (cur && removedSet.has(cur)) {
-        if (isArr) p.mesh.material = p.mesh.material.map(m => removedSet.has(m) ? defaultMat : m);
-        else       p.mesh.material = defaultMat;
+        if (isArr) h.material = h.material.map(m => removedSet.has(m) ? defaultMat : m);
+        else       h.material = defaultMat;
         n++;
       }
     }
@@ -24565,8 +24702,9 @@ function _refreshUsedBySelection() {
   if (state.selected?.size) {
     for (const id of state.selected) {
       const p = getPart(id);
-      if (!p || p.deleted || !p.mesh) continue;
-      let m = p.mesh.material;
+      const h = (p && !p.deleted) ? _matHolder(p) : null;
+      if (!h) continue;
+      let m = h.material;
       if (Array.isArray(m)) m = m[0];
       if (m?.isMaterial) used.add(m);
     }
@@ -26209,10 +26347,12 @@ function _treeUngroupRow(row) {
 // and the group itself is dissolved automatically once it ends up empty.
 async function _treeDeleteGroup(row) {
   if (!row || !row.dataset.groupId) return;
-  const gid = parseInt(row.dataset.groupId, 10);
-  if (Number.isNaN(gid)) return;
+  // (a user group's id is a string, '_ug_…'; a tree group's is a number)
+  const ugS = (state.userGroups || []).find(g => String(g.id) === String(row.dataset.groupId));
+  const gid = ugS ? ugS.id : parseInt(row.dataset.groupId, 10);
+  if (!ugS && Number.isNaN(gid)) return;
   // userGroup branch.
-  const ug = (state.userGroups || []).find(g => g.id === gid);
+  const ug = ugS || (state.userGroups || []).find(g => g.id === gid);
   if (ug) {
     const ids = [...(ug.partIds || [])];
     if (ids.length === 0) { removeUserGroup(gid); return; }
@@ -26274,9 +26414,10 @@ async function _treeDeleteGroup(row) {
 
 async function _treeRenameRow(row) {
   if (!row || !row.dataset.groupId) return;
-  const gid = parseInt(row.dataset.groupId, 10);
-  if (Number.isNaN(gid)) return;
-  const ug = (state.userGroups || []).find(g => g.id === gid);
+  const ugS = (state.userGroups || []).find(g => String(g.id) === String(row.dataset.groupId));
+  const gid = ugS ? ugS.id : parseInt(row.dataset.groupId, 10);
+  if (!ugS && Number.isNaN(gid)) return;
+  const ug = ugS || (state.userGroups || []).find(g => g.id === gid);
   const cur = ug ? ug.name : (state.treeNodes?.find(n => n.kind === 'group' && n.id === gid)?.name || '');
   const next = await appPrompt('Rename group:', cur, { title: 'Rename group', okLabel: 'Rename' });
   if (next == null) return;
@@ -26327,7 +26468,7 @@ function _treeSelectGroupParts(row, mode = 'single') {
 }
 
 function _treeExpandAll() {
-  if (!state.treeCollapsed?.size) return;
+  if (!state.treeCollapsed?.size && !(state.userGroups || []).some(g => !g.expanded)) return;
   state.treeCollapsed.clear();
   for (const ug of (state.userGroups || [])) ug.expanded = true;
   rebuildTree();
@@ -26428,6 +26569,24 @@ document.addEventListener('contextmenu', e => {
   if (!node) return;
   e.preventDefault();
 
+  // Cloner row branch -----------------------------------------------------
+  // A cloner's row carries a group id, but it is a part (its container is the
+  // part's mesh): it gets the entries that mean something for it.
+  if (node.classList.contains('is-cloner')) {
+    const gidC = parseInt(node.dataset.groupId || '', 10);
+    const tnC = (state.treeNodes || []).find(t => t.id === gidC && t.kind === 'cloner');
+    const cl = tnC && state.parts.find(q => q.isCloner && q.mesh === tnC.obj3d && !q.deleted);
+    if (!cl) return;
+    if (!state.selected.has(cl.partId)) selectPart(cl.partId, 'single');
+    _ctxBuild([
+      { icon: 'crosshair', label: 'Frame cloner',      fn: frameSelected },
+      { icon: 'eye',       label: 'Toggle visibility', fn: () => { _applyVisibility([[cl, !cl.visible]]); rebuildTree(); requestRender(); } },
+      '---',
+      { icon: 'trash-2',   label: 'Delete cloner', danger: true, kbd: 'Del', fn: () => { try { _Actions.list.find(x => x.id === 'delete')?.run(); } catch (_) {} } },
+    ], e.clientX, e.clientY);
+    return;
+  }
+
   // Group row branch ------------------------------------------------------
   if (node.dataset.groupId) {
     const items = [
@@ -26440,8 +26599,9 @@ document.addEventListener('contextmenu', e => {
       { icon: 'trash-2',        label: 'Delete group + contents',    danger: true, fn: () => _treeDeleteGroup(node) },
       '---',
       { icon: 'eye',            label: 'Toggle visibility',          fn: () => {
-          if (node.dataset.groupId && state.userGroups?.find(g => g.id === parseInt(node.dataset.groupId, 10))) {
-            toggleGroupVisibility(parseInt(node.dataset.groupId, 10));
+          const ugTV = (state.userGroups || []).find(g => String(g.id) === String(node.dataset.groupId));
+          if (ugTV) {
+            toggleGroupVisibility(ugTV.id);
           } else {
             // Toggle the group's parts directly; this must not change what
             // is selected, and deleted parts stay untouched.
@@ -27842,7 +28002,8 @@ function frameSelected() {
   const box = new THREE.Box3();
   for (const id of state.selected) {
     const p = getPart(id);
-    if (!p || !p.mesh || p.deleted) continue;
+    if (!p || p.deleted) continue;
+    if (!p.mesh) { if (p.bbox && !p.bbox.isEmpty()) box.union(p.bbox); continue; }
     p.mesh.updateMatrixWorld(true);
     const b = new THREE.Box3().setFromObject(p.mesh);
     if (!b.isEmpty()) box.union(b);
@@ -29130,7 +29291,7 @@ function _wireDeadTreeControls() {
     if (!state.parts.length) { toast('No model loaded', '', 'info'); return; }
     // Decide direction: if anything is currently expanded, collapse; else expand.
     const anyUserExpanded   = (state.userGroups || []).some(g => g.expanded);
-    const anyHierExpanded   = state.treeCollapsed.size === 0;
+    const anyHierExpanded   = state.treeNodes && state.treeNodes.length > 0 && state.treeCollapsed.size === 0;
     const collapse = anyUserExpanded || anyHierExpanded;
     if (collapse) {
       for (const g of (state.userGroups || [])) g.expanded = false;
@@ -30210,10 +30371,22 @@ const _BatchRename = (() => {
     };
   }
 
+  // The tree's rows by id, and its part rows by part id. Built once for a
+  // tree and kept while that tree is the one in use: gathering the candidates
+  // asks for a part's row and its ancestors once per part.
+  let _treeIdx = null;
+  function _treeIndex() {
+    const all = state.treeNodes || [];
+    if (!_treeIdx || _treeIdx.src !== all || _treeIdx.len !== all.length) {
+      const byId = new Map(), byPart = new Map();
+      for (const t of all) { byId.set(t.id, t); if (t.kind === 'part' && t.partId != null && !byPart.has(t.partId)) byPart.set(t.partId, t); }
+      _treeIdx = { src: all, len: all.length, byId, byPart };
+    }
+    return _treeIdx;
+  }
   function _ancestorNames(treeNode) {
     if (!treeNode) return [];
-    const all = state.treeNodes || [];
-    const byId = new Map(all.map(n => [n.id, n]));
+    const byId = _treeIndex().byId;
     const out = [];
     let cur = treeNode.parentId != null ? byId.get(treeNode.parentId) : null;
     while (cur) {
@@ -30225,6 +30398,7 @@ const _BatchRename = (() => {
 
   function gatherCandidates(scope) {
     const all = state.treeNodes || [];
+    _treeIdx = null;                               // (names may have changed since the last time: index afresh)
     const candByPart = new Map();
     const candByGroup = new Map();
 
@@ -30232,7 +30406,7 @@ const _BatchRename = (() => {
       if (candByPart.has(partId)) return;
       const p = getPart(partId);
       if (!p || p.deleted) return;
-      const tn = all.find(n => n.kind === 'part' && n.partId === partId);
+      const tn = _treeIndex().byPart.get(partId);
       const ancestors = _ancestorNames(tn);
       candByPart.set(partId, {
         kind: 'part',
@@ -30801,17 +30975,18 @@ const _BatchRenameDialog = (() => {
   // (search "Batch Rename dialog") — migrated out of a runtime <style>.
   function _injectStyles() { /* no-op; CSS migrated to index.html */ }
 
-  function _scopeRowHtml() {
+  let _scopeRows = 0;
+  function _scopeRowHtml(which = '') {
     return `
       <div class="brn-collapsible open">
         <div class="brn-collapsible-h"><span><strong>Scope</strong> · what to rename</span><span class="chev">▸</span></div>
         <div class="brn-collapsible-b">
           <div style="display:flex;flex-direction:column;gap:5px">
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="selection" checked>Selection (parts + groups picked in tree)</label>
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="selection-with-children">Selection + descendants</label>
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="selected-parts">Only selected parts</label>
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="selected-groups">Only selected groups</label>
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope" value="whole-tree">Whole tree (every part + every group)</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="selection" checked>Selection (parts + groups picked in tree)</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="selection-with-children">Selection + descendants</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="selected-parts">Only selected parts</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="selected-groups">Only selected groups</label>
+            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="whole-tree">Whole tree (every part + every group)</label>
           </div>
         </div>
       </div>`;
@@ -30876,7 +31051,7 @@ const _BatchRenameDialog = (() => {
               <input type="text" id="_brn-replace" placeholder="(use $1 $2 with regex)">
             </div>
             ${_filtersCollapsibleHtml()}
-            ${_scopeRowHtml()}
+            ${_scopeRowHtml(String(++_scopeRows))}
           </div>
 
           <div class="brn-pane" data-pane="pattern">
@@ -30906,7 +31081,7 @@ const _BatchRenameDialog = (() => {
               </div>
             </div>
             ${_filtersCollapsibleHtml()}
-            ${_scopeRowHtml()}
+            ${_scopeRowHtml(String(++_scopeRows))}
           </div>
 
           <div class="brn-pane" data-pane="presets">
@@ -30978,7 +31153,9 @@ const _BatchRenameDialog = (() => {
       el.addEventListener('input', _refreshPreview);
       el.addEventListener('change', _refreshPreview);
     });
-    bg.querySelectorAll('input[name="_brn-scope"]').forEach(r => r.addEventListener('change', () => {
+    bg.querySelectorAll('input[name^="_brn-scope"]').forEach(r => r.addEventListener('change', () => {
+      // both tabs show the same choice
+      if (r.checked) bg.querySelectorAll('input[name^="_brn-scope"]').forEach(o => { if (o !== r) o.checked = (o.value === r.value); });
       STATE.candidates = _BatchRename.gatherCandidates(_currentScope());
       _updateScopeSummary();
       _refreshPreview();
@@ -30999,7 +31176,7 @@ const _BatchRenameDialog = (() => {
   }
 
   function _currentScope() {
-    const r = bg.querySelector('input[name="_brn-scope"]:checked');
+    const r = bg.querySelector('input[name^="_brn-scope"]:checked');
     return r ? r.value : 'selection';
   }
   function _currentFilterOpts() {
@@ -31286,7 +31463,7 @@ const _BatchRenameDialog = (() => {
       // immediately produces preview rows without requiring a prior selection.
       const hasSelection = (state.selected?.size || 0) + (state.selectedGroupIds?.size || 0) > 0;
       const defaultScope = hasSelection ? 'selection' : 'whole-tree';
-      bg.querySelectorAll('input[name="_brn-scope"]').forEach(r => { r.checked = (r.value === defaultScope); });
+      bg.querySelectorAll('input[name^="_brn-scope"]').forEach(r => { r.checked = (r.value === defaultScope); });
       STATE.candidates = _BatchRename.gatherCandidates(defaultScope);
       E('_brn-find').value = '';
       E('_brn-replace').value = '';
@@ -34969,6 +35146,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const start = w;
       for (let i = 0; i < o.idx.length; i++) newIndex[w++] = remap[o.idx[i]];
       if (outParts.length > 1) out.addGroup(start, o.idx.length, o.materialIndex);
+      else if (src.groups && src.groups.length === 1) out.addGroup(start, o.idx.length, src.groups[0].materialIndex || 0);
     }
     out.setIndex(new THREE.BufferAttribute(newIndex, 1));
     if (!out.attributes.normal) out.computeVertexNormals();
@@ -35011,7 +35189,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     redo(op) { _applyDecimateOp(op, 'after'); state.history.push(op); _finalizeUndo({ rebuildTree: true }); },
   });
 
+  let _decimateBusy = false;
   async function _decimateSelected() {
+    if (_decimateBusy) return;
+    _decimateBusy = true;
+    try { return await _decimateSelectedRun(); }
+    finally { _decimateBusy = false; }
+  }
+  async function _decimateSelectedRun() {
     const sel = state.selected;
     if (!sel || sel.size === 0) {
       if (typeof toast === 'function') toast('Decimate', 'Select parts first', 'warn', 2500);
@@ -36186,6 +36371,13 @@ setTimeout(() => _dndDecorateTree(), 0);
   $id('welcome-shapes')?.addEventListener('click', async (e) => {
     const btn = e.target.closest('.wl-shape');
     if (!btn) return;
+    // With a scene already open, "new scene" is a new tab: the shape has to
+    // go there, not into the scene that is being left behind.
+    if (!window.__moNoTabs && state.parts.some(p => !p.deleted)) {
+      try { document.getElementById('welcome-close')?.click(); } catch (_) {}
+      _Tabs.add({ shape: btn.dataset.shape });
+      return;
+    }
     $id('welcome-start-empty')?.click();
     await new Promise(r => setTimeout(r, 60));
     try { await window._addPrimitive?.(btn.dataset.shape); } catch (err) { console.warn('[welcome] shape', err); }
