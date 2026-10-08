@@ -391,22 +391,26 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-mat-btn .prop-mat-sphere{flex-shrink:0;width:36px;height:36px;border-radius:var(--r-sm);overflow:hidden;display:grid;place-items:center}
 .prop-mat-btn .prop-mat-sphere img{width:100%;height:100%;display:block;object-fit:cover}
 .prop-mat-btn .prop-mat-color{flex-shrink:0;width:36px;height:36px;border-radius:var(--r-sm);border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
-.prop-mat-btn .prop-mat-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-sans);font-size:var(--fs-md);color:var(--tx);font-weight:var(--fw-medium)}
+.prop-mat-btn .prop-mat-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-sans);font-size:var(--fs-md);color:var(--tx);font-weight:var(--fw-regular)}
 .prop-mat-btn .prop-mat-sub{font-size:var(--fs-xs);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:var(--tracking-snug)}
-.prop-mat-btn .prop-mat-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
-.prop-mat-btn .prop-mat-action{width:24px;height:24px;border-radius:6px;border:none;background:transparent;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background 100ms ease,color 100ms ease}
-.prop-mat-btn .prop-mat-action:hover{background:rgba(255,255,255,.07);color:var(--tx)}
-.prop-mat-btn .prop-mat-action svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
-.prop-mat-multi-list{display:flex;flex-direction:column;gap:var(--space-sm)}
-.prop-mat-multi-list .prop-mat-btn{padding:6px 8px;gap:var(--space-md)}
-.prop-mat-multi-list .prop-mat-sphere,.prop-mat-multi-list .prop-mat-color{width:28px!important;height:28px!important}
-.prop-mat-multi-list .prop-mat-name{font-size:var(--fs-12)}
-.prop-mat-multi-list .prop-mat-sub{font-size:var(--fs-10)}
-.prop-mat-overflow{display:none;flex-direction:column;gap:var(--space-sm)}
-.prop-mat-overflow.open{display:flex}
-.prop-mat-expand-btn{all:unset;display:block;text-align:center;width:100%;padding:5px 0;font-size:var(--fs-11);color:var(--ac-text);cursor:pointer;border-radius:var(--r-sm);margin-top:2px}
-.prop-mat-expand-btn:hover{background:var(--ac-soft)}
+/* The material slot is a faint well, always 86px high, whether nothing, one
+   material or twenty are in it: the cards below it never move. The materials
+   are square tiles in one strip that scrolls sideways. */
+.prop-material-row{display:flex;align-items:center;height:86px;margin:0 0 12px;padding:7px;box-sizing:border-box;border-radius:12px;background:color-mix(in srgb,var(--tx) 3%,transparent)}
+.prop-material-row>.prop-mat-strip{flex:1;min-width:0}
+.prop-mat-empty{flex:1;text-align:center;font-size:var(--fs-11);color:var(--tx3)}
+.prop-mat-strip{display:flex;gap:8px;height:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
+.prop-mat-strip::-webkit-scrollbar{display:none}
+.prop-mat-strip .prop-mat-more{flex:0 0 auto;align-self:center;padding:0 12px 0 4px;color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums}
+.prop-head-note{flex:none;font-size:var(--fs-11);color:var(--tx3);white-space:nowrap;font-variant-numeric:tabular-nums}
+.prop-mat-strip .prop-mat-btn{flex:0 0 72px;width:72px;height:72px;box-sizing:border-box;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:6px 5px;border:0;text-align:center;scroll-snap-align:start}
+.prop-mat-strip .prop-mat-btn:hover{border:0}
+.prop-mat-strip .prop-mat-sphere,.prop-mat-strip .prop-mat-color{width:32px;height:32px}
+.prop-mat-strip .prop-mat-name{width:100%;font-size:var(--fs-11);line-height:1.25}
+.prop-mat-strip .prop-mat-sub{width:100%;font-size:var(--fs-10);line-height:1.2}
+.prop-mat-strip.more-r{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.prop-mat-strip.more-l{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px);mask-image:linear-gradient(90deg,transparent,#000 28px)}
+.prop-mat-strip.more-l.more-r{-webkit-mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent,#000 28px,#000 calc(100% - 28px),transparent)}
 .prop-bar{flex:1;height:6px;background:var(--s3);border-radius:var(--r-pill);overflow:hidden}
 .prop-bar-fill{height:100%;background:var(--ac);border-radius:var(--r-pill);transition:width 200ms var(--ease-out),background 200ms var(--ease-out)}
 .prop-bar-fill.heavy{background:var(--wn)}
@@ -1755,6 +1759,7 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 /* toolbars over the viewport */
 .vp-bar,.vpc.tl:not(#vp-perf){background:var(--surface-bar);box-shadow:0 6px 20px rgba(0,0,0,.4),var(--surface-ring)}
 .tip-pop{border-radius:6px}
+.tip-pop.tip-bar{box-shadow:var(--surface-shadow)}   /* tips over the viewport toolbars: no outline */
 /* The selected row's label and icon are the accent blue itself. */
 .tree-node.selected .tree-label{color:var(--ac)}
 .tree-node.selected .tree-typeicon{color:var(--ac)}
@@ -1888,11 +1893,12 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
    their labels, so the big triangle count above stays the one loud number. */
 #prop-body .prop-grid .prop-value{font-size:var(--fs-11);font-weight:400;color:var(--tx)}
 #prop-body .prop-grid .prop-label{font-size:var(--fs-11);font-weight:400}
-/* …and one rhythm down the card: name, tags, the count with its bar, the facts. */
-#prop-body .prop-head{margin-bottom:8px}
-/* The tag row keeps its line even with no tags in it, so a tag that comes and
-   goes (hidden, flagged, instanced) does not push the rest of the card down. */
-#prop-body .prop-tags{margin-bottom:10px;min-height:16px;align-items:center}
+/* …and one rhythm down the card: name, materials, the count with its bar, the facts, the tags. */
+#prop-body .prop-head{margin-bottom:10px}
+/* The tag row (under the facts) keeps its line even with no tags in it, so a
+   tag that comes and goes (hidden, flagged, instanced) does not push the rest
+   of the card down. */
+#prop-body .prop-tags{margin:12px 0 0;min-height:20px;align-items:center}
 #prop-body .prop-hero{margin:0 0 14px}
 #prop-body .prop-hero .prop-bar{margin-top:10px}
 #prop-body .prop-hero-cap{margin-top:8px}
@@ -2804,13 +2810,14 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 /* ── Heavy parts: tick rows ────────────────────────────────────────────────
    A click on a row ticks it (its rank gives way to the tick box), another
    click takes the tick off, and the button under the list deletes the ticked
-   rows. The box shows empty under the pointer, so it can be found. */
-.off-check{position:absolute;left:12px;top:9.5px;width:14px;height:14px;box-sizing:border-box;border-radius:4px;border:1.5px solid var(--tx3);opacity:0;pointer-events:none;
-  transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
-.off-check::after{content:'';position:absolute;left:3.2px;top:.2px;width:3.6px;height:7.4px;border:solid var(--tx-on-accent,#fff);border-width:0 1.7px 1.7px 0;transform:rotate(45deg);opacity:0}
+   rows. The mark is a round iOS-style circle: an empty ring under the pointer,
+   so it can be found, and a filled accent circle with a check once ticked. */
+.off-check{position:absolute;left:7px;top:7.5px;width:18px;height:18px;box-sizing:border-box;border-radius:50%;border:1.5px solid var(--tx3);opacity:0;pointer-events:none;
+  transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.off-check::after{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 8.3l3 3 5.8-6.6'/%3E%3C/svg%3E") center/11px 11px no-repeat;transform:scale(.6);opacity:0;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .off-row:hover .off-check{opacity:1}
 .off-row.selected .off-check{opacity:1;background:var(--ac);border-color:var(--ac)}
-.off-row.selected .off-check::after{opacity:1}
+.off-row.selected .off-check::after{opacity:1;transform:scale(1)}
 .off-row:hover .off-rank,.off-row.selected .off-rank{visibility:hidden}
 #btn-off-delete{width:100%;margin-top:10px}
 #offenders-body:has(.off-list:empty) #btn-off-delete{display:none}
@@ -2942,6 +2949,17 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
    (app-v2.js, _alignDocTab sets the margins once, to where they end up). */
 body.tb-slide:not(.resizing) :is(.doc-tabs,#btn-toggle-left){transition:margin-left 320ms cubic-bezier(.4,0,.2,1)}
 body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubic-bezier(.4,0,.2,1)}
+
+/* The material of the selected part(s), in the materials drawer: the whole card
+   is lit in a neutral grey (the blue is for the material picked in the panel),
+   instead of a blue ring round the thumbnail. */
+#vp-materials-pop :is(.mat-cell,.mat-row).usedby-selection:not(.selected){background:rgba(255,255,255,.055);border-color:rgba(255,255,255,.07);box-shadow:none}
+#vp-materials-pop :is(.mat-cell,.mat-row).usedby-selection:not(.selected):hover{background:rgba(255,255,255,.085)}
+#vp-materials-pop .mat-cell.usedby-selection .mat-thumb,#vp-materials-pop .mat-row.usedby-selection .mat-row-thumb{box-shadow:none}
+#vp-materials-pop .mat-cell.usedby-selection .mat-thumb::after{box-shadow:none}
+#vp-materials-pop .mat-row.usedby-selection .mat-row-name,#vp-materials-pop .mat-cell.usedby-selection .mat-name{color:var(--tx)}
+/* a little air between the rows, so a run of lit cards does not join up */
+#vp-materials-pop .mat-row{margin:2px 0}
 </style>
 </head>
 <body>
@@ -4398,12 +4416,14 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubi
     // useful in the command search but too much next to an icon. Only a
     // short bracket is a shortcut and is taken out of the name; a longer one
     // is a note that belongs to it ("Add shape (hold for more)") and stays.
-    if (target.closest('#vp-overlay') && !target.closest('.vp-cmd-host')) {
+    const onBar = !!target.closest('#vp-overlay') && !target.closest('.vp-cmd-host');
+    if (onBar) {
       const key = raw.match(/\(([^)]{1,12})\)/);
       const name = raw.split(/\s[—–·]\s|:\s/)[0].replace(/\s*\([^)]{1,12}\)\s*/g, ' ').trim();
       raw = (key && /[A-Za-z0-9]/.test(key[1])) ? name + ' (' + key[1] + ')' : name;
     }
     const el = ensureEl();
+    el.classList.toggle('tip-bar', onBar);
     render(el, raw);
     position(el, target);
     el.classList.add('show');

@@ -239,6 +239,15 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   position, when they stood within 5 % of the model's size of it (176 mm on
   the 3.5 m test assembly). Only copies lying on the part itself (within 2 %
   of its size) go along now.
+- ![fix][fix] **A dropped file can be added to the open scene.** Dropping a
+  file on a scene that already has parts always opened a tab, and only the
+  Import button could add one. Now a small question comes up: *Add to this
+  scene* or *Open in new tab* (Esc or a click outside does nothing). On an
+  empty scene the file opens there as before.
+- ![polish][polish] **The selected part's material stands out in the drawer.**
+  The whole card of the material (or materials) the selection uses is lit in
+  a neutral grey, in the grid and in the list, instead of a thin blue ring
+  round the thumbnail. The blue stays for the material picked in the panel.
 - ![fix][fix] **Orbiting out of a 2D view** drops back to the perspective
   camera again (the check ran once a frame and never saw a drag, which
   OrbitControls applies inside its own handler). Pan and zoom stay in the

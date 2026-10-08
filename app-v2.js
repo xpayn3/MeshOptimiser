@@ -2318,6 +2318,58 @@ function _handleDroppedFile(e) {
       .then(h => { if (h?.kind === 'file') _rememberHandle(file, h); })
       .catch(() => {});
   } catch (_) {}
+  _dropOpen(file);
+}
+
+// A file dropped on a scene that already has parts: add it to that scene, or
+// open it in a tab of its own? (Dropping always opened a tab, so there was no
+// way to add a dropped file; only the Import button could.) On an empty scene
+// it just opens there.
+function _askDropChoice(file) {
+  return new Promise(res => {
+    const bg = document.createElement('div');
+    bg.className = 'dlg-bg show';
+    bg.innerHTML = `
+      <div class="dlg-card" style="position:relative">
+        <button class="dlg-close" aria-label="Close">\u2715</button>
+        <div class="dlg-head">
+          <div class="dlg-icon"><i data-lucide="upload"></i></div>
+          <div class="dlg-text">
+            <div class="dlg-title">Add to this scene?</div>
+            <div class="dlg-msg"></div>
+          </div>
+        </div>
+        <div class="dlg-foot">
+          <button class="dlg-btn dlg-btn-cancel" data-c="tab">Open in new tab</button>
+          <button class="dlg-btn dlg-btn-ok" data-c="add">Add to this scene</button>
+        </div>
+      </div>`;
+    bg.querySelector('.dlg-msg').textContent = `${file.name}: add its parts to the scene that is open, or open it in a tab of its own?`;
+    document.body.appendChild(bg);
+    try { _lucide(); } catch (_) {}
+    const done = (c) => { document.removeEventListener('keydown', onKey, true); bg.remove(); res(c); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(null); }
+      else if (e.key === 'Enter') {
+        const f = document.activeElement;
+        if (f && f.tagName === 'BUTTON' && bg.contains(f) && f.dataset.c) return;   // (Enter presses the focused button)
+        e.preventDefault(); e.stopPropagation(); done('add');
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    bg.addEventListener('click', (e) => { if (e.target === bg) done(null); });
+    bg.querySelector('.dlg-close').addEventListener('click', () => done(null));
+    for (const b of bg.querySelectorAll('[data-c]')) b.addEventListener('click', () => done(b.dataset.c));
+    setTimeout(() => bg.querySelector('[data-c="add"]')?.focus(), 30);
+  });
+}
+async function _dropOpen(file) {
+  const supported = /\.(step|stp)$/i.test(file.name) || !!_loaderForName(file.name);
+  if (supported && !window.__moNoTabs && state.parts.some(p => !p.deleted)) {
+    const c = await _askDropChoice(file);
+    if (!c) return;                              // closed: nothing happens
+    if (c === 'add') state._importMode = true;   // (_handleSelectedFile appends instead of opening a tab)
+  }
   _handleSelectedFile(file);
 }
 
@@ -3739,7 +3791,7 @@ window.addEventListener('keydown', e => {
   const hasFiles = e => !!e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
   const showDrop = on => {
     if (!dropHint) return;
-    if (on) { const t = $('vp-drop-sub'); if (t) t.textContent = state.parts.some(p => !p.deleted) ? 'Opens in a new tab; this scene stays as it is' : 'STEP, GLB, glTF, FBX, OBJ, 3MF or STL'; }
+    if (on) { const t = $('vp-drop-sub'); if (t) t.textContent = state.parts.some(p => !p.deleted) ? 'Add it to this scene, or open it in a new tab' : 'STEP, GLB, glTF, FBX, OBJ, 3MF or STL'; }
     dropHint.hidden = !on;
   };
   vp?.addEventListener('dragenter', e => { e.preventDefault(); if (hasFiles(e)) { dragDepth++; showDrop(true); } });
@@ -12364,6 +12416,7 @@ function refreshPropertiesPanel() {
 
   let nameHtml = `<span class="prop-name" style="color:var(--tx3)">No selection</span>`;
   let materialHtml = '';
+  let matNote = '';          // "3 materials", on the title line, when more than one is in play
   let tagsHtml = '';
   let tris = '—', verts = '—', bbox = '—', diag = '—', pct = '—', vol = '—';
   let triShare = 0;
@@ -12402,6 +12455,31 @@ function refreshPropertiesPanel() {
     }
     return n;
   };
+  // One material as a square tile of the strip: ball on top, name and part
+  // count under it. `own` is the selection's one material: it opens through
+  // the selected part and its name renames in place (double-click); a tile
+  // among several opens the material it carries.
+  const _matChip = (m, n, own) => {
+    const matHex = '#' + (m.color?.getHexString?.() || 'cccccc');
+    let thumbHtml;
+    try {
+      const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(m) : null;
+      thumbHtml = url
+        ? `<span class="prop-mat-sphere"><img src="${url}" alt="" draggable="false"></span>`
+        : `<span class="prop-mat-color" style="background:${matHex}"></span>`;
+    } catch (_) {
+      thumbHtml = `<span class="prop-mat-color" style="background:${matHex}"></span>`;
+    }
+    const name = _matLabel(m);
+    const type = (m.type || 'Material').replace('Mesh','').replace('Material','');
+    const parts = `${n} part${n === 1 ? '' : 's'}`;
+    const hint = own ? 'Click to edit · double-click the name to rename' : 'Click to edit';
+    return `<div class="prop-mat-btn${own ? '' : ' prop-mat-multi-row'}" data-action="edit-material"${own ? '' : ` data-mat-uuid="${m.uuid}"`} title="${escapeHtml(name)} · ${escapeHtml(type)} · ${parts}\n${hint}">
+      ${thumbHtml}
+      <span class="prop-mat-name"${own ? ' data-mat-name' : ''}>${escapeHtml(name)}</span>
+      <span class="prop-mat-sub">${parts}</span>
+    </div>`;
+  };
 
   if (ids.length === 1) {
     const p = getPart(ids[0]);
@@ -12424,35 +12502,7 @@ function refreshPropertiesPanel() {
                `<span class="prop-name" title="${_safeName}">${_safeName}</span>${_lockBadge}`;
     const mat = _matOfPart(p);
     if (mat && !p.isPrimitive) {
-      const label = _matLabel(mat);
-      const matHex = '#' + (mat.color?.getHexString?.() || 'cccccc');
-      // Try to use the cached preview sphere from the materials grid for
-      // visual consistency. Falls back to a flat colour swatch if the
-      // preview hasn't been rendered yet (first frame).
-      let thumbHtml;
-      try {
-        const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(mat) : null;
-        thumbHtml = url
-          ? `<span class="prop-mat-sphere"><img src="${url}" alt="" draggable="false"></span>`
-          : `<span class="prop-mat-color" style="background:${matHex}"></span>`;
-      } catch (_) {
-        thumbHtml = `<span class="prop-mat-color" style="background:${matHex}"></span>`;
-      }
-      // Sub-label: material type + part count + a "double-click name to
-      // rename" hint that fades on hover (CSS owns the visibility).
-      const usedCount = _countPartsUsingMaterial(mat);
-      const subLabel = `${mat.type.replace('Mesh','').replace('Material','')} · ${usedCount} part${usedCount === 1 ? '' : 's'}`;
-      materialHtml = `<div class="prop-mat-btn" data-action="edit-material" title="Click to edit · double-click name to rename">
-        ${thumbHtml}
-        <div class="prop-mat-info">
-          <span class="prop-mat-name" data-mat-name>${escapeHtml(label)}</span>
-          <span class="prop-mat-sub">${escapeHtml(subLabel)}</span>
-        </div>
-        <div class="prop-mat-actions">
-          <button class="prop-mat-action" data-action="rename-material" title="Rename material"><i data-lucide="pencil"></i></button>
-          <button class="prop-mat-action" data-action="edit-material" title="Edit material"><i data-lucide="sliders-horizontal"></i></button>
-        </div>
-      </div>`;
+      materialHtml = `<div class="prop-mat-strip">${_matChip(mat, _countPartsUsingMaterial(mat), true)}</div>`;
     }
     const tags = [];
     {
@@ -12514,29 +12564,7 @@ function refreshPropertiesPanel() {
       sharedMatRef = m;
     }
     if (matSet.size === 1 && sharedMatRef) {
-      const matHex = '#' + (sharedMatRef.color?.getHexString?.() || 'cccccc');
-      let thumbHtml;
-      try {
-        const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(sharedMatRef) : null;
-        thumbHtml = url
-          ? `<span class="prop-mat-sphere"><img src="${url}" alt="" draggable="false"></span>`
-          : `<span class="prop-mat-color" style="background:${matHex}"></span>`;
-      } catch (_) {
-        thumbHtml = `<span class="prop-mat-color" style="background:${matHex}"></span>`;
-      }
-      const usedCount = _countPartsUsingMaterial(sharedMatRef);
-      const subLabel = `${sharedMatRef.type.replace('Mesh','').replace('Material','')} · ${usedCount} part${usedCount === 1 ? '' : 's'}`;
-      materialHtml = `<div class="prop-mat-btn" data-action="edit-material" title="Click to edit · double-click name to rename">
-        ${thumbHtml}
-        <div class="prop-mat-info">
-          <span class="prop-mat-name" data-mat-name>${escapeHtml(_matLabel(sharedMatRef))}</span>
-          <span class="prop-mat-sub">${escapeHtml(subLabel)}</span>
-        </div>
-        <div class="prop-mat-actions">
-          <button class="prop-mat-action" data-action="rename-material" title="Rename material"><i data-lucide="pencil"></i></button>
-          <button class="prop-mat-action" data-action="edit-material" title="Edit material"><i data-lucide="sliders-horizontal"></i></button>
-        </div>
-      </div>`;
+      materialHtml = `<div class="prop-mat-strip">${_matChip(sharedMatRef, _countPartsUsingMaterial(sharedMatRef), true)}</div>`;
     } else if (matSet.size > 1) {
       // Multi-material selection — list every unique material with a per-row
       // edit affordance so the user can drill straight into the one they want
@@ -12547,34 +12575,12 @@ function refreshPropertiesPanel() {
         if (!m) continue;
         matCounts.set(m, (matCounts.get(m) || 0) + 1);
       }
-      const MAT_FOLD = 4;
       const matEntries = [...matCounts.entries()];
-      const makeRow = ([m, n]) => {
-        const matHex = '#' + (m.color?.getHexString?.() || 'cccccc');
-        let thumbHtml;
-        try {
-          const url = (typeof _renderMaterialPreview === 'function') ? _renderMaterialPreview(m) : null;
-          thumbHtml = url
-            ? `<span class="prop-mat-sphere"><img src="${url}" alt="" draggable="false"></span>`
-            : `<span class="prop-mat-color" style="background:${matHex}"></span>`;
-        } catch (_) {
-          thumbHtml = `<span class="prop-mat-color" style="background:${matHex}"></span>`;
-        }
-        const subLabel = `${(m.type || 'Material').replace('Mesh','').replace('Material','')} · ${n} part${n === 1 ? '' : 's'}`;
-        return `<div class="prop-mat-btn prop-mat-multi-row" data-action="edit-material" data-mat-uuid="${m.uuid}" title="Click to edit">
-          ${thumbHtml}
-          <div class="prop-mat-info">
-            <span class="prop-mat-name">${escapeHtml(_matLabel(m))}</span>
-            <span class="prop-mat-sub">${escapeHtml(subLabel)}</span>
-          </div>
-        </div>`;
-      };
-      const visibleRows = matEntries.slice(0, MAT_FOLD).map(makeRow).join('');
-      const hiddenRows = matEntries.length > MAT_FOLD ? matEntries.slice(MAT_FOLD).map(makeRow).join('') : '';
-      const expandBtn = hiddenRows
-        ? `<button class="prop-mat-expand-btn" type="button" data-action="mat-expand">Show ${matEntries.length - MAT_FOLD} more</button>`
-        : '';
-      materialHtml = `<div class="prop-mat-multi-list">${visibleRows}${hiddenRows ? `<div class="prop-mat-overflow">${hiddenRows}</div>` : ''}${expandBtn}</div>`;
+      const makeRow = ([m, n]) => _matChip(m, n);
+      matNote = matEntries.length + ' materials';
+      // One horizontal strip in a slot of fixed height: ten materials take
+      // no more room than two, so nothing below the card moves.
+      materialHtml = `<div class="prop-mat-strip">${matEntries.map(makeRow).join('')}</div>`;
     }
     const tags = [];
     if (anyInstanced) tags.push(`<span class="tree-badge">${anyInstanced} instanced</span>`);
@@ -12679,13 +12685,13 @@ function refreshPropertiesPanel() {
        </div>`;
 
   el.innerHTML = `
-    <div class="prop-head">${nameHtml}</div>
-    ${materialHtml ? `<div class="prop-material-row">${materialHtml}</div>` : ''}
-    <div class="prop-tags">${tagsHtml}</div>
+    <div class="prop-head">${nameHtml}${matNote ? `<span class="prop-head-note" title="Different materials in this selection">${matNote}</span>` : ''}</div>
+    <div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>
     ${heroHtml}
     <div class="prop-grid">
       ${gridRows.map(([ic, lb, val]) => `<span class="prop-icon"><i data-lucide="${ic}"></i></span><span class="prop-label">${lb}</span><strong class="prop-value"${lb === 'Size' ? ` title="${val}"` : ''}>${val}</strong>`).join('\n      ')}
-    </div>`;
+    </div>
+    <div class="prop-tags">${tagsHtml}</div>`;
   // Append the C4D-style Shape-parameters panel when the active selection
   // is a single primitive part. Sliders rebuild the geometry live.
   if (ids.length === 1) {
@@ -12724,20 +12730,27 @@ function refreshPropertiesPanel() {
       if (info) _openMaterialEditor(info);
     });
   });
-  el.querySelectorAll('.prop-mat-expand-btn[data-action="mat-expand"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const list = btn.closest('.prop-mat-multi-list');
-      const overflow = list?.querySelector('.prop-mat-overflow');
-      if (!overflow) return;
-      const expanded = overflow.classList.toggle('open');
-      btn.textContent = expanded ? 'Show less' : `Show ${overflow.querySelectorAll('.prop-mat-multi-row').length} more`;
-    });
-  });
+  // The strip scrolls sideways: the wheel turns it, and a soft fade on the
+  // side that has more says so (classes `more-l` / `more-r`).
+  const matStrip = el.querySelector('.prop-mat-strip');
+  if (matStrip) {
+    const fade = () => {
+      matStrip.classList.toggle('more-l', matStrip.scrollLeft > 2);
+      matStrip.classList.toggle('more-r', matStrip.scrollLeft < matStrip.scrollWidth - matStrip.clientWidth - 2);
+    };
+    matStrip.addEventListener('scroll', fade, { passive: true });
+    matStrip.addEventListener('wheel', (e) => {
+      if (matStrip.scrollWidth <= matStrip.clientWidth) return;
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (!d) return;
+      e.preventDefault();
+      matStrip.scrollLeft += d;
+    }, { passive: false });
+    fade();
+    requestAnimationFrame(fade);
+  }
   if (matBtn && !matBtn.classList.contains('prop-mat-multi-row')) {
     matBtn.addEventListener('click', (e) => {
-      // The action buttons inside the chip handle their own clicks. Don't
-      // double-fire the editor when the user meant to hit "rename".
-      if (e.target.closest('.prop-mat-action[data-action="rename-material"]')) return;
       if (typeof _collectLiveMaterials !== 'function' || typeof _openMaterialEditor !== 'function') return;
       const target = _resolveSelectedMat();
       if (!target) return;
@@ -12755,13 +12768,6 @@ function refreshPropertiesPanel() {
         if (target) _renameMaterialInline(nameEl, target);
       });
     }
-    // Pencil action button — same rename flow.
-    const renameBtn = matBtn.querySelector('.prop-mat-action[data-action="rename-material"]');
-    if (renameBtn) renameBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const target = _resolveSelectedMat();
-      if (target && nameEl) _renameMaterialInline(nameEl, target);
-    });
   }
   el.querySelectorAll('[data-prop-act="select-instances"]').forEach(badge => {
     badge.addEventListener('click', e => {
