@@ -2683,6 +2683,22 @@ const _Settings = (() => {
     into('camera', kidsOf(byTitle('Camera')));
     $s('set-pane-camera').insertAdjacentHTML('beforeend', `<div id="set-camera-prefs"></div>`);
     into('perf', kidsOf(byTitle('Performance')));
+    // the renderer picker, which used to sit at the right end of the top bar
+    // (the select itself is moved, so initRenderer and its change listener still find it)
+    const rsel = $s('renderer-select'), rpick = rsel && (rsel.closest('.cs-wrap') || rsel);
+    if (rpick) {
+      const row = document.createElement('div');
+      row.className = 'field set-row';
+      row.innerHTML = `<label><span>Renderer<span class="set-help">WebGPU, or WebGL2 where the browser or graphics driver has no WebGPU. Changing it reloads the page.</span></span></label>`;
+      row.appendChild(rpick);
+      $s('set-pane-perf').prepend(row);
+    }
+    // what a moving view gives up to stay smooth (_MotionPerf)
+    $s('set-pane-perf').insertAdjacentHTML('beforeend', _group('While the view moves') +
+      _toggleRow('set-cull-small', 'Skip tiny parts', (() => { try { return _MotionPerf.cullSmall(); } catch (_) { return true; } })(), 'Parts that would be only a few pixels across are left out while you orbit, pan or zoom, and drawn again the moment the view stops.') +
+      _toggleRow('set-dyn-res', 'Lower the resolution if it stutters', (() => { try { return _MotionPerf.dynRes(); } catch (_) { return true; } })(), 'On a scene too heavy to move smoothly, the picture is drawn a little coarser while it moves and sharp again when it stops. A scene that moves freely is left alone.'));
+    $s('set-cull-small')?.addEventListener('change', e => { try { _MotionPerf.setCullSmall(e.target.checked); } catch (_) {} });
+    $s('set-dyn-res')?.addEventListener('change', e => { try { _MotionPerf.setDynRes(e.target.checked); } catch (_) {} });
     // the Scene settings window's sections, each under its own sub-heading
     for (const sec of [...document.querySelectorAll('#scene-settings-body > .pop-section')]) {
       const title = (sec.querySelector('.pop-section-title')?.textContent || '').trim();
@@ -2732,7 +2748,7 @@ const _Settings = (() => {
       document.getElementById('resize-r')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       toast('Panel sizes reset', '', 'success');
     });
-    $s('set-reset-all')?.addEventListener('click', () => { _Prefs.reset(); _fillPrefs(); toast('Settings reset', 'Defaults restored', 'success'); });
+    $s('set-reset-all')?.addEventListener('click', () => { _Prefs.reset(); try { _Tabs.setSameSidebars(true); } catch (_) {} _fillPrefs(); toast('Settings reset', 'Defaults restored', 'success'); });
     try { _lucide(); } catch (_) {}
   }
 
@@ -2747,6 +2763,8 @@ const _Settings = (() => {
       _toggleRow('set-restore', 'Offer the last file', p.autoRestoreSession, 'A Resume button for the file you had open last.') +
       _group('Opening files') +
       _toggleRow('set-autofit', 'Fit the view after loading', p.autoFitOnLoad) +
+      _group('Tabs') +
+      _toggleRow('set-same-sidebars', 'Same sidebars in every tab', (() => { try { return _Tabs.sameSidebars(); } catch (_) { return true; } })(), 'Switching tabs keeps the sidebar widths, and the folded left sidebar, of the tab you came from. Off: each tab keeps its own.') +
       _group('Editing') +
       _toggleRow('set-confirm', 'Confirm destructive actions', p.confirmDestructive, 'Ask before deletes and other steps that are hard to take back.') +
       _toggleRow('set-auto-empty', 'Delete groups when they become empty', p.autoDeleteEmptyGroups === true, 'Off: a group you empty stays in the hierarchy, marked “empty”, until you delete it.');
@@ -2768,6 +2786,7 @@ const _Settings = (() => {
       });
     });
     $s('set-orbit-pivot')?.addEventListener('change', e => { _Prefs.set('orbitPivot', e.target.checked ? 'selection' : 'scene'); });
+    $s('set-same-sidebars')?.addEventListener('change', e => { try { _Tabs.setSameSidebars(e.target.checked); } catch (_) {} });
     try { window._enhanceSelects?.(); } catch (_) {}
     if ($s('settings-search')?.value) _search($s('settings-search').value);
   }
@@ -3075,6 +3094,26 @@ const _Welcome = (() => {
     if (bg.classList.contains('show')) hide(); else show();
   }
   return { show, hide, toggle, pushRecent, enterLoading, enterPick };
+})();
+
+// The welcome screen's cover clip runs only while that screen is showing (it
+// is also what is on screen while a file loads), and closes its options popup
+// when the screen goes away or a click lands outside it.
+(function _welcomeCover() {
+  const bg = document.getElementById('welcome-modal');
+  const clip = bg && bg.querySelector('.wl-cover video');
+  if (!bg) return;
+  const sync = () => {
+    const on = bg.classList.contains('show');
+    if (clip) {
+      const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      try { if (on && !calm) { const p = clip.play(); if (p && p.catch) p.catch(() => {}); } else clip.pause(); } catch (_) {}
+    }
+    if (!on) bg.querySelector('.wl-optd')?.removeAttribute('open');
+  };
+  try { new MutationObserver(sync).observe(bg, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
+  bg.addEventListener('click', (e) => { const d = bg.querySelector('.wl-optd[open]'); if (d && !d.contains(e.target)) d.removeAttribute('open'); });
+  sync();
 })();
 
 // ── Action registry, command palette, shortcuts overlay ────────────────
@@ -3719,7 +3758,6 @@ window.addEventListener('keydown', e => {
       (e) => { close(); if (e?.type === 'keydown') btn.focus(); },
       { containers: [menu, btn], isOpen: () => menu.classList.contains('show') },
     );
-    $('brand-menu-settings')?.addEventListener('click', () => { close(); _Settings.show(); });
     $('brand-menu-shortcuts')?.addEventListener('click', () => { close(); try { _Shortcuts.show(); } catch(_){} });
   })();
   input?.addEventListener('change', e => {
@@ -5559,6 +5597,156 @@ function onResize() {
   requestRender();
 }
 
+// ── Lighter frames while the view moves ────────────────────────────────────
+// A still picture has all the time it wants; a moving one has 16 ms. So while
+// the camera is moving (orbit, pan, zoom, a fly-to) two things are given up,
+// and both come back on the first frame after it stops:
+//
+//   Tiny parts.  A part that would cover less than a few pixels is not drawn.
+//     CAD assemblies are mostly screws, washers and clips, so this takes a
+//     large share of the draw calls out of a moving frame for something that
+//     cannot be seen at that size anyway. Parts that are large for the model
+//     (over 2% of its size) are always drawn, so a model seen from far away
+//     keeps its shape, and so are selected parts. A set of instances is left
+//     out only when even its nearest one is that small. Nothing about the
+//     parts changes: they are moved to a layer the camera does not draw
+//     (not `visible`, which is the app's own record of what is hidden).
+//
+//   Resolution.  Only when frames are actually slow: the picture is drawn at
+//     a lower pixel ratio, a step at a time, until the view moves freely.
+//     A scene that already orbits at the display's rate is never touched.
+//     The step that was needed is remembered, so the next movement starts
+//     there instead of stuttering down to it again.
+//
+// Both are switches under Settings › Performance, stored on their own keys
+// (every tab reads them, and hears when another tab changes them).
+const _MotionPerf = (() => {
+  const K_CULL = 'stepopt-perf-cull-small', K_RES = 'stepopt-perf-dyn-res';
+  const read = (k) => { try { return localStorage.getItem(k) !== '0'; } catch (_) { return true; } };
+  let cullOn = read(K_CULL), resOn = read(K_RES);
+  const PX = 3;                 // smaller than this many CSS pixels across: not drawn while moving
+  const REL = 0.02;             // …unless it is more than this share of the model's size
+  const REST_MS = 160;          // this long without movement is "stopped"
+  const STEPS = [1, 0.8, 0.65, 0.5];
+  const HIDE_LAYER = 1;
+  const hidden = new Set();
+  let moving = false, lastMove = 0, scale = 1, want = 1;
+  let ema = 0, prevTurn = 0, prevMoved = false, sinceChange = 0, fastRun = 0, fastest = 16.7, noUpUntil = 0, lastUpAt = 0;
+  let sceneR = 0, movedTurns = 0;
+  const _c = new THREE.Vector3(), _s = new THREE.Vector3(), _box = new THREE.Box3();
+
+  function put(o, hide) {
+    if (hide) { if (!hidden.has(o)) { o.layers.set(HIDE_LAYER); hidden.add(o); } }
+    else if (hidden.has(o)) { o.layers.set(0); hidden.delete(o); }
+  }
+  function uncull() { for (const o of hidden) { try { o.layers.set(0); } catch (_) {} } hidden.clear(); }
+  function measureScene() {
+    _box.makeEmpty();
+    for (const p of state.parts) if (!p.deleted && p.bbox) _box.union(p.bbox);
+    return _box.isEmpty() ? 0 : _box.getSize(_s).length() / 2;
+  }
+  function cull() {
+    if (!cullOn || !camera || !sceneR) { if (hidden.size) uncull(); return; }
+    const H = $('canvas')?.clientHeight || 0;
+    if (!H) return;
+    const persp = !!camera.isPerspectiveCamera;
+    // pixels per world unit: at distance 1 for a perspective view, everywhere for an orthographic one
+    const k = persp ? H / (2 * Math.tan((camera.fov * Math.PI / 180) / 2)) : H * (camera.zoom || 1) / Math.max(1e-9, camera.top - camera.bottom);
+    const maxR = sceneR * REL, cam = camera.position, sel = state.selected;
+    const sets = new Map();                                   // a set of instances → the largest any of them appears
+    for (const p of state.parts) {
+      if (p.deleted || !p.bbox) continue;
+      const r = p.bbox.getSize(_s).length() / 2;
+      let px = Infinity;
+      if (r <= maxR && !(sel && sel.has(p.partId))) {
+        const d = persp ? Math.max(1e-6, p.bbox.getCenter(_c).distanceTo(cam) - r) : 1;
+        px = 2 * r * k / d;
+      }
+      if (p.instancedMesh && p.instanceIndex >= 0) { const m = p.instancedMesh; if (!(sets.get(m) >= px)) sets.set(m, px); continue; }
+      if (p.mesh) put(p.mesh, px < PX);
+    }
+    for (const [m, px] of sets) put(m, px < PX);
+  }
+
+  function restDpr() { return state._restDpr || (state._restDpr = renderer?.getPixelRatio?.() || 1); }
+  // the pixel ratio in use: the still picture's, times the step, never under half a pixel per pixel
+  function dprNow() { const base = restDpr(); return scale >= 1 ? base : Math.min(base, Math.max(0.5, base * scale)); }
+  function applyScale(v) {
+    if (v === scale) return;
+    scale = v;
+    if (!renderer) return;
+    const dpr = dprNow();
+    if (Math.abs((renderer.getPixelRatio?.() ?? 1) - dpr) > 0.01) { renderer.setPixelRatio(dpr); onResize(); }
+  }
+  function end() {
+    moving = false;
+    uncull();
+    applyScale(1);
+    requestRender();                                           // the sharp, complete picture
+  }
+  // Once per turn of the render loop, before it draws. `moved`: the camera moved this turn.
+  // Has the camera moved since the last turn of the loop? Asked of the camera
+  // itself: the orbit controls move it from their own pointer handler, between
+  // turns, so nothing inside the loop sees it happen.
+  const _lastP = new THREE.Vector3(), _lastQ = new THREE.Quaternion(); let _lastZoom = 0, _seen = false;
+  function camMoved() {
+    if (!camera) return false;
+    const was = _seen && (camera.position.distanceToSquared(_lastP) > 1e-12 || Math.abs(camera.quaternion.dot(_lastQ)) < 1 - 1e-12 || camera.zoom !== _lastZoom);
+    _lastP.copy(camera.position); _lastQ.copy(camera.quaternion); _lastZoom = camera.zoom; _seen = true;
+    return was;
+  }
+  function frame(movedInLoop, now) {
+    const moved = camMoved() || !!movedInLoop;
+    if (moved) movedTurns++;
+    // How long a moving frame takes is the time from one turn of the loop to
+    // the next, and only when the turn before also drew a moving frame. (The
+    // time between two frames that moved says nothing: a slow hand or a
+    // wheel click every 80 ms would read as a slow machine.)
+    const dt = prevMoved ? now - prevTurn : 0;
+    prevTurn = now; prevMoved = moved;
+    if (!moved) { if (moving && now - lastMove > REST_MS) end(); return; }
+    if (!cullOn && !resOn) { if (moving) end(); return; }
+    if (!moving) {
+      moving = true;
+      sceneR = measureScene();
+      ema = 0; sinceChange = 0; fastRun = 0;
+      if (resOn && want < 1) applyScale(want);
+    }
+    lastMove = now;
+    cull();
+    if (!resOn) { if (scale !== 1) applyScale(1); return; }
+    {
+      if (dt > 2 && dt < 250) {
+        if (dt < fastest) fastest = Math.max(4, dt);            // (the display's own rate, near enough)
+        ema = ema ? ema * 0.8 + dt * 0.2 : dt;
+        sinceChange++;
+        const at = STEPS.indexOf(scale);
+        if (sinceChange > 8 && ema > Math.max(24, fastest * 1.45) && at < STEPS.length - 1) {
+          if (now - lastUpAt < 1500) noUpUntil = now + 30000;    // it was just raised and could not hold it: leave it down for a while
+          want = STEPS[at + 1]; applyScale(want); sinceChange = 0; ema = 0; fastRun = 0;
+        } else if (at > 0 && ema < fastest * 1.15 && now > noUpUntil) {
+          if (++fastRun > 45) { want = STEPS[at - 1]; applyScale(want); lastUpAt = now; sinceChange = 0; ema = 0; fastRun = 0; }
+        } else fastRun = 0;
+      }
+    }
+  }
+  function set(key, on) {
+    try { if (on) localStorage.removeItem(key); else localStorage.setItem(key, '0'); } catch (_) {}
+    cullOn = read(K_CULL); resOn = read(K_RES);
+    if (!cullOn) uncull();
+    if (!resOn) { want = 1; applyScale(1); }
+    requestRender();
+  }
+  try { window.addEventListener('storage', (e) => { if (e.key === K_CULL || e.key === K_RES) { cullOn = read(K_CULL); resOn = read(K_RES); if (!cullOn) uncull(); if (!resOn) { want = 1; applyScale(1); } } }); } catch (_) {}
+  return {
+    frame, dprNow, end: () => { if (moving) end(); else uncull(); },
+    cullSmall: () => cullOn, dynRes: () => resOn,
+    setCullSmall: (on) => set(K_CULL, on), setDynRes: (on) => set(K_RES, on),
+    info: () => ({ moving, scale, want, movedTurns, hidden: hidden.size, frameMs: +ema.toFixed(1), dpr: +(renderer?.getPixelRatio?.() ?? 1).toFixed(2), restDpr: state._restDpr }),
+  };
+})();
+window.__motionPerf = _MotionPerf;
+
 // Reusable temp vectors so per-frame motion check doesn't allocate. Summing
 // xyz scalars (the previous heuristic) hits collisions if the camera moves
 // equally on +x and -y for example, so a vector-distance comparison is more
@@ -5577,6 +5765,7 @@ let _stdViewActive = false;
 // warnings; if any one fails, the others still run and the next frame is
 // always scheduled in a top-level finally.
 let _lastTickAt = 0;
+let _tickCamMoved = false;
 function tick() {
   _lastTickAt = performance.now();
   try {
@@ -5588,9 +5777,11 @@ function tick() {
         // every frame during long bake/merge operations.
         _TICK_PREV_POS.copy(camera.position);
         _TICK_PREV_TGT.copy(controls.target);
+        const zoom0 = camera.zoom;
         controls.update();
         if (camera.position.distanceToSquared(_TICK_PREV_POS) > 1e-12 ||
-            controls.target.distanceToSquared(_TICK_PREV_TGT) > 1e-12) {
+            controls.target.distanceToSquared(_TICK_PREV_TGT) > 1e-12 || camera.zoom !== zoom0) {
+          _tickCamMoved = true;
           requestRender();
           // User orbited away from a standard view — flip the pill back to
           // "Cam" so the toolbar doesn't keep claiming we're still aligned
@@ -5608,6 +5799,11 @@ function tick() {
         }
       } catch (e) { _logTickErr('controls', e); }
     }
+
+    // While the camera moves the frame is made lighter, and put right again
+    // when it stops (_MotionPerf).
+    if (!state.renderPaused) { try { _MotionPerf.frame(_tickCamMoved, _lastTickAt); } catch (e) { _logTickErr('motion', e); } }
+    _tickCamMoved = false;
 
     // Render only if something invalidated us, OR we're inside the post-event
     // decay window. This drops idle GPU usage to ~0 on a static 10k-part scene.
@@ -6250,6 +6446,8 @@ function applyPerfMode() {
   if (ultraHeavy) dpr = 0.75;
   if (state.perfMode === 'high') dpr = Math.min(devicePixelRatio || 1, 2);
   if (state.perfMode === 'low')  dpr = 0.6;
+  state._restDpr = dpr;                                        // the still picture's; a moving one may use less (_MotionPerf)
+  try { dpr = _MotionPerf.dprNow(); } catch (_) {}
   if (renderer && Math.abs((renderer.getPixelRatio?.() ?? 1) - dpr) > 0.01) {
     renderer.setPixelRatio(dpr);
     onResize();
@@ -12437,9 +12635,40 @@ const _Tabs = (() => {
   const frameOf = (id) => TOP.document.querySelector('iframe.mo-tab-frame[data-tab="' + id + '"]');
   const renderAll = () => { for (const id of Object.keys(REG.wins)) { try { REG.wins[id].__moRenderTabs?.(); } catch (_) {} } };
 
+  // Every tab is a page of its own, with sidebars of its own. The tab being
+  // switched to takes the widths (and the folded left sidebar) of the one
+  // being left, so the panels do not move when the scene changes. It is done
+  // before the tab is shown and without the usual slide.
+  // (Settings › General › "Same sidebars in every tab"; on unless switched off.
+  // It is a key of its own, read when it is needed, because each tab keeps
+  // its own copy of the other preferences.)
+  const SAME_SIDEBARS = 'stepopt-tabs-same-sidebars';
+  const sameSidebars = () => { try { return localStorage.getItem(SAME_SIDEBARS) !== '0'; } catch (_) { return true; } };
+  const setSameSidebars = (on) => { try { if (on) localStorage.removeItem(SAME_SIDEBARS); else localStorage.setItem(SAME_SIDEBARS, '0'); } catch (_) {} };
+  function carryLayout(fromId, toId) {
+    if (!sameSidebars()) return;
+    try {
+      const a = REG.wins[fromId], b = REG.wins[toId];
+      if (!a || !b || a === b || !a.document.body || !b.document.body) return;
+      const from = a.getComputedStyle(a.document.documentElement), root = b.document.documentElement, to = b.getComputedStyle(root);
+      const app = b.document.getElementById('app'), side = b.document.getElementById('sidebar-left');
+      const folded = a.document.body.classList.contains('left-collapsed');
+      const widths = ['--side-l-w', '--side-r-w'].map(p => [p, from.getPropertyValue(p).trim()]).filter(([p, v]) => v && to.getPropertyValue(p).trim() !== v);
+      const refold = b.document.body.classList.contains('left-collapsed') !== folded;
+      if (!widths.length && !refold) return;
+      const quiet = [app, side].filter(Boolean);
+      for (const el of quiet) el.style.transition = 'none';
+      for (const [p, v] of widths) root.style.setProperty(p, v);
+      if (refold) b.document.getElementById('btn-toggle-left')?.click();
+      void b.document.body.offsetWidth;                         // take the new layout in while nothing may slide
+      b.requestAnimationFrame(() => b.requestAnimationFrame(() => { for (const el of quiet) el.style.transition = ''; }));
+    } catch (_) {}
+  }
+
   function activate(id) {
     const t = find(id);
     if (!t || t.closed) return;
+    if (REG.active !== id) carryLayout(REG.active, id);
     REG.active = id;
     for (const fr of TOP.document.querySelectorAll('iframe.mo-tab-frame')) {
       if (fr.dataset.booting) continue;           // still starting up, out of sight: leave it be
@@ -12581,6 +12810,7 @@ const _Tabs = (() => {
   function render() {
     const host = document.getElementById('doc-tabs'), own = document.getElementById('doc-tab');
     if (!host || !own) return;
+    if (host.classList.contains('is-reordering')) return;        // a tab is being dragged: redrawn when it is let go
     for (const el of host.querySelectorAll('.doc-tab.other, .doc-tab-add')) el.remove();
     const tabs = listed();
     let before = true;
@@ -12590,7 +12820,7 @@ const _Tabs = (() => {
       b.className = 'doc-tab other' + (t.dirty ? ' is-dirty' : '') + (t.loading ? ' is-loading' : '');
       b.dataset.tab = t.id;
       b.title = t.title + (t.dirty ? ' — not saved' : '');
-      b.innerHTML = '<span class="doc-tab-lead"><i data-lucide="box"></i><button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button></span><span class="doc-tab-name"></span>';
+      b.innerHTML = '<span class="doc-tab-lead"><i data-lucide="box"></i>' + (t.dirty ? '<span class="doc-unsaved"></span>' : '') + '</span><span class="doc-tab-name"></span><button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button>';
       b.querySelector('.doc-tab-name').textContent = t.title;
       if (before) host.insertBefore(b, own); else host.appendChild(b);
     }
@@ -12614,7 +12844,116 @@ const _Tabs = (() => {
     });
     // middle-click closes, as in a browser
     host.addEventListener('auxclick', (e) => { if (e.button !== 1) return; const tab = e.target.closest('.doc-tab'); if (tab) { e.preventDefault(); close(tab.classList.contains('other') ? tab.dataset.tab : myId); } });
+    wireReorder(host);
     render();
+  }
+
+  // Drag a tab sideways to change the order.
+  // Nothing in the strip is rebuilt or measured again while a tab is held:
+  // the places and widths of all tabs are read once, when the drag starts,
+  // and from then on everything follows from where the pointer is. The held
+  // tab rides with the pointer (sideways only, never past the ends of the
+  // row); the place it would take is the one whose middle is nearest to its
+  // own, and the other tabs slide to make that place. Because the answer
+  // depends on the pointer alone, a tab cannot flicker between two places.
+  // The new order is written to the list (REG.tabs) once, on release, and
+  // every copy's strip is redrawn then. Esc puts the tab back.
+  function wireReorder(host) {
+    const idOf = (el) => el.classList.contains('other') ? el.dataset.tab : myId;
+    const still = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let drag = null;
+    // where each tab's left edge is with the held tab in place `at` (ids in strip order)
+    function layout(d, at) {
+      const rest = d.tabs.filter(t => t.id !== d.id), out = new Map();
+      let x = d.x0strip;
+      for (let i = 0, k = 0; i <= rest.length; i++) {
+        if (i === at) { out.set(d.id, x); x += d.me.width + d.gap; }
+        if (k < rest.length && i < rest.length) { const t = rest[k++]; out.set(t.id, x); x += t.width + d.gap; }
+      }
+      return out;
+    }
+    function begin(d) {
+      const els = [...host.querySelectorAll('.doc-tab')];
+      d.tabs = els.map(el => { const r = el.getBoundingClientRect(); return { id: idOf(el), el, left: r.left, width: r.width }; });
+      d.me = d.tabs.find(t => t.id === d.id);
+      if (!d.me || d.tabs.length < 2) return false;
+      d.x0strip = d.tabs[0].left;
+      d.gap = Math.max(0, d.tabs[1].left - (d.tabs[0].left + d.tabs[0].width));
+      d.end = d.tabs[d.tabs.length - 1].left + d.tabs[d.tabs.length - 1].width;
+      d.at = d.from = d.tabs.indexOf(d.me);
+      host.classList.add('is-reordering');
+      d.me.el.classList.add('is-dragged');
+      for (const t of d.tabs) if (t !== d.me) t.el.style.transition = still() ? 'none' : 'transform 160ms cubic-bezier(.2,.8,.3,1)';
+      try { getSelection().removeAllRanges(); } catch (_) {}
+      return true;
+    }
+    function place(d, clientX) {
+      const edge = Math.max(d.x0strip, Math.min(d.end - d.me.width, clientX - d.grab));
+      const mid = edge + d.me.width / 2;
+      // the place it has keeps a small lead, so a hand resting right on the
+      // line between two places does not send the tabs back and forth
+      const off = (i) => Math.abs(layout(d, i).get(d.id) + d.me.width / 2 - mid);
+      let best = d.at, bestGap = off(d.at) - 8;
+      for (let i = 0; i < d.tabs.length; i++) {
+        const g = off(i);
+        if (i !== d.at && g < bestGap) { bestGap = g; best = i; }
+      }
+      d.at = best; d.edge = edge;
+      const where = layout(d, best);
+      for (const t of d.tabs) t.el.style.transform = `translateX(${Math.round((t === d.me ? edge : where.get(t.id)) - t.left)}px)`;
+    }
+    function finish(commit) {
+      window.removeEventListener('pointermove', onMove, true);
+      window.removeEventListener('pointerup', onUp, true);
+      window.removeEventListener('pointercancel', onCancel, true);
+      window.removeEventListener('blur', onCancel);
+      window.removeEventListener('keydown', onKey, true);
+      const d = drag; drag = null;
+      if (!d || !d.on) return;
+      const settle = layout(d, commit ? d.at : d.from).get(d.id);
+      for (const t of d.tabs) { t.el.style.transition = ''; t.el.style.transform = ''; t.el.classList.remove('is-dragged'); }
+      host.classList.remove('is-reordering');
+      if (commit && d.at !== d.from) {
+        const ids = d.tabs.filter(t => t.id !== d.id).map(t => t.id);
+        ids.splice(d.at, 0, d.id);
+        const rank = new Map(ids.map((id, i) => [id, i]));
+        const open = REG.tabs.filter(t => rank.has(t.id)).sort((x, y) => rank.get(x.id) - rank.get(y.id));
+        REG.tabs = [...open, ...REG.tabs.filter(t => !rank.has(t.id))];   // (anything not in this strip keeps its place after them)
+      }
+      renderAll();
+      // the held tab glides from where it was let go into its place
+      const el = d.id === myId ? document.getElementById('doc-tab') : host.querySelector('.doc-tab.other[data-tab="' + d.id + '"]');
+      const dx = el ? Math.round(d.edge - settle) : 0;
+      if (el && dx && !still()) { try { el.animate([{ transform: `translateX(${dx}px)` }, { transform: 'none' }], { duration: 160, easing: 'cubic-bezier(.2,.8,.3,1)' }); } catch (_) {} }
+      // the release is not a click on the tab (it would switch to it, or save)
+      const eat = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      window.addEventListener('click', eat, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener('click', eat, true), 0);
+    }
+    function onMove(e) {
+      if (!drag) return;
+      if (!drag.on) {
+        if (Math.abs(e.clientX - drag.x0) < 5) return;
+        if (!begin(drag)) { finish(false); return; }
+        drag.on = true;
+      }
+      if (e.buttons === 0) { finish(true); return; }                // the button came up somewhere this page did not see
+      place(drag, e.clientX);
+    }
+    const onUp = () => finish(true);
+    const onCancel = () => finish(false);
+    const onKey = (e) => { if (e.key === 'Escape' && drag && drag.on) { e.preventDefault(); e.stopPropagation(); finish(false); } };
+    host.addEventListener('pointerdown', (e) => {
+      if (drag || e.button !== 0 || listed().length < 2) return;
+      const tab = e.target.closest('.doc-tab');
+      if (!tab || tab.classList.contains('is-loading') || e.target.closest('.doc-tab-x, input, textarea, [contenteditable="true"]')) return;
+      drag = { id: idOf(tab), x0: e.clientX, grab: e.clientX - tab.getBoundingClientRect().left, on: false };
+      window.addEventListener('pointermove', onMove, true);
+      window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('pointercancel', onCancel, true);
+      window.addEventListener('blur', onCancel);
+      window.addEventListener('keydown', onKey, true);
+    });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
 
@@ -12648,31 +12987,34 @@ const _Tabs = (() => {
     if (t && !isHost) { for (let k = 2; ; k++) { const c = 'Untitled scene ' + k; if (!REG.tabs.some(x => x !== t && !x.closed && x.title === c)) return (t.blank = c); } }
     return 'Untitled scene';
   };
-  return { add, close, activate, report, render, onReady, blankName, warmSoon, isHost, id: myId, count: () => listed().length, list: () => listed().map(t => ({ ...t })) };
+  return { add, close, activate, report, render, onReady, blankName, warmSoon, isHost, sameSidebars, setSameSidebars, id: myId, count: () => listed().length, list: () => listed().map(t => ({ ...t })) };
 })();
 
 // Unsaved changes. The scene is "as saved" while the newest entry of the undo
 // history is the one that was newest at the last save (or load / new scene),
-// so undoing back to that point clears the warning again. The dot in the
-// document tab shows it (yellow, saves on click) and is green when saved.
+// so undoing back to that point clears the warning again. A dot on the corner
+// of the tab's icon shows it (yellow, or green when saved); a click on the
+// icon saves.
 const _Dirty = (() => {
   let savedTop = null;
   const top = () => (state.history && state.history.length) ? state.history[state.history.length - 1] : null;
   const dirty = () => top() !== savedTop && state.parts.some(p => !p.deleted);
   function sync() {
-    const el = document.getElementById('doc-unsaved');
+    const el = document.getElementById('doc-unsaved'), btn = document.getElementById('doc-save');
     const d = dirty();
     if (el) {
       // Nothing in the scene: no dot. Otherwise yellow (unsaved) or green (as saved).
       el.hidden = !state.parts.some(p => !p.deleted);
       el.classList.toggle('is-saved', !d);
-      el.title = d ? 'There are changes that are not saved — click to save the scene (Ctrl+S)' : 'All changes are saved';
-      el.setAttribute('aria-label', d ? 'Unsaved changes' : 'Saved');
+    }
+    if (btn) {
+      btn.title = d ? 'There are changes that are not saved — click to save the scene (Ctrl+S)' : 'All changes are saved';
+      btn.setAttribute('aria-label', d ? 'Unsaved changes: save the scene' : 'Saved');
     }
     try { _Tabs.report({ dirty: d }); } catch (_) {}
   }
   function mark() { savedTop = top(); sync(); }
-  const wire = () => document.getElementById('doc-unsaved')?.addEventListener('click', (e) => { e.stopPropagation(); if (dirty()) document.getElementById('btn-save-scene')?.click(); });
+  const wire = () => document.getElementById('doc-save')?.addEventListener('click', (e) => { e.stopPropagation(); if (dirty()) document.getElementById('btn-save-scene')?.click(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
   return { sync, mark, dirty };
 })();
@@ -35692,6 +36034,19 @@ if (new URLSearchParams(location.search).has('selftest')) {
       let moved = 0;
       if (sw && side) {
         const curS = parseFloat(sw.style.marginLeft) || 0;
+        // The Menu button gives up its word when the switch would otherwise
+        // run past the sidebar's edge, and takes it back when there is room
+        // again (its width with the word is remembered from when it had it).
+        const menu = document.getElementById('btn-file');
+        if (menu) {
+          const box0 = [...side.querySelectorAll('.tree-search')].map(e => e.getBoundingClientRect()).find(q => q.width);
+          const edge0 = box0 && box0.width ? box0.right : side.getBoundingClientRect().right - 12;
+          const r0 = sw.getBoundingClientRect(), short = menu.classList.contains('icon-only'), mw = menu.getBoundingClientRect().width;
+          if (!short && mw) menu._fullW = mw;
+          const end = r0.right - curS + (short ? Math.max(0, (menu._fullW || mw) - mw) : 0);   // where the switch ends with the word shown
+          const want = !document.body.classList.contains('left-collapsed') && end > edge0 + 0.5;
+          if (want !== short) menu.classList.toggle('icon-only', want);
+        }
         const r = sw.getBoundingClientRect(), box = [...side.querySelectorAll('.tree-search')].map(e => e.getBoundingClientRect()).find(q => q.width);
         const edge = box && box.width ? box.right : side.getBoundingClientRect().right - 12;
         const folded = document.body.classList.contains('left-collapsed');

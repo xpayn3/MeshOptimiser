@@ -343,6 +343,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         '.js': 'application/javascript', '.mjs': 'application/javascript',
         '.wasm': 'application/wasm', '.html': 'text/html',
         '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json',
+        '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml',
     }
 
     def end_headers(self):
@@ -517,11 +518,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self._json({"job_id": job_id})
 
 
+# ─── The app's own window ─────────────────────────────────────────────────
+# A Chromium browser started with --app=<url> draws the page in a window of
+# its own: a title bar and nothing else. No tabs, no address bar, and none of
+# the toolbar an installed web app gets (the extensions button, the menu).
+# It uses the browser's usual profile, so settings and recent files are the
+# ones the app already had in a tab. Returns False when no such browser is
+# found, and the caller falls back to an ordinary tab.
+def _app_browsers():
+    if sys.platform == "win32":
+        roots = [os.environ.get(k) for k in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData")]
+        tails = [r"Google\Chrome\Application\chrome.exe", r"Microsoft\Edge\Application\msedge.exe",
+                 r"BraveSoftware\Brave-Browser\Application\brave.exe"]
+        return [os.path.join(r, t) for t in tails for r in roots if r]
+    if sys.platform == "darwin":
+        return [f"/Applications/{n}.app/Contents/MacOS/{n}" for n in ("Google Chrome", "Microsoft Edge", "Brave Browser")]
+    return [p for p in (shutil.which(n) for n in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge", "brave-browser")) if p]
+
+def _open_app_window(url: str) -> bool:
+    for exe in _app_browsers():
+        if not os.path.isfile(exe): continue
+        try:
+            subprocess.Popen([exe, f"--app={url}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception:
+            continue
+    return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=PORT)
     ap.add_argument("--open", "-o", type=str)
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--tab", action="store_true", help="open in an ordinary browser tab instead of the app's own window")
     args = ap.parse_args()
     os.chdir(ROOT)
 
@@ -573,8 +603,9 @@ def main() -> int:
         if auto_load: url += "?file=" + quote(auto_load)
         print(f"\n  MeshOptimiser running at  {url}\n  (press Ctrl+C to stop)\n")
         if not args.no_browser:
-            try: webbrowser.open(url)
-            except Exception: pass
+            if args.tab or not _open_app_window(url):
+                try: webbrowser.open(url)
+                except Exception: pass
         try: httpd.serve_forever()
         except KeyboardInterrupt:
             print("\n  stopped."); return 0

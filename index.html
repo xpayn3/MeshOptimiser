@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MeshOptimiser</title>
+<!-- Installable: the browser's "Install" / "Open in app" gives it a window of its own, without the address bar. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#101010">
+<link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="preload" href="vendor/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
 <style>
 @font-face{font-family:'Inter';src:url('vendor/inter/InterVariable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
@@ -935,7 +940,7 @@ body.msr-mode #canvas{cursor:crosshair}
    a dark mask covers the right portion proportional to how much was
    deleted, so the visible right edge transitions from red (full) through
    yellow to green as the user trims geometry. */
-.vp-tribar{position:relative;height:3px;width:100%;background:linear-gradient(90deg,#22c55e 0%,#84cc16 25%,#facc15 50%,#fb923c 75%,#ef4444 100%);border-radius:var(--r-2xs);overflow:hidden;margin:3px 0 5px}
+.vp-tribar{position:relative;height:3px;width:100%;background:var(--ac);border-radius:var(--r-2xs);overflow:hidden;margin:3px 0 5px}
 .vp-tribar-mask{position:absolute;top:0;bottom:0;right:0;width:0;background:var(--glass-strong);transition:width 220ms ease-out}
 
 /* Export dropdown — anchored to the toolbar Export button. Click the
@@ -951,7 +956,9 @@ body.msr-mode #canvas{cursor:crosshair}
 .tbtn.active .caret,
 .tbtn[aria-expanded="true"] .caret{transform:rotate(180deg)}
 /* the Menu button's arrow stays as it is when the menu is open */
-.export-wrap.open > #btn-file .caret,#btn-file[aria-expanded="true"] .caret{transform:none}
+/* The Menu button has no arrow, and drops its word (the icon alone is left)
+   when the sidebar's stretch of the top bar has no room for it: _alignDocTab. */
+#btn-file.icon-only .tbtn-label{display:none}
 /* One arrow for everything that opens a list: the one the dropdowns draw
    (--select-arrow), on the toolbar buttons and the brand button too. */
 .tbtn .caret,.brand-caret{width:10px;height:10px;margin-left:5px;opacity:1;background:var(--select-arrow) center/10px 10px no-repeat}
@@ -1487,7 +1494,13 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 #loader-sub{color:var(--tx2);font-size:var(--fs-12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #loader-time{color:var(--tx2);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;padding:4px 8px;background:var(--hairline);border-radius:var(--r-sm)}
 .loader-bar{height:6px;background:var(--s3);border-radius:4px;margin-top:14px;overflow:hidden;position:relative}
-.loader-bar-fill{height:100%;width:35%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:4px;transition:width .3s ease;position:absolute;left:0}
+.loader-bar-fill{height:100%;width:35%;background:var(--ac);border-radius:4px;transition:width .3s ease;position:absolute;left:0;overflow:hidden}
+/* One flat accent colour. While something is loading a faint band of light
+   drifts across the filled part and back; it only runs while the bar is on
+   screen (the loader is display:none otherwise), and not at all with reduced motion. */
+.loader-bar-fill::after{content:'';position:absolute;top:0;bottom:0;left:0;width:40%;min-width:36px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);animation:loader-sheen 1.8s ease-in-out infinite alternate;pointer-events:none}
+@keyframes loader-sheen{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+@media (prefers-reduced-motion:reduce){.loader-bar-fill::after{animation:none;display:none}}
 .loader-bar-fill.indeterminate{animation:slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
 @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
 .loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid var(--hairline);border-radius:6px;padding:8px 10px;font:11px/1.55 var(--font-sans);color:var(--tx2)}
@@ -2031,6 +2044,10 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 #log-console.show{transform:translateY(0);visibility:visible;transition:transform .2s var(--ease-out),visibility 0s}
 /* Triangle / part readout sits in the viewport's top-right corner. */
 .vpc.vp-stats{flex-direction:column;pointer-events:none;top:8px;left:8px;right:auto;align-items:flex-start;}
+/* The triangle / parts / instanced read-out over the viewport's corner is not
+   shown: Properties gives the same totals. It stays in the page because the
+   counters are still written to it (and read back by the self-test). */
+.vpc.vp-stats{display:none!important}
 /* Shortcut tips are a quiet reference, not part of the scene. */
 .vp-tips .vp-hint-lbl{color:var(--tx3)}
 /* Add and Cloner are no longer in the top bar. Shapes are added from the
@@ -2265,8 +2282,9 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 #prop-body .prop-grid .prop-label{font-size:var(--fs-11);font-weight:400}
 /* …and one rhythm down the card: name, tags, the count with its bar, the facts. */
 #prop-body .prop-head{margin-bottom:8px}
-#prop-body .prop-tags{margin-bottom:10px;min-height:0}
-#prop-body .prop-tags:empty{display:none}
+/* The tag row keeps its line even with no tags in it, so a tag that comes and
+   goes (hidden, flagged, instanced) does not push the rest of the card down. */
+#prop-body .prop-tags{margin-bottom:10px;min-height:16px;align-items:center}
 #prop-body .prop-hero{margin:0 0 14px}
 #prop-body .prop-hero .prop-bar{margin-top:10px}
 #prop-body .prop-hero-cap{margin-top:8px}
@@ -2435,8 +2453,12 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
    hover, on focus, and for as long as something is typed in it. */
 .tree-search:has(input:placeholder-shown:not(:focus)){opacity:.5}
 .tree-search:has(input:placeholder-shown:not(:focus)):hover{opacity:.85}
-/* Renderer picker ends on the same line as the right sidebar's cards. */
-#stat-renderer{padding-right:0}
+/* The renderer picker lives in Settings › Performance (moved there when the
+   window is first built). Its old place in the top bar stays, empty and
+   unseen: it is as wide as the right sidebar, which is what ends Export and
+   the screenshot button on the viewport's right edge, and the renderer's
+   status dot is still written to it. */
+#tb .spacer ~ #stat-renderer:last-child,#tb #stat-renderer{visibility:hidden;pointer-events:none}
 /* ── Corner radii: three sizes for the whole page ─────────────────────────
    4px  tiny things: key caps, tags, the +/- box, colour chips
    6px  every control: buttons, fields, dropdowns, rows, icon buttons
@@ -2715,12 +2737,12 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
   background:var(--bg2);border-radius:var(--btn-r-md,6px);color:var(--tx-control);font-size:var(--fs-12)}
 .doc-tab>svg,.doc-tab>i{width:14px;height:14px;flex:0 0 14px;stroke-width:1.8;color:var(--tx3)}
 .doc-tab-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text}
-:is(.doc-unsaved,#_a#_b){flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;padding:0;border:0;border-radius:50%;
-  background:transparent;color:var(--wn);font-size:0;cursor:pointer}     /* a dot only: yellow with unsaved changes, green when saved */
-.doc-unsaved::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor}
-:is(.doc-unsaved.is-saved,#_a#_b){color:var(--ok);cursor:default}
-:is(.doc-unsaved:not(.is-saved),#_a#_b):hover{background:color-mix(in srgb,var(--wn) 22%,transparent)}
-:is(.doc-unsaved[hidden],#_a#_b){display:none}     /* (must outweigh the rule above, or the pill never hides) */
+/* the status dot sits on the bottom right corner of the tab's icon: yellow
+   with unsaved changes, green when saved. The ring is the tab's own colour. */
+:is(.doc-unsaved,#_a#_b){position:absolute;right:-3px;bottom:-3px;width:7px;height:7px;border-radius:50%;background:var(--wn);
+  box-shadow:0 0 0 2px var(--bg2);pointer-events:none}
+:is(.doc-unsaved.is-saved,#_a#_b){background:var(--ok)}
+:is(.doc-unsaved[hidden],#_a#_b){display:none}     /* (must outweigh the rule above, or the dot never hides) */
 @media (max-width:900px){.doc-tab{max-width:150px}}
 /* Properties: the triangle count leads the card. When triangles were saved
    the percentage is the headline (green badge) and the old count is struck
@@ -2776,14 +2798,25 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 :is(.prim-row .prim-axis-group,#_a#_b){box-sizing:border-box;width:84px;height:22px;padding:1px;gap:1px;border-radius:var(--r-sm,6px)}
 :is(.prim-row .prim-axis-btn,#_a#_b){flex:1 1 0;min-width:0;height:100%;padding:0;border-radius:4px}
 :is(.prim-row .prim-select,#_a#_b){box-sizing:border-box;width:84px;min-width:0;height:22px;border-radius:var(--r-sm,6px)}
-/* The icon at the left of a tab turns into a close button under the
-   pointer. A tab that is still starting pulses and cannot be picked yet. */
+/* The icon at the left of a tab carries the status dot; on the open tab it
+   is a button that saves. The close button is at the right end: always there
+   on the open tab, under the pointer on the others. A tab that is still
+   starting pulses and cannot be picked yet. */
 .doc-tab-lead{position:relative;flex:0 0 16px;width:16px;height:16px;display:inline-grid;place-items:center}
-.doc-tab-lead>svg,.doc-tab-lead>i{width:14px;height:14px;stroke-width:1.8;color:var(--tx3);transition:opacity var(--dur-fast) var(--ease-out)}
-.doc-tab.is-dirty .doc-tab-lead>svg{color:var(--wn)}
-:is(.doc-tab-lead .doc-tab-x,#_a#_b){position:absolute;inset:-2px;width:20px;height:20px;opacity:0;margin:0}
-.doc-tab:hover .doc-tab-lead>svg,.doc-tab:hover .doc-tab-lead>i{opacity:0}
-:is(.doc-tab:hover .doc-tab-lead .doc-tab-x,#_a#_b){opacity:1}
+:is(button.doc-tab-lead,#_a#_b){padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer;border-radius:4px;overflow:visible}
+button.doc-tab-lead::after{content:'';position:absolute;inset:-4px;border-radius:5px;background:transparent;transition:background var(--dur-fast) var(--ease-out)}
+button.doc-tab-lead:hover::after{background:rgba(255,255,255,.08)}
+.doc-tab-lead>svg,.doc-tab-lead>i{width:14px;height:14px;stroke-width:1.8;color:var(--tx3)}
+button.doc-tab-lead:hover>svg{color:var(--tx-control-hover)}
+.doc-tab.other .doc-unsaved{box-shadow:0 0 0 2px var(--bg)}
+/* a tab being dragged to a new place in the strip rides above the others */
+.doc-tabs.is-reordering,.doc-tabs.is-reordering *{user-select:none;-webkit-user-select:none;cursor:grabbing!important}
+/* (solid, whatever the tab is: an unopened tab has no background of its own,
+   and the tabs it passes over must not show through it) */
+:is(.doc-tabs .doc-tab.is-dragged,.doc-tabs .doc-tab.is-dragged:hover,#_a#_b){z-index:2;background:var(--bg3);opacity:1;box-shadow:0 4px 14px rgba(0,0,0,.45);transition:none}
+.doc-tab.is-dragged .doc-unsaved{box-shadow:0 0 0 2px var(--bg3)}
+body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name tip trailing a tab that is being moved */
+:is(.doc-tab>.doc-tab-x,#_a#_b){margin:0 -5px 0 -1px}
 .doc-tab.is-loading{pointer-events:none;animation:doc-tab-load 1s ease-in-out infinite}
 @keyframes doc-tab-load{50%{opacity:.45}}
 @media (prefers-reduced-motion:reduce){.doc-tab.is-loading{animation:none;opacity:.6}}
@@ -2946,6 +2979,70 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 :is(.cmd-num .size-field input[type=text]:not([inputmode]),#_a#_b){text-align:left}
 .field-help.is-result{color:var(--tx)}
 #sh-after{margin:0 0 4px}
+/* ── Installed as an app, with the title bar folded away ───────────────────
+   (the "^" in the title bar of the installed app turns this on and off). The
+   window's own buttons then float over the top right corner of the page, so
+   the app's top bar becomes the title bar: it keeps clear of them, and its
+   empty stretches drag the window. Buttons, tabs and fields stay clickable. */
+@media (display-mode: window-controls-overlay){
+  #tb{padding-left:max(12px,env(titlebar-area-x,0px));
+      padding-right:calc(100vw - env(titlebar-area-x,0px) - env(titlebar-area-width,100vw));
+      -webkit-app-region:drag;app-region:drag}
+  #tb :is(button,a,input,select,label,[role=tab],[role=button],.doc-tab,.cs-wrap,.cs-trigger,.export-wrap,.side-switch,.stat,.brand){-webkit-app-region:no-drag;app-region:no-drag}
+  /* The window's own buttons already take up room at the right end. The empty
+     block that keeps Export on the viewport's edge gives that much back (and
+     the bar's usual 12px edge with it), so Export sits where it does in an
+     ordinary window and does not move when the title bar is hidden or shown.
+     Only when the window's buttons are wider than that does it give way. */
+  #tb .spacer ~ #stat-renderer:last-child,#tb .spacer ~ .stat-renderer:last-child,#tb #stat-renderer,#tb .stat-renderer{flex-basis:max(0px,calc(var(--side-r-w) - 6px - (100vw - env(titlebar-area-x,0px) - env(titlebar-area-width,100vw))))}
+}
+/* ── Welcome: a cover on top, the essentials under it ───────────────────────
+   The cover is a wide clip rendered on the window's own colour, so it has no
+   edges; the name sits on its empty left half. Under it: open something
+   (left) or pick up something (right). The three options live in a small
+   popup opened from the footer, and the long tip is gone. */
+.wl-modal{width:min(860px,calc(100vw - 48px));border-radius:16px}
+.wl-cover{position:relative;flex:0 0 auto;margin:0;line-height:0;background:var(--surface-pop)}
+.wl-cover video{display:block;width:100%;height:auto;aspect-ratio:860/240;object-fit:cover;background:var(--surface-pop);
+  /* fades out at the bottom and at both sides, so no edge of the clip can show against the window */
+  -webkit-mask-image:linear-gradient(to bottom,#000 0,#000 74%,transparent 100%),linear-gradient(to right,transparent 0,#000 7%,#000 93%,transparent 100%);-webkit-mask-composite:source-in;
+          mask-image:linear-gradient(to bottom,#000 0,#000 74%,transparent 100%),linear-gradient(to right,transparent 0,#000 7%,#000 93%,transparent 100%);mask-composite:intersect}
+.wl-cover .wl-head{position:absolute;left:36px;top:50%;transform:translateY(-58%);margin:0;padding:0;gap:14px;line-height:normal}
+.wl-cover .wl-mark{width:38px;height:38px}
+.wl-cover .wl-mark svg{width:34px;height:34px}
+.wl-cover .wl-title{font-size:27px;letter-spacing:-.02em;line-height:1.1;gap:10px}
+.wl-cover .wl-tag{font-size:13px;margin-top:6px;color:var(--tx2)}
+:is(.wl-modal #welcome-close,#_a#_b){top:14px!important;right:14px!important;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.34);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--tx-control);display:grid;place-items:center;font-size:12px;border:0}
+:is(.wl-modal #welcome-close:hover,#_a#_b){background:rgba(255,255,255,.14);color:#fff}
+.wl-modal .modal-b{padding:0 36px 20px;position:relative}
+.wl-cols{gap:32px}
+.wl-drop{padding:18px 16px 16px;gap:9px}
+.wl-drop>svg,.wl-drop>i{width:24px;height:24px}
+.wl-actions{margin-top:12px;gap:2px}
+.wl-act{height:36px}
+.wl-label{margin:16px 0 8px}
+.wl-shapes{gap:8px}
+.wl-shape{flex-direction:row;justify-content:center;padding:7px 6px;gap:7px;border-radius:8px}
+.wl-shape-pic,.wl-shape-pic img{width:22px;height:22px}
+.wl-modal .welcome-resume{height:104px;margin-bottom:10px;border-radius:10px}
+.wl-modal .welcome-resume .wr-info .wr-name{font-size:var(--fs-lg)}
+.wl-recents-head{margin:14px 0 8px}
+#welcome-resume:empty + .wl-recents-head{margin-top:0}
+.wl-recents{gap:6px;max-height:204px}
+.wl-foot{margin-top:18px;padding-top:12px;position:relative}
+.wl-foot-tip{display:none}
+/* the options: a popup standing on its word in the footer */
+.wl-optd{position:relative}
+.wl-optd>summary{list-style:none;display:inline-flex;align-items:center;gap:6px}
+.wl-optd>summary::-webkit-details-marker{display:none}
+.wl-optd>summary::after{content:'';width:10px;height:10px;background:var(--select-arrow) center/10px 10px no-repeat;opacity:.7;transform:rotate(180deg)}
+.wl-optd[open]>summary{color:var(--tx)}
+.wl-optd>.wl-opts{position:absolute;right:0;bottom:calc(100% + 10px);width:280px;padding:6px 14px;gap:0;border-radius:10px;background:var(--surface-pop);box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.09);z-index:5;animation:cmd-in .16s var(--ease-out)}
+.wl-optd .wl-opt{font-size:13px;height:34px}
+/* while a file loads the cover stays and the progress sits where the lists were */
+#welcome-load-pane{padding-top:6px}
+@media (max-width:720px){.wl-cover .wl-tag{display:none}.wl-cover .wl-title{font-size:22px}}
+@media (max-height:700px){.wl-cover video{aspect-ratio:860/170}}
 /* on a short viewport the controls matter more than the clip */
 @media (max-height:640px){.cmd-hero{display:none}.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:0;padding:10px 40px 8px 12px}}
 </style>
@@ -2966,19 +3063,19 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.12.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.13.0</div>
         </div>
         <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.12.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.13.0</span></div>
           <ul>
-            <li>Object library: 86 parametric parts, dragged into the scene</li>
-            <li>Align to floor: stand any model on the grid in one card</li>
-            <li>Select hidden parts, and Fit to budget for the whole scene</li>
-            <li>Smart fit: Boxes and Blocks keep the outline</li>
-            <li>Clay view, a headlight and reflections for dark parts</li>
-            <li>Search finds parts and the library, and does sums</li>
+            <li>Install it as an app, in a window of its own</li>
+            <li>Fold the title bar away: the top bar takes its place</li>
+            <li>Drag tabs into order; save from the tab’s icon</li>
+            <li>Same sidebars in every tab</li>
+            <li>Tiny parts are skipped while the view moves</li>
+            <li>Renderer picker moved to Settings › Performance</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -2991,9 +3088,6 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
         </a>
         <button class="brand-menu-item" id="brand-menu-shortcuts" role="menuitem">
           <i data-lucide="command"></i><span class="lbl">Keyboard shortcuts</span><kbd class="kbd-chip">?</kbd>
-        </button>
-        <button class="brand-menu-item" id="brand-menu-settings" role="menuitem">
-          <i data-lucide="settings"></i><span class="lbl">Settings</span><span class="kbd-keys"><kbd class="kbd-chip">Ctrl</kbd><span class="sc-plus">+</span><kbd class="kbd-chip">,</kbd></span>
         </button>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-foot">
@@ -3009,7 +3103,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
     </div>
     <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
     <div class="export-wrap" id="file-menu-wrap">
-      <button class="tbtn" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="Menu (New / Open / Import / Save / Scene settings)"><i data-lucide="menu"></i>Menu <span class="caret"><i data-lucide="chevron-down"></i></span></button>
+      <button class="tbtn" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="Menu (New / Open / Import / Save / Scene settings)" aria-label="Menu"><i data-lucide="menu"></i><span class="tbtn-label">Menu</span></button>
       <div id="file-menu" class="export-menu" style="min-width:260px">
         <button class="export-menu-item" data-file-cmd="new"><span class="fmt"><i data-lucide="file-plus" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>New scene</span><span class="hint">Ctrl+N</span></button>
         <button class="export-menu-item" data-file-cmd="open"><span class="fmt"><i data-lucide="folder-open" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Open…</span><span class="hint">Ctrl+O</span></button>
@@ -3054,14 +3148,15 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
     <div class="divider"></div>
     <button class="tbtn" id="btn-undo" disabled><i data-lucide="undo-2"></i>Undo</button>
     <button class="tbtn" id="btn-redo" disabled><i data-lucide="redo-2"></i>Redo</button>
-    <!-- Document tab: the scene's name (double-click to rename) and, when
-         there are changes that are not in a saved scene file, a yellow dot
-         that saves on click; the dot is green when the scene is as saved. -->
+    <!-- Document tab: the scene's icon, its name (double-click to rename) and
+         a close button. A dot on the icon's corner is yellow when there are
+         changes that are not in a saved scene file and green when the scene
+         is as saved; a click on the icon saves. -->
     <div class="doc-tabs" id="doc-tabs">
       <div class="doc-tab active" id="doc-tab">
-        <span class="doc-tab-lead"><i data-lucide="box"></i><button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button></span>
+        <button type="button" class="doc-tab-lead" id="doc-save" title="Save the scene (Ctrl+S)" aria-label="Save the scene"><i data-lucide="box"></i><span class="doc-unsaved" id="doc-unsaved" hidden></span></button>
         <span class="doc-tab-name" id="sb-status">Untitled scene</span>
-        <button type="button" class="doc-unsaved" id="doc-unsaved" hidden title="There are changes that are not saved — click to save the scene (Ctrl+S)" aria-label="Unsaved changes"></button>
+        <button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button>
       </div>
     </div>
     <div class="export-wrap">
@@ -4090,17 +4185,22 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 
 <div class="modal-bg" id="welcome-modal">
   <div class="modal wl-modal" style="position:relative">
-    <button class="x" id="welcome-close" title="Close (Esc)" style="position:absolute;top:14px;right:14px;z-index:1">✕</button>
+    <button class="x" id="welcome-close" title="Close (Esc)" style="position:absolute;top:14px;right:14px;z-index:3">✕</button>
+    <!-- The cover: what the app does, in one loop (a dense mesh stepping down to a
+         simple one). It stays on top while a file loads, so the same screen is
+         the splash and the progress window. -->
+    <figure class="wl-cover" aria-hidden="true">
+      <video src="assets/help/cover.webm" poster="assets/help/cover-poster.webp" width="1290" height="360" muted loop playsinline preload="auto" disablepictureinpicture tabindex="-1"></video>
+      <figcaption class="wl-head">
+        <span class="wl-mark"><i data-lucide="zap"></i></span>
+        <div class="wl-titles">
+          <div class="wl-title">MeshOptimiser <span class="wl-ver" id="wl-ver"></span></div>
+          <div class="wl-tag">Open, clean up and convert CAD and mesh files</div>
+        </div>
+      </figcaption>
+    </figure>
     <div class="modal-b">
       <div id="welcome-pick-pane">
-        <div class="wl-head">
-          <span class="wl-mark"><i data-lucide="zap"></i></span>
-          <div class="wl-titles">
-            <div class="wl-title">MeshOptimiser <span class="wl-ver" id="wl-ver"></span></div>
-            <div class="wl-tag">Open, clean up and convert CAD and mesh files</div>
-          </div>
-        </div>
-
         <div class="wl-cols">
           <!-- left: start something -->
           <div class="wl-col">
@@ -4116,7 +4216,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
               <button class="wl-act" id="welcome-start-empty" type="button"><i data-lucide="file-plus"></i><span>New empty scene</span><kbd>Ctrl+N</kbd></button>
             </div>
 
-            <div class="wl-label">Start from a shape</div>
+            <div class="wl-label">Or start from a shape</div>
             <div class="wl-shapes" id="welcome-shapes">
               <button class="wl-shape" data-shape="cube" title="New scene with a cube"><span class="wl-shape-pic"></span><span>Cube</span></button>
               <button class="wl-shape" data-shape="sphere" title="New scene with a sphere"><span class="wl-shape-pic"></span><span>Sphere</span></button>
@@ -4124,12 +4224,6 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
               <button class="wl-shape" data-shape="torus" title="New scene with a torus"><span class="wl-shape-pic"></span><span>Torus</span></button>
             </div>
 
-            <div class="wl-label">Options</div>
-            <div class="wl-opts">
-              <label class="wl-opt" title="Frame the model in the viewport once it has loaded"><span>Fit view after loading</span><input type="checkbox" id="wl-opt-fit"><span class="switch"></span></label>
-              <label class="wl-opt" title="Show the last file at the top of this screen so it can be reopened in one click"><span>Offer to resume the last file</span><input type="checkbox" id="wl-opt-resume"><span class="switch"></span></label>
-              <label class="wl-opt" title="Show this screen when the app starts"><span>Show this screen at startup</span><input type="checkbox" id="wl-opt-boot"><span class="switch"></span></label>
-            </div>
           </div>
 
           <!-- right: pick up where you left off -->
@@ -4147,7 +4241,14 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 
         <div class="wl-foot">
           <span class="wl-foot-hints"><kbd>Ctrl+K</kbd> command palette<span class="wl-dot">·</span><button class="wl-link" id="welcome-shortcuts" type="button">Keyboard shortcuts</button><span class="wl-dot">·</span><button class="wl-link" id="welcome-settings" type="button">Settings</button></span>
-          <span class="wl-foot-tip">Assemblies over 200 MB load faster pre-converted with <code>step2glb.py</code></span>
+          <details class="wl-optd">
+            <summary class="wl-link">Options</summary>
+            <div class="wl-opts">
+              <label class="wl-opt" title="Frame the model in the viewport once it has loaded"><span>Fit view after loading</span><input type="checkbox" id="wl-opt-fit"><span class="switch"></span></label>
+              <label class="wl-opt" title="Show the last file at the top of this screen so it can be reopened in one click"><span>Offer to resume the last file</span><input type="checkbox" id="wl-opt-resume"><span class="switch"></span></label>
+              <label class="wl-opt" title="Show this screen when the app starts"><span>Show this screen at startup</span><input type="checkbox" id="wl-opt-boot"><span class="switch"></span></label>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -4506,9 +4607,9 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=20261008-v0.12.0"></script>
+<script type="module" src="app-v2.js?v=20261008-v0.13.0"></script>
 <!-- Feature modules — load after app-v2.js. cloner.js attaches via window._appFns / _appHooks. -->
-<script src="cloner.js?v=20261008-v0.12.0"></script>
+<script src="cloner.js?v=20261008-v0.13.0"></script>
 <script>
   // Reveal the app once layout has had a chance to settle and the lucide
   // icons have been materialized. We schedule a double-rAF (lets the browser

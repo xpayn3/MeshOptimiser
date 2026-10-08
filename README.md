@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 0 . 1 2 . 0
+  O P T I M I S E R   ·   v 0 . 1 3 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
@@ -258,21 +258,17 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v0.12.0** — the app builds as well as reduces: a parts library, a model stood on the floor in one card, and a scene you can finally read.
+**v0.13.0** — it feels like an app: installs to the desktop, opens in a window of its own, and the tabs grew up.
 
-- ![new][new] **Object library** — 86 parametric parts on six shelves: shapes, fasteners, nuts, pipes and flanges, profiles and plates, machine parts. Drag one into the scene and a see-through copy shows where it will stand, square to the surface under the pointer.
-- ![new][new] **A nut on the bolt** — bolts carry their own nut, in the bolt's thread, at a distance you set from the head.
-- ![new][new] **Align to floor** — turn the model in steps and choose which side of it goes to zero on each axis. One undo step, no drift, and it can run each time a file is opened.
-- ![new][new] **Select hidden parts** — finds what cannot be seen from outside and selects it.
-- ![new][new] **Fit to budget** — a triangle target for the whole scene, densest meshes first, with a preview and Cancel.
-- ![new][new] **Smart fit: Boxes and Blocks** — stand-ins that keep the outline: a handful of fitted boxes, or a coarse grid with the part's steps, arms and openings.
-- ![new][new] **Clay (`5`)** — every part in one plain material, to read the shape. Porcelain, steel and red wax on a right-click.
-- ![new][new] **Dark parts have a shape** — a studio to reflect on the plain backgrounds, and a headlight that follows the view.
-- ![fix][fix] **Parts no longer show through thin covers** when zoomed out: the near plane follows the camera.
-- ![new][new] **Search finds parts and the library**, and works out sums and lengths (`12*25.4`, `2 in`).
-- ![new][new] **Every number field drags**; Move snaps to a step that suits the scene's size.
-- ![new][new] **Optimisation report** — the scene as opened against the scene now.
-- ![polish][polish] Right sidebar grouped into Inspect / Clean up / Reduce; a clearer selection in the tree. The section plane is gone.
+- ![new][new] **Install it** — a web-app manifest and icon, so Chrome and Edge offer *Install*; the title bar can be folded away and the top bar takes its place.
+- ![new][new] **Its own window** — `start.bat` opens the app with no address bar, tabs or extension buttons. `python serve.py --tab` for an ordinary tab.
+- ![new][new] **Drag tabs into order** — sideways only, the others slide over, `Esc` puts it back.
+- ![polish][polish] **The tab, rearranged** — a status dot on the icon's corner, a click on the icon saves, close at the right end.
+- ![new][new] **Same sidebars in every tab** — widths and the folded left sidebar follow you between scenes; a switch turns it off.
+- ![perf][perf] **While the view moves** — parts under a few pixels are skipped, and the resolution steps down only if frames are slow. Both back the moment it stops, both switches under Settings.
+- ![polish][polish] Renderer picker in Settings; a Menu button without an arrow; a flat accent loading bar; Properties that does not jump.
+
+**v0.12.0** — the app builds as well as reduces: a library drawer of 86 parametric parts to drag onto the model, Align to floor, Select hidden parts, Fit to budget, Smart fit Boxes and Blocks, Clay view, and dark parts that have a shape.
 
 **v0.11.0** — how the app is used changes: scenes in tabs, command panels beside the viewport, numbers you drag, one Settings window, and a speed pass on a 5.4M-triangle assembly.
 

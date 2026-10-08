@@ -4,6 +4,87 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.13.0
+
+v0.12 gave the app things to build with. v0.13 makes it feel like an app.
+It installs to the desktop with an icon of its own, opens in a window
+with no address bar, no browser tabs and no extension buttons, and can
+fold its title bar away so the top bar is all there is. The scene tabs
+grew up with it: drag them into the order you want, save from the tab's
+icon, and keep your sidebars where you put them from one scene to the
+next. And a view that is moving now gives up what you cannot see anyway.
+
+**An app of its own**
+
+- ![new][new] **Install it.** The app carries a web-app manifest and its own
+  icon, so Chrome and Edge offer *Install*. Installed, it has a desktop and
+  Start-menu shortcut and a window to itself.
+- ![new][new] **A window with nothing of the browser in it.** `start.bat`
+  (and `serve.py`) now open the app in Chrome's app mode, falling back to
+  Edge, then Brave: a title bar and the app, no address bar, no tabs, no
+  extensions button. It uses your usual browser profile, so settings and
+  recent files are the ones you had. `python serve.py --tab` opens an
+  ordinary browser tab as before.
+- ![new][new] **Fold the title bar away.** In the installed app the `^` in
+  the title bar hides it: the window's own buttons float over the top
+  right corner and the app's top bar becomes the title bar. Its empty
+  stretches drag the window; buttons, tabs and fields stay clickable, and
+  Export and the screenshot button stay where they were.
+- ![new][new] **A cover on the start screen.** The start screen opens with a
+  wide clip across its top, the app's name over it and the essentials
+  underneath.
+
+**Tabs**
+
+- ![new][new] **Drag tabs into order.** Press a tab and pull it sideways. It
+  rides with the pointer, the others slide over to make room, and it
+  drops into the place nearest to it. It moves left and right only and
+  stops at the ends of the row; `Esc` puts it back. Nothing in the strip
+  is rebuilt or measured again while a tab is held, so tabs of different
+  widths cannot flicker between two places.
+- ![polish][polish] **The tab, rearranged.** The icon on the left stays an
+  icon and carries the status dot on its corner: yellow with unsaved
+  changes, green when saved. A click on the icon saves. The close button
+  is at the right end, always there on the open tab and under the pointer
+  on the others. Other tabs show the yellow dot when they have unsaved
+  changes.
+- ![new][new] **Same sidebars in every tab.** Switching tabs keeps the
+  sidebar widths, and the folded left sidebar, of the tab you came from,
+  applied before the tab is shown so nothing slides. A switch under
+  Settings › General turns it off, and each tab keeps its own again.
+
+**While the view moves**
+
+- ![perf][perf] **Tiny parts are skipped.** While you orbit, pan or zoom, a
+  part that would be under about three pixels across is not drawn, and it
+  is back on the first frame after the view stops. CAD assemblies are
+  mostly screws, washers and clips: on the 1,583-part test assembly that
+  is 77 parts at the opening view and 570 with the model zoomed out.
+  Parts that are large for the model are always drawn, so a model seen
+  from far away keeps its shape, and so is whatever is selected.
+- ![perf][perf] **The resolution gives way before the frame rate does.**
+  Only when moving frames are actually slow, the picture is drawn a step
+  coarser (80%, 65%, 50%) until the view moves freely, and sharp again
+  when it stops. A scene that already moves at the display's rate is left
+  alone. The step that was needed is remembered for the next movement.
+- Both are switches under Settings › Performance, on by default.
+
+**Interface**
+
+- ![polish][polish] **The renderer picker moved to Settings › Performance.**
+  The top bar ends with Export and the screenshot button.
+- ![polish][polish] **The Menu button has no arrow**, and drops its word for
+  the icon alone when the sidebar's stretch of the top bar is too narrow
+  for it.
+- ![polish][polish] **One flat accent blue on the loading bar**, in place of
+  the blue-to-purple gradient, with a faint band of light drifting across
+  it while something loads.
+- ![polish][polish] **The triangle count over the viewport's corner is gone.**
+  Properties shows the same totals.
+- ![fix][fix] **Properties no longer jumps when a tag appears.** The tag row
+  under the name keeps its line, so "782 hidden" arriving on Isolate does
+  not push the rest of the card down.
+
 ## v0.12.0
 
 **The biggest release yet.** Until now MeshOptimiser opened a model and
