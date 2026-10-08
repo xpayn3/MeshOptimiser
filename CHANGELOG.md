@@ -9,6 +9,15 @@ Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &n
 A read of the whole code base and a round of beta testing after v0.13.0:
 what was found to be wrong is fixed, and the start screen is rebuilt.
 
+**The view cube**
+
+- ![new][new] **The cube turns to the new view.** Clicking an axis dot or a
+  face of the view cube now turns the camera there in a third of a second
+  instead of jumping, and the cube follows. A drag on the viewport takes over.
+- **Cleaner axes.** The dots are flat, with the letter centred in the circle;
+  each line stops at the rim of its dot instead of running into the letter, and
+  the lines are drawn over the cube, so a face never hides one.
+
 **The library is a drawer**
 
 - ![new][new] **A drawer along the bottom.** The library no longer takes
@@ -178,6 +187,58 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
 - ![polish][polish] **Exploding is for looking.** Moving a slider lets go
   of the selection; parts can still be picked (and are outlined) but carry
   no transform gizmo until they are put back.
+- ![polish][polish] **Smart fit keeps the exploded view.** It still fits the
+  parts at rest, then puts the explosion back as it was, like Fill holes.
+- ![fix][fix] **Select similar shape is no longer all-or-nothing.** It asked
+  for the same vertex count, the same triangle count and a box within 0.1%,
+  so copies of a leaf that differ a little in tessellation or size were
+  left out. Now a part matches when it is close enough, and a new
+  *Select similar* card in the right sidebar sets how close: a Strictness
+  scrubber from 0 % (about the same size and weight) to 100 % (the very
+  same shape, as before). It starts at 60 % (triangle count within 20 %,
+  each side of the box within 10 % of the longest) and is remembered.
+- ![polish][polish] **Undo goes back further.** The history held 30 steps; it
+  now keeps 200, with the last 30 of the kinds that carry geometry (delete,
+  split, merge, bake, decimate and the like), so a big model does not run
+  out of memory.
+- ![fix][fix] **Delete small parts leaves hidden parts alone.** What is
+  flagged, highlighted, counted, isolated and deleted is now only what is on
+  show (the tree's eyes); the card says how many hidden parts it skipped.
+  Showing or hiding a part (or undoing that) updates the count at once. When
+  the small parts are isolated, what was on show before the isolation is
+  what the threshold goes on choosing from.
+- ![new][new] **Stacked copies.** A card under Clean up finds parts that sit
+  on an identical copy (the same shape in the same place: drawn twice,
+  flickering where they meet). It selects the extra copies and keeps the
+  first of each; Isolate shows them, Delete removes them (Ctrl+Z brings
+  them back). *Same place within* sets how exact "the same place" is (a
+  share of the part's size) and *Also near copies* lets the triangle count
+  differ a little. Hidden parts are not looked at.
+- ![fix][fix] **Merge leaves the part where it was in the tree.** The merged
+  part used to be put at the very end of the tree, outside every group. It
+  now takes the place of the first part that went into it: same group, same
+  depth, same spot (or the same group the user made).
+- ![fix][fix] **Less flicker between panels lying on each other.** With the
+  camera outside the model the near plane now goes to the model's nearest
+  depth along the view (a twentieth of the way to the orbit target before),
+  which gives the depth buffer several times the resolution at the usual
+  distance: on the 3.5 m test assembly seen from 6.8 m, 0.001 mm instead of
+  0.008 mm. (Faces that lie exactly on each other still fight; the Stacked
+  copies card finds those.)
+- ![fix][fix] **Undoing a fit in an exploded view no longer throws parts
+  around.** The fit is made with the model at rest and the explosion put
+  back after, but its undo put the parts back at rest and left them there
+  among parts that were pushed apart. The explosion is now put back on them,
+  from their own rest positions.
+- ![fix][fix] **Merging in an exploded view.** The merged part was built at
+  the exploded places and stayed there when the explosion was taken out.
+  Merge now works on the model at rest and puts the explosion back after;
+  undo does too.
+- ![fix][fix] **Smart fit no longer fits (and moves) its neighbours.** Parts
+  that share a shape with a fitted part were fitted with it, and put on its
+  position, when they stood within 5 % of the model's size of it (176 mm on
+  the 3.5 m test assembly). Only copies lying on the part itself (within 2 %
+  of its size) go along now.
 - ![fix][fix] **Orbiting out of a 2D view** drops back to the perspective
   camera again (the check ran once a frame and never saw a drag, which
   OrbitControls applies inside its own handler). Pan and zoom stay in the
@@ -237,6 +298,36 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
 
 **Export and scene settings**
 
+- ![fix][fix] **Cinema 4D opens the FBX.** A binary FBX carries a file
+  id, a creation time and a code at its end that have to agree; the FBX
+  SDK (Cinema 4D, Maya) checks them and refuses the file when they do
+  not. The export wrote a random id and the time of day with a fixed
+  code, so Blender and the app itself read the file and Cinema 4D said
+  it could not. The three now agree. (An FBX exported before this can be
+  re-exported, or opened in Blender and saved again.)
+- ![fix][fix] **An FBX says what its units are.** The scene is in
+  millimetres and the file claimed centimetres, so Cinema 4D showed a
+  2.6 m machine 26 m long. The file now states its unit (millimetres, or
+  whatever the export's Unit scale makes of them: × 0.001 is metres).
+- ![fix][fix] **…and which way is up.** A scene written as it is, Z up,
+  was labelled Y up; it is labelled as written, so Blender, Maya and
+  Unreal stand it up. A scene that is shown Y up (Scene settings) is
+  labelled Y up. Cinema 4D does not turn a file on import.
+- ![polish][polish] **The Up axis choice says what it does**: *Keep as in
+  the scene* and *Turn Z-up into Y-up*. A model that already stands Y up
+  (anything that came from Cinema 4D or a glTF) must be kept: turning it
+  lays it on its side.
+- ![fix][fix] **The binary FBX shares its materials.** It wrote one
+  material per mesh: a 778-part model arrived in Cinema 4D with 778
+  materials and took 13 s to open. It writes one per colour, as the ASCII
+  FBX does: 40 materials, 1.4 s.
+- ![fix][fix] **OBJ: parts that share a name stay separate.** Repeated
+  names get a number (`name.001`). Cinema 4D goes by name and made one
+  object of all of them: 778 parts arrived as 325.
+- ![docs][docs] All eight formats were exported from a 778-part,
+  793,550-triangle model and opened in Cinema 4D 2026.4: GLB, glTF, FBX
+  (binary and ASCII), OBJ, STL and USDZ read with every triangle; PLY
+  cannot be read there (Cinema 4D has no PLY import).
 - ![fix][fix] **Up axis and Scene scale stay out of the file, for every
   part.** A part moved after either setting changed was written turned or
   resized, the others were not, and instanced parts differed again. The

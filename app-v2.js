@@ -4028,6 +4028,8 @@ function initScene() {
   // handler, so the per-frame check in tick() never sees the move: listen to
   // the controls' own change event. Pan and zoom keep the direction and stay.
   const _orbitDir = new THREE.Vector3();
+  // A drag during the turn to an axis view takes over from it.
+  controls.addEventListener('start', () => { if (_axisFlight) { _axisFlightStop(); _leaveAxisView(); } });
   controls.addEventListener('change', () => {
     if (!_stdViewActive || !camera) return;
     _orbitDir.copy(camera.position).sub(controls.target).normalize();
@@ -8748,6 +8750,7 @@ function _applyCameraClip() {
 // moves out to half that gap (never closer than the clip preset's own near),
 // which keeps the precision roughly constant however far out the view is.
 const _nearFit = { box: new THREE.Box3(), sphere: new THREE.Sphere(), at: 0, base: 0, set: -1 };
+const _nearFwd = new THREE.Vector3();
 function _fitNearToView() {
   if (!camera || camera._isOrtho || !state.partsRoot) return;
   const now = performance.now();
@@ -8758,6 +8761,32 @@ function _fitNearToView() {
   }
   if (camera.near !== _nearFit.set) _nearFit.base = camera.near;   // someone else set it (clip preset, fit, a loaded scene)
   camera._baseNear = _nearFit.base;
+  // With the camera outside the model, the nearest thing the model can have is
+  // the nearest corner of its box along the view direction. Putting the near
+  // plane there (a little short of it, and never beyond 0.4 of the way to the
+  // model's middle, so the floor grid is not cut off high up the screen) gives
+  // the depth buffer all the precision the view can use: depth resolution at a
+  // distance z is about z² / (near × 2²⁴), and with the near plane tied to the
+  // orbit target (a twentieth of the way) a big machine seen from the usual
+  // distance had a resolution of a few hundredths of a millimetre, so panels
+  // lying on each other flickered. Inside the box (or with part of it behind
+  // the camera) the rules below apply.
+  if (!_nearFit.box.isEmpty()) {
+    const b = _nearFit.box, f = _nearFwd.set(0, 0, -1).applyQuaternion(camera.quaternion), cp = camera.position;
+    let minD = Infinity;
+    for (let i = 0; i < 8; i++) {
+      const d = ((i & 1 ? b.max.x : b.min.x) - cp.x) * f.x + ((i & 2 ? b.max.y : b.min.y) - cp.y) * f.y + ((i & 4 ? b.max.z : b.min.z) - cp.z) * f.z;
+      if (d < minD) minD = d;
+    }
+    if (minD > 0) {
+      const want = Math.max(Math.min(minD * 0.9, cp.distanceTo(_nearFit.sphere.center) * 0.4), _nearFit.base * 1e-4, 1e-4);
+      if (Math.abs(want - camera.near) > camera.near * 0.02) {
+        camera.near = _nearFit.set = want;
+        camera.updateProjectionMatrix();
+      }
+      return;
+    }
+  }
   // Up close, the near plane has to come in as well, or a small part is cut
   // open before it fills the view: it stays within a fiftieth of the distance
   // to what the view is centred on (the wheel zoom keeps the orbit target at
@@ -10025,7 +10054,7 @@ const _AXG = {
   colors: { x: ['#ff8a8f', '#f0525f'], y: ['#7fe08f', '#3fb85a'], z: ['#7fbaff', '#3b8cf2'] },   // [highlight, body] of each dot
   S: 11,            // half the cube's edge (svg units; viewBox is -44..44)
   D: 10,            // how far past the cube an axis runs before its dot
-  R: 6.6,           // dot radius
+  R: 7,             // dot radius
   // six faces: outward normal and the four corners, counter-clockwise from outside
   faces: [
     { id: 'px', n: [ 1, 0, 0], c: [[1,-1,-1],[1, 1,-1],[1, 1, 1],[1,-1, 1]] },
@@ -10041,9 +10070,6 @@ function buildAxisGizmo() {
   if (!svg || _AXG.built) return;
   const c = _AXG.colors;
   let html = '<defs>';
-  for (const a of ['x', 'y', 'z']) {
-    html += `<radialGradient id="axg-g-${a}" cx="34%" cy="30%" r="75%"><stop offset="0" stop-color="${c[a][0]}"/><stop offset="1" stop-color="${c[a][1]}"/></radialGradient>`;
-  }
   html += `<filter id="axg-shadow" x="-40%" y="-40%" width="180%" height="190%"><feDropShadow dx="0" dy="1.6" stdDeviation="1.8" flood-color="#000" flood-opacity=".42"/></filter>`;
   html += '</defs>';
   // the three axis stems, from the far end of a cube edge out to the dot
@@ -10059,8 +10085,8 @@ function buildAxisGizmo() {
   for (const a of ['x', 'y', 'z']) {
     const id = 'p' + a;
     html += `<g class="axg-handle" id="axg-h-${id}" data-axis="${id}" style="cursor:pointer">
-      <circle r="${_AXG.R}" fill="url(#axg-g-${a})" stroke="rgba(255,255,255,.28)" stroke-width=".6"/>
-      <text text-anchor="middle" dominant-baseline="central" font-size="8" font-weight="600" fill="#fff" style="pointer-events:none;user-select:none">${a.toUpperCase()}</text>
+      <circle r="${_AXG.R}" fill="${c[a][1]}"/>
+      <text x="0" y="0" dy=".36em" text-anchor="middle" font-size="8.5" font-weight="500" fill="#fff" style="pointer-events:none;user-select:none">${a.toUpperCase()}</text>
     </g>`;
   }
   svg.innerHTML = html;
@@ -10098,29 +10124,47 @@ function updateAxisGizmo() {
     el.style.display = '';
   }
   // Axes: from the cube's corner (-S,-S,-S) along an edge, D past the cube.
+  // The cube is drawn first and the axes over it, so a line is never hidden
+  // by a face; each line stops at the rim of its dot (not at its centre), and
+  // the dots are opaque, so nothing runs into a letter.
   const order = ['x', 'y', 'z'].map(a => {
     const e = a === 'x' ? [1, 0, 0] : a === 'y' ? [0, 1, 0] : [0, 0, 1];
     const at = (t) => project(-S + e[0] * t, -S + e[1] * t, -S + e[2] * t);
-    return { a, from: at(2 * S), to: at(2 * S + _AXG.D) };
+    return { a, from: at(0), to: at(2 * S + _AXG.D) };
   }).sort((p, q) => p.to.z - q.to.z);
-  // Depth order: stems and dots that end behind the cube's centre are drawn
-  // before it, the others after it, nearest last.
-  const cube = document.getElementById('axg-cube');
-  let cubePlaced = false;
+  svg.appendChild(document.getElementById('axg-cube'));
   for (const o of order) {
     const g = document.getElementById('axg-h-p' + o.a), l = document.getElementById('axg-l-' + o.a);
-    if (!cubePlaced && o.to.z >= 0) { svg.appendChild(cube); cubePlaced = true; }
+    const dx = o.to.x - o.from.x, dy = o.to.y - o.from.y, len = Math.hypot(dx, dy);
+    const reach = Math.max(0, len - _AXG.R);                       // the dot's rim, along the line
+    const ex = len > 0.01 ? o.from.x + dx / len * reach : o.from.x;
+    const ey = len > 0.01 ? o.from.y + dy / len * reach : o.from.y;
     l.setAttribute('x1', o.from.x.toFixed(2)); l.setAttribute('y1', o.from.y.toFixed(2));
-    l.setAttribute('x2', o.to.x.toFixed(2));   l.setAttribute('y2', o.to.y.toFixed(2));
+    l.setAttribute('x2', ex.toFixed(2));       l.setAttribute('y2', ey.toFixed(2));
     g.setAttribute('transform', `translate(${o.to.x.toFixed(2)},${o.to.y.toFixed(2)})`);
-    const dim = o.to.z < -0.5 ? 0.55 : 1;
-    g.style.opacity = dim; l.style.opacity = dim * 0.9;
-    svg.appendChild(l); svg.appendChild(g);
+    // an axis pointing away from the viewer is drawn a little quieter
+    const back = o.to.z - o.from.z < -3;
+    l.style.opacity = back ? 0.5 : 0.95;
+    g.style.filter = back ? 'brightness(.72)' : '';              // darker, but opaque: nothing shows through a dot
+    svg.appendChild(l);
   }
-  if (!cubePlaced) svg.appendChild(cube);
+  for (const o of order) svg.appendChild(document.getElementById('axg-h-p' + o.a));   // dots over every line, nearest last
 }
-function alignViewToAxis(axisId) {
+// Turn the camera to look along an axis. The turn is animated (the cube in the
+// corner follows, it is redrawn with every frame): the camera's orientation is
+// slerped, the distance and target stay. It runs only while it moves, and a
+// drag on the viewport (or another click) takes it over. onDone runs once the
+// camera has arrived (at once without motion).
+let _axisFlight = null;
+function _axisFlightStop() {
+  if (!_axisFlight) return;
+  clearTimeout(_axisFlight.timer);
+  cancelAnimationFrame(_axisFlight.raf);
+  _axisFlight = null;
+}
+function alignViewToAxis(axisId, onDone) {
   if (!camera || !controls) return;
+  _axisFlightStop();
   const sign = axisId[0] === 'p' ? 1 : -1;
   const ax = axisId[1];
   const dir = new THREE.Vector3(
@@ -10129,15 +10173,36 @@ function alignViewToAxis(axisId) {
     ax === 'z' ? sign : 0
   );
   // Keep the current orbit distance so the model stays the same size.
-  const dist = camera.position.distanceTo(controls.target) || state.modelDiag * 1.5 || 100;
-  camera.position.copy(controls.target).add(dir.multiplyScalar(dist));
+  const target = controls.target.clone();
+  const dist = camera.position.distanceTo(target) || state.modelDiag * 1.5 || 100;
   // Use Y-up only when looking straight down/up the Z axis (top/bottom views);
   // every other view keeps the CAD-standard Z-up convention.
-  if (ax === 'z') camera.up.set(0, 1, 0);
-  else camera.up.set(0, 0, 1);
-  camera.lookAt(controls.target);
-  controls.update();
-  requestRender();
+  const upEnd = ax === 'z' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+  const place = (q) => {
+    const back = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    camera.position.copy(target).addScaledVector(back, dist);
+    camera.up.set(0, 1, 0).applyQuaternion(q);
+    camera.lookAt(target);
+    controls.update();
+    requestRender();
+  };
+  const qEnd = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(dir, new THREE.Vector3(), upEnd));
+  const finish = () => { _axisFlightStop(); place(qEnd); if (onDone) onDone(); };
+  const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const qStart = camera.quaternion.clone();
+  if (still || qStart.angleTo(qEnd) < 0.002) { finish(); return; }
+  const DUR = 320, t0 = performance.now(), q = new THREE.Quaternion();
+  const flight = _axisFlight = { raf: 0, timer: 0 };
+  const step = () => {
+    if (_axisFlight !== flight) return;
+    const k = Math.min(1, (performance.now() - t0) / DUR);
+    if (k >= 1) { finish(); return; }
+    const e = 1 - Math.pow(1 - k, 3);               // ease out
+    place(q.copy(qStart).slerp(qEnd, e));
+    flight.raf = requestAnimationFrame(step);
+  };
+  flight.raf = requestAnimationFrame(step);
+  flight.timer = setTimeout(() => { if (_axisFlight === flight) finish(); }, DUR + 150);   // no frames (hidden tab): still arrive
 }
 
 // Switch to orthographic + align to a standard view (top / front / side).
@@ -10193,10 +10258,14 @@ function _goAxisView(axisId) {
     const fovRow = document.getElementById('cam-fov-row');
     if (fovRow) fovRow.style.opacity = '.42';
   }
-  alignViewToAxis(axisId);
+  // The camera flies there; the view counts as an axis view once it has
+  // arrived (until then the controls' change events must not read the turn as
+  // the user orbiting out of it).
+  alignViewToAxis(axisId, () => {
+    _stdViewDir.copy(camera.position).sub(controls.target).normalize();
+    _stdViewActive = true;
+  });
   _syncViewPill(view || 'axis', label);
-  _stdViewActive = true;
-  _stdViewDir.copy(camera.position).sub(controls.target).normalize();
   controls.enableRotate = true;
   // Switch the grid plane to match the camera-facing plane so the user sees
   // a real grid in front / side ortho views (not just an edge-on smear).
@@ -12784,7 +12853,29 @@ function _updateSelectedChip() {
 // isolated) what is on screen follow at once; the costlier work, the
 // highlight in the viewport and the marks in the tree, is left for the call
 // without `live` that comes when the slider stops.
+// What the small-part tools may look at: the parts that are on show (the
+// tree's eyes). While the small parts are isolated, everything but them is
+// hidden by the isolation itself, so what was on show before it began stands
+// in (state._flagEligible, taken by isolateFlagged).
+function _flagEligible(p) {
+  if (state._isolated && state._isolatedBy === 'flagged' && state._flagEligible) return state._flagEligible.has(p.partId);
+  return p.visible !== false;
+}
+function _flagVisKey() {
+  let n = 0, h = 0;
+  for (const p of state.parts) if (!p.deleted && p.visible !== false) { n++; h = (h * 31 + p.partId) | 0; }
+  return n + ':' + h;
+}
+let _flagVisLast = '', _flagVisT = 0;
+// A part was shown or hidden: the flagged set (when it comes from the size
+// threshold) is worked out again for what is on show now.
+function _flagVisSoon() {
+  if (state._flagSource !== 'size') return;
+  clearTimeout(_flagVisT);
+  _flagVisT = setTimeout(() => { try { if (_flagVisKey() !== _flagVisLast) refreshFlagged(); } catch (_) {} }, 0);
+}
 function refreshFlagged(live = false) {
+  state._flagSource = 'size';
   state.pendingFlagged.clear();
   const thr = state.threshold / 100;
   const metric = state.sizeMetricMode;
@@ -12794,7 +12885,7 @@ function refreshFlagged(live = false) {
   for (const p of state.parts) {
     if (p.deleted) { p.flagged = false; continue; }
     const v = metric === 'diag' ? p.sizeMetrics.diag : metric === 'max' ? p.sizeMetrics.max : p.sizeMetrics.vol;
-    p.flagged = (v < cutoff);
+    p.flagged = (v < cutoff) && _flagEligible(p);       // (a part that is hidden is left alone)
     if (p.flagged) { count++; state.pendingFlagged.add(p.partId); }
   }
   $('btn-delete-small-count').textContent = fmtNum(count);
@@ -12804,13 +12895,15 @@ function refreshFlagged(live = false) {
     const len = _fmtLen(side, side >= 100 ? 0 : side >= 10 ? 1 : 2);   // in the unit the scene is shown in
     const what = metric === 'max' ? `with no side longer than ${len}` : metric === 'vol' ? `whose box is smaller than a ${len} cube` : `under ${len} corner to corner`;
     $('thr-info').textContent = !state.parts.some(p => !p.deleted) ? 'Load a model to see what would go.'
-      : count > 0 ? `${fmtNum(count)} part${count === 1 ? '' : 's'} ${what}.` : `No parts ${what}.`;
+      : (count > 0 ? `${fmtNum(count)} part${count === 1 ? '' : 's'} ${what}.` : `No parts ${what}.`)
+        + (() => { let hid = 0; for (const p of state.parts) if (!p.deleted && !_flagEligible(p)) hid++; return hid ? ` ${fmtNum(hid)} hidden part${hid === 1 ? ' is' : 's are'} left alone.` : ''; })();
     $('thr-found')?.classList.toggle('has', count > 0);
     for (const b of document.querySelectorAll('#thr-metric-seg button')) b.classList.toggle('active', b.dataset.metric === metric);
     const sel = $('thr-metric'); if (sel && sel.value !== metric) sel.value = metric;
   }
   _updateFlaggedChip();
   _isolateFollowFlagged(live);
+  _flagVisLast = _flagVisKey();
   if (!live) {
     applySelectionColors();
     _treeSyncFlagged();            // was a full rebuildTree(): a third of a second per slider move on a large tree
@@ -12846,11 +12939,27 @@ function _updateFlaggedChip() {
   el.classList.toggle('active', n > 0);
 }
 
+// How far back Ctrl+Z goes. Moves, visibility, selection-like edits, material
+// edits and the like are small, so 200 of them are kept; an entry that carries
+// geometry (what a delete, split, merge, bake, decimate … has to put back) is
+// big on a large model, so only the last 30 of THOSE are kept, and the history
+// is cut from the far end until both limits hold.
+const _UNDO_MAX = 200, _UNDO_MAX_HEAVY = 30;
+const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'recenter', 'normals', 'merge', 'flatten', 'duplicate', 'paste-group', 'addPart', 'decimate', 'budget']);
 function pushUndo(op) {
   state.history.push(op);
+  if (op.type === 'vis') _flagVisSoon();
   // (the entry that falls off the far end can no longer be undone: the
   // unsaved-changes marker has to know, see _Dirty.dropped)
-  if (state.history.length > 30) { const gone = state.history.shift(); try { _Dirty.dropped(gone); } catch (_) {} }
+  {
+    let heavy = 0;
+    for (const h of state.history) if (_UNDO_HEAVY.has(h.type)) heavy++;
+    while (state.history.length > _UNDO_MAX || heavy > _UNDO_MAX_HEAVY) {
+      const gone = state.history.shift();
+      if (_UNDO_HEAVY.has(gone.type)) heavy--;
+      try { _Dirty.dropped(gone); } catch (_) {}
+    }
+  }
   // Any new user action invalidates the redo stack — same convention as
   // every editor (Photoshop, VS Code, Figma). Without this the user could
   // undo, do something new, then redo back to a state inconsistent with
@@ -13366,10 +13475,10 @@ const _Dirty = (() => {
     try { _Tabs.report({ dirty: d, empty: !any }); } catch (_) {}
   }
   function mark() { savedTop = top(); sync(); }
-  // The history keeps 30 entries; `op` is one that has just fallen off its
+  // The history keeps up to 200 entries (30 of the geometry-carrying kind); `op` is one that has just fallen off its
   // far end. If the save was made before it (at an empty history), undoing
   // everything that is left no longer gets back to what was saved: without
-  // this, more than 30 edits followed by undoing them all read as "saved".
+  // this, more edits than the history holds followed by undoing them all read as "saved".
   // If the save was made right after it, the empty history now IS the saved
   // scene.
   const LOST = {};
@@ -13388,6 +13497,7 @@ const _Dirty = (() => {
 // cyan outline stayed in place" or "tree row stayed selected after a
 // destructive undo".
 function _finalizeUndo({ rebuildTree: doRebuildTree = false } = {}) {
+  _flagVisSoon();     // (an undone / redone hide or show changes what the small-part tools look at)
   // A group that the undo / redo just removed cannot stay selected: its id
   // would show up as "Group -2" in Properties and aim the gizmo at nothing.
   if (state.selectedGroupIds && state.selectedGroupIds.size) {
@@ -14183,23 +14293,46 @@ function _shapeFingerprint(part) {
   const inv = 1000 / scale;
   const fp = `v${part.vertCount}_t${part.triCount}_${Math.round(d0*inv)}_${Math.round(d1*inv)}_${Math.round(d2*inv)}`;
   part._fp = fp;
+  part._fpDims = [d0, d1, d2];          // sorted sides, for the tolerant match in selectSimilar
   part._fpKey = part.triCount + ':' + part.vertCount;
   return fp;
+}
+// "Similar" is not "identical": copies of a leaf or a bolt differ a little in
+// tessellation and in size. Two parts match when their triangle counts are
+// within 20% (a few triangles' slack on small parts) and each of the three
+// sorted sides is within 10% of the larger part's longest side.
+// How strict: 100 = the same shape only, 0 = anything of about the same size
+// and weight (triangle count within 50%, sides within 25%). Set in the
+// Select similar card in the right sidebar, remembered between sessions.
+let _simStrict = 60;
+try { const v = parseInt(localStorage.getItem('stepopt-sim-strict'), 10); if (v >= 0 && v <= 100) _simStrict = v; } catch (_) {}
+function _simTol() { const k = (100 - _simStrict) / 100; return { tri: 0.5 * k, dim: 0.25 * k }; }
+function _isSimilarShape(part, ref, tol0) {
+  const tolT = tol0 || _simTol();
+  const dt = Math.abs(part.triCount - ref.tri);
+  if (dt > Math.max(4, tolT.tri * Math.max(part.triCount, ref.tri))) return false;
+  const d = part._fpDims, tol = tolT.dim * Math.max(d[2], ref.dims[2]);
+  return Math.abs(d[0] - ref.dims[0]) <= tol && Math.abs(d[1] - ref.dims[1]) <= tol && Math.abs(d[2] - ref.dims[2]) <= tol;
 }
 
 function selectSimilar() {
   if (state.selected.size === 0) return toast('Select at least one part first', '', 'warn');
   // Build the set of fingerprints from the current selection
-  const wantPrints = new Set();
+  const wantPrints = new Set(), refs = [];
   for (const id of state.selected) {
     const p = getPart(id);
-    if (p) wantPrints.add(_shapeFingerprint(p));
+    if (!p) continue;
+    const fp = _shapeFingerprint(p);
+    if (wantPrints.has(fp)) continue;                 // (one reference per distinct shape)
+    wantPrints.add(fp);
+    refs.push({ tri: p.triCount, dims: p._fpDims });
   }
-  // Add every part whose fingerprint matches
+  // Add every part that is the same shape, or close enough to it
   let added = 0;
+  const tolT = _simTol(), exactOnly = _simStrict >= 100;
   for (const p of state.parts) {
     if (p.deleted || state.selected.has(p.partId)) continue;
-    if (wantPrints.has(_shapeFingerprint(p))) { state.selected.add(p.partId); added++; }
+    if (wantPrints.has(_shapeFingerprint(p)) || (!exactOnly && refs.some(r => _isSimilarShape(p, r, tolT)))) { state.selected.add(p.partId); added++; }
   }
   applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel();
   if (typeof updateGizmo === 'function') updateGizmo();
@@ -14283,9 +14416,13 @@ function isolateSelected() {
 }
 function isolateFlagged() {
   if (state.pendingFlagged.size === 0) return toast('Nothing flagged', 'Set a size threshold first', 'warn');
+  // what is on show now is what the threshold may keep choosing from while the isolation hides the rest
+  const eligible = (state._isolated && state._isolatedBy === 'flagged' && state._flagEligible) ? state._flagEligible
+    : new Set(state.parts.filter(p => !p.deleted && p.visible !== false).map(p => p.partId));
   _isolateSet(state.pendingFlagged);
   state._isolated = true;
-  state._isolatedBy = 'flagged';        // so the view follows the threshold from here on (_isolateFollowFlagged)
+  state._isolatedBy = 'flagged';
+  state._flagEligible = eligible;        // so the view follows the threshold from here on (_isolateFollowFlagged)
 }
 function showAllParts() {
   const m4restore = new THREE.Matrix4();
@@ -15456,7 +15593,26 @@ function _fbxBakeMeshGeom(meshObj) {
   return out;
 }
 
-async function _exportFbxBinary(root) {
+// What an FBX says about itself in GlobalSettings. It used to say
+// "centimetres, Y up" whatever was written:
+//   Units. One scene unit is a millimetre (see _fmtLen), and the export's
+//     own Unit scale changes what a unit of the file is. FBX gives its unit
+//     in centimetres, so millimetres are 0.1. With 1 here Cinema 4D read a
+//     2.6 m machine as 26 m.
+//   Axes. "Keep as in the scene" writes the scene as it is; "Turn Z-up
+//     into Y-up" turns it. The file has to say which way is up in what was
+//     written, or a reader that follows the file's axes (Blender, Maya,
+//     Unreal) turns a model that was already right. Cinema 4D does not turn
+//     anything on import: it shows the numbers as they are.
+function _fbxGlobals(opts) {
+  const scale = opts && opts.scale > 0 ? opts.scale : 1;
+  // "keep" keeps the scene's own up axis, which is Y for a scene shown Y up
+  // (Scene settings): its data is Y up, whatever the option's label says.
+  const yUp = !!(opts && opts.axis === 'y-up') || state.sceneUpAxis === 'y';
+  return { unit: +(0.1 / scale).toPrecision(12), up: yUp ? 1 : 2, front: yUp ? 2 : 1, frontSign: yUp ? 1 : -1 };
+}
+async function _exportFbxBinary(root, opts) {
+  const _fg = _fbxGlobals(opts);
   const { nodes } = _collectFbxScene(root);
 
   const GEOM_ID_BASE  = 100000000;
@@ -15480,7 +15636,8 @@ async function _exportFbxBinary(root) {
   // colors) but C4D-compatible.
   const meshIdxToGeomIdx = new Map();
   const meshIdxToMatIdx = new Map();      // per-mesh material index
-  const perMeshMats = [];                 // [{ r, g, b }, ...] one entry per mesh
+  const perMeshMats = [];                 // [{ r, g, b }, ...] one entry per colour (see below)
+  const _binMatByColor = new Map();       // "r,g,b" → index in perMeshMats
   const bakedGeoms = [];   // index → { meshNodeIndex, baked }
   // Resolve the display colour for a node, falling back to vertex colours for
   // the merge-into-one path (material.vertexColors=true, no material.color).
@@ -15499,10 +15656,16 @@ async function _exportFbxBinary(root) {
     meshIdxToGeomIdx.set(i, bakedGeoms.length);
     bakedGeoms.push({ nodeIdx: i, baked: _fbxBakeMeshGeom(nodes[i].obj) });
     const { r, g, b } = _binResolveColor(nodes[i]);
-    meshIdxToMatIdx.set(i, perMeshMats.length);
-    perMeshMats.push({
-      r, g, b,
-    });
+    // One material per colour, shared by the meshes that wear it. (This used
+    // to write one per mesh, on the belief that Cinema 4D could not build a
+    // file in which models share a material. That was read off files it
+    // refused for another reason, the file id; with that put right it loads
+    // shared materials, as it always did from the ASCII writer: 778 meshes
+    // came in with 778 materials, now with the scene's own few dozen.)
+    const _mk = r.toFixed(4) + ',' + g.toFixed(4) + ',' + b.toFixed(4);
+    let _mIdx = _binMatByColor.get(_mk);
+    if (_mIdx === undefined) { _mIdx = perMeshMats.length; _binMatByColor.set(_mk, _mIdx); perMeshMats.push({ r, g, b }); }
+    meshIdxToMatIdx.set(i, _mIdx);
   }
 
   const safeName = (s) => (s || 'unnamed').replace(/["\\]/g, '_').replace(/[\x00-\x1f]/g, '_');
@@ -15622,33 +15785,33 @@ async function _exportFbxBinary(root) {
     ],
   });
 
-  // FileId — 16 bytes of unique-ish data. C4D requires this top-level node.
-  // Random bytes are fine; the value isn't validated cryptographically.
-  const fileId = new Uint8Array(16);
-  for (let i = 0; i < 16; i++) fileId[i] = (Math.random() * 256) | 0;
+  // FileId, CreationTime and the footer code at the end of the file belong
+  // together: the FBX SDK (Cinema 4D, Maya) works the other two out from
+  // the time and refuses the file ("cannot read") when they do not agree.
+  // These are the three Blender writes, a set known to agree. A random id
+  // with today's time, as this used to write, opened in Blender and
+  // three.js, which do not check, and in nothing built on the SDK.
+  // (Tested in Cinema 4D 2026.4: with only the footer or only the time put
+  // right the file is still refused; with all three it loads.)
+  // The real time of the export is in FBXHeaderExtension/CreationTimeStamp.
+  const fileId = new Uint8Array([0x28, 0xb3, 0x2a, 0xeb, 0xb6, 0x24, 0xcc, 0xc2, 0xbf, 0xc8, 0xb0, 0x2a, 0xa9, 0x2b, 0xfc, 0xf1]);
   tree.push({ name: 'FileId', props: [{ type: 'R', value: fileId }] });
-  // CreationTime: use Blender's exact format ("YYYY-MM-DD HH:MM:SS:fff").
-  // Various FBX importers parse this string; ISO-8601 with the 'T' / 'Z'
-  // characters that JS toISOString() emits is technically valid but C4D
-  // 2026 may not handle it.
-  const pad = (n, w=2) => String(n).padStart(w, '0');
-  const ctstr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}:${pad(now.getMilliseconds(), 3)}`;
-  tree.push({ name: 'CreationTime', props: [{ type: 'S', value: ctstr }] });
+  tree.push({ name: 'CreationTime', props: [{ type: 'S', value: '1970-01-01 10:00:00:000' }] });
   tree.push({ name: 'Creator', props: [{ type: 'S', value: 'Blender (stable FBX IO) - 4.1.0 - 4.27.1' }] });
 
   tree.push({
     name: 'GlobalSettings', props: [], children: [
       { name: 'Version', props: [{ type: 'I', value: 1000 }] },
       { name: 'Properties70', props: [], children: [
-        P('UpAxis', 'int', 'Integer', '', 1),
+        P('UpAxis', 'int', 'Integer', '', _fg.up),
         P('UpAxisSign', 'int', 'Integer', '', 1),
-        P('FrontAxis', 'int', 'Integer', '', 2),
-        P('FrontAxisSign', 'int', 'Integer', '', 1),
+        P('FrontAxis', 'int', 'Integer', '', _fg.front),
+        P('FrontAxisSign', 'int', 'Integer', '', _fg.frontSign),
         P('CoordAxis', 'int', 'Integer', '', 0),
         P('CoordAxisSign', 'int', 'Integer', '', 1),
         P('OriginalUpAxis', 'int', 'Integer', '', -1),     // Blender writes -1, not 1
         P('OriginalUpAxisSign', 'int', 'Integer', '', 1),
-        P('UnitScaleFactor', 'double', 'Number', '', 1),
+        P('UnitScaleFactor', 'double', 'Number', '', _fg.unit),
         P('OriginalUnitScaleFactor', 'double', 'Number', '', 1),
         P('AmbientColor', 'ColorRGB', 'Color', '', 0, 0, 0),
         P('DefaultCamera', 'KString', '', '', 'Producer Perspective'),
@@ -16183,7 +16346,8 @@ async function _exportFbxBinary(root) {
 // vertices, so geometry is not shared between meshes. Cinema 4D, Blender,
 // Maya, 3ds Max, and Houdini all read this dialect.
 // ───────────────────────────────────────────────────────────────────
-function _exportFbxAscii(root) {
+function _exportFbxAscii(root, opts) {
+  const _fg = _fbxGlobals(opts);
   // FBX uses int64 ids; we space them out by ranges so the output is readable
   // and ids don't collide across object types (Geometry / Model / Material).
   const GEOM_ID_BASE  = 100000000;
@@ -16326,15 +16490,15 @@ FBXHeaderExtension:  {
 GlobalSettings:  {
 \tVersion: 1000
 \tProperties70:  {
-\t\tP: "UpAxis", "int", "Integer", "",1
+\t\tP: "UpAxis", "int", "Integer", "",${_fg.up}
 \t\tP: "UpAxisSign", "int", "Integer", "",1
-\t\tP: "FrontAxis", "int", "Integer", "",2
-\t\tP: "FrontAxisSign", "int", "Integer", "",1
+\t\tP: "FrontAxis", "int", "Integer", "",${_fg.front}
+\t\tP: "FrontAxisSign", "int", "Integer", "",${_fg.frontSign}
 \t\tP: "CoordAxis", "int", "Integer", "",0
 \t\tP: "CoordAxisSign", "int", "Integer", "",1
 \t\tP: "OriginalUpAxis", "int", "Integer", "",-1
 \t\tP: "OriginalUpAxisSign", "int", "Integer", "",1
-\t\tP: "UnitScaleFactor", "double", "Number", "",1
+\t\tP: "UnitScaleFactor", "double", "Number", "",${_fg.unit}
 \t\tP: "OriginalUnitScaleFactor", "double", "Number", "",1
 \t\tP: "AmbientColor", "ColorRGB", "Color", "",0,0,0
 \t\tP: "DefaultCamera", "KString", "", "", "Producer Perspective"
@@ -16811,11 +16975,17 @@ function _exportObjStreaming(root, mtlBaseName) {
     normalMatrix.getNormalMatrix(matrix);
 
     objIdx++;
+    if (!_exportObjStreaming._seen || _exportObjStreaming._seenFor !== root) { _exportObjStreaming._seen = new Map(); _exportObjStreaming._seenFor = root; }
+    const _objNameSeen = _exportObjStreaming._seen;
     const chain = chainNames(child);
     const baseName = sanitize(child.name || 'Mesh_' + objIdx);
     // `o` line: prefix with chain joined by `/` so the importer's outliner
     // shows the full path. Identifier-safe characters only.
-    const objName = chain.length ? chain.join('/') + '/' + baseName : baseName;
+    let objName = chain.length ? chain.join('/') + '/' + baseName : baseName;
+    // Parts that share a name (and a place in the tree) get a number: an
+    // importer that goes by name (Cinema 4D) made one object of all of them,
+    // 778 parts arriving as 325.
+    { const k = (_objNameSeen.get(objName) || 0) + 1; _objNameSeen.set(objName, k); if (k > 1) objName += '.' + String(k - 1).padStart(3, '0'); }
     append(`o ${objName}\n`);
     // `g` line: same chain space-separated. Some tools read it as group tags.
     if (chain.length) append('g ' + chain.join(' ') + '\n');
@@ -17642,7 +17812,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       const useAscii = document.getElementById('exp-fbx-ascii')?.checked;
       if (useAscii) {
         setLoader(true, 'Building FBX…', 'ASCII FBX 7.4');
-        const fbxBlob = _exportFbxAscii(root);
+        const fbxBlob = _exportFbxAscii(root, { scale, axis });
         downloadBlob(fbxBlob, base + '.fbx');
         Log.info('FBX exported as ASCII (FBX 7.4)', { tag: 'export' });
       } else {
@@ -17664,7 +17834,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
           Log.warn('Assimp FBX failed, using built-in writer: ' + (e.message || e), { tag: 'export' });
         }
         if (!exported) {
-          const fbxBlob = await _exportFbxBinary(root);
+          const fbxBlob = await _exportFbxBinary(root, { scale, axis });
           const fbxBytes = fbxBlob.size;
           downloadBlob(fbxBlob, base + '.fbx');
           // Count meshes in the export root for debugging.
@@ -18462,7 +18632,7 @@ function wireUI() {
   for (const b of document.querySelectorAll('#thr-metric-seg button')) b.addEventListener('click', () => { state.sizeMetricMode = b.dataset.metric; refreshFlagged(); b.blur(); });
 
   $('btn-delete-small').addEventListener('click', async () => {
-    const ids = [...state.pendingFlagged];
+    const ids = [...state.pendingFlagged].filter(id => { const p = getPart(id); return p && !p.deleted && _flagEligible(p); });
     if (!ids.length) return toast('No parts to delete', '', 'info');
     deleteParts(ids, 'Removed small parts');
   });
@@ -22240,9 +22410,10 @@ boot().catch(e => { console.error('[STEP] Boot failed:', e); try { toast('Init f
 // Reuses the same pendingFlagged set the size-threshold tools use,
 // so the existing "Delete N small parts" + "Isolate flagged" still work.
 function flagByTriangleCount(minTri) {
+  state._flagSource = 'other';
   state.pendingFlagged.clear();
   for (const p of state.parts) {
-    p.flagged = !p.deleted && p.triCount < minTri;
+    p.flagged = !p.deleted && p.triCount < minTri && _flagEligible(p);
     if (p.flagged) state.pendingFlagged.add(p.partId);
   }
   $('btn-delete-small-count').textContent = state.pendingFlagged.size;
@@ -22255,6 +22426,7 @@ function flagByTriangleCount(minTri) {
 
 // Flag thin sliver parts (long-but-narrow shapes like wires, gaskets, labels).
 function flagSlivers(ratio) {
+  state._flagSource = 'other';
   state.pendingFlagged.clear();
   const sz = new THREE.Vector3();
   for (const p of state.parts) {
@@ -22263,7 +22435,7 @@ function flagSlivers(ratio) {
     const dims = [sz.x, sz.y, sz.z].map(Math.abs).sort((a,b)=>a-b);
     const minD = Math.max(dims[0], 1e-9);
     const maxD = dims[2];
-    p.flagged = (maxD / minD) > ratio;
+    p.flagged = (maxD / minD) > ratio && _flagEligible(p);
     if (p.flagged) state.pendingFlagged.add(p.partId);
   }
   $('btn-delete-small-count').textContent = state.pendingFlagged.size;
@@ -25475,7 +25647,26 @@ function fitProxy(geom, localToPartsRoot, mode = 'smart') {
 }
 
 // ─── Bbox-ify selected/all ─────────────────────────────────────────────────
-async function bboxifyParts(partIds, label='Smart-fit parts', mode='smart') {
+// Smart fit works on the model at rest (the core below puts an exploded view
+// back first, so the offsets are not taken for shape), and then the explosion
+// is put on again as it was: like Fill holes, fitting does not end the view.
+async function bboxifyParts(partIds, label = 'Smart-fit parts', mode = 'smart') {
+  const ex = state.explode ? { x: state.explode.x, y: state.explode.y, z: state.explode.z } : null;
+  const was = !!(ex && (ex.x || ex.y || ex.z));
+  try { return await _bboxifyPartsCore(partIds, label, mode); }
+  finally {
+    if (was) {
+      try {
+        invalidateExplodeBaseline();         // the parts have new rest positions; measured again from here
+        state.explode = ex;
+        const sc = state._explodeScrubbers;
+        if (sc) { sc.all?.setValue(Math.max(ex.x, ex.y, ex.z)); sc.x?.setValue(ex.x); sc.y?.setValue(ex.y); sc.z?.setValue(ex.z); }
+        applyExplode();
+      } catch (e) { console.warn('[smart fit] could not restore the exploded view:', e); }
+    }
+  }
+}
+async function _bboxifyPartsCore(partIds, label, mode) {
   if (!partIds.length) { toast('Nothing selected', '', 'warn'); return; }
   // Detach the gizmo BEFORE we touch any mesh transforms. When the gizmo is
   // attached, every selected mesh is re-parented under `state.pivot` so the
@@ -25785,7 +25976,12 @@ async function bboxifyParts(partIds, label='Smart-fit parts', mode='smart') {
       //    shape on top of our new box (the "outline is a box but the
       //    rendered mesh looks unchanged" symptom).
       const siblings = partsByGeom.get(sharedGeom) || [];
-      const tolerance = (state.modelDiag || 1) * 0.05;        // 5% of model diag
+      // Only copies that really sit on this part (stacked, drawn twice) are
+      // fitted along with it. The limit was 5% of the model's size, which on a
+      // 3.5 m assembly is 176 mm: parts of the same shape standing near the
+      // fitted one were fitted too and moved onto its position (they are put
+      // at the fit's centre below). Now: 2% of the part's own size.
+      const tolerance = Math.max((fit.size ? fit.size.length() : 0) * 0.02, (state.modelDiag || 1) * 1e-4);
       const tol2 = tolerance * tolerance;
       for (const sib of siblings) {
         if (sib === p) continue;
@@ -25943,6 +26139,32 @@ _UndoOps.register('boxify', {
       p._fp = null; p._fpKey = null;
     }
     state.redo.push(op);    // boxify is redoable — bboxifyParts re-runs cleanly
+    // The fit was made with the model at rest (the explosion is taken out first
+    // and put back after), so the parts come back at their rest places. While
+    // the view is exploded they have to be given their place in it again, or
+    // they sit at rest among parts that are pushed apart.
+    try {
+      const e = state.explode;
+      if (e && (e.x || e.y || e.z)) {
+        // Their baseline (where they rest, and their centre) is taken from the
+        // rest places they are at now. It is NOT worked out again for the whole
+        // model: the others are pushed apart, and the model's centre measured
+        // like that would move every part.
+        const b = new THREE.Box3(), wp = new THREE.Vector3();
+        for (const it of op.items) {
+          const p = getPart(it.partId);
+          if (!p || !p.mesh) continue;
+          p.mesh.updateWorldMatrix(true, false);
+          p._origWorldPos = new THREE.Vector3().setFromMatrixPosition(p.mesh.matrixWorld);
+          p._origPos = p.mesh.position.clone();
+          if (!p._partCenter) {
+            b.setFromObject(p.mesh);
+            p._partCenter = b.isEmpty() ? wp.setFromMatrixPosition(p.mesh.matrixWorld).clone() : b.getCenter(new THREE.Vector3());
+          }
+        }
+        applyExplode();
+      }
+    } catch (err) { console.warn('[smart fit] undo: could not put the exploded view back:', err); }
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
   },
@@ -27972,6 +28194,136 @@ function _explodeDeselect() {
   try { if (state.selected && state.selected.size > 0) clearSelection(); } catch (_) {}
 }
 
+// -- Stacked copies ---------------------------------------------------------
+// Parts that sit on an identical copy: the same shape in the same place.
+// Candidates share a triangle and vertex count (near copies: a triangle
+// count within 25%), a world box whose centre and sides agree within the
+// tolerance (a share of the larger part's diagonal) and the mean of their
+// vertices in world space. They are grouped, one part of each group is kept
+// (the first loaded) and the rest are the "extra" copies. Hidden parts are
+// not looked at (the tree's eyes).
+let _stkTol = 0.5, _stkNear = false;      // percent of the part's diagonal; also near copies
+try { const v = parseFloat(localStorage.getItem('stepopt-stk-tol')); if (v >= 0 && v <= 5) _stkTol = v; _stkNear = localStorage.getItem('stepopt-stk-near') === '1'; } catch (_) {}
+let _stkIds = [];
+function _stkMeanWorld(p) {
+  const g = state.geomByHash.get(p.hash);
+  const pos = g && g.attributes && g.attributes.position;
+  if (!pos) return null;
+  if (!g._stkMean) {
+    let x = 0, y = 0, z = 0; const n = pos.count, a = pos.array;
+    for (let i = 0; i < n; i++) { x += a[i * 3]; y += a[i * 3 + 1]; z += a[i * 3 + 2]; }
+    g._stkMean = new THREE.Vector3(x / n, y / n, z / n);
+  }
+  return g._stkMean.clone().applyMatrix4(_resolvePartWorldMatrix(p));
+}
+function _findStackedCopies(tolPct, near) {
+  const tolF = tolPct / 100;
+  const items = [];
+  const c = new THREE.Vector3(), s = new THREE.Vector3();
+  for (const p of state.parts) {
+    if (p.deleted || p.visible === false || !p.bbox || p.bbox.isEmpty()) continue;
+    p.bbox.getCenter(c); p.bbox.getSize(s);
+    items.push({ p, cx: c.x, cy: c.y, cz: c.z, sx: s.x, sy: s.y, sz: s.z, diag: Math.hypot(s.x, s.y, s.z), mean: undefined });
+  }
+  const parent = items.map((_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const join = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb); };
+  const order = items.map((_, i) => i).sort((a, b) => items[a].cx - items[b].cx);
+  let maxDiag = 0; for (const it of items) if (it.diag > maxDiag) maxDiag = it.diag;
+  const win = tolF * maxDiag + 1e-6;
+  const meanOf = (it) => it.mean === undefined ? (it.mean = _stkMeanWorld(it.p)) : it.mean;
+  for (let oi = 0; oi < order.length; oi++) {
+    const i = order[oi], A = items[i];
+    for (let oj = oi + 1; oj < order.length; oj++) {
+      const j = order[oj], B = items[j];
+      if (B.cx - A.cx > win) break;
+      const tol = tolF * Math.max(A.diag, B.diag) + 1e-6;
+      if (Math.abs(A.cx - B.cx) > tol || Math.abs(A.cy - B.cy) > tol || Math.abs(A.cz - B.cz) > tol) continue;
+      if (Math.abs(A.sx - B.sx) > tol || Math.abs(A.sy - B.sy) > tol || Math.abs(A.sz - B.sz) > tol) continue;
+      const pa = A.p, pb = B.p;
+      if (near) { if (Math.abs(pa.triCount - pb.triCount) > 0.25 * Math.max(pa.triCount, pb.triCount, 1)) continue; }
+      else if (pa.triCount !== pb.triCount || pa.vertCount !== pb.vertCount) continue;
+      const ma = meanOf(A), mb = meanOf(B);
+      if (ma && mb && ma.distanceTo(mb) > tol * 2) continue;
+      join(i, j);
+    }
+  }
+  const groups = new Map();
+  items.forEach((it, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(it.p); });
+  const out = [], extra = [];
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    g.sort((a, b) => a.partId - b.partId);
+    out.push(g.map(p => p.partId));
+    for (let k = 1; k < g.length; k++) extra.push(g[k].partId);
+  }
+  return { groups: out, extra };
+}
+function _wireStacked() {
+  const info = $('stk-info'), after = $('stk-after');
+  initScrubber({
+    el: 'stk-tol-scrub', label: 'Same place within', maxSteps: 50,
+    stepToVal: (st) => st / 10, valToStep: (v) => Math.max(0, Math.min(50, Math.round(v * 10))),
+    format: (v) => ({ value: v.toFixed(1), unit: '% of the part' }), initialValue: _stkTol,
+    promptTitle: 'Same place within', promptUnit: '%',
+    onChange: (v) => { _stkTol = Math.max(0, Math.min(5, v)); try { localStorage.setItem('stepopt-stk-tol', String(_stkTol)); } catch (_) {} },
+  });
+  const nearEl = $('stk-near');
+  if (nearEl) {
+    nearEl.checked = _stkNear;
+    nearEl.addEventListener('change', () => { _stkNear = nearEl.checked; try { localStorage.setItem('stepopt-stk-near', _stkNear ? '1' : '0'); } catch (_) {} });
+  }
+  const pick = (ids) => {
+    state.selected.clear(); if (state.selectedGroupIds) state.selectedGroupIds.clear();
+    for (const id of ids) state.selected.add(id);
+    applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo();
+    $('del-sel-count').textContent = state.selected.size;
+  };
+  const live = () => _stkIds.filter(id => { const p = getPart(id); return p && !p.deleted; });
+  $('stk-run')?.addEventListener('click', () => {
+    if (!state.parts.some(p => !p.deleted)) { info.textContent = 'Load a model first.'; after.hidden = true; return; }
+    const t0 = performance.now();
+    const r = _findStackedCopies(_stkTol, _stkNear);
+    _stkIds = r.extra;
+    pick(r.extra);
+    after.hidden = !r.extra.length;
+    info.textContent = r.extra.length
+      ? `${fmtNum(r.extra.length)} extra cop${r.extra.length === 1 ? 'y' : 'ies'} of ${fmtNum(r.groups.length)} part${r.groups.length === 1 ? '' : 's'} selected; the first of each is kept.`
+      : 'No stacked copies found.';
+    try { if (typeof Log !== 'undefined') Log.info(`stacked copies: ${r.extra.length} in ${r.groups.length} groups, ${Math.round(performance.now() - t0)} ms`, { tag: 'stacked' }); } catch (_) {}
+  });
+  $('stk-isolate')?.addEventListener('click', () => {
+    const ids = live();
+    if (!ids.length) return;
+    pick(ids); isolateSelected();
+  });
+  $('stk-delete')?.addEventListener('click', () => {
+    const ids = live();
+    if (!ids.length) { after.hidden = true; return; }
+    deleteParts(ids, 'Removed stacked copies');
+    _stkIds = []; after.hidden = true; info.textContent = `${fmtNum(ids.length)} stacked cop${ids.length === 1 ? 'y' : 'ies'} removed.`;
+  });
+}
+
+// The Select similar card: how strict the match is.
+function _wireSimilar() {
+  const help = () => {
+    const el = $('sim-strict-help'); if (!el) return;
+    const t = _simTol();
+    el.textContent = _simStrict >= 100 ? 'Only parts with the very same shape.'
+      : `Triangle count within ${Math.round(t.tri * 100)}%, each side of the box within ${Math.round(t.dim * 100)}% of the longest.`;
+  };
+  initScrubber({
+    el: 'sim-strict-scrub', label: 'Strictness', maxSteps: 20,
+    stepToVal: (s) => s * 5, valToStep: (v) => Math.max(0, Math.min(20, Math.round(v / 5))),
+    format: (v) => ({ value: Math.round(v).toString(), unit: '%' }), initialValue: _simStrict,
+    promptTitle: 'Strictness', promptUnit: '%',
+    onChange: (v) => { _simStrict = Math.max(0, Math.min(100, Math.round(v))); try { localStorage.setItem('stepopt-sim-strict', String(_simStrict)); } catch (_) {} help(); },
+  });
+  help();
+  $('sim-run')?.addEventListener('click', selectSimilar);
+}
+
 function _wireExplode() {
   const explodePctFmt = (v) => ({ value: Math.round(v).toString(), unit: '%' });
   const explodeOpts = {
@@ -28339,6 +28691,8 @@ const _origWireUI_ux1 = wireUI;
 wireUI = function() {
   _origWireUI_ux1();
   _safeRun(_wireExplode,        'explode');
+  _safeRun(_wireSimilar,        'similar');
+  _safeRun(_wireStacked,        'stacked');
   _safeRun(_wireMeshSplitter,   'mesh-splitter');
   _safeRun(_wireRevealAndKeys,  'reveal-and-keys');
   _safeRun(_wireSidebarResize,  'sidebar-resize');
@@ -28446,7 +28800,28 @@ function _wireSidebarResize() {
 // Group → wrap selected meshes under a new empty Group node.
 // Both register undo so Ctrl+Z restores the prior state.
 
+// Merge bakes the parts' positions into one buffer, so it has to see the model
+// at rest (with the explosion in, the merged part would be built at the
+// exploded places and stay there when the explosion is taken out). Like Smart
+// fit: the model is put at rest, merged, and the explosion put on again.
 async function mergeSelectedIntoOne() {
+  const ex = state.explode ? { x: state.explode.x, y: state.explode.y, z: state.explode.z } : null;
+  const was = !!(ex && (ex.x || ex.y || ex.z));
+  if (was) { try { resetExplode(); } catch (_) {} }
+  try { return await _mergeSelectedCore(); }
+  finally {
+    if (was) {
+      try {
+        state._explodeBaselineDone = false;       // (the new part has no rest position yet; the others keep theirs)
+        state.explode = ex;
+        const sc = state._explodeScrubbers;
+        if (sc) { sc.all?.setValue(Math.max(ex.x, ex.y, ex.z)); sc.x?.setValue(ex.x); sc.y?.setValue(ex.y); sc.z?.setValue(ex.z); }
+        applyExplode();
+      } catch (e) { console.warn('[merge] could not restore the exploded view:', e); }
+    }
+  }
+}
+async function _mergeSelectedCore() {
   const ids = [...state.selected];
   if (ids.length < 2) { toast('Select 2+ parts to merge', '', 'warn'); return; }
   // Reversible via Ctrl+Z — no confirm prompt.
@@ -28658,11 +29033,30 @@ async function mergeSelectedIntoOne() {
   // be appended explicitly. Top-level placement (depth 0, parentId null)
   // is correct here because the merged mesh lives directly under partsRoot
   // and isn't part of any captured Cinema-4D group hierarchy.
-  if (state.treeNodes && Array.isArray(state.treeNodes)) {
-    state.treeNodes.push({
-      id: newId, kind: 'part', name: newPart.name, depth: 0,
-      parentId: null, partId: newId, instanceCount: 0,
-    });
+  // The merged part takes the place of the first part that went into it: same
+  // group, same depth, same spot among its siblings (it used to be put at the
+  // end of the tree, outside every group). The first one is the one that comes
+  // first in the tree. A part that sits in a group the user made joins that
+  // group (and is parented under its node, so moving the group moves it).
+  {
+    const consumedIds = new Set(consumed.map(q => q.partId));
+    let anchorIdx = -1;
+    if (state.treeNodes && Array.isArray(state.treeNodes)) {
+      anchorIdx = state.treeNodes.findIndex(n => n.kind === 'part' && consumedIds.has(n.partId));
+    }
+    const anchorId = anchorIdx >= 0 ? state.treeNodes[anchorIdx].partId : consumed[0].partId;
+    const ug = (state.userGroups || []).find(g => g && g.partIds && g.partIds.has(anchorId));
+    if (ug) {
+      ug.partIds.add(newId);
+      if (ug.ref) { try { ug.ref.attach(mesh); mesh.updateMatrixWorld(true); } catch (_) {} }
+    } else if (state.treeNodes && Array.isArray(state.treeNodes)) {
+      const at = anchorIdx >= 0 ? state.treeNodes[anchorIdx] : null;
+      const node = {
+        id: newId, kind: 'part', name: newPart.name, depth: at ? at.depth : 0,
+        parentId: at ? at.parentId : null, partId: newId, instanceCount: 0,
+      };
+      if (anchorIdx >= 0) state.treeNodes.splice(anchorIdx, 0, node); else state.treeNodes.push(node);
+    }
   }
   pushUndo({ type: 'merge', mergedPartId: newId, items: undoItems });
 
@@ -28692,6 +29086,7 @@ _UndoOps.register('merge', {
     if (state.treeNodes && Array.isArray(state.treeNodes)) {
       state.treeNodes = state.treeNodes.filter(n => n.partId !== op.mergedPartId);
     }
+    for (const g of (state.userGroups || [])) { if (g && g.partIds) g.partIds.delete(op.mergedPartId); }
     const m4 = new THREE.Matrix4();
     for (const it of op.items) {
       const p = getPart(it.partId); if (!p) continue;
@@ -28704,6 +29099,8 @@ _UndoOps.register('merge', {
       }
     }
     state.selected.clear();
+    // the parts come back where the merge left them (at rest): give them their place in the explosion again
+    try { const e = state.explode; if (e && (e.x || e.y || e.z)) applyExplode(); } catch (_) {}
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
   },
@@ -36010,7 +36407,22 @@ setTimeout(() => _dndDecorateTree(), 0);
     bg.classList.add('show');
   }
   document.getElementById('btn-report')?.addEventListener('click', _showReport);
-  window._MOpt = { fitToBudget: _fitToBudget, selectHidden: _selectHiddenParts, selectFasteners: _selectFasteners, showReport: _showReport, captureBaseline: _captureBaseline, noteExport: _noteExport, stats: _sceneStats };
+  window._MOpt = { partCentres: () => {
+    // world-space centre of each live part's box (for tests: where everything is now)
+    const out = {}, b = new THREE.Box3(), c = new THREE.Vector3(), m = new THREE.Matrix4();
+    for (const p of state.parts) {
+      if (p.deleted) continue;
+      if (p.mesh) { p.mesh.updateWorldMatrix(true, false); b.setFromObject(p.mesh); }
+      else if (p.instancedMesh) {
+        const g = p.instancedMesh.geometry; if (!g.boundingBox) g.computeBoundingBox();
+        p.instancedMesh.updateWorldMatrix(true, false);
+        p.instancedMesh.getMatrixAt(p.instanceIndex, m); m.premultiply(p.instancedMesh.matrixWorld);
+        b.copy(g.boundingBox).applyMatrix4(m);
+      } else continue;
+      b.getCenter(c); out[p.partId] = [c.x, c.y, c.z];
+    }
+    return out;
+  }, explodeState: () => ({ ...state.explode }), selectedIds: () => [...state.selected], partInfo: (id) => { const p = state.partById.get(id); return p ? { name: p.name, tris: p.triCount, hash: p.hash, deleted: !!p.deleted, inst: !!p.instancedMesh, mesh: !!p.mesh } : null; }, fitNear: () => { _nearFit.at = 0; _fitNearToView(); }, cameraInfo: () => ({ near: camera.near, far: camera.far, ortho: !!camera._isOrtho, dist: controls ? camera.position.distanceTo(controls.target) : null, modelDiag: state.modelDiag, clip: state.cameraClipMode }), fitToBudget: _fitToBudget, selectHidden: _selectHiddenParts, selectFasteners: _selectFasteners, showReport: _showReport, captureBaseline: _captureBaseline, noteExport: _noteExport, stats: _sceneStats };
 
   // ── Fill holes ────────────────────────────────────────────────────────
   // Closes holes in flat faces and leaves the rest of each mesh exactly as it

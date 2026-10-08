@@ -649,6 +649,22 @@
     for (const f of ['glb', 'fbx', 'usdz', 'obj', 'stl', 'ply', 'csv']) {
       const b = await T.exportAs(f);
       T.assert(b.size > 50, f.toUpperCase() + ' export is empty');
+      // A binary FBX carries a file id, a creation time and a footer code
+      // that the FBX SDK checks against each other: Cinema 4D refused every
+      // file while the id was random and the time was today's.
+      if (f === 'fbx') {
+        const u = new Uint8Array(await b.arrayBuffer());
+        const has = (bytes) => { outer: for (let i = 0; i + bytes.length <= Math.min(u.length, 8192); i++) { for (let k = 0; k < bytes.length; k++) if (u[i + k] !== bytes[k]) continue outer; return true; } return false; };
+        if (String.fromCharCode(...u.subarray(0, 18)) === 'Kaydara FBX Binary') {
+          T.assert(has([...'1970-01-01 10:00:00:000'].map(c => c.charCodeAt(0))), 'binary FBX: the creation time is not the one its footer code belongs to');
+          T.assert(has([0x28, 0xb3, 0x2a, 0xeb, 0xb6, 0x24, 0xcc, 0xc2, 0xbf, 0xc8, 0xb0, 0x2a, 0xa9, 0x2b, 0xfc, 0xf1]), 'binary FBX: the file id is not the one its creation time belongs to');
+          const foot = [0xfa, 0xbc, 0xab, 0x09, 0xd0, 0xc8, 0xd4, 0x66, 0xb1, 0x76, 0xfb, 0x83, 0x1c, 0xf7, 0x26, 0x7e];
+          const tail = u.subarray(Math.max(0, u.length - 200));
+          let ok = false;
+          for (let i = 0; i + 16 <= tail.length && !ok; i++) ok = foot.every((v, k) => tail[i + k] === v);
+          T.assert(ok, 'binary FBX: the footer code is missing');
+        }
+      }
     }
     const j = await T.gltf();
     const names = j.nodes.map(n => n.name);

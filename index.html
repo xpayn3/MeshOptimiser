@@ -2053,7 +2053,7 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 #axis-gizmo .axg-face[data-axis$="y"]:hover{fill:#3fb85a!important;stroke:#3fb85a!important;filter:none}
 #axis-gizmo .axg-face[data-axis$="z"]:hover{fill:#3b8cf2!important;stroke:#3b8cf2!important;filter:none}
 #axis-gizmo .axg-handle circle{transition:transform .12s var(--ease-out);transform-box:fill-box;transform-origin:center}
-#axis-gizmo .axg-handle:hover circle{transform:scale(1.14);filter:none}
+#axis-gizmo .axg-handle:hover circle{transform:scale(1.14);filter:none;stroke:rgba(255,255,255,.55);stroke-width:1}
 /* Parts search: quiet while it is empty and not in use, full strength on
    hover, on focus, and for as long as something is typed in it. */
 .tree-search:has(input:placeholder-shown:not(:focus)){opacity:.5}
@@ -3547,6 +3547,15 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubi
       </div>
     </div>
 
+    <div class="section">
+      <div class="section-h"><span>Select similar</span><span class="chev">▾</span></div>
+      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="field"><div id="sim-strict-scrub"></div></div>
+        <div class="field-help" id="sim-strict-help"></div>
+        <button class="btn" id="sim-run" title="Add the parts that look like the selected ones, as strictly as set above"><i data-lucide="shapes"></i>Select similar</button>
+      </div>
+    </div>
+
     <div class="side-group">Inspect</div>
 
     <div class="section">
@@ -3651,6 +3660,21 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubi
         </div>
         <div class="field-help" id="align-info"></div>
         <div class="toggle" title="Place every file as it is opened, with the choices above (it is not turned)"><span id="align-on-open-lbl">Place every file I open</span><label><input type="checkbox" id="align-on-open" aria-labelledby="align-on-open-lbl"><span class="switch"></span></label></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Stacked copies</span><span class="chev">▾</span></div>
+      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="field-help">Parts that sit on top of an identical copy: the same shape in the same place, drawn twice (and flickering where the two meet). One of each pair is kept.</div>
+        <div class="field"><div id="stk-tol-scrub"></div></div>
+        <div class="toggle" title="Also count a part as a copy when its triangle count differs a little (another export of the same part, a re-meshed duplicate)"><span id="stk-near-lbl">Also near copies</span><label><input type="checkbox" id="stk-near" aria-labelledby="stk-near-lbl"><span class="switch"></span></label></div>
+        <button class="btn primary" id="stk-run" title="Select the extra copies. Nothing is deleted until you press Delete."><i data-lucide="copy"></i>Find stacked copies</button>
+        <div class="field-help" id="stk-info"></div>
+        <div class="btn-row" id="stk-after" hidden>
+          <button class="btn" id="stk-isolate" title="Show only the extra copies, to check them"><i data-lucide="focus"></i>Isolate</button>
+          <button class="btn danger" id="stk-delete" title="Delete the extra copies. Can be undone."><i data-lucide="trash-2"></i>Delete</button>
+        </div>
       </div>
     </div>
 
@@ -4022,8 +4046,8 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubi
           </div>
           <div class="field" style="margin:0"><label id="exp-axis-lbl"><span>Up axis</span></label>
             <select id="exp-axis" aria-labelledby="exp-axis-lbl" class="mac-sel">
-              <option value="z-up" selected>Z-up (CAD, keep)</option>
-              <option value="y-up">Y-up (glTF, OBJ, Maya)</option>
+              <option value="z-up" selected>Keep as in the scene</option>
+              <option value="y-up">Turn Z-up into Y-up (for glTF, OBJ, Maya)</option>
             </select>
           </div>
           <div class="field" style="margin:0"><label id="exp-origin-lbl"><span>Origin</span></label>
