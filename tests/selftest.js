@@ -727,6 +727,45 @@
     }
   });
 
+  // A cube seen from straight above is a square, in a wide picture too. The
+  // orthographic views used to keep the viewport's shape while the picture
+  // took another, so the square came out as a wide rectangle.
+  test('screenshot: an orthographic view is not stretched in a picture of another shape', async () => {
+    await T.fresh(['cube']);
+    T.act('camTop'); await T.sleep(700);
+    try {
+      T.capture(); T.blobs.length = 0;
+      document.getElementById('tg-screenshot').click(); await T.sleep(700);
+      const dlg = document.getElementById('scrshot-dlg');
+      T.assert(dlg, 'the screenshot dialog did not open');
+      const set = (id, v) => { const el = dlg.querySelector(id); el.value = String(v); el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+      set('#ss-w', 800); set('#ss-h', 400);
+      const hg = dlg.querySelector('#ss-hide-grid'); if (hg && !hg.checked) hg.click();
+      await T.sleep(150);
+      dlg.querySelector('.ss-save').click();
+      const t0 = performance.now();
+      while (!T.blobs.length && performance.now() - t0 < 15000) await T.sleep(200);
+      T.assert(T.blobs.length > 0, 'no picture was saved');
+      const bmp = await createImageBitmap(T.blobs[T.blobs.length - 1]);
+      T.eq(bmp.width + 'x' + bmp.height, '800x400', 'picture size');
+      const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+      const g = c.getContext('2d'); g.drawImage(bmp, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      // the cube is whatever differs from the background in the corner
+      let x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+      for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+        const i = (y * c.width + x) * 4;
+        if (Math.abs(d[i] - d[0]) + Math.abs(d[i + 1] - d[1]) + Math.abs(d[i + 2] - d[2]) > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      }
+      T.assert(x1 > x0 && y1 > y0, 'nothing was drawn in the picture');
+      const ratio = (x1 - x0 + 1) / (y1 - y0 + 1);
+      T.assert(ratio > 0.9 && ratio < 1.1, 'a cube from above is ' + (x1 - x0 + 1) + ' × ' + (y1 - y0 + 1) + ' pixels in an 800 × 400 picture: it should be square');
+    } finally {
+      document.querySelector('#scrshot-dlg .ss-cancel')?.click();
+      T.act('camPersp'); await T.sleep(500);
+    }
+  });
+
   test('export: cloner copies are written', async () => {
     await T.fresh(['cube']);
     if (!window._Cloner) return 'skipped (no cloner module)';

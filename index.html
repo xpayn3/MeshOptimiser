@@ -443,7 +443,6 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-type-icon.asm{color:var(--icon-asm)}      /* warm amber for assemblies */
 .prop-type-icon.part{color:var(--icon-part)}    /* emerald for leaves */
 .prop-type-icon.inst{color:var(--icon-inst)}    /* purple for shared-geometry leaves (instances) */
-.prop-color{flex-shrink:0;width:18px;height:18px;border-radius:6px;border:1px solid rgba(255,255,255,.18);box-shadow:var(--sh-thumb)}
 .prop-name{font-size:var(--fs-lg);font-weight:var(--fw-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
 .prop-tags{display:flex;flex-wrap:wrap;gap:var(--space-xs);margin-bottom:8px;min-height:14px}
 .prop-material-row{margin:10px 0 10px}
@@ -581,7 +580,6 @@ input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin
 
 /* Compact toolbar row under the search input */
 .tree-toolbar{display:flex;row-gap:5px;align-items:center}
-.tree-toolbar #tree-sort{flex:1 1 100%;min-width:0;font-size:var(--fs-11);padding:5px 20px 5px 7px;background-position:right 6px center}
 .tree-icon-btn{display:grid;place-items:center;background:var(--bg2);border:1px solid var(--bd);color:var(--tx2);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .tree-icon-btn:hover{color:var(--tx);background:var(--bg3);border-color:var(--bd2)}
 .tree-icon-btn:active{transform:scale(.92)}
@@ -781,8 +779,6 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .vpb:active{transform:scale(.92)}
 .vpb svg{stroke:currentColor;fill:none;stroke-width:2}
 #vp-add-prim{position:relative}
-#vp-add-prim #vp-add-prim-img{width:20px;height:20px;display:block;object-fit:contain;pointer-events:none;user-select:none}
-#vp-add-prim:not(.has-thumb) #vp-add-prim-img{display:none}
 #vp-add-prim:not(.has-thumb)::before{content:"";display:block;width:14px;height:14px;border:1.5px solid currentColor;border-radius:4px;opacity:.85}
 /* Dropdown affordance — tiny triangle in the bottom-right corner so users
    notice this button has a long-hold picker. Matches Figma / Photoshop tool
@@ -901,7 +897,7 @@ body.msr-mode #canvas{cursor:crosshair}
 #vp-materials-pop .mat-view-btn i,#vp-materials-pop .mat-view-btn svg{width:11px;height:11px;stroke-width:2}
 
 /* List-view rendering of the materials panel — same visual language as the
-   right-sidebar materials list (.mat-row in app-v2.js buildMaterialsPanel)
+   right-sidebar materials list (.mat-row)
    so users get a consistent row layout when they flip from grid to list. */
 #vp-materials-pop .mat-list-view{display:flex;flex-direction:column;gap:0}
 #vp-materials-pop .mat-row{display:flex;align-items:center;gap:9px;padding:6px 4px;cursor:pointer;font-size:var(--fs-12);border-radius:var(--r-sm);transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out);user-select:none;border:1px solid transparent}
@@ -969,15 +965,6 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-edit-select-row label{flex:0 0 80px;font-size:var(--fs-11);color:var(--tx2)}
 .mat-edit-select-row select{flex:1;font-size:var(--fs-sm);padding:5px 8px}
 
-.mat-tex-row{display:flex;align-items:center;gap:var(--space-md);padding:3px 0}
-.mat-tex-thumb{flex:0 0 28px;width:28px;height:28px;border-radius:6px;background:var(--bg-checker);border:1px solid var(--bd);display:grid;place-items:center;overflow:hidden;color:var(--tx3)}
-.mat-tex-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.mat-tex-thumb svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;opacity:.45}
-.mat-tex-thumb.has-tex{border-color:var(--ac-line)}
-.mat-tex-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
-.mat-tex-label{font-size:var(--fs-11);color:var(--tx2);line-height:1.1}
-.mat-tex-name{font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mat-tex-name.empty::before{content:'— no texture —';color:var(--tx3);opacity:.55}
 .mat-tex-btn{flex:0 0 auto;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:4px 6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;transition:background 120ms var(--ease-out),border-color 120ms var(--ease-out),color 120ms var(--ease-out)}
 .mat-tex-btn:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
 .mat-tex-btn:disabled{opacity:.35;cursor:default;pointer-events:none}
@@ -1027,10 +1014,6 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-color-pct:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx2)}
 .mat-color-pct:focus{background:var(--bg1);border-color:var(--ac);color:var(--tx);box-shadow:0 0 0 2px var(--ac-tint-18)}
 
-.mat-eyedrop{flex:0 0 22px;width:22px;height:22px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx2);cursor:pointer;display:grid;place-items:center;padding:0;transition:background 120ms,border-color 120ms,color 120ms}
-.mat-eyedrop:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
-.mat-eyedrop:disabled{opacity:.35;cursor:default;pointer-events:none}
-.mat-eyedrop svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:1.8}
 
 .mat-tex-pop{position:fixed;z-index:9999;padding:10px;width:240px;display:none}
 .mat-tex-pop.show{display:block}
@@ -1873,7 +1856,6 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .vp-prim-pop-item:hover .prim-ico{color:#fff}
 #vp-add-prim.has-icon::before{display:none}
 #vp-add-prim .vp-add-ico{display:grid;place-items:center;pointer-events:none}
-#vp-add-prim.has-icon #vp-add-prim-img{display:none}
 
 /* ── Floating surfaces: one set of tokens ────────────────────────────────
    Everything that floats above the page draws from these: menus, popovers,
@@ -3249,7 +3231,6 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
             <option value="vertex" title="Default. Connect triangles that share a vertex.">Vertex connectivity</option>
             <option value="edge" title="Stricter than vertex. Connect only when triangles share a full edge — keeps solids meeting at a point separate.">Edge connectivity</option>
             <option value="spatial" title="Group by triangle bbox overlap on a 3D grid. Doesn't read the index buffer at all — useful when topology is fused but solids are still spatially separate.">Spatial proximity (AABB)</option>
-            <option value="watertight" title="Find connected sets where every edge has 2 triangles (closed manifold). Most robust for genuine solids, slower.">Watertight regions</option>
             <option value="hybrid" title="Vertex connectivity first, then re-split any dominant component (>50%) with spatial proximity.">Hybrid (vertex + spatial)</option>
           </select>
         </div>

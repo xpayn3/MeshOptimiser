@@ -6,8 +6,37 @@ Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &n
 
 ## Unreleased
 
-A read of the whole code base and a round of beta testing after v0.13.0.
-No new features: what is here is what was found to be wrong.
+A read of the whole code base and a round of beta testing after v0.13.0:
+what was found to be wrong is fixed, and the start screen is rebuilt.
+
+**Start screen**
+
+- ![polish][polish] **Recent files are a list you can read.** One row a
+  file: its picture, its name, type and size, and when it was last opened.
+  The rows no longer shrink into slivers when there are many; the list
+  scrolls, and fades at the edge that has more. At most ten are kept.
+- ![polish][polish] **Continue where you left off.** The file that was open
+  last has a card of its own, with its picture across it, and is not
+  listed a second time below.
+- ![polish][polish] The filter sits in the heading's line and `Enter` opens
+  the first match; the arrow keys walk the list; the remove button takes
+  the place of the age while the pointer is on a row. An empty list says
+  what will appear there.
+
+**Export and scene settings**
+
+- ![fix][fix] **Up axis and Scene scale stay out of the file, for every
+  part.** A part moved after either setting changed was written turned or
+  resized, the others were not, and instanced parts differed again. The
+  two settings are how the scene is shown and measured; Export's own
+  Scale and Axis decide the file.
+- ![fix][fix] **A position typed in the Transform panel lands where the
+  field says** in a Y-up or scaled scene.
+- ![fix][fix] **Screenshots from Top, Front and Side are not stretched**
+  when the picture has another shape than the viewport.
+- ![fix][fix] Draco export names the file `.glb` when it had to fall back
+  to an uncompressed one; CSV export honours "Selected parts only"; ASCII
+  FBX gives repeated names a number, as the binary writer does.
 
 **Security**
 
@@ -83,7 +112,37 @@ No new features: what is here is what was found to be wrong.
   keeps non-Latin names; ASCII FBX keeps its precision at any export
   scale; cloner radial mode no longer leaves a copy at the centre.
 
-**Launchers**
+- ![fix][fix] The unsaved dot survives more than 30 edits followed by
+  undoing them; shortcuts no longer reach the scene from behind a dialog;
+  the add-shape button answers the keyboard; `Alt` + right-drag zooms in
+  orthographic views; snap follows the grid's own cell.
+- ![fix][fix] Split: "Watertight regions" is gone (it did what Vertex
+  connectivity does); the read-out and the preview agree with the split;
+  undo frees what the split made. Merge keeps shading when one source had
+  no normals. Fit to budget and Heatmap free what they replace.
+- ![fix][fix] Cloner: redo of "create" and "add sources" no longer adds a
+  second undo step or throws the remaining redos away, and undo puts the
+  source parts back where they were.
+- ![polish][polish] Labels and roles for screen readers on switches, fields,
+  menus and windows; keyboard focus is visible on sliders, links and
+  tick boxes; shortcut tips over the viewport are easier to read.
+- ![refactor][refactor] About 2,000 lines of code and 150 style rules that
+  nothing used are gone: the old flatten routines, the bounding-box
+  overlay, the per-part colour picker, the old Add menu, the scene
+  settings window.
+
+**Launchers and converter**
+
+- ![fix][fix] **A STEP file with nothing solid in it says so**, instead of
+  a traceback. Cancelling a conversion stops the converter on macOS and
+  Linux too, and a cancel that arrives early is not lost. A long
+  conversion keeps printing its log past 200 lines.
+- ![fix][fix] `--open` reuses a converted file only when it came from the
+  same source; a `.gltf` with side files is refused with a reason.
+- ![fix][fix] The launchers check for Python 3.10 to 3.12 and say what is
+  wrong when it is another version; a hidden start no longer waits on a
+  key nobody can press, and reports a failed start.
+- ![docs][docs] A LICENSE file (MIT).
 
 - ![fix][fix] `step2glb.bat` uses the project's own Python and passes
   every argument on. The macOS launchers are executable after a clone,

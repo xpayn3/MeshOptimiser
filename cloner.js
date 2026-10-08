@@ -1271,6 +1271,7 @@
           _clonerDissolve(p);
         }
         state.redo.push(op);
+        _syncUndoButtons();
         try { F.rebuildTree?.(); } catch (_) {}
         try { F.applySelectionColors?.(); } catch (_) {}
         try { F.refreshPropertiesPanel?.(); } catch (_) {}
@@ -1286,6 +1287,7 @@
           F.refreshPropertiesPanel?.();
         }
         state.redo.push(op);
+        _syncUndoButtons();
         requestRender();
         return true;
       }
@@ -1345,6 +1347,7 @@
           }
         }
         state.redo.push(op);
+        _syncUndoButtons();
         try { F.rebuildTree?.(); } catch (_) {}
         try { F.refreshPropertiesPanel?.(); } catch (_) {}
         try { F.applySelectionColors?.(); } catch (_) {}
@@ -1378,6 +1381,7 @@
           _clonerRebuild(p);
         }
         state.redo.push(op);
+        _syncUndoButtons();
         try { F.rebuildTree?.(); } catch (_) {}
         try { F.refreshPropertiesPanel?.(); } catch (_) {}
         try { F.applySelectionColors?.(); } catch (_) {}
@@ -1388,7 +1392,10 @@
     });
     // The Undo / Redo buttons follow the two stacks. The app refreshes them
     // inside pushUndo, which a redo does not go through.
+    // The Undo and Redo buttons, after a step taken here (the app's own
+    // routine when it is there: it also keeps the menu entries right).
     const _syncUndoButtons = () => {
+      if (typeof F._refreshUndoRedoButtons === 'function') { try { F._refreshUndoRedoButtons(); return; } catch (_) {} }
       const u = document.getElementById('btn-undo'); if (u) u.disabled = state.history.length === 0;
       const r = document.getElementById('btn-redo'); if (r) r.disabled = !state.redo || state.redo.length === 0;
     };
@@ -1423,6 +1430,7 @@
           F.refreshPropertiesPanel?.();
         }
         state.history.push(op);
+        _syncUndoButtons();
         requestRender();
         return true;
       }
@@ -1431,6 +1439,7 @@
         const p = getPart(op.snap.partId);
         if (p?.isCloner) _clonerDissolve(p);
         state.history.push(op);
+        _syncUndoButtons();
         try { F.rebuildTree?.(); } catch (_) {}
         try { F.refreshPropertiesPanel?.(); } catch (_) {}
         requestRender();

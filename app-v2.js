@@ -52,7 +52,7 @@ const state = {
   gridCellMode: 'auto',
   snapToGrid: false,
   pendingFlagged: new Set(),
-  partsRoot: null, bboxRoot: null,
+  partsRoot: null,
   sizeMetricMode: 'diag', threshold: 2.0,
   materialByColor: new Map(), geomByHash: new Map(), instancedGroups: [],
   shareMaterials: true, autoInstance: true,
@@ -106,6 +106,7 @@ if (typeof window !== 'undefined') {
     // for functions the chain re-binds.
     get pushUndo() { return pushUndo; },
     get undoLast() { return undoLast; },
+    get _refreshUndoRedoButtons() { return _refreshUndoRedoButtons; },
     get redoLast() { return redoLast; },
     get _Prefs() { return _Prefs; },
     get refreshPropertiesPanel() { return refreshPropertiesPanel; },
@@ -979,10 +980,6 @@ function _closeAllTopbarMenus(exceptId) {
     document.getElementById('file-menu-wrap')?.classList.remove('open');
     const fb = document.getElementById('btn-file');
     if (fb) { fb.classList.remove('active'); fb.setAttribute('aria-expanded', 'false'); }
-  }
-  if (exceptId !== 'add-prim-menu') {
-    document.getElementById('add-prim-menu')?.classList.remove('show');
-    document.getElementById('btn-add-prim')?.classList.remove('active');
   }
   if (exceptId !== 'export-menu') {
     document.getElementById('export-menu')?.classList.remove('show');
@@ -2154,12 +2151,15 @@ async function convertStepViaServer(file, opts = {}) {
       if (j.status === 'cancelled') throw new DOMException('cancelled', 'AbortError');
       // (the start screen shows its own copy of the loader while it is up)
       if (j.message) { $('loader-sub').textContent = j.message; const wlSub = $('wl-sub'); if (wlSub) wlSub.textContent = j.message; }
-      if (Array.isArray(j.log) && j.log.length > lastSeenLogIdx) {
-        for (let i = lastSeenLogIdx; i < j.log.length; i++) {
-          const line = j.log[i];
+      // (line i of the whole log is j.log[i - j.log_base]: without the base a
+      // long conversion stopped printing after the first 200 lines)
+      if (Array.isArray(j.log)) {
+        const base = j.log_base | 0, end = base + j.log.length;
+        for (let i = Math.max(lastSeenLogIdx, base); i < end; i++) {
+          const line = j.log[i - base];
           if (line) logProgress(line);
         }
-        lastSeenLogIdx = j.log.length;
+        if (end > lastSeenLogIdx) lastSeenLogIdx = end;
       }
       if (j.status === 'done') {
         logProgress('conversion done: ' + j.result, 'ok');
@@ -3237,8 +3237,8 @@ const _Actions = (() => {
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
     { id:'merge',        group:'Edit',       label:'Merge selection',            kbd:'Ctrl+M', run: _click('btn-merge-sel') },
     { id:'split',        group:'Edit',       label:'Split meshes…',              kbd:'X', run: () => _CmdCards.open('split') },
-    { id:'smartFit',     group:'Edit',       label:'Smart-fit selection',        kbd:'Ctrl+B', run: () => _CmdCards.open('smartfit') },
-    { id:'smartFitAll',  group:'Edit',       label:'Smart-fit all parts',        run: _click('btn-bbox-all') },
+    { id:'smartFit',     group:'Edit',       label:'Smart fit selection',        kbd:'Ctrl+B', run: () => _CmdCards.open('smartfit') },
+    { id:'smartFitAll',  group:'Edit',       label:'Smart fit all parts',        run: _click('btn-bbox-all') },
     { id:'fillHoles',    group:'Edit',       label:'Fill holes…',                kbd:'P', run: () => _CmdCards.open('fillholes') },
     { id:'decimate',     group:'Edit',       label:'Decimate selection',         run: _click('btn-decimate-sel') },
     { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { const el = document.getElementById('budget-target'); if (el && el.offsetParent) { el.focus(); el.select(); } else _click('btn-budget')(); } },
@@ -4245,10 +4245,6 @@ function initScene() {
   // through thousands of children. We call updateMatrixWorld() manually after
   // mutations.
   state.partsRoot.matrixAutoUpdate = false;
-  // (An empty group left from the bounding-box overlay, which is gone;
-  // clearModel and the recent-file thumbnail still refer to it.)
-  state.bboxRoot = new THREE.Group(); state.bboxRoot.visible = false; scene.add(state.bboxRoot);
-  state.bboxRoot.matrixAutoUpdate = false;
   raycaster = new THREE.Raycaster(); pointer = new THREE.Vector2();
 
   // Gizmo + a dedicated pivot we re-position to bbox center on each select
@@ -6901,7 +6897,7 @@ function clearModel() {
   // Detach scene-graph references immediately — the new model needs a clean
   // root to attach to. Old objects survive in _deferredDispose, but the
   // renderer no longer traverses them.
-  state.partsRoot.clear(); state.bboxRoot.clear();
+  state.partsRoot.clear();
   // Clipboard ids reference the OLD model — without clearing, paste after a
   // model swap can collide with freshly-allocated partIds in the new model.
   state._clipboardParts = [];
@@ -6917,13 +6913,10 @@ function clearModel() {
   state.activeHighlights = [];
   state._selMergedGeom = null;
   // Per-model derived state — would otherwise reference parts from the old model.
-  state.selHistory = []; state.selHistoryIdx = -1;
   state.explode = { x: 0, y: 0, z: 0 };
   state._explodeBaselineDone = false;
   state._isolated = false;
   state._modelCenter = null;
-  state._pendingStepRoot = null;
-  state.bboxBuilt = false;
   // Wipe history + redo on model unload (state from a previous file
   // wouldn't apply to whatever we load next).
   state.history.length = 0; state.redo.length = 0;
@@ -6985,7 +6978,6 @@ function _newSceneHere() {
   // happened. Refresh every panel that reads from state here.
   try { rebuildTree?.(); } catch (_) {}
   try { refreshPropertiesPanel?.(); } catch (_) {}
-  try { buildMaterialsPanel?.(); } catch (_) {}
   try { refreshFlagged?.(); } catch (_) {}
   try { setStatus?.(_Tabs.blankName()); } catch (_) {}
   onSceneActivated();
@@ -7115,10 +7107,11 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
     try { if (state?._originMarker) state._originMarker.visible = false; } catch (_) {}
   }
 
-  // Stash + adjust perspective camera aspect so a 16:9 export of a square
-  // viewport doesn't stretch the model. Orthographic cameras carry their own
-  // l/r/t/b — leave those untouched (the user's framing already implies aspect).
-  const stashedAspect = (camera.isPerspectiveCamera) ? camera.aspect : null;
+  // Stash + adjust the camera's aspect so a 16:9 export of a square viewport
+  // doesn't stretch the model. That goes for the orthographic views as well:
+  // this app's camera (DualCamera) builds its orthographic matrix from the
+  // same `aspect`, so leaving it alone stretched every Top / Front / Side shot.
+  const stashedAspect = (camera.isPerspectiveCamera || camera._isOrtho) ? camera.aspect : null;
   if (stashedAspect != null) {
     camera.aspect = outW / outH;
     camera.updateProjectionMatrix();
@@ -7173,7 +7166,7 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
     const cv = renderer.domElement;
     const prevW = cv.width, prevH = cv.height;
     const prevPxRatio = renderer.getPixelRatio?.() || 1;
-    const stashedAspect2 = camera.isPerspectiveCamera ? camera.aspect : null;
+    const stashedAspect2 = (camera.isPerspectiveCamera || camera._isOrtho) ? camera.aspect : null;
     try {
       if (stashedAspect2 != null) {
         camera.aspect = outW / outH;
@@ -7771,15 +7764,19 @@ async function _captureRecentThumb(filename) {
   const center = box.getCenter(new THREE.Vector3());
   const maxDim = Math.max(sz.x, sz.y, sz.z) || 1;
   const cam = new THREE.PerspectiveCamera(35, 1, maxDim / 1000, maxDim * 100);
-  cam.up.set(0, 0, 1);
-  const dir = new THREE.Vector3(0.7, -0.9, 0.5).normalize();
+  const upY = state.sceneUpAxis === 'y';
+  cam.up.set(0, upY ? 1 : 0, upY ? 0 : 1);
+  const dir = (upY ? new THREE.Vector3(0.7, 0.5, 0.9) : new THREE.Vector3(0.7, -0.9, 0.5)).normalize();
   const dist = (maxDim / (2 * Math.tan(cam.fov * Math.PI / 360))) * 1.4;
   cam.position.copy(center).add(dir.multiplyScalar(dist));
   cam.lookAt(center);
-  // Hide helpers (grid, bbox) for a clean thumbnail.
-  const wasGrid = gridHelper?.visible, wasBbox = state.bboxRoot?.visible;
-  if (gridHelper)       gridHelper.visible = false;
-  if (state.bboxRoot)   state.bboxRoot.visible = false;
+  // The grid and the origin marker stay out of the picture.
+  const wasGrid = gridHelper?.visible, wasOrigin = state._originMarker?.visible;
+  const hideHelpers = (hide) => {
+    if (gridHelper) gridHelper.visible = hide ? false : wasGrid;
+    if (state._originMarker) state._originMarker.visible = hide ? false : wasOrigin;
+  };
+  hideHelpers(true);
   const target = new THREE.WebGLRenderTarget(SIZE, SIZE, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
   const oldTarget = renderer.getRenderTarget?.();
   let pixels = new Uint8Array(SIZE * SIZE * 4);
@@ -7811,8 +7808,7 @@ async function _captureRecentThumb(filename) {
   } finally {
     renderer.setRenderTarget(oldTarget || null);
     target.dispose();
-    if (gridHelper)     gridHelper.visible = wasGrid;
-    if (state.bboxRoot) state.bboxRoot.visible = wasBbox;
+    hideHelpers(false);
     requestRender?.();
   }
   let dataUrl;
@@ -7833,10 +7829,19 @@ async function _captureRecentThumb(filename) {
     // Snapshot the live viewport canvas instead. Cropped to a centred
     // square so wide viewports don't produce stretched thumbnails.
     try {
-      if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, cam);
-      else renderer.render(scene, cam);
+      // The live canvas is not square and this camera is: it takes the
+      // canvas's shape for this one frame (the picture used to be stretched),
+      // and the grid stays out of it as on the other path.
       const liveCanvas = renderer.domElement;
       const w = liveCanvas.width, h = liveCanvas.height;
+      cam.aspect = (w / h) || 1;
+      if (cam.aspect < 1) cam.position.sub(center).multiplyScalar(1 / cam.aspect).add(center);   // (a tall canvas: step back so the width still fits)
+      cam.updateProjectionMatrix();
+      hideHelpers(true);
+      try {
+        if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, cam);
+        else renderer.render(scene, cam);
+      } finally { hideHelpers(false); requestRender?.(); }
       const side = Math.min(w, h);
       const sx = (w - side) >> 1, sy = (h - side) >> 1;
       const c = document.createElement('canvas');
@@ -12040,7 +12045,6 @@ function _polyRectOverlap(poly, rMinX, rMinY, rMaxX, rMaxY) {
 // The marquee itself is a Ctrl / Cmd drag (see the canvas mousedown), so:
 //   with Shift (m.additive) → add hits to the existing selection
 //   without                 → replace the selection with hits
-// (m.toggle is always false: Ctrl is taken by the gesture itself.)
 function _commitMarqueeSelection(m) {
   const canvasRect = $('canvas').getBoundingClientRect();
   const rMinX = Math.min(m.startX, m.endX);
@@ -12091,11 +12095,6 @@ function _commitMarqueeSelection(m) {
 
   if (m.additive) {
     for (const id of matched) state.selected.add(id);
-  } else if (m.toggle) {
-    for (const id of matched) {
-      if (state.selected.has(id)) state.selected.delete(id);
-      else state.selected.add(id);
-    }
   } else {
     state.selected = new Set(matched);
     state.selectedGroupIds?.clear?.();           // (a marquee replaces what was selected: the group row included)
@@ -16786,7 +16785,6 @@ function _collectSceneState() {
     view: {
       viewMode:        state._viewModeShown || state.viewMode,
       showGrid:        state.showGrid,
-      showBboxes:      state.showBboxes,
       threshold:       state.threshold,
       sizeMetricMode:  state.sizeMetricMode,
       bgMode:          state.bgMode,
@@ -17649,13 +17647,6 @@ function wireUI() {
     _toggleExportMenu();
   });
 
-  // Toolbar Add-primitive button. Same dropdown affordance as Export —
-  // the menu is in HTML; we just toggle visibility and route the chosen
-  // primitive id to _addPrimitive(). Closing on outside click is wired
-  // alongside the export menu's existing close logic.
-  const _addPrimMenu = $('add-prim-menu');
-  const _addPrimBtn  = $('btn-add-prim');
-
   // Tiny one-time renderer for primitive thumbnails. Snapshots each kind
   // with an accent-coloured PBR material once and persists the data URL
   // to localStorage so subsequent app loads skip the WebGPU init entirely.
@@ -17798,62 +17789,7 @@ function wireUI() {
     return { render };
   })();
 
-  const _populatePrimThumbs = async () => {
-    if (!_addPrimMenu) return;
-    const items = [..._addPrimMenu.querySelectorAll('.export-menu-item[data-prim]')];
-    // Insert placeholder thumbs first so the menu doesn't reflow as each
-    // snapshot lands. Each placeholder is replaced once its image is ready.
-    for (const item of items) {
-      if (item.querySelector('.prim-thumb')) continue;
-      const ph = document.createElement('span');
-      ph.className = 'prim-thumb prim-thumb-placeholder';
-      item.insertBefore(ph, item.firstChild);
-    }
-    // Render snapshots serially so they share one renderer instance.
-    for (const item of items) {
-      const ph = item.querySelector('.prim-thumb.prim-thumb-placeholder');
-      if (!ph) continue;
-      let url = null;
-      try { url = await _primThumb.render(item.dataset.prim); }
-      catch (err) { console.warn('[prim-thumb] render failed for', item.dataset.prim, err); }
-      if (url) {
-        const img = document.createElement('img');
-        img.src = url; img.alt = ''; img.className = 'prim-thumb'; img.draggable = false;
-        ph.replaceWith(img);
-      } else {
-        ph.classList.remove('prim-thumb-placeholder');
-      }
-    }
-  };
-  window._populatePrimThumbs = _populatePrimThumbs;
   window._primThumb = _primThumb;
-
-  if (_addPrimBtn && _addPrimMenu) {
-    _addPrimBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      const willOpen = !_addPrimMenu.classList.contains('show');
-      if (willOpen) _closeAllTopbarMenus('add-prim-menu');
-      _addPrimMenu.classList.toggle('show', willOpen);
-      _addPrimBtn.classList.toggle('active', willOpen);
-      if (willOpen) _populatePrimThumbs();
-    });
-    _addPrimMenu.addEventListener('click', e => {
-      const item = e.target.closest('[data-prim]');
-      if (!item) return;
-      e.stopPropagation();
-      _addPrimMenu.classList.remove('show');
-      _addPrimBtn.classList.remove('active');
-      try { _addPrimitive(item.dataset.prim); }
-      catch (err) { console.warn('[prim] add failed:', err); toast('Add failed', err.message || String(err), 'error', 4000); }
-    });
-    // Any click anywhere closes the menu — including clicks ON the trigger
-    // button. The trigger's own click handler (which toggles `.show`) runs
-    // before this in source order, so toggling still works as expected.
-    _Popover.dismiss(
-      () => { _addPrimMenu.classList.remove('show'); _addPrimBtn.classList.remove('active'); },
-      { isOpen: () => _addPrimMenu.classList.contains('show'), escape: false },
-    );
-  }
 
   $('vw-solid').addEventListener('click', () => setViewMode('solid'));
   $('vw-wire').addEventListener('click', () => setViewMode('wire'));
@@ -21489,7 +21425,6 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     catch (e) { console.warn('[STEP] auto-instance failed:', e); }
   }
   setLoaderProgress(90);
-  state.bboxBuilt = false;
   if (importMode) {
     // Totals and the model size describe the whole scene, not just the
     // file that was appended.
@@ -24214,7 +24149,6 @@ function _applyMatBatch(op, dir) {
   }
   for (const e of op.edits || []) { try { _matPreviewCache.delete(e.matRef); } catch (_) {} }
   try { _populateMaterialsList?.(); } catch (_) {}
-  try { buildMaterialsPanel?.(); } catch (_) {}
   _matEditorResync((op.edits || []).map(e => e.matRef));
 }
 _UndoOps.register('matBatch', {
@@ -25634,8 +25568,8 @@ function _wireBboxButtonsFinal() {
     if (!ids.length) return toast('No parts to fit', '', 'warn');
     // Smart-fit ALL still prompts: destructive across every part, easy to
     // fire by accident.
-    if (!await appConfirmDestructive(`Smart-fit all ${ids.length} part${ids.length === 1 ? '' : 's'} with low-poly proxies?\n\nEach part picks the best proxy automatically (box, turned box, or cylinder). This is a heavy, lossy triangle reduction. The per-selection "Smart fit" covers the common case.`,
-                          { title: 'Smart-fit all parts', okLabel: 'Smart-fit all' })) return;
+    if (!await appConfirmDestructive(`Smart fit all ${ids.length} part${ids.length === 1 ? '' : 's'} with low-poly proxies?\n\nEach part picks the best proxy automatically (box, turned box, or cylinder). This is a heavy, lossy triangle reduction. The per-selection "Smart fit" covers the common case.`,
+                          { title: 'Smart fit all parts', okLabel: 'Smart fit all' })) return;
     bboxifyParts(ids, 'Smart-fit all', 'smart').catch(_onFitError);
   });
   // ── The Smart fit panel ─────────────────────────────────────────────────
@@ -27056,59 +26990,7 @@ function _splitMeshSpatialAABBCount(geom, cellSize) {
   return roots.size;
 }
 
-// 3. WATERTIGHT REGIONS ────────────────────────────────────────────────────
-// Find sets of triangles forming closed manifolds (every edge has exactly 2
-// triangles). Run vertex-connectivity first, then for each component verify
-// the manifold property and discard / re-split components that fail.
-// Components that fail manifoldness are kept as single units rather than
-// merged with neighbours — losing a region is worse than getting a few
-// non-watertight ones.
-function _splitMeshWatertight(geom, epsAbs) {
-  const pos = geom.attributes.position;
-  if (!pos) return null;
-  const idxAttr = geom.index;
-  const vertCount = pos.count;
-  const built = _splitBuildCanon(geom, epsAbs);
-  const canon = built.canon;
-  const triCount = ((idxAttr ? idxAttr.count : vertCount) / 3) | 0;
-  const idxArr = idxAttr ? idxAttr.array : null;
-  // Vertex-level union-find via canon, exactly like vertex connectivity.
-  const N = built.N;
-  const parent = new Uint32Array(N);
-  for (let i = 0; i < N; i++) parent[i] = i;
-  const vfind = (a) => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
-  const vuni = (a, b) => { a = vfind(a); b = vfind(b); if (a !== b) parent[b] = a; };
-  for (let t = 0; t < triCount; t++) {
-    const i0 = idxArr ? idxArr[t * 3]     : t * 3;
-    const i1 = idxArr ? idxArr[t * 3 + 1] : t * 3 + 1;
-    const i2 = idxArr ? idxArr[t * 3 + 2] : t * 3 + 2;
-    vuni(canon[i0], canon[i1]);
-    vuni(canon[i1], canon[i2]);
-  }
-  // Bucket triangles by component root.
-  const compTris = new Map();
-  for (let t = 0; t < triCount; t++) {
-    const v0 = idxArr ? idxArr[t * 3] : t * 3;
-    const r = vfind(canon[v0]);
-    const arr = compTris.get(r);
-    if (arr) arr.push(t); else compTris.set(r, [t]);
-  }
-  if (compTris.size <= 1) return null;
-  // Manifold check per component: count triangles per edge — must be 2.
-  // Components that fail are kept whole rather than dropped (we still want
-  // them in the output; they're just labelled as non-watertight in the
-  // toast summary if the caller cares).
-  return _splitBuildGeomsFromTriBuckets(geom, compTris);
-}
-
-function _splitMeshWatertightCount(geom, epsAbs) {
-  // Cheap upper bound: same as vertex-connectivity component count. Real
-  // watertight count requires a manifold check per component which is
-  // expensive — skip for the live preview.
-  return _splitMeshComponentCount(geom, epsAbs);
-}
-
-// 4. HYBRID (vertex first, then spatial fallback) ─────────────────────────
+// 3. HYBRID (vertex first, then spatial fallback) ─────────────────────────
 // Run vertex-connectivity. If the largest resulting component is huge
 // (>50% of the original triangle count), re-split THAT component with
 // spatial-AABB at a moderate cell size. Catches over-merged components
@@ -27158,7 +27040,6 @@ function _splitDispatch(method, geom, epsAbs) {
   switch (method) {
     case 'edge':       return _splitMeshEdgeConnectivity(geom, epsAbs);
     case 'spatial':    return _splitMeshSpatialAABB(geom, (state.modelDiag || 1) * Math.max(epsAbs / Math.max(state.modelDiag||1, 1e-9), 1e-3));
-    case 'watertight': return _splitMeshWatertight(geom, epsAbs);
     case 'hybrid':     return _splitMeshHybrid(geom, epsAbs);
     case 'vertex':
     default:           return _splitMeshLooseParts(geom, epsAbs);
@@ -27169,7 +27050,6 @@ function _splitDispatchCount(method, geom, epsAbs) {
   switch (method) {
     case 'edge':       return _splitMeshEdgeConnectivityCount(geom, epsAbs);
     case 'spatial':    return _splitMeshSpatialAABBCount(geom, (state.modelDiag || 1) * Math.max(epsAbs / Math.max(state.modelDiag||1, 1e-9), 1e-3));
-    case 'watertight': return _splitMeshWatertightCount(geom, epsAbs);
     case 'hybrid':     return _splitMeshHybridCount(geom, epsAbs);
     case 'vertex':
     default:           return _splitMeshComponentCount(geom, epsAbs);
@@ -27273,7 +27153,6 @@ function _wireMeshSplitter() {
       if (diag <= 0) return '≈ — at this model size';
       // (the proximity split never uses a cell under 0.1% of the model: see _splitDispatch)
       if (kind === 'spatial') return 'Cell size: ' + _formatLengthMM(Math.max(activeEps, 1e-3) * diag) + ' (smaller = more components)';
-      if (kind === 'watertight') return 'Tolerance ignored — watertight detects closed manifolds.';
       // vertex / edge / hybrid all use eps as a weld tolerance.
       if (activeEps <= 0) return 'Trusts the index buffer exactly — no vertices welded.';
       return '≈ ' + _formatLengthMM(activeEps * diag) + ' at this model size';
@@ -27812,6 +27691,8 @@ function _initCustomSelects() {
     trigger.className = 'cs-trigger';
     trigger.id = sel.id ? sel.id + '__btn' : '';
     if (sel.title) trigger.title = sel.title;
+    // (the <select> is hidden: the button is what a screen reader lands on)
+    for (const a of ['aria-labelledby', 'aria-label']) { const v = sel.getAttribute(a); if (v) trigger.setAttribute(a, v); }
     Object.assign(trigger.style, mirror);
     if (sel.disabled) { trigger.disabled = true; trigger.style.opacity = '.5'; trigger.style.cursor = 'not-allowed'; }
     wrap.appendChild(trigger);
@@ -28862,29 +28743,8 @@ function _wireUserGroupTreeHandlers() {
 }
 
 // The tree toolbar's buttons: expand / collapse all, and Flatten. (The name
-// is from when they were not wired up. The first five handlers below are for
-// controls that are no longer in the page: #tree-sort, #tree-hide-unsel,
-// #tree-show-all, #tree-sel-back and #tree-sel-fwd.)
+// is from when they were not wired up.)
 function _wireDeadTreeControls() {
-  $('tree-sort')?.addEventListener('change', e => {
-    state.sortMode = e.target.value;
-    rebuildTree();
-    Log.debug(`Sort: ${state.sortMode}`, { tag: 'tree' });
-  });
-  $('tree-hide-unsel')?.addEventListener('click', () => {
-    if (!state.parts.length) return;
-    if (state.selected.size === 0) { toast('Nothing selected', '', 'warn'); return; }
-    _applyVisibility(state.parts
-      .filter(p => !p.deleted && !state.selected.has(p.partId))
-      .map(p => [p, false]));
-    rebuildTree(); requestRender();
-    // Visibility change is visible in the viewport — no toast.
-  });
-  $('tree-show-all')?.addEventListener('click', () => {
-    if (typeof showAllParts === 'function') showAllParts();
-  });
-  $('tree-sel-back')?.addEventListener('click', () => { if (typeof selectionBack === 'function') selectionBack(); });
-  $('tree-sel-fwd')?.addEventListener('click',  () => { if (typeof selectionFwd === 'function') selectionFwd(); });
   // Expand / collapse all groups in one shot. Toggles between the two states
   // by checking whether ANY collapsible row is currently expanded — if yes,
   // collapse them all; otherwise expand them all. Covers both data sources:
@@ -30108,7 +29968,7 @@ const _BatchRename = (() => {
     { name: 'diag',          desc: 'Bounding-box diagonal' },
     { name: 'vol',           desc: 'Bounding-box volume' },
     { name: 'max',           desc: 'Largest bbox dimension' },
-    { name: 'color',         desc: 'Material color hex' },
+    { name: 'color',         desc: 'Material colour, as hex' },
     { name: 'hash',          desc: 'Geometry hash (:N first N chars)' },
     { name: 'instanceCount', desc: 'Number of shared instances' },
   ];
@@ -30392,7 +30252,6 @@ const _BatchRenameDialog = (() => {
 
   // CSS for #_brn-dialog content classes lives in index.html
   // (search "Batch Rename dialog") — migrated out of a runtime <style>.
-  function _injectStyles() { /* no-op; CSS migrated to index.html */ }
 
   let _scopeRows = 0;
   function _scopeRowHtml(which = '') {
@@ -30424,7 +30283,7 @@ const _BatchRenameDialog = (() => {
             <input type="text" data-filter="notMatchRegex" data-filter-trigger placeholder="must NOT match">
           </div>
           <div class="brn-row">
-            <label>Color =</label>
+            <label>Colour =</label>
             <input type="text" data-filter="colorEq" data-filter-trigger placeholder="#ff0000" style="max-width:120px;flex:0 0 auto">
             <label style="margin-left:14px">Kind</label>
             <select data-filter="kindOnly" data-filter-trigger class="mac-sel" style="max-width:140px">
@@ -30445,7 +30304,6 @@ const _BatchRenameDialog = (() => {
 
   function _ensure() {
     if (bg) return;
-    _injectStyles();
 
     const bodyHtml = `
       <div class="brn-cols">
@@ -30493,7 +30351,7 @@ const _BatchRenameDialog = (() => {
                   <select id="_brn-cnt-mode" class="mac-sel">
                     <option value="global">none</option>
                     <option value="parent">parent group</option>
-                    <option value="color">color bucket</option>
+                    <option value="color">colour bucket</option>
                     <option value="size">size bucket</option>
                   </select>
                 </div>
@@ -34439,9 +34297,9 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (!p || p.deleted) continue;
       if (!p.mesh) { skipped.push(p.name + ' (instanced)'); continue; }
       const geom = p.mesh.geometry;
-      if (!geom || !geom.attributes || !geom.attributes.position) { skipped.push(p.name + ' (no geom)'); continue; }
+      if (!geom || !geom.attributes || !geom.attributes.position) { skipped.push(p.name + ' (no mesh data)'); continue; }
       const triBefore = geom.index ? geom.index.count / 3 : geom.attributes.position.count / 3;
-      if (triBefore < 12) { skipped.push(p.name + ' (too few tris)'); continue; }
+      if (triBefore < 12) { skipped.push(p.name + ' (too few triangles)'); continue; }
 
       try {
         let reduced = null;

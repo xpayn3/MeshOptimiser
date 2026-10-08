@@ -193,7 +193,7 @@ start.bat
 ```bash
 python step2glb.py input.step
 python step2glb.py input.step --quality 0.2 --min-size 0.5
-python step2glb.py input.step --no-instance       # disable instancing
+python step2glb.py input.step --no-instance       # disable instancing (only with --no-colors, the plain reader)
 python step2glb.py input.step --meshopt           # shell out to gltfpack
 python step2glb.py input.step --relative          # quality as fraction of diag
 ```
@@ -250,7 +250,7 @@ Right-click <code>start.command</code> → <b>Open</b>. Gatekeeper blocks double
 </details>
 
 <details>
-<summary><b>📦 "ModuleNotFoundError: cadquery"</b></summary><br>
+<summary><b>📦 "ModuleNotFoundError: No module named 'OCP'"</b></summary><br>
 Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.command</code> to rebuild from scratch.
 </details>
 
