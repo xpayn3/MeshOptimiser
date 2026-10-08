@@ -2926,22 +2926,30 @@ const _Welcome = (() => {
     const box = document.getElementById('welcome-recents');
     if (!box) return;
     const list = _load();
+    const clearBtn = document.getElementById('welcome-recents-clear');
+    if (clearBtn) clearBtn.style.display = list.length ? 'inline-flex' : 'none';
     if (!list.length) {
-      box.innerHTML = `<div style="padding:10px 12px;background:var(--bg2);border-radius:var(--r-md);color:var(--tx3);font-size:var(--fs-md);text-align:center">No recent files yet</div>`;
+      box.innerHTML = `<div class="wl-recents-none"><i data-lucide="clock"></i><div>No recent files yet</div><span>Files you open are listed here</span></div>`;
       _renderResume(null);
+      try { _lucide(); } catch (_) {}
+      _recentsEdges();
       return;
     }
     // Resume CTA — top recent if its handle is still stored AND the pref is on.
+    let resumed = null;
     if (typeof _Prefs !== 'undefined' && _Prefs.get('autoRestoreSession')) {
       try {
         const top = list[0];
         const handle = await _idbGet(_recKey(top.name, top.size));
-        _renderResume(handle ? top : null);
-      } catch (_) { _renderResume(null); }
-    } else {
-      _renderResume(null);
+        resumed = handle ? top : null;
+      } catch (_) {}
     }
+    _renderResume(resumed);
+    // (the file on the Resume card is not listed a second time right below it,
+    // unless it is the only one)
+    const skipTop = !!resumed && list.length > 1;
     box.innerHTML = list.map((r, i) => {
+      if (skipTop && i === 0) return '';
       const safeName = r.name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
       const thumbInner = r.thumb
         ? `<img src="${r.thumb}" alt="" draggable="false">`
@@ -2949,7 +2957,7 @@ const _Welcome = (() => {
       // the file's type, as a small tag after its name
       const ext = (/\.([a-z0-9]{2,5})$/i.exec(r.name) || [])[1] || '';
       const stem = ext ? safeName.slice(0, safeName.length - ext.length - 1) : safeName;
-      const sub = [_fmtBytes(r.size), _fmtAge(r.ts)].filter(Boolean).join(' · ');
+      const size = r.size > 0 ? _fmtBytes(r.size) : '';
       // <div> wrapper (not <button>) because the row hosts a nested <button>
       // for the hover-revealed × delete affordance, and HTML disallows nested
       // buttons. Click bubbling on the row still triggers the open handler.
@@ -2957,9 +2965,10 @@ const _Welcome = (() => {
       <div class="welcome-recent" data-idx="${i}" title="${safeName}" tabindex="0" role="button" aria-label="Open ${safeName}">
         <div class="wr-thumb">${thumbInner}</div>
         <div class="wr-meta">
-          <div class="wr-name"><span class="wr-stem">${stem}</span>${ext ? `<span class="wr-ext">${ext.toUpperCase()}</span>` : ''}</div>
-          <div class="wr-sub">${sub}</div>
+          <div class="wr-name">${stem}</div>
+          <div class="wr-sub">${ext ? `<span class="wr-ext">${/^gltf$/i.test(ext) ? 'glTF' : ext.toUpperCase()}</span>` : ''}${size ? `<span>${size}</span>` : ''}</div>
         </div>
+        <span class="wr-age">${_fmtAge(r.ts)}</span>
         <button class="wr-del" data-act="delete" title="Remove from recent files" aria-label="Remove ${safeName} from recent files"><i data-lucide="x"></i></button>
       </div>`;
     }).join('');
@@ -2974,10 +2983,17 @@ const _Welcome = (() => {
         if (!rec) return;
         _openRecentByKey(_recKey(rec.name, rec.size));
       });
-      // a row is reached with Tab: Enter or Space opens it, as a click does
+      // a row is reached with Tab: Enter or Space opens it, as a click does,
+      // and the arrow keys walk the list
       el.addEventListener('keydown', (e) => {
-        if ((e.key !== 'Enter' && e.key !== ' ') || e.target !== el) return;
-        e.preventDefault(); el.click();
+        if (e.target !== el) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); el.click(); return; }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        const rows = [...box.querySelectorAll('.welcome-recent')].filter(r => r.style.display !== 'none');
+        const to = rows[rows.indexOf(el) + (e.key === 'ArrowDown' ? 1 : -1)];
+        if (to) to.focus();
+        else if (e.key === 'ArrowUp') document.getElementById('welcome-recents-filter')?.focus();
       });
     });
     // Per-row delete: drop the entry from the persisted list, drop the
@@ -2997,10 +3013,33 @@ const _Welcome = (() => {
         _renderRecents();
       });
     });
-    // Toggle the Clear-all chip based on whether the list has anything.
-    const clearBtn = document.getElementById('welcome-recents-clear');
-    if (clearBtn) clearBtn.style.display = list.length ? 'inline-flex' : 'none';
     try { _lucide(); } catch (_) {}
+    box.scrollTop = 0;
+    _recentsEdges();
+  }
+
+  // The list fades out at an edge that has more rows beyond it. Wired once:
+  // the list scrolls, and typing in the filter (Enter opens the first match,
+  // the down arrow steps into the list).
+  function _recentsEdges() {
+    const box = document.getElementById('welcome-recents');
+    if (!box) return;
+    if (!box._edgesWired) {
+      box._edgesWired = true;
+      box.addEventListener('scroll', _recentsEdges, { passive: true });
+      window.addEventListener('resize', _recentsEdges);
+      const filter = document.getElementById('welcome-recents-filter');
+      filter?.addEventListener('input', () => setTimeout(_recentsEdges, 0));
+      filter?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== 'ArrowDown') return;
+        const first = [...box.querySelectorAll('.welcome-recent')].find(r => r.style.display !== 'none');
+        if (!first) return;
+        e.preventDefault();
+        if (e.key === 'Enter') first.click(); else first.focus();
+      });
+    }
+    box.classList.toggle('more-above', box.scrollTop > 2);
+    box.classList.toggle('more-below', box.scrollTop + box.clientHeight < box.scrollHeight - 2);
   }
 
   function _renderResume(rec) {
@@ -3017,14 +3056,13 @@ const _Welcome = (() => {
       ? `style="background-image:url('${rec.thumb}')"`
       : '';
     slot.innerHTML = `
-      <div class="wr-heading">Resume project</div>
-      <button id="welcome-resume-btn" class="welcome-resume" ${bgStyle}>
-        <span class="wr-play"><i data-lucide="play"></i></span>
+      <button id="welcome-resume-btn" class="welcome-resume${rec.thumb ? ' has-thumb' : ''}" ${bgStyle} title="Open ${safeName}">
         <span class="wr-info">
+          <span class="wr-heading">Continue where you left off</span>
           <span class="wr-name">${safeName}</span>
-          <span class="wr-sub">Pick up where you left off</span>
+          <span class="wr-sub">${[rec.size > 0 ? _fmtBytes(rec.size) : '', 'opened ' + _fmtAge(rec.ts)].filter(Boolean).join(' · ')}</span>
         </span>
-        <span class="wr-age">${_fmtAge(rec.ts)}</span>
+        <span class="wr-play"><i data-lucide="arrow-right"></i></span>
       </button>`;
     document.getElementById('welcome-resume-btn')?.addEventListener('click', () => {
       _openRecentByKey(_recKey(rec.name, rec.size));
@@ -3085,19 +3123,11 @@ const _Welcome = (() => {
       if (e.key === 'Escape') { e.preventDefault(); hide(); }
     });
 
-    drop.addEventListener('dragover', e => {
-      e.preventDefault();
-      drop.style.borderColor = 'var(--ac)';
-      drop.style.background = 'var(--bg3)';
-    });
-    drop.addEventListener('dragleave', () => {
-      drop.style.borderColor = 'var(--bd2)';
-      drop.style.background = 'var(--bg2)';
-    });
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag-over'); });
+    drop.addEventListener('dragleave', () => { drop.classList.remove('drag-over'); });
     drop.addEventListener('drop', e => {
       e.preventDefault();
-      drop.style.borderColor = 'var(--bd2)';
-      drop.style.background = 'var(--bg2)';
+      drop.classList.remove('drag-over');
       _handleDroppedFile(e);
     });
 
@@ -3139,6 +3169,7 @@ const _Welcome = (() => {
     _renderRecents();
     _setMode('pick');
     bg.classList.add('show');
+    requestAnimationFrame(_recentsEdges);
   }
   function hide() {
     const bg = document.getElementById('welcome-modal');

@@ -194,33 +194,34 @@ body{font:var(--fs-lg)/1.4 var(--font-sans);color:var(--tx);background:var(--bg)
 body.app-ready{opacity:1}
 #welcome-modal{transition:opacity .3s ease .1s}
 body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
-/* Recent-files list rows — compact horizontal row with a small thumbnail
-   on the left, name + size/age stack in the middle. The big visual is
-   the hero "Resume project" card above; this list is the secondary
-   archive of older opens. Mirrors the IDE / Figma "open a recent file"
-   strip pattern. */
+/* Recent files: one row a file, every row the same height. The rows do not
+   shrink (ten of them in a short list were once squeezed into slivers one on
+   top of the other): the list scrolls instead, and fades at an edge that has
+   more rows beyond it. A thumbnail, the name over its type and size, when it
+   was last opened, and a "forget this one" button that shows with the pointer. */
 .welcome-recent{
-  display:flex;align-items:center;gap:var(--space-lg);width:100%;padding:7px 9px;
-  background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);
-  color:var(--tx);text-align:left;cursor:pointer;overflow:hidden;
-  transition:background 140ms var(--ease-out),border-color 140ms var(--ease-out);
+  position:relative;flex:0 0 auto;display:flex;align-items:center;gap:11px;width:100%;height:44px;padding:0 9px 0 7px;
+  border-radius:8px;color:var(--tx);text-align:left;cursor:pointer;
+  transition:background var(--dur-fast) var(--ease-out);
 }
-.welcome-recent:hover{background:var(--bg3);border-color:var(--bd2)}
+.welcome-recent:hover,.welcome-recent:focus-visible{background:var(--bg3)}
+.welcome-recent:focus-visible{outline:none;box-shadow:inset 0 0 0 1.5px var(--ac)}
 .welcome-recent .wr-thumb{
-  position:relative;flex-shrink:0;width:42px;height:42px;border-radius:var(--r-sm);
-  background:var(--bg);overflow:hidden;
-  border:1px solid rgba(255,255,255,.06);
-  display:grid;place-items:center;color:var(--tx3);
+  flex:0 0 auto;width:32px;height:32px;border-radius:7px;background:var(--bg);overflow:hidden;
+  border:1px solid rgba(255,255,255,.07);display:grid;place-items:center;color:var(--tx3);
 }
 .welcome-recent .wr-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.welcome-recent .wr-thumb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6}
-.welcome-recent .wr-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;overflow:hidden}
-.welcome-recent .wr-name{font-size:var(--fs-md);font-weight:var(--fw-medium);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.welcome-recent .wr-sub{font-size:var(--fs-sm);color:var(--tx3);font-variant-numeric:tabular-nums}
-/* Per-row delete (×). Hidden until the row is hovered to keep the list
-   visually quiet; opacity transition prevents a flash on first paint. */
+.welcome-recent .wr-thumb svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.6}
+.welcome-recent .wr-meta{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.welcome-recent .wr-name{font-size:13px;line-height:16px;font-weight:var(--fw-medium);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-recent .wr-sub{display:flex;align-items:center;gap:7px;font-size:11.5px;line-height:14px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.welcome-recent .wr-ext{font-size:9.5px;font-weight:var(--fw-medium);letter-spacing:.05em;color:var(--tx2);background:var(--bg3);border-radius:4px;padding:0 5px;line-height:14px}
+.welcome-recent:hover .wr-ext,.welcome-recent:focus-visible .wr-ext{background:var(--bg4)}
+.welcome-recent .wr-age{flex:0 0 auto;font-size:11.5px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap;transition:opacity var(--dur-fast) var(--ease-out)}
+/* (the button takes the place of the age while the pointer is on the row) */
+.welcome-recent:hover .wr-age,.welcome-recent:focus-within .wr-age{opacity:0}
 .welcome-recent .wr-del{
-  flex-shrink:0;width:24px;height:24px;display:grid;place-items:center;
+  position:absolute;right:6px;top:10px;width:24px;height:24px;display:grid;place-items:center;
   background:transparent;border:none;border-radius:6px;color:var(--tx3);
   cursor:pointer;opacity:0;
   transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
@@ -230,37 +231,35 @@ body:not(.app-ready) #welcome-modal{opacity:0;pointer-events:none}
 .welcome-recent .wr-del:hover{background:var(--er-soft-strong);color:var(--er)}
 #welcome-recents-clear:hover{color:var(--er);border-color:var(--er-line);background:var(--er-tint-10)}
 
-/* Resume hero card — uses the most-recent thumb as a full-bleed
-   background, with a darkening gradient + accent play badge sitting over
-   the artwork. C4D's "Continue working on…" pattern. */
+/* The file that was open last, as a card: its picture across the whole card
+   under a shade that keeps the text readable, the name, and an arrow. */
 .welcome-resume{
-  position:relative;display:flex;align-items:flex-end;width:100%;height:180px;
-  margin-bottom:14px;padding:14px 16px;
+  position:relative;display:flex;align-items:flex-end;gap:12px;width:100%;height:88px;
+  padding:11px 14px;
   background:var(--bg2) center/cover no-repeat;
-  border:0;border-radius:var(--r-xl);
+  border:0;border-radius:10px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);
   color:var(--tx);text-align:left;cursor:pointer;overflow:hidden;
-  transition:filter 140ms var(--ease-out),transform var(--dur-fast) var(--ease-out),box-shadow 140ms var(--ease-out);
 }
-.welcome-resume:hover{filter:brightness(1.06)}
 .welcome-resume::before{
   content:'';position:absolute;inset:0;
-  background:linear-gradient(180deg,rgba(15,15,15,.30) 0%,rgba(15,15,15,.85) 90%);
+  background:linear-gradient(90deg,rgba(15,15,15,.88) 0%,rgba(15,15,15,.62) 55%,rgba(15,15,15,.25) 100%);
+  transition:opacity var(--dur-base) var(--ease-out);
 }
+.welcome-resume:not(.has-thumb)::before{display:none}
+.welcome-resume:hover::before,.welcome-resume:focus-visible::before{opacity:.82}
+.welcome-resume:focus-visible{outline:none;box-shadow:inset 0 0 0 1.5px var(--ac)}
 .welcome-resume > *{position:relative;z-index:1}
+.welcome-resume .wr-info{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.welcome-resume .wr-heading{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ac-text);margin-bottom:3px}
+.welcome-resume .wr-name{font-size:15px;line-height:19px;font-weight:var(--fw-semibold);color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-resume .wr-sub{font-size:11.5px;color:rgba(255,255,255,.62);font-variant-numeric:tabular-nums}
 .welcome-resume .wr-play{
-  width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
-  background:var(--ac);color:var(--tx-on-accent);
-  box-shadow:0 4px 14px var(--ac-tint-45),inset 0 1px 0 rgba(255,255,255,.25);
-  flex-shrink:0;margin-right:14px;
-  transition:transform 200ms cubic-bezier(.34,1.56,.64,1);
+  flex:0 0 auto;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
+  background:var(--ac);color:#fff;
+  transition:transform var(--dur-base) var(--ease-out);
 }
-.welcome-resume:hover .wr-play{transform:scale(1.12)}
-.welcome-resume .wr-play svg{width:16px;height:16px;stroke:currentColor;fill:currentColor;stroke-width:0}
-.welcome-resume .wr-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
-#welcome-resume .wr-heading{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--ac-text);margin-bottom:8px;padding-left:2px}
-.welcome-resume .wr-info .wr-name{display:block;font-size:var(--fs-2xl);font-weight:var(--fw-semibold);color:var(--tx-on-accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.welcome-resume .wr-info .wr-sub{display:block;font-size:var(--fs-sm);color:rgba(255,255,255,.65)}
-.welcome-resume .wr-age{align-self:flex-end;color:rgba(255,255,255,.55);font-size:var(--fs-sm);flex-shrink:0;margin-left:12px}
+.welcome-resume:hover .wr-play,.welcome-resume:focus-visible .wr-play{transform:translateX(3px)}
+.welcome-resume .wr-play svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2}
 button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
 input,select{font:inherit;color:inherit}
 #app{display:grid;height:100vh;width:100vw;transition:grid-template-columns 320ms cubic-bezier(.4,0,.2,1);grid-template-rows:44px 1fr 22px;grid-template-columns:var(--side-l-w) minmax(0,1fr) var(--side-r-w);}
@@ -1765,19 +1764,28 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .wl-opt input:checked + .switch{background:var(--ac)}
 .wl-opt input:focus-visible + .switch{outline:2px solid var(--ac-text);outline-offset:2px}
 #welcome-resume:empty + .wl-recents-head{margin-top:0}
-.wl-search{position:relative;margin-bottom:12px;}
+.wl-search{position:relative;flex:0 1 168px;min-width:0}
 .wl-search svg,.wl-search i{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;stroke:var(--tx3);fill:none;stroke-width:2}
-.wl-search input{box-sizing:border-box;width:100%;padding:0 10px 0 28px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);outline:none;height:34px;font-size:13px;}
+.wl-search input{box-sizing:border-box;width:100%;padding:0 8px 0 27px;background:var(--bg2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);outline:none;height:26px;font-size:12px;}
 .wl-search input:focus{border-color:var(--ac)}
-.wl-recents{display:flex;flex-direction:column;overflow-y:auto;padding-right:2px;gap:10px;max-height:320px;}
-.wl-recents-empty{font-size:12px;color:var(--tx3);padding:10px 2px}
+/* The list takes the height the left column leaves it (the rows line up with
+   the column's edges: the list reaches 7px past them, the rows' own padding). */
+.wl-recents{display:flex;flex-direction:column;gap:2px;flex:1 1 0;min-height:136px;overflow-y:auto;margin:0 -7px;scrollbar-gutter:stable}
+.wl-recents.more-below{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 26px),transparent)}
+.wl-recents.more-above{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 22px);mask-image:linear-gradient(to bottom,transparent,#000 22px)}
+.wl-recents.more-above.more-below{-webkit-mask-image:linear-gradient(to bottom,transparent,#000 22px,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(to bottom,transparent,#000 22px,#000 calc(100% - 26px),transparent)}
+.wl-recents-empty{font-size:12px;color:var(--tx3);padding:10px 0}
+.wl-recents:has(.wl-recents-none){scrollbar-gutter:auto}
+.wl-recents-none{flex:1 1 auto;margin:0 7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:16px 12px;border:1px dashed var(--bd);border-radius:10px;text-align:center;color:var(--tx2);font-size:13px}
+.wl-recents-none svg{width:20px;height:20px;stroke:var(--tx3);fill:none;stroke-width:1.6;margin-bottom:5px}
+.wl-recents-none span{font-size:12px;color:var(--tx3)}
 .wl-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;border-top:1px solid var(--bd);color:var(--tx3);margin-top:30px;padding-top:18px;font-size:12px;}
 .wl-foot kbd{font:inherit;color:var(--tx2);background:var(--bg3);border:1px solid var(--bd);border-radius:4px;padding:1px 5px;margin-right:5px}
 .wl-foot code{font-family:var(--font-sans);color:var(--ac-text)}
 .wl-dot{margin:0 8px;opacity:.6}
 .wl-link{all:unset;cursor:pointer;color:var(--tx2)}
 .wl-link:hover,.wl-link:focus-visible{color:var(--ac-text);text-decoration:underline}
-@media (max-width:720px){.wl-cols{grid-template-columns:1fr}}
+@media (max-width:720px){.wl-cols{grid-template-columns:1fr}.wl-recents{flex:0 0 auto;max-height:236px}}
 
 /* ── Viewport toolbars, Plasticity-style ─────────────────────────────────
    Two dark pills instead of rows of boxed buttons: tools down the left
@@ -1830,7 +1838,8 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .wl-act kbd{font-size:12px}
 .wl-shape{padding:14px 6px 12px;gap:8px;font-size:12px;border-radius:10px}
 .wl-opt input:checked + .switch::after{transform:translateX(14px)}
-.wl-recents-head{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px;}
+.wl-recents-head{display:flex;align-items:center;gap:8px;min-height:26px;margin:26px 0 12px;}
+.wl-recents-head .wl-label{margin:0 auto 0 0}
 /* The command palette's field is the whole bar; it needs no focus box of its own. */
 #cmdk-input,#cmdk-input:focus,#cmdk-input:focus-visible{outline:none!important;border:0!important;box-shadow:none!important}
 /* The log console slides up inside the viewport column and is fully out of
@@ -2768,18 +2777,15 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 :is(.wl-modal #welcome-close:hover,#_a#_b){background:rgba(255,255,255,.14);color:#fff}
 .wl-modal .modal-b{padding:0 36px 20px;position:relative}
 .wl-cols{gap:32px}
-.wl-drop{padding:18px 16px 16px;gap:9px}
+.wl-drop{padding:28px 16px 24px;gap:9px}
 .wl-drop>svg,.wl-drop>i{width:24px;height:24px}
 .wl-actions{margin-top:12px;gap:2px}
-.wl-act{height:36px}
+.wl-act{height:38px}
 .wl-label{margin:16px 0 8px}
 .wl-shapes{gap:8px}
 .wl-shape{flex-direction:row;justify-content:center;padding:7px 6px;gap:7px;border-radius:8px}
 .wl-shape-pic,.wl-shape-pic img{width:22px;height:22px}
-.wl-modal .welcome-resume{height:104px;margin-bottom:10px;border-radius:10px}
-.wl-modal .welcome-resume .wr-info .wr-name{font-size:var(--fs-lg)}
-.wl-recents-head{margin:14px 0 8px}
-.wl-recents{gap:6px;max-height:204px}
+.wl-recents-head{margin:12px 0 6px}
 .wl-foot{margin-top:18px;padding-top:12px;position:relative}
 /* the options: a popup standing on its word in the footer */
 .wl-optd{position:relative}
@@ -3992,10 +3998,10 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
           <div class="wl-col">
             <div id="welcome-resume"></div>
             <div class="wl-recents-head">
-              <div class="wl-label" style="margin:0">Recent files</div>
+              <div class="wl-label">Recent files</div>
+              <div class="wl-search"><i data-lucide="search"></i><input type="text" id="welcome-recents-filter" placeholder="Filter…" autocomplete="off" aria-label="Filter recent files"></div>
               <button id="welcome-recents-clear" title="Remove every entry from the recent files list" style="display:none;gap:5px;background:transparent;border:1px solid transparent;color:var(--tx3);cursor:pointer"><i data-lucide="trash-2" style="width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2"></i>Clear all</button>
             </div>
-            <div class="wl-search"><i data-lucide="search"></i><input type="text" id="welcome-recents-filter" placeholder="Filter recent files…" autocomplete="off"></div>
             <div id="welcome-recents" class="wl-recents"></div>
             <div class="wl-recents-empty" id="welcome-recents-nomatch" style="display:none">No recent file matches.</div>
           </div>
