@@ -123,9 +123,7 @@
   T.exportAs = async (fmt, maxMs = 20000) => {
     T.capture(); T.blobs.length = 0;
     const t0 = performance.now();
-    document.getElementById('btn-export').click(); await T.sleep(300);
-    const menu = [...document.querySelectorAll('.export-menu-item[data-fmt="' + fmt + '"]')].find(x => x.offsetParent);
-    if (menu) { menu.click(); await T.sleep(400); }
+    document.getElementById('btn-export').click(); await T.sleep(400);
     const card = document.querySelector('.fmt-card[data-fmt="' + fmt + '"]');
     if (card && card.offsetParent) { card.click(); await T.sleep(200); }
     const go = document.getElementById('export-confirm');
@@ -599,17 +597,17 @@
     T.assert(!cls('Group 1').contains('selected'), 'the group stayed bright after one of its parts was clicked');
   });
 
-  test('top bar: Export opens its own menu and leaves File alone', async () => {
+  test('top bar: Export opens the export dialog (no dropdown) and leaves File alone', async () => {
     await T.fresh(['cube']);
     const exp = document.getElementById('btn-export'), file = document.getElementById('btn-file');
     const expWrap = exp.closest('.export-wrap'), fileWrap = file.closest('.export-wrap');
     T.assert(expWrap !== fileWrap, 'Export and File share a wrapper');
-    exp.click(); await T.sleep(150);
-    T.assert(document.getElementById('export-menu').classList.contains('show'), 'the Export menu did not open');
-    T.assert(expWrap.classList.contains('open'), 'the Export arrow did not flip');
+    T.assert(!document.getElementById('export-menu') && !exp.querySelector('.caret'), 'Export still has a dropdown or an arrow');
+    exp.click(); await T.sleep(300);
+    T.assert(document.getElementById('export-modal').classList.contains('show'), 'the export dialog did not open');
     T.assert(!fileWrap.classList.contains('open'), 'opening Export flipped the File arrow');
+    document.getElementById('export-close')?.click(); await T.sleep(300);
     file.click(); await T.sleep(150);
-    T.assert(!document.getElementById('export-menu').classList.contains('show') && !expWrap.classList.contains('open'), 'opening File left Export open');
     T.eq(file.getAttribute('aria-expanded'), 'true', 'the File menu did not open');
     file.click(); await T.sleep(150);
     T.assert(!fileWrap.classList.contains('open') && file.getAttribute('aria-expanded') === 'false', 'the File menu did not close');
@@ -1175,9 +1173,7 @@
   test('shortcuts: nothing acts on the scene behind a dialog; Ctrl+S does not isolate', async () => {
     await T.fresh(['cube', 'sphere']);
     await T.pick(['Cube']);
-    document.getElementById('btn-export').click(); await T.sleep(300);
-    const menu = [...document.querySelectorAll('.export-menu-item[data-fmt="glb"]')].find(x => x.offsetParent);
-    if (menu) { menu.click(); await T.sleep(400); }
+    document.getElementById('btn-export').click(); await T.sleep(400);
     T.assert(!!document.querySelector('.modal-bg.show'), 'export dialog did not open');
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
     await T.sleep(400); await T.ok(); await T.sleep(200);

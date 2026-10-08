@@ -98,8 +98,8 @@
   --r-pill:999px;
 
   /* Type scale (kept in px, lined up with the existing ramp) */
-  --fs-2xs:9.5px;
-  --fs-xs:10.5px; --fs-sm:11.5px; --fs-md:12.5px; --fs-lg:13px; --fs-xl:14px;
+  --fs-2xs:10px;
+  --fs-xs:11px; --fs-sm:12px; --fs-md:13px; --fs-lg:13px; --fs-xl:14px;
   --fs-2xl:16px;
   /* Off-grid sizes the codebase actually uses — kept named so future drift is visible. */
   --fs-9:9px;
@@ -224,15 +224,16 @@ input,select{font:inherit;color:inherit}
 body.left-collapsed{--side-l-w:10px}      /* folded: a little of the dark window stays at the left, the view does not run to the edge */
 body.left-collapsed #sidebar-left{opacity:0;transform:translateX(-12px);pointer-events:none;overflow:hidden}
 body.resizing #app{transition:none}
-/* The drag handles of the two sidebars. Each is a cell of the app grid on the row of the viewport, 16px wide and centred on the gap between
-   its sidebar and the viewport (the viewport's edge on the left, the middle of the 12px gap on the right). A thin line shows in the
-   middle of it under the pointer, and fades out toward both ends. */
-.resize-handle{position:relative;grid-row:2;align-self:stretch;justify-self:start;width:16px;cursor:col-resize;z-index:var(--z-sticky);background:transparent;touch-action:none}
-.resize-handle::after{content:'';position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;border-radius:1px;pointer-events:none;opacity:0;
-  background:linear-gradient(to bottom,transparent 0,var(--ac) 22%,var(--ac) 78%,transparent 100%);transition:opacity .16s var(--ease-out)}
-/* the line comes only after the pointer has rested on the handle for a moment (passing over it shows nothing), and goes at once when it leaves */
-.resize-handle:hover::after{opacity:.5;transition:opacity .2s var(--ease-out) .35s}
-.resize-handle.dragging::after{opacity:.75;transition:opacity .1s linear}
+/* The drag handles of the two sidebars. Each is a cell of the app grid on the status-bar row (the only part of the edge that is grabbable, so
+   nothing over the viewport or the sidebars can be caught by accident), 16px wide and centred on the gap between its sidebar and the
+   viewport (the viewport's edge on the left, the middle of the 12px gap on the right). A short faint notch shows in the middle of it
+   once the pointer has rested on it for a moment; otherwise it is invisible. */
+.resize-handle{position:relative;grid-row:3;align-self:stretch;justify-self:start;width:16px;cursor:col-resize;z-index:calc(var(--z-toolbar) + 2);background:transparent;touch-action:none}
+.resize-handle::after{content:'';position:absolute;top:50%;left:50%;width:2px;height:12px;margin:-6px 0 0 -1px;border-radius:1px;pointer-events:none;opacity:0;
+  background:var(--ac);transition:opacity .16s var(--ease-out)}
+/* the notch comes only after the pointer has rested on the handle for a moment (passing over it shows nothing), and goes at once when it leaves */
+.resize-handle:hover::after{opacity:.55;transition:opacity .2s var(--ease-out) .3s}
+.resize-handle.dragging::after{opacity:.8;transition:opacity .1s linear}
 #resize-l{grid-column:2;margin-left:-8px}
 #resize-r{grid-column:3;margin-left:-2px}
 body.left-collapsed #resize-l{display:none}
@@ -256,7 +257,7 @@ body.resizing *{cursor:col-resize !important}
 .brand-menu-mark{width:34px;height:34px;border-radius:var(--r-lg);display:grid;place-items:center;flex:0 0 auto}
 .brand-menu-mark svg{width:18px;height:18px}
 .brand-menu-titles{flex:1 1 auto;min-width:0}
-.brand-menu-title{font-size:13.5px;font-weight:var(--fw-semibold);line-height:var(--lh-tight);color:var(--white);}
+.brand-menu-title{font-size:14px;font-weight:var(--fw-semibold);line-height:var(--lh-tight);color:var(--white);}
 .brand-menu-tagline{font-size:var(--fs-11);margin-top:2px;line-height:var(--lh-tight);color:rgba(255,255,255,.65);}
 .brand-menu-ver{font-size:var(--fs-xs);font-weight:var(--fw-semibold);border:1px solid var(--bd);border-radius:var(--r-sm);padding:2px 7px;letter-spacing:var(--tracking-mono);flex:0 0 auto;color:var(--white);background:var(--s6);border-color:var(--s6);}
 .brand-menu-about{font-size:var(--fs-sm);line-height:var(--lh-relaxed);padding:0 10px 4px;color:rgba(255,255,255,.82);}
@@ -1322,7 +1323,7 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .dlg-text{flex:1;min-width:0;padding-top:2px}
 .dlg-title{font-size:15px;font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:-.01em;margin-bottom:6px}
 .dlg-msg{color:var(--tx2);font-size:var(--fs-lg);line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
-.dlg-input{display:none;width:100%;margin-top:14px;padding:10px 12px;background:var(--s2);border:1px solid var(--s4);border-radius:var(--r-md);color:var(--tx);font-size:13.5px;font-family:inherit;outline:none;transition:border-color .15s,background .15s,box-shadow .15s}
+.dlg-input{display:none;width:100%;margin-top:14px;padding:10px 12px;background:var(--s2);border:1px solid var(--s4);border-radius:var(--r-md);color:var(--tx);font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,background .15s,box-shadow .15s}
 .dlg-input:focus{border-color:var(--ac-tint-55);background:var(--s3);box-shadow:0 0 0 3px var(--ac-tint-15)}
 .dlg-foot{display:flex;justify-content:flex-end;gap:var(--space-md);padding:18px 22px 20px;margin-top:18px}
 .dlg-btn{font:inherit;border:1px solid transparent;cursor:pointer;font-weight:var(--fw-medium);transition:transform .08s,filter .12s,background .12s,border-color .12s;letter-spacing:var(--tracking-snug)}
@@ -1385,8 +1386,8 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .exp-win{display:flex;width:840px;max-width:96vw;height:min(620px,90vh);background:var(--bg1);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh),0 0 0 1px var(--surface-line);transform:translateY(8px) scale(.97);opacity:0;transition:transform var(--dur-slow) var(--ease-out),opacity 180ms var(--ease-out)}
 #export-modal.show .exp-win{transform:translateY(0) scale(1);opacity:1}
 .exp-sidebar{width:212px;flex:0 0 212px;background:var(--surface-inset);border-right:1px solid var(--surface-line);overflow-y:auto;padding:16px 8px 12px}
-.exp-side-h{padding:0 10px 12px;font-size:15px;color:var(--tx-control-hover)}
-.exp-cat-label{font-size:var(--fs-xs);font-weight:var(--fw-medium);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3);padding:16px 10px 5px}
+.exp-side-h{padding:0 10px 12px;font-size:var(--fs-2xl);font-weight:var(--fw-semibold);color:var(--tx-control-hover)}
+.exp-cat-label{font-size:var(--fs-11);font-weight:var(--fw-medium);text-transform:uppercase;letter-spacing:var(--tracking-wide);color:var(--tx3);padding:16px 10px 5px}
 #format-grid>.exp-cat-label:first-child{padding-top:2px}
 .fmt-card{all:unset;display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:8px;cursor:pointer;width:100%;box-sizing:border-box;transition:background var(--dur-fast) var(--ease-out)}
 .fmt-card:hover{background:var(--s3)}
@@ -1395,25 +1396,25 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .fmt-icon{width:28px;height:28px;background:var(--s3);border-radius:8px;display:grid;place-items:center;flex:0 0 28px;color:var(--tx3);transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .fmt-icon i{display:block;width:14px;height:14px}
 .fmt-card.selected .fmt-icon{background:var(--ac);color:var(--tx-on-accent)}
-.fmt-name{font-size:var(--fs-md);color:var(--tx-control);font-weight:var(--fw-medium);display:block;line-height:1.2}
+.fmt-name{font-size:var(--fs-12);color:var(--tx-control);font-weight:var(--fw-medium);display:block;line-height:1.2}
 .fmt-card.selected .fmt-name{color:var(--tx-control-hover)}
-.fmt-sub{font-size:var(--fs-xs);color:var(--tx3);display:block;line-height:1.3;margin-top:2px}
+.fmt-sub{font-size:var(--fs-11);color:var(--tx3);display:block;line-height:1.3;margin-top:2px}
 .exp-content{flex:1;display:flex;flex-direction:column;min-width:0}
 .exp-content-h{padding:18px 20px 16px 26px;border-bottom:1px solid var(--surface-line);display:flex;align-items:flex-start;justify-content:space-between;flex:0 0 auto;gap:12px}
-.exp-fmt-title{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:var(--fw-semibold);line-height:1.1;letter-spacing:-.01em;color:var(--tx-control-hover)}
+.exp-fmt-title{display:flex;align-items:center;gap:10px;font-size:var(--fs-2xl);font-weight:var(--fw-semibold);line-height:1.2;color:var(--tx-control-hover)}
 .exp-fmt-ext{font:500 11px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:0;padding:4px 7px;border-radius:var(--r-sm);background:var(--s4);color:var(--tx2)}
 .exp-fmt-desc{font-size:var(--fs-12);color:var(--tx3);margin-top:6px;line-height:1.45;max-width:420px}
 .exp-h-act{display:flex;gap:8px;align-items:center;flex-shrink:0}
 .exp-h-act .btn-sm i{width:13px;height:13px}
 .exp-content-b{flex:1 1 auto;overflow-y:auto;padding:4px 26px 20px;min-height:0}
 .exp-content-b .sv-sum{margin-top:18px}
-.exp-group-title{margin:22px 0 4px;font-size:var(--fs-xs);font-weight:var(--fw-medium);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
+.exp-group-title{margin:22px 0 4px;font-size:var(--fs-11);font-weight:var(--fw-medium);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
 /* one row style for everything: what it is (and what it does) left, the control right */
 .exp-win .exp-row{display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:48px;box-sizing:border-box;padding:8px 0;margin:0;border-top:1px solid var(--hairline);font-size:var(--fs-13)}
 .exp-win .exp-group-title+.exp-row,.exp-win .exp-group-title+.exp-name{border-top:0}
 .exp-win .exp-row>.exp-row-l,.exp-win .toggle>.exp-row-l{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px;white-space:normal;overflow:visible;text-overflow:clip}
-.exp-row-l b{font-weight:var(--fw-medium);font-size:var(--fs-13);color:var(--tx-control-hover)}
-.exp-row-l small{font-size:var(--fs-sm);color:var(--tx3);line-height:1.4}
+.exp-row-l b{font-weight:var(--fw-medium);font-size:var(--fs-12);color:var(--tx-control-hover)}
+.exp-row-l small{font-size:var(--fs-11);color:var(--tx3);line-height:1.4}
 .exp-win .exp-row>:is(.cs-wrap,select,.exp-num){flex:0 0 212px;width:212px!important;box-sizing:border-box}
 .exp-win .exp-row .cs-wrap .cs-trigger{width:100%}
 .exp-num{height:var(--btn-h-md);padding:0 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--btn-r-md);color:var(--tx);font-size:var(--fs-12);font-variant-numeric:tabular-nums;outline:none;transition:border-color var(--dur-base) var(--ease-out)}
@@ -1426,14 +1427,17 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .exp-name-box:hover{border-color:var(--bd2)}
 .exp-name-box:focus-within{border-color:var(--ac)}
 .exp-name-box input{flex:1;min-width:0;padding:0 12px;border:0;background:none;outline:none;font:inherit;font-size:var(--fs-13);color:var(--tx)}
-.exp-name-ext{display:inline-flex;align-items:center;padding:0 12px;background:var(--s1);border-left:1px solid var(--surface-line);color:var(--tx3);font:500 12px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.exp-name-ext{display:inline-flex;align-items:center;padding:0 12px;background:var(--s1);border-left:1px solid var(--surface-line);color:var(--tx3);font:500 11px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .exp-name .sv-chips{margin-top:10px}
 #exp-source-note{margin-top:16px;padding:10px 12px;background:var(--wn-tint-08);border:1px solid rgba(251,191,36,.2);border-radius:var(--r-md);color:var(--wn);font-size:var(--fs-sm);line-height:var(--lh-base)}
 .exp-content-f{padding:12px 20px 12px 26px;border-top:1px solid var(--surface-line);background:var(--surface-inset);flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:14px}
 .exp-foot-note{min-width:0;font-size:var(--fs-12);color:var(--tx3);line-height:1.4}
 .exp-foot-note.is-warn{color:var(--wn)}
 .exp-foot-act{display:flex;align-items:center;gap:8px;flex-shrink:0}
-#export-confirm{min-width:150px}
+#export-confirm{min-width:150px;font-size:var(--fs-12)}
+#export-modal #export-compat-btn{font-size:var(--fs-12)}
+#export-modal .sv-chip{font-size:var(--fs-11)}
+#export-modal .sv-sum b{font-size:var(--fs-13)}
 #export-confirm svg,#export-confirm i{width:15px;height:15px}
 #export-confirm:disabled{opacity:.45;cursor:default}
 /* Format-compatibility reference table — opened from "Compare formats" in
@@ -1475,7 +1479,7 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 #file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);padding:12px 14px;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx);line-height:1.8}
 
 /* Global Log Console */
-#log-console{position:fixed;bottom:22px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px -16px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:var(--z-toolbar);font:11.5px/1.5 var(--font-sans)}
+#log-console{position:fixed;bottom:22px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px -16px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:var(--z-toolbar);font:12px/1.5 var(--font-sans)}
 .lc-grip{position:absolute;top:-3px;left:0;right:0;height:6px;cursor:ns-resize;z-index:1}
 .lc-grip:hover{background:var(--ac-tint-15)}
 .lc-h{display:flex;align-items:center;gap:var(--space-md);padding:6px 10px;border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:var(--font-sans)}
@@ -1531,7 +1535,7 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
   position:fixed;z-index:var(--z-tooltip);pointer-events:none;
   color:var(--tx);
   padding:6px 10px;
-  font:500 11.5px/1.4 var(--font-sans);
+  font:500 12px/1.4 var(--font-sans);
   letter-spacing:var(--tracking-snug);
   max-width:280px;
   opacity:0;transform:translateY(2px);
@@ -1563,7 +1567,7 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 :root{
   --btn-h-sm:26px; --btn-h-md:32px; --btn-h-lg:40px;
   --btn-px-sm:9px; --btn-px-md:12px; --btn-px-lg:18px;
-  --btn-fs-sm:11.5px; --btn-fs-md:12px; --btn-fs-lg:13px;
+  --btn-fs-sm:12px; --btn-fs-md:12px; --btn-fs-lg:13px;
   --btn-icon:14px; --btn-gap:6px;--menu-pad:8px;--menu-item-r:6px;--menu-item-h:28px;--menu-fs:12px;
 }
 /* md — the default */
@@ -1902,15 +1906,15 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .vp-drop-card svg{width:28px;height:28px;stroke:var(--ac);stroke-width:1.6;fill:none;margin-bottom:4px}
 .vp-drop-t{font-size:var(--fs-xl);font-weight:var(--fw-semibold)}
 .vp-drop-s{font-size:var(--fs-12);color:var(--tx3)}
-/* Right sidebar hierarchy: a group label (Inspect / Clean up / Reduce), then
+/* Right sidebar hierarchy: a group label (View / Select / Find / Optimise), then
    sections with plain titles. One filled button per section at most; lists of
    one-off commands are quiet rows. */
-.side-group{padding:14px 4px 7px;font-size:var(--fs-10,10.5px);font-weight:var(--fw-semibold);letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);user-select:none}
+.side-group{padding:14px 4px 7px;font-size:var(--fs-10,10px);font-weight:var(--fw-semibold);letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);user-select:none}
 #sidebar-right .section-h{text-transform:none;letter-spacing:0;font-size:var(--fs-12);font-weight:var(--fw-medium);color:var(--tx)}
 #sidebar-right .section-h.collapsed{color:var(--tx2)}
 #sidebar-right .btn.primary{background:var(--ac);border-color:transparent;color:var(--white)}
 #sidebar-right .btn.primary:hover{background:color-mix(in srgb,var(--ac) 88%,var(--white));border-color:transparent}
-/* A column of commands (Auto cleanup, Tidy geometry, Optimize). They are the
+/* A column of commands (Quick fixes, Edit selection, Optimize). They are the
    same buttons as everywhere else in the sidebar, with the same gap between
    them; `quiet` only sets the label to the left, after the icon. (They used
    to be borderless rows, which read as a different kind of control.) */
@@ -1940,7 +1944,7 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .lib-opts .mac-sel{flex:0 0 68px}
 .lib-opts .size-field{height:var(--btn-h-md);padding:0 8px}
 #lib-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:0 10px 10px}
-.lib-shelf{padding:28px 2px 9px;font-size:var(--fs-10,10.5px);font-weight:var(--fw-semibold);letter-spacing:.09em;text-transform:uppercase;color:var(--tx3)}
+.lib-shelf{padding:28px 2px 9px;font-size:var(--fs-10,10px);font-weight:var(--fw-semibold);letter-spacing:.09em;text-transform:uppercase;color:var(--tx3)}
 .lib-sec:first-child>.lib-shelf{padding-top:12px}
 .lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
 /* A tile: the part's studio picture on a soft spot of light, its name under it. */
@@ -1998,7 +2002,7 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 #vp-materials-pop.mat-dock{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;width:auto;max-height:none;display:flex;flex-direction:column;overflow:hidden;padding:0;border:0;border-top:1px solid var(--bd);border-radius:0;
   box-shadow:0 -8px 24px -16px rgba(0,0,0,.5);z-index:var(--z-toolbar);opacity:1;pointer-events:auto;transform-origin:50% 100%;
   transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform .2s var(--ease-out),visibility 0s linear .2s;
-  font:11.5px/1.5 var(--font-sans)}
+  font:12px/1.5 var(--font-sans)}
 #vp-materials-pop.mat-dock.show{transform:translateY(0);visibility:visible;transition:transform .2s var(--ease-out),visibility 0s}
 /* the toolbar and the tips move up with it, so nothing is covered */
 .vpc.tr,.vpc.br{transition:bottom .2s var(--ease-out)}
@@ -2069,6 +2073,8 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
 .tree-toolbar .tree-icon-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:44px;padding:0 2px}
 .tree-toolbar .tree-icon-btn span{font-size:var(--fs-xs);line-height:1;letter-spacing:.01em;white-space:nowrap;color:inherit}
 .tree-toolbar .tree-icon-btn svg{width:15px;height:15px;flex:0 0 auto}
+/* the buttons above the tree are cards like the ones in the right sidebar: the same fill, no outline */
+.tree-toolbar .tree-icon-btn,.tree-toolbar .tree-icon-btn:hover,.tree-toolbar .tree-icon-btn.active{border-color:transparent}
 /* Scrollbars without arrow buttons: a slim thumb on a clear track. (The
    standard scrollbar-width / scrollbar-color pair draws the system bar,
    arrows included, so Chromium gets the ::-webkit- version instead.) */
@@ -2408,7 +2414,6 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
    the right with Screenshot. The scene's name is a document tab. */
 #tb #btn-undo,#tb #btn-redo,#tb #btn-redo+.doc-tabs~.divider,#tb .divider:has(+#btn-undo){display:none}
 #tb .export-wrap:has(#btn-export){order:2}
-#tb #export-menu{left:auto;right:0;transform-origin:top right}
 .doc-tabs{display:flex;min-width:0;flex:0 1 auto;margin-left:6px;gap:2px;align-items:center;}       /* margin-left is set by _alignDocTab: the tab starts at the viewport's left edge */
 .doc-tab{display:inline-flex;align-items:center;gap:7px;min-width:0;width:var(--doc-tab-w,172px);height:var(--btn-h-md,32px);box-sizing:border-box;padding:0 10px;
   background:var(--bg2);border-radius:var(--btn-r-md,6px);color:var(--tx-control);font-size:var(--fs-12)}
@@ -2451,6 +2456,52 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
    window is short; what cannot run right now is dimmed. */
 #ctx-menu .ctx-menu-row.is-off{opacity:.38;cursor:default}
 #ctx-menu .ctx-menu-row.is-off:hover{background:none}
+/* ── Quick wand (hold W: a ring of commands around the pointer) ─────────── */
+#quick-wand{position:fixed;inset:0;display:none;z-index:330;pointer-events:none;user-select:none;font-size:var(--fs-xs);color:var(--tx);opacity:0;transition:opacity var(--dur-instant) var(--ease-out)}
+#quick-wand.is-in{opacity:1}
+#quick-wand .qw-ring{position:absolute;width:0;height:0;transform:scale(.88);transition:transform var(--dur-base) var(--ease-out)}
+#quick-wand.is-in .qw-ring{transform:none}
+#quick-wand .qw-svg{position:absolute;overflow:visible}
+#quick-wand .qw-slice,#quick-wand .qw-sub{fill:var(--surface-pop);stroke:var(--surface-pop);stroke-width:1;stroke-linejoin:round;transition:fill var(--dur-instant) var(--ease-out),stroke var(--dur-instant) var(--ease-out)}
+#quick-wand .qw-slice.is-hot,#quick-wand .qw-sub.is-hot{fill:var(--ac);stroke:var(--ac)}
+#quick-wand .qw-slice.danger.is-hot,#quick-wand .qw-sub.danger.is-hot{fill:var(--er);stroke:var(--er)}
+#quick-wand .qw-sub{fill:var(--bg3);stroke:var(--bg3)}
+#quick-wand .qw-pop,#quick-wand .qw-pop2{fill:var(--ac);stroke:var(--ac);stroke-width:1;stroke-linejoin:round;opacity:0;transform:scale(1);transform-origin:0 0;pointer-events:none;filter:drop-shadow(0 5px 9px rgba(0,0,0,.42));transition:transform var(--dur-slow) cubic-bezier(.34,1.56,.64,1),opacity var(--dur-fast) var(--ease-out)}
+#quick-wand .qw-pop.is-on{opacity:1;transform:scale(1.075)}
+#quick-wand .qw-pop2.is-on{opacity:1;transform:scale(1.03)}
+#quick-wand .qw-pop.danger{fill:var(--er);stroke:var(--er)}
+#quick-wand .qw-pop2{fill:color-mix(in srgb, var(--ac) 40%, var(--bg3));stroke:color-mix(in srgb, var(--ac) 40%, var(--bg3));filter:drop-shadow(0 3px 6px rgba(0,0,0,.28));transition:transform var(--dur-base) var(--ease-out),opacity var(--dur-fast) var(--ease-out)}
+#quick-wand .qw-pop2.danger{fill:color-mix(in srgb, var(--er) 40%, var(--bg3));stroke:color-mix(in srgb, var(--er) 40%, var(--bg3))}
+#quick-wand .qw-sub.is-hot{fill:color-mix(in srgb, var(--ac) 40%, var(--bg3));stroke:color-mix(in srgb, var(--ac) 40%, var(--bg3))}
+#quick-wand .qw-sub.danger.is-hot{fill:color-mix(in srgb, var(--er) 40%, var(--bg3));stroke:color-mix(in srgb, var(--er) 40%, var(--bg3))}
+#quick-wand .qw-subico{transition:translate var(--dur-base) var(--ease-out)}
+#quick-wand .qw-subico.is-hot{translate:var(--dx,0) var(--dy,0)}
+/* a fan sweeps out one command after another (backwards: only the start is held, so a dimmed one stays dimmed) */
+@keyframes qw-fan-in{from{opacity:0;transform:scale(.86)}}
+@keyframes qw-fade-in{from{opacity:0}}
+#quick-wand .qw-sub{transform-origin:0 0;animation:qw-fan-in var(--dur-slow) var(--ease-out) backwards;animation-delay:calc(var(--j,0) * 24ms)}
+#quick-wand .qw-subico{animation:qw-fade-in var(--dur-slow) var(--ease-out) backwards;animation-delay:calc(var(--j,0) * 24ms + 30ms)}
+#quick-wand .qw-lab{animation:qw-fade-in var(--dur-slow) var(--ease-out) backwards;animation-delay:calc(var(--j,0) * 24ms + 70ms)}
+#quick-wand .qw-items,#quick-wand .qw-fanlabels{position:absolute;left:0;top:0;width:0;height:0}
+#quick-wand .qw-item{position:absolute;translate:-50% -50%;display:flex;flex-direction:column;align-items:center;gap:2px;width:56px;text-align:center;line-height:1.1;color:var(--tx);font-size:var(--fs-xs)}
+#quick-wand .qw-item svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;color:var(--tx2)}
+#quick-wand .qw-item{transition:scale var(--dur-slow) cubic-bezier(.34,1.56,.64,1),translate var(--dur-slow) cubic-bezier(.34,1.56,.64,1)}
+#quick-wand .qw-item.is-hot{scale:1.08;translate:calc(-50% + var(--dx,0px)) calc(-50% + var(--dy,0px))}
+#quick-wand .qw-item.is-hot,#quick-wand .qw-item.is-hot svg{color:var(--tx-on-accent)}
+#quick-wand .qw-item.danger,#quick-wand .qw-item.danger svg{color:var(--er)}
+#quick-wand .qw-item.danger.is-hot,#quick-wand .qw-item.danger.is-hot svg{color:var(--white)}
+#quick-wand .is-off{opacity:.42}
+#quick-wand .qw-subico div{display:grid;place-items:center;width:18px;height:18px;color:var(--tx2)}
+#quick-wand .qw-subico svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+#quick-wand .qw-subico.is-hot div{color:var(--tx)}
+#quick-wand .qw-lab{position:absolute;white-space:nowrap;padding:2px 7px;border-radius:var(--r-pill);background:var(--surface-pop);box-shadow:var(--surface-ring);color:var(--tx2);font-size:var(--fs-xs)}
+#quick-wand .qw-lab{transition:scale var(--dur-base) var(--ease-out),background var(--dur-instant) var(--ease-out)}
+#quick-wand .qw-lab-r{margin-left:8px;opacity:.55;font-size:var(--fs-9)}
+#quick-wand .qw-hint{position:fixed;left:50%;bottom:72px;translate:-50% 0;padding:5px 12px;border-radius:var(--r-pill);background:var(--surface-pop);box-shadow:var(--surface-ring);color:var(--tx2);font-size:var(--fs-xs);white-space:nowrap}
+#quick-wand .qw-hint:empty{display:none}
+#quick-wand .qw-lab.is-hot{background:color-mix(in srgb, var(--ac) 40%, var(--bg3));color:var(--tx);scale:1.03}
+@media (prefers-reduced-motion:reduce){#quick-wand .qw-sub,#quick-wand .qw-subico,#quick-wand .qw-lab{animation:none}#quick-wand .qw-pop,#quick-wand .qw-pop2{transition:none}#quick-wand .qw-pop.is-on,#quick-wand .qw-pop2.is-on{transform:none}#quick-wand .qw-item.is-hot{scale:1;translate:-50% -50%}}
+
 /* a row that opens a list beside it (Open recent on a tab's menu) */
 #ctx-menu .ctx-menu-chev{width:14px;height:14px;flex:0 0 14px;margin-left:auto;stroke-width:2;color:inherit;opacity:.7}
 :is(#ctx-menu .ctx-menu-row.is-open,#_a#_b){background:var(--ac);color:var(--tx-on-accent)}
@@ -2581,7 +2632,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    Menus, popovers, tooltips, toasts, dialogs, windows and the command panels
    all sit on --surface-pop. It is a step above the UI black (#101010) so a
    surface reads against the page, and well below the old #1e1e1e. */
-.cp-pop,.vp-cmd-host>.section-cmd,.cs-pop,#file-menu,#export-menu,.vp-pill-menu,.brand-menu{background:var(--surface-pop)}
+.cp-pop,.vp-cmd-host>.section-cmd,.cs-pop,#file-menu,.vp-pill-menu,.brand-menu{background:var(--surface-pop)}
 .brand-menu{background-image:none}
 
 /* Search: a popup standing on its button in the bottom toolbar. A search
@@ -2886,7 +2937,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 @media (prefers-reduced-motion:reduce){#sidebar-right .section-h .chev{transition:none}}
 /* a count on a card's header, seen while the card is folded */
 .section-h>span:first-child{flex:0 0 auto}
-.section-h .sec-count{margin:0 auto 0 8px;min-width:18px;height:18px;padding:0 6px;box-sizing:border-box;display:inline-grid;place-items:center;border-radius:9px;background:var(--s3);color:var(--tx2);font-size:var(--fs-10,10.5px);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;line-height:1}
+.section-h .sec-count{margin:0 auto 0 8px;min-width:18px;height:18px;padding:0 6px;box-sizing:border-box;display:inline-grid;place-items:center;border-radius:9px;background:var(--s3);color:var(--tx2);font-size:var(--fs-10,10px);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;line-height:1}
 .section-h .sec-count[hidden]{display:none}
 .section-h .sec-count.is-zero{background:var(--s2);color:var(--tx3)}
 /* ── Heavy parts: tick rows ────────────────────────────────────────────────
@@ -2921,7 +2972,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #vp-library-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--lib-dock-h),80vh);
   display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:#1a1a1a;box-shadow:0 -8px 24px -16px rgba(0,0,0,.5);
   z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform .2s var(--ease-out),visibility 0s linear .2s;
-  font:11.5px/1.5 var(--font-sans)}
+  font:12px/1.5 var(--font-sans)}
 #vp-library-pop.show{transform:translateY(0);visibility:visible;transition:transform .2s var(--ease-out),visibility 0s}
 body.lib-dock-open .vpc.tr{bottom:calc(min(var(--lib-dock-h),80vh) + 12px)}
 body.lib-dock-open .vpc.br{bottom:calc(min(var(--lib-dock-h),80vh) + 10px)}
@@ -2975,7 +3026,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
 .lib-shelf-act:hover{color:var(--tx)}
 /* small tiles: more of them at once */
 #lib-list.is-small .lib-sec:not([data-shelf="Recently used"]) .lib-grid{grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px}
-#lib-list.is-small .lib-sec:not([data-shelf="Recently used"]) .lib-name{padding:4px 4px 7px;font-size:var(--fs-10,10.5px)}
+#lib-list.is-small .lib-sec:not([data-shelf="Recently used"]) .lib-name{padding:4px 4px 7px;font-size:var(--fs-10,10px)}
 #lib-list.is-small .lib-sec:not([data-shelf="Recently used"]) .lib-pic img{inset:8px 10px 2px;width:calc(100% - 20px);height:calc(100% - 10px)}
 /* large or small tiles: the same two-way switch as the materials' grid / list */
 .lib-view-toggle{display:inline-flex;align-items:center;flex:0 0 auto;box-sizing:border-box;height:var(--btn-h-sm);padding:2px;gap:2px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm)}
@@ -3088,7 +3139,7 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubi
 #_brn-dialog .brn-seg{display:flex;flex-wrap:wrap;gap:6px}
 /* what the Quick tab built */
 #_brn-dialog .brn-hint{display:flex;align-items:center;gap:8px;margin-top:2px;padding:9px 10px;border-radius:8px;background:var(--s1);font-size:var(--fs-sm);color:var(--tx3)}
-#_brn-dialog .brn-hint code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 11.5px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--tx2);background:none;padding:0}
+#_brn-dialog .brn-hint code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 12px/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--tx2);background:none;padding:0}
 #_brn-dialog .brn-hint .sv-chip{flex:none}
 #_brn-dialog .brn-numopts[hidden]{display:none}
 #_brn-dialog .brn-numopts{margin-top:12px}
@@ -3167,6 +3218,7 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubi
 /* Dynamic place: a hand over the selection, a closed hand while it is held; the viewport hint stays out of the way */
 body.dyn-place #canvas{cursor:crosshair}
 body.dyn-place.dyn-over #canvas{cursor:grab}
+body.dyn-place.dyn-handle #canvas,body.dyn-scaling #canvas{cursor:ns-resize}
 body.dyn-placing,body.dyn-placing #canvas{cursor:grabbing!important}
 /* Shading card: small 3D parts, one for each look */
 .shade-group{margin:0 0 12px}
@@ -3197,7 +3249,7 @@ body.dyn-placing,body.dyn-placing #canvas{cursor:grabbing!important}
    Only the places where text is typed or read at length stay selectable: fields, the console log, the help articles. */
 html,body{user-select:none;-webkit-user-select:none}
 :is(input,textarea,[contenteditable="true"],[contenteditable=""],#log-console,#log-console *,.hp-art,.hp-art *,.selectable,.selectable *){user-select:text;-webkit-user-select:text}
-.shade-badge{position:absolute;top:4px;left:4px;z-index:1;padding:2px 5px;border-radius:var(--r-pill);font-style:normal;font-size:8.5px;font-weight:var(--fw-semibold);letter-spacing:.05em;line-height:1;text-transform:uppercase;color:var(--tx2);background:color-mix(in srgb,var(--black) 55%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--white) 10%,transparent);pointer-events:none;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.shade-badge{position:absolute;top:4px;left:4px;z-index:1;padding:2px 5px;border-radius:var(--r-pill);font-style:normal;font-size:9px;font-weight:var(--fw-semibold);letter-spacing:.05em;line-height:1;text-transform:uppercase;color:var(--tx2);background:color-mix(in srgb,var(--black) 55%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--white) 10%,transparent);pointer-events:none;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .shade-sw.is-on .shade-badge{background:var(--ac);color:var(--tx-on-accent);box-shadow:none}
 #vw-cad .shade-sw:first-child{margin-left:10px}
 #vw-cad .shade-sw:first-child::before{content:'';position:absolute;margin-left:-10px;top:0;height:64px;width:1px;background:var(--s3)}
@@ -3330,7 +3382,7 @@ body.app-ready .sp-card{transform:scale(1.025)}
 .hp-sum{margin:0 0 18px;font-size:var(--fs-xl);line-height:1.5;color:var(--tx3)}
 .hp-art h3{margin:26px 0 8px;font-size:var(--fs-2xl);font-weight:var(--fw-semibold);color:var(--tx)}
 .hp-art p{margin:0 0 12px}
-.hp-art code{padding:1px 5px;border-radius:var(--r-xs);background:var(--s3);color:var(--tx);font:500 .92em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.hp-art code{padding:1px 5px;border-radius:var(--r-xs);background:var(--s3);color:var(--tx);font:500 var(--fs-12) ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .hp-art a{color:var(--ac-text);text-decoration:none}
 .hp-art a:hover{text-decoration:underline}
 .hp-art mark{background:var(--ac-tint-25);color:inherit;border-radius:3px;padding:0 1px}
@@ -3601,18 +3653,7 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
     <div class="export-wrap">
-      <button class="tbtn" id="btn-export" disabled><i data-lucide="download"></i>Export <span class="caret"><i data-lucide="chevron-down"></i></span></button>
-      <div id="export-menu" class="export-menu">
-        <button class="export-menu-item" data-fmt="glb"><span class="fmt">GLB</span><span class="hint">Best for web &amp; Cinema 4D</span></button>
-        <button class="export-menu-item" data-fmt="gltf"><span class="fmt">glTF</span><span class="hint">JSON glTF 2.0</span></button>
-        <button class="export-menu-item" data-fmt="fbx"><span class="fmt">FBX</span><span class="hint">Blender, Maya, Unreal</span></button>
-        <button class="export-menu-item" data-fmt="usdz"><span class="fmt">USDZ</span><span class="hint">Apple Quick Look</span></button>
-        <button class="export-menu-item" data-fmt="obj"><span class="fmt">OBJ</span><span class="hint">Wavefront, universal</span></button>
-        <button class="export-menu-item" data-fmt="stl"><span class="fmt">STL</span><span class="hint">3D printing</span></button>
-        <button class="export-menu-item" data-fmt="ply"><span class="fmt">PLY</span><span class="hint">Geometry + colours</span></button>
-        <div class="export-menu-sep"></div>
-        <button class="export-menu-item" data-fmt="csv"><span class="fmt">CSV</span><span class="hint">Parts list (BOM)</span></button>
-      </div>
+      <button class="tbtn" id="btn-export" disabled title="Export the model (Ctrl+E)"><i data-lucide="download"></i>Export</button>
     </div>
     <button class="tbtn icon-only" id="tg-screenshot" title="Capture viewport screenshot (share / copy / download)"><i data-lucide="camera"></i></button>
     <button class="tbtn" id="btn-save-scene" disabled style="display:none"><i data-lucide="save"></i>Save scene</button>
@@ -3732,10 +3773,6 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="tg-smart-fit" data-cmd-toggle="smartfit" title="Smart fit (Ctrl+B)"><i data-lucide="wand-2"></i></button>
         <button class="vpb" id="tg-select-hidden" data-cmd-toggle="selhidden" title="Select hidden parts"><i data-lucide="eye-off"></i></button>
         <button class="vpb" id="tg-fasteners" data-cmd-toggle="fasteners" title="Fasteners: select bolts, nuts and washers"><i data-lucide="bolt"></i></button>
-        <button class="vpb" id="tg-repair" data-cmd-toggle="repair" title="Repair mesh: doubled vertices, empty triangles, faces turned the wrong way"><i data-lucide="wrench"></i></button>
-        <button class="vpb" id="tg-hidfaces" data-cmd-toggle="hidfaces" title="Remove hidden faces: the faces that can never be seen"><i data-lucide="scan-eye"></i></button>
-        <button class="vpb" id="tg-mergeby" data-cmd-toggle="mergeby" title="Merge by material or by group"><i data-lucide="layers"></i></button>
-        <button class="vpb" id="tg-selrule" data-cmd-toggle="selrule" title="Select by rule: name, material, group, size, triangles"><i data-lucide="list-filter"></i></button>
         <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
         <div class="vpb-sep"></div>
         <button class="vpb" id="tg-library" title="Library (Shift+L)"><i data-lucide="shapes"></i></button>
@@ -3983,14 +4020,14 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="active" data-spin="0">0°</button><button type="button" data-spin="90">90°</button><button type="button" data-spin="180">180°</button><button type="button" data-spin="270">270°</button>
         </div>
         <button type="button" class="cmd-link" id="place-reset">Reset gap and turn</button>
-        <div class="field-help">Select a part, then drag it. A press that is not on the selected part selects as usual. Undo takes the whole drag back.</div>
+        <div class="field-help">Select a part, then drag it. The small cube on top of it scales it: drag the cube up to make the part larger, down to make it smaller (Shift: in steps of 5 %). A press that is not on the selected part selects as usual. Undo takes the whole drag back.</div>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Leave Dynamic place"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
     </div>
 
     <div class="section section-cmd has-hero" data-cmd="fillholes" hidden>
       <figure class="cmd-hero" aria-label="Fill holes at work: the holes in a flat face close a few at a time, and the raised ring stays">
-        <video src="assets/help/fill-holes.webm?v=2" poster="assets/help/fill-holes-poster.webp?v=2" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+        <video src="assets/help/fill-holes.webm?v=3" poster="assets/help/fill-holes-poster.webp?v=3" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
       </figure>
       <div class="section-h"><span>Fill holes</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
@@ -4151,7 +4188,7 @@ window.moSplash = function (msg, pct) {
 
     <div class="section section-cmd has-hero" data-cmd="split" hidden>
       <figure class="cmd-hero" aria-label="Split at work: a bracket, its pin and two bolts that arrived as one mesh come apart into separate parts">
-        <video src="assets/help/split.webm?v=3" poster="assets/help/split-poster.webp?v=3" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
+        <video src="assets/help/split.webm?v=4" poster="assets/help/split-poster.webp?v=4" width="592" height="370" muted loop playsinline preload="none" disablepictureinpicture tabindex="-1" aria-hidden="true"></video>
       </figure>
       <div class="section-h"><span>Split</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
@@ -4263,6 +4300,8 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
 
+    <div class="side-group">View</div>
+
     <div class="section" id="shading-section">
       <div class="section-h"><span>Shading</span><span class="chev">▾</span></div>
       <div class="section-b">
@@ -4271,70 +4310,6 @@ window.moSplash = function (msg, pct) {
           <div class="shade-fam" id="vw-cad" data-mode="cad"></div>
         </div>
         <div class="toggle shade-outlines"><span id="shade-outlines-lbl" title="A fine dark line on the sharp edges of every part, in every view">Outlines</span><label><input type="checkbox" id="shade-outlines" aria-labelledby="shade-outlines-lbl" checked><span class="switch"></span></label></div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><span>Selection &amp; actions</span><span class="chev">▾</span></div>
-      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="btn-row">
-          <button class="btn" id="sel-all" title="Select every visible part (Ctrl+A)">All</button>
-          <button class="btn" id="sel-invert" title="Invert the current selection (Ctrl+I)">Invert</button>
-          <button class="btn" id="sel-clear" title="Deselect everything (Esc)">Clear</button>
-          <button class="btn" id="sel-similar" title="Add parts that share geometry with the current selection">Select similar</button>
-        </div>
-        <div class="btn-row">
-          <button class="btn" id="btn-select-color" title="Select every part that shares a colour with the current selection"><i data-lucide="palette"></i>By colour</button>
-          <button class="btn" id="btn-select-regex" title="Select every part whose name matches a regex"><i data-lucide="search"></i>By name</button>
-        </div>
-        <div class="btn-row">
-          <button class="btn" id="btn-merge-sel" title="Merge selected parts into a single mesh — ideal for STL / 3D printing (Ctrl+M)"><i data-lucide="combine"></i>Merge</button>
-          <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together (Ctrl+G)"><i data-lucide="group"></i>Group</button>
-        </div>
-        <button class="btn danger" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)"><i data-lucide="trash-2"></i>Delete (<span id="del-sel-count">0</span>)</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><span>Select similar</span><span class="chev">▾</span></div>
-      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="field"><div id="sim-strict-scrub"></div></div>
-        <div class="field-help" id="sim-strict-help"></div>
-        <button class="btn" id="sim-run" title="Add the parts that look like the selected ones, as strictly as set above"><i data-lucide="shapes"></i>Select similar</button>
-      </div>
-    </div>
-
-    <div class="side-group">Inspect</div>
-
-    <div class="section">
-      <div class="section-h"><span>Heavy parts</span><span class="sec-count" id="heavy-count" hidden></span><span class="chev">▾</span></div>
-      <div class="section-b" id="offenders-body">
-        <div class="off-empty" style="color:var(--tx3);font-size:var(--fs-12);padding:4px 0">Load a model to see heavy parts.</div>
-        <div class="off-list" id="offenders-list"></div>
-        <button class="btn danger" id="btn-off-delete" disabled title="Delete the ticked parts. Can be undone."><i data-lucide="trash-2"></i><span id="off-delete-label">Delete</span></button>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><span>Filters &amp; flags</span><span class="chev">▾</span></div>
-      <div class="section-b">
-        <div class="field"><div id="tri-scrub"></div></div>
-        <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-triangle parts</button>
-        <div style="height:10px"></div>
-        <div class="field"><div id="aspect-scrub"></div></div>
-        <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="minus"></i>Flag thin slivers</button>
-      </div>
-    </div>
-
-    <div class="section" hidden>
-      <div class="section-h"><span>Measurements</span><span class="chev">▾</span></div>
-      <div class="section-b">
-        <div class="btn-row">
-          <button class="btn" id="msr-add" title="Toggle measure mode (M) — pick two points in the viewport to measure distance"><i data-lucide="ruler"></i>Measure</button>
-          <button class="btn warn" id="msr-clear" title="Delete every measurement">Clear all</button>
-        </div>
-        <div class="field-help" id="msr-info" style="margin-top:8px">Click Measure or press <kbd class="kbd">M</kbd>, then click two points on geometry. Drag still orbits.</div>
-        <div id="msr-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
       </div>
     </div>
 
@@ -4369,55 +4344,82 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
 
-    <div class="side-group">Clean up</div>
-
-    <div class="section">
-      <div class="section-h"><span>Delete small parts</span><span class="chev">▾</span></div>
-      <div class="section-b small-card">
-        <div class="cmd-lede">Screws, washers, clips: the parts too small to matter.</div>
-        <!-- how small: a share of the whole model's size -->
-        <div id="thr-scrub"></div>
-        <!-- small by what measure (the select is what the rest of the app reads and sets; the buttons drive it) -->
-        <div class="small-by">
-          <span>Measured by</span>
-          <div class="cmd-seg" id="thr-metric-seg" role="group" aria-label="Measured by">
-            <button type="button" class="active" data-metric="diag" title="Corner to corner of the part's box. The usual choice.">Diagonal</button>
-            <button type="button" data-metric="max" title="The part's longest side. Keeps long thin parts (rods, pipes) that the diagonal also keeps, and is stricter with flat ones.">Longest side</button>
-            <button type="button" data-metric="vol" title="The volume of the part's box. Catches thin sheets and wires however long they are.">Volume</button>
-          </div>
-          <select id="thr-metric" hidden><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select>
-        </div>
-        <!-- what the two choices above catch -->
-        <div class="small-found" id="thr-found"><i data-lucide="scan-search"></i><span id="thr-info">Load a model to see what would go.</span></div>
+    <div class="section" hidden>
+      <div class="section-h"><span>Measurements</span><span class="chev">▾</span></div>
+      <div class="section-b">
         <div class="btn-row">
-          <button class="btn" id="btn-isolate-small" title="Show only the parts that would be deleted, to check them first"><i data-lucide="eye"></i>Isolate</button>
-          <button class="btn" id="btn-show-all" title="Make every hidden part visible again"><i data-lucide="circle-plus"></i>Show all</button>
+          <button class="btn" id="msr-add" title="Toggle measure mode (M) — pick two points in the viewport to measure distance"><i data-lucide="ruler"></i>Measure</button>
+          <button class="btn warn" id="msr-clear" title="Delete every measurement">Clear all</button>
         </div>
-        <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
+        <div class="field-help" id="msr-info" style="margin-top:8px">Click Measure or press <kbd class="kbd">M</kbd>, then click two points on geometry. Drag still orbits.</div>
+        <div id="msr-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+    </div>
+
+    <div class="side-group">Select</div>
+
+    <div class="section">
+      <div class="section-h"><span>Pick parts</span><span class="chev">▾</span></div>
+      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="btn-row">
+          <button class="btn" id="sel-all" title="Select every visible part (Ctrl+A)">All</button>
+          <button class="btn" id="sel-invert" title="Invert the current selection (Ctrl+I)">Invert</button>
+          <button class="btn" id="sel-clear" title="Deselect everything (Esc)">Clear</button>
+          <button class="btn" id="sel-similar" title="Add parts that share geometry with the current selection">Select similar</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="btn-select-color" title="Select every part that shares a colour with the current selection"><i data-lucide="palette"></i>By colour</button>
+          <button class="btn" id="btn-select-regex" title="Select every part whose name matches a regex"><i data-lucide="search"></i>By name</button>
+        </div>
+        <details class="cmd-adv" id="sim-adv">
+          <summary><span>How alike Select similar goes</span></summary>
+          <div class="cmd-adv-b">
+            <div class="field"><div id="sim-strict-scrub"></div></div>
+            <div class="field-help" id="sim-strict-help"></div>
+          </div>
+        </details>
       </div>
     </div>
 
     <div class="section">
-      <div class="section-h"><span>Auto cleanup</span><span class="chev">▾</span></div>
-      <div class="section-b btn-list">
-        <button class="btn quiet" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Remove empty parts</button>
-        <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy"></i>Deduplicate geometry</button>
-        <button class="btn quiet" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="asterisk"></i>Fix degenerate parts</button>
-        <button class="btn quiet" id="btn-clean-empty-groups" title="Remove user groups and hierarchy groups whose members are all deleted or empty"><i data-lucide="folder-x"></i>Delete empty groups</button>
+      <div class="section-h"><span>Edit selection</span><span class="chev">▾</span></div>
+      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="btn-row">
+          <button class="btn" id="btn-merge-sel" title="Merge selected parts into a single mesh — ideal for STL / 3D printing (Ctrl+M)"><i data-lucide="combine"></i>Merge</button>
+          <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together (Ctrl+G)"><i data-lucide="group"></i>Group</button>
+        </div>
+        <div class="btn-list">
+          <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox centre sits at world origin"><i data-lucide="target"></i>Recentre on origin</button>
+          <button class="btn quiet" id="btn-bake-transforms" title="Commit pending gizmo edits permanently into vertex data"><i data-lucide="check"></i>Bake gizmo transforms</button>
+          <button class="btn quiet" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox centre (visual position unchanged)"><i data-lucide="crosshair"></i>Centre pivot</button>
+        </div>
+        <button class="btn danger" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)"><i data-lucide="trash-2"></i>Delete (<span id="del-sel-count">0</span>)</button>
+      </div>
+    </div>
+
+    <div class="side-group">Find</div>
+
+    <div class="section">
+      <div class="section-h"><span>Heavy parts</span><span class="sec-count" id="heavy-count" hidden></span><span class="chev">▾</span></div>
+      <div class="section-b" id="offenders-body">
+        <div class="off-empty" style="color:var(--tx3);font-size:var(--fs-12);padding:4px 0">Load a model to see heavy parts.</div>
+        <div class="off-list" id="offenders-list"></div>
+        <button class="btn danger" id="btn-off-delete" disabled title="Delete the ticked parts. Can be undone."><i data-lucide="trash-2"></i><span id="off-delete-label">Delete</span></button>
       </div>
     </div>
 
     <div class="section">
-      <div class="section-h"><span>Tidy geometry</span><span class="chev">▾</span></div>
-      <div class="section-b btn-list">
-        <button class="btn quiet" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="sparkles"></i>Recompute smooth normals</button>
-        <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox centre sits at world origin"><i data-lucide="target"></i>Recentre on origin</button>
-        <button class="btn quiet" id="btn-bake-transforms" title="Commit pending gizmo edits permanently into vertex data"><i data-lucide="check"></i>Bake gizmo transforms</button>
-        <button class="btn quiet" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox centre (visual position unchanged)"><i data-lucide="crosshair"></i>Centre pivot</button>
+      <div class="section-h"><span>Filters &amp; flags</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="field"><div id="tri-scrub"></div></div>
+        <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-triangle parts</button>
+        <div style="height:10px"></div>
+        <div class="field"><div id="aspect-scrub"></div></div>
+        <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="minus"></i>Flag thin slivers</button>
       </div>
     </div>
 
-    <div class="side-group">Reduce</div>
+    <div class="side-group">Optimise</div>
 
     <div class="section" id="smart-section">
       <div class="section-h"><span>Smart optimise</span><span class="chev">▾</span></div>
@@ -4447,6 +4449,43 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section">
+      <div class="section-h"><span>Quick fixes</span><span class="chev">▾</span></div>
+      <div class="section-b btn-list">
+        <button class="btn quiet" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Remove empty parts</button>
+        <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy"></i>Deduplicate geometry</button>
+        <button class="btn quiet" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="asterisk"></i>Fix degenerate parts</button>
+        <button class="btn quiet" id="btn-clean-empty-groups" title="Remove user groups and hierarchy groups whose members are all deleted or empty"><i data-lucide="folder-x"></i>Delete empty groups</button>
+        <button class="btn quiet" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="sparkles"></i>Recompute smooth normals</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><span>Delete small parts</span><span class="chev">▾</span></div>
+      <div class="section-b small-card">
+        <div class="cmd-lede">Screws, washers, clips: the parts too small to matter.</div>
+        <!-- how small: a share of the whole model's size -->
+        <div id="thr-scrub"></div>
+        <!-- small by what measure (the select is what the rest of the app reads and sets; the buttons drive it) -->
+        <div class="small-by">
+          <span>Measured by</span>
+          <div class="cmd-seg" id="thr-metric-seg" role="group" aria-label="Measured by">
+            <button type="button" class="active" data-metric="diag" title="Corner to corner of the part's box. The usual choice.">Diagonal</button>
+            <button type="button" data-metric="max" title="The part's longest side. Keeps long thin parts (rods, pipes) that the diagonal also keeps, and is stricter with flat ones.">Longest side</button>
+            <button type="button" data-metric="vol" title="The volume of the part's box. Catches thin sheets and wires however long they are.">Volume</button>
+          </div>
+          <select id="thr-metric" hidden><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select>
+        </div>
+        <!-- what the two choices above catch -->
+        <div class="small-found" id="thr-found"><i data-lucide="scan-search"></i><span id="thr-info">Load a model to see what would go.</span></div>
+        <div class="btn-row">
+          <button class="btn" id="btn-isolate-small" title="Show only the parts that would be deleted, to check them first"><i data-lucide="eye"></i>Isolate</button>
+          <button class="btn" id="btn-show-all" title="Make every hidden part visible again"><i data-lucide="circle-plus"></i>Show all</button>
+        </div>
+        <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-h"><span>Reduce triangles</span><span class="chev">▾</span></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
         <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
@@ -4466,6 +4505,14 @@ window.moSplash = function (msg, pct) {
         </div>
         <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
         <div class="field-help plan-line" style="margin-top:-2px"><span id="decimate-info"></span><button type="button" class="plan-link" id="decimate-preview" hidden title="See what each part will lose before running it">Preview…</button></div>
+        <div class="btn-row">
+          <button class="btn" id="btn-untriangulate" title="Join neighbouring triangles that lie in one plane into polygons (n-gons), take away the vertices in the middle of each flat face and triangulate it again with the fewest triangles. The shape does not change. Works on the selection, or on the whole scene when nothing is selected. Undoable."><i data-lucide="hexagon"></i>Untriangulate</button>
+          <select id="untri-angle" class="mac-sel" title="How flat neighbouring triangles must be to join into one polygon" style="flex:0 0 96px">
+            <option value="0.2">Strict</option>
+            <option value="1" selected>Normal</option>
+            <option value="5">Loose</option>
+          </select>
+        </div>
         <div class="btn-list">
           <button class="btn quiet" id="btn-bbox-all" title="Smart fit every part: each becomes a box, a turned box or a cylinder, whichever fits it best. Removes most of the detail."><i data-lucide="square-dashed"></i>Smart fit all parts</button>
           <button class="btn quiet" id="btn-report" title="The model as it was opened against what it is now: triangles, draw calls, materials, file size"><i data-lucide="clipboard-list"></i>Optimisation report</button>
@@ -4631,6 +4678,7 @@ window.moSplash = function (msg, pct) {
             <option value="0.2">Fine (0.2) — smoother surfaces</option>
             <option value="0.05">Ultra (0.05) — slow, very smooth</option>
           </select>
+          <div style="margin-top:6px;font-size:var(--fs-sm);color:var(--tx3);line-height:var(--lh-relaxed)">A coarser setting makes fewer triangles at the source, which usually looks better than decimating a fine mesh afterwards. Curves are the part that grows with it.</div>
         </div>
         <div class="field" style="margin-bottom:14px">
           <label id="imp-step-colors-lbl"><span>Colours &amp; materials</span></label>
@@ -5379,7 +5427,7 @@ window.moSplash = function (msg, pct) {
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=20261008-v0.14.0-fp1"></script>
+<script type="module" src="app-v2.js?v=20261009-simplify-dev-ch1-wire-na1-ngon-sm2-sw1-wfix-pf1-wtri-wout-wall-dp1-ty1-dp2-dps2-hp1-dps3"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app-v2.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

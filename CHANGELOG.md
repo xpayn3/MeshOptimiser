@@ -4,6 +4,35 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## Unreleased
+
+Four tools for cleaner, lighter models, each a floating card that opens from the command palette (Ctrl+K).
+
+**Repair, clean-up and selection**
+
+- ![new][new] **Repair mesh.** Joins doubled vertices, removes empty and doubled triangles, turns faces so that neighbours agree on which side is out (a closed shape is turned outward), and can work the shading out again with a smoothing angle. It works on the selected parts or the whole scene, leaves a part that is already sound as it is, keeps UV seams and materials, and reports what it did. One Ctrl+Z takes it back.
+- ![new][new] **Remove hidden faces.** The polygon-level partner of Select hidden parts: each part is looked at from many sides (Fast, Normal or Thorough), and the faces that never show are deleted: the inside of a housing, the faces where two parts press together. A face next to a visible one stays, so no holes open in the surface. A part that is hidden altogether is left for Select hidden parts. Can be undone.
+- ![new][new] **Merge by material or by group.** Joins parts into one mesh per material, or one per group (the nearest group, or the groups just inside the top one). A merged mesh keeps its material. A whole run is one step to undo.
+- ![new][new] **Select by rule.** Rules on a part's name (contains, starts with, ends with, is, wildcards), material, group, triangles, size as a share of the model, and whether it is shown, flagged, instanced or selected. Match all rules or any, and replace, add to, remove from or narrow the selection; the card says how many parts fit as you type.
+
+**Wireframe view**
+
+- ![new][new] **Untriangulate.** Cinema 4D's command of the same name, in Reduce triangles (and the command palette). Neighbouring triangles that lie in one plane are one polygon (an n-gon); the vertices that touch only that polygon are removed and the polygon is triangulated again from its outline with the fewest triangles, so a flat plate cut into a grid of 200 triangles becomes 38. The shape does not change at all (nothing is deviation), and a polygon is only rebuilt when it is flat to 2e-5 of the part's size, its vertex normals agree with its plane, every vertex on its outline is kept (so no crack opens against the neighbouring polygon), and the area adds up; anything else is left as it was and counted in the message. It works on the selection, or on the whole scene when nothing is selected, in the background workers, and it is one step to undo. **Strict, Normal and Loose** set how flat neighbouring triangles must be to join. The triangles remember their polygon, so the Wireframe view shows the polygons. The graphics card and the file formats still draw and store triangles: this removes the triangles and vertices that only cut a flat face up, it does not give OBJ or FBX real n-gon faces.
+- ![polish][polish] **Wireframe is the surfaces with a thin black line on every edge.** Like Gouraud Shading (Lines) in Cinema 4D. Before, it drew the surfaces themselves as lines in their own colours, see-through, so an assembly turned into coloured thread. Now the colours, lighting and opacity of the Solid view stay, and a thin black line follows every edge of the mesh on top. The lines share the part's vertex buffer (24 bytes per triangle for the index) and are not kept while the view is off. **Settings › Viewport › Wireframe**: Lines is *Triangles* (the default: every edge of the mesh, the wireframe), *Polygons* (the outline of each flat polygon, curved faces included, with the triangle lines inside flat polygons left out) or *Outline* (only the sharp edges and borders of the shape, the same lines as the CAD view's Outlines), and Flat within sets how flat neighbouring triangles must be to count as one polygon in Polygons. These only change what is drawn; Untriangulate changes the mesh.
+
+**Decimate and Fit to budget**
+
+- ![new][new] **Normals, UVs and vertex colours now steer which triangles are removed.** Before, only positions counted, so a crease, a UV seam or a colour edge could be flattened as readily as a smooth patch. Now the simplifier weighs them in first and falls back to the old position-only pass, then to an unlocked-border pass, only when that does not reach the target. The same code runs in the background workers and on the page (`simplify-core.js`).
+- ![new][new] **The report shows how far the surfaces moved.** Decimate and Fit to budget take the simplifier's own error estimate, scale it to the part's size in the scene, and add it up over every reduction. It shows as "Surface deviation (est.)" in the Optimisation report, in the unit the scene is shown in, and in the toast after a run. Undo and redo take it back with the step. It is an estimate, not a measured distance: on a test sphere it came out about a third under what was measured, so read it as a floor, not a limit.
+
+**Interface**
+
+- ![polish][polish] **The sidebar drag handles sit on the status-bar row.** Only the bottom of the edge between a sidebar and the viewport can be grabbed, so nothing over the viewport or a sidebar is caught by accident. A short faint notch shows there once the pointer has rested on it for a moment, and is invisible otherwise.
+- ![polish][polish] **The buttons above the tree are cards.** Collapse, Rename and Flatten have the same fill as the cards in the right sidebar and no outline.
+- ![polish][polish] **The four tool buttons left the bottom toolbar.** Repair mesh, Remove hidden faces, Merge by material or by group and Select by rule are opened from the command palette.
+- ![new][new] **Dynamic place has a scale handle.** A small solid cube floats on the middle of the selected part's top face. Drag it up and the part grows, down and it shrinks, evenly in all three directions (Shift: steps of 5 %). The part is scaled about the middle of its underside, so one resting on a surface stays on it, and a see-through ghost of the part at its old size stays behind while you drag. A part that is scaled still rests correctly when it is dragged over another surface. One Ctrl+Z takes the whole drag back, and Esc cancels it.
+- ![polish][polish] **The animations at the top of the Help cards are redrawn so that they match.** Split, Select hidden parts, Fasteners, Smart fit, Fill holes and the cover now share one lighting and one grey material, with the accent blue for what is selected. In Split the bracket stays in the middle while the other parts fly out of it; Select hidden parts shows a gearbox with eighteen parts inside its housing instead of a box with a cylinder; Smart fit lays its three parts out in an even row again. No mesh lines are drawn except in the cover, whose subject is the mesh. The clips are made by `tools/render-*-clip.mjs`, on one shared renderer, `tools/clip-kit.mjs`.
+
 ## v0.14.0
 
 Released 8 Oct 2026.

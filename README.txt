@@ -61,6 +61,9 @@ WHAT'S INCLUDED:
   cloner.js                    cloner (linear / grid / radial arrays)
   holefill.js                  hole filler
   mesh-worker.js               background worker for Fill holes and Decimate
+  simplify-core.js             how a mesh is reduced (shared by the page and the worker)
+  wirelines.js                 polygons found in a triangle mesh, and the lines that draw them
+  untriangulate.js             joins flat triangles into polygons and rebuilds each with the fewest triangles
 
   step2glb.bat / .command      direct CLI converter (no viewer)
   test-converter.bat / .command  smoke-test the converter

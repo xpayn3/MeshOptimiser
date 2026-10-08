@@ -35,7 +35,7 @@
   var RADII = [['Sharp', 'sharp', 0.25], ['Default', 'default', 1], ['Round', 'round', 1.6]];
 
   // The scale tokens and their stylesheet values (px).
-  var FS = { '--fs-9': 9, '--fs-10': 10, '--fs-11': 11, '--fs-12': 12, '--fs-13': 13, '--fs-2xs': 9.5, '--fs-xs': 10.5, '--fs-sm': 11.5, '--fs-md': 12.5, '--fs-lg': 13, '--fs-xl': 14, '--fs-2xl': 16, '--btn-fs-sm': 11.5, '--btn-fs-md': 12, '--btn-fs-lg': 13 };
+  var FS = { '--fs-9': 9, '--fs-10': 10, '--fs-11': 11, '--fs-12': 12, '--fs-13': 13, '--fs-2xs': 10, '--fs-xs': 11, '--fs-sm': 12, '--fs-md': 13, '--fs-lg': 13, '--fs-xl': 14, '--fs-2xl': 16, '--btn-fs-sm': 12, '--btn-fs-md': 12, '--btn-fs-lg': 13 };
   var HT = { '--btn-h-sm': 26, '--btn-h-md': 32, '--btn-h-lg': 40 };
   var RD = { '--r-2xs': 2, '--r-xs': 4, '--r-sm': 6, '--r-md': 6, '--r-lg': 10, '--r-xl': 10, '--btn-r-sm': 6, '--btn-r-md': 6, '--btn-r-lg': 6, '--surface-pop-r': 10, '--surface-win-r': 10 };
   var AC_TINTS = [4, 8, 12, 14, 15, 18, 20, 25, 35, 40, 45, 55];
@@ -93,7 +93,7 @@
     applyTone(p.uiTone);
     var font = FONTS[p.uiFont];
     set('--font-sans', !font || p.uiFont === 'inter' ? null : font.stack);
-    applyScale(FS, +p.uiTextScale || 1, 'px', false);
+    applyScale(FS, +p.uiTextScale || 1, 'px', true);        // type sizes stay whole pixels at every text size
     applyScale(HT, +p.uiDensity || 1, 'px', true);
     var r = RADII.filter(function (x) { return x[1] === p.uiRadius; })[0] || RADII[1];
     for (var k in RD) set(k, r[2] === 1 ? null : Math.min(14, Math.round(RD[k] * r[2] * 10) / 10) + 'px');

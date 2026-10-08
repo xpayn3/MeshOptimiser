@@ -19,7 +19,7 @@ stored = { uiTone: 'midnight' }; reset(); A.apply(); ok(props['--bg'] === '#0e11
 stored = { uiTone: 'nonsense' }; reset(); A.apply(); ok(!props['--bg'], 'unknown tone = default');
 // type and size
 stored = { uiFont: 'mono' }; reset(); A.apply(); ok(/ui-monospace/.test(props['--font-sans']), 'mono font');
-stored = { uiTextScale: 1.2 }; reset(); A.apply(); ok(props['--fs-12'] === '14.4px' && props['--fs-md'] === '15px', 'text scale ' + props['--fs-12'] + ' ' + props['--fs-md']);
+stored = { uiTextScale: 1.2 }; reset(); A.apply(); ok(props['--fs-12'] === '14px' && props['--fs-md'] === '16px', 'text scale ' + props['--fs-12'] + ' ' + props['--fs-md']);
 stored = { uiDensity: 0.88 }; reset(); A.apply(); ok(props['--btn-h-md'] === '28px' && props['--btn-h-sm'] === '23px', 'density ' + props['--btn-h-md']);
 // shape, motion
 stored = { uiRadius: 'round' }; reset(); A.apply(); ok(props['--r-sm'] === '9.6px' && props['--r-lg'] === '14px', 'round ' + props['--r-sm'] + ' ' + props['--r-lg']);
