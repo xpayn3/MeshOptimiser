@@ -107,6 +107,7 @@
   --fs-10:10px;
   --fs-11:11px;
   --fs-12:12px;
+  --fs-13:13px;
 
   /* Font stack — sans only. Monospace was retired; numeric alignment is
      handled via font-variant-numeric:tabular-nums where digits need to line
@@ -378,8 +379,8 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .stat strong{color:var(--tx);font-weight:var(--fw-medium)}
 /* FPS pill — compact rounded badge with a green pulse dot. Color shifts on
    the dot are driven from JS via .warn / .bad classes. */
-.dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
-.dot.warn{background:var(--wn)}.dot.off{background:var(--tx3)}
+#stat-renderer .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+#stat-renderer .dot.warn{background:var(--wn)}#stat-renderer .dot.off{background:var(--tx3)}
 
 /* Sidebars */
 .panel{background:var(--bg);display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
@@ -527,7 +528,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-grid{display:grid;font-variant-numeric:tabular-nums;align-items:center}
 .prop-grid .prop-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3)}
 .prop-grid .prop-icon svg{width:13px;height:13px}
-.prop-grid .prop-value{font-weight:var(--fw-normal);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prop-grid .prop-value{font-weight:var(--fw-regular);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Primitive shape parameters block in the right-side props panel.
    C4D-style — selection-driven, sliders rebuild geometry on the fly. */
@@ -670,7 +671,7 @@ input.prim-value:focus{border-color:var(--ac-tint-55);background:rgba(0,0,0,.25)
 .field:last-child{margin-bottom:0}
 .field label{display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-12);color:var(--tx2);margin-bottom:7px;font-weight:var(--fw-medium)}
 .field label .v{color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold)}
-.field-help{font-size:var(--fs-11);color:var(--tx3);margin-top:8px;margin-bottom:10px;line-height:var(--lh-relaxed)5}
+.field-help{font-size:var(--fs-11);color:var(--tx3);margin-top:8px;margin-bottom:10px;line-height:1.55}
 input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:var(--bg3);border-radius:var(--r-pill);outline:none}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;background:white;border-radius:50%}
 input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.05)}
@@ -729,6 +730,7 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .btn svg{stroke:currentColor;fill:none;stroke-width:2}
 .btn:disabled{opacity:.4;cursor:not-allowed}
 .btn-row{display:grid;gap:var(--space-sm);grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+.btn-row[hidden]{display:none}
 
 /* ── Heavy parts (offenders) panel ────────────────────────────────────────
    The parts with the most triangles, heaviest first. Click selects + frames.
@@ -787,7 +789,12 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 .toggle label{flex-shrink:0;display:inline-flex;align-items:center;cursor:pointer}
 .toggle .switch{position:relative;width:34px;height:20px;background:rgba(120,128,140,.35);border-radius:var(--r-lg);transition:background 220ms var(--ease-ios);cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);display:block}
 .toggle .switch::after{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;background:white;border-radius:50%;transition:transform 220ms var(--ease-ios);box-shadow:0 1px 2px rgba(0,0,0,.25),0 2px 6px rgba(0,0,0,.15)}
-.toggle input{display:none}
+/* The checkbox itself is kept in the page, unseen, so a switch can be reached
+   with Tab and flipped with Space (display:none took all of them out of the
+   tab order); the switch shows the focus. */
+.toggle label{position:relative}
+.toggle input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.toggle input:focus-visible+.switch{outline:2px solid var(--ac-text);outline-offset:2px}
 .toggle input:checked+.switch{background:var(--ac)}
 .toggle input:checked+.switch::after{transform:translateX(14px)}
 
@@ -1256,7 +1263,7 @@ body.msr-mode #canvas{cursor:crosshair}
 #_flat-dialog .flat-opt input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:#fff}
 #_flat-dialog .flat-opt-text{flex:1;min-width:0}
 #_flat-dialog .flat-opt-label{font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--tx);margin-bottom:3px;letter-spacing:var(--tracking-tight)}
-#_flat-dialog .flat-opt-help{font-size:var(--fs-sm);color:var(--tx3);line-height:var(--lh-base)5}
+#_flat-dialog .flat-opt-help{font-size:var(--fs-sm);color:var(--tx3);line-height:1.45}
 #_flat-dialog .flat-opt-help code{font-family:var(--font-sans);color:var(--ac-text);background:rgba(0,0,0,.28);padding:0 5px;border-radius:var(--r-xs);font-size:var(--fs-11)}
 #_flat-dialog .flat-row{display:flex;align-items:center;gap:var(--space-md);margin-top:9px}
 #_flat-dialog .flat-row label{font-size:var(--fs-11);color:var(--tx3);font-weight:var(--fw-medium);letter-spacing:var(--tracking-snug)}
@@ -1642,7 +1649,7 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .fmt-compat thead th{position:sticky;top:0;background:var(--bg1);z-index:1;padding:10px 8px;border-bottom:1px solid var(--bd);text-align:center;font-weight:var(--fw-semibold);color:var(--tx);font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:var(--tracking-wide)}
 .fmt-compat tbody td{padding:9px 8px;border-bottom:1px solid var(--s3);text-align:center;vertical-align:middle}
 .fmt-compat tbody td:first-child{text-align:left;padding-left:20px;color:var(--tx)}
-.fmt-compat tbody td:last-child{text-align:left;color:var(--tx3);font-size:var(--fs-11);line-height:var(--lh-base)5;padding-right:20px;max-width:280px}
+.fmt-compat tbody td:last-child{text-align:left;color:var(--tx3);font-size:var(--fs-11);line-height:1.45;padding-right:20px;max-width:280px}
 .fmt-compat tbody tr:hover{background:var(--bg2)}
 .fmt-compat .y{color:var(--ok);font-weight:var(--fw-semibold);font-size:var(--fs-lg)}
 .fmt-compat .n{color:var(--tx3);font-size:var(--fs-11)}
@@ -2774,7 +2781,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 #ctx-menu.is-commands::-webkit-scrollbar{display:none}
 #ctx-menu.is-commands .ctx-menu-row{padding-top:5px;padding-bottom:5px}
 /* ── Scene tabs ────────────────────────────────────────────────────────────
-   The scene on screen is the lit tab (name, Unsaved pill, close); the other
+   The scene on screen is the lit tab (icon with the unsaved dot, name, close); the other
    open scenes are quieter tabs beside it; "+" opens a new scene. */
 .doc-tab{position:relative;flex:0 1 auto}
 .doc-tab.other{background:none;color:var(--tx3);cursor:pointer;max-width:180px;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);padding:0 10px 0 8px;gap:6px;}
@@ -3083,7 +3090,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
           </div>
           <div class="brand-menu-ver" id="brand-menu-ver">v0.13.0</div>
         </div>
-        <div class="brand-menu-about">Optimize, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
+        <div class="brand-menu-about">Optimise, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.13.0</span></div>
@@ -3186,7 +3193,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
         <button class="export-menu-item" data-fmt="usdz"><span class="fmt">USDZ</span><span class="hint">Apple Quick Look</span></button>
         <button class="export-menu-item" data-fmt="obj"><span class="fmt">OBJ</span><span class="hint">Wavefront, universal</span></button>
         <button class="export-menu-item" data-fmt="stl"><span class="fmt">STL</span><span class="hint">3D printing</span></button>
-        <button class="export-menu-item" data-fmt="ply"><span class="fmt">PLY</span><span class="hint">Geometry + colors</span></button>
+        <button class="export-menu-item" data-fmt="ply"><span class="fmt">PLY</span><span class="hint">Geometry + colours</span></button>
         <div class="export-menu-sep"></div>
         <button class="export-menu-item" data-fmt="csv"><span class="fmt">CSV</span><span class="hint">Parts list (BOM)</span></button>
       </div>
@@ -3269,7 +3276,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
         <button class="vpb" id="vw-solid" data-mode="solid" title="Solid (1)"><i data-lucide="box"></i></button>
         <button class="vpb" id="vw-wire" data-mode="wire" title="Wireframe (2)"><svg viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v10"/></svg></button>
         <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
-        <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — color parts by triangle density (4)"><i data-lucide="flame"></i></button>
+        <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — colour parts by triangle density (4)"><i data-lucide="flame"></i></button>
         <button class="vpb" id="vw-clay" data-mode="clay" title="Clay (5): every part in one plain material, to read the shape. Right-click for other looks: porcelain, steel, red wax."><i data-lucide="contrast"></i></button>
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
       </div>
@@ -3330,7 +3337,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
               <div class="field" style="margin:0" title="Multiplier on the fog falloff. >1 = denser (fog ramps in faster); <1 = gentler."><label style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="fog-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">1.0×</span></label><input type="range" id="fog-int" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
               <button id="fog-reset" type="button" class="btn-sm" title="Clear overrides and use the auto-tuned distances + intensity 1.0">Reset to auto</button>
             </div>
-            <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral gray</option><option value="white">White</option><option value="hdri">HDRI environment</option></select></div>
+            <div class="field" style="margin-top:12px;margin-bottom:0"><label><span>Background</span></label><select id="bg-mode" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral grey</option><option value="white">White</option><option value="hdri">HDRI environment</option></select></div>
             <div id="hdri-controls" style="display:none;flex-direction:column;gap:var(--space-sm);margin-top:8px;padding:8px 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:6px">
               <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:var(--lh-base)">Drag the <span style="color:#ffd76b">sun</span> in the viewport to rotate the environment. Its brightness lights every PBR material in the scene.</div>
               <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-xs)">
@@ -3376,7 +3383,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
               </select>
             </div>
             <div class="toggle"><span>Auto-instance duplicates</span><label><input type="checkbox" id="toggle-instance" checked><span class="switch"></span></label></div>
-            <div class="toggle"><span>Share materials by color</span><label><input type="checkbox" id="toggle-share-mat" checked><span class="switch"></span></label></div>
+            <div class="toggle"><span>Share materials by colour</span><label><input type="checkbox" id="toggle-share-mat" checked><span class="switch"></span></label></div>
           </div>
         </div>
         </div>
@@ -3622,7 +3629,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
           <button class="btn" id="sel-similar" title="Add parts that share geometry with the current selection">Select similar</button>
         </div>
         <div class="btn-row">
-          <button class="btn" id="btn-select-color" title="Select every part that shares a color with the current selection"><i data-lucide="palette"></i>By color</button>
+          <button class="btn" id="btn-select-color" title="Select every part that shares a colour with the current selection"><i data-lucide="palette"></i>By colour</button>
           <button class="btn" id="btn-select-regex" title="Select every part whose name matches a regex"><i data-lucide="search"></i>By name</button>
         </div>
         <div class="btn-row">
@@ -3743,9 +3750,9 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
       <div class="section-h"><span>Tidy geometry</span><span class="chev">▾</span></div>
       <div class="section-b btn-list">
         <button class="btn quiet" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="sparkles"></i>Recompute smooth normals</button>
-        <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox center sits at world origin"><i data-lucide="target"></i>Recenter on origin</button>
+        <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox centre sits at world origin"><i data-lucide="target"></i>Recentre on origin</button>
         <button class="btn quiet" id="btn-bake-transforms" title="Commit pending gizmo edits permanently into vertex data"><i data-lucide="check"></i>Bake gizmo transforms</button>
-        <button class="btn quiet" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox center (visual position unchanged)"><i data-lucide="crosshair"></i>Center pivot</button>
+        <button class="btn quiet" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox centre (visual position unchanged)"><i data-lucide="crosshair"></i>Centre pivot</button>
       </div>
     </div>
 
@@ -3906,17 +3913,17 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
           </select>
         </div>
         <div class="field" style="margin-bottom:14px">
-          <label><span>Colors &amp; materials</span></label>
+          <label><span>Colours &amp; materials</span></label>
           <select id="imp-step-colors" class="mac-sel">
-            <option value="on" selected>Read XCAF (colors + names + hierarchy)</option>
-            <option value="off">Geometry only (fastest, no colors / hierarchy)</option>
+            <option value="on" selected>Read XCAF (colours + names + hierarchy)</option>
+            <option value="off">Geometry only (fastest, no colours / hierarchy)</option>
           </select>
           <div style="font-size:var(--fs-sm);color:var(--tx3);margin-top:6px;line-height:var(--lh-relaxed)">"Geometry only" skips the slow XCAF transfer entirely — best for huge files where you only need the shape.</div>
         </div>
 
         <div style="font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin:18px 0 4px">XCAF read modes</div>
         <div style="font-size:var(--fs-sm);color:var(--tx3);margin-bottom:6px;line-height:var(--lh-relaxed)">Each mode adds a pass over the STEP entity graph. Disable what you don't need — turning off SHUO is the biggest win on instanced assemblies.</div>
-        <div class="toggle" title="Specified Higher-Usage Occurrence overrides — per-instance color/material overrides resolved combinatorially. The single biggest cost on instanced assemblies."><span>SHUO overrides <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(slowest)</span></span><label><input type="checkbox" id="imp-step-shuo"><span class="switch"></span></label></div>
+        <div class="toggle" title="Specified Higher-Usage Occurrence overrides — per-instance colour/material overrides resolved combinatorially. The single biggest cost on instanced assemblies."><span>SHUO overrides <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(slowest)</span></span><label><input type="checkbox" id="imp-step-shuo"><span class="switch"></span></label></div>
         <div class="toggle"><span>Layer attributes</span><label><input type="checkbox" id="imp-step-layers"><span class="switch"></span></label></div>
         <div class="toggle"><span>Material attributes</span><label><input type="checkbox" id="imp-step-materials" checked><span class="switch"></span></label></div>
         <div class="toggle"><span>Product names</span><label><input type="checkbox" id="imp-step-names" checked><span class="switch"></span></label></div>
@@ -3947,7 +3954,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 
       <div style="padding:12px 20px 16px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:10px">
         <input type="checkbox" id="imp-skip-next" style="margin:0">
-        <label for="imp-skip-next" style="color:var(--tx2);font-size:var(--fs-sm);cursor:pointer;flex:1">Don't ask again for this format <span style="color:var(--tx3)">(reset from File menu)</span></label>
+        <label for="imp-skip-next" style="color:var(--tx2);font-size:var(--fs-sm);cursor:pointer;flex:1">Don't ask again for this format <span style="color:var(--tx3)">(undo in Settings › Storage)</span></label>
       </div>
     </div>
     <div class="modal-f">
@@ -4011,7 +4018,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
         <div class="exp-cat-label">3D Printing</div>
         <button class="fmt-card" data-fmt="stl"><span class="fmt-icon"><i data-lucide="printer"></i></span><span><span class="fmt-name">STL</span><span class="fmt-sub">Standard format</span></span></button>
         <div class="exp-cat-label">Point Cloud</div>
-        <button class="fmt-card" data-fmt="ply"><span class="fmt-icon"><i data-lucide="grid-3x3"></i></span><span><span class="fmt-name">PLY</span><span class="fmt-sub">Geometry + colors</span></span></button>
+        <button class="fmt-card" data-fmt="ply"><span class="fmt-icon"><i data-lucide="grid-3x3"></i></span><span><span class="fmt-name">PLY</span><span class="fmt-sub">Geometry + colours</span></span></button>
         <div class="exp-cat-label">Data</div>
         <button class="fmt-card" data-fmt="csv"><span class="fmt-icon"><i data-lucide="table-2"></i></span><span><span class="fmt-name">CSV</span><span class="fmt-sub">Parts list, BOM</span></span></button>
       </div>
@@ -4054,8 +4061,8 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
           <div class="field" style="margin:0"><label><span>Origin</span></label>
             <select id="exp-origin" class="mac-sel">
               <option value="keep" selected>Keep model origin</option>
-              <option value="center">Recenter to bbox center</option>
-              <option value="floor">Center XY, drop to floor (Z=0)</option>
+              <option value="center">Recentre to bbox centre</option>
+              <option value="floor">Centre XY, drop to floor (Z=0)</option>
             </select>
           </div>
         </div>
@@ -4088,7 +4095,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
             <th>Export</th>
             <th>Hierarchy</th>
             <th>Materials</th>
-            <th>Vertex&nbsp;colors</th>
+            <th>Vertex&nbsp;colours</th>
             <th style="text-align:left">Notes</th>
           </tr>
         </thead>
@@ -4101,14 +4108,14 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
           <tr><td><strong>OBJ</strong></td><td class="y">●</td><td class="y">●</td><td class="n">flat</td><td class="y">via&nbsp;.mtl</td><td class="n">—</td><td>Universal but no transforms; hierarchy baked into names.</td></tr>
           <tr><td><strong>3MF</strong></td><td class="y">●</td><td class="n">—</td><td class="y">●</td><td class="y">●</td><td class="n">—</td><td>3D-printing standard. Import only for now.</td></tr>
           <tr><td><strong>STL</strong></td><td class="y">●</td><td class="y">●</td><td class="n">single&nbsp;mesh</td><td class="n">—</td><td class="n">—</td><td>Geometry only. 3D printing.</td></tr>
-          <tr><td><strong>PLY</strong></td><td class="n">—</td><td class="y">●</td><td class="n">single&nbsp;mesh</td><td class="n">—</td><td class="y">●</td><td>Geometry + per-vertex colors. Research / scanning.</td></tr>
+          <tr><td><strong>PLY</strong></td><td class="n">—</td><td class="y">●</td><td class="n">single&nbsp;mesh</td><td class="n">—</td><td class="y">●</td><td>Geometry + per-vertex colours. Research / scanning.</td></tr>
           <tr><td><strong>CSV</strong></td><td class="n">—</td><td class="y">●</td><td class="muted">n/a</td><td class="muted">n/a</td><td class="muted">n/a</td><td>Parts list / BOM. No geometry written.</td></tr>
         </tbody>
       </table>
       <div style="padding:12px 20px 16px;color:var(--tx3);font-size:var(--fs-sm);line-height:var(--lh-relaxed);border-top:1px solid var(--bd)">
         <strong style="color:var(--tx2)">Hierarchy</strong> — whether the format preserves the assembly tree (groups / nested transforms) on round-trip.
         <strong style="color:var(--tx2)">Materials</strong> — color + shading info per part. PBR means full metalness/roughness; plain ● is diffuse only.
-        <strong style="color:var(--tx2)">Vertex colors</strong> — per-vertex RGB baked into the geometry (no separate material).
+        <strong style="color:var(--tx2)">Vertex colours</strong> — per-vertex RGB baked into the geometry (no separate material).
       </div>
     </div>
   </div>
@@ -4118,7 +4125,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
   <div class="modal set-modal">
     <div class="modal-h set-head">
       <h3>Settings</h3>
-      <label class="set-search" title="Search every section (Ctrl+F)"><i data-lucide="search"></i><input type="text" id="settings-search" placeholder="Search settings" autocomplete="off" spellcheck="false"></label>
+      <label class="set-search" title="Search every section (Ctrl+F)"><i data-lucide="search"></i><input type="text" id="settings-search" placeholder="Search settings…" autocomplete="off" spellcheck="false"></label>
       <button class="x" id="settings-close" title="Close (Esc)">✕</button>
     </div>
     <div class="modal-b" id="settings-body"></div>
@@ -4145,9 +4152,9 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
         <div class="pop-section-title">Scene</div>
         <div class="field"><label><span>Display units</span></label>
           <select id="display-units" class="mac-sel">
-            <option value="mm" selected>Millimeters (mm)</option>
-            <option value="cm">Centimeters (cm)</option>
-            <option value="m">Meters (m)</option>
+            <option value="mm" selected>Millimetres (mm)</option>
+            <option value="cm">Centimetres (cm)</option>
+            <option value="m">Metres (m)</option>
             <option value="in">Inches (in)</option>
             <option value="ft">Feet (ft)</option>
             <option value="none">No unit suffix</option>
@@ -4452,10 +4459,19 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
     const t = e.target.closest('[title], [data-tip]');
     if (!t) return;
     if (t === currentTarget) return;
-    // Adopt native title to suppress browser's own tooltip exactly once.
+    // Adopt the native title, so the browser's own tooltip does not show as
+    // well. Every time, not once: the app rewrites titles as things change
+    // (the save state on the tab, Collapse / Expand all), and a title kept
+    // from the first hover would go on saying the old thing. An icon-only
+    // control keeps a name for screen readers, which the title was.
     if (t.hasAttribute('title')) {
       const v = t.getAttribute('title');
-      if (v && !t.dataset.tip) t.dataset.tip = v;
+      if (v) {
+        t.dataset.tip = v;
+        if (!t.hasAttribute('aria-label') && !t.hasAttribute('aria-labelledby') && !(t.textContent || '').trim() && /^(BUTTON|A|INPUT|SELECT)$/.test(t.tagName)) {
+          t.setAttribute('aria-label', v.replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+—.*$/, ''));
+        }
+      }
       t.removeAttribute('title');
     }
     if (!getText(t)) return;

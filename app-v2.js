@@ -372,7 +372,12 @@ const _Dialog = (() => {
     document.addEventListener('keydown', e => {
       if (!bg.classList.contains('show')) return;
       if (e.key === 'Escape') { e.preventDefault(); close(null); }
-      else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); close(inputEl.style.display === 'none' ? true : inputEl.value); }
+      else if (e.key === 'Enter' && !e.shiftKey) {
+        // Enter accepts, unless the focus is on another button: then it presses that one.
+        const f = document.activeElement;
+        if (f && f.tagName === 'BUTTON' && f !== okBtn && bg.contains(f)) return;
+        e.preventDefault(); close(inputEl.style.display === 'none' ? true : inputEl.value);
+      }
     }, true);
   }
 
@@ -1652,7 +1657,7 @@ const Log = (() => {
     row.className = `lc-row lvl-${entry.level}`;
     row.dataset.level = entry.level;
     row.dataset.text = (entry.msg + ' ' + entry.tag).toLowerCase();
-    const tagHTML = entry.tag ? `<span class="lc-tag">[${entry.tag}]</span>` : '';
+    const tagHTML = entry.tag ? `<span class="lc-tag">[${escapeHtml(entry.tag)}]</span>` : '';
     row.innerHTML = `<span class="lc-time">${entry.t}</span>${tagHTML}<span class="lc-msg"></span>`;
     row.querySelector('.lc-msg').textContent = entry.msg;
     _applyFilter(row);
@@ -1996,7 +2001,7 @@ const _ImportSettings = (() => {
       const isStep = ext === 'step' || ext === 'stp';
       const base = isStep ? DEFAULTS_STEP : DEFAULTS_MESH;
       const opts = _loadOpts(ext, base);
-      if (forceAppend) opts.append = true;
+      opts.append = !!forceAppend;          // (Import appends, Open does not; never remembered from last time)
       if (_skipModal(ext)) { resolve(opts); return; }
 
       const bg = document.getElementById('import-modal');
@@ -2013,7 +2018,7 @@ const _ImportSettings = (() => {
       };
       const onConfirm = () => {
         const next = _read(isStep);
-        _saveOpts(ext, next);
+        { const { append, ...keep } = next; _saveOpts(ext, keep); }
         if (document.getElementById('imp-skip-next').checked) _setSkip(ext, true);
         cleanup(); resolve(next);
       };
@@ -2021,9 +2026,12 @@ const _ImportSettings = (() => {
       const onKey = (e) => {
         if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
         else if (e.key === 'Enter' && !e.shiftKey) {
-          // Enter confirms — but not if focus is in a number input (let it commit first)
-          const tag = (document.activeElement?.tagName || '').toLowerCase();
-          if (tag !== 'textarea') { e.preventDefault(); onConfirm(); }
+          // Enter confirms, but not from a text area, and not over the head
+          // of another button that has the focus (Cancel, the close button).
+          const f = document.activeElement, tag = (f?.tagName || '').toLowerCase();
+          if (tag === 'textarea') return;
+          if (tag === 'button' && f.id !== 'import-modal-confirm' && bg.contains(f)) return;
+          e.preventDefault(); onConfirm();
         }
       };
       const onBackdrop = (e) => { if (e.target === bg) onCancel(); };
@@ -2042,7 +2050,7 @@ const _ImportSettings = (() => {
     });
   }
 
-  // Reset all per-format "don't ask" flags. Wired from the File menu.
+  // Reset all per-format "don't ask" flags (Settings › Storage › Import options).
   function resetSkips() {
     try {
       for (const ext of ['step','stp','fbx','obj','3mf','stl']) {
@@ -2384,6 +2392,7 @@ async function _importWithPicker() {
     // One-shot listener so we reset the flag after the user picks (or cancels).
     const reset = () => { state._importMode = false; };
     inp?.addEventListener('change', reset, { once: true });
+    inp?.addEventListener('cancel', reset, { once: true });     // (no change event when the picker is cancelled)
     inp?.click();
     return;
   }
@@ -2439,7 +2448,7 @@ async function _revertToSourceFile() {
   const editCount = (state.history?.length || 0)
     + (state.parts?.filter(p => p.deleted).length || 0);
   const detail = editCount > 0
-    ? `Discards every edit (${editCount} undo entr${editCount === 1 ? 'y' : 'ies'} + deletions, hierarchy changes, colors, merges, splits) and re-parses ${state._sourceFile.name}.`
+    ? `Discards every edit (${editCount} undo entr${editCount === 1 ? 'y' : 'ies'} + deletions, hierarchy changes, colours, merges, splits) and re-parses ${state._sourceFile.name}.`
     : `Re-parses ${state._sourceFile.name} from scratch.`;
   const ok = await appConfirmDestructive(detail, {
     title: 'Revert to original model?',
@@ -2496,7 +2505,11 @@ function _confirmQuitDialog() {
     bg.addEventListener('click', (e) => { if (e.target === bg) finish('cancel'); });
     const onKey = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); finish('cancel'); }
-      else if (e.key === 'Enter') { e.preventDefault(); finish('save'); }
+      else if (e.key === 'Enter') {
+        const f = document.activeElement, act = f && f.dataset ? f.dataset.act : '';
+        if (f && f.tagName === 'BUTTON' && act && act !== 'save' && bg.contains(f)) return;      // Enter on "Don't save" or Cancel means that button
+        e.preventDefault(); finish('save');
+      }
     };
     document.addEventListener('keydown', onKey, true);
     setTimeout(() => card.querySelector('[data-act="save"]')?.focus(), 50);
@@ -2520,11 +2533,24 @@ async function _quitApp() {
       if (ok === false) return;
     }
   } else {
-    if (!confirm('Quit MeshOptimiser?\n\nThe local server will stop.')) return;
+    let ok = false;
+    try { ok = await appConfirm('The local server will stop.', { title: 'Quit MeshOptimiser?', okLabel: 'Quit' }); } catch (_) {}
+    if (!ok) return;
   }
+  // The other tabs are scenes of their own; one of them may have work that is not saved.
+  try {
+    const others = ((window.top && window.top.__moTabs && window.top.__moTabs.tabs) || []).filter(t => !t.closed && t.dirty && t.id !== _Tabs.id);
+    if (others.length) {
+      const names = others.slice(0, 3).map(t => '"' + t.title + '"').join(', ') + (others.length > 3 ? ' and ' + (others.length - 3) + ' more' : '');
+      const ok = await appConfirm((others.length === 1 ? 'Another scene has' : others.length + ' other scenes have') + ' changes that are not saved: ' + names + '. Quit anyway?', { title: 'Quit MeshOptimiser?', okLabel: 'Quit without saving', danger: true });
+      if (!ok) return;
+    }
+  } catch (_) {}
   try { await fetch('/api/quit', { method: 'POST' }); } catch (_) {}
   try { window.close(); } catch (_) {}
-  document.documentElement.innerHTML =
+  let _doc = document;
+  try { if (window.top && window.top.document) _doc = window.top.document; } catch (_) {}
+  _doc.documentElement.innerHTML =
     `<body style="margin:0;background:#101218;color:#9aa3b2;font:14px/1.5 system-ui,sans-serif;` +
     `display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:24px">` +
     `<div><div style="font-size:18px;color:#e6e9ef;margin-bottom:8px">MeshOptimiser closed</div>` +
@@ -2728,6 +2754,7 @@ const _Settings = (() => {
     $s('set-pane-data').innerHTML = `
       <div class="set-row set-action"><span>Recent files<span class="set-help">The list on the start screen.</span></span><button class="btn" id="set-clear-recents">Clear</button></div>
       <div class="set-row set-action"><span>File access<span class="set-help">Permissions that let the app reopen a recent file without asking where it is.</span></span><button class="btn" id="set-clear-handles">Forget</button></div>
+      <div class="set-row set-action"><span>Import options<span class="set-help">Show the options dialog again for the formats where “Don’t ask again” was ticked.</span></span><button class="btn" id="set-reset-import">Ask again</button></div>
       <div class="set-row set-action"><span>Panel sizes<span class="set-help">Widths of the sidebars and the height of the docks.</span></span><button class="btn" id="set-clear-layout">Reset</button></div>
       <div class="set-row set-action"><span>All settings<span class="set-help">Puts every preference under General and Camera back to its default.</span></span><button class="btn danger" id="set-reset-all">Reset</button></div>`;
     body.addEventListener('click', (e) => {
@@ -2755,6 +2782,10 @@ const _Settings = (() => {
         toast('File handles cleared', '', 'success');
       } catch (e) { toast('Clear failed', e?.message || String(e), 'error'); }
     });
+    $s('set-reset-import')?.addEventListener('click', () => {
+      try { _ImportSettings.resetSkips(); } catch (_) {}
+      toast('Import options', 'The options dialog will be shown again', 'success');
+    });
     $s('set-clear-layout')?.addEventListener('click', () => {
       const root = document.documentElement;
       for (const k of ['stepopt-mat-dock-h', 'stepopt-mat-insp-w', 'stepopt-console-h']) { try { localStorage.removeItem(k); } catch (_) {} }
@@ -2763,7 +2794,7 @@ const _Settings = (() => {
       document.getElementById('resize-r')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       toast('Panel sizes reset', '', 'success');
     });
-    $s('set-reset-all')?.addEventListener('click', () => { _Prefs.reset(); try { _Tabs.setSameSidebars(true); } catch (_) {} _fillPrefs(); toast('Settings reset', 'Defaults restored', 'success'); });
+    $s('set-reset-all')?.addEventListener('click', () => { _Prefs.reset(); try { _Tabs.setSameSidebars(true); } catch (_) {} try { if (controls) controls.zoomToCursor = true; } catch (_) {} _fillPrefs(); toast('Settings reset', 'Defaults restored', 'success'); });
     try { _lucide(); } catch (_) {}
   }
 
@@ -3269,7 +3300,7 @@ const _Actions = (() => {
     { id:'copy',         group:'Edit',       label:'Copy selection',             kbd:'Ctrl+C', run: () => { if (state.selected.size) copyParts([...state.selected]); } },
     { id:'paste',        group:'Edit',       label:'Paste',                      kbd:'Ctrl+V', run: () => pasteParts() },
     { id:'duplicate',    group:'Edit',       label:'Duplicate selection',        kbd:'Ctrl+D', run: () => { if (state.selected.size) duplicateParts([...state.selected]); } },
-    { id:'recenter',     group:'Edit',       label:'Recenter model',             run: _click('btn-recenter') },
+    { id:'recenter',     group:'Edit',       label:'Recentre model',             run: _click('btn-recenter') },
     { id:'alignFloor',   group:'Edit',       label:'Align model to the floor',   run: _click('btn-align-floor') },
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
     { id:'merge',        group:'Edit',       label:'Merge selection',            kbd:'Ctrl+M', run: _click('btn-merge-sel') },
@@ -3498,8 +3529,8 @@ const _CmdK = (() => {
     const row = (a) => { const idx = i++; return `
         <div class="cmdk-item${idx === activeIdx ? ' active' : ''}" data-idx="${idx}">
           <i class="cmdk-item-icon" data-lucide="${a.icon || ICON[a.id] || GROUP_ICON[a.group] || 'panel-right'}"></i>
-          <span class="cmdk-item-label">${a.icon ? escapeHtml(a.label) : a.label}</span>
-          <span class="cmdk-item-group">${q ? a.group : ''}</span>
+          <span class="cmdk-item-label">${escapeHtml(a.label)}</span>
+          <span class="cmdk-item-group">${q ? escapeHtml(a.group || '') : ''}</span>
           ${a.kbd ? `<span class="cmdk-keys">${a.kbd.split('+').map(k => `<kbd class="kbd-chip">${k}</kbd>`).join('<span class="sc-plus">+</span>')}</span>` : ''}
         </div>`; };
     list.innerHTML = items.length === 0
@@ -3859,7 +3890,6 @@ window.addEventListener('keydown', e => {
       ta.remove();
     }
   });
-  console.log('[STEP] Early file picker wired');
 })();
 
 // ─── Renderer lifecycle owner ─────────────────────────────────────────────
@@ -4604,11 +4634,18 @@ function _promoteInstanceToMesh(p) {
   if (!p || !p.instancedMesh || p.instanceIndex < 0 || p.deleted) return false;
   const inst = p.instancedMesh;
   const localMat = new THREE.Matrix4();
-  inst.getMatrixAt(p.instanceIndex, localMat);
+  // A hidden instance is drawn with a zero-scale matrix (_setPartVisible), and
+  // a zero matrix has no rotation to take apart: the mesh would come out with
+  // a NaN transform, and the gizmo pivot would spread it to everything else
+  // selected. Its real place is the one kept from when it was built.
+  if (p.visible === false && p._instOrigMat) localMat.copy(p._instOrigMat);
+  else inst.getMatrixAt(p.instanceIndex, localMat);
   inst.updateWorldMatrix(true, false);
   const worldMat = new THREE.Matrix4().multiplyMatrices(inst.matrixWorld, localMat);
 
-  const mesh = new THREE.Mesh(inst.geometry, inst.material);
+  const mesh = new THREE.Mesh(inst.geometry, _ownMaterialOf(inst));
+  mesh.visible = p.visible !== false;
+  if (state.viewMode === 'clay' && _clayMat) { _clayOwn.set(mesh, mesh.material); mesh.material = _clayMat; }
   mesh.name = p.name || `part_${p.partId}`;
   mesh.userData.partId = p.partId;
 
@@ -5162,11 +5199,10 @@ function setBackground(mode) {
   state.bgMode = mode;
   // Clear any previous background node (TSL shader gradient) first.
   if (scene.backgroundNode !== undefined) scene.backgroundNode = null;
-  // Dispose any previous canvas-backed texture to avoid GPU leaks.
-  if (scene.background && scene.background.isTexture) {
-    scene.background.dispose?.();
-    scene.background = null;
-  }
+  // A texture here is one of the cached environments (the built-in studio, an
+  // HDRI preset, a loaded .hdr), which HDRI mode puts back later: let go of
+  // it, do not dispose it. (Disposing it left HDRI black the second time.)
+  if (scene.background && scene.background.isTexture) scene.background = null;
 
   if (mode === 'dark') {
     // Plasticity's viewport grey: a cool, slightly lifted #27272b on screen.
@@ -5739,7 +5775,7 @@ const _MotionPerf = (() => {
         if (sinceChange > 8 && ema > Math.max(24, fastest * 1.45) && at < STEPS.length - 1) {
           if (now - lastUpAt < 1500) noUpUntil = now + 30000;    // it was just raised and could not hold it: leave it down for a while
           want = STEPS[at + 1]; applyScale(want); sinceChange = 0; ema = 0; fastRun = 0;
-        } else if (at > 0 && ema < fastest * 1.15 && now > noUpUntil) {
+        } else if (at > 0 && ema < Math.max(18, fastest * 1.15) && now > noUpUntil) {
           if (++fastRun > 45) { want = STEPS[at - 1]; applyScale(want); lastUpAt = now; sinceChange = 0; ema = 0; fastRun = 0; }
         } else fastRun = 0;
       }
@@ -5747,7 +5783,7 @@ const _MotionPerf = (() => {
   }
   function set(key, on) {
     try { if (on) localStorage.removeItem(key); else localStorage.setItem(key, '0'); } catch (_) {}
-    cullOn = read(K_CULL); resOn = read(K_RES);
+    if (key === K_CULL) cullOn = !!on; else resOn = !!on;       // (set directly: storage may be unavailable)
     if (!cullOn) uncull();
     if (!resOn) { want = 1; applyScale(1); }
     requestRender();
@@ -5755,6 +5791,8 @@ const _MotionPerf = (() => {
   try { window.addEventListener('storage', (e) => { if (e.key === K_CULL || e.key === K_RES) { cullOn = read(K_CULL); resOn = read(K_RES); if (!cullOn) uncull(); if (!resOn) { want = 1; applyScale(1); } } }); } catch (_) {}
   return {
     frame, dprNow, end: () => { if (moving) end(); else uncull(); },
+    // a different model: what the last one needed says nothing about this one
+    reset: () => { if (moving) end(); else uncull(); want = 1; fastest = 16.7; noUpUntil = 0; ema = 0; },
     cullSmall: () => cullOn, dynRes: () => resOn,
     setCullSmall: (on) => set(K_CULL, on), setDynRes: (on) => set(K_RES, on),
     info: () => ({ moving, scale, want, movedTurns, hidden: hidden.size, frameMs: +ema.toFixed(1), dpr: +(renderer?.getPixelRatio?.() ?? 1).toFixed(2), restDpr: state._restDpr }),
@@ -5780,6 +5818,7 @@ let _stdViewActive = false;
 // warnings; if any one fails, the others still run and the next frame is
 // always scheduled in a top-level finally.
 let _lastTickAt = 0;
+let _tickRaf = 0;                 // the loop's pending frame request (the watchdog replaces it, never adds a second)
 let _tickCamMoved = false;
 function tick() {
   _lastTickAt = performance.now();
@@ -5934,7 +5973,7 @@ function tick() {
     // (variable-not-defined, frozen global, etc.) we still must reschedule.
     _logTickErr('tick-outer', e);
   } finally {
-    requestAnimationFrame(tick);
+    _tickRaf = requestAnimationFrame(tick);
   }
 }
 
@@ -5982,7 +6021,10 @@ function _renderWatchdog() {
       _watchdogReviveAt = now;
       console.warn('[watchdog] tick() silent for ' + tickSilenceMs.toFixed(0) +
                    'ms — kicking rAF chain back to life');
-      try { requestAnimationFrame(tick); } catch (e) { console.warn('[watchdog] rAF revive failed:', e); }
+      // Replace the pending request, do not add to it: after one frame that
+      // blocked for seconds the loop is alive and has its own request queued,
+      // and a second chain would draw everything twice from then on.
+      try { cancelAnimationFrame(_tickRaf); _tickRaf = requestAnimationFrame(tick); } catch (e) { console.warn('[watchdog] rAF revive failed:', e); }
     }
 
     // Mode 2: tick() running but rendering broken. We rely on the tick's
@@ -5992,7 +6034,8 @@ function _renderWatchdog() {
     // frames in that case — so only flag when we KEEP asking for renders
     // and none come out.
     if (!state.needsRender && !state.activeFrames) _watchdogLastHealthyMs = now;
-    const stuck = state.needsRender && (now - _watchdogLastHealthyMs > 5000);
+    if (state.renderPaused) _watchdogLastHealthyMs = now;      // paused on purpose (a load, a batch job): no frames are expected
+    const stuck = state.needsRender && !state.renderPaused && (now - _watchdogLastHealthyMs > 5000);
     if (stuck && now - _watchdogToastedAt > 30000) {
       _watchdogToastedAt = now;
       console.warn('[watchdog] no healthy frame for ' +
@@ -6009,7 +6052,9 @@ function _renderWatchdog() {
     // render loop never draws another frame. After 10 s of being paused
     // without any active operation, force-reset.
     if (state.renderPaused) {
-      state._pausedSinceMs = state._pausedSinceMs || now;
+      // (a load that is still showing its progress is an active operation, however long it takes)
+      const busy = !!document.getElementById('loader')?.classList.contains('show');
+      state._pausedSinceMs = busy ? now : (state._pausedSinceMs || now);
       if (now - state._pausedSinceMs > 10000) {
         console.warn('[watchdog] renderPaused stuck > 10s — force resetting');
         state.renderPaused = false;
@@ -6833,6 +6878,7 @@ async function _drainDisposeQueue() {
 // model loads. Don't redefine clearModel without preserving the chain.
 function clearModel() {
   _detachGizmo();
+  try { _MotionPerf.reset(); } catch (_) {}
   try { _alignForget(); } catch (_) {}         // (the turn "Align to floor" gave the last model)
   setTimeout(() => _Dirty.mark(), 0);          // a new or freshly opened scene has nothing unsaved
   // "Recenter on origin" moves partsRoot. A new model must start from zero
@@ -7174,7 +7220,7 @@ async function _captureFrameAsBlob(outW, outH, opts = {}) {
       ctx.drawImage(cv, 0, 0, outW, outH);
     } finally {
       renderer.setPixelRatio?.(prevPxRatio);
-      renderer.setSize(prevW, prevH, false);
+      try { onResize(); } catch (_) { renderer.setSize(prevW / (prevPxRatio || 1), prevH / (prevPxRatio || 1), false); }
       if (stashedAspect2 != null) {
         camera.aspect = stashedAspect2;
         camera.updateProjectionMatrix();
@@ -7730,7 +7776,6 @@ function _captureViewportScreenshot() {
 // renderer's own readRenderTargetPixels API rather than canvas.toDataURL
 // (the swap-chain image is gone after WebGPU presents).
 async function _captureRecentThumb(filename) {
-  console.log('[recent-thumb] start for', filename);
   if (!renderer || !scene) { console.warn('[recent-thumb] no renderer/scene'); return; }
   if (!state.partsRoot) { console.warn('[recent-thumb] no partsRoot'); return; }
   const box = new THREE.Box3().setFromObject(state.partsRoot);
@@ -7843,7 +7888,6 @@ async function _captureRecentThumb(filename) {
     if (idx >= 0) {
       list[idx].thumb = dataUrl;
       localStorage.setItem(REC_KEY, JSON.stringify(list));
-      console.log('[recent-thumb] saved %d-byte JPEG to recents[%d] (%s)', dataUrl.length, idx, list[idx].name);
     } else {
       console.warn('[recent-thumb] no recent record to attach the thumb to');
     }
@@ -7852,12 +7896,33 @@ async function _captureRecentThumb(filename) {
   }
 }
 
+// Coordinates that are not finite numbers become 0. Returns how many there were.
+let _badCoords = 0, _badCoordsT = 0;
+function _sanitizePositions(geom) {
+  const attr = geom && geom.attributes && geom.attributes.position, a = attr && attr.array;
+  if (!a) return 0;
+  let bad = 0;
+  for (let k = 0; k < a.length; k++) if (!Number.isFinite(a[k])) { a[k] = 0; bad++; }
+  if (!bad) return 0;
+  attr.needsUpdate = true;
+  _badCoords += bad;
+  clearTimeout(_badCoordsT);
+  _badCoordsT = setTimeout(() => {
+    const c = _badCoords; _badCoords = 0;
+    const were = c === 1 ? 'value was' : 'values were';
+    try { toast('This file has invalid coordinates', fmtNum(c) + ' ' + were + ' not a number and set to 0. The model may look wrong in places.', 'warn', 9000); } catch (_) {}
+  }, 500);
+  return bad;
+}
+
 function fitToView() {
   const box = new THREE.Box3().setFromObject(state.partsRoot);
   if (box.isEmpty()) return;
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   const maxDim = Math.max(size.x, size.y, size.z);
+  // (a box that is not finite would put NaN into the camera, and everything drawn from it)
+  if (!Number.isFinite(maxDim) || !Number.isFinite(center.x + center.y + center.z) || maxDim <= 0) return;
   const fov = camera.fov * Math.PI / 180;
   // 2.0× margin gives Blender / C4D-like breathing room around the model
   // (was 1.4×, which filled ~70% of viewport height — felt cropped).
@@ -7865,6 +7930,9 @@ function fitToView() {
   const dir = new THREE.Vector3(0.7, -0.9, 0.5).normalize();
   camera.position.copy(center).add(dir.multiplyScalar(dist));
   camera.near = Math.max(0.001, dist / 1000); camera.far = dist * 1000;
+  // An orthographic view is sized by its own half-height and zoom, not by how
+  // far away the camera is: frame the model with those.
+  if (camera._isOrtho) { camera._orthoHalfH = maxDim; camera.zoom = 1; }
   camera.updateProjectionMatrix();
   controls.target.copy(center); controls.update();
   // Resize the floor grid to fit the model — a fixed 200-unit grid was getting
@@ -8432,6 +8500,7 @@ function _applySceneUpAxis() {
     gridHelper.rotation.x = (state.sceneUpAxis === 'y') ? 0 : Math.PI / 2;
     gridHelper.updateMatrix();
   }
+  try { _refreshAllPartBBoxes(); } catch (_) {}
 }
 
 function _applySceneScale() {
@@ -8439,6 +8508,31 @@ function _applySceneScale() {
   state.partsRoot.scale.setScalar(state.sceneScale);
   state.partsRoot.updateMatrix();
   state.partsRoot.updateMatrixWorld(true);
+  _refreshAllPartBBoxes();
+}
+
+// Every part's box in world space, measured again. Needed after anything
+// that moves the whole model without touching the parts (scene scale, up
+// axis): marquee, Properties and the moving-view culling all read p.bbox as
+// a world box.
+function _refreshAllPartBBoxes() {
+  if (!state.partsRoot) return;
+  state.partsRoot.updateMatrixWorld(true);
+  const m = new THREE.Matrix4(), sz = new THREE.Vector3();
+  for (const p of state.parts) {
+    if (!p || p.deleted || p.isCloner) continue;
+    if (p.mesh && p.mesh.geometry && p.mesh.geometry.attributes) { _refreshPartBBox(p); continue; }
+    const inst = p.instancedMesh;
+    if (!inst || p.instanceIndex < 0 || !p.bbox) continue;
+    const g = inst.geometry;
+    if (!g.boundingBox) g.computeBoundingBox();
+    if (!g.boundingBox || g.boundingBox.isEmpty()) continue;
+    if (p.visible === false && p._instOrigMat) m.copy(p._instOrigMat); else inst.getMatrixAt(p.instanceIndex, m);
+    m.premultiply(inst.matrixWorld);
+    p.bbox.copy(g.boundingBox).applyMatrix4(m);
+    p.bbox.getSize(sz);
+    p.sizeMetrics = { diag: sz.length(), vol: sz.x * sz.y * sz.z, max: Math.max(sz.x, sz.y, sz.z) };
+  }
 }
 
 function _applyCameraProjection() {
@@ -11046,6 +11140,8 @@ function _getEdgesGeom(g) {
 function _disposeEdgesFor(g) {
   const e = _edgesCache.get(g);
   if (e) { e.dispose?.(); _edgesCache.delete(g); }
+  // a job still running for this geometry would cache edges of the old shape
+  try { for (const [id, fg] of _edgesInFlight) if (fg === g) _edgesInFlight.delete(id); } catch (_) {}
 }
 
 // Feature-edge extraction is the slow part of drawing a selection: about a
@@ -11139,6 +11235,7 @@ const _EDGES_PREWARM_FLOATS = 30e6;      // about 120 MB of outline data
 let _edgesPrewarmFloats = 0;
 function _prewarmEdges() {
   _edgesPrewarm.length = 0;
+  _edgesPrewarmFloats = 0;
   if (_edgesWorkerBroken) return;
   const seen = new Set();
   for (const p of state.parts) {
@@ -12052,11 +12149,14 @@ function refreshPropertiesPanel() {
     let n = 0;
     const seen = new Set();
     for (const p of state.parts || []) {
-      if (p.deleted || !p.mesh || seen.has(p.mesh)) continue;
+      if (p.deleted) continue;
+      // a part drawn as one copy of an instanced set wears that set's material
+      if (!p.mesh) { if (p.instancedMesh && _ownMaterialOf(p.instancedMesh) === mat) n++; continue; }
+      if (seen.has(p.mesh)) continue;
       seen.add(p.mesh);
-      let m = p.mesh.material;
+      let m = _ownMaterialOf(p.mesh);
       if (Array.isArray(m)) m = m[0];
-      if (m === mat) n += (p.group ? p.group.parts.length : 1);
+      if (m === mat) n += 1;
     }
     return n;
   };
@@ -12775,7 +12875,8 @@ const _Tabs = (() => {
     const t = find(myId);
     if (t) t.loading = false;
     if (REG.pending === myId) { REG.pending = null; activate(myId); warmSoon(); }
-    else { window.__moParked = REG.active !== myId; renderAll(); }
+    else if (REG.active === myId) activate(myId);          // (the 9 s fallback made it the open tab: reveal() above hid it again)
+    else { window.__moParked = true; renderAll(); }
   }
 
   async function close(id) {
@@ -12800,6 +12901,7 @@ const _Tabs = (() => {
       t.closed = true; t.dirty = false;
     } else {
       REG.tabs = REG.tabs.filter(x => x.id !== id);
+      if (REG.active === id) carryLayout(id, next.id);     // while the closing tab's window can still be read
       delete REG.wins[id];
       if (REG.pending === id) REG.pending = null;
       const fr = frameOf(id);
@@ -12821,7 +12923,7 @@ const _Tabs = (() => {
 
   // The strip in this copy's top bar. This copy is only ever on screen while
   // its own tab is the active one, so its own tab is the static #doc-tab
-  // (name, Unsaved pill) and the others are drawn around it.
+  // (name, unsaved dot on its icon) and the others are drawn around it.
   function render() {
     const host = document.getElementById('doc-tabs'), own = document.getElementById('doc-tab');
     if (!host || !own) return;
@@ -13166,7 +13268,8 @@ function _clonePart(srcId, target = null) {
 
   const geom = state.geomByHash.get(src.hash) || (src.mesh && src.mesh.geometry);
   if (!geom) return null;
-  const mat = getOrCreateMaterial(src.originalColor);
+  // (the material it is wearing: a preset or an edited one, not a fresh one in the old colour)
+  const mat = _ownMaterialOf(src.mesh || src.instancedMesh) || getOrCreateMaterial(src.originalColor);
   const mesh = new THREE.Mesh(geom, mat);
   const newId = _allocPartId();
   const newName = _nextDuplicateName(src.name);
@@ -13501,7 +13604,7 @@ const _transformHandlers = {
       : [{ partId: op.partId, before: op.before, after: op.after }];
     const n = _applyTransformOp(items, 'before');
     if (n <= 0) return false;
-    state.redo.push({ type: 'transformGroup', items });
+    state.redo.push(op);
     _finalizeUndo();
   },
   redo(op) {
@@ -13628,16 +13731,19 @@ function recomputeStats() {
       // this InstancedMesh (i.e., wasn't promoted out / deleted).
       for (const entry of g.parts) {
         const pi = entry && entry.partInfo;
-        if (pi && !pi.deleted && pi.instancedMesh === g.instanced) return true;
+        // (a deleted part still counts: undo brings it back, and it needs its
+        // InstancedMesh to be drawn and picked again. Deleted instances are
+        // scaled to nothing, so the set draws nothing for them meanwhile.)
+        if (pi && pi.instancedMesh === g.instanced) return true;
       }
-      // Group is dead — every member was consumed. Remove the now-empty
+      // Group is dead — every member was promoted out. Remove the now-empty
       // InstancedMesh from the scene to free its draw call too.
       try { g.instanced && g.instanced.parent && g.instanced.parent.remove(g.instanced); } catch (_) {}
       return false;
     });
   }
   const vpInst = document.getElementById('vp-instances');
-  if (vpInst) vpInst.textContent = fmtNum((state.instancedGroups || []).length);
+  if (vpInst) vpInst.textContent = fmtNum((state.instancedGroups || []).filter(g => g.parts.some(e => e && e.partInfo && !e.partInfo.deleted && e.partInfo.instancedMesh === g.instanced)).length);
   _updateTriBar(tris);
 }
 
@@ -16078,7 +16184,7 @@ GlobalSettings:  {
   // resolution, which is sub-micron at mm scale and far tighter than any
   // downstream manufacturing tolerance. Going from 6 dp to 4 dp cuts the
   // dominant vertex/normal data ~20 % in the text stream.
-  const fmt = (n) => Math.abs(n) < 1e-10 ? '0' : (+n.toFixed(4)).toString();
+  const fmt = (n) => Math.abs(n) < 1e-10 ? '0' : (+n.toPrecision(7)).toString();
   // Sanitise names — FBX is fragile around backslashes, double-quotes and
   // control characters in object labels.
   const safeName = (s) => (s || 'unnamed').replace(/["\\]/g, '_').replace(/[\x00-\x1f]/g, '_');
@@ -16445,7 +16551,7 @@ function _exportObjStreaming(root, mtlBaseName) {
   // alphabetically in the outliner so a chain prefix produces correct
   // visible grouping. The redundant `g <chain>` line is still emitted for
   // tools that DO use it (some legacy CAD tools, Substance).
-  const sanitize = (s) => (s || '').replace(/\s+/g, '_').replace(/[^\w.-]/g, '') || 'Group';
+  const sanitize = (s) => (s || '').replace(/\s+/g, '_').replace(/[^\p{L}\p{N}_.-]/gu, '') || 'Part';
   const chainNames = (child) => {
     const names = [];
     let cur = child.parent;
@@ -17064,6 +17170,17 @@ let _clayMat = null;
 const _clayOwn = new WeakMap();       // mesh → the material it had
 const _clayInst = new WeakMap();      // instanced mesh → { mat, col }: its material and per-instance colours
 const _clayLook = () => { const k = _Prefs.get('clayLook'); return _CLAY_LOOKS[k] ? k : 'clay'; };
+// The material an object really has. While Clay is on, `o.material` is the
+// shared clay material; anything that builds a new mesh from an existing one
+// (an instance made into a mesh of its own, a cloner copy) has to take this,
+// or the copy is clay for good and is exported that way.
+window._ownMaterialOf = (o) => _ownMaterialOf(o);        // (cloner.js builds its copies from source meshes)
+window._clayRefresh = () => { if (state.viewMode === 'clay') _clayApply(); };
+function _ownMaterialOf(o) {
+  if (!o) return null;
+  if (_clayMat && o.material === _clayMat) return _clayOwn.get(o) || (_clayInst.get(o) && _clayInst.get(o).mat) || o.material;
+  return o.material;
+}
 function _clayMaterial() {
   const look = _CLAY_LOOKS[_clayLook()];
   if (!_clayMat) _clayMat = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
@@ -17143,7 +17260,7 @@ function _clayExit() {
     })), e.clientX, e.clientY);
   });
   window.addEventListener('keydown', (e) => {
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+    if (_typingTarget(e) || _modalOpen()) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === '5') setViewMode(state.viewMode === 'clay' ? 'solid' : 'clay');
   });
@@ -17848,7 +17965,7 @@ function wireUI() {
           }
           state._selAnchorId = seedId;
           applySelectionColors();
-          rebuildTreeSelectionOnly?.() ?? rebuildTree();
+          if (typeof rebuildTreeSelectionOnly === 'function') rebuildTreeSelectionOnly(); else rebuildTree();
           refreshPropertiesPanel?.();
           if (typeof updateGizmo === 'function') updateGizmo();
           $('del-sel-count').textContent = state.selected.size;
@@ -18385,6 +18502,7 @@ function wireUI() {
   $('display-units')?.addEventListener('change', e => {
     state.displayUnit = e.target.value;
     try { onSelectionChanged?.(); } catch (_) {}
+    try { _Measure.setSerialized(_Measure.getSerialized()); } catch (_) {}      // measurement labels are drawn text: draw them again in the new unit
   });
   $('scene-up-axis')?.addEventListener('change', e => {
     state.sceneUpAxis = e.target.value;
@@ -18807,8 +18925,8 @@ function wireUI() {
     usdz: { title:'USDZ', desc:'OpenUSD · Apple Quick Look, Reality Composer, C4D R26+' },
     obj:  { title:'OBJ',  desc:'Wavefront OBJ · Universal, geometry only' },
     stl:  { title:'STL',  desc:'Binary STL · Standard for 3D printing' },
-    ply:  { title:'PLY',  desc:'Polygon File Format · Geometry + vertex colors' },
-    csv:  { title:'CSV',  desc:'Parts list spreadsheet · Name, color, tris, verts, dimensions' },
+    ply:  { title:'PLY',  desc:'Polygon File Format · Geometry + vertex colours' },
+    csv:  { title:'CSV',  desc:'Parts list spreadsheet · Name, colour, triangles, vertices, dimensions' },
   };
   function _syncExpHeading(fmt) {
     const m = _EXP_META[fmt] || { title: fmt.toUpperCase(), desc: '' };
@@ -19082,7 +19200,6 @@ async function _buildBVHsForAllGeoms() {
     }
   }
   } finally {
-    state.renderPaused = false;
     state._bvhBuilding = false;
     try { requestRender(); } catch (_) {}
   }
@@ -20321,8 +20438,14 @@ for (const s of _LIB_SHELVES) if (_LIB_EXTRA_SHELVES[s[0]]) s[1].push(..._LIB_EX
 for (const k of Object.keys(_LIB_EXTRA)) if (_LIB_EXTRA[k].sized) _LIB_SIZED.add(k);
 const _LIB_KEY = 'stepopt-lib';
 function _libPrefs() {
-  try { return { size: 'M6', length: 24, recent: [], side: 'tree', ...(JSON.parse(localStorage.getItem(_LIB_KEY) || '{}') || {}) }; }
-  catch (_) { return { size: 'M6', length: 24, recent: [], side: 'tree' }; }
+  const base = { size: 'M6', length: 24, recent: [], side: 'tree' };
+  try {
+    const v = JSON.parse(localStorage.getItem(_LIB_KEY) || '{}');
+    const out = (v && typeof v === 'object' && !Array.isArray(v)) ? { ...base, ...v } : base;
+    if (!Array.isArray(out.recent)) out.recent = [];
+    out.recent = out.recent.filter(k => typeof k === 'string');
+    return out;
+  } catch (_) { return base; }
 }
 function _libSave(p) { try { localStorage.setItem(_LIB_KEY, JSON.stringify(p)); } catch (_) {} }
 // The turn that stands a part (built along the scene's up axis) along `normal`.
@@ -21127,7 +21250,7 @@ function _wirePrimitiveSliders(rootEl, p) {
       });
       valEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); valEl.blur(); }
-        if (e.key === 'Escape') { valEl.value = p.primParams[fId] ?? ''; _gestureBefore = null; valEl.blur(); }
+        if (e.key === 'Escape') { valEl.value = p.primParams[fId] ?? ''; valEl.blur(); }      // (blur commits the gesture: nothing changed, so nothing is recorded)
       });
       // Leaving the field without a change still ends the gesture (the
       // selection outline is hidden while one is open).
@@ -21189,12 +21312,19 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (typeof real === 'string' && real) { o.name = real; delete o.userData.soName; }
   });
   sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
+  if (!meshList.length) { try { toast('Nothing to show', 'This file has no meshes in it.', 'warn', 6000); } catch (_) {} }
   const meshToPart = new Map();
   let i = 0;
   for (const m of meshList) {
     const geom = m.geometry;
     const pos = geom.attributes.position;
     if (!pos) { i++; continue; }
+    // A file can carry NaN or Infinity as a coordinate. One such value makes
+    // the part's box, the model's box and then the camera not-a-number, and
+    // nothing can be drawn or framed after that: set them to 0 and say so.
+    // (Checked with a plain pass over the numbers, which is cheaper than the
+    // bounding box that follows and does not log an error of its own.)
+    { const arr = pos.array; let ok = true; for (let k = 0; k < arr.length; k++) { if (!Number.isFinite(arr[k])) { ok = false; break; } } if (!ok) _sanitizePositions(geom); }
     if (!geom.attributes.normal) geom.computeVertexNormals();
     geom.computeBoundingBox(); geom.computeBoundingSphere();
     const idx = geom.index?.array;
@@ -21343,6 +21473,19 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
 // loader is just: read bytes → parse → ingest. Renderer pause + control
 // re-enable + loader-overlay teardown all live here so the format functions
 // stay tiny.
+// What went wrong with a file, in words. A parser's own message for a file
+// that is empty, cut short or not what its name says is a JavaScript error
+// ("Invalid typed array length: 4", "Unexpected token …"), which tells the
+// person nothing; the original stays in the console.
+function _plainLoadError(e, file) {
+  const raw = (e && e.message) || String(e || '');
+  if (file && file.size === 0) return 'The file is empty.';
+  if (/Invalid typed array length|outside the bounds of the DataView|Unexpected (token|end)|is not valid JSON|JSON at position|Expected property name|Unsupported asset|Invalid array length/i.test(raw)) {
+    return 'This does not look like a valid file of that type. It may be damaged, cut short, or something else under that name.';
+  }
+  return raw;
+}
+
 async function _runLoad(file, formatLabel, parser) {
   setLoader(true, `Reading ${formatLabel}…`, file.name);
   setLoaderProgress(10);
@@ -21364,7 +21507,7 @@ async function _runLoad(file, formatLabel, parser) {
     loadedOk = true;
   } catch (e) {
     console.error(e);
-    toast(`${formatLabel} load failed`, e.message || String(e), 'error', 7000);
+    toast(`${formatLabel} load failed`, _plainLoadError(e, file), 'error', 7000);
     await new Promise(r => setTimeout(r, 1500));
   } finally {
     // Append mode is one-shot: if the parser failed before the scene
@@ -21952,9 +22095,9 @@ function recenterModel() {
   _detachGizmo();   // selected parts sit outside partsRoot until released
   // (the model at rest and without deleted parts: see _liveModelBox)
   const box = _liveModelBox();
-  if (box.isEmpty()) return toast('Nothing to recenter', '', 'warn');
+  if (box.isEmpty()) return toast('Nothing to recentre', '', 'warn');
   const center = box.getCenter(new THREE.Vector3());
-  if (center.lengthSq() < 1e-12) return toast('Already centered', '', 'info');
+  if (center.lengthSq() < 1e-12) { try { updateGizmo(); } catch (_) {} return toast('Already centred', '', 'info'); }
   // partsRoot.matrixAutoUpdate=false — _shiftPartsRoot calls updateMatrix()
   // explicitly, otherwise the new position never makes it into matrix and
   // matrixWorld stays at identity, then force-propagates to descendants.
@@ -21963,10 +22106,10 @@ function recenterModel() {
   // space centroid. _origPos is in partsRoot-local frame and is still
   // correct (mesh.position didn't change), so keep those.
   _shiftPartsRoot(center, -1);
-  pushUndo({ type: 'recenter', label: 'Recenter on origin', offset: center.clone() });
+  pushUndo({ type: 'recenter', label: 'Recentre on origin', offset: center.clone() });
   applySelectionColors();
   updateGizmo();
-  toast('Recentered', `Translated by (${(-center.x).toFixed(1)}, ${(-center.y).toFixed(1)}, ${(-center.z).toFixed(1)})`, 'success');
+  toast('Recentred', `Translated by (${(-center.x).toFixed(1)}, ${(-center.y).toFixed(1)}, ${(-center.z).toFixed(1)})`, 'success');
   requestRender();
 }
 
@@ -22131,7 +22274,7 @@ function alignModelToFloor(opts = {}) {
   const e0 = _align.D.elements, e1 = D.elements;
   let diff = 0;
   for (let i = 0; i < 16; i++) diff = Math.max(diff, Math.abs(e0[i] - e1[i]) / (i >= 12 && i < 15 ? Math.max(1, state.modelDiag || 1) : 1));
-  if (diff < 1e-7) { if (!opts.quiet && !opts.live) toast(opts.reset ? 'Already as loaded' : 'Already in place', '', 'info'); _alignRefreshInfo(); return false; }
+  if (diff < 1e-7) { if (!opts.quiet && !opts.live) toast(opts.reset ? 'Already as loaded' : 'Already in place', '', 'info'); _alignRefreshInfo(); try { updateGizmo(); } catch (_) {} return false; }
   const before = { D: _align.D.clone(), Q: _align.Q.clone() };
   _alignGoTo(D, Q);
   if (!opts.quiet) {
@@ -22215,6 +22358,8 @@ function _alignRefreshInfo() {
 function bakeTransforms(opts = {}) {
   let count = 0, cloned = 0;
   _detachGizmo();
+  // (not on top of an exploded view: the offsets would be baked into the vertices)
+  { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z) && typeof resetExplode === 'function') resetExplode(); }
   const ID = new THREE.Matrix4();
   // Undo copy of every part about to be baked, taken before anything moves.
   let undoBefore = null, undoTooBig = false;
@@ -22346,10 +22491,13 @@ function centerPivotsOnSelection(opts = {}) {
   // `opts` is a click event when called from the button; only a redo passes ids.
   const targetIds = (opts && opts.fromRedo && opts.ids) ? opts.ids : [...state.selected];
   if (targetIds.length === 0) {
-    toast('Nothing selected', 'Select one or more parts to center their pivots', 'warn');
+    toast('Nothing selected', 'Select one or more parts to centre their pivots', 'warn');
     return;
   }
   _detachGizmo();   // Restore meshes from pivot to partsRoot before mutating
+  // As for Smart fit: with the view exploded, each part sits at rest + offset,
+  // and that sum would become its new rest position.
+  { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z) && typeof resetExplode === 'function') resetExplode(); }
 
   const geomUses = _geomUseCounts();
   const offsetLocal = new THREE.Vector3();
@@ -22395,6 +22543,9 @@ function centerPivotsOnSelection(opts = {}) {
     p.mesh.updateMatrixWorld(true);
     // The vertices and the transform both changed; export uses this snapshot.
     p._exactWorld = p.mesh.matrixWorld.clone();
+    // The exploded view's rest positions for this part are of the old origin.
+    p._origPos = null; p._origWorldPos = null; p._partCenter = null;
+    state._explodeBaselineDone = false;
 
     // 5. Refresh caches that depend on geometry positions.
     _refreshPartBBox(p);
@@ -22406,8 +22557,8 @@ function centerPivotsOnSelection(opts = {}) {
   }
 
   if (centered > 0 && !fromRedo) {
-    if (undoBefore && undoBefore.length) pushUndo({ type: 'geomXform', tool: 'centerPivot', label: 'Center pivot', before: undoBefore, ids: targetIds });
-    else if (undoTooBig) _dropUndoHistory('Center pivot');
+    if (undoBefore && undoBefore.length) pushUndo({ type: 'geomXform', tool: 'centerPivot', label: 'Centre pivot', before: undoBefore, ids: targetIds });
+    else if (undoTooBig) _dropUndoHistory('Centre pivot');
   }
   if (centered > 0) {
     _buildBVHsForAllGeoms();          // rebuild for any disposed/cloned geoms
@@ -22419,9 +22570,9 @@ function centerPivotsOnSelection(opts = {}) {
   const detail = (cloned > 0 ? ` (${cloned} cloned to keep shared geom safe)` : '') +
                  (skipped > 0 ? `, ${skipped} skipped (already centered or instanced)` : '');
   if (centered === 0) {
-    toast('Nothing to do', skipped > 0 ? 'All selected parts are already centered or are instanced' : '', 'info');
+    toast('Nothing to do', skipped > 0 ? 'All selected parts are already centred or are instanced' : '', 'info');
   } else {
-    toast('Pivot centered', `${centered} part${centered === 1 ? '' : 's'}${detail}`, 'success');
+    toast('Pivot centred', `${centered} part${centered === 1 ? '' : 's'}${detail}`, 'success');
   }
 }
 
@@ -22489,12 +22640,17 @@ wireUI = function() { _safeRun(_origWireUI, 'base'); _safeRun(wireAdvancedUI, 'a
 (function checkAutoLoad(){
   const f = new URLSearchParams(location.search).get('file');
   if (f) {
-    // Restrict to relative paths under inbox/ — reject absolute, scheme, or protocol-relative URLs.
-    if (/^[a-z][a-z0-9+.-]*:/i.test(f) || f.startsWith('//') || f.startsWith('/') || f.includes('..')) {
-      console.warn('[autoload] rejected non-relative file param:', f);
+    // Only a file this server serves from its inbox/ folder. The address is
+    // resolved the way fetch will resolve it (so a backslash or a stray
+    // control character cannot turn it into another host) and then checked.
+    let u = null;
+    try { u = new URL(f, location.href); } catch (_) {}
+    const inbox = new URL('inbox/', location.href).pathname;
+    if (!u || u.origin !== location.origin || !u.pathname.startsWith(inbox) || /^[a-z][a-z0-9+.-]*:/i.test(f) || f.includes('..')) {
+      console.warn('[autoload] rejected file param (not under inbox/):', f);
       return;
     }
-    const w = setInterval(() => { if (_sceneReady) { clearInterval(w); loadByUrl(f); } }, 100);
+    const w = setInterval(() => { if (_sceneReady) { clearInterval(w); loadByUrl(u.pathname.slice(new URL('.', location.href).pathname.length) + u.search); } }, 100);
   }
 })();
 
@@ -23323,7 +23479,7 @@ function _openMaterialEditor(info) {
         <span class="mat-row-label">${escapeHtml(label)}</span>
         <span></span>
         <div class="mat-row-val">
-          <button type="button" id="${cid}" class="mat-swatch" data-hex="${hex || '#000000'}" style="background:${hex || '#000000'}" title="Click to pick color"></button>
+          <button type="button" id="${cid}" class="mat-swatch" data-hex="${hex || '#000000'}" style="background:${hex || '#000000'}" title="Click to pick colour"></button>
           <input type="text" class="mat-color-hex-v2" id="${cid}-hex" value="${hexClean}" maxlength="7" spellcheck="false" autocomplete="off">
           <input type="text" class="mat-color-pct" id="${cid}-pct" value="100%" inputmode="numeric" autocomplete="off">
           ${texBtn}
@@ -23367,7 +23523,7 @@ function _openMaterialEditor(info) {
        <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-transparent">Transparent</label>
        <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-flat">Flat shading</label>
        <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-wireframe">Wireframe</label>
-       <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-vertexcolors">Vertex colors</label>
+       <label class="mat-edit-toggle"><input type="checkbox" id="mat-edit-vertexcolors">Vertex colours</label>
      </div>`
   );
 
@@ -23597,7 +23753,17 @@ function _openMaterialEditor(info) {
         hex.value = h.replace(/^#/, '').toUpperCase();
         hex.classList.remove('invalid');
       }
-      if (target === mat.color) { _matFollowColorName(mat); _syncName(); _relistSoon(); }
+      if (target === mat.color) {
+        // The parts that wear this material take the colour as their own: the
+        // export, the swatch in the tree and a duplicate all read it from the part.
+        for (const p of state.parts) {
+          if (!p || p.deleted || !p.originalColor) continue;
+          const holder = p.mesh || p.instancedMesh;
+          const pm = holder ? _ownMaterialOf(holder) : null;
+          if (pm === mat || (Array.isArray(pm) && pm.includes(mat))) p.originalColor.copy(mat.color);
+        }
+        _matFollowColorName(mat); _syncName(); _relistSoon();
+      }
       mat.needsUpdate = true;
       requestRender();
       _refreshAll();
@@ -25358,6 +25524,7 @@ async function bboxifyParts(partIds, label='Smart-fit parts', mode='smart') {
       // _partCenter = world bbox centre. applyExplode works in world space
       // then converts deltas back to partsRoot-local before adding to _origPos.
       p._origPos = p.mesh.position.clone();
+      p._origWorldPos = new THREE.Vector3().setFromMatrixPosition(p.mesh.matrixWorld);   // (what the exploded view actually starts from)
       p._partCenter = fitCenter.clone().applyMatrix4(state.partsRoot.matrixWorld);
       // Belt-and-braces: clear any stale instanced-explode cache. Boxified
       // parts always live as standalone meshes after this op; if anything
@@ -25448,6 +25615,7 @@ async function bboxifyParts(partIds, label='Smart-fit parts', mode='smart') {
         sib.mesh.updateMatrixWorld(true);
         sib._exactWorld = sib.mesh.matrixWorld.clone();
         sib._origPos = sib.mesh.position.clone();
+        sib._origWorldPos = new THREE.Vector3().setFromMatrixPosition(sib.mesh.matrixWorld);
         sib._partCenter = fitCenter.clone().applyMatrix4(state.partsRoot.matrixWorld);
         sib._instOrigMat = null;
         sib.triCount = fit.tri; sib.vertCount = fit.vert;
@@ -25533,6 +25701,7 @@ _UndoOps.register('boxify', {
       p._exactWorld = p.mesh.matrixWorld.clone();
       // Restore explode baseline cache so the slider doesn't jump after undo.
       if (it.origOrigPos !== undefined) p._origPos = it.origOrigPos ? it.origOrigPos.clone() : null;
+      p._origWorldPos = null;                       // measured again from the restored mesh
       if (it.origPartCenter !== undefined) p._partCenter = it.origPartCenter ? it.origPartCenter.clone() : null;
       if (it.origInstOrigMat !== undefined) p._instOrigMat = it.origInstOrigMat ? it.origInstOrigMat.clone() : null;
       p.triCount = it.origTri; p.vertCount = it.origVert; p.bbox.copy(it.origBbox);
@@ -25881,8 +26050,8 @@ function _openCommandsMenu(anchor) {
     { icon: 'scan',           label: 'Frame',                kbd: 'F',      off: needAny, fn: act('fit') },
     '---',
     { icon: 'arrow-down-to-line', label: 'Align to the floor',              off: needAny, fn: act('alignFloor') },
-    { icon: 'target',         label: 'Recenter on origin',                  off: needAny, fn: act('recenter') },
-    { icon: 'crosshair',      label: 'Center pivot',                        off: needSel, fn: click('btn-center-pivot') },
+    { icon: 'target',         label: 'Recentre on origin',                  off: needAny, fn: act('recenter') },
+    { icon: 'crosshair',      label: 'Centre pivot',                        off: needSel, fn: click('btn-center-pivot') },
     { icon: 'check',          label: 'Bake transforms',                     off: needAny, fn: click('btn-bake-transforms') },
     { icon: 'sparkles',       label: 'Recompute normals',                   off: needAny, fn: click('btn-recompute-normals') },
     { icon: 'list-tree',      label: 'Flatten hierarchy…',                  off: needAny, fn: act('flatten') },
@@ -26263,7 +26432,7 @@ document.addEventListener('contextmenu', e => {
   if (node.dataset.groupId) {
     const items = [
       { icon: 'check',          label: 'Select group parts',         fn: () => _treeSelectGroupParts(node, 'single') },
-      { icon: 'plus-circle',    label: 'Add group parts to selection', fn: () => _treeSelectGroupParts(node, 'toggle') },
+      { icon: 'plus-circle',    label: 'Add group parts to selection', fn: () => _treeSelectGroupParts(node, 'add') },
       { icon: 'crosshair',      label: 'Frame group',                fn: () => { _treeSelectGroupParts(node, 'single'); frameSelected?.(); } },
       '---',
       { icon: 'pencil',         label: 'Rename group',               fn: () => _treeRenameRow(node) },
@@ -26307,14 +26476,14 @@ document.addEventListener('contextmenu', e => {
     { icon: 'circle-plus',    label: 'Show all',               fn: showAllParts },
     '---',
     { icon: 'shapes',         label: 'Select similar shape',   fn: selectSimilar },
-    { icon: 'palette',        label: 'Select same color',      fn: selectByColor },
+    { icon: 'palette',        label: 'Select same colour',      fn: selectByColor },
     '---',
     { icon: 'folder-plus',    label: `Group selected${selSize > 1 ? ` (${selSize})` : ''}`, kbd: 'Ctrl+G', fn: _treeGroupSelected },
     { icon: 'combine',        label: 'Merge selected',         fn: () => mergeSelectedIntoOne?.() },
     { icon: 'split',          label: 'Split…',                 kbd: 'X', fn: () => _CmdCards.open('split') },
     { icon: 'circle-off',     label: 'Fill holes…',            kbd: 'P', fn: () => _CmdCards.open('fillholes') },
     '---',
-    { icon: p.locked ? 'unlock' : 'lock', label: p.locked ? 'Unlock' : 'Lock', fn: () => { for (const sid of state.selected) { const sp = getPart(sid); if (sp) sp.locked = !sp.locked; } rebuildTree(); /* lock state visible in tree row — no toast */ } },
+    { icon: p.locked ? 'unlock' : 'lock', label: p.locked ? 'Unlock' : 'Lock', fn: () => { const next = !p.locked; for (const sid of state.selected) { const sp = getPart(sid); if (sp) sp.locked = next; } rebuildTree(); /* lock state visible in tree row — no toast */ } },
     { icon: 'wand-2',         label: 'Smart fit selected',     fn: () => smartFitSelection('smart') },
     { icon: 'square',         label: 'Force AABB box',         fn: () => smartFitSelection('aabb') },
     { icon: 'rotate-3d',      label: 'Force OBB box',          fn: () => smartFitSelection('obb') },
@@ -26586,7 +26755,7 @@ function _splitOnePart(part, epsRel, method) {
     const bbox = g.boundingBox.clone().applyMatrix4(worldM);
     const sz = bbox.getSize(new THREE.Vector3());
 
-    const mat = getOrCreateMaterial(part.originalColor);
+    const mat = (part.mesh && _ownMaterialOf(part.mesh)) || getOrCreateMaterial(part.originalColor);
     const m = new THREE.Mesh(g, mat);
     m.name = (part.name || ('part_' + part.partId)) + '__p' + (i + 1);
     m.userData.partId = childId;
@@ -26924,8 +27093,27 @@ function _splitMeshEdgeConnectivityCount(geom, epsAbs) {
 // AABBs overlap (share a cell) are unioned. Doesn't read the index buffer at
 // all — useful when the source has fused topology between solids that are
 // still spatially separate. cellSize is in absolute model units.
+// The grid the proximity split sorts triangles into is kept to a bounded size.
+// The cell asked for is a fraction of the whole model, so on one large part
+// with large triangles (a plate, a box) a single triangle could cover
+// hundreds of cells each way, millions of entries, and the tab froze or ran
+// out of memory. The cell is never smaller than 1/_SPLIT_MAX_CELLS of the
+// mesh's own longest side, and one triangle is entered in at most
+// _SPLIT_MAX_SPAN cells per axis.
+const _SPLIT_MAX_CELLS = 128, _SPLIT_MAX_SPAN = 24;
+function _splitCapCell(geom, cellSize) {
+  try {
+    if (!geom.boundingBox) geom.computeBoundingBox();
+    const b = geom.boundingBox;
+    const side = b ? Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) : 0;
+    if (Number.isFinite(side) && side > 0) return Math.max(cellSize, side / _SPLIT_MAX_CELLS);
+  } catch (_) {}
+  return cellSize;
+}
+
 function _splitMeshSpatialAABB(geom, cellSize) {
   if (!cellSize || cellSize <= 0) cellSize = (state.modelDiag || 1) * 1e-3;
+  cellSize = _splitCapCell(geom, cellSize);
   const pos = geom.attributes.position;
   if (!pos) return null;
   const idxAttr = geom.index;
@@ -26950,9 +27138,11 @@ function _splitMeshSpatialAABB(geom, cellSize) {
     const x0 = Math.floor(tBox[0] * inv), x1 = Math.floor(tBox[3] * inv);
     const y0 = Math.floor(tBox[1] * inv), y1 = Math.floor(tBox[4] * inv);
     const z0 = Math.floor(tBox[2] * inv), z1 = Math.floor(tBox[5] * inv);
-    for (let xi = x0; xi <= x1; xi++)
-      for (let yi = y0; yi <= y1; yi++)
-        for (let zi = z0; zi <= z1; zi++) {
+    // (a triangle that spans very many cells is entered in a sample of them, _SPLIT_MAX_SPAN per axis)
+    const sx = Math.max(1, Math.ceil((x1 - x0 + 1) / _SPLIT_MAX_SPAN)), sy = Math.max(1, Math.ceil((y1 - y0 + 1) / _SPLIT_MAX_SPAN)), sz = Math.max(1, Math.ceil((z1 - z0 + 1) / _SPLIT_MAX_SPAN));
+    for (let xi = x0; xi <= x1; xi += sx)
+      for (let yi = y0; yi <= y1; yi += sy)
+        for (let zi = z0; zi <= z1; zi += sz) {
           const key = xi + ',' + yi + ',' + zi;
           const arr = cellMap.get(key);
           if (arr) arr.push(t); else cellMap.set(key, [t]);
@@ -26970,6 +27160,7 @@ function _splitMeshSpatialAABB(geom, cellSize) {
 
 function _splitMeshSpatialAABBCount(geom, cellSize) {
   if (!cellSize || cellSize <= 0) cellSize = (state.modelDiag || 1) * 1e-3;
+  cellSize = _splitCapCell(geom, cellSize);
   const pos = geom.attributes && geom.attributes.position;
   if (!pos) return 0;
   const idxAttr = geom.index;
@@ -26992,9 +27183,11 @@ function _splitMeshSpatialAABBCount(geom, cellSize) {
     const x0 = Math.floor(minx * inv), x1 = Math.floor(maxx * inv);
     const y0 = Math.floor(miny * inv), y1 = Math.floor(maxy * inv);
     const z0 = Math.floor(minz * inv), z1 = Math.floor(maxz * inv);
-    for (let xi = x0; xi <= x1; xi++)
-      for (let yi = y0; yi <= y1; yi++)
-        for (let zi = z0; zi <= z1; zi++) {
+    // (a triangle that spans very many cells is entered in a sample of them, _SPLIT_MAX_SPAN per axis)
+    const sx = Math.max(1, Math.ceil((x1 - x0 + 1) / _SPLIT_MAX_SPAN)), sy = Math.max(1, Math.ceil((y1 - y0 + 1) / _SPLIT_MAX_SPAN)), sz = Math.max(1, Math.ceil((z1 - z0 + 1) / _SPLIT_MAX_SPAN));
+    for (let xi = x0; xi <= x1; xi += sx)
+      for (let yi = y0; yi <= y1; yi += sy)
+        for (let zi = z0; zi <= z1; zi += sz) {
           const key = xi + ',' + yi + ',' + zi;
           const arr = cellMap.get(key);
           if (arr) arr.push(t); else cellMap.set(key, [t]);
@@ -27188,7 +27381,8 @@ function _wireMeshSplitter() {
     label: 'Weld tolerance',
     maxSteps: 10,
     stepToVal: (s) => -7 + s * 0.5,
-    valToStep: (v) => Math.max(0, Math.min(10, Math.round((v + 7) / 0.5))),
+    // (the chip shows the tolerance itself, "1e-4"; a value typed or left there is that, not its log10)
+    valToStep: (v) => { const lg = v > 0 ? Math.log10(v) : v; return Math.max(0, Math.min(10, Math.round((lg + 7) / 0.5))); },
     format: (v) => ({ value: _splitFmtEps(Math.pow(10, v)), unit: '× diag' }),
     initialValue: -4,
     promptTitle: 'Weld tolerance (log10)',
@@ -27829,7 +28023,7 @@ function _initCustomSelects() {
 if (typeof document !== 'undefined') {
   // one set of listeners for every dropdown (each used to add its own)
   document.addEventListener('mousedown', (ev) => { if (_csOpen && !_csOpen.pop.contains(ev.target) && ev.target !== _csOpen.trigger) _csClose(); }, true);
-  document.addEventListener('keydown', (ev) => { if (_csOpen && ev.key === 'Escape') { ev.stopPropagation(); _csClose(); } }, true);
+  document.addEventListener('keydown', (ev) => { if (_csOpen && ev.key === 'Escape') { ev.stopImmediatePropagation(); ev.preventDefault(); _csClose(); } }, true);
   window.addEventListener('blur', _csClose);
   window.addEventListener('resize', _csClose);
   // a <select> that turns up later is dressed too
@@ -27915,8 +28109,8 @@ if (typeof document !== 'undefined') {
       e.preventDefault();
       const colorHex = matRow.dataset.matColor;
       _ctxBuild([
-        { icon: 'palette', label: 'Select all parts with this color', fn: () => { matRow.click(); } },
-        { icon: 'eye-off', label: 'Hide all parts with this color',   fn: () => {
+        { icon: 'palette', label: 'Select all parts with this colour', fn: () => { matRow.click(); } },
+        { icon: 'eye-off', label: 'Hide all parts with this colour',   fn: () => {
             _applyVisibility(state.parts
               .filter(p => !p.deleted && '#' + p.originalColor.getHexString() === colorHex)
               .map(p => [p, false]));
@@ -27936,7 +28130,7 @@ if (typeof document !== 'undefined') {
         items.push({ icon: 'focus',           label: 'Isolate selected',   fn: isolateSelected });
         items.push('---');
         items.push({ icon: 'shapes',          label: 'Select similar shape', fn: selectSimilar });
-        items.push({ icon: 'palette',         label: 'Select same color',  fn: selectByColor });
+        items.push({ icon: 'palette',         label: 'Select same colour',  fn: selectByColor });
         items.push('---');
         items.push({ icon: 'copy',            label: 'Copy',               kbd: 'Ctrl+C', fn: () => copyParts([...state.selected]) });
         if ((state._clipboardParts || []).length) items.push({ icon: 'clipboard-paste', label: 'Paste', kbd: 'Ctrl+V', fn: () => pasteParts() });
@@ -27970,7 +28164,7 @@ if (typeof document !== 'undefined') {
         items.push('---');
         // Output
         items.push({ icon: 'camera',           label: 'Save screenshot…',                   fn: () => _captureViewportScreenshot?.() });
-        items.push({ icon: 'save',             label: 'Save scene',                         fn: () => $('btn-save-scene')?.click() });
+        items.push({ icon: 'save',             label: 'Save scene…',                         fn: () => $('btn-save-scene')?.click() });
       }
       _ctxBuild(items, e.clientX, e.clientY);
       return;
@@ -28070,8 +28264,7 @@ function _wireSidebarResize() {
     });
     // Double-click to reset to default — escape hatch for "I dragged too far".
     handle.addEventListener('dblclick', () => {
-      const def = side === 'left' ? '280px' : '320px';
-      root.style.setProperty(prop, def);
+      root.style.removeProperty(prop);
       try { localStorage.removeItem(side === 'left' ? STORE_L : STORE_R); } catch {}
       if (typeof onWindowResize === 'function') onWindowResize();
     });
@@ -28709,7 +28902,7 @@ groupSelectedUnderNull = async function() {
   const ctx = (typeof _dndContext === 'function') ? _dndContext() : 'flat';
   _dndDoNewGroupFromRows(rows, ctx, groupName);
   if (skipped && typeof toast === 'function') {
-    toast('Some parts skipped', `${skipped} instanced parts can't be reparented`, 'warn');
+    toast('Some parts skipped', `${skipped} instanced ${skipped === 1 ? 'part' : 'parts'} can't be reparented`, 'warn');
   }
   // Hier path doesn't auto-rebuild — make sure the new group renders.
   if (ctx === 'hier') rebuildTree();
@@ -29147,7 +29340,7 @@ const _FlattenDialog = (() => {
       const help = bg.querySelector('#_flat-sel-help');
       const selOpt = bg.querySelector('input[name="flat-scope"][value="selected"]');
       if (selectedGroupCount > 0) {
-        const preview = selectedNames.slice(0, 3).map(n => `“${n}”`).join(', ');
+        const preview = selectedNames.slice(0, 3).map(n => `“${escapeHtml(n)}”`).join(', ');
         const more = selectedNames.length > 3 ? ` + ${selectedNames.length - 3} more` : '';
         help.innerHTML = `Apply only inside <strong>${selectedGroupCount}</strong> selected group${selectedGroupCount === 1 ? '' : 's'}: ${preview}${more}.`;
         selOpt.disabled = false;
@@ -29477,8 +29670,6 @@ async function flattenTree() {
   }
   const dissolved = plan.gone.length;
 
-  console.log('[flatten] scope=%s mode=%s roots=%d dissolved=%d snapshots=%d',
-    opts.scope, opts.mode, roots.length, dissolved, snapshots.length);
 
   // Nothing matched: leave everything untouched and say why, instead of
   // reporting a flatten that did nothing.
@@ -30176,7 +30367,7 @@ const _BatchRename = (() => {
         const escaped = String(rule.find).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         re = new RegExp(escaped, rule.matchCase ? 'g' : 'gi');
       }
-      return cand.currentName.replace(re, rule.replace || '');
+      return cand.currentName.replace(re, rule.regex ? (rule.replace || '') : () => rule.replace || '');
     }
     if (rule.kind === 'pattern') {
       const ctx = {
@@ -30512,7 +30703,7 @@ const _DraggablePopup = (() => {
         // browser will handle it by cancelling composition rather than
         // dismissing.
         if (e.isComposing) return;
-        if (e.key === 'Escape') { e.preventDefault(); _hide(); }
+        if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _hide(); }      // (not also "clear the selection")
       }, true);
     }
     xBtn.addEventListener('click', _hide);
@@ -31326,7 +31517,8 @@ const _Measure = (() => {
 
   function _fmtVal(value) {
     const u = (state.displayUnit && state.displayUnit !== 'none') ? ' ' + state.displayUnit : '';
-    const v = value;
+    // (the scene is in millimetres; the read-out is in the unit chosen under Scene)
+    const v = value * ((typeof _UNIT_FACTOR !== 'undefined' && _UNIT_FACTOR[state.displayUnit]) || 1);
     const txt = v >= 1000 ? v.toFixed(0)
               : v >= 100  ? v.toFixed(1)
               : v >= 10   ? v.toFixed(2)
@@ -32017,11 +32209,11 @@ const _Measure = (() => {
       list.innerHTML = '';
       return;
     }
-    // String build with escapeHtml on the value (the only user-visible field
-    // that originates from runtime state). kind is hard-coded; id is alphanum.
+    // Everything is escaped: measurements can come from a scene saved inside
+    // a file (setSerialized), so neither the id nor the kind can be trusted.
     list.innerHTML = items.map(it => `
-      <div class="msr-row" data-id="${it.id}">
-        <span class="msr-kind">${it.kind}</span>
+      <div class="msr-row" data-id="${escapeHtml(it.id)}">
+        <span class="msr-kind">${escapeHtml(it.kind)}</span>
         <span class="msr-val" title="${escapeHtml(_fmtVal(it.value))}">${escapeHtml(_fmtVal(it.value))}</span>
         <button class="msr-del" type="button" title="Delete this measurement"><i data-lucide="x"></i></button>
       </div>`).join('');
@@ -32038,7 +32230,7 @@ const _Measure = (() => {
   function getSerialized() { return items.map(_serialiseItem); }
 
   function setSerialized(list) {
-    _disposePendingMarker();
+    try { _cancelPending(); } catch (_) { _disposePendingMarker(); }
     while (items.length) {
       const it = items.pop();
       _disposeRendered(it);
@@ -32047,8 +32239,9 @@ const _Measure = (() => {
       for (const s of list) {
         if (!s?.a || !s?.b || s.a.length !== 3 || s.b.length !== 3) continue;
         const it = {
-          id: s.id || ('msr_' + Date.now().toString(36) + '_' + Math.floor(Math.random() * 999)),
-          kind: s.kind || 'distance',
+          // (from a file: keep an id only if it looks like one of ours; there is one kind)
+          id: (typeof s.id === 'string' && /^msr_[a-z0-9_]+$/i.test(s.id)) ? s.id : ('msr_' + Date.now().toString(36) + '_' + Math.floor(Math.random() * 999)),
+          kind: 'distance',
           a: s.a.slice(),
           b: s.b.slice(),
           value: typeof s.value === 'number' ? s.value : Math.hypot(s.a[0]-s.b[0], s.a[1]-s.b[1], s.a[2]-s.b[2]),
@@ -32162,9 +32355,9 @@ wireUI = function() {
   // M toggles measure mode; Esc cancels current pick or exits mode.
   // Skipped while typing into inputs so the user can type "m" in fields.
   window.addEventListener('keydown', (e) => {
-    const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (_typingTarget(e)) return;
     if (e.key === 'm' || e.key === 'M') {
+      if (_modalOpen()) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
       _Measure.toggle();
@@ -32565,7 +32758,7 @@ wireUI = function() {
   const btn = document.getElementById('tree-batch-rename');
   btn?.addEventListener('click', () => _openBatchRenameDialog(btn));
   window.addEventListener('keydown', e => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+    if (_typingTarget(e) || _modalOpen()) return;
     if (e.key === 'F2') {
       e.preventDefault();
       _openBatchRenameDialog(document.getElementById('tree-batch-rename'));
@@ -32965,7 +33158,7 @@ function _dndBegin(originRow) {
   }
   const n = rows.length;
   const firstLabel = (rows[0].querySelector('.tree-label')?.textContent || '').trim().slice(0, 60) || 'item';
-  _dndGhost.innerHTML = `<span class="badge">${n}</span>${firstLabel}${n > 1 ? ' …' : ''}`;
+  _dndGhost.innerHTML = `<span class="badge">${n}</span>${escapeHtml(firstLabel)}${n > 1 ? ' …' : ''}`;
   _dndGhost.style.display = 'block';
 
   if (!_dndIndicator) {
@@ -33450,7 +33643,7 @@ function _dndDoNewGroupFromRows(rows, ctx, explicitName) {
   });
   const skipped = partIds.size - movable.length;
   if (movable.length === 0) {
-    toast('Nothing to group', skipped ? `${skipped} parts can't be reparented (instanced)` : '', 'warn');
+    toast('Nothing to group', skipped ? `${skipped} instanced ${skipped === 1 ? 'part' : 'parts'} can't be reparented` : '', 'warn');
     return;
   }
   const defaultName = explicitName || ('Group ' + ((state._userGroupCount || 0) + 1));
@@ -33889,7 +34082,8 @@ function _ensureManualOrder() {
 function _manualOrderInsert(key, beforeKey) {
   const m = state._manualOrder;
   const entries = [...m.entries()].sort((a, b) => a[1] - b[1]).map(e => e[0]).filter(k => k !== key);
-  const insertIdx = (beforeKey == null) ? entries.length : Math.max(0, entries.indexOf(beforeKey));
+  const _at = (beforeKey == null) ? -1 : entries.indexOf(beforeKey);
+  const insertIdx = _at < 0 ? entries.length : _at;
   entries.splice(insertIdx, 0, key);
   m.clear();
   for (let i = 0; i < entries.length; i++) m.set(entries[i], i);
@@ -34665,7 +34859,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   // '4' shortcut. Guards mirror the existing 1/2/3 handler — skip when an
   // input is focused or modifier keys are held.
   window.addEventListener('keydown', (e) => {
-    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+    if (_typingTarget(e) || _modalOpen()) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === '4') setViewMode('heat');
   });
@@ -34942,12 +35136,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     if (undoItems.length) pushUndo({ type: 'decimate', label: 'Decimate', items: undoItems });
 
     // Refresh aggregates + UI.
-    try {
-      let total = 0;
-      for (const p of state.parts) if (!p.deleted) total += p.triCount;
-      const $vt = $('vp-tris'); if ($vt) $vt.textContent = total.toLocaleString();
-      const $st = $('sb-tris'); if ($st) $st.textContent = total.toLocaleString();
-    } catch (_) {}
+    try { recomputeStats(); } catch (_) {}
     try { rebuildTree && rebuildTree(); } catch (_) {}
     try { refreshPropertiesPanel && refreshPropertiesPanel(); } catch (_) {}
     try { applySelectionColors && applySelectionColors(); } catch (_) {}
@@ -35376,7 +35565,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     opts = (opts && typeof opts === 'object' && !(opts instanceof Event)) ? opts : {};
     const nViews = Math.max(14, Math.min(256, opts.views | 0 || _HIDDEN_VIEWS));
     const all = _exportDrawList(true);
-    const seeThrough = (m) => state.viewMode !== 'xray' && !!m && !Array.isArray(m) && m.transparent && m.opacity < 0.99;
+    const seeThrough = (m) => state.viewMode !== 'xray' && state.viewMode !== 'heat' && !!m && !Array.isArray(m) && m.transparent && m.opacity < 0.99;
     const items = opts.glassHides ? all : all.filter(it => !seeThrough(it.srcMat));
     const within = opts.scope === 'sel' && state.selected.size ? new Set(state.selected) : null;
     const candidates = items.filter(it => it.part && !it.isClone && (!within || within.has(it.part.partId)));

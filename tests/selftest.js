@@ -884,7 +884,7 @@
     const txt = () => document.getElementById('prop-body').innerText.replace(/\s+/g, ' ');
     const tris = () => T.live().reduce((a, p) => a + p.triCount, 0);
     await T.sleep(200);
-    T.assert(/Parts 2\b/.test(txt()) && txt().includes(tris().toLocaleString() + ' triangles'), 'no scene totals with nothing selected: ' + txt());
+    T.assert(/Parts 2\b/.test(txt()) && txt().includes(tris().toLocaleString() + ' tris'), 'no scene totals with nothing selected: ' + txt());
     T.assert(!/No selection/.test(txt()), 'the card still says "No selection"');
     T.eq(document.getElementById('vp-tris').textContent, tris().toLocaleString(), 'viewport triangle count for a scene made of shapes');
     T.eq(document.getElementById('sb-tris').textContent, tris().toLocaleString(), 'status-bar triangle count for a scene made of shapes');
@@ -984,7 +984,8 @@
     await T.pick(['Cube']);
     document.getElementById('mat-act-add').click(); await T.sleep(400);
     const m = T.part('Cube').mesh.material;
-    T.eq(m.name, 'mat_' + m.color.getHexString(), 'name of a new material');
+    T.assert(/^Material \d+$/.test(m.name), 'a new material is not called "Material" and a number: ' + m.name);
+    m.name = 'mat_' + m.color.getHexString();        // named after its colour, as an imported material is
     cells().find(c => c._mat === m).dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await T.sleep(700);
     const nameEl = () => document.querySelector('.mat-edit-preview-name');
     if (!nameEl()) return 'skipped (material editor did not open)';
@@ -1028,11 +1029,11 @@
     if (!Tabs) return 'skipped (no tabs)';
     const strip = document.getElementById('doc-tabs');
     T.eq(Tabs.count(), 1, 'tabs at the start');
-    // the Unsaved pill: shown with an edit in the history, gone when the scene is as saved
+    // the unsaved dot on the tab's icon: shown with an edit in the history, gone when the scene is as saved
     const pill = document.getElementById('doc-unsaved');
-    T.assert(pill.offsetParent !== null, 'no Unsaved pill on a scene with an unsaved cube');
+    T.assert(pill.offsetParent !== null, 'no unsaved dot on a scene with an unsaved cube');
     await T.undo(); await T.sleep(150);
-    T.assert(pill.offsetParent === null, 'the Unsaved pill is still drawn on a scene with nothing in it');
+    T.assert(pill.offsetParent === null, 'the unsaved dot is still drawn on a scene with nothing in it');
     await T.redo(); await T.sleep(150);
     T.assert(strip.querySelector('.doc-tab-add') && !strip.querySelector('.doc-tab.other'), 'the strip does not show one tab and a + button');
     window.__moNoTabs = false;

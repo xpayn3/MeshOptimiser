@@ -17,7 +17,7 @@ ROOT = Path(__file__).parent.resolve()
 INBOX = ROOT / "inbox"
 INBOX.mkdir(exist_ok=True)
 
-# step2glb.py needs numpy / OCP / pygltflib, which live in the project's .venv.
+# step2glb.py needs numpy / OCP / trimesh, which live in the project's .venv.
 # Users routinely launch `python serve.py` from a global Python that has none of
 # them, so we always prefer the venv's interpreter for the subprocess if it
 # exists. Falls back to whatever's running serve.py.
@@ -314,6 +314,13 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
             return
         if rc != 0:
             raise RuntimeError(f"step2glb.py exited with code {rc}")
+        # The converter can finish without an error and without a file: a STEP
+        # that holds only surfaces or wires has no solid for it to mesh.
+        if not dst_path.exists():
+            for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf")):
+                try: stale.unlink(missing_ok=True)
+                except OSError: pass
+            raise RuntimeError("Nothing to convert: this STEP file has no solid bodies in it")
         # Drop the uploaded STEP + its XCAF binary cache — both are large
         # (often hundreds of MB) and only useful during the conversion. The
         # .glb is the durable artifact the user keeps.
@@ -362,11 +369,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if "/favicon.ico" in msg: return
         sys.stderr.write(f"  {self.address_string()} - {msg}\n")
 
+    # Who is asking. The server only listens on this computer, but any web page
+    # open in the browser can still send requests to http://localhost:<port>.
+    # Two checks keep those out:
+    #   Host    must be this server's own address. A page that points its own
+    #           domain at 127.0.0.1 (DNS rebinding) arrives with its domain here.
+    #   Origin  (sent with every cross-site POST) must be this server, or absent
+    #           (the app's own GETs, curl, the launcher).
+    def _trusted(self) -> bool:
+        port = self.server.server_address[1]
+        hosts = {f"localhost:{port}", f"127.0.0.1:{port}"}
+        if (self.headers.get("Host") or "").strip().lower() not in hosts:
+            return False
+        origin = self.headers.get("Origin")
+        return origin is None or origin.strip().lower() in {"http://" + h for h in hosts}
+
+    def _refuse(self):
+        return self._json({"error": "forbidden"}, 403)
+
+    # No folder listings, and nothing from a dot-folder (.git, .venv): the app
+    # asks for files by name and never for either.
+    def list_directory(self, path):
+        self.send_error(404, "Not found")
+        return None
+
     def do_GET(self):
+        if not self._trusted(): return self._refuse()
         u = urlparse(self.path)
         if u.path == "/favicon.ico":
             self.send_response(204); self.end_headers(); return
-        if u.path == "/api/jobs": return self._json(JOBS)
+        if any(seg.startswith(".") for seg in u.path.split("/") if seg):
+            self.send_error(404, "Not found"); return
         if u.path.startswith("/api/job/"):
             job_id = u.path.rsplit("/", 1)[-1]
             with JOBS_LOCK: job = JOBS.get(job_id)
@@ -374,7 +407,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(job)
         return super().do_GET()
 
+    def do_HEAD(self):
+        if not self._trusted(): return self._refuse()
+        u = urlparse(self.path)
+        if any(seg.startswith(".") for seg in u.path.split("/") if seg):
+            self.send_error(404, "Not found"); return
+        return super().do_HEAD()
+
     def do_POST(self):
+        if not self._trusted(): return self._refuse()
         u = urlparse(self.path)
         if u.path == "/api/convert": return self._handle_convert()
         if u.path == "/api/quit":    return self._handle_quit()
@@ -408,6 +449,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self._json({"status": "shutting down"})
         def _stop():
             time.sleep(0.1)
+            with JOBS_LOCK: running = list(PROCS.values())
+            for proc in running:                      # a conversion still going has nobody left to read it
+                try: _kill_tree(proc)
+                except Exception: pass
             try:
                 if HTTPD is not None: HTTPD.shutdown()
             except Exception: pass
@@ -535,11 +580,22 @@ def _app_browsers():
         return [f"/Applications/{n}.app/Contents/MacOS/{n}" for n in ("Google Chrome", "Microsoft Edge", "Brave Browser")]
     return [p for p in (shutil.which(n) for n in ("google-chrome", "chromium", "chromium-browser", "microsoft-edge", "brave-browser")) if p]
 
+def _already_running(port: int) -> bool:
+    """True when a MeshOptimiser server answers on this port."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/manifest.webmanifest", timeout=0.6) as r:
+            return json.loads(r.read().decode("utf-8", "replace")).get("name") == "MeshOptimiser"
+    except Exception:
+        return False
+
 def _open_app_window(url: str) -> bool:
     for exe in _app_browsers():
         if not os.path.isfile(exe): continue
         try:
-            subprocess.Popen([exe, f"--app={url}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # (a session of its own, so Ctrl+C in the server's terminal does not reach the browser)
+            subprocess.Popen([exe, f"--app={url}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=(os.name != "nt"))
             return True
         except Exception:
             continue
@@ -581,12 +637,33 @@ def main() -> int:
     # would block /api/job polling while a parallel /api/convert was uploading,
     # making the loader appear stuck. http.server.ThreadingHTTPServer was added
     # in Python 3.7 and is the standard for local dev tools.
-    http.server.ThreadingHTTPServer.allow_reuse_address = True
-    candidate_ports = [args.port, 4242, 5173, 8765, 9090, 7373, 3737, 8181, 0]
+    #
+    # allow_reuse_address is SO_REUSEADDR. On Windows that lets a second server
+    # bind a port another one is already serving (both "start", only one gets
+    # the requests), so it is left off there; elsewhere it only allows a quick
+    # restart on the same port.
+    class _Server(http.server.ThreadingHTTPServer):
+        allow_reuse_address = (os.name != "nt")
+        daemon_threads = True
+
+    # Already running? Then this launch is "open the window again": show it on
+    # the server that is there instead of starting a second one on another
+    # port (an installed copy of the app only knows the first address).
+    if _already_running(args.port):
+        url = f"http://localhost:{args.port}/index.html"
+        if auto_load: url += "?file=" + quote(auto_load)
+        print(f"\n  MeshOptimiser is already running at  {url}\n")
+        if not args.no_browser:
+            if args.tab or not _open_app_window(url):
+                try: webbrowser.open(url)
+                except Exception: pass
+        return 0
+
+    candidate_ports = list(dict.fromkeys([args.port, 4242, 5173, 8765, 9090, 7373, 3737, 8181, 0]))
     httpd = None; chosen_port = None; last_err = None
     for p in candidate_ports:
         try:
-            httpd = http.server.ThreadingHTTPServer(("127.0.0.1", p), Handler)
+            httpd = _Server(("127.0.0.1", p), Handler)
             chosen_port = httpd.server_address[1]; break
         except OSError as e:
             last_err = e

@@ -106,7 +106,6 @@
       if (c.mode === 'radial') {
         // Radial is inherently centered around the cloner origin; centerArray
         // is a no-op here.
-        if (i === 0) return out.identity();
         const R = c.radial;
         const denom = (R.count > 1 && Math.abs(R.endDeg - R.startDeg) % 360 !== 0) ? (R.count - 1) : R.count;
         const t = (denom > 0) ? i / denom : 0;
@@ -301,7 +300,8 @@
             if (cloneCount === 0) continue;
             const srcLocal = src.matrix;
             if (c.useInstancing) {
-              const inst = new THREE.InstancedMesh(src.geometry, src.material, cloneCount);
+              // (the source's real material, not the shared one the Clay view lends it)
+              const inst = new THREE.InstancedMesh(src.geometry, (window._ownMaterialOf ? window._ownMaterialOf(src) : src.material), cloneCount);
               inst.userData._isClonerInstance = true;
               inst.userData._clonerOwner = p.partId;
               inst.frustumCulled = false;
@@ -319,7 +319,7 @@
               grp.userData._clonerCloneRefs.push(inst);
             } else {
               for (let i = 0; i < cloneCount; i++) {
-                const m = new THREE.Mesh(src.geometry, src.material);
+                const m = new THREE.Mesh(src.geometry, (window._ownMaterialOf ? window._ownMaterialOf(src) : src.material));
                 m.userData._isClonerClone = true;
                 m.userData._clonerOwner = p.partId;
                 _clonerOffsetMatrix(c, i + startIdx, _M);
@@ -341,6 +341,7 @@
           }
         }
         grp.updateMatrixWorld(true);
+        try { window._clayRefresh && window._clayRefresh(); } catch (_) {}     // new copies wear the Clay view too, if it is on
       } finally {
         state.renderPaused = _wasPaused;
         // Even if rebuild threw, kick a render so the dirty flag matches
@@ -1600,7 +1601,6 @@
       dissolve: _clonerDissolve,
       stress: _stress,
     };
-    console.log('[cloner] ready — _Cloner.createFromSelection() or cmd-K → "Cloner from selection". Stress-test: _Cloner.stress()');
   }
 
   _whenReady();

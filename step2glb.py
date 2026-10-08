@@ -28,7 +28,7 @@ Requirements:
     optional: gltfpack on PATH (https://meshoptimizer.org/gltf/)
 """
 from __future__ import annotations
-import argparse, hashlib, shutil, subprocess, sys, time
+import argparse, hashlib, json, shutil, subprocess, sys, time
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
@@ -272,6 +272,10 @@ def _load_xcaf_cache(path: Path):
     color_tool = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
     free_labels = TDF_LabelSequence()
     shape_tool.GetFreeShapes(free_labels)
+    # A cache that opens but holds no shapes is no cache: the caller parses the
+    # STEP again (returning it empty gave a model without colours or names).
+    if free_labels.Length() == 0:
+        raise RuntimeError("cache loaded with no shapes")
     return doc, shape_tool, color_tool, free_labels
 
 

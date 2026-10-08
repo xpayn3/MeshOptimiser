@@ -66,7 +66,7 @@ echo.
 
 REM --- Step 2: virtualenv -------------------------------------
 echo  [2/4] Checking local Python environment...
-if exist ".venv\Scripts\python.exe" goto venv_ready
+if exist ".venv\Scripts\python.exe" goto venv_exists
 
 echo        First-time setup - creating .venv (takes ~30 seconds)...
 %PY% -m venv .venv
@@ -79,17 +79,27 @@ if errorlevel 1 (
   exit /b 1
 )
 
+:venv_exists
+REM The packages are installed once per requirements.txt: a copy of the file is
+REM kept in .venv after a successful install, and compared here. So a first
+REM run that failed half-way, or an update that changed the requirements, is
+REM put right on the next start instead of being skipped for good.
+fc /b requirements.txt ".venv\.requirements.installed" >nul 2>&1
+if not errorlevel 1 goto venv_ready
+
 echo        Installing dependencies (takes 1-3 minutes the first time)...
 call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 if errorlevel 1 (
   echo.
-  echo    ERROR: pip install failed. Check your internet connection.
+  echo    ERROR: pip install failed.
+  echo    Check your internet connection, and that Python is 3.10 to 3.12.
   echo.
   pause
   exit /b 1
 )
+copy /y requirements.txt ".venv\.requirements.installed" >nul
 echo        Setup complete.
 goto venv_done
 

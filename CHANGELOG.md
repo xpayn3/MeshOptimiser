@@ -4,6 +4,93 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## Unreleased
+
+A read of the whole code base and a round of beta testing after v0.13.0.
+No new features: what is here is what was found to be wrong.
+
+**Security**
+
+- ![fix][fix] **The local server answers only its own page.** Any web page
+  open in the browser could send requests to `localhost:4242`: stop the
+  server, or start a conversion on a file of its choosing. Requests are
+  now refused unless they come from the app's own address, folders are no
+  longer listed, and nothing is served from `.git` or `.venv`.
+- ![fix][fix] **Names and scene data from a file are never run as markup.**
+  Three places built HTML from them without escaping: measurements saved
+  inside a GLB, the label that follows a dragged tree row, and the Flatten
+  dialog. The `?file=` address is checked the way it will be fetched.
+
+**Parts and scenes**
+
+- ![fix][fix] **A fresh install converts STEP again.** The OpenCascade
+  package had moved to a version the converter cannot import; the
+  versions are pinned, and `start.bat` installs again when the
+  requirements change or the first install failed.
+- ![fix][fix] **Hidden instanced parts no longer wreck a Select all.** A
+  hidden copy was made into a mesh from a zero matrix, and the NaN that
+  came out spread to every selected part.
+- ![fix][fix] **Undo brings back deleted instanced parts.** Deleting every
+  copy of a repeated part removed the set from the scene; undo restored
+  the rows but nothing drew them.
+- ![fix][fix] **A colour changed in the material editor is exported**, and
+  shows on the part's swatch in the tree. Duplicate and Split keep the
+  material a part is wearing.
+- ![fix][fix] **Smart fit, Centre pivot and Bake no longer fight the
+  exploded view.** A fitted part jumped back to its old origin on the
+  next move of the slider.
+- ![fix][fix] **Clay does not stick.** A part made from an instance, or a
+  cloner copy built while Clay was on, kept the clay material for good.
+- ![fix][fix] **Split by proximity cannot freeze the tab.** Its grid is
+  bounded: on a plate or a box one triangle used to fill millions of
+  cells.
+- ![fix][fix] **Measurements are shown in the unit chosen**, not in
+  millimetres with another unit's name after them.
+- ![fix][fix] **Files with invalid coordinates open.** NaN and Infinity
+  are set to 0, with a notice; before, the camera became not-a-number
+  and the viewport never recovered. A broken or empty file gets a plain
+  message, and a file with no meshes says so.
+- ![fix][fix] **Import no longer turns later Opens into appends**, and
+  "Don't ask again" can be undone under Settings › Storage.
+- ![fix][fix] **Quit asks about every open scene**, not only the one in
+  front.
+
+**Viewport**
+
+- ![fix][fix] **HDRI works the second time.** Leaving it disposed the
+  environment it would need again.
+- ![fix][fix] **One slow frame no longer doubles the render loop**, and a
+  long load is not reported as a stalled viewport.
+- ![fix][fix] **Fit frames the model in orthographic views.**
+- ![fix][fix] **Parts keep their size on screen after a scene scale.** The
+  moving-view culling measured boxes from before the change.
+
+**Interface**
+
+- ![fix][fix] **Switches can be reached with Tab and flipped with Space.**
+  All of them were out of the tab order.
+- ![fix][fix] **Tooltips follow what they describe**: the save state on a
+  tab, Collapse / Expand all. Icon-only buttons keep a name for screen
+  readers.
+- ![fix][fix] **Enter presses the button that has the focus** in a dialog,
+  instead of always accepting. `Esc` in a dropdown closes the dropdown
+  only.
+- ![fix][fix] Single-key shortcuts (`4`, `5`, `M`, `F2`) no longer fire
+  behind a dialog or while a dropdown has the focus.
+- ![polish][polish] **British spelling throughout** the visible text.
+- ![fix][fix] Lock / Unlock on a mixed selection; "Add group parts to
+  selection" adds; plain Find & Replace treats `$` as text; OBJ export
+  keeps non-Latin names; ASCII FBX keeps its precision at any export
+  scale; cloner radial mode no longer leaves a copy at the centre.
+
+**Launchers**
+
+- ![fix][fix] `step2glb.bat` uses the project's own Python and passes
+  every argument on. The macOS launchers are executable after a clone,
+  and line endings are fixed by `.gitattributes`.
+- ![fix][fix] Starting the app twice opens the window on the server that
+  is already running instead of starting a second one.
+
 ## v0.13.0
 
 v0.12 gave the app things to build with. v0.13 makes it feel like an app.
