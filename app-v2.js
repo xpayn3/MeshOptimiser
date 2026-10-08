@@ -27,7 +27,7 @@ const $ = id => document.getElementById(id);
 
 const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
-  viewMode: 'solid', showGrid: true, showBboxes: false,
+  viewMode: 'solid', showGrid: true,
   highlightSmall: false, bgMode: 'dark', fog: false,
   fogNear: null, fogFar: null,     // null = auto-tune from model footprint
   fogIntensity: 1,                 // multiplier on fog falloff range
@@ -69,7 +69,6 @@ const state = {
   // ── Perf: render-on-demand + lazy resources ─────────────────────────────
   needsRender: true,           // tick() draws when true
   activeFrames: 0,             // keep rendering N frames after each invalidation
-  bboxBuilt: false,            // bbox helpers built lazily on first toggle
   perfMode: 'auto',            // 'auto' (cap DPR by part count) | 'high' | 'low'
   // ── Render-health bookkeeping (watchdog reads these) ────────────────────
   // Explicitly 0 not undefined: previously the watchdog gated its "healthy
@@ -183,41 +182,6 @@ function _lucide() {
       svg.removeAttribute('data-lucide');
     }
   } catch (_) { /* lucide CDN failed to load; silently fall back to placeholders */ }
-}
-
-// Tiny "listener bag" — collect per-modal listeners at open, remove them all
-// at close.
-//
-// Why this exists: this file has ~407 addEventListener vs ~35 removeEventListener.
-// Most one-off boot listeners are fine, but long-lived modal builders (material
-// editor, flatten dialog, batch rename, export) bind dozens of listeners per
-// open and rebind on every reopen. Their modal DOM nodes are reused (not
-// recreated), so each open stacks listeners on the same element. Across a long
-// session this leaks closures over fat state slices.
-//
-// Usage:
-//   const bag = _listenerBag();
-//   bag.on(el, 'click', fn);
-//   bag.on(otherEl, 'input', fn2, { passive: true });
-//   ...later, in the modal's close handler:
-//   bag.dispose();
-//
-// el may be null/undefined (querySelector miss) — bag.on quietly no-ops so
-// the call site doesn't have to guard each lookup.
-function _listenerBag() {
-  const disposers = [];
-  return {
-    on(el, ev, fn, opt) {
-      if (!el || typeof el.addEventListener !== 'function') return;
-      el.addEventListener(ev, fn, opt);
-      disposers.push(() => { try { el.removeEventListener(ev, fn, opt); } catch (_) {} });
-    },
-    dispose() {
-      while (disposers.length) {
-        try { disposers.pop()(); } catch (_) {}
-      }
-    },
-  };
 }
 
 let scene, camera, renderer, controls;
@@ -429,7 +393,7 @@ const _Dialog = (() => {
 const appConfirm = (msg, opts) => _Dialog.confirm(msg, opts);
 const appPrompt  = (msg, def, opts) => _Dialog.prompt(msg, def, opts);
 // Destructive variant — drop-in for appConfirm at danger sites (delete, revert,
-// clear-all, etc.). Honours the global Settings → Behavior → "Confirm
+// clear-all, etc.). Honours the global Settings › General › "Confirm
 // destructive actions" pref: when the user has turned that off, this short-
 // circuits to true so the caller proceeds without a dialog. Defaults
 // `danger:true` so the OK button gets the red destructive styling.
@@ -664,6 +628,9 @@ function _scrubDrag(el, { get, set, min, max, pxPerStep = 2, begin = null, end =
   }, true);
 }
 
+// The tooltip of anything that can be dragged sideways, said one way.
+const _SCRUB_TIP = 'Drag to change, click to type';
+
 // A plain number field that can also be dragged sideways. `step` is what one
 // notch is worth; the field keeps `decimals` places.
 function _scrubField(input, { min = 0, max = 1e6, step = 1, decimals = 0 } = {}) {
@@ -678,7 +645,7 @@ function _scrubField(input, { min = 0, max = 1e6, step = 1, decimals = 0 } = {})
   };
   _scrubDrag(input, opts);
   const wrap = input.closest('.size-field');
-  if (wrap) { for (const lab of wrap.querySelectorAll('span')) _scrubDrag(lab, opts); wrap.title = (wrap.title ? wrap.title + ' · ' : '') + 'drag to change, click to type'; }
+  if (wrap) { for (const lab of wrap.querySelectorAll('span')) _scrubDrag(lab, opts); wrap.title = wrap.title ? wrap.title + ' · ' + _SCRUB_TIP.toLowerCase() : _SCRUB_TIP; }
 }
 
 // Every number field in the app can be dragged sideways, not only the ones a
@@ -714,7 +681,7 @@ function _autoScrubField(input) {
     set: (n) => { input.value = String(parseFloat((n * step).toFixed(decimals))) + tail; input.dispatchEvent(new Event('input', { bubbles: true })); },
     end: () => input.dispatchEvent(new Event('change', { bubbles: true })),
   });
-  if (!input.title && !input.closest('[title]')) input.title = 'Drag to change, click to type';
+  if (!input.title && !input.closest('[title]')) input.title = _SCRUB_TIP;
 }
 if (typeof document !== 'undefined') {
   const wire = (e) => { const t = e.target; if (t && t.tagName === 'INPUT' && !t._scrubDrag && !t._noScrub && !t.disabled) _autoScrubField(t); };
@@ -725,13 +692,6 @@ if (typeof document !== 'undefined') {
 function _initScrubberImpl({
   el, label = '', maxSteps, stepToVal, valToStep, format, onChange,
   initialValue = 0,
-  // true: onChange fires when the slider is let go, not while it is dragged.
-  // For sliders whose change re-evaluates the whole model (the number beside
-  // the slider still follows the drag).
-  commitOnRelease = false,
-  // With commitOnRelease: called as soon as the value starts to differ from
-  // what was last committed, so the owner can show that its result is stale.
-  onPending = null,
 }) {
   const cont = (typeof el === 'string') ? document.getElementById(el) : el;
   if (!cont) { console.warn(`[scrub] container not found: ${el}`); return null; }
@@ -780,32 +740,12 @@ function _initScrubberImpl({
   // input listener below reads range.value the snap already happened.
   _attachWheelStepBehavior(range);
 
-  let _held = false, _settle = 0;
-  if (commitOnRelease) {
-    cont.classList.add('scrub-on-release');
-    range.addEventListener('pointerdown', () => { _held = true; });
-    const letGo = () => {
-      if (!_held) return;
-      _held = false;
-      if (_pendingVal != null) { clearTimeout(_settle); _flush(); }
-    };
-    window.addEventListener('pointerup', letGo);
-    window.addEventListener('pointercancel', letGo);
-  }
   range.addEventListener('input', () => {
     _syncDisplay();
     _pendingVal = stepToVal(parseInt(range.value, 10) || 0);
-    if (commitOnRelease) {
-      if (onPending) { try { onPending(_pendingVal); } catch (_) {} }
-      // dragging: wait for the release. Wheel or arrow keys: wait for a pause.
-      clearTimeout(_settle);
-      if (!_held) _settle = setTimeout(_flush, 220);
-      return;
-    }
     if (!_rafId) _rafId = requestAnimationFrame(_flush);
   });
   range.addEventListener('change', () => {
-    if (commitOnRelease) { clearTimeout(_settle); _held = false; _flush(); return; }
     if (_rafId) { cancelAnimationFrame(_rafId); _rafId = 0; _flush(); }
   });
 
@@ -865,11 +805,11 @@ function _initScrubberImpl({
   for (const grab of [valEl, labelEl]) _scrubDrag(grab, {
     get: () => parseInt(range.value, 10) || 0, min: 0, max: maxSteps,
     pxPerStep: Math.max(0.25, Math.min(8, 260 / Math.max(1, maxSteps))),
-    begin: () => { _held = true; cont.classList.add('scrubbing'); },
+    begin: () => { cont.classList.add('scrubbing'); },
     set: _stepTo,
     end: () => { cont.classList.remove('scrubbing'); range.dispatchEvent(new Event('change', { bubbles: true })); },
   });
-  valEl.title = 'Drag to change · click to type';
+  valEl.title = _SCRUB_TIP;
 
   function setValue(v) {
     const s = Math.max(0, Math.min(maxSteps, Math.round(valToStep(v))));
@@ -955,8 +895,8 @@ function logProgress(msg, kind='') {
 }
 function setStatus(s) { $('sb-status').textContent = s; try { _Tabs.report({ title: String(s) }); } catch (_) {} }
 
-// Paint the bottom-center hint once the DOM is ready so the user sees the
-// default tip on load (before any selection / mode change fires).
+// Paint the viewport's shortcut tips once the DOM is ready so the user sees
+// the default tips on load (before any selection / mode change fires).
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { try { _updateVpHint(); } catch (_) {} }, { once: true });
   else queueMicrotask(() => { try { _updateVpHint(); } catch (_) {} });
@@ -1056,12 +996,6 @@ function _closeAllTopbarMenus(exceptId) {
   }
 }
 
-// Deep-clone the treeNodes array so undo snapshots don't share node objects
-// with the live array. Without this, in-place mutations of `depth` /
-// `parentId` (done by _dndMoveHier and _treeUngroupRow's promote loop) would
-// leak into the "prev" snapshot and undo would restore the array structure
-// but leave child nodes pointing at deleted parents. obj3d / mesh refs are
-// preserved intentionally so the scene-graph half of the undo still works.
 // Show or hide one part. Instanced parts have no mesh of their own: they are
 // hidden by collapsing their slot in the shared InstancedMesh to zero scale
 // and shown by restoring the matrix captured when the instance was built.
@@ -1396,7 +1330,7 @@ function _removeGroupRows(dead, { label = 'Removed groups', auto = true } = {}) 
   return dead.length;
 }
 
-// ── "Delete groups when they become empty" (Settings → Behavior) ────────────
+// ── "Delete groups when they become empty" (Settings › General) ─────────────
 // Off (the default): a group you empty stays in the tree. On: a group that
 // held something before an action and holds nothing after it is removed as
 // part of that action. Groups that were already empty are left alone, so
@@ -1534,12 +1468,19 @@ function _nextFrame() {
   });
 }
 
+// Deep-clone the treeNodes array so undo snapshots don't share node objects
+// with the live array. Without this, in-place mutations of `depth` /
+// `parentId` (done by _dndMoveHier and _treeUngroupRow's promote loop) would
+// leak into the "prev" snapshot and undo would restore the array structure
+// but leave child nodes pointing at deleted parents. obj3d / mesh refs are
+// preserved intentionally so the scene-graph half of the undo still works.
 function _snapshotTreeNodes(arr) {
   return (arr || []).map(n => ({ ...n }));
 }
 
-// Double-click the status pill to rename the scene. Sets state.sceneName,
-// which the export pipeline (above) prefers over the source-file stem.
+// Double-click the scene's name in the status bar to rename the scene. Sets
+// state.sceneName, which export and the tab title prefer over the source
+// file's name.
 (function wireSbStatusRename() {
   function attach() {
     const el = document.getElementById('sb-status');
@@ -2045,7 +1986,7 @@ const _ImportSettings = (() => {
       bg.addEventListener('mousedown', onBackdrop);
       document.addEventListener('keydown', onKey, true);
       bg.classList.add('show');
-      try { window.lucide?.createIcons(); } catch (_) {}
+      _lucide();
       try { confirmBtn.focus(); } catch (_) {}
     });
   }
@@ -2198,9 +2139,11 @@ async function convertStepViaServer(file, opts = {}) {
     let lastSeenLogIdx = 0;
     while (true) {
       if (ac.signal.aborted) throw new DOMException('aborted', 'AbortError');
+      // (the abort listener comes off again when the second is up; left on, a
+      // long conversion collected one per poll on the same signal)
       await new Promise((r, rej) => {
-        const tid = setTimeout(r, 1000);
         const onAbort = () => { clearTimeout(tid); rej(new DOMException('aborted', 'AbortError')); };
+        const tid = setTimeout(() => { ac.signal.removeEventListener('abort', onAbort); r(); }, 1000);
         ac.signal.addEventListener('abort', onAbort, { once: true });
       });
       const jr = await fetch('/api/job/' + job_id, { signal: ac.signal });
@@ -2209,7 +2152,8 @@ async function convertStepViaServer(file, opts = {}) {
       // polling "Converting…" forever.
       if (!jr.ok || !j.status) throw new Error('The converter lost track of this job (was the server restarted?). Open the file again.');
       if (j.status === 'cancelled') throw new DOMException('cancelled', 'AbortError');
-      if (j.message) $('loader-sub').textContent = j.message;
+      // (the start screen shows its own copy of the loader while it is up)
+      if (j.message) { $('loader-sub').textContent = j.message; const wlSub = $('wl-sub'); if (wlSub) wlSub.textContent = j.message; }
       if (Array.isArray(j.log) && j.log.length > lastSeenLogIdx) {
         for (let i = lastSeenLogIdx; i < j.log.length; i++) {
           const line = j.log[i];
@@ -2557,40 +2501,8 @@ async function _quitApp() {
     `<div>Server stopped. You can close this tab.</div></div></body>`;
 }
 
-// Scene settings modal — dedicated surface for scene-persistent state
-// (units, up-axis, scale, grid, lighting). Sections are now authored
-// directly inside #scene-settings-body in index.html — no DOM relocation
-// from the cog popup, just a thin show/hide wrapper.
-const _SceneSettings = (() => {
-  let inited = false;
-  function _wire() {
-    if (inited) return;
-    inited = true;
-    const bg = document.getElementById('scene-settings-modal');
-    if (!bg) return;
-    document.getElementById('scene-settings-close')?.addEventListener('click', hide);
-    document.getElementById('scene-settings-done')?.addEventListener('click', hide);
-    bg.addEventListener('click', e => { if (e.target === bg) hide(); });
-    document.addEventListener('keydown', e => {
-      if (!bg.classList.contains('show')) return;
-      if (e.key === 'Escape') { e.preventDefault(); hide(); }
-    });
-  }
-  function show() {
-    _wire();
-    document.getElementById('scene-settings-modal')?.classList.add('show');
-  }
-  function hide() {
-    document.getElementById('scene-settings-modal')?.classList.remove('show');
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', _wire, { once: true });
-  } else {
-    _wire();
-  }
-  return { show, hide };
-})();
-
+// The scene's own settings (units, up axis, scale, grid) are the Scene section
+// of the Settings window.
 function _openSceneSettings() { _Settings.show('scene'); }
 
 async function _openRecentByKey(key) {
@@ -2629,7 +2541,6 @@ const _Prefs = (() => {
     autoFitOnLoad: true,
     confirmDestructive: true,
     autoDeleteEmptyGroups: false,   // off: a group you empty stays in the tree
-    showFps: true,
     // Camera behavior
     orbitPivot: 'selection', // 'selection': about the selected parts when there are any, else the view's centre | 'scene': always the view's centre
     zoomToCursor: true,      // wheel zooms toward mouse, not toward target
@@ -2648,17 +2559,6 @@ const _Prefs = (() => {
   };
 })();
 
-function _applyShowFps(show) {
-  const el = document.getElementById('fps');
-  const pill = el?.parentElement;
-  if (pill) pill.style.display = show ? '' : 'none';
-}
-
-// ── Settings modal ───────────────────────────────────────────────────────
-// Toolbar gear opens this. Mirrors the existing display/perf controls into
-// one place + adds new behavior toggles persisted via _Prefs. Mirrored
-// controls write back to the original element with a dispatched change so
-// existing handlers keep working.
 // ── Settings ──────────────────────────────────────────────────────────────
 // One window for everything that can be set: a list of sections on the left,
 // the section on the right, a search over all of them at the top.
@@ -2690,10 +2590,6 @@ const _Settings = (() => {
       <span>${label}${help ? `<span class="set-help">${help}</span>` : ''}</span>
       <label><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span class="switch"></span></label>
     </div>`;
-  }
-  function _selectRow(id, label, options, cur, help) {
-    const opts = options.map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`).join('');
-    return `<div class="field set-row"><label><span>${label}${help ? `<span class="set-help">${help}</span>` : ''}</span></label><select id="${id}" class="mac-sel">${opts}</select></div>`;
   }
   const _group = (title) => `<div class="set-group-title">${title}</div>`;
 
@@ -2883,7 +2779,6 @@ const _Settings = (() => {
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); $s('settings-search')?.focus(); }
     });
     $s('settings-search')?.addEventListener('input', e => _search(e.target.value));
-    $s('settings-reset')?.addEventListener('click', () => { _Prefs.reset(); _fillPrefs(); toast('Settings reset', 'Defaults restored', 'success'); });
   }
   function show(pane) {
     _wire(); _assemble(); _fillPrefs();
@@ -3176,12 +3071,7 @@ const _Welcome = (() => {
     if (bg) bg.classList.remove('show');
     _setMode('pick'); // reset so next show starts on the picker
   }
-  function toggle() {
-    const bg = document.getElementById('welcome-modal');
-    if (!bg) return;
-    if (bg.classList.contains('show')) hide(); else show();
-  }
-  return { show, hide, toggle, pushRecent, enterLoading, enterPick };
+  return { show, hide, pushRecent, enterLoading, enterPick };
 })();
 
 // The welcome screen's cover clip runs only while that screen is showing (it
@@ -3476,7 +3366,13 @@ const _CmdK = (() => {
   const _recentIds = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string').slice(0, 5) : []; } catch (_) { return []; } };
   const _remember = (it) => { if (!it || !it.id || it.noRecent) return; try { localStorage.setItem(RECENT_KEY, JSON.stringify([it.id, ..._recentIds().filter(x => x !== it.id)].slice(0, 5))); } catch (_) {} };
   const _fmtNum = (v) => { const r = Math.abs(v) >= 1e9 || (v !== 0 && Math.abs(v) < 1e-6) ? v.toExponential(6) : String(+v.toPrecision(10)); return r; };
-  const _copy = (text, what) => { try { navigator.clipboard.writeText(text); toast('Copied', `${what} is on the clipboard`, 'success', 2200); } catch (_) { toast(what, text, 'info', 4000); } };
+  // "Copied" is said once the clipboard has taken it; if it refuses (no
+  // permission, page not focused) the answer is shown instead, to copy by hand.
+  const _copy = (text, what) => {
+    const shown = () => toast(what, text, 'info', 4000);
+    try { navigator.clipboard.writeText(text).then(() => toast('Copied', `${what} is on the clipboard`, 'success', 2200), shown); }
+    catch (_) { shown(); }
+  };
   const UNIT = { mm: 1, cm: 10, m: 1000, um: 0.001, 'µm': 0.001, in: 25.4, inch: 25.4, inches: 25.4, '"': 25.4, ft: 304.8, foot: 304.8, feet: 304.8, thou: 0.0254, mil: 0.0254 };
   function _answer(q) {
     // a length with a unit, optionally "in/to <unit>"
@@ -3689,7 +3585,7 @@ const _Shortcuts = (() => {
         </div>
       </div>
     `).join('');
-    try { window.lucide?.createIcons(); } catch(_){}
+    _lucide();
   }
   function _wire() {
     if (inited) return;
@@ -3715,7 +3611,7 @@ const _Shortcuts = (() => {
       if (e.key === 'Escape' && !inSearch) { e.preventDefault(); hide(); }
     });
     // Render lucide icons in the static footer/search-icon on first wire.
-    try { window.lucide?.createIcons(); } catch(_){}
+    _lucide();
   }
   function show() {
     _wire();
@@ -3729,8 +3625,12 @@ const _Shortcuts = (() => {
   return { show, hide };
 })();
 
-// Global key bindings: Cmd/Ctrl+K · Cmd/Ctrl+, · ?
+// Global key bindings: Cmd/Ctrl+K · Cmd/Ctrl+, · ? and the File menu's own.
+// None of them acts behind an open dialog (Ctrl+N under the Export dialog
+// started a new scene). The start screen is the exception: the shortcuts it
+// lists beside its buttons are these.
 window.addEventListener('keydown', e => {
+  if (document.querySelector('.modal-bg.show:not(#welcome-modal), .dlg-bg.show')) return;
   const t = e.target;
   const inField = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
@@ -3829,8 +3729,6 @@ window.addEventListener('keydown', e => {
       setTimeout(() => { try { onResize?.(); } catch (_) {} }, 360);
     });
   })();
-  $('btn-settings')?.addEventListener('click', () => _Settings.show());
-  try { _applyShowFps(_Prefs.get('showFps') !== false); } catch(_){}
   (function wireBrandMenu(){
     const btn = $('btn-brand'), menu = $('brand-menu');
     if (!btn || !menu) return;
@@ -3852,9 +3750,7 @@ window.addEventListener('keydown', e => {
     const f = e.target.files[0]; e.target.value = '';
     _handleSelectedFile(f);
   });
-  // Drop a file anywhere on the viewport to load it. No `#dropzone` overlay
-  // exists — the .drag-over visual feedback the old code tried to toggle was
-  // dead since the element isn't in the markup. Drop is what matters.
+  // Drop a file anywhere on the viewport to load it.
   const vp = $('viewport');
   // While a file is dragged over the viewport an overlay says it can be
   // dropped (and that it opens in a new tab when a scene is already there).
@@ -3887,9 +3783,12 @@ window.addEventListener('keydown', e => {
       return;
     }
     if (_activeParse) {
-      _activeParse.cancelled = true;
+      const parse = _activeParse;
+      parse.cancelled = true;
       try { _stepWorker?.terminate(); } catch(_){}
       _stepWorker = null;
+      // The stopped worker will never answer: end the parse that waits on it.
+      try { parse.onCancel?.(); } catch (_) {}
       // Revoke the blob URL too — the worker holds the only reference and
       // we're killing the worker, so the URL is now garbage.
       try { if (_stepWorkerUrl) URL.revokeObjectURL(_stepWorkerUrl); } catch(_){}
@@ -3943,9 +3842,8 @@ window.addEventListener('keydown', e => {
 // their own short-lived instances and are out of scope here.
 const _RendererOwner = (() => {
   // Read user preferences: URL param + localStorage flag + capability sniff.
-  // Returns `true` if WebGL2 is forced. WebGPU's clipping-plane support on
-  // auto-converted standard materials is unreliable in three.js r0.172;
-  // WebGL2 is functionally identical for this app (no compute, no TSL).
+  // Returns { forceWebGL }: true when the browser has no WebGPU or the user
+  // chose WebGL2 (which draws everything this app does: no compute, no TSL).
   function preferences() {
     let forceWebGL = !navigator.gpu;
     try {
@@ -4015,16 +3913,19 @@ async function initRenderer() {
   _RendererOwner.applyConfig(renderer, { canvas });
   const name = backendName;
   $('renderer-name').textContent = name;
-  // Both WebGPU and WebGL2 are first-class user choices via the top-bar
-  // dropdown — neither is a fallback/warning state.
+  // Both WebGPU and WebGL2 are first-class user choices (the Renderer row of
+  // Settings › Performance) — neither is a fallback/warning state. The name
+  // and the dot are in the page's markup, hidden; they are still kept true.
   $('stat-renderer').querySelector('.dot').classList.remove('warn');
   $('stat-renderer').querySelector('.dot').classList.remove('off');
 
-  // Top-bar renderer switcher. The custom-select widget wraps this <select>
-  // during wireUI() (which runs before initRenderer), so the trigger button
-  // already exists. We have to sync BOTH the underlying select value AND the
-  // trigger button's label — setting sel.value alone doesn't refresh the
-  // visible label because the widget only re-syncs on user-driven changes.
+  // Renderer switcher. Its <select> starts in the top bar's markup and is
+  // moved into Settings › Performance when that window is first built. The
+  // custom-select widget wraps it during wireUI() (which runs before
+  // initRenderer), so the trigger button already exists. We have to sync BOTH
+  // the underlying select value AND the trigger button's label — setting
+  // sel.value alone doesn't refresh the visible label because the widget only
+  // re-syncs on user-driven changes.
   try {
     const sel = $('renderer-select');
     if (sel) {
@@ -4161,6 +4062,14 @@ function initScene() {
         if (!dy) return;
         // ~0.5% per pixel; negative dy (moving up) → factor < 1 → dolly in.
         const factor = Math.exp(dy * 0.005);
+        // An orthographic view (Top / Front / Side) looks the same from any
+        // distance: there it is the zoom that changes, as the wheel does.
+        if (camera._isOrtho) {
+          camera.zoom = Math.max(1e-6, camera.zoom / factor);
+          camera.updateProjectionMatrix();
+          requestRender();
+          return;
+        }
         const offset = camera.position.clone().sub(controls.target);
         offset.multiplyScalar(factor);
         camera.position.copy(controls.target).add(offset);
@@ -4243,25 +4152,12 @@ function initScene() {
       requestRender();
     }, { capture: true, passive: false });
   })();
-  // Orbit-pivot mode: rebind controls.target on LEFT-button pointerdown so the
-  // rotate gesture pivots around the selection / point under cursor instead of
-  // a static target. Capture phase fires before OrbitControls reads target.
-  //   'scene'     → leave target alone (legacy behavior)
-  //   'selection' → bbox center of state.selected (falls back to scene)
-  //   'cursor'    → raycast hit point at mouse; no hit → leave target alone
-  // Changing target without moving the camera redefines the pivot but keeps
-  // the current framing — that's exactly OrbitControls' rotate math.
-  // Per-click orbit-pivot updates are disabled. Camera must NEVER recenter or
-  // shift when the user clicks/selects an object — every prior implementation
-  // (target.copy, delta-preserve, raycast-under-cursor) produced visible
-  // jumping the user didn't want. OrbitControls keeps whatever target the
-  // last explicit framing op (Fit / F / Reset / load) installed.
   // Any user interaction with the camera invalidates the framebuffer. Without
   // this hook the render-on-demand loop would freeze the viewport.
   controls.addEventListener('start', () => requestRender());
   controls.addEventListener('change', () => requestRender());
   controls.addEventListener('end', () => requestRender());
-  // ── Orbit around the selection (Settings → Orbit around) ─────────────────
+  // ── Orbit around the selection (Settings › Camera) ───────────────────────
   // The orbit controls turn the camera about their target, which is wherever
   // the last Fit or Frame left it. With a part selected, the view should turn
   // about that part instead, without the picture jumping when the drag starts
@@ -4349,6 +4245,8 @@ function initScene() {
   // through thousands of children. We call updateMatrixWorld() manually after
   // mutations.
   state.partsRoot.matrixAutoUpdate = false;
+  // (An empty group left from the bounding-box overlay, which is gone;
+  // clearModel and the recent-file thumbnail still refer to it.)
   state.bboxRoot = new THREE.Group(); state.bboxRoot.visible = false; scene.add(state.bboxRoot);
   state.bboxRoot.matrixAutoUpdate = false;
   raycaster = new THREE.Raycaster(); pointer = new THREE.Vector2();
@@ -4612,11 +4510,6 @@ function initScene() {
             configurable: true,
           });
         } catch (_) {}
-      } else if (t === 'TorusGeometry') {
-        // Rotate-mode rings — thin them too if the user switches to rotate.
-        o.scale.x = 1.0;  // ring diameter unchanged
-        o.scale.y = 1.0;
-        o.scale.z = 1.0;
       }
       // Make the plane handles (XY, YZ, XZ squares) less visually heavy by
       // dropping their opacity. Identified by the named picker convention
@@ -4652,14 +4545,6 @@ function initScene() {
   scene.add(state.pivot);
 }
 
-// Place the gizmo at the bbox-center of the selected mesh by wrapping it in a pivot.
-// The pivot is positioned at world-bbox-center; the mesh is reparented under it
-// (THREE.Group.attach preserves world transform). Now the gizmo manipulates the pivot
-// at the visual center of the part.
-// Attach the gizmo to ANY number of parts as a single "group" pivot. The
-// pivot sits at the combined world bbox center; each selected mesh is
-// re-parented under the pivot so a translate/rotate moves them together.
-// _detachGizmo() restores them to partsRoot with their final world transform.
 // Pop a single instance out of an InstancedMesh and into a standalone Mesh
 // under partsRoot, preserving its visual world transform. Used when the user
 // wants to manipulate an instance with the gizmo — InstancedMesh instances
@@ -4718,12 +4603,11 @@ function _promoteInstanceToMesh(p) {
   return true;
 }
 
-// If the current selection EXACTLY matches one userGroup's part list, return
-// that group — that's the signal to attach the gizmo to the group's transform
-// origin instead of the bbox center of the contained meshes. Mixed selections
-// (group + extra parts, or partial group) fall through to the per-part path.
 // Returns a userGroup whose member set EXACTLY matches state.selected, or
-// null. Hier groups (auto-detected from the assembly tree) are intentionally
+// null. A match is the signal to attach the gizmo to the group's transform
+// origin instead of the bbox center of the contained meshes; mixed selections
+// (group + extra parts, or partial group) fall through to the per-part path.
+// Hier groups (auto-detected from the assembly tree) are intentionally
 // excluded: their obj3d isn't a guaranteed flat container of the descendant
 // meshes — _detachGizmo always reparents pivoted meshes back to partsRoot,
 // so after any individual gizmo drag, members of a hier group end up
@@ -4747,6 +4631,10 @@ function _findSelectionUserGroup() {
   return null;
 }
 
+// Attach the gizmo to ANY number of parts as a single "group" pivot. The
+// pivot sits at the combined world bbox center; each selected mesh is
+// re-parented under the pivot so a translate/rotate moves them together.
+// _detachGizmo() restores them to partsRoot with their final world transform.
 function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   if (!state.gizmo || !state.pivot) return;
   // Promote any selected-but-instanced parts so they CAN be moved by the
@@ -4761,7 +4649,6 @@ function _attachGizmoToParts(parts, centerOverride, quatOverride) {
     if (p.instancedMesh && _promoteInstanceToMesh(p)) promoted++;
   }
   if (promoted > 0) {
-    Log.info(`promoted ${promoted} instance${promoted === 1 ? '' : 's'} to standalone mesh for gizmo`, { tag: 'gizmo' });
     // Housekeeping the user didn't ask about: note it in the log console
     // instead of popping a toast on every click of an instanced part.
     try { Log?.info?.(`Promoted ${promoted} instanced part${promoted === 1 ? '' : 's'} to a mesh so the gizmo can move ${promoted === 1 ? 'it' : 'them'}`, { tag: 'instancing' }); } catch (_) {}
@@ -5345,9 +5232,11 @@ async function _ensureStudioReflections() {
   try {
     if (!_studioRefl || _studioRefl.renderer !== renderer) {
       const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
-      const pmrem = new THREE.PMREMGenerator(renderer);
+      // (the one PMREM generator of the session, shared with the HDRI code
+      // below: a second one made here was never freed)
+      _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
       const room = new RoomEnvironment();
-      const tex = pmrem.fromScene(room, 0.04).texture;
+      const tex = _hdriPmrem.fromScene(room, 0.04).texture;
       room.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
       _studioRefl = { renderer, tex };
     }
@@ -5413,9 +5302,6 @@ function _paintHdriPreset(id) {
   } else if (id === 'overcast') {
     skyGrad('#a9b3bf', '#c2cbd5', '#d8dde4', '#5e656d');
     // No sun — overcast is uniform diffuse light.
-  } else if (id === 'forest') {
-    skyGrad('#2c4a2a', '#5a7e4a', '#3d5a32', '#1c2818');
-    sun(W * 0.65, H * 0.30, 140, 'rgba(255,255,200,.85)', 'rgba(220,255,180,.40)');
   } else {
     // 'studio' or unknown id → null sentinel; caller falls back to
     // RoomEnvironment which is the canonical clean-studio look.
@@ -5453,7 +5339,7 @@ async function _applyHdriPreset(id) {
   if (id === 'studio') {
     await _ensureHdriEnvironment();   // RoomEnvironment path
     const cur = document.getElementById('hdri-current');
-    if (cur) cur.textContent = 'Studio (built-in)';
+    if (cur) cur.textContent = 'Built-in studio';
   } else {
     const env = _ensurePresetEnv(id);
     if (!env) return;
@@ -5463,7 +5349,7 @@ async function _applyHdriPreset(id) {
     _applyHdriIntensity();
     requestRender();
     const cur = document.getElementById('hdri-current');
-    const labels = { outdoor: 'Outdoor', sunset: 'Sunset', overcast: 'Overcast', forest: 'Forest' };
+    const labels = { outdoor: 'Outdoor', sunset: 'Sunset', overcast: 'Overcast' };
     if (cur) cur.textContent = labels[id] || id;
   }
   _markHdriPresetActive(id);
@@ -5473,7 +5359,7 @@ function _markHdriPresetActive(id) {
     const isActive = b.dataset.hdriPreset === id;
     b.style.background = isActive ? 'var(--ac-tint-18)' : 'var(--bg3)';
     b.style.borderColor = isActive ? 'var(--ac-tint-55)' : 'var(--bd)';
-    b.style.color = isActive ? 'var(--tx)' : 'var(--tx)';
+    b.style.color = 'var(--tx)';
   });
 }
 async function _ensureHdriEnvironment() {
@@ -5495,7 +5381,7 @@ async function _ensureHdriEnvironment() {
       requestRender();
       _markHdriPresetActive(state.hdriPreset);
       const cur = document.getElementById('hdri-current');
-      const labels = { outdoor: 'Outdoor', sunset: 'Sunset', overcast: 'Overcast', forest: 'Forest' };
+      const labels = { outdoor: 'Outdoor', sunset: 'Sunset', overcast: 'Overcast' };
       if (cur) cur.textContent = labels[state.hdriPreset] || state.hdriPreset;
       return;
     }
@@ -5519,15 +5405,16 @@ async function _ensureHdriEnvironment() {
   requestRender();
   _markHdriPresetActive('studio');
   const cur = document.getElementById('hdri-current');
-  if (cur) cur.textContent = 'Studio (built-in)';
+  if (cur) cur.textContent = 'Built-in studio';
 }
 
 // Load a user-supplied .hdr (Radiance) or .exr (OpenEXR) equirectangular
 // HDRI. JPGs/PNGs are accepted as a fallback (treated as LDR equirect).
 // On success the texture replaces scene.background + scene.environment.
 async function _loadCustomHdri(file) {
+  let url = '';
   try {
-    const url = URL.createObjectURL(file);
+    url = URL.createObjectURL(file);
     let tex;
     if (/\.exr$/i.test(file.name)) {
       const { EXRLoader } = await import('three/addons/loaders/EXRLoader.js');
@@ -5538,7 +5425,6 @@ async function _loadCustomHdri(file) {
     } else {
       tex = await new THREE.TextureLoader().loadAsync(url);
     }
-    URL.revokeObjectURL(url);
     tex.mapping = THREE.EquirectangularReflectionMapping;
     // Run through PMREM so it lights PBR materials with the correct
     // pre-filtered roughness mips; without this, reflections are noisy.
@@ -5556,6 +5442,9 @@ async function _loadCustomHdri(file) {
   } catch (e) {
     console.error('[hdri] load failed', e);
     toast('HDRI load failed', e?.message || String(e), 'error', 5000);
+  } finally {
+    // (also when the file could not be read: the URL was left behind then)
+    if (url) URL.revokeObjectURL(url);
   }
 }
 
@@ -5881,9 +5770,7 @@ function tick() {
           requestRender();
           // User orbited away from a standard view — flip the pill back to
           // "Cam" so the toolbar doesn't keep claiming we're still aligned
-          // to Top/Front/Side. Skipped when rotation is disabled (i.e., we
-          // locked the camera into a standard view) — pan + zoom alone
-          // shouldn't drop us out of ortho top/front/side.
+          // to Top/Front/Side.
           // Only a rotation leaves it: the direction from the target to the
           // camera changes. A pan moves both, a zoom moves neither. (The
           // controls run without damping, so there is no leftover spin to
@@ -6129,7 +6016,7 @@ if (typeof document !== 'undefined') {
     const hiddenMs = _tabHiddenSinceMs ? performance.now() - _tabHiddenSinceMs : 0;
     _tabHiddenSinceMs = 0;
     _watchdogLastHealthyMs = performance.now();
-    // Stamp _lastTickAt so the watchdog's rAF-kick (line ~3893) doesn't
+    // Stamp _lastTickAt so the watchdog's rAF-kick (_renderWatchdog) doesn't
     // fire during our defer window — that would re-render into stale GPU
     // buffers before the device has had time to come back. The next real
     // tick() will overwrite this stamp with its own.
@@ -6221,15 +6108,28 @@ self.onmessage = async (ev) => {
 function parseStepInWorker(buffer, ctrl, onProgress) {
   return new Promise((resolve, reject) => {
     const w = getStepWorker();
+    // Both listeners come off when the parse ends, however it ends (the
+    // 'error' one used to stay on the worker, one more per file). Cancel
+    // stops the worker, so no message will ever come: it ends the parse
+    // through ctrl.onCancel. Before, a cancelled parse never settled and its
+    // caller waited for ever, heartbeat timer running.
+    const end = (settle, v) => {
+      w.removeEventListener('message', onMsg);
+      w.removeEventListener('error', onErr);
+      ctrl.onCancel = null;
+      settle(v);
+    };
     const onMsg = (ev) => {
-      if (ctrl.cancelled) { w.removeEventListener('message', onMsg); reject(new Error('cancelled')); return; }
+      if (ctrl.cancelled) { end(reject, new Error('cancelled')); return; }
       const m = ev.data;
       if (m.type === 'progress') { onProgress?.(m.stage, m.sub); return; }
-      if (m.type === 'done') { w.removeEventListener('message', onMsg); resolve(m); return; }
-      if (m.type === 'error') { w.removeEventListener('message', onMsg); reject(new Error(m.message)); return; }
+      if (m.type === 'done') { end(resolve, m); return; }
+      if (m.type === 'error') { end(reject, new Error(m.message)); return; }
     };
+    const onErr = (e) => end(reject, new Error(e.message || 'Worker error'));
+    ctrl.onCancel = () => end(reject, new Error('cancelled'));
     w.addEventListener('message', onMsg);
-    w.addEventListener('error', e => { w.removeEventListener('message', onMsg); reject(new Error(e.message || 'Worker error')); }, { once: true });
+    w.addEventListener('error', onErr);
     w.postMessage({ buffer }, [buffer]);
   });
 }
@@ -6272,7 +6172,7 @@ async function loadStepFile(file) {
     // is true; only the modal can opt out. It applies to both fresh loads
     // and appends.
     // Layer two sources: per-file import-modal override (state._importFitOnLoad)
-    // AND the global Settings → Behavior → "Auto-fit on load" pref.
+    // AND the global Settings › General › "Fit the view after loading" pref.
     const fitOnLoad = (state._importFitOnLoad !== false)
                    && (_Prefs.get('autoFitOnLoad') !== false);
     state._importFitOnLoad = undefined;
@@ -6285,7 +6185,7 @@ async function loadStepFile(file) {
     if (importMode) onSceneActivated(); else onModelLoaded(file.name);
     setLoaderProgress(100);
     toast(importMode ? 'STEP imported' : 'Model loaded',
-          importMode ? `+${result.meshes.length} parts (now ${state.parts.length})` : `${result.meshes.length} parts - ${dt.toFixed(1)}s`,
+          importMode ? `+${result.meshes.length} parts (now ${state.parts.length})` : `${result.meshes.length} parts · ${dt.toFixed(1)}s`,
           'success');
     await new Promise(r => setTimeout(r, 350));
     // Drain stale resources from the previous model — see _drainDisposeQueue.
@@ -6295,6 +6195,7 @@ async function loadStepFile(file) {
     if (e.message !== 'cancelled') { console.error(e); toast('Load failed', e.message || String(e), 'error', 8000); }
     await new Promise(r => setTimeout(r, 800));
   } finally {
+    stopHB();                       // (whichever way it ended: the timer must not outlive the load)
     _activeParse = null;
     if (controls) controls.enabled = true;
     setLoader(false);
@@ -6406,8 +6307,6 @@ async function buildModelFromMeshes(meshes, hashes, ctrl, opts) {
       if (gi % 20 === 0) await new Promise(r => setTimeout(r, 0));
     }
   }
-  // Bbox helpers are built lazily on first toggle (see _ensureBboxHelpers).
-  state.bboxBuilt = false;
   const size = overallBox.getSize(new THREE.Vector3());
   state.modelDiag = Math.max(size.length(), 0.0001);
   // Refresh camera near/far now that we know the model size — without
@@ -6499,26 +6398,6 @@ function _stripUnusedAttributes(geom, keep) {
   return bytesFreed;
 }
 
-// ── Lazy bbox helpers ──────────────────────────────────────────────────────
-// Building thousands of THREE.Box3Helper objects up front bloats the scene
-// graph and burns matrix-update time even while invisible. Build only when
-// the bbox toggle is first turned on; subsequent toggles are free.
-function _ensureBboxHelpers() {
-  if (state.bboxBuilt) return;
-  const t0 = performance.now();
-  for (const p of state.parts) {
-    if (p.deleted) continue;
-    const helper = new THREE.Box3Helper(p.bbox, 0x6ea8ff);
-    helper.userData.partId = p.partId;
-    helper.matrixAutoUpdate = false;
-    helper.frustumCulled = true;
-    state.bboxRoot.add(helper);
-  }
-  state.bboxRoot.updateMatrixWorld(true);
-  state.bboxBuilt = true;
-  console.log('[STEP] bbox helpers built in', (performance.now() - t0).toFixed(0), 'ms');
-}
-
 // ── Adaptive perf mode ─────────────────────────────────────────────────────
 // Heavy assemblies don't need 2× DPR (4× fragment shading). On a 5k-part
 // scene with retina display, halving DPR alone can take frame time from
@@ -6566,7 +6445,9 @@ function applyPerfMode() {
     });
   }
 
-  console.log(`[STEP] perfMode: parts=${partCount} tris=${fmtNum(totalTris)} avg=${avgTris|0} DPR=${dpr} mode=${state.perfMode}`);
+  // (this runs on every load, edit and quality change: the log console's
+  // debug level, not the browser console)
+  try { Log.debug(`perfMode: parts=${partCount} tris=${fmtNum(totalTris)} avg=${avgTris|0} DPR=${dpr} mode=${state.perfMode}`, { tag: 'perf' }); } catch (_) {}
   requestRender();
 }
 
@@ -6707,11 +6588,14 @@ function _buildHierarchyFromScene(scene, meshToPart) {
     state.treeNodes.unshift(orphanHeader);
     groupCount++;
     // Insert orphan part rows right after the header (depth 1, parented to
-    // the synthetic group) — keep them grouped visually.
+    // the synthetic group) — keep them grouped visually. They go in together:
+    // one splice per row moved the whole tree each time, which on a large
+    // appended import grew with the square of the part count.
+    const orphanRows = [];
     for (let i = 0; i < orphans.length; i++) {
       const p = orphans[i];
       const inst = hashCount.get(p.hash) || 1;
-      state.treeNodes.splice(1 + i, 0, {
+      orphanRows.push({
         id: p.partId, kind: 'part', name: p.name, depth: 1,
         parentId: orphanGroupId, partId: p.partId,
         instanceCount: inst > 1 ? inst : 0,
@@ -6720,6 +6604,7 @@ function _buildHierarchyFromScene(scene, meshToPart) {
       appended++;
       leafCount++;
     }
+    state.treeNodes = [orphanHeader].concat(orphanRows, state.treeNodes.slice(1));
   }
   if (leafCount === 0 && groupCount === 0) state.treeNodes = [];
   // Note: previously had `if (groupCount === 0) state.treeNodes = []` here as
@@ -6917,8 +6802,9 @@ async function _drainDisposeQueue() {
   if (count > 0) Log.debug(`disposed ${count} stale resources from previous model`, { tag: 'dispose' });
 }
 
-// IMPORTANT: clearModel is monkey-patched downstream (userGroups at ~22482,
-// measure at ~26435). Any new wrapper MUST capture the previous binding via
+// IMPORTANT: clearModel is monkey-patched downstream (search
+// `_origClearModel_userGroups` and `_origClearModel_measure`). Any new
+// wrapper MUST capture the previous binding via
 // `const _orig = clearModel;` and `return _orig();` at the end — skipping the
 // chain silently drops cleanup added by lower wrappers and leaks state across
 // model loads. Don't redefine clearModel without preserving the chain.
@@ -7067,12 +6953,15 @@ function _liveSceneDiag() {
 
 // Start a brand-new empty scene. Wipes any previous model, marks the scene
 // active so primitives / save / fit / scene-settings light up without
-// requiring a file load first. Called from File → New and from the welcome
-// modal's "Start with empty scene" link.
+// requiring a file load first. Called from File → New, Ctrl+N, the command
+// palette and the start screen (#welcome-start-empty).
 function newScene() {
-  // Never over a scene that has something in it: that opens a tab. (Tests
-  // set __moNoTabs to keep working in the one scene.)
-  if (!window.__moNoTabs && state.parts.some(p => !p.deleted)) { _Tabs.add(); return; }
+  // Never over a scene that has something in it: that opens a tab. The test
+  // is the one opening a file uses (_handleSelectedFile): a scene whose parts
+  // have all been deleted still has its undo history, and is not blank.
+  // (Tests set __moNoTabs to keep working in the one scene.)
+  const untouched = state.parts.length === 0 && !(state.history && state.history.length) && !(state.redo && state.redo.length);
+  if (!window.__moNoTabs && !untouched) { _Tabs.add(); return; }
   _newSceneHere();
 }
 function _newSceneHere() {
@@ -7113,7 +7002,6 @@ window.__moOpenFile = (file) => _handleSelectedFile(file);
 // `onModelLoaded` calls this then layers on the model-specific bits
 // (recent-thumb capture, status name).
 function onSceneActivated() {
-  if ($('btn-fit')) $('btn-fit').disabled = false;
   const _bss = $('btn-save-scene'); if (_bss) _bss.disabled = false;
   // Export still requires geometry — re-evaluated on every part add/remove.
   const _exp = $('btn-export'); if (_exp) _exp.disabled = state.parts.length === 0;
@@ -7339,16 +7227,16 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
   return blob;
 }
 
-// Render a small black info card in the bottom-left corner of the captured
-// canvas. Pulls the same numbers shown in the status bar (model name, vert
-// count, parts, mem) so the stamp matches what the user sees in the app.
-// Default stamp configuration — every field on, anchored bottom-left.
+// Default stamp configuration: the model's own lines on, anchored bottom-left.
 const _STAMP_DEFAULTS = {
   name: true, stats: true, selection: true, timestamp: true,
   camera: false, scale: false, branding: false,
   position: 'bl', // 'tl' | 'tr' | 'bl' | 'br'
 };
 
+// Render a small black info card in a corner of the captured canvas. Pulls
+// the same numbers shown in the status bar (model name, vert count, parts,
+// mem) so the stamp matches what the user sees in the app.
 function _drawScreenshotStamp(ctx, w, h, optsIn) {
   const opts = Object.assign({}, _STAMP_DEFAULTS, optsIn || {});
   const sbStatus   = document.getElementById('sb-status')?.textContent?.trim() || 'Untitled';
@@ -7358,7 +7246,7 @@ function _drawScreenshotStamp(ctx, w, h, optsIn) {
   const sbFlagged  = document.getElementById('sb-flagged-n')?.textContent?.trim() || '0';
   const partCount  = (state?.parts?.filter?.(p => p && !p.deleted).length) ?? 0;
   const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
-  const modelName = (sbStatus && sbStatus !== 'Ready') ? sbStatus : 'Untitled';
+  const modelName = sbStatus || 'Untitled';
 
   // Camera info — derives view kind (perspective vs ortho, named view if the
   // user is locked to one) and a FOV / zoom number.
@@ -7405,7 +7293,7 @@ function _drawScreenshotStamp(ctx, w, h, optsIn) {
     opts.camera && cameraLine ? { text: cameraLine,                              color: '#a0a0a0' } : null,
     opts.scale  && scaleLine  ? { text: scaleLine,                               color: '#a0a0a0' } : null,
     opts.timestamp ? { text: ts,                                                  color: '#808080' } : null,
-    opts.branding  ? { text: 'MeshOptimiser',                                    color: 'var(--ac)', font: brandFont, accent: true } : null,
+    opts.branding  ? { text: 'MeshOptimiser',                                    color: 'var(--ac)', font: brandFont } : null,
   ].filter(Boolean);
   if (!candidates.length) return; // nothing to draw — silently skip
   candidates[0].font = titleFont;
@@ -7478,7 +7366,7 @@ function _drawScreenshotStamp(ctx, w, h, optsIn) {
 // in the status bar by onModelLoaded) plus an ISO timestamp.
 function _defaultScreenshotName() {
   const sbName = document.getElementById('sb-status')?.textContent?.trim() || '';
-  const baseName = (sbName && sbName !== 'Ready') ? sbName : 'viewport';
+  const baseName = sbName || 'viewport';
   const stem = baseName.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'viewport';
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   return `${stem}_${ts}.png`;
@@ -7662,6 +7550,17 @@ function _openScreenshotDialog() {
     aspectEl.textContent = (h > 0) ? (w / h).toFixed(3) : '—';
     mpixEl.textContent = (w * h / 1e6).toFixed(1) + ' MP';
   };
+
+  // The dialog is built once and shown again after that, so the three
+  // Viewport presets would keep the canvas size of the first time it was
+  // opened: bring them up to date with the viewport as it is now.
+  presetBtns.forEach(b => {
+    const p = presets.find(x => x.id === b.dataset.id);
+    if (!p || !/^vp/.test(p.id)) return;
+    b.dataset.w = String(Math.round(p.w)); b.dataset.h = String(Math.round(p.h));
+    const sub = b.querySelector('.sub');
+    if (sub) sub.textContent = `${Math.round(p.w)}×${Math.round(p.h)} · ${p.desc}`;
+  });
 
   // Reset filename to a fresh timestamp every open. W/H are left at the
   // user's last pick so a repeat shot is one click away.
@@ -8165,10 +8064,6 @@ function _buildAxisColouredGrid(size, divisions, gridHex, axisXHex, axisYHex, fa
   group.add(majorMesh);
   group.add(axisMesh);
   group.matrixAutoUpdate = false;
-  group.userData.minorMesh = minorMesh;
-  group.userData.majorMesh = majorMesh;
-  group.userData.axisMesh  = axisMesh;
-  group.userData.minorCellSize = minorCellSize;
   // Convenience disposer — _fitGridToModel calls this on the old group
   // before swapping in a fresh one to free GPU buffers cleanly.
   group.dispose = () => {
@@ -8201,14 +8096,13 @@ function _makeShaderGrid(opts = {}) {
       throw new Error('TSL nodes unavailable');
 
     const { positionLocal, fwidth, fract, uniform, smoothstep,
-            vec2, vec3, vec4, float, color, mix, abs, min, max, dot,
+            vec2, vec4, float, color, mix, abs, min, max, dot,
             log2, pow, floor,
             length: len, normalize,
             cameraPosition, cameraProjectionMatrix, cameraViewMatrix } = tsl;
 
     // — Uniforms —
     const uMinor      = uniform(minor);
-    const uMajorEvery = uniform(major / minor);
     const uFadeStart  = uniform(fadeStart);
     const uFadeEnd    = uniform(fadeEnd);
     // View-angle fade: 1 when looking straight at the plane, 0 when edge-on.
@@ -8367,9 +8261,8 @@ function _makeShaderGrid(opts = {}) {
     grp.add(mesh);
     grp.matrixAutoUpdate = false;
     grp.userData.isShaderGrid = true;
-    grp.userData.isRaymarchedGrid = true;
     grp.userData.uniforms = {
-      uMinor, uMajorEvery, uFadeStart, uFadeEnd, uAngleFade,
+      uMinor, uFadeStart, uFadeEnd, uAngleFade,
       uPlaneN, uPlaneU, uPlaneV, uPlaneBias, uInvViewProj,
     };
     grp.userData.gridParams   = { minor, major, fadeStart, fadeEnd };
@@ -8381,12 +8274,11 @@ function _makeShaderGrid(opts = {}) {
   }
 }
 
-// "Infinite" floor grid: a very large GridHelper-style line set with the two
-// centre lines coloured red (X axis) and green (Y axis) via vertex colours.
-// A real infinite shader plane would need NodeMaterial/TSL to compile on
-// WebGPU; this version is renderer-agnostic and feels infinite for any
-// realistic camera distance because we make the grid extent ~5000× the
-// minor cell so the user sees the fade-into-distance effect through perspective.
+// "Infinite" floor grid. The ray-marched shader grid above where the node
+// materials it needs are there; otherwise a very large GridHelper-style line
+// set with the two centre lines coloured red (X axis) and green (Y axis) via
+// vertex colours, wide enough to feel infinite at any realistic camera
+// distance and fading out towards its edge.
 function _makeInfiniteGrid(opts = {}) {
   const sg = _makeShaderGrid(opts);
   if (sg) return sg;
@@ -8459,10 +8351,9 @@ function _bgFogColor() {
   }
 }
 
-// Reposition the grid for the loaded model. Picks minor / major spacing
-// from the model footprint (so a 100mm part shows 5mm cells and a 5m
-// assembly shows 250mm cells), rebuilds the LineSegments geometry, and
-// pins it to box.min.z so it reads as the model's floor.
+// Fit the grid to the loaded model: picks minor / major spacing and the fade
+// distances from the model footprint (cells of about a twentieth of it,
+// snapped down to a power of ten). The grid itself stays at the origin.
 function _fitGridToModel(box) {
   if (!gridHelper || !scene) return;
   const size = box.getSize(new THREE.Vector3());
@@ -8485,18 +8376,15 @@ function _fitGridToModel(box) {
   const fadeEnd   = footprint * 30;
   const majorEvery = Math.max(1, Math.round(major / minor));
 
-  // Rebuild the line set with the new spacing — geometry encodes the line
-  // positions AND per-vertex fade alphas, so re-spacing / re-fading means
-  // new buffers (cheap; one-shot per load). The grid is now a Group with
-  // two LineSegments children (minor + major/axis); .dispose() walks both.
   // Grid is the SOURCE OF TRUTH for world origin — it stays pinned at
   // (0,0,0) regardless of model bbox. Models align to the grid, the grid
-  // never aligns to models. The per-frame loop above clobbers X/Y to
-  // follow the camera (for shader-grid precision); Z stays at 0 forever.
+  // never aligns to models. The shader grid takes the new spacing and fade
+  // through its uniforms. The legacy line set encodes the line positions AND
+  // per-vertex fade alphas in its geometry, so for it re-spacing / re-fading
+  // means new buffers (cheap; one-shot per load).
   if (gridHelper.userData.isShaderGrid) {
     const u = gridHelper.userData.uniforms;
     u.uMinor.value      = minor;
-    u.uMajorEvery.value = majorEvery;
     u.uFadeStart.value  = fadeStart;
     u.uFadeEnd.value    = fadeEnd;
     // Ray-marched grid has no PlaneGeometry — planeSize is intentionally
@@ -8526,6 +8414,7 @@ function _fitGridToModel(box) {
   _fogTuned.near = footprint * 3;
   _fogTuned.far  = footprint * 30;
   if (state.fog) _applyFog();
+  try { _applySnap(); } catch (_) {}      // snap to grid follows the cell just chosen
 }
 
 // ── Pro-mode scene-settings appliers ────────────────────────────────────
@@ -8803,11 +8692,12 @@ function _applySunDirection() {
 // Sun direction gizmo — TransformControls in rotate mode at scene centre.
 // Rotating it spins a virtual sphere whose +Y vector is the sun direction;
 // we read that vector each frame and place state._lights.dir at
-// (direction × radius). Toggled by the tg-sun viewport button.
+// (direction × radius). Toggled by the "Sun direction gizmo" switch in
+// Settings › Viewport (which clicks the hidden #tg-sun button).
 // =====================================================================
 
 // Build (or fetch) the gizmo objects. Lazy — nothing in the scene until the
-// user actually clicks tg-sun, so unloaded models stay clean.
+// user actually switches it on, so unloaded models stay clean.
 function _ensureSunGizmo() {
   if (state._sunGizmo) return state._sunGizmo;
   if (!scene || !camera || !renderer) return null;
@@ -8923,11 +8813,12 @@ function _removeSunGizmo() {
   if (g.tcHelper && g.tcHelper.parent) g.tcHelper.parent.remove(g.tcHelper);
   if (g.tc.dispose) g.tc.dispose();
   if (g.target.parent) g.target.parent.remove(g.target);
-  // Visual children (sphere + arrow) live under target — disposed via
-  // recursive parent removal. Geometries/materials are tiny one-offs;
-  // explicit dispose keeps GPU memory tidy.
+  // Visual children (sphere + arrow) live under target and left the scene
+  // with it. Geometries/materials are tiny one-offs; explicit dispose keeps
+  // GPU memory tidy. (The arrow's shaft is a Line, not a Mesh: it is freed
+  // here as well.)
   g.visual?.traverse?.(o => {
-    if (o.isMesh) {
+    if (o.isMesh || o.isLine) {
       o.geometry?.dispose?.();
       if (Array.isArray(o.material)) o.material.forEach(m => m.dispose?.());
       else o.material?.dispose?.();
@@ -9975,7 +9866,6 @@ function _applyGridCell() {
     if (!isFinite(cell) || cell <= 0) return;
     const u = gridHelper.userData.uniforms;
     u.uMinor.value      = cell;
-    u.uMajorEvery.value = 10;
     gridHelper.userData.gridParams.minor = cell;
     gridHelper.userData.gridParams.major = cell * 10;
     requestRender();
@@ -9990,8 +9880,9 @@ function _applyGridCell() {
   newGrid.material.opacity = 0.45;
   newGrid.visible = state.showGrid;
   scene.remove(gridHelper);
-  gridHelper.geometry?.dispose?.();
-  gridHelper.material?.dispose?.();
+  // (the legacy line grid is a Group with a dispose() of its own, and has no
+  // geometry or material to free directly; a GridHelper has dispose() too)
+  gridHelper.dispose?.();
   gridHelper = newGrid;
   scene.add(gridHelper);
 }
@@ -9999,7 +9890,9 @@ function _applyGridCell() {
 function _applySnap() {
   if (!state.gizmo) return;
   if (state.snapToGrid) {
-    const cell = (state.gridCellMode === 'auto') ? 10 : parseFloat(state.gridCellMode) || 10;
+    // In Auto the step is the cell the grid chose for the model, not a fixed 10.
+    const autoCell = gridHelper?.userData?.gridParams?.minor;
+    const cell = (state.gridCellMode === 'auto') ? (autoCell > 0 ? autoCell : 10) : parseFloat(state.gridCellMode) || 10;
     state.gizmo.translationSnap = cell;
     state.gizmo.rotationSnap = Math.PI / 12;
   } else {
@@ -10138,9 +10031,9 @@ function alignViewToAxis(axisId) {
 }
 
 // Switch to orthographic + align to a standard view (top / front / side).
-// Picks the axis convention from state.upAxis so Z-up CAD scenes and Y-up
-// (Blender/glTF) scenes both come out right. The single-button counterpart
-// to the axis-gizmo's six face-arrows.
+// Picks the axis convention from state.sceneUpAxis so Z-up CAD scenes and
+// Y-up (Blender/glTF) scenes both come out right. The view pill's and the
+// Ctrl+1…4 shortcuts' counterpart to the view cube's six faces.
 function _setStandardView(view) {
   const upAxis = (state.sceneUpAxis === 'y') ? 'y' : 'z';
   // axisId is the camera position vector ("p<axis>"=positive end of axis,
@@ -10274,11 +10167,12 @@ function _wireViewPill() {
   const menu = document.getElementById('vp-view-pill-menu');
   if (!pill || !menu) return;
 
-  // Platform-aware shortcut hint per dropdown row. Mac uses ⌘N, every
-  // other platform uses Ctrl+N. Reads from data-kbd which only carries
-  // the digit so the markup stays platform-agnostic.
+  // Platform-aware shortcut hint per dropdown row. Mac uses ⌘1, every
+  // other platform Ctrl+1, written the way shortcuts are everywhere else in
+  // the app. Reads from data-kbd which only carries the digit so the markup
+  // stays platform-agnostic.
   const isMac = /mac/i.test(navigator.platform || '') || /Mac/i.test(navigator.userAgent || '');
-  const prefix = isMac ? '⌘' : 'Ctrl ';
+  const prefix = isMac ? '⌘' : 'Ctrl+';
   menu.querySelectorAll('.vp-pill-item-kbd').forEach(k => {
     k.textContent = prefix + (k.dataset.kbd || '');
   });
@@ -10464,7 +10358,7 @@ function _rebuildTreeHierarchical(reuse = null) {
     oldG = new Map(); oldP = new Map();
     for (const r of reuse) (r._isG ? oldG : oldP).set(r._nid, r);
   }
-  let totalParts = 0, shownParts = 0, deepest = 0;
+  let totalParts = 0, shownParts = 0;
   let hideDepth = Infinity, clickDepth = Infinity;
   // which rows got which highlight, for rebuildTreeSelectionOnly to start from
   const litP = new Set(), dimP = new Set(), litG = new Set(), dimG = new Set();
@@ -10472,7 +10366,6 @@ function _rebuildTreeHierarchical(reuse = null) {
     const n = all[i], d = n.depth, isG = n.kind === 'group';
     if (d <= hideDepth) hideDepth = Infinity;
     if (d <= clickDepth) clickDepth = Infinity;
-    if (d > deepest) deepest = d;
     let searchHidden = visibleIds !== null && !visibleIds.has(n.id);
     let p = null;
     if (n.kind === 'part') {
@@ -10563,7 +10456,7 @@ function _rebuildTreeHierarchical(reuse = null) {
   // A kept row that is no longer near the viewport goes back to being a
   // shell: what it showed may be out of date.
   for (const r of wasFilled) if (!r._filled) r.textContent = '';
-  _treeFitIndent(deepest);
+  _treeFitIndent();
   $('tree-summary').classList.toggle('is-filter', !!ft);     // the line is only shown while searching
   $('tree-summary').textContent = ft
     ? `${shownParts} of ${totalParts} part${totalParts === 1 ? '' : 's'} match`
@@ -10736,8 +10629,6 @@ function _treeScrollToRow(row, where = 'center', smooth = false) {
   else { el.scrollTop = to; _treeView.top = el.scrollTop; _treeFillVisible(); }
   return true;
 }
-// Make sure one particular row has its contents (before code reads them).
-function _ensureTreeRow(row) { if (row && row._n && !row._filled) _fillTreeRow(row); return row; }
 function _fillTreeRow(row) {
   const n = row._n;
   if (!n) return;
@@ -10993,11 +10884,10 @@ function _instBadge(n) {
          `${_ico('copy')}×${n}</span>`;
 }
 
-// Collect every part-id descendant of a group node in state.treeNodes.
-// Returns partIds that are DIRECT children of groupId (n.parentId === groupId,
-// Walks forward from the group's index until depth drops back to or below
-// the group's depth — that's the boundary of the group's subtree (treeNodes
-// is in DFS order). Returns the list of partIds, no group ids.
+// Collect every part-id descendant of a group node in state.treeNodes, at
+// any depth. Walks forward from the group's index until depth drops back to
+// or below the group's depth — that's the boundary of the group's subtree
+// (treeNodes is in DFS order). Returns the list of partIds, no group ids.
 function _treeGroupDescendants(groupId) {
   const all = state.treeNodes;
   if (!all || !all.length) return [];
@@ -11165,8 +11055,6 @@ function rebuildTreeSelectionOnly() {
   const ancestorPartSet = new Set();
   if (explicitG.size && state.treeNodes && state.treeNodes.length) {
     const all = state.treeNodes;
-    let depth0 = -1;
-    let activeAncestor = null;
     const stack = [];
     for (const n of all) {
       while (stack.length && stack[stack.length - 1].depth >= n.depth) stack.pop();
@@ -11578,16 +11466,29 @@ function _syncPrimWireframe(p) {
   let existing = null;
   for (const c of p.mesh.children) { if (c._isPrimWireframe) { existing = c; break; } }
   if (want) {
+    // The outline is rebuilt only when the mesh's geometry has changed since
+    // it was made: another geometry object, or new vertex / index data in the
+    // same one. (It used to be rebuilt on every highlight pass, that is on
+    // every change of selection, for every selected shape.)
+    const g = p.mesh.geometry, pos = g?.attributes?.position, idx = g?.index || null;
+    const was = existing && existing._wfOf;
+    if (was && was.g === g && was.pos === pos && was.posV === pos?.version && was.idx === idx && was.idxV === (idx ? idx.version : -1)) {
+      existing.visible = true;
+      return;
+    }
+    const made = { g, pos, posV: pos?.version, idx, idxV: idx ? idx.version : -1 };
     const wfGeom = _buildNgonEdgesGeom(p.mesh.geometry);
     if (existing) {
       try { existing.geometry?.dispose(); } catch (_) {}
       existing.geometry = _stampGeometry(wfGeom);
+      existing._wfOf = made;
       // Reset visibility — primitive-slider drag may have hidden it to skip
       // the per-frame outline rebuild; this is the catch-up call.
       existing.visible = true;
     } else {
       const lines = new THREE.LineSegments(wfGeom, _PRIM_WF_MAT);
       lines._isPrimWireframe = true;
+      lines._wfOf = made;
       lines.renderOrder = 997;
       p.mesh.add(lines);
     }
@@ -11603,24 +11504,14 @@ function _applySelectionColorsImpl() {
   const hasOverlays = !!(state.activeHighlights && state.activeHighlights.length);
   const wantsSel    = state.selected && state.selected.size > 0;
   const wantsFlag   = state.highlightSmall;
-  // Primitive wireframes live as children of the mesh (not in
-  // state.activeHighlights), so the fast-path above used to leave them
-  // attached after a deselect. Detect any stale wireframe and force the
-  // teardown path to run when one exists.
-  let hasPrimWf = false;
   if (!hasOverlays && !wantsSel && !wantsFlag) {
-    for (const p of state.parts) {
-      if (!p?.isPrimitive || !p.mesh) continue;
-      for (const c of p.mesh.children) {
-        if (c._isPrimWireframe) { hasPrimWf = true; break; }
-      }
-      if (hasPrimWf) break;
-    }
+    // Primitive wireframes live as children of the mesh (not in
+    // state.activeHighlights), so they are not covered by the test above:
+    // take off any that a deselect left attached.
+    for (const p of state.parts) { if (p.isPrimitive) _syncPrimWireframe(p); }
     // Origin dots are global (always-visible per-group), so refresh them on
     // every fast-path tick — adds/removes groups land here too.
-    for (const p of state.parts) { if (p.isPrimitive) _syncPrimWireframe(p); }
     _updateGroupOriginDot();
-    if (!hasPrimWf) { requestRender(); return; }
     requestRender();
     return;
   }
@@ -11788,8 +11679,14 @@ function _applySelectionColorsImpl() {
       overlay.frustumCulled = false;
       if (parent) parent.add(overlay);
       else if (p.instancedMesh) {
+        // An instance's matrix is in its InstancedMesh's own space. The
+        // overlay sits in the scene, so it takes that mesh's world matrix as
+        // well: without it the fill ignored a partsRoot that is turned,
+        // scaled or moved (Y-up, scene scale, Recentre).
+        p.instancedMesh.updateWorldMatrix(true, false);
         p.instancedMesh.getMatrixAt(p.instanceIndex, flagMat);
-        overlay.matrixAutoUpdate = false; overlay.matrix.copy(flagMat);
+        overlay.matrixAutoUpdate = false; overlay.matrix.multiplyMatrices(p.instancedMesh.matrixWorld, flagMat);
+        overlay.matrixWorldNeedsUpdate = true;
         scene.add(overlay);
       } else scene.add(overlay);
       state.activeHighlights.push(overlay);
@@ -11971,11 +11868,11 @@ function _updateGroupOriginDot() {
 
 // Multi-sample raycasting offsets, in pixels, in concentric rings around the
 // click. Order: center first (dead-on hits short-circuit immediately), then
-// progressively larger rings (4 → 8 → 12 px), each with 8 samples per ring.
+// progressively larger rings (4 to 20 px in steps of 4), 8 samples per ring.
 // First ray that hits a part wins. Pure raycasts → no AABB-snap fuzz → no
 // random "passes through to wrong part" behaviour, but tiny / thin parts
 // (vertical beams etc.) still catch on one of the offset rays even if the
-// center misses by several pixels. Total = 25 samples; each is microseconds
+// center misses by several pixels. Total = 41 samples; each is microseconds
 // with BVH attached.
 const _PICK_OFFSETS = (() => {
   const pts = [[0, 0]];
@@ -12013,7 +11910,7 @@ function pickAtPointer(ev) {
 
   const hitToPartId = (h) => {
     if (h.object.isInstancedMesh) {
-      // Lazy index — see note at original pickAtPointer for cache rationale.
+      // Which group this InstancedMesh draws, looked up once and kept on it.
       let grp = h.object.userData._group;
       if (!grp) {
         grp = state.instancedGroups.find(g => g.instanced === h.object);
@@ -12027,7 +11924,7 @@ function pickAtPointer(ev) {
   };
 
   // Try each sample ray; first hit returns. With BVH attached to most geoms
-  // each ray is microseconds, so ~13 samples is essentially free.
+  // each ray is microseconds, so the 41 samples are essentially free.
   for (const [dx, dy] of _PICK_OFFSETS) {
     pointer.x = (((ev.clientX + dx) - r.left) / r.width) * 2 - 1;
     pointer.y = -(((ev.clientY + dy) - r.top) / r.height) * 2 + 1;
@@ -12140,10 +12037,10 @@ function _polyRectOverlap(poly, rMinX, rMinY, rMaxX, rMaxY) {
 // silhouette) and vertex-sampling alone under-selected (samples could miss the
 // rect even when the part visibly grazes it).
 //
-// Modifiers:
-//   additive (shift) → add hits to existing selection
-//   toggle   (ctrl)  → flip hits in existing selection
-//   neither          → replace selection with hits
+// The marquee itself is a Ctrl / Cmd drag (see the canvas mousedown), so:
+//   with Shift (m.additive) → add hits to the existing selection
+//   without                 → replace the selection with hits
+// (m.toggle is always false: Ctrl is taken by the gesture itself.)
 function _commitMarqueeSelection(m) {
   const canvasRect = $('canvas').getBoundingClientRect();
   const rMinX = Math.min(m.startX, m.endX);
@@ -12846,7 +12743,9 @@ function _updateFlaggedChip() {
 
 function pushUndo(op) {
   state.history.push(op);
-  if (state.history.length > 30) state.history.shift();
+  // (the entry that falls off the far end can no longer be undone: the
+  // unsaved-changes marker has to know, see _Dirty.dropped)
+  if (state.history.length > 30) { const gone = state.history.shift(); try { _Dirty.dropped(gone); } catch (_) {} }
   // Any new user action invalidates the redo stack — same convention as
   // every editor (Photoshop, VS Code, Figma). Without this the user could
   // undo, do something new, then redo back to a state inconsistent with
@@ -13307,9 +13206,20 @@ const _Dirty = (() => {
     try { _Tabs.report({ dirty: d }); } catch (_) {}
   }
   function mark() { savedTop = top(); sync(); }
+  // The history keeps 30 entries; `op` is one that has just fallen off its
+  // far end. If the save was made before it (at an empty history), undoing
+  // everything that is left no longer gets back to what was saved: without
+  // this, more than 30 edits followed by undoing them all read as "saved".
+  // If the save was made right after it, the empty history now IS the saved
+  // scene.
+  const LOST = {};
+  function dropped(op) {
+    if (savedTop === op) savedTop = null;
+    else if (savedTop === null) savedTop = LOST;
+  }
   const wire = () => document.getElementById('doc-save')?.addEventListener('click', (e) => { e.stopPropagation(); if (dirty()) document.getElementById('btn-save-scene')?.click(); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
-  return { sync, mark, dirty };
+  return { sync, mark, dirty, dropped };
 })();
 // Single source of truth for "after-undo / after-redo cleanup". Every branch
 // of undoLast / redoLast calls this so the viewport, gizmo, highlights, and
@@ -14137,11 +14047,10 @@ function selectSimilar() {
   // Selection visible in viewport / sidebar chip — no toast.
 }
 
-function _isolateSet(idSet, label='Isolated') {
+function _isolateSet(idSet) {
   state._isolatedBy = null;             // (isolateFlagged sets it again)
   const m4zero = new THREE.Matrix4().makeScale(0, 0, 0);
   const m4restore = new THREE.Matrix4();
-  let shown = 0, hidden = 0;
   // Snapshot per-part visibility for a single 'vis' undo entry.
   const _items = [];
   const _prevIsolated = state._isolated || false;
@@ -14161,7 +14070,6 @@ function _isolateSet(idSet, label='Isolated') {
       p.instancedMesh.instanceMatrix.needsUpdate = true;
     }
     if (before !== on) _items.push({ partId: p.partId, before, after: on });
-    if (on) shown++; else hidden++;
   }
   if (_items.length) {
     try { pushUndo({ type: 'vis', items: _items, prevIsolated: _prevIsolated, nextIsolated: true }); } catch (_) {}
@@ -14196,14 +14104,14 @@ function _syncIsolatePill() {
 }
 
 function isolateSelected() {
-  if (state.selected.size > 0) { _isolateSet(state.selected, 'Isolated selected'); state._isolated = true; }
-  else if (state.pendingFlagged.size > 0) { _isolateSet(state.pendingFlagged, 'Isolated flagged parts'); state._isolated = true; }
+  if (state.selected.size > 0) { _isolateSet(state.selected); state._isolated = true; }
+  else if (state.pendingFlagged.size > 0) { _isolateSet(state.pendingFlagged); state._isolated = true; }
   else { showAllParts(); /* visible in viewport — no toast */ }
   requestRender();
 }
 function isolateFlagged() {
   if (state.pendingFlagged.size === 0) return toast('Nothing flagged', 'Set a size threshold first', 'warn');
-  _isolateSet(state.pendingFlagged, 'Isolated flagged parts');
+  _isolateSet(state.pendingFlagged);
   state._isolated = true;
   state._isolatedBy = 'flagged';        // so the view follows the threshold from here on (_isolateFollowFlagged)
 }
@@ -14318,16 +14226,6 @@ function setViewMode(mode) {
   requestRender();
 }
 
-// (Removed: _buildMergedEdges + toggleEdgesOverlay. The mesh / "solid + edges"
-// view mode was dropped; the merged-edges overlay was the only consumer of
-// state.edgesRoot, state.edgeOverlay, and state._mergedEdgesBuilt.)
-
-// Resolve the world-space matrix for a given part. Handles three cases:
-//   - Standalone Mesh (p.mesh): use its own matrixWorld.
-//   - Instanced part  (p.instancedMesh): compose the InstancedMesh's matrixWorld
-//     with its per-instance matrix.
-//   - Pure-data parts: identity (means "geometry as stored").
-// Returns a freshly allocated Matrix4 caller can mutate.
 // Detect whether a Matrix4 contains shear. Shear is what's left over after a
 // transform is decomposed into T/R/S and recomposed: if the decompose+compose
 // round-trip differs from the original, the difference IS the shear. Without
@@ -14351,6 +14249,12 @@ const _matrixHasShear = (() => {
   };
 })();
 
+// Resolve the world-space matrix for a given part. Handles three cases:
+//   - Standalone Mesh (p.mesh): use its own matrixWorld.
+//   - Instanced part  (p.instancedMesh): compose the InstancedMesh's matrixWorld
+//     with its per-instance matrix.
+//   - Pure-data parts: identity (means "geometry as stored").
+// Returns a freshly allocated Matrix4 caller can mutate.
 function _resolvePartWorldMatrix(p) {
   const out = new THREE.Matrix4();
   if (p.mesh) {
@@ -14740,33 +14644,28 @@ function downloadBlob(blob, name) {
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
 }
 
-// Walk every Mesh in the export root and re-normalize its normal attribute
-// in place. After multiple matrix applies (world transform, axis flip, scale)
-// individual normals drift to magnitudes ~1 ± a few ULP — enough for
-// GLTFExporter's strict check to log "Creating normalized normal attribute"
-// once per mesh and produce a corrected copy in memory. Doing one final
-// renormalize pass here keeps the original buffer authoritative and silences
-// the warning cleanly.
-// Lazy-load gltf-transform + draco3dgltf and use them to re-encode a GLB
-// with KHR_draco_mesh_compression. Three.js ships only a Draco DECODER, not
-// an encoder, so we delegate to gltf-transform which has first-class Draco
-// integration plus a browser-friendly WebIO. Modules are pulled from esm.sh
-// at click time (cached on first use), so users who never check the Draco
-// box never pay the ~2 MB download.
+// Lazy-load gltf-transform and the Draco encoder, and use them to re-encode
+// a GLB with KHR_draco_mesh_compression. Three.js ships only a Draco DECODER,
+// not an encoder, so we delegate to gltf-transform which has first-class
+// Draco integration plus a browser-friendly WebIO. The Draco encoder and
+// decoder are in vendor/draco; the gltf-transform modules are NOT vendored:
+// they are imported from a CDN at click time (cached on first use), so users
+// who never check the Draco box never pay the download, and Draco export
+// needs the network.
 //
 // Compression typically shrinks the GLB 5–20× on vertex data; in exchange,
 // loading is slower (decoder runs in main thread or worker depending on
 // host) and very-low-poly meshes can occasionally end up LARGER due to
-// per-primitive overhead. The exporter writes the uncompressed file as
-// `mesh_optimised.glb` and the compressed one as `mesh_optimised.draco.glb`
-// so the user can compare.
+// per-primitive overhead. The compressed file is saved as `<name>.draco.glb`.
+// If the tool chain cannot be loaded, the uncompressed GLB is saved instead,
+// under the plain `<name>.glb` (see the export handler).
 let _dracoCachedModules = null;
 
-// Inject a UMD <script> and resolve once it's loaded. Used to pull the
-// Google-hosted Draco encoder/decoder which are browser-targeted UMDs.
-// (The npm package `draco3dgltf` is Node-only — it imports `fs`, and
-// every JS-package CDN we tried — esm.sh, jsdelivr, skypack — refuses
-// to bundle that for browsers.)
+// Inject a UMD <script> and resolve once it's loaded. Used for the Draco
+// encoder / decoder and for assimpjs, which are builds made for a plain
+// <script> tag. (The npm packages import `fs` on a code path browsers never
+// take, and every JS-package CDN we tried — esm.sh, jsdelivr, skypack —
+// refuses to bundle that as an ES module.)
 function _loadUmdScript(url) {
   return new Promise((resolve, reject) => {
     const existing = document.querySelector('script[data-umd="' + url + '"]');
@@ -14781,7 +14680,10 @@ function _loadUmdScript(url) {
     s.async = true;
     s.dataset.umd = url;
     s.addEventListener('load',  () => { s.dataset.loaded = '1'; resolve(); });
-    s.addEventListener('error', () => reject(new Error('script load failed: ' + url)));
+    // A tag that failed is taken out again. Left in the page, the next try
+    // for the same URL found it, waited for a 'load' or 'error' that had
+    // already been and gone, and never settled.
+    s.addEventListener('error', () => { s.remove(); reject(new Error('script load failed: ' + url)); });
     document.head.appendChild(s);
   });
 }
@@ -14789,14 +14691,13 @@ function _loadUmdScript(url) {
 async function _loadDracoToolchain() {
   if (_dracoCachedModules) return _dracoCachedModules;
   // Strategy:
-  //   * gltf-transform packages: pure JS, work fine via esm.sh / jsdelivr
-  //     ESM bundling. Try jsdelivr first (faster on most networks).
-  //   * Draco encoder/decoder: load Google's gstatic-hosted UMDs. These
-  //     are the same wasm modules `three/examples/jsm/libs/draco` uses for
-  //     the decoder; gstatic also hosts the encoder at the same versioned
-  //     path. They expose DracoEncoderModule/DracoDecoderModule globals.
-  //     Crucially: built for browsers (no fs imports), unlike the npm
-  //     `draco3dgltf` package we fought for two iterations.
+  //   * gltf-transform packages: pure JS, imported as ES modules from a CDN
+  //     (jsdelivr first, faster on most networks; esm.sh as the fallback).
+  //     This is the part that needs the network.
+  //   * Draco encoder/decoder: the draco3d builds in vendor/draco, loaded
+  //     as plain <script> tags (see below), with the same files on a CDN as
+  //     the fallback. They expose DracoEncoderModule / DracoDecoderModule
+  //     globals.
   const tryImport = async (urls) => {
     let lastErr = null;
     for (const u of urls) {
@@ -14852,7 +14753,7 @@ async function _loadDracoToolchain() {
     ]),
   ]);
   if (typeof window.DracoEncoderModule !== 'function' || typeof window.DracoDecoderModule !== 'function') {
-    throw new Error('Draco UMDs loaded but globals (DracoEncoderModule/DracoDecoderModule) missing — gstatic build mismatch?');
+    throw new Error('The Draco encoder and decoder scripts loaded but did not start (DracoEncoderModule / DracoDecoderModule missing)');
   }
   // Lift Google's factories into the shape gltf-transform expects: an object
   // with createEncoderModule / createDecoderModule async functions returning
@@ -14907,6 +14808,13 @@ async function _compressGLBWithDraco(glbUint8) {
   return compressed instanceof Uint8Array ? compressed.buffer : compressed;
 }
 
+// Walk every Mesh in the export root and re-normalize its normal attribute
+// in place. After multiple matrix applies (world transform, axis flip, scale)
+// individual normals drift to magnitudes ~1 ± a few ULP — enough for
+// GLTFExporter's strict check to log "Creating normalized normal attribute"
+// once per mesh and produce a corrected copy in memory. Doing one final
+// renormalize pass here keeps the original buffer authoritative and silences
+// the warning cleanly.
 function _normalizeNormalsInPlace(root) {
   let touched = 0;
   // Dedup: buildExportRoot shares one geometry across all parts with the
@@ -14943,7 +14851,7 @@ function _normalizeNormalsInPlace(root) {
     nrm.needsUpdate = true;
     touched++;
   });
-  if (touched > 0) Log.debug(`pre-export: re-normalized normals on ${touched} unique geometries`, { tag: 'export' });
+  if (touched > 0) Log.debug(`pre-export: re-normalised normals on ${touched} unique geometries`, { tag: 'export' });
 }
 
 // Estimate total vertex count in the export root. Used to scale the OBJ
@@ -14958,30 +14866,6 @@ function _countExportVerts(root) {
   return v;
 }
 
-// Streaming OBJ exporter — bypasses V8's ~500 MB single-string limit.
-//
-// three.js's stock OBJExporter builds one giant string and returns it. For a
-// 10M-vertex model that string is ~300 MB; V8 caps single strings at ~500 MB
-// and concat operations at ~256 MB on some builds, so the user sees
-// "Invalid string length" and the download fails outright.
-//
-// This version writes per-mesh chunks into a BlobPart array. Each chunk is
-// capped at TARGET_CHUNK bytes of UTF-8 — small enough that V8's string
-// concat path stays in the fast lane, large enough that we don't churn out
-// millions of tiny array entries. The final Blob has no total-size limit.
-//
-// Numeric formatting matches three.js's OBJExporter (default toString()).
-// ───────────────────────────────────────────────────────────────────
-// ASCII FBX exporter (version 7400 / "FBX 2014").
-// Why hand-rolled: three.js doesn't ship an FBX exporter, and the only
-// npm options are CDN-hosted (we just got burned by the Draco CDN
-// saga, so any new export format earns its own self-contained writer).
-// What's supported: per-mesh triangle geometry, vertex normals, per-mesh
-// diffuse color material, world-space transforms baked into vertices.
-// Hierarchy and shared geometry are flattened — every visible mesh
-// becomes its own FBX Model + Geometry + Material triplet. Cinema 4D,
-// Blender, Maya, 3ds Max, and Houdini all read this dialect.
-// ───────────────────────────────────────────────────────────────────
 // Lazy-load assimpjs (a 4 MB wasm port of Open Asset Import Library) on
 // first FBX export. Cached for subsequent calls so the user only pays the
 // download / instantiation cost once per session.
@@ -15023,6 +14907,9 @@ async function _getAssimp() {
       },
     });
   })();
+  // A load that failed is not kept: the next export tries again, instead of
+  // being handed the same rejection for the rest of the session.
+  _assimpReady.catch(() => { _assimpReady = null; });
   return _assimpReady;
 }
 
@@ -15102,23 +14989,6 @@ class _FbxBinWriter {
   i16(v) { this._ensure(2); this.view.setInt16(this.pos, v, true); this.pos += 2; }
   i32(v) { this._ensure(4); this.view.setInt32(this.pos, v, true); this.pos += 4; }
   u32(v) { this._ensure(4); this.view.setUint32(this.pos, v >>> 0, true); this.pos += 4; }
-  // u64 / patchU64: split a JS Number (safe up to 2^53 — well above the
-  // 4 GB FBX 7.4 limit) into two uint32s. Avoids BigInt allocation per
-  // write, which adds up over the millions of offsets in a real export.
-  u64(v) {
-    this._ensure(8);
-    const lo = v >>> 0;
-    const hi = Math.floor(v / 4294967296) >>> 0;
-    this.view.setUint32(this.pos, lo, true);
-    this.view.setUint32(this.pos + 4, hi, true);
-    this.pos += 8;
-  }
-  patchU64(at, v) {
-    const lo = v >>> 0;
-    const hi = Math.floor(v / 4294967296) >>> 0;
-    this.view.setUint32(at, lo, true);
-    this.view.setUint32(at + 4, hi, true);
-  }
   f32(v) { this._ensure(4); this.view.setFloat32(this.pos, v, true); this.pos += 4; }
   f64(v) { this._ensure(8); this.view.setFloat64(this.pos, v, true); this.pos += 8; }
   i64(v) { this._ensure(8); this.view.setBigInt64(this.pos, BigInt(v), true); this.pos += 8; }
@@ -15329,21 +15199,9 @@ function _collectFbxScene(root) {
     }
   }
 
-  // Material dedup by RGB hex.
-  const mats = [];
-  const colorHexToIdx = new Map();
-  for (const n of nodes) {
-    if (n.type !== 'Mesh') continue;
-    const c = n.obj.material?.color;
-    const r = c ? c.r : 0.8, g = c ? c.g : 0.8, b = c ? c.b : 0.8;
-    const key = ((r * 255 | 0) << 16) | ((g * 255 | 0) << 8) | (b * 255 | 0);
-    if (!colorHexToIdx.has(key)) {
-      colorHexToIdx.set(key, mats.length);
-      mats.push({ r, g, b });
-    }
-  }
-
-  return { nodes, mats, colorHexToIdx };
+  // (Materials are not collected here: the binary writer gives every mesh a
+  // material of its own, see _exportFbxBinary.)
+  return { nodes };
 }
 
 // Bake mesh.matrixWorld into a fresh typed-array of world-space positions
@@ -15427,7 +15285,7 @@ function _fbxBakeMeshGeom(meshObj) {
 }
 
 async function _exportFbxBinary(root) {
-  const { nodes, mats, colorHexToIdx } = _collectFbxScene(root);
+  const { nodes } = _collectFbxScene(root);
 
   const GEOM_ID_BASE  = 100000000;
   const MODEL_ID_BASE = 200000000;
@@ -15448,7 +15306,6 @@ async function _exportFbxBinary(root) {
   // writes 1 material per mesh (no dedup). We follow the same convention
   // here. Slightly larger file (~601 Material entries instead of N unique
   // colors) but C4D-compatible.
-  const meshNodes = nodes.filter(n => n.type === 'Mesh');
   const meshIdxToGeomIdx = new Map();
   const meshIdxToMatIdx = new Map();      // per-mesh material index
   const perMeshMats = [];                 // [{ r, g, b }, ...] one entry per mesh
@@ -15537,9 +15394,15 @@ async function _exportFbxBinary(root) {
         { name: 'Second',  props: [{ type: 'I', value: now.getSeconds() }] },
         { name: 'Millisecond', props: [{ type: 'I', value: 0 }] },
       ]},
-      // Spoof Blender's Creator string. Test whether Cinema 4D 2026's FBX
-      // importer has exporter-based rejection. Blender's identity is the
-      // safest bet since it's the most commonly tested writer.
+      // The Creator string, and the SceneInfo records below with their
+      // "/foobar.fbx" placeholder paths, are deliberately the ones Blender's
+      // FBX exporter writes. This is a compatibility choice, not a leftover:
+      // this writer follows Blender's layout node for node, and importers
+      // (Cinema 4D 2026 above all, which rejected earlier versions of this
+      // file) read these records to decide how to treat what follows.
+      // Blender's is the most widely tested writer, so its identity is the
+      // one every importer accepts. Do not "correct" them to MeshOptimiser
+      // without re-testing in Cinema 4D, Maya and Houdini.
       { name: 'Creator', props: [{ type: 'S', value: 'Blender (stable FBX IO) - 4.1.0 - 4.27.1' }] },
       // OtherFlags block removed — Blender doesn't write it and it's not
       // required. C4D may have been treating its presence (with our
@@ -16138,6 +16001,16 @@ async function _exportFbxBinary(root) {
   return new Blob([w.finalize()], { type: 'application/octet-stream' });
 }
 
+// ───────────────────────────────────────────────────────────────────
+// ASCII FBX exporter (version 7400 / "FBX 2014").
+// Why hand-rolled: three.js doesn't ship an FBX exporter, and a writer of
+// our own needs nothing fetched at export time.
+// What's written: the group hierarchy (groups as Null models), per-mesh
+// triangle geometry (no normals: importers rebuild them), one diffuse
+// colour material per colour. Each mesh's transform is baked into its
+// vertices, so geometry is not shared between meshes. Cinema 4D, Blender,
+// Maya, 3ds Max, and Houdini all read this dialect.
+// ───────────────────────────────────────────────────────────────────
 function _exportFbxAscii(root) {
   // FBX uses int64 ids; we space them out by ranges so the output is readable
   // and ids don't collide across object types (Geometry / Model / Material).
@@ -16211,24 +16084,10 @@ function _exportFbxAscii(root) {
     }
   }
 
-  // ── Dedup geometries and materials ──────────────────────────────────────
-  // Geometry sharing is the single biggest size win: 100 instances of one
-  // bracket become 1 Geometry block + 100 Model instances instead of 100
-  // full Geometry blocks. Keyed by BufferGeometry reference (buildExportRoot
-  // already shares clones across same-hash parts), so this maps 1:1 to
-  // GLTFExporter's dedup behaviour.
-  const geoms = [];                      // unique BufferGeometry list
-  const geomToIdx = new Map();           // BufferGeometry → index
-  for (const n of nodes) {
-    if (n.type !== 'Mesh') continue;
-    const g = n.obj.geometry;
-    if (!g) continue;
-    if (!geomToIdx.has(g)) {
-      geomToIdx.set(g, geoms.length);
-      geoms.push(g);
-    }
-  }
-
+  // ── Dedup materials ─────────────────────────────────────────────────────
+  // (Geometries are not shared in this writer: every mesh node gets a
+  // Geometry block of its own, with its transform baked in. See "Geometry
+  // blocks" below for why.)
   // Materials are keyed by RGB hex so meshes with identical colours share
   // one Material entry. Different metalness/roughness/etc. would need finer
   // keys; our pipeline produces flat color-only materials so hex is enough.
@@ -16368,10 +16227,10 @@ GlobalSettings:  {
   push(`Objects:  {
 `);
 
-  // Helper: format a number compactly. 4 decimal places = 0.0001-unit
-  // resolution, which is sub-micron at mm scale and far tighter than any
-  // downstream manufacturing tolerance. Going from 6 dp to 4 dp cuts the
-  // dominant vertex/normal data ~20 % in the text stream.
+  // Helper: format a number compactly, to 7 significant digits. (A fixed
+  // number of decimals was wrong at either end: an export scaled to metres
+  // lost most of its digits, one in large units carried digits that mean
+  // nothing.)
   const fmt = (n) => Math.abs(n) < 1e-10 ? '0' : (+n.toPrecision(7)).toString();
   // Sanitise names — FBX is fragile around backslashes, double-quotes and
   // control characters in object labels.
@@ -16391,11 +16250,7 @@ GlobalSettings:  {
   //    Hierarchy is still preserved via Connections — group containers'
   //    own Lcl is identity (buildExportRoot creates them at identity), so
   //    they only contribute structure, not transform.
-  //
-  //    geomToIdx map is rebuilt here per-mesh-node since we no longer
-  //    share BufferGeometries: each mesh node gets its own Geometry block.
-  geoms.length = 0;
-  geomToIdx.clear();
+  const geoms = [];                        // one per mesh node: { source: BufferGeometry, mesh }
   const meshIdxToGeomIdx = new Map();      // node index → geom block index
   for (let ni = 0; ni < nodes.length; ni++) {
     const n = nodes[ni];
@@ -16532,10 +16387,18 @@ GlobalSettings:  {
   const tmpV = new THREE.Vector3();
   const tmpScale = new THREE.Vector3();
   const RAD2DEG = 180 / Math.PI;
+  // Model names are made unique, as the binary writer makes them: Cinema 4D
+  // will not build a scene in which two Models carry one name, even when
+  // their ids differ. A repeated name gets ".001", ".002", …
+  const seenModelNames = new Map();   // name → how many times it has come up
   for (let ni = 0; ni < nodes.length; ni++) {
     const n = nodes[ni];
     const o = n.obj;
     const modelId = MODEL_ID_BASE + ni;
+    const rawName = safeName(o.name || (n.type === 'Mesh' ? `mesh_${ni}` : `group_${ni}`));
+    const seenN = seenModelNames.get(rawName) || 0;
+    seenModelNames.set(rawName, seenN + 1);
+    const modelName = seenN > 0 ? `${rawName}.${String(seenN).padStart(3, '0')}` : rawName;
     // Mesh nodes get identity Lcl because their world transform was baked
     // into the emitted vertex stream. Group ('Null') nodes get the decomposed
     // local matrix so their structural placement (if any) is preserved —
@@ -16552,7 +16415,7 @@ GlobalSettings:  {
       rx = tmpEuler.x * RAD2DEG; ry = tmpEuler.y * RAD2DEG; rz = tmpEuler.z * RAD2DEG;
       sx = tmpScale.x; sy = tmpScale.y; sz = tmpScale.z;
     }
-    push(`\tModel: ${modelId}, "Model::${safeName(o.name || (n.type === 'Mesh' ? `mesh_${ni}` : `group_${ni}`))}", "${n.type}" {
+    push(`\tModel: ${modelId}, "Model::${modelName}", "${n.type}" {
 \t\tVersion: 232
 \t\tProperties70:  {
 \t\t\tP: "DefaultAttributeIndex", "int", "Integer", "",0
@@ -16681,6 +16544,20 @@ function _objFloat(n, d) {
   return s === '-0' ? '0' : s;
 }
 
+// Streaming OBJ exporter — bypasses V8's ~500 MB single-string limit.
+//
+// three.js's stock OBJExporter builds one giant string and returns it. For a
+// 10M-vertex model that string is ~300 MB; V8 caps single strings at ~500 MB
+// and concat operations at ~256 MB on some builds, so the user sees
+// "Invalid string length" and the download fails outright.
+//
+// This version writes per-mesh chunks into a BlobPart array. Each chunk is
+// capped at TARGET_CHUNK bytes of UTF-8 — small enough that V8's string
+// concat path stays in the fast lane, large enough that we don't churn out
+// millions of tiny array entries. The final Blob has no total-size limit.
+//
+// Numbers are written with a fixed number of decimals (_OBJ_POS_DEC and
+// friends above), not three.js's default toString().
 function _exportObjStreaming(root, mtlBaseName) {
   const TARGET_CHUNK = 4 * 1024 * 1024;   // 4 MB per string chunk
   // Banner spells out the OBJ format's two structural limitations so a future
@@ -16870,9 +16747,10 @@ function _exportObjStreaming(root, mtlBaseName) {
 
 // ── Save / restore scene state ──────────────────────────────────────────────
 // Round-trips through a normal .glb. We bundle a JSON sidecar (camera, view
-// toggles, threshold, per-part visible/flagged) into the scene's `extras`. Any
-// other GLB tool ignores extras; reopening here picks them back up and applies
-// them after the model is loaded so the user lands exactly where they left off.
+// toggles, threshold) into the scene's `extras`; whether a part is hidden or
+// flagged travels on that part's own node. Any other GLB tool ignores extras;
+// reopening here picks them back up and applies them after the model is
+// loaded so the user lands exactly where they left off.
 const SCENE_STATE_KEY = '__stepOptimizerSceneState__';
 const SCENE_STATE_VERSION = 1;
 
@@ -17073,8 +16951,6 @@ async function _saveSceneImpl() {
   if (ask === null) return false;
   let chosenName = (ask.name || '').trim() || suggested;
   chosenName = chosenName.replace(/\.glb$/i, '').replace(/[\\/:*?"<>|]/g, '_');
-  // A copy leaves the scene's own name and file as they were.
-  if (!ask.copy) state._lastSavedSceneName = chosenName;
   const fname = `${chosenName}.glb`;
   // If the browser supports the File System Access API, reuse the previously
   // chosen file handle when the name matches — that lets the user "Save"
@@ -17108,7 +16984,6 @@ async function _saveSceneImpl() {
           startIn: prev || undefined,
           types: [{ description: 'glTF Binary', accept: { 'model/gltf-binary': ['.glb'] } }],
         });
-        if (!ask.copy) state._lastSaveSceneHandle = fileHandle;
       } catch (e) {
         if (e && e.name === 'AbortError') return false;
         console.warn('[scene-save] save picker failed, falling back to download', e);
@@ -17117,9 +16992,10 @@ async function _saveSceneImpl() {
   }
   setLoader(true, 'Preparing scene…', 'GLB');
   await new Promise(r => setTimeout(r, 16));
-  // visibleOnly:false so hidden parts survive the round-trip — visibility is
-  // stored in the sidecar and re-applied on load. Identity axis/scale/origin
-  // means the saved file overlays the live scene exactly when reopened.
+  // A whole-scene save writes the hidden parts too (visibleOnly false): each
+  // is marked hidden on its own node, below, and hidden again on load.
+  // Identity axis/scale/origin means the saved file overlays the live scene
+  // exactly when reopened.
   let root, count, meshByPart;
   // "Only the selected parts" and "without the hidden ones" are both done the
   // way Export does it: the parts that stay out are made invisible for the
@@ -17193,7 +17069,15 @@ async function _saveSceneImpl() {
     } else {
       downloadBlob(blob, fname);
     }
-    if (!ask.copy) _Dirty.mark();
+    // The scene takes this name and file as its own only now that the file is
+    // written: a save that failed (or was cancelled in the picker) used to
+    // leave them set, and the next Save went to a file that was never made.
+    // A copy leaves the scene's own name and file as they were.
+    if (!ask.copy) {
+      state._lastSavedSceneName = chosenName;
+      if (fileHandle) state._lastSaveSceneHandle = fileHandle;
+      _Dirty.mark();
+    }
     toast(ask.copy ? 'Copy saved' : 'Scene saved', `${fname} · ${fmtBytes(blob.size)}`, 'success', 4000);
     return true;
   } catch (e) {
@@ -17243,12 +17127,8 @@ function _applySceneState(s) {
       if (gridHelper) gridHelper.visible = v.showGrid;
       $('tg-grid')?.classList.toggle('active', v.showGrid);
     }
-    if (typeof v.showBboxes === 'boolean' && v.showBboxes !== state.showBboxes) {
-      state.showBboxes = v.showBboxes;
-      if (v.showBboxes && typeof _ensureBboxHelpers === 'function') _ensureBboxHelpers();
-      if (state.bboxRoot) state.bboxRoot.visible = v.showBboxes;
-      $('tg-bbox')?.classList.toggle('active', v.showBboxes);
-    }
+    // (v.showBboxes, in scenes saved by older versions, is ignored: the
+    // bounding-box overlay it switched on no longer exists)
     if (typeof v.threshold === 'number') state.threshold = v.threshold;
     if (typeof v.sizeMetricMode === 'string') {
       state.sizeMetricMode = v.sizeMetricMode;
@@ -17303,9 +17183,6 @@ function _applySceneState(s) {
       const sel = $('perf-mode'); if (sel) sel.value = v.perfMode;
       try { applyPerfMode(); } catch (_) {}
     }
-    // Per-part visibility + flagged state. Match by name — partIds are
-    // assigned by load order, which can shift if anything pre-filtered the
-    // mesh list. Names are preserved by the GLTF round-trip.
     // Per-part hidden / flagged state travels on each part's own node (see
     // saveScene), so duplicate names and shifted ids can't mis-assign it.
     {
@@ -17483,7 +17360,8 @@ async function doExport(opts) {
   }
 }
 async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', draco=false }) {
-  setLoader(true, 'Preparing export…', format.toUpperCase());
+  const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
+  setLoader(true, 'Preparing export…', fmtLabel);
   await new Promise(r => setTimeout(r, 16));
   const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin });
   if (count === 0) { setLoader(false); toast('Nothing to export', 'No visible parts', 'warn'); return; }
@@ -17494,12 +17372,8 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
   root.updateMatrixWorld(true);
 
   // Pre-flight: text-based formats produce huge output for dense models, but
-  // we use streaming writers below so the browser doesn't actually blow up.
-  // The warning is now informational — confirm before generating a >500 MB
-  // file, but offer to continue.
-  // OBJ size warning for >20M-vertex exports removed per UX preference: only
-  // Box-ify ALL prompts. Heads-up toast still fires so the user knows what
-  // they're getting.
+  // the streaming writers below cope with any size, so nothing is asked:
+  // past 20M vertices a toast says how big the OBJ is going to be.
   if (format === 'obj') {
     const totalV = _countExportVerts(root);
     if (totalV > 20_000_000) {
@@ -17545,6 +17419,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       }
       if (isBin) {
         let outBuf = result;          // ArrayBuffer from GLTFExporter
+        let compressed = false;
         if (draco) {
           // Lazy-load gltf-transform + draco encoder ONLY when the user opted
           // in. Both libs together are ~2 MB and downloading them on every
@@ -17553,15 +17428,20 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
             setLoader(true, 'Compressing with Draco…', 'GLB');
             await new Promise(r => setTimeout(r, 16));
             outBuf = await _compressGLBWithDraco(new Uint8Array(result));
+            compressed = true;
           } catch (e) {
             console.error('[draco] compression failed:', e);
-            toast('Draco failed', e.message || String(e), 'error', 6000);
+            // (gltf-transform comes from a CDN: with no network this is the
+            // usual way to get here)
+            toast('Draco compression failed', `Saved without it, as a plain .glb. Draco needs an internet connection the first time it is used. (${e.message || String(e)})`, 'error', 8000);
             // Fall back to the uncompressed buffer so the user still gets
             // a working file — better than no download at all.
             outBuf = result;
           }
         }
-        downloadBlob(new Blob([outBuf], { type: 'model/gltf-binary' }), base + (draco ? '.draco.glb' : '.glb'));
+        // The name says what is in the file: ".draco.glb" only when it really
+        // was compressed.
+        downloadBlob(new Blob([outBuf], { type: 'model/gltf-binary' }), base + (compressed ? '.draco.glb' : '.glb'));
       } else {
         downloadBlob(new Blob([JSON.stringify(result)], { type: 'model/gltf+json' }), base + '.gltf');
       }
@@ -17675,7 +17555,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       const blob = out instanceof ArrayBuffer ? new Blob([out], { type: 'model/ply' }) : new Blob([out], { type: 'text/plain' });
       downloadBlob(blob, base + '.ply');
     }
-    toast('Exported', `${format.toUpperCase()} - ${count} object${count===1?'':'s'}`, 'success');
+    toast('Exported', `${fmtLabel} · ${count} object${count===1?'':'s'}`, 'success');
   } catch (e) {
     console.error(e);
     // "Invalid string length" is the V8 error for a too-large concatenated
@@ -17683,7 +17563,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
     // engine error in a toast.
     const isStringLimit = e instanceof RangeError && /string length/i.test(e.message || '');
     if (isStringLimit) {
-      toast('Model too big for ' + format.toUpperCase(),
+      toast('Model too big for ' + fmtLabel,
             'Export ran out of string memory. Use GLB (binary) or STL (binary) for large models.',
             'error', 9000);
     } else {
@@ -17695,7 +17575,6 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
 
 function wireUI() {
   new ResizeObserver(onResize).observe($('canvas'));
-  $('btn-fit')?.addEventListener('click', fitToView);
   $('btn-undo').addEventListener('click', () => undoLast());
   $('btn-redo')?.addEventListener('click', () => redoLast());
   $('btn-save-scene')?.addEventListener('click', () => { saveScene(); });
@@ -17778,7 +17657,7 @@ function wireUI() {
   const _addPrimBtn  = $('btn-add-prim');
 
   // Tiny one-time renderer for primitive thumbnails. Snapshots each kind
-  // with a per-shape coloured PBR material once and persists the data URL
+  // with an accent-coloured PBR material once and persists the data URL
   // to localStorage so subsequent app loads skip the WebGPU init entirely.
   // Uses WebGPURenderer (the bundle's only renderer; WebGLRenderer isn't
   // shipped in three.webgpu.js).
@@ -17787,13 +17666,11 @@ function wireUI() {
     let unavailable = (typeof THREE.WebGPURenderer !== 'function');
     let initPromise = null;
     const STORE_KEY = 'stepopt-prim-thumbs-v9';      // v9: thumbnails saved by the racing renderer (below) are dropped
-    const AC = 0x0d99ff;
-    const COLORS = {
-      cube: AC, sphere: AC, cylinder: AC, cone: AC,
-      torus: AC, torusknot: AC, plane: AC, capsule: AC,
-      icosahedron: AC, dodecahedron: AC,
-      hexbolt: AC, hexnut: AC, allen: AC, washer: AC,
-    };
+    const AC = 0x0d99ff;                             // every thumbnail is drawn in the accent colour
+    // The key's number goes up whenever the pictures have to be made again.
+    // What earlier versions stored under the lower numbers is never read
+    // again: take it out of the browser's storage.
+    try { for (let v = 1; v <= 8; v++) localStorage.removeItem('stepopt-prim-thumbs-v' + v); } catch (_) {}
     let cache;
     try { cache = new Map(Object.entries(JSON.parse(localStorage.getItem(STORE_KEY) || '{}'))); }
     catch (_) { cache = new Map(); }
@@ -17897,9 +17774,8 @@ function wireUI() {
         const h = bb.max.y - bb.min.y;
         geom.translate(0, h * 0.32, 0);
       }
-      // Per-shape coloured material so the menu reads as a colour key too.
       const material = new THREE.MeshStandardMaterial({
-        color: COLORS[kind] ?? 0x9aaccc, metalness: 0.18, roughness: 0.42,
+        color: AC, metalness: 0.18, roughness: 0.42,
       });
       if (c.mesh) {
         c.scene.remove(c.mesh);
@@ -18443,16 +18319,8 @@ function wireUI() {
     });
   });
 
-  const _smallBusy = (on) => {
-    const b = $('btn-delete-small');
-    if (!b) return;
-    b.classList.toggle('is-busy', on);
-    b.disabled = on;
-    b.setAttribute('aria-busy', on ? 'true' : 'false');
-  };
   // Size threshold scrubber — quadratic curve so the useful sub-1% range gets
   // most of the bar's horizontal travel.
-  const refreshFlaggedRaf = rafCoalesce(refreshFlagged);
   let _thrSettle = 0;
   const THR_MAX = 30;
   initScrubber({
@@ -18594,19 +18462,24 @@ function wireUI() {
     const _writeLast = (kind) => {
       try { localStorage.setItem(LAST_KEY, kind); } catch (_) {}
     };
-    const thumbImg = document.getElementById('vp-add-prim-img');
-    const _setThumb = (url) => {
-      if (!url || !thumbImg) return;
-      thumbImg.src = url;
-      btn.classList.add('has-thumb');
-    };
-    // The button shows the line icon of the shape a click will add.
+    const PRIMS = ['cube','sphere','cylinder','cone','torus','plane','capsule','icosahedron','dodecahedron',
+                   'hexbolt','hexnut','allen','washer'];
+    const LABELS = { cube:'Cube', sphere:'Sphere', cylinder:'Cylinder', cone:'Cone', torus:'Torus',
+                     plane:'Plane', capsule:'Capsule', icosahedron:'Icosahedron', dodecahedron:'Dodecahedron',
+                     hexbolt:'Hex bolt', hexnut:'Hex nut', allen:'Socket head screw', washer:'Washer' };
+    // The button shows the line icon of the shape a click will add, and its
+    // tooltip names that shape (the one in the markup always said "cube").
     const _refreshThumbFor = (kind) => {
       let ico = btn.querySelector('.vp-add-ico');
       if (!ico) { ico = document.createElement('span'); ico.className = 'vp-add-ico'; btn.appendChild(ico); }
       ico.innerHTML = _primLineIcon(kind);
       btn.classList.add('has-icon');
       btn.classList.remove('has-thumb');
+      let label = LABELS[kind];
+      if (!label) { try { label = _primitiveDefaultName(kind); } catch (_) {} }      // (a library part: its name, not its id)
+      label = String(label || kind).toLowerCase();
+      btn.title = `Add ${label} — click to add the last used shape, hold for the shape picker`;
+      btn.setAttribute('aria-label', `Add ${label}`);
     };
     // Initial paint reflects the persisted last-added kind.
     _refreshThumbFor(_readLast());
@@ -18620,7 +18493,6 @@ function wireUI() {
         try {
           if (typeof kind === 'string' && kind) {
             _writeLast(kind);
-            btn.title = `Add ${kind} — click to add the last used shape, hold for picker`;
             _refreshThumbFor(kind);
           }
         } catch (_) {}
@@ -18629,11 +18501,6 @@ function wireUI() {
       window._addPrimitive_wrapped = true;
     }
 
-    const PRIMS = ['cube','sphere','cylinder','cone','torus','plane','capsule','icosahedron','dodecahedron',
-                   'hexbolt','hexnut','allen','washer'];
-    const LABELS = { cube:'Cube', sphere:'Sphere', cylinder:'Cylinder', cone:'Cone', torus:'Torus',
-                     plane:'Plane', capsule:'Capsule', icosahedron:'Icosahedron', dodecahedron:'Dodecahedron',
-                     hexbolt:'Hex bolt', hexnut:'Hex nut', allen:'Socket head screw', washer:'Washer' };
     let holdTimer = null;
     let didHold = false;
 
@@ -18649,7 +18516,7 @@ function wireUI() {
         row.type = 'button';
         row.className = 'vp-prim-pop-item';
         row.innerHTML = _primLineIcon(kind);
-        row.appendChild(Object.assign(document.createTextNode(LABELS[kind] || kind), {}));
+        row.appendChild(document.createTextNode(LABELS[kind] || kind));
         row.addEventListener('click', () => { closePop(); try { _addPrimitive(kind); } catch(e) {} });
         pop.appendChild(row);
       });
@@ -18662,13 +18529,21 @@ function wireUI() {
       _lucide?.();
     };
 
-    btn.addEventListener('mousedown', () => { didHold = false; holdTimer = setTimeout(openPop, 400); });
-    btn.addEventListener('mouseup', () => {
+    // The left button only: a right or a middle press used to add a shape too.
+    btn.addEventListener('mousedown', (e) => { if (e.button !== 0) return; didHold = false; holdTimer = setTimeout(openPop, 400); });
+    btn.addEventListener('mouseup', (e) => {
+      if (e.button !== 0) return;
       clearTimeout(holdTimer);
       if (!didHold) { closePop(); try { _addPrimitive(_readLast()); } catch(e) {} }
     });
     btn.addEventListener('mouseleave', () => { clearTimeout(holdTimer); });
-    btn.addEventListener('click', e => e.stopPropagation());
+    // The mouse is handled above, by press and release. A click that comes
+    // with no mouse press behind it (detail 0) is Enter or Space on the
+    // focused button: it adds the last used shape, as a plain click does.
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.detail === 0) { closePop(); try { _addPrimitive(_readLast()); } catch (_) {} }
+    });
   })();
 
   // Camera-view pill — single pill at top-center exposing the active view
@@ -18684,7 +18559,6 @@ function wireUI() {
   $('perf-mode')?.addEventListener('change', e => {
     state.perfMode = e.target.value;
     applyPerfMode();
-    const label = e.target.value === 'low' ? 'Low (0.6× DPR)' : e.target.value === 'high' ? 'High (full DPR)' : 'Auto';
     // Quality change is reflected in the dropdown itself — no toast.
   });
 
@@ -18842,7 +18716,6 @@ function wireUI() {
     const dot  = $('sun-gizmo-dot');
     if (!wrap || !svg || !dot) return;
 
-    const R_OUTER = 36;            // dome radius in SVG units
     const R_DOT   = 22;            // visual radius the puck sits at by default
     let dragging = false;
 
@@ -18953,7 +18826,7 @@ function wireUI() {
   });
   $('grid-cell')?.addEventListener('change', e => {
     state.gridCellMode = e.target.value;
-    _applyGridCell(); requestRender();
+    _applyGridCell(); _applySnap(); requestRender();
   });
   $('toggle-snap-grid')?.addEventListener('change', e => {
     state.snapToGrid = e.target.checked;
@@ -18971,10 +18844,9 @@ function wireUI() {
   _updateFlaggedChip();
 
   // Persist right-sidebar section collapse state across reloads. First-time
-  // users land with only Properties + "Selection & actions" expanded — the
-  // sidebar holds 12 sections and was always-open by default, which forced
-  // scrolling for every interaction. State is keyed by header text so a
-  // section reorder doesn't reset the user's preference.
+  // users land with only the sections in SEC_OPEN_BY_DEFAULT expanded (with
+  // every section open, each interaction meant scrolling). State is keyed by
+  // header text so a section reorder doesn't reset the user's preference.
   const SEC_LS_KEY = 'stepopt-section-collapsed';
   const SEC_OPEN_BY_DEFAULT = new Set(['Properties', 'Selection & actions', 'Reduce triangles']);
   const _readSecState = () => {
@@ -19053,9 +18925,11 @@ function wireUI() {
     // CSV branch: parts-list dump (BOM-style). Doesn't go through doExport
     // because there's no geometry pipeline to run — just iterate state.parts.
     if (fmt === 'csv') {
-      const parts = state.parts.filter(p => !p.deleted &&
-        (!selectedOnly || state.selected.has(p.partId)) &&
-        (!visibleOnly || p.visible));
+      // The same rows the geometry export would write: "Selected parts only"
+      // means the selected parts whether shown or not (it overrides "Visible
+      // parts only", as below), and a cloner's container is not a part.
+      const parts = state.parts.filter(p => !p.deleted && !p.isCloner &&
+        (selectedOnly ? state.selected.has(p.partId) : (!visibleOnly || p.visible)));
       if (!parts.length) { toast('No parts', 'Nothing matches the export filters', 'warn'); return; }
       const esc = s => {
         const v = String(s ?? '');
@@ -19118,7 +18992,7 @@ function wireUI() {
   // Show/hide format-specific toggles based on the selected export format.
   const _EXP_META = {
     glb:  { title:'GLB',  desc:'Modern binary glTF · Best for web & Cinema 4D 2026' },
-    gltf: { title:'GLTF', desc:'JSON glTF 2.0 · Maximum compatibility' },
+    gltf: { title:'glTF', desc:'JSON glTF 2.0 · Maximum compatibility' },
     fbx:  { title:'FBX',  desc:'Binary FBX 7.4 · Blender, Maya, 3ds Max, Houdini, Unreal' },
     usdz: { title:'USDZ', desc:'OpenUSD · Apple Quick Look, Reality Composer, C4D R26+' },
     obj:  { title:'OBJ',  desc:'Wavefront OBJ · Universal, geometry only' },
@@ -19192,7 +19066,7 @@ function wireUI() {
   //               Ctrl+G group · Ctrl+Shift+G ungroup · Ctrl+D duplicate · Del delete
   //   visibility  H hide · Shift+H hide the rest · Alt+H show all · S isolate / back
   //   selection   Ctrl+A all · Ctrl+I invert · Esc none · Shift+S find in the tree
-  //   view        F frame · 1-4 shading · Ctrl+1-4 camera · G grid · E R T Q gizmo · M measure
+  //   view        F frame · 1-5 shading · Ctrl+1-4 camera · G grid · E R T Q gizmo · M measure
   //   panels      Ctrl+K search · Shift+M materials · ` console · Ctrl+, settings · Ctrl+; scene · ? shortcuts
   //   file        Ctrl+N new · Ctrl+O open · Ctrl+Shift+O import · Ctrl+S save · Ctrl+E export
   // Lossy tools (decimate) deliberately have no single key.
@@ -19408,15 +19282,12 @@ async function _buildBVHsForAllGeoms() {
   );
 }
 
-// Dispose every BVH attached to a hash-cached geom. Called from clearModel.
-// Format-agnostic ingestion: walks meshes off a parsed scene root, builds
-// state.parts, hooks up materials, and triggers all the post-load UI work.
 // ── Primitive shapes ─────────────────────────────────────────────────────
 // Add a Blender / C4D / Maya-style primitive to the scene as a first-class
 // part — shows up in the assembly tree, pickable, transformable, can take
-// a material, exported alongside the loaded model. Sized relative to the
-// current model footprint (or 100 units when the scene is empty) so the
-// new shape is immediately visible at any zoom.
+// a material, exported alongside the loaded model. A new shape is always
+// 100 units across, whatever the size of the scene (see _addPrimitive).
+//
 // ── ISO metric fastener dimension table (DIN/ISO standard reference). All
 // values in millimetres. Drives the Hex bolt / Hex nut / Allen / Washer
 // primitives so the user picks "M6" and gets correct head, hex flats,
@@ -19592,9 +19463,9 @@ function _allenGeom(p) {
 
 // Parameter schemas — drive both the default geometry on add and the
 // shape-parameters panel that pops in the right-side props sidebar when
-// a primitive is selected. `s` is the per-primitive base size (defaults
-// to ~25% of model footprint or 100 if empty), used to scale the size-
-// like params so the new shape lands at a sensible visible scale.
+// a primitive is selected. `s` is the per-primitive base size (100 for
+// every shape added today; kept on the part as primBaseSize), used to
+// scale the size-like params.
 function _primitiveDefaultParams(kind, s) {
   const r = (v) => Math.max(1, Math.round(v)); // round to whole mm, min 1
   // orientation = the axis the primitive's "long" / "natural" direction points
@@ -20565,6 +20436,32 @@ window._LIB_ICON_PATHS = {
   knob: '<path d="M12 3l2.2 3.2 3.8-.6.4 3.8 3.4 1.8-2.4 3 1.2 3.6-3.8.6L14.6 22 12 19.2 9.4 22 7.2 18.4l-3.8-.6 1.2-3.6-2.4-3 3.4-1.8.4-3.8 3.8.6z"/><circle cx="12" cy="12.5" r="2.5"/>',
   bracket: '<path d="M4 3h4v13h13v4H4z"/><path d="M6 8v.01M15 18v.01"/>',
   stepper: '<rect x="4" y="8" width="16" height="13" rx="1"/><path d="M9 8V7h6v1"/><path d="M11 7V2h2v5"/>',
+  // The further batch (_LIB_EXTRA). Without an entry here a part's tile and
+  // its row in the shape picker fall back to the cube.
+  roundedbox: '<rect x="3" y="5" width="18" height="14" rx="4"/>',
+  halfcyl: '<path d="M4 17a8 8 0 0 1 16 0z"/><path d="M4 17v3h16v-3"/>',
+  tetra: '<path d="M12 3 3 19h18z"/><path d="m12 3 3 16"/>',
+  star: '<path d="m12 2.5 2.9 6 6.6.9-4.8 4.6 1.2 6.5-5.9-3.1-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z"/>',
+  plus: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/>',
+  arrow: '<path d="M3 9h10V5l8 7-8 7v-4H3z"/>',
+  setscrew: '<rect x="8" y="3" width="8" height="18" rx="1"/><path d="M8 8l8 2M8 12l8 2M8 16l8 2"/>',
+  carriagebolt: '<path d="M5 8a7 4 0 0 1 14 0z"/><path d="M9 8v3h6V8"/><path d="M10 11v10h4V11"/>',
+  ubolt: '<path d="M6 21V9a6 6 0 0 1 12 0v12"/><path d="M4 17h4M16 17h4"/>',
+  circlip: '<path d="M15 3.5a9 9 0 1 1-6 0"/><path d="M9 3.5v3M15 3.5v3"/>',
+  springwasher: '<path d="M13.5 3.1a9 9 0 1 0 3 1.1"/><circle cx="12" cy="12" r="4"/>',
+  pipecross: '<path d="M9 2h6v7h7v6h-7v7H9v-7H2V9h7z"/><circle cx="12" cy="12" r="2"/>',
+  cchannel: '<path d="M19 9V5H5v14h14v-4h-3v1H8V8h8v1z"/>',
+  gusset: '<path d="M4 4v16h16z"/><path d="M8 13v.01M8 17v.01M12 17v.01"/>',
+  perfplate: '<rect x="3" y="5" width="18" height="14" rx="1"/><path d="M8 9.5v.01M12 9.5v.01M16 9.5v.01M8 14.5v.01M12 14.5v.01M16 14.5v.01"/>',
+  slotplate: '<rect x="3" y="6" width="18" height="12" rx="1"/><rect x="7" y="10.5" width="10" height="3" rx="1.5"/>',
+  hinge: '<rect x="3" y="6" width="7.5" height="12" rx="1"/><rect x="13.5" y="6" width="7.5" height="12" rx="1"/><path d="M12 4v16"/>',
+  collar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 3v4.5"/>',
+  pillowblock: '<path d="M3 20v-4h3.5a6 6 0 1 1 11 0H21v4z"/><circle cx="12" cy="12.5" r="2.5"/>',
+  wheel: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="1.5"/>',
+  rail: '<path d="M2 15h20v4H2z"/><path d="M8 15v-4h8v4"/><path d="M6 11h12V8H6z"/>',
+  foot: '<path d="M11 3h2v11h-2z"/><path d="m5 20 3-6h8l3 6z"/>',
+  handle: '<path d="M5 19v-9a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v9"/><path d="M3 19h4M17 19h4"/>',
+  enclosure: '<rect x="3" y="6" width="18" height="14" rx="1.5"/><path d="M3 10h18"/><path d="M6.5 8v.01M17.5 8v.01"/>',
 };
 {
   const params0 = _primitiveDefaultParams, schema0 = _primitiveSchema, geom0 = _primitiveGeometry, name0 = _primitiveDefaultName;
