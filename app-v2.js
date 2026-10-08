@@ -929,14 +929,16 @@ function _updateVpHint() {
   const msr   = (typeof _Measure !== 'undefined' && _Measure?.isActive?.()) ? true : false;
   // [keys, label] — several keys are a combo ("Ctrl" + "G").
   let tips;
-  if (msr) {
+  if (state.dynPlaceOn) {
+    tips = [[['Drag'], 'Place the selected part'], [['Scroll'], 'Turn it (while held)'], [['Esc'], 'Put it back, while held'], [['D'], 'Leave Dynamic place']];
+  } else if (msr) {
     tips = [[['Click'], 'Pick a point'], [['Drag'], 'Orbit'], [['Scroll'], 'Zoom'], [['M'], 'Leave measure'], [['Esc'], 'Cancel']];
   } else if (selN === 0) {
     tips = [[['Click'], 'Select'], [['Ctrl', 'Drag'], 'Box select'], [['Drag'], 'Orbit'], [['Scroll'], 'Zoom'],
             [['F'], 'Fit view'], [['M'], 'Measure'], [['Right-click'], 'Menu'], [['Ctrl', 'K'], 'Commands']];
   } else {
     tips = [[['E'], gm === 'translate' ? 'Move (active)' : 'Move'], [['R'], gm === 'rotate' ? 'Rotate (active)' : 'Rotate'],
-            [['T'], gm === 'scale' ? 'Scale (active)' : 'Scale'], [['Q'], 'Hide gizmo'], [['Shift'], 'Snap while dragging'], [['Shift', 'Scroll'], 'Snap step'],
+            [['T'], gm === 'scale' ? 'Scale (active)' : 'Scale'], [['Q'], 'Hide gizmo'], [['D'], 'Dynamic place'], [['Shift'], 'Snap while dragging'], [['Shift', 'Scroll'], 'Snap step'],
             [['F'], 'Frame selection'], [['S'], 'Isolate'], [['H'], 'Hide'], [['Ctrl', 'G'], 'Group'], [['Ctrl', 'D'], 'Duplicate'],
             [['Del'], 'Delete'], [['Esc'], 'Deselect']];
   }
@@ -2447,6 +2449,10 @@ async function _importWithPicker() {
   }
 }
 
+// Opens the export window itself (the format dropdown on the toolbar button is
+// only a shortcut to it). Set in wireUI. Menu, command palette and Ctrl+E use it.
+let _openExportDialog = () => {};
+
 // Dispatcher for the File-menu items. Pulled out into a function so the
 // command palette / keyboard shortcuts can route through the same code path.
 function _runFileCmd(cmd) {
@@ -2455,10 +2461,11 @@ function _runFileCmd(cmd) {
     case 'open':           _openWithPicker(); break;
     case 'import':         _importWithPicker(); break;
     case 'save':           document.getElementById('btn-save-scene')?.click(); break;
-    case 'export':         document.getElementById('btn-export')?.click(); break;
+    case 'export':         _openExportDialog(); break;
     case 'revert':         _revertToSourceFile(); break;
     case 'scene-settings': _openSceneSettings(); break;
     case 'settings':       _Settings.show(); break;
+    case 'help':           window.MOHelp?.show(); break;
     case 'welcome':        try { _Welcome.show(); } catch (_) {} break;
     case 'quit':           _quitApp(); break;
   }
@@ -2621,6 +2628,13 @@ const _Prefs = (() => {
   const KEY = 'stepopt-prefs';
   const DEFAULTS = {
     welcomeOnBoot: true,
+    splashOnStart: true,             // the short splash while the app opens
+    dynPlaceAlign: true,             // Dynamic place: turn the part to face the surface it rests on
+    dynPlaceAxis: '',                // Dynamic place: which axis of the part points away from the surface: 'x' | 'y' | 'z' ('' = the scene's up axis)
+    dynPlaceSign: 1,                 // ...and whether it is that axis (1) or the opposite one (-1)
+    dynPlaceGround: true,            // Dynamic place: land on the grid where nothing is under the cursor
+    warnUnsaved: true,               // ask before the window closes with changes that are not saved
+    undoMax: 200,                    // how many steps Undo goes back
     autoRestoreSession: true,
     autoFitOnLoad: true,
     confirmDestructive: true,
@@ -2643,6 +2657,13 @@ const _Prefs = (() => {
   };
 })();
 
+// How fast the view orbits and zooms: Settings › Camera › Speed.
+function _applyCameraFeel() {
+  if (typeof controls === 'undefined' || !controls) return;
+  controls.rotateSpeed = +_Prefs.get('camRotate') || 1;
+  controls.zoomSpeed = +_Prefs.get('camZoom') || 1;
+}
+
 // ── Settings ──────────────────────────────────────────────────────────────
 // One window for everything that can be set: a list of sections on the left,
 // the section on the right, a search over all of them at the top.
@@ -2662,11 +2683,13 @@ const _Settings = (() => {
   let inited = false, assembled = false, current = 'general';
   const PANES = [
     ['general',  'General',     'sliders-horizontal', 'How the app starts and behaves.'],
+    ['appearance','Appearance', 'palette',            'The look of the interface: colour, type, size and shape.'],
     ['viewport', 'Viewport',    'monitor',            'What the 3D view draws around the model.'],
     ['camera',   'Camera',      'video',              'Projection, lens, and how the view moves.'],
     ['perf',     'Performance', 'gauge',              'Trade detail for speed on heavy models.'],
     ['scene',    'Scene',       'box',                'Units, orientation and grid of the open scene. These are saved with the scene.'],
     ['data',     'Storage',     'database',           'What the app remembers on this computer.'],
+    ['about',    'About',       'info',               'The version, where to find help, and what to send when something goes wrong.'],
   ];
   const $s = (id) => document.getElementById(id);
   function _toggleRow(id, label, checked, help) {
@@ -2687,6 +2710,7 @@ const _Settings = (() => {
       <nav class="set-nav" id="set-nav">
         ${PANES.map(([id, name, icon]) => `<button type="button" class="set-nav-item" data-pane="${id}"><i data-lucide="${icon}"></i><span>${name}</span></button>`).join('')}
         <div class="set-nav-gap"></div>
+        <button type="button" class="set-nav-item set-nav-link" id="set-open-help"><i data-lucide="life-buoy"></i><span>Help &amp; docs</span></button>
         <button type="button" class="set-nav-item set-nav-link" id="set-open-shortcuts"><i data-lucide="command"></i><span>Keyboard shortcuts</span></button>
         <div class="set-nav-ver">${(document.getElementById('brand-menu-ver')?.textContent || '').trim()}</div>
       </nav>
@@ -2717,7 +2741,7 @@ const _Settings = (() => {
     // what a moving view gives up to stay smooth (_MotionPerf)
     $s('set-pane-perf').insertAdjacentHTML('beforeend', _group('While the view moves') +
       _toggleRow('set-cull-small', 'Skip tiny parts', (() => { try { return _MotionPerf.cullSmall(); } catch (_) { return true; } })(), 'Parts that would be only a few pixels across are left out while you orbit, pan or zoom, and drawn again the moment the view stops.') +
-      _toggleRow('set-dyn-res', 'Lower the resolution if it stutters', (() => { try { return _MotionPerf.dynRes(); } catch (_) { return true; } })(), 'On a scene too heavy to move smoothly, the picture is drawn a little coarser while it moves and sharp again when it stops. A scene that moves freely is left alone.'));
+      _toggleRow('set-dyn-res', 'Lower the resolution if it stutters', (() => { try { return _MotionPerf.dynRes(); } catch (_) { return false; } })(), 'On a scene too heavy to move smoothly, the picture is drawn a little coarser while it moves and sharp again when it stops. A scene that moves freely is left alone.'));
     $s('set-cull-small')?.addEventListener('change', e => { try { _MotionPerf.setCullSmall(e.target.checked); } catch (_) {} });
     $s('set-dyn-res')?.addEventListener('change', e => { try { _MotionPerf.setDynRes(e.target.checked); } catch (_) {} });
     // the Scene settings window's sections, each under its own sub-heading
@@ -2746,6 +2770,7 @@ const _Settings = (() => {
       const inp = row && row.querySelector('input[type="checkbox"]');
       if (inp) inp.click();
     });
+    $s('set-open-help')?.addEventListener('click', () => { hide(); try { window.MOHelp?.show(); } catch (_) {} });
     $s('set-open-shortcuts')?.addEventListener('click', () => { hide(); try { _Shortcuts.show(); } catch (_) {} });
     $s('set-clear-recents')?.addEventListener('click', () => {
       try { localStorage.removeItem('stepopt-recents'); } catch (_) {}
@@ -2774,9 +2799,143 @@ const _Settings = (() => {
       document.getElementById('resize-r')?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       toast('Panel sizes reset', '', 'success');
     });
-    $s('set-reset-all')?.addEventListener('click', () => { _Prefs.reset(); try { _Tabs.setSameSidebars(true); } catch (_) {} try { if (controls) controls.zoomToCursor = true; } catch (_) {} _fillPrefs(); toast('Settings reset', 'Defaults restored', 'success'); });
+    $s('set-reset-all')?.addEventListener('click', () => { _Prefs.reset(); try { window.MOAppearance.apply(); } catch (_) {} try { _applyCameraFeel(); } catch (_) {} _fillAppearance(); try { _setUndoMax(200); } catch (_) {} try { _cadOnPref('cadLook'); _cadOnPref('edgesMode'); } catch (_) {} try { _Tabs.setSameSidebars(true); } catch (_) {} try { if (controls) controls.zoomToCursor = true; } catch (_) {} _fillPrefs(); toast('Settings reset', 'Defaults restored', 'success'); });
+    // Appearance: a press on a choice, the colour picker (live, without redrawing under the hand), the motion switch, Reset
+    const ap = $s('set-pane-appearance');
+    ap?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-v]'), grp = b && b.closest('[data-ui]');
+      if (b && grp) { const k = grp.dataset.ui; _setLook(k, (k === 'uiTextScale' || k === 'uiDensity') ? +b.dataset.v : b.dataset.v); return; }
+      if (e.target.closest('#set-reset-look')) {
+        for (const k of LOOK_KEYS) _Prefs.set(k, undefined);
+        try { window.MOAppearance.apply(); } catch (_) {}
+        _fillAppearance(); toast('Appearance reset', '', 'success');
+      }
+    });
+    ap?.addEventListener('input', (e) => {
+      if (e.target.id !== 'ap-accent-custom') return;
+      _setLook('uiAccent', e.target.value, false);
+      ap.querySelectorAll('.ap-sw').forEach(s => s.classList.toggle('is-on', s.classList.contains('ap-sw-custom')));
+      e.target.closest('.ap-sw-custom')?.style.setProperty('--sw', e.target.value);
+    });
+    ap?.addEventListener('change', (e) => { if (e.target.id === 'set-motion') _setLook('uiMotion', e.target.checked, false); });
+    // Viewport: the CAD look and the edges
+    $s('set-viewport-extra')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-v]'), grp = b && b.closest('[data-pref]');
+      if (!b || !grp) return;
+      _Prefs.set(grp.dataset.pref, b.dataset.v);
+      grp.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('is-on', x === b));
+      try { _cadOnPref(grp.dataset.pref); } catch (_) {}
+    });
+    // About: Help, shortcuts and the details to copy
+    $s('set-pane-about')?.addEventListener('click', async (e) => {
+      if (e.target.closest('#set-about-help')) { hide(); try { window.MOHelp?.show(); } catch (_) {} }
+      else if (e.target.closest('#set-about-keys')) { hide(); try { _Shortcuts.show(); } catch (_) {} }
+      else if (e.target.closest('#set-about-copy')) {
+        const gpu = await _gpuInfo(), p = _Prefs.all();
+        const text = ['MeshOptimiser details', ..._aboutFacts().map(([k, v]) => k + ': ' + v), 'GPU: ' + gpu,
+          'Look: ' + [p.uiTone || 'graphite', p.uiAccent || 'default accent'].join(', ') + ' · CAD look ' + (p.cadLook || 'ceramic') + ' · outlines ' + (p.edgesMode === 'off' ? 'off' : 'on')].join('\n');
+        try { await navigator.clipboard.writeText(text); toast('Details copied', 'Paste them into the issue', 'success'); }
+        catch (_) { toast('Could not copy', 'The browser did not allow it', 'error'); }
+      }
+    });
+    // General: undo depth
+    $s('set-pane-general')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-v]'), grp = b && b.closest('[data-pref="undoMax"]');
+      if (!b || !grp) return;
+      _Prefs.set('undoMax', +b.dataset.v); _setUndoMax(+b.dataset.v);
+      grp.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('is-on', x === b));
+    });
+    // Camera speed
+    $s('set-camera-prefs')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-v]'), grp = b && b.closest('[data-cam]');
+      if (!b || !grp) return;
+      _Prefs.set(grp.dataset.cam, +b.dataset.v);
+      try { _applyCameraFeel(); } catch (_) {}
+      grp.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('is-on', x === b));
+    });
     try { _lucide(); } catch (_) {}
   }
+
+  // ── Appearance: accent, surfaces, type, size, corners, motion (appearance.js applies them) ──
+  function _fillAppearance() {
+    const A = window.MOAppearance, dst = $s('set-pane-appearance');
+    if (!A || !dst) return;
+    const p = A.read();
+    const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const chips = (key, list, cur) => `<div class="set-chips" data-ui="${key}">${list.map(([label, val, face]) => `<button type="button" class="sv-chip${String(cur) === String(val) ? ' is-on' : ''}" data-v="${esc(val)}"${face ? ` style="font-family:${esc(face)}"` : ''}>${esc(label)}</button>`).join('')}</div>`;
+    const acc = String(p.uiAccent || '').toLowerCase(), isHex = /^#[0-9a-f]{6}$/.test(acc);
+    const preset = A.ACCENTS.some(a => a[1].toLowerCase() === acc);
+    dst.innerHTML =
+      _group('Colour') +
+      `<div class="set-row set-stack"><span>Accent<span class="set-help">Buttons, selections and highlights.</span></span>
+        <div class="ap-swatches" data-ui="uiAccent">${A.ACCENTS.map(([n, h]) => `<button type="button" class="ap-sw${h.toLowerCase() === acc ? ' is-on' : ''}" data-v="${h}" style="--sw:${h}" title="${n}" aria-label="${n}"></button>`).join('')}
+          <label class="ap-sw ap-sw-custom${!preset ? ' is-on' : ''}" style="--sw:${isHex ? acc : '#0d99ff'}" title="Any colour"><input type="color" id="ap-accent-custom" value="${isHex ? acc : '#0d99ff'}" aria-label="Pick any colour"></label></div></div>` +
+      `<div class="set-row set-stack"><span>Surfaces<span class="set-help">The greys the interface is built from.</span></span>
+        <div class="ap-tones" data-ui="uiTone">${Object.entries(A.TONES).map(([k, t]) => `<button type="button" class="ap-tone${k === p.uiTone ? ' is-on' : ''}" data-v="${k}"><span class="ap-tone-sw"><i style="background:${t['--bg']}"></i><i style="background:${t['--bg2']}"></i><i style="background:${t['--bg4']}"></i></span>${t.label}</button>`).join('')}</div></div>` +
+      _group('Type') +
+      `<div class="set-row set-stack"><span>Font</span>${chips('uiFont', Object.entries(A.FONTS).map(([k, f]) => [f.label, k, f.stack]), p.uiFont)}</div>` +
+      `<div class="set-row set-stack"><span>Text size<span class="set-help">Everything written in the interface; buttons and fields grow with it.</span></span>${chips('uiTextScale', A.TEXT_SCALES, p.uiTextScale)}</div>` +
+      _group('Shape') +
+      `<div class="set-row set-stack"><span>Corners</span>${chips('uiRadius', A.RADII.map(r => [r[0], r[1]]), p.uiRadius)}</div>` +
+      `<div class="set-row set-stack"><span>Density<span class="set-help">The height of buttons, fields and dropdowns.</span></span>${chips('uiDensity', A.DENSITIES, p.uiDensity)}</div>` +
+      _group('Motion') +
+      _toggleRow('set-motion', 'Interface animations', p.uiMotion !== false, 'Fades, slides and the movement of the start-up splash. Off: everything just appears.') +
+      `<div class="set-row set-action"><span>Appearance<span class="set-help">Put the colour, type, size, shape and motion back to the defaults.</span></span><button class="btn" id="set-reset-look">Reset</button></div>`;
+    if ($s('settings-search')?.value) _search($s('settings-search').value);
+  }
+  // ── About: the version, help, and the details a bug report needs ──
+  const _gpuInfo = async () => {
+    try {
+      if (navigator.gpu) { const a = await navigator.gpu.requestAdapter(); const i = a && (a.info || (a.requestAdapterInfo && await a.requestAdapterInfo())); if (i) return [i.vendor, i.architecture, i.description].filter(Boolean).join(' ') || 'WebGPU adapter'; }
+    } catch (_) {}
+    try { const gl = document.createElement('canvas').getContext('webgl2'), x = gl && gl.getExtension('WEBGL_debug_renderer_info'); if (x) return gl.getParameter(x.UNMASKED_RENDERER_WEBGL); } catch (_) {}
+    return 'not available';
+  };
+  const _sceneTotals = () => { const live = state.parts.filter(p => !p.deleted); return { parts: live.length, tris: live.reduce((t, p) => t + (p.triCount || 0), 0) }; };
+  // The browser's name and version. (Every Chrome user agent also says "Safari": the brand list, or the most specific name, comes first.)
+  const _browserName = () => {
+    const brands = navigator.userAgentData && navigator.userAgentData.brands;
+    const real = brands && brands.find(x => !/not.?a.?brand|chromium/i.test(x.brand));
+    if (real) return real.brand + ' ' + real.version;
+    const ua = navigator.userAgent;
+    for (const [name, re] of [['Edge', /Edg[/]([0-9.]+)/], ['Firefox', /Firefox[/]([0-9.]+)/], ['Chrome', /Chrome[/]([0-9.]+)/], ['Safari', /Version[/]([0-9.]+)/]]) { const m = ua.match(re); if (m) return name + ' ' + m[1]; }
+    return ua.slice(0, 60);
+  };
+  const _aboutFacts = () => {
+    const ver = (document.getElementById('brand-menu-ver')?.textContent || '').trim() || '—', sc = _sceneTotals();
+    return [
+      ['Version', ver],
+      ['Renderer', (document.getElementById('renderer-name')?.textContent || '—').trim() + (THREE && THREE.REVISION ? ' · three.js r' + THREE.REVISION : '')],
+      ['Scene', sc.parts ? fmtNum(sc.parts) + (sc.parts === 1 ? ' part · ' : ' parts · ') + fmtNum(sc.tris) + ' triangles' : 'empty'],
+      ['Display', screen.width + ' × ' + screen.height + ' at ' + (Math.round(devicePixelRatio * 100) / 100) + '×'],
+      ['Browser', (navigator.userAgentData && navigator.userAgentData.platform ? navigator.userAgentData.platform + ' · ' : '') + _browserName()],
+    ];
+  };
+  function _fillAbout() {
+    const dst = $s('set-pane-about'); if (!dst) return;
+    const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    dst.innerHTML =
+      _group('MeshOptimiser') +
+      _aboutFacts().map(([k, v]) => `<div class="set-row"><span>${k}</span><span class="set-val" title="${esc(v)}">${esc(v)}</span></div>`).join('') +
+      _group('Help') +
+      `<div class="set-row set-action"><span>Help &amp; docs<span class="set-help">How every tool works, with pictures. Works offline (F1).</span></span><button class="btn" id="set-about-help">Open</button></div>` +
+      `<div class="set-row set-action"><span>Keyboard shortcuts<span class="set-help">Every key and mouse gesture (?).</span></span><button class="btn" id="set-about-keys">Open</button></div>` +
+      `<div class="set-row set-action"><span>Something wrong?<span class="set-help">Copy the details below, then describe what happened in a new issue.</span></span><span style="display:flex;gap:8px"><button class="btn" id="set-about-copy">Copy details</button><a class="btn" href="https://github.com/xpayn3/MeshOptimiser/issues/new" target="_blank" rel="noopener">Report an issue</a></span></div>` +
+      _group('Project') +
+      `<div class="set-row set-action"><span>Website<span class="set-help">Downloads, the full docs and the screenshots.</span></span><a class="btn" href="https://lukagrcar.com/apps/meshoptimiser/" target="_blank" rel="noopener">Open</a></div>` +
+      `<div class="set-row set-action"><span>Source code<span class="set-help">Free and open source, under the MIT licence.</span></span><a class="btn" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener">GitHub</a></div>`;
+    if ($s('settings-search')?.value) _search($s('settings-search').value);
+  }
+  const LOOK_KEYS = ['uiAccent', 'uiTone', 'uiFont', 'uiTextScale', 'uiDensity', 'uiRadius', 'uiMotion'];
+  function _setLook(key, val, refill = true) {
+    _Prefs.set(key, val);
+    try { window.MOAppearance.apply(); } catch (_) {}
+    if (refill) _fillAppearance();
+  }
+  const _chipsPref = (key, list, cur) => `<div class="set-chips" data-pref="${key}">${list.map(([l, v]) => `<button type="button" class="sv-chip${String(cur) === String(v) ? ' is-on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
+  // How fast the view orbits and zooms (Camera › Speed).
+  const CAM_SPEEDS = { camRotate: [['Slow', 0.6], ['Normal', 1], ['Fast', 1.6]], camZoom: [['Slow', 0.6], ['Normal', 1], ['Fast', 1.8]] };
+  const _camChips = (key, p) => `<div class="set-chips" data-cam="${key}">${CAM_SPEEDS[key].map(([l, v]) => `<button type="button" class="sv-chip${Math.abs((+p[key] || 1) - v) < 0.01 ? ' is-on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
 
   // The rows that are plain preferences are redrawn each time the window
   // opens, from what is stored.
@@ -2785,26 +2944,36 @@ const _Settings = (() => {
     const gen = $s('set-pane-general');
     if (gen) gen.innerHTML =
       _group('Start-up') +
+      _toggleRow('set-splash', 'Splash screen', p.splashOnStart !== false, 'A short splash while the app opens. Off: the app just fades in.') +
       _toggleRow('set-welcome', 'Start screen', p.welcomeOnBoot, 'Show the start screen when the app opens.') +
       _toggleRow('set-restore', 'Offer the last file', p.autoRestoreSession, 'A Resume button for the file you had open last.') +
       _group('Opening files') +
-      _toggleRow('set-autofit', 'Fit the view after loading', p.autoFitOnLoad) +
+      _toggleRow('set-autofit', 'Fit the view after loading', p.autoFitOnLoad, 'Frame the whole model as soon as it opens.') +
       _group('Tabs') +
       _toggleRow('set-same-sidebars', 'Same sidebars in every tab', (() => { try { return _Tabs.sameSidebars(); } catch (_) { return true; } })(), 'Switching tabs keeps the sidebar widths, and the folded left sidebar, of the tab you came from. Off: each tab keeps its own.') +
       _group('Editing') +
       _toggleRow('set-confirm', 'Confirm destructive actions', p.confirmDestructive, 'Ask before deletes and other steps that are hard to take back.') +
+      _toggleRow('set-warn-unsaved', 'Warn before leaving with unsaved changes', p.warnUnsaved !== false, 'Closing or reloading the window asks first when a scene has changes that are not saved.') +
+      `<div class="set-row set-stack"><span>Undo history<span class="set-help">How many steps Ctrl+Z can go back. A longer history uses more memory.</span></span>${_chipsPref('undoMax', [['Short', 50], ['Normal', 200], ['Long', 500]], p.undoMax || 200)}</div>` +
       _toggleRow('set-auto-empty', 'Delete groups when they become empty', p.autoDeleteEmptyGroups === true, 'Off: a group you empty stays in the hierarchy, marked “empty”, until you delete it.');
     const cam = $s('set-camera-prefs');
     if (cam) cam.innerHTML =
       _group('Navigation') +
       _toggleRow('set-orbit-pivot', 'Orbit around the selection', p.orbitPivot !== 'scene', 'With something selected, the view turns around it. Off, or with nothing selected: around the centre of the view.') +
-      _toggleRow('set-zoom-cursor', 'Zoom toward the cursor', p.zoomToCursor, 'The wheel zooms toward the pointer instead of the orbit centre.');
+      _toggleRow('set-zoom-cursor', 'Zoom toward the cursor', p.zoomToCursor, 'The wheel zooms toward the pointer instead of the orbit centre.') +
+      _group('Speed') +
+      `<div class="set-row set-stack"><span>Orbit speed<span class="set-help">How far the view turns for a drag.</span></span>${_camChips('camRotate', p)}</div>` +
+      `<div class="set-row set-stack"><span>Zoom speed<span class="set-help">How far the wheel moves the view.</span></span>${_camChips('camZoom', p)}</div>`;
     const vx = $s('set-viewport-extra');
-    if (vx) vx.innerHTML = _toggleRow('set-hilite', 'Highlight small parts', !!$s('toggle-highlight')?.checked, 'Tint the parts that are under the size threshold of Delete small parts.');
+    if (vx) vx.innerHTML = _toggleRow('set-hilite', 'Highlight small parts', !!$s('toggle-highlight')?.checked, 'Tint the parts that are under the size threshold of Delete small parts.') +
+      _group('Shading') +
+      `<div class="set-row set-stack"><span>CAD view look<span class="set-help">The matcap the CAD view (key 6) shades with.</span></span>${_chipsPref('cadLook', Object.entries(_CAD_LOOKS).map(([k, l]) => [l.label, k]), _cadLook())}</div>` +
+      _toggleRow('set-outlines', 'Outlines', _Prefs.get('edgesMode') !== 'off', 'A fine dark line on the sharp edges of every part, in every view.');
+    $s('set-outlines')?.addEventListener('change', (e) => { _Prefs.set('edgesMode', e.target.checked ? 'on' : 'off'); try { _cadOnPref('edgesMode'); } catch (_) {} try { _Shading.sync(); } catch (_) {} });
     $s('set-hilite')?.addEventListener('change', (e) => { const t = $s('toggle-highlight'); if (t) { t.checked = e.target.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } });
     [
-      ['set-welcome', 'welcomeOnBoot'], ['set-restore', 'autoRestoreSession'], ['set-autofit', 'autoFitOnLoad'],
-      ['set-confirm', 'confirmDestructive'], ['set-auto-empty', 'autoDeleteEmptyGroups'], ['set-zoom-cursor', 'zoomToCursor'],
+      ['set-splash', 'splashOnStart'], ['set-welcome', 'welcomeOnBoot'], ['set-restore', 'autoRestoreSession'], ['set-autofit', 'autoFitOnLoad'],
+      ['set-confirm', 'confirmDestructive'], ['set-warn-unsaved', 'warnUnsaved'], ['set-auto-empty', 'autoDeleteEmptyGroups'], ['set-zoom-cursor', 'zoomToCursor'],
     ].forEach(([id, key]) => {
       $s(id)?.addEventListener('change', e => {
         _Prefs.set(key, e.target.checked);
@@ -2865,7 +3034,7 @@ const _Settings = (() => {
     $s('settings-search')?.addEventListener('input', e => _search(e.target.value));
   }
   function show(pane) {
-    _wire(); _assemble(); _fillPrefs();
+    _wire(); _assemble(); _fillPrefs(); _fillAppearance(); _fillAbout();
     const q = $s('settings-search'); if (q) { q.value = ''; _search(''); }
     _select(pane || current);
     $s('settings-modal')?.classList.add('show');
@@ -3163,7 +3332,75 @@ const _CmdCards = (() => {
     const h = host.getBoundingClientRect(), b = bar.getBoundingClientRect();
     if (h.width && b.width && b.left < h.right + 10) host.classList.add('lifted');
   }
-  window.addEventListener('resize', () => { if (shown().length) _place(); });
+  window.addEventListener('resize', () => { if (shown().length) { const c = _cur.slice(); _apply(0, 0); _place(); _apply(c[0], c[1]); _nudge(); } });
+
+  // The panels can be moved about the viewport: press the title (or the picture at the top of one that has a picture) and drag.
+  // The host sits in the bottom-left corner; a card is moved by shifting the host, which holds one card at a time. Each card
+  // remembers where it was left (this browser), the double-click on the title puts it back, and it is kept inside the viewport.
+  const K_POS = 'stepopt-card-pos';
+  const _pos = (() => { try { return JSON.parse(localStorage.getItem(K_POS) || '{}') || {}; } catch (_) { return {}; } })();
+  const _savePos = () => { try { localStorage.setItem(K_POS, JSON.stringify(_pos)); } catch (_) {} };
+  let _cur = [0, 0];
+  const _host = () => document.getElementById('vp-cmd-host');
+  function _apply(x, y) {
+    const host = _host(); if (!host) return;
+    _cur = [x, y];
+    host.style.translate = (x || y) ? x + 'px ' + y + 'px' : '';
+  }
+  // the translation nearest to (x, y) that keeps the open card inside the viewport
+  function _clampPos(x, y) {
+    const host = _host(), sec = shown()[0];
+    if (!host || !sec) return [x, y];
+    const par = host.offsetParent || host.parentElement; if (!par) return [x, y];
+    const P = par.getBoundingClientRect(), H = host.getBoundingClientRect(), M = 6;
+    const r = { left: H.left + sec.offsetLeft, top: H.top + sec.offsetTop, width: sec.offsetWidth, height: sec.offsetHeight };   // (not getBoundingClientRect: the open animation moves the card)
+    r.right = r.left + r.width; r.bottom = r.top + r.height;
+    if (!r.width || !r.height) return [x, y];
+    const lx = _cur[0] + (P.left + M - r.left), hx = _cur[0] + (P.right - M - r.right);
+    const ly = _cur[1] + (P.top + M - r.top), hy = _cur[1] + (P.bottom - M - r.bottom);
+    return [Math.min(Math.max(x, Math.min(lx, hx)), Math.max(lx, hx)), Math.min(Math.max(y, Math.min(ly, hy)), Math.max(ly, hy))];
+  }
+  function _restorePos(sec) {
+    const p = _pos[sec.dataset.cmd];
+    _apply(0, 0);
+    if (p && isFinite(p[0]) && isFinite(p[1])) { const c = _clampPos(p[0], p[1]); _apply(c[0], c[1]); }
+  }
+  function _nudge() { const c = _clampPos(_cur[0], _cur[1]); if (c[0] !== _cur[0] || c[1] !== _cur[1]) _apply(c[0], c[1]); }
+  {
+    let d = null;
+    const grip = (t) => t.closest && t.closest('.vp-cmd-host .section-h, .vp-cmd-host .cmd-hero');
+    document.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !e.isPrimary) return;
+      const g = grip(e.target);
+      if (!g || e.target.closest('button, input, textarea, select, a, [contenteditable]')) return;
+      const sec = g.closest('.section-cmd'); if (!sec || sec.hidden) return;
+      d = { id: e.pointerId, g, sec, x: e.clientX, y: e.clientY, sx: _cur[0], sy: _cur[1], moved: false };
+      try { g.setPointerCapture(e.pointerId); } catch (_) {}
+    }, true);
+    document.addEventListener('pointermove', (e) => {
+      if (!d || e.pointerId !== d.id) return;
+      const dx = e.clientX - d.x, dy = e.clientY - d.y;
+      if (!d.moved) { if (Math.abs(dx) + Math.abs(dy) < 3) return; d.moved = true; document.body.classList.add('cmd-dragging'); }
+      e.preventDefault();
+      const c = _clampPos(d.sx + dx, d.sy + dy);
+      _apply(c[0], c[1]);
+    }, true);
+    const end = (e) => {
+      if (!d || (e && e.pointerId !== d.id)) return;
+      const was = d; d = null;
+      try { was.g.releasePointerCapture(was.id); } catch (_) {}
+      document.body.classList.remove('cmd-dragging');
+      if (was.moved) { _pos[was.sec.dataset.cmd] = [_cur[0], _cur[1]]; _savePos(); }
+    };
+    document.addEventListener('pointerup', end, true);
+    document.addEventListener('pointercancel', end, true);
+    document.addEventListener('dblclick', (e) => {
+      const g = grip(e.target);
+      if (!g || e.target.closest('button, input, textarea, select, a')) return;
+      const sec = g.closest('.section-cmd'); if (!sec) return;
+      delete _pos[sec.dataset.cmd]; _savePos(); _apply(0, 0);
+    }, true);
+  }
   // A toolbar button that opens a panel (`data-cmd-toggle`) is lit while it is open.
   const _lamp = (sec) => { for (const b of document.querySelectorAll(`[data-cmd-toggle="${sec.dataset.cmd}"]`)) b.classList.toggle('active', !sec.hidden); };
   function _hide(sec) {
@@ -3184,7 +3421,16 @@ const _CmdCards = (() => {
     sec.querySelector('.section-h')?.classList.remove('collapsed');
     if (was) { sec.classList.remove('cmd-in'); void sec.offsetWidth; sec.classList.add('cmd-in'); }
     _lamp(sec);
-    _place();
+    {
+      // (_place() asks where the host is, so the host must be at its own place, not where the last card was dragged to; and its
+      // bottom must not be mid-slide when the position is worked out)
+      const host = _host();
+      if (host) host.style.transition = 'none';
+      _apply(0, 0);
+      _place();
+      _restorePos(sec);
+      if (host) { void host.offsetHeight; host.style.transition = ''; }
+    }
     _clips(sec, true);
     sec.dispatchEvent(new CustomEvent('cmd-open'));
     return true;
@@ -3231,7 +3477,7 @@ const _Actions = (() => {
     { id:'dupscene',     group:'File',       label:'Duplicate scene',            run: () => _Tabs.duplicate() },
     { id:'closeall',     group:'File',       label:'Close all scenes',           kbd:'Ctrl+Shift+F4', run: () => _Tabs.closeAll() },
     { id:'closeothers',  group:'File',       label:'Close other scenes',         run: () => _Tabs.closeOthers() },
-    { id:'export',       group:'File',       label:'Export model…',              kbd:'Ctrl+E', run: _click('btn-export') },
+    { id:'export',       group:'File',       label:'Export model…',              kbd:'Ctrl+E', run: () => _openExportDialog() },
     { id:'sceneSettings',group:'File',       label:'Scene settings…',            kbd:'Ctrl+;', run: () => { try { _openSceneSettings(); } catch (_) {} } },
     { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: () => { try { if (state.selected.size > 0 && typeof frameSelected === 'function') frameSelected(); else fitToView(); } catch (_) {} } },
     { id:'revert',       group:'File',       label:'Revert to source file…',     run: () => { try { _revertToSourceFile(); } catch (_) {} } },
@@ -3246,6 +3492,7 @@ const _Actions = (() => {
     { id:'gzMove',       group:'View',       label:'Translate gizmo (Shift to snap 10u)', kbd:'E', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
     { id:'gzRotate',     group:'View',       label:'Rotate gizmo (Shift to snap 15°)',    kbd:'R', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
     { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
+    { id:'gzPlace',      group:'View',       label:'Dynamic place: drag the selection over surfaces', kbd:'D', run: () => { try { _DynPlace.toggle(); } catch (_) {} } },
     { id:'gzOff',        group:'View',       label:'Hide gizmo',                          kbd:'Q', run: () => { try { setGizmoMode('off'); } catch (_) {} } },
     { id:'tgGrid',       group:'View',       label:'Toggle grid',                kbd:'G', run: _click('tg-grid') },
     { id:'selAll',       group:'Selection',  label:'Select all',                 kbd:'Ctrl+A', run: _click('sel-all') },
@@ -3256,13 +3503,14 @@ const _Actions = (() => {
     { id:'hideUnsel',    group:'Selection',  label:'Hide unselected',            kbd:'Shift+H', run: () => { try { hideUnselected(); } catch (_) {} } },
     { id:'reveal',       group:'Selection',  label:'Reveal selected in tree',    kbd:'Shift+S', run: () => { try { revealSelectedInTree(); } catch (_) {} } },
     { id:'undo',         group:'Edit',       label:'Undo',                       kbd:'Ctrl+Z', run: () => { try { undoLast(); } catch (_) {} } },
-    { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', run: () => { try { redoLast(); } catch (_) {} } },
-    { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', run: () => { if (state.selected.size || state.selectedGroupIds?.size) _deleteSelection('Deleted via palette'); } },
+    { id:'redo',         group:'Edit',       label:'Redo',                       kbd:'Ctrl+Y', alt:'Ctrl+Shift+Z', run: () => { try { redoLast(); } catch (_) {} } },
+    { id:'delete',       group:'Edit',       label:'Delete selected',            kbd:'Del', alt:'Backspace', run: () => { if (state.selected.size || state.selectedGroupIds?.size) _deleteSelection('Deleted via palette'); } },
     { id:'copy',         group:'Edit',       label:'Copy selection',             kbd:'Ctrl+C', run: () => { if (state.selected.size) copyParts([...state.selected]); } },
     { id:'paste',        group:'Edit',       label:'Paste',                      kbd:'Ctrl+V', run: () => pasteParts() },
     { id:'duplicate',    group:'Edit',       label:'Duplicate selection',        kbd:'Ctrl+D', run: () => { if (state.selected.size) duplicateParts([...state.selected]); } },
     { id:'recenter',     group:'Edit',       label:'Recentre model',             run: _click('btn-recenter') },
-    { id:'alignFloor',   group:'Edit',       label:'Align model to the floor',   run: _click('btn-align-floor') },
+    { id:'alignFloor',   group:'Edit',       label:'Align model to the floor…',  run: () => _CmdCards.open('align') },
+    { id:'alignFloorNow', group:'Edit',      label:'Align model to the floor (with the last choices)', run: _click('btn-align-floor') },
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
     { id:'merge',        group:'Edit',       label:'Merge selection',            kbd:'Ctrl+M', run: _click('btn-merge-sel') },
     { id:'split',        group:'Edit',       label:'Split meshes…',              kbd:'X', run: () => _CmdCards.open('split') },
@@ -3272,6 +3520,7 @@ const _Actions = (() => {
     { id:'decimate',     group:'Edit',       label:'Decimate selection',         run: _click('btn-decimate-sel') },
     { id:'smartopt',     group:'Edit',       label:'Smart optimise',             run: () => window.__moSmartOptimise?.() },
     { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { const el = document.getElementById('budget-target'); if (el && el.offsetParent) { el.focus(); el.select(); } else _click('btn-budget')(); } },
+    { id:'stackedCopies', group:'Selection', label:'Find stacked copies…',       run: () => _CmdCards.open('stacked') },
     { id:'selHidden',    group:'Selection',  label:'Select hidden parts…',       run: () => _CmdCards.open('selhidden') },
     { id:'selFasteners', group:'Selection',  label:'Select fasteners…',          run: () => _CmdCards.open('fasteners') },
     { id:'report',       group:'File',       label:'Optimisation report',        run: () => window._MOpt?.showReport() },
@@ -3282,8 +3531,11 @@ const _Actions = (() => {
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
     { id:'heat',         group:'View',       label:'Heatmap view',               kbd:'4', run: () => { try { setViewMode('heat'); } catch (_) {} } },
     { id:'clay',         group:'View',       label:'Clay view',                  kbd:'5', run: () => { try { setViewMode('clay'); } catch (_) {} } },
+    { id:'cad',          group:'View',       label:'CAD view',                   kbd:'6', run: () => { try { setViewMode('cad'); } catch (_) {} } },
     { id:'flatten',      group:'Edit',       label:'Advanced flatten…',          run: _click('tree-flatten') },
+    { id:'batchRename',  group:'Edit',       label:'Batch rename…',              kbd:'F2', run: () => _openBatchRenameDialog(document.getElementById('tree-batch-rename')) },
     { id:'settings',     group:'App',        label:'Open settings',              kbd:'Ctrl+,', run: () => _Settings.show() },
+    { id:'help',         group:'App',        label:'Help & docs',                kbd:'F1', run: () => window.MOHelp?.show() },
     { id:'shortcuts',    group:'App',        label:'Keyboard shortcuts',         kbd:'?', run: () => _Shortcuts.show() },
     { id:'palette',      group:'App',        label:'Command palette',            kbd:'Ctrl+K', run: () => _CmdK.show() },
     { id:'console',      group:'App',        label:'Toggle log console',         kbd:'`', run: _click('sb-console-btn') },
@@ -3575,12 +3827,38 @@ const _Shortcuts = (() => {
   let inited = false;
   // Per-category icon + display order. Anything in _Actions.list outside this
   // map still renders, sorted alphabetically after the known groups.
-  const GROUP_ICONS = { File:'folder', Edit:'pencil', Selection:'mouse-pointer-2', View:'eye', App:'settings-2' };
-  const GROUP_ORDER = ['File', 'Edit', 'Selection', 'View', 'App'];
+  const GROUP_ICONS = { File:'folder', Edit:'pencil', Selection:'mouse-pointer-2', View:'eye', Mouse:'mouse-pointer-click', Tree:'list-tree', Fields:'hash', Panels:'square-stack', App:'settings-2' };
+  const GROUP_ORDER = ['File', 'Edit', 'Selection', 'View', 'Mouse', 'Tree', 'Fields', 'Panels', 'App'];
+  // Bindings that are not an action in the list: gestures, and keys a panel takes while it is open. Every key the
+  // app binds is either an action above (kbd / alt) or one of these; tests/shortcuts.test.mjs checks the two agree.
+  const EXTRA = [
+    { group:'Mouse',  label:'Orbit',                                  kbd:'Left-drag' },
+    { group:'Mouse',  label:'Pan',                                    kbd:'Middle-drag', alt:'Right-drag' },
+    { group:'Mouse',  label:'Zoom (toward the cursor)',               kbd:'Scroll' },
+    { group:'Mouse',  label:'Select a part',                          kbd:'Click' },
+    { group:'Mouse',  label:'Add to the selection',                   kbd:'Shift+Click' },
+    { group:'Mouse',  label:'Toggle in the selection',                kbd:'Ctrl+Click' },
+    { group:'Mouse',  label:'Box select',                             kbd:'Ctrl+Drag' },
+    { group:'Mouse',  label:'Box select, adding to the selection',    kbd:'Ctrl+Shift+Drag' },
+    { group:'Mouse',  label:'Context menu',                           kbd:'Right-click' },
+    { group:'Tree',   label:'Select a row',                           kbd:'Click' },
+    { group:'Tree',   label:'Select a range of rows',                 kbd:'Shift+Click' },
+    { group:'Tree',   label:'Toggle a row in the selection',          kbd:'Ctrl+Click' },
+    { group:'Tree',   label:'Rename a part or group',                 kbd:'Double-click' },
+    { group:'Tree',   label:'Move rows into a group',                 kbd:'Drag' },
+    { group:'Fields', label:'Change a number by dragging it',         kbd:'Drag' },
+    { group:'Fields', label:'…ten times faster',                      kbd:'Shift+Drag' },
+    { group:'Fields', label:'…ten times finer',                       kbd:'Alt+Drag' },
+    { group:'Fields', label:'Type a number',                          kbd:'Click' },
+    { group:'Panels', label:'Run the open command (Split, Fill holes…)', kbd:'Enter' },
+    { group:'Panels', label:'Close the open command',                 kbd:'Esc' },
+    { group:'Panels', label:'Apply a batch rename',                   kbd:'Ctrl+Enter' },
+  ];
   function _esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-  function _renderKeys(kbd) {
-    // Split combos like "Ctrl+Shift+O" into separate keycap chips, joined by +.
-    return kbd.split('+').map(k => `<kbd class="kbd-chip">${_esc(k)}</kbd>`).join('<span class="sc-plus">+</span>');
+  function _renderKeys(kbd, alt) {
+    // Split combos like "Ctrl+Shift+O" into separate keycap chips, joined by +; an alternative follows after "or".
+    const one = (c) => c.split('+').map(k => `<kbd class="kbd-chip">${_esc(k)}</kbd>`).join('<span class="sc-plus">+</span>');
+    return one(kbd) + (alt ? `<span class="sc-or">or</span>` + one(alt) : '');
   }
   function _render(query = '') {
     const body = document.getElementById('shortcuts-body');
@@ -3588,10 +3866,12 @@ const _Shortcuts = (() => {
     const q = query.trim().toLowerCase();
     const groups = {};
     let total = 0;
-    for (const a of _Actions.list) {
+    const seen = new Set();
+    for (const a of [..._Actions.list, ...EXTRA]) {
       if (!a.kbd) continue;
+      const dup = a.group + '|' + a.label + '|' + a.kbd; if (seen.has(dup)) continue; seen.add(dup);      // (Fit to view and Frame selection are one key)
       if (q) {
-        const hay = `${a.label} ${a.group} ${a.kbd}`.toLowerCase();
+        const hay = `${a.label} ${a.group} ${a.kbd} ${a.alt || ''}`.toLowerCase();
         if (!hay.includes(q)) continue;
       }
       (groups[a.group] = groups[a.group] || []).push(a);
@@ -3611,7 +3891,7 @@ const _Shortcuts = (() => {
           ${groups[g].map(a => `
             <div class="sc-row">
               <span class="sc-row-label" title="${_esc(a.label)}">${_esc(a.label)}</span>
-              <span class="sc-row-keys">${_renderKeys(a.kbd)}</span>
+              <span class="sc-row-keys">${_renderKeys(a.kbd, a.alt)}</span>
             </div>
           `).join('')}
         </div>
@@ -3665,6 +3945,9 @@ window.addEventListener('keydown', e => {
   if (document.querySelector('.modal-bg.show:not(#welcome-modal), .dlg-bg.show')) return;
   const t = e.target;
   const inField = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  if (e.key === 'F1' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+    e.preventDefault(); window.MOHelp?.show(); return;
+  }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 'k' || e.key === 'K')) {
     e.preventDefault(); _CmdK.show(); return;
   }
@@ -3777,6 +4060,7 @@ window.addEventListener('keydown', e => {
       { containers: [menu, btn], isOpen: () => menu.classList.contains('show') },
     );
     $('brand-menu-shortcuts')?.addEventListener('click', () => { close(); try { _Shortcuts.show(); } catch(_){} });
+    $('brand-menu-help')?.addEventListener('click', () => { close(); try { window.MOHelp?.show(); } catch(_){} });
   })();
   input?.addEventListener('change', e => {
     const f = e.target.files[0]; e.target.value = '';
@@ -4061,6 +4345,7 @@ function initScene() {
   // Cursor-centric wheel zoom — wheel-in/out tracks toward the mouse pointer
   // instead of always pulling toward controls.target. Standard CAD UX.
   controls.zoomToCursor = (_Prefs.get('zoomToCursor') !== false);
+  _applyCameraFeel();
   // Mouse button mapping — match standard CAD conventions:
   //  LEFT   → orbit (rotate)
   //  MIDDLE → pan (was DOLLY by default; wheel still handles zoom)
@@ -4400,7 +4685,7 @@ function initScene() {
   });
   // Live invalidation while the gizmo is being dragged.
   state.gizmo.addEventListener('change', () => requestRender());
-  state.gizmo.addEventListener('objectChange', () => { requestRender(); _gizmoHud.update(); _fastTrackGroupOriginDot(); applySelectionColors(); });
+  state.gizmo.addEventListener('objectChange', () => { requestRender(); _gizmoHud.update(); _fastTrackGroupOriginDot(); if (!_outlineRidesPivot()) applySelectionColors(); });
   // Plane-handle uniform-scale lock. By default three's TransformControls
   // computes scale.x and scale.y independently when the user drags the XY
   // plane handle (sx = pointEnd.x / pointStart.x, sy = pointEnd.y /
@@ -4613,6 +4898,7 @@ function _promoteInstanceToMesh(p) {
   const mesh = new THREE.Mesh(inst.geometry, _ownMaterialOf(inst));
   mesh.visible = p.visible !== false;
   if (state.viewMode === 'clay' && _clayMat) { _clayOwn.set(mesh, mesh.material); mesh.material = _clayMat; }
+  else if (state.viewMode === 'cad') { _cadOwn.set(mesh, mesh.material); mesh.material = _cadMaterialFor(mesh.material); }
   mesh.name = p.name || `part_${p.partId}`;
   mesh.userData.partId = p.partId;
 
@@ -4626,6 +4912,7 @@ function _promoteInstanceToMesh(p) {
   // above. (Refreshing the whole model here, once per instance, made the
   // first Select all on an assembly with 1,000 instances take half a second.)
   mesh.updateMatrixWorld(true);
+  try { _cadEdgesAttach(mesh); } catch (_) {}
 
   // Hide the original instance slot
   const m4zero = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -5263,12 +5550,12 @@ function setBackground(mode) {
   if (scene.background && scene.background.isTexture) scene.background = null;
 
   if (mode === 'dark') {
-    // Plasticity's viewport grey: a cool, slightly lifted #27272b on screen.
+    // Plasticity's viewport grey, a little cooler (blue-grey) than the plain #27272b it came from.
     // The value here is what goes INTO the tone mapper — the neutral curve
     // darkens low values, so #444446 is what comes out as #27272b (the old
     // 0x3c3c3c came out as a near-black #1e1e1e).
-    scene.background = new THREE.Color(0x444446);
-    renderer.setClearColor(0x444446, 1);
+    scene.background = new THREE.Color(0x444547);
+    renderer.setClearColor(0x444547, 1);
   }
   else if (mode === 'grad') {
     // Studio gradient — computed entirely in the GPU shader via Three.js TSL
@@ -5704,7 +5991,11 @@ function onResize() {
   // extent and derives the horizontal one from it).
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(w, h, false);
+  const dpr = renderer.getPixelRatio ? renderer.getPixelRatio() : 1;
+  if (onResize._w !== w || onResize._h !== h || onResize._dpr !== dpr) {       // (setSize clears and reallocates the drawing buffer, even for the size it has)
+    onResize._w = w; onResize._h = h; onResize._dpr = dpr;
+    renderer.setSize(w, h, false);
+  }
   requestRender();
 }
 
@@ -5733,7 +6024,8 @@ function onResize() {
 // (every tab reads them, and hears when another tab changes them).
 const _MotionPerf = (() => {
   const K_CULL = 'stepopt-perf-cull-small', K_RES = 'stepopt-perf-dyn-res';
-  const read = (k) => { try { return localStorage.getItem(k) !== '0'; } catch (_) { return true; } };
+  // Skip tiny parts is on unless switched off (key '0'); lowering the resolution is off unless switched on (key '1').
+  const read = (k) => { try { const v = localStorage.getItem(k); return k === K_RES ? v === '1' : v !== '0'; } catch (_) { return k !== K_RES; } };
   let cullOn = read(K_CULL), resOn = read(K_RES);
   const PX = 3;                 // smaller than this many CSS pixels across: not drawn while moving
   const REL = 0.02;             // …unless it is more than this share of the model's size
@@ -5744,16 +6036,22 @@ const _MotionPerf = (() => {
   let moving = false, lastMove = 0, scale = 1, want = 1;
   let ema = 0, prevTurn = 0, prevMoved = false, sinceChange = 0, fastRun = 0, fastest = 16.7, noUpUntil = 0, lastUpAt = 0;
   let sceneR = 0, movedTurns = 0;
-  const _c = new THREE.Vector3(), _s = new THREE.Vector3(), _box = new THREE.Box3();
+  const _c = new THREE.Vector3(), _s = new THREE.Vector3(), _box = new THREE.Box3(), _tb = new THREE.Box3();
+  // Exploded parts are drawn away from their p.bbox (the box of the assembled model), by p._exOff.
+  const exploded = () => { const e = state.explode; return !!(e && (e.x || e.y || e.z)); };
 
+  // (The renderer tests layers per object and still visits the children of one it skips, so the CAD edge lines
+  // that hang on a part must be moved to the layer along with it, or a culled part keeps drawing its lines.)
+  function layerOf(o, n) { o.layers.set(n); for (const k of o.children) if (k.userData && k.userData.cadEdge) k.layers.set(n); }
   function put(o, hide) {
-    if (hide) { if (!hidden.has(o)) { o.layers.set(HIDE_LAYER); hidden.add(o); } }
-    else if (hidden.has(o)) { o.layers.set(0); hidden.delete(o); }
+    if (hide) { if (!hidden.has(o)) { layerOf(o, HIDE_LAYER); hidden.add(o); } }
+    else if (hidden.has(o)) { layerOf(o, 0); hidden.delete(o); }
   }
-  function uncull() { for (const o of hidden) { try { o.layers.set(0); } catch (_) {} } hidden.clear(); }
+  function uncull() { for (const o of hidden) { try { layerOf(o, 0); } catch (_) {} } hidden.clear(); }
   function measureScene() {
     _box.makeEmpty();
-    for (const p of state.parts) if (!p.deleted && p.bbox) _box.union(p.bbox);
+    const ex = exploded();
+    for (const p of state.parts) if (!p.deleted && p.bbox) _box.union(ex && p._exOff ? _tb.copy(p.bbox).translate(p._exOff) : p.bbox);
     return _box.isEmpty() ? 0 : _box.getSize(_s).length() / 2;
   }
   function cull() {
@@ -5763,14 +6061,14 @@ const _MotionPerf = (() => {
     const persp = !!camera.isPerspectiveCamera;
     // pixels per world unit: at distance 1 for a perspective view, everywhere for an orthographic one
     const k = persp ? H / (2 * Math.tan((camera.fov * Math.PI / 180) / 2)) : H * (camera.zoom || 1) / Math.max(1e-9, camera.top - camera.bottom);
-    const maxR = sceneR * REL, cam = camera.position, sel = state.selected;
+    const maxR = sceneR * REL, cam = camera.position, sel = state.selected, ex = exploded();
     const sets = new Map();                                   // a set of instances → the largest any of them appears
     for (const p of state.parts) {
       if (p.deleted || !p.bbox) continue;
       const r = p.bbox.getSize(_s).length() / 2;
       let px = Infinity;
       if (r <= maxR && !(sel && sel.has(p.partId))) {
-        const d = persp ? Math.max(1e-6, p.bbox.getCenter(_c).distanceTo(cam) - r) : 1;
+        const d = persp ? Math.max(1e-6, (ex && p._exOff ? p.bbox.getCenter(_c).add(p._exOff) : p.bbox.getCenter(_c)).distanceTo(cam) - r) : 1;
         px = 2 * r * k / d;
       }
       if (p.instancedMesh && p.instanceIndex >= 0) { const m = p.instancedMesh; if (!(sets.get(m) >= px)) sets.set(m, px); continue; }
@@ -5842,7 +6140,7 @@ const _MotionPerf = (() => {
     }
   }
   function set(key, on) {
-    try { if (on) localStorage.removeItem(key); else localStorage.setItem(key, '0'); } catch (_) {}
+    try { if (on === (key !== K_RES)) localStorage.removeItem(key); else localStorage.setItem(key, key === K_RES ? '1' : '0'); } catch (_) {}
     if (key === K_CULL) cullOn = !!on; else resOn = !!on;       // (set directly: storage may be unavailable)
     if (!cullOn) uncull();
     if (!resOn) { want = 1; applyScale(1); }
@@ -5964,6 +6262,7 @@ function tick() {
           u.uAngleFade.value = t * t * (3 - 2 * t);
         }
       }
+      if (state._flagInst && state._flagInst.length) { try { _flagInstSync(); } catch (_) {} }
       try { _fitNearToView(); } catch (_) {}
       let renderErr = null;
       try { renderer.render(scene, camera); }
@@ -6306,6 +6605,7 @@ async function loadStepFile(file) {
                    && (_Prefs.get('autoFitOnLoad') !== false);
     state._importFitOnLoad = undefined;
     if (!importMode) clearModel();
+    const idsBefore = importMode ? new Set(state.parts.map(p => p.partId)) : null;
     await buildModelFromMeshes(result.meshes, hashes, ctrl, { append: importMode });
     if (ctrl.cancelled) throw new Error('cancelled');
     setLoaderProgress(95);
@@ -6319,6 +6619,7 @@ async function loadStepFile(file) {
     await new Promise(r => setTimeout(r, 350));
     // Drain stale resources from the previous model — see _drainDisposeQueue.
     _drainDisposeQueue();
+    if (idsBefore) setTimeout(() => _focusImportedParts(idsBefore), 120);     // show where the import landed
   } catch (e) {
     stopHB();
     if (e.message !== 'cancelled') { console.error(e); toast('Load failed', e.message || String(e), 'error', 8000); }
@@ -7150,6 +7451,21 @@ function onSceneActivated() {
   state._sceneActive = true;
 }
 
+// When the user last pressed a key or a button, scrolled or dragged. Work that can wait (the picture of a scene for the Recents
+// list, a warm spare copy of the app for the next tab) waits for a quiet moment instead of competing with the first seconds of
+// use of a model that was just opened, which is when a scene of thousands of parts needs every frame.
+let _lastInputAt = performance.now();
+for (const ev of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(ev, () => { _lastInputAt = performance.now(); }, { capture: true, passive: true });
+window.addEventListener('pointermove', (e) => { if (e.buttons) _lastInputAt = performance.now(); }, { capture: true, passive: true });
+const _quietFor = (ms) => performance.now() - _lastInputAt >= ms;
+function _whenQuiet(fn, quietMs = 1500, maxWaitMs = 30000) {
+  const t0 = performance.now();
+  const tick = () => {
+    if (_quietFor(quietMs) || performance.now() - t0 > maxWaitMs) { try { fn(); } catch (e) { console.warn('[quiet]', e); } }
+    else setTimeout(tick, 500);
+  };
+  setTimeout(tick, 0);
+}
 function onModelLoaded(filename) {
   onSceneActivated();
   setStatus(filename);
@@ -7157,14 +7473,12 @@ function onModelLoaded(filename) {
   // part, the rest of the app per distinct mesh (shared geometry once), and
   // the two showed different sizes side by side until the first edit.
   setTimeout(() => {
-    // "Place every file I open": the move is part of opening, not an edit.
-    try { if (_alignPrefs().onOpen && alignModelToFloor({ quiet: true })) { if (_Prefs.get('autoFitOnLoad') !== false) fitToView(); toast('Aligned to the floor', 'Turn this off under Align to floor', 'info', 3500); } } catch (e) { console.warn('[align] on open failed:', e); }
     try { recomputeStats(); } catch (_) {} try { _Dirty.mark(); } catch (_) {} try { window._MOpt?.captureBaseline(); } catch (_) {} }, 0);
   // C4D-style snapshot for the recent-files panel. Defer until the lights
   // ramp has finished and the renderer has had a chance to draw at least one
   // full-quality frame; otherwise we'd snapshot a half-lit / partially-loaded
   // scene. ~1.1s matches the boot-light ramp duration.
-  setTimeout(() => {
+  setTimeout(() => _whenQuiet(() => {
     // _captureRecentThumb is async — a synchronous try/catch can't catch
     // its rejection, so the renderTargetPixelsAsync failure observed on
     // WebGPU surfaced as an "Unhandled promise rejection". Always attach
@@ -7172,7 +7486,7 @@ function onModelLoaded(filename) {
     Promise.resolve()
       .then(() => _captureRecentThumb(filename))
       .catch(e => console.warn('[recent-thumb] capture failed:', e?.message || e));
-  }, 1100);
+  }, 1500, 20000), 1100);       // (two extra full draws of the scene and a read-back: not while the user is already working with it)
 }
 
 // Camera-shutter flash overlay. Replaces the unintentional black blink that
@@ -7385,7 +7699,7 @@ function _drawScreenshotStamp(ctx, w, h, optsIn) {
   const sbVerts    = document.getElementById('sb-verts')?.textContent?.trim() || '';
   const sbMem      = document.getElementById('sb-mem')?.textContent?.trim() || '';
   const sbSelected = document.getElementById('sb-selected-n')?.textContent?.trim() || '0';
-  const sbFlagged  = document.getElementById('sb-flagged-n')?.textContent?.trim() || '0';
+  const sbFlagged  = String(state?.pendingFlagged?.size ?? 0);
   const partCount  = (state?.parts?.filter?.(p => p && !p.deleted).length) ?? 0;
   const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const modelName = sbStatus || 'Untitled';
@@ -8745,8 +9059,10 @@ function _applyCameraProjection() {
 // The middle of what is selected, in world space (false if nothing is).
 function _selectionCentre(out) {
   if (!state.selected || !state.selected.size) return false;
-  const box = new THREE.Box3();
-  for (const id of state.selected) { const p = getPart(id); if (p && !p.deleted && p.bbox && !p.bbox.isEmpty()) box.union(p.bbox); }
+  const box = new THREE.Box3(), tb = new THREE.Box3();
+  const ex = state.explode, exploded = !!(ex && (ex.x || ex.y || ex.z));
+  // (p.bbox is the part's box in the assembled model; an exploded part is drawn away from it, by p._exOff)
+  for (const id of state.selected) { const p = getPart(id); if (p && !p.deleted && p.bbox && !p.bbox.isEmpty()) box.union(exploded && p._exOff ? tb.copy(p.bbox).translate(p._exOff) : p.bbox); }
   if (box.isEmpty()) return false;
   box.getCenter(out);
   return true;
@@ -9456,6 +9772,130 @@ function _fmtNum(v, decimals = 3) {
   return parseFloat(v.toFixed(decimals)).toString();
 }
 
+// What the Reset button does. Position is what the panel shows: the world
+// position minus the origin of the parent group, so 0 means "on the parent's
+// origin" (on the world origin for something in no group, or in the top group).
+// A group resets the same way, carrying every part below it as one rigid body:
+// its origin goes to its parent's origin and its turn to 0. Rotation reads 0
+// in the frame the panel shows (the world one for a part under the gizmo).
+function _tformResetSelection() {
+  const target = _transformTarget();
+  if (!target?.obj) return;
+  if (target.kind === 'instance') {
+    toast?.('Instanced part', 'Move it once with the gizmo to edit it here', 'info', 2200);
+    return;
+  }
+  if (target.part?.locked) {
+    try { toast('Part is locked', target.part.name, 'warn', 2000); } catch (_) {}
+    return;
+  }
+  const obj = target.obj;
+  _initGroupOrigins();
+  const originOf = (parentId) => {
+    const o = parentId != null ? _groupOrigins.get(parentId) : null;
+    return o ? o.clone() : new THREE.Vector3();
+  };
+  try {
+    if (target.kind === 'group') {
+      const gid = parseInt(String([...(state.selectedGroupIds || [])][0]), 10);
+      const node = state.treeNodes?.find(n => n.kind === 'group' && n.id === gid);
+      const stored = _groupOrigins.get(gid);
+      if (!node || !stored) return;                       // an empty group has no place to move
+      const T = originOf(node.parentId);
+      const O = stored.clone();
+      const Qc = (_groupRotations.get(gid) || new THREE.Quaternion()).clone();
+      if (state.pivot && state._pivotedParts?.length && state._pivotedTreeGroupId === gid) {
+        state.pivot.updateMatrixWorld(true);              // the live gizmo is the freshest word on where it stands
+        state.pivot.getWorldPosition(O);
+        Qc.copy(state.pivot.quaternion);
+      }
+      _detachGizmo();                                     // every part back in the scene, world pose kept
+      const R = Qc.clone().invert();
+      // x' = T + Qc^-1 (x - O): the group's frame lands on T with no turn.
+      const D = new THREE.Matrix4().makeTranslation(T.x, T.y, T.z)
+        .multiply(new THREE.Matrix4().makeRotationFromQuaternion(R))
+        .multiply(new THREE.Matrix4().makeTranslation(-O.x, -O.y, -O.z));
+      const inv = new THREE.Matrix4(), world = new THREE.Matrix4();
+      let left = 0;
+      for (const id of _treeGroupDescendants(gid)) {
+        const p = getPart(id);
+        if (!p || p.deleted) continue;
+        if (!p.mesh && p.instancedMesh) _promoteInstanceToMesh(p);
+        if (!p.mesh) continue;
+        if (p.locked) { left++; continue; }
+        const parent = p.mesh.parent || state.partsRoot;
+        parent.updateWorldMatrix(true, false);
+        p.mesh.updateWorldMatrix(true, false);
+        world.multiplyMatrices(D, p.mesh.matrixWorld);
+        inv.copy(parent.matrixWorld).invert();
+        inv.multiply(world).decompose(p.mesh.position, p.mesh.quaternion, p.mesh.scale);
+        p.mesh.updateMatrix();
+        p.mesh.updateMatrixWorld(true);
+        p._exactWorld = p.mesh.matrixWorld.clone();
+        try { _refreshPartBBox(p); } catch (_) {}
+      }
+      if (left) { try { toast('Locked parts stayed', left + ' locked part' + (left === 1 ? '' : 's') + ' did not move', 'warn', 3000); } catch (_) {} }
+      // The group's own frame, then the groups below it: they turned with it, and
+      // their centres are worked out again from where the parts are now.
+      _groupOrigins.set(gid, T);
+      _groupRotations.set(gid, new THREE.Quaternion());
+      const all = state.treeNodes || [];
+      const at = all.findIndex(n => n.id === gid);
+      for (let i = at + 1; at >= 0 && i < all.length && all[i].depth > all[at].depth; i++) {
+        if (all[i].kind !== 'group') continue;
+        _groupOrigins.delete(all[i].id);
+        const q = _groupRotations.get(all[i].id);
+        if (q) q.premultiply(R);
+      }
+      _tfParentCentroidForChild = null;
+      if (!target.synthetic) {                            // a stand-in group is the scene's root: no scale of its own
+        obj.scale.set(1, 1, 1);
+        obj.updateMatrix();
+        obj.updateMatrixWorld(true);
+      }
+    } else {
+      const underGizmo = _hasPivotAncestor(obj);
+      _detachGizmo();                                     // back under its own parent, world pose kept
+      const parent = obj.parent || state.partsRoot;
+      parent.updateWorldMatrix(true, false);
+      let T = new THREE.Vector3();
+      if (target.kind === 'part') {
+        const pn = state.treeNodes?.find(n => n.kind === 'part' && n.partId === target.part?.partId);
+        T = originOf(pn?.parentId);
+      }
+      obj.scale.set(1, 1, 1);
+      if (underGizmo || target.kind === 'user-group') {
+        parent.getWorldQuaternion(_tfTmpQuat).invert();   // world 0, which is what the gizmo's fields read
+        obj.quaternion.copy(_tfTmpQuat);
+      } else {
+        obj.quaternion.identity();
+      }
+      obj.position.copy(parent.worldToLocal(T));
+      obj.updateMatrix();
+      obj.updateMatrixWorld(true);
+      if (target.kind === 'part') {
+        target.part._exactWorld = obj.matrixWorld.clone();
+        try { _refreshPartBBox(target.part); } catch (_) {}
+      } else {
+        for (const p of (state.parts || [])) {            // a user group: its members went with it
+          if (p?.mesh && !p.deleted && p.mesh.parent === obj) {
+            p.mesh.updateWorldMatrix(true, false);
+            p._exactWorld = p.mesh.matrixWorld.clone();
+            try { _refreshPartBBox(p); } catch (_) {}
+          }
+        }
+      }
+    }
+  } catch (err) { console.warn('[transform-panel] reset failed:', err); return; }
+  try { updateGizmo?.(); } catch (_) {}                   // the gizmo comes back at the new place
+  // The selection's outline is built where the part stood: build it again
+  // where it stands now.
+  try { applySelectionColors?.(); } catch (_) {}
+  requestRender();
+  refreshPropertiesPanel?.();
+  _transformPanelRefresh();
+}
+
 let _transformWired = false;
 function _wireTransformPanel() {
   if (_transformWired) return;
@@ -9770,73 +10210,10 @@ function _wireTransformPanel() {
     window.addEventListener('pointercancel', onUp);
     window.addEventListener('blur', onUp);
   }
-  // Reset: clear the editable channels back to identity in the SAME frame
-  // we display (world if pivot is ancestor, else local). Setting local to
-  // zero when a non-identity pivot is in the chain leaves the object stuck
-  // at the pivot's world transform — confusing — so we route through world
-  // → local conversion for the pivoted case.
-  document.getElementById('tform-reset')?.addEventListener('click', () => _withTransformUndo('panel:reset', () => {
-    const target = _transformTarget();
-    if (!target?.obj) return;
-    const obj = target.obj;
-    const isGroup = target.kind === 'group' || target.kind === 'user-group';
-    const pivotActive = state.pivot && (state._pivotedGroup || state._pivotedParts?.length);
-    try {
-      if (pivotActive) {
-        // Reset pivot to world origin with identity rotation.
-        // Child objects preserve their world offsets relative to the pivot —
-        // for single parts that brings them to (0,0,0); for groups the group
-        // container moves to origin and the parts come along.
-        state.pivot.position.set(0, 0, 0);
-        state.pivot.rotation.set(0, 0, 0);
-        state.pivot.updateMatrixWorld(true);
-        // Also reset the real object's scale (pivot has no scale of its own).
-        if (!target.synthetic) {
-          obj.scale.set(1, 1, 1);
-          obj.updateMatrix();
-          obj.updateMatrixWorld(true);
-        }
-      } else if (target.synthetic) {
-        // nothing of its own to reset (and the stand-in object is the scene's root)
-      } else if (_hasPivotAncestor(obj)) {
-        // obj is under pivot but pivotActive is false — edge case; fall back
-        // to the world-to-local path.
-        obj.parent?.updateMatrixWorld?.(true);
-        _tfTmpVec.set(0, 0, 0);
-        if (obj.parent) obj.parent.worldToLocal(_tfTmpVec);
-        obj.position.copy(_tfTmpVec);
-        if (obj.parent) {
-          obj.parent.getWorldQuaternion(_tfTmpQuat).invert();
-          obj.quaternion.copy(_tfTmpQuat);
-        } else {
-          obj.rotation.set(0, 0, 0);
-        }
-        obj.scale.set(1, 1, 1);
-        obj.updateMatrix();
-        obj.updateMatrixWorld(true);
-      } else {
-        // No pivot active — write directly to obj. Works for user-groups
-        // (ug.ref parents the meshes) and normal parts. For tree groups this
-        // resets the container's own transform (usually a no-op since it's
-        // already identity), but scale reset is always safe.
-        obj.position.set(0, 0, 0);
-        obj.rotation.set(0, 0, 0);
-        obj.scale.set(1, 1, 1);
-        obj.updateMatrix();
-        obj.updateMatrixWorld(true);
-      }
-      if (state._pivotedPart || state._pivotedGroup) {
-        try { _detachGizmo(); updateGizmo?.(); } catch (_) {}
-      }
-    } catch (err) { console.warn('[transform-panel] reset failed:', err); return; }
-    // The selection's outline is built where the part stood: build it again
-    // where it stands now (typing a value does the same; Reset left the
-    // outline behind at the old place).
-    try { applySelectionColors?.(); } catch (_) {}
-    requestRender();
-    refreshPropertiesPanel?.();
-    _transformPanelRefresh();
-  }));
+  // Reset puts the selection back at the origin of its parent group (the world
+  // origin when it has none), turned to 0 and at scale 1: the values the
+  // fields show as zero. See _tformResetSelection.
+  document.getElementById('tform-reset')?.addEventListener('click', () => _withTransformUndo('panel:reset', _tformResetSelection));
 
   // ── Right-click on Position / Rotation / Size column headers ─────────
   // Pops a small context menu with Copy XYZ / Paste XYZ / Reset XYZ for
@@ -10126,7 +10503,7 @@ function buildAxisGizmo() {
   html += '</defs>';
   // the three axis stems, from the far end of a cube edge out to the dot
   for (const a of ['x', 'y', 'z']) {
-    html += `<line class="axg-stem" id="axg-l-${a}" stroke="${c[a][1]}" stroke-width="1.5" stroke-linecap="round"/>`;
+    html += `<path class="axg-stem" id="axg-l-${a}" fill="none" stroke="${c[a][1]}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
   html += '<g id="axg-cube" filter="url(#axg-shadow)">';
   for (const f of _AXG.faces) {
@@ -10175,32 +10552,82 @@ function updateAxisGizmo() {
     el.setAttribute('stroke', col);
     el.style.display = '';
   }
-  // Axes: from the cube's corner (-S,-S,-S) along an edge, D past the cube.
-  // The cube is drawn first and the axes over it, so a line is never hidden
-  // by a face; each line stops at the rim of its dot (not at its centre), and
-  // the dots are opaque, so nothing runs into a letter.
+  // Axes: from the cube's corner (-S,-S,-S) along an edge, D past the cube. A stem
+  // is drawn piece by piece and a piece that lies behind one of the cube's faces
+  // is left out, so a stem that starts at a hidden corner shows only where it
+  // really is in view (along a visible edge, and out past the cube). The dots
+  // go behind the cube when they are behind it and in front when they are not;
+  // each stem stops at the rim of its dot, and the dots are opaque.
+  const front = [];                                        // the faces that look at the viewer: outline and plane
+  for (const f of _AXG.faces) {
+    const n = project(f.n[0], f.n[1], f.n[2]);
+    if (n.z <= 0.02) continue;
+    const poly = f.c.map(k => project(k[0] * S, k[1] * S, k[2] * S));
+    front.push({ poly, nx: n.x, ny: n.y, nz: n.z, x0: poly[0].x, y0: poly[0].y, z0: poly[0].z });
+  }
+  const inPoly = (poly, x, y) => {                         // (a convex outline: every turn goes the same way)
+    let pos = false, neg = false;
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i + 1) % poly.length];
+      const cr = (q.x - p.x) * (y - p.y) - (q.y - p.y) * (x - p.x);
+      if (cr > 1e-9) pos = true; else if (cr < -1e-9) neg = true;
+      if (pos && neg) return false;
+    }
+    return true;
+  };
+  const hidden = (p) => {                                  // behind a face of the cube?
+    for (const f of front) {
+      if (!inPoly(f.poly, p.x, p.y)) continue;
+      const zf = f.z0 - (f.nx * (p.x - f.x0) + f.ny * (p.y - f.y0)) / f.nz;
+      if (p.z < zf - 0.35) return true;
+    }
+    return false;
+  };
   const order = ['x', 'y', 'z'].map(a => {
     const e = a === 'x' ? [1, 0, 0] : a === 'y' ? [0, 1, 0] : [0, 0, 1];
     const at = (t) => project(-S + e[0] * t, -S + e[1] * t, -S + e[2] * t);
-    return { a, from: at(0), to: at(2 * S + _AXG.D) };
+    return { a, at, from: at(0), to: at(2 * S + _AXG.D) };
   }).sort((p, q) => p.to.z - q.to.z);
-  svg.appendChild(document.getElementById('axg-cube'));
+  const STEPS = 44;
   for (const o of order) {
     const g = document.getElementById('axg-h-p' + o.a), l = document.getElementById('axg-l-' + o.a);
-    const dx = o.to.x - o.from.x, dy = o.to.y - o.from.y, len = Math.hypot(dx, dy);
-    const reach = Math.max(0, len - _AXG.R);                       // the dot's rim, along the line
-    const ex = len > 0.01 ? o.from.x + dx / len * reach : o.from.x;
-    const ey = len > 0.01 ? o.from.y + dy / len * reach : o.from.y;
-    l.setAttribute('x1', o.from.x.toFixed(2)); l.setAttribute('y1', o.from.y.toFixed(2));
-    l.setAttribute('x2', ex.toFixed(2));       l.setAttribute('y2', ey.toFixed(2));
+    // the points of the stem, cut where it meets the rim of its dot
+    const pts = [o.at(0)];
+    const total = 2 * S + _AXG.D;
+    for (let k = 1; k <= STEPS; k++) {
+      const p = o.at(total * k / STEPS), prev = pts[pts.length - 1];
+      const dp = Math.hypot(p.x - o.to.x, p.y - o.to.y);
+      if (dp <= _AXG.R) {
+        const dq = Math.hypot(prev.x - o.to.x, prev.y - o.to.y);
+        const f = dq > dp ? Math.max(0, Math.min(1, (dq - _AXG.R) / (dq - dp))) : 0;
+        pts.push({ x: prev.x + (p.x - prev.x) * f, y: prev.y + (p.y - prev.y) * f, z: prev.z + (p.z - prev.z) * f });
+        break;
+      }
+      pts.push(p);
+    }
+    let d = '', pen = false;
+    for (let k = 1; k < pts.length; k++) {
+      const a0 = pts[k - 1], a1 = pts[k];
+      const seen = !hidden({ x: (a0.x + a1.x) / 2, y: (a0.y + a1.y) / 2, z: (a0.z + a1.z) / 2 });
+      if (!seen) { pen = false; continue; }
+      if (!pen) d += 'M' + a0.x.toFixed(2) + ',' + a0.y.toFixed(2);
+      d += 'L' + a1.x.toFixed(2) + ',' + a1.y.toFixed(2);
+      pen = true;
+    }
+    l.setAttribute('d', d);
     g.setAttribute('transform', `translate(${o.to.x.toFixed(2)},${o.to.y.toFixed(2)})`);
     // an axis pointing away from the viewer is drawn a little quieter
     const back = o.to.z - o.from.z < -3;
     l.style.opacity = back ? 0.5 : 0.95;
     g.style.filter = back ? 'brightness(.72)' : '';              // darker, but opaque: nothing shows through a dot
-    svg.appendChild(l);
   }
-  for (const o of order) svg.appendChild(document.getElementById('axg-h-p' + o.a));   // dots over every line, nearest last
+  // Stacking, farthest first: the dots behind the cube, the cube, then the stems and the dots in front.
+  const lineOf = (o) => document.getElementById('axg-l-' + o.a), dotOf = (o) => document.getElementById('axg-h-p' + o.a);
+  const behindCube = order.filter(o => o.to.z < 0), inFront = order.filter(o => o.to.z >= 0);
+  for (const o of behindCube) svg.appendChild(dotOf(o));
+  svg.appendChild(document.getElementById('axg-cube'));
+  for (const o of order) svg.appendChild(lineOf(o));
+  for (const o of inFront) svg.appendChild(dotOf(o));              // dots over every line, nearest last
 }
 // Turn the camera to look along an axis. The turn is animated (the cube in the
 // corner follows, it is redrawn with every frame): the camera's orientation is
@@ -11430,6 +11857,7 @@ function _getEdgesGeom(g) {
 function _disposeEdgesFor(g) {
   const e = _edgesCache.get(g);
   if (e) { e.dispose?.(); _edgesCache.delete(g); }
+  try { _cadEdgesGeomChanged(g); } catch (_) {}
   // a job still running for this geometry would cache edges of the old shape
   try { for (const [id, fg] of _edgesInFlight) if (fg === g) _edgesInFlight.delete(id); } catch (_) {}
 }
@@ -11499,6 +11927,7 @@ function _edgesWorkerGet() {
         eg.setAttribute('position', new THREE.BufferAttribute(ev.data.edges, 3));
         _edgesCache.set(g, eg);
         _edgesPrewarmFloats += ev.data.edges.length;
+        try { _cadEdgesGeomReady(); } catch (_) {}
         // Redraw only if something selected is waiting on this geometry.
         let wanted = false;
         for (const id of state.selected) {
@@ -11603,7 +12032,12 @@ function _edgesFor(g, deadline) {
 // would also glow on the back-facing edges of the selected part itself.
 const _SEL_LINE_MAT        = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.95, depthTest: true,  depthWrite: false });
 const _SEL_LINE_MAT_BEHIND = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.35, depthTest: false, depthWrite: false });
-const _FLAG_FILL_MAT = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.22, depthTest: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+// Small parts that are flagged: a bright yellow fill where the part is seen, a fainter one showing through whatever hides it, and a
+// yellow outline (from the part's cached edges) that is never hidden, so a screw inside a housing is found at a glance.
+const _FLAG_FILL_MAT = new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: 0.62, depthTest: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+const _FLAG_BEHIND_MAT = new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: 0.26, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+const _FLAG_LINE_MAT = new THREE.LineBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false });
+const _FLAG_EXTRAS_MAX = 400;       // (the see-through fill and the outline cost a draw each: only for this many flagged parts)
 
 // Triangle-vert budget for feature edges. Selecting a 5000-part tree with
 // 100k tris each used to spend seconds in EdgesGeometry construction; once
@@ -11729,6 +12163,55 @@ function _syncPrimWireframe(p) {
     p.mesh.remove(existing);
   }
 }
+// A small selection draws its outline with lines that are children of the selected meshes and share the parts' cached edge
+// geometry: nothing is baked on the CPU or uploaded, and the outline follows the part through the scene graph (gizmo drag,
+// transform panel, undo, explode) with no rebuild. A big selection, copies still drawn as an instanced mesh, and parts whose
+// edges are not ready yet keep using the one merged buffer below (one draw call for any number of parts).
+const _SEL_CHILD_MAX = 200;
+function _selOutlinePlan(deadline) {
+  const items = [];
+  let key = '';
+  if (state.selected && state.selected.size > 0 && state.selected.size <= _SEL_CHILD_MAX) {
+    for (const id of state.selected) {
+      const p = getPart(id);
+      if (!p || p.deleted || !p.visible || !p.mesh || !p.mesh.isMesh || !p.mesh.geometry) continue;
+      const e = _edgesFor(p.mesh.geometry, deadline);
+      if (e === _EDGES_PENDING || !e || !e.attributes.position || !e.attributes.position.count) continue;
+      items.push({ p, e }); key += p.mesh.id + ':' + e.id + ',';
+    }
+  }
+  return { items, key, set: new Set(items.map(i => i.p)) };
+}
+// The yellow fill of a small part that is drawn as one copy of an instanced mesh sits in the scene (a copy has no mesh to be a
+// child of), so it is put on the copy's current matrix before each frame: it cannot stay behind when the copies move.
+const _flagSyncM = new THREE.Matrix4();
+function _flagInstSync() {
+  const done = new Map();
+  for (const e of state._flagInst) {
+    const im = e.p.instancedMesh;
+    if (!im || e.p.instanceIndex < 0) { e.ov.visible = false; for (const x of e.extras) x.visible = false; continue; }      // it has become a mesh of its own
+    let w = done.get(im);
+    if (!w) { im.updateWorldMatrix(true, false); w = im.matrixWorld; done.set(im, w); }
+    im.getMatrixAt(e.p.instanceIndex, _flagSyncM);
+    e.ov.matrix.multiplyMatrices(w, _flagSyncM);
+    e.ov.matrixWorldNeedsUpdate = true;
+    for (const x of e.extras) { x.matrix.copy(e.ov.matrix); x.matrixWorldNeedsUpdate = true; }
+  }
+}
+// While a part is dragged, its outline needs no rebuild when it is carried by the gizmo's pivot (the merged buffer, parented
+// to it) or drawn by lines that are children of the parts. Anything else (the yellow fills of small parts) is rebuilt as before.
+function _outlineRidesPivot() {
+  if (!state._gizmoDragging) return false;
+  const hs = state.activeHighlights;
+  if (!hs || !hs.length) return false;
+  for (const h of hs) {
+    if (h.userData && h.userData.selChild) continue;
+    if (state._selMergedGeom && h.geometry === state._selMergedGeom) continue;
+    return false;
+  }
+  for (const h of hs) if (state._selMergedGeom && h.geometry === state._selMergedGeom && h.parent !== state.pivot) state.pivot.attach(h);
+  return true;
+}
 function _applySelectionColorsImpl() {
   // Fast path: nothing selected, nothing flagged-and-shown, no leftover
   // overlays. Skip the entire teardown + per-part scan. Cuts per-click
@@ -11753,12 +12236,18 @@ function _applySelectionColorsImpl() {
   //    in the scene + half the new ones, which manifested as "the old
   //    highlight stayed in place" the user reported. Materials are shared
   //    across rebuilds so we never dispose them.
+  const outlinePlan = _selOutlinePlan(performance.now() + _EDGES_INLINE_BUDGET_MS);
+  const keepOutline = !!outlinePlan.key && outlinePlan.key === state._selChildKey && !!state._selChildLines &&
+    state._selChildLines.every(l => l.parent && l.visible);
   if (state.activeHighlights) {
     for (const h of state.activeHighlights) {
+      if (keepOutline && h.userData && h.userData.selChild) continue;
       try { if (h.parent) h.parent.remove(h); } catch (_) {}
     }
   }
-  state.activeHighlights = [];
+  state.activeHighlights = keepOutline ? state._selChildLines.slice() : [];
+  state._flagInst = [];
+  if (!keepOutline) { state._selChildLines = null; state._selChildKey = ''; }
   if (state._selMergedGeom) {
     try { state._selMergedGeom.dispose?.(); } catch (_) {}
     state._selMergedGeom = null;
@@ -11798,6 +12287,7 @@ function _applySelectionColorsImpl() {
     if (drawn >= MAX_SELECTION_HIGHLIGHTS) break;
     const p = getPart(id);
     if (!p || p.deleted || !p.visible) continue;
+    if (outlinePlan.set.has(p)) continue;                           // outlined by lines of its own (below)
 
     let geom = null;
     if (p.mesh) geom = p.mesh.geometry;
@@ -11892,12 +12382,25 @@ function _applySelectionColorsImpl() {
     parent.add(lines);
     state.activeHighlights.push(linesBehind, lines);
   }
+  if (!keepOutline && outlinePlan.items.length) {
+    const made = [];
+    for (const { p, e } of outlinePlan.items) {
+      const behind = new THREE.LineSegments(e, _SEL_LINE_MAT_BEHIND);
+      behind.renderOrder = 998;
+      const front = new THREE.LineSegments(e, _SEL_LINE_MAT);
+      front.renderOrder = 999;
+      for (const l of [behind, front]) { l.frustumCulled = false; l.raycast = () => {}; l.userData.selChild = true; p.mesh.add(l); made.push(l); }
+    }
+    state._selChildLines = made;
+    state._selChildKey = outlinePlan.key;
+    for (const l of made) state.activeHighlights.push(l);
+  }
   if (state.highlightSmall) {
     // Flagged-small overlay still iterates per-part — it's a fill MESH, not
     // line edges, so merging would need face indices + normals rebuild and
     // doesn't share the BVH-friendly properties of the edge buffer. The
     // FLAGGED cap (2500) keeps draw counts bounded.
-    const flagMat = new THREE.Matrix4();
+    const flagMat = new THREE.Matrix4(), flagDeadline = performance.now() + _EDGES_INLINE_BUDGET_MS;
     let count = 0;
     for (const p of state.parts) {
       if (p.deleted || !p.visible || !p.flagged || state.selected.has(p.partId)) continue;
@@ -11909,7 +12412,14 @@ function _applySelectionColorsImpl() {
       const overlay = new THREE.Mesh(geom, _FLAG_FILL_MAT);
       overlay.renderOrder = 998;
       overlay.frustumCulled = false;
-      if (parent) parent.add(overlay);
+      // the see-through fill and the outline ride along with the fill
+      const extras = [];
+      if (count < _FLAG_EXTRAS_MAX) {
+        const behind = new THREE.Mesh(geom, _FLAG_BEHIND_MAT); behind.renderOrder = 997; behind.frustumCulled = false; extras.push(behind);
+        const eg0 = _edgesFor(geom, flagDeadline), eg = eg0 === _EDGES_PENDING ? null : eg0;
+        if (eg && eg.attributes.position && eg.attributes.position.count) { const ln = new THREE.LineSegments(eg, _FLAG_LINE_MAT); ln.renderOrder = 1000; ln.frustumCulled = false; ln.raycast = () => {}; extras.push(ln); }
+      }
+      if (parent) { parent.add(overlay); for (const x of extras) parent.add(x); }
       else if (p.instancedMesh) {
         // An instance's matrix is in its InstancedMesh's own space. The
         // overlay sits in the scene, so it takes that mesh's world matrix as
@@ -11920,8 +12430,10 @@ function _applySelectionColorsImpl() {
         overlay.matrixAutoUpdate = false; overlay.matrix.multiplyMatrices(p.instancedMesh.matrixWorld, flagMat);
         overlay.matrixWorldNeedsUpdate = true;
         scene.add(overlay);
-      } else scene.add(overlay);
-      state.activeHighlights.push(overlay);
+        for (const x of extras) { x.matrixAutoUpdate = false; x.matrix.copy(overlay.matrix); x.matrixWorldNeedsUpdate = true; scene.add(x); }
+        (state._flagInst || (state._flagInst = [])).push({ ov: overlay, extras, p });      // kept on its copy by _flagInstSync, every frame drawn
+      } else { scene.add(overlay); for (const x of extras) scene.add(x); }
+      state.activeHighlights.push(overlay, ...extras);
       if (++count >= MAX_FLAGGED_HIGHLIGHTS) break;
     }
   }
@@ -12031,9 +12543,8 @@ function _updateGroupOriginDot() {
   // Build a quick lookup of which group ids are currently selected so we can
   // recolour their dots without doing a Set lookup per dot inside the loop.
   const selSet = state.selectedGroupIds ? new Set([...state.selectedGroupIds].map(g => parseInt(String(g), 10))) : new Set();
-  // When the user has opted into "only on select", non-selected groups skip
-  // the dot entirely. Default (off) keeps the always-visible behaviour.
-  const onlyOnSelect = !!state.groupOriginsOnSelectOnly;
+  // "Show origin points" is off by default: no dots at all until it is switched on.
+  const showDots = !!state.showOriginPoints;
   // Pre-pass: compute the set of group ids that still have at least one LIVE
   // (non-deleted) part somewhere in their subtree. Groups whose contents are
   // all deleted otherwise keep a stranded dot at their stale origin — the
@@ -12076,7 +12587,7 @@ function _updateGroupOriginDot() {
     const numId = typeof node.id === 'number' ? node.id : parseInt(String(node.id), 10);
     if (!Number.isFinite(numId)) continue;
     const sel = selSet.has(numId);
-    if (onlyOnSelect && !sel) continue;
+    if (!showDots) continue;
     // Skip groups with no live descendants — the dot at the stale origin is
     // worse UX than no dot.
     if (!aliveGroups.has(numId)) continue;
@@ -12426,8 +12937,8 @@ function refreshPropertiesPanel() {
   // mesh and instanced parts; ignores Material[] arrays by taking [0]).
   const _matOfPart = (p) => {
     if (!p) return null;
-    let m = p.mesh?.material;
-    if (!m) m = p.instancedMesh?.material;
+    let m = p.mesh ? _matOf(p.mesh) : null;                       // (the part's own material: under Clay or CAD it wears the view's)
+    if (!m) m = p.instancedMesh ? _matOf(p.instancedMesh) : null;
     if (Array.isArray(m)) m = m[0];
     return (m && m.isMaterial) ? m : null;
   };
@@ -12686,12 +13197,12 @@ function refreshPropertiesPanel() {
 
   el.innerHTML = `
     <div class="prop-head">${nameHtml}${matNote ? `<span class="prop-head-note" title="Different materials in this selection">${matNote}</span>` : ''}</div>
-    <div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>
     ${heroHtml}
     <div class="prop-grid">
       ${gridRows.map(([ic, lb, val]) => `<span class="prop-icon"><i data-lucide="${ic}"></i></span><span class="prop-label">${lb}</span><strong class="prop-value"${lb === 'Size' ? ` title="${val}"` : ''}>${val}</strong>`).join('\n      ')}
     </div>
-    <div class="prop-tags">${tagsHtml}</div>`;
+    <div class="prop-tags">${tagsHtml}</div>
+    <div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>`;
   // Append the C4D-style Shape-parameters panel when the active selection
   // is a single primitive part. Sliders rebuild the geometry live.
   if (ids.length === 1) {
@@ -12713,8 +13224,8 @@ function refreshPropertiesPanel() {
     const ids = [...state.selected];
     if (!ids.length) return null;
     const p = getPart(ids[0]);
-    let target = p?.mesh?.material;
-    if (!target) target = p?.instancedMesh?.material;
+    let target = p?.mesh ? _matOf(p.mesh) : null;
+    if (!target) target = p?.instancedMesh ? _matOf(p.instancedMesh) : null;
     if (Array.isArray(target)) target = target[0];
     return target || null;
   };
@@ -12739,13 +13250,7 @@ function refreshPropertiesPanel() {
       matStrip.classList.toggle('more-r', matStrip.scrollLeft < matStrip.scrollWidth - matStrip.clientWidth - 2);
     };
     matStrip.addEventListener('scroll', fade, { passive: true });
-    matStrip.addEventListener('wheel', (e) => {
-      if (matStrip.scrollWidth <= matStrip.clientWidth) return;
-      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-      if (!d) return;
-      e.preventDefault();
-      matStrip.scrollLeft += d;
-    }, { passive: false });
+    _stripPhysics(matStrip);      // (drag, flick, rubber band: as the Shading card's strip; the vertical wheel scrolls the sidebar)
     fade();
     requestAnimationFrame(fade);
   }
@@ -12895,11 +13400,11 @@ function refreshFlagged(live = false) {
     if (p.flagged) { count++; state.pendingFlagged.add(p.partId); }
   }
   $('btn-delete-small-count').textContent = fmtNum(count);
-  // In words, with the size the percentage comes to: "710 parts under 70.5 mm corner to corner".
+  // In words, with the size the percentage comes to: "710 parts under 70.5 mm".
   {
     const side = thr * state.modelDiag;                       // the length the threshold stands for
     const len = _fmtLen(side, side >= 100 ? 0 : side >= 10 ? 1 : 2);   // in the unit the scene is shown in
-    const what = metric === 'max' ? `with no side longer than ${len}` : metric === 'vol' ? `whose box is smaller than a ${len} cube` : `under ${len} corner to corner`;
+    const what = metric === 'max' ? `with no side longer than ${len}` : metric === 'vol' ? `whose box is smaller than a ${len} cube` : `under ${len}`;
     $('thr-info').textContent = !state.parts.some(p => !p.deleted) ? 'Load a model to see what would go.'
       : (count > 0 ? `${fmtNum(count)} part${count === 1 ? '' : 's'} ${what}.` : `No parts ${what}.`)
         + (() => { let hid = 0; for (const p of state.parts) if (!p.deleted && !_flagEligible(p)) hid++; return hid ? ` ${fmtNum(hid)} hidden part${hid === 1 ? ' is' : 's are'} left alone.` : ''; })();
@@ -12938,11 +13443,7 @@ function _isolateFollowFlagged(live) {
 // flag-by-tri / flag-by-aspect helpers (which mutate state.pendingFlagged
 // outside the threshold path).
 function _updateFlaggedChip() {
-  const el = $('sb-flagged'); if (!el) return;
-  const n = state.pendingFlagged.size;
-  $('sb-flagged-n').textContent = n;
-  el.classList.toggle('empty', n === 0);
-  el.classList.toggle('active', n > 0);
+  // (the status bar no longer shows a flagged chip; the Delete small parts card and the tree show them)
 }
 
 // How far back Ctrl+Z goes. Moves, visibility, selection-like edits, material
@@ -12950,7 +13451,9 @@ function _updateFlaggedChip() {
 // geometry (what a delete, split, merge, bake, decimate … has to put back) is
 // big on a large model, so only the last 30 of THOSE are kept, and the history
 // is cut from the far end until both limits hold.
-const _UNDO_MAX = 200, _UNDO_MAX_HEAVY = 30;
+let _UNDO_MAX = Math.max(10, Math.min(1000, +_Prefs.get('undoMax') || 200));
+const _UNDO_MAX_HEAVY = 30;
+function _setUndoMax(n) { _UNDO_MAX = Math.max(10, Math.min(1000, +n || 200)); }
 const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'recenter', 'normals', 'merge', 'flatten', 'duplicate', 'paste-group', 'addPart', 'decimate', 'budget']);
 function pushUndo(op) {
   state.history.push(op);
@@ -13152,9 +13655,17 @@ const _Tabs = (() => {
   }
   function reveal(fr) { delete fr.dataset.booting; fr.style.opacity = ''; fr.style.pointerEvents = ''; fr.style.display = 'none'; }
   // Keep one spare ready (not during the self-test, and one at a time).
+  // The spare is a whole second copy of the app (its own renderer, its own pipelines and memory). It starts when the page has been
+  // quiet for a moment, so that it does not take the first seconds of use of a model that was just opened, and not at all beside a
+  // very big scene (then a new tab starts when it is asked for, about a second and a half later).
+  const SPARE_MAX_PARTS = 1500;
   function warm() {
     REG.warmTimer = 0;
     if (REG.spare || REG.pending || TOP.__moNoTabs || /[?&]selftest/.test(TOP.location.search)) return;
+    try {
+      if (state.parts.reduce((n, p) => n + (p.deleted ? 0 : 1), 0) > SPARE_MAX_PARTS) return;
+      if (!_quietFor(2500)) { REG.warmTimer = TOP.setTimeout(warm, 2500); return; }
+    } catch (_) {}
     REG.spare = { id: spawn({ spare: true }), ready: false };
   }
   function warmSoon() {
@@ -13496,6 +14007,13 @@ const _Dirty = (() => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
   return { sync, mark, dirty, dropped };
 })();
+// Closing or reloading the window with changes that are not saved asks first (Settings › General turns it off).
+window.addEventListener('beforeunload', (e) => {
+  if (_Prefs.get('warnUnsaved') === false) return;
+  let unsaved = false;
+  try { unsaved = _Dirty.dirty() || _Tabs.list().some(t => t.dirty); } catch (_) {}
+  if (unsaved) { e.preventDefault(); e.returnValue = ''; }
+});
 // Single source of truth for "after-undo / after-redo cleanup". Every branch
 // of undoLast / redoLast calls this so the viewport, gizmo, highlights, and
 // tree all stay in sync — previously each branch picked-and-chose which
@@ -14658,7 +15176,7 @@ function _exportDrawList(visibleOnly) {
   return out;
 }
 
-function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
+function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false }) {
   const root = new THREE.Group();
   let count = 0;
   const drawList = _exportDrawList(visibleOnly);
@@ -14737,6 +15255,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin }) {
     // Cache containers so siblings under the same group share one parent node.
     const groupCache = new Map();
     function getContainer(part) {
+      if (flat) return root;                 // "Flatten groups": every part at the top level
       const ug = partToUserGroup.get(part.partId);
       if (ug) {
         const key = 'ug:' + ug.id;
@@ -17158,6 +17677,74 @@ function _collectSceneState() {
 // copy: write the file without making it this scene's file.
 // The dialog says what is about to be written (parts, triangles, a size) and
 // whether Save will go over the file saved last time or ask where to put it.
+// Bytes of geometry behind some parts (shared geometry is counted once).
+function _geomBytesOf(parts) {
+  const seen = new Set(); let n = 0;
+  for (const p of parts) {
+    const g = (p.mesh || p.instancedMesh)?.geometry;
+    if (!g || seen.has(g)) continue;
+    seen.add(g);
+    for (const k in g.attributes) n += g.attributes[k].array?.byteLength || 0;
+    if (g.index) n += g.index.array?.byteLength || 0;
+  }
+  return n;
+}
+
+// The pieces a file name can be built from: the pills under a name field in
+// Save scene and in Export. Each piece has a pattern that finds it in the name
+// (with the separator before it) and a function that writes it from what is
+// about to be written (`now`: parts, tris, bytes). A piece is in the name at
+// most once; pressing its pill puts it there or takes it off, and when an
+// option changes what is written, the counts and the size already in the name
+// are rewritten to match.
+//   input     the name field          chipsEl   the element holding the pills
+//   clean     name as it will be used (no extension, no path characters)
+//   now       { parts, tris, bytes }, kept up to date by the caller
+//   srcStem   () => the name of the file that was opened, without extension
+//   refresh   called after a pill changes the name
+function _nameTokenKit({ input, chipsEl, clean, now, srcStem, refresh }) {
+  const short = (n) => n >= 1e6 ? +(n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M' : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
+  const sizeTok = (b) => b >= 1073741824 ? +(b / 1073741824).toFixed(1) + 'GB' : b >= 1048576 ? Math.round(b / 1048576) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB';
+  const srcBytes = () => (state._sourceFile && state._sourceFile.size) || 0;
+  const z2 = (n) => String(n).padStart(2, '0');
+  const TOK = {
+    date:  { re: /[ _-]?\d{4}-\d{2}-\d{2}/, make: () => { const d = new Date(); return `${d.getFullYear()}-${z2(d.getMonth() + 1)}-${z2(d.getDate())}`; } },
+    time:  { re: /[ _-]?\d{4}h(?![a-z])/i, make: () => { const d = new Date(); return z2(d.getHours()) + z2(d.getMinutes()) + 'h'; } },
+    ver:   { re: /[ _-]?v\d+(?![a-z0-9])/i, make: () => 'v2' },
+    tris:  { re: /[ _-]?\d+(?:\.\d+)?[kM]?-tris/, make: () => short(now.tris) + '-tris', live: true },
+    parts: { re: /[ _-]?\d+-parts?/, make: () => now.parts + (now.parts === 1 ? '-part' : '-parts'), live: true },
+    size:  { re: /[ _-]?\d+(?:\.\d+)?(?:KB|MB|GB)/, make: () => sizeTok(now.bytes), live: true },
+    saved: { re: /[ _-]?-?\d+pct/, make: () => '-' + Math.max(0, Math.round((1 - now.bytes / srcBytes()) * 100)) + 'pct', live: true, ok: () => srcBytes() > 0 && now.bytes < srcBytes() },
+    opt:   { re: /[ _-]?optimi[sz]ed/i, make: () => 'optimised' },
+    sel:   { re: /[ _-]?selection/i, make: () => 'selection' },
+  };
+  const has = (k) => TOK[k].re.test(clean(input.value));
+  const strip = (k, name) => name.replace(TOK[k].re, '').replace(/^[ _-]+/, '');
+  function toggleTok(k, e) {
+    let name = clean(input.value);
+    if (k === 'src') { name = srcStem(); }
+    else if (k === 'ver' && has(k) && !(e && e.shiftKey)) { name = name.replace(/v(\d+)(?![a-z0-9])/i, (m, d) => 'v' + String(+d + 1).padStart(d.length, '0')); }   // press again: the next version
+    else if (has(k)) name = strip(k, name);
+    else name = (name ? name + '_' : '') + TOK[k].make();
+    input.value = name; refresh(); input.focus();
+  }
+  function paintToks(rewrite) {
+    let name = clean(input.value), changed = false;
+    for (const b of chipsEl.querySelectorAll('[data-tok]')) {
+      const k = b.dataset.tok, t = TOK[k];
+      if (!t) continue;
+      if (t.ok) b.hidden = !t.ok() && !has(k);
+      const on = t.re.test(name);
+      b.classList.toggle('is-on', on);
+      b.textContent = (on ? '− ' : '+ ') + b.textContent.replace(/^[+−] /, '');
+      // a count or a size already in the name follows what is about to be written
+      if (rewrite && on && t.live) { const m = name.match(t.re), sep = (m[0].match(/^[ _-]/) || [''])[0], next = sep + t.make(); if (m[0] !== next) { name = name.replace(t.re, next); changed = true; } }
+    }
+    if (changed) input.value = name;
+  }
+  return { has, toggleTok, paintToks };
+}
+
 const _saveSceneOpts = { hidden: true, view: true };     // these two stick for the session
 function _openSaveSceneDialog(suggested) {
   return new Promise((resolve) => {
@@ -17176,64 +17763,13 @@ function _openSaveSceneDialog(suggested) {
     note('save-scene-sel-note', nSel ? `${fmtNum(nSel)} selected` : 'nothing selected');
     note('save-scene-hid-note', nHidden ? `${fmtNum(nHidden)} hidden` : 'none hidden');
     const clean = (v) => String(v || '').trim().replace(/\.glb$/i, '').replace(/[\\/:*?"<>|]/g, '_');
-    // bytes of geometry behind a part (shared geometry is counted once)
-    const geomBytes = (parts) => {
-      const seen = new Set(); let n = 0;
-      for (const p of parts) {
-        const g = (p.mesh || p.instancedMesh)?.geometry;
-        if (!g || seen.has(g)) continue;
-        seen.add(g);
-        for (const k in g.attributes) n += g.attributes[k].array?.byteLength || 0;
-        if (g.index) n += g.index.array?.byteLength || 0;
-      }
-      return n;
-    };
-    // ── The pieces a name can be built from ──────────────────────────────
-    // Each has a pattern that finds it in the name (with the separator before
-    // it) and a function that writes it from what is about to be saved. A
-    // piece is in the name at most once; pressing its pill puts it there or
-    // takes it off, and when an option changes what is saved the counts and
-    // the size already in the name are rewritten to match.
+    const geomBytes = _geomBytesOf;       // bytes of geometry behind some parts (shared geometry counted once)
+    // The pieces a name can be built from live in _nameTokenKit (shared with Export).
     const now = { parts: 0, tris: 0, bytes: 0 };
-    const short = (n) => n >= 1e6 ? +(n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M' : n >= 1000 ? Math.round(n / 1000) + 'k' : String(n);
-    const sizeTok = (b) => b >= 1073741824 ? +(b / 1073741824).toFixed(1) + 'GB' : b >= 1048576 ? Math.round(b / 1048576) + 'MB' : Math.max(1, Math.round(b / 1024)) + 'KB';
-    const srcBytes = (state._sourceFile && state._sourceFile.size) || 0;
-    const z2 = (n) => String(n).padStart(2, '0');
-    const TOK = {
-      date:  { re: /[ _-]?\d{4}-\d{2}-\d{2}/, make: () => { const d = new Date(); return `${d.getFullYear()}-${z2(d.getMonth() + 1)}-${z2(d.getDate())}`; } },
-      time:  { re: /[ _-]?\d{4}h(?![a-z])/i, make: () => { const d = new Date(); return z2(d.getHours()) + z2(d.getMinutes()) + 'h'; } },
-      ver:   { re: /[ _-]?v\d+(?![a-z0-9])/i, make: () => 'v2' },
-      tris:  { re: /[ _-]?\d+(?:\.\d+)?[kM]?-tris/, make: () => short(now.tris) + '-tris', live: true },
-      parts: { re: /[ _-]?\d+-parts?/, make: () => now.parts + (now.parts === 1 ? '-part' : '-parts'), live: true },
-      size:  { re: /[ _-]?\d+(?:\.\d+)?(?:KB|MB|GB)/, make: () => sizeTok(now.bytes), live: true },
-      saved: { re: /[ _-]?-?\d+pct/, make: () => '-' + Math.max(0, Math.round((1 - now.bytes / srcBytes) * 100)) + 'pct', live: true, ok: () => srcBytes > 0 && now.bytes < srcBytes },
-      opt:   { re: /[ _-]?optimi[sz]ed/i, make: () => 'optimised' },
-      sel:   { re: /[ _-]?selection/i, make: () => 'selection' },
-    };
-    const has = (k) => TOK[k].re.test(clean(input.value));
-    const strip = (k, name) => name.replace(TOK[k].re, '').replace(/^[ _-]+/, '');
-    function toggleTok(k, e) {
-      let name = clean(input.value);
-      if (k === 'src') { name = clean(state._loadedFilename || 'scene').replace(/\.[^.]+$/, ''); }
-      else if (k === 'ver' && has(k) && !(e && e.shiftKey)) { name = name.replace(/v(\d+)(?![a-z0-9])/i, (m, d) => 'v' + String(+d + 1).padStart(d.length, '0')); }   // press again: the next version
-      else if (has(k)) name = strip(k, name);
-      else name = (name ? name + '_' : '') + TOK[k].make();
-      input.value = name; refresh(); input.focus();
-    }
-    function paintToks(rewrite) {
-      let name = clean(input.value), changed = false;
-      for (const b of bg.querySelectorAll('#save-scene-chips [data-tok]')) {
-        const k = b.dataset.tok, t = TOK[k];
-        if (!t) continue;
-        if (t.ok) b.hidden = !t.ok() && !has(k);
-        const on = t.re.test(name);
-        b.classList.toggle('is-on', on);
-        b.textContent = (on ? '− ' : '+ ') + b.textContent.replace(/^[+−] /, '');
-        // a count or a size already in the name follows what is about to be saved
-        if (rewrite && on && t.live) { const m = name.match(t.re), sep = (m[0].match(/^[ _-]/) || [''])[0], next = sep + t.make(); if (m[0] !== next) { name = name.replace(t.re, next); changed = true; } }
-      }
-      if (changed) input.value = name;
-    }
+    const { toggleTok, paintToks } = _nameTokenKit({
+      input, chipsEl: $i('save-scene-chips'), clean, now, refresh: () => refresh(),
+      srcStem: () => clean(state._loadedFilename || 'scene').replace(/\.[^.]+$/, ''),
+    });
     let copyChoice = !!(copy && copy.checked);
     function refresh(ev) {
       const whole = !all || all.checked || !nSel;
@@ -17580,7 +18116,7 @@ function _applySceneState(s) {
 // set aside while it is on and put back the moment any other mode is chosen,
 // and Export and Save switch to Solid for the time they run (_withSolidView),
 // so nothing of it ever reaches a file.
-// The look is one of _CLAY_LOOKS (a right-click on the button chooses it).
+// The look is one of _CLAY_LOOKS (chosen on the Shading card in the right sidebar).
 const _CLAY_LOOKS = {
   clay:      { label: 'Clay',      icon: 'circle',        color: 0xb7b3ac, roughness: 0.82, metalness: 0 },
   porcelain: { label: 'Porcelain', icon: 'circle-dot',    color: 0xf1efea, roughness: 0.2,  metalness: 0 },
@@ -17596,9 +18132,10 @@ const _clayLook = () => { const k = _Prefs.get('clayLook'); return _CLAY_LOOKS[k
 // (an instance made into a mesh of its own, a cloner copy) has to take this,
 // or the copy is clay for good and is exported that way.
 window._ownMaterialOf = (o) => _ownMaterialOf(o);        // (cloner.js builds its copies from source meshes)
-window._clayRefresh = () => { if (state.viewMode === 'clay') _clayApply(); };
+window._clayRefresh = () => { if (state.viewMode === 'clay') _clayApply(); else if (state.viewMode === 'cad') _cadApply(); };
 function _ownMaterialOf(o) {
   if (!o) return null;
+  if (_isCadMat(o.material) && !Array.isArray(o.material)) return _cadOwn.get(o) || (_cadInst.get(o) && _cadInst.get(o).mat) || o.material;
   if (_clayMat && o.material === _clayMat) return _clayOwn.get(o) || (_clayInst.get(o) && _clayInst.get(o).mat) || o.material;
   return o.material;
 }
@@ -17669,17 +18206,7 @@ function _clayExit() {
   };
   // parts added, replaced or brought back while it is on are dressed too
   window._appHooks?.treePostBuildHooks.push(() => { if (state.viewMode === 'clay') _clayApply(); });
-  const btn = document.getElementById('vw-clay');
-  btn?.addEventListener('click', () => setViewMode(state.viewMode === 'clay' ? 'solid' : 'clay'));
-  // a right-click chooses the look
-  btn?.addEventListener('contextmenu', (e) => {
-    e.preventDefault(); e.stopPropagation();
-    const cur = _clayLook();
-    _ctxBuild(Object.entries(_CLAY_LOOKS).map(([k, look]) => ({
-      icon: k === cur ? 'check' : look.icon, label: look.label,
-      fn: () => { _Prefs.set('clayLook', k); if (state.viewMode === 'clay') { _clayMaterial(); requestRender(); } else setViewMode('clay'); },
-    })), e.clientX, e.clientY);
-  });
+  // (the looks are chosen on the Shading card in the right sidebar)
   window.addEventListener('keydown', (e) => {
     if (_typingTarget(e) || _modalOpen()) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -17687,7 +18214,925 @@ function _clayExit() {
   });
 }
 
-// Wireframe, X-ray, Heatmap and Clay work by changing the live materials. Export
+// ── CAD view: matte matcap shading and a dark line on every edge ────────────
+// The look of CAD programs (Plasticity is the reference): no lights, no reflections,
+// no shadows. A pixel's colour comes only from which way its surface faces the camera,
+// read from a small picture of a lit sphere (a matcap): light cool grey where a face
+// looks left, dark where it looks right, warm sand where it looks up. Every part keeps
+// its own colour on top: a grey or white part takes the matcap as it is, a coloured one
+// takes its colour with the matcap's shading. Under it, a fine dark line follows the sharp
+// edges of every part (see "CAD edges" below). Research and reasoning: docs/research-cad-shading.md.
+//
+// A view mode like Clay: the parts' own materials are set aside while it is on and put back
+// when any other mode is chosen; Export and Save switch to Solid (_withSolidView), so none
+// of it reaches a file. The look is one of _CAD_LOOKS (a right-click on the button chooses it).
+const _CAD_LOOKS = {
+  ceramic: { label: 'Ceramic', icon: 'circle', dark: [38, 39, 44],  light: [150, 158, 171], warm: [186, 160, 138], warmAmt: 1.0 },
+  light:   { label: 'Light',   icon: 'sun',    dark: [92, 96, 106],  light: [214, 220, 230], warm: [234, 216, 198], warmAmt: 0.8 },
+  mono:    { label: 'Mono',    icon: 'moon',   dark: [30, 30, 33],   light: [170, 170, 175], warm: [170, 170, 175], warmAmt: 0 },
+};
+const _cadLook = () => { const k = _Prefs.get('cadLook'); return _CAD_LOOKS[k] ? k : 'ceramic'; };
+let _cadTex = null;
+const _cadMats = new WeakMap();        // a part's own material → its CAD material
+const _cadOwn = new WeakMap();         // mesh → the material it had
+const _cadInst = new WeakMap();        // instanced mesh → { mat }: the material it had
+// The sphere: lit from the upper left, painted pixel by pixel. y is up the canvas' top edge, as a matcap is read.
+function _cadPaintMatcap(canvas, look) {
+  const S = canvas.width, ctx = canvas.getContext('2d'), img = ctx.createImageData(S, S), d = img.data;
+  const L = [-0.52, 0.46, 0.72], ln = Math.hypot(L[0], L[1], L[2]);
+  const step = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const mix = (a, b, t) => a + (b - a) * t;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    let nx = (x + 0.5) / S * 2 - 1, ny = 1 - (y + 0.5) / S * 2, nz;
+    const r2 = nx * nx + ny * ny;
+    if (r2 > 1) { const k = 1 / Math.sqrt(r2); nx *= k; ny *= k; nz = 0; } else nz = Math.sqrt(1 - r2);   // past the rim: the rim's colour, so a grazing face is never empty
+    const t = step(0.02, 0.92, (nx * L[0] + ny * L[1] + nz * L[2]) / ln);          // how much light: little on the right, a lot on the left
+    const w = look.warmAmt * step(0.50, 0.90, ny);                                 // faces that look up take the warm colour
+    const i = (y * S + x) * 4;
+    for (let c = 0; c < 3; c++) d[i + c] = Math.round(mix(mix(look.dark[c], look.light[c], t), look.warm[c], w));
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+function _cadMatcap() {
+  if (!_cadTex) {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    _cadTex = new THREE.CanvasTexture(c);
+    _cadTex.colorSpace = THREE.SRGBColorSpace;
+    _cadTex.generateMipmaps = false; _cadTex.minFilter = THREE.LinearFilter; _cadTex.magFilter = THREE.LinearFilter;
+  }
+  _cadPaintMatcap(_cadTex.image, _CAD_LOOKS[_cadLook()]);
+  _cadTex.needsUpdate = true;
+  return _cadTex;
+}
+// One CAD material for each material a part has (those are already shared by colour). The colour is the part's
+// own THREE.Color, read live, so editing a colour in the material editor shows at once.
+function _cadMaterialFor(own) {
+  if (Array.isArray(own)) return own.map(_cadMaterialFor);
+  let m = own && _cadMats.get(own);
+  if (m) return m;
+  const T = THREE.TSL;
+  const mc = T.texture(_cadMatcap(), T.matcapUV).rgb;
+  const col = own && own.color ? T.uniform(own.color) : T.vec3(0.75, 0.75, 0.75);
+  const W = T.vec3(0.299, 0.587, 0.114);
+  const lum = T.dot(mc, W), cl = T.dot(col, W);
+  const mx = T.max(T.max(col.x, col.y), col.z), mn = T.min(T.min(col.x, col.y), col.z);
+  const sat = mx.sub(mn).div(T.max(mx, 0.0001));
+  const amt = T.smoothstep(0.10, 0.28, sat);                                     // grey and white parts take the matcap itself; coloured ones, their colour
+  const neutral = mc.mul(T.clamp(cl.mul(1.5), 0.22, 1.1));                        // (dimmed for a dark grey part)
+  const tinted = col.mul(lum.mul(1.6));
+  m = new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide, fog: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+  const shaded = T.mix(neutral, tinted, amt);
+  // The outline of a smooth surface (a cylinder's side has no crease to draw): where it turns edge-on to the camera
+  // the colour goes dark, and fwidth keeps that band about a pixel and a half wide whatever the curvature or distance.
+  const facing = T.normalView.z.abs();
+  const slope = T.fwidth(facing);                                                   // how fast it changes across a pixel
+  const band = T.smoothstep(0.0, T.max(slope.mul(1.5), 0.0001), facing);           // 0 right at the outline, 1 a pixel and a half in
+  const curved = T.smoothstep(0.004, 0.012, slope);                                // 0 on a flat face, 1 on a surface that turns away
+  const rim = T.mix(T.float(1), band, curved);                                     // a flat face keeps its colour, however slanted
+  m.colorNode = T.mix(T.vec3(0.004, 0.004, 0.006), shaded, rim);
+  m.userData.isCad = true;
+  if (own) _cadMats.set(own, m);
+  return m;
+}
+const _isCadMat = (m) => !!(m && (Array.isArray(m) ? m.some(x => x && x.userData && x.userData.isCad) : m.userData && m.userData.isCad));
+function _cadApply() {
+  _cadMatcap();
+  for (const p of state.parts) {
+    if (!p || p.deleted || !p.mesh) continue;
+    p.mesh.traverse(o => {
+      if (!o.isMesh || _isCadMat(o.material)) return;
+      _cadOwn.set(o, o.material);
+      o.material = _cadMaterialFor(o.material);
+    });
+  }
+  for (const g of (state.instancedGroups || [])) {
+    const inst = g.instanced;
+    if (!inst || _isCadMat(inst.material)) continue;
+    _cadInst.set(inst, { mat: inst.material });
+    inst.material = _cadMaterialFor(inst.material);      // (the copies' own colours stay: they multiply the matcap)
+  }
+  requestRender();
+}
+function _cadExit() {
+  for (const p of state.parts) {
+    if (!p || !p.mesh) continue;
+    p.mesh.traverse(o => {
+      if (!o.isMesh || !_cadOwn.has(o)) return;
+      if (_isCadMat(o.material)) o.material = _cadOwn.get(o);        // (if something gave it a new material meanwhile, that one stays)
+      _cadOwn.delete(o);
+    });
+  }
+  for (const g of (state.instancedGroups || [])) {
+    const inst = g.instanced, own = inst && _cadInst.get(inst);
+    if (!own) continue;
+    if (_isCadMat(inst.material)) inst.material = own.mat;
+    _cadInst.delete(inst);
+  }
+  requestRender();
+}
+
+// ── Dynamic place ──────────────────────────────────────────────────────────
+// Like Cinema 4D's tool of the same name: with it on, the selected part is picked up where you press it and
+// dragged over the other surfaces. It rests on whatever is under the cursor (the underside touches the surface,
+// never sinks into it) and, if "Align to surface" is on, turns so that what was its top points away from the surface,
+// as when a part is dragged out of a library onto a model. Where nothing is under the cursor it lands on the grid.
+// The selection keeps travelling under the gizmo's pivot (the highlight outline too), so this only moves that pivot;
+// the gizmo is hidden meanwhile and Undo takes the whole drag as one step, exactly as after a gizmo drag.
+const _DynPlace = (() => {
+  const card = () => document.querySelector('.section-cmd[data-cmd="place"]');
+  const q$ = (id) => document.getElementById(id);
+  let on = false, busy = false, drag = null, hoverRaf = 0, lastHover = null, hoverOver = false;
+  const spinNow = { deg: 0 };
+  const tmpM = new THREE.Matrix4(), tmpM2 = new THREE.Matrix4(), tmpN3 = new THREE.Matrix3();
+  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _up = new THREE.Vector3(), _h = new THREE.Vector3();
+  const _q = new THREE.Quaternion(), _qa = new THREE.Quaternion(), _qs = new THREE.Quaternion();
+  const _plane = new THREE.Plane(), _ray = new THREE.Ray(), _rq = new THREE.Quaternion();
+  // Which way a part's own top points. A part is taken to be upright the first time it is picked up (base is its pose then);
+  // its top is the chosen axis (X, Y or Z, + or -) of that upright pose, carried along with the part. So after it has been placed
+  // on a slope the next drag still turns that same top to the new surface's normal (and not the tilted part's current pose,
+  // which would leave it stuck at the old angle). q is the pose it was left in: if the part has been turned some other way since
+  // (the gizmo, an undo), the record no longer applies and the part counts as upright again.
+  const _topOf = new WeakMap();
+  const axisKey = () => { const a = _Prefs.get('dynPlaceAxis'); return a === 'x' || a === 'y' || a === 'z' ? a : (_floorPlane() === 'xz' ? 'y' : 'z'); };
+  const axisSign = () => (_Prefs.get('dynPlaceSign') === -1 ? -1 : 1);
+  const axisVec = (out) => { out.set(0, 0, 0); out[axisKey()] = axisSign(); return out; };
+
+  // The bounds of what is being placed: a box in the pivot's frame, drawn in the viewport while the tool is on, so that it is
+  // plain which box is being set down (and which side of it is the bottom).
+  let boxObj = null, boxC = null, boxS = null, boxRaf = 0;
+  const _bm = new THREE.Matrix4(), _bq = new THREE.Quaternion();
+  function boxSet(pts) {
+    if (!pts || !pts.length) { boxC = boxS = null; return; }
+    const b = new THREE.Box3();
+    for (const p of pts) b.expandByPoint(p);
+    boxC = b.getCenter(new THREE.Vector3()); boxS = b.getSize(new THREE.Vector3()).max(new THREE.Vector3(1e-6, 1e-6, 1e-6));
+  }
+  function boxDraw() {
+    if (!on || !boxC) { if (boxObj && boxObj.parent) { boxObj.parent.remove(boxObj); requestRender(); } return; }
+    if (!boxObj) {
+      const g = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+      boxObj = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x0d99ff, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false }));
+      boxObj.matrixAutoUpdate = false; boxObj.frustumCulled = false; boxObj.renderOrder = 999; boxObj.raycast = () => {};
+      boxObj.userData.dynPlaceBox = true;
+    }
+    state.pivot.updateMatrixWorld(true);
+    _bm.compose(boxC, _bq.identity(), boxS);
+    boxObj.matrix.multiplyMatrices(state.pivot.matrixWorld, _bm);
+    boxObj.matrixWorld.copy(boxObj.matrix);
+    if (!boxObj.parent) scene.add(boxObj);
+    requestRender();
+  }
+  // the box of the selection as it is now (after the selection or the tool changes)
+  function boxRefresh() {
+    if (boxRaf) return;
+    boxRaf = requestAnimationFrame(() => {
+      boxRaf = 0;
+      if (!on || drag) return;
+      let pts = null;
+      try {
+        if (canMove()) {
+          const ms = selMeshes();
+          pts = _corners(ms.length ? ms : (() => { const a = []; state._pivotedGroup?.traverse(o => { if (o.isMesh) a.push(o); }); return a; })());
+        }
+      } catch (_) {}
+      boxSet(pts); boxDraw();
+    });
+  }
+
+  const worldUp = (out) => (_floorPlane() === 'xz' ? out.set(0, 1, 0) : out.set(0, 0, 1));
+  const selMeshes = () => {
+    const out = [], seen = new Set();
+    for (const p of (state._pivotedParts || (state._pivotedPart ? [state._pivotedPart] : []))) if (p && p.mesh && !seen.has(p.mesh)) { seen.add(p.mesh); out.push(p.mesh); }
+    return out;
+  };
+  const canMove = () => !!state.gizmo && (state._pivotedGroup || selMeshes().length > 0) && state.gizmo.object === state.pivot;
+  const align  = () => _Prefs.get('dynPlaceAlign') !== false;
+  const ground = () => _Prefs.get('dynPlaceGround') !== false;
+  const num = (el, d) => { const v = parseFloat(String(el && el.value).replace(',', '.')); return isFinite(v) ? v : d; };
+  const offset = () => num(q$('place-offset'), 0) * (state.sceneScale || 1);      // typed in the model's units, drawn in the scene's
+
+  function _rayAt(ev, out) {
+    const c = q$('canvas'), r = c.getBoundingClientRect();
+    pointer.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+    pointer.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    return raycaster.ray;
+  }
+  // A press that lands on the selection (the same few-pixel forgiveness a click on a thin part gets).
+  function _grabbed(ev, meshes) {
+    if (!meshes.length) return null;
+    if (state.partsRoot) { state.partsRoot.updateMatrix(); state.partsRoot.updateMatrixWorld(true); }
+    state.pivot.updateMatrixWorld(true);
+    const c = q$('canvas'), r = c.getBoundingClientRect();
+    for (const [dx, dy] of _PICK_OFFSETS) {
+      pointer.x = (((ev.clientX + dx) - r.left) / r.width) * 2 - 1;
+      pointer.y = -(((ev.clientY + dy) - r.top) / r.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(meshes, false);
+      if (hits.length) return hits[0];
+    }
+    return null;
+  }
+  // Everything the selection can come to rest on: the visible parts that are not part of it.
+  function _targets(selSet) {
+    const t = [], seen = new Set();
+    for (const p of state.parts) {
+      if (p.deleted || !p.visible || !p.mesh || p.mesh.visible === false || selSet.has(p.mesh) || seen.has(p.mesh)) continue;
+      seen.add(p.mesh); t.push(p.mesh);
+    }
+    for (const g of (state.instancedGroups || [])) if (g.instanced && g.instanced.visible !== false) t.push(g.instanced);
+    return t;
+  }
+  function _normalOf(h, out) {
+    if (!h.face) return null;
+    tmpM.copy(h.object.matrixWorld);
+    if (h.object.isInstancedMesh && h.instanceId != null) { h.object.getMatrixAt(h.instanceId, tmpM2); tmpM.multiply(tmpM2); }
+    out.copy(h.face.normal).applyNormalMatrix(tmpN3.getNormalMatrix(tmpM)).normalize();
+    return out;
+  }
+  // The selection's corners in the pivot's own frame (one box per part, or one box round the lot when there are many parts).
+  function _corners(meshes) {
+    const inv = new THREE.Matrix4().copy(state.pivot.matrixWorld).invert(), pts = [], box = new THREE.Box3(), p = new THREE.Vector3();
+    const addBox = (b, m) => { for (let i = 0; i < 8; i++) pts.push(new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(m)); };
+    const each = [];
+    for (const m of meshes) {
+      const g = m.geometry; if (!g) continue;
+      if (!g.boundingBox) { try { g.computeBoundingBox(); } catch (_) {} }
+      if (!g.boundingBox || g.boundingBox.isEmpty()) continue;
+      m.updateWorldMatrix(true, false);
+      each.push({ b: g.boundingBox, m: new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld) });
+    }
+    if (each.length <= 250) { for (const e of each) addBox(e.b, e.m); return pts; }
+    for (const e of each) for (let i = 0; i < 8; i++) { p.set(i & 1 ? e.b.max.x : e.b.min.x, i & 2 ? e.b.max.y : e.b.min.y, i & 4 ? e.b.max.z : e.b.min.z).applyMatrix4(e.m); box.expandByPoint(p); }
+    addBox(box, new THREE.Matrix4());
+    return pts;
+  }
+
+  function _solve(ev) {
+    if (!drag) return;
+    const ray = _rayAt(ev);
+    let hit = null;
+    const hits = raycaster.intersectObjects(drag.targets, false);
+    if (hits.length && _normalOf(hits[0], _n)) hit = hits[0];
+    if (hit) { _h.copy(hit.point); if (_n.dot(ray.direction) > 0) _n.negate(); }
+    else if (ground()) {
+      const pl = (state.gridPlane || _floorPlane());
+      _w.set(pl === 'yz' ? 1 : 0, pl === 'xz' ? 1 : 0, pl === 'xy' ? 1 : 0);
+      _plane.set(_w, 0);
+      if (!ray.intersectPlane(_plane, _h)) return;
+      _n.copy(_w); if (_n.dot(ray.direction) > 0) _n.negate();
+    } else return;
+    // Orientation. With "Align to surface" it is worked out from the part's upright pose and the surface alone: the chosen axis
+    // of the upright part goes to the normal, then the turn about the normal. Nothing of how it was left by the last drag (its
+    // tilt, its turn) goes into it, so a part dropped on a slope can be dragged onto a flat face and sits flat again, and the
+    // turn means the same on every drag. The pose wanted for the part is carried to the pivot: pivot = want * now^-1 * pivot0.
+    if (align()) {
+      _qa.setFromUnitVectors(drag.axis, _n);
+      _q.copy(_qa).multiply(drag.base);
+      if (spinNow.deg) { _qs.setFromAxisAngle(_n, spinNow.deg * Math.PI / 180); _q.premultiply(_qs); }
+      _q.multiply(drag.nowInv).multiply(drag.q0);
+    } else {
+      // it keeps the way it faces; the turn is counted from what it was when the drag began
+      _q.copy(drag.q0);
+      const dd = spinNow.deg - drag.spin0;
+      if (dd) { _qs.setFromAxisAngle(_n, dd * Math.PI / 180); _q.premultiply(_qs); }
+    }
+    // position: the lowest corner, measured along the normal, rests on the hit point
+    let low = Infinity;
+    for (const c of drag.corners) { _v.copy(c).applyQuaternion(_q); const d = _v.dot(_n); if (d < low) low = d; }
+    if (!isFinite(low)) low = 0;
+    state.pivot.quaternion.copy(_q);
+    state.pivot.position.copy(_h).addScaledVector(_n, offset() - low);
+    state.pivot.updateMatrixWorld(true);
+    drag.moved = true;
+    boxDraw();
+    try { state.gizmo.dispatchEvent({ type: 'objectChange' }); } catch (_) {}
+    requestRender();
+  }
+
+  function _end(cancel) {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (!cancel && d.moved && d.ref) { const rec = _topOf.get(d.ref); if (rec) { d.ref.updateWorldMatrix(true, false); d.ref.getWorldQuaternion(rec.q); } }
+    if (cancel) { state.pivot.position.copy(d.p0); state.pivot.quaternion.copy(d.q0); state.pivot.updateMatrixWorld(true); }
+    try { d.cv.releasePointerCapture(d.id); } catch (_) {}
+    document.body.classList.remove('dyn-placing');
+    try { state.gizmo.dispatchEvent({ type: 'objectChange' }); } catch (_) {}
+    try { state.gizmo.dispatchEvent({ type: 'dragging-changed', value: false }); } catch (_) {}   // the undo step, the panels
+    boxDraw(); boxRefresh(); setTimeout(boxRefresh, 150);      // (again once the gizmo has settled on the selection)
+    requestRender();
+  }
+
+  function _down(e) {
+    if (!on || e.button !== 0 || e.target !== q$('canvas')) return;
+    if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!canMove()) return;
+    const meshes = selMeshes();
+    const grabbed = _grabbed(e, meshes.length ? meshes : (state._pivotedGroup ? (() => { const a = []; state._pivotedGroup.traverse(o => { if (o.isMesh) a.push(o); }); return a; })() : []));
+    if (!grabbed) return;                                          // not on the selection: the click selects as always
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    const cv = q$('canvas');
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    const all = meshes.length ? meshes : [];
+    const selSet = new Set(all);
+    if (state._pivotedGroup) state._pivotedGroup.traverse(o => { if (o.isMesh) selSet.add(o); });
+    state.pivot.updateMatrixWorld(true);
+    const ref = [...selSet][0] || null, axis = axisVec(new THREE.Vector3());      // (upright: the chosen axis is world X, Y or Z)
+    let base = new THREE.Quaternion(), nowInv = new THREE.Quaternion();
+    if (ref) {
+      ref.updateWorldMatrix(true, false); ref.getWorldQuaternion(_rq);
+      let rec = _topOf.get(ref);
+      if (!(rec && Math.abs(rec.q.dot(_rq)) > 1 - 1e-6)) { rec = { base: _rq.clone(), q: _rq.clone() }; _topOf.set(ref, rec); }
+      base = rec.base.clone(); nowInv = _rq.clone().invert();
+    }
+    const corners = _corners([...selSet]);
+    boxSet(corners);
+    drag = { id: e.pointerId, cv, targets: _targets(selSet), corners, p0: state.pivot.position.clone(), q0: state.pivot.quaternion.clone(), moved: false, ref, axis, base, nowInv, spin0: spinNow.deg };
+    document.body.classList.add('dyn-placing');
+    try { state.gizmo.dispatchEvent({ type: 'dragging-changed', value: true }); } catch (_) {}   // the undo snapshot
+    _solve(e);
+  }
+  function _move(e) {
+    if (drag) { if (e.pointerId === drag.id) { e.preventDefault(); _solve(e); } return; }
+    if (!on || e.target !== q$('canvas')) { if (hoverOver) { hoverOver = false; document.body.classList.remove('dyn-over'); } return; }
+    lastHover = e;
+    if (hoverRaf) return;
+    hoverRaf = requestAnimationFrame(() => {
+      hoverRaf = 0;
+      if (!on || drag || !lastHover) return;
+      let over = false;
+      try { over = !!(canMove() && _grabbed(lastHover, selMeshes())); } catch (_) {}
+      if (over !== hoverOver) { hoverOver = over; document.body.classList.toggle('dyn-over', over); }
+    });
+  }
+  function _onUp(e) { if (drag && e.pointerId === drag.id) _end(false); }
+
+  // The gizmo is neither drawn nor grabbed while this is on: its helper reports itself hidden (the attach code sets
+  // `visible` again with every selection change) and the controls are switched off.
+  function _guardGizmo() {
+    const obj = state.gizmoHelper;
+    if (!obj || obj._dpGuard) return;
+    let vis = obj.visible;
+    Object.defineProperty(obj, 'visible', { get: () => vis && !on, set: (x) => { vis = x; }, configurable: true });
+    obj._dpGuard = true;
+  }
+  function setOn(v) {
+    v = !!v;
+    if (v === on) return;
+    on = v;
+    state.dynPlaceOn = on;
+    document.body.classList.toggle('dyn-place', on);
+    _guardGizmo();
+    if (on) boxRefresh(); else { boxC = boxS = null; boxDraw(); }
+    if (state.gizmo) state.gizmo.enabled = !on;
+    if (on) {
+      if (state.gizmoMode === 'off') { busy = true; try { setGizmoMode('translate'); } finally { busy = false; } }
+      for (const id of ['gz-translate', 'gz-rotate', 'gz-scale']) q$(id)?.classList.remove('active');
+      const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { try { toast('Dynamic place', 'Put the exploded parts back together first', 'info', 3200); } catch (_) {} }
+    } else {
+      _end(true);
+      document.body.classList.remove('dyn-over', 'dyn-placing');
+      if (q$('gz-' + state.gizmoMode)) q$('gz-' + state.gizmoMode).classList.add('active');
+    }
+    try { _updateVpHint(); } catch (_) {}
+    requestRender();
+  }
+  window.addEventListener('pointerdown', _down, true);
+  window.addEventListener('pointermove', _move, true);
+  window.addEventListener('pointerup', _onUp, true);
+  window.addEventListener('pointercancel', (e) => { if (drag && e.pointerId === drag.id) _end(true); }, true);
+  window.addEventListener('blur', () => { if (drag) _end(true); });
+  window.addEventListener('keydown', (e) => { if (drag && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _end(true); } }, true);
+  // the wheel turns the part about the surface's normal while it is held
+  window.addEventListener('wheel', (e) => {
+    if (!drag) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    spinNow.deg = (Math.round(spinNow.deg / 15) * 15 + (e.deltaY < 0 ? 15 : -15) + 360) % 360;
+    const f = q$('place-spin'); if (f) f.value = String(spinNow.deg);
+    syncSpinSeg();
+    _solve(e);
+  }, { capture: true, passive: false });
+  // a drag that is on when the selection changes under it ends
+  function syncSpinSeg() { const seg = q$('place-spin-seg'); if (seg) seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', +b.dataset.spin === spinNow.deg)); }
+
+  // the card
+  const sec = card();
+  if (sec) {
+    sec.addEventListener('cmd-open', () => setOn(true));
+    sec.addEventListener('cmd-close', () => setOn(false));
+    const al = q$('place-align'), gr = q$('place-ground'), off = q$('place-offset'), sp = q$('place-spin');
+    if (al) { al.checked = align(); al.addEventListener('change', () => _Prefs.set('dynPlaceAlign', al.checked)); }
+    if (gr) { gr.checked = ground(); gr.addEventListener('change', () => _Prefs.set('dynPlaceGround', gr.checked)); }
+    if (off) off.addEventListener('change', () => { const v = num(off, 0); off.value = String(v); });
+    if (sp) sp.addEventListener('change', () => { spinNow.deg = ((Math.round(num(sp, 0)) % 360) + 360) % 360; sp.value = String(spinNow.deg); syncSpinSeg(); });
+    q$('place-spin-seg')?.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-spin]'); if (!b) return;
+      spinNow.deg = +b.dataset.spin; if (sp) sp.value = String(spinNow.deg); syncSpinSeg();
+    });
+    const syncAxis = () => {
+      const k = axisKey(), sg = axisSign();
+      q$('place-axis-seg')?.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.axis === k));
+      q$('place-sign-seg')?.querySelectorAll('button').forEach(b => b.classList.toggle('active', +b.dataset.sign === sg));
+    };
+    syncAxis();
+    q$('place-axis-seg')?.addEventListener('click', (e) => { const b = e.target.closest('button[data-axis]'); if (!b) return; _Prefs.set('dynPlaceAxis', b.dataset.axis); syncAxis(); });
+    q$('place-sign-seg')?.addEventListener('click', (e) => { const b = e.target.closest('button[data-sign]'); if (!b) return; _Prefs.set('dynPlaceSign', +b.dataset.sign); syncAxis(); });
+    sec.addEventListener('cmd-open', syncAxis);
+    q$('place-reset')?.addEventListener('click', () => { spinNow.deg = 0; if (sp) sp.value = '0'; if (off) off.value = '0'; syncSpinSeg(); });
+  }
+  window._appHooks?.propsRenderHooks.push(() => { if (on) boxRefresh(); });      // (the selection changed)
+  return { isOn: () => on, setOn, busy: () => busy, toggle: () => { const c = card(); if (!c) return; if (on) _CmdCards.close('place'); else _CmdCards.open('place'); } };
+})();
+// Choosing a gizmo (E, R, T, Q or its button) while Dynamic place is on ends it.
+{
+  const _sgmDyn = setGizmoMode;
+  setGizmoMode = function (mode) {
+    if (_DynPlace.isOn() && !_DynPlace.busy()) { try { _CmdCards.close('place'); } catch (_) {} }
+    return _sgmDyn.apply(this, arguments);
+  };
+}
+
+// ── CAD edges: a fine dark line on the sharp edges of every part ───────────
+// The edges are the ones the selection outline already finds (_edgesFor: EdgesGeometry at 30°, kept per
+// geometry, big ones computed in a worker). Each part's lines are a child of its mesh, so they move, hide,
+// explode and follow the gizmo with it for free. Duplicates that are drawn as one InstancedMesh have their
+// edges baked once for all copies (and again when the copies move). The surfaces are pushed a little back
+// in depth (polygonOffset) so a line never flickers against the face it lies on.
+// Where: "Edges" in Settings › Viewport: Auto (only in the CAD view), Always (also Solid and Clay), Off.
+// Depth: a line lies exactly on the faces it borders, so it fights them for the pixel, and which one wins changes with the
+// camera angle (half the lines on one tilt, the other half on the other). The usual cure, polygonOffset, is not implemented by
+// this three.js version's WebGPU backend, so it is done here, in the line's own vertex shader (it works on both backends):
+// every vertex is pulled toward the camera by a small share of its distance, which is more than the depth difference of a
+// face under any but an almost edge-on angle. It is a positionNode (not a vertexNode) so that instancing still applies:
+// the lines of copies are drawn by the GPU with the very same instance matrices as the copies' surfaces.
+const _CAD_EDGE_PULL = 0.0016;
+const _CAD_EDGE_MAT = (() => {
+  const m = new THREE.LineBasicNodeMaterial({ color: 0x0d0d11, transparent: true, opacity: 0.9, depthWrite: false });
+  const T = THREE.TSL;
+  const camLocal = T.modelWorldMatrixInverse.mul(T.vec4(T.cameraPosition, 1.0)).xyz;     // the camera in the object's own space
+  m.positionNode = T.positionLocal.add(camLocal.sub(T.positionLocal).mul(_CAD_EDGE_PULL));
+  return m;
+})();
+// A part's lines, as a child of the part. For the copies of an instanced part the line object shares the copies' instance
+// matrices and count, so it is drawn once per copy, always where the copy's surface is (no baked positions to go stale).
+function _cadAddLine(host, geom) {
+  const l = new THREE.LineSegments(geom, _CAD_EDGE_MAT);
+  l.userData.cadEdge = true; l.raycast = () => {}; l.renderOrder = -2;      // renderOrder -2: before the ground grid (-1), see _cadEdgesBuild
+  if (host.isInstancedMesh) {
+    l.isInstancedMesh = true; l.instanceMatrix = host.instanceMatrix; l.instanceColor = null; l.count = host.count;
+    l.frustumCulled = false;
+    l.onBeforeRender = () => { l.count = host.count; };
+  }
+  host.add(l);
+  return l;
+}
+const _CAD_EDGE_MAX_PARTS = 6000, _CAD_EDGE_FLOATS = 30e6;      // what is drawn at most (about 120 MB of lines)
+let _cadEdgesToldCap = 0;              // how many parts the last "too many for edges" message was about
+const _cadEdgeMeta = new WeakMap();    // a mesh → the geometry its lines came from; an instanced mesh → { geom, ver, cnt, floats }
+const _cadEdgeStale = new Set();       // geometries that changed: their lines are drawn again
+let _cadEdgesActive = false, _cadEdgesTimer = 0;
+const _edgesWanted = () => {
+  // One switch for all views: Outlines on or off (Shading card, Settings). ('auto' and 'on' from earlier versions count as on.)
+  const m = state.viewMode;
+  if (_Prefs.get('edgesMode') === 'off') return false;
+  return m === 'cad' || m === 'solid' || m === 'clay';
+};
+const _cadEdgeKids = (obj) => obj.children.filter(c => c.userData && c.userData.cadEdge);
+function _cadSurfaceOffset(on) {
+  const mats = new Set();
+  for (const p of state.parts) if (p && p.mesh) p.mesh.traverse(o => { if (o.isMesh && o.material) for (const m of [].concat(o.material)) mats.add(m); });
+  for (const g of (state.instancedGroups || [])) if (g.instanced && g.instanced.material) for (const m of [].concat(g.instanced.material)) mats.add(m);
+  if (_clayMat) mats.add(_clayMat);
+  for (const m of mats) {
+    if (!m || (m.userData && m.userData.isCad)) continue;       // (a CAD material has its offset already)
+    if (on) { if (m.userData._po === undefined) m.userData._po = [m.polygonOffset, m.polygonOffsetFactor, m.polygonOffsetUnits]; m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1; }
+    else if (m.userData._po) { [m.polygonOffset, m.polygonOffsetFactor, m.polygonOffsetUnits] = m.userData._po; delete m.userData._po; }
+    else continue;
+    m.needsUpdate = true;
+  }
+}
+function _cadEdgesClear() {
+  for (const p of state.parts) { if (!p || !p.mesh) continue; for (const k of _cadEdgeKids(p.mesh)) p.mesh.remove(k); _cadEdgeMeta.delete(p.mesh); }
+  for (const g of (state.instancedGroups || [])) { const inst = g.instanced; if (!inst) continue; for (const k of _cadEdgeKids(inst)) inst.remove(k); _cadEdgeMeta.delete(inst); }
+  _cadSurfaceOffset(false);
+  requestRender();
+}
+const _geomRadius = (g) => { if (!g.boundingSphere) { try { g.computeBoundingSphere(); } catch (_) {} } return g.boundingSphere ? g.boundingSphere.radius : 0; };
+function _cadEdgesBuild() {
+  let floats = 0, n = 0, capped = 0;
+  const deadline = performance.now() + 10;
+  // renderOrder -2: before the ground grid (-1). The grid is a transparent plane that writes its own depth, so a line drawn after it
+  // is hidden wherever the plane lies between it and the camera: the part of the model below the grid when you look from above,
+  // the part above it when you look from below. Drawn first, the lines are never behind the plane's depth.
+  const addLine = _cadAddLine;
+  // Everything that could have edges, the biggest first: when the budget runs out it is the smallest parts that go without,
+  // and the same ones every time (not whichever happened to come last in the tree).
+  const items = [];
+  for (const p of state.parts) {
+    if (!p || p.deleted || !p.mesh || !p.mesh.isMesh || !p.mesh.geometry) continue;
+    items.push({ mesh: p.mesh, geom: p.mesh.geometry, r: _geomRadius(p.mesh.geometry) });
+  }
+  for (const grp of (state.instancedGroups || [])) {
+    const inst = grp.instanced;
+    if (inst && inst.geometry && inst.instanceMatrix) items.push({ inst, geom: inst.geometry, r: _geomRadius(inst.geometry) });
+  }
+  items.sort((x, y) => y.r - x.r);
+  for (const it of items) {
+    const { mesh, inst, geom } = it, host = mesh || inst, have = _cadEdgeKids(host);
+    const drop = () => { for (const k of have) host.remove(k); _cadEdgeMeta.delete(host); };
+    if (mesh) {
+      if (n >= _CAD_EDGE_MAX_PARTS || floats > _CAD_EDGE_FLOATS) { drop(); capped++; continue; }
+      if (have.length && _cadEdgeMeta.get(mesh) === geom && !_cadEdgeStale.has(geom)) { floats += have[0].geometry.attributes.position.count * 3; n++; continue; }
+      drop();
+      const e = _edgesFor(geom, deadline);
+      if (e === _EDGES_PENDING) continue;                         // the worker calls back when it has them
+      _cadEdgeMeta.set(mesh, geom);
+      if (!e || !e.attributes.position || !e.attributes.position.count) continue;
+      addLine(mesh, e); floats += e.attributes.position.count * 3; n++;
+    } else {
+      const cnt = inst.count, meta = _cadEdgeMeta.get(inst);
+      if (have.length && meta && meta.geom === geom && meta.cnt === cnt && !_cadEdgeStale.has(geom)) {
+        if (floats + meta.floats > _CAD_EDGE_FLOATS) { drop(); capped++; continue; }
+        floats += meta.floats; continue;
+      }
+      drop();
+      const e = _edgesFor(geom, deadline);
+      if (e === _EDGES_PENDING) continue;
+      const per = e && e.attributes.position ? e.attributes.position.count * 3 : 0;
+      if (!per) { _cadEdgeMeta.set(inst, { geom, cnt, floats: 0 }); continue; }
+      if (floats + per * cnt > _CAD_EDGE_FLOATS) { capped++; continue; }      // too many copies to draw them all
+      addLine(inst, e); _cadEdgeMeta.set(inst, { geom, cnt, floats: per * cnt }); floats += per * cnt;
+    }
+  }
+  // Say so when some parts have none: a model that looks half outlined should not be a mystery.
+  if (capped && capped !== _cadEdgesToldCap) { _cadEdgesToldCap = capped; try { toast('Edges', capped + ' of the smallest parts are drawn without edges: the model has more than the view can outline.', 'info', 6000); } catch (_) {} }
+  else if (!capped) _cadEdgesToldCap = 0;
+  try { _edgesPump(); } catch (_) {}                               // start the worker on whatever is still missing
+  _cadEdgeStale.clear();
+  requestRender();
+}
+// Make the layer match what is wanted now (mode and preference).
+function _cadEdgesSync() {
+  clearTimeout(_cadEdgesTimer); _cadEdgesTimer = 0;
+  if (!_edgesWanted()) { if (_cadEdgesActive) { _cadEdgesActive = false; _cadEdgesClear(); } return; }
+  if (!_cadEdgesActive) { _cadEdgesActive = true; _cadSurfaceOffset(true); }
+  _cadEdgesBuild();
+}
+function _cadEdgesSchedule(ms = 90) {
+  if (_cadEdgesTimer || !(_cadEdgesActive || _edgesWanted())) return;
+  _cadEdgesTimer = setTimeout(() => { _cadEdgesTimer = 0; _cadEdgesSync(); }, ms);
+}
+function _cadEdgesGeomReady() { _cadEdgesSchedule(); }                 // (a worker finished a geometry's edges)
+function _cadEdgesGeomChanged(g) { _cadEdgeStale.add(g); _cadEdgesSchedule(); }   // (a geometry was edited: its edges are stale)
+// A part that has just become its own mesh (a copy that was selected or edited) gets its lines in the same breath, from the
+// edges its group already has: it never shows a frame without them.
+function _cadEdgesAttach(mesh) {
+  if (!_cadEdgesActive || !mesh || !mesh.isMesh || !mesh.geometry || _cadEdgeKids(mesh).length) return;
+  const e = _edgesCache.get(mesh.geometry);
+  if (!e || !e.attributes.position || !e.attributes.position.count) return;
+  _cadAddLine(mesh, e); _cadEdgeMeta.set(mesh, mesh.geometry);
+}
+// For the tests: do the copies' lines share the copies' own matrices?
+window.__cadEdgesInfo = () => (state.instancedGroups || []).filter(g => g.instanced).map(g => {
+  const inst = g.instanced, k = _cadEdgeKids(inst)[0];
+  return { count: inst.count, lines: !!k, sharesMatrices: !!k && k.instanceMatrix === inst.instanceMatrix, sharesEdges: !!k && k.geometry === _edgesCache.get(inst.geometry), lineCount: k ? k.count : 0 };
+});
+// What Settings changes.
+function _cadOnPref(key) {
+  if (key === 'cadLook' && _cadTex) { _cadMatcap(); requestRender(); }
+  if (key === 'edgesMode') _cadEdgesSync();
+  try { _Shading.sync(); } catch (_) {}
+}
+{
+  const _beforeCad = setViewMode;                        // (with Clay in it)
+  setViewMode = function (mode) {
+    if (mode === 'cad') {
+      try { _beforeCad('solid'); } catch (_) {}            // out of Clay, Wireframe, X-ray, Heatmap first
+      state.viewMode = 'cad';
+      _cadApply();
+      $('vw-solid')?.classList.remove('active');
+      $('vw-cad')?.classList.add('active');
+      _cadEdgesSync();
+      return;
+    }
+    _cadExit();
+    $('vw-cad')?.classList.remove('active');
+    const r = _beforeCad.apply(this, arguments);
+    try { _cadEdgesSync(); } catch (_) {}                  // (Solid and Clay show edges when the preference is Always)
+    return r;
+  };
+  // parts added, replaced or brought back while it is on are dressed, and drawn with their edges
+  window._appHooks?.treePostBuildHooks.push(() => { if (state.viewMode === 'cad') _cadApply(); _cadEdgesSchedule(0); });
+// The width of the tree's scrollbar, for the pinned eye and colour column (it lines up with the buttons above the tree).
+{
+  const t = document.getElementById('tree');
+  if (t) {
+    let last = -1, raf = 0;
+    const measure = () => { raf = 0; const w = Math.max(0, t.offsetWidth - t.clientWidth); if (w !== last) { last = w; t.style.setProperty('--tree-sbw', w + 'px'); } };
+    const soon = () => { if (!raf) raf = requestAnimationFrame(measure); };
+    try { new ResizeObserver(soon).observe(t); new MutationObserver(soon).observe(t, { childList: true }); } catch (_) {}
+    window.addEventListener('resize', soon);
+    soon();
+  }
+}
+  // (the looks and the edges are chosen on the Shading card in the right sidebar)
+  window.addEventListener('keydown', (e) => {
+    if (_typingTarget(e) || _modalOpen()) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === '6') setViewMode(state.viewMode === 'cad' ? 'solid' : 'cad');
+  });
+}
+
+// The way a horizontal strip of cards moves under a mouse, shared by the Shading card and the material strip in Properties:
+// drag it, and it carries on after a flick, and stretches past its ends like a rubber band (see below). Touch and trackpads
+// use the browser's own scrolling. The items move by --rb (set on the strip), see ".shade-row .shade-sw" and ".prop-mat-strip>*".
+function _stripPhysics(row) {
+  if (!row || row._stripPhysics) return;
+  row._stripPhysics = true;
+  let down = null, dragged = false;
+  let glide = 0, rec = [], rbPx = 0;       // rbPx: how far the strip is pulled past an end right now
+  row.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse' || e.button !== 0) return; cancelAnimationFrame(glide); glide = 0; rec = []; down = { x: e.clientX, left: row.scrollLeft }; dragged = false; });
+  row.addEventListener('pointermove', (e) => {
+    if (!down) return;
+    const dx = e.clientX - down.x;
+    if (!dragged && Math.abs(dx) > 4) { dragged = true; try { row.setPointerCapture(e.pointerId); } catch (_) {} row.classList.add('is-dragging'); }
+    if (dragged) {
+      rec.push({ t: e.timeStamp, x: e.clientX }); while (rec.length > 2 && e.timeStamp - rec[0].t > 100) rec.shift();
+      // past either end the strip follows the hand with growing resistance (an iOS rubber band) and springs back when let go
+      const max = Math.max(0, row.scrollWidth - row.clientWidth), want = down.left - dx;
+      row.scrollLeft = Math.max(0, Math.min(max, want));
+      const over = want < 0 ? -want : want > max ? want - max : 0, lim = row.clientWidth * 0.3;
+      const pull = lim * (1 - 1 / (over * 0.6 / lim + 1));
+      rbPx = want < 0 ? pull : -pull;
+      row.style.setProperty('--rb', rbPx.toFixed(1) + 'px');
+    }
+  });
+  let rbT = 0;
+  // A fast drag that is let go carries on and slows as it goes, as a list does on iOS (it runs only while it glides).
+  // Reaching an end it does not stop: it goes on into the rubber band, a spring pulls it back (damped just enough not to
+  // swing), and it settles on the end without a bounce.
+  const fling = (v) => {
+    let last = performance.now(), x = row.scrollLeft;
+    const K = 0.0006, C = 2 * Math.sqrt(K);                     // spring and damping (per ms): critically damped
+    const step = (now) => {
+      if (!row.isConnected) { glide = 0; return; }
+      const dt = Math.min(32, now - last); last = now;
+      const max = Math.max(0, row.scrollWidth - row.clientWidth);
+      const o1 = x < 0 ? x : x > max ? x - max : 0;
+      if (o1) v += (-K * o1 - C * v) * dt; else v *= Math.pow(0.9955, dt);
+      x += v * dt;
+      const o2 = x < 0 ? x : x > max ? x - max : 0;
+      row.scrollLeft = Math.max(0, Math.min(max, x));
+      const lim = row.clientWidth * 0.3, pull = lim * (1 - 1 / (Math.abs(o2) * 0.6 / lim + 1));
+      if (o2 && Math.abs(o2) < 0.3 && Math.abs(v) < 0.02) { x = Math.max(0, Math.min(max, x)); rbPx = 0; row.style.setProperty('--rb', '0px'); glide = 0; return; }
+      rbPx = o2 < 0 ? pull : o2 > 0 ? -pull : 0;
+      row.style.setProperty('--rb', rbPx.toFixed(1) + 'px');
+      if (!o2 && Math.abs(v) < 0.03) { glide = 0; return; }
+      glide = requestAnimationFrame(step);
+    };
+    glide = requestAnimationFrame(step);
+  };
+  const end = () => {
+    const moved = dragged, r0 = rec[0], r1 = rec[rec.length - 1];
+    down = null; row.classList.remove('is-dragging'); rec = [];
+    if (Math.abs(rbPx) > 0.5) {
+      rbPx = 0;
+      row.classList.add('rb-spring'); row.style.setProperty('--rb', '0px');
+      clearTimeout(rbT); rbT = setTimeout(() => row.classList.remove('rb-spring'), 700);
+      return;
+    }
+    if (moved && r0 && r1 && r1.t > r0.t && performance.now() - r1.t < 70) {      // (still moving as it is let go)
+      const v = -(r1.x - r0.x) / (r1.t - r0.t);                 // px per ms, the way the strip should move
+      if (Math.abs(v) > 0.6) fling(Math.max(-3, Math.min(3, v * 0.85)));      // (only a real flick carries on)
+    }
+  };
+  row.addEventListener('pointerup', end); row.addEventListener('pointercancel', end);
+  row.addEventListener('wheel', () => { cancelAnimationFrame(glide); glide = 0; }, { passive: true });
+  row.addEventListener('click', (e) => { if (dragged) { e.stopPropagation(); e.preventDefault(); dragged = false; } }, true);       // (a drag is not a choice)
+}
+
+// ── Shading card (right sidebar, under Properties) ─────────────────────────
+// Clay and CAD, each with its looks, as a small 3D hex nut drawn the way the look draws a part, shaded by
+// the look itself (the CAD ones with the real matcap, a dark outline and the dark line on every edge). A click on a look chooses it and
+// turns that view on; a click on the look that is on goes back to Solid. Keys 5 and 6 and the Edges choice work as before.
+const _Shading = (() => {
+  const q$ = (id) => document.getElementById(id);
+  const SIZE = 128;                                  // drawn at this size, shown at 64 CSS pixels (sharp on a 2x screen)
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+  // the part: a hex nut (chamfered corners, a bore), centred on the origin, so it sits in the middle of its card
+  const sdCylZ = (px, py, pz, r, h) => { const dx = Math.hypot(px, py) - r, dz = Math.abs(pz) - h; return Math.min(Math.max(dx, dz), 0) + Math.hypot(Math.max(dx, 0), Math.max(dz, 0)); };
+  const sdHex = (px, py, r) => {                                   // a hexagon with inradius r
+    const kx = -0.8660254, ky = 0.5, kz = 0.5773503;
+    let x = Math.abs(px), y = Math.abs(py);
+    const m = 2 * Math.min(kx * x + ky * y, 0); x -= m * kx; y -= m * ky;
+    x -= Math.max(-kz * r, Math.min(kz * r, x)); y -= r;
+    return Math.hypot(x, y) * (y < 0 ? -1 : 1);
+  };
+  const sdf = (x, y, z) => {
+    const prism = Math.max(sdHex(x, y, 0.72), Math.abs(z) - 0.34);
+    const chamfer = (Math.hypot(x, y) + Math.abs(z) * 0.9 - 1.02) * 0.7;           // a double cone takes the corners off, as on a real nut
+    return Math.max(prism, chamfer, -sdCylZ(x, y, z, 0.34, 0.6));
+  };
+  // the camera: three-quarter view from above, a perspective one (38 degrees) as the app's own
+  const YAW = -0.62, PITCH = 0.5;
+  const cy = Math.cos(YAW), sy = Math.sin(YAW), cp = Math.cos(PITCH), sp = Math.sin(PITCH);
+  const CAM_DIST = 3.3, TAN_HALF = Math.tan(19 * Math.PI / 180) * 1.0;
+  const RIGHT = [cy, sy, 0];                                           // the world's X turned by the yaw
+  const FWD = [-sy * cp, cy * cp, -sp];                                // looks into the scene
+  const UP = [-sy * sp, cy * sp, cp];                                  // (right x forward: the three are at right angles)
+  // scene → one buffer of {hit, normal (view space), depth}
+  let _geo = null, _geoP = null;
+  // Ray-marched a few rows at a time in idle moments: it is about thirty thousand rays.
+  function geometryAsync() {
+    if (_geoP) return _geoP;
+    return (_geoP = new Promise((resolve) => {
+    const S = SIZE, hit = new Uint8Array(S * S), nv = new Float32Array(S * S * 3), dep = new Float32Array(S * S);
+    const E = 0.0015;
+    let row = 0;
+    const rows = () => {
+    const t0 = performance.now();
+    for (; row < S && performance.now() - t0 < 8; row++) { const j = row; for (let i = 0; i < S; i++) {
+      const u = ((i + 0.5) / S * 2 - 1) * TAN_HALF, v = (1 - (j + 0.5) / S * 2) * TAN_HALF;
+      let dx = FWD[0] + RIGHT[0] * u + UP[0] * v, dy = FWD[1] + RIGHT[1] * u + UP[1] * v, dz = FWD[2] + RIGHT[2] * u + UP[2] * v;
+      const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
+      const ox = -FWD[0] * CAM_DIST, oy = -FWD[1] * CAM_DIST, oz = -FWD[2] * CAM_DIST;
+      let t = 0, ok = false;
+      for (let s = 0; s < 120 && t < 12; s++) {
+        const d = sdf(ox + dx * t, oy + dy * t, oz + dz * t);
+        if (d < 0.0008) { ok = true; break; }
+        t += d * 0.9;
+      }
+      const k = j * S + i;
+      if (!ok) continue;
+      const px = ox + dx * t, py = oy + dy * t, pz = oz + dz * t;
+      let nx = sdf(px + E, py, pz) - sdf(px - E, py, pz), ny = sdf(px, py + E, pz) - sdf(px, py - E, pz), nz = sdf(px, py, pz + E) - sdf(px, py, pz - E);
+      const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+      hit[k] = 1; dep[k] = t;
+      nv[k * 3] = nx * RIGHT[0] + ny * RIGHT[1] + nz * RIGHT[2];       // into the camera's frame: x right, y up, z toward the viewer
+      nv[k * 3 + 1] = nx * UP[0] + ny * UP[1] + nz * UP[2];
+      nv[k * 3 + 2] = -(nx * FWD[0] + ny * FWD[1] + nz * FWD[2]);
+    }
+    }
+    if (row < S) (window.requestIdleCallback || ((f) => setTimeout(f, 30)))(rows, { timeout: 500 });
+    else { _geo = { hit, nv, dep }; resolve(_geo); }
+    };
+    rows();
+    }));
+  }
+  const srgb2lin = (c) => Math.pow(c / 255, 2.2), lin2srgb = (c) => Math.round(255 * Math.pow(clamp01(c), 1 / 2.2));
+  function paintClay(canvas, look) {
+    const { hit, nv } = _geo, S = SIZE, ctx = canvas.getContext('2d'), img = ctx.createImageData(S, S), d = img.data;
+    const col = [(look.color >> 16) & 255, (look.color >> 8) & 255, look.color & 255].map(srgb2lin);
+    const L = [-0.45, 0.62, 0.64], ll = Math.hypot(...L); L[0] /= ll; L[1] /= ll; L[2] /= ll;
+    const H = [L[0], L[1], L[2] + 1]; const hl = Math.hypot(...H); H[0] /= hl; H[1] /= hl; H[2] /= hl;
+    const shin = 10 + (1 - look.roughness) * (1 - look.roughness) * 260, m = look.metalness;
+    for (let k = 0; k < S * S; k++) {
+      if (!hit[k]) continue;
+      const nx = nv[k * 3], ny = nv[k * 3 + 1], nz = nv[k * 3 + 2];
+      const ndl = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]), ndh = Math.max(0, nx * H[0] + ny * H[1] + nz * H[2]);
+      const amb = 0.2 + 0.28 * (ny * 0.5 + 0.5);
+      const rx = 2 * nz * nx, ry = 2 * nz * ny, rz = 2 * nz * nz - 1;          // the reflected view ray: what a metal shows
+      const env = 0.16 + 0.95 * sstep(-0.3, 0.9, ry) + 0.25 * Math.pow(Math.max(0, rx * L[0] + ry * L[1] + rz * L[2]), 6);
+      const spec = Math.pow(ndh, shin) * (0.1 + 0.5 * (1 - look.roughness)) * (m ? 1.4 : 1);
+      const i = k * 4;
+      for (let c = 0; c < 3; c++) {
+        const diff = col[c] * (1 - m) * (amb + 0.95 * ndl);
+        const metal = col[c] * m * env * 0.9;
+        const sp2 = spec * (m ? col[c] : 1);
+        d[i + c] = lin2srgb(diff + metal + sp2 * 0.9);
+      }
+      d[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  function paintCad(canvas, look) {
+    const { hit, nv, dep } = _geo, S = SIZE, ctx = canvas.getContext('2d'), img = ctx.createImageData(S, S), d = img.data;
+    const mc = document.createElement('canvas'); mc.width = mc.height = 128; _cadPaintMatcap(mc, look);
+    const mp = mc.getContext('2d').getImageData(0, 0, 128, 128).data;
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const k = j * S + i;
+      if (!hit[k]) continue;
+      const nx = nv[k * 3], ny = nv[k * 3 + 1], nz = nv[k * 3 + 2];
+      let r, g, b;
+      { const u = Math.max(0, Math.min(127, Math.floor((nx * 0.5 + 0.5) * 128))), w = Math.max(0, Math.min(127, Math.floor((0.5 - ny * 0.5) * 128))), o = (w * 128 + u) * 4;
+        const rim = sstep(0.0, 0.2, Math.abs(nz));                              // a surface turning edge-on goes dark, as in the view
+        r = mp[o] * rim * 1.06; g = mp[o + 1] * rim * 1.06; b = mp[o + 2] * rim * 1.06; }
+      // the dark line on an edge: where the surface turns sharply from one pixel to the next, or jumps in depth
+      let edge = 0;
+      for (const [di, dj] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || jj < 0 || ii >= S || jj >= S) { edge = 1; continue; }
+        const k2 = jj * S + ii;
+        if (!hit[k2]) { edge = 1; continue; }
+        const dot = nx * nv[k2 * 3] + ny * nv[k2 * 3 + 1] + nz * nv[k2 * 3 + 2];
+        if (dot < 0.8) edge = Math.max(edge, 1 - sstep(0.55, 0.8, dot) * 0.2);
+        if (Math.abs(dep[k] - dep[k2]) > 0.09) edge = 1;
+      }
+      const o2 = k * 4, e = edge ? 0.9 : 0;
+      d[o2] = Math.round(r * (1 - e) + 3 * e); d[o2 + 1] = Math.round(g * (1 - e) + 3 * e); d[o2 + 2] = Math.round(b * (1 - e) + 6 * e); d[o2 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  const CLAY_ORDER = () => Object.keys(_CLAY_LOOKS), CAD_ORDER = () => Object.keys(_CAD_LOOKS);
+  const queue = [];
+  let pumping = false;
+  function pump() {
+    if (pumping) return;
+    pumping = true;
+    const step = () => {
+      const job = queue.shift();
+      if (!job) { pumping = false; return; }
+      Promise.resolve().then(job).catch((e) => console.warn('[shading] thumbnail failed:', e)).then(() => (window.requestIdleCallback || ((f) => setTimeout(f, 30)))(step, { timeout: 400 }));
+    };
+    (window.requestIdleCallback || ((f) => setTimeout(f, 30)))(step, { timeout: 400 });
+  }
+  function build() {
+    const mk = (row, kind, looks, tip) => {
+      if (!row || row.childElementCount) return;
+      for (const [k, look] of Object.entries(looks)) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'shade-sw'; b.dataset.kind = kind; b.dataset.look = k; b.title = look.label + ' — ' + tip;
+        const c = document.createElement('canvas'); c.width = c.height = SIZE; c.className = 'shade-thumb';
+        const s = document.createElement('span'); s.textContent = look.label;
+        const card = document.createElement('div'); card.className = 'shade-card'; card.appendChild(c);
+        if (kind === 'cad') { const bd = document.createElement('em'); bd.className = 'shade-badge'; bd.textContent = 'CAD'; card.appendChild(bd); }      // (the family, as a badge on the picture)
+        b.append(card, s); row.appendChild(b);
+        queue.push(async () => { await geometryAsync(); (kind === 'clay' ? paintClay : paintCad)(c, look); });
+      }
+    };
+    mk(q$('vw-clay'), 'clay', _CLAY_LOOKS, 'plain matte shading to read the shape (key 5)');
+    {
+      // Default: no look at all, the plain Solid view with the model's own materials. Lit when nothing else is on.
+      const first = q$('vw-clay');
+      if (first && !first.querySelector('.shade-sw[data-kind="solid"]')) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'shade-sw'; b.dataset.kind = 'solid'; b.dataset.look = 'default'; b.title = "Default — the plain view, with the model's own materials";
+        const c = document.createElement('canvas'); c.width = c.height = SIZE; c.className = 'shade-thumb';
+        const sp = document.createElement('span'); sp.textContent = 'Default';
+        const card = document.createElement('div'); card.className = 'shade-card'; card.appendChild(c);
+        b.append(card, sp); first.insertBefore(b, first.firstChild);
+        queue.push(async () => { await geometryAsync(); paintClay(c, { color: 0xc3c6cc, roughness: 0.42, metalness: 0.3 }); });
+      }
+    }
+    mk(q$('vw-cad'), 'cad', _CAD_LOOKS, 'CAD shading with a dark line on every edge (key 6)');
+    pump();
+  }
+  const curLook = (kind) => (kind === 'clay' ? _clayLook() : _cadLook());
+  function sync() {
+    const mode = state.viewMode;
+    document.querySelectorAll('.shade-sw[data-kind="solid"]').forEach(b => b.classList.toggle('is-on', mode === 'solid'));
+    for (const kind of ['clay', 'cad']) {
+      const on = mode === kind;
+      q$('vw-' + kind)?.classList.toggle('active', on);
+      document.querySelectorAll('.shade-sw[data-kind="' + kind + '"]').forEach(b => b.classList.toggle('is-on', on && b.dataset.look === curLook(kind)));
+    }
+    for (const lit of document.querySelectorAll('.shade-sw.is-on')) {         // (a lit card that is out of view is brought into it)
+      const row = lit.closest('.shade-row'), l = lit.offsetLeft, r = l + lit.offsetWidth;
+      if (l < row.scrollLeft + 12) row.scrollTo({ left: Math.max(0, l - 12), behavior: 'smooth' });
+      else if (r > row.scrollLeft + row.clientWidth - 12) row.scrollTo({ left: r - row.clientWidth + 12, behavior: 'smooth' });
+    }
+    const ol = q$('shade-outlines'); if (ol) ol.checked = _Prefs.get('edgesMode') !== 'off';
+  }
+  function choose(kind, look) {
+    const key = kind === 'clay' ? 'clayLook' : 'cadLook';
+    if (state.viewMode === kind && curLook(kind) === look) { setViewMode('solid'); return; }          // the one that is on: back to Solid
+    _Prefs.set(key, look);
+    if (state.viewMode === kind) { if (kind === 'clay') { _clayMaterial(); requestRender(); } else _cadOnPref('cadLook'); }
+    else setViewMode(kind);
+    sync();
+  }
+  function wire() {
+    const sec = q$('shading-section');
+    if (!sec) return;
+    q$('shade-outlines')?.addEventListener('change', (e) => { _Prefs.set('edgesMode', e.target.checked ? 'on' : 'off'); _cadOnPref('edgesMode'); });
+    sec.addEventListener('click', (e) => {
+      const sw = e.target.closest('.shade-sw');
+      if (sw && sw.dataset.kind === 'solid') { if (state.viewMode !== 'solid') setViewMode('solid'); sync(); return; }
+      if (sw) { choose(sw.dataset.kind, sw.dataset.look); return; }
+      const gh = e.target.closest('.shade-gh');
+      if (gh) { const kind = gh.parentElement.dataset.mode; setViewMode(state.viewMode === kind ? 'solid' : kind); }
+    });
+    for (const row of sec.querySelectorAll('.shade-row')) {
+      const edges = () => { row.classList.toggle('can-l', row.scrollLeft > 2); row.classList.toggle('can-r', row.scrollLeft < row.scrollWidth - row.clientWidth - 2); };
+      row.addEventListener('scroll', edges, { passive: true });
+      try { new ResizeObserver(edges).observe(row); } catch (_) {}
+      edges();
+      _stripPhysics(row);
+    }
+    build(); sync();
+  }
+  wire();
+  return { sync, choose };
+})();
+{
+  const _afterShading = setViewMode;
+  setViewMode = function () { const r = _afterShading.apply(this, arguments); try { _Shading.sync(); } catch (_) {} return r; };
+}
+
+// Wireframe, X-ray, Heatmap, Clay and CAD work by changing the live materials. Export
 // and Save clone those materials, so run them in Solid and put the user's
 // view mode back afterwards — otherwise the file gets line primitives,
 // see-through surfaces or heat colours.
@@ -17698,6 +19143,18 @@ async function _withSolidView(fn) {
   if (swap) { try { setViewMode('solid'); } catch (_) {} }
   try { return await fn(); }
   finally { state._viewModeShown = null; if (swap) { try { setViewMode(prev); } catch (_) {} } }
+}
+// The file name typed in the export window, made safe for a download: no path
+// characters, and no extension (the format adds its own). '' means "use the scene's name".
+function _exportFileStem(typed) {
+  let s = String(typed || '').replace(/[\u0000-\u001f<>:"/\\|?*]+/g, '_').trim();
+  s = s.replace(/\.(glb|gltf|fbx|usdz|obj|mtl|stl|ply|csv)$/i, '').replace(/[. ]+$/, '').trim();
+  return s;
+}
+// What an export is called when no name is typed: the scene's name, else the opened file's.
+function _exportDefaultStem() {
+  const stem = (state._sourceFile?.name || '').replace(/\.[^.]+$/, '').trim();
+  return (state.sceneName && state.sceneName.trim()) || stem || 'mesh_optimised';
 }
 async function doExport(opts) {
   try { return await _withSolidView(() => _doExportImpl(opts)); }
@@ -17710,11 +19167,11 @@ async function doExport(opts) {
     toast('Export failed', e && e.message ? e.message : String(e), 'error', 6000);
   }
 }
-async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', draco=false }) {
+async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', draco=false, flat=false, stlAscii=false, fileName='' }) {
   const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
   setLoader(true, 'Preparing export…', fmtLabel);
   await new Promise(r => setTimeout(r, 16));
-  const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin });
+  const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat });
   if (count === 0) { setLoader(false); toast('Nothing to export', 'No visible parts', 'warn'); return; }
   // Force-recompute matrixWorld for the entire export subtree. applyMatrix4
   // updates a mesh's local matrix but NOT matrixWorld, and detached subtrees
@@ -17735,9 +19192,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
   }
 
   try {
-    const srcName = state._sourceFile?.name || '';
-    const stem = srcName.replace(/\.[^.]+$/, '').trim();
-    const base = (state.sceneName && state.sceneName.trim()) || stem || 'mesh_optimised';
+    const base = _exportFileStem(fileName) || _exportDefaultStem();
     if (format === 'glb' || format === 'gltf') {
       // Pre-normalize every mesh's normal attribute so GLTFExporter doesn't
       // print "Creating normalized normal attribute…" once per mesh. Float
@@ -17862,14 +19317,19 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       downloadBlob(new Blob([arr], { type: 'model/vnd.usdz+zip' }), base + '.usdz');
     }
     else if (format === 'stl') {
-      setLoader(true, 'Building STL…', 'Binary STL');
+      setLoader(true, 'Building STL…', stlAscii ? 'ASCII STL' : 'Binary STL');
       // STLExporter.parse() returns a DataView (not ArrayBuffer) in binary mode.
       // Explicitly pull .buffer so Blob gets a clean ArrayBuffer — avoids any
       // edge-case where the browser treats DataView differently as a Blob source.
-      const stlData = new STLExporter().parse(root, { binary: true });
-      const stlBuf  = stlData instanceof DataView ? stlData.buffer : stlData;
-      downloadBlob(new Blob([stlBuf], { type: 'model/stl' }), base + '.stl');
-      Log.info(`STL exported (binary, ${(stlBuf.byteLength / 1024).toFixed(1)} KB)`, { tag: 'export' });
+      const stlData = new STLExporter().parse(root, { binary: !stlAscii });
+      if (stlAscii) {
+        downloadBlob(new Blob([stlData], { type: 'model/stl' }), base + '.stl');       // a string: readable text
+        Log.info(`STL exported (ASCII, ${(stlData.length / 1024).toFixed(1)} KB)`, { tag: 'export' });
+      } else {
+        const stlBuf  = stlData instanceof DataView ? stlData.buffer : stlData;
+        downloadBlob(new Blob([stlBuf], { type: 'model/stl' }), base + '.stl');
+        Log.info(`STL exported (binary, ${(stlBuf.byteLength / 1024).toFixed(1)} KB)`, { tag: 'export' });
+      }
     }
     else if (format === 'ply') {
       // PLYExporter reads per-vertex colors from geometry.attributes.color.
@@ -17936,10 +19396,19 @@ function wireUI() {
     document.querySelectorAll('#format-grid .fmt-card').forEach(c => {
       c.classList.toggle('selected', c.dataset.fmt === fmt);
     });
+    // The file name starts as what the export would be called (the pills build on it).
+    const fn = $('exp-filename');
+    if (fn) fn.value = _exportDefaultStem();
     if (typeof _refreshFormatToggles === 'function') _refreshFormatToggles();
     _showExportSourceNote();
     $('export-modal').classList.add('show');
   }
+  _openExportDialog = () => {
+    const b = $('btn-export');
+    if (!b || b.disabled) return;                                    // nothing open to export
+    _closeExportMenu();
+    _openExportModalForFormat(document.querySelector('#format-grid .fmt-card.selected')?.dataset.fmt || 'glb');
+  };
   function _closeExportMenu() {
     $('export-menu')?.classList.remove('show');
     document.getElementById('btn-export')?.closest('.export-wrap')?.classList.remove('open');
@@ -18884,13 +20353,13 @@ function wireUI() {
     const el = $('vp-fps'); if (el) el.style.display = state.showFps ? '' : 'none';
   });
   // Initial state from localStorage so the preference sticks across sessions.
-  try { state.groupOriginsOnSelectOnly = localStorage.getItem('stepopt-group-origins-on-select') === '1'; } catch (_) {}
-  const _grpOriginToggle = $('toggle-group-origins-sel');
+  try { state.showOriginPoints = localStorage.getItem('stepopt-show-origin-points') === '1'; } catch (_) {}
+  const _grpOriginToggle = $('toggle-show-origin-points');
   if (_grpOriginToggle) {
-    _grpOriginToggle.checked = !!state.groupOriginsOnSelectOnly;
+    _grpOriginToggle.checked = !!state.showOriginPoints;
     _grpOriginToggle.addEventListener('change', e => {
-      state.groupOriginsOnSelectOnly = e.target.checked;
-      try { localStorage.setItem('stepopt-group-origins-on-select', state.groupOriginsOnSelectOnly ? '1' : '0'); } catch (_) {}
+      state.showOriginPoints = e.target.checked;
+      try { localStorage.setItem('stepopt-show-origin-points', state.showOriginPoints ? '1' : '0'); } catch (_) {}
       try { _updateGroupOriginDot(); } catch (_) {}
       requestRender();
     });
@@ -19126,7 +20595,6 @@ function wireUI() {
   // "flagged" isolates flagged parts. Both no-op when their counter is 0
   // (the .empty class disables pointer-events via CSS).
   $('sb-selected')?.addEventListener('click', () => { try { frameSelected(); } catch (_) {} });
-  $('sb-flagged')?.addEventListener('click', () => { try { isolateFlagged(); } catch (_) {} });
   // Initial paint with zero values so the chips render in their muted
   // empty-state on first load before any selection or flag pass runs.
   _updateSelectedChip();
@@ -19137,7 +20605,7 @@ function wireUI() {
   // every section open, each interaction meant scrolling). State is keyed by
   // header text so a section reorder doesn't reset the user's preference.
   const SEC_LS_KEY = 'stepopt-section-collapsed';
-  const SEC_OPEN_BY_DEFAULT = new Set(['Properties']);      // (Properties is fixed open; every other card starts folded)
+  const SEC_OPEN_BY_DEFAULT = new Set(['Properties', 'Shading']);      // (Properties is fixed open; every other card starts folded)
   const _readSecState = () => {
     try { return JSON.parse(localStorage.getItem(SEC_LS_KEY) || '{}') || {}; }
     catch (_) { return {}; }
@@ -19187,6 +20655,7 @@ function wireUI() {
     const isCustom = e.target.value === 'custom';
     const inp = $('exp-scale-custom');
     if (inp) inp.disabled = !isCustom;
+    _refreshFormatToggles();                       // shows or hides the custom row
     if (isCustom && inp) inp.focus();
   });
   $('export-confirm').addEventListener('click', async () => {
@@ -19202,6 +20671,15 @@ function wireUI() {
     if (!isFinite(scale) || scale <= 0) scale = 1;
     const axis = $('exp-axis')?.value || 'z-up';
     const origin = $('exp-origin')?.value || 'model';
+    const flat = !!$('exp-flat')?.checked;
+    const stlAscii = !!$('exp-stl-ascii')?.checked && fmt === 'stl';
+    const fileName = $('exp-filename')?.value || '';
+    // The choices that are the same from one export to the next are kept.
+    // (Not "selected only": it depends on what is selected right now. Not the file name: it belongs to the scene.)
+    _Prefs.set('exportOpts', {
+      scale: scaleSel, scaleCustom: $('exp-scale-custom')?.value || '1', axis, origin,
+      merge, visible: visibleOnly, flat,
+    });
 
     // Validate selected-only.
     if (selectedOnly && (!state.selected || state.selected.size === 0)) {
@@ -19243,7 +20721,7 @@ function wireUI() {
       const blob = new Blob([rows.join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = 'parts_list.csv';
+      a.href = url; a.download = (_exportFileStem(fileName) || 'parts_list') + '.csv';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast('Exported parts list', `${parts.length} rows`, 'info', 1800);
@@ -19267,7 +20745,7 @@ function wireUI() {
       }
     }
     try {
-      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, draco });
+      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, draco, flat, stlAscii, fileName });
     } finally {
       if (snapshot.length) {
         for (const s of snapshot) {
@@ -19278,72 +20756,127 @@ function wireUI() {
       }
     }
   });
-  // Show/hide format-specific toggles based on the selected export format.
+  // ── The export window: what is written, and how ──────────────────────────
   const _EXP_META = {
-    glb:  { title:'GLB',  desc:'Modern binary glTF · Best for web & Cinema 4D 2026' },
-    gltf: { title:'glTF', desc:'JSON glTF 2.0 · Maximum compatibility' },
-    fbx:  { title:'FBX',  desc:'Binary FBX 7.4 · Blender, Maya, 3ds Max, Houdini, Unreal' },
-    usdz: { title:'USDZ', desc:'OpenUSD · Apple Quick Look, Reality Composer, C4D R26+' },
-    obj:  { title:'OBJ',  desc:'Wavefront OBJ · Universal, geometry only' },
-    stl:  { title:'STL',  desc:'Binary STL · Standard for 3D printing' },
-    ply:  { title:'PLY',  desc:'Polygon File Format · Geometry + vertex colours' },
-    csv:  { title:'CSV',  desc:'Parts list spreadsheet · Name, colour, triangles, vertices, dimensions' },
+    glb:  { title:'GLB',  ext:'glb',  desc:'Modern binary glTF · Best for web & Cinema 4D 2026' },
+    gltf: { title:'glTF', ext:'gltf', desc:'JSON glTF 2.0 · Maximum compatibility' },
+    fbx:  { title:'FBX',  ext:'fbx',  desc:'Binary FBX 7.4 · Blender, Maya, 3ds Max, Houdini, Unreal' },
+    usdz: { title:'USDZ', ext:'usdz', desc:'OpenUSD · Apple Quick Look, Reality Composer, C4D R26+' },
+    obj:  { title:'OBJ',  ext:'obj',  desc:'Wavefront OBJ · Universal, geometry only' },
+    stl:  { title:'STL',  ext:'stl',  desc:'Binary STL · Standard for 3D printing' },
+    ply:  { title:'PLY',  ext:'ply',  desc:'Polygon File Format · Geometry + vertex colours' },
+    csv:  { title:'CSV',  ext:'csv',  desc:'Parts list spreadsheet · Name, colour, triangles, vertices, dimensions' },
   };
+  const _expFmt = () => document.querySelector('#format-grid .fmt-card.selected')?.dataset.fmt || 'glb';
   function _syncExpHeading(fmt) {
-    const m = _EXP_META[fmt] || { title: fmt.toUpperCase(), desc: '' };
-    const h = $('exp-fmt-heading'); if (h) h.textContent = m.title;
-    const d = $('exp-fmt-desc');    if (d) d.textContent = m.desc;
-    const b = $('export-confirm');  if (b) b.textContent = `Export ${m.title}`;
+    const m = _EXP_META[fmt] || { title: fmt.toUpperCase(), ext: fmt, desc: '' };
+    const set = (id, t) => { const el = $(id); if (el) el.textContent = t; };
+    set('exp-fmt-heading', m.title); set('exp-fmt-ext', '.' + m.ext); set('exp-name-ext', '.' + m.ext);
+    set('exp-fmt-desc', m.desc); set('export-confirm-lbl', `Export ${m.title}`);
   }
 
-  // Draco is GLB-only; ASCII FBX is FBX-only. Dim and disable when irrelevant
-  // so users can see the option exists without us silently ignoring it.
+  // The file name has the same pills as Save scene.
+  const _expNow = { parts: 0, tris: 0, bytes: 0 };
+  const _expNameInput = $('exp-filename');
+  const _expKit = (_expNameInput && $('exp-chips')) ? _nameTokenKit({
+    input: _expNameInput, chipsEl: $('exp-chips'), clean: _exportFileStem, now: _expNow,
+    srcStem: () => _exportFileStem((state._sourceFile?.name || state._loadedFilename || 'scene').replace(/\.[^.]+$/, '')),
+    refresh: () => _refreshExpSummary(),
+  }) : null;
+  $('exp-chips')?.addEventListener('click', e => { const b = e.target.closest('[data-tok]'); if (b && _expKit) _expKit.toggleTok(b.dataset.tok, e); });
+  _expNameInput?.addEventListener('input', e => _refreshExpSummary(e));
+
+  // The parts the options select (the same rule the export itself applies).
+  function _expPartList() {
+    const live = state.parts.filter(p => !p.deleted && !p.isCloner);
+    if ($('exp-selected')?.checked) return live.filter(p => state.selected.has(p.partId));
+    return $('exp-visible')?.checked ? live.filter(p => p.visible) : live;
+  }
+  // A rough size of the file (the real one depends on the writer; this is for the name and the summary).
+  function _expBytes(fmt, parts, tris, verts) {
+    const gb = _geomBytesOf(parts);
+    switch (fmt) {
+      case 'glb':  return Math.round((gb * 1.02 + 4096) * ($('exp-draco')?.checked ? 0.15 : 1));
+      case 'gltf': return Math.round((gb * 1.02 + 4096) * 1.37);                  // the buffers are written as text
+      case 'fbx':  return Math.round(gb * 1.1 + 8192);
+      case 'usdz': return Math.round(gb * 1.25 + 8192);
+      case 'obj':  return Math.round(verts * 34 + tris * 22);
+      case 'stl':  return $('exp-stl-ascii')?.checked ? tris * 258 + 80 : tris * 50 + 84;
+      case 'ply':  return Math.round(verts * 27 + tris * 13 + 300);
+      case 'csv':  return parts.length * 90 + 80;
+      default:     return gb;
+    }
+  }
+  function _refreshExpSummary(ev) {
+    const fmt = _expFmt(), m = _EXP_META[fmt] || { ext: fmt };
+    const parts = _expPartList();
+    const tris = parts.reduce((t, p) => t + (p.triCount || 0), 0);
+    const verts = parts.reduce((t, p) => t + (p.vertCount || 0), 0);
+    _expNow.parts = parts.length; _expNow.tris = tris; _expNow.bytes = _expBytes(fmt, parts, tris, verts);
+    _expKit?.paintToks(!(ev && ev.type === 'input'));                 // (not while the name is being typed)
+    const sum = $('exp-sum');
+    if (sum) {
+      const tile = (b, s) => `<div><b>${b}</b><span>${s}</span></div>`;
+      sum.innerHTML = fmt === 'csv'
+        ? tile(fmtNum(parts.length), parts.length === 1 ? 'row' : 'rows') + tile('10', 'columns') + tile('≈ ' + fmtBytes(_expNow.bytes), 'file size')
+        : tile(fmtNum(parts.length), parts.length === 1 ? 'part' : 'parts') + tile(fmtNum(tris), 'triangles') + tile('≈ ' + fmtBytes(_expNow.bytes), 'file size');
+    }
+    const btn = $('export-confirm'); if (btn) btn.disabled = !parts.length;
+    const note = $('exp-foot-note');
+    if (note) {
+      const none = !parts.length;
+      note.classList.toggle('is-warn', none);
+      note.innerHTML = none
+        ? ($('exp-selected')?.checked ? 'Nothing is selected.' : 'There are no visible parts to export.')
+        : `Saves as <b>${escapeHtml((_exportFileStem(_expNameInput?.value) || _exportDefaultStem()) + '.' + m.ext)}</b>${fmt === 'obj' ? ' and a .mtl for the colours' : ''}`;
+    }
+  }
+
+  // Only what applies to the chosen format is shown: Draco for GLB, ASCII for
+  // FBX and STL, no geometry options for the parts list.
   function _refreshFormatToggles() {
-    const sel = document.querySelector('#format-grid .fmt-card.selected');
-    const fmt = sel?.dataset.fmt || 'glb';
+    const fmt = _expFmt();
     _syncExpHeading(fmt);
     const isCsv = fmt === 'csv';
+    const rowOf = (id) => $(id)?.closest('.exp-row');
+    const show = (el, on) => { if (el) el.style.display = on ? '' : 'none'; };
+    const onlyFor = (rowId, cbId, on) => { show($(rowId), on); const cb = $(cbId); if (cb && !on) cb.checked = false; };
+    onlyFor('exp-draco-row', 'exp-draco', fmt === 'glb');
+    onlyFor('exp-fbx-ascii-row', 'exp-fbx-ascii', fmt === 'fbx');
+    onlyFor('exp-stl-ascii-row', 'exp-stl-ascii', fmt === 'stl');
+    show($('exp-fmt-group'), fmt === 'glb' || fmt === 'fbx' || fmt === 'stl');
 
-    // Draco — GLB only
-    const dracoRow = $('exp-draco-row');
-    const dracoCb  = $('exp-draco');
-    if (dracoRow && dracoCb) {
-      const on = fmt === 'glb';
-      dracoRow.style.opacity = on ? '1' : '.42';
-      dracoRow.style.pointerEvents = on ? '' : 'none';
-      if (!on) dracoCb.checked = false;
-    }
+    // Flatten groups: formats with no tree have nothing to flatten, and one merged mesh has no groups.
+    const flatRow = $('exp-flat-row');
+    show(flatRow, ['glb', 'gltf', 'fbx', 'usdz', 'obj'].includes(fmt));
+    if (flatRow) { const off = !!$('exp-merge')?.checked; flatRow.style.opacity = off ? '.42' : ''; flatRow.style.pointerEvents = off ? 'none' : ''; }
 
-    // ASCII FBX — FBX only
-    const asciiRow = $('exp-fbx-ascii-row');
-    const asciiCb  = $('exp-fbx-ascii');
-    if (asciiRow && asciiCb) {
-      const on = fmt === 'fbx';
-      asciiRow.style.opacity = on ? '1' : '.42';
-      asciiRow.style.pointerEvents = on ? '' : 'none';
-      if (!on) asciiCb.checked = false;
-    }
-
-    // CSV: geometry pipeline doesn't run, so dim the irrelevant rows
-    // (scale / axis / origin / merge / draco). 'Visible parts only' and
-    // 'Selected parts only' DO still filter rows so they stay enabled.
-    const geomRows = ['exp-scale', 'exp-scale-custom', 'exp-axis', 'exp-origin', 'exp-merge'];
-    for (const id of geomRows) {
-      const el = $(id);
-      const wrap = el?.closest('.field') || el?.closest('.toggle') || el?.parentElement;
-      if (wrap) {
-        wrap.style.opacity = isCsv ? '.42' : '1';
-        wrap.style.pointerEvents = isCsv ? 'none' : '';
-      }
-    }
-    if (isCsv && dracoRow) {
-      dracoRow.style.opacity = '.42';
-      dracoRow.style.pointerEvents = 'none';
-      if (dracoCb) dracoCb.checked = false;
-    }
+    // The parts list is not geometry: no scale, axis, origin or merge.
+    show($('exp-geom-title'), !isCsv);
+    for (const id of ['exp-scale', 'exp-axis', 'exp-origin', 'exp-merge']) show(rowOf(id), !isCsv);
+    show($('exp-scale-custom-row'), !isCsv && $('exp-scale')?.value === 'custom');
+    _refreshExpSummary();
   }
   document.querySelectorAll('#format-grid .fmt-card').forEach(c =>
     c.addEventListener('click', () => setTimeout(_refreshFormatToggles, 0)));
+  for (const id of ['exp-merge', 'exp-draco', 'exp-stl-ascii']) $(id)?.addEventListener('change', _refreshFormatToggles);
+  for (const id of ['exp-visible', 'exp-selected']) $(id)?.addEventListener('change', () => _refreshExpSummary());
+  // Put back what was chosen last time.
+  try {
+    const o = _Prefs.get('exportOpts');
+    if (o && typeof o === 'object') {
+      const sc = $('exp-scale');
+      if (sc && [...sc.options].some(op => op.value === o.scale)) {
+        sc.value = o.scale;
+        const ci = $('exp-scale-custom');
+        if (ci) { ci.value = o.scaleCustom || '1'; ci.disabled = o.scale !== 'custom'; }
+      }
+      const setSel = (id, v) => { const el = $(id); if (el && v != null && [...el.options].some(op => op.value === v)) el.value = v; };
+      setSel('exp-axis', o.axis); setSel('exp-origin', o.origin);
+      const setCb = (id, v) => { const el = $(id); if (el && typeof v === 'boolean') el.checked = v; };
+      setCb('exp-merge', o.merge); setCb('exp-visible', o.visible); setCb('exp-flat', o.flat);
+    }
+  } catch (_) {}
   _refreshFormatToggles();
 
   // Shortcuts by exact combination ("Ctrl+Shift+G", "Shift+H", "P"), so a
@@ -19368,6 +20901,7 @@ function wireUI() {
   const _KEYMAP = {
     'X':            () => _CmdCards.open('split'),
     'P':            () => _CmdCards.open('fillholes'),
+    'D':            () => _DynPlace.toggle(),
     'H':            () => hideSelected(),
     'Shift+H':      () => hideUnselected(),
     'Alt+H':        () => showAllParts(),
@@ -19375,7 +20909,7 @@ function wireUI() {
     'Ctrl+Shift+G': () => _ungroupSelection(),
     'Ctrl+M':       () => $('btn-merge-sel')?.click(),
     'Ctrl+B':       () => _CmdCards.open('smartfit'),
-    'Ctrl+E':       () => { const b = $('btn-export'); if (b && !b.disabled) b.click(); },
+    'Ctrl+E':       () => _openExportDialog(),
     'Shift+M':      () => $('tg-materials')?.click(),
     'Shift+L':      () => $('tg-library')?.click(),
     'Ctrl+Shift+F4': () => _Tabs.closeAll(),
@@ -22102,6 +23636,7 @@ async function _runLoad(file, formatLabel, parser) {
   // Revert reloads and the export name comes from. Setting these up front
   // meant a failed load, or an append, replaced them.
   const wasImport = !!state._importMode;
+  const idsBefore = wasImport ? new Set(state.parts.map(p => p.partId)) : null;     // so the import can be found again
   const prevSource = state._sourceFile, prevSceneName = state.sceneName;
   // A newer load supersedes this one. That is only known here, at the end:
   // the older load does not take the loader down or switch drawing back on
@@ -22132,6 +23667,8 @@ async function _runLoad(file, formatLabel, parser) {
       if (controls) controls.enabled = true;
       setLoader(false);
       requestRender();
+      // Imported into an open scene: show where it landed (once the tree has settled).
+      if (loadedOk && idsBefore) setTimeout(() => _focusImportedParts(idsBefore), 120);
     }
   }
 }
@@ -22366,9 +23903,13 @@ async function boot() {
   // while WebGPU initializes in parallel. Handlers close over camera/renderer/
   // scene as references invoked only on user interaction; onResize() guards
   // against missing camera/renderer at this stage.
+  const _sp = (m, p) => { try { window.moSplash && window.moSplash(m, p); } catch (_) {} };     // (the start-up splash's status line)
+  _sp('Building the interface', 30);
   wireUI();
   _lucide();
+  _sp('Starting the renderer', 55);
   await initRenderer();
+  _sp('Preparing the scene', 85);
   initScene();
   setBackground('dark');
   buildAxisGizmo();
@@ -22396,6 +23937,7 @@ async function boot() {
   setStatus(state.sceneName || 'Untitled scene');
   _sceneReady = true;
   Log.success('Ready', { tag: 'boot' });
+  window._moBooted = true; window.dispatchEvent(new Event('mo-boot-ready'));      // (index.html lifts the splash on this)
   if (_pendingFile) {
     const f = _pendingFile; _pendingFile = null;
     const opts = _pendingFileOpts || {}; _pendingFileOpts = null;
@@ -22408,7 +23950,7 @@ async function boot() {
     try { _Welcome.show(); } catch (_) {}
   }
 }
-boot().catch(e => { console.error('[STEP] Boot failed:', e); try { toast('Init failed', e.message, 'error', 12000); } catch(_){} });
+boot().catch(e => { console.error('[STEP] Boot failed:', e); window._moBooted = true; window.dispatchEvent(new Event('mo-boot-ready')); try { toast('Init failed', e.message, 'error', 12000); } catch(_){} });
 
 // ============== ADVANCED CLEANUP / OPTIMIZATION ==============
 
@@ -22749,6 +24291,9 @@ function recenterModel() {
 const _ALIGN_KEY = 'stepopt-align';
 const _ALIGN_DEFAULT = { a: 'center', b: 'center', up: 'min', onOpen: false, step: 90 };
 const _align = { D: new THREE.Matrix4(), Q: new THREE.Quaternion() };
+// What the card is setting up (the turn and, in the preferences, the point that goes to zero). The model moves only when Align to
+// floor is pressed; until then the drawing on the card shows what would happen.
+const _alignPend = { Q: new THREE.Quaternion() };
 function _alignPrefs() {
   try { return { ..._ALIGN_DEFAULT, ...(JSON.parse(localStorage.getItem(_ALIGN_KEY) || '{}') || {}) }; }
   catch (_) { return { ..._ALIGN_DEFAULT }; }
@@ -22756,7 +24301,7 @@ function _alignPrefs() {
 function _alignSave(p) { try { localStorage.setItem(_ALIGN_KEY, JSON.stringify(p)); } catch (_) {} }
 // A model that has just been loaded (or a cleared scene) starts unaligned.
 function _alignForget() {
-  _align.D.identity(); _align.Q.identity();
+  _align.D.identity(); _align.Q.identity(); _alignPend.Q.identity();
   try { _applySceneUpAxis(); } catch (_) {}
   try { _alignRefreshInfo(); } catch (_) {}
 }
@@ -22855,6 +24400,7 @@ function _alignGoTo(D, Q) {
   _align.D.copy(D); _align.Q.copy(Q);
 }
 function _alignAfter() {
+  _alignPend.Q.copy(_align.Q);                       // (what was just done, or undone, is what the card now starts from)
   // an exploded view is pushed apart along the scene's axes: do that again
   // for the model as it now stands
   try { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) applyExplode(); } catch (_) {}
@@ -22896,7 +24442,7 @@ function alignModelToFloor(opts = {}) {
     // a run of adjustments is one step: keep extending the align step on top
     const top = state.history[state.history.length - 1];
     if (top && top.type === 'align' && top.open) { top.after = { D: D.clone(), Q: Q.clone() }; state.redo.length = 0; _refreshUndoRedoButtons(); }
-    else pushUndo({ type: 'align', label: 'Align to floor', open: true, before, after: { D: D.clone(), Q: Q.clone() } });
+    else pushUndo({ type: 'align', label: 'Align to floor', open: false, before, after: { D: D.clone(), Q: Q.clone() } });
   }
   _alignAfter();
   return true;
@@ -22905,26 +24451,165 @@ function alignModelToFloor(opts = {}) {
 function _alignTurn(axis, sign) {
   const step = Math.max(0.01, Math.min(180, parseFloat(_alignPrefs().step) || 90));
   const n = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
-  const q = new THREE.Quaternion().setFromAxisAngle(n, sign * step * Math.PI / 180).multiply(_align.Q).normalize();
-  alignModelToFloor({ Q: q, live: true });
+  _alignPend.Q.premultiply(new THREE.Quaternion().setFromAxisAngle(n, sign * step * Math.PI / 180)).normalize();
+  _alignPreview();                                   // (only the drawing turns; the model does when Align to floor is pressed)
 }
-// "Turned X 90° · Y 0° · Z 0°" and where the model stands now.
+// Redraws the picture on the Align to floor card (there used to be a line of numbers under the buttons too).
+// Work out where the model would stand if Align to floor were pressed now, and draw that. Nothing moves.
+function _alignPreview() {
+  if (!state.parts.some(p => !p.deleted)) { _alignView.draw(null, false); return; }
+  const R = new THREE.Matrix4().makeRotationFromQuaternion(_alignPend.Q);
+  const box = _liveModelBox(R.clone().multiply(_align.D.clone().invert()));       // as loaded → turned (not yet placed)
+  if (box.isEmpty()) { _alignView.draw(null, false); return; }
+  const a = _alignAnchor(box, _alignPrefs());
+  const Dn = new THREE.Matrix4().makeTranslation(-a.x, -a.y, -a.z).multiply(R);
+  let diff = 0;
+  for (let i = 0; i < 16; i++) diff = Math.max(diff, Math.abs(_align.D.elements[i] - Dn.elements[i]) / (i >= 12 && i < 15 ? Math.max(1, state.modelDiag || 1) : 1));
+  box.translate(a.clone().negate());
+  _alignView.draw(box, diff >= 1e-7);
+}
 function _alignRefreshInfo() {
   const el = document.getElementById('align-info');
   if (!el || !document.getElementById('btn-align-floor')?.offsetParent) return;   // (the line itself is not laid out while it is empty)
-  const box = state.parts.some(p => !p.deleted) ? _liveModelBox() : null;
-  if (!box || box.isEmpty()) { el.textContent = ''; return; }
-  const ax = _alignAxes(), c = box.getCenter(new THREE.Vector3());
-  const low = box.min[ax.up], off = Math.hypot(c[ax.a], c[ax.b]);
-  const eps = (box.getSize(new THREE.Vector3()).length() || 1) * 1e-6;
-  const f = (n) => fmtNum(Math.round(Math.abs(n) * 10) / 10);
-  const floor = Math.abs(low) < eps ? 'Stands on the floor' : `Lowest point ${f(low)} ${low < 0 ? 'below' : 'above'} the floor`;
-  const mid = off < eps ? 'middle over the origin' : `middle ${f(off)} from the origin`;
-  const e = new THREE.Euler().setFromQuaternion(_align.Q, 'ZYX');
-  const deg = (r) => { const d = Math.round(r * 1800 / Math.PI) / 10; return (Object.is(d, -0) ? 0 : d) + '°'; };
-  const turned = Math.abs(_align.Q.w) > 1 - 1e-9 ? '' : `Turned X ${deg(e.x)} · Y ${deg(e.y)} · Z ${deg(e.z)}. `;
-  el.textContent = turned + floor + ' · ' + mid;
+  try { _alignPreview(); } catch (e) { console.warn('[align] drawing failed:', e); }
+  el.textContent = '';      // (the drawing says where the model stands; there is no line of numbers under the buttons)
 }
+// ── The picture on the Align to floor card ─────────────────────────────────
+// A small 3D drawing of what the card does: the floor with its grid, the origin with the three axes, and the model as the box
+// it fills, standing where it stands now. The point of the model that the choices bring to 0 is ringed, a dashed line joins it to
+// the origin while they are apart, and two arrows (its top, its front, as it was loaded) turn with the model, so a turn and the
+// choices can be read at a glance. With no model open it shows an example box, so the choices can be tried before a file is.
+const _alignView = (() => {
+  const cv = () => document.getElementById('align-view');
+  const YAW = -0.62, PITCH = 0.5, cyw = Math.cos(YAW), syw = Math.sin(YAW), cpt = Math.cos(PITCH), spt = Math.sin(PITCH);
+  const COL = { a: '#ff5f57', b: '#3fd466', up: '#4da3ff', edge: 'rgba(205,214,232,.85)', grid: 'rgba(255,255,255,.085)' };
+  let raf = 0, lastBox = null, ro = null;
+  let pending = false;
+  function draw(box, isPending) { lastBox = box || null; pending = !!isPending; if (!raf) raf = requestAnimationFrame(paint); }
+  // a nice step for the grid lines: 1, 2 or 5 times a power of ten
+  const niceStep = (span) => { const t = span / 7, mag = Math.pow(10, Math.floor(Math.log10(t || 1))), m = t / mag; return (m >= 5 ? 5 : m >= 2 ? 2 : 1) * mag; };
+  function paint() {
+    raf = 0;
+    const c = cv();
+    if (!c || !c.offsetParent) return;
+    if (!ro && window.ResizeObserver) { ro = new ResizeObserver(() => draw(lastBox)); ro.observe(c); }
+    const dpr = Math.min(2, window.devicePixelRatio || 1), W = c.clientWidth, H = c.clientHeight;
+    if (!W || !H) return;
+    if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const ax = _alignAxes(), prefs = _alignPrefs(), flip = ax.up === 'y' ? -1 : 1;        // (a y-up scene is mirrored in b so the drawing keeps its handedness)
+    const names = { a: ax.a.toUpperCase(), b: (flip < 0 ? '−' : '') + ax.b.toUpperCase(), up: ax.up.toUpperCase() };
+    const hasModel = !!lastBox && !lastBox.isEmpty();
+    // the box, in the drawing's frame: x along a, y along b (flipped for y-up), z up
+    let lo, hi, example = false;
+    if (hasModel) {
+      const mn = lastBox.min, mx = lastBox.max;
+      lo = { x: mn[ax.a], y: flip < 0 ? -mx[ax.b] : mn[ax.b], z: mn[ax.up] };
+      hi = { x: mx[ax.a], y: flip < 0 ? -mn[ax.b] : mx[ax.b], z: mx[ax.up] };
+    } else {                                                                              // an example, placed as the choices say
+      example = true;
+      const s = { x: 1, y: 0.7, z: 0.55 };
+      const pick = (mode, size) => mode === 'min' ? 0 : mode === 'max' ? size : mode === 'center' ? size / 2 : size / 2;
+      const off = { x: pick(prefs.a, s.x), y: pick(prefs.b, s.y), z: pick(prefs.up, s.z) };
+      lo = { x: -off.x, y: -off.y, z: -off.z }; hi = { x: s.x - off.x, y: s.y - off.y, z: s.z - off.z };
+    }
+    const size = { x: hi.x - lo.x, y: hi.y - lo.y, z: hi.z - lo.z };
+    const big = Math.max(size.x, size.y, size.z, 1e-9);
+    // what the drawing has to hold: the box and the origin, with some floor around them
+    const bx0 = Math.min(lo.x, 0), bx1 = Math.max(hi.x, 0), by0 = Math.min(lo.y, 0), by1 = Math.max(hi.y, 0), bz0 = Math.min(lo.z, 0), bz1 = Math.max(hi.z, 0);
+    const span = Math.max(bx1 - bx0, by1 - by0, (bz1 - bz0) * 1.2, big * 0.6, 1e-9);
+    const pad = span * 0.22;
+    const fx0 = bx0 - pad, fx1 = bx1 + pad, fy0 = by0 - pad, fy1 = by1 + pad;
+    const cx = (fx0 + fx1) / 2, cy = (fy0 + fy1) / 2, cz = (bz0 + bz1) / 2;
+    const norm = 2 / Math.max(fx1 - fx0, fy1 - fy0, bz1 - bz0 + pad, 1e-9);
+    // a point of the drawing's frame → the screen, unit scale (fitted below)
+    const proj = (x, y, z) => {
+      const nx = (x - cx) * norm, ny = (y - cy) * norm, nz = (z - cz) * norm;
+      const x1 = cyw * nx - syw * ny, y1 = syw * nx + cyw * ny;
+      const depth = y1 * cpt - nz * spt, f = 1 / (1 + 0.1 * depth);
+      return { x: x1 * f, y: -(nz * cpt + y1 * spt) * f, d: depth };
+    };
+    // fit: project the lot at unit scale, then scale and centre it in the canvas
+    const mid0 = { x: (lo.x + hi.x) / 2, y: (lo.y + hi.y) / 2, z: (lo.z + hi.z) / 2 }, reach = big * 0.62 + span * 0.04, tip = span * 0.42 + span * 0.05;
+    const probe = [[mid0.x + reach, mid0.y, mid0.z], [mid0.x - reach, mid0.y, mid0.z], [mid0.x, mid0.y + reach, mid0.z], [mid0.x, mid0.y - reach, mid0.z], [mid0.x, mid0.y, mid0.z + reach], [mid0.x, mid0.y, mid0.z - reach], [tip, 0, 0], [0, tip, 0], [0, 0, tip], [fx0, fy0, 0], [fx1, fy0, 0], [fx0, fy1, 0], [fx1, fy1, 0], [lo.x, lo.y, lo.z], [hi.x, hi.y, hi.z], [lo.x, hi.y, hi.z], [hi.x, lo.y, hi.z], [lo.x, hi.y, lo.z], [hi.x, lo.y, lo.z], [lo.x, lo.y, hi.z], [hi.x, hi.y, lo.z], [0, 0, 0], [0, 0, Math.max(span * 0.45, hi.z)]];
+    let px0 = 1e9, px1 = -1e9, py0 = 1e9, py1 = -1e9;
+    for (const p of probe) { const q = proj(p[0], p[1], p[2]); px0 = Math.min(px0, q.x); px1 = Math.max(px1, q.x); py0 = Math.min(py0, q.y); py1 = Math.max(py1, q.y); }
+    const M = 22, sc = Math.min((W - 2 * M) / Math.max(px1 - px0, 1e-9), (H - 2 * M) / Math.max(py1 - py0, 1e-9)), ox = W / 2 - (px0 + px1) / 2 * sc, oy = H / 2 - (py0 + py1) / 2 * sc;
+    const P = (x, y, z) => { const q = proj(x, y, z); return { x: ox + q.x * sc, y: oy + q.y * sc, d: q.d }; };
+    const line = (a, b, col, w, dash) => { g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []); g.stroke(); g.setLineDash([]); };
+    const poly = (pts, fill, stroke, w) => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.closePath(); if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = w || 1; g.stroke(); } };
+    const eps = span * 1e-4, below = lo.z < -eps;
+
+    const drawFloor = (alpha) => {
+      poly([P(fx0, fy0, 0), P(fx1, fy0, 0), P(fx1, fy1, 0), P(fx0, fy1, 0)], `rgba(255,255,255,${0.035 * alpha * 4})`, null);
+      const step = niceStep(Math.max(fx1 - fx0, fy1 - fy0));
+      g.globalAlpha = alpha;
+      for (let x = Math.ceil(fx0 / step) * step; x <= fx1 + 1e-9; x += step) line(P(x, fy0, 0), P(x, fy1, 0), COL.grid, 1);
+      for (let y = Math.ceil(fy0 / step) * step; y <= fy1 + 1e-9; y += step) line(P(fx0, y, 0), P(fx1, y, 0), COL.grid, 1);
+      poly([P(fx0, fy0, 0), P(fx1, fy0, 0), P(fx1, fy1, 0), P(fx0, fy1, 0)], null, 'rgba(255,255,255,.16)', 1);
+      g.globalAlpha = 1;
+    };
+    const drawBox = () => {
+      const X = [lo.x, hi.x], Y = [lo.y, hi.y], Z = [lo.z, hi.z];
+      const V = (i, j, k) => P(X[i], Y[j], Z[k]);
+      const faces = [                                                   // [corners, fill]
+        [[V(0, 0, 1), V(1, 0, 1), V(1, 1, 1), V(0, 1, 1)], 'rgba(158,176,208,.55)'],      // top
+        [[V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)], 'rgba(80,92,118,.45)'],        // bottom
+        [[V(0, 0, 0), V(1, 0, 0), V(1, 0, 1), V(0, 0, 1)], 'rgba(118,134,164,.50)'],      // y low
+        [[V(0, 1, 0), V(1, 1, 0), V(1, 1, 1), V(0, 1, 1)], 'rgba(96,110,138,.50)'],       // y high
+        [[V(0, 0, 0), V(0, 1, 0), V(0, 1, 1), V(0, 0, 1)], 'rgba(104,120,150,.50)'],      // x low
+        [[V(1, 0, 0), V(1, 1, 0), V(1, 1, 1), V(1, 0, 1)], 'rgba(132,148,180,.50)'],      // x high
+      ];
+      faces.sort((p, q) => q[0].reduce((s, v) => s + v.d, 0) - p[0].reduce((s, v) => s + v.d, 0));      // far first
+      g.lineJoin = 'round';
+      for (const [pts, fill] of faces) poly(pts, fill, COL.edge, 1);
+      if (Math.abs(lo.z) <= eps && !example) poly([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)], 'rgba(77,163,255,.22)', COL.up, 1.4);      // standing on the floor
+      return { X, Y, Z };
+    };
+    if (below) { drawBox(); drawFloor(1); } else { drawFloor(1); drawBox(); }
+
+    // the origin and the axes
+    const L = span * 0.38, o = P(0, 0, 0);
+    const axis = (x, y, z, col, name) => {
+      const t = P(x, y, z); line(o, t, col, 1.8);
+      g.fillStyle = col; g.font = '600 10px Inter, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const dx = t.x - o.x, dy = t.y - o.y, l = Math.hypot(dx, dy) || 1;
+      g.fillText(name, t.x + dx / l * 9, t.y + dy / l * 9);
+    };
+    axis(L, 0, 0, COL.a, names.a); axis(0, L, 0, COL.b, names.b); axis(0, 0, L, COL.up, names.up);
+    g.beginPath(); g.arc(o.x, o.y, 3.4, 0, Math.PI * 2); g.fillStyle = '#fff'; g.fill(); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1; g.stroke();
+
+    // the point of the model that the choices bring to zero
+    const anc = { x: 0, y: 0, z: 0 };
+    const mode = { x: prefs.a, y: flip < 0 ? ({ min: 'max', max: 'min' }[prefs.b] || prefs.b) : prefs.b, z: prefs.up };
+    for (const k of ['x', 'y', 'z']) anc[k] = mode[k] === 'min' ? lo[k] : mode[k] === 'max' ? hi[k] : (lo[k] + hi[k]) / 2;
+    const ap = P(anc.x, anc.y, anc.z);
+    if (Math.hypot(anc.x, anc.y, anc.z) > span * 0.01) line(ap, o, 'rgba(255,255,255,.55)', 1.2, [3, 3]);
+    g.beginPath(); g.arc(ap.x, ap.y, 6, 0, Math.PI * 2); g.strokeStyle = '#ffc928'; g.lineWidth = 2; g.stroke();
+    g.beginPath(); g.arc(ap.x, ap.y, 1.8, 0, Math.PI * 2); g.fillStyle = '#ffc928'; g.fill();
+
+    // its top and its front, as it was loaded, turned as the model is turned
+    const Q = _alignPend.Q;
+    const dir = (v) => { const d = v.clone().applyQuaternion(Q); return { x: d[ax.a], y: flip * d[ax.b], z: d[ax.up] }; };
+    const unit = (k) => new THREE.Vector3(k === 'x' ? 1 : 0, k === 'y' ? 1 : 0, k === 'z' ? 1 : 0);
+    const ctr = { x: (lo.x + hi.x) / 2, y: (lo.y + hi.y) / 2, z: (lo.z + hi.z) / 2 }, aLen = Math.max(size.x, size.y, size.z) * 0.62;
+    const arrow = (d, col, label) => {
+      const s = P(ctr.x, ctr.y, ctr.z), e = P(ctr.x + d.x * aLen, ctr.y + d.y * aLen, ctr.z + d.z * aLen);
+      line(s, e, col, 2);
+      const ang = Math.atan2(e.y - s.y, e.x - s.x);
+      g.beginPath(); g.moveTo(e.x, e.y); g.lineTo(e.x - 7 * Math.cos(ang - 0.45), e.y - 7 * Math.sin(ang - 0.45)); g.lineTo(e.x - 7 * Math.cos(ang + 0.45), e.y - 7 * Math.sin(ang + 0.45)); g.closePath(); g.fillStyle = col; g.fill();
+      g.font = '600 9.5px Inter, system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = col;
+      g.fillText(label, e.x + Math.cos(ang) * 14, e.y + Math.sin(ang) * 10);
+    };
+    arrow(dir(unit(ax.b)), 'rgba(255,255,255,.62)', 'front');       // (the model's own front: the second floor axis, as loaded)
+    arrow(dir(unit(ax.up)), '#ffc928', 'top');
+    g.font = '500 10px Inter, system-ui, sans-serif'; g.textAlign = 'left'; g.textBaseline = 'top';
+    if (example) { g.fillStyle = 'rgba(255,255,255,.4)'; g.fillText('example', 8, 7); }
+    else if (pending) { g.fillStyle = '#4da3ff'; g.textBaseline = 'bottom'; g.fillText('Preview: not applied yet', 8, H - 7); }
+  }
+  return { draw };
+})();
 (function _wireAlign() {
   const ids = { a: 'align-a', b: 'align-b', up: 'align-up' };
   const prefs = _alignPrefs();
@@ -22935,13 +24620,17 @@ function _alignRefreshInfo() {
     if (lb) lb.textContent = ax.b.toUpperCase();
   };
   const hasModel = () => state.parts.some(p => !p.deleted);
+  const segSyncs = [];
   for (const role of ['a', 'b', 'up']) {
     const el = document.getElementById(ids[role]);
     if (!el) continue;
-    el.value = prefs[role];
-    el.addEventListener('change', () => {
-      const p = _alignPrefs(); p[role] = el.value; _alignSave(p);
-      if (hasModel()) alignModelToFloor({ live: true });
+    const sync = () => { const v = _alignPrefs()[role]; el.querySelectorAll('button[data-v]').forEach(b => b.classList.toggle('active', b.dataset.v === v)); };
+    sync(); segSyncs.push(sync);
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-v]');
+      if (!b) return;
+      const p = _alignPrefs(); p[role] = b.dataset.v; _alignSave(p); sync();
+      _alignPreview();
     });
   }
   const step = document.getElementById('align-step');
@@ -22960,13 +24649,16 @@ function _alignRefreshInfo() {
     if (!hasModel()) { toast('Nothing to align', '', 'warn'); return; }
     _alignTurn(b.dataset.turn[0], b.dataset.turn[1] === '-' ? -1 : 1);
   });
-  const auto = document.getElementById('align-on-open');
-  if (auto) { auto.checked = !!prefs.onOpen; auto.addEventListener('change', () => { const p = _alignPrefs(); p.onOpen = auto.checked; _alignSave(p); }); }
-  document.getElementById('btn-align-floor')?.addEventListener('click', () => { if (alignModelToFloor()) toast('Aligned to the floor', '', 'success'); });
-  document.getElementById('btn-align-reset')?.addEventListener('click', () => { if (alignModelToFloor({ reset: true })) toast('Back to how it was loaded', '', 'success'); });
+  document.getElementById('btn-align-floor')?.addEventListener('click', () => { if (alignModelToFloor({ Q: _alignPend.Q })) toast('Aligned to the floor', '', 'success'); });
+  document.getElementById('btn-align-reset')?.addEventListener('click', () => {
+    // Reset puts the whole card back: the model as it was loaded, no turn waiting, and the choices as they start (Mid, Mid, Floor)
+    _alignPend.Q.identity();
+    const p = _alignPrefs(); p.a = _ALIGN_DEFAULT.a; p.b = _ALIGN_DEFAULT.b; p.up = _ALIGN_DEFAULT.up; _alignSave(p);
+    segSyncs.forEach(f => f());
+    if (alignModelToFloor({ reset: true })) toast('Back to how it was loaded', '', 'success'); _alignPreview(); });
   const box = document.getElementById('align-box');
   box?.addEventListener('pointerenter', () => { labels(); _alignRefreshInfo(); });
-  box?.closest('.section')?.querySelector('.section-h')?.addEventListener('click', () => setTimeout(() => { labels(); _alignRefreshInfo(); }, 0));
+  box?.closest('.section-cmd')?.addEventListener('cmd-open', () => setTimeout(() => { labels(); _alignRefreshInfo(); }, 0));
   labels();
 })();
 
@@ -23291,6 +24983,21 @@ wireUI = function() { _safeRun(_origWireUI, 'base'); _safeRun(wireAdvancedUI, 'a
 //                            a selected copy becomes a mesh of its own, so the
 //                            rest of its set keeps what it had
 function _matHolder(p) { return p ? (p.mesh || p.instancedMesh || null) : null; }
+// While Clay or CAD is on, a part wears the view's shared material. The materials panels, the "used by" marks and the
+// assign / delete / merge actions work on the material the part really has, so they read it with _matOf and put a new one
+// back with _matSet (which, under Clay or CAD, changes what the part will wear again, not the view's material).
+function _matOf(h) { return h ? _ownMaterialOf(h) : null; }
+function _matSet(h, m) {
+  if (!h) return;
+  const cur = h.material;
+  if (_clayMat && cur === _clayMat) { if (h.isInstancedMesh) { const r = _clayInst.get(h); if (r) r.mat = m; } else _clayOwn.set(h, m); return; }
+  if (!Array.isArray(cur) && _isCadMat(cur)) {
+    if (h.isInstancedMesh) { const r = _cadInst.get(h); if (r) r.mat = m; } else _cadOwn.set(h, m);
+    h.material = _cadMaterialFor(Array.isArray(m) ? m[0] : m);
+    return;
+  }
+  h.material = m;
+}
 function _matPromoteSelected() {
   let k = 0;
   for (const id of state.selected || []) {
@@ -23306,7 +25013,7 @@ function _collectLiveMaterials() {
   for (const p of state.parts || []) {
     if (p.deleted) continue;
     if (p.isPrimitive) continue;
-    let m = _matHolder(p)?.material;
+    let m = _matOf(_matHolder(p));
     if (Array.isArray(m)) m = m[0];
     if (!m || !m.isMaterial) continue;
     let entry = seen.get(m);
@@ -23489,7 +25196,7 @@ function _wireMatDock() {
         const p = getPart(id);
         if (!p || p.deleted || !p.mesh || seen.has(p.mesh)) continue;
         seen.add(p.mesh);
-        if (p.mesh.material !== infos[0].mat) { p.mesh.material = infos[0].mat; k++; }
+        if (_matOf(p.mesh) !== infos[0].mat) { _matSet(p.mesh, infos[0].mat); k++; }
       }
       if (k) { try { _pushMaterialUndo('Assign material', before, null); } catch (err) { console.warn('[mat-undo]', err); } }
       requestRender();
@@ -24571,10 +26278,11 @@ function _reassignMaterial(src, dst) {
     const mesh = _matHolder(p);
     if (!mesh || seen.has(mesh)) continue;
     seen.add(mesh);
-    if (Array.isArray(mesh.material)) {
-      mesh.material = mesh.material.map(m => m === src ? dst : m);
-    } else if (mesh.material === src) {
-      mesh.material = dst;
+    const own = _matOf(mesh);
+    if (Array.isArray(own)) {
+      _matSet(mesh, own.map(m => m === src ? dst : m));
+    } else if (own === src) {
+      _matSet(mesh, dst);
       n++;
     }
   }
@@ -24706,7 +26414,7 @@ let _matActionsWired = false;
 // before and after a Materials-panel action so the action can be undone.
 function _matStateSnap() {
   const assign = new Map();
-  for (const p of state.parts || []) { const h = p.deleted ? null : _matHolder(p); if (h) assign.set(p.partId, h.material); }
+  for (const p of state.parts || []) { const h = p.deleted ? null : _matHolder(p); if (h) assign.set(p.partId, _matOf(h)); }
   return {
     assign,
     user: state.userMaterials ? new Set(state.userMaterials) : null,
@@ -24730,7 +26438,7 @@ function _pushMaterialUndo(label, before, edits) {
 function _applyMatBatch(op, dir) {
   for (const it of op.assigns || []) {
     const h = _matHolder(getPart(it.partId));
-    if (h) h.material = it[dir];
+    if (h) _matSet(h, it[dir]);
   }
   for (const e of op.edits || []) if (e.matRef && e[dir]) _applyMatSnapshot(e.matRef, e[dir]);
   const user = dir === 'before' ? op.userBefore : op.userAfter;
@@ -24784,7 +26492,7 @@ function _wireMaterialActions() {
       const used = new Set();
       const note = (m) => { const k = /^Material (\d+)$/.exec((m && m.name || '').trim()); if (k) used.add(+k[1]); };
       for (const m of state.userMaterials || []) note(m);
-      for (const p of state.parts) { const h = p.deleted ? null : _matHolder(p); if (!h) continue; const pm = h.material; if (Array.isArray(pm)) pm.forEach(note); else note(pm); }
+      for (const p of state.parts) { const h = p.deleted ? null : _matHolder(p); if (!h) continue; const pm = _matOf(h); if (Array.isArray(pm)) pm.forEach(note); else note(pm); }
       let n = 1; while (used.has(n)) n++;
       fresh.name = 'Material ' + n;
     }
@@ -24804,7 +26512,7 @@ function _wireMaterialActions() {
         const p = getPart(id);
         if (!p || p.deleted || !p.mesh || seen.has(p.mesh)) continue;
         seen.add(p.mesh);
-        p.mesh.material = fresh;
+        _matSet(p.mesh, fresh);
         assigned++;
       }
     }
@@ -24844,7 +26552,7 @@ function _wireMaterialActions() {
         const p = getPart(id);
         if (!p || p.deleted || !p.mesh || seen.has(p.mesh)) continue;
         seen.add(p.mesh);
-        p.mesh.material = clone;
+        _matSet(p.mesh, clone);
       }
     }
     _matPanelSelected.clear();
@@ -24895,12 +26603,13 @@ function _wireMaterialActions() {
       const h = p.deleted ? null : _matHolder(p);
       if (!h || seen.has(h)) continue;
       seen.add(h);
-      let cur = h.material;
+      const raw = _matOf(h);
+      let cur = raw;
       const isArr = Array.isArray(cur);
       if (isArr) cur = cur[0];
       if (cur && removedSet.has(cur)) {
-        if (isArr) h.material = h.material.map(m => removedSet.has(m) ? defaultMat : m);
-        else       h.material = defaultMat;
+        if (isArr) _matSet(h, raw.map(m => removedSet.has(m) ? defaultMat : m));
+        else       _matSet(h, defaultMat);
         n++;
       }
     }
@@ -24969,7 +26678,7 @@ function _refreshUsedBySelection() {
       const p = getPart(id);
       const h = (p && !p.deleted) ? _matHolder(p) : null;
       if (!h) continue;
-      let m = h.material;
+      let m = _matOf(h);
       if (Array.isArray(m)) m = m[0];
       if (m?.isMaterial) used.add(m);
     }
@@ -26423,6 +28132,7 @@ function _ctxSub(m, row, items) {
 function _ctxBuild(items, x, y) {
   const m = $('ctx-menu'); if (!m) return;
   m.innerHTML = '';
+  m.style.maxHeight = '';
   _ctxFill(m, items, m);
   m.style.display = 'block';
   m.style.left = Math.min(x, window.innerWidth - 220) + 'px';
@@ -26515,7 +28225,7 @@ function _openCommandsMenu(anchor) {
     { icon: 'eye',            label: 'Show all',             kbd: 'Alt+H',  off: needAny, fn: act('showAll') },
     { icon: 'scan',           label: 'Frame',                kbd: 'F',      off: needAny, fn: act('fit') },
     '---',
-    { icon: 'arrow-down-to-line', label: 'Align to the floor',              off: needAny, fn: act('alignFloor') },
+    { icon: 'arrow-down-to-line', label: 'Align to the floor…',             off: needAny, fn: act('alignFloor') },
     { icon: 'target',         label: 'Recentre on origin',                  off: needAny, fn: act('recenter') },
     { icon: 'crosshair',      label: 'Centre pivot',                        off: needSel, fn: click('btn-center-pivot') },
     { icon: 'check',          label: 'Bake transforms',                     off: needAny, fn: click('btn-bake-transforms') },
@@ -26531,7 +28241,10 @@ function _openCommandsMenu(anchor) {
   if (folded.length) items.unshift(...folded, '---');
   _ctxBuild(items, 0, 0);
   m.classList.add('is-commands');
-  const b = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  const b = anchor.getBoundingClientRect(), w = m.offsetWidth;
+  const room = Math.max(160, Math.min(520, b.top - 10 - 56));      // 520px at most, and clear of the top bar
+  m.style.maxHeight = room + 'px';
+  const h = Math.min(m.offsetHeight, room);
   m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, b.right - w + 6)) + 'px';
   m.style.top = Math.max(8, b.top - h - 10) + 'px';
 }
@@ -26809,6 +28522,64 @@ function _treeCollapseAll() {
   }
   for (const ug of (state.userGroups || [])) ug.expanded = false;
   rebuildTree();
+}
+
+// Collapse or expand part of the tree: just what is selected, or everything from the
+// selection down. (The whole tree is _treeCollapseAll / _treeExpandAll.)
+//   scope 'selected'  the selected groups and every group inside them; for a selected
+//                     part, collapsing closes the group it is in, expanding opens the
+//                     way down to it
+//   scope 'from'      the first selected row and every group after it in the tree;
+//                     the groups above it stay as they are, so it stays in view
+function _treeFoldScoped(scope, collapse) {
+  const nodes = state.treeNodes || [];
+  if (!nodes.length) return;
+  const selG = new Set([...(state.selectedGroupIds || [])].map(String));
+  const selIdx = [];
+  nodes.forEach((n, i) => {
+    if ((n.kind === 'part' && state.selected.has(n.partId)) || (n.kind === 'group' && selG.has(String(n.id)))) selIdx.push(i);
+  });
+  if (!selIdx.length) { toast('Nothing selected', 'Pick a part or a group in the tree first', 'info', 2200); return; }
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const parentOf = (n) => (n.parentId != null ? byId.get(n.parentId) : null);
+  const targets = new Set();                      // the groups to change
+  if (scope === 'selected') {
+    for (const i of selIdx) {
+      const n = nodes[i];
+      if (n.kind === 'group') {
+        targets.add(n.id);
+        for (let j = i + 1; j < nodes.length && nodes[j].depth > n.depth; j++) if (nodes[j].kind === 'group') targets.add(nodes[j].id);
+      } else if (collapse) {
+        const p = parentOf(n); if (p) targets.add(p.id);
+      } else {
+        for (let p = parentOf(n); p; p = parentOf(p)) targets.add(p.id);
+      }
+    }
+  } else {
+    for (let j = Math.min(...selIdx); j < nodes.length; j++) if (nodes[j].kind === 'group') targets.add(nodes[j].id);
+  }
+  if (!targets.size) return;
+  for (const id of targets) { if (collapse) state.treeCollapsed.add(id); else state.treeCollapsed.delete(id); }
+  // every row takes its hidden / collapsed marks from the changed list; a search or user groups need a rebuild
+  const quick = ($('tree-filter')?.value || '') === '' && !(state.userGroups && state.userGroups.length) && $('tree');
+  if (quick) _treeSyncCollapsed(null, true); else rebuildTree();
+  if (typeof _treeToggleSays === 'function') _treeToggleSays();
+}
+// The menu on the tree toolbar's Collapse button.
+function _openTreeFoldMenu(anchor) {
+  if (!state.parts.length) { toast('No model loaded', '', 'info'); return; }
+  const none = !(state.selected.size || state.selectedGroupIds?.size);
+  const off = none ? 'Select something in the tree first' : false;
+  const r = (anchor || $('tree-collapse-toggle')).getBoundingClientRect();
+  _ctxBuild([
+    { icon: 'chevrons-down-up', label: 'Collapse the whole tree', fn: () => _treeCollapseAll() },
+    { icon: 'chevrons-down-up', label: 'Collapse the selection', off, fn: () => _treeFoldScoped('selected', true) },
+    { icon: 'chevrons-down-up', label: 'Collapse from here on', off, fn: () => _treeFoldScoped('from', true) },
+    '---',
+    { icon: 'chevrons-up-down', label: 'Expand the whole tree', fn: () => _treeExpandAll() },
+    { icon: 'chevrons-up-down', label: 'Expand the selection', off, fn: () => _treeFoldScoped('selected', false) },
+    { icon: 'chevrons-up-down', label: 'Expand from here on', off, fn: () => _treeFoldScoped('from', false) },
+  ], r.left, r.bottom + 4);
 }
 
 // Site-wide kill switch for the browser's native right-click menu. Custom
@@ -27196,7 +28967,7 @@ function _splitOnePart(part, epsRel, method) {
   // detached mesh — they'd otherwise leak with the stash.
   for (let i = part.mesh.children.length - 1; i >= 0; i--) {
     const ch = part.mesh.children[i];
-    if (ch.isLineSegments || ch.isMesh && ch.material === _FLAG_FILL_MAT) part.mesh.remove(ch);
+    if (ch.isLineSegments || ch.isMesh && (ch.material === _FLAG_FILL_MAT || ch.material === _FLAG_BEHIND_MAT)) part.mesh.remove(ch);
   }
   part.deleted = true;
   part.visible = false;
@@ -28065,6 +29836,7 @@ function applyExplode() {
       (p._partCenter.y - c.y) * (y / 100),
       (p._partCenter.z - c.z) * (z / 100),
     );
+    (p._exOff || (p._exOff = new THREE.Vector3())).copy(worldDelta);      // (p.bbox stays at the rest position: the moving-view culling adds this)
     if (p.mesh && p._origWorldPos) {
       // World-coord math. Eliminates the entire class of "which frame is
       // mesh.parent in" bugs:
@@ -28130,6 +29902,7 @@ function applyExplode() {
   // ticks don't thrash the scene graph.
   updateGizmo();      // (it leaves the gizmo off while exploded)
   try { _syncExplodePill(); } catch (_) {}
+  try { state._explodePaint?.(); } catch (_) {}
   requestRender();
 }
 
@@ -28185,6 +29958,8 @@ function resetExplode() {
     state._explodeScrubbers.y?.setValue(0);
     state._explodeScrubbers.z?.setValue(0);
   }
+  state._explodeLast = 0;
+  try { state._explodeReset?.(); } catch (_) {}
   // Selection highlight buffer was baked at the exploded positions —
   // rebuild against the rest pose now that meshes have moved back.
   if (state.selected && state.selected.size > 0) applySelectionColors();
@@ -28336,34 +30111,65 @@ function _wireExplode() {
     maxSteps: 60, stepToVal: (s) => s * 5, valToStep: (v) => Math.max(0, Math.min(60, Math.round(v / 5))),
     format: explodePctFmt, initialValue: 0, promptTitle: 'Explode amount', promptUnit: '%',
   };
-  const _explodeAll = initScrubber({ ...explodeOpts, el: 'explode-all-scrub', label: 'All axes', onChange: (v) => {
-    state.explode = { x: v, y: v, z: v };
-    _explodeX?.setValue(v); _explodeY?.setValue(v); _explodeZ?.setValue(v);
-    _explodeDeselect();
-    applyExplode();
-  }});
-  const _explodeX = initScrubber({ ...explodeOpts, el: 'explode-x-scrub', label: 'X axis', onChange: (v) => {
-    state.explode.x = v;
-    const m = Math.max(state.explode.x, state.explode.y, state.explode.z);
+  // The panel: one Amount slider moves every axis that is switched on (the X / Y / Z
+  // pills); "Fine tune" has a slider for each axis on its own.
+  const AXES = ['x', 'y', 'z'];
+  const on = { x: true, y: true, z: true };
+  const cur = () => Math.max(state.explode.x || 0, state.explode.y || 0, state.explode.z || 0);
+  const scr = () => state._explodeScrubbers || {};
+  // The pills follow the values: an axis that is moving is on. While nothing is exploded they keep what was chosen.
+  const paint = () => {
+    const m = cur();
+    if (m > 0) for (const a of AXES) on[a] = (state.explode[a] || 0) > 0;
+    document.querySelectorAll('#explode-axes .ex-axis').forEach(b => {
+      const a = b.dataset.axis;
+      b.classList.toggle('is-on', !!on[a]);
+      b.setAttribute('aria-pressed', on[a] ? 'true' : 'false');
+    });
+    document.querySelectorAll('#explode-presets [data-v]').forEach(b => b.classList.toggle('is-on', m > 0 && +b.dataset.v === m));
+  };
+  const change = () => { _explodeDeselect(); applyExplode(); paint(); };
+  const allOn = () => { if (!on.x && !on.y && !on.z) on.x = on.y = on.z = true; };
+  // the main slider: every axis that is on goes to the same amount
+  function setAmount(v) {
+    allOn();
+    if (v > 0) state._explodeLast = v;
+    state.explode = { x: on.x ? v : 0, y: on.y ? v : 0, z: on.z ? v : 0 };
+    for (const a of AXES) scr()[a]?.setValue(state.explode[a]);
+    change();
+  }
+  const _explodeAll = initScrubber({ ...explodeOpts, el: 'explode-all-scrub', label: 'Amount', onChange: setAmount });
+  // one axis on its own; the main slider follows the largest
+  const fine = (a) => initScrubber({ ...explodeOpts, el: `explode-${a}-scrub`, label: a.toUpperCase() + ' axis', onChange: (v) => {
+    state.explode[a] = v;
+    const m = cur();
+    if (m > 0) state._explodeLast = m;
     _explodeAll?.setValue(m);
-    _explodeDeselect();
-    applyExplode();
+    change();
   }});
-  const _explodeY = initScrubber({ ...explodeOpts, el: 'explode-y-scrub', label: 'Y axis', onChange: (v) => {
-    state.explode.y = v;
-    const m = Math.max(state.explode.x, state.explode.y, state.explode.z);
-    _explodeAll?.setValue(m);
-    _explodeDeselect();
-    applyExplode();
-  }});
-  const _explodeZ = initScrubber({ ...explodeOpts, el: 'explode-z-scrub', label: 'Z axis', onChange: (v) => {
-    state.explode.z = v;
-    const m = Math.max(state.explode.x, state.explode.y, state.explode.z);
-    _explodeAll?.setValue(m);
-    _explodeDeselect();
-    applyExplode();
-  }});
-  state._explodeScrubbers = { all: _explodeAll, x: _explodeX, y: _explodeY, z: _explodeZ };
+  state._explodeScrubbers = { all: _explodeAll, x: fine('x'), y: fine('y'), z: fine('z') };
+
+  // X / Y / Z: which axes explode. Switching one off puts it back; switching it on
+  // gives it the amount the others have (or the last one, if all were off).
+  document.querySelectorAll('#explode-axes .ex-axis').forEach(b => b.addEventListener('click', () => {
+    const a = b.dataset.axis;
+    const amount = cur() || (!on.x && !on.y && !on.z ? (state._explodeLast || 0) : 0);
+    on[a] = !on[a];
+    state.explode[a] = on[a] ? amount : 0;
+    if (amount > 0) state._explodeLast = amount;
+    scr()[a]?.setValue(state.explode[a]);
+    _explodeAll?.setValue(cur());
+    change();
+  }));
+  // quick amounts
+  document.querySelectorAll('#explode-presets [data-v]').forEach(b => b.addEventListener('click', () => {
+    const v = +b.dataset.v;
+    _explodeAll?.setValue(v);
+    setAmount(v);
+  }));
+  state._explodePaint = paint;
+  state._explodeReset = () => { on.x = on.y = on.z = true; paint(); };
+  paint();
 
   $('btn-explode-reset')?.addEventListener('click', resetExplode);
 }
@@ -28371,15 +30177,17 @@ function _wireExplode() {
 // ============== UX: frame selected, reveal in tree, custom dropdowns, ctx menus ==============
 
 // Frame the camera onto the bbox of the current selection.
-// Falls back to fitToView() when nothing is selected.
-function frameSelected() {
+// Falls back to fitToView() when nothing is selected. `only`: one part id to frame instead of the selection.
+function frameSelected(only) {
   if (!state.parts.length) return;
-  if (state.selected.size === 0) { fitToView(); return; }
+  const ids = typeof only === 'number' ? [only] : state.selected;     // (menus pass it as a callback: anything but a part id is ignored)
+  if (ids.size === 0 || ids.length === 0) { fitToView(); return; }
   const box = new THREE.Box3();
-  for (const id of state.selected) {
+  const ex = state.explode, exploded = !!(ex && (ex.x || ex.y || ex.z));
+  for (const id of ids) {
     const p = getPart(id);
     if (!p || p.deleted) continue;
-    if (!p.mesh) { if (p.bbox && !p.bbox.isEmpty()) box.union(p.bbox); continue; }
+    if (!p.mesh) { if (p.bbox && !p.bbox.isEmpty()) box.union(exploded && p._exOff ? p.bbox.clone().translate(p._exOff) : p.bbox); continue; }
     p.mesh.updateMatrixWorld(true);
     const b = new THREE.Box3().setFromObject(p.mesh);
     if (!b.isEmpty()) box.union(b);
@@ -28403,6 +30211,28 @@ function frameSelected() {
   controls.target.copy(center);
   controls.update();
   requestRender();
+}
+
+// After "Import into scene": select what the file added, scroll the tree to it
+// (opening the groups it sits in) and frame it in the viewport, so it is clear
+// where the new model landed. `before` is the set of part ids that existed
+// before the import.
+function _focusImportedParts(before) {
+  try {
+    const fresh = state.parts.filter(p => p && !p.deleted && !before.has(p.partId));
+    if (!fresh.length) return;
+    state.selected.clear();
+    state.selectedGroupIds.clear();
+    state._selAnchorId = null;
+    for (const p of fresh) state.selected.add(p.partId);
+    applySelectionColors();
+    rebuildTreeSelectionOnly();
+    refreshPropertiesPanel();
+    updateGizmo();
+    const cnt = $('del-sel-count'); if (cnt) cnt.textContent = state.selected.size;
+    frameSelected();
+    revealSelectedInTree();
+  } catch (e) { console.warn('[import] could not focus the imported parts:', e); }
 }
 
 // Scroll the tree to the first selected part and pulse-highlight it.
@@ -28615,7 +30445,7 @@ if (typeof document !== 'undefined') {
     // which fires on EVERY non-input contextmenu. Checking defaultPrevented
     // therefore killed the viewport and tree-empty menus on every click.
     // Each branch below is target-scoped, so we can safely run unconditionally.)
-    if (e.target.closest && e.target.closest('#vw-clay')) return;      // the Clay button has a menu of its own
+    if (e.target.closest && e.target.closest('#vw-clay, #vw-cad')) return;      // the Clay button has a menu of its own
     // If the right button was dragged before this contextmenu fired, the user
     // was panning the camera — don't pop up a menu.
     if (_rmbDown) {
@@ -28709,21 +30539,21 @@ wireUI = function() {
 // ── Sidebar drag-to-resize ────────────────────────────────────────────────
 // Both sidebars are sized via CSS custom properties (--side-l-w / --side-r-w
 // in :root, applied by #app's grid-template-columns). The drag handles are
-// 5px-wide invisible overlays sitting on the inside edge of each sidebar;
-// hovering accents them blue so users discover they're draggable. Width is
+// 16px-wide cells of that grid, centred on the gap between a sidebar and the
+// viewport; a faint line shows in the middle of one under the pointer. Width is
 // persisted in localStorage so the user's preference survives reloads.
 function _wireSidebarResize() {
   const root = document.documentElement;
   const STORE_L = 'sidebarLeftWidth';
   const STORE_R = 'sidebarRightWidth';
-  const MIN = 180, MAX = 720;
+  const MIN_L = 220, MIN_R = 240, MAX = 720;      // (narrower than these the buttons, the labels and the choices begin to wrap or be cut)
   // Restore saved widths on boot. Don't crash if localStorage is unavailable
   // (private browsing, embedded contexts, etc.).
   try {
     const lw = parseInt(localStorage.getItem(STORE_L) || '', 10);
-    if (lw >= MIN && lw <= MAX) root.style.setProperty('--side-l-w', lw + 'px');
+    if (lw >= MIN_L && lw <= MAX) root.style.setProperty('--side-l-w', lw + 'px');
     const rw = parseInt(localStorage.getItem(STORE_R) || '', 10);
-    if (rw >= MIN && rw <= MAX) root.style.setProperty('--side-r-w', rw + 'px');
+    if (rw >= MIN_R && rw <= MAX) root.style.setProperty('--side-r-w', rw + 'px');
   } catch {}
 
   function attach(handleId, prop, side) {
@@ -28770,7 +30600,7 @@ function _wireSidebarResize() {
       // grows as the cursor moves LEFT (the right sidebar is anchored on the
       // right edge of the viewport). Sign flip handles this difference.
       const delta = side === 'left' ? (e.clientX - startX) : (startX - e.clientX);
-      wantW = Math.min(MAX, Math.max(MIN, startW + delta));
+      wantW = Math.min(MAX, Math.max(side === 'left' ? MIN_L : MIN_R, startW + delta));
       if (!raf) raf = requestAnimationFrame(apply);          // once per frame, however many moves arrive
     });
     window.addEventListener('mouseup', () => {
@@ -29655,6 +31485,10 @@ function _wireDeadTreeControls() {
     }
     updateToggleIcon();
   });
+  // The arrow in its corner, and a right-click, open the menu: the whole tree, the
+  // selection, or from the selection down.
+  $('tree-collapse-menu')?.addEventListener('click', (e) => { e.stopPropagation(); _openTreeFoldMenu(_toggleBtn); });
+  _toggleBtn?.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); _openTreeFoldMenu(_toggleBtn); });
   // Run once after wiring so the icon reflects initial (mostly-expanded) state.
   setTimeout(updateToggleIcon, 0);
   // The button names what a press will do, so it has to follow the tree:
@@ -30683,11 +32517,15 @@ const _BatchRename = (() => {
     if (rule.kind === 'find-replace') {
       if (!rule.find) return cand.currentName;
       let re;
+      // "Whole word": the match may not touch a letter or digit (an underscore or a dash
+      // between parts of a name still counts as a boundary: Hub in Coupling_Hub_A).
+      const word = (src) => rule.wholeWord ? '(?<![\\p{L}\\p{N}])(?:' + src + ')(?![\\p{L}\\p{N}])' : src;
+      const flags = (rule.matchCase ? 'g' : 'gi') + (rule.wholeWord ? 'u' : '');
       if (rule.regex) {
-        try { re = new RegExp(rule.find, rule.matchCase ? 'g' : 'gi'); } catch { return cand.currentName; }
+        try { re = new RegExp(word(rule.find), flags); } catch { return cand.currentName; }
       } else {
         const escaped = String(rule.find).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        re = new RegExp(escaped, rule.matchCase ? 'g' : 'gi');
+        re = new RegExp(word(escaped), flags);
       }
       return cand.currentName.replace(re, rule.regex ? (rule.replace || '') : () => rule.replace || '');
     }
@@ -31111,53 +32949,47 @@ const _BatchRenameDialog = (() => {
   // (search "Batch Rename dialog") — migrated out of a runtime <style>.
 
   let _scopeRows = 0;
+  // What to rename. One list on every tab; the choice is kept in step between them.
+  const SCOPES = [
+    ['selection',              'Selection',            'Parts and groups picked in the tree'],
+    ['selection-with-children','Selection + contents', 'Also everything inside the picked groups'],
+    ['selected-parts',         'Selected parts only',  'Leave the groups as they are'],
+    ['selected-groups',        'Selected groups only', 'Leave the parts as they are'],
+    ['whole-tree',             'Whole tree',           'Every part and every group'],
+  ];
   function _scopeRowHtml(which = '') {
     return `
-      <div class="brn-collapsible open">
-        <div class="brn-collapsible-h"><span><strong>Scope</strong> · what to rename</span><span class="chev">▸</span></div>
-        <div class="brn-collapsible-b">
-          <div style="display:flex;flex-direction:column;gap:5px">
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="selection" checked>Selection (parts + groups picked in tree)</label>
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="selection-with-children">Selection + descendants</label>
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="selected-parts">Only selected parts</label>
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="selected-groups">Only selected groups</label>
-            <label class="brn-tog" style="background:none;border:none;padding:2px 0"><input type="radio" name="_brn-scope${which}" value="whole-tree">Whole tree (every part + every group)</label>
-          </div>
+      <div class="brn-sec">
+        <div class="brn-sec-t">Scope</div>
+        <div class="brn-scope">${SCOPES.map(([v, t, d], i) => `
+          <label class="brn-scope-row"><input type="radio" name="_brn-scope${which}" value="${v}"${i === 0 ? ' checked' : ''}><span class="brn-scope-l"><b>${t}</b><small>${d}</small></span></label>`).join('')}
         </div>
       </div>`;
   }
   function _filtersCollapsibleHtml() {
     return `
       <div class="brn-collapsible">
-        <div class="brn-collapsible-h"><span><strong>Apply only if…</strong> (optional filters)</span><span class="chev">▸</span></div>
+        <div class="brn-collapsible-h"><span><strong>Only if…</strong><em>optional filters</em></span><span class="chev">▸</span></div>
         <div class="brn-collapsible-b">
-          <div class="brn-row">
-            <label>Name regex</label>
-            <input type="text" data-filter="matchRegex" data-filter-trigger placeholder="must match (blank = none)">
-          </div>
-          <div class="brn-row">
-            <label>NOT regex</label>
-            <input type="text" data-filter="notMatchRegex" data-filter-trigger placeholder="must NOT match">
-          </div>
-          <div class="brn-row">
-            <label>Colour =</label>
-            <input type="text" data-filter="colorEq" data-filter-trigger placeholder="#ff0000" style="max-width:120px;flex:0 0 auto">
-            <label style="margin-left:14px">Kind</label>
-            <select data-filter="kindOnly" data-filter-trigger class="mac-sel" style="max-width:140px">
-              <option value="">any</option><option value="part">parts only</option><option value="group">groups only</option>
-            </select>
-          </div>
-          <div class="brn-row">
-            <label>Depth</label>
-            <input type="number" data-filter="depthMin" data-filter-trigger placeholder="min" style="max-width:80px">
-            <input type="number" data-filter="depthMax" data-filter-trigger placeholder="max" style="max-width:80px">
-            <label style="margin-left:14px">Tris</label>
-            <input type="number" data-filter="trisMin" data-filter-trigger placeholder="min" style="max-width:80px">
-            <input type="number" data-filter="trisMax" data-filter-trigger placeholder="max" style="max-width:80px">
+          <div class="brn-grid2">
+            <label class="brn-f"><span>Name matches</span><input type="text" data-filter="matchRegex" data-filter-trigger placeholder="regex · blank = any"></label>
+            <label class="brn-f"><span>Name does not match</span><input type="text" data-filter="notMatchRegex" data-filter-trigger placeholder="regex"></label>
+            <label class="brn-f"><span>Colour is</span><input type="text" data-filter="colorEq" data-filter-trigger placeholder="#ff0000"></label>
+            <label class="brn-f"><span>Kind</span>
+              <select data-filter="kindOnly" data-filter-trigger class="mac-sel">
+                <option value="">any</option><option value="part">parts only</option><option value="group">groups only</option>
+              </select>
+            </label>
+            <div class="brn-f"><span>Depth</span><div class="brn-pair"><input type="number" data-filter="depthMin" data-filter-trigger placeholder="min"><input type="number" data-filter="depthMax" data-filter-trigger placeholder="max"></div></div>
+            <div class="brn-f"><span>Triangles</span><div class="brn-pair"><input type="number" data-filter="trisMin" data-filter-trigger placeholder="min"><input type="number" data-filter="trisMax" data-filter-trigger placeholder="max"></div></div>
           </div>
         </div>
       </div>`;
   }
+  // the Quick tab's letters, and the pieces of a pattern
+  const QUICK_CASES = [['keep', 'As it is'], ['upper', 'UPPER'], ['lower', 'lower'], ['title', 'Title Case'], ['snake', 'snake_case'], ['kebab', 'kebab-case'], ['camel', 'camelCase']];
+  // what a modifier pill writes (the ones that take a value get one to start from)
+  const MOD_INSERT = { strip: 'strip(_)', slice: 'slice(0,8)', replace: 'replace(/a/b/g)', pad: 'pad(3,0)', round: 'round(1)', abbrev: 'abbrev(12)' };
 
   function _ensure() {
     if (bg) return;
@@ -31166,52 +32998,97 @@ const _BatchRenameDialog = (() => {
       <div class="brn-cols">
         <div class="brn-left">
           <div class="brn-tabs">
-            <button class="brn-tab active" data-pane="find">Find &amp; Replace</button>
+            <button class="brn-tab active" data-pane="find">Find &amp; replace</button>
+            <button class="brn-tab" data-pane="quick">Quick</button>
             <button class="brn-tab" data-pane="pattern">Pattern</button>
             <button class="brn-tab" data-pane="presets">Presets</button>
           </div>
 
           <div class="brn-pane active" data-pane="find">
-            <div class="brn-row">
-              <label>Find</label>
-              <input type="text" id="_brn-find" placeholder="text or regex">
-            </div>
-            <div class="brn-row" style="padding-left:68px">
-              <label class="brn-tog"><input type="checkbox" id="_brn-regex"> regex</label>
-              <label class="brn-tog"><input type="checkbox" id="_brn-case"> match case</label>
-            </div>
-            <div class="brn-row">
-              <label>Replace</label>
-              <input type="text" id="_brn-replace" placeholder="(use $1 $2 with regex)">
+            <div class="brn-sec">
+              <label class="brn-f"><span>Find</span><input type="text" id="_brn-find" placeholder="Text or regex" autocomplete="off" spellcheck="false"></label>
+              <label class="brn-f"><span>Replace with</span><input type="text" id="_brn-replace" placeholder="Empty removes it · $1 $2 with regex" autocomplete="off" spellcheck="false"></label>
+              <div class="brn-chiprow">
+                <label class="sv-chip brn-opt" title="Treat Find as a regular expression"><input type="checkbox" id="_brn-regex">regex</label>
+                <label class="sv-chip brn-opt" title="Capitals must match too"><input type="checkbox" id="_brn-case">match case</label>
+                <label class="sv-chip brn-opt" title="Only whole words: Hub in Coupling_Hub_A, not in Hubcap"><input type="checkbox" id="_brn-word">whole word</label>
+              </div>
             </div>
             ${_filtersCollapsibleHtml()}
             ${_scopeRowHtml(String(++_scopeRows))}
           </div>
 
+          <div class="brn-pane" data-pane="quick">
+            <div class="brn-sec">
+              <div class="brn-sec-t">Add text</div>
+              <div class="brn-grid2">
+                <label class="brn-f"><span>Before the name</span><input type="text" id="_brn-q-prefix" placeholder="prefix_" autocomplete="off" spellcheck="false"></label>
+                <label class="brn-f"><span>After the name</span><input type="text" id="_brn-q-suffix" placeholder="_suffix" autocomplete="off" spellcheck="false"></label>
+              </div>
+            </div>
+            <div class="brn-sec">
+              <div class="brn-sec-t">Letters</div>
+              <div class="brn-seg" id="_brn-q-case">${QUICK_CASES.map(([v, t], i) => `<button type="button" class="sv-chip${i === 0 ? ' is-on' : ''}" data-v="${v}">${t}</button>`).join('')}</div>
+            </div>
+            <div class="brn-sec">
+              <div class="brn-sec-t">Clean up</div>
+              <div class="brn-chiprow" style="margin-bottom:12px">
+                <label class="sv-chip brn-opt" title="Take spaces off both ends"><input type="checkbox" id="_brn-q-trim">trim spaces</label>
+              </div>
+              <div class="brn-grid2">
+                <label class="brn-f"><span>Remove from the start</span><input type="number" id="_brn-q-rmfirst" min="0" value="0" title="How many characters"></label>
+                <label class="brn-f"><span>Remove from the end</span><input type="number" id="_brn-q-rmlast" min="0" value="0" title="How many characters"></label>
+              </div>
+            </div>
+            <div class="brn-sec">
+              <div class="brn-sec-t">Numbering</div>
+              <div class="brn-chiprow">
+                <label class="sv-chip brn-opt" title="Add a running number to every name"><input type="checkbox" id="_brn-q-num">number them</label>
+              </div>
+              <div class="brn-numopts" id="_brn-q-numopts" hidden>
+                <div class="brn-grid3">
+                  <label class="brn-f"><span>Start at</span><input type="number" id="_brn-q-start" value="1" step="1"></label>
+                  <label class="brn-f"><span>Step</span><input type="number" id="_brn-q-step" value="1" step="1"></label>
+                  <label class="brn-f"><span>Digits</span><input type="number" id="_brn-q-digits" value="3" min="1" max="8"></label>
+                </div>
+                <div class="brn-grid3">
+                  <label class="brn-f"><span>Put it</span>
+                    <select id="_brn-q-pos" class="mac-sel"><option value="after">after the name</option><option value="before">before the name</option></select>
+                  </label>
+                  <label class="brn-f"><span>Separator</span><input type="text" id="_brn-q-sep" value="_" maxlength="4" autocomplete="off"></label>
+                  <label class="brn-f"><span>Start again per</span>
+                    <select id="_brn-q-mode" class="mac-sel"><option value="global">nothing</option><option value="parent">parent group</option><option value="color">colour</option><option value="size">size</option></select>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="brn-hint"><span>Pattern</span><code id="_brn-q-hint">{name}</code><button type="button" class="sv-chip sv-chip-plain" id="_brn-q-topattern" title="Open this as a pattern, to go on from here">Edit as pattern</button></div>
+            ${_filtersCollapsibleHtml()}
+            ${_scopeRowHtml(String(++_scopeRows))}
+          </div>
+
           <div class="brn-pane" data-pane="pattern">
-            <div class="brn-row">
-              <label>Pattern</label>
-              <input type="text" id="_brn-pattern" placeholder="e.g. {parent}_{counter:003}" autocomplete="off" spellcheck="false">
+            <div class="brn-sec">
+              <label class="brn-f"><span>Pattern</span><input type="text" id="_brn-pattern" placeholder="e.g. {parent}_{counter:003}" autocomplete="off" spellcheck="false"></label>
+              <div class="brn-sec-t sm">Put in</div>
+              <div class="brn-chiprow" id="_brn-tok-chips">${_BatchRename.TOKEN_CATALOG.map(t => `<button type="button" class="sv-chip" data-ins="${t.name}" title="${escapeHtml(t.desc)}">${t.name}</button>`).join('')}</div>
+              <div class="brn-sec-t sm">Change the last one</div>
+              <div class="brn-chiprow" id="_brn-mod-chips">${_BatchRename.MODIFIER_CATALOG.map(m => `<button type="button" class="sv-chip" data-mod="${m.name}" title="${escapeHtml(m.desc)}">${m.name}</button>`).join('')}</div>
+              <div class="brn-help">Type <code>{</code> for a list · press a piece to put it at the cursor · chain changes with <code>:</code></div>
             </div>
-            <div class="brn-help">
-              Type <code>{</code> for tokens · chain modifiers with <code>:</code>
-            </div>
-            <div class="brn-collapsible">
-              <div class="brn-collapsible-h"><span><strong>Counter</strong></span><span class="chev">▸</span></div>
-              <div class="brn-collapsible-b">
-                <div class="brn-row">
-                  <label>Start</label><input type="number" id="_brn-cnt-start" value="1" step="1">
-                  <label>Step</label><input type="number" id="_brn-cnt-step" value="1" step="1">
-                </div>
-                <div class="brn-row">
-                  <label>Reset per</label>
+            <div class="brn-sec">
+              <div class="brn-sec-t">Counter</div>
+              <div class="brn-grid3">
+                <label class="brn-f"><span>Start at</span><input type="number" id="_brn-cnt-start" value="1" step="1"></label>
+                <label class="brn-f"><span>Step</span><input type="number" id="_brn-cnt-step" value="1" step="1"></label>
+                <label class="brn-f"><span>Start again per</span>
                   <select id="_brn-cnt-mode" class="mac-sel">
-                    <option value="global">none</option>
+                    <option value="global">nothing</option>
                     <option value="parent">parent group</option>
-                    <option value="color">colour bucket</option>
-                    <option value="size">size bucket</option>
+                    <option value="color">colour</option>
+                    <option value="size">size</option>
                   </select>
-                </div>
+                </label>
               </div>
             </div>
             ${_filtersCollapsibleHtml()}
@@ -31219,11 +33096,15 @@ const _BatchRenameDialog = (() => {
           </div>
 
           <div class="brn-pane" data-pane="presets">
-            <div class="brn-section-title">Built-in</div>
-            <div class="brn-presets-grid" id="_brn-presets-builtin"></div>
-            <div class="brn-section-title" style="margin-top:14px">My presets</div>
-            <div class="brn-presets-grid" id="_brn-presets-user"></div>
-            <div style="font-size:var(--fs-11);color:var(--tx3);margin-top:6px">Build a rule in another tab, then click <em>Save preset…</em> to add it here.</div>
+            <div class="brn-sec">
+              <div class="brn-sec-t">Built in</div>
+              <div class="brn-presets-grid" id="_brn-presets-builtin"></div>
+            </div>
+            <div class="brn-sec">
+              <div class="brn-sec-t">Mine</div>
+              <div class="brn-presets-grid" id="_brn-presets-user"></div>
+              <div class="brn-help">Make a rule on another tab, then press <b>Save preset…</b> to keep it here.</div>
+            </div>
           </div>
 
           <div class="brn-foot">
@@ -31238,7 +33119,7 @@ const _BatchRenameDialog = (() => {
         </div>
 
         <div class="brn-right">
-          <div class="brn-right-head">Preview</div>
+          <div class="brn-right-head"><span>Preview</span><label class="sv-chip brn-opt" title="Hide the names that stay the same"><input type="checkbox" id="_brn-changed">changed only</label></div>
           <div class="brn-preview">
             <table class="brn-preview-table" id="_brn-preview"></table>
           </div>
@@ -31251,8 +33132,8 @@ const _BatchRenameDialog = (() => {
       title: 'Batch rename',
       subtitle: '—',
       iconName: 'signature',
-      width: 880, height: 580,
-      minWidth: 560, minHeight: 380,
+      width: 940, height: 640,
+      minWidth: 700, minHeight: 440,
       bodyHtml,
       onClose: () => _close(null),
     });
@@ -31269,6 +33150,7 @@ const _BatchRenameDialog = (() => {
       bg.querySelectorAll('.brn-tab').forEach(x => x.classList.toggle('active', x === t));
       bg.querySelectorAll('.brn-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === t.dataset.pane));
       if (t.dataset.pane === 'find') STATE.mode = 'find-replace';
+      else if (t.dataset.pane === 'quick') STATE.mode = 'quick';
       else if (t.dataset.pane === 'pattern') STATE.mode = 'pattern';
       _refreshPreview();
     }));
@@ -31276,7 +33158,9 @@ const _BatchRenameDialog = (() => {
       h.parentElement.classList.toggle('open');
     }));
 
-    const inputs = ['_brn-find','_brn-replace','_brn-regex','_brn-case','_brn-pattern','_brn-cnt-start','_brn-cnt-step','_brn-cnt-mode'];
+    const inputs = ['_brn-find','_brn-replace','_brn-regex','_brn-case','_brn-word','_brn-pattern','_brn-cnt-start','_brn-cnt-step','_brn-cnt-mode',
+      '_brn-q-prefix','_brn-q-suffix','_brn-q-trim','_brn-q-rmfirst','_brn-q-rmlast','_brn-q-num','_brn-q-start','_brn-q-step','_brn-q-digits','_brn-q-pos','_brn-q-sep','_brn-q-mode',
+      '_brn-changed'];
     for (const id of inputs) {
       const el = E(id);
       if (!el) continue;
@@ -31296,6 +33180,47 @@ const _BatchRenameDialog = (() => {
     }));
 
     _wireTokenAutocomplete(E('_brn-pattern'));
+
+    // Quick: the letters are a choice of one; the numbering options show only while numbering is on.
+    E('_brn-q-case')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-v]'); if (!b) return;
+      E('_brn-q-case').querySelectorAll('[data-v]').forEach(x => x.classList.toggle('is-on', x === b));
+      _refreshPreview();
+    });
+    E('_brn-q-num')?.addEventListener('change', () => { E('_brn-q-numopts').hidden = !E('_brn-q-num').checked; });
+    E('_brn-q-topattern')?.addEventListener('click', () => {
+      const t = _quickBuild().template;
+      bg.querySelector('[data-pane="pattern"].brn-tab').click();
+      const p = E('_brn-pattern'); p.value = t;
+      if (E('_brn-q-num').checked) { E('_brn-cnt-start').value = E('_brn-q-start').value; E('_brn-cnt-step').value = E('_brn-q-step').value; E('_brn-cnt-mode').value = E('_brn-q-mode').value; }
+      _refreshPreview(); p.focus();
+    });
+    // Pattern: pieces to press instead of typing. A piece goes in at the cursor; a change goes on the piece at or before it.
+    const pat = E('_brn-pattern');
+    const insertAtCaret = (text) => {
+      const a = pat.selectionStart ?? pat.value.length, b = pat.selectionEnd ?? a;
+      pat.value = pat.value.slice(0, a) + text + pat.value.slice(b);
+      pat.setSelectionRange(a + text.length, a + text.length);
+      _refreshPreview();
+    };
+    for (const id of ['_brn-tok-chips', '_brn-mod-chips']) E(id)?.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });   // keep the cursor in the field
+    E('_brn-tok-chips')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ins]'); if (!b) return;
+      insertAtCaret('{' + b.dataset.ins + '}'); pat.focus();
+    });
+    E('_brn-mod-chips')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-mod]'); if (!b) return;
+      const v = pat.value, caret = pat.selectionStart ?? v.length;
+      const lastClose = v.lastIndexOf('}', caret - 1), open = v.lastIndexOf('{', caret - 1);
+      let at = -1;
+      if (open > lastClose) at = v.indexOf('}', caret);          // the cursor is inside a piece
+      else if (lastClose >= 0) at = lastClose;                   // else the piece just before it
+      if (at < 0) { try { toast?.('Put a piece in first', 'Press one of the pieces above, then change it', 'info'); } catch (_) {} return; }
+      const mod = ':' + (MOD_INSERT[b.dataset.mod] || b.dataset.mod);
+      pat.value = v.slice(0, at) + mod + v.slice(at);
+      pat.setSelectionRange(at + mod.length, at + mod.length);
+      _refreshPreview(); pat.focus();
+    });
 
     E('_brn-cancel').addEventListener('click', () => _close(null));
     E('_brn-ok').addEventListener('click', _onApply);
@@ -31334,7 +33259,13 @@ const _BatchRenameDialog = (() => {
         replace: E('_brn-replace').value,
         regex: E('_brn-regex').checked,
         matchCase: E('_brn-case').checked,
+        wholeWord: E('_brn-word').checked,
       };
+    }
+    if (STATE.mode === 'quick') {
+      const tmpl = _quickBuild().template;
+      const compiled = _BatchRename.compileTemplate(tmpl);
+      return { kind: 'pattern', template: tmpl, fn: compiled.fn, ok: compiled.ok, errors: compiled.errors };
     }
     if (STATE.mode === 'pattern') {
       const tmpl = E('_brn-pattern').value;
@@ -31343,7 +33274,33 @@ const _BatchRenameDialog = (() => {
     }
     return { kind: 'none' };
   }
+  // The Quick tab as a pattern: what it asks for, written as the template the engine reads.
+  function _quickBuild() {
+    const val = (id) => E(id)?.value ?? '';
+    const lit = (s) => String(s).replace(/[{}]/g, '');                     // a brace would open a piece
+    const mods = [];
+    const first = Math.max(0, parseInt(val('_brn-q-rmfirst'), 10) || 0), last = Math.max(0, parseInt(val('_brn-q-rmlast'), 10) || 0);
+    if (first || last) mods.push(last ? `slice(${first},${-last})` : `slice(${first})`);
+    if (E('_brn-q-trim')?.checked) mods.push('trim');
+    const cs = E('_brn-q-case')?.querySelector('.is-on')?.dataset.v || 'keep';
+    if (cs !== 'keep') mods.push(cs);
+    let t = lit(val('_brn-q-prefix')) + '{name' + mods.map(m => ':' + m).join('') + '}' + lit(val('_brn-q-suffix'));
+    if (E('_brn-q-num')?.checked) {
+      const digits = Math.min(8, Math.max(1, parseInt(val('_brn-q-digits'), 10) || 1));
+      const num = digits > 1 ? `{counter:${'0'.repeat(digits)}}` : '{counter}';
+      const sep = lit(val('_brn-q-sep'));
+      t = val('_brn-q-pos') === 'before' ? num + sep + t : t + sep + num;
+    }
+    return { template: t };
+  }
   function _currentCounter() {
+    if (STATE.mode === 'quick') {
+      return {
+        start: parseInt(E('_brn-q-start')?.value, 10) || 1,
+        step:  parseInt(E('_brn-q-step')?.value, 10) || 1,
+        mode:  E('_brn-q-mode')?.value || 'global',
+      };
+    }
     return {
       start: parseInt(E('_brn-cnt-start')?.value, 10) || 1,
       step:  parseInt(E('_brn-cnt-step')?.value, 10) || 1,
@@ -31362,6 +33319,7 @@ const _BatchRenameDialog = (() => {
   }
   function _doPreview() {
     const rule = _currentRule();
+    if (STATE.mode === 'quick') { const h = E('_brn-q-hint'); if (h) { h.textContent = rule.template; h.title = rule.template; } }
     const filterFn = _BatchRename.makeFilter(_currentFilterOpts());
     const cands = STATE.candidates;
     const rows = (rule.kind === 'pattern' && !rule.ok)
@@ -31379,18 +33337,32 @@ const _BatchRenameDialog = (() => {
     // so the browser only paints rows that scroll into view. innerHTML cost on
     // a 5000-row table is well under one frame; debounce already prevents
     // per-keystroke thrash.
-    const html = rows.map(r => {
+    // The new name with the part that changed marked: what the old and the new share at the
+    // start and at the end stays plain.
+    const marked = (a, b) => {
+      const m = Math.min(a.length, b.length);
+      let i = 0; while (i < m && a[i] === b[i]) i++;
+      let j = 0; while (j < m - i && a[a.length - 1 - j] === b[b.length - 1 - j]) j++;
+      const mid = b.slice(i, b.length - j);
+      return escapeHtml(b.slice(0, i)) + (mid ? `<mark>${escapeHtml(mid)}</mark>` : '') + escapeHtml(b.slice(b.length - j));
+    };
+    const onlyChanged = !!E('_brn-changed')?.checked;
+    const shown = onlyChanged ? rows.filter(r => r.status !== 'unchanged' && r.status !== 'skipped') : rows;
+    const html = shown.map(r => {
       const k = r.cand.kind === 'part' ? 'PART' : r.cand.kind === 'hier-group' ? 'GROUP' : 'UGRP';
       const reason = r.reason ? `<td class="reason">${escapeHtml(r.reason)}</td>` : '<td class="reason"></td>';
+      const changed = r.status === 'ok' || r.status === 'warn';
       return `<tr class="${r.status}">
-        <td class="kind">${k}</td>
-        <td>${escapeHtml(r.oldName)}</td>
+        <td class="kind"><span>${k}</span></td>
+        <td class="old">${escapeHtml(r.oldName)}</td>
         <td class="arrow">→</td>
-        <td class="new">${escapeHtml(r.newName)}</td>
+        <td class="new">${changed ? marked(r.oldName, r.newName) : escapeHtml(r.newName)}</td>
         ${reason}
       </tr>`;
     }).join('');
-    tbl.innerHTML = html || `<tr><td style="padding:14px 12px;color:var(--tx3)">No candidates in scope. Pick parts or groups in the tree, or change Scope on the left.</td></tr>`;
+    tbl.innerHTML = html || (rows.length
+      ? `<tr><td colspan="5" class="brn-empty">Nothing changes yet.<br>Make a rule on the left and the new names show here.</td></tr>`
+      : `<tr><td colspan="5" class="brn-empty">Nothing to rename in this scope.<br>Pick parts or groups in the tree, or change the scope on the left.</td></tr>`);
     const sub = E('_brn-summary');
     if (sub) sub.innerHTML = `
       <span><span class="ok">${summary.ok} ok</span>${summary.warn ? ` · <span class="warn">${summary.warn} warn</span>` : ''}${summary.error ? ` · <span class="err">${summary.error} error</span>` : ''}${summary.unchanged ? ` · ${summary.unchanged} unchanged` : ''}${summary.skipped ? ` · ${summary.skipped} skipped` : ''}</span>
@@ -31420,7 +33392,10 @@ const _BatchRenameDialog = (() => {
     if (!trimmed) { toast?.('Name your preset', '', 'warn'); return; }
     let preset;
     if (STATE.mode === 'find-replace') {
-      preset = { name: trimmed, mode: 'find-replace', config: { find: E('_brn-find').value, replace: E('_brn-replace').value, regex: E('_brn-regex').checked, matchCase: E('_brn-case').checked } };
+      preset = { name: trimmed, mode: 'find-replace', config: { find: E('_brn-find').value, replace: E('_brn-replace').value, regex: E('_brn-regex').checked, matchCase: E('_brn-case').checked, wholeWord: E('_brn-word').checked } };
+    } else if (STATE.mode === 'quick') {
+      // a Quick rule is kept as the pattern it builds
+      preset = { name: trimmed, mode: 'pattern', config: { template: _quickBuild().template, counterMode: E('_brn-q-mode').value, counterStart: E('_brn-q-start').value, counterStep: E('_brn-q-step').value } };
     } else {
       preset = { name: trimmed, mode: 'pattern', config: { template: E('_brn-pattern').value, counterMode: E('_brn-cnt-mode').value, counterStart: E('_brn-cnt-start').value, counterStep: E('_brn-cnt-step').value } };
     }
@@ -31465,6 +33440,7 @@ const _BatchRenameDialog = (() => {
       E('_brn-replace').value = preset.config.replace || '';
       E('_brn-regex').checked = !!preset.config.regex;
       E('_brn-case').checked = !!preset.config.matchCase;
+      E('_brn-word').checked = !!preset.config.wholeWord;
     } else {
       bg.querySelector('[data-pane="pattern"].brn-tab').click();
       E('_brn-pattern').value = preset.config.template || '';
@@ -31602,6 +33578,12 @@ const _BatchRenameDialog = (() => {
       E('_brn-find').value = '';
       E('_brn-replace').value = '';
       E('_brn-pattern').value = '';
+      // a fresh start on every tab
+      E('_brn-word').checked = false; E('_brn-changed').checked = false;
+      E('_brn-q-prefix').value = ''; E('_brn-q-suffix').value = '';
+      E('_brn-q-trim').checked = false; E('_brn-q-rmfirst').value = '0'; E('_brn-q-rmlast').value = '0';
+      E('_brn-q-num').checked = false; E('_brn-q-numopts').hidden = true;
+      E('_brn-q-case').querySelectorAll('[data-v]').forEach(x => x.classList.toggle('is-on', x.dataset.v === 'keep'));
       bg.querySelector('[data-pane="find"].brn-tab').click();
       _renderPresets();
       _updateScopeSummary();
@@ -34766,13 +36748,25 @@ setTimeout(() => _dndDecorateTree(), 0);
   }
 
   // ── Big offenders panel ──────────────────────────────────────────────────
-  const OFF_TOP_N = 50;              // the list scrolls (index.html), so it can go well past what fits
+  const HEAVY_TRIS = 10000;          // a part with more triangles than this is heavy
+  const OFF_TOP_N = 500;             // the most rows drawn (the list scrolls, index.html)
   function _refreshOffenders() {
     const list = document.getElementById('offenders-list');
     if (!list) return;
     const live = state.parts.filter(p => p && !p.deleted && p.triCount > 0);
-    if (live.length === 0) { list.innerHTML = ''; return; }
-    const byTri = live.slice().sort((a, b) => b.triCount - a.triCount).slice(0, OFF_TOP_N);
+    const heavy = live.filter(p => p.triCount > HEAVY_TRIS);
+    // the count on the card's header, seen while the card is folded: the heavy parts, which are the rows of the list below
+    const badge = document.getElementById('heavy-count');
+    if (badge) {
+      badge.hidden = live.length === 0;
+      badge.classList.toggle('is-zero', heavy.length === 0);
+      badge.textContent = fmtNum(heavy.length);
+      badge.title = heavy.length ? fmtNum(heavy.length) + (heavy.length === 1 ? ' part has' : ' parts have') + ' more than ' + fmtNum(HEAVY_TRIS) + ' triangles' + (heavy.length > OFF_TOP_N ? ' (the ' + OFF_TOP_N + ' heaviest are listed)' : '') : 'No part has more than ' + fmtNum(HEAVY_TRIS) + ' triangles';
+    }
+    const empty = document.querySelector('#offenders-body .off-empty');
+    if (empty) empty.textContent = live.length ? 'No part has more than ' + fmtNum(HEAVY_TRIS) + ' triangles.' : 'Load a model to see heavy parts.';
+    if (live.length === 0 || heavy.length === 0) { list.innerHTML = ''; _offDeleteSync(); return; }
+    const byTri = heavy.sort((a, b) => b.triCount - a.triCount).slice(0, OFF_TOP_N);
     const maxTri = byTri[0].triCount || 1;
     const esc = s => String(s).replace(/[<>&"]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[ch]));
     const rows = byTri.map((p, i) => {
@@ -34863,11 +36857,16 @@ setTimeout(() => _dndDecorateTree(), 0);
         for (let i = Math.min(anchor, at); i <= Math.max(anchor, at); i++) { const k = parseInt(rows[i].dataset.partId, 10); if (Number.isFinite(k) && !state.selected.has(k)) selectPart(k, 'add'); }
       } else selectPart(id, 'toggle');
     } catch (_) {}
-    _offLastId = row.dataset.partId;
-    // the first tick shows where the part is; further ticks leave the camera alone
-    if (typeof frameSelected === 'function' && state.selected.size === 1 && state.selected.has(id)) {
-      try { frameSelected(); } catch (_) {}
-    }
+    _offLastId = row.dataset.partId;     // (the camera stays where it is: ticking a row only selects)
+  });
+  // Right-click a row: the camera goes to that part (the ticks are left as they are).
+  document.addEventListener('contextmenu', (e) => {
+    const row = e.target.closest && e.target.closest('.off-row');
+    if (!row) return;
+    const id = parseInt(row.dataset.partId, 10);
+    if (!Number.isFinite(id)) return;
+    e.preventDefault();
+    try { frameSelected(id); } catch (_) {}
   });
   let _offLastId = null;
 
@@ -36317,7 +38316,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     for (const p of state.parts) {
       if (p.deleted) continue;
       parts++; tris += p.triCount || 0; verts += p.vertCount || 0;
-      const m = p.mesh ? p.mesh.material : (p.instancedMesh ? p.instancedMesh.material : null);
+      const m = p.mesh ? _matOf(p.mesh) : (p.instancedMesh ? _matOf(p.instancedMesh) : null);
       for (const x of (Array.isArray(m) ? m : [m])) if (x) mats.add(x);
       if (p.mesh) {
         if (p.mesh.geometry) geoms.add(p.mesh.geometry);
@@ -36871,6 +38870,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     mo.observe(m, { attributes: true, attributeFilter: ['class'] });
   };
   $id('welcome-shortcuts')?.addEventListener('click', () => aside('shortcuts-modal', () => run('shortcuts')));
+  $id('welcome-help')?.addEventListener('click', () => aside('help-modal', () => run('help')));
   $id('welcome-settings')?.addEventListener('click', () => aside('settings-modal', () => _Settings.show('general')));
 
   // Start from a shape: an empty scene with one primitive in it.

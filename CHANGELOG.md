@@ -4,10 +4,112 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
-## Unreleased
+## v0.14.0
 
-A read of the whole code base and a round of beta testing after v0.13.0:
-what was found to be wrong is fixed, and the start screen is rebuilt.
+Released 8 Oct 2026.
+
+The biggest release so far. It adds a CAD view and a Shading card with a look for every taste, Dynamic place, an Align to floor that shows what it will do, a Help window with the whole knowledge base inside the app, a Settings window that can change the look of the interface, a rebuilt Export window, and three tools that clean up a scene for you (Smart optimise, Fasteners and Stacked copies). It also fixes what a read of the whole code base and a round of testing on assemblies with thousands of parts found, and it makes opening a big model faster.
+
+**CAD view and shading**
+
+- ![new][new] **A CAD view (key 6).** A view mode like the ones in CAD programs: no lights, reflections or shadows. Every surface is shaded only by which way it faces the camera, read from a small picture of a lit sphere (a matcap). Faces that look left are a light cool grey, faces that look right are dark and faces that look up are a warm sand. A grey or white part takes the matcap as it is; a coloured part keeps its colour with the matcap's shading. A dark line follows the sharp edges of every part, and a smooth surface such as the side of a cylinder gets a thin dark outline where it turns edge-on to the camera. Three looks: Ceramic, Light and Mono. Export and Save switch to Solid while they run, so none of it reaches a file.
+- ![new][new] **A Shading card under Properties.** Clay and CAD left the toolbar on the left. The card has a strip of small 3D parts (a hex nut), one for every look drawn in that look: Default (the plain Solid view), Clay, Porcelain, Steel and Red wax, then the CAD looks Ceramic, Light and Mono (they carry a CAD badge). A click chooses a look and turns the view on; a click on the lit one goes back to Solid. Keys 5 (Clay) and 6 (CAD) work as before. The card starts open.
+- ![new][new] **Outlines.** One switch on the Shading card (and in Settings › Viewport) draws the fine dark line on the sharp edges of every part in every view: Solid, Clay and CAD. It is on to start. Where lines are drawn in Solid and Clay the surfaces are pushed slightly back in depth so a line never flickers against the face it lies on.
+- ![polish][polish] **The strips scroll like the materials strip.** With a mouse, drag a strip sideways: it carries on after a flick, slows down, and at either end it stretches like an iOS list and springs back. A drag is not taken as a click on a tile. The strip fades at an edge that has more behind it, and a lit tile that is out of view is scrolled into view when the look changes. The materials strip in Properties is dragged the same way.
+- ![fix][fix] **Edge lines no longer show only half.** A line lies exactly on the faces it borders, so which of the two won the pixel changed with the camera angle: half the lines on one tilt, the other half on the other. The lines are now pulled toward the camera in their own shader, which works on both the WebGL and the WebGPU renderer (this version of the WebGPU renderer has no polygon offset).
+- ![fix][fix] **Edge lines are no longer hidden by the ground grid.** The grid plane writes its own depth, so a line drawn after it vanished where the plane lay between line and camera (the part of the model below the grid seen from above, the part above it seen from below). The lines are drawn before the grid now.
+- ![fix][fix] **Edge lines do not lag behind their parts.** The lines of duplicated parts (drawn as one instanced mesh) were baked on the processor and drawn again 90 ms after a move, so they trailed the surfaces in an exploded view and while snap-moving. They are drawn by the graphics card now, with the very same matrices as the parts. A copy that is selected or edited and becomes a mesh of its own gets its lines in the same moment.
+- ![fix][fix] **Hidden parts do not keep drawing edge lines.** While the view moves and Skip tiny parts leaves a part out, its CAD edge lines are left out with it.
+- ![polish][polish] **A very heavy model says when some parts have no edges.** The view draws edges for at most 6,000 parts and about 30 million floats of lines. Past that the biggest parts are outlined first, the same ones every time, and a notice says how many of the smallest parts are drawn without.
+- ![fix][fix] **Materials work while Clay or CAD is on.** Under Clay or CAD a part wears the view's shared material, and the material panels, the "used by" marks, Assign, New material, Duplicate, Delete material and merging materials used to look at that shared one. They read and change the material the part really has now, and the Properties card shows it. Parts made while a view is on (a copy turned into a mesh of its own) are dressed at once.
+
+**Dynamic place**
+
+- ![new][new] **Drag the selected part over other surfaces (key D).** A button in the toolbar on the left, the key D and the command palette open a card. With it on, press the selected part and drag: it rests on the surface under the cursor, with its lowest point (measured along the surface's normal) on it so it never sinks in, and turns to face the surface, like dragging a part out of a library onto a model. A press that is not on the selected part selects as usual; Shift, Ctrl, Alt and Cmd keep their normal meaning.
+- ![new][new] **Its options.** Align to surface; Land on the grid where nothing is under the cursor; Top axis (X, Y or Z of the part as it was picked up) and Direction (+ or −), which choose the side of the part that points away from the surface; Gap (a negative gap sinks the part in); Turn about the surface's normal, with quick buttons for 0°, 90°, 180° and 270°; and Reset gap and turn. The mouse wheel turns the held part in steps of 15°. Esc, a lost focus or a cancelled pointer puts the part back where it was. A drag is one undo step.
+- ![polish][polish] **Out of the way.** The transform gizmo is neither drawn nor grabbable while the tool is on, and choosing a gizmo (E, R, T, Q or its button) ends it. The cursor is a cross-hair, a hand over the selected part and a closed hand while it is held. With the view exploded it says to put the parts back together first. The tips at the foot of the viewport follow the tool.
+
+**Align to floor**
+
+- ![polish][polish] **It shows what it will do.** A small 3D drawing sits at the top of the card: the floor with its grid, the origin with the three axes and the model as the box it fills. The point of the model that goes to zero is ringed, a dashed line joins it to the origin while they are apart, a model that stands on the floor gets a blue footprint, and two arrows (its top and its front, as it was loaded) turn with the model. With no model open it draws an example box, so the choices can be tried first.
+- ![polish][polish] **Nothing moves until you press Align to floor.** The turn buttons and the choices only change the drawing ("Preview: not applied yet"); Align to floor does it, as one undo step. The three drop-downs are buttons now (Low / Mid / High / Keep, and Floor / Mid / Top / Keep). Reset puts the model back as it was loaded and the card back to its start (no turn, Mid / Mid / Floor).
+- ![polish][polish] **It is a floating card.** Align to floor left the right sidebar and opens over the viewport like Split and Fill holes, from the command palette (Ctrl+K, "Align model to the floor…") or the All commands menu (the three dots). "Align model to the floor (with the last choices)" in the palette does it without opening the card. Esc puts it away.
+- ![polish][polish] **Less on the card.** The line of numbers under the buttons is gone (the picture says it), and so is "Place every file I open": a file that is opened no longer moves itself.
+
+**Floating cards and tools**
+
+- ![new][new] **Move a card.** Split, Fill holes, Fasteners, Align to floor and the other cards over the viewport can be dragged by their title bar, or by the picture at the top of one that has a picture. A card stays inside the viewport, remembers where it was left in this browser, goes back to its corner with a double-click on the title, and is pulled back inside when the window shrinks.
+- ![polish][polish] **Stacked copies is a floating card too.** It left the right sidebar and opens from the command palette ("Find stacked copies…"). The tolerance, the near-copies switch, Find, Isolate and Delete work as before.
+- ![polish][polish] **Heavy parts are the parts over 10,000 triangles.** The card lists only those (up to 500, heaviest first) and shows how many there are as a small number beside its title, seen while the card is folded. It goes down as they are deleted or reduced, and reads 0 (dimmed) when none is that big; the empty list says "No part has more than 10,000 triangles." or "Load a model to see heavy parts.". Ticking a row never moves the camera now; a right-click on a row goes to the part.
+- ![polish][polish] **Cards over the viewport have no outline,** only a shadow, and every dropdown keeps the same hairline ring. They end in a Done bar with the Esc key.
+- ![polish][polish] **Small parts that are flagged stand out.** The yellow of Highlight small parts is stronger (62% instead of 22% opaque), a fainter yellow shows through whatever hides the part, and a yellow outline that nothing covers is drawn, so a screw inside a housing is found at a glance (for the first 400 flagged parts; beyond that the plain fill). The fill of a duplicated part stays on its copy when the copies move.
+
+**Exploded view**
+
+- ![polish][polish] **A simpler Exploded view card.** One Amount slider moves every axis that is on; X, Y and Z are pills with a coloured dot (red, green, blue) that choose which axes explode (switching one off puts it back, switching it on gives it the current amount); quick amounts (25%, 50%, 100%, 200%) set round values; the single-axis sliders are folded under Fine tune each axis. Reset puts every part back.
+- ![polish][polish] **Solid state pills.** Isolated is the accent blue, Exploded violet, Measure amber and Snap green, each a flat colour instead of a dim tint with a ring.
+- ![fix][fix] **Frame selection in an exploded view.** A copy drawn as part of a repeated set was framed where it sits at rest, so the camera aimed at where it used to be. Orbiting around the selection and Skip tiny parts also use where the parts are drawn now.
+
+**Settings, Appearance and Help**
+
+- ![new][new] **Appearance.** A new Settings page changes how the interface looks: an accent colour (presets and a picker for any colour), four tones for the greys, the interface font, the text size, the shape of corners and the density (the height of buttons, fields and dropdowns), and an Interface animations switch that turns off fades, slides and the start-up movement. Changes show at once and a Reset button on the page puts them back.
+- ![new][new] **Help & docs in the app (F1).** A window with the whole knowledge base of the website: articles in groups on the left, the open article on the right, and a search of all of them at the top. It works offline. It opens with F1, from the Menu, from the File menu, from the command palette, from a link on the start screen and from Settings.
+- ![new][new] **About.** A Settings page with the version, renderer, scene size, display and browser, buttons for Help and the shortcuts, a Copy details button that puts those facts and the GPU and the chosen look on the clipboard for a bug report, and links to report an issue, the website and the source.
+- ![new][new] **More Settings.** Camera speed (Orbit speed and Zoom speed, each Slow, Normal or Fast); Undo history (Short 50, Normal 200 or Long 500 steps); Warn before leaving with unsaved changes (on to start); Splash screen on or off; CAD view look and Outlines under Viewport. Settings no longer blurs what is behind it, so a colour or size changed there is seen as it changes.
+- ![polish][polish] **Show origin points** replaces "Group origins on select". It is off to start; when on, a dot shows at the origin of every group.
+- ![polish][polish] **Lower the resolution if it stutters is off to start.** It used to be on. Skip tiny parts stays on.
+- ![fix][fix] **Reset all settings resets everything it should:** the appearance, the camera speed, the undo depth, the CAD look and the outlines, not only the General page.
+- ![polish][polish] **The Keyboard shortcuts window is complete.** Besides the keys it lists the mouse (orbit, pan, zoom, select, box select, context menu), the tree (select rows and ranges, rename, drag into a group), fields (drag a number, Shift ten times faster, Alt ten times finer, click to type) and panels (Enter runs the open command, Esc closes it, Ctrl+Enter applies a batch rename), and shows a second key after "or". A test checks that every key the app binds is listed. CAD view (6), Batch rename (F2), Help & docs (F1) and Dynamic place (D) are in the command palette too.
+
+**Start-up**
+
+- ![new][new] **A splash screen while the app opens.** A dark card with a drawing of a rear derailleur as glowing 3D lines (the parts fly together, the camera glides round and a band of light climbs the model), the icon, the name, the version, a status line ("Building the interface", "Starting the renderer", "Preparing the scene") and a thin progress bar along the bottom edge. The app fades in by parts (top bar, left sidebar, viewport, right sidebar) when it has finished starting, after a short minimum (2.2 s the first time in a browser session, 0.7 s after a reload) and at the latest after 6 s. It can be switched off in Settings › General, and with "reduce motion" on the drawing is one still frame.
+- ![polish][polish] **The start screen keeps one height** (at least 720 px, or the window less 48 px) instead of changing size with the number of recent files.
+
+**Export**
+
+- ![polish][polish] **The Export window is rebuilt.** It is wider and taller. On the left is an inset list of formats under a heading; on the right are the format's name with its extension, a line saying what it is, and the options as hairline rows under small group titles (File name, Size and position, Parts, Format options), each with a bold name and a line saying what it does. Only the options that apply to the format are shown (Draco for GLB, ASCII for FBX and STL; the parts list shows no scale, axis, origin or merge; the custom-scale row appears only when Custom is chosen).
+- ![new][new] **Name the file.** A file name field with the same pills as Save scene (date, time, version, triangles, parts, size, percentage saved, optimised, selection and the source name), filled with what the file would be called anyway. A pill puts its piece in the name or takes it out; the version pill counts up when pressed again. Characters a file name cannot hold become `_`, and a typed extension is dropped, since the format adds its own.
+- ![new][new] **A summary before you export.** Three figures (parts, triangles and an approximate file size) and a line at the foot saying "Saves as name.ext" (an OBJ adds "and a .mtl for the colours"). With nothing to export the line says so and the Export button is disabled.
+- ![new][new] **Flatten groups and ASCII STL.** Flatten groups writes every part at the top level, without group folders, for tools that stumble on nested groups (not offered for formats without a tree or for one merged mesh). ASCII STL writes readable text instead of binary.
+- ![polish][polish] **The choices are remembered:** scale, up axis, origin, merge, Visible only and Flatten. Selected only and the file name are not.
+- ![fix][fix] **Ctrl+E, File › Export and the palette open the Export window itself,** with the format chosen last (GLB at first). They used to press the toolbar button, whose dropdown picks a format.
+
+**Batch rename**
+
+- ![polish][polish] **Batch rename is redesigned** to match Settings and Export. The rule column is wider; the tabs are one segmented control; every switch and every piece of a rule is a pill; the Quick tab shows what it built as a line of code; the scope is one list on every tab (Selection, Selection + contents, Selected parts only, Selected groups only, Whole tree), each with a line saying what it does, kept in step between the tabs; optional filters fold away and presets sit in a two-column grid. Each result row has a small kind tag, the old name quiet and the new name lit with the changed part highlighted (yellow for a warning, red for an error).
+- ![new][new] **A Quick tab.** Between Find & replace and Pattern: the usual jobs without writing a pattern. Add text before and after the name, change the letters (As it is, UPPER, lower, Title Case, snake_case, kebab-case, camelCase), trim spaces, remove characters from the start and the end, and number the parts (Start at, Step, Digits from 1 to 8, a separator, before or after the name, and Start again per nothing, parent group, colour or size). A line under the options shows the pattern the choices make, Edit as pattern opens it on the Pattern tab with the numbering carried over, and a Quick rule can be saved as a preset.
+- ![new][new] **Press a piece instead of typing it.** On the Pattern tab, two rows of buttons: the tokens (each puts `{token}` at the cursor) and the modifiers (each adds `:modifier` to the piece at or before the cursor), the ones that take a value with one to start from, like `strip(_)`, `slice(0,8)`, `pad(3,0)`, `round(1)` and `abbrev(12)`. Typing `{` for the list still works.
+- ![new][new] **The preview shows what changed.** In the new name the part that differs from the old name is marked, and what both share at the start and the end stays plain. A "changed only" switch in the Preview header hides the names that stay the same. An empty preview says why ("Nothing changes yet. Make a rule on the left…" or "Nothing to rename in this scope…").
+- ![polish][polish] **A bigger dialog.** It opens at 940 × 640 (was 880 × 580) and can be made no smaller than 700 × 440 (was 560 × 380). Fields have their labels above them, the optional filters are called "Only if…" (Name matches, Name does not match, Colour is, Kind, Depth, Triangles), the counter settings are always open, and Reset clears every tab, Quick included.
+- ![fix][fix] **Whole word matches whole words,** and has its own switch next to regex and match case. The match may not touch a letter or a digit, in any script; an underscore or a dash counts as a boundary, so `Hub` is found in `Coupling_Hub_A`. It works with plain text and with regular expressions.
+
+**Left sidebar and the tree**
+
+- ![new][new] **The Collapse button has a menu.** The arrow in its corner (or a right-click) collapses or expands the whole tree, the selection (the selected groups and everything inside; for a selected part, the group it is in) or from the selection down. Without a selection those entries are dimmed. The Locate button is gone.
+- ![polish][polish] **An import shows where it landed.** After Add to this scene or Import, the new parts are selected, the tree scrolls to them (opening the groups they sit in) and the camera frames them.
+- ![fix][fix] **The drag handles stay put.** The right one used to scroll away with the sidebar. Both are now cells of the app grid, 16 px wide, centred on the gap between a sidebar and the viewport, the same on both sides (the left one is hidden while the sidebar is folded). A thin line shows in the middle once the pointer has rested on the handle for a moment (passing over it shows nothing) and fades out toward both ends. Double-click resets the width.
+- ![polish][polish] **Minimum sizes.** The left sidebar cannot be dragged narrower than 220 px and the right one than 240 px (narrower, buttons and labels wrap or are cut off). The window has a minimum of 960 × 560: smaller, the app scrolls instead of squeezing the panels.
+- ![polish][polish] **Folding the left sidebar leaves a 10 px strip of the dark window at the left,** so the view does not run to the edge.
+- ![polish][polish] **Tree rows line up with the buttons above.** The colour swatch ends 14 px from the panel's edge (less the width of the scrollbar), the eye and swatch take 34 px, and a long name is cut 8 px before the eye.
+
+**Viewport**
+
+- ![polish][polish] **The dark background is a little cooler** (a touch more blue-grey).
+- ![fix][fix] **The view cube hides an axis where it passes behind the cube.** Each axis line is drawn in pieces, and a piece that lies behind a face is left out; an axis dot that points away from you is drawn behind the cube and the others in front.
+- ![polish][polish] **The Properties card puts the material row last,** under the facts and tags, and its strip is as wide as the cards around it.
+
+**Performance**
+
+- ![perf][perf] **The selection outline is drawn by the graphics card.** Up to 200 selected parts carry outline lines of their own that share the part's edges, so nothing is copied or uploaded when the selection moves. A drag with a bigger selection no longer rebuilds the outline on every move.
+- ![perf][perf] **Opening a big model gets all the speed.** The picture for the Recents list, and the spare copy of the app that makes the next tab open instantly, now wait until you have stopped clicking for a moment instead of starting in the first seconds. No spare copy is kept beside a scene of more than 1,500 parts (a new tab then takes about a second longer). The viewport is no longer resized when its size has not changed.
+
+**Interface**
+
+- ![polish][polish] **One design language.** Fields, buttons, dropdowns and search boxes in dialogs (Export, Batch rename, Save screenshot, Flatten, the shortcuts search, text prompts) share one height (32 px), corner and edge, at rest, under the pointer and in focus, and keyboard focus is drawn on the Export format list, the Batch rename pills and segmented controls. The colours, radii and sizes are tokens now.
+- ![fix][fix] **Labels and numbers are no longer selected by dragging or double-clicking.** Only fields, the console log and the help articles can be selected.
+- ![fix][fix] **The logo, Menu and Export menus open at the same height** under the top bar, and the Commands menu stops at 520 px with a thin visible scrollbar.
+- ![polish][polish] **The Transform card has room for 280 px** when it opens (the fields are taller). Reset puts the selection at the origin of its parent group (the world origin if it has none), turned to 0 and at scale 1; a group is reset as one rigid body, a locked part stays where it is, and an instanced part says to move it once with the gizmo first.
 
 **The view cube**
 
@@ -16,7 +118,7 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   instead of jumping, and the cube follows. A drag on the viewport takes over.
 - **Cleaner axes.** The dots are flat, with the letter centred in the circle;
   each line stops at the rim of its dot instead of running into the letter, and
-  the lines are drawn over the cube, so a face never hides one.
+  a line is cut where it passes behind a face of the cube, so the cube hides what is behind it.
 
 **The library is a drawer**
 
@@ -95,7 +197,7 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
 **Number fields and the Transform card**
 
 - ![polish][polish] **Number fields are bigger, and no number is cut
-  off.** A slider's value is a field you can see, 28 px tall and at least
+  off.** A slider's value is a field you can see, 32 px tall (as high as a button) and at least
   60 wide, and it grows with what is in it, as does the field it turns into
   when you type. The fields of the command panels and of the Shape card
   follow the same height.
@@ -124,9 +226,8 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   it — a tick box takes the place of its rank — and a second click takes
   the tick off; rows ticked before stay ticked, and `Shift`+click ticks a
   run of them. The button under the list deletes the ticked rows and says
-  what they weigh: *Delete 3 parts · 171.3k triangles*. One undo step. The
-  first tick still shows where the part is; further ticks leave the camera
-  alone.
+  what they weigh: *Delete 3 parts · 171.3k triangles*. One undo step. A tick
+  leaves the camera alone; a right-click on a row goes to the part.
 - ![fix][fix] **The Heavy parts list follows the scene.** A part deleted
   with the Delete key stayed listed until the tree was next rebuilt, and an
   undo did not bring it back into the list.
@@ -136,7 +237,7 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   and the dimmed text now, in the sidebar and in the command panels.
 
 - ![polish][polish] **Cards start folded.** Every card in the right sidebar
-  opens folded the first time (Properties has no fold). The ones you open
+  opens folded the first time (Properties has no fold, and Shading starts open). The ones you open
   or close are remembered, as before.
 
 **Gizmo and selection**
@@ -172,9 +273,9 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   click on it leaves the mode) and the Measure button is yellow. A click
   on a row in the Measurements card picks that measurement: its line is
   drawn thicker and its label turns yellow, and it stays on show after
-  the mode is left. The pills along the top of the viewport (camera view,
-  isolate, measure, snap) now share the toolbars' surface, and the camera
-  pill has a caret because it opens a list.
+  the mode is left. The camera-view pill shares the toolbars' surface and has a
+  caret because it opens a list; the isolate, exploded, measure and snap pills
+  are flat colours.
 
 **Views**
 
@@ -198,7 +299,7 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   same shape, as before). It starts at 60 % (triangle count within 20 %,
   each side of the box within 10 % of the longest) and is remembered.
 - ![polish][polish] **Undo goes back further.** The history held 30 steps; it
-  now keeps 200, with the last 30 of the kinds that carry geometry (delete,
+  now keeps 200 by default (Settings › General: Short 50, Normal 200, Long 500), with the last 30 of the kinds that carry geometry (delete,
   split, merge, bake, decimate and the like), so a big model does not run
   out of memory.
 - ![fix][fix] **Delete small parts leaves hidden parts alone.** What is
@@ -207,7 +308,7 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
   Showing or hiding a part (or undoing that) updates the count at once. When
   the small parts are isolated, what was on show before the isolation is
   what the threshold goes on choosing from.
-- ![new][new] **Stacked copies.** A card under Clean up finds parts that sit
+- ![new][new] **Stacked copies.** A card (it opens over the viewport from the command palette) finds parts that sit
   on an identical copy (the same shape in the same place: drawn twice,
   flickering where they meet). It selects the extra copies and keeps the
   first of each; Isolate shows them, Delete removes them (Ctrl+Z brings

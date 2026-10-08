@@ -261,6 +261,17 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.14.0** — the biggest release so far: a CAD view, Dynamic place, an Align to floor that shows what it will do, Help inside the app, and a Settings window that changes the look.
+
+- ![new][new] **CAD view and a Shading card** — key `6`; a strip of small 3D nuts, one for every look (Default, Clay, Porcelain, Steel, Red wax, and the CAD looks Ceramic, Light, Mono); one Outlines switch for the edge lines.
+- ![new][new] **Dynamic place** — key `D`: drag the selected part over other surfaces; it rests on them and turns to face them.
+- ![polish][polish] **Align to floor** shows a 3D drawing of what it will do and moves nothing until you press it; it is a floating card.
+- ![new][new] **Help (F1)** — the whole knowledge base, with search, offline. **Settings › Appearance** — accent colours, tones, fonts, text size, corners, density.
+- ![new][new] **Smart optimise**, **Fasteners** and **Stacked copies** clean a scene up for you; **Select similar** has a strictness slider; the library is a drawer.
+- ![polish][polish] **Export window rebuilt** — file name pills, a summary, Flatten groups, ASCII STL. **Batch rename** redesigned with a Quick tab. A **splash screen** at start. Cards over the viewport can be moved.
+- ![perf][perf] **Faster big models** — selection outlines and edge lines are drawn by the graphics card; the Recents picture and the spare tab wait until you stop clicking.
+- ![fix][fix] **72 fixes**, among them Cinema 4D-ready FBX, a server that answers only the app, and undo for instanced parts. The full list is in [CHANGELOG.md](CHANGELOG.md).
+
 **v0.13.0** — it feels like an app: installs to the desktop, opens in a window of its own, and the tabs grew up.
 
 - ![new][new] **Install it** — a web-app manifest and icon, so Chrome and Edge offer *Install*; the title bar can be folded away and the top bar takes its place.
