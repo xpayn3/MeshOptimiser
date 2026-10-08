@@ -126,7 +126,7 @@ what was found to be wrong is fixed, and the start screen is rebuilt.
 - ![polish][polish] Labels and roles for screen readers on switches, fields,
   menus and windows; keyboard focus is visible on sliders, links and
   tick boxes; shortcut tips over the viewport are easier to read.
-- ![refactor][refactor] About 2,000 lines of code and 150 style rules that
+- ![refactor][refactor] Well over a thousand lines of code and 150 style rules that
   nothing used are gone: the old flatten routines, the bounding-box
   overlay, the per-part colour picker, the old Add menu, the scene
   settings window.
