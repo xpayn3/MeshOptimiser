@@ -536,7 +536,9 @@ input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin
      residual is invisible at standard zoom). */
   top:0;
   bottom:0;
-  border-left:1px solid var(--bd);left:7px;
+  /* left:26px = 7px + one 20px step - 1: the vertical stands under the parent's
+     type icon (its centre), not under the parent's +/- box. */
+  border-left:1px solid var(--bd);left:26px;
 }
 /* Elbow: horizontal stub at row mid-height connecting the vertical line to
    the next column's content (icon or +/- box). Starts at the vertical's
@@ -545,8 +547,16 @@ input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin
   content:'';
   position:absolute;     /* right of the vertical so they connect cleanly */
   top:50%;    /* reaches the right edge of the 14px column */
-  border-top:1px solid var(--bd);left:8px;width:6px;
+  border-top:1px solid var(--bd);left:27px;width:6px;
 }
+/* A group child has its +/- box right where the vertical stands: the line runs
+   behind the box (it sits above it), with no stub. */
+.tree-line.elbow:has(+ .tree-expand)::before{display:none}
+.tree-node .tree-expand{position:relative;z-index:1}
+/* The last row under a parent ends its vertical at the row's middle (an L);
+   a level with no later row under its parent draws no line. See _treeLinesCompute. */
+.tree-line.elbow.last::after{bottom:50%}
+.tree-line.nl::after{display:none}
 
 /* Compact toolbar row under the search input */
 .tree-toolbar{display:flex;row-gap:5px;align-items:center}
@@ -656,6 +666,89 @@ input[type=range].scrub-range::-moz-range-thumb{width:12px;height:12px;border-ra
 /* A choice of one out of a few inside a command panel: Smart fit's shape,
    Split's sensitivity. (Split's buttons also carry .split-preset, which is
    what its script looks for.) */
+/* a line is a row of the tree like any other part: bluish, so it reads as a curve and not as a mesh */
+.tree-typeicon.spl{color:#5aa9ff}
+html.tree-icons-coded .tree-node .tree-typeicon.spl{color:#5aa9ff}
+.tree-node.is-spline:not(.selected) .tree-label{color:#8fc2ff}
+.prop-type-icon.spl{color:#5aa9ff}
+.prim-row.prim-off{opacity:.38}
+.prim-row.prim-off .prim-label{pointer-events:none}
+/* the Shape and Spline cards: one control size for dropdowns, number boxes and switches */
+#prop-body#prop-body :is(.spl-shape,.spl-spline) .prim-row{min-height:34px}
+#prop-body#prop-body :is(.spl-shape,.spl-spline) :is(.prim-val-wrap,.cs-wrap,.cs-trigger){box-sizing:border-box;width:112px;height:26px;min-height:0}
+#prop-body#prop-body :is(.spl-shape,.spl-spline) .prim-val-wrap{padding:0 8px;justify-content:flex-end;background-color:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm,6px)}
+#prop-body#prop-body :is(.spl-shape,.spl-spline) .prim-val-wrap input{height:100%;width:auto;flex:1 1 auto;min-width:0;padding:0;font-size:var(--fs-12);text-align:right}
+#prop-body#prop-body :is(.spl-shape,.spl-spline) .cs-trigger{background-color:var(--bg2);font-size:var(--fs-12);color:var(--tx);padding:0 24px 0 10px;border-radius:var(--r-sm,6px)}
+#prop-body#prop-body :is(.spl-shape,.spl-spline) .prim-toggle{justify-self:end}
+/* Draw: the layer over the viewport, the hint, the card (see _Draw) */
+#draw-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+#draw-overlay[hidden]{display:none}
+#draw-hint{position:absolute;top:48px;left:50%;transform:translateX(-50%);z-index:3;max-width:min(760px,calc(100% - 140px));padding:6px 14px;background:var(--surface-pop,#161616);border:1px solid var(--bd);border-radius:999px;font-size:var(--fs-11);line-height:1.4;color:var(--tx2);text-align:center;pointer-events:none}
+#draw-hint[hidden]{display:none}
+#draw-dim{position:absolute;z-index:4;width:132px;height:28px;padding:0 10px;background:var(--surface-pop,#161616);border:1px solid var(--ac-line,#0d99ff);border-radius:var(--r-sm);color:var(--tx);font:inherit;font-size:var(--fs-12);outline:none}
+#draw-dim[hidden]{display:none}
+.section-cmd[data-cmd="draw"] [hidden]{display:none!important}
+/* a tall card scrolls; its rows keep their height instead of squeezing */
+.section-cmd[data-cmd="draw"] .section-b>*,.section-cmd[data-cmd="sweep"] .section-b>*{flex-shrink:0}
+/* Draw card: one row of tool icons, segmented controls, and settings in an inset group (iOS style) */
+#draw-card .small-card{gap:8px}
+#draw-card .sw-label{display:none}
+#draw-card .section-h em{font-style:normal;margin-left:8px;color:var(--tx3);text-transform:none;letter-spacing:0;font-weight:var(--fw-regular)}
+#draw-card .dr-grid{grid-template-columns:repeat(7,1fr);gap:0;padding:2px;background:var(--bg2);border-radius:10px}
+#draw-card .dr-grid button{height:30px;padding:0;gap:0;border:0;background:transparent;border-radius:8px;color:var(--tx3);transition:background 180ms var(--ease-ios),color 180ms var(--ease-ios),transform 120ms var(--ease-ios)}
+#draw-card .dr-grid button span{display:none}
+#draw-card .dr-grid button svg{width:16px;height:16px}
+#draw-card .dr-grid button:hover{background:var(--s3);color:var(--tx)}
+#draw-card .dr-grid button:active{transform:scale(.94)}
+#draw-card .dr-grid button.active{background:var(--bg4);color:var(--ac-text);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+#draw-card .cmd-seg{border:0;border-radius:9px;--seg-pad:2px}
+#draw-card .cmd-seg>button{padding:5px 2px}
+#draw-card .dr-group{background:var(--bg2);border-radius:10px;overflow:hidden}
+#draw-card .dr-group:not(:has(>:not([hidden]))){display:none}
+#draw-card .dr-group>*{box-sizing:border-box;min-height:34px;margin:0;padding:0 12px}
+#draw-card .dr-group>:not([hidden])~:not([hidden]){border-top:1px solid var(--hairline)}
+#draw-card .dr-group .cmd-num,#draw-card .dr-group .toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:var(--fs-12);color:var(--tx)}
+#draw-card .dr-group .toggle{border-top:0}
+#draw-card .dr-group>:not([hidden])~.toggle:not([hidden]){border-top:1px solid var(--hairline)}
+#draw-card .dr-group .toggle>span:first-child,#draw-card .dr-group .cmd-num>span:first-child{color:var(--tx);font-weight:var(--fw-regular)}
+#draw-card .dr-group .toggle .switch{width:30px;height:18px}
+#draw-card .dr-group .toggle .switch::after{width:14px;height:14px}
+#draw-card .dr-group .toggle input:checked+.switch::after{transform:translateX(12px)}
+#draw-card .dr-group .size-field{width:84px;height:26px;padding:0 6px;margin-right:-6px;background:none;border:0;border-radius:6px;justify-content:flex-end;color:var(--tx3);transition:background 140ms var(--ease-ios)}
+#draw-card .dr-group .size-field:hover{background:var(--s3)}
+#draw-card .dr-group .size-field:focus-within{background:var(--bg3);box-shadow:inset 0 0 0 1px var(--ac)}
+#draw-card .dr-group .size-field input{width:auto;flex:1 1 auto;min-width:0;color:var(--tx)}
+#draw-card #dr-r-corner{display:flex;flex-direction:column;padding:0}
+#draw-card #dr-r-corner>.cmd-seg{margin:6px 12px;background:var(--bg3)}
+#draw-card #dr-r-corner>.cmd-num{padding:0 12px;border-top:1px solid var(--hairline)}
+#draw-card #dr-edit{display:flex;flex-wrap:wrap;gap:6px}
+#draw-card #dr-edit>.field-help{flex:1 1 100%;margin:0 0 2px}
+#draw-card #dr-edit .btn-row{display:contents}
+#draw-card #dr-edit .btn{flex:0 0 auto;height:26px;min-width:0;padding:0 11px;border:0;border-radius:13px;background:var(--bg2);font-size:var(--fs-11);color:var(--tx2);transition:background 140ms var(--ease-ios),transform 120ms var(--ease-ios)}
+#draw-card #dr-edit .btn:hover{background:var(--bg3);color:var(--tx)}
+#draw-card #dr-edit .btn:active{transform:scale(.96)}
+#draw-card #dr-edit .btn.danger{color:#ff6b61}
+/* Sweep: the lines to pick from (see _Sweep) */
+.section-cmd[data-cmd="sweep"] [hidden]{display:none!important}
+.sw-label{font-size:var(--fs-11);color:var(--tx3);margin:2px 0 -2px}
+.sw-list{display:flex;flex-direction:column;gap:3px;max-height:132px;overflow:auto}
+.sw-list[hidden]{display:none}
+.sw-empty{font-size:var(--fs-12);color:var(--tx3);padding:6px 2px}
+.sw-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;width:100%;padding:6px 10px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx-control,var(--tx2));font:inherit;font-size:var(--fs-12);cursor:pointer;text-align:left}
+.sw-row:hover{background:var(--bg3);color:var(--tx)}
+.sw-row.active{color:var(--ac-text);background:var(--ac-soft);border-color:var(--ac-line)}
+.sw-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw-meta{flex:0 0 auto;font-size:var(--fs-11);color:var(--tx3)}
+.sw-add{margin-top:2px}
+.sw-add .btn{flex:1 1 0;min-width:0;padding:0 8px}
+#sw-circle-row[hidden],#sw-rect-row[hidden]{display:none}
+/* Smart fit: the shapes as one grid of tiles (icon over name) */
+.field-help:empty{display:none}
+.fit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.fit-grid button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;height:62px;padding:0 4px;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx-control,var(--tx2));font:inherit;font-size:var(--fs-11);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.fit-grid button svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.75}
+.fit-grid button:hover{background:var(--bg3);color:var(--tx)}
+.fit-grid button.active{color:var(--ac-text);background:var(--ac-soft);border-color:var(--ac-line)}
 .cmd-seg{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);overflow:hidden;padding:var(--seg-pad,3px);--seg-n:4;--seg-i:0}
 .cmd-seg>button{position:relative;z-index:1;padding:6px 2px;background:transparent;color:var(--tx2);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);border:none;border-radius:var(--r-xs);cursor:pointer;white-space:nowrap;transition:color var(--dur-fast) var(--ease-out)}
 .cmd-seg>button:hover{color:var(--tx)}
@@ -1645,6 +1738,12 @@ button:focus-visible,[role="button"]:focus-visible,.cs-trigger:focus-visible,sum
 /* …and for what is not a button: links, tick boxes and the number you can
    Tab to on a slider. (On their own they had only the faint --ring-focus.) */
 a:focus-visible,[role="textbox"]:focus-visible,input:is([type=checkbox],[type=radio]):focus-visible{outline:2px solid var(--ac-text);outline-offset:2px}
+/* A control that was clicked with the mouse keeps focus, and Chrome draws the
+   keyboard ring on it as soon as any key goes down, Shift included (which
+   the viewport uses for snapping). Tapping a modifier is not keyboard
+   navigation: the ring stays hidden until a real key (Tab, an arrow …) is
+   pressed. See _wireModifierRing in app-v2.js. */
+html.no-mod-ring :focus-visible{outline:none!important;box-shadow:none!important}
 
 /* ── Menus ───────────────────────────────────────────────────────────────
    One look for every dropdown and context menu, after Figma's: a dark
@@ -1707,6 +1806,13 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
    the indent, not by colour. Colour is kept for selection only. */
 .tree-typeicon.asm{color:var(--tx2)}
 .tree-typeicon.part,.tree-typeicon.inst{color:var(--tx3)}
+/* Settings › Appearance › Colour the hierarchy icons: the colours the tree had
+   before. The icons keep them when their row is selected or lies on the way to
+   the selection: only the label takes the accent then. */
+html.tree-icons-coded .tree-node .tree-typeicon.asm{color:var(--icon-asm)}
+html.tree-icons-coded .tree-node .tree-typeicon.part{color:var(--icon-part)}
+html.tree-icons-coded .tree-node .tree-typeicon.inst{color:var(--icon-inst)}
+html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8)}
 /* Selection is the accent label and icon over a faint accent wash. */
 .tree-node.selected,.tree-node.is-group.selected{background:var(--ac-tint-12);--row-tint:var(--ac-tint-12)}
 .tree-node.selected:hover,.tree-node.is-group.selected:hover{background:var(--ac-tint-18);--row-tint:var(--ac-tint-18)}
@@ -2126,7 +2232,7 @@ strong,b,h1,h2,h3,h4,th{font-weight:var(--fw-semibold)}
   background:linear-gradient(var(--row-tint,transparent),var(--row-tint,transparent)),var(--bg)}
 /* the pinned column wears the row's own tint, over the panel colour */
 .tree-line{width:14px}
-.tree-line.elbow:has(+ .tree-expand-spacer)::before{width:23px}
+.tree-line.elbow:has(+ .tree-expand-spacer)::before{width:6px}
 /* The scrollbar under the tree. It takes no room while every row fits. */
 #tree-hscroll{flex:0 0 auto;overflow-x:auto;overflow-y:hidden;background:var(--bg)}
 #tree-hscroll > div{height:1px}
@@ -2381,6 +2487,20 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 .cmd-adv>summary:hover{color:var(--tx-control-hover)}
 .cmd-adv.is-changed>summary>span::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ac);margin-left:7px;vertical-align:2px}
 .cmd-adv-b{display:flex;flex-direction:column;gap:2px;padding:4px 0 2px}
+/* In a command card Advanced is the last thing before the footer: the same gap
+   above its label (from the rule) and below it (to the footer's rule). */
+.vp-cmd-host .section-cmd .section-b:has(>.cmd-adv:last-child){padding-bottom:0}
+.section-cmd .cmd-adv>summary{padding:12px 0 13px}
+.section-cmd .cmd-adv-b{padding:4px 0 12px}
+/* Reset for Advanced: a small icon at the end of its row, there only while
+   something inside differs from the default (the card sets .is-changed). It
+   stands in for the "Reset to defaults" link at the foot, which is hidden. */
+.cmd-adv-reset{margin:-4px 0 -4px auto;display:grid;place-items:center;width:20px;height:20px;padding:0;background:none;border:0;border-radius:var(--r-xs);color:var(--tx3);cursor:pointer}
+.cmd-adv-reset:hover{color:var(--tx-control-hover);background:var(--s3)}
+.cmd-adv-reset .ti{width:14px;height:14px}
+.cmd-adv:not(.is-changed) .cmd-adv-reset{display:none}
+.cmd-adv.has-reset .cmd-adv-b .cmd-link[id$="-reset"]{display:none}
+.section-cmd .cmd-adv.has-reset.is-changed>summary>span::after{display:none}
 /* Advanced opens and closes by growing: the browser animates the height of
    the details content between 0 and its own size, and the options fade in a
    beat behind it. Where that is not supported it simply opens at once. */
@@ -2622,6 +2742,19 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #_flat-dialog .flat-row input[type=number]{padding-top:calc(6px + var(--num-drop));padding-bottom:calc(6px - var(--num-drop))}
 .set-pane-b .field>input[type=range]{flex:0 0 230px;width:230px}
 .set-help{display:block;margin-top:2px;font-size:var(--fs-11);color:var(--tx3);line-height:1.45;white-space:normal;font-weight:var(--fw-regular)}
+/* Crash safety: one calm panel for a problem that needs a decision (see _Recover) */
+#mo-recover{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:9500;display:flex;align-items:center;gap:16px;max-width:min(680px,calc(100vw - 32px));padding:14px 16px;background:var(--surface-pop,#161616);border:1px solid var(--bd2);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.6);font-size:var(--fs-12);color:var(--tx2)}
+#mo-recover[hidden]{display:none}
+#mo-recover .mr-text{display:flex;flex-direction:column;gap:3px;min-width:0}
+#mo-recover .mr-title{color:var(--tx);font-size:var(--fs-13,13px)}
+#mo-recover .mr-msg{line-height:1.45}
+#mo-recover .mr-actions{display:flex;gap:8px;flex:0 0 auto;flex-wrap:wrap;justify-content:flex-end}
+#mo-recover .btn{width:auto;min-height:var(--btn-h-sm);height:var(--btn-h-sm);padding:0 12px;white-space:nowrap}
+@media (max-width:640px){#mo-recover{flex-direction:column;align-items:stretch}}
+/* Settings > Performance > Graphics: the line turns amber when the browser draws in software */
+.set-gfx.is-soft .set-help{color:rgb(251,191,36)}
+.set-gfx .btn{min-width:0;white-space:nowrap}
+.set-gfx .btn[hidden]{display:none}
 .set-action .btn{width:auto;flex:0 0 auto;min-width:86px;min-height:var(--btn-h-sm);height:var(--btn-h-sm);padding:0 12px;justify-content:center}
 .set-pane-b #fog-controls,.set-pane-b #hdri-controls{margin:4px 0 10px!important}
 .set-foot{align-items:center}
@@ -2693,6 +2826,18 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    plain description under it, and one filled button that runs the command. */
 .vp-cmd-host>.section-cmd.has-hero{box-shadow:0 18px 50px rgba(0,0,0,.6),0 0 0 1px var(--s4)}
 .vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:-32px;padding:0 14px 10px}
+/* While Advanced is open the clip stays but shrinks to half its size, so the
+   options have the room; closing Advanced grows it back (see _advTurn in
+   _CmdCards). The picture is scaled from its top centre (it has the card's own
+   colour around it, so the sides do not show) while the frame closes to the
+   matching height; the title, pulled up over the clip's foot, rides along. The
+   close button's blur is dropped while it runs. */
+.cmd-hero{aspect-ratio:592/370;min-height:0;overflow:clip;transition:aspect-ratio .34s cubic-bezier(.32,.72,0,1)}
+.cmd-hero video{transform-origin:50% 0;transition:transform .34s cubic-bezier(.32,.72,0,1)}
+.section-cmd.adv-open>.cmd-hero{aspect-ratio:592/185}
+.section-cmd.adv-open>.cmd-hero video{transform:scale(.5)}
+.section-cmd.adv-anim .section-h .cmd-close{backdrop-filter:none;-webkit-backdrop-filter:none}
+@media (prefers-reduced-motion:reduce){.cmd-hero,.cmd-hero video{transition:none}}
 .vp-cmd-host .section-cmd.has-hero>.section-h>span{font-size:18px;line-height:1.2;font-weight:var(--fw-semibold);letter-spacing:-.015em;text-transform:none;color:var(--white);text-shadow:0 1px 14px rgba(0,0,0,.7)}
 .vp-cmd-host .section-cmd.has-hero>.section-b{padding:0 14px 14px}
 .cmd-lede{color:var(--tx2);font-size:var(--fs-12);line-height:1.55;margin:0 0 12px}
@@ -3196,6 +3341,9 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubi
 /* The materials: a card under the numbers, as wide as the other cards in this column
    (it reaches past the block's side padding to their edges). */
 #prop-body .prop-material-row{margin:6px -10px 0;padding:9px 10px;height:90px;border-radius:var(--r-xl);background:color-mix(in srgb,var(--tx) 2.5%,transparent)}
+/* The Scene card flashes once when it is opened from the menu or the command list */
+.section.flash-card{animation:card-flash .9s ease-out}
+@keyframes card-flash{0%{box-shadow:0 0 0 2px var(--ac)}100%{box-shadow:0 0 0 2px transparent}}
 /* Exploded view: one amount, the axes as pills, the per-axis sliders folded away */
 .ex-body .field{margin-bottom:12px}
 .ex-row{display:flex;align-items:center;gap:10px;margin:0 0 10px}
@@ -3415,7 +3563,7 @@ body.app-ready .sp-card{transform:scale(1.025)}
 /* a fact on a Settings row (About) */
 .set-val{max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx3);font-size:var(--fs-12);font-variant-numeric:tabular-nums;text-align:right}
 </style>
-<script src="appearance.js?v=1"></script>
+<script src="appearance.js?v=2"></script>
 </head>
 <body>
 
@@ -3576,20 +3724,20 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.15.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.20.0</div>
         </div>
         <div class="brand-menu-about">Optimise, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.15.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.20.0</span></div>
           <ul>
-            <li>Quick wand: hold W for a ring of commands</li>
-            <li>Repair mesh and Remove hidden faces</li>
-            <li>Merge by material or group, Select by rule</li>
-            <li>Untriangulate, and a wireframe that shows polygons</li>
-            <li>Dynamic place has a scale handle (drag the cube)</li>
-            <li>Decimate keeps normals, UVs and colours</li>
-            <li>The report shows how far the surfaces moved</li>
+            <li>Draw lines and shapes (L), and Sweep along a line</li>
+            <li>Lines are parts: in the tree, in groups, with the gizmo</li>
+            <li>Organise the tree: remove, flatten, sort, move groups</li>
+            <li>Pick groups and parts together with Ctrl and Shift</li>
+            <li>IGES and BREP files, folders and LODs in the converter</li>
+            <li>Copies found in files from other tools; Decimate within a distance</li>
+            <li>The server closes with the window; a crash is handled</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -3629,7 +3777,7 @@ window.moSplash = function (msg, pct) {
         <button class="export-menu-item" role="menuitem" data-file-cmd="export"><span class="fmt"><i data-lucide="download" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Export…</span><span class="hint">Ctrl+E</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="revert" title="Discards every edit and re-parses the source file"><span class="fmt"><i data-lucide="rotate-ccw" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Revert to source…</span></button>
         <div class="export-menu-sep" role="separator"></div>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="scene-settings"><span class="fmt"><i data-lucide="box" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Scene settings…</span><span class="hint">Ctrl+;</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="scene-settings"><span class="fmt"><i data-lucide="clapperboard" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Scene settings…</span><span class="hint">Ctrl+;</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="settings"><span class="fmt"><i data-lucide="settings" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Settings…</span><span class="hint">Ctrl+,</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="help"><span class="fmt"><i data-lucide="life-buoy" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Help &amp; docs</span><span class="hint">F1</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="welcome"><span class="fmt"><i data-lucide="home" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px"></i>Welcome screen</span></button>
@@ -3710,6 +3858,8 @@ window.moSplash = function (msg, pct) {
 
   <main id="viewport">
     <canvas id="canvas"></canvas>
+    <canvas id="draw-overlay" hidden aria-hidden="true"></canvas>
+    <div id="draw-hint" hidden aria-live="polite"></div>
     <div id="vp-drop" hidden aria-hidden="true"><div class="vp-drop-card"><i data-lucide="upload"></i><div class="vp-drop-t">Drop to open</div><div class="vp-drop-s" id="vp-drop-sub"></div></div></div>
     <div id="gizmo-hud" aria-hidden="true"></div>
     <div id="vp-overlay">
@@ -3720,11 +3870,11 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="gz-place" data-cmd-toggle="place" title="Dynamic place (D): pick the selected part up and drag it over other surfaces. It rests on them and turns to face them."><i data-lucide="arrow-down-to-dot"></i></button>
         <button class="vpb" id="tg-transform" title="Toggle transform panel: position, rotation, size"><i data-lucide="move-3d"></i></button>
         <div class="vpb-sep"></div>
-        <button class="vpb" id="vw-solid" data-mode="solid" title="Solid (1)"><i data-lucide="box"></i></button>
-        <button class="vpb" id="vw-wire" data-mode="wire" title="Wireframe (2)"><svg viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v10"/></svg></button>
-        <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="crosshair"></i></button>
+        <button class="vpb" id="vw-solid" data-mode="solid" title="Solid (1)"><i data-lucide="cube-solid"></i></button>
+        <button class="vpb" id="vw-wire" data-mode="wire" title="Wireframe (2)"><i data-lucide="cube-wire"></i></button>
+        <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (3)"><i data-lucide="cube-xray"></i></button>
         <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — colour parts by triangle density (4)"><i data-lucide="flame"></i></button>
-        <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="triangle-alert"></i></button>
+        <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="highlighter"></i></button>
       </div>
       <div class="vpc tc">
         <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Camera view">
@@ -3740,7 +3890,7 @@ window.moSplash = function (msg, pct) {
             <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
           </button>
           <button id="vp-explode-pill" class="vp-pill vp-pill-mode" type="button" hidden title="The parts are exploded. Click to put them back together">
-            <i class="vp-pill-icon" data-lucide="expand" aria-hidden="true"></i>
+            <i class="vp-pill-icon" data-lucide="unfold-vertical" aria-hidden="true"></i>
             <span class="vp-pill-label">Exploded</span>
             <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
           </button>
@@ -3769,9 +3919,11 @@ window.moSplash = function (msg, pct) {
         <div id="vp-add-pop" class="vp-prim-pop" style="display:none"></div>
         <div class="vpb-sep"></div>
         <button class="vpb" id="tg-split" data-cmd-toggle="split" title="Split (X)"><i data-lucide="split"></i></button>
-        <button class="vpb" id="tg-fill-holes" data-cmd-toggle="fillholes" title="Fill holes (P)"><i data-lucide="circle-off"></i></button>
+        <button class="vpb" id="tg-fill-holes" data-cmd-toggle="fillholes" title="Fill holes (P)"><i data-lucide="square-dot"></i></button>
+        <button class="vpb" id="tg-sweep" data-cmd-toggle="sweep" title="Sweep"><i data-lucide="spline"></i></button>
+        <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="pen-tool"></i></button>
         <button class="vpb" id="tg-smart-fit" data-cmd-toggle="smartfit" title="Smart fit (Ctrl+B)"><i data-lucide="wand-2"></i></button>
-        <button class="vpb" id="tg-select-hidden" data-cmd-toggle="selhidden" title="Select hidden parts"><i data-lucide="eye-off"></i></button>
+        <button class="vpb" id="tg-select-hidden" data-cmd-toggle="selhidden" title="Select hidden parts"><i data-lucide="ghost"></i></button>
         <button class="vpb" id="tg-fasteners" data-cmd-toggle="fasteners" title="Fasteners: select bolts, nuts and washers"><i data-lucide="bolt"></i></button>
         <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
         <div class="vpb-sep"></div>
@@ -3791,7 +3943,7 @@ window.moSplash = function (msg, pct) {
             <!-- Ground grid and Sun gizmo are switched here. Their old toolbar
                  buttons stay in the page, hidden, because the shortcuts, the
                  command list and scene save/restore go through them. -->
-            <span style="display:none"><button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="grid-3x3"></i></button><button class="vpb" id="tg-sun" title="Toggle sun direction gizmo"><i data-lucide="sun"></i></button></span>
+            <span style="display:none"><button class="vpb" id="tg-grid" title="Toggle ground grid"><i data-lucide="land-plot"></i></button><button class="vpb" id="tg-sun" title="Toggle sun direction gizmo"><i data-lucide="sun"></i></button></span>
             <div class="toggle" title="Show the ground grid (G)"><span id="toggle-grid-lbl">Ground grid</span><label><input type="checkbox" id="toggle-grid" aria-labelledby="toggle-grid-lbl" data-mirror="tg-grid"><span class="switch"></span></label></div>
             <div class="toggle" title="Show a gizmo in the viewport for turning the sun"><span id="toggle-sun-lbl">Sun direction gizmo</span><label><input type="checkbox" id="toggle-sun" aria-labelledby="toggle-sun-lbl" data-mirror="tg-sun"><span class="switch"></span></label></div>
             <div class="toggle"><span id="toggle-fps-lbl">FPS counter</span><label><input type="checkbox" id="toggle-fps" aria-labelledby="toggle-fps-lbl"><span class="switch"></span></label></div>
@@ -3915,6 +4067,115 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Remove</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
+    <div class="section section-cmd" data-cmd="sweep" hidden>
+      <div class="section-h"><span>Sweep</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b small-card">
+        <div class="cmd-lede">Carries a profile along a path and makes a solid. Paths and profiles are lines in the scene.</div>
+        <div class="sw-label">Path</div>
+        <div class="sw-list" id="sw-path-list"></div>
+        <div class="sw-label">Profile</div>
+        <div class="cmd-seg" id="sw-profile" role="group" aria-label="Profile">
+          <button type="button" class="active" data-p="circle" title="A circle">Circle</button>
+          <button type="button" data-p="rect" title="A rectangle">Rectangle</button>
+          <button type="button" data-p="line" title="A line of the scene">A line</button>
+        </div>
+        <div class="sw-list" id="sw-prof-list" hidden></div>
+        <div class="cmd-num" id="sw-circle-row"><span>Diameter</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-size" value="10"><span>mm</span></label></div>
+        <div id="sw-rect-row" hidden>
+          <div class="cmd-num"><span>Width</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-w" value="10"><span>mm</span></label></div>
+          <div class="cmd-num"><span>Height</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-h" value="6"><span>mm</span></label></div>
+        </div>
+        <button class="btn warn" id="sw-run" data-cmd-primary title="Make the solid. Ctrl+Z takes it back."><i data-lucide="spline"></i><span>Sweep</span></button>
+        <div class="field-help" id="sw-info"></div>
+        <details class="cmd-adv" id="sw-adv">
+          <summary><span>Advanced</span></summary>
+          <div class="cmd-adv-b">
+            <div class="cmd-num" title="How big the profile is where the path starts, as a share of its size"><span>Size at the start</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-scale0" value="100"><span>%</span></label></div>
+            <div class="cmd-num" title="How big the profile is where the path ends (a taper)"><span>Size at the end</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-scale1" value="100"><span>%</span></label></div>
+            <div class="cmd-num" title="How far the profile turns about the path from the start to the end"><span>Twist</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-twist" value="0"><span>°</span></label></div>
+            <div class="toggle" title="Close the two ends of an open path with a flat face"><span id="sw-caps-lbl">Close the ends</span><label><input type="checkbox" id="sw-caps" aria-labelledby="sw-caps-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="A corner of the profile sharper than this stays a hard edge; the rest is shaded smooth"><span>Hard edges from</span><label class="size-field"><input type="text" inputmode="decimal" id="sw-crease" value="30"><span>°</span></label></div>
+            <button type="button" class="cmd-link" id="sw-reset">Reset to defaults</button>
+          </div>
+        </details>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Sweep</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <div class="section section-cmd" data-cmd="draw" id="draw-card" hidden>
+      <div class="section-h"><span>Draw<em id="dr-tool-name"></em></span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b small-card">
+        <div class="fit-grid dr-grid" id="dr-tools" role="group" aria-label="Tool">
+          <button type="button" class="active" data-t="pen" title="Pen: points and curves"><i data-lucide="pen-tool"></i><span>Pen</span></button>
+          <button type="button" data-t="rect" title="Rectangle"><i data-lucide="rectangle-horizontal"></i><span>Rectangle</span></button>
+          <button type="button" data-t="circle" title="Circle"><i data-lucide="circle"></i><span>Circle</span></button>
+          <button type="button" data-t="arc" title="Arc through three points"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 18a9 9 0 0 1 16 0"/><circle cx="4" cy="18" r="1.2"/><circle cx="20" cy="18" r="1.2"/></svg><span>Arc</span></button>
+          <button type="button" data-t="polygon" title="Polygon"><i data-lucide="hexagon"></i><span>Polygon</span></button>
+          <button type="button" data-t="freehand" title="Freehand stroke, smoothed"><i data-lucide="pencil"></i><span>Freehand</span></button>
+          <button type="button" data-t="edit" title="Edit the points of a line"><i data-lucide="mouse-pointer-2"></i><span>Edit</span></button>
+        </div>
+        <div class="sw-label">Curve</div>
+        <div class="cmd-seg" id="dr-type" role="group" aria-label="Curve type">
+          <button type="button" class="active" data-k="bezier" title="Points with handles">Bezier</button>
+          <button type="button" data-k="cubic" title="A smooth curve through the points">Cubic</button>
+          <button type="button" data-k="bspline" title="A smooth curve pulled towards the points">B-spline</button>
+          <button type="button" data-k="linear" title="Straight pieces">Linear</button>
+        </div>
+        <div class="sw-label">Work plane</div>
+        <div class="cmd-seg" id="dr-plane" role="group" aria-label="Work plane">
+          <button type="button" class="active" data-p="ground" title="The ground, XY">Ground</button>
+          <button type="button" data-p="front" title="The front, XZ">Front</button>
+          <button type="button" data-p="side" title="The side, YZ">Side</button>
+          <button type="button" data-p="view" title="Facing the camera">View</button>
+          <button type="button" data-p="surface" title="On the face of a part: the first click picks it">Surface</button>
+        </div>
+        <div class="dr-group" id="dr-snapgroup">
+        <div class="cmd-num" title="How far the plane is moved along its normal"><span>Offset</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-offset" value="0"><span>mm</span></label></div>
+        <div class="toggle" title="Points land on the grid"><span id="dr-snap-grid-lbl">Snap to grid</span><label><input type="checkbox" id="dr-snap-grid" aria-labelledby="dr-snap-grid-lbl" checked><span class="switch"></span></label></div>
+        <div class="cmd-num" title="The grid step. Auto follows the zoom; type a number to fix it, or empty for Auto"><span>Grid step</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-grid" value="Auto"><span>mm</span></label></div>
+        <div class="toggle" title="Points land on the points of other lines"><span id="dr-snap-pts-lbl">Snap to points</span><label><input type="checkbox" id="dr-snap-pts" aria-labelledby="dr-snap-pts-lbl" checked><span class="switch"></span></label></div>
+        </div>
+        <div class="dr-group" id="dr-shapegroup">
+        <div id="dr-r-corner" hidden>
+          <div class="cmd-seg" id="dr-corner-type" role="group" aria-label="Corner">
+            <button type="button" class="active" data-c="round" title="Rounded corners: true arcs">Round</button>
+            <button type="button" data-c="bevel" title="Cut corners: straight chamfers">Bevel</button>
+          </div>
+          <div class="cmd-num" title="How far the corner reaches along each edge. 0 leaves the corners sharp"><span>Corner size</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-corner" value="0"><span>mm</span></label></div>
+        </div>
+        <div class="cmd-num" id="dr-r-sides" hidden><span>Sides</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-sides" value="6"></label></div>
+        <div class="toggle" id="dr-r-star" hidden title="Alternate points on a smaller radius"><span id="dr-star-lbl">Star</span><label><input type="checkbox" id="dr-star" aria-labelledby="dr-star-lbl"><span class="switch"></span></label></div>
+        <div class="cmd-num" id="dr-r-inner" hidden title="The inner radius of the star, as a share of the outer"><span>Inner radius</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-inner" value="50"><span>%</span></label></div>
+        <div class="toggle" id="dr-r-circum" hidden title="The size is the circle the sides touch, not the circle the corners lie on"><span id="dr-circum-lbl">Around the circle</span><label><input type="checkbox" id="dr-circum" aria-labelledby="dr-circum-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" id="dr-r-ellipse" hidden title="Two radii: the pointer sets one along each axis"><span id="dr-ellipse-lbl">Ellipse</span><label><input type="checkbox" id="dr-ellipse" aria-labelledby="dr-ellipse-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" id="dr-r-center" hidden title="The first click is the middle of the rectangle (Alt does the same)"><span id="dr-center-lbl">From the centre</span><label><input type="checkbox" id="dr-center" aria-labelledby="dr-center-lbl"><span class="switch"></span></label></div>
+        <div class="cmd-num" id="dr-r-smooth" hidden title="How far the smoothed line may stray from the stroke, in pixels"><span>Smoothing</span><label class="size-field"><input type="text" inputmode="decimal" id="dr-smooth" value="4"><span>px</span></label></div>
+        </div>
+        <div id="dr-edit" hidden>
+          <div class="field-help" id="dr-edit-info"></div>
+          <div class="btn-row dr-actions">
+            <button type="button" class="btn" id="dr-close" title="Close or open the line (C)"><span id="dr-close-label">Close</span></button>
+            <button type="button" class="btn" id="dr-reverse" title="Turn the line round">Reverse</button>
+            <button type="button" class="btn" id="dr-simplify" title="Fewer points, a smooth curve through them">Simplify</button>
+          </div>
+          <div class="btn-row dr-actions">
+            <button type="button" class="btn" id="dr-smooth-pt" title="Give the selected point handles">Smooth</button>
+            <button type="button" class="btn" id="dr-sharp-pt" title="Take the handles off the selected point">Sharp</button>
+            <button type="button" class="btn danger" id="dr-del-pt" title="Delete the selected point (Delete)">Delete</button>
+          </div>
+          <div class="btn-row dr-actions">
+            <button type="button" class="btn" id="dr-fillet" title="Round or cut the selected corner by the corner size above">Corner</button>
+            <button type="button" class="btn" id="dr-fillet-all" title="Round or cut every sharp corner">All corners</button>
+          </div>
+          <div class="btn-row dr-actions">
+            <button type="button" class="btn" id="dr-mirror-u" title="A mirrored copy, across the work plane's vertical axis">Mirror ↔</button>
+            <button type="button" class="btn" id="dr-mirror-v" title="A mirrored copy, across the work plane's horizontal axis">Mirror ↕</button>
+          </div>
+        </div>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the tool away"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
+    </div>
+
     <div class="section section-cmd" data-cmd="mergeby" hidden>
       <div class="section-h"><span>Merge by</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b small-card">
@@ -3965,7 +4226,7 @@ window.moSplash = function (msg, pct) {
         <div class="field-help">Parts that sit on top of an identical copy: the same shape in the same place, drawn twice (and flickering where the two meet). One of each pair is kept.</div>
         <div class="field"><div id="stk-tol-scrub"></div></div>
         <div class="toggle" title="Also count a part as a copy when its triangle count differs a little (another export of the same part, a re-meshed duplicate)"><span id="stk-near-lbl">Also near copies</span><label><input type="checkbox" id="stk-near" aria-labelledby="stk-near-lbl"><span class="switch"></span></label></div>
-        <button class="btn primary" id="stk-run" data-cmd-primary title="Select the extra copies. Nothing is deleted until you press Delete."><i data-lucide="copy"></i>Find stacked copies</button>
+        <button class="btn primary" id="stk-run" data-cmd-primary title="Select the extra copies. Nothing is deleted until you press Delete."><i data-lucide="layers-2"></i>Find stacked copies</button>
         <div class="field-help" id="stk-info"></div>
         <div class="btn-row" id="stk-after" hidden>
           <button class="btn" id="stk-isolate" title="Show only the extra copies, to check them"><i data-lucide="focus"></i>Isolate</button>
@@ -4007,6 +4268,7 @@ window.moSplash = function (msg, pct) {
           Press the selected part and drag it over the model. It rests on the surface under the cursor, and turns to face it.
         </div>
         <div class="toggle" title="Turn the part so that what was its top points away from the surface, as when a part is dragged out of a library onto a model. Off: it keeps the way it faces."><span id="place-align-lbl">Align to surface</span><label><input type="checkbox" id="place-align" aria-labelledby="place-align-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="A bolt goes in by its shank: only its head is left standing on the surface, as if it were screwed in. Parts that are not bolts rest as usual. Needs Align to surface."><span id="place-head-lbl">Seat bolts by the head</span><label><input type="checkbox" id="place-head" aria-labelledby="place-head-lbl"><span class="switch"></span></label></div>
         <div class="toggle" title="Where nothing is under the cursor, the part lands on the grid. Off: it stays where it last rested."><span id="place-ground-lbl">Land on the grid</span><label><input type="checkbox" id="place-ground" aria-labelledby="place-ground-lbl" checked><span class="switch"></span></label></div>
         <div class="cmd-num" title="Which axis of the part points away from the surface it rests on. X, Y and Z are the part's own axes as it stands when you first pick it up."><span>Top axis</span>
           <div class="cmd-seg" id="place-axis-seg" role="group" aria-label="Top axis" style="--seg-n:3;width:96px"><button type="button" data-axis="x">X</button><button type="button" data-axis="y">Y</button><button type="button" data-axis="z">Z</button></div>
@@ -4036,9 +4298,9 @@ window.moSplash = function (msg, pct) {
         </div>
         <div class="btn-row" style="grid-template-columns:auto minmax(0,1fr)">
           <label class="size-field" title="Largest hole to fill, measured across its widest point"><span>up to</span><input type="text" inputmode="decimal" id="fill-holes-size" value="12"><span>mm</span></label>
-          <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Fill holes</span></button>
+          <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="square-dot"></i><span id="fill-holes-label">Fill holes</span></button>
         </div>
-        <div class="field-help" id="fill-holes-info">Bolt holes, slots, pockets and lettering in flat faces. Bosses, the bore of a washer or nut, and openings into a cavity are left alone.</div>
+        <div class="field-help" id="fill-holes-info"></div>
         <details class="cmd-adv" id="fh-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
@@ -4065,23 +4327,21 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><span>Smart fit</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-lede">
-          Replaces selected parts with a best-fit box or cylinder, or with a few boxes or Blocks, which keep the part's outline. Size and position are kept.
+          Replaces the selected parts with simple shapes. Size and position are kept.
         </div>
-        <div class="cmd-seg" id="fit-modes" role="group" aria-label="Shape">
-          <button type="button" class="active" data-mode="smart" title="Picks a box, a turned box or a cylinder for each part">Auto</button>
-          <button type="button" data-mode="aabb" title="A box lined up with the scene's axes">Box</button>
-          <button type="button" data-mode="obb" title="A box turned to follow the part">Turned box</button>
-          <button type="button" data-mode="cyl" title="A cylinder along the part's long axis">Cylinder</button>
-        </div>
-        <!-- the shapes that keep the part's outline -->
-        <div class="cmd-seg" id="fit-modes-more" role="group" aria-label="Shapes that keep the outline" style="margin-top:6px">
-          <button type="button" data-mode="boxes" title="A handful of boxes, each sized and turned to one piece of the part: a foot becomes a slab and a bar, a frame four bars">A few boxes</button>
-          <button type="button" data-mode="blocks" title="The part rebuilt from a coarse grid of boxes: boxy, but its steps, arms and openings stay where they are">Blocks</button>
+        <!-- one grid of shapes; the last two keep the part's outline -->
+        <div class="fit-grid" id="fit-modes" role="group" aria-label="Shape">
+          <button type="button" class="active" data-mode="smart" data-desc="Picks a box, a turned box or a cylinder for each part."><i data-lucide="wand-2"></i><span>Auto</span></button>
+          <button type="button" data-mode="aabb" data-desc="A box lined up with the scene's axes."><i data-lucide="square"></i><span>Box</span></button>
+          <button type="button" data-mode="obb" data-desc="A box turned to follow the part."><i data-lucide="rotate-3d"></i><span>Turned box</span></button>
+          <button type="button" data-mode="cyl" data-desc="A cylinder along the part's long axis."><i data-lucide="cylinder"></i><span>Cylinder</span></button>
+          <button type="button" data-mode="boxes" data-desc="A handful of boxes, each sized and turned to one piece of the part: a foot becomes a slab and a bar, a frame four bars. Keeps the outline."><i data-lucide="boxes"></i><span>A few boxes</span></button>
+          <button type="button" data-mode="blocks" data-desc="The part rebuilt from a coarse grid of boxes: boxy, but its steps, arms and openings stay where they are. Keeps the outline."><i data-lucide="blocks"></i><span>Blocks</span></button>
         </div>
         <div class="cmd-num" id="fit-count-row" style="margin-top:8px" hidden title="A few boxes: the most boxes a part may become. Simple parts use fewer. Each box is 12 triangles."><span>At most</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-count" value="6"><span>boxes</span></label></div>
         <div class="cmd-num" id="fit-detail-row" style="margin-top:8px" hidden title="Blocks: how many cells the part's longest side is cut into. More cells follow the outline more closely and cost more triangles. An opening narrower than a cell closes."><span>Blocks detail</span><label class="size-field"><input type="text" inputmode="decimal" id="fit-detail" value="8"><span>cells</span></label></div>
         <button class="btn warn" id="btn-bbox-selected" data-cmd-primary style="margin-top:10px" title="Replace the selected parts with the shape chosen above. Undoable."><i data-lucide="wand-2"></i>Smart fit</button>
-        <div class="field-help" id="smartfit-info">Select the parts to replace. Nuts, bolts, pins and housings are the ones it suits.</div>
+        <div class="field-help" id="smartfit-info">Select the parts to replace.</div>
         <details class="cmd-adv" id="fit-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
@@ -4109,8 +4369,8 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="active" data-scope="all" title="Every visible part is checked">Whole scene</button>
           <button type="button" data-scope="sel" title="Only the selected parts are checked; the rest of the scene still hides them">Selection only</button>
         </div>
-        <button class="btn warn" id="btn-sh-run" data-cmd-primary style="margin-top:10px" title="Look at the scene from every side and select what never shows. Nothing is deleted."><i data-lucide="eye-off"></i>Select hidden parts</button>
-        <div class="field-help" id="sh-info">Screws, bearings and brackets inside a housing. Nothing is deleted until you press Delete.</div>
+        <button class="btn warn" id="btn-sh-run" data-cmd-primary style="margin-top:10px" title="Look at the scene from every side and select what never shows. Nothing is deleted."><i data-lucide="ghost"></i>Select hidden parts</button>
+        <div class="field-help" id="sh-info"></div>
         <div class="btn-row" id="sh-after" hidden>
           <button class="btn" id="btn-sh-isolate" title="Show only the selected parts, to check them (S)"><i data-lucide="focus"></i>Isolate</button>
           <button class="btn danger" id="btn-sh-delete" title="Delete the selected parts. Can be undone."><i data-lucide="trash-2"></i>Delete</button>
@@ -4154,7 +4414,7 @@ window.moSplash = function (msg, pct) {
           <div class="toggle" title="Hex, flange, square, cap and coupling nuts: six or four flats around a threaded hole"><span id="fa-nuts-lbl">Nuts</span><label><input type="checkbox" id="fa-nuts" aria-labelledby="fa-nuts-lbl" checked><span class="switch"></span></label></div>
           <div class="toggle" title="Flat rings: plain, large and thick washers, shims"><span id="fa-washers-lbl">Washers</span><label><input type="checkbox" id="fa-washers" aria-labelledby="fa-washers-lbl" checked><span class="switch"></span></label></div>
         </div>
-        <div class="field-help" id="fa-info">Bushings, bearings, O-rings, shafts and pipe fittings are told apart and left alone. Nothing is deleted until you press Delete.</div>
+        <div class="field-help" id="fa-info"></div>
         <div class="fa-list" id="fa-list" hidden></div>
         <div class="btn-row" id="fa-after" hidden>
           <button class="btn" id="btn-fa-isolate" title="Show only the selected parts, to check them (S)"><i data-lucide="focus"></i>Isolate</button>
@@ -4214,7 +4474,7 @@ window.moSplash = function (msg, pct) {
         <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:var(--fs-sm);margin:0 0 10px;min-height:16px">Select a mesh to preview the split.</div>
         <button class="btn" id="btn-split-selected" data-cmd-primary title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
         <div style="height:6px"></div>
-        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts"><i data-lucide="search"></i>Scan whole model</button>
+        <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts"><i data-lucide="radar"></i>Scan whole model</button>
         <details class="cmd-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
@@ -4344,6 +4604,40 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
 
+    <div class="section" id="scene-section">
+      <div class="section-h"><span>Scene</span><span class="chev">▾</span></div>
+      <div class="section-b" title="Saved with the scene">
+        <div class="field"><label id="display-units-lbl"><span>Display units</span></label>
+          <select id="display-units" aria-labelledby="display-units-lbl" class="mac-sel">
+            <option value="mm" selected>Millimetres (mm)</option>
+            <option value="cm">Centimetres (cm)</option>
+            <option value="m">Metres (m)</option>
+            <option value="in">Inches (in)</option>
+            <option value="ft">Feet (ft)</option>
+            <option value="none">No unit suffix</option>
+          </select>
+        </div>
+        <div class="field"><label id="scene-up-axis-lbl"><span>Up axis</span></label>
+          <select id="scene-up-axis" aria-labelledby="scene-up-axis-lbl" class="mac-sel">
+            <option value="z" selected>Z-up (CAD, NX, SolidWorks)</option>
+            <option value="y">Y-up (Maya, glTF, Unity)</option>
+          </select>
+        </div>
+        <div class="field"><label for="scene-scale"><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the whole scene. 0.001 turns mm → m; 1000 turns m → mm."></div>
+        <div class="field"><label id="grid-cell-lbl"><span>Grid cell size</span></label>
+          <select id="grid-cell" aria-labelledby="grid-cell-lbl" class="mac-sel">
+            <option value="auto" selected>Auto (fit to model)</option>
+            <option value="0.1">0.1</option>
+            <option value="1">1</option>
+            <option value="10">10</option>
+            <option value="100">100</option>
+            <option value="1000">1000</option>
+          </select>
+        </div>
+        <div class="toggle" style="margin-bottom:0"><span id="toggle-snap-grid-lbl">Snap gizmo to grid</span><label><input type="checkbox" id="toggle-snap-grid" aria-labelledby="toggle-snap-grid-lbl"><span class="switch"></span></label></div>
+      </div>
+    </div>
+
     <div class="section" hidden>
       <div class="section-h"><span>Measurements</span><span class="chev">▾</span></div>
       <div class="section-b">
@@ -4386,10 +4680,10 @@ window.moSplash = function (msg, pct) {
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
         <div class="btn-row">
           <button class="btn" id="btn-merge-sel" title="Merge selected parts into a single mesh — ideal for STL / 3D printing (Ctrl+M)"><i data-lucide="combine"></i>Merge</button>
-          <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together (Ctrl+G)"><i data-lucide="group"></i>Group</button>
+          <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together (Ctrl+G)"><i data-lucide="folder-plus"></i>Group</button>
         </div>
         <div class="btn-list">
-          <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox centre sits at world origin"><i data-lucide="target"></i>Recentre on origin</button>
+          <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox centre sits at world origin"><i data-lucide="axis-3d"></i>Recentre on origin</button>
           <button class="btn quiet" id="btn-bake-transforms" title="Commit pending gizmo edits permanently into vertex data"><i data-lucide="check"></i>Bake gizmo transforms</button>
           <button class="btn quiet" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox centre (visual position unchanged)"><i data-lucide="crosshair"></i>Centre pivot</button>
         </div>
@@ -4415,7 +4709,7 @@ window.moSplash = function (msg, pct) {
         <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-triangle parts</button>
         <div style="height:10px"></div>
         <div class="field"><div id="aspect-scrub"></div></div>
-        <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="minus"></i>Flag thin slivers</button>
+        <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="rectangle-horizontal"></i>Flag thin slivers</button>
       </div>
     </div>
 
@@ -4441,6 +4735,24 @@ window.moSplash = function (msg, pct) {
             <div class="cmd-num" title="Bolts, nuts and washers found by their shape. Simplify turns each into a plain cylinder; Delete removes them."><span>Bolts, nuts, washers</span><select id="smart-fast" class="mac-sel" aria-label="Bolts, nuts and washers"><option value="keep">Keep</option><option value="cyl">Simplify</option><option value="delete">Delete</option></select></div>
             <div class="cmd-num" title="Parts whose box, corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone."><span>Remove parts under</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-small" value="0" aria-label="Remove parts smaller than, in percent of the model"><span>%</span></label></div>
             <div class="toggle" title="Closes holes in flat faces, with the settings of the Fill holes panel"><span id="smart-holes-lbl">Fill holes</span><label><input type="checkbox" id="smart-holes" aria-labelledby="smart-holes-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="The same part twice in the same place. Only the second copy goes; parts that merely share a shape stay."><span id="smart-dupes-lbl">Remove exact copies</span><label><input type="checkbox" id="smart-dupes" aria-labelledby="smart-dupes-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Takes out triangles from each part for as long as no point of its surface moves by more than this. 0 leaves it out. Runs before the triangle target."><span>Reduce within</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-tol" value="0" aria-label="Largest move of any point, in millimetres"><span>mm</span></label></div>
+          </div>
+        </details>
+        <details class="cmd-adv" id="smart-recipes">
+          <summary><span>Recipes</span></summary>
+          <div class="cmd-adv-b">
+            <div class="cmd-num" title="Settings you saved. Choose one to put them in the controls above."><span>Saved</span><select id="recipe-list" class="mac-sel" aria-label="Saved recipes"></select></div>
+            <div class="btn-row">
+              <button class="btn quiet" id="recipe-run" title="Put the chosen recipe's settings in the controls and run them on this scene">Apply and run</button>
+              <button class="btn quiet" id="recipe-save" title="Save the settings above under a name, to run again on the next revision of the model">Save these…</button>
+            </div>
+            <div class="btn-row" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+              <button class="btn quiet" id="recipe-export" title="Write the saved recipes to a file you can keep or share">Export</button>
+              <button class="btn quiet" id="recipe-import" title="Read recipes from a file">Import</button>
+              <button class="btn quiet" id="recipe-delete" title="Delete the chosen recipe">Delete</button>
+            </div>
+            <input type="file" id="recipe-file" accept=".json,application/json" hidden>
           </div>
         </details>
         <div class="field-help smart-info" id="smart-info"></div>
@@ -4452,10 +4764,10 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><span>Quick fixes</span><span class="chev">▾</span></div>
       <div class="section-b btn-list">
         <button class="btn quiet" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Remove empty parts</button>
-        <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy"></i>Deduplicate geometry</button>
-        <button class="btn quiet" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="asterisk"></i>Fix degenerate parts</button>
+        <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy-check"></i>Deduplicate geometry</button>
+        <button class="btn quiet" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="eraser"></i>Fix degenerate parts</button>
         <button class="btn quiet" id="btn-clean-empty-groups" title="Remove user groups and hierarchy groups whose members are all deleted or empty"><i data-lucide="folder-x"></i>Delete empty groups</button>
-        <button class="btn quiet" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="sparkles"></i>Recompute smooth normals</button>
+        <button class="btn quiet" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="refresh-ccw-dot"></i>Recompute smooth normals</button>
       </div>
     </div>
 
@@ -4479,7 +4791,7 @@ window.moSplash = function (msg, pct) {
         <div class="small-found" id="thr-found"><i data-lucide="scan-search"></i><span id="thr-info">Load a model to see what would go.</span></div>
         <div class="btn-row">
           <button class="btn" id="btn-isolate-small" title="Show only the parts that would be deleted, to check them first"><i data-lucide="eye"></i>Isolate</button>
-          <button class="btn" id="btn-show-all" title="Make every hidden part visible again"><i data-lucide="circle-plus"></i>Show all</button>
+          <button class="btn" id="btn-show-all" title="Make every hidden part visible again"><i data-lucide="eye"></i>Show all</button>
         </div>
         <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
       </div>
@@ -4494,16 +4806,18 @@ window.moSplash = function (msg, pct) {
         </div>
         <div class="field-help plan-line" style="margin-top:-2px"><span id="budget-info"></span><button type="button" class="plan-link" id="budget-preview" hidden title="See which meshes will be reduced, and by how much, before running it">Preview…</button></div>
         <div class="btn-row">
-          <button class="btn warn" id="btn-decimate-sel" title="Reduce the triangle count of the selected parts. Normals, UVs and vertex colours are kept. Lossy, but undoable."><i data-lucide="triangle-alert"></i>Decimate <span id="dec-sel-count">0</span></button>
+          <button class="btn warn" id="btn-decimate-sel" title="Reduce the triangle count of the selected parts. Normals, UVs and vertex colours are kept. Lossy, but undoable."><i data-lucide="shrink"></i>Decimate <span id="dec-sel-count">0</span></button>
           <select id="decimate-strength" class="mac-sel" title="How many triangles to remove from each selected part" style="flex:0 0 96px">
             <option value="0.25">−25%</option>
             <option value="0.5" selected>−50%</option>
             <option value="0.75">−75%</option>
             <option value="0.9">−90%</option>
             <option value="target">Target…</option>
+            <option value="tol">Within…</option>
           </select>
         </div>
         <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
+        <label class="size-field" id="decimate-tol-row" style="display:none" title="Take out as many triangles as possible without moving any point of the surface by more than this"><span>no point moves more than</span><input type="text" inputmode="decimal" id="decimate-tol" value="0.1"><span>mm</span></label>
         <div class="field-help plan-line" style="margin-top:-2px"><span id="decimate-info"></span><button type="button" class="plan-link" id="decimate-preview" hidden title="See what each part will lose before running it">Preview…</button></div>
         <div class="btn-row">
           <button class="btn" id="btn-untriangulate" title="Join neighbouring triangles that lie in one plane into polygons (n-gons), take away the vertices in the middle of each flat face and triangulate it again with the fewest triangles. The shape does not change. Works on the selection, or on the whole scene when nothing is selected. Undoable."><i data-lucide="hexagon"></i>Untriangulate</button>
@@ -4514,7 +4828,7 @@ window.moSplash = function (msg, pct) {
           </select>
         </div>
         <div class="btn-list">
-          <button class="btn quiet" id="btn-bbox-all" title="Smart fit every part: each becomes a box, a turned box or a cylinder, whichever fits it best. Removes most of the detail."><i data-lucide="square-dashed"></i>Smart fit all parts</button>
+          <button class="btn quiet" id="btn-bbox-all" title="Smart fit every part: each becomes a box, a turned box or a cylinder, whichever fits it best. Removes most of the detail."><i data-lucide="box-select"></i>Smart fit all parts</button>
           <button class="btn quiet" id="btn-report" title="The model as it was opened against what it is now: triangles, draw calls, materials, file size"><i data-lucide="clipboard-list"></i>Optimisation report</button>
         </div>
       </div>
@@ -4554,7 +4868,7 @@ window.moSplash = function (msg, pct) {
       <option value="hue">Colour</option>
     </select>
     <div class="mat-view-toggle" role="group" aria-label="Materials view">
-      <button type="button" id="mat-view-grid" class="mat-view-btn" data-view="grid" title="Grid view" aria-pressed="true"><i data-lucide="layout-grid"></i></button>
+      <button type="button" id="mat-view-grid" class="mat-view-btn" data-view="grid" title="Grid view" aria-pressed="true"><i data-lucide="grid-2x2"></i></button>
       <button type="button" id="mat-view-list" class="mat-view-btn" data-view="list" title="List view" aria-pressed="false"><i data-lucide="list"></i></button>
     </div>
     <div class="lc-spacer"></div>
@@ -4565,7 +4879,7 @@ window.moSplash = function (msg, pct) {
         <button class="mat-act mat-act-icon" id="mat-act-merge" title="Merge the picked materials into one" disabled><i data-lucide="combine"></i></button>
         <button class="mat-act mat-act-icon mat-act-danger" id="mat-act-delete" title="Delete the picked materials" disabled><i data-lucide="trash-2"></i></button>
       </div>
-      <button class="mat-act mat-act-presets" id="mat-act-presets" title="Apply an industry-standard PBR preset"><span><i data-lucide="sparkles" style="margin-right:4px"></i>Industry presets</span><i data-lucide="chevron-up"></i></button>
+      <button class="mat-act mat-act-presets" id="mat-act-presets" title="Apply an industry-standard PBR preset"><span><i data-lucide="swatch-book" style="margin-right:4px"></i>Industry presets</span><i data-lucide="chevron-up"></i></button>
       <div class="mat-presets-menu" id="mat-presets-menu"></div>
     </div>
     <button class="lc-icon-btn" id="mat-dock-close" title="Close"><i data-lucide="x"></i></button>
@@ -4591,7 +4905,7 @@ window.moSplash = function (msg, pct) {
     <label class="mat-dock-search" title="Search the library by name or shelf"><i data-lucide="search"></i><input type="text" id="lib-filter" placeholder="Search…" autocomplete="off" spellcheck="false"></label>
     <select id="lib-shelf" class="mac-sel" title="Show one shelf"></select>
     <div class="lib-view-toggle" role="group" aria-label="Tile size">
-      <button type="button" class="lib-view-btn" data-lib-view="grid" title="Large tiles" aria-pressed="true"><i data-lucide="layout-grid"></i></button>
+      <button type="button" class="lib-view-btn" data-lib-view="grid" title="Large tiles" aria-pressed="true"><i data-lucide="grid-2x2"></i></button>
       <button type="button" class="lib-view-btn" data-lib-view="small" title="Small tiles" aria-pressed="false"><i data-lucide="grid-3x3"></i></button>
     </div>
     <div class="lib-opts" title="Screws, nuts and washers are added in this size">
@@ -4645,7 +4959,7 @@ window.moSplash = function (msg, pct) {
   </div>
 </div>
 
-<input type="file" id="file-input" accept=".step,.stp,.STEP,.STP,.glb,.gltf,.GLB,.GLTF,.fbx,.FBX,.obj,.OBJ,.3mf,.3MF,.stl,.STL" style="display:none">
+<input type="file" id="file-input" accept=".step,.stp,.STEP,.STP,.iges,.igs,.IGES,.IGS,.brep,.brp,.BREP,.BRP,.glb,.gltf,.GLB,.GLTF,.fbx,.FBX,.obj,.OBJ,.3mf,.3MF,.stl,.STL" style="display:none">
 
 <!-- Import-settings modal — shown between picking a file and starting the
      load/conversion. Lets the user trade XCAF read fidelity for conversion
@@ -4781,13 +5095,13 @@ window.moSplash = function (msg, pct) {
         <div class="exp-cat-label">3D formats</div>
         <button class="fmt-card selected" data-fmt="glb"><span class="fmt-icon"><i data-lucide="box"></i></span><span><span class="fmt-name">GLB</span><span class="fmt-sub">Web, Cinema 4D</span></span></button>
         <button class="fmt-card" data-fmt="gltf"><span class="fmt-icon"><i data-lucide="file-code-2"></i></span><span><span class="fmt-name">glTF</span><span class="fmt-sub">JSON glTF 2.0</span></span></button>
-        <button class="fmt-card" data-fmt="fbx"><span class="fmt-icon"><i data-lucide="layers-2"></i></span><span><span class="fmt-name">FBX</span><span class="fmt-sub">Blender, Maya, Unreal</span></span></button>
+        <button class="fmt-card" data-fmt="fbx"><span class="fmt-icon"><i data-lucide="file-box"></i></span><span><span class="fmt-name">FBX</span><span class="fmt-sub">Blender, Maya, Unreal</span></span></button>
         <button class="fmt-card" data-fmt="usdz"><span class="fmt-icon"><i data-lucide="smartphone"></i></span><span><span class="fmt-name">USDZ</span><span class="fmt-sub">Apple Quick Look</span></span></button>
-        <button class="fmt-card" data-fmt="obj"><span class="fmt-icon"><i data-lucide="triangle"></i></span><span><span class="fmt-name">OBJ</span><span class="fmt-sub">Wavefront, universal</span></span></button>
+        <button class="fmt-card" data-fmt="obj"><span class="fmt-icon"><i data-lucide="file-text"></i></span><span><span class="fmt-name">OBJ</span><span class="fmt-sub">Wavefront, universal</span></span></button>
         <div class="exp-cat-label">3D printing</div>
         <button class="fmt-card" data-fmt="stl"><span class="fmt-icon"><i data-lucide="printer"></i></span><span><span class="fmt-name">STL</span><span class="fmt-sub">3D printing</span></span></button>
         <div class="exp-cat-label">Point cloud</div>
-        <button class="fmt-card" data-fmt="ply"><span class="fmt-icon"><i data-lucide="grid-3x3"></i></span><span><span class="fmt-name">PLY</span><span class="fmt-sub">Geometry + colours</span></span></button>
+        <button class="fmt-card" data-fmt="ply"><span class="fmt-icon"><i data-lucide="grip"></i></span><span><span class="fmt-name">PLY</span><span class="fmt-sub">Geometry + colours</span></span></button>
         <div class="exp-cat-label">Data</div>
         <button class="fmt-card" data-fmt="csv"><span class="fmt-icon"><i data-lucide="table-2"></i></span><span><span class="fmt-name">CSV</span><span class="fmt-sub">Parts list (BOM)</span></span></button>
       </div>
@@ -4870,6 +5184,17 @@ window.moSplash = function (msg, pct) {
         <div class="toggle exp-row" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only."><span class="exp-row-l" id="exp-draco-lbl"><b>Draco compression</b><small>Shrinks the file 5–20× · slower to write</small></span><label><input type="checkbox" id="exp-draco" aria-labelledby="exp-draco-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII format instead of binary."><span class="exp-row-l" id="exp-fbx-ascii-lbl"><b>ASCII FBX</b><small>Readable text · try it if binary fails</small></span><label><input type="checkbox" id="exp-fbx-ascii" aria-labelledby="exp-fbx-ascii-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-stl-ascii-row" title="Write STL as readable text instead of binary. Much larger; only for tools that cannot read binary STL."><span class="exp-row-l" id="exp-stl-ascii-lbl"><b>ASCII STL</b><small>Readable text · much larger than binary</small></span><label><input type="checkbox" id="exp-stl-ascii" aria-labelledby="exp-stl-ascii-lbl"><span class="switch"></span></label></div>
+        <div class="exp-group-title" id="exp-target-title">Where it is going</div>
+        <div class="field exp-row" id="exp-target-row"><span class="exp-row-l" id="exp-target-lbl"><b>Check against</b><small>Compares the scene with the published guidance for a place</small></span>
+          <select id="exp-target" aria-labelledby="exp-target-lbl" class="mac-sel">
+            <option value="none">Nothing in particular</option>
+            <option value="web">A web page (about 5 MB)</option>
+            <option value="shopify">Shopify product page (15 MB)</option>
+            <option value="arql">Apple AR Quick Look (10 MB)</option>
+            <option value="phone">Any phone app (25 MB)</option>
+          </select>
+        </div>
+        <div class="field-help" id="exp-target-meter" style="margin:-4px 0 0"></div>
         <div id="exp-source-note" style="display:none"></div>
       </div>
       <div class="exp-content-f">
@@ -4938,32 +5263,10 @@ window.moSplash = function (msg, pct) {
   </div>
 </div>
 
-<!-- Scene settings (units, up axis, scale, grid, lighting). The controls are
-     shown in Settings › Scene: app-v2.js moves them there the first time the
-     Settings window opens. Until then they wait here, laid out but unseen
-     (the window they used to have of their own is gone). -->
+<!-- Hidden inputs the scene save/restore code still reads (the lighting that moved to the Sun gizmo). The scene's units, up axis,
+     scale and grid are the Scene card in the right sidebar. -->
 <div aria-hidden="true" style="position:fixed;left:0;top:0;width:560px;visibility:hidden;pointer-events:none">
     <div class="modal-b" id="scene-settings-body" style="padding:0">
-      <div class="pop-section">
-        <div class="pop-section-title">Scene</div>
-        <div class="field"><label id="display-units-lbl"><span>Display units</span></label>
-          <select id="display-units" aria-labelledby="display-units-lbl" class="mac-sel">
-            <option value="mm" selected>Millimetres (mm)</option>
-            <option value="cm">Centimetres (cm)</option>
-            <option value="m">Metres (m)</option>
-            <option value="in">Inches (in)</option>
-            <option value="ft">Feet (ft)</option>
-            <option value="none">No unit suffix</option>
-          </select>
-        </div>
-        <div class="field"><label id="scene-up-axis-lbl"><span>Up axis (viewport)</span></label>
-          <select id="scene-up-axis" aria-labelledby="scene-up-axis-lbl" class="mac-sel">
-            <option value="z" selected>Z-up (CAD, NX, SolidWorks)</option>
-            <option value="y">Y-up (Maya, glTF, Unity)</option>
-          </select>
-        </div>
-        <div class="field" style="margin-bottom:0"><label for="scene-scale"><span>Scene scale (×)</span></label><input type="number" id="scene-scale" step="any" value="1" min="0" style="width:100%;padding:7px 10px;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums" title="Multiplier applied to the whole scene. 0.001 turns mm → m; 1000 turns m → mm."></div>
-      </div>
       <!-- Lighting controls moved to the in-scene Sun gizmo (tg-sun button
            in the viewport overlay). Inputs stay hidden so existing scene
            save/restore wiring that reads/writes #light-* still works. -->
@@ -4975,20 +5278,6 @@ window.moSplash = function (msg, pct) {
         <div class="field"><label><span>Sun azimuth <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-azi-val">45</span>°</span></span></label><input type="range" id="light-azi" min="0" max="360" step="1" value="45" style="width:100%"></div>
         <div class="field"><label><span>Sun elevation <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-ele-val">45</span>°</span></span></label><input type="range" id="light-ele" min="0" max="90" step="1" value="45" style="width:100%"></div>
         <div class="toggle" style="margin-bottom:0"><span>Shadows</span><label><input type="checkbox" id="toggle-shadows"><span class="switch"></span></label></div>
-      </div>
-      <div class="pop-section">
-        <div class="pop-section-title">Grid</div>
-        <div class="field"><label id="grid-cell-lbl"><span>Cell size</span></label>
-          <select id="grid-cell" aria-labelledby="grid-cell-lbl" class="mac-sel">
-            <option value="auto" selected>Auto (fit to model)</option>
-            <option value="0.1">0.1</option>
-            <option value="1">1</option>
-            <option value="10">10</option>
-            <option value="100">100</option>
-            <option value="1000">1000</option>
-          </select>
-        </div>
-        <div class="toggle" style="margin-bottom:0"><span id="toggle-snap-grid-lbl">Snap gizmo to grid</span><label><input type="checkbox" id="toggle-snap-grid" aria-labelledby="toggle-snap-grid-lbl"><span class="switch"></span></label></div>
       </div>
     </div>
 </div>
@@ -5079,7 +5368,7 @@ window.moSplash = function (msg, pct) {
         </div>
 
         <div class="wl-foot">
-          <span>Opens STEP · GLB · glTF · FBX · OBJ · 3MF · STL</span>
+          <span>Opens STEP · IGES · BREP · GLB · glTF · FBX · OBJ · 3MF · STL</span>
           <span><kbd>Ctrl+K</kbd>Search commands</span>
         </div>
       </div>
@@ -5135,13 +5424,18 @@ window.moSplash = function (msg, pct) {
 // hostile on touchscreens. We gate the show path behind a fine-pointer check.
 (function () {
   const SHOW_DELAY = 800;            // ms hover before tooltip appears
-  const HIDE_DELAY = 60;             // ms grace period when leaving
+  const HIDE_DELAY = 150;            // ms grace period when leaving (long enough to cross the gap between two buttons without a blink)
   const finePointer = matchMedia('(pointer: fine)').matches;
   if (!finePointer) return;          // skip entirely on touch / coarse pointers
 
   let tipEl = null;
   let showT = 0, hideT = 0;
   let currentTarget = null;
+  // Warm: once a tip is up (or has just closed because the pointer slid off its button), the next button's tip
+  // comes at once, whatever is under the pointer. Only the first one waits.
+  const WARM_MS = 450;
+  let warmUntil = 0;
+  const isWarm = () => (!!tipEl && tipEl.classList.contains('show')) || performance.now() < warmUntil;
 
   function ensureEl() {
     if (tipEl) return tipEl;
@@ -5242,6 +5536,13 @@ window.moSplash = function (msg, pct) {
     clearTimeout(hideT); hideT = 0;
   }
 
+  // The pointer moved off the anchor (not a click, a key or a scroll): the tip goes, and the next one comes at once
+  // for a moment (see isWarm). Every hide that comes from the pointer must go through here, or the next tip waits again.
+  function fade() {
+    if (tipEl && tipEl.classList.contains('show')) warmUntil = performance.now() + WARM_MS;
+    hide();
+  }
+
   function onEnter(e) {
     const t = e.target.closest('[title], [data-tip]');
     if (!t) return;
@@ -5262,9 +5563,11 @@ window.moSplash = function (msg, pct) {
       t.removeAttribute('title');
     }
     if (!getText(t)) return;
+    const warm = isWarm();
     currentTarget = t;
-    clearTimeout(hideT);
+    clearTimeout(hideT); hideT = 0;
     clearTimeout(showT);
+    if (warm) { showT = 0; show(t); return; }
     // viewport tools are icons only: say what they are straight away
     // (a command panel is not a row of icons: its tips wait like any other)
     showT = setTimeout(() => show(t), (t.closest('#vp-overlay') && !t.closest('.vp-cmd-host')) ? 0 : SHOW_DELAY);
@@ -5276,7 +5579,7 @@ window.moSplash = function (msg, pct) {
     if (e.relatedTarget && currentTarget.contains(e.relatedTarget)) return;
     clearTimeout(showT);
     clearTimeout(hideT);
-    hideT = setTimeout(hide, HIDE_DELAY);
+    hideT = setTimeout(fade, HIDE_DELAY);
   }
 
   document.addEventListener('mouseover', onEnter, true);
@@ -5315,10 +5618,11 @@ window.moSplash = function (msg, pct) {
       mmRaf = 0;
       if (!currentTarget) return;
       const under = document.elementFromPoint(lastMx, lastMy);
-      if (!under) { hide(); return; }
+      if (!under) { fade(); return; }
       // Still inside the same tooltip-bearing anchor? Keep showing.
       if (currentTarget.contains(under) || under.closest('[title], [data-tip]') === currentTarget) return;
-      hide();
+      // Over a gap or a bare bit of panel: the tip stays a moment for the next anchor instead of going at once.
+      if (!hideT) hideT = setTimeout(fade, HIDE_DELAY);
     });
   }, { passive: true });
 
@@ -5410,6 +5714,40 @@ window.moSplash = function (msg, pct) {
 </script>
 
 <script src="vendor/lucide/lucide.min.js"></script>
+<script>
+/* The app's own icons, drawn in Lucide's 24-unit grid so they sit with the library.
+   Added to lucide's icon set before anything renders, so <i data-lucide="…"> and _ico() find them. */
+(function () {
+  var L = window.lucide; if (!L || !L.icons) return;
+  var HEX = 'M21 16V8l-9-5-9 5v8l9 5 9-5z';
+  var p = function (d, o) { var a = { d: d }; for (var k in (o || {})) a[k] = o[k]; return ['path', a]; };
+  var custom = {
+    /* Solid: the whole cube filled in */
+    CubeSolid: [p(HEX, { fill: 'currentColor', 'fill-opacity': '.4' }), p('M3 8l9 5 9-5M12 13v8')],
+    /* Wireframe: the cube cut into triangles */
+    CubeWire: [p(HEX), p('M3 8l9 5 9-5M12 13v8'), p('M3 8l9 13M21 8L12 21M3 8h18')],
+    /* X-ray: a box seen through itself, hidden edges dashed */
+    CubeXray: [
+      ['rect', { x: 3, y: 9, width: 12, height: 12, rx: 1 }],
+      p('M3 9l6-6M15 9l6-6M15 21l6-6M9 3h12v12'),
+      p('M9 3v12M9 15h12M3 21l6-6', { 'stroke-dasharray': '2 2.2' })
+    ],
+    /* Clay: a plain sphere */
+    SphereClay: [['circle', { cx: 12, cy: 12, r: 9 }], p('M3 12c0 2 4 3.5 9 3.5s9-1.5 9-3.5')],
+    /* Standard views: the cube with the face you look at filled in */
+    ViewTop: [p(HEX), p('M3 8l9 5 9-5M12 13v8'), p('M3 8l9-5 9 5-9 5z', { fill: 'currentColor', 'fill-opacity': '.55' })],
+    ViewFront: [p(HEX), p('M3 8l9 5 9-5M12 13v8'), p('M3 8l9 5v8l-9-5z', { fill: 'currentColor', 'fill-opacity': '.55' })],
+    ViewSide: [p(HEX), p('M3 8l9 5 9-5M12 13v8'), p('M21 8l-9 5v8l9-5z', { fill: 'currentColor', 'fill-opacity': '.55' })]
+  };
+  /* lucide.icons is frozen: swap in a copy that has ours, and make createIcons() use it */
+  var all = {}, k2;
+  for (k2 in L.icons) all[k2] = L.icons[k2];
+  for (k2 in custom) all[k2] = custom[k2];
+  L.icons = all;
+  var make = L.createIcons;
+  L.createIcons = function (o) { o = o || {}; if (!o.icons) o.icons = all; return make.call(L, o); };
+})();
+</script>
 
 <!-- The libraries the app needs are bundled in vendor/ (three.js r172 with
      the add-ons in use, three-mesh-bvh, meshoptimizer, lucide, and the Draco
@@ -5427,11 +5765,11 @@ window.moSplash = function (msg, pct) {
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=20261009-simplify-dev-ch1-wire-na1-ngon-sm2-sw1-wfix-pf1-wtri-wout-wall-dp1-ty1-dp2-dps2-hp1-dps3-v0.15.0-hc1-rp1-cl1-sh2"></script>
+<script type="module" src="app-v2.js?v=20261009-icons9"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app-v2.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
-<script defer src="cloner.js?v=20261008-v0.14.0"></script>
+<script defer src="cloner.js?v=20261009-icons"></script>
 <script defer src="help.js?v=2"></script>
 <script>
   // Reveal the app when it says it has booted (app-v2.js: 'mo-boot-ready', after the renderer and the

@@ -7,6 +7,7 @@
 //   { op: 'fill',     positions, index, opts }            → what fillFlatHoles returns
 //   { op: 'simplify', positions, index, groups, keep, url, attrs } → index ranges per material group,
 //                                                                  and the error estimate (see simplify-core.js)
+//   { op: 'simplify', …, tol } instead of keep: as far as no point moves more than `tol` (in the mesh's units)
 //
 //   { op: 'ngons',    positions, index, angle, poly }       → the outlines of the polygons (wirelines.js)
 //   { op: 'untriangulate', positions, index, groups, angle, normals, threeUrl }
@@ -54,8 +55,20 @@ self.onmessage = async (e) => {
       const S = await getSimplifier(m.url);
       const parts = [], transfer = [];
       let err = 0;
+      const byTol = m.tol > 0;
+      const scale = byTol ? S.getScale(m.positions, 3) : 1;
       for (const g of m.groups) {
         const sub = m.index.subarray(g.start, g.start + g.count);
+        if (byTol) {
+          // The simplifier's error is relative to the mesh's extent; with no
+          // triangle target it stops only when the next step would cross it.
+          const [res, rel] = S.simplify(sub, m.positions, 3, 0, Math.min(1, m.tol / scale));
+          const idx = res.slice();
+          err = Math.max(err, rel * scale);
+          parts.push({ idx, materialIndex: g.materialIndex });
+          transfer.push(idx.buffer);
+          continue;
+        }
         const target = Math.max(3, Math.floor((sub.length / 3) * m.keep) * 3);
         let idx;
         if (sub.length <= target) idx = sub.slice();

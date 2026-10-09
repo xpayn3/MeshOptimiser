@@ -1,9 +1,11 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
 import { fillFlatHoles, applyHoleFill } from './holefill.js?v=9';
+import * as SPL from './splines.js?v=3';
 import { reduceIndex, packAttributes } from './simplify-core.js?v=1';
 import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=2';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
+import { findRepeats } from './repeats.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // OBJ export uses our own streaming writer (_exportObjStreaming) to avoid
@@ -931,7 +933,11 @@ function _updateVpHint() {
   const msr   = (typeof _Measure !== 'undefined' && _Measure?.isActive?.()) ? true : false;
   // [keys, label] — several keys are a combo ("Ctrl" + "G").
   let tips;
-  if (state.dynPlaceOn) {
+  let drawTips = null;
+  try { if (_Draw.isActive()) drawTips = _Draw.tips(); } catch (_) {}      // (_Draw is defined further down the file)
+  if (drawTips) {
+    tips = drawTips;
+  } else if (state.dynPlaceOn) {
     tips = [[['Drag'], 'Place the selected part'], [['Drag cube'], 'Scale it'], [['Scroll'], 'Turn it (while held)'], [['Esc'], 'Put it back, while held'], [['D'], 'Leave Dynamic place']];
   } else if (msr) {
     tips = [[['Click'], 'Pick a point'], [['Drag'], 'Orbit'], [['Scroll'], 'Zoom'], [['M'], 'Leave measure'], [['Esc'], 'Cancel']];
@@ -1058,6 +1064,7 @@ function _typingTarget(e) {
 // marquee, "% of model", primitive placement). Tools that rewrite vertices
 // must refresh it through here rather than copying the geometry's local box.
 function _refreshPartBBox(p) {
+  if (p && p.isSpline) { _refreshSplineBBox(p); return; }          // (the stand-in mesh has nothing of its own)
   const g = p && p.mesh && p.mesh.geometry;
   if (!g) return;
   if (!g.boundingBox) g.computeBoundingBox();
@@ -1919,7 +1926,7 @@ const _ImportSettings = (() => {
   function _hydrate(file, opts, isStep) {
     document.getElementById('import-modal-name').textContent = file.name;
     const mb = file.size / 1048576;
-    const fmtLabel = isStep ? 'STEP' : (_ext(file.name) || 'file').toUpperCase();
+    const fmtLabel = isStep ? (/^(iges|igs)$/.test(_ext(file.name)) ? 'IGES' : /^(brep|brp)$/.test(_ext(file.name)) ? 'BREP' : 'STEP') : (_ext(file.name) || 'file').toUpperCase();
     document.getElementById('import-modal-meta').textContent = `${mb.toFixed(1)} MB · ${fmtLabel}`;
     document.getElementById('import-panel-step').style.display = isStep ? '' : 'none';
     document.getElementById('import-panel-mesh').style.display = isStep ? 'none' : '';
@@ -1968,7 +1975,7 @@ const _ImportSettings = (() => {
   function show(file, { forceAppend = false } = {}) {
     return new Promise((resolve) => {
       const ext = _ext(file.name);
-      const isStep = ext === 'step' || ext === 'stp';
+      const isStep = ext === 'step' || ext === 'stp' || ext === 'iges' || ext === 'igs' || ext === 'brep' || ext === 'brp';     // (the converter reads all of them)
       const base = isStep ? DEFAULTS_STEP : DEFAULTS_MESH;
       const opts = _loadOpts(ext, base);
       opts.append = !!forceAppend;          // (Import appends, Open does not; never remembered from last time)
@@ -2023,7 +2030,7 @@ const _ImportSettings = (() => {
   // Reset all per-format "don't ask" flags (Settings › Storage › Import options).
   function resetSkips() {
     try {
-      for (const ext of ['step','stp','fbx','obj','3mf','stl']) {
+      for (const ext of ['step','stp','iges','igs','brep','brp','fbx','obj','3mf','stl']) {
         localStorage.removeItem('import_skip_' + ext);
       }
     } catch (_) {}
@@ -2050,10 +2057,10 @@ async function _fileBytes(file) {
 
 async function _handleSelectedFile(file) {
   if (!file) return;
-  const isStep = /\.(step|stp)$/i.test(file.name);
+  const isStep = /\.(step|stp|iges|igs|brep|brp)$/i.test(file.name);
   const meshLoader = _loaderForName(file.name);
   if (!isStep && !meshLoader) {
-    toast('Unsupported file type', 'Supported: .step, .stp, .glb, .gltf, .fbx, .obj, .3mf, .stl', 'warn');
+    toast('Unsupported file type', 'Supported: .step, .stp, .iges, .igs, .brep, .brp, .glb, .gltf, .fbx, .obj, .3mf, .stl', 'warn');
     return;
   }
   // The picker callers (_importWithPicker) pre-set state._importMode to true
@@ -2364,7 +2371,7 @@ function _askDropChoice(file) {
   });
 }
 async function _dropOpen(file) {
-  const supported = /\.(step|stp)$/i.test(file.name) || !!_loaderForName(file.name);
+  const supported = /\.(step|stp|iges|igs|brep|brp)$/i.test(file.name) || !!_loaderForName(file.name);
   if (supported && !window.__moNoTabs && state.parts.some(p => !p.deleted)) {
     const c = await _askDropChoice(file);
     if (!c) return;                              // closed: nothing happens
@@ -2386,9 +2393,9 @@ async function _openWithPicker(startIn) {
       id: 'mo-open',
       ...(startIn ? { startIn } : {}),
       types: [{
-        description: '3D model (STEP / glTF / FBX / OBJ / 3MF / STL)',
+        description: '3D model (STEP / IGES / glTF / FBX / OBJ / 3MF / STL)',
         accept: {
-          'model/step':         ['.step', '.stp'],
+          'model/step':         ['.step', '.stp', '.iges', '.igs', '.brep', '.brp'],
           'model/gltf-binary':  ['.glb'],
           'model/gltf+json':    ['.gltf'],
           'application/octet-stream': ['.fbx', '.3mf', '.stl'],
@@ -2427,9 +2434,9 @@ async function _importWithPicker() {
   try {
     const [handle] = await window.showOpenFilePicker({
       types: [{
-        description: '3D model (STEP / glTF / FBX / OBJ / 3MF / STL)',
+        description: '3D model (STEP / IGES / glTF / FBX / OBJ / 3MF / STL)',
         accept: {
-          'model/step':         ['.step', '.stp'],
+          'model/step':         ['.step', '.stp', '.iges', '.igs', '.brep', '.brp'],
           'model/gltf-binary':  ['.glb'],
           'model/gltf+json':    ['.gltf'],
           'application/octet-stream': ['.fbx', '.3mf', '.stl'],
@@ -2590,9 +2597,16 @@ async function _quitApp() {
     `<div>Server stopped. You can close this tab.</div></div></body>`;
 }
 
-// The scene's own settings (units, up axis, scale, grid) are the Scene section
-// of the Settings window.
-function _openSceneSettings() { _Settings.show('scene'); }
+// The scene's own settings (units, up axis, scale, grid) are the Scene card of the right sidebar.
+// The Scene card in the right sidebar: unfolded, in view, with a brief flash so it is plain where it is.
+function _openSceneSettings() {
+  const sec = document.getElementById('scene-section'), h = sec && sec.querySelector('.section-h');
+  if (!h) return;
+  if (h.classList.contains('collapsed')) h.click();            // (the card's own click handler unfolds it and remembers)
+  try { sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {}
+  sec.classList.remove('flash-card'); void sec.offsetWidth; sec.classList.add('flash-card');
+  setTimeout(() => sec.classList.remove('flash-card'), 900);
+}
 
 async function _openRecentByKey(key) {
   let handle = null;
@@ -2631,6 +2645,7 @@ const _Prefs = (() => {
     dynPlaceAxis: '',                // Dynamic place: which axis of the part points away from the surface: 'x' | 'y' | 'z' ('' = the scene's up axis)
     dynPlaceSign: 1,                 // ...and whether it is that axis (1) or the opposite one (-1)
     dynPlaceGround: true,            // Dynamic place: land on the grid where nothing is under the cursor
+    dynPlaceHead: false,             // Dynamic place: a bolt goes in by its shank and shows only its head
     warnUnsaved: true,               // ask before the window closes with changes that are not saved
     undoMax: 200,                    // how many steps Undo goes back
     autoRestoreSession: true,
@@ -2670,13 +2685,71 @@ function _applyCameraFeel() {
 //   Viewport     background, environment, fog, overlays
 //   Camera       projection, lens, clip planes, orbit and zoom
 //   Performance  quality, instancing, shared materials
-//   Scene        units, up axis, scale, grid — saved with the scene
 //   Storage      what the app remembers on this computer
 //
-// Viewport, Camera, Performance and Scene are not copies: the controls that
-// used to live in the viewport's settings popover and in the separate Scene
-// settings window are moved in here once, with their ids and listeners, so
-// everything that reads or writes them keeps working.
+// Viewport, Camera and Performance are not copies: the controls that used to
+// live in the viewport's settings popover are moved in here once, with their
+// ids and listeners, so everything that reads or writes them keeps working.
+// (The scene's own settings are the Scene card in the right sidebar.)
+// ── Is the browser drawing with the graphics card? ───────────────────────────
+// With hardware acceleration off (Chrome and Edge: Settings > System > "Use
+// graphics acceleration when available") the browser draws with a processor
+// rasteriser such as SwiftShader. The app still runs, but a big model crawls,
+// and nothing on screen says why. A page cannot switch the setting itself, so
+// the app says so (Settings > Performance, and once when it starts) and shows
+// where the switch is.
+const _GfxProbe = (() => {
+  let p = null;
+  const SOFT = /swiftshader|llvmpipe|softpipe|software|basic render|microsoft basic/i;
+  function probe() {
+    return p || (p = (async () => {
+      const out = { software: false, renderer: '', adapter: '', noGL: false };
+      let gl = null;
+      try {
+        // a context made with failIfMajorPerformanceCaveat is refused when the browser would draw in software
+        const hw = document.createElement('canvas').getContext('webgl2', { failIfMajorPerformanceCaveat: true });
+        gl = hw || document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl');
+        if (!gl) out.noGL = true;
+        else {
+          const ext = gl.getExtension('WEBGL_debug_renderer_info');
+          out.renderer = String((ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) || '');
+          if (!hw) out.software = true;
+        }
+      } catch (_) { out.noGL = true; }
+      try { gl && gl.getExtension('WEBGL_lose_context')?.loseContext(); } catch (_) {}
+      if (SOFT.test(out.renderer)) out.software = true;
+      try {
+        const a = navigator.gpu && await navigator.gpu.requestAdapter();
+        if (a) {
+          const info = a.info || (a.requestAdapterInfo ? await a.requestAdapterInfo() : {}) || {};
+          out.adapter = [info.vendor, info.architecture, info.description || info.device].filter(Boolean).join(' ');
+          if (a.isFallbackAdapter || SOFT.test(out.adapter)) out.software = true;
+        }
+      } catch (_) {}
+      out.noGL = out.noGL && !out.adapter;
+      return out;
+    })());
+  }
+  // where the switch is, for the browser this is
+  function where() {
+    const edge = /\bEdg\//.test(navigator.userAgent);
+    return { name: edge ? 'Edge' : 'Chrome', url: (edge ? 'edge' : 'chrome') + '://settings/system' };
+  }
+  return { probe, where };
+})();
+// Once per session, when the browser turns out to draw in software.
+async function _gfxWarnAtStart() {
+  try {
+    if (/[?&]selftest\b/.test(location.search) || sessionStorage.getItem('stepopt-gfx-warned') === '1') return;
+    const r = await _GfxProbe.probe();
+    if (!r.software && !r.noGL) return;
+    sessionStorage.setItem('stepopt-gfx-warned', '1');
+    const w = _GfxProbe.where();
+    Log.warn(`The browser is drawing in software (${r.renderer || r.adapter || 'no graphics card in use'}). Turn on "Use graphics acceleration when available" in ${w.url}.`);
+    toast('Graphics acceleration is off', `Big models will be slow. In ${w.name}: Settings, System, "Use graphics acceleration when available". Settings > Performance has the address.`, 'warn', 20000);
+  } catch (_) {}
+}
+
 const _Settings = (() => {
   let inited = false, assembled = false, current = 'general';
   const PANES = [
@@ -2685,7 +2758,6 @@ const _Settings = (() => {
     ['viewport', 'Viewport',    'monitor',            'What the 3D view draws around the model.'],
     ['camera',   'Camera',      'video',              'Projection, lens, and how the view moves.'],
     ['perf',     'Performance', 'gauge',              'Trade detail for speed on heavy models.'],
-    ['scene',    'Scene',       'box',                'Units, orientation and grid of the open scene. These are saved with the scene.'],
     ['data',     'Storage',     'database',           'What the app remembers on this computer.'],
     ['about',    'About',       'info',               'The version, where to find help, and what to send when something goes wrong.'],
   ];
@@ -2736,19 +2808,39 @@ const _Settings = (() => {
       row.appendChild(rpick);
       $s('set-pane-perf').prepend(row);
     }
+    // Graphics: the card, or software? (what to do when it is software)
+    {
+      const w = _GfxProbe.where();
+      const row = document.createElement('div');
+      row.className = 'set-row set-action set-gfx';
+      row.id = 'set-gfx';
+      row.innerHTML = `<span>Graphics<span class="set-help" id="set-gfx-text">Checking what the browser draws with…</span></span><button class="btn" id="set-gfx-copy" hidden title="Copy the address, then paste it into the address bar">Copy ${w.url}</button>`;
+      $s('set-pane-perf').prepend(row);
+      _GfxProbe.probe().then((r) => {
+        const t = $s('set-gfx-text'), b = $s('set-gfx-copy');
+        if (!t) return;
+        // "ANGLE (NVIDIA, NVIDIA GeForce RTX 4080 (0x...) Direct3D11 ...)": keep the card's name
+        const m = r.renderer.match(/ANGLE \([^,]+,\s*([^,(]+)/);
+        const who = (m ? m[1].trim() : r.renderer) || r.adapter || 'the graphics card';
+        if (r.software || r.noGL) {
+          row.classList.add('is-soft');
+          t.textContent = `The browser is drawing in software${r.renderer ? ' (' + r.renderer + ')' : ''}, not with the graphics card, so big models will be slow. In ${w.name} open Settings, System, and turn on "Use graphics acceleration when available", then relaunch ${w.name}.`;
+          if (b) b.hidden = false;
+        } else {
+          t.textContent = `Drawing with the graphics card: ${who}.`;
+        }
+      });
+      $s('set-gfx-copy')?.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(w.url); toast('Copied', `Paste ${w.url} into the address bar`, 'success', 3500); }
+        catch (_) { toast(w.url, 'Type this into the address bar', 'info', 6000); }
+      });
+    }
     // what a moving view gives up to stay smooth (_MotionPerf)
     $s('set-pane-perf').insertAdjacentHTML('beforeend', _group('While the view moves') +
       _toggleRow('set-cull-small', 'Skip tiny parts', (() => { try { return _MotionPerf.cullSmall(); } catch (_) { return true; } })(), 'Parts that would be only a few pixels across are left out while you orbit, pan or zoom, and drawn again the moment the view stops.') +
       _toggleRow('set-dyn-res', 'Lower the resolution if it stutters', (() => { try { return _MotionPerf.dynRes(); } catch (_) { return false; } })(), 'On a scene too heavy to move smoothly, the picture is drawn a little coarser while it moves and sharp again when it stops. A scene that moves freely is left alone.'));
     $s('set-cull-small')?.addEventListener('change', e => { try { _MotionPerf.setCullSmall(e.target.checked); } catch (_) {} });
     $s('set-dyn-res')?.addEventListener('change', e => { try { _MotionPerf.setDynRes(e.target.checked); } catch (_) {} });
-    // the Scene settings window's sections, each under its own sub-heading
-    for (const sec of [...document.querySelectorAll('#scene-settings-body > .pop-section')]) {
-      const title = (sec.querySelector('.pop-section-title')?.textContent || '').trim();
-      if (sec.style.display === 'none') { sec.querySelector('.pop-section-title')?.remove(); $s('set-pane-scene').appendChild(sec); continue; }   // (hidden controls other code still reads)
-      if (title && title !== 'Scene') $s('set-pane-scene').insertAdjacentHTML('beforeend', _group(title));
-      into('scene', kidsOf(sec));
-    }
     const before = (id, title) => { const row = $s(id)?.closest('.toggle, .field'); if (row) row.insertAdjacentHTML('beforebegin', _group(title)); };
     $s('set-viewport-extra').insertAdjacentHTML('beforebegin', _group('Overlays'));
     before('toggle-fog', 'Environment');
@@ -2815,7 +2907,7 @@ const _Settings = (() => {
       ap.querySelectorAll('.ap-sw').forEach(s => s.classList.toggle('is-on', s.classList.contains('ap-sw-custom')));
       e.target.closest('.ap-sw-custom')?.style.setProperty('--sw', e.target.value);
     });
-    ap?.addEventListener('change', (e) => { if (e.target.id === 'set-motion') _setLook('uiMotion', e.target.checked, false); });
+    ap?.addEventListener('change', (e) => { if (e.target.id === 'set-motion') _setLook('uiMotion', e.target.checked, false); if (e.target.id === 'set-tree-colours') _setLook('uiTreeColors', e.target.checked, false); });
     // Viewport: the CAD look and the edges
     $s('set-viewport-extra')?.addEventListener('click', (e) => {
       const b = e.target.closest('[data-v]'), grp = b && b.closest('[data-pref]');
@@ -2874,6 +2966,8 @@ const _Settings = (() => {
       _group('Shape') +
       `<div class="set-row set-stack"><span>Corners</span>${chips('uiRadius', A.RADII.map(r => [r[0], r[1]]), p.uiRadius)}</div>` +
       `<div class="set-row set-stack"><span>Density<span class="set-help">The height of buttons, fields and dropdowns.</span></span>${chips('uiDensity', A.DENSITIES, p.uiDensity)}</div>` +
+      _group('Hierarchy') +
+      _toggleRow('set-tree-colours', 'Colour the hierarchy icons', p.uiTreeColors === true, 'Groups amber, parts green, shared-geometry copies purple and cloners blue, as the tree used to be. Off: all grey, and only the selection is coloured.') +
       _group('Motion') +
       _toggleRow('set-motion', 'Interface animations', p.uiMotion !== false, 'Fades, slides and the movement of the start-up splash. Off: everything just appears.') +
       `<div class="set-row set-action"><span>Appearance<span class="set-help">Put the colour, type, size, shape and motion back to the defaults.</span></span><button class="btn" id="set-reset-look">Reset</button></div>`;
@@ -2934,7 +3028,7 @@ const _Settings = (() => {
       `<div class="set-row set-action"><span>Source code<span class="set-help">Free and open source, under the MIT licence.</span></span><a class="btn" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener">GitHub</a></div>`;
     if ($s('settings-search')?.value) _search($s('settings-search').value);
   }
-  const LOOK_KEYS = ['uiAccent', 'uiTone', 'uiFont', 'uiTextScale', 'uiDensity', 'uiRadius', 'uiMotion'];
+  const LOOK_KEYS = ['uiAccent', 'uiTone', 'uiFont', 'uiTextScale', 'uiDensity', 'uiRadius', 'uiMotion', 'uiTreeColors'];
   function _setLook(key, val, refill = true) {
     _Prefs.set(key, val);
     try { window.MOAppearance.apply(); } catch (_) {}
@@ -3334,6 +3428,57 @@ const _CmdCards = (() => {
       } catch (_) {}
     }
   };
+  // The reset of an Advanced section is an icon in its summary row (shown by
+  // CSS while the card has marked the section .is-changed); it presses the
+  // section's own "Reset to defaults" link, which is hidden.
+  const _advResets = () => {
+    for (const det of document.querySelectorAll('.section-cmd details.cmd-adv')) {
+      if (det._rst) continue;
+      const reset = det.querySelector('.cmd-adv-b .cmd-link[id$="-reset"]');
+      const sum = det.querySelector(':scope > summary');
+      if (!reset || !sum) continue;
+      det._rst = true;
+      det.classList.add('has-reset');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cmd-adv-reset';
+      b.title = 'Reset to defaults';
+      b.setAttribute('aria-label', 'Reset Advanced to defaults');
+      b.innerHTML = _ico('rotate-ccw');
+      b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); reset.click(); b.blur(); });
+      sum.appendChild(b);
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _advResets);
+  else _advResets();
+  // Advanced and the clip share the card: opening Advanced shrinks the clip
+  // to half size (it keeps playing), closing Advanced brings it back. `toggle` does not bubble,
+  // so it is caught on the way down.
+  // The fold starts from the click itself (the `toggle` event comes a frame
+  // later, and the fold would start behind the opening section); `toggle`
+  // stays as the catch-all for an Advanced opened any other way.
+  const _advTurn = (sec, open) => {
+    if (sec.classList.contains('adv-open') === open) return;
+    sec.classList.add('adv-anim');
+    clearTimeout(sec._advAnim);
+    sec._advAnim = setTimeout(() => sec.classList.remove('adv-anim'), 420);
+    sec.classList.toggle('adv-open', open);
+  };
+  const _advSec = (el) => {
+    const det = el && el.closest && el.closest('.section-cmd details.cmd-adv');
+    const sec = det && det.closest('.section-cmd');
+    return sec && sec.querySelector(':scope > .cmd-hero') ? { det, sec } : null;
+  };
+  document.addEventListener('click', (e) => {
+    const sum = e.target.closest && e.target.closest('.section-cmd details.cmd-adv > summary');
+    if (!sum || e.target.closest('.cmd-adv-reset')) return;
+    const a = _advSec(sum);
+    if (a) _advTurn(a.sec, !a.det.open);        // `open` is still the state before this click
+  }, true);
+  document.addEventListener('toggle', (e) => {
+    const a = _advSec(e.target);
+    if (a && e.target === a.det) _advTurn(a.sec, a.det.open);
+  }, true);
   // On a narrow viewport the panel would cover the start of the bottom
   // toolbar: sit above it then.
   function _place() {
@@ -3491,7 +3636,7 @@ const _Actions = (() => {
     { id:'export',       group:'File',       label:'Export model…',              kbd:'Ctrl+E', run: () => _openExportDialog() },
     { id:'sceneSettings',group:'File',       label:'Scene settings…',            kbd:'Ctrl+;', run: () => { try { _openSceneSettings(); } catch (_) {} } },
     { id:'wand',         group:'View',       label:'Quick wand (hold, then let go on a slice)', kbd:'W', run: () => { try { _Wand.toggle(); } catch (_) {} } },
-    { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: () => { try { if (state.selected.size > 0 && typeof frameSelected === 'function') frameSelected(); else fitToView(); } catch (_) {} } },
+    { id:'fit',          group:'View',       label:'Fit to view',                kbd:'F', run: () => { try { if ((state.selected.size > 0 || state.selectedSpline != null) && typeof frameSelected === 'function') frameSelected(); else fitToView(); } catch (_) {} } },
     { id:'revert',       group:'File',       label:'Revert to source file…',     run: () => { try { _revertToSourceFile(); } catch (_) {} } },
     { id:'frameSel',     group:'View',       label:'Frame selection',            kbd:'F', run: () => { try { frameSelected(); } catch (_) {} } },
     { id:'camPersp',     group:'View',       label:'Camera view (Perspective)',  kbd:'Ctrl+1', run: () => { try { _setPerspectiveView(); } catch (_) {} } },
@@ -3525,13 +3670,17 @@ const _Actions = (() => {
     { id:'alignFloorNow', group:'Edit',      label:'Align model to the floor (with the last choices)', run: _click('btn-align-floor') },
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
     { id:'merge',        group:'Edit',       label:'Merge selection',            kbd:'Ctrl+M', run: _click('btn-merge-sel') },
+    { id:'mergeColour',  group:'Edit',       label:'Merge parts of the same colour', run: () => mergeByColour() },
     { id:'split',        group:'Edit',       label:'Split meshes…',              kbd:'X', run: () => _CmdCards.open('split') },
     { id:'smartFit',     group:'Edit',       label:'Smart fit selection',        kbd:'Ctrl+B', run: () => _CmdCards.open('smartfit') },
     { id:'smartFitAll',  group:'Edit',       label:'Smart fit all parts',        run: _click('btn-bbox-all') },
     { id:'fillHoles',    group:'Edit',       label:'Fill holes…',                kbd:'P', run: () => _CmdCards.open('fillholes') },
+    { id:'sweep',        group:'Edit',       label:'Sweep…',                     run: () => _CmdCards.open('sweep') },
+    { id:'draw',         group:'Edit',       label:'Draw lines…',                kbd:'L', run: () => _CmdCards.open('draw') },
     { id:'decimate',     group:'Edit',       label:'Decimate selection',         run: _click('btn-decimate-sel') },
     { id:'untriangulate', group:'Edit',       label:'Untriangulate',              run: _click('btn-untriangulate') },
     { id:'smartopt',     group:'Edit',       label:'Smart optimise',             run: () => window.__moSmartOptimise?.() },
+    { id:'diagnostics',  group:'App',        label:'Copy diagnostics for a bug report', run: () => _copyDiagnostics() },
     { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { const el = document.getElementById('budget-target'); if (el && el.offsetParent) { el.focus(); el.select(); } else _click('btn-budget')(); } },
     { id:'stackedCopies', group:'Selection', label:'Find stacked copies…',       run: () => _CmdCards.open('stacked') },
     { id:'selHidden',    group:'Selection',  label:'Select hidden parts…',       run: () => _CmdCards.open('selhidden') },
@@ -3640,12 +3789,12 @@ const _CmdK = (() => {
   }
   // An icon per command (by id), else per group.
   const ICON = {
-    newscene: 'file-plus', open: 'folder-open', import: 'file-input', savescene: 'save', export: 'download', sceneSettings: 'box', revert: 'rotate-ccw',
-    fit: 'scan', frameSel: 'scan', camPersp: 'video', camTop: 'square-arrow-down', camFront: 'square-arrow-right', camSide: 'square-arrow-left',
-    solid: 'box', wire: 'grid-3x3', xray: 'crosshair', clay: 'contrast', gzMove: 'move', gzRotate: 'rotate-cw', gzScale: 'scaling', gzOff: 'circle-slash', tgGrid: 'grid-3x3',
-    selAll: 'square-check', selInvert: 'square-dashed', selClear: 'square-x', isolate: 'focus', showAll: 'eye', hideUnsel: 'eye-off', hideSel: 'eye-off', reveal: 'list-tree',
-    undo: 'undo-2', redo: 'redo-2', delete: 'trash-2', copy: 'copy', paste: 'clipboard', duplicate: 'copy-plus', recenter: 'target', group: 'folder-plus', ungroup: 'folder-minus',
-    merge: 'combine', repairMesh: 'wrench', hiddenFaces: 'scan-eye', mergeBy: 'layers', selRule: 'list-filter', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'circle-off', decimate: 'triangle', flatten: 'list-tree', measure: 'ruler', materials: 'palette',
+    newscene: 'file-plus', open: 'folder-open', import: 'file-input', savescene: 'save', export: 'download', sceneSettings: 'clapperboard', revert: 'rotate-ccw',
+    fit: 'maximize', frameSel: 'maximize', camPersp: 'video', camTop: 'view-top', camFront: 'view-front', camSide: 'view-side',
+    solid: 'cube-solid', wire: 'cube-wire', xray: 'cube-xray', clay: 'sphere-clay', gzMove: 'move', gzRotate: 'rotate-cw', gzScale: 'scaling', gzOff: 'circle-slash', tgGrid: 'land-plot',
+    selAll: 'square-check', selInvert: 'arrow-left-right', selClear: 'square-x', isolate: 'focus', showAll: 'eye', hideUnsel: 'eye-off', hideSel: 'eye-off', reveal: 'locate',
+    undo: 'undo-2', redo: 'redo-2', delete: 'trash-2', copy: 'copy', paste: 'clipboard-paste', duplicate: 'copy-plus', recenter: 'axis-3d', group: 'folder-plus', ungroup: 'folder-minus',
+    merge: 'combine', repairMesh: 'wrench', hiddenFaces: 'scan-eye', mergeBy: 'layers', selRule: 'list-filter', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'square-dot', decimate: 'shrink', flatten: 'list-tree', measure: 'ruler', materials: 'palette',
     settings: 'settings', shortcuts: 'command', palette: 'search', console: 'terminal', welcome: 'home',
   };
   const GROUP_ICON = { File: 'file', View: 'eye', Selection: 'mouse-pointer-2', Edit: 'pencil', App: 'settings' };
@@ -4231,7 +4380,7 @@ const _RendererOwner = (() => {
           const reason = info?.reason || 'unknown';
           const msg = info?.message || '(no message)';
           console.warn('[GPU] device lost:', reason, msg);
-          try { toast('GPU lost', reason + ' — reload the page to recover', 'error', 10000); } catch (_) {}
+          try { _deviceLost(reason, msg); } catch (_) {}
         });
       }
     } catch (e) { console.warn('[GPU] could not attach lost handler:', e); }
@@ -5242,6 +5391,7 @@ function _updateGizmoImpl() {
   // carry no transform gizmo (a move made here would only be undone by the
   // next change of the explosion). It comes back when the parts are put back.
   { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { _detachGizmo(); return; } }
+  try { if (_Draw.isActive()) { _detachGizmo(); return; } } catch (_) {}      // the Draw tool owns the left button
   const ids = [...state.selected];
   // Include instanced parts (p.mesh is null but p.instancedMesh is set) — the
   // promotion code inside _attachGizmoToParts pops them out of the InstancedMesh
@@ -6258,6 +6408,7 @@ function tick() {
         // Inverse(projection × view) — back-projects NDC pixels to world rays
         // inside the shader. Three.js refreshes camera.matrixWorldInverse
         // automatically when controls move, so this is always current.
+        if (u.uPersp) u.uPersp.value = camera.isPerspectiveCamera ? 1 : 0;
         if (u.uInvViewProj) {
           if (!gridHelper.userData._scratchVP) gridHelper.userData._scratchVP = new THREE.Matrix4();
           const vp = gridHelper.userData._scratchVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -7064,6 +7215,60 @@ function _buildHierarchyFromScene(scene, meshToPart) {
     `(${groupCount} groups, ${leafCount} leaves, ${appended} appended via fallback)`);
 }
 
+// Give meshes that are copies of one another a single geometry. Each copy's
+// own placement is folded into its node, so nothing moves on screen. Only
+// geometries made of positions, normals and an index are looked at (a UV or a
+// vertex colour could differ between copies and would be lost). Returns
+// { groups, shared } where `shared` is how many geometries were replaced.
+function _shareRepeatedGeometry(meshList) {
+  const byGeom = new Map();
+  for (const m of meshList) {
+    const g = m.geometry;
+    if (!g || !g.attributes || !g.attributes.position) continue;
+    let e = byGeom.get(g.uuid);
+    if (!e) {
+      const keys = Object.keys(g.attributes);
+      const pos = g.attributes.position, nrm = g.attributes.normal;
+      const plain = keys.every(k => k === 'position' || k === 'normal')
+        && !pos.isInterleavedBufferAttribute && pos.array instanceof Float32Array
+        && (!nrm || (!nrm.isInterleavedBufferAttribute && nrm.array instanceof Float32Array))
+        && !(g.morphAttributes && Object.keys(g.morphAttributes).length)
+        && !(g.groups && g.groups.length > 1);
+      e = { g, meshes: [], plain };
+      byGeom.set(g.uuid, e);
+    }
+    e.meshes.push(m);
+  }
+  const ents = [...byGeom.values()].filter(e => e.plain);
+  if (ents.length < 2) return { groups: 0, shared: 0 };
+  const res = findRepeats(ents.map(e => ({
+    positions: e.g.attributes.position.array,
+    index: e.g.index ? e.g.index.array : null,
+    normals: e.g.attributes.normal ? e.g.attributes.normal.array : null,
+  })));
+  let shared = 0;
+  const M = new THREE.Matrix4();
+  for (const grp of res.groups) {
+    const refGeom = ents[grp.ref].g;
+    for (const mem of grp.members) {
+      const ent = ents[mem.i];
+      M.fromArray(mem.m);
+      for (const mesh of ent.meshes) {
+        mesh.updateMatrix();
+        mesh.matrix.multiply(M);                                   // local × M: the copy's own turn and shift, now carried by the node
+        mesh.matrix.decompose(mesh.position, mesh.quaternion, mesh.scale);
+        mesh.updateMatrix();
+        mesh.matrixWorldNeedsUpdate = true;
+        mesh.geometry = refGeom;
+      }
+      try { ent.g.dispose(); } catch (_) {}
+      shared++;
+    }
+  }
+  if (shared) Log.info(`Found ${fmtNum(shared)} repeated geometr${shared === 1 ? 'y' : 'ies'} in ${fmtNum(res.groups.length)} shape${res.groups.length === 1 ? '' : 's'}; each is kept once (${res.stats.ms} ms)`, { tag: 'load' });
+  return { groups: res.groups.length, shared };
+}
+
 // ── GLB auto-instancing ────────────────────────────────────────────────────
 // step2glb.py writes glTF with shared BufferGeometry references for repeated
 // shapes (every M6 bolt points to the same vertex buffer). After GLTFLoader,
@@ -7257,6 +7462,7 @@ async function _drainDisposeQueue() {
 // model loads. Don't redefine clearModel without preserving the chain.
 function clearModel() {
   _detachGizmo();
+  try { _disposeSplines(); _Lines.render(); } catch (_) {}
   try { _MotionPerf.reset(); } catch (_) {}
   // Heatmap, Clay, X-ray and Wireframe dress the materials of the model that
   // is here now. Back to Solid while that model still exists: otherwise the
@@ -8606,6 +8812,9 @@ function _makeShaderGrid(opts = {}) {
     // Per-frame inverse(projection × view). Drives the eye-ray unproject;
     // the JS-side renderer loop copies it from the active camera each frame.
     const uInvViewProj = uniform(new THREE.Matrix4());
+    // 1 for a perspective camera: the eye ray starts at the camera, so the floor right under it is drawn. (From the
+    // near plane, everything closer than the near plane was cut off: the grid was clipped when zoomed in close.)
+    const uPersp = uniform(1);
 
     // — Vertex stage: fullscreen quad —
     // PlaneGeometry(2,2) at identity → vertices at (±1, ±1, 0). We emit them
@@ -8628,8 +8837,9 @@ function _makeShaderGrid(opts = {}) {
     // ray an orthographic one casts (from cameraPosition it is wrong there:
     // the 2D views lost their grid).
     const nearH = uInvViewProj.mul(vec4(positionLocal.x, positionLocal.y, float(0), float(1)));
-    const rayOrg = nearH.xyz.div(nearH.w);
-    const rayDir = normalize(farW.sub(rayOrg));
+    const nearW  = nearH.xyz.div(nearH.w);
+    const rayDir = normalize(farW.sub(nearW));
+    const rayOrg = mix(nearW, cameraPosition, uPersp);
 
     // Ray-plane intersection: plane passes through origin, normal = uPlaneN.
     //   dot(O + t·D, N) = 0   ⇒   t = -dot(O, N) / dot(D, N)
@@ -8721,7 +8931,7 @@ function _makeShaderGrid(opts = {}) {
     const clipHit = cameraProjectionMatrix.mul(cameraViewMatrix).mul(
       vec4(biasedHit.x, biasedHit.y, biasedHit.z, float(1)),
     );
-    const ndcZ = clipHit.z.div(clipHit.w);
+    const ndcZ = clipHit.z.div(clipHit.w).clamp(0, 1);       // (the floor nearer than the near plane has no depth of its own: it is the nearest thing there is)
 
     const mat = new THREE.MeshBasicNodeMaterial({
       transparent: true,
@@ -8753,7 +8963,7 @@ function _makeShaderGrid(opts = {}) {
     grp.userData.isShaderGrid = true;
     grp.userData.uniforms = {
       uMinor, uFadeStart, uFadeEnd, uAngleFade,
-      uPlaneN, uPlaneU, uPlaneV, uPlaneBias, uInvViewProj,
+      uPlaneN, uPlaneU, uPlaneV, uPlaneBias, uInvViewProj, uPersp,
     };
     grp.userData.gridParams   = { minor, major, fadeStart, fadeEnd };
     grp.dispose = () => { mesh.geometry?.dispose(); mat.dispose(); };
@@ -8847,18 +9057,21 @@ function _bgFogColor() {
 function _fitGridToModel(box) {
   if (!gridHelper || !scene) return;
   const size = box.getSize(new THREE.Vector3());
-  const footprint = Math.max(size.x, size.y, 1);
+  // (a scene smaller than one unit, say a model scaled to metres, gets a grid
+  // finer than one unit; only a box with no size at all falls back to 1)
+  const footprint = Math.max(size.x, size.y, size.z, 1e-9);
+  const sized = Math.max(size.x, size.y, size.z) > 1e-9;       // (all three: the floor is the XZ plane when Y is up)
 
   // Pick minor/major near ~5% of the footprint, snapped to a power-of-10
-  // nice number. Below 1 unit we fall back to 1 minor / 10 major.
-  const targetMinor = Math.max(footprint * 0.05, 1);
+  // nice number.
+  const targetMinor = sized ? footprint * 0.05 : 1;
   const mag = Math.pow(10, Math.floor(Math.log10(targetMinor)));
-  const minor = Math.max(1, mag);
+  const minor = Math.max(1e-9, mag);
   const major = minor * 10;
 
   // Plane extends ~200× the footprint so it feels infinite from any
   // reasonable camera distance, capped at 1e5 for vertex-budget sanity.
-  const planeSize = Math.min(1e5, Math.max(footprint * 200, 200));
+  const planeSize = Math.min(1e5, Math.max(footprint * 200, 1e-6));
   // Distance fade: full opacity within ~5× footprint, gone by ~30× —
   // smooth roll-off so the horizon dissolves cleanly.
   const fadeStart = footprint * 5;
@@ -8973,6 +9186,29 @@ function _applySceneUpAxis() {
   try { _refreshAllPartBBoxes(); } catch (_) {}
 }
 
+// A change of scene scale makes the model k times larger or smaller about the
+// origin. The view has to go with it, or the model ends up a speck millions of
+// units away (or the camera inside it) and the floor grid, cut for the old size,
+// has nothing to show: so the camera, what it looks at, its clip planes and the
+// size of an orthographic view are scaled by the same k (the picture does not
+// change), and the grid is cut again for the new size.
+function _followSceneScale(k) {
+  if (!(k > 0) || !Number.isFinite(k) || Math.abs(k - 1) < 1e-12 || !camera) return;
+  camera.position.multiplyScalar(k);
+  if (controls && controls.target) controls.target.multiplyScalar(k);
+  camera.near *= k; camera.far *= k;
+  // (the near plane's follower, _fitNearToView, keeps the clip preset's near as its floor. If the scaled near lands on
+  // the very number it last set itself, it does not see it has changed and keeps the old floor: after 1e6 → 1 that
+  // floor was a hundred times the camera's distance and the whole model was cut away.)
+  try { _nearFit.base = camera.near; _nearFit.set = -1; _nearFit.at = 0; } catch (_) {}
+  if (camera._isOrtho && Number.isFinite(camera._orthoHalfH)) camera._orthoHalfH *= k;
+  if (Number.isFinite(state.modelDiag)) state.modelDiag *= k;
+  camera.updateProjectionMatrix();
+  try { controls.update(); } catch (_) {}
+  try { _applyGridCell(); } catch (e) { console.warn('[scene] grid after scale:', e); }
+  requestRender();
+}
+
 function _applySceneScale() {
   if (!state.partsRoot) return;
   const before = _rootWorldNow();
@@ -9071,9 +9307,25 @@ function _applyCameraProjection() {
   if (state.gizmo) state.gizmo.camera = camera;
 }
 
+// The box of the selected line, in world space (null if no line is selected).
+function _selectedSplineBox() {
+  if (state.selectedSpline == null) return null;
+  const sp = (state.splines || []).find(s => s.id === state.selectedSpline);
+  if (!sp || sp.deleted || !sp.object || !sp.object.parent) return null;
+  sp.object.updateWorldMatrix(true, false);
+  const b = new THREE.Box3().setFromObject(sp.object);
+  return b.isEmpty() ? null : b;
+}
+
 // The middle of what is selected, in world space (false if nothing is).
+// A selected line counts, when no part is selected: the view turns about it (Settings > Camera).
 function _selectionCentre(out) {
-  if (!state.selected || !state.selected.size) return false;
+  if (!state.selected || !state.selected.size) {
+    const lb = _selectedSplineBox();
+    if (!lb) return false;
+    lb.getCenter(out);
+    return true;
+  }
   const box = new THREE.Box3(), tb = new THREE.Box3();
   const ex = state.explode, exploded = !!(ex && (ex.x || ex.y || ex.z));
   // (p.bbox is the part's box in the assembled model; an exploded part is drawn away from it, by p._exOff)
@@ -10952,19 +11204,27 @@ function _rebuildTreeHierarchical(reuse = null) {
   const root = $('tree');
   const ft = ($('tree-filter').value || '').toLowerCase();
   const all = state.treeNodes;
-  // Filter pass: when a search filter is active, find every part row that
-  // matches and force its ancestors visible (otherwise the filter would hide
-  // the whole tree). Stored in a Set of treeNode ids that should be shown.
+  // Filter pass: when a search filter is active, find every row that matches,
+  // part or group alike (a group by its own name), and force its ancestors
+  // visible (otherwise the filter would hide the whole tree). Stored in a Set
+  // of treeNode ids that should be shown.
   let visibleIds = null;
+  const matchedGroups = new Set();
   if (ft) {
     visibleIds = new Set();
     const byId = new Map();
     for (const n of all) byId.set(n.id, n);
     for (const n of all) {
-      if (n.kind !== 'part') continue;
-      const p = getPart(n.partId);
-      if (!p || p.deleted) continue;
-      if (p.name.toLowerCase().includes(ft)) {
+      let hit = false;
+      if (n.kind === 'part') {
+        const p = getPart(n.partId);
+        if (!p || p.deleted) continue;
+        hit = p.name.toLowerCase().includes(ft);
+      } else {
+        hit = String(n.name || '').toLowerCase().includes(ft);
+        if (hit) matchedGroups.add(n.id);
+      }
+      if (hit) {
         let cur = n;
         while (cur) {
           if (visibleIds.has(cur.id)) break;
@@ -11124,6 +11384,7 @@ function _rebuildTreeHierarchical(reuse = null) {
   // change of selection only has to touch the rows that differ (without
   // this, the first click after every rebuild went through every row).
   _treeSelCache = litP; _treeGroupSelCache = litG; _treeAncPartCache = dimP; _treeAncGroupCache = dimG;
+  _treeLinesCompute(shown);
   _treeShown = shown;
   _treeView.f0 = 0; _treeView.f1 = -1;       // the list changed: what is in the document has to be worked out again
   _treeFillVisible();
@@ -11133,7 +11394,7 @@ function _rebuildTreeHierarchical(reuse = null) {
   _treeFitIndent();
   $('tree-summary').classList.toggle('is-filter', !!ft);     // the line is only shown while searching
   $('tree-summary').textContent = ft
-    ? `${shownParts} of ${totalParts} part${totalParts === 1 ? '' : 's'} match`
+    ? `${shownParts} of ${totalParts} part${totalParts === 1 ? '' : 's'}${matchedGroups.size ? ` and ${matchedGroups.size} group${matchedGroups.size === 1 ? '' : 's'}` : ''} match`
     : `${totalParts} part${totalParts === 1 ? '' : 's'} in hierarchy`;
   _lucide();
 }
@@ -11221,7 +11482,31 @@ function _treeShownRows() {
   for (const r of _treeRows()) {
     if (r._n && !r.classList.contains('is-hidden') && !r.classList.contains('is-gone')) out.push(r);
   }
+  _treeLinesCompute(out);
   return (_treeShown = out);
+}
+// The guide lines of the tree: the last row under a parent gets an L (its
+// vertical stops at the row's middle), and a level whose parent has no later
+// row draws no line beside the rows below. Works on the rows that are shown,
+// from the bottom up: `more[k]` is true while a later row at depth k stands
+// under the same parent.
+function _treeLinesCompute(rows) {
+  const more = [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i], d = r._n.depth || 0;
+    let m = '';
+    for (let k = 1; k <= d; k++) m += more[k] ? '1' : '0';
+    more.length = d + 1;
+    more[d] = true;
+    if (r._lm === m) continue;
+    r._lm = m;
+    if (!r._filled) continue;
+    const spans = r.querySelectorAll('.tree-line');
+    for (let j = 0; j < spans.length; j++) {
+      const off = m[j] === '0';
+      spans[j].classList.toggle(j === d - 1 ? 'last' : 'nl', off);
+    }
+  }
 }
 // Put in the document the rows the panel shows, plus a margin above and
 // below, and take out the ones that have left. Called after a rebuild, on
@@ -11308,8 +11593,12 @@ function _fillTreeRow(row) {
   if (!n) return;
   row._filled = true;
   let indent = '';
-  for (let d = 0; d < n.depth - 1; d++) indent += '<span class="tree-line"></span>';
-  if (n.depth > 0) indent += '<span class="tree-line elbow"></span>';
+  // row._lm: for each level, '1' if a later row stands at that level under the
+  // same parent (see _treeLinesCompute). Without one the line ends at the row
+  // (the L corner); a level that has no later row draws no line at all.
+  const lm = row._lm || '';
+  for (let d = 0; d < n.depth - 1; d++) indent += `<span class="tree-line${lm[d] === '0' ? ' nl' : ''}"></span>`;
+  if (n.depth > 0) indent += `<span class="tree-line elbow${lm[n.depth - 1] === '0' ? ' last' : ''}"></span>`;
   if (row.classList.contains('is-group')) {
     // the row's classes are kept current by whatever changes the tree in
     // place, so they are the source for what the row shows
@@ -11329,9 +11618,10 @@ function _fillTreeRow(row) {
   const instN = (p.group && p.group.parts) ? p.group.parts.length : (n.instanceCount || 0);
   // Instances get their own icon ("this is one of N copies").
   // tree-expand-spacer keeps leaf rows aligned with their parents' +/- boxes.
+  row.classList.toggle('is-spline', !!p.isSpline);
   row.innerHTML = indent +
     `<span class="tree-expand-spacer"></span>` +
-    `<span class="tree-typeicon ${instN > 1 ? 'inst' : 'part'}">${_ico(instN > 1 ? 'copy' : 'box')}</span>` +
+    `<span class="tree-typeicon ${p.isSpline ? 'spl' : instN > 1 ? 'inst' : 'part'}">${_ico(p.isSpline ? 'spline' : instN > 1 ? 'copy' : 'box')}</span>` +
     `${lockIcon}<span class="tree-label">${escapeHtml(n.name || _stripFrameSuffix(p.name))}</span>` +
     `<span class="tree-iconcol">` +
       `<span class="tree-vis">${_ico(p.visible ? 'eye' : 'eye-off')}</span>` +
@@ -11840,7 +12130,7 @@ function applySelectionColors() {
   _selColorsQueued = true;
   queueMicrotask(() => {
     _selColorsQueued = false;
-    try { _applySelectionColorsImpl(); state._selDrawnSig = _selVisSig(); }
+    try { _applySelectionColorsImpl(); state._selDrawnSig = _selVisSig(); _paintSplines(); }
     catch (e) { console.warn('[selection] highlight rebuild failed:', e); try { requestRender(); } catch (_) {} }
     try { _updateVpHint(); } catch (_) {}
   });
@@ -12301,7 +12591,7 @@ function _applySelectionColorsImpl() {
   for (const id of state.selected) {
     if (drawn >= MAX_SELECTION_HIGHLIGHTS) break;
     const p = getPart(id);
-    if (!p || p.deleted || !p.visible) continue;
+    if (!p || p.deleted || !p.visible || p.isSpline) continue;      // (a line is tinted instead: see _paintSplines)
     if (outlinePlan.set.has(p)) continue;                           // outlined by lines of its own (below)
 
     let geom = null;
@@ -12699,6 +12989,7 @@ function pickAtPointer(ev) {
 function selectPart(partId, mode='single') {
   const p = getPart(partId);
   if (!p || p.deleted) return;
+  if (state.selectedSpline != null) { state.selectedSpline = null; try { _paintSplines(); _Lines.render(); } catch (_) {} }
   if (mode === 'add') state.selected.add(partId);
   else if (mode === 'toggle') { if (state.selected.has(partId)) state.selected.delete(partId); else state.selected.add(partId); }
   else {
@@ -12716,6 +13007,7 @@ function selectPart(partId, mode='single') {
 }
 
 function clearSelection() {
+  if (state.selectedSpline != null) { state.selectedSpline = null; try { _paintSplines(); _Lines.render(); } catch (_) {} }
   state.selected.clear();
   state.selectedGroupIds.clear();
   state._selAnchorId = null;
@@ -12923,6 +13215,59 @@ function _treeSelectRange(anchorId, clickedId, additive) {
   $('del-sel-count').textContent = state.selected.size;
 }
 
+// Click on a row of the tree with the modifiers, groups and parts alike (so they can be picked together):
+//   click            this row alone (a group: the group and everything in it)
+//   Ctrl / Cmd       toggles the row as a unit: a group goes in or out with all its parts
+//   Shift            the rows from the last clicked one to this one, whatever they are (groups and parts)
+//   Ctrl + Shift     the same, added to what is selected
+// Only the rows shown count in a range (a collapsed group's contents come with the group, not by themselves).
+function _treeSelectRowMod(e, row) {
+  const toggle = e.ctrlKey || e.metaKey, range = e.shiftKey;
+  const same = (x, y) => x && y && x.kind === y.kind && x.id === y.id;
+  const addRow = (x) => {
+    if (x.kind === 'group') { state.selectedGroupIds.add(x.id); for (const id of _treeGroupDescendants(x.id)) state.selected.add(id); }
+    else { const q = getPart(x.id); if (q && !q.deleted) state.selected.add(x.id); }
+  };
+  const treeEl = document.getElementById('tree');
+  const shown = treeEl && treeEl._rows ? _treeShownRows() : [...document.querySelectorAll('#tree .tree-node')];
+  const list = [];
+  for (const r of shown) {
+    const n = r._n;
+    if (n) { if (n.kind === 'group') list.push({ kind: 'group', id: n.id }); else if (n.kind === 'part') list.push({ kind: 'part', id: n.partId }); }
+    else if (r.dataset.partId) list.push({ kind: 'part', id: parseInt(r.dataset.partId, 10) });
+    else if (r.dataset.groupId && !Number.isNaN(parseInt(r.dataset.groupId, 10))) list.push({ kind: 'group', id: parseInt(r.dataset.groupId, 10) });
+  }
+  const at = (x) => list.findIndex(y => same(x, y));
+  const picked = (y) => (y.kind === 'group' ? state.selectedGroupIds.has(y.id) : state.selected.has(y.id));
+  if (range) {
+    let anchor = state._selAnchorRow;
+    if (!anchor || at(anchor) < 0) anchor = list.find(picked) || row;                  // nothing to start from: the first picked row in view
+    const a = at(anchor), b = at(row);
+    if (a >= 0 && b >= 0) {
+      if (!toggle) { state.selected.clear(); state.selectedGroupIds.clear(); }
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) addRow(list[i]);
+      state._selAnchorRow = anchor;                                                    // the anchor stays put across shift-clicks
+      state._selAnchorId = anchor.kind === 'part' ? anchor.id : null;
+    } else { if (!toggle) { state.selected.clear(); state.selectedGroupIds.clear(); } addRow(row); state._selAnchorRow = row; state._selAnchorId = row.kind === 'part' ? row.id : null; }
+  } else {
+    if (toggle) {
+      if (row.kind === 'group' && state.selectedGroupIds.has(row.id)) {
+        state.selectedGroupIds.delete(row.id);
+        for (const id of _treeGroupDescendants(row.id)) state.selected.delete(id);
+        for (const g of state.selectedGroupIds) if (typeof g === 'number') for (const id of _treeGroupDescendants(g)) state.selected.add(id);      // parts another picked group still holds
+      } else if (row.kind === 'part' && state.selected.has(row.id)) state.selected.delete(row.id);
+      else addRow(row);
+    } else { state.selected.clear(); state.selectedGroupIds.clear(); addRow(row); }
+    state._selAnchorRow = row; state._selAnchorId = row.kind === 'part' ? row.id : null;
+  }
+  applySelectionColors();
+  rebuildTreeSelectionOnly();
+  refreshPropertiesPanel();
+  updateGizmo();
+  $('del-sel-count').textContent = state.selected.size;
+  requestRender();
+}
+
 // Totals for the whole scene: what the Properties card shows while nothing is
 // selected.
 function _sceneTotals() {
@@ -13041,8 +13386,8 @@ function refreshPropertiesPanel() {
     // part, purple `copy` for an instance — same icon + colour the user
     // already learned from the left sidebar.
     const isInst = !!p.group;
-    const tCls   = isInst ? 'inst' : 'part';
-    const tIcon  = isInst ? 'copy' : 'box';
+    const tCls   = p.isSpline ? 'spl' : isInst ? 'inst' : 'part';
+    const tIcon  = p.isSpline ? 'spline' : isInst ? 'copy' : 'box';
     const _safeName = escapeHtml(p.name);
     const _lockBadge = p.locked
       ? `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Locked — click to unlock" style="margin-left:6px;font-size:var(--fs-10);padding:1px 6px;border-radius:var(--r-sm);background:var(--wn-soft);color:var(--wn);border:1px solid var(--wn-line);cursor:pointer;user-select:none">🔒 Locked</span>`
@@ -13050,7 +13395,7 @@ function refreshPropertiesPanel() {
     nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instanced part (×' + p.group.parts.length + ')' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
                `<span class="prop-name" title="${_safeName}">${_safeName}</span>${_lockBadge}`;
     const mat = _matOfPart(p);
-    if (mat && !p.isPrimitive) {
+    if (mat && !p.isPrimitive && !p.isSpline) {
       materialHtml = `<div class="prop-mat-strip">${_matChip(mat, _countPartsUsingMaterial(mat), true)}</div>`;
     }
     const tags = [];
@@ -13200,10 +13545,10 @@ function refreshPropertiesPanel() {
       const gname = g ? g.name : ('Group ' + groupIds[0]);
       const partN = ids.length;
       const sub = partN ? ` · ${partN} part${partN === 1 ? '' : 's'}` : '';
-      nameHtml = `<span class="prop-type-icon asm" title="Group${sub}"><i data-lucide="archive"></i></span>` +
+      nameHtml = `<span class="prop-type-icon asm" title="Group${sub}"><i data-lucide="folder"></i></span>` +
                  `<span class="prop-name" title="${escapeHtml(gname)}">${escapeHtml(gname)}</span>`;
     } else {
-      nameHtml = `<span class="prop-type-icon asm" title="${groupIds.length} groups selected"><i data-lucide="archive"></i></span>` +
+      nameHtml = `<span class="prop-type-icon asm" title="${groupIds.length} groups selected"><i data-lucide="folder"></i></span>` +
                  `<span class="prop-name">${groupIds.length} groups selected</span>`;
     }
   }
@@ -13212,7 +13557,15 @@ function refreshPropertiesPanel() {
   // dragging the framerate" intuition matches the existing threshold helpers.
   const sharePct = Math.min(100, triShare * 100);
   const fillCls = sceneRows ? '' : triShare > 0.20 ? 'very-heavy' : triShare > 0.05 ? 'heavy' : '';
-  const gridRows = sceneRows || [
+  // a line has no triangles: its card says how many points, how long, how big
+  const _splSel = ids.length === 1 ? getPart(ids[0]) : null, _splOn = !!(_splSel && _splSel.isSpline && !_splSel.deleted && _splineById(_splSel.splineId));
+  let _splRows = null;
+  if (_splOn) {
+    const _sp0 = _splineById(_splSel.splineId); let _len0 = 0;
+    try { const pl = _splinePolyline(_sp0); _len0 = SPL.polylineLength(pl.points, pl.closed); } catch (_) {}
+    _splRows = [['circle-dot', 'Points', fmtNum(_srcOf(_sp0).points.length)], ['box', 'Size', bbox], ['ruler', 'Length', _fmtLen(_len0, 3)], ['percent', '% of model', pct]];
+  }
+  const gridRows = _splRows || sceneRows || [
     ['circle-dot', 'Vertices', verts], ['box', 'Size', bbox],
     ['percent', '% of model', pct], ['package', 'Volume', vol],
   ];
@@ -13235,12 +13588,21 @@ function refreshPropertiesPanel() {
 
   el.innerHTML = `
     <div class="prop-head">${nameHtml}${matNote ? `<span class="prop-head-note" title="Different materials in this selection">${matNote}</span>` : ''}</div>
-    ${heroHtml}
+    ${_splOn ? '' : heroHtml}
     <div class="prop-grid">
       ${gridRows.map(([ic, lb, val]) => `<span class="prop-icon"><i data-lucide="${ic}"></i></span><span class="prop-label">${lb}</span><strong class="prop-value"${lb === 'Size' ? ` title="${val}"` : ''}>${val}</strong>`).join('\n      ')}
     </div>
     <div class="prop-tags">${tagsHtml}</div>
-    <div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>`;
+    ${_splOn ? '' : `<div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>`}`;
+  // A line: the Shape (rectangle, circle, polygon) and Spline cards, C4D style
+  if (_splOn) {
+    const html = _renderSplineSections(_splSel);
+    if (html) {
+      el.insertAdjacentHTML('beforeend', html);
+      _wireSplineSections(el, _splSel);
+      try { _initCustomSelects(); } catch (_) {}
+    }
+  }
   // Append the C4D-style Shape-parameters panel when the active selection
   // is a single primitive part. Sliders rebuild the geometry live.
   if (ids.length === 1) {
@@ -14045,6 +14407,206 @@ const _Dirty = (() => {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
   return { sync, mark, dirty, dropped };
 })();
+// ── Crash safety ─────────────────────────────────────────────────────────────
+// Whatever goes wrong should never be a silent freeze:
+//   _Recover   one calm panel for a problem that needs a decision
+//   _Session   tells whether the last run ended without saying goodbye
+//              (crash, kill, power cut); offers the last file and safe mode
+//   the guards below: a flood of errors, a lost graphics device, long freezes
+//   the link to the server, which stops itself when the last window closes
+const _Recover = (() => {
+  let el = null, shownId = null;
+  function ensure() {
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'mo-recover';
+    el.setAttribute('role', 'alertdialog');
+    el.hidden = true;
+    el.innerHTML = '<div class="mr-text"><span class="mr-title"></span><span class="mr-msg"></span></div><div class="mr-actions"></div>';
+    document.body.appendChild(el);
+    return el;
+  }
+  function hide() { if (el) el.hidden = true; shownId = null; }
+  function show({ id = '', title = '', msg = '', actions = [] }) {
+    const box = ensure();
+    box.querySelector('.mr-title').textContent = title;
+    box.querySelector('.mr-msg').textContent = msg;
+    const row = box.querySelector('.mr-actions');
+    row.textContent = '';
+    for (const a of actions) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn' + (a.primary ? ' warn' : '');
+      b.textContent = a.label;
+      b.addEventListener('click', () => {
+        if (!a.keep) hide();
+        try { const r = a.run && a.run(); if (r && r.catch) r.catch((e) => console.warn(e)); } catch (e) { console.warn(e); }
+      });
+      row.appendChild(b);
+    }
+    box.hidden = false;
+    shownId = id;
+  }
+  return { show, hide, shown: () => shownId };
+})();
+
+// What to send along when something went wrong: the app, the machine, what it
+// draws with, and the last of the console log.
+async function _crashReport() {
+  let g = {};
+  try { g = await _GfxProbe.probe(); } catch (_) {}
+  const head = [
+    'MeshOptimiser ' + ((document.getElementById('brand-menu-ver') || {}).textContent || '').trim(),
+    new Date().toISOString(),
+    navigator.userAgent,
+    'graphics: ' + (g.software ? 'SOFTWARE, ' : '') + (g.renderer || g.adapter || 'unknown'),
+    'renderer: ' + ((document.getElementById('renderer-name') || {}).textContent || '?'),
+    'parts: ' + ((state.parts || []).filter(p => !p.deleted).length) + ', triangles: ' + ((document.getElementById('vp-tris') || {}).textContent || '?'),
+    'page: ' + location.search,
+  ].join('\n');
+  let log = '';
+  try { log = Log.entries().slice(-150).map(e => `[${e.t}] ${e.level.toUpperCase()} ${e.tag ? '[' + e.tag + '] ' : ''}${e.msg}`).join('\n'); } catch (_) {}
+  return head + '\n\n' + log;
+}
+const _copyReportAction = { label: 'Copy report', keep: true, run: async () => {
+  try { await navigator.clipboard.writeText(await _crashReport()); toast('Copied', 'The report is on the clipboard', 'success', 3000); }
+  catch (_) { toast('Copy failed', 'The browser blocked clipboard access', 'error'); }
+} };
+const _safeModeAction = (primary) => ({ label: 'Safe mode', primary, run: () => { location.search = '?webgl=1&safe=1'; } });
+
+// Safe mode (?safe=1): WebGL2 instead of WebGPU (?webgl=1), tiny parts skipped
+// and a lower resolution while the view moves.
+function _safeModeApply() {
+  if (!/[?&]safe=1\b/.test(location.search)) return;
+  try { _MotionPerf.setCullSmall(true); _MotionPerf.setDynRes(true); } catch (_) {}
+  try { toast('Safe mode', 'WebGL2, tiny parts skipped, a lower resolution while the view moves. Reload without "safe" in the address to leave it.', 'info', 9000); } catch (_) {}
+}
+
+const _Session = (() => {
+  const K = 'stepopt-sessions', STREAK = 'stepopt-crash-streak';
+  const id = Math.random().toString(36).slice(2, 10);
+  const mine = window.top === window && !/[?&]selftest\b/.test(location.search);
+  const read = () => { try { return JSON.parse(localStorage.getItem(K) || '{}') || {}; } catch (_) { return {}; } };
+  const write = (o) => { try { localStorage.setItem(K, JSON.stringify(o)); } catch (_) {} };
+  // Each running page holds a Web Lock named after its session for as long as it
+  // lives: the browser lets go of it when the page ends however it ends, so an
+  // entry that never said goodbye and whose lock nobody holds is a run that died.
+  async function begin() {
+    if (!mine) return null;
+    const name = 'mo-session-' + id;
+    const haveLocks = !!(navigator.locks && navigator.locks.request);
+    if (haveLocks) await new Promise((res) => { try { navigator.locks.request(name, () => { res(); return new Promise(() => {}); }); } catch (_) { res(); } });
+    const now = Date.now(), all = read();
+    let held = null;
+    try { held = new Set(((await navigator.locks.query()).held || []).map(l => l.name)); } catch (_) {}
+    let crashed = null;
+    for (const [sid, s] of Object.entries(all)) {
+      if (s.clean) { delete all[sid]; continue; }
+      const alive = held ? held.has('mo-session-' + sid) : (now - s.t0 < 15000);
+      if (!alive) { crashed = { ...s, sid }; delete all[sid]; }
+    }
+    all[id] = { t0: now, clean: false };
+    write(all);
+    window.addEventListener('pagehide', (e) => {
+      if (e.persisted) return;
+      const a = read();
+      if (a[id]) { a[id].clean = true; write(a); }
+      if (Date.now() - now > 60000) { try { localStorage.setItem(STREAK, '0'); } catch (_) {} }     // a run of over a minute was a healthy one
+    });
+    return crashed;
+  }
+  function notice() {
+    let streak = 1;
+    try { streak = parseInt(localStorage.getItem(STREAK) || '0', 10) + 1; localStorage.setItem(STREAK, String(streak)); } catch (_) {}
+    let last = null;
+    try { last = JSON.parse(localStorage.getItem('stepopt-recents') || '[]')[0]; } catch (_) {}
+    const safe = /[?&]safe=1\b/.test(location.search);
+    const shortName = (n) => n.length > 24 ? n.slice(0, 11) + '…' + n.slice(-11) : n;
+    const acts = [];
+    if (last && last.name) acts.push({ label: 'Reopen ' + shortName(last.name), primary: streak < 2, run: () => _openRecentByKey(_recKey(last.name, last.size)) });
+    if (!safe) acts.push(_safeModeAction(streak >= 2));
+    acts.push({ label: 'Dismiss' });
+    _Recover.show({
+      id: 'crash',
+      title: 'MeshOptimiser closed unexpectedly last time',
+      msg: streak >= 2 ? `That is ${streak} times in a row. Safe mode draws with WebGL2 and a lower resolution while the view moves.`
+        : 'Reopen the last file, or start in safe mode if it keeps happening.',
+      actions: acts,
+    });
+  }
+  return { begin, notice };
+})();
+_Session.begin().then((crashed) => { if (crashed) setTimeout(() => _Session.notice(), 1500); }).catch(() => {});
+
+// A flood of errors (a dozen in ten seconds) is not a hiccup: say so once.
+(() => {
+  const times = [];
+  let armed = true;
+  const hit = () => {
+    const now = Date.now();
+    times.push(now);
+    while (times.length && now - times[0] > 10000) times.shift();
+    if (!armed || times.length < 12) return;
+    armed = false;
+    setTimeout(() => { armed = true; times.length = 0; }, 60000);
+    _Recover.show({
+      id: 'errors', title: 'Something keeps going wrong',
+      msg: 'The page has raised a string of errors. Save the scene if you can, then reload. The report has the details.',
+      actions: [{ label: 'Save scene…', keep: true, run: () => document.getElementById('btn-save-scene')?.click() }, _copyReportAction, _safeModeAction(false), { label: 'Dismiss' }],
+    });
+  };
+  window.addEventListener('error', (e) => { if (/ResizeObserver/.test((e && e.message) || '')) return; hit(); });
+  window.addEventListener('unhandledrejection', hit);
+})();
+
+// The graphics device (GPU) can disappear: a driver reset, the graphics process
+// stopping, a laptop switching cards. Nothing can be drawn after that.
+function _deviceLost(reason, msg) {
+  if (reason === 'destroyed') return;       // we asked for it
+  const hasWork = (state.parts || []).some(p => !p.deleted);
+  const acts = [];
+  if (hasWork) acts.push({ label: 'Save scene…', keep: true, run: () => document.getElementById('btn-save-scene')?.click() });
+  acts.push({ label: 'Reload with WebGL2', primary: true, run: () => { location.search = '?webgl=1'; } });
+  acts.push(_copyReportAction);
+  _Recover.show({
+    id: 'gpu', title: 'The graphics device was lost',
+    msg: 'The graphics driver reset or its process stopped, so the 3D view cannot draw. Save the scene, then reload.' + (msg ? ' (' + String(msg).slice(0, 80) + ')' : ''),
+    actions: acts,
+  });
+}
+(() => {
+  const c = document.getElementById('canvas');
+  if (c) c.addEventListener('webglcontextlost', (e) => { try { e.preventDefault(); } catch (_) {} _deviceLost('lost', 'WebGL context lost'); });
+})();
+
+// A freeze of several seconds goes in the console log with what was running.
+try {
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) {
+      if (e.duration >= 3000) { try { Log.warn(`The page was blocked for ${(e.duration / 1000).toFixed(1)} s${window.__moBusy ? ' (' + window.__moBusy + ')' : ''}`, { tag: 'freeze' }); } catch (_) {} }
+    }
+  }).observe({ entryTypes: ['longtask'] });
+} catch (_) {}
+
+// The link to the server: one request that stays open while this window does.
+// serve.py stops itself, and any converter still running, when the last one
+// closes (the operating system closes it even if the browser is killed).
+(() => {
+  if (window.top !== window || /[?&]selftest\b/.test(location.search) || !/^https?:$/.test(location.protocol)) return;
+  let tries = 0;
+  const link = async () => {
+    try {
+      const r = await fetch('/api/alive', { cache: 'no-store' });
+      if (!r.ok || !r.body) return;                  // not our server (a plain file server, a hosted copy)
+      tries = 0;
+      const rd = r.body.getReader();
+      while (!(await rd.read()).done) { /* a byte every few seconds */ }
+    } catch (_) {}
+    if (++tries <= 5) setTimeout(link, 3000);        // the server went away: a few more tries, then leave it be
+  };
+  link();
+})();
+
 // Closing or reloading the window with changes that are not saved asks first (Settings › General turns it off).
 window.addEventListener('beforeunload', (e) => {
   if (_Prefs.get('warnUnsaved') === false) return;
@@ -14788,19 +15350,64 @@ function _noteTriCount(tris) {
   }
 })();
 
+// What a bug report needs, as text on the clipboard: version, browser, renderer,
+// how big the scene is and the last lines of the log. Deliberately left out:
+// the opened file's name (replaced by <file>), drive paths and anything typed
+// into the app, because models are often a customer's. Part names can still
+// appear in log lines, so the person reads it before pasting it anywhere.
+async function _copyDiagnostics() {
+  const live = state.parts.filter(p => !p.deleted);
+  let tris = 0, verts = 0;
+  for (const p of live) { tris += p.triCount || 0; verts += p.vertCount || 0; }
+  const ver = (document.getElementById('brand-menu-ver')?.textContent || '').trim() || 'unknown';
+  const src = state._sourceFile;
+  const ext = src && src.name && /\.([A-Za-z0-9]+)$/.exec(src.name);
+  let backend = 'unknown';
+  try { const r = window._appFns && window._appFns.renderer; backend = (r && r.backend && (r.backend.isWebGPUBackend ? 'WebGPU' : 'WebGL')) || backend; } catch (_) {}
+  const secrets = [];
+  for (const n of [src && src.name, state.sceneName]) { if (n && n.length > 2) { secrets.push(n); const b = n.replace(/\.[^.]+$/, ''); if (b.length > 2) secrets.push(b); } }
+  secrets.sort((a, b) => b.length - a.length);
+  const hide = (t) => { for (const n of secrets) t = t.split(n).join('<file>'); return t; };
+  const clean = (t) => hide(String(t || '')).replace(/[A-Za-z]:\\[^\s"']+|\/(?:Users|home)\/[^\s"']+/g, '<path>').slice(0, 400);
+  const lines = [];
+  try { for (const e of Log.entries().slice(-80)) lines.push(clean((e.time || e.t || '') + ' ' + (e.level || '') + ' ' + (e.msg || e.message || ''))); } catch (_) {}
+  const text = [
+    'MeshOptimiser ' + ver,
+    'Browser: ' + navigator.userAgent,
+    'Renderer: ' + backend + ' · cores ' + (navigator.hardwareConcurrency || '?') + ' · memory ' + (navigator.deviceMemory || '?') + ' GB',
+    'Scene: ' + live.length + ' parts, ' + tris.toLocaleString('en') + ' triangles, ' + verts.toLocaleString('en') + ' vertices, ' + state.instancedGroups.length + ' instanced groups',
+    'Opened file: ' + (ext ? '.' + ext[1].toLowerCase() : 'none') + (src && src.size ? ', ' + (src.size / 1048576).toFixed(1) + ' MB' : ''),
+    'History: ' + state.history.length + ' undo steps',
+    '',
+    'Log (last ' + lines.length + ' lines, paths removed):',
+    ...lines,
+  ].join('\n');
+  try { await Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(() => no(new Error('clipboard timeout')), 2500))]); toast('Diagnostics copied', 'Read it, then paste it into the bug report. The file name and drive paths are removed; part names can still appear in the log.', 'success', 5000); }
+  catch (_) { downloadBlob(new Blob([text], { type: 'text/plain' }), 'meshoptimiser-diagnostics.txt'); toast('Diagnostics saved', 'The clipboard was not available, so a text file was saved instead.', 'info', 5000); }
+  return text;
+}
+window._copyDiagnostics = _copyDiagnostics;
+
 function cleanEmpty() {
   const ids = state.parts.filter(p => !p.deleted && (p.triCount === 0 || p.vertCount === 0)).map(p => p.partId);
   if (!ids.length) return toast('No empty parts found', '', 'info');
   deleteParts(ids, 'Removed empty parts');
 }
+// Exact copies only: the same shape in the same place. Sharing a geometry hash
+// is not enough: 400 instances of one bolt share a hash and sit in 400 places,
+// and removing "every repeat" used to delete 399 real bolts. Placement is judged
+// the way the Stacked copies card does it (_findStackedCopies), at its tightest.
 function cleanDupes() {
-  const seen = new Map(); const dupes = [];
-  for (const p of state.parts) {
-    if (p.deleted) continue;
-    if (seen.has(p.hash)) dupes.push(p.partId); else seen.set(p.hash, p.partId);
-  }
+  const dupes = _findExactCopies();
   if (!dupes.length) return toast('No duplicates found', '', 'info');
   deleteParts(dupes, 'Removed duplicates');
+}
+function _findExactCopies() {
+  // One part of each set is kept (the first loaded), the rest are returned.
+  // "The same place" is judged to a hundredth of a percent of the part's size,
+  // on the vertex data as well as the box (a part that is merely the same size
+  // is not a copy).
+  return _findStackedCopies(0.01, false).extra.filter(id => { const p = getPart(id); return p && !p.isSpline; });
 }
 function cleanDegenerate() {
   const ids = [];
@@ -15170,7 +15777,7 @@ function _resolvePartWorldMatrix(p) {
 function _exportDrawList(visibleOnly) {
   const out = [];
   for (const p of state.parts) {
-    if (p.deleted || p.isCloner) continue;
+    if (p.deleted || p.isCloner || p.isSpline) continue;           // (lines go in on their own: see _appendSplinesToExport)
     if (visibleOnly && !p.visible) continue;
     // The geometry on the mesh is what the user sees; the hash table is the
     // fallback for instanced parts, which have no mesh of their own.
@@ -15214,7 +15821,7 @@ function _exportDrawList(visibleOnly) {
   return out;
 }
 
-function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false }) {
+function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false, lines = false }) {
   const root = new THREE.Group();
   let count = 0;
   const drawList = _exportDrawList(visibleOnly);
@@ -15419,6 +16026,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
       if (p && !item.isClone) meshByPart.set(p.partId, m);
       count++;
     }
+    if (lines) { try { _appendSplinesToExport(root, postMat, settingsOut, visibleOnly); } catch (e) { console.warn('[export] lines:', e); } }
     return { root, count, meshByPart };
   }
 
@@ -17933,7 +18541,7 @@ async function _saveSceneImpl(toBlob = false) {
     }
   }
   try {
-    ({ root, count, meshByPart } = buildExportRoot({ visibleOnly: partial, merge: false, scale: 1, axis: 'z-up', origin: 'model' }));
+    ({ root, count, meshByPart } = buildExportRoot({ visibleOnly: partial, merge: false, scale: 1, axis: 'z-up', origin: 'model', lines: true }));
   } catch (e) {
     console.error('[scene-save]', e);
     setLoader(false);
@@ -18563,6 +19171,7 @@ const _DynPlace = (() => {
   const canMove = () => !!state.gizmo && (state._pivotedGroup || selMeshes().length > 0) && state.gizmo.object === state.pivot;
   const align  = () => _Prefs.get('dynPlaceAlign') !== false;
   const ground = () => _Prefs.get('dynPlaceGround') !== false;
+  const headSeat = () => _Prefs.get('dynPlaceHead') === true;
   const num = (el, d) => { const v = parseFloat(String(el && el.value).replace(',', '.')); return isFinite(v) ? v : d; };
   const offset = () => num(q$('place-offset'), 0) * (state.sceneScale || 1);      // typed in the model's units, drawn in the scene's
 
@@ -18623,6 +19232,68 @@ const _DynPlace = (() => {
     return pts;
   }
 
+  // "Seat bolts by the head": which end of a bolt is its head, and the point on its axis where the head meets the shank (a
+  // countersunk head: its top, which ends up flush). Read from the shape of the part itself, in the part's own frame; null for
+  // anything that is not a bolt with a head (the part then rests on its lowest corner as always).
+  function _headOf(mesh) {
+    const g = mesh && mesh.geometry, pos = g && g.attributes && g.attributes.position;
+    if (!pos || pos.count < 24) return null;
+    let arr = pos.array;
+    if (pos.isInterleavedBufferAttribute || !(arr instanceof Float32Array) || pos.itemSize !== 3) {
+      arr = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) { arr[i * 3] = pos.getX(i); arr[i * 3 + 1] = pos.getY(i); arr[i * 3 + 2] = pos.getZ(i); }
+    }
+    let r = null;
+    try { r = classifyFastener(arr, g.index ? g.index.array : null); } catch (_) {}
+    if (!r || r.kind !== 'bolt' || !(r.headH > 0) || !r.axis) return null;
+    const a = new THREE.Vector3().fromArray(r.axis).normalize();
+    const u = new THREE.Vector3().crossVectors(a, Math.abs(a.x) < 0.8 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
+    const v = new THREE.Vector3().crossVectors(a, u);
+    const n = pos.count, X = new Float32Array(n), Y = new Float32Array(n), Z = new Float32Array(n);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const px = arr[i * 3], py = arr[i * 3 + 1], pz = arr[i * 3 + 2];
+      const x = px * u.x + py * u.y + pz * u.z, y = px * v.x + py * v.y + pz * v.z, z = px * a.x + py * a.y + pz * a.z;
+      X[i] = x; Y[i] = y; Z[i] = z;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+    }
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, len = z1 - z0;
+    if (!(len > 0)) return null;
+    // how wide the part is at each height: the vertices, and points along every edge (a plain shank has vertices only at its ends)
+    const B = 48, mr = new Float32Array(B);
+    const bin = (x, y, z) => { const b = Math.min(B - 1, Math.max(0, Math.floor((z - z0) / len * B))), d = Math.hypot(x - cx, y - cy); if (d > mr[b]) mr[b] = d; };
+    for (let i = 0; i < n; i++) bin(X[i], Y[i], Z[i]);
+    const ix = g.index ? g.index.array : null, nI = ix ? ix.length : n, step = Math.max(1, Math.floor(nI / 3 / 40000)) * 3;
+    for (let t = 0; t + 2 < nI; t += step) {
+      for (let e = 0; e < 3; e++) {
+        const i0 = ix ? ix[t + e] : t + e, i1 = ix ? ix[t + (e + 1) % 3] : t + (e + 1) % 3;
+        const ns = Math.min(2 * B, Math.ceil(Math.abs(Z[i1] - Z[i0]) / len * B * 2));
+        for (let k = 1; k < ns; k++) { const f = k / ns; bin(X[i0] + (X[i1] - X[i0]) * f, Y[i0] + (Y[i1] - Y[i0]) * f, Z[i0] + (Z[i1] - Z[i0]) * f); }
+      }
+    }
+    const k = Math.max(2, Math.round(B * 0.1));
+    let lo = 0, hi = 0;
+    for (let i = 0; i < k; i++) { lo = Math.max(lo, mr[i]); hi = Math.max(hi, mr[B - 1 - i]); }
+    const up = hi >= lo, Rh = up ? hi : lo;                                   // the head is at the +axis end when that end is the wider one
+    const mid = Array.from(mr.slice(Math.round(B * 0.3), Math.round(B * 0.7))).sort((p, q) => p - q), Rs = mid[mid.length >> 1] || 0;
+    if (!(Rs > 0) || Rh < 1.25 * Rs) return null;
+    let zu;
+    if (r.sub === 'countersunk') zu = up ? z1 : z0;
+    else {
+      const cut = Rs + 0.5 * (Rh - Rs);
+      let i = up ? B - 1 : 0;
+      while (i >= 0 && i < B && mr[i] >= cut) i += up ? -1 : 1;
+      zu = z0 + (up ? i + 1 : i) / B * len;                                    // the edge of the slab nearest the head
+      // ...then the real height of the head's underside: the vertices of the wide part that lie near that edge
+      const tol = 1.5 * len / B, near = zu; let found = false;
+      for (let q = 0; q < n; q++) {
+        if (Math.abs(Z[q] - near) > tol || Math.hypot(X[q] - cx, Y[q] - cy) < cut) continue;
+        if (!found || (up ? Z[q] < zu : Z[q] > zu)) { zu = Z[q]; found = true; }
+      }
+    }
+    return { dir: up ? a : a.clone().negate(), q: new THREE.Vector3().addScaledVector(u, cx).addScaledVector(v, cy).addScaledVector(a, zu) };
+  }
+
   function _solve(ev) {
     if (!drag) return;
     const ray = _rayAt(ev);
@@ -18652,7 +19323,19 @@ const _DynPlace = (() => {
       const dd = spinNow.deg - drag.spin0;
       if (dd) { _qs.setFromAxisAngle(_n, dd * Math.PI / 180); _q.premultiply(_qs); }
     }
-    // position: the lowest corner, measured along the normal, rests on the hit point
+    // position: the lowest corner, measured along the normal, rests on the hit point; a bolt seated by its head goes in by the
+    // shank: the point where the head meets the shank, on the bolt's axis, is put on the hit point
+    if (drag.head && align()) {
+      _v.copy(drag.head.Q).multiply(state.pivot.scale).applyQuaternion(_q);
+      state.pivot.quaternion.copy(_q);
+      state.pivot.position.copy(_h).addScaledVector(_n, offset()).sub(_v);
+      state.pivot.updateMatrixWorld(true);
+      drag.moved = true;
+      boxDraw();
+      try { state.gizmo.dispatchEvent({ type: 'objectChange' }); } catch (_) {}
+      requestRender();
+      return;
+    }
     let low = Infinity;
     for (const c of drag.corners) { _v.copy(c).multiply(state.pivot.scale).applyQuaternion(_q); const d = _v.dot(_n); if (d < low) low = d; }
     if (!isFinite(low)) low = 0;
@@ -18703,7 +19386,19 @@ const _DynPlace = (() => {
     }
     const corners = _corners([...selSet]);
     boxSet(corners);
-    drag = { id: e.pointerId, cv, targets: _targets(selSet), corners, p0: state.pivot.position.clone(), q0: state.pivot.quaternion.clone(), moved: false, ref, axis, base, nowInv, spin0: spinNow.deg };
+    let head = null;
+    if (headSeat() && align() && ref && meshes.length && ref === meshes[0]) {
+      const hs = _headOf(ref);
+      if (hs) {
+        ref.updateWorldMatrix(true, false);
+        const M = new THREE.Matrix4().multiplyMatrices(new THREE.Matrix4().copy(state.pivot.matrixWorld).invert(), ref.matrixWorld);
+        const hp = hs.dir.clone().transformDirection(M), pq = state.pivot.getWorldQuaternion(new THREE.Quaternion());
+        // the head's direction in the part's upright pose: that is what is turned away from the surface
+        axis.copy(hp.applyQuaternion(pq).applyQuaternion(nowInv).applyQuaternion(base)).normalize();
+        head = { Q: hs.q.clone().applyMatrix4(M) };
+      }
+    }
+    drag = { head, id: e.pointerId, cv, targets: _targets(selSet), corners, p0: state.pivot.position.clone(), q0: state.pivot.quaternion.clone(), moved: false, ref, axis, base, nowInv, spin0: spinNow.deg };
     document.body.classList.add('dyn-placing');
     try { state.gizmo.dispatchEvent({ type: 'dragging-changed', value: true }); } catch (_) {}   // the undo snapshot
     _solve(e);
@@ -18778,8 +19473,9 @@ const _DynPlace = (() => {
   if (sec) {
     sec.addEventListener('cmd-open', () => setOn(true));
     sec.addEventListener('cmd-close', () => setOn(false));
-    const al = q$('place-align'), gr = q$('place-ground'), off = q$('place-offset'), sp = q$('place-spin');
+    const al = q$('place-align'), gr = q$('place-ground'), hd = q$('place-head'), off = q$('place-offset'), sp = q$('place-spin');
     if (al) { al.checked = align(); al.addEventListener('change', () => _Prefs.set('dynPlaceAlign', al.checked)); }
+    if (hd) { hd.checked = headSeat(); hd.addEventListener('change', () => _Prefs.set('dynPlaceHead', hd.checked)); }
     if (gr) { gr.checked = ground(); gr.addEventListener('change', () => _Prefs.set('dynPlaceGround', gr.checked)); }
     if (off) off.addEventListener('change', () => { const v = num(off, 0); off.value = String(v); });
     if (sp) sp.addEventListener('change', () => { spinNow.deg = ((Math.round(num(sp, 0)) % 360) + 360) % 360; sp.value = String(spinNow.deg); syncSpinSeg(); });
@@ -19395,7 +20091,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
   const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
   setLoader(true, 'Preparing export…', fmtLabel);
   await new Promise(r => setTimeout(r, 16));
-  const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat });
+  const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat, lines: (format === 'glb' || format === 'gltf') && !merge });
   if (count === 0) { setLoader(false); toast('Nothing to export', 'No visible parts', 'warn'); return; }
   // Force-recompute matrixWorld for the entire export subtree. applyMatrix4
   // updates a mesh's local matrix but NOT matrixWorld, and detached subtrees
@@ -19472,6 +20168,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
         // The name says what is in the file: ".draco.glb" only when it really
         // was compressed.
         downloadBlob(new Blob([outBuf], { type: 'model/gltf-binary' }), base + (compressed ? '.draco.glb' : '.glb'));
+        try { window._exportCheck?.note(outBuf.byteLength); } catch (_) {}
       } else {
         downloadBlob(new Blob([JSON.stringify(result)], { type: 'model/gltf+json' }), base + '.gltf');
       }
@@ -19624,8 +20321,77 @@ function wireUI() {
     if (fn) fn.value = _exportDefaultStem();
     if (typeof _refreshFormatToggles === 'function') _refreshFormatToggles();
     _showExportSourceNote();
+    _updateExportTarget();
     $('export-modal').classList.add('show');
   }
+  // "Check against": a target place for the file, and a line saying how the
+  // scene compares with its published guidance. The figures are guidance, not
+  // rules (Apple: about 100k triangles and under 10 MB; Shopify: files over
+  // 15 MB are recompressed on upload, 500 MB at most; a web page: what loads
+  // quickly), so the wording says so.
+  const _EXPORT_TARGETS = {
+    web:     { mb: 5,  tris: 100000, name: 'a web page' },
+    shopify: { mb: 15, tris: 100000, name: 'a Shopify product page', note: 'Shopify recompresses files above 15 MB when they are uploaded.' },
+    arql:    { mb: 10, tris: 100000, name: 'Apple AR Quick Look' },
+    phone:   { mb: 25, tris: 200000, name: 'a phone app' },
+  };
+  function _exportEstimate() {
+    const visibleOnly = $('exp-visible')?.checked, selectedOnly = $('exp-selected')?.checked, merge = $('exp-merge')?.checked;
+    let list = _exportDrawList(visibleOnly);
+    if (selectedOnly && state.selected && state.selected.size) list = list.filter(it => state.selected.has(it.part.partId));
+    const seen = new Set();
+    let tris = 0, bytes = 0, nodes = 0, verts = 0;
+    for (const it of list) {
+      const g = it.geom, pos = g.attributes.position;
+      const t = (g.index ? g.index.count : pos.count) / 3;
+      tris += t; nodes++;
+      if (merge) { verts += pos.count; bytes += pos.count * 24 + t * 12; continue; }
+      if (seen.has(g.uuid)) continue;                 // a shared geometry is written once
+      seen.add(g.uuid);
+      bytes += pos.count * 24 + t * 3 * (pos.count > 65535 ? 4 : 2);
+    }
+    bytes += (merge ? 1 : nodes) * 160 + seen.size * 120;   // nodes and mesh entries in the JSON
+    return { tris: Math.round(tris), bytes, parts: nodes };
+  }
+  function _updateExportTarget() {
+    const row = $('exp-target-row'), meter = $('exp-target-meter'), sel = $('exp-target');
+    if (!row || !sel) return;
+    const fmt = document.querySelector('#format-grid .fmt-card.selected')?.dataset.fmt || 'glb';
+    row.style.display = (fmt === 'glb' || fmt === 'gltf' || fmt === 'usdz') ? '' : 'none';
+    if (row.style.display === 'none') return;
+    try { const v = localStorage.getItem('stepopt-export-target'); if (v && !sel._restored) { sel.value = v; sel._restored = true; } } catch (_) {}
+    const t = _EXPORT_TARGETS[sel.value];
+    const e = _exportEstimate();
+    const mb = e.bytes / 1048576, draco = $('exp-draco')?.checked && fmt === 'glb';
+    const size = (draco ? 'roughly ' + (mb * 0.2 < 0.1 ? '0.1' : (mb * 0.2).toFixed(1)) + ' MB with Draco' : 'about ' + (mb < 0.1 ? '0.1' : mb.toFixed(mb < 10 ? 1 : 0)) + ' MB') ;
+    let text = fmtNum(e.tris) + ' triangles · ' + size;
+    let over = false;
+    if (t) {
+      const sizeMb = draco ? mb * 0.2 : mb;
+      const bits = [];
+      if (e.tris > t.tris) { bits.push(fmtNum(e.tris - t.tris) + ' triangles over the usual ' + fmtNum(t.tris)); over = true; }
+      if (sizeMb > t.mb) { bits.push('about ' + (sizeMb - t.mb).toFixed(1) + ' MB over ' + t.mb + ' MB'); over = true; }
+      text += over ? ' · for ' + t.name + ': ' + bits.join(', ') + '. These are guidelines, not hard limits.'
+                   : ' · within the usual limits for ' + t.name + '.';
+    }
+    meter.textContent = text;
+    meter.style.color = over ? 'var(--wn)' : '';
+  }
+  function _noteExportSize(bytes) {
+    const sel = $('exp-target'), t = sel && _EXPORT_TARGETS[sel.value];
+    if (!t) return;
+    const mb = bytes / 1048576;
+    if (mb > t.mb) toast('Larger than the usual limit', 'The file is ' + mb.toFixed(1) + ' MB; ' + t.name + ' usually wants ' + t.mb + ' MB or less. ' + (t.note || ''), 'warn', 8000);
+    else Log.info('Exported ' + mb.toFixed(2) + ' MB, within the usual ' + t.mb + ' MB for ' + t.name, { tag: 'export' });
+  }
+  window._exportCheck = { estimate: () => _exportEstimate(), update: _updateExportTarget, note: _noteExportSize };
+  for (const id of ['exp-target', 'exp-visible', 'exp-selected', 'exp-merge', 'exp-draco']) {
+    document.getElementById(id)?.addEventListener('change', () => {
+      if (id === 'exp-target') { try { localStorage.setItem('stepopt-export-target', $('exp-target').value); } catch (_) {} }
+      _updateExportTarget();
+    });
+  }
+  document.getElementById('format-grid')?.addEventListener('click', () => setTimeout(_updateExportTarget, 0));
   _openExportDialog = () => {
     const b = $('btn-export');
     if (!b || b.disabled) return;                                    // nothing open to export
@@ -19922,7 +20688,12 @@ function wireUI() {
     mouseDown = null;
     if (dx + dy > 4) return;
     const id = pickAtPointer(e);
-    if (id == null) { if (!e.shiftKey && !e.ctrlKey && !e.metaKey) clearSelection(); return; }
+    if (id == null) {
+      const sid = _pickSpline(e);                          // no part under the pointer: a line, perhaps
+      if (sid != null) { _selectSpline(sid, e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey ? 'toggle' : 'single')); return; }
+      if (!e.shiftKey && !e.ctrlKey && !e.metaKey) clearSelection();
+      return;
+    }
     selectPart(id, e.shiftKey ? 'add' : (e.ctrlKey || e.metaKey ? 'toggle' : 'single'));
     // Viewport-pick only: pin the picked row to the top of the tree so the
     // user can immediately see what they hit. Tree-side selection paths
@@ -20071,57 +20842,7 @@ function wireUI() {
         e.stopPropagation();
         return;
       }
-      const descendants = _treeGroupDescendants(gid);
-      if (descendants.length === 0) {
-        // Empty group: still let plain click set the row's highlight so the
-        // user gets visual feedback. Esc / clicking elsewhere clears.
-        if (!(e.ctrlKey || e.metaKey || e.shiftKey)) {
-          state.selected.clear();
-          state.selectedGroupIds.clear();
-          state.selectedGroupIds.add(gid);
-          applySelectionColors();
-          // Selection-only update — group rows ARE in _treeGroupSelCache so
-          // toggling selectedGroupIds is a CSS-class diff, not a DOM rewrite.
-          // Keeps the sidebar scroll position frozen.
-          rebuildTreeSelectionOnly();
-          refreshPropertiesPanel();
-          updateGizmo();
-          $('del-sel-count').textContent = 0;
-        }
-        e.stopPropagation();
-        return;
-      }
-      // Click on a hier group row → select every part descendant so the
-      // viewport outline + gizmo light up (matching the comment at the top
-      // of this if-block). Modifiers mirror part-click semantics:
-      //   plain  → replace selection with this group's descendants
-      //   ctrl   → toggle each descendant in the existing selection
-      //   shift  → add descendants to existing selection
-      if (e.ctrlKey || e.metaKey) {
-        if (state.selectedGroupIds.has(gid)) state.selectedGroupIds.delete(gid);
-        else state.selectedGroupIds.add(gid);
-        for (const id of descendants) {
-          if (state.selected.has(id)) state.selected.delete(id);
-          else state.selected.add(id);
-        }
-      } else if (e.shiftKey) {
-        state.selectedGroupIds.add(gid);
-        for (const id of descendants) state.selected.add(id);
-      } else {
-        state.selected.clear();
-        state.selectedGroupIds.clear();
-        state.selectedGroupIds.add(gid);
-        for (const id of descendants) state.selected.add(id);
-      }
-      state._selAnchorId = null;
-      applySelectionColors();
-      // Selection-only update — descendants get .selected via the partId
-      // diff, the group row itself via the groupId diff. No DOM rewrite,
-      // so the sidebar scroll position stays frozen across repeat clicks.
-      rebuildTreeSelectionOnly();
-      refreshPropertiesPanel();
-      updateGizmo();
-      $('del-sel-count').textContent = state.selected.size;
+      _treeSelectRowMod(e, { kind: 'group', id: gid });
       e.stopPropagation();
       return;
     }
@@ -20137,12 +20858,10 @@ function wireUI() {
     const pressed = _treePressSelected === id;
     _treePressSelected = null;
     if (pressed && !e.shiftKey && !e.ctrlKey && !e.metaKey && state.selected.size === 1 && state.selected.has(id)) return;
-    if (e.shiftKey && state._selAnchorId != null && state._selAnchorId !== id) {
-      _treeSelectRange(state._selAnchorId, id, e.ctrlKey || e.metaKey);
-      // anchor stays put across shift-clicks (Explorer behaviour)
-    } else {
+    if (e.shiftKey) _treeSelectRowMod(e, { kind: 'part', id });
+    else {
       selectPart(id, e.ctrlKey || e.metaKey ? 'toggle' : 'single');
-      state._selAnchorId = id;
+      state._selAnchorId = id; state._selAnchorRow = { kind: 'part', id };
     }
   });
   // Select on PRESS. A click only fires when the button comes back up, which
@@ -20543,9 +21262,11 @@ function wireUI() {
   $('scene-scale')?.addEventListener('change', e => {
     const v = parseFloat(e.target.value);
     if (!isFinite(v) || v <= 0) { e.target.value = state.sceneScale; return; }
+    const was = state.sceneScale || 1;
     state.sceneScale = v;
     try { _detachGizmo(); } catch (_) {}
     _applySceneScale();
+    _followSceneScale(v / was);
     try { updateGizmo(); refreshPropertiesPanel(); } catch (_) {}
     requestRender();
   });
@@ -21085,7 +21806,7 @@ function wireUI() {
   // branches below only act when no Ctrl / Alt is held.
   //
   // The whole map, so nothing fights:
-  //   tools       X split · P fill holes (patch) · Ctrl+M merge · Ctrl+B smart fit
+  //   tools       X split · P fill holes (patch) · L draw lines · Ctrl+M merge · Ctrl+B smart fit
   //               Ctrl+G group · Ctrl+Shift+G ungroup · Ctrl+D duplicate · Del delete
   //   visibility  H hide · Shift+H hide the rest · Alt+H show all · S isolate / back
   //   selection   Ctrl+A all · Ctrl+I invert · Esc none · Shift+S find in the tree
@@ -21102,6 +21823,7 @@ function wireUI() {
   const _KEYMAP = {
     'X':            () => _CmdCards.open('split'),
     'P':            () => _CmdCards.open('fillholes'),
+    'L':            () => _CmdCards.open('draw'),
     'D':            () => _DynPlace.toggle(),
     'H':            () => hideSelected(),
     'Shift+H':      () => hideUnselected(),
@@ -21124,7 +21846,7 @@ function wireUI() {
     const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
     if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // F = focus: frame the selection if any, else fit the whole model.
-      if (state.selected.size > 0 && typeof frameSelected === 'function') frameSelected();
+      if ((state.selected.size > 0 || state.selectedSpline != null) && typeof frameSelected === 'function') frameSelected();
       else fitToView();
     }
     // Ctrl/⌘ + 1..4 → camera view pill (Cam / Top / Front / Side). Has to
@@ -21151,7 +21873,9 @@ function wireUI() {
       if (typeof _treeGroupSelected === 'function') _treeGroupSelected();
     }
     else if (plain && !e.shiftKey && (e.key === 'g' || e.key === 'G')) $('tg-grid').click();
-    else if (e.key === 'Delete' || e.key === 'Backspace') { if (state.selected.size > 0 || state.selectedGroupIds?.size) { e.preventDefault(); _deleteSelection('Deleted selected'); } }
+    else if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (state.selected.size > 0 || state.selectedGroupIds?.size) { e.preventDefault(); _deleteSelection('Deleted selected'); }
+    }
     else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redoLast(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoLast(); }
@@ -23066,6 +23790,1760 @@ function _libWireParams(root, kind, params) {
 
 // `preset`: parameter values to start from instead of the defaults (the
 // library's chosen fastener size, for one).
+// ── Lines are parts ──────────────────────────────────────────────────────────────
+// A line is a part of the scene like any other: a row in the tree (renamed, hidden, deleted, grouped, nested and
+// dragged like a mesh), selected like a part, moved with the part gizmo, one undo step per change. What stands for
+// it in all of that is a proxy mesh with nothing to draw; the THREE.Line itself is the proxy's child and follows its
+// transform. state.splines indexes the lines: { id, partId, object (the Line), src (its spline), interp, shape, ... }.
+// The maths (curves, frames, the sweep itself) is splines.js.
+const _splineId = () => (state._splineSeq = (state._splineSeq || 0) + 1);
+
+// "the selected line" is the selected part, when that is a line
+Object.defineProperty(state, 'selectedSpline', {
+  configurable: true,
+  get() {
+    if (!state.selected || state.selected.size !== 1) return null;
+    const p = getPart(state.selected.values().next().value);
+    return p && p.isSpline && !p.deleted ? p.splineId : null;
+  },
+  set() { /* the selection is the part selection */ },
+});
+
+function _makeSpline(line, closed, src) {
+  const sp = {
+    id: _splineId(), object: line, closed: !!closed, base: 0xffffff, src: src || null, partId: null, shape: null,
+    interp: { mode: 'adaptive', points: 8, angle: 5, maxLength: 0 },       // how the curve is cut into the polyline that is drawn (the Properties card)
+    _name: line.name || '',
+  };
+  // name, hidden and deleted are the part's own
+  Object.defineProperties(sp, {
+    part: { get() { return this.partId != null ? getPart(this.partId) : null; } },
+    name: { enumerable: true, get() { const p = this.part; return p ? p.name : this._name; }, set(v) { this._name = v; const p = this.part; if (p) p.name = v; this.object.name = v; } },
+    deleted: { enumerable: true, get() { const p = this.part; return p ? !!p.deleted : false; } },
+    hidden: { enumerable: true, get() { const p = this.part; return p ? !p.visible : false; } },
+  });
+  return sp;
+}
+
+let _splineProxyMat = null;
+function _splineProxy(name) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));       // one triangle with no area: nothing to draw, nothing to hit
+  g.boundingBox = new THREE.Box3();                                                    // and no box: a box at the origin would pull a selection's centre (the gizmo) there
+  g.computeBoundingBox = function () { this.boundingBox = new THREE.Box3(); };
+  if (!_splineProxyMat) _splineProxyMat = new THREE.MeshBasicMaterial({ color: 0xffffff, visible: false });
+  const m = new THREE.Mesh(g, _splineProxyMat);
+  m.name = name;
+  return m;
+}
+
+// Lines in a loaded file: a LineLoop (which the WebGPU renderer cannot draw) becomes a closed Line, and each line gets
+// its proxy mesh in its own place of the hierarchy; the ordinary import then makes parts and tree rows of them.
+function _registerSplines(root, importMode) {
+  if (!importMode) state.splines = [];
+  state.splines ||= [];
+  const found = [];
+  root.traverse(o => { if (o.isLine && !o.isLineSegments && o.parent && o.geometry && o.geometry.attributes && o.geometry.attributes.position) found.push(o); });
+  for (const o of found) {
+    const pos = o.geometry.attributes.position;
+    if (pos.count < 2) continue;
+    const P = (i) => [pos.getX(i), pos.getY(i), pos.getZ(i)];
+    let line = o, closed = !!o.isLineLoop;
+    if (!closed && pos.count > 2) {                      // a strip that ends where it began is closed too
+      let L = 0;
+      for (let i = 1; i < pos.count; i++) { const p = P(i), q = P(i - 1); L += Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); }
+      const a = P(0), b = P(pos.count - 1);
+      if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < Math.max(1e-9, L * 1e-6)) closed = true;
+    }
+    if (o.isLineLoop) {
+      // a Line that comes back to its first point looks the same
+      const arr = new Float32Array((pos.count + 1) * 3);
+      for (let i = 0; i < pos.count; i++) arr.set(P(i), i * 3);
+      arr.set(P(0), pos.count * 3);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+      line = new THREE.Line(g, o.material);
+      line.name = o.name; line.userData = o.userData;
+      line.matrixAutoUpdate = o.matrixAutoUpdate;
+      line.position.copy(o.position); line.quaternion.copy(o.quaternion); line.scale.copy(o.scale);
+      if (!o.matrixAutoUpdate) line.matrix.copy(o.matrix);
+      o.geometry.dispose();
+    }
+    if (line.material && line.material.clone) line.material = line.material.clone();      // its own colour: a selected line is tinted
+    const n = state.splines.length + 1;
+    const sp = _makeSpline(line, closed, null);
+    sp.base = line.material && line.material.color ? line.material.color.getHex() : 0xffffff;
+    // the proxy takes the line's name, transform and place; the line goes inside it, untransformed
+    const proxy = _splineProxy(o.name || ('Line ' + n));
+    const parent = o.parent, at = parent.children.indexOf(o);
+    if (line.matrixAutoUpdate) line.updateMatrix();
+    line.matrix.decompose(proxy.position, proxy.quaternion, proxy.scale);
+    proxy.visible = o.visible;
+    proxy.userData.splineId = sp.id;
+    parent.remove(o);
+    parent.add(proxy);
+    parent.children.splice(parent.children.indexOf(proxy), 1);
+    parent.children.splice(at, 0, proxy);
+    line.position.set(0, 0, 0); line.quaternion.identity(); line.scale.set(1, 1, 1);
+    line.matrixAutoUpdate = true; line.visible = true; line.updateMatrix();
+    proxy.add(line);
+    state.splines.push(sp);
+  }
+}
+// after the import made parts of the proxies: tie each line to its part
+function _linkSplineParts(meshToPart) {
+  for (const [m, p] of meshToPart) {
+    const id = m.userData && m.userData.splineId;
+    if (id == null) continue;
+    const sp = _splineById(id);
+    if (!sp) continue;
+    sp.partId = p.partId;
+    p.isSpline = true; p.splineId = sp.id; p.triCount = 0;
+    p.originalColor = new THREE.Color(0xffffff);
+    _refreshSplineBBox(p);
+  }
+}
+// a line's box, in world space, is its part's box (the proxy has nothing of its own)
+function _refreshSplineBBox(p) {
+  const sp = _splineById(p.splineId);
+  if (!sp || !sp.object.geometry) return;
+  const g = sp.object.geometry;
+  if (!g.boundingBox) g.computeBoundingBox();
+  sp.object.updateWorldMatrix(true, false);
+  const b = g.boundingBox.clone().applyMatrix4(sp.object.matrixWorld);
+  if (b.isEmpty()) return;
+  if (p.bbox) p.bbox.copy(b); else p.bbox = b;
+  const sz = b.getSize(new THREE.Vector3());
+  p.sizeMetrics = { diag: sz.length(), vol: sz.x * sz.y * sz.z, max: Math.max(sz.x, sz.y, sz.z) };
+  p.vertCount = g.attributes.position ? g.attributes.position.count : 0;
+}
+
+function _disposeSplines() {
+  for (const sp of (state.splines || [])) {
+    try { sp.object.removeFromParent(); sp.object.geometry?.dispose?.(); sp.object.material?.dispose?.(); } catch (_) {}
+  }
+  state.splines = [];
+}
+
+// a spline as a polyline in the frame of partsRoot (where parts live): { points, closed }
+function _splinePolyline(sp) {
+  const o = sp.object;
+  state.partsRoot.updateWorldMatrix(true, false);
+  o.updateWorldMatrix(true, false);
+  const inv = state.partsRoot.matrixWorld.clone().invert();
+  const pos = o.geometry.attributes.position, v = new THREE.Vector3(), out = [];
+  const count = sp.closed && pos.count > 2 ? pos.count - 1 : pos.count;      // a closed line ends on its first point
+  for (let i = 0; i < count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(inv); out.push([v.x, v.y, v.z]); }
+  return { points: out, closed: sp.closed };
+}
+
+// A mesh made by a tool (Sweep, a line, ...) as a part of the scene: in the tree, selected, counted, and one undo
+// step. `opts`: mesh (use this one), material, hash, triCount, extra (more fields on the part), onPart (called with the
+// part as soon as it exists, before the interface is refreshed).
+function _addGeometryPart(geom, baseName, opts = {}) {
+  if (!scene || !state.partsRoot) return null;
+  geom.computeBoundingBox();
+  if (!geom.attributes.normal && !opts.mesh) geom.computeVertexNormals();
+  const used = new Set(state.parts.filter(p => !p.deleted).map(p => p.name));
+  let name = baseName, k = 1;
+  while (used.has(name)) name = `${baseName}.${String(k++).padStart(3, '0')}`;
+  const color = new THREE.Color(0xcccccc);
+  const mesh = opts.mesh || new THREE.Mesh(geom, opts.material || new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.1, roughness: 0.5, side: THREE.DoubleSide }));
+  mesh.name = name;
+  mesh.updateMatrixWorld(true);
+  const triCount = opts.triCount != null ? opts.triCount : (geom.index ? geom.index.count / 3 : geom.attributes.position.count / 3);
+  const bbox = geom.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+  const sz = bbox.getSize(new THREE.Vector3());
+  const partId = _allocPartId();
+  const partInfo = {
+    partId, name, hash: opts.hash || ('gen_' + partId), triCount, vertCount: geom.attributes.position.count, bbox,
+    sizeMetrics: { diag: sz.length(), vol: sz.x * sz.y * sz.z, max: Math.max(sz.x, sz.y, sz.z) },
+    visible: true, deleted: false, flagged: false, originalColor: color.clone(),
+    mesh, group: null, instanceIndex: -1, instancedMesh: null, userExtras: {},
+    ...(opts.extra || {}),
+  };
+  mesh.userData.partId = partId;
+  state.parts.push(partInfo);
+  if (state.partById) state.partById.set(partId, partInfo);
+  if (opts.onPart) opts.onPart(partInfo);
+  state.partsRoot.add(mesh);
+  state.partsRoot.updateMatrixWorld(true);
+  try { _refreshPartBBox(partInfo); } catch (_) {}
+  if (state.geomByHash && !state.geomByHash.has(partInfo.hash)) state.geomByHash.set(partInfo.hash, geom);
+  state.treeNodes ||= [];
+  state.treeNodes.push({ id: partId, kind: 'part', name, depth: 0, parentId: null, partId, instanceCount: 0, obj3d: mesh });
+  try {
+    if (state.selected) { state.selected.clear(); state.selected.add(partId); }
+    state.selectedGroupIds?.clear?.();
+    rebuildTree();
+    try { recomputeStats(); const vi = $('vp-info'); if (vi) vi.style.display = ''; } catch (_) {}
+    applySelectionColors(); refreshPropertiesPanel(); updateGizmo();
+  } catch (e) { console.warn('[part] post-add UI refresh failed:', e); }
+  try { onSceneActivated(); } catch (_) {}
+  try { pushUndo({ type: 'addPart', partId, kind: 'generated', name }); } catch (_) {}
+  requestRender();
+  return partInfo;
+}
+
+// A new line in the scene from points (what the Sweep card's "Add" buttons make): editable like any other.
+function _addSpline(baseName, points, closed) {
+  return _addSplineSrc(baseName, { type: 'linear', closed: !!closed, points: points.map(p => ({ p })) });
+}
+
+// ── The Sweep card ───────────────────────────────────────────────────────────
+// A profile carried along a path. Paths and profiles are lines in the scene (draw them with
+// the Draw tool); the profile can also be a circle or a rectangle made here. The result is a
+// normal part.
+const _Sweep = (() => {
+  const K = 'stepopt-sweep';
+  const D = { profile: 'circle', size: 10, w: 10, h: 6, scale0: 100, scale1: 100, twist: 0, caps: true, crease: 30 };
+  const S = Object.assign({}, D, (() => { try { return JSON.parse(localStorage.getItem(K) || '{}') || {}; } catch (_) { return {}; } })());
+  let pathId = null, profId = null, sizeTyped = false, wired = false;
+  const sec = () => document.querySelector('.section-cmd[data-cmd="sweep"]');
+  const $q = (id) => document.getElementById(id);
+  const live = () => (state.splines || []).filter(s => !s.deleted && s.object && s.object.parent);
+  const byId = (id) => live().find(s => s.id === id) || null;
+  const save = () => { try { localStorage.setItem(K, JSON.stringify(S)); } catch (_) {} };
+  const nPts = (sp) => { const c = sp.object.geometry.attributes.position.count; return sp.closed && c > 2 ? c - 1 : c; };
+
+  // tint what is chosen: the path in the accent colour, a profile line in amber
+  function paint(on) {
+    state._splineTint = on ? { path: pathId, prof: S.profile === 'line' ? profId : null } : null;
+    _paintSplines();
+  }
+
+  function renderList(host, chosen, skip, onPick) {
+    host.textContent = '';
+    const items = live().filter(s => s.id !== skip);
+    if (!items.length) {
+      const e = document.createElement('div'); e.className = 'sw-empty'; e.textContent = 'No lines in the scene yet. Draw one with the Draw tool (L).'; host.appendChild(e); return;
+    }
+    for (const sp of items) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'sw-row' + (sp.id === chosen ? ' active' : '');
+      const a = document.createElement('span'); a.className = 'sw-name'; a.textContent = sp.name;
+      const m = document.createElement('span'); m.className = 'sw-meta'; m.textContent = `${sp.closed ? 'closed' : 'open'}, ${nPts(sp)} points`;
+      b.append(a, m);
+      b.addEventListener('click', () => { onPick(sp.id); b.blur(); });
+      host.appendChild(b);
+    }
+  }
+
+  function pathLength() { const sp = byId(pathId); if (!sp) return 0; const pl = _splinePolyline(sp); return SPL.polylineLength(pl.points, pl.closed); }
+
+  function refresh() {
+    const c = sec(); if (!c) return;
+    const lines = live();
+    if (!byId(pathId)) pathId = (lines.find(s => !s.closed) || lines[0] || {}).id || null;
+    if (!byId(profId) || profId === pathId) profId = (lines.find(s => s.id !== pathId && s.closed) || lines.find(s => s.id !== pathId) || {}).id || null;
+    renderList($q('sw-path-list'), pathId, null, (id) => { pathId = id; if (profId === id) profId = null; if (!sizeTyped) autoSize(); refresh(); paint(true); });
+    renderList($q('sw-prof-list'), profId, pathId, (id) => { profId = id; refresh(); paint(true); });
+    for (const b of c.querySelectorAll('#sw-profile button')) b.classList.toggle('active', b.dataset.p === S.profile);
+    $q('sw-prof-list').hidden = S.profile !== 'line';
+    $q('sw-circle-row').hidden = S.profile !== 'circle';
+    $q('sw-rect-row').hidden = S.profile !== 'rect';
+    $q('sw-size').value = String(S.size); $q('sw-w').value = String(S.w); $q('sw-h').value = String(S.h);
+    $q('sw-scale0').value = String(S.scale0); $q('sw-scale1').value = String(S.scale1);
+    $q('sw-twist').value = String(S.twist); $q('sw-crease').value = String(S.crease);
+    $q('sw-caps').checked = !!S.caps;
+    $q('sw-adv').classList.toggle('is-changed', ['scale0', 'scale1', 'twist', 'caps', 'crease'].some(k => S[k] !== D[k]));
+    $q('sw-run').disabled = !byId(pathId) || (S.profile === 'line' && !byId(profId));
+  }
+
+  // a first size that fits the path: a fiftieth of its length, to two figures
+  function autoSize() {
+    const L = pathLength(); if (!(L > 0)) return;
+    const v = +(L / 50).toPrecision(2);
+    S.size = v; S.w = v; S.h = +(v * 0.6).toPrecision(2);
+  }
+
+  function run() {
+    const info = $q('sw-info'), say = (t) => { if (info) info.textContent = t; };
+    const path = byId(pathId);
+    if (!path) return say('Pick the path first.');
+    const pl = _splinePolyline(path);
+    if (pl.points.length < 2) return say('The path needs at least two points.');
+    let prof;
+    if (S.profile === 'circle') prof = SPL.circle(Math.max(1e-6, S.size) / 2, 32);
+    else if (S.profile === 'rect') prof = SPL.rectangle(Math.max(1e-6, S.w), Math.max(1e-6, S.h));
+    else {
+      const pr = byId(profId);
+      if (!pr) return say('Pick the profile line.');
+      const q = _splinePolyline(pr);
+      const t = [pl.points[1][0] - pl.points[0][0], pl.points[1][1] - pl.points[0][1], pl.points[1][2] - pl.points[0][2]];
+      const p2 = SPL.profileTo2D(q.points, q.closed, t);
+      prof = { pts: p2.pts, closed: q.closed };
+    }
+    window.__moBusy = 'Sweep';
+    try {
+      const m = SPL.sweep(prof, pl, { scale: [S.scale0 / 100, S.scale1 / 100], twist: S.twist, caps: S.caps, crease: S.crease });
+      if (!m.index.length) return say('Nothing came out. Check the path and the profile.');
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(m.positions, 3));
+      g.setIndex(new THREE.BufferAttribute(m.index, 1));
+      g.computeVertexNormals();
+      _addGeometryPart(g, 'Sweep');
+      say(`Made a part of ${fmtNum(m.index.length / 3)} triangles along ${path.name}.`);
+    } finally { window.__moBusy = null; }
+  }
+
+  function wire() {
+    if (wired) return; wired = true;
+    const c = sec();
+    for (const b of c.querySelectorAll('#sw-profile button')) b.addEventListener('click', () => { S.profile = b.dataset.p; save(); refresh(); paint(true); b.blur(); });
+    const num = (id, key, o, onSet) => {
+      const el = $q(id);
+      el.addEventListener('change', () => { const v = parseFloat(String(el.value).replace(',', '.')); if (isFinite(v)) S[key] = Math.max(o.min, Math.min(o.max, v)); if (onSet) onSet(); save(); refresh(); });
+      _scrubField(el, o);
+    };
+    const typed = () => { sizeTyped = true; };
+    num('sw-size', 'size', { min: 0.001, max: 1e6, step: 0.5, decimals: 2 }, typed);
+    num('sw-w', 'w', { min: 0.001, max: 1e6, step: 0.5, decimals: 2 }, typed);
+    num('sw-h', 'h', { min: 0.001, max: 1e6, step: 0.5, decimals: 2 }, typed);
+    num('sw-scale0', 'scale0', { min: 1, max: 1000, step: 1, decimals: 0 });
+    num('sw-scale1', 'scale1', { min: 1, max: 1000, step: 1, decimals: 0 });
+    num('sw-twist', 'twist', { min: -3600, max: 3600, step: 5, decimals: 0 });
+    num('sw-crease', 'crease', { min: 0, max: 180, step: 1, decimals: 0 });
+    $q('sw-caps').addEventListener('change', (e) => { S.caps = e.target.checked; save(); refresh(); });
+    $q('sw-reset').addEventListener('click', () => { Object.assign(S, { scale0: D.scale0, scale1: D.scale1, twist: D.twist, caps: D.caps, crease: D.crease }); save(); refresh(); });
+    $q('sw-run').addEventListener('click', run);
+    // (the lists are drawn first: that settles which line is the path, and the size follows its length)
+    c.addEventListener('cmd-open', () => { refresh(); if (!sizeTyped) { autoSize(); refresh(); } paint(true); });
+    c.addEventListener('cmd-close', () => paint(false));
+  }
+  return { wire, refresh, run };
+})();
+(() => { const go = () => { try { _Sweep.wire(); } catch (e) { console.warn('[sweep]', e); } }; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go, { once: true }); else go(); })();
+
+
+// ── Lines in the scene: tint, pick, and what changes after an edit ───────────────
+// A line is picked in the viewport by its screen distance (a few pixels). Parts keep priority: a line is only
+// picked where no part is under the pointer. Everything else (rows, rename, hide, delete, group) is the part's.
+function _paintSplines() {
+  const t = state._splineTint || {}, sel = state.selected;
+  for (const sp of (state.splines || [])) {
+    const m = sp.object && sp.object.material;
+    if (!m || !m.color) continue;
+    const on = sp.partId != null && sel && sel.has(sp.partId);
+    m.color.setHex(sp.id === t.path ? 0x0d99ff : sp.id === t.prof ? 0xffb020 : on ? 0x0d99ff : sp.base);
+  }
+  requestRender();
+}
+
+// a line in the selection, as the part it is
+function _selectSpline(id, mode = 'single') {
+  const sp = id != null ? _splineById(id) : null;
+  if (sp && sp.partId != null) selectPart(sp.partId, mode);
+  else clearSelection();
+  try { _Draw.syncCard(); _Draw.repaint(); } catch (_) {}
+}
+
+const _distToSegment = (px, py, ax, ay, bx, by) => {
+  const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+};
+const _shownInScene = (o) => { for (; o; o = o.parent) if (o.visible === false) return false; return true; };
+function _pickSpline(ev) {
+  const lines = (state.splines || []).filter(s => !s.deleted && s.object && s.object.parent && _shownInScene(s.object));
+  if (!lines.length || !camera) return null;
+  const r = $('canvas').getBoundingClientRect();
+  const px = ev.clientX - r.left, py = ev.clientY - r.top;
+  const v = new THREE.Vector3();
+  let best = null, bestD = 7;                             // pixels
+  camera.updateMatrixWorld();
+  for (const sp of lines) {
+    const o = sp.object;
+    o.updateWorldMatrix(true, false);
+    const pos = o.geometry.attributes.position;
+    let prev = null;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).project(camera);
+      const cur = { x: (v.x * 0.5 + 0.5) * r.width, y: (-v.y * 0.5 + 0.5) * r.height, off: v.z > 1 || v.z < -1 };
+      if (prev && !prev.off && !cur.off) {
+        const d = _distToSegment(px, py, prev.x, prev.y, cur.x, cur.y);
+        if (d < bestD) { bestD = d; best = sp; }
+      }
+      prev = cur;
+    }
+  }
+  return best ? best.id : null;
+}
+
+const _splineById = (id) => (state.splines || []).find(s => s.id === id) || null;
+// `o.panel === false`: the Properties panel made this change itself and keeps its own fields
+function _afterSplineChange(o) {
+  try { _Sweep.refresh(); } catch (_) {}
+  _paintSplines();
+  try { updateGizmo(); } catch (_) {}
+  if (!(o && o.panel === false)) { try { if (state.selectedSpline != null) refreshPropertiesPanel(); } catch (_) {} }
+}
+// (the list that used to sit under the tree is gone: lines are rows of the tree itself)
+const _Lines = { render() {}, wire() {} };
+
+
+// A line goes into a GLB / glTF (and into a saved scene) as a Line, baked into the same frame as the parts.
+function _appendSplinesToExport(root, postMat, settingsOut, visibleOnly) {
+  for (const sp of (state.splines || [])) {
+    if (sp.deleted || !sp.object || !sp.object.parent) continue;
+    if (visibleOnly && sp.hidden) continue;
+    sp.object.updateWorldMatrix(true, false);
+    const world = sp.object.matrixWorld.clone().premultiply(settingsOut);
+    const g = sp.object.geometry.clone();
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(postMat, world));
+    const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: sp.base }));
+    line.name = sp.name;
+    root.add(line);
+  }
+}
+
+
+// ── Editable lines: the spline behind a Line, and building one from it ───────────
+// A line made here (or edited) keeps its spline in sp.src, in the line object's own space:
+// { type, closed, points:[{ p, tIn, tOut }] }. The Line in the scene is that spline sampled.
+// A line that came from a file has no src until it is edited: it is read as a polyline.
+function _srcOf(sp) {
+  if (sp.src) return sp.src;
+  const pos = sp.object.geometry.attributes.position;
+  const count = sp.closed && pos.count > 2 ? pos.count - 1 : pos.count;
+  const pts = [];
+  for (let i = 0; i < count; i++) pts.push({ p: [pos.getX(i), pos.getY(i), pos.getZ(i)] });
+  sp.src = { type: 'linear', closed: !!sp.closed, points: pts };
+  return sp.src;
+}
+// How a spline is cut into the polyline that is drawn and swept (C4D's Interpolation): see splines.js. The maximum
+// length of "subdivided" starts as a twentieth of the curve's size, so the first switch to it does something.
+function _ensureMaxLen(sp) {
+  const I = sp.interp || (sp.interp = { mode: 'adaptive', points: 8, angle: 5, maxLength: 0 });
+  if (!(I.maxLength > 0)) {
+    const pts = _srcOf(sp).points, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const q of pts) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], q.p[k]); hi[k] = Math.max(hi[k], q.p[k]); }
+    const d = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+    I.maxLength = d > 0 ? +(d / 20).toPrecision(2) : 1;
+  }
+  return I;
+}
+function _rebuildSplineGeometry(sp) {
+  const I = _ensureMaxLen(sp);
+  const s = SPL.sampleSpline(sp.src, { mode: I.mode, points: I.points, angle: I.angle, maxLength: I.maxLength });
+  const pts = s.points, closed = !!sp.src.closed, n = pts.length + (closed ? 1 : 0);
+  const old = sp.object.geometry, attr = old && old.attributes && old.attributes.position;
+  sp.closed = closed;
+  sp._len = null;
+  if (attr && attr.count === n && attr.array instanceof Float32Array) {
+    // the same number of points (dragging a point or a handle): move them where they are. The
+    // buffer is re-sent to the GPU because its version goes up; no new geometry, so nothing for
+    // the renderer to miss.
+    const a = attr.array;
+    pts.forEach((p, i) => { a[i * 3] = p[0]; a[i * 3 + 1] = p[1]; a[i * 3 + 2] = p[2]; });
+    if (closed) { a[(n - 1) * 3] = pts[0][0]; a[(n - 1) * 3 + 1] = pts[0][1]; a[(n - 1) * 3 + 2] = pts[0][2]; }
+    attr.needsUpdate = true;
+    old.computeBoundingSphere(); old.computeBoundingBox();
+  } else {
+    // another number of points (a point added or removed, another curve type): a new geometry,
+    // stamped so that the WebGPU renderer sees it is a different one (see _stampGeometry)
+    const arr = new Float32Array(n * 3);
+    pts.forEach((p, i) => arr.set(p, i * 3));
+    if (closed) arr.set(pts[0], pts.length * 3);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    _stampGeometry(g);
+    sp.object.geometry = g;
+    try { if (old) old.dispose(); } catch (_) {}
+  }
+  const part = sp.part;
+  if (part) { try { _refreshSplineBBox(part); } catch (_) {} }
+  requestRender();
+}
+
+// ── Shapes: a rectangle, circle, ellipse, polygon or star stays a shape ──────────
+// A shape drawn with one of those tools keeps what it was made from (sp.shape, in the line's own space: a corner
+// or centre, the plane's two directions, the sizes), so its Properties can be changed later. Editing its points
+// turns it into an ordinary spline.
+function _shapeSrc(sh) {
+  if (sh.kind === 'rect') return SPL.roundedRectSpline(sh.o, sh.u, sh.v, sh.w, sh.h, sh.corner || 0, sh.cornerType || 'round');
+  if (sh.kind === 'circle') return sh.ellipse ? SPL.circleSpline(sh.o, sh.u, sh.v, sh.rx, sh.ry) : SPL.circleSpline(sh.o, sh.u, sh.v, sh.rx);
+  const n = Math.max(3, Math.round(sh.sides));
+  const around = !!sh.circum && !sh.star, R = around ? sh.r / Math.cos(Math.PI / n) : sh.r, phase = (sh.phase || 0) - (around ? Math.PI / n : 0);
+  let poly = sh.star ? SPL.starSpline(sh.o, sh.u, sh.v, R, n, sh.inner / 100, phase) : SPL.polygonSpline(sh.o, sh.u, sh.v, R, n, phase);
+  if (sh.corner > 0) poly = SPL.filletCorners(poly, sh.corner, sh.cornerType || 'round');
+  return poly;
+}
+// everything that can change in a line from its Properties, as one text, for undo
+const _splineSnap = (sp) => JSON.stringify({ src: _srcOf(sp), shape: sp.shape || null, interp: sp.interp });
+function _applySplineSnap(sp, text) {
+  const o = JSON.parse(text);
+  sp.src = o.src; sp.shape = o.shape || null;
+  if (o.interp) sp.interp = o.interp;
+  _rebuildSplineGeometry(sp);
+}
+
+// a new line from a spline (given in the space of partsRoot, where parts live) that is a part of the scene
+// `opts.shape`: what a rectangle, circle or polygon was made from
+function _addSplineSrc(baseName, src, opts = {}) {
+  if (!scene || !state.partsRoot) return null;
+  state.splines ||= [];
+  const line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff }));
+  const sp = _makeSpline(line, !!src.closed, SPL.cloneSpline(src));
+  sp.shape = opts.shape || null;
+  const proxy = _splineProxy(baseName);
+  proxy.userData.splineId = sp.id;
+  proxy.add(line);
+  _rebuildSplineGeometry(sp);
+  state.splines.push(sp);
+  const part = _addGeometryPart(proxy.geometry, baseName, {
+    mesh: proxy, triCount: 0, hash: 'spl_' + sp.id,
+    extra: { isSpline: true, splineId: sp.id },
+    onPart: (p) => { sp.partId = p.partId; sp._name = p.name; line.name = p.name; p.originalColor = new THREE.Color(0x4da3ff); _refreshSplineBBox(p); },
+  });
+  if (!part) { state.splines.pop(); return null; }
+  _paintSplines();
+  return sp;
+}
+// a change to a line's spline, undoable (an edit of the points makes the shape an ordinary spline)
+function _setSplineSrc(sp, src, undoable = true) {
+  const from = _splineSnap(sp);
+  sp.src = SPL.cloneSpline(src);
+  sp.shape = null;
+  _rebuildSplineGeometry(sp);
+  if (undoable) pushUndo({ type: 'editSpline', id: sp.id, from, to: _splineSnap(sp) });
+  _afterSplineChange();
+  try { _Draw.repaint(); } catch (_) {}
+}
+_UndoOps.register('editSpline', {
+  undo(op) { const sp = _splineById(op.id); if (sp) _applySplineSnap(sp, op.from); state.redo.push(op); _afterSplineChange(); try { _Draw.repaint(); } catch (_) {} _refreshUndoRedoButtons(); },
+  redo(op) { const sp = _splineById(op.id); if (sp) _applySplineSnap(sp, op.to); state.history.push(op); _afterSplineChange(); try { _Draw.repaint(); } catch (_) {} _refreshUndoRedoButtons(); },
+});
+
+// ── Properties of a line: SHAPE (for a rectangle, circle, polygon, star) and SPLINE ─────────────────
+// The Spline card is Cinema 4D's: Type, Close Spline, Interpolation, and what the interpolation needs (Points for
+// Natural and Uniform, Angle for Adaptive and Subdivided, Maximum length for Subdivided; the others are greyed).
+const _SPL_TYPES = [['bezier', 'Bezier'], ['cubic', 'Cubic'], ['bspline', 'B-spline'], ['linear', 'Linear']];
+const _SPL_INTERPS = [['none', 'None'], ['natural', 'Natural'], ['uniform', 'Uniform'], ['adaptive', 'Adaptive'], ['subdivided', 'Subdivided']];
+const _SPL_SHAPE_IDS = new Set(['w', 'h', 'corner', 'cornerType', 'rx', 'ry', 'ellipse', 'r', 'sides', 'star', 'inner', 'circum']);
+const _SPL_CORNERS = [['round', 'Round'], ['bevel', 'Bevel']];
+function _splFields(sp) {
+  const sh = sp.shape, I = _ensureMaxLen(sp), src = _srcOf(sp);
+  const len = (id, label, v, extra) => Object.assign({ id, label, kind: 'num', v, min: 0, max: 1e9, unit: 'len' }, extra);
+  const shape = [];
+  if (sh && sh.kind === 'rect') shape.push(len('w', 'Width', sh.w, { min: 1e-6 }), len('h', 'Height', sh.h, { min: 1e-6 }),
+    { id: 'cornerType', label: 'Corner', kind: 'sel', v: sh.cornerType || 'round', opts: _SPL_CORNERS }, len('corner', 'Corner size', sh.corner || 0));
+  if (sh && sh.kind === 'circle') shape.push(len('rx', sh.ellipse ? 'Radius X' : 'Radius', sh.rx, { min: 1e-6 }),
+    { id: 'ellipse', label: 'Ellipse', kind: 'bool', v: !!sh.ellipse }, len('ry', 'Radius Y', sh.ry, { min: 1e-6, hidden: !sh.ellipse }));
+  if (sh && sh.kind === 'polygon') shape.push(len('r', 'Radius', sh.r, { min: 1e-6 }),
+    { id: 'sides', label: 'Sides', kind: 'num', v: sh.sides, min: 3, max: 128, dec: 0, step: 1 },
+    { id: 'star', label: 'Star', kind: 'bool', v: !!sh.star },
+    { id: 'inner', label: 'Inner radius', kind: 'num', v: sh.inner, min: 1, max: 99, dec: 0, step: 1, unit: '%', hidden: !sh.star },
+    { id: 'circum', label: 'Around the circle', kind: 'bool', v: !!sh.circum, hidden: !!sh.star },
+    { id: 'cornerType', label: 'Corner', kind: 'sel', v: sh.cornerType || 'round', opts: _SPL_CORNERS }, len('corner', 'Corner size', sh.corner || 0));
+  const spline = [];
+  if (!sh) {
+    spline.push({ id: 'type', label: 'Type', kind: 'sel', v: src.type, opts: _SPL_TYPES },
+      { id: 'closed', label: 'Close Spline', kind: 'bool', v: !!src.closed });
+  }
+  spline.push({ id: 'mode', label: 'Interpolation', kind: 'sel', v: I.mode, opts: _SPL_INTERPS },
+    { id: 'points', label: 'Points', kind: 'num', v: I.points, min: 1, max: 256, dec: 0, step: 1 },
+    { id: 'angle', label: 'Angle', kind: 'num', v: I.angle, min: 0.1, max: 90, dec: 1, step: 0.5, unit: '°' },
+    len('maxLength', 'Maximum length', I.maxLength, { min: 1e-6 }));
+  return { shape, spline };
+}
+function _renderSplineSections(p) {
+  const sp = _splineById(p.splineId);
+  if (!sp) return '';
+  const { shape, spline } = _splFields(sp);
+  const ul = _UNIT_LABEL[state.displayUnit] || '';
+  const fmt = (v) => String(parseFloat(Number(v).toPrecision(6)));
+  const row = (f) => {
+    const head = `<div class="prim-row" data-spl-field="${f.id}"${f.hidden ? ' hidden' : ''}><label class="prim-label">${escapeHtml(f.label)}</label>`;
+    if (f.kind === 'sel') return head + `<select data-spl-input class="prim-select mac-sel">${f.opts.map(([k, t]) => `<option value="${k}"${k === f.v ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select></div>`;
+    if (f.kind === 'bool') return head + `<label class="prim-toggle"><input type="checkbox" data-spl-input ${f.v ? 'checked' : ''}><span></span></label></div>`;
+    const unit = f.unit === 'len' ? ul : (f.unit || '');
+    return head + `<span class="prim-val-wrap"><input type="text" inputmode="decimal" class="prim-value" data-spl-input${f.unit === 'len' ? ' data-len="1"' : ''} value="${fmt(f.v)}"${f.min != null ? ` data-min="${f.min}"` : ''} data-max="${f.max}"${f.dec != null ? ` data-dec="${f.dec}"` : ''}${f.step != null ? ` data-step="${f.step}"` : ''}>${unit ? `<span class="prim-unit">${escapeHtml(unit)}</span>` : ''}</span></div>`;
+  };
+  const section = (title, icon, rows, cls) => `
+    <div class="prop-section prim-section ${cls}">
+      <div class="prop-section-title"><span><i data-lucide="${icon}"></i> ${title}</span></div>
+      <div>${rows.map(row).join('')}</div>
+    </div>`;
+  return (shape.length ? section('Shape', 'shapes', shape, 'spl-shape') : '') + section('Spline', 'spline', spline, 'spl-spline');
+}
+// the card above the sections (points, size, length, share of the model) follows an edit made in them
+function _updateSplineReadouts(root, p, sp) {
+  const cells = root.querySelectorAll('.prop-grid .prop-value');
+  if (cells.length < 4) return;
+  let len = 0;
+  try { const pl = _splinePolyline(sp); len = SPL.polylineLength(pl.points, pl.closed); } catch (_) {}
+  cells[0].textContent = fmtNum(_srcOf(sp).points.length);
+  cells[1].textContent = _fmtDims(p.bbox.getSize(new THREE.Vector3()));
+  cells[2].textContent = _fmtLen(len, 3);
+  cells[3].textContent = (p.sizeMetrics.diag / _liveSceneDiag() * 100).toFixed(2) + '%';
+}
+function _wireSplineSections(root, p) {
+  const sp = _splineById(p.splineId);
+  if (!sp || !root) return;
+  const q = (id) => root.querySelector('.prim-row[data-spl-field="' + id + '"]');
+  const lock = p.locked;
+  const sync = () => {                               // what is greyed, what is shown
+    const I = sp.interp, sh = sp.shape;
+    const off = (id, v) => { const r = q(id); if (r) { r.classList.toggle('prim-off', v); r.querySelectorAll('input,select').forEach(i => { i.disabled = v || lock; }); } };
+    off('points', !(I.mode === 'natural' || I.mode === 'uniform'));
+    off('angle', !(I.mode === 'adaptive' || I.mode === 'subdivided'));
+    off('maxLength', I.mode !== 'subdivided');
+    const hid = (id, h) => { const r = q(id); if (r) r.hidden = h; };
+    if (sh && sh.kind === 'circle') { hid('ry', !sh.ellipse); const l = q('rx') && q('rx').querySelector('.prim-label'); if (l) l.textContent = sh.ellipse ? 'Radius X' : 'Radius'; }
+    if (sh && sh.kind === 'polygon') { hid('inner', !sh.star); hid('circum', !!sh.star); }
+  };
+  const value = (id) => {
+    const sh = sp.shape;
+    if (sh && _SPL_SHAPE_IDS.has(id)) return sh[id];
+    if (id === 'type') return _srcOf(sp).type;
+    if (id === 'closed') return !!_srcOf(sp).closed;
+    return sp.interp[id === 'mode' ? 'mode' : id];
+  };
+  const fill = (except) => {                         // the fields show the model (one shape field can move another)
+    for (const row of root.querySelectorAll('.prim-row[data-spl-field]')) {
+      const inp = row.querySelector('[data-spl-input]');
+      if (!inp || inp === except || inp === document.activeElement) continue;
+      const v = value(row.dataset.splField);
+      if (v === undefined) continue;
+      if (inp.type === 'checkbox') inp.checked = !!v;
+      else if (inp.tagName === 'SELECT') { inp.value = String(v); inp.dispatchEvent(new Event('mo-sync')); }
+      else inp.value = String(parseFloat(Number(v).toPrecision(6)));
+    }
+  };
+  function set(id, v) {
+    const sh = sp.shape;
+    if (sh && _SPL_SHAPE_IDS.has(id)) {
+      if (id === 'w' || id === 'h') {                // a rectangle grows about its centre
+        const old = sh[id], dir = id === 'w' ? sh.u : sh.v, d = (old - v) / 2;
+        sh[id] = v; sh.o = sh.o.map((c, k) => c + dir[k] * d);
+      } else if (id === 'rx' && !sh.ellipse) { sh.rx = v; sh.ry = v; }
+      else if (id === 'ellipse') { sh.ellipse = !!v; if (!v) sh.ry = sh.rx; }
+      else sh[id] = v;
+      sp.src = _shapeSrc(sh);
+    } else if (id === 'type') {
+      sp.src = SPL.withType(_srcOf(sp), v);
+    } else if (id === 'closed') {
+      const s = SPL.cloneSpline(_srcOf(sp));
+      if (v && s.points.length < 3) { toast('Spline', 'Closing a line needs three points', 'info', 2500); return false; }
+      s.closed = !!v; sp.src = s;
+    } else sp.interp[id] = v;
+    _rebuildSplineGeometry(sp);
+    return true;
+  }
+  let gesture = null;
+  const begin = () => { if (!gesture) gesture = _splineSnap(sp); };
+  const commit = () => {
+    if (!gesture) return;
+    const from = gesture; gesture = null;
+    const to = _splineSnap(sp);
+    if (from !== to) { try { pushUndo({ type: 'editSpline', id: sp.id, from, to }); } catch (_) {} }
+    _afterSplineChange({ panel: false });
+    try { _Draw.repaint(); _Draw.syncCard(); } catch (_) {}
+    try { recomputeStats(); } catch (_) {}
+    try { _updateSplineReadouts(root, p, sp); } catch (_) {}
+  };
+  sync();
+  for (const row of root.querySelectorAll('.prim-row[data-spl-field]')) {
+    const id = row.dataset.splField, inp = row.querySelector('[data-spl-input]');
+    if (!inp) continue;
+    if (lock) { inp.disabled = true; continue; }
+    if (inp.type === 'checkbox') {
+      inp.addEventListener('change', () => { begin(); if (!set(id, inp.checked)) inp.checked = !inp.checked; sync(); fill(inp); commit(); });
+    } else if (inp.tagName === 'SELECT') {
+      inp.addEventListener('change', () => { begin(); set(id, inp.value); sync(); fill(inp); commit(); });
+    } else {
+      const lo = parseFloat(inp.dataset.min), hi = parseFloat(inp.dataset.max), dec = inp.dataset.dec != null ? +inp.dataset.dec : null;
+      // a length moves in steps of a two-hundredth of the line's size (rounded to 1, 2 or 5), so the same drag feels the same on a big shape and a small one
+      const nice = (x) => { const e = Math.pow(10, Math.floor(Math.log10(x))), m = x / e; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * e; };
+      const step = inp.dataset.step != null ? +inp.dataset.step : inp.dataset.len ? nice(Math.max(1e-9, (p.sizeMetrics && p.sizeMetrics.diag) || 100) / 200) : 0.1;
+      const decimals = dec != null ? dec : Math.max(0, 1 - Math.floor(Math.log10(step)));
+      const clamp = (v) => { v = Math.max(isFinite(lo) ? lo : -1e9, Math.min(hi, v)); return dec === 0 ? Math.round(v) : v; };
+      const dmin = isFinite(lo) ? lo : -1e9;
+      _scrubField(inp, { min: dmin, max: hi, step, decimals });
+      // the whole box and its label drag too, as the fields of a primitive do
+      for (const grab of [inp.closest('.prim-val-wrap'), row.querySelector('.prim-label')]) _scrubDrag(grab, {
+        get: () => Math.round((parseFloat(String(inp.value).replace(',', '.')) || 0) / step),
+        min: Math.round(dmin / step), max: Math.round(hi / step), pxPerStep: 4,
+        set: (n) => { inp.value = String(parseFloat((n * step).toFixed(decimals))); inp.dispatchEvent(new Event('input', { bubbles: true })); },
+        end: () => inp.dispatchEvent(new Event('change', { bubbles: true })),
+      });
+      inp.addEventListener('input', () => {
+        const v = parseFloat(String(inp.value).replace(',', '.'));
+        if (!Number.isFinite(v)) return;
+        begin(); set(id, clamp(v)); fill(inp);
+      });
+      inp.addEventListener('change', () => {
+        const v = parseFloat(String(inp.value).replace(',', '.'));
+        begin();
+        if (Number.isFinite(v)) set(id, clamp(v));
+        fill(null); inp.value = String(parseFloat(Number(value(id)).toPrecision(6)));
+        commit();
+      });
+      inp.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+        else if (e.key === 'Escape') { inp.value = String(parseFloat(Number(value(id)).toPrecision(6))); inp.blur(); }
+      });
+    }
+  }
+}
+
+// ── The Draw tool ────────────────────────────────────────────────────────────────
+// Lines drawn on a work plane, and edited point by point. The picture while drawing (the curve so
+// far, its points and handles, the snap marker, the readout) is a 2D layer over the viewport: it costs
+// nothing when the tool is off and nothing is made in the scene until a line is finished.
+//   Pen        click for a point, drag for a curve (Bezier), Enter to finish, C to close
+//   Rectangle  drag corner to corner (Shift: square, Alt: from the centre)
+//   Circle     drag from the centre
+//   Arc        start, end, then a point it passes through
+//   Polygon    drag from the centre (the pointer turns it); the sides are set in the card
+//   Freehand   draw with the pointer; it is smoothed into a curve
+//   Edit       move points and handles, click a curve to add a point, Delete removes one
+// Alt + drag orbits while the tool is on; the middle and right buttons pan as always.
+const _Draw = (() => {
+  const K = 'stepopt-draw';
+  const D = { tool: 'pen', type: 'bezier', plane: 'ground', offset: 0, snapGrid: true, gridAuto: true, grid: 10, snapPoints: true, sides: 6, smooth: 4,
+    corner: 0, cornerType: 'round', star: false, inner: 50, ellipse: false, circum: false, center: false };
+  const S = Object.assign({}, D, (() => { try { return JSON.parse(localStorage.getItem(K) || '{}') || {}; } catch (_) { return {}; } })());
+  const TOOLS = ['pen', 'rect', 'circle', 'arc', 'polygon', 'freehand', 'edit'];
+  const NAMES = { pen: 'Spline', rect: 'Rectangle', circle: 'Circle', arc: 'Arc', polygon: 'Polygon', freehand: 'Freehand' };
+  // what a finished shape is called, from the options it was made with
+  const nameFor = (tool) => tool === 'rect' ? (S.corner > 0 ? (S.cornerType === 'bevel' ? 'Bevelled rectangle' : 'Rounded rectangle') : 'Rectangle')
+    : tool === 'circle' ? (S.ellipse ? 'Ellipse' : 'Circle')
+    : tool === 'polygon' ? (S.star ? 'Star' : S.corner > 0 ? 'Rounded polygon' : 'Polygon') : NAMES[tool];
+  const ACCENT = '#0d99ff', AMBER = '#ffb020';
+  let active = false, wired = false, ov = null, ctx = null, pending = false, prevButtons = null, altOrbit = false, selFor = null;
+  let ptr = null;             // the pointer on the viewport, in pixels (the grid dots fade away from it)
+  let hot = null;             // Edit: the point or handle under the pointer
+  let cur = null;             // what is being drawn: { tool, pts:[{p,tIn,tOut}] | a,b | raw, plane }
+  let hover = null;           // { p: Vector3 (snapped), kind, raw }
+  let drag = null;            // a drag in progress (pen handle, edit point or handle, shape, freehand)
+  let sel = -1;               // the selected point of the line being edited
+  let dimBox = null;          // the box a size is typed into while a shape is active
+  let mods = { shift: false, alt: false };
+  const $q = (id) => document.getElementById(id);
+  const canvas = () => $q('canvas');
+  const save = () => { try { localStorage.setItem(K, JSON.stringify(S)); } catch (_) {} };
+  const V3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+  const arr = (v) => [v.x, v.y, v.z];
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+
+  // ── planes ──
+  const mkPlane = (o, n, u) => { n = n.clone().normalize(); u = u.clone().sub(n.clone().multiplyScalar(u.dot(n))).normalize(); return { o, n, u, v: new THREE.Vector3().crossVectors(n, u) }; };
+  function basisFor(n) { const z = new THREE.Vector3(0, 0, 1); const u = Math.abs(n.dot(z)) > 0.98 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3().crossVectors(z, n); return u.normalize(); }
+  function plane() {
+    if (cur && cur.plane) return cur.plane;
+    const off = S.offset || 0;
+    if (S.plane === 'front') return mkPlane(new THREE.Vector3(0, -off, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(1, 0, 0));
+    if (S.plane === 'side') return mkPlane(new THREE.Vector3(off, 0, 0), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
+    if (S.plane === 'view') {
+      const n = camera.position.clone().sub(controls.target).normalize();
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+      return mkPlane(controls.target.clone().addScaledVector(n, off), n, right);
+    }
+    return mkPlane(new THREE.Vector3(0, 0, off), new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0));       // ground (and Surface until a face is clicked)
+  }
+  function pointerRay(ev) {
+    const r = canvas().getBoundingClientRect();
+    ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    return ray.ray;
+  }
+  function hitPlane(ev, pl) {
+    const rr = pointerRay(ev), d = rr.direction.dot(pl.n);
+    if (Math.abs(d) < 1e-7) return null;
+    const t = pl.n.dot(pl.o.clone().sub(rr.origin)) / d;
+    if (t < 0 && !camera.isOrthographicCamera) return null;
+    return rr.origin.clone().addScaledVector(rr.direction, t);
+  }
+  // the surface of a part under the pointer: its point and a plane lying on that face
+  function surfaceHit(ev) {
+    pointerRay(ev);
+    const targets = [];
+    for (const p of state.parts) if (!p.deleted && p.visible && p.mesh) targets.push(p.mesh);
+    const hits = ray.intersectObjects(targets, false);
+    const h = hits.find(x => x.face);
+    if (!h) return null;
+    const n = h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize();
+    if (n.dot(ray.ray.direction) > 0) n.negate();
+    return { point: h.point.clone(), plane: mkPlane(h.point.clone(), n, basisFor(n)) };
+  }
+
+  // ── screen helpers ──
+  const proj = (w) => {
+    const r = canvas().getBoundingClientRect(), v = w.clone().project(camera);
+    return { x: (v.x * 0.5 + 0.5) * r.width, y: (-v.y * 0.5 + 0.5) * r.height, off: v.z > 1 || v.z < -1 };
+  };
+  const clientToLocal = (ev) => { const r = canvas().getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
+  // millimetres a pixel covers at a world point
+  function mmPerPx(w) {
+    const a = proj(w), r = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+    const b = proj(w.clone().add(r));
+    const px = Math.hypot(a.x - b.x, a.y - b.y);
+    return px > 1e-6 ? 1 / px : 1;
+  }
+  const niceStep = (x) => { const e = Math.pow(10, Math.floor(Math.log10(x))), m = x / e; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * e; };
+  // The grid is fixed to the world. Its step follows the zoom (it is worked out where the camera looks, not
+  // under the pointer, so moving the mouse never changes it), and its dots lie at whole steps from the world's
+  // origin carried onto the work plane. You move over the dots; they do not move with you.
+  const gridStep = () => S.gridAuto ? niceStep(mmPerPx(controls.target) * 28) : Math.max(1e-6, S.grid);
+  const anchorOf = (pl) => pl.n.clone().multiplyScalar(pl.n.dot(pl.o));
+
+  // ── what a point can snap to ──
+  function nodeCandidates() {
+    const out = [];
+    if (cur && cur.pts) for (let i = 0; i < cur.pts.length; i++) out.push({ p: cur.pts[i].p, kind: i === 0 && cur.pts.length >= 3 && cur.tool === 'pen' ? 'close' : 'point' });
+    for (const sp of (state.splines || [])) {
+      if (sp.deleted || sp.hidden || !sp.object || !sp.object.parent) continue;
+      if (active && S.tool === 'edit' && sp.id === state.selectedSpline) continue;
+      const src = _srcOf(sp), M = sp.object.matrixWorld;
+      sp.object.updateWorldMatrix(true, false);
+      // (a long polyline from a file is checked at its ends only)
+      const idx = src.points.length > 200 ? [0, src.points.length - 1] : src.points.map((_, i) => i);
+      for (const i of idx) out.push({ p: V3(src.points[i].p).applyMatrix4(M), kind: 'point' });
+    }
+    return out;
+  }
+  function snap(ev, raw, pl, opts = {}) {
+    let p = raw.clone(), kind = null;
+    if (S.snapPoints && opts.points !== false) {
+      const m = clientToLocal(ev);
+      let best = 11;
+      for (const c of nodeCandidates()) {
+        const s = proj(c.p);
+        if (s.off) continue;
+        const d = Math.hypot(s.x - m.x, s.y - m.y);
+        if (d < best) { best = d; p = c.p.clone(); kind = c.kind; }
+      }
+      if (kind) return { p, kind, raw };
+    }
+    // 15 degree steps from the last point
+    const last = opts.from || (cur && cur.pts && cur.pts.length ? cur.pts[cur.pts.length - 1].p : (cur && cur.a) || null);
+    if (mods.shift && last) {
+      const d = p.clone().sub(last), a = d.dot(pl.u), b = d.dot(pl.v), len = Math.hypot(a, b);
+      const ang = Math.round(Math.atan2(b, a) / (Math.PI / 12)) * (Math.PI / 12);
+      let L = len;
+      if (S.snapGrid) { const g = gridStep(p); L = Math.round(len / g) * g; }
+      p = last.clone().addScaledVector(pl.u, Math.cos(ang) * L).addScaledVector(pl.v, Math.sin(ang) * L);
+      return { p, kind: 'angle', raw };
+    }
+    if (S.snapGrid) {
+      // The point lands on the dot nearest to the pointer ON THE SCREEN, not the nearest on the plane: seen at
+      // an angle a few pixels on the screen are a long way on the plane, and the plane's nearest point would
+      // often be another dot than the one aimed at. The dots around the plane's nearest point are looked at.
+      const g = gridStep(), A = anchorOf(pl), d = p.clone().sub(A), dn = d.dot(pl.n);
+      const a0 = Math.round(d.dot(pl.u) / g), b0 = Math.round(d.dot(pl.v) / g), m = clientToLocal(ev);
+      let best = null, bd = Infinity;
+      for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
+        const w = A.clone().addScaledVector(pl.u, (a0 + i) * g).addScaledVector(pl.v, (b0 + j) * g).addScaledVector(pl.n, dn);
+        const q = proj(w);
+        if (q.off) continue;
+        const dist = Math.hypot(q.x - m.x, q.y - m.y);
+        if (dist < bd) { bd = dist; best = w; }
+      }
+      p = best || A.clone().addScaledVector(pl.u, a0 * g).addScaledVector(pl.v, b0 * g).addScaledVector(pl.n, dn);
+      kind = 'grid';
+    }
+    return { p, kind, raw };
+  }
+  // the pointer as a point on the work plane (or on a part's surface), snapped
+  function cursor(ev) {
+    let pl = plane(), raw = null;
+    if (S.plane === 'surface' && !(cur && cur.plane)) {
+      const h = surfaceHit(ev);
+      if (h) { raw = h.point; pl = h.plane; }
+    }
+    if (!raw) raw = hitPlane(ev, pl);
+    if (!raw) return null;
+    const s = snap(ev, raw, pl);
+    s.plane = pl;
+    return s;
+  }
+  const lockPlane = (c) => { if (cur && !cur.plane && S.plane === 'surface' && c && c.plane) cur.plane = c.plane; if (cur && !cur.plane) cur.plane = plane(); };
+
+  // ── building a line from the tool's state ──
+  const toSrc = (pts, closed, type) => ({
+    type, closed: !!closed,
+    points: pts.map(q => ({ p: arr(q.p), tIn: type === 'bezier' && q.tIn ? arr(q.tIn) : undefined, tOut: type === 'bezier' && q.tOut ? arr(q.tOut) : undefined })),
+  });
+  // world to the space of partsRoot (where the line will live): points, and handles as offsets
+  function toLocal(src) {
+    state.partsRoot.updateWorldMatrix(true, false);
+    const inv = state.partsRoot.matrixWorld.clone().invert(), out = SPL.cloneSpline(src);
+    for (const q of out.points) {
+      const p = V3(q.p), pl = p.clone().applyMatrix4(inv);
+      if (q.tIn) q.tIn = arr(V3([p.x + q.tIn[0], p.y + q.tIn[1], p.z + q.tIn[2]]).applyMatrix4(inv).sub(pl));
+      if (q.tOut) q.tOut = arr(V3([p.x + q.tOut[0], p.y + q.tOut[1], p.z + q.tOut[2]]).applyMatrix4(inv).sub(pl));
+      q.p = arr(pl);
+    }
+    return out;
+  }
+  // a shape's frame (corner or centre, the plane's two directions, the sizes) in the space of partsRoot
+  function toLocalShape(sh) {
+    state.partsRoot.updateWorldMatrix(true, false);
+    const inv = state.partsRoot.matrixWorld.clone().invert(), out = Object.assign({}, sh);
+    const pt = (a) => arr(V3(a).applyMatrix4(inv));
+    const dir = (a) => arr(V3(a).transformDirection(inv));
+    const k = V3([1, 0, 0]).transformDirection(new THREE.Matrix4().extractRotation(inv)).length() && new THREE.Vector3().setFromMatrixScale(inv).x;
+    out.o = pt(sh.o); out.u = dir(sh.u); out.v = dir(sh.v);
+    for (const key of ['w', 'h', 'rx', 'ry', 'r', 'corner']) if (typeof out[key] === 'number') out[key] *= k;
+    return out;
+  }
+  function commit(src, name) {
+    closeDim();
+    const shape = src._shape ? toLocalShape(src._shape) : null;
+    const sp = _addSplineSrc(name, toLocal(src), { shape });
+    if (sp) { sel = -1; }
+    cur = null; drag = null;
+    schedule();
+    return sp;
+  }
+  // where a shape's far corner is: under the pointer, or where a typed size puts it
+  function farPoint(pl) {
+    if (!cur.dims) return hover ? hover.p : null;
+    const d = hover ? hover.p.clone().sub(cur.a) : new THREE.Vector3(1, 1, 0);
+    const sx = d.dot(pl.u) < 0 ? -1 : 1, sy = d.dot(pl.v) < 0 ? -1 : 1, q = cur.dims;
+    if (cur.tool === 'rect') { const k = (mods.alt || S.center) ? 0.5 : 1; return cur.a.clone().addScaledVector(pl.u, sx * q.a * k).addScaledVector(pl.v, sy * q.b * k); }
+    if (cur.tool === 'circle') return cur.a.clone().addScaledVector(pl.u, sx * q.a).addScaledVector(pl.v, S.ellipse ? sy * q.b : 0);
+    const dir = d.lengthSq() > 1e-18 ? d.clone().normalize() : pl.u.clone();
+    return cur.a.clone().addScaledVector(dir, q.a);
+  }
+  function previewSpline() {
+    if (!cur) return null;
+    const pl = cur.plane || plane();
+    if (cur.tool === 'pen') {
+      const pts = cur.pts.map(q => ({ p: q.p, tIn: q.tIn, tOut: q.tOut }));
+      if (hover && !drag) pts.push({ p: hover.p, tIn: new THREE.Vector3(), tOut: new THREE.Vector3() });
+      return pts.length >= 2 ? toSrc(pts, false, S.type) : null;
+    }
+    if (!hover) return null;
+    const h = farPoint(pl);
+    if (!h) return null;
+    if (cur.tool === 'rect' && cur.a) {
+      const d = h.clone().sub(cur.a);
+      let w = d.dot(pl.u), hh = d.dot(pl.v);
+      if (mods.shift && !cur.dims) { const m = Math.max(Math.abs(w), Math.abs(hh)); w = Math.sign(w || 1) * m; hh = Math.sign(hh || 1) * m; }
+      const centre = mods.alt || S.center;
+      const o = centre ? cur.a.clone().addScaledVector(pl.u, -w).addScaledVector(pl.v, -hh) : cur.a.clone();
+      const W = centre ? w * 2 : w, H = centre ? hh * 2 : hh;
+      if (Math.abs(W) < 1e-9 || Math.abs(H) < 1e-9) return null;
+      const x0 = W < 0 ? W : 0, y0 = H < 0 ? H : 0;
+      const org = arr(o.clone().addScaledVector(pl.u, x0).addScaledVector(pl.v, y0));
+      return Object.assign(SPL.roundedRectSpline(org, arr(pl.u), arr(pl.v), Math.abs(W), Math.abs(H), S.corner, S.cornerType),
+        { _shape: { kind: 'rect', o: org, u: arr(pl.u), v: arr(pl.v), w: Math.abs(W), h: Math.abs(H), corner: S.corner, cornerType: S.cornerType } });
+    }
+    if (cur.tool === 'circle' && cur.a) {
+      if (S.ellipse) {
+        const d = h.clone().sub(cur.a), rx = Math.abs(d.dot(pl.u)), ry = Math.abs(d.dot(pl.v));
+        return rx > 1e-9 && ry > 1e-9 ? Object.assign(SPL.circleSpline(arr(cur.a), arr(pl.u), arr(pl.v), rx, ry),
+          { _shape: { kind: 'circle', o: arr(cur.a), u: arr(pl.u), v: arr(pl.v), rx, ry, ellipse: true } }) : null;
+      }
+      const r = h.distanceTo(cur.a);
+      return r > 1e-9 ? Object.assign(SPL.circleSpline(arr(cur.a), arr(pl.u), arr(pl.v), r),
+        { _shape: { kind: 'circle', o: arr(cur.a), u: arr(pl.u), v: arr(pl.v), rx: r, ry: r, ellipse: false } }) : null;
+    }
+    if (cur.tool === 'polygon' && cur.a) {
+      const d = h.clone().sub(cur.a), r = d.length(), n = Math.max(3, Math.round(S.sides)), ang = Math.atan2(d.dot(pl.v), d.dot(pl.u));
+      if (!(r > 1e-9)) return null;
+      // "outside the circle": the pointer's radius is the circle the polygon's sides touch, and the pointer points at a side
+      const around = S.circum && !S.star, R = around ? r / Math.cos(Math.PI / n) : r, phase = ang - (around ? Math.PI / n : 0);
+      let poly = S.star ? SPL.starSpline(arr(cur.a), arr(pl.u), arr(pl.v), R, n, S.inner / 100, phase)
+        : SPL.polygonSpline(arr(cur.a), arr(pl.u), arr(pl.v), R, n, phase);
+      if (S.corner > 0) poly = SPL.filletCorners(poly, S.corner, S.cornerType);
+      poly._shape = { kind: 'polygon', o: arr(cur.a), u: arr(pl.u), v: arr(pl.v), r, sides: n, star: !!S.star, inner: S.inner, circum: !!S.circum, phase: ang, corner: S.corner, cornerType: S.cornerType };
+      return poly;
+    }
+    if (cur.tool === 'arc') {
+      if (cur.pts.length === 1) return { type: 'linear', closed: false, points: [{ p: arr(cur.pts[0].p) }, { p: arr(h) }] };
+      if (cur.pts.length === 2) return SPL.arcSpline(arr(cur.pts[0].p), arr(h), arr(cur.pts[1].p));
+    }
+    if (cur.tool === 'freehand' && cur.raw && cur.raw.length > 1) return { type: 'linear', closed: false, points: cur.raw.map(p => ({ p: arr(p) })) };
+    return null;
+  }
+  function finishPen(closed) {
+    if (!cur || cur.tool !== 'pen') return;
+    const n = cur.pts.length;
+    if (n < 2 || (closed && n < 3)) { cancel(); return; }
+    const src = toSrc(cur.pts, closed, S.type);
+    commit(src, NAMES.pen);
+  }
+  function cancel() { cur = null; drag = null; closeDim(); schedule(); }
+
+  // ── a size typed while a shape is active ──
+  // Digits open a small box at the pointer. 20 x 10 for a rectangle, a radius for a circle or polygon (a second
+  // number is the other radius of an ellipse). The shape follows what is typed; Enter places it, Esc puts the box away.
+  function parseDims(text) {
+    const n = String(text).replace(',', '.').split(/[\s;x×*]+/).map(parseFloat).filter(v => isFinite(v) && v > 0);
+    if (!n.length) return null;
+    return { a: n[0], b: n.length > 1 ? n[1] : n[0] };
+  }
+  function openDim(first) {
+    if (!dimBox) {
+      dimBox = document.createElement('input');
+      dimBox.id = 'draw-dim'; dimBox.type = 'text'; dimBox.autocomplete = 'off'; dimBox.spellcheck = false;
+      $q('viewport').appendChild(dimBox);
+      dimBox.addEventListener('input', () => { if (cur) cur.dims = parseDims(dimBox.value); schedule(); });
+      dimBox.addEventListener('keydown', (e) => {
+        e.stopPropagation();                                      // keys typed here are for the box, not the app
+        if (e.key === 'Enter') { e.preventDefault(); const src = cur && cur.dims ? previewSpline() : null; if (src) commit(src, nameFor(cur.tool)); else closeDim(); }
+        else if (e.key === 'Escape') { e.preventDefault(); if (cur) cur.dims = null; closeDim(); schedule(); }
+      });
+    }
+    dimBox.placeholder = cur.tool === 'rect' ? 'width x height' : cur.tool === 'circle' && S.ellipse ? 'radius x radius' : 'radius';
+    dimBox.style.left = Math.min((ptr ? ptr.x : 40) + 18, canvas().clientWidth - 150) + 'px';
+    dimBox.style.top = Math.min((ptr ? ptr.y : 40) + 18, canvas().clientHeight - 40) + 'px';
+    dimBox.hidden = false;
+    dimBox.value = first;
+    cur.dims = parseDims(first);
+    dimBox.focus();
+    schedule();
+  }
+  function closeDim() {
+    if (!dimBox || dimBox.hidden) return;
+    dimBox.hidden = true;
+    dimBox.value = '';
+    if (document.activeElement === dimBox) dimBox.blur();
+  }
+
+  // ── events ──
+  function down(ev) {
+    if (!active || ev.button !== 0) return;
+    if (ev.altKey) { altOrbit = true; controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE; return; }       // Alt + drag orbits
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    try { canvas().setPointerCapture(ev.pointerId); } catch (_) {}
+    mods = { shift: ev.shiftKey, alt: ev.altKey, ctrl: ev.ctrlKey || ev.metaKey };
+    ptr = clientToLocal(ev);
+    if (S.tool === 'edit') return editDown(ev);
+    const c = cursor(ev);
+    if (!c) return;
+    hover = c;
+    if (!cur) cur = { tool: S.tool, pts: [], plane: null };
+    lockPlane(c);
+    const t = S.tool;
+    if (t === 'pen') {
+      if (c.kind === 'close' && cur.pts.length >= 3) { finishPen(true); return; }
+      cur.pts.push({ p: c.p.clone(), tIn: new THREE.Vector3(), tOut: new THREE.Vector3() });
+      drag = { kind: 'pen', x: ev.clientX, y: ev.clientY, moved: false };
+    } else if (t === 'rect' || t === 'circle' || t === 'polygon') {
+      if (cur.a) {                                                 // the second click places it
+        const src = previewSpline();
+        if (src) commit(src, nameFor(cur.tool));
+        return;
+      }
+      cur.a = c.p.clone(); drag = { kind: 'shape', x: ev.clientX, y: ev.clientY, moved: false };      // the first click starts it (a drag still places it on release)
+    } else if (t === 'arc') {
+      cur.pts.push({ p: c.p.clone() });
+      if (cur.pts.length === 3) {
+        const [a, c2, b] = [cur.pts[0].p, cur.pts[1].p, cur.pts[2].p];       // start, end, through
+        commit(SPL.arcSpline(arr(a), arr(b), arr(c2)), NAMES.arc);
+      }
+    } else if (t === 'freehand') {
+      cur.raw = [c.raw.clone()]; drag = { kind: 'free' };
+    }
+    schedule();
+  }
+  function move(ev) {
+    if (!active) return;
+    mods = { shift: ev.shiftKey, alt: ev.altKey, ctrl: ev.ctrlKey || ev.metaKey };
+    ptr = clientToLocal(ev);
+    if (S.tool === 'edit') {
+      if (drag) { editMove(ev); return; }
+      hover = null;                                              // no snap marker while editing: the point under the pointer lights up
+      const sp = editing(), n = sp ? hitNode(sp, ev) : null;
+      if ((n && n.kind + n.i) !== (hot && hot.kind + hot.i)) { hot = n; canvas().style.cursor = n ? 'pointer' : 'default'; }
+      if (sp && sp.shape && cornerHit(sp, ev)) canvas().style.cursor = 'pointer'; else if (!n) canvas().style.cursor = 'default';
+      schedule();
+      return;
+    }
+    const c = cursor(ev);
+    if (c) hover = c;
+    if (drag && cur) {
+      if (drag.kind === 'pen') {
+        const q = cur.pts[cur.pts.length - 1];
+        if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) > 4) drag.moved = true;
+        if (drag.moved && S.type === 'bezier' && c) {
+          const tip = snap(ev, c.raw, c.plane, { points: false, from: q.p });          // the handle's tip lands on a grid dot, like a point
+          const h = tip.p.clone().sub(q.p);
+          q.tOut = h.clone(); q.tIn = (mods.alt || mods.ctrl) ? q.tIn : h.clone().negate();
+          hover = tip;
+        }
+      } else if (drag.kind === 'shape') {
+        if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) > 5) drag.moved = true;
+      } else if (drag.kind === 'free' && c) {
+        const last = cur.raw[cur.raw.length - 1];
+        if (c.raw.distanceTo(last) > mmPerPx(c.raw) * 2) cur.raw.push(c.raw.clone());
+      }
+    }
+    schedule();
+  }
+  function up(ev) {
+    if (altOrbit) { altOrbit = false; controls.mouseButtons.LEFT = -1; return; }       // Alt + drag: the orbit controls take it from here
+    if (!active || ev.button !== 0 || ev.target !== canvas()) return;
+    ev.stopImmediatePropagation();           // the orbit controls never saw this press: they would release a capture that is already gone
+    if (S.tool === 'edit') { editUp(ev); return; }
+    if (!drag || !cur) return;
+    mods = { shift: ev.shiftKey, alt: ev.altKey, ctrl: ev.ctrlKey || ev.metaKey };
+    const k = drag.kind, d0 = drag;
+    drag = null;
+    if (k === 'shape') {
+      // a click leaves the shape active, waiting for the second click; a drag places it as the button comes up
+      if (d0 && d0.moved) { const src = previewSpline(); if (src) commit(src, nameFor(cur.tool)); else cancel(); }
+    } else if (k === 'free') {
+      const raw = cur.raw || [];
+      const mm = raw.length ? mmPerPx(raw[0]) : 1;
+      let pts = SPL.simplifyPolyline(raw.map(arr), Math.max(1e-6, S.smooth * mm));
+      if (pts.length < 2) { cancel(); return; }
+      const s0 = proj(raw[0]), s1 = proj(raw[raw.length - 1]);
+      const closed = pts.length > 3 && Math.hypot(s0.x - s1.x, s0.y - s1.y) < 12;
+      if (closed) pts = pts.slice(0, -1);
+      let src = { type: 'cubic', closed, points: pts.map(p => ({ p })) };
+      if (S.type === 'linear') src.type = 'linear'; else if (S.type === 'bspline') src.type = 'bspline'; else if (S.type === 'bezier') src = SPL.toBezier(src);
+      commit(src, NAMES.freehand);
+    }
+    schedule();
+  }
+  // the pointer left the viewport: no cursor to show
+  function leave() { if (drag) return; ptr = null; hover = null; hot = null; schedule(); }
+  // the pointer was taken away (another window, a cancelled touch): what was being dragged ends where it is
+  function lost() {
+    if (altOrbit) { altOrbit = false; controls.mouseButtons.LEFT = -1; }
+    if (!active || !drag) return;
+    if (S.tool === 'edit') editUp(); else drag = null;
+    schedule();
+  }
+  function dbl(ev) {
+    if (!active || ev.button !== 0) return;
+    ev.preventDefault(); ev.stopImmediatePropagation();
+    if (S.tool === 'edit') { editDbl(ev); return; }
+    if (S.tool === 'pen' && cur && cur.pts.length) {
+      const n = cur.pts.length;
+      if (n >= 2 && cur.pts[n - 1].p.distanceTo(cur.pts[n - 2].p) < mmPerPx(cur.pts[n - 1].p) * 3) cur.pts.pop();      // the second click of the double click
+      finishPen(false);
+    }
+  }
+  function key(ev) {
+    if (!active) return;
+    const tag = (ev.target && ev.target.tagName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (ev.target && ev.target.isContentEditable)) return;
+    mods = { shift: ev.shiftKey, alt: ev.altKey, ctrl: ev.ctrlKey || ev.metaKey };
+    const k = ev.key, stop = () => { ev.preventDefault(); ev.stopImmediatePropagation(); };
+    if (k === 'Escape' && (cur || drag)) { stop(); cancel(); return; }
+    if (cur && cur.a && (cur.tool === 'rect' || cur.tool === 'circle' || cur.tool === 'polygon')) {
+      if (/^[0-9.]$/.test(k) && !ev.ctrlKey && !ev.metaKey && !ev.altKey) { stop(); openDim(k); return; }       // typing a number types the size
+      if (k === 'ArrowUp' || k === 'ArrowDown') {                                                              // the option the shape has most use for, a step at a time
+        stop();
+        const d = k === 'ArrowUp' ? 1 : -1;
+        if (cur.tool === 'polygon') S.sides = Math.max(3, Math.min(64, Math.round(S.sides) + d));
+        else if (cur.tool === 'rect') S.corner = Math.max(0, +(S.corner + d * gridStep()).toFixed(6));
+        else S.ellipse = d > 0;
+        save(); syncCard(); schedule();
+        return;
+      }
+    }
+    if (S.tool === 'pen' && cur && cur.pts.length) {
+      if (k === 'Enter') { stop(); finishPen(false); return; }
+      if (k === 'c' || k === 'C') { stop(); finishPen(true); return; }
+      if (k === 'Backspace' || (k === 'z' && (ev.ctrlKey || ev.metaKey))) { stop(); cur.pts.pop(); if (!cur.pts.length) cur = null; schedule(); return; }
+    }
+    if (S.tool === 'edit') {
+      if (k === 'Delete' || k === 'Backspace') { const sp = editing(); if (sp && sel >= 0) { stop(); removeSelected(); } return; }
+      if (k === 'c' || k === 'C') { const sp = editing(); if (sp) { stop(); toggleClosed(); } return; }
+    }
+    if (k === 'Shift' || k === 'Alt' || k === 'Control' || k === 'Meta') schedule();
+  }
+  function keyUp(ev) { if (active && (ev.key === 'Shift' || ev.key === 'Alt' || ev.key === 'Control' || ev.key === 'Meta')) { mods = { shift: ev.shiftKey, alt: ev.altKey, ctrl: ev.ctrlKey || ev.metaKey }; schedule(); } }
+
+  // ── editing ──
+  const editing = () => {
+    const sp = _splineById(state.selectedSpline), ok = sp && !sp.deleted ? sp : null;
+    const id = ok ? ok.id : null;
+    if (id !== selFor) { selFor = id; sel = -1; }
+    return ok;
+  };
+  const worldOf = (sp, a) => V3(a).applyMatrix4(sp.object.matrixWorld);
+  const localOf = (sp, w) => { const inv = sp.object.matrixWorld.clone().invert(); return arr(w.clone().applyMatrix4(inv)); };
+  // the points and handles of the line being edited, as places on the screen
+  function nodes(sp) {
+    const src = _srcOf(sp), out = [];
+    sp.object.updateWorldMatrix(true, false);
+    src.points.forEach((q, i) => {
+      out.push({ kind: 'point', i, w: worldOf(sp, q.p) });
+      const showH = src.type === 'bezier' && (src.points.length <= 40 || i === sel);
+      if (showH) {
+        if (q.tIn && !SPL.isSharp({ tIn: q.tIn, tOut: [0, 0, 0] })) out.push({ kind: 'in', i, w: worldOf(sp, [q.p[0] + q.tIn[0], q.p[1] + q.tIn[1], q.p[2] + q.tIn[2]]), from: out[out.length - 1].w });
+        if (q.tOut && !SPL.isSharp({ tIn: q.tOut, tOut: [0, 0, 0] })) out.push({ kind: 'out', i, w: worldOf(sp, [q.p[0] + q.tOut[0], q.p[1] + q.tOut[1], q.p[2] + q.tOut[2]]), from: out.find(n => n.kind === 'point' && n.i === i).w });
+      }
+    });
+    return out;
+  }
+  function hitNode(sp, ev) {
+    const m = clientToLocal(ev); let best = null, bd = 10;
+    for (const n of nodes(sp)) {
+      const s = proj(n.w);
+      if (s.off) continue;
+      const d = Math.hypot(s.x - m.x, s.y - m.y) - (n.kind === 'point' ? 1.5 : 0);       // a point wins a tie with its handle
+      if (d < bd) { bd = d; best = n; }
+    }
+    return best;
+  }
+  // where a click on the curve falls: piece and position along it
+  function hitCurve(sp, ev) {
+    const src = _srcOf(sp), det = SPL.sampleDetailed(src, 16), m = clientToLocal(ev);
+    sp.object.updateWorldMatrix(true, false);
+    let best = null, bd = 8, prev = null;
+    const N = det.points.length;
+    for (let i = 0; i < N + (det.closed ? 1 : 0); i++) {
+      const j = i % N, s = proj(worldOf(sp, det.points[j]));
+      if (prev && !prev.s.off && !s.off) {
+        const d = _distToSegment(m.x, m.y, prev.s.x, prev.s.y, s.x, s.y);
+        if (d < bd) {
+          const l2 = (s.x - prev.s.x) ** 2 + (s.y - prev.s.y) ** 2, f = l2 ? Math.max(0, Math.min(1, ((m.x - prev.s.x) * (s.x - prev.s.x) + (m.y - prev.s.y) * (s.y - prev.s.y)) / l2)) : 0;
+          const a = prev.j, b = j;
+          let seg = det.seg[a], t0 = det.t[a], t1 = det.seg[b] === seg && b !== 0 ? det.t[b] : 1;
+          if (det.seg[b] !== seg || b === 0) t1 = 1;
+          bd = d; best = { seg, t: t0 + (t1 - t0) * f };
+        }
+      }
+      prev = { s, j };
+    }
+    return best;
+  }
+  // (the two handles of a smooth point are linked while they point opposite ways; once one has been pulled off the line, they are free)
+  const handlesLinked = (q) => {
+    if (!q.tIn || !q.tOut) return true;
+    const la = Math.hypot(...q.tIn), lb = Math.hypot(...q.tOut);
+    if (la < 1e-12 || lb < 1e-12) return true;
+    return -(q.tIn[0] * q.tOut[0] + q.tIn[1] * q.tOut[1] + q.tIn[2] * q.tOut[2]) / (la * lb) > 0.9995;
+  };
+  // ── The corner handle (as Plasticity's fillet handle) ──
+  // A rectangle or polygon that is still a shape shows a ring on its first corner, in the Edit tool. Drag it along the
+  // diagonal to round or cut the corners (they all follow; it snaps to the grid like a point), click Round or Bevel
+  // beside it to change the kind. The readout says how far the corner reaches. One drag is one undo step.
+  const CH = { ui: null };
+  function cornerInfo(sp) {
+    const sh = sp.shape;
+    if (!sh || !(sh.kind === 'rect' || (sh.kind === 'polygon' && !sh.star))) return null;
+    let C, toward, alpha, maxD;
+    if (sh.kind === 'rect') {
+      C = V3(sh.o); toward = V3(sh.u).normalize().add(V3(sh.v).normalize()).normalize(); alpha = Math.PI / 2; maxD = Math.min(sh.w, sh.h) / 2;
+    } else {
+      const n = Math.max(3, Math.round(sh.sides)), around = !!sh.circum, R = around ? sh.r / Math.cos(Math.PI / n) : sh.r, phase = (sh.phase || 0) - (around ? Math.PI / n : 0);
+      const o = V3(sh.o);
+      C = o.clone().addScaledVector(V3(sh.u).normalize(), Math.cos(phase) * R).addScaledVector(V3(sh.v).normalize(), Math.sin(phase) * R);
+      toward = o.clone().sub(C).normalize(); alpha = Math.PI - 2 * Math.PI / n; maxD = R * Math.sin(Math.PI / n);
+    }
+    const half = alpha / 2, round = (sh.cornerType || 'round') !== 'bevel';
+    const f = round ? 1 / Math.cos(half) - Math.tan(half) : Math.cos(half);           // how far the middle of the cut lies from the corner, for a reach of 1
+    sp.object.updateWorldMatrix(true, false);
+    const off = mmPerPx(worldOf(sp, arr(C))) * 20;                                    // the ring stands a little inside the cut, so it never hides a point
+    return { C: arr(C), toward: arr(toward), f, off, maxD, round };
+  }
+  const cornerAt = (ci, d) => V3(ci.C).addScaledVector(V3(ci.toward), ci.f * d + ci.off);
+  function cornerHit(sp, ev) {
+    if (!CH.ui) return null;
+    const m = clientToLocal(ev);
+    for (const b of CH.ui.pills) if (m.x >= b.x && m.x <= b.x + b.w && m.y >= b.y && m.y <= b.y + b.h) return { kind: 'pill', k: b.k };
+    return Math.hypot(m.x - CH.ui.x, m.y - CH.ui.y) <= 11 ? { kind: 'handle' } : null;
+  }
+  function setCornerType(sp, k) {
+    if (!sp.shape || (sp.shape.cornerType || 'round') === k) return;
+    const from = _splineSnap(sp);
+    sp.shape.cornerType = k; S.cornerType = k; save();
+    sp.src = _shapeSrc(sp.shape);
+    _rebuildSplineGeometry(sp);
+    pushUndo({ type: 'editSpline', id: sp.id, from, to: _splineSnap(sp) });
+    _afterSplineChange(); _Draw.syncCard(); schedule();
+  }
+  function cornerMove(sp, raw) {
+    const ci = drag.ci, loc = V3(localOf(sp, raw));
+    const t = loc.sub(V3(ci.C)).dot(V3(ci.toward)) - ci.off;
+    let d = Math.max(0, Math.min(ci.maxD, t / ci.f));
+    if (S.snapGrid) { const g = gridStep(); d = Math.min(ci.maxD, Math.round(d / g) * g); }
+    if (d < ci.maxD * 1e-4) d = 0;
+    sp.shape.corner = d;
+    sp.src = _shapeSrc(sp.shape);
+    _rebuildSplineGeometry(sp);
+  }
+  function drawCornerHandle(sp) {
+    CH.ui = null;
+    const ci = cornerInfo(sp);
+    if (!ci) return;
+    const d = sp.shape.corner || 0, hp = proj(worldOf(sp, arr(cornerAt(ci, d)))), mid = proj(worldOf(sp, arr(V3(ci.C).addScaledVector(V3(ci.toward), ci.f * d))));
+    if (hp.off || mid.off) return;
+    ctx.beginPath(); ctx.moveTo(mid.x, mid.y); ctx.lineTo(hp.x, hp.y); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(hp.x, hp.y, 7, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = drag && drag.kind === 'corner' ? ACCENT : '#fff'; ctx.stroke();
+    disc(hp.x, hp.y, 3, ACCENT);
+    const pills = [], bw = 46, bh = 18, x0 = hp.x + 14, y0 = hp.y - bh / 2;
+    [['round', 'Round'], ['bevel', 'Bevel']].forEach(([k, t], i) => {
+      const x = x0 + i * (bw + 4), on = (sp.shape.cornerType || 'round') === k;
+      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y0, bw, bh, 9); else ctx.rect(x, y0, bw, bh);
+      ctx.fillStyle = on ? ACCENT : 'rgba(24,24,24,.88)'; ctx.fill();
+      if (!on) { ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.stroke(); }
+      ctx.font = '11px system-ui, sans-serif'; ctx.fillStyle = on ? '#fff' : '#cfcfcf'; ctx.textAlign = 'center'; ctx.fillText(t, x + bw / 2, y0 + 12.5); ctx.textAlign = 'start';
+      pills.push({ k, x, y: y0, w: bw, h: bh });
+    });
+    text(d > 0 ? `Corner ${d.toFixed(2)}` : 'Corner 0', x0, y0 - 6);
+    CH.ui = { x: hp.x, y: hp.y, pills };
+  }
+  function editDown(ev) {
+    const sp = editing();
+    const ch = sp && sp.shape ? cornerHit(sp, ev) : null;
+    if (sp && ch) {
+      if (ch.kind === 'pill') { setCornerType(sp, ch.k); return; }
+      const ci = cornerInfo(sp), M = sp.object.matrixWorld;
+      if (ci) {
+        const nrm = V3(sp.shape.u).cross(V3(sp.shape.v)).transformDirection(M), uw = V3(sp.shape.u).transformDirection(M);
+        drag = { kind: 'corner', ci, from: _splineSnap(sp), moved: false, x: ev.clientX, y: ev.clientY, pl: mkPlane(worldOf(sp, arr(cornerAt(ci, sp.shape.corner || 0))), nrm, uw) };
+        schedule();
+        return;
+      }
+    }
+    const c = sp ? hitNode(sp, ev) : null;
+    if (sp && c) {
+      sel = c.i; _Draw.syncCard();
+      const src = _srcOf(sp), pl = plane();
+      drag = { kind: c.kind, i: c.i, linked: c.kind === 'point' || handlesLinked(src.points[c.i]), from: _splineSnap(sp), moved: false, pl: mkPlane(c.w.clone(), pl.n, pl.u), x: ev.clientX, y: ev.clientY };
+      schedule();
+      return;
+    }
+    if (sp) {
+      const h = hitCurve(sp, ev);
+      if (h) {
+        const next = SPL.insertPoint(_srcOf(sp), h.seg, h.t);
+        _setSplineSrc(sp, next);
+        sel = h.seg + 1; _Draw.syncCard(); schedule();
+        return;
+      }
+    }
+    const sid = _pickSpline(ev);
+    if (sid != null) { _selectSpline(sid); sel = -1; _Draw.syncCard(); }
+    else { if (sp) clearSelection(); sel = -1; _Draw.syncCard(); }
+    schedule();
+  }
+  function editMove(ev) {
+    const sp = editing();
+    if (!sp || !drag) return;
+    if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < 3) return;
+    drag.moved = true;
+    const raw = hitPlane(ev, drag.pl);
+    if (!raw) return;
+    if (drag.kind === 'corner') { cornerMove(sp, raw); schedule(); return; }
+    const src = SPL.cloneSpline(_srcOf(sp)), q = src.points[drag.i];
+    if (drag.kind === 'point') {
+      const s = snap(ev, raw, drag.pl);
+      q.p = localOf(sp, s.p);
+      hover = s;
+    } else {
+      const tip = snap(ev, raw, drag.pl, { points: false, from: worldOf(sp, q.p) });      // the handle's tip lands on a grid dot
+      hover = tip;
+      const loc = localOf(sp, tip.p), off = [loc[0] - q.p[0], loc[1] - q.p[1], loc[2] - q.p[2]];
+      const mine = drag.kind === 'in' ? 'tIn' : 'tOut', other = drag.kind === 'in' ? 'tOut' : 'tIn';
+      q[mine] = off;
+      if (!mods.alt && !mods.ctrl && drag.linked && q[other]) {                                  // a smooth point keeps its handles in line: the other one turns with this one
+        const len = Math.hypot(...q[other]) || Math.hypot(...off), d = Math.hypot(...off) || 1;
+        q[other] = [-off[0] / d * len, -off[1] / d * len, -off[2] / d * len];
+      }
+    }
+    sp.src = src; sp.shape = null;                                 // a point moved by hand: no longer a shape
+    _rebuildSplineGeometry(sp);
+    schedule();
+  }
+  function editUp() {
+    const sp = editing();
+    if (drag && sp && drag.moved) {
+      pushUndo({ type: 'editSpline', id: sp.id, from: drag.from, to: _splineSnap(sp) });
+      _afterSplineChange();
+    }
+    drag = null;
+    schedule();
+  }
+  function editDbl(ev) {                                           // a point: smooth <-> sharp
+    const sp = editing();
+    const c = sp ? hitNode(sp, ev) : null;
+    if (!sp || !c || c.kind !== 'point') return;
+    toggleSmooth(c.i);
+  }
+  function toggleSmooth(i) {
+    const sp = editing(); if (!sp) return;
+    let src = _srcOf(sp);
+    if (src.type !== 'bezier') src = SPL.toBezier(src);
+    src = SPL.isSharp(src.points[i]) ? SPL.smoothHandles(src, i) : SPL.sharpPoint(src, i);
+    sel = i; _setSplineSrc(sp, src); _Draw.syncCard(); schedule();
+  }
+  function removeSelected() {
+    const sp = editing(); if (!sp || sel < 0) return;
+    const src = SPL.removePoint(_srcOf(sp), sel);
+    if (src.points.length === _srcOf(sp).points.length) { toast('Draw', 'A line needs at least ' + (src.closed ? 'three' : 'two') + ' points', 'info', 2500); return; }
+    sel = Math.min(sel, src.points.length - 1);
+    _setSplineSrc(sp, src); _Draw.syncCard(); schedule();
+  }
+  function toggleClosed() {
+    const sp = editing(); if (!sp) return;
+    const src = SPL.cloneSpline(_srcOf(sp));
+    if (!src.closed && src.points.length < 3) { toast('Draw', 'Closing a line needs three points', 'info', 2500); return; }
+    src.closed = !src.closed;
+    _setSplineSrc(sp, src); _Draw.syncCard(); schedule();
+  }
+  function changeType(type) {
+    S.type = type; save();
+    const sp = S.tool === 'edit' ? editing() : null;
+    if (sp && _srcOf(sp).type !== type) _setSplineSrc(sp, SPL.withType(_srcOf(sp), type));
+    _Draw.syncCard(); schedule();
+  }
+  function simplifyLine() {
+    const sp = editing(); if (!sp) return;
+    const src = _srcOf(sp), poly = src.points.map(q => q.p);
+    const pl = _splinePolyline(sp), L = SPL.polylineLength(pl.points, pl.closed);
+    const kept = SPL.simplifyPolyline(src.closed ? [...poly, poly[0]] : poly, Math.max(1e-9, L * 0.0015));
+    const pts = src.closed ? kept.slice(0, -1) : kept;
+    if (pts.length < 2 || pts.length >= poly.length) { toast('Draw', 'Nothing to simplify', 'info', 2200); return; }
+    sel = -1;
+    _setSplineSrc(sp, { type: 'cubic', closed: src.closed, points: pts.map(p => ({ p })) });
+    toast('Simplified', `${poly.length} points became ${pts.length}`, 'success', 2500);
+    _Draw.syncCard(); schedule();
+  }
+  // round (or cut) the corner of the selected point, or every sharp corner, by the corner size in the card
+  function filletLine(all) {
+    const sp = editing(); if (!sp) return;
+    if (!all && sel < 0) { toast('Draw', 'Select a point first', 'info', 2200); return; }
+    if (!(S.corner > 0)) { toast('Draw', 'Set a corner size first', 'info', 2200); return; }
+    const src = _srcOf(sp), next = SPL.filletCorners(src, S.corner, S.cornerType, all ? null : [sel]);
+    if (next.points.length === SPL.toBezier(src).points.length) { toast('Draw', 'Nothing to ' + (S.cornerType === 'bevel' ? 'cut' : 'round') + ': a corner must be sharp, between straight edges', 'info', 3200); return; }
+    sel = -1; _setSplineSrc(sp, next); _Draw.syncCard(); schedule();
+  }
+  // a mirrored copy of the line, reflected across the work plane's U or V axis through its origin
+  function mirrorLine(axis) {
+    const sp = editing(); if (!sp) return;
+    const src = _srcOf(sp), M = sp.object.matrixWorld, w = SPL.cloneSpline(src);
+    sp.object.updateWorldMatrix(true, false);
+    for (const q of w.points) {
+      const p = V3(q.p), pw = p.clone().applyMatrix4(M);
+      if (q.tIn) q.tIn = arr(V3([p.x + q.tIn[0], p.y + q.tIn[1], p.z + q.tIn[2]]).applyMatrix4(M).sub(pw));
+      if (q.tOut) q.tOut = arr(V3([p.x + q.tOut[0], p.y + q.tOut[1], p.z + q.tOut[2]]).applyMatrix4(M).sub(pw));
+      q.p = arr(pw);
+    }
+    const pl = plane(), A = anchorOf(pl), n = axis === 'u' ? pl.u : pl.v;
+    commit(SPL.mirrorSpline(w, arr(A), arr(n)), sp.name + ' mirror');
+  }
+  function reverseLine() { const sp = editing(); if (!sp) return; sel = -1; _setSplineSrc(sp, SPL.reverseSpline(_srcOf(sp))); _Draw.syncCard(); schedule(); }
+
+  // ── the picture ──
+  function size() {
+    const c = canvas(), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+    if (ov.width !== Math.round(w * dpr) || ov.height !== Math.round(h * dpr)) { ov.width = Math.round(w * dpr); ov.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w, h };
+  }
+  function strokeCurve(src, color, width, dash) {
+    const s = SPL.sampleSpline(src, { steps: 16 }), pts = s.points;
+    if (pts.length < 2) return;
+    ctx.beginPath(); let started = false;
+    const n = pts.length + (s.closed ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const q = proj(V3(pts[i % pts.length]));
+      if (q.off) { started = false; continue; }
+      if (!started) { ctx.moveTo(q.x, q.y); started = true; } else ctx.lineTo(q.x, q.y);
+    }
+    ctx.lineWidth = width; ctx.strokeStyle = color; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // (points and handles are flat, no outline: a fill only)
+  function square(x, y, r, fill) { ctx.beginPath(); ctx.rect(x - r, y - r, r * 2, r * 2); ctx.fillStyle = fill; ctx.fill(); }
+  function disc(x, y, r, fill) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); }
+  function text(t, x, y) { ctx.font = '11px system-ui, sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.75)'; ctx.strokeText(t, x, y); ctx.fillStyle = '#e8e8e8'; ctx.fillText(t, x, y); }
+  function paint() {
+    if (!active || !ov) return;
+    hint();
+    const { w, h } = size();
+    ctx.clearRect(0, 0, w, h);
+    const pl = (cur && cur.plane) || (hover && hover.plane) || plane();
+    // the grid as dots that fade out in a circle round the pointer: bright next to it, gone at FADE pixels.
+    // A dot also fades with how crowded it is on screen: seen edge-on or from far away the dots of a
+    // plane pile up (a white smear), so a dot whose neighbour is closer than 6 pixels is not drawn at all.
+    if (ptr && hover && ((S.snapGrid && S.tool !== 'edit') || (S.tool === 'edit' && drag))) {
+      const FADE = 170, g = gridStep(), A = anchorOf(pl), d0 = hover.p.clone().sub(A), a0 = Math.round(d0.dot(pl.u) / g), b0 = Math.round(d0.dot(pl.v) / g);
+      const cell = (i, j) => proj(A.clone().addScaledVector(pl.u, (a0 + i) * g).addScaledVector(pl.v, (b0 + j) * g));
+      const c0 = cell(0, 0), cu = cell(1, 0), cv2 = cell(0, 1);
+      const per = Math.max(3, Math.min(Math.hypot(cu.x - c0.x, cu.y - c0.y), Math.hypot(cv2.x - c0.x, cv2.y - c0.y)));
+      const n = Math.max(3, Math.min(18, Math.ceil(FADE / per) + 1));        // enough cells to fill the circle (a zoomed-out grid is thinner than the circle)
+      const W = 2 * n + 2, Q = new Array(W * W);                              // the projected cells, one more each way for the neighbours
+      for (let i = 0; i < W; i++) for (let j = 0; j < W; j++) Q[i * W + j] = cell(i - n, j - n);
+      const dotsFade = (d) => { const t = Math.max(0, Math.min(1, (d - 6) / 8)); return t * t * (3 - 2 * t); };      // 0 below 6 px apart, 1 from 14 px
+      for (let i = 0; i < W - 1; i++) for (let j = 0; j < W - 1; j++) {
+        const q = Q[i * W + j], qi = Q[(i + 1) * W + j], qj = Q[i * W + j + 1];
+        if (q.off || qi.off || qj.off) continue;
+        const f = 1 - Math.hypot(q.x - ptr.x, q.y - ptr.y) / FADE;
+        if (f <= 0.03) continue;
+        const crowd = dotsFade(Math.min(Math.hypot(qi.x - q.x, qi.y - q.y), Math.hypot(qj.x - q.x, qj.y - q.y)));
+        const alpha = 0.7 * f * f * crowd;
+        if (alpha < 0.02) continue;
+        ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+        ctx.fillRect(q.x - 1, q.y - 1, 2, 2);
+      }
+    }
+    // the line being edited: curve, points, handles
+    const sp = S.tool === 'edit' ? editing() : null;
+    if (sp) {
+      const src = _srcOf(sp);
+      sp.object.updateWorldMatrix(true, false);
+      {                                                          // the curve itself, from the spline as it is right now
+        const smp = SPL.sampleSpline(src, { steps: 16 }), P = smp.points;
+        ctx.beginPath(); let started = false;
+        for (let i = 0; i < P.length + (smp.closed ? 1 : 0); i++) {
+          const q = proj(worldOf(sp, P[i % P.length]));
+          if (q.off) { started = false; continue; }
+          if (!started) { ctx.moveTo(q.x, q.y); started = true; } else ctx.lineTo(q.x, q.y);
+        }
+        ctx.lineWidth = 2; ctx.strokeStyle = ACCENT; ctx.stroke();
+      }
+      drawCornerHandle(sp);
+      const ns = nodes(sp);
+      for (const n of ns) if (n.kind !== 'point') {
+        const a = proj(n.from), b = proj(n.w);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.stroke();
+      }
+      for (const n of ns) {
+        const q = proj(n.w);
+        if (q.off) continue;
+        if (n.kind === 'point') {
+          const on = n.i === sel, lit = hot && hot.kind === 'point' && hot.i === n.i;
+          const sharp = src.type === 'bezier' && SPL.isSharp(src.points[n.i]);
+          const grow = lit ? 1.5 : 0;
+          if (src.type === 'bezier' && !sharp) disc(q.x, q.y, (on ? 5.5 : 4.5) + grow, on ? ACCENT : '#fff'); else square(q.x, q.y, (on ? 5 : 4) + grow, on ? ACCENT : '#fff');
+        } else {
+          const lit = hot && hot.kind === n.kind && hot.i === n.i;
+          disc(q.x, q.y, lit ? 5 : 3.5, n.i === sel || lit ? AMBER : '#cfcfcf', '#111');
+        }
+      }
+    }
+    // what is being drawn
+    if (cur) {
+      const src = previewSpline();
+      if (src) strokeCurve(src, ACCENT, 2, cur.tool === 'pen' || cur.tool === 'arc' ? null : null);
+      if (cur.pts) cur.pts.forEach((q, i) => {
+        const s = proj(q.p);
+        if (s.off) return;
+        if (S.type === 'bezier' && cur.tool === 'pen') for (const t of [q.tIn, q.tOut]) {
+          if (!t || t.lengthSq() < 1e-12) continue;
+          const e = proj(q.p.clone().add(t));
+          ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.stroke();
+          disc(e.x, e.y, 3.5, '#cfcfcf', '#111');
+        }
+        square(s.x, s.y, i === 0 && hover && hover.kind === 'close' ? 6 : 4, i === 0 ? '#fff' : '#fff', '#111');
+      });
+      if (cur.a) { const s = proj(cur.a); disc(s.x, s.y, 3, '#fff', '#111'); }
+    }
+    // the snap marker and the readout (Edit shows no marker; while a point is being dragged, only its position)
+    const dragging = S.tool === 'edit' && drag && drag.kind === 'point' && drag.moved;
+    if (hover && (S.tool !== 'edit' || dragging)) {
+      const q = proj(hover.p);
+      if (!q.off) {
+        if (S.tool === 'edit') { /* no marker */ }
+        else if (hover.kind === 'point' || hover.kind === 'close') { ctx.beginPath(); ctx.arc(q.x, q.y, hover.kind === 'close' ? 9 : 7, 0, Math.PI * 2); ctx.lineWidth = 2; ctx.strokeStyle = hover.kind === 'close' ? AMBER : ACCENT; ctx.stroke(); }
+        else disc(q.x, q.y, 2.5, hover.kind ? ACCENT : '#fff', '#111');
+        const last = cur && cur.pts && cur.pts.length ? cur.pts[cur.pts.length - 1].p : cur && cur.a;
+        let line = '';                                              // (no X Y Z next to the pointer: only a shape's size, and the close hint)
+        if (cur && cur.a && !cur.dims && cur.tool !== 'arc') {      // the size of the shape as it stands
+          const d = hover.p.clone().sub(cur.a), a = Math.abs(d.dot(pl.u)), b = Math.abs(d.dot(pl.v)), f = (x) => x.toFixed(2);
+          if (cur.tool === 'rect') line = `W ${f((mods.alt || S.center) ? a * 2 : a)}  H ${f((mods.alt || S.center) ? b * 2 : b)}` + (S.corner > 0 ? `  ·  corner ${f(S.corner)}` : '');
+          else if (cur.tool === 'circle') line = S.ellipse ? `Rx ${f(a)}  Ry ${f(b)}` : `R ${f(d.length())}  ·  Ø ${f(d.length() * 2)}`;
+          else if (cur.tool === 'polygon') line = `R ${f(d.length())}  ·  ${Math.round(S.sides)} ${S.star ? 'points' : 'sides'}` + (S.corner > 0 ? `  ·  corner ${f(S.corner)}` : '');
+        }
+        if (hover.kind === 'close') line = 'Close the line';
+        if (line) text(line, Math.min(q.x + 14, w - 250), q.y - 12);
+      }
+    }
+    // the plane's origin, so it is clear where the work plane is
+    const o = proj(pl.o);
+    if (!o.off && S.tool !== 'edit') { ctx.strokeStyle = 'rgba(13,153,255,.7)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(o.x - 6, o.y); ctx.lineTo(o.x + 6, o.y); ctx.moveTo(o.x, o.y - 6); ctx.lineTo(o.x, o.y + 6); ctx.stroke(); }
+  }
+  function schedule() {
+    if (!active || pending) return;
+    pending = true;
+    const run = () => { if (!pending) return; pending = false; paint(); };
+    requestAnimationFrame(run);
+    setTimeout(run, 60);
+  }
+  // The keys that do something right now, for the list at the bottom right of the viewport: the tool, the curve
+  // type (only Bezier points have handles to drag) and what has been placed so far decide what is listed.
+  function tips() {
+    const T = (k, l) => [Array.isArray(k) ? k : [k], l];
+    const t = S.tool, bez = S.type === 'bezier', out = [];
+    const n = cur && cur.pts ? cur.pts.length : 0, drawing = !!(cur && (n || cur.a));
+    if (t === 'pen') {
+      if (!drawing) {
+        out.push(T('Click', 'First point'));
+        if (bez) out.push(T('Drag', 'Pull out handles'));
+        out.push(T('Shift', 'Snap the angle'), T('Esc', 'Leave the tool'));
+      } else {
+        out.push(T('Click', 'Add a point'));
+        if (bez) out.push(T('Drag', 'Pull out handles'));
+        if (n >= 3) out.push(T('Click', 'First point: close'));
+        if (n >= 2) out.push(T('Enter', 'Finish'), T('Double-click', 'Finish here'));
+        if (n >= 3) out.push(T('C', 'Close and finish'));
+        out.push(T('Backspace', 'Undo a point'), T('Shift', 'Snap the angle'), T('Esc', 'Cancel'));
+      }
+    } else if (t === 'rect') {
+      if (!(cur && cur.a)) out.push(T('Click', 'First corner'), T('Drag', 'Draw in one go'), T('Esc', 'Leave the tool'));
+      else out.push(T('Click', 'Place it'), T('Type', 'Size: 20 x 10'), T('↑ ↓', 'Round corners'), T('Shift', 'A square'), T('Alt', 'From the centre'), T('Esc', 'Cancel'));
+    } else if (t === 'circle') {
+      if (!(cur && cur.a)) out.push(T('Click', 'The centre'), T('Drag', 'Draw in one go'), T('Esc', 'Leave the tool'));
+      else out.push(T('Click', 'Place it'), T('Type', 'Radius'), T('↑ ↓', 'Ellipse'), T('Esc', 'Cancel'));
+    } else if (t === 'polygon') {
+      if (!(cur && cur.a)) out.push(T('Click', 'The centre'), T('Drag', 'Draw in one go'), T('Esc', 'Leave the tool'));
+      else out.push(T('Click', 'Place it'), T('Type', 'Radius'), T('↑ ↓', 'Sides'), T('Esc', 'Cancel'));
+    } else if (t === 'arc') {
+      out.push(T('Click', n === 0 ? 'Start' : n === 1 ? 'End' : 'A point on the arc'), T('Esc', n ? 'Cancel' : 'Leave the tool'));
+    } else if (t === 'freehand') {
+      out.push(T('Drag', 'Draw a stroke'), T('Esc', 'Leave the tool'));
+    } else if (t === 'edit') {
+      const sp = editing(), src = sp ? _srcOf(sp) : null, line = !!sp, isBez = !!src && src.type === 'bezier';
+      if (!line) out.push(T('Click', 'Pick a line'));
+      else {
+        out.push(T('Drag', isBez ? 'Move a point or handle' : 'Move a point'), T('Click', 'Curve: add a point'),
+          T('Double-click', 'Point: smooth or sharp'));
+        if (isBez) out.push(T(['Ctrl', 'Drag'], 'Break a handle'));
+        if (sel >= 0) out.push(T('Delete', 'Remove point'));
+        out.push(T('C', src && src.closed ? 'Open' : 'Close'));
+      }
+      out.push(T('Esc', 'Leave the tool'));
+    }
+    out.push(T(['Alt', 'Drag'], 'Orbit'), T('Scroll', 'Zoom'));
+    return out;
+  }
+  // The old pill at the top of the viewport is gone: the keys are in the list at the bottom right (_updateVpHint),
+  // which is refreshed here whenever the tool, the curve type or the line being drawn changes.
+  let _tipsSig = '';
+  function hint(force) {
+    const el = $q('draw-hint'); if (el) { el.hidden = true; el.textContent = ''; }
+    const ed = S.tool === 'edit' ? editing() : null;
+    const sig = [active, S.tool, S.type, cur && cur.pts ? cur.pts.length : -1, !!(cur && cur.a), sel >= 0, ed ? ed.id : 0].join('|');
+    if (!force && sig === _tipsSig) return;
+    _tipsSig = sig;
+    try { _updateVpHint(); } catch (_) {}
+  }
+
+  // ── the card ──
+  function syncCard() {
+    const c = $q('draw-card'); if (!c) return;
+    for (const b of c.querySelectorAll('#dr-tools button')) b.classList.toggle('active', b.dataset.t === S.tool);
+    { const nm = c.querySelector('#dr-tool-name'), on = c.querySelector('#dr-tools button.active span'); if (nm) nm.textContent = on ? on.textContent : ''; }
+    for (const b of c.querySelectorAll('#dr-type button')) b.classList.toggle('active', b.dataset.k === S.type);
+    for (const b of c.querySelectorAll('#dr-plane button')) b.classList.toggle('active', b.dataset.p === S.plane);
+    $q('dr-offset').value = String(S.offset);
+    $q('dr-snap-grid').checked = !!S.snapGrid; $q('dr-snap-pts').checked = !!S.snapPoints;
+    $q('dr-grid').value = S.gridAuto ? 'Auto' : String(S.grid);
+    $q('dr-sides').value = String(S.sides); $q('dr-smooth').value = String(S.smooth);
+    const sp = editing(), src = sp ? _srcOf(sp) : null;
+    $q('dr-r-sides').hidden = S.tool !== 'polygon';
+    $q('dr-r-smooth').hidden = S.tool !== 'freehand';
+    $q('dr-r-corner').hidden = !(S.tool === 'rect' || S.tool === 'polygon' || S.tool === 'edit');
+    $q('dr-r-star').hidden = S.tool !== 'polygon';
+    $q('dr-r-inner').hidden = !(S.tool === 'polygon' && S.star);
+    $q('dr-r-circum').hidden = !(S.tool === 'polygon' && !S.star);
+    $q('dr-r-ellipse').hidden = S.tool !== 'circle';
+    $q('dr-r-center').hidden = S.tool !== 'rect';
+    for (const b of c.querySelectorAll('#dr-corner-type button')) b.classList.toggle('active', b.dataset.c === S.cornerType);
+    $q('dr-corner').value = String(S.corner); $q('dr-inner').value = String(S.inner);
+    $q('dr-star').checked = !!S.star; $q('dr-circum').checked = !!S.circum; $q('dr-ellipse').checked = !!S.ellipse; $q('dr-center').checked = !!S.center;
+    $q('dr-edit').hidden = S.tool !== 'edit';
+    $q('dr-edit-info').textContent = !sp ? 'Pick a line in the viewport or in the Lines list.' : `${sp.name}: ${src.points.length} points, ${src.closed ? 'closed' : 'open'}${sel >= 0 ? ', point ' + (sel + 1) + ' selected' : ''}.`;
+    for (const id of ['dr-close', 'dr-reverse', 'dr-simplify']) $q(id).disabled = !sp;
+    for (const id of ['dr-smooth-pt', 'dr-sharp-pt', 'dr-del-pt', 'dr-fillet']) $q(id).disabled = !sp || sel < 0;
+    for (const id of ['dr-fillet-all', 'dr-mirror-u', 'dr-mirror-v']) $q(id).disabled = !sp;
+    $q('dr-close-label').textContent = src && src.closed ? 'Open' : 'Close';
+    hint();
+  }
+  function setTool(t) {
+    if (!TOOLS.includes(t)) return;
+    cancel(); hot = null; S.tool = t; save();
+    canvas().style.cursor = t === 'edit' ? 'default' : 'crosshair';
+    syncCard(); schedule();
+  }
+  function wire() {
+    if (wired) return; wired = true;
+    const c = $q('draw-card');
+    ov = $q('draw-overlay'); ctx = ov.getContext('2d');
+    for (const b of c.querySelectorAll('#dr-tools button')) b.addEventListener('click', () => { setTool(b.dataset.t); b.blur(); });
+    for (const b of c.querySelectorAll('#dr-type button')) b.addEventListener('click', () => { changeType(b.dataset.k); b.blur(); });
+    for (const b of c.querySelectorAll('#dr-plane button')) b.addEventListener('click', () => { cancel(); S.plane = b.dataset.p; save(); syncCard(); schedule(); b.blur(); });
+    const num = (id, key, o) => { const el = $q(id); el.addEventListener('change', () => { const v = parseFloat(String(el.value).replace(',', '.')); if (isFinite(v)) S[key] = Math.max(o.min, Math.min(o.max, v)); save(); syncCard(); schedule(); }); _scrubField(el, o); };
+    num('dr-offset', 'offset', { min: -1e6, max: 1e6, step: 1, decimals: 2 });
+    num('dr-sides', 'sides', { min: 3, max: 64, step: 1, decimals: 0 });
+    num('dr-smooth', 'smooth', { min: 1, max: 40, step: 1, decimals: 0 });
+    num('dr-corner', 'corner', { min: 0, max: 1e6, step: 1, decimals: 2 });
+    num('dr-inner', 'inner', { min: 5, max: 95, step: 1, decimals: 0 });
+    for (const b of c.querySelectorAll('#dr-corner-type button')) b.addEventListener('click', () => { S.cornerType = b.dataset.c; save(); syncCard(); schedule(); b.blur(); });
+    for (const [id, key] of [['dr-star', 'star'], ['dr-circum', 'circum'], ['dr-ellipse', 'ellipse'], ['dr-center', 'center']]) $q(id).addEventListener('change', (e) => { S[key] = e.target.checked; save(); syncCard(); schedule(); });
+    $q('dr-fillet').addEventListener('click', () => filletLine(false));
+    $q('dr-fillet-all').addEventListener('click', () => filletLine(true));
+    $q('dr-mirror-u').addEventListener('click', () => mirrorLine('u'));
+    $q('dr-mirror-v').addEventListener('click', () => mirrorLine('v'));
+    const g = $q('dr-grid');
+    g.addEventListener('change', () => { const v = parseFloat(String(g.value).replace(',', '.')); if (isFinite(v) && v > 0) { S.grid = v; S.gridAuto = false; } else S.gridAuto = true; save(); syncCard(); schedule(); });
+    $q('dr-snap-grid').addEventListener('change', (e) => { S.snapGrid = e.target.checked; save(); schedule(); });
+    $q('dr-snap-pts').addEventListener('change', (e) => { S.snapPoints = e.target.checked; save(); schedule(); });
+    $q('dr-close').addEventListener('click', toggleClosed);
+    $q('dr-reverse').addEventListener('click', reverseLine);
+    $q('dr-simplify').addEventListener('click', simplifyLine);
+    $q('dr-smooth-pt').addEventListener('click', () => { const sp = editing(); if (sp && sel >= 0) { let src = _srcOf(sp); if (src.type !== 'bezier') src = SPL.toBezier(src); _setSplineSrc(sp, SPL.smoothHandles(src, sel)); syncCard(); schedule(); } });
+    $q('dr-sharp-pt').addEventListener('click', () => { const sp = editing(); if (sp && sel >= 0) { let src = _srcOf(sp); if (src.type !== 'bezier') src = SPL.toBezier(src); _setSplineSrc(sp, SPL.sharpPoint(src, sel)); syncCard(); schedule(); } });
+    $q('dr-del-pt').addEventListener('click', removeSelected);
+    c.addEventListener('cmd-open', activate);
+    c.addEventListener('cmd-close', deactivate);
+    syncCard();
+  }
+  function activate() {
+    if (active) return;
+    active = true; cur = null; drag = null; hover = null; sel = -1;
+    const cv = canvas();
+    ov.hidden = false;
+    prevButtons = { ...controls.mouseButtons };
+    controls.mouseButtons = { LEFT: -1, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };       // the left button draws; Alt + drag orbits
+    cv.style.cursor = S.tool === 'edit' ? 'default' : 'crosshair';
+    cv.addEventListener('pointerdown', down, true);
+    cv.addEventListener('pointermove', move);
+    cv.addEventListener('pointerleave', leave);
+    cv.addEventListener('dblclick', dbl, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', lost, true);
+    window.addEventListener('blur', lost);
+    window.addEventListener('keydown', key, true);
+    window.addEventListener('keyup', keyUp, true);
+    controls.addEventListener('change', schedule);
+    window.addEventListener('resize', schedule);
+    syncCard(); schedule();
+    try { updateGizmo(); } catch (_) {}               // (the line's gizmo steps aside while drawing)
+  }
+  function deactivate() {
+    if (!active) return;
+    active = false; cancel(); ptr = null; hover = null; hot = null;
+    const cv = canvas();
+    cv.removeEventListener('pointerdown', down, true);
+    cv.removeEventListener('pointermove', move);
+    cv.removeEventListener('pointerleave', leave);
+    cv.removeEventListener('dblclick', dbl, true);
+    window.removeEventListener('pointerup', up, true);
+    window.removeEventListener('pointercancel', lost, true);
+    window.removeEventListener('blur', lost);
+    window.removeEventListener('keydown', key, true);
+    window.removeEventListener('keyup', keyUp, true);
+    controls.removeEventListener('change', schedule);
+    window.removeEventListener('resize', schedule);
+    if (prevButtons) controls.mouseButtons = prevButtons;
+    cv.style.cursor = '';
+    ov.hidden = true;
+    ctx.clearRect(0, 0, ov.width, ov.height);
+    hint();
+    try { updateGizmo(); } catch (_) {}               // (and the selected line has it again)
+  }
+  return { wire, repaint: schedule, syncCard, isActive: () => active, tips, state: () => ({ S, cur, sel, hover }),
+    // for the tests: the same code paths as the pointer, without a pointer
+    _api: { setTool, changeType, finishPen, removeSelected, toggleClosed, simplifyLine, reverseLine, toggleSmooth, setSel: (i) => { sel = i; } } };
+})();
+window._MODraw = _Draw;            // (for tests and the console)
+(() => { const go = () => { try { _Draw.wire(); } catch (e) { console.warn('[draw]', e); } }; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go, { once: true }); else go(); })();
+
 function _addPrimitive(kind, preset) {
   if (!scene || !state.partsRoot) return;
 
@@ -23650,7 +26128,17 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     const real = o.userData && o.userData.soName;
     if (typeof real === 'string' && real) { o.name = real; delete o.userData.soName; }
   });
+  try { _registerSplines(sceneRoot, importMode); } catch (e) { console.warn('[spline] could not read the lines of this file:', e); }
   sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
+  // Copies that arrive as separate geometries (a file from another tool writes
+  // the same bolt out again for every place it is used): find them from the
+  // numbers and give them one geometry, so that they are kept, drawn and
+  // exported once. Nothing is merged unless it fits within a hair (repeats.js).
+  let _repeatStats = null;
+  if (state.autoInstance && meshList.length > 1) {
+    try { _repeatStats = _shareRepeatedGeometry(meshList); }
+    catch (e) { console.warn('[load] repeated-part search failed:', e); }
+  }
   if (!meshList.length) { try { toast('Nothing to show', 'This file has no meshes in it.', 'warn', 6000); } catch (_) {} }
   const meshToPart = new Map();
   // `i` counts the file's meshes (it names the unnamed ones); a mesh with no
@@ -23710,6 +26198,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (!state.geomByHash.has(partInfo.hash)) state.geomByHash.set(partInfo.hash, geom);
     i++; made++;
   }
+  try { _linkSplineParts(meshToPart); } catch (e) { console.warn('[spline] could not link the lines to their parts:', e); }
   // Append: _buildHierarchyFromScene starts a fresh tree for the file being
   // read. Keep the tree that was there and add the new rows after it
   // (see _mergeImportedTree) instead of replacing it.
@@ -23742,7 +26231,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   // matches. FBX / OBJ / 3MF / STL importers each clone geometry per mesh.
   // Skip in import-mode: re-running it across previously-imported parts
   // would re-instance geometry that's already settled into the scene graph.
-  if (!importMode && format === 'glb' && state.autoInstance) {
+  if (!importMode && (format === 'glb' || (_repeatStats && _repeatStats.shared)) && state.autoInstance) {
     try { _autoInstanceFromGLB(); }
     catch (e) { console.warn('[STEP] auto-instance failed:', e); }
   }
@@ -24108,6 +26597,8 @@ async function boot() {
   _lucide();
   _sp('Starting the renderer', 55);
   await initRenderer();
+  _gfxWarnAtStart();
+  _safeModeApply();
   _sp('Preparing the scene', 85);
   initScene();
   setBackground('dark');
@@ -28130,14 +30621,22 @@ function _wireBboxButtonsFinal() {
   // under Advanced write straight into state.smartFit.
   const sec = document.querySelector('.section-cmd[data-cmd="smartfit"]');
   if (sec) {
-    const modes = [...sec.querySelectorAll('#fit-modes button, #fit-modes-more button')];
+    const modes = [...sec.querySelectorAll('#fit-modes button')];
     // the number that belongs to the chosen shape, and no other
     const rows = () => { for (const [id, mode] of [['fit-count-row', 'boxes'], ['fit-detail-row', 'blocks']]) { const r = $(id); if (r) r.hidden = _fitMode !== mode; } };
     rows();
+    for (const m of modes) m.title = m.dataset.desc || '';      // what each shape does: a tooltip, not a paragraph
+    const paint = () => {
+      for (const m of modes) {
+        const on = m.dataset.mode === _fitMode;
+        m.classList.toggle('active', on);
+      }
+      rows();
+    };
+    paint();
     for (const b of modes) b.addEventListener('click', () => {
       _fitMode = b.dataset.mode;
-      rows();
-      for (const m of modes) m.classList.toggle('active', m === b);
+      paint();
       b.blur();                                        // so Enter runs the command, not this button again
     });
     const DEF = { cylCircularity: 0.85, cylBoxWaste: 0.82, cylAspect: 0, pcaEnabled: true, blockDetail: 8, boxCount: 6 };
@@ -28175,7 +30674,7 @@ function _wireBboxButtonsFinal() {
       let n = 0, tris = 0;
       for (const id of state.selected) { const p = getPart(id); if (p && !p.deleted && p.mesh) { n++; tris += p.triCount || 0; } }
       const text = n ? `${fmtNum(n)} part${n === 1 ? '' : 's'} selected, ${fmtNum(tris)} triangles. Each becomes a few dozen at most.`
-        : 'Select the parts to replace. Nuts, bolts, pins and housings are the ones it suits.';
+        : 'Select the parts to replace.';
       if (info && text !== seen) info.textContent = seen = text;
     };
     let watch = 0;
@@ -28363,7 +30862,7 @@ const _SelCmds = (() => {
       if (sel) { sel.value = String(v); sel.dispatchEvent(new Event('change', { bubbles: true })); }
       document.getElementById('btn-decimate-sel')?.click();
     };
-    const dRow = (v) => ({ id: 'dec' + Math.round(v * 100), icon: 'triangle', label: 'Decimate −' + Math.round(v * 100) + '%', tip: 'Remove ' + Math.round(v * 100) + '% of the triangles of each selected part',
+    const dRow = (v) => ({ id: 'dec' + Math.round(v * 100), icon: 'shrink', label: 'Decimate −' + Math.round(v * 100) + '%', tip: 'Remove ' + Math.round(v * 100) + '% of the triangles of each selected part',
       right: fmtNum(m.tris) + ' → ' + fmtNum(Math.round(m.tris * (1 - v))), off: noTris, fn: dec(v) });
     return [
       { id: 'delete', icon: 'trash-2', label: 'Delete', kbd: 'Del', tip: 'Delete the selection', danger: true, fn: act('delete') },
@@ -28372,7 +30871,7 @@ const _SelCmds = (() => {
       state._isolated
         ? { id: 'isolate', icon: 'eye', label: 'Show all', kbd: 'Alt+H', tip: 'Leave the isolation and show every part again', fn: act('showAll') }
         : { id: 'isolate', icon: 'focus', label: 'Isolate', kbd: 'S', tip: 'Show only the selection', fn: act('isolate') },
-      { id: 'frame', icon: 'scan', label: 'Frame', kbd: 'F', tip: 'Zoom to the selection', fn: () => frameSelected() },
+      { id: 'frame', icon: 'maximize', label: 'Frame', kbd: 'F', tip: 'Zoom to the selection', fn: () => frameSelected() },
       { id: 'similar', icon: 'shapes', label: 'Select similar', tip: 'Select every part of the same shape', fn: () => selectSimilar() },
       dRow(0.5),
       { id: 'merge', icon: 'combine', label: 'Merge', kbd: 'Ctrl+M', tip: 'Join the selection into one part', off: m.n > 1 ? false : 'Select two or more parts', fn: act('merge') },
@@ -28382,15 +30881,15 @@ const _SelCmds = (() => {
       { id: 'colour', icon: 'palette', label: 'Select same colour', tip: 'Select every part of the same colour', fn: () => selectByColor() },
       { id: 'smartfit', icon: 'wand-2', label: 'Smart fit', kbd: 'Ctrl+B', tip: 'Replace the selection with the simplest shape that fits it', fn: act('smartFit') },
       { id: 'split', icon: 'split', label: 'Split…', kbd: 'X', tip: 'Split the selection into its pieces', fn: () => _CmdCards.open('split') },
-      { id: 'fillholes', icon: 'circle-off', label: 'Fill holes…', kbd: 'P', tip: 'Close the holes in the selection', fn: () => _CmdCards.open('fillholes') },
+      { id: 'fillholes', icon: 'square-dot', label: 'Fill holes…', kbd: 'P', tip: 'Close the holes in the selection', fn: () => _CmdCards.open('fillholes') },
       { id: 'copy', icon: 'copy', label: 'Copy', kbd: 'Ctrl+C', tip: 'Copy the selection', fn: () => copyParts([...state.selected]) },
       { id: 'paste', icon: 'clipboard-paste', label: 'Paste', kbd: 'Ctrl+V', tip: 'Paste what was copied', off: hasClip ? false : 'Nothing copied yet', fn: () => pasteParts() },
       { id: 'showall', icon: 'eye', label: 'Show all', kbd: 'Alt+H', tip: 'Show every hidden part', off: anyHidden ? false : 'Nothing is hidden', fn: act('showAll') },
       dRow(0.25), dRow(0.75), dRow(0.9),
       { id: 'invert', icon: 'arrow-left-right', label: 'Invert selection', kbd: 'Ctrl+I', tip: 'Select what is not selected, deselect the rest', fn: act('selInvert') },
-      { id: 'intree', icon: 'arrow-up-right', label: 'Show in tree', kbd: 'Shift+S', tip: 'Show the selection in the tree', fn: () => revealSelectedInTree() },
+      { id: 'intree', icon: 'locate', label: 'Show in tree', kbd: 'Shift+S', tip: 'Show the selection in the tree', fn: () => revealSelectedInTree() },
       { id: 'pivot', icon: 'crosshair', label: 'Centre pivot', tip: 'Move the pivot to the middle of the part', fn: click('btn-center-pivot') },
-      { id: 'normals', icon: 'sparkles', label: 'Recompute normals', tip: 'Recompute the normals of the selection', fn: click('btn-recompute-normals') },
+      { id: 'normals', icon: 'refresh-ccw-dot', label: 'Recompute normals', tip: 'Recompute the normals of the selection', fn: click('btn-recompute-normals') },
     ];
   }
   return { commands: () => registry(measure()) };
@@ -28453,20 +30952,20 @@ const _Wand = (() => {
       const more = [...pick('isolate', 'similar', 'colour', 'group', 'duplicate', 'merge', 'frame', 'hideothers'), ...(state._isolated ? [] : pick('showall'))];
       return [
         { leaf: C.hide },
-        { group: 'Reduce', icon: 'triangle', items: pick('dec50', 'dec25', 'dec75', 'dec90', 'smartfit', 'split', 'fillholes') },
+        { group: 'Reduce', icon: 'shrink', items: pick('dec50', 'dec25', 'dec75', 'dec90', 'smartfit', 'split', 'fillholes') },
         { leaf: C.delete },
         { group: 'More', icon: 'ellipsis', items: more },
       ];
     }
-    const mode = (m, label, kbd) => L('m-' + m, m === 'solid' ? 'box' : m === 'wire' ? 'grid-3x3' : 'crosshair', label, 'Draw the model as ' + label.toLowerCase(), () => setViewMode(m), { kbd });
+    const mode = (m, label, kbd) => L('m-' + m, m === 'solid' ? 'cube-solid' : m === 'wire' ? 'cube-wire' : 'cube-xray', label, 'Draw the model as ' + label.toLowerCase(), () => setViewMode(m), { kbd });
     return [
       { leaf: L('fit', 'maximize', 'Fit view', 'Zoom to the whole model', () => fitToView(), { kbd: 'F', off: none }) },
-      { leaf: L('selall', 'check', 'Select all', 'Select every part', click('sel-all'), { kbd: 'Ctrl+A', off: none }) },
+      { leaf: L('selall', 'square-check', 'Select all', 'Select every part', click('sel-all'), { kbd: 'Ctrl+A', off: none }) },
       { group: 'View', icon: 'video', items: [
         L('v-persp', 'video', 'Camera view', 'Perspective camera', () => _setPerspectiveView(), { kbd: 'Ctrl+1' }),
-        L('v-top', 'square', 'Top view', 'Look from above', () => _setStandardView('top'), { kbd: 'Ctrl+2' }),
-        L('v-front', 'square', 'Front view', 'Look from the front', () => _setStandardView('front'), { kbd: 'Ctrl+3' }),
-        L('v-side', 'square', 'Side view', 'Look from the side', () => _setStandardView('side'), { kbd: 'Ctrl+4' }),
+        L('v-top', 'view-top', 'Top view', 'Look from above', () => _setStandardView('top'), { kbd: 'Ctrl+2' }),
+        L('v-front', 'view-front', 'Front view', 'Look from the front', () => _setStandardView('front'), { kbd: 'Ctrl+3' }),
+        L('v-side', 'view-side', 'Side view', 'Look from the side', () => _setStandardView('side'), { kbd: 'Ctrl+4' }),
         mode('solid', 'Solid view', '1'), mode('wire', 'Wireframe view', '2'), mode('xray', 'X-ray view', '3'),
         L('grid', state.showGrid ? 'eye-off' : 'eye', state.showGrid ? 'Hide ground grid' : 'Show ground grid', 'Toggle the floor grid', click('tg-grid'), { kbd: 'G' }) ] },
       { leaf: L('showall', 'eye', 'Show all', 'Show every hidden part', () => showAllParts(), { kbd: 'Alt+H', off: any ? (hiddenSome ? false : 'Nothing is hidden') : none }) },
@@ -28475,12 +30974,12 @@ const _Wand = (() => {
         L('save', 'save', 'Save scene…', 'Save the scene', click('btn-save-scene'), { kbd: 'Ctrl+S', off: any && !document.getElementById('btn-save-scene')?.disabled ? false : 'Nothing to save' }),
         L('revert', 'rotate-ccw', 'Revert to source file…', 'Go back to the file as it was opened', () => _revertToSourceFile(), { off: any ? (state._sourceFile ? false : 'No source file to revert to') : none }) ] },
       { group: 'Clean', icon: 'sparkles', items: [
-        L('recentre', 'target', 'Recentre on origin', 'Move the model to the origin', click('btn-recenter'), { off: none }),
+        L('recentre', 'axis-3d', 'Recentre on origin', 'Move the model to the origin', click('btn-recenter'), { off: none }),
         L('align', 'arrow-down-to-line', 'Align to the floor…', 'Stand the model on the floor', act('alignFloor'), { off: none }),
         L('smartall', 'box-select', 'Smart fit all parts', 'Replace every part with its simplest fit', act('smartFitAll'), { off: none }),
         L('c-empty', 'circle-minus', 'Remove empty parts', 'Delete parts without geometry', click('btn-clean-empty'), { off: none }),
-        L('c-dupes', 'copy', 'Deduplicate geometry', 'Share geometry between equal parts', click('btn-clean-dupes'), { off: none }),
-        L('c-degen', 'asterisk', 'Fix degenerate parts', 'Repair broken triangles', click('btn-clean-degenerate'), { off: none }) ] },
+        L('c-dupes', 'copy-check', 'Deduplicate geometry', 'Share geometry between equal parts', click('btn-clean-dupes'), { off: none }),
+        L('c-degen', 'eraser', 'Fix degenerate parts', 'Repair broken triangles', click('btn-clean-degenerate'), { off: none }) ] },
     ];
   }
   // ── drawing ──
@@ -28681,7 +31180,7 @@ const _Wand = (() => {
 // When the viewport is too narrow for both, toolbar buttons are folded away
 // from the right, one at a time; the search and "…" always stay, and "…"
 // lists whatever was folded so nothing is lost.
-const _TB_FOLD_ORDER = ['tg-materials', 'tg-library', 'tg-select-hidden', 'tg-split', 'tg-fill-holes','vw-heat', 'vw-xray', 'vw-wire', 'vw-solid'];
+const _TB_FOLD_ORDER = ['tg-materials', 'tg-library', 'tg-select-hidden', 'tg-split', 'tg-fill-holes', 'tg-sweep', 'tg-draw', 'vw-heat', 'vw-xray', 'vw-wire', 'vw-solid'];
 function _fitBottomToolbar() {
   const bar = document.querySelector('#vp-overlay .vpc.tr'), tips = document.querySelector('#vp-overlay .vpc.br'), vp = document.getElementById('viewport');
   if (!bar || !vp) return;
@@ -28740,7 +31239,7 @@ function _openCommandsMenu(anchor) {
   const items = [
     { icon: 'split',          label: 'Split…',               kbd: 'X',      off: needAny, fn: () => _CmdCards.open('split') },
     { icon: 'circle-off',     label: 'Fill holes…',          kbd: 'P',      off: needAny, fn: () => _CmdCards.open('fillholes') },
-    { icon: 'triangle',       label: 'Decimate',                            off: needSel, fn: click('btn-decimate-sel') },
+    { icon: 'shrink',       label: 'Decimate',                            off: needSel, fn: click('btn-decimate-sel') },
     { icon: 'gauge',          label: 'Fit to triangle budget',              off: needAny, fn: click('btn-budget') },
     { icon: 'eye-off',        label: 'Select hidden parts',                 off: needAny, fn: act('selHidden') },
     { icon: 'bolt',           label: 'Select fasteners',                    off: needAny, fn: act('selFasteners') },
@@ -28757,18 +31256,18 @@ function _openCommandsMenu(anchor) {
     { icon: 'eye-off',        label: 'Hide',                 kbd: 'H',      off: needSel, fn: act('hideSel') },
     { icon: 'eye-off',        label: 'Hide unselected',      kbd: 'Shift+H', off: needSel, fn: act('hideUnsel') },
     { icon: 'eye',            label: 'Show all',             kbd: 'Alt+H',  off: needAny, fn: act('showAll') },
-    { icon: 'scan',           label: 'Frame',                kbd: 'F',      off: needAny, fn: act('fit') },
+    { icon: 'maximize',           label: 'Frame',                kbd: 'F',      off: needAny, fn: act('fit') },
     '---',
     { icon: 'arrow-down-to-line', label: 'Align to the floor…',             off: needAny, fn: act('alignFloor') },
-    { icon: 'target',         label: 'Recentre on origin',                  off: needAny, fn: act('recenter') },
+    { icon: 'axis-3d',         label: 'Recentre on origin',                  off: needAny, fn: act('recenter') },
     { icon: 'crosshair',      label: 'Centre pivot',                        off: needSel, fn: click('btn-center-pivot') },
     { icon: 'check',          label: 'Bake transforms',                     off: needAny, fn: click('btn-bake-transforms') },
-    { icon: 'sparkles',       label: 'Recompute normals',                   off: needAny, fn: click('btn-recompute-normals') },
+    { icon: 'refresh-ccw-dot',       label: 'Recompute normals',                   off: needAny, fn: click('btn-recompute-normals') },
     { icon: 'list-tree',      label: 'Flatten hierarchy…',                  off: needAny, fn: act('flatten') },
     '---',
     { icon: 'circle-minus',   label: 'Remove empty parts',                  off: needAny, fn: click('btn-clean-empty') },
-    { icon: 'copy',           label: 'Deduplicate geometry',                off: needAny, fn: click('btn-clean-dupes') },
-    { icon: 'asterisk',       label: 'Fix degenerate parts',                off: needAny, fn: click('btn-clean-degenerate') },
+    { icon: 'copy-check',           label: 'Deduplicate geometry',                off: needAny, fn: click('btn-clean-dupes') },
+    { icon: 'eraser',       label: 'Fix degenerate parts',                off: needAny, fn: click('btn-clean-degenerate') },
     { icon: 'folder-x',       label: 'Delete empty groups',                 off: needAny, fn: click('btn-clean-empty-groups') },
   ];
   const folded = _foldedToolbarItems();
@@ -28924,6 +31423,91 @@ function _treeUngroupRow(row) {
   } catch (_) {}
   rebuildTree();
   // Promoted children visible in the tree — no toast.
+}
+
+// ── Organising the tree from a group's menu ─────────────────────────────────────
+// The groups of the tree are rows in state.treeNodes (a flat list in depth-first order); a group's subtree is the
+// run of rows below it that are deeper. Everything here works on that list, so it also works for rows that are
+// not on screen, and each action is one undo step.
+function _treeGroupIndex(node) {
+  const gid = node && node.dataset ? node.dataset.groupId : null;
+  return gid == null ? -1 : (state.treeNodes || []).findIndex(n => n.kind === 'group' && String(n.id) === String(gid));
+}
+function _treeSpanEnd(all, i) { let e = i + 1; while (e < all.length && all[e].depth > all[i].depth) e++; return e; }
+const _treeTreeUndo = (prev) => pushUndo({ type: 'hierUngroup', items: [], prevTreeNodes: prev, nextTreeNodes: _snapshotTreeNodes(state.treeNodes) });
+
+// Take the group out of the tree, or all the selected groups when it is one of them. Whatever was inside stays
+// as it was, nesting included, and moves up to where the group stood. One undo step.
+function _treeRemoveGroups(node) {
+  if (!node || !node.dataset.groupId) return;
+  const picked = state.selectedGroupIds ? [...state.selectedGroupIds].map(String) : [];
+  const ids = picked.includes(String(node.dataset.groupId)) ? picked : [String(node.dataset.groupId)];
+  const dead = (state.treeNodes || []).filter(n => n.kind === 'group' && ids.includes(String(n.id)));
+  let n = _removeGroupRows(dead, { label: 'Removed group', auto: false });
+  for (const id of ids) {                                                                  // groups made by hand (their ids are text)
+    const ug = (state.userGroups || []).find(g => String(g.id) === id);
+    if (ug) { try { removeUserGroup(ug.id); n++; } catch (err) { console.warn('[remove group]', err); } }
+  }
+  try { state.selectedGroupIds?.clear?.(); applySelectionColors(); refreshPropertiesPanel(); } catch (_) {}
+  if (n) toast(n === 1 ? 'Group removed' : n + ' groups removed', 'Their contents stay in the tree', 'success', 2500);
+}
+// Keep this group but dissolve every group inside it: all its parts end up directly under it.
+function _treeFlattenGroup(node) {
+  const all = state.treeNodes || [], i = _treeGroupIndex(node);
+  if (i < 0) return;
+  const dead = all.slice(i + 1, _treeSpanEnd(all, i)).filter(n => n.kind === 'group');
+  if (!dead.length) { toast('Nothing to flatten', 'This group has no groups inside it', 'info', 2200); return; }
+  const k = _removeGroupRows(dead, { label: 'Flattened group', auto: false });
+  toast('Group flattened', k + ' group' + (k === 1 ? '' : 's') + ' dissolved inside it', 'success', 2500);
+}
+// Sort what is directly inside the group by name (numbers by value: part 2 before part 10), groups first.
+function _treeSortGroup(node, dir) {
+  const all = state.treeNodes || [], i = _treeGroupIndex(node);
+  if (i < 0) return;
+  const e = _treeSpanEnd(all, i), base = all[i].depth, blocks = [];
+  for (let k = i + 1; k < e;) { let j = k + 1; while (j < e && all[j].depth > base + 1) j++; blocks.push(all.slice(k, j)); k = j; }
+  if (blocks.length < 2) { toast('Nothing to sort', 'The group holds fewer than two rows', 'info', 2200); return; }
+  const rank = (b) => (b[0].kind === 'part' ? 1 : 0);
+  const sorted = blocks.slice().sort((x, y) => rank(x) - rank(y) || String(x[0].name || '').localeCompare(String(y[0].name || ''), undefined, { numeric: true, sensitivity: 'base' }) * dir);
+  if (sorted.every((b, k) => b === blocks[k])) { toast('Already in order', '', 'info', 1800); return; }
+  const prev = _snapshotTreeNodes(all);
+  state.treeNodes = [...all.slice(0, i + 1), ...sorted.flat(), ...all.slice(e)];
+  _treeTreeUndo(prev);
+  rebuildTree();
+}
+// Move the group one place up or down among the rows beside it (same parent), taking its contents along.
+function _treeMoveGroup(node, dir) {
+  const all = state.treeNodes || [], i = _treeGroupIndex(node);
+  if (i < 0) return;
+  const me = all[i], e = _treeSpanEnd(all, i);
+  let a, b, c;                                                    // two neighbouring blocks, [a,b) and [b,c): swapped
+  if (dir < 0) {
+    let p = i - 1; while (p >= 0 && all[p].depth > me.depth) p--;
+    if (p < 0 || all[p].depth !== me.depth || all[p].parentId !== me.parentId) { toast('Already first', '', 'info', 1800); return; }
+    a = p; b = i; c = e;
+  } else {
+    if (e >= all.length || all[e].depth !== me.depth || all[e].parentId !== me.parentId) { toast('Already last', '', 'info', 1800); return; }
+    a = i; b = e; c = _treeSpanEnd(all, e);
+  }
+  const prev = _snapshotTreeNodes(all);
+  state.treeNodes = [...all.slice(0, a), ...all.slice(b, c), ...all.slice(a, b), ...all.slice(c)];
+  _treeTreeUndo(prev);
+  rebuildTree();
+}
+// Open or close this group and every group inside it.
+function _treeFoldBranch(node, collapse) {
+  const all = state.treeNodes || [], i = _treeGroupIndex(node);
+  if (i < 0) return;
+  for (const n of all.slice(i, _treeSpanEnd(all, i))) if (n.kind === 'group') { if (collapse) state.treeCollapsed.add(n.id); else state.treeCollapsed.delete(n.id); }
+  rebuildTree();
+}
+// Every group that holds nothing (no live part anywhere inside it) goes.
+function _treeDeleteEmptyGroups() {
+  const dead = [];
+  for (const [n, alive] of _groupLiveMap()) if (!alive && n.kind === 'group') dead.push(n);
+  if (!dead.length) { toast('No empty groups', 'Every group holds something', 'info', 2200); return; }
+  const k = _removeGroupRows(dead, { label: 'Removed empty groups', auto: false });
+  toast(k + ' empty group' + (k === 1 ? '' : 's') + ' removed', '', 'success', 2500);
 }
 
 // Hard-delete a group + everything inside it (recursive). For empty groups
@@ -29184,10 +31768,10 @@ document.addEventListener('contextmenu', function _matContextMenu(e) {
     { icon: 'combine', label: `Merge ${n} materials into one`, fn: press('#mat-act-merge') },
     '---',
     { icon: 'mouse-pointer-2', label: `Select parts with ${these}`, off: unused, fn: press('#mat-inspector [data-mi="select"]') },
-    { icon: 'plus-circle', label: 'Add those parts to the selection', off: unused, fn: addToSelection },
+    { icon: 'square-plus', label: 'Add those parts to the selection', off: unused, fn: addToSelection },
     { icon: 'focus', label: 'Isolate those parts', off: unused, fn: press('#mat-inspector [data-mi="isolate"]') },
     '---',
-    { icon: 'sparkles', label: 'Apply a preset…', fn: press('#mat-act-presets') },
+    { icon: 'swatch-book', label: 'Apply a preset…', fn: press('#mat-act-presets') },
     '---',
     { icon: 'trash-2', label: `Delete ${n} materials`, danger: true, fn: press('#mat-act-delete') },
   ] : [
@@ -29195,12 +31779,12 @@ document.addEventListener('contextmenu', function _matContextMenu(e) {
     { icon: 'copy', label: 'Duplicate', fn: press('#mat-act-duplicate') },
     '---',
     { icon: 'mouse-pointer-2', label: 'Select parts with this material', off: unused, fn: press('#mat-inspector [data-mi="select"]') },
-    { icon: 'plus-circle', label: 'Add those parts to the selection', off: unused, fn: addToSelection },
+    { icon: 'square-plus', label: 'Add those parts to the selection', off: unused, fn: addToSelection },
     { icon: 'focus', label: 'Isolate those parts', off: unused, fn: press('#mat-inspector [data-mi="isolate"]') },
     { icon: 'paint-bucket', label: nSel ? `Assign to ${fmtNum(nSel)} selected ${nSel === 1 ? 'part' : 'parts'}` : 'Assign to the selected parts', off: nSel ? false : 'Select the parts that should get it first', fn: press('#mat-inspector [data-mi="assign"]') },
     '---',
     { icon: 'pipette', label: `Copy colour ${hex}`, fn: copyHex },
-    { icon: 'sparkles', label: 'Apply a preset…', fn: press('#mat-act-presets') },
+    { icon: 'swatch-book', label: 'Apply a preset…', fn: press('#mat-act-presets') },
     '---',
     { icon: 'trash-2', label: 'Delete', danger: true, fn: press('#mat-act-delete') },
   ];
@@ -29233,12 +31817,21 @@ document.addEventListener('contextmenu', e => {
   // Group row branch ------------------------------------------------------
   if (node.dataset.groupId) {
     const items = [
-      { icon: 'check',          label: 'Select group parts',         fn: () => _treeSelectGroupParts(node, 'single') },
-      { icon: 'plus-circle',    label: 'Add group parts to selection', fn: () => _treeSelectGroupParts(node, 'add') },
+      { icon: 'square-check',          label: 'Select group parts',         fn: () => _treeSelectGroupParts(node, 'single') },
+      { icon: 'square-plus',    label: 'Add group parts to selection', fn: () => _treeSelectGroupParts(node, 'add') },
       { icon: 'crosshair',      label: 'Frame group',                fn: () => { _treeSelectGroupParts(node, 'single'); frameSelected?.(); } },
       '---',
       { icon: 'pencil',         label: 'Rename group',               fn: () => _treeRenameRow(node) },
-      { icon: 'folder-x',       label: 'Ungroup',                    fn: () => _treeUngroupRow(node) },
+      { icon: 'folder-minus',       label: 'Ungroup',                    fn: () => _treeUngroupRow(node) },
+      { icon: 'folder-output',      label: 'Remove group, keep contents', fn: () => _treeRemoveGroups(node) },
+      '---',
+      { icon: 'layers-2',       label: 'Flatten this group',         fn: () => _treeFlattenGroup(node) },
+      { icon: 'arrow-down-a-z', label: 'Sort inside A to Z',         fn: () => _treeSortGroup(node, 1) },
+      { icon: 'arrow-up-z-a',   label: 'Sort inside Z to A',         fn: () => _treeSortGroup(node, -1) },
+      { icon: 'arrow-up',       label: 'Move group up',              fn: () => _treeMoveGroup(node, -1) },
+      { icon: 'arrow-down',     label: 'Move group down',            fn: () => _treeMoveGroup(node, 1) },
+      { icon: 'brush-cleaning', label: 'Delete empty groups',        fn: _treeDeleteEmptyGroups },
+      '---',
       { icon: 'trash-2',        label: 'Delete group + contents',    danger: true, fn: () => _treeDeleteGroup(node) },
       '---',
       { icon: 'eye',            label: 'Toggle visibility',          fn: () => {
@@ -29258,8 +31851,10 @@ document.addEventListener('contextmenu', e => {
         }
       },
       '---',
-      { icon: 'chevrons-down', label: 'Expand all groups',          fn: _treeExpandAll },
-      { icon: 'chevrons-up',   label: 'Collapse all groups',        fn: _treeCollapseAll },
+      { icon: 'chevron-down',   label: 'Expand this branch',         fn: () => _treeFoldBranch(node, false) },
+      { icon: 'chevron-up',     label: 'Collapse this branch',       fn: () => _treeFoldBranch(node, true) },
+      { icon: 'chevrons-up-down', label: 'Expand all groups',          fn: _treeExpandAll },
+      { icon: 'chevrons-down-up',   label: 'Collapse all groups',        fn: _treeCollapseAll },
     ];
     _ctxBuild(items, e.clientX, e.clientY);
     return;
@@ -29276,7 +31871,7 @@ document.addEventListener('contextmenu', e => {
     { icon: 'focus',          label: 'Isolate',                fn: isolateSelected },
     { icon: 'eye',            label: 'Toggle visibility',      fn: () => { _applyVisibility([[p, !p.visible]]); rebuildTree(); requestRender(); } },
     { icon: 'eye-off',        label: 'Hide unselected',        fn: hideUnselected },
-    { icon: 'circle-plus',    label: 'Show all',               fn: showAllParts },
+    { icon: 'eye',    label: 'Show all',               fn: showAllParts },
     '---',
     { icon: 'shapes',         label: 'Select similar shape',   fn: selectSimilar },
     { icon: 'palette',        label: 'Select same colour',      fn: selectByColor },
@@ -29288,14 +31883,14 @@ document.addEventListener('contextmenu', e => {
     '---',
     { icon: p.locked ? 'unlock' : 'lock', label: p.locked ? 'Unlock' : 'Lock', fn: () => { const next = !p.locked; for (const sid of state.selected) { const sp = getPart(sid); if (sp) sp.locked = next; } rebuildTree(); /* lock state visible in tree row — no toast */ } },
     { icon: 'wand-2',         label: 'Smart fit selected',     fn: () => smartFitSelection('smart') },
-    { icon: 'square',         label: 'Force AABB box',         fn: () => smartFitSelection('aabb') },
+    { icon: 'box',         label: 'Force AABB box',         fn: () => smartFitSelection('aabb') },
     { icon: 'rotate-3d',      label: 'Force OBB box',          fn: () => smartFitSelection('obb') },
     { icon: 'cylinder',       label: 'Force cylinder',         fn: () => smartFitSelection('cyl') },
     { icon: 'boxes',          label: 'A few boxes (keeps the outline)', fn: () => smartFitSelection('boxes') },
-    { icon: 'blocks',         label: 'Blocks (keeps the outline)', fn: () => smartFitSelection('blocks') },
+    { icon: 'brick-wall',         label: 'Blocks (keeps the outline)', fn: () => smartFitSelection('blocks') },
     '---',
-    { icon: 'chevrons-down',  label: 'Expand all groups',      fn: _treeExpandAll },
-    { icon: 'chevrons-up',    label: 'Collapse all groups',    fn: _treeCollapseAll },
+    { icon: 'chevrons-up-down',  label: 'Expand all groups',      fn: _treeExpandAll },
+    { icon: 'chevrons-down-up',    label: 'Collapse all groups',    fn: _treeCollapseAll },
     '---',
     { icon: 'copy',           label: 'Copy',                   kbd: 'Ctrl+C', fn: () => copyParts([...state.selected]) },
     ...((state._clipboardParts || []).length ? [{ icon: 'clipboard-paste', label: 'Paste', kbd: 'Ctrl+V', fn: () => pasteParts() }] : []),
@@ -29598,7 +32193,15 @@ function _undoSplitBatch(batch) {
       const c = state.parts.find(p => p.partId === cid);
       if (!c) continue;
       if (c.mesh && c.mesh.parent) c.mesh.parent.remove(c.mesh);
-      try { c.mesh?.geometry?.dispose?.(); } catch (e) {}
+      // everything that hangs on the child's geometry goes with it: the outline
+      // and CAD edges built for it, its BVH, and its buffers. (The outline
+      // geometry was left behind: each split + undo kept ~130 of them on the GPU.)
+      const cg = c.mesh && c.mesh.geometry;
+      if (cg) {
+        try { _disposeEdgesFor(cg); } catch (e) {}
+        try { if (cg.boundsTree) cg.disposeBoundsTree?.(); } catch (e) {}
+      }
+      try { cg?.dispose?.(); } catch (e) {}
       // The split put this geometry in the geometry table under the child's
       // hash; it leaves with the child (the entry kept the disposed buffer).
       if (c.hash != null && c.mesh && state.geomByHash.get(c.hash) === c.mesh.geometry) state.geomByHash.delete(c.hash);
@@ -29667,19 +32270,55 @@ function splitSelectedParts(epsRel, method) {
   requestRender();
 }
 
-function splitAllParts(epsRel, method) {
+// Scans every mesh and splits what falls apart. Done in pieces of a few dozen
+// milliseconds so the page stays alive: the loader shows how far it is and its
+// Cancel button stops after the mesh being worked on (what was split so far
+// stays, as one undo step).
+let _splitAllBusy = false;
+async function splitAllParts(epsRel, method) {
+  if (_splitAllBusy) return;
   _detachGizmo();
   // Snapshot before iterating so freshly-spawned children aren't re-scanned.
   const candidates = state.parts.filter(p => !p.deleted && p.mesh && !p._splitInto);
+  if (!candidates.length) { toast('Nothing to scan', 'There are no meshes in the scene', 'info'); return; }
+  _splitAllBusy = true;
+  window.__moBusy = 'Scan whole model';
+  const cancelBtn = document.getElementById('loader-cancel-btn');
+  let stopped = false;
+  const onCancel = () => { stopped = true; };
+  cancelBtn?.addEventListener('click', onCancel, true);
+  const sub = (t) => { for (const id of ['loader-sub', 'wl-sub']) { const el = document.getElementById(id); if (el) el.textContent = t; } };
   let scanned = 0, total = 0;
   const undoBatch = [];
-  for (const p of candidates) {
-    scanned++;
-    const out = _splitOnePart(p, epsRel, method);
-    if (out > 0) { undoBatch.push({ parentId: p.partId, childIds: p._splitInto.slice() }); total += out; }
+  try {
+    setLoader(true, 'Scan whole model', `0 of ${fmtNum(candidates.length)} meshes`);
+    setLoaderProgress(0);
+    await _nextFrame();
+    let t0 = performance.now();
+    for (const p of candidates) {
+      if (stopped) break;
+      scanned++;
+      let out = 0;
+      try { out = _splitOnePart(p, epsRel, method); }
+      catch (e) { console.warn('[split] ' + (p.name || p.partId) + ':', (e && e.message) || e); }
+      if (out > 0) { undoBatch.push({ parentId: p.partId, childIds: p._splitInto.slice() }); total += out; }
+      if (performance.now() - t0 > 40) {                  // hand the page back: paint, take clicks (Cancel)
+        setLoaderProgress(100 * scanned / candidates.length);
+        sub(`${fmtNum(scanned)} of ${fmtNum(candidates.length)} meshes, ${fmtNum(total)} parts found`);
+        await new Promise(r => setTimeout(r, 0));
+        t0 = performance.now();
+      }
+    }
+  } finally {
+    cancelBtn?.removeEventListener('click', onCancel, true);
+    window.__moBusy = null;
+    _splitAllBusy = false;
+    setLoader(false);
   }
   if (total === 0) {
-    toast('No separable parts found', `Scanned ${scanned} meshes — all are single connected solids at this tolerance.`, 'info');
+    toast(stopped ? 'Scan cancelled' : 'No separable parts found',
+      stopped ? `Stopped after ${fmtNum(scanned)} of ${fmtNum(candidates.length)} meshes, nothing to split yet.`
+              : `Scanned ${scanned} meshes — all are single connected solids at this tolerance.`, 'info');
     return;
   }
   pushUndo({ type: 'split', batch: undoBatch, label: 'Split all meshes' });
@@ -29689,7 +32328,8 @@ function splitAllParts(epsRel, method) {
   _reindexParts(); recomputeStats(); refreshFlagged(); rebuildTree();
   applySelectionColors();
   _buildBVHsForAllGeoms();   // new child geoms need BVHs for picking
-  toast('Split complete', `${undoBatch.length} of ${scanned} mesh${scanned===1?'':'es'} → ${total} parts`, 'success');
+  toast(stopped ? 'Scan cancelled' : 'Split complete',
+    `${undoBatch.length} of ${scanned} mesh${scanned === 1 ? '' : 'es'} → ${total} parts${stopped ? ' (stopped early)' : ''}`, stopped ? 'info' : 'success');
   requestRender();
 }
 
@@ -30711,10 +33351,12 @@ function _wireExplode() {
 // Frame the camera onto the bbox of the current selection.
 // Falls back to fitToView() when nothing is selected. `only`: one part id to frame instead of the selection.
 function frameSelected(only) {
-  if (!state.parts.length) return;
+  const lineBox = typeof only !== 'number' && !(state.selected && state.selected.size) ? _selectedSplineBox() : null;     // a selected line, when no part is
+  if (!state.parts.length && !lineBox) return;
   const ids = typeof only === 'number' ? [only] : state.selected;     // (menus pass it as a callback: anything but a part id is ignored)
-  if (ids.size === 0 || ids.length === 0) { fitToView(); return; }
+  if (!lineBox && (ids.size === 0 || ids.length === 0)) { fitToView(); return; }
   const box = new THREE.Box3();
+  if (lineBox) box.union(lineBox);
   const ex = state.explode, exploded = !!(ex && (ex.x || ex.y || ex.z));
   for (const id of ids) {
     const p = getPart(id);
@@ -30997,11 +33639,11 @@ if (typeof document !== 'undefined') {
       const _noParts = _any ? false : 'The scene is empty';
       const _noSel = !_any ? 'The scene is empty' : (state.selected.size ? false : 'Select something first');
       _ctxBuild([
-        { icon: 'check',             label: 'Select all',       kbd: 'Ctrl+A', off: _noParts, fn: () => $('sel-all')?.click() },
+        { icon: 'square-check',             label: 'Select all',       kbd: 'Ctrl+A', off: _noParts, fn: () => $('sel-all')?.click() },
         { icon: 'arrow-left-right',  label: 'Invert selection', off: _noParts, fn: () => $('sel-invert')?.click() },
         { icon: 'x',                 label: 'Clear selection',  kbd: 'Esc',    off: _noSel, fn: () => $('sel-clear')?.click() },
         '---',
-        { icon: 'circle-plus',       label: 'Show all parts',   off: _noParts, fn: showAllParts },
+        { icon: 'eye',       label: 'Show all parts',   off: _noParts, fn: showAllParts },
         { icon: 'eye-off',           label: 'Hide unselected',  off: _noSel, fn: hideUnselected },
       ], e.clientX, e.clientY);
       return;
@@ -31012,7 +33654,7 @@ if (typeof document !== 'undefined') {
       const items = [];
       if (state.selected.size > 0) {
         items.push({ icon: 'crosshair',       label: `Frame selected (${state.selected.size})`, fn: frameSelected });
-        items.push({ icon: 'arrow-up-right',  label: 'Reveal in tree',     kbd: 'Shift+S', fn: revealSelectedInTree });
+        items.push({ icon: 'locate',  label: 'Reveal in tree',     kbd: 'Shift+S', fn: revealSelectedInTree });
         items.push(state._isolated
           ? { icon: 'eye',   label: 'Show all parts',     kbd: 'Alt+H', fn: showAllParts }
           : { icon: 'focus', label: 'Isolate selected',   fn: isolateSelected });
@@ -31038,14 +33680,14 @@ if (typeof document !== 'undefined') {
         items.push('---');
         // Standard CAD views — same set as the top-center pill / Ctrl+1..4.
         items.push({ icon: 'video',            label: 'Camera view',         kbd: 'Ctrl+1', fn: () => _setPerspectiveView() });
-        items.push({ icon: 'square',           label: 'Top view',            kbd: 'Ctrl+2', fn: () => _setStandardView('top') });
-        items.push({ icon: 'square',           label: 'Front view',          kbd: 'Ctrl+3', fn: () => _setStandardView('front') });
-        items.push({ icon: 'square',           label: 'Side view',           kbd: 'Ctrl+4', fn: () => _setStandardView('side') });
+        items.push({ icon: 'view-top',           label: 'Top view',            kbd: 'Ctrl+2', fn: () => _setStandardView('top') });
+        items.push({ icon: 'view-front',           label: 'Front view',          kbd: 'Ctrl+3', fn: () => _setStandardView('front') });
+        items.push({ icon: 'view-side',           label: 'Side view',           kbd: 'Ctrl+4', fn: () => _setStandardView('side') });
         items.push('---');
         // Render / display modes
-        items.push({ icon: 'box',              label: 'Solid view',          kbd: '1',     fn: () => setViewMode('solid') });
-        items.push({ icon: 'grid-3x3',         label: 'Wireframe view',      kbd: '2',     fn: () => setViewMode('wire') });
-        items.push({ icon: 'crosshair',        label: 'X-ray view',          kbd: '3',     fn: () => setViewMode('xray') });
+        items.push({ icon: 'cube-solid',              label: 'Solid view',          kbd: '1',     fn: () => setViewMode('solid') });
+        items.push({ icon: 'cube-wire',         label: 'Wireframe view',      kbd: '2',     fn: () => setViewMode('wire') });
+        items.push({ icon: 'cube-xray',        label: 'X-ray view',          kbd: '3',     fn: () => setViewMode('xray') });
         items.push('---');
         // Helper toggles — labels reflect the current state so the row reads
         // as the action that's about to happen rather than a status line.
@@ -31053,8 +33695,8 @@ if (typeof document !== 'undefined') {
         items.push({ icon: gridOn ? 'eye-off' : 'eye',   label: gridOn ? 'Hide ground grid'    : 'Show ground grid',     kbd: 'G', fn: () => $('tg-grid')?.click() });
         items.push('---');
         // Selection helpers
-        items.push({ icon: 'check',            label: 'Select all',          kbd: 'Ctrl+A', off: _noParts, fn: () => $('sel-all')?.click() });
-        items.push({ icon: 'circle-plus',      label: 'Show all parts',                     off: _noParts, fn: showAllParts });
+        items.push({ icon: 'square-check',            label: 'Select all',          kbd: 'Ctrl+A', off: _noParts, fn: () => $('sel-all')?.click() });
+        items.push({ icon: 'eye',      label: 'Show all parts',                     off: _noParts, fn: showAllParts });
         items.push('---');
         // Output
         items.push({ icon: 'camera',           label: 'Save screenshot…',                   off: _noParts, fn: () => _captureViewportScreenshot?.() });
@@ -31183,6 +33825,43 @@ function _wireSidebarResize() {
 // at rest (with the explosion in, the merged part would be built at the
 // exploded places and stay there when the explosion is taken out). Like Smart
 // fit: the model is put at rest, merged, and the explosion put on again.
+// Join parts that have the same colour into one mesh each: fewer draws and
+// fewer nodes for a configurator, at the price of no longer being able to pick
+// the parts apart. Works on the selection, or on every visible part when
+// nothing is selected. Parts that are instanced are left out (they are one
+// draw already, and joining them would write their triangles out once per
+// copy). One undo step takes the whole run back.
+async function mergeByColour() {
+  const picked = !!(state.selected && state.selected.size);
+  const pool = (picked ? [...state.selected].map(getPart) : state.parts)
+    .filter(p => p && !p.deleted && !p.isCloner && !p.isSpline && p.mesh && (picked || p.visible !== false));     // (a line is not a surface to join)
+  const groups = new Map();
+  for (const p of pool) {
+    const k = p.originalColor.getHex();
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(p.partId);
+  }
+  const todo = [...groups.values()].filter(g => g.length >= 2);
+  if (!todo.length) { toast('Merge by colour', 'Every colour appears once, so there is nothing to join', 'info', 3500); return; }
+  const before = new Set(state.history), parts0 = state.parts.filter(p => !p.deleted).length;
+  window.__moQuietToasts = true;
+  try {
+    for (const ids of todo) {
+      state.selected.clear(); if (state.selectedGroupIds) state.selectedGroupIds.clear();
+      for (const id of ids) state.selected.add(id);
+      await mergeSelectedIntoOne();
+    }
+  } finally {
+    window.__moQuietToasts = false;
+    const mine = state.history.filter(op => !before.has(op));
+    for (let i = 1; i < mine.length; i++) mine[i].auto = true;
+    try { clearSelection(); } catch (_) {}
+  }
+  const parts1 = state.parts.filter(p => !p.deleted).length;
+  toast('Merged by colour', fmtNum(parts0) + ' → ' + fmtNum(parts1) + ' parts · Ctrl+Z takes it back', 'success', 4500);
+}
+window._mergeByColour = mergeByColour;
+
 async function mergeSelectedIntoOne() {
   const ex = state.explode ? { x: state.explode.x, y: state.explode.y, z: state.explode.z } : null;
   const was = !!(ex && (ex.x || ex.y || ex.z));
@@ -35855,6 +38534,7 @@ let _dndCommitInFlight = false;
 
 function _dndPointerDown(e) {
   if (e.button !== 0) return;
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return;         // Ctrl / Shift / Cmd + click picks rows: a slip of the hand must not turn it into a drag that eats the click
   if (e.target.closest('[data-toggle], .tree-vis, .tree-chev, .tree-expand, [data-act], button, input, select')) return;
   const row = e.target.closest('.tree-node');
   if (!row) return;
@@ -35896,8 +38576,14 @@ function _dndPointerMove(e) {
   }
 }
 
+// (a press that moved a little and let go over the row it started on: the person meant a click)
+function _dndIsPlainClick(e) {
+  const row = e.target && e.target.closest ? e.target.closest('.tree-node') : null;
+  return !!(_dndDrag && _dndDrag.originRow && row === _dndDrag.originRow);
+}
 function _dndPointerUp(e) {
-  const wasActive = _dndDrag && _dndDrag.active && !_dndDrag.cancelled && e.type === 'pointerup';
+  const plain = _dndDrag && _dndDrag.active && e.type === 'pointerup' && _dndIsPlainClick(e);
+  const wasActive = _dndDrag && _dndDrag.active && !_dndDrag.cancelled && e.type === 'pointerup' && !plain;
   window.removeEventListener('pointermove', _dndPointerMove, true);
   window.removeEventListener('pointerup', _dndPointerUp, true);
   window.removeEventListener('pointercancel', _dndPointerUp, true);
@@ -37636,7 +40322,26 @@ setTimeout(() => _dndDecorateTree(), 0);
   // Reduce `geom` to about `keep` (0..1) of its triangles. Returns a new
   // BufferGeometry that carries every attribute of the original, or null if
   // the mesh can't be reduced.
-  function _simplifyKeepingAttributes(S, geom, keep) {
+  // How far apart two surfaces are, in the geometry's own units: the largest
+  // distance from any vertex of one to the surface of the other, both ways
+  // (up to ~60,000 vertices of each are looked at, evenly spread).
+  async function _surfaceDeviation(a, b) {
+    const bvh = await import('three-mesh-bvh');
+    for (const g of [a, b]) if (!g.boundsTree) g.boundsTree = new bvh.MeshBVH(g, { indirect: true });
+    const out = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 };
+    const v = new THREE.Vector3();
+    let worst = 0;
+    for (const [from, to] of [[a, b], [b, a]]) {
+      const P = from.attributes.position, n = P.count, step = Math.max(1, Math.floor(n / 60000));
+      for (let i = 0; i < n; i += step) {
+        v.fromBufferAttribute(P, i);
+        const r = to.boundsTree.closestPointToPoint(v, out);
+        if (r && r.distance > worst) worst = r.distance;
+      }
+    }
+    return worst;
+  }
+  function _simplifyKeepingAttributes(S, geom, keep, tol) {
     // An index buffer is required; weld a non-indexed mesh first (this
     // keeps attributes and only joins vertices that match in all of them).
     const src = geom.index ? geom : _mergeVertices(geom.clone());
@@ -37656,8 +40361,16 @@ setTimeout(() => _dndDecorateTree(), 0);
     const outParts = [];
     const attrs = packAttributes(src);
     let err = 0;
+    let worst = 0;
+    const scale = tol > 0 ? S.getScale(positions, 3) : 1;
     for (const g of groups) {
       const sub = index.subarray(g.start, g.start + g.count);
+      if (tol > 0) {                                   // as far as the tolerance allows
+        const [res, err] = S.simplify(sub, positions, 3, 0, Math.min(1, tol / scale));
+        worst = Math.max(worst, err * scale);
+        outParts.push({ idx: res, materialIndex: g.materialIndex });
+        continue;
+      }
       const target = Math.max(3, Math.floor((sub.length / 3) * keep) * 3);
       if (sub.length <= target) { outParts.push({ idx: sub, materialIndex: g.materialIndex }); continue; }
       // (borders locked first, normals / UVs / colours weighed in, falling back
@@ -37668,6 +40381,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
     const out = _geomFromIndexParts(src, outParts);
     if (out) _simpErr.set(out, err);
+    if (out && tol > 0) { out._err = worst; _simpErr.set(out, Math.max(err, worst)); }
     return out;
   }
 
@@ -37751,13 +40465,13 @@ setTimeout(() => _dndDecorateTree(), 0);
   });
 
   let _decimateBusy = false;
-  async function _decimateSelected() {
+  async function _decimateSelected(over) {
     if (_decimateBusy) return;
     _decimateBusy = true;
-    try { return await _decimateSelectedRun(); }
+    try { return await _decimateSelectedRun(over && over.tolMm ? over : undefined); }
     finally { _decimateBusy = false; }
   }
-  async function _decimateSelectedRun() {
+  async function _decimateSelectedRun(over) {
     const sel = state.selected;
     if (!sel || sel.size === 0) {
       if (typeof toast === 'function') toast('Decimate', 'Select parts first', 'warn', 2500);
@@ -37770,8 +40484,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     const ids = [...sel];
     let selTris = 0;
     for (const id of ids) { const sp = getPart(id); if (sp && !sp.deleted && sp.mesh) selTris += sp.triCount || 0; }
-    let keep;
-    if (strengthSel && strengthSel.value === 'target') {
+    let keep, tolMm = 0;
+    if (over && over.tolMm > 0) {                      // asked for by Smart optimise or a recipe, not by the controls
+      tolMm = over.tolMm; keep = 0;
+    } else if (strengthSel && strengthSel.value === 'tol') {
+      tolMm = parseFloat((document.getElementById('decimate-tol')?.value || '').replace(',', '.'));
+      if (!(tolMm > 0)) { toast('Decimate', 'Type how far a point may move, in mm', 'warn', 3000); return; }
+      keep = 0;
+    } else if (strengthSel && strengthSel.value === 'target') {
       const want = parseInt((document.getElementById('decimate-target')?.value || '').replace(/[^0-9]/g, ''), 10);
       if (!(want > 0)) { toast('Decimate', 'Type a target triangle count first', 'warn', 3000); return; }
       if (want >= selTris) { toast('Decimate', `The selection already has ${fmtNum(selTris)} triangles`, 'info', 3000); return; }
@@ -37800,6 +40520,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     // positions) is simplified on the page as before.
     const queued = new Map();               // partId → Promise<index ranges | null>
     const simplifierUrl = meshopt ? _importMapUrl('meshoptimizer-simplifier') : null;
+    // In tolerance mode the limit is in world units (mm); a mesh drawn through a
+    // scaled node measures it in its own units.
+    const _sv = new THREE.Vector3();
+    const unitsOf = (p) => { p.mesh.updateWorldMatrix(true, false); _sv.setFromMatrixScale(p.mesh.matrixWorld); return Math.cbrt(Math.abs(_sv.x * _sv.y * _sv.z)) || 1; };
+    const tolFor = (p, f = 1) => tolMm ? f * tolMm / unitsOf(p) : 0;
+    const FIRST_PASS = 0.8;                 // the simplifier's own error runs a little low on curved parts; what counts is measured below
+    let measuredAll = true;
+    let worstErr = 0;                       // the largest error any part reached, in mm
     if (simplifierUrl && _MeshWorkers.available()) {
       for (const id of ids) {
         const p = getPart(id);
@@ -37815,7 +40543,7 @@ setTimeout(() => _dndDecorateTree(), 0);
             : [{ start: 0, count: index.length, materialIndex: 0 }];
           const ap = packAttributes(geom);
           const attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights } : null;
-          return { msg: { op: 'simplify', positions, index, groups, keep, url: simplifierUrl, attrs }, transfer: attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer] };
+          return { msg: { op: 'simplify', positions, index, groups, keep, tol: tolFor(p, FIRST_PASS), url: simplifierUrl, attrs }, transfer: attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer] };
         }).then(reply => (reply && reply.ok) ? { parts: reply.parts, err: reply.err || 0 } : null));
       }
     }
@@ -37835,7 +40563,31 @@ setTimeout(() => _dndDecorateTree(), 0);
           const job = await queued.get(p.partId);
           if (job && p.mesh.geometry === geom) { reduced = _geomFromIndexParts(geom, job.parts); if (reduced) _simpErr.set(reduced, job.err); }
         }
-        if (!reduced && meshopt) reduced = _simplifyKeepingAttributes(meshopt, geom, keep);
+        if (!reduced && meshopt) reduced = _simplifyKeepingAttributes(meshopt, geom, keep, tolFor(p, FIRST_PASS));
+        if (!reduced && tolMm) { skipped.push(p.name + ' (needs the simplifier, which did not load)'); continue; }
+        if (reduced && tolMm) {
+          // Do not take the simplifier's word for it: measure how far the new
+          // surface is from the old one (vertices of each against the other
+          // surface) and tighten the setting until it fits. Large parts, where
+          // measuring would take a while, keep the simplifier's own figure.
+          const lim = tolFor(p);
+          let dev = null;
+          if (meshopt && triBefore <= 400000) {
+            try {
+              dev = await _surfaceDeviation(geom, reduced);
+              let f = FIRST_PASS, tries = 0;
+              while (dev > lim && tries++ < 4) {
+                f *= (lim / dev) * 0.95;
+                const again = _simplifyKeepingAttributes(meshopt, geom, 0, tolFor(p, f));
+                if (!again) break;
+                reduced = again; dev = await _surfaceDeviation(geom, reduced);
+              }
+            } catch (e) { dev = null; console.warn('[decimate] could not measure the deviation:', e); }
+          }
+          if (dev == null) { measuredAll = false; worstErr = Math.max(worstErr, tolMm); }
+          else if (dev > lim * 1.0005) { skipped.push(p.name + ' (no reduction fits within ' + tolMm + ' mm)'); continue; }
+          else { worstErr = Math.max(worstErr, dev * unitsOf(p)); _simpErr.set(reduced, dev); }     // (the report's "surface deviation" now holds a measured figure)
+        }
         if (!reduced) {
           // Fallback (offline, or no WebAssembly): positions only. The
           // modifier welds coincident vertices and then collapses `count`
@@ -37898,13 +40650,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     const dropped = trisBefore - trisAfter;
     const pct = trisBefore > 0 ? (dropped / trisBefore * 100) : 0;
     if (typeof toast === 'function') {
-      if (parts > 0) toast('Decimated', parts + (parts === 1 ? ' part' : ' parts') + ' · −' + dropped.toLocaleString() + ' tris (' + pct.toFixed(1) + '%)' + (_maxDeviation() > 0 ? ' · surfaces moved ' + _fmtDev(_maxDeviation()) : ''), 'success', 4000);
+      if (parts > 0) toast('Decimated', parts + (parts === 1 ? ' part' : ' parts') + ' · −' + dropped.toLocaleString() + ' tris (' + pct.toFixed(1) + '%)' + (tolMm ? (measuredAll ? ' · measured: no point moved more than ' : ' · no point should move more than ') + (worstErr < 0.001 ? '0.001' : worstErr.toPrecision(2)) + ' mm' : (_maxDeviation() > 0 ? ' · surfaces moved ' + _fmtDev(_maxDeviation()) : '')), 'success', 4000);
       if (skipped.length > 0) toast('Skipped', skipped.slice(0, 4).join(', ') + (skipped.length > 4 ? ' +' + (skipped.length-4) + ' more' : ''), 'warn', 4000);
       if (failed.length > 0) toast('Failed', failed.slice(0, 3).join(', ') + (failed.length > 3 ? ' +' + (failed.length-3) + ' more' : ''), 'error', 5000);
     }
   }
 
-  document.getElementById('btn-decimate-sel') && document.getElementById('btn-decimate-sel').addEventListener('click', _decimateSelected);
+  document.getElementById('btn-decimate-sel') && document.getElementById('btn-decimate-sel').addEventListener('click', () => _decimateSelected());
+  window.__moDecimateWithin = (mm) => _decimateSelected({ tolMm: mm });
 
   // ── Untriangulate ────────────────────────────────────────────────────────
   // Cinema 4D's command of the same name. Neighbouring triangles that lie in one plane are one polygon; the vertices that
@@ -38352,6 +41105,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   }
   function _decimateKeep(selTris) {
     const sel = document.getElementById('decimate-strength');
+    if (sel && sel.value === 'tol') return NaN;                                // the result depends on the shape: no estimate
     if (sel && sel.value === 'target') {
       const want = parseInt((document.getElementById('decimate-target')?.value || '').replace(/[^0-9]/g, ''), 10);
       return (want > 0 && want < selTris) ? want / selTris : NaN;
@@ -38365,6 +41119,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const live = [];
     for (const id of state.selected) { const p = getPart(id); if (p && !p.deleted) { live.push(p); if (p.mesh) selTris += p.triCount || 0; } }
     const keep = _decimateKeep(selTris);
+    if (document.getElementById('decimate-strength')?.value === 'tol') { toast('Decimate', 'How much goes depends on the shape: run it, and undo with Ctrl+Z if it is not enough', 'info', 4000); return; }
     if (!(keep > 0)) { toast('Decimate', 'Type a target below the triangle count of the selection', 'warn', 3000); return; }
     const rows = [];
     let instanced = 0, tiny = 0, from = 0, to = 0;
@@ -38649,7 +41404,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const idle = () => {
       const n = state.selected.size;
       return o.scope === 'sel' ? (n ? `Checks the ${fmtNum(n)} selected ${n === 1 ? 'part' : 'parts'} against the whole scene.` : 'Select the parts to check first, or look in the whole scene.')
-        : 'Screws, bearings and brackets inside a housing. Nothing is deleted until you press Delete.';
+        : '';
     };
     let result = null;
     function show() {
@@ -38933,7 +41688,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const n = state.selected.size;
       if (!o.bolts && !o.nuts && !o.washers && !o.pins) return 'Switch on at least one kind.';
       if (o.scope === 'sel') return n ? 'Looks at the ' + fmtNum(n) + ' selected ' + (n === 1 ? 'part' : 'parts') + ' only.' : 'Select the parts to look at first, or look in the whole scene.';
-      return 'Bushings, bearings, O-rings, shafts and pipe fittings are told apart and left alone. Nothing is deleted until you press Delete.';
+      return '';
     };
     function show() {
       paintScope(); paintSure();
@@ -39346,6 +42101,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       light:    { clean: true, hidden: false, fast: 'keep', small: 0, holes: false, remesh: false, keep: 0.5 },
       balanced: { clean: true, hidden: true,  fast: 'cyl',  small: 1, holes: false, remesh: true,  keep: 0.5 },
       strong:   { clean: true, hidden: true,  fast: 'cyl',  small: 2, holes: true,  remesh: true,  keep: 0.25 },
+      // (exact copies are on at every level; "reduce within" is off until someone sets it)
     };
     const NAMES = { light: 'Light', balanced: 'Balanced', strong: 'Strong' };
     let level = 'auto', targetTyped = false, busy = false, applying = false;
@@ -39362,6 +42118,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       clean: el('smart-clean').checked, hidden: el('smart-hidden').checked, fast: el('smart-fast').value,
       small: Math.max(0, parseFloat(String(el('smart-small').value).replace(',', '.')) || 0),
       holes: el('smart-holes').checked, remesh: el('smart-remesh').checked, target: parseTris(el('smart-target').value),
+      dupes: el('smart-dupes').checked, tol: Math.max(0, parseFloat(String(el('smart-tol').value).replace(',', '.')) || 0),
     });
     // a level's answers, written into the controls
     function apply(name) {
@@ -39385,10 +42142,12 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (!n) { info.textContent = 'Load a model first.'; return; }
       const steps = [];
       if (c.clean) steps.push('tidy up');
+      if (c.dupes) steps.push('remove exact copies');
       if (c.hidden) steps.push('remove hidden parts');
       if (c.fast === 'cyl') steps.push('simplify fasteners'); else if (c.fast === 'delete') steps.push('delete fasteners');
       if (c.small > 0) steps.push(`remove parts under ${c.small}%`);
       if (c.holes) steps.push('fill holes');
+      if (c.tol > 0) steps.push(`reduce triangles without moving a point more than ${c.tol} mm`);
       if (c.remesh && c.target > 0 && c.target < tris) steps.push(`reduce ${fmtNum(tris)} triangles to ${fmtNum(c.target)}`);
       const picked = level === 'auto' ? `Auto picked ${NAMES[resolved()]} for ${fmtNum(tris)} triangles in ${fmtNum(n)} ${n === 1 ? 'part' : 'parts'}. ` : '';
       const last = steps.length > 1 ? steps.slice(0, -1).join(', ') + ' and ' + steps[steps.length - 1] : steps[0];
@@ -39404,7 +42163,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       level = b.dataset.level; targetTyped = false;
       apply(resolved()); refresh(); b.blur();
     });
-    for (const id of ['smart-clean', 'smart-hidden', 'smart-fast', 'smart-holes', 'smart-remesh', 'smart-small']) {
+    for (const id of ['smart-clean', 'smart-hidden', 'smart-fast', 'smart-holes', 'smart-remesh', 'smart-small', 'smart-dupes', 'smart-tol']) {
       el(id)?.addEventListener('change', () => { if (applying) return; level = 'custom'; refresh(); });
     }
     el('smart-small')?.addEventListener('input', () => { if (applying) return; level = 'custom'; refresh(); });
@@ -39438,6 +42197,10 @@ setTimeout(() => _dndDecorateTree(), 0);
       };
       try {
         if (c.clean) await step('Tidying up', () => { cleanEmpty(); cleanDegenerate(); cleanEmptyGroups(); });
+        if (c.dupes) await step('Removing exact copies', () => {
+          const ids = _findExactCopies();
+          if (ids.length && ids.length < liveParts()) deleteParts(ids, 'Removed exact copies');
+        });
         if (c.hidden) await step('Removing hidden parts', async () => {
           const r = await _selectHiddenParts({});
           if (r && r.count) deleteParts([...state.selected], 'Removed hidden parts');
@@ -39455,6 +42218,12 @@ setTimeout(() => _dndDecorateTree(), 0);
           if (ids.length && ids.length < liveParts()) deleteParts(ids, 'Removed small parts');
         });
         if (c.holes) await step('Filling holes', async () => { clearSelection(); await _fillHoles(); });
+        if (c.tol > 0) await step('Reducing within ' + c.tol + ' mm', async () => {
+          clearSelection();
+          for (const p of state.parts) if (!p.deleted && p.mesh && !p.isSpline && p.visible !== false) state.selected.add(p.partId);
+          await _decimateSelected({ tolMm: c.tol });
+          clearSelection();
+        });
         if (c.remesh && c.target > 0 && _sceneTris() > c.target) await step('Reducing triangles', () => _fitToBudget(c.target));
       } finally {
         cancelBtn?.removeEventListener('click', onCancel, true);
@@ -39480,6 +42249,99 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
     run.addEventListener('click', smartRun);
     window.__moSmartOptimise = smartRun;
+
+    // ── Recipes ────────────────────────────────────────────────────────
+    // The settings above, saved under a name, to run again on the next
+    // revision of the model. Kept in this browser; Export / Import move them
+    // between machines as a small JSON file. A file is data: every field is
+    // checked and clamped, and anything unknown is dropped.
+    const RKEY = 'stepopt-recipes', FAST = ['keep', 'cyl', 'delete'];
+    const cleanSteps = (s) => {
+      if (!s || typeof s !== 'object') return null;
+      const b = (v, d) => typeof v === 'boolean' ? v : d;
+      const n = (v, lo, hi, d) => { const x = typeof v === 'number' && Number.isFinite(v) ? v : d; return Math.min(hi, Math.max(lo, x)); };
+      return {
+        clean: b(s.clean, true), dupes: b(s.dupes, true), hidden: b(s.hidden, false),
+        fast: FAST.includes(s.fast) ? s.fast : 'keep', small: n(s.small, 0, 50, 0), holes: b(s.holes, false),
+        tol: n(s.tol, 0, 1000, 0), remesh: b(s.remesh, false),
+        target: (typeof s.target === 'number' && Number.isFinite(s.target) && s.target >= 1) ? Math.round(Math.min(1e9, s.target)) : null,
+      };
+    };
+    const cleanName = (x) => String(x == null ? '' : x).replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 60);
+    const loadRecipes = () => {
+      try { const a = JSON.parse(localStorage.getItem(RKEY) || '[]'); return (Array.isArray(a) ? a : []).map(r => ({ name: cleanName(r && r.name), steps: cleanSteps(r && r.steps) })).filter(r => r.name && r.steps); }
+      catch (_) { return []; }
+    };
+    const storeRecipes = (a) => { try { localStorage.setItem(RKEY, JSON.stringify(a)); } catch (_) {} };
+    const snapshot = () => { const c = read(); return cleanSteps({ clean: c.clean, dupes: c.dupes, hidden: c.hidden, fast: c.fast, small: c.small, holes: c.holes, tol: c.tol, remesh: c.remesh, target: c.target > 0 ? c.target : null }); };
+    const fillList = (pick) => {
+      const sel = el('recipe-list'); if (!sel) return;
+      const all = loadRecipes();
+      sel.innerHTML = '';
+      if (!all.length) { const o = document.createElement('option'); o.value = ''; o.textContent = 'None saved yet'; sel.appendChild(o); }
+      for (const r of all) { const o = document.createElement('option'); o.value = r.name; o.textContent = r.name; sel.appendChild(o); }
+      if (pick) sel.value = pick;
+      for (const id of ['recipe-run', 'recipe-delete', 'recipe-export']) { const b = el(id); if (b) b.disabled = !all.length; }
+    };
+    function writeSteps(s) {
+      applying = true;
+      try {
+        el('smart-clean').checked = s.clean; el('smart-dupes').checked = s.dupes; el('smart-hidden').checked = s.hidden;
+        el('smart-holes').checked = s.holes; el('smart-remesh').checked = s.remesh;
+        el('smart-small').value = String(s.small); el('smart-tol').value = String(s.tol);
+        const f = el('smart-fast'); if (f.value !== s.fast) { f.value = s.fast; f.dispatchEvent(new Event('change', { bubbles: true })); }
+        el('smart-target').value = s.target ? short(s.target) : '';
+      } finally { applying = false; }
+      level = 'custom'; targetTyped = true; refresh();
+    }
+    async function runRecipe(name) {
+      const r = loadRecipes().find(x => x.name === name);
+      if (!r) { toast('Recipes', 'Pick a saved recipe first', 'warn', 2500); return false; }
+      writeSteps(r.steps);
+      await smartRun();
+      return true;
+    }
+    el('recipe-save')?.addEventListener('click', async () => {
+      const name = cleanName(await appPrompt('A name for these settings, for example "Web, 150k, no bolts":', '', { title: 'Save recipe', okLabel: 'Save' }));
+      if (!name) return;
+      const all = loadRecipes(), i = all.findIndex(r => r.name === name), rec = { name, steps: snapshot() };
+      if (i >= 0) all[i] = rec; else all.push(rec);
+      storeRecipes(all); fillList(name);
+      toast('Recipe saved', name, 'success', 2500);
+    });
+    el('recipe-run')?.addEventListener('click', () => runRecipe(el('recipe-list').value));
+    el('recipe-delete')?.addEventListener('click', async () => {
+      const name = el('recipe-list').value; if (!name) return;
+      if (!(await appConfirm('Delete the recipe "' + name + '"?', { title: 'Delete recipe', okLabel: 'Delete', danger: true }))) return;
+      storeRecipes(loadRecipes().filter(r => r.name !== name)); fillList();
+    });
+    el('recipe-export')?.addEventListener('click', () => {
+      const body = { app: 'MeshOptimiser', kind: 'recipes', version: 1, recipes: loadRecipes() };
+      downloadBlob(new Blob([JSON.stringify(body, null, 2)], { type: 'application/json' }), 'meshoptimiser-recipes.json');
+    });
+    el('recipe-import')?.addEventListener('click', () => el('recipe-file')?.click());
+    el('recipe-file')?.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0]; e.target.value = '';
+      if (!f) return;
+      try {
+        if (f.size > 1048576) throw new Error('The file is too large to be a recipe file.');
+        const j = JSON.parse(await f.text());
+        if (!j || j.kind !== 'recipes' || !Array.isArray(j.recipes)) throw new Error('This is not a MeshOptimiser recipe file.');
+        const all = loadRecipes(); let added = 0;
+        for (const r of j.recipes.slice(0, 200)) {
+          const rec = { name: cleanName(r && r.name), steps: cleanSteps(r && r.steps) };
+          if (!rec.name || !rec.steps) continue;
+          const i = all.findIndex(x => x.name === rec.name);
+          if (i >= 0) all[i] = rec; else all.push(rec);
+          added++;
+        }
+        if (!added) throw new Error('The file has no usable recipes in it.');
+        storeRecipes(all); fillList();
+        toast('Recipes imported', added + (added === 1 ? ' recipe' : ' recipes'), 'success', 2500);
+      } catch (err) { toast('Could not read the file', err.message || String(err), 'error', 5000); }
+    });
+    fillList();
+    window.__moRecipes = { list: loadRecipes, run: runRecipe, steps: cleanSteps, snapshot, write: writeSteps, fill: fillList };
     apply(resolved()); refresh();
   })();
   document.getElementById('fill-holes-size')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); _fillHoles(); } });
@@ -39493,17 +42355,21 @@ setTimeout(() => _dndDecorateTree(), 0);
     const sel = document.getElementById('decimate-strength');
     const tgt = document.getElementById('decimate-target');
     if (tgt) tgt.style.display = (sel && sel.value === 'target') ? '' : 'none';
+    const tolRow = document.getElementById('decimate-tol-row');
+    if (tolRow) tolRow.style.display = (sel && sel.value === 'tol') ? '' : 'none';
     if (!info || !sel) return;
     let tris = 0, n = 0;
     for (const id of (state.selected || [])) { const p = getPart(id); if (p && !p.deleted && p.mesh) { tris += p.triCount || 0; n++; } }
     let text = '';
     if (n > 0) {
       let after;
-      if (sel.value === 'target') {
+      if (sel.value === 'tol') after = null;
+      else if (sel.value === 'target') {
         const want = parseInt(((tgt && tgt.value) || '').replace(/[^0-9]/g, ''), 10);
         after = want > 0 ? Math.min(want, tris) : null;
       } else after = Math.round(tris * (1 - parseFloat(sel.value)));
-      text = after == null ? `${fmtNum(tris)} triangles selected` : `${fmtNum(tris)} → about ${fmtNum(after)} triangles`;
+      text = sel.value === 'tol' ? `${fmtNum(tris)} triangles selected; as many as possible go`
+        : after == null ? `${fmtNum(tris)} triangles selected` : `${fmtNum(tris)} → about ${fmtNum(after)} triangles`;
     }
     if (info.textContent !== text) info.textContent = text;
     const link = document.getElementById('decimate-preview');
@@ -40459,4 +43325,19 @@ if (new URLSearchParams(location.search).has('selftest')) {
     setTimeout(soon, 800);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go, { once: true }); else go();
+})();
+
+// Shift, Ctrl, Alt and Cmd on their own are not keyboard navigation. After a
+// click, the clicked button stays focused and Chrome would draw the Tab ring
+// on it the moment one of them goes down. Hide the ring (html.no-mod-ring)
+// while the last real input was the mouse and only modifiers are pressed; any
+// other key (Tab, arrows, Enter …) brings the ring back.
+(function _wireModifierRing() {
+  const root = document.documentElement, MOD = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock']);
+  let mouse = false;
+  addEventListener('pointerdown', () => { mouse = true; root.classList.remove('no-mod-ring'); }, true);
+  addEventListener('keydown', (e) => {
+    if (MOD.has(e.key)) { if (mouse) root.classList.add('no-mod-ring'); return; }
+    mouse = false; root.classList.remove('no-mod-ring');
+  }, true);
 })();

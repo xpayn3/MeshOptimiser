@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
-"""Local server + STEP->GLB conversion entry point.
+"""Local server + CAD->GLB conversion entry point (STEP, IGES, BREP).
 
 Run via:
     python serve.py                # start server, open browser empty
     python serve.py --open file    # start server, auto-load file
-                                    # (asks about re-convert + quality if STEP)
+                                    # (asks about re-convert + quality if CAD)
 """
 from __future__ import annotations
-import argparse, http.server, json, os, re, shutil, signal, subprocess
+import argparse, atexit, http.server, json, os, re, select, shutil, signal, subprocess
 import sys, threading, time, uuid, webbrowser
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, quote
 
 PORT = 4242
+# CAD formats step2glb.py reads (its SUPPORTED_EXTS), and the name each is
+# called in messages. /api/convert, --open and the inbox sweep all use this.
+CAD_EXTS = (".step", ".stp", ".iges", ".igs", ".brep", ".brp")
+_CAD_NAMES = {".step": "STEP", ".stp": "STEP", ".iges": "IGES", ".igs": "IGES",
+              ".brep": "BREP", ".brp": "BREP"}
 ROOT = Path(__file__).parent.resolve()
 INBOX = ROOT / "inbox"
 INBOX.mkdir(exist_ok=True)
@@ -85,6 +90,111 @@ def _stop_converters() -> None:
     for proc in running:
         _kill_tree(proc)
 
+
+# --- Nothing is left running behind the app ---------------------------------
+# 1. The server lives as long as its window. The page keeps one request open
+#    (GET /api/alive, see Handler._handle_alive). When the last one closes (the
+#    window was shut, the browser crashed or was killed: the operating system
+#    closes the connection either way) and nobody comes back within the grace
+#    period, the server stops its converters and exits. Only on when the server
+#    opened the window itself (or with --exit-when-closed): a server started
+#    for development with --no-browser keeps running, as before.
+CLIENTS: dict[str, float] = {}
+CLIENTS_LOCK = threading.Lock()
+LIFE = {"ever": False, "left_at": time.time(), "started": time.time(),
+        "exit_when_closed": False,
+        "grace": 10.0,        # seconds: a reload closes the page for a moment
+        "first_wait": 120.0}  # seconds to wait for the window to show up at all
+
+
+def _watchdog(httpd) -> None:
+    while True:
+        time.sleep(1.0)
+        if not LIFE["exit_when_closed"]:
+            continue
+        with CLIENTS_LOCK:
+            n, ever, left = len(CLIENTS), LIFE["ever"], LIFE["left_at"]
+        if n:
+            continue
+        waited = time.time() - (left if ever else LIFE["started"])
+        if waited > (LIFE["grace"] if ever else LIFE["first_wait"]):
+            print("\n  the window is closed: stopping.")
+            _stop_converters()
+            try: httpd.shutdown()
+            except Exception: pass
+            return
+
+
+# 2. Windows: a converter belongs to a job that the system tears down when the
+#    server's last handle to it closes, which happens however the server ends
+#    (Ctrl+C, taskkill /F, a crash). Anything the converter started stays in it.
+#    (Elsewhere a converter has a process group of its own, see _kill_tree.)
+_JOB = None
+
+def _job_object():
+    global _JOB
+    if _JOB is not None:
+        return _JOB or None
+    _JOB = 0
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.CreateJobObjectW.restype = wintypes.HANDLE
+        k.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+        k.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+
+        class _Basic(ctypes.Structure):
+            _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                        ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                        ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                        ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                        ("SchedulingClass", wintypes.DWORD)]
+
+        class _Io(ctypes.Structure):
+            _fields_ = [(n, ctypes.c_uint64) for n in ("ReadOps", "WriteOps", "OtherOps", "ReadBytes", "WriteBytes", "OtherBytes")]
+
+        class _Ext(ctypes.Structure):
+            _fields_ = [("Basic", _Basic), ("Io", _Io), ("ProcessMemoryLimit", ctypes.c_size_t),
+                        ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                        ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+        h = k.CreateJobObjectW(None, None)
+        if not h:
+            return None
+        info = _Ext()
+        info.Basic.LimitFlags = 0x2000          # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not k.SetInformationJobObject(h, 9, ctypes.byref(info), ctypes.sizeof(info)):   # 9 = extended limit information
+            return None
+        _JOB = h
+        return h
+    except Exception:
+        return None
+
+
+def _contain(proc: subprocess.Popen) -> None:
+    """Tie a converter's life to the server's (Windows). Best effort: a refusal
+    (the server itself sits in a job that forbids it) only means the converter is
+    stopped the ordinary way, by _stop_converters."""
+    h = _job_object()
+    if not h:
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k = ctypes.WinDLL("kernel32", use_last_error=True)
+        k.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        k.AssignProcessToJobObject(h, wintypes.HANDLE(int(proc._handle)))
+    except Exception:
+        pass
+
+
+def _graceful(signum, frame):
+    """A termination request ends the server the way Ctrl+C does."""
+    raise KeyboardInterrupt
+
 # Module-level reference set by main() once the server binds. The /api/quit
 # handler reads this to schedule a clean shutdown — keeping it module-level
 # (rather than a closure) means the Handler class doesn't need the httpd
@@ -139,7 +249,7 @@ def _sweep_stale_inbox() -> None:
     """Drop what earlier imports left behind in `inbox/`.
 
     Three things accumulate there over time:
-      • `<job_id>_<name>.step|.stp` — staged uploads. The /api/convert
+      • `<job_id>_<name>.step|.stp|.iges|.igs|.brep|.brp` — staged uploads. The /api/convert
         thread removes these when a conversion ends, but a crash between
         upload and conversion (or a process kill mid-job) leaves the
         source behind.
@@ -168,7 +278,7 @@ def _sweep_stale_inbox() -> None:
             name = p.name.lower()
             is_job_file = (
                 _JOB_PREFIX_RE.match(p.name) is not None
-                and name.endswith((".step", ".stp", ".glb", ".glb.params.json"))
+                and name.endswith(CAD_EXTS + (".glb", ".glb.params.json"))
             )
             is_orphan_cache = name.endswith(".xcaf-cache.xbf")
             if is_job_file or is_orphan_cache:
@@ -308,6 +418,7 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
     older clients without the modal) keep working unchanged.
     """
     opts = opts or {}
+    cad_name = _CAD_NAMES.get(src_path.suffix.lower(), "CAD")
     with JOBS_LOCK:
         # Cancel can arrive before this thread gets going. Then there is
         # nothing to start, and the job must stay "cancelled".
@@ -358,6 +469,7 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
                                 text=True, encoding="utf-8", errors="replace",
                                 bufsize=1, cwd=ROOT,
                                 start_new_session=(os.name != "nt"))
+        _contain(proc)
         with JOBS_LOCK:
             PROCS[job_id] = proc
             cancelled = JOBS[job_id].get("status") == "cancelled"
@@ -389,7 +501,7 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
         # 3 is the converter's "read the file, found nothing to write": no
         # solid bodies in it, or the minimum-size setting removed every part.
         if rc == 3:
-            raise RuntimeError("Nothing to convert: " + (said or "this STEP file has no solid bodies in it"))
+            raise RuntimeError("Nothing to convert: " + (said or f"this {cad_name} file has no solid bodies in it"))
         if rc != 0:
             raise RuntimeError(f"step2glb.py exited with code {rc}")
         # The converter can finish without an error and without a file: a STEP
@@ -398,7 +510,7 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
             for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf")):
                 try: stale.unlink(missing_ok=True)
                 except OSError: pass
-            raise RuntimeError("Nothing to convert: this STEP file has no solid bodies in it")
+            raise RuntimeError(f"Nothing to convert: this {cad_name} file has no solid bodies in it")
         # Drop the uploaded STEP + its XCAF binary cache — both are large
         # (often hundreds of MB) and only useful during the conversion. The
         # .glb is the durable artifact the user keeps.
@@ -478,6 +590,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_response(204); self.end_headers(); return
         if any(seg.startswith(".") for seg in u.path.split("/") if seg):
             self.send_error(404, "Not found"); return
+        if u.path == "/api/alive":
+            return self._handle_alive()
         if u.path.startswith("/api/job/"):
             job_id = u.path.rsplit("/", 1)[-1]
             # A copy taken under the lock, so "log" and "log_base" belong together.
@@ -503,6 +617,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if u.path.startswith("/api/cancel/"):
             return self._handle_cancel(u.path.rsplit("/", 1)[-1])
         return self._json({"error": "unknown endpoint"}, 404)
+
+    def _handle_alive(self):
+        """One open request per window: it never ends while the page is there.
+        The server writes a byte every few seconds and also watches the socket,
+        so a window that closes (or a browser that is killed) is noticed within
+        seconds: see the watchdog."""
+        self.close_connection = True
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/plain; charset=utf-8')
+        self.end_headers()
+        cid = uuid.uuid4().hex
+        with CLIENTS_LOCK:
+            CLIENTS[cid] = time.time()
+            LIFE["ever"] = True
+        conn = self.connection
+        try:
+            while True:
+                ready, _, _ = select.select([conn], [], [], 3.0)
+                if ready:
+                    try: data = conn.recv(64)          # b'' = the other end has closed
+                    except OSError: break
+                    if not data: break
+                self.wfile.write(b'.')
+                self.wfile.flush()
+                with CLIENTS_LOCK:
+                    CLIENTS[cid] = time.time()
+        except (OSError, ValueError):
+            pass
+        finally:
+            with CLIENTS_LOCK:
+                CLIENTS.pop(cid, None)
+                if not CLIENTS:
+                    LIFE["left_at"] = time.time()
 
     def _handle_cancel(self, job_id: str):
         """Stop a running conversion (the loader's Cancel button)."""
@@ -551,9 +698,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # ── Validate inputs BEFORE we touch disk
         raw_name = q.get("name", ["upload.step"])[0]
         name = _sanitize_filename(raw_name)
-        # Extension allow-list — never write anything that's not STEP-shaped.
-        if not name.lower().endswith((".step", ".stp")):
-            return self._json({"error": "filename must end in .step or .stp"}, 400)
+        # Extension allow-list — never write anything that's not a CAD file
+        # step2glb.py reads (it picks its reader by the extension).
+        if not name.lower().endswith(CAD_EXTS):
+            return self._json({"error": "filename must end in .step, .stp, .iges, .igs, .brep or .brp"}, 400)
 
         try:
             quality = float(q.get("quality", ["0.5"])[0])
@@ -709,8 +857,19 @@ def main() -> int:
     ap.add_argument("--open", "-o", type=str)
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--tab", action="store_true", help="open in an ordinary browser tab instead of the app's own window")
+    ap.add_argument("--keep-running", action="store_true", help="keep the server running after the window is closed")
+    ap.add_argument("--exit-when-closed", action="store_true", help="stop the server when its window is closed, also with --no-browser")
     args = ap.parse_args()
     os.chdir(ROOT)
+
+    # However the server ends, converters it started do not outlive it.
+    atexit.register(_stop_converters)
+    for name in ("SIGTERM", "SIGHUP", "SIGBREAK"):
+        sig = getattr(signal, name, None)
+        if sig is not None:
+            try: signal.signal(sig, _graceful)
+            except (OSError, ValueError): pass
+    LIFE["exit_when_closed"] = (args.exit_when_closed or not args.no_browser) and not args.keep_running
 
     # Reclaim space + clear orphaned uploads from prior runs before we start
     # accepting new jobs. Cheap (single iterdir on a small directory).
@@ -722,7 +881,7 @@ def main() -> int:
         if not src.exists():
             print(f"  ERROR: file not found: {src}"); return 1
         ext = src.suffix.lower()
-        if ext in (".step", ".stp"):
+        if ext in CAD_EXTS:
             # Always interactive: ask about the cached result and the quality
             dst = interactive_convert(src)
             if dst is None: return 1
@@ -791,16 +950,21 @@ def main() -> int:
     with httpd:
         url = f"http://localhost:{chosen_port}/index.html"
         if auto_load: url += "?file=" + quote(auto_load)
-        print(f"\n  MeshOptimiser running at  {url}\n  (press Ctrl+C to stop)\n")
+        print(f"\n  MeshOptimiser running at  {url}\n  (press Ctrl+C to stop"
+              + ("; it also stops when its window is closed)" if LIFE["exit_when_closed"] else ")") + "\n")
         if not args.no_browser:
             if args.tab or not _open_app_window(url):
                 try: webbrowser.open(url)
                 except Exception: pass
-        try: httpd.serve_forever()
+        threading.Thread(target=_watchdog, args=(httpd,), daemon=True).start()
+        try:
+            httpd.serve_forever()
         except KeyboardInterrupt:
             # A converter in a session of its own does not get the Ctrl+C.
             _stop_converters()
             print("\n  stopped."); return 0
+        _stop_converters()
+        return 0
 
 
 if __name__ == "__main__":

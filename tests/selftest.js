@@ -507,6 +507,200 @@
     T.F()._Actions && document.querySelector('.section-cmd[data-cmd="smartfit"] .cmd-close')?.click();
   });
 
+  test('repeats: copies that arrive as separate meshes are kept once, and nothing moves', async () => {
+    await T.fresh([]);
+    const bytes = await (await fetch('tests/fixtures/repeats-60.glb')).arrayBuffer();
+    // where every vertex of the file should end up (node translation + rotation applied by hand)
+    const dv = new DataView(bytes), jl = dv.getUint32(12, true);
+    const json = JSON.parse(new TextDecoder().decode(new Uint8Array(bytes, 20, jl)));
+    const bin = bytes.slice(20 + jl + 8);
+    const rot = (q, p) => { const [x, y, z, w] = q; const tx = 2 * (y * p[2] - z * p[1]), ty = 2 * (z * p[0] - x * p[2]), tz = 2 * (x * p[1] - y * p[0]); return [p[0] + w * tx + (y * tz - z * ty), p[1] + w * ty + (z * tx - x * tz), p[2] + w * tz + (x * ty - y * tx)]; };
+    const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+    for (const n of json.nodes) {
+      if (n.mesh == null) continue;
+      const a = json.accessors[json.meshes[n.mesh].primitives[0].attributes.POSITION], v = json.bufferViews[a.bufferView];
+      const f = new Float32Array(bin, v.byteOffset, a.count * 3);
+      for (let i = 0; i < f.length; i += 3) {
+        let p = [f[i], f[i + 1], f[i + 2]];
+        if (n.rotation) p = rot(n.rotation, p);
+        if (n.translation) p = p.map((x, k) => x + n.translation[k]);
+        for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], p[k]); hi[k] = Math.max(hi[k], p[k]); }
+      }
+    }
+    const trisIn = json.accessors.filter((a, i) => json.meshes.some(m => m.primitives[0].indices === i)).reduce((s, a) => s + a.count / 3, 0);
+    await T.dropFile(new Blob([bytes], { type: 'model/gltf-binary' }), 'repeats-60.glb');
+    const live = T.live();
+    T.eq(live.length, 60, 'parts after opening');
+    const geomOf = (p) => (p.mesh || p.instancedMesh).geometry;
+    T.eq(new Set(live.map(p => geomOf(p).uuid)).size, 3, 'distinct geometries (60 meshes, 3 shapes)');
+    T.eq(live.reduce((s, p) => s + p.triCount, 0), trisIn, 'triangle count');
+    // every vertex in world space, against the file
+    const THREE = T.F().THREE, v = new THREE.Vector3(), mm = new THREE.Matrix4();
+    const wlo = [1e9, 1e9, 1e9], whi = [-1e9, -1e9, -1e9];
+    state.partsRoot.updateMatrixWorld(true);
+    for (const p of live) {
+      if (p.mesh) mm.copy(p.mesh.matrixWorld); else { p.instancedMesh.getMatrixAt(p.instanceIndex, mm); mm.premultiply(p.instancedMesh.matrixWorld); }
+      const pos = geomOf(p).attributes.position;
+      for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(mm); for (let k = 0; k < 3; k++) { const x = v.getComponent(k); if (x < wlo[k]) wlo[k] = x; if (x > whi[k]) whi[k] = x; } }
+    }
+    for (let k = 0; k < 3; k++) T.assert(Math.abs(wlo[k] - lo[k]) < 0.02 && Math.abs(whi[k] - hi[k]) < 0.02, 'the model moved: axis ' + k + ' ' + wlo[k].toFixed(3) + '…' + whi[k].toFixed(3) + ' instead of ' + lo[k].toFixed(3) + '…' + hi[k].toFixed(3));
+    // the saved file keeps the sharing
+    const glb = await T.exportAs('glb');
+    const out = new Uint8Array(await glb.arrayBuffer()), odv = new DataView(out.buffer);
+    const oj = JSON.parse(new TextDecoder().decode(out.slice(20, 20 + odv.getUint32(12, true))));
+    T.eq(oj.meshes.length, 3, 'meshes in the exported file');
+    T.assert(out.length < bytes.byteLength * 0.5, 'the exported file is not smaller than half the original (' + bytes.byteLength + ' → ' + out.length + ')');
+  });
+
+  test('export: "Check against" estimates the size and the triangle count, and says when a target is passed', async () => {
+    await T.fresh([]);
+    const bytes = await (await fetch('tests/fixtures/repeats-60.glb')).arrayBuffer();
+    await T.dropFile(new Blob([bytes], { type: 'model/gltf-binary' }), 'repeats-60.glb');
+    const tris = T.live().reduce((s, p) => s + p.triCount, 0);
+    const est = window._exportCheck.estimate();
+    T.eq(est.tris, tris, 'estimated triangles');
+    const real = (await T.exportAs('glb')).size;
+    T.assert(est.bytes > real * 0.6 && est.bytes < real * 1.6, 'estimated file size ' + Math.round(est.bytes) + ' bytes against a real ' + real);
+    // a target the scene is inside, and one it is not (shrink the limit by picking the tightest and padding the scene)
+    document.getElementById('btn-export').click(); await T.sleep(300);
+    const menuItem = [...document.querySelectorAll('.export-menu-item[data-fmt="glb"]')].find(x => x.offsetParent);
+    if (menuItem) { menuItem.click(); await T.sleep(300); }          // (older layout: a dropdown first)
+    document.querySelector('.fmt-card[data-fmt="glb"]')?.click(); await T.sleep(200);
+    const sel = document.getElementById('exp-target');
+    T.assert(sel && sel.offsetParent, 'the Check against list is not on screen for GLB');
+    sel.value = 'web'; sel.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(100);
+    const meter = document.getElementById('exp-target-meter').textContent;
+    T.assert(/within the usual limits/.test(meter), 'a small scene should be within the web limits: "' + meter + '"');
+    document.querySelector('.fmt-card[data-fmt="obj"]').click(); await T.sleep(100);
+    T.assert(!document.getElementById('exp-target-row').offsetParent, 'the Check against list should be hidden for OBJ');
+    document.getElementById('export-close')?.click(); await T.sleep(100);
+  });
+
+  test('duplicates: "Deduplicate geometry" removes a copy in the same place and keeps every repeat elsewhere', async () => {
+    // the old version deleted every part whose shape had been seen before: 60 placed parts of 3 shapes became 3
+    await T.fresh([]);
+    const bytes = await (await fetch('tests/fixtures/repeats-60.glb')).arrayBuffer();
+    await T.dropFile(new Blob([bytes], { type: 'model/gltf-binary' }), 'repeats-60.glb');
+    T.eq(T.live().length, 60, 'parts after opening');
+    document.getElementById('btn-clean-dupes').click(); await T.sleep(500); await T.ok(); await T.sleep(400);
+    T.eq(T.live().length, 60, 'parts after Deduplicate geometry (60 placed repeats of 3 shapes must all stay)');
+    await T.fresh(['cube', 'cube', 'sphere']);
+    T.eq(T.live().length, 3, 'parts before');
+    const h0 = state.history.length;
+    document.getElementById('btn-clean-dupes').click(); await T.sleep(500); await T.ok(); await T.sleep(500);
+    T.eq(T.live().length, 2, 'the second cube in the same place should go, the sphere stays');
+    T.assert(state.history.length > h0, 'removing copies pushed no undo entry');
+    await T.undo();
+    T.eq(T.live().length, 3, 'undo');
+  });
+
+  test('recipes: save, change, run again; a file from outside is checked, not trusted', async () => {
+    await T.fresh(['cube', 'cube', 'sphere']);
+    const R = window.__moRecipes;
+    T.assert(R, 'no recipes API');
+    // what a hostile or damaged file may contain
+    const c = R.steps({ clean: 'yes', fast: 'rm -rf', small: -5, tol: 1e12, target: 'lots', extra: 1, hidden: true });
+    T.eq(c.fast, 'keep', 'unknown fasteners setting'); T.eq(c.small, 0, 'negative size'); T.eq(c.tol, 1000, 'huge tolerance'); T.eq(c.target, null, 'target that is not a number'); T.eq(c.clean, true, 'non-boolean'); T.eq(c.hidden, true, 'a valid boolean passes'); T.assert(!('extra' in c), 'unknown field kept');
+    T.eq(R.steps('x'), null, 'a string is not a recipe');
+    // save the controls under a name through the dialog
+    R.write({ clean: true, dupes: true, hidden: false, fast: 'keep', small: 0, holes: false, tol: 0, remesh: false, target: null });
+    document.getElementById('smart-adv').open = true;
+    document.getElementById('recipe-save').click(); await T.sleep(300);
+    document.getElementById('_dlg-input').value = 'selftest recipe';
+    document.getElementById('_dlg-ok').click(); await T.sleep(300);
+    T.assert(R.list().some(r => r.name === 'selftest recipe'), 'the recipe was not saved');
+    T.eq(document.getElementById('recipe-list').value, 'selftest recipe', 'the list shows the new recipe');
+    // change the controls, then run the recipe: they go back and the run removes the stacked cube
+    R.write({ clean: false, dupes: false, hidden: true, fast: 'delete', small: 5, holes: true, tol: 3, remesh: true, target: 1000 });
+    await R.run('selftest recipe'); await T.sleep(600);
+    T.eq(document.getElementById('smart-dupes').checked, true, 'Remove exact copies set by the recipe');
+    T.eq(document.getElementById('smart-hidden').checked, false, 'hidden parts set by the recipe');
+    T.eq(document.getElementById('smart-tol').value, '0', 'tolerance set by the recipe');
+    T.eq(T.live().length, 2, 'the run should have removed the stacked cube');
+    // clean up what the test saved
+    localStorage.setItem('stepopt-recipes', JSON.stringify(R.list().filter(r => r.name !== 'selftest recipe')));
+    R.fill();
+  });
+
+  test('merge by colour: one part per colour, same triangles, one undo', async () => {
+    await T.fresh(['cube', 'cube', 'sphere', 'sphere', 'cone']);
+    const THREE = T.F().THREE;
+    const live0 = T.live();
+    live0.forEach((p, i) => p.originalColor.setHex(p.name.startsWith('Cube') ? 0xcc3333 : p.name.startsWith('Sphere') ? 0x3355cc : 0x33aa55));
+    const tris0 = live0.reduce((s, p) => s + p.triCount, 0);
+    const h0 = state.history.length;
+    await window._mergeByColour(); await T.sleep(1200);
+    T.eq(T.live().length, 3, 'parts after merging two colours of two (and one single)');
+    T.eq(T.live().reduce((s, p) => s + p.triCount, 0), tris0, 'triangles must not change');
+    T.assert(state.history.length > h0, 'no undo entry');
+    await T.undo();
+    T.eq(T.live().length, 5, 'one Ctrl+Z should bring all five parts back');
+  });
+
+  test('open: IGES and BREP files go through the converter like STEP (a box and a cylinder)', async () => {
+    for (const name of ['test-model.iges', 'test-model.brep']) {
+      await T.fresh([]);
+      const blob = await (await fetch('tests/fixtures/' + name)).blob();
+      // the import-settings window asks first for a CAD file: press Import when it shows
+      const press = setInterval(() => { const b = document.getElementById('import-modal-confirm'); if (b && b.offsetParent) b.click(); }, 200);
+      try { await T.dropFile(blob, name); } finally { clearInterval(press); }
+      T.eq(T.live().length, 2, name + ': parts');
+      T.assert(T.live().every(p => p.triCount >= 12), name + ': a part has no triangles');
+    }
+  });
+
+  test('scene scale: the view and the floor grid follow, from a millionth to a million', async () => {
+    await T.fresh(['cube', 'sphere', 'cone']);
+    const F = T.F(), THREE = F.THREE;
+    const setScale = async (v) => { const e = document.getElementById('scene-scale'); e.value = String(v); e.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(600); };
+    const grid = () => state.partsRoot.parent.getObjectByName('_infiniteGrid');
+    const screenOf = () => { const b = new THREE.Box3().setFromObject(state.partsRoot), c = b.getCenter(new THREE.Vector3()); F.camera.updateMatrixWorld(); return c.project(F.camera); };
+    await setScale(1); F.fitToView(); await T.sleep(600);
+    const ref = screenOf(), minor1 = grid().userData.uniforms.uMinor.value, dist1 = F.camera.position.distanceTo(F.controls.target);
+    T.assert(minor1 > 0, 'no grid cell size');
+    for (const k of [0.001, 1e-6, 1000, 1e6, 1]) {
+      await setScale(k);
+      const p = screenOf(), g = grid(), u = g.userData.uniforms;
+      T.assert(Math.abs(p.x - ref.x) < 1e-3 && Math.abs(p.y - ref.y) < 1e-3 && p.z > 0 && p.z < 1, 'scale ' + k + ': the model moved on screen (' + p.x.toFixed(4) + ', ' + p.y.toFixed(4) + ' instead of ' + ref.x.toFixed(4) + ', ' + ref.y.toFixed(4) + ', depth ' + p.z.toFixed(4) + ')');
+      const dist = F.camera.position.distanceTo(F.controls.target);
+      T.assert(Math.abs(dist / dist1 / k - 1) < 1e-6, 'scale ' + k + ': the camera did not follow (distance ' + dist + ' for ' + dist1 + ')');
+      T.assert(F.camera.near > 0 && F.camera.far > F.camera.near && dist > F.camera.near && dist < F.camera.far, 'scale ' + k + ': the clip planes do not contain the model (' + F.camera.near + '…' + F.camera.far + ', distance ' + dist + ')');
+      T.assert(g.visible && Math.abs(u.uMinor.value / minor1 / k - 1) < 1e-6, 'scale ' + k + ': the grid cell is ' + u.uMinor.value + ', not ' + (minor1 * k));
+      T.assert(u.uFadeEnd.value > dist, 'scale ' + k + ': the grid fades out before the camera distance (' + u.uFadeEnd.value + ' < ' + dist + ')');
+    }
+  });
+
+  test('draw tool: the keys are listed at the bottom right, and only the ones that do something', async () => {
+    await T.fresh([]);
+    const D = window._MODraw, rows = () => [...document.querySelectorAll('#vp-hint .vp-tip')].map(r => [...r.querySelectorAll('kbd')].map(k => k.textContent).join('+') + ' ' + r.querySelector('.vp-hint-lbl').textContent.trim());
+    const has = (re) => rows().some(r => re.test(r));
+    T.act('draw'); await T.sleep(700);
+    T.assert(D.isActive(), 'the Draw tool did not start');
+    T.assert(document.getElementById('draw-hint').hidden, 'the old pill at the top of the viewport is still there');
+    D._api.setTool('pen'); D._api.changeType('bezier'); await T.sleep(500);
+    T.assert(has(/^Click First point/), 'pen: no first-point tip: ' + rows().join(' | '));
+    T.assert(has(/^Drag Pull out handles/), 'Bezier: the handle tip is missing');
+    T.assert(!has(/^Enter /) && !has(/^Backspace /) && !has(/^C /), 'pen with no point yet lists keys that do nothing: ' + rows().join(' | '));
+    D._api.changeType('bspline'); await T.sleep(500);
+    T.assert(!has(/^Drag Pull out handles/), 'B-spline has no handles, but the list says to drag them');
+    D._api.changeType('bezier'); await T.sleep(300);
+    // three real clicks on the canvas
+    const c = document.getElementById('canvas').getBoundingClientRect();
+    const click = async (x, y) => { for (const type of ['pointerdown', 'pointerup']) document.getElementById('canvas').dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: type === 'pointerdown' ? 1 : 0, pointerId: 1, isPrimary: true })); await T.sleep(250); };
+    for (const [fx, fy] of [[0.4, 0.5], [0.55, 0.6], [0.65, 0.45]]) await click(c.left + c.width * fx, c.top + c.height * fy);
+    const st = D.state();
+    T.assert(st.cur && st.cur.pts.length === 3, 'three clicks made ' + (st.cur ? st.cur.pts.length : 0) + ' points');
+    T.assert(has(/^Enter Finish/) && has(/^C Close and finish/) && has(/^Backspace /) && has(/^Esc Cancel/), 'three points: the finishing keys are not listed: ' + rows().join(' | '));
+    D._api.finishPen(false); await T.sleep(400);
+    D._api.setTool('rect'); await T.sleep(400);
+    T.assert(has(/^Click First corner/), 'rectangle: ' + rows().join(' | '));
+    // leaving the tool brings the ordinary tips back
+    T.act('draw'); await T.sleep(500);
+    if (D.isActive()) { document.querySelector('#draw-card .cmd-close, #draw-card [data-cmd-close]')?.click(); await T.sleep(500); }
+    T.assert(!D.isActive(), 'the Draw tool did not stop');
+    T.assert(!has(/First corner|First point|Alt\+Drag Orbit/) && (has(/^Click Select/) || has(/^E Move/)), 'after leaving the tool the ordinary tips are not back: ' + rows().join(' | '));     // (the line just drawn is selected, so these are the selection's tips)
+  });
+
   test('decimate: removes the share it says, keeps the part, undoes, reaches the export', async () => {
     await T.fresh(['sphere', 'torus']);
     const tri = (n) => T.part(n).triCount;
@@ -531,6 +725,40 @@
     T.eq(tri('Sphere') + '/' + tri('Torus'), before.join('/'), 'undo of Decimate');
     await T.redo();
     T.assert(tri('Sphere') < before[0], 'redo of Decimate');
+  });
+
+  test('decimate: "Within … mm" removes triangles and moves no point further than it says', async () => {
+    await T.fresh(['sphere', 'torus']);
+    const THREE = T.F().THREE;
+    // closest distance from point p to a triangle mesh (brute force, Ericson 5.1.5)
+    const tris = (g) => { const P = g.attributes.position, I = g.index ? g.index.array : null, n = (I ? I.length : P.count) / 3, out = []; for (let t = 0; t < n; t++) { const a = I ? I[t * 3] : t * 3, b = I ? I[t * 3 + 1] : t * 3 + 1, c = I ? I[t * 3 + 2] : t * 3 + 2; out.push([new THREE.Vector3().fromBufferAttribute(P, a), new THREE.Vector3().fromBufferAttribute(P, b), new THREE.Vector3().fromBufferAttribute(P, c)]); } return out; };
+    const tgt = new THREE.Vector3(), tri = new THREE.Triangle();
+    const dist = (p, T3) => { let best = Infinity; for (const [a, b, c] of T3) { tri.set(a, b, c).closestPointToPoint(p, tgt); const d = tgt.distanceTo(p); if (d < best) best = d; } return best; };
+    const oneWay = (from, to) => { const P = from.attributes.position, v = new THREE.Vector3(); let worst = 0; for (let i = 0; i < P.count; i += 3) { v.fromBufferAttribute(P, i); worst = Math.max(worst, dist(v, to)); } return worst; };
+    const part = T.part('Sphere');
+    const orig = part.mesh.geometry, origTris = tris(orig), n0 = part.triCount;
+    const run = async (mm) => {
+      await T.pick(['Sphere']);
+      const sel = document.getElementById('decimate-strength');
+      sel.value = 'tol'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+      const box = document.getElementById('decimate-tol'); box.value = String(mm); box.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('btn-decimate-sel').click(); await T.sleep(300); await T.ok(); await T.sleep(2500);
+    };
+    const radius = 50;                                       // the default sphere in a 100 mm scene
+    await run(0.2);
+    const fine = T.part('Sphere').triCount;
+    T.assert(fine < n0, 'a 0.2 mm tolerance removed nothing from a ' + n0 + '-triangle sphere');
+    const g1 = T.part('Sphere').mesh.geometry, t1 = tris(g1);
+    const dev1 = Math.max(oneWay(g1, origTris), oneWay(orig, t1));
+    T.assert(dev1 <= 0.2 * 1.1, 'the 0.2 mm run moved a point ' + dev1.toFixed(3) + ' mm');
+    await T.undo();
+    T.eq(T.part('Sphere').triCount, n0, 'undo of Decimate within a tolerance');
+    await run(2);
+    const coarse = T.part('Sphere').triCount;
+    T.assert(coarse < fine, 'a 2 mm tolerance (' + coarse + ' triangles) did not go further than 0.2 mm (' + fine + ')');
+    const g2 = T.part('Sphere').mesh.geometry;
+    const dev2 = Math.max(oneWay(g2, origTris), oneWay(orig, tris(g2)));
+    T.assert(dev2 <= 2 * 1.1, 'the 2 mm run moved a point ' + dev2.toFixed(3) + ' mm');
   });
 
   test('decimate: a triangle target for the whole selection', async () => {

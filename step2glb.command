@@ -1,6 +1,9 @@
 #!/bin/bash
-# step2glb - convert a STEP file to an optimized GLB (macOS).
+# step2glb - convert a STEP, IGES or BREP file to an optimized GLB (macOS).
 # Usage from Terminal:  ./step2glb.command path/to/file.step [options]
+#                       ./step2glb.command --batch path/to/folder [--out OUT] [--recursive]
+#                       ./step2glb.command file.step --lod 100,50,25
+# (every option is passed on as it is; see step2glb.py --help)
 # (Drag-and-drop onto the icon in Finder doesn't pass the file in macOS the
 #  way it does on Windows. From a Terminal you CAN drag the file onto the
 #  window after typing the script path.)
@@ -22,6 +25,7 @@ if [ -z "$1" ]; then
   echo "  Usage: drop a .step file onto the Terminal after typing"
   echo "         ./step2glb.command  (with a trailing space), then hit Enter"
   echo "         - or run:  ./step2glb.command path/to/file.step"
+  echo "         - or a folder:  ./step2glb.command --batch path/to/folder"
   echo
   read -n 1 -s -r -p "  Press any key to exit..."
   exit 0

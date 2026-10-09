@@ -4,6 +4,82 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.20.0
+
+Released 9 Oct 2026.
+
+v0.15.0 was about reaching commands quickly. v0.20.0 is about drawing, organising and trusting the app. You can draw lines and shapes and sweep a profile along them, lines are real parts of the scene (in the tree, in groups, with the gizmo), the tree gets a set of organising commands, the converter reads IGES and BREP and finds repeated parts in other tools' files, and the app now looks after itself: it closes its server with the window, survives a crash and tells you when the graphics card is not doing the work.
+
+**Draw lines and shapes**
+
+- ![new][new] **A Draw tool (L).** Pen, Rectangle, Circle, Arc, Polygon, Freehand and Edit, with the curve type chosen in the card: Bezier, Cubic, B-spline or Linear. A rectangle, circle or polygon is placed with two clicks (the first starts it, the second places it) and can be typed in: `20 x 10`, then Enter. The arrow keys change the corners and the number of sides while you place it; Star, Ellipse, Around the circle and From the centre are switches in the card.
+- ![new][new] **Work planes.** Ground, Front, Side, View, or Surface (the first click picks a face of a part), each with an offset.
+- ![new][new] **Snapping you can see.** A field of dots fades in round the pointer and follows the grid; a click a few pixels off a dot still lands on it. Points also snap to other lines' points, and Shift snaps the angle in 15° steps. The dots stay quiet when they would crowd (seen from far away or edge-on) and the grid step can be Auto or a number.
+- ![new][new] **Edit the points of any line.** Drag points and handles, click a curve to add a point, double-click a point to make it smooth or sharp, Delete removes one, C opens or closes the line. The curve follows live while you drag. Close or open, Reverse, Simplify, Smooth, Sharp, Corner, All corners and Mirror are in the card; changing the curve type converts the line.
+- ![new][new] **Round and Bevel corners.** The Round and Bevel switch and a corner size are in the card, and a rectangle or polygon that is still a shape shows a ring on its first corner in the Edit tool: drag it to round or cut every corner at once (it snaps to the grid, one undo step) and click Round or Bevel beside it.
+- ![new][new] **Bezier handles snap to the grid** while you draw and while you edit.
+- ![new][new] **Ctrl-drag a handle to break it from its partner.** The two handles of a smooth point move together while they are in one line; Ctrl (or Cmd, or Alt) while dragging frees one of them, and it stays free afterwards.
+- ![polish][polish] **The Draw card is compact.** One row of tool icons with the tool's name in the title, segmented controls for the curve and the plane, and the settings in small groups with switches. Only the keys that do something are listed at the bottom right with the other shortcuts (handles are offered for Bezier lines only, Enter and C appear when there are enough points), in short words. The X Y Z readout that followed the pointer is gone; a shape still shows its size while you place it.
+- ![fix][fix] **Orbit around the selection and F (frame) include lines,** so a line can be orbited and framed like a part.
+
+**Lines are parts**
+
+- ![new][new] **A line is a row in the tree,** like any other part: rename it, hide it, delete it, undo, drag it, put it in a group and nest groups. The separate Lines list is gone.
+- ![new][new] **The gizmo moves, turns and scales a line** like a part, and it sits on the line's centre. Clicking a line in the viewport selects it; Shift adds and Ctrl toggles.
+- ![new][new] **Lines are read from files.** A GLB or glTF with lines (strips and loops) opens them as lines, and lines go back out into GLB, glTF and saved scenes (grouped lines are written flat, with their names).
+
+**Properties of a line**
+
+- ![new][new] **A Shape card** for a rectangle, circle, ellipse, polygon or star that is still a shape: width, height, radius, sides, star and inner radius, corner type and size. A rectangle grows about its centre. Moving a point by hand turns the shape into an ordinary spline.
+- ![new][new] **A Spline card as in Cinema 4D:** Type, Close Spline, Interpolation (None, Natural, Uniform, Adaptive or Subdivided), Points, Angle and Maximum length. The ones that do not apply to the chosen interpolation are greyed.
+- ![polish][polish] **Every control in the two cards has one size,** and the number boxes drag from the box, the label or the number. One drag is one undo step, and the Points, Size and Length at the top of the card follow the edit.
+
+**Sweep**
+
+- ![new][new] **Sweep (a card on the bottom toolbar).** Pick a path and a profile (a circle, a rectangle or another line), set the scale at the start and the end, a twist, closed ends and a hard-edge angle, and it makes a normal part along the path.
+
+**Organise the tree**
+
+- ![new][new] **Remove group, keep contents.** Takes a group, or every selected group, out of the tree; what was inside stays as it was, nesting included, and moves up. One undo.
+- ![new][new] **Flatten this group** (dissolves every group inside it), **Sort inside A to Z and Z to A** (numbers by value, groups first), **Move group up and down** among its siblings, **Delete empty groups**, and **Expand this branch and Collapse this branch** are in the group's right-click menu.
+- ![new][new] **Groups and parts can be picked together.** Ctrl toggles a row as a unit (a group goes in or out with all its parts), Shift selects the range from the last clicked row whatever it is, and Ctrl+Shift adds a range.
+- ![fix][fix] **A slip of the mouse no longer eats the click.** The tree's drag and drop started on any press, and after 5 px of movement swallowed the click: Ctrl and Shift clicks, which pick rows, now never start a drag, and a press that lets go on its own row counts as a click.
+- ![fix][fix] **The guide lines of the tree end properly:** the last row under a parent gets an L, its line starts under the parent's icon, and a level with no later row draws no line.
+- ![polish][polish] **Tooltips follow the pointer.** The first one still waits; once one is up (or has just closed), the next button's tip appears at once, and a gap between two buttons does not make the tip blink or the next wait start again.
+
+**Lighter files, and promises you can check**
+
+- ![fix][fix] **Deduplicate geometry no longer deletes real parts.** It removed every part whose shape had been seen before, so 400 placed copies of one bolt became one. It now removes a part only when an identical one sits in the same place. (A self-test opens 60 placed repeats of three shapes and checks that all 60 stay.)
+- ![new][new] **Copies are found in files from other tools.** A GLB, FBX, OBJ or 3MF that writes the same bolt out again for every place it is used is searched for repeats when it opens (`repeats.js`): the same vertices and triangles after one rigid move, checked on every vertex, mirrored and bent parts left alone. Each shape is then kept once and drawn and exported once. A test file of 600 meshes goes from 2.72 MB to 186 KB; every vertex stays within 0.01 mm of where the file put it. The switch is "Auto-instance duplicates" in Settings.
+- ![new][new] **Decimate within a distance.** Choose "Within…" and type a number of millimetres: triangles are taken out for as long as no point of the surface moves further than that. The simplifier's own error figure ran 25 % over on a curved part in testing, so the result is measured (the vertices of each surface against the other) and tightened until it fits; the message says the measured figure.
+- ![new][new] **Check against a place the file is going.** The Export window can compare the scene with the published guidance for a web page, a Shopify product page, Apple AR Quick Look or a phone app, with an estimate of the triangles and the file size before exporting and a note afterwards. The figures are guidance, not hard limits, and the text says so.
+- ![new][new] **Recipes.** Smart optimise can save its settings under a name, apply and run them later, and export or import them as a small file; every field of an imported file is checked. Two steps joined it: remove exact copies, and reduce within a distance.
+- ![new][new] **Merge parts of the same colour** (in the command list): one mesh per colour for the selection, or for everything visible. Instanced parts are left alone. One undo.
+
+**The converter reads more, and does more**
+
+- ![new][new] **IGES and BREP files.** `step2glb.py` and the server's upload (`/api/convert`) take `.iges`, `.igs`, `.brep` and `.brp` as well as STEP, picking the reader by the extension, and the app opens them as it opens STEP. IGES keeps the names, colours and layers the file has; a surface model with no solid is meshed as it is (an IGES face for face, one body per colour; a BREP one body per shell). An unknown extension, a damaged file or one with nothing to mesh stops with a message that says why.
+- ![new][new] **A whole folder.** `--batch DIR` converts every CAD file in it (`--out`, `--recursive`), one process per file, so a damaged file cannot stop the run. It prints a table with parts, triangles, size, seconds and status, writes `batch-report.csv`, and exits 1 if any file failed.
+- ![new][new] **LOD files.** `--lod 100,50,25` writes `name.glb`, `name_lod1.glb`, `name_lod2.glb` at those shares of the triangles, with the same nodes, names and instances. Simplified by gltfpack when it is installed, otherwise by the bundled meshoptimizer through Node.js. The log gives the real triangle count of every level.
+- ![new][new] **The CAD file's own data on the nodes.** Each node's `extras` hold its name in the CAD tree, the assembly path, the part it instances, the STEP part number and description, colour, layers, material, volume and area, wherever the file has them (`--no-extras` turns it off; about 200 bytes a node).
+- ![new][new] **Copy diagnostics for a bug report** (in the command list): version, browser, renderer, size of the scene and the last log lines, with the file name and drive paths removed. A bug-report form is in `.github/ISSUE_TEMPLATE`.
+
+**The app looks after itself**
+
+- ![new][new] **The server goes when the window goes.** `serve.py` watches the browser windows it opened and exits about ten seconds after the last one closes (`--keep-running` turns it off). On Windows the converters it starts are tied to it, so they die with it; before, a closed app could leave a process eating the machine.
+- ![new][new] **A crash is handled, not just survived.** An unclean exit is noticed at the next start ("closed unexpectedly") with Reopen last file and Safe mode, a flood of errors and a lost graphics device each get a panel that says what happened, and slow frames are written to the log.
+- ![new][new] **A warning when the graphics card is not used.** Chrome with hardware acceleration switched off runs WebGPU in software and the app crawls; Settings › Performance now has a Graphics row, and the app says so at start.
+- ![fix][fix] **Scan whole model no longer freezes the app.** It works in slices with a progress bar and a Cancel button; before, a large model could lock the page.
+- ![fix][fix] **A memory leak in Split is closed.** Each split and undo left about 130 outline geometries on the graphics card; they are released now.
+- ![fix][fix] **Changing the scene scale no longer strands the view.** The camera, what it looks at, its clip planes and the grid follow the scale, so the picture stays the same; before, the model could end up a speck millions of units away or the camera inside it, and a near plane left over from a larger scale cut the whole model away. The floor grid is cut again for the new size and its cell can be finer than one unit.
+- ![fix][fix] **The floor grid is no longer cut off when you zoom in close.** It was drawn from the near plane, so everything closer than that vanished; it now starts at the camera.
+- ![fix][fix] **Shift no longer lights up the button you just clicked.** A clicked button keeps focus, and Chrome drew the Tab ring on it the moment Shift (or Ctrl, Alt, Cmd) went down. The ring stays hidden while only a modifier is pressed after a click; Tab and the arrow keys still show it.
+
+**Cards**
+
+- ![polish][polish] **Smart fit has a tidier layout.** Its **Advanced** section has a reset button next to its name that shows once something has changed (the one at the bottom is gone), and the video at the top of a card gets smaller, smoothly, while Advanced is open, instead of disappearing.
+- ![polish][polish] **The command cards have no description lines.** What a command does is in its tooltip and in the help.
+
 ## v0.15.0
 
 Released 9 Oct 2026.

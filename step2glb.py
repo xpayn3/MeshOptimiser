@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-step2glb.py — Native STEP to optimized GLB converter (Pixyz-style preprocessor).
+step2glb.py — Native CAD to optimized GLB converter (Pixyz-style preprocessor).
+Reads STEP (.step .stp), IGES (.iges .igs) and BREP (.brep .brp).
 
 Features:
   - XCAF-based STEP reader: extracts per-solid colors + names + assembly tree
@@ -10,6 +11,9 @@ Features:
   - Optional size threshold (drop tiny parts during conversion)
   - Writes GLB with PBR materials so the web viewer picks up color groups
   - Optional EXT_meshopt_compression via gltfpack (industry-standard, ~10x smaller)
+  - What the CAD file knows (instance and product names, assembly path, colour, part
+    number, layers, material, volume/area) goes into each glTF node's "extras"
+  - LOD files (--lod 100,50,25) and whole folders (--batch DIR)
 
 Usage:
     python step2glb.py input.step
@@ -18,6 +22,10 @@ Usage:
     python step2glb.py input.step --no-meshopt      # disable auto-meshopt
     python step2glb.py input.step --relative        # quality is fraction of diag
     python step2glb.py input.step --no-colors --no-instance   # plain reader, no instancing
+    python step2glb.py part.iges                    # IGES / BREP: same options as STEP
+    python step2glb.py input.step --lod 100,50,25   # also input_lod1.glb, input_lod2.glb
+    python step2glb.py --batch DIR --out OUT --recursive    # every CAD file in DIR
+    python step2glb.py input.step --no-extras       # leave the CAD metadata out of the nodes
 
 Defaults:
     EXT_meshopt_compression turns on automatically when gltfpack is on PATH.
@@ -27,14 +35,16 @@ Exit codes:
     0  converted (or the cached GLB is still current)
     1  the conversion failed
     3  the file was read but there was nothing to write: it has no solid
-       bodies, or --min-size removed every part. No GLB is written.
+       bodies (IGES and BREP: no surfaces either), or --min-size removed
+       every part. No GLB is written.
+    --batch: 0 when every file converted, 1 when at least one did not.
 
 Requirements:
     pip install cadquery-ocp trimesh numpy
     optional: gltfpack on PATH (https://meshoptimizer.org/gltf/)
 """
 from __future__ import annotations
-import argparse, hashlib, json, os, shutil, subprocess, sys, tempfile, time, traceback
+import argparse, csv, hashlib, json, os, shutil, struct, subprocess, sys, tempfile, time, traceback
 from dataclasses import dataclass, replace as _dc_replace
 from pathlib import Path
 from collections import defaultdict
@@ -60,6 +70,11 @@ class Heartbeat:
         self._proc = None; self._t0 = 0.0
     def __enter__(self):
         self._t0 = time.time()
+        # --batch runs each file in a process of its own and reads the log
+        # afterwards. A helper left behind by a crashed converter would run
+        # for ever (see the note below), so the batch asks for none.
+        if os.environ.get("STEP2GLB_NO_HEARTBEAT"):
+            return self
         # Inline heartbeat script. -u keeps stdout unbuffered on Windows where
         # the cmd.exe pipe sometimes line-buffers Python output. We deliberately
         # do NOT check parent liveness via os.kill(ppid, 0) — it works on Linux
@@ -118,7 +133,7 @@ from OCP.IFSelect import IFSelect_RetDone
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRep import BRep_Tool
 from OCP.TopExp import TopExp_Explorer
-from OCP.TopAbs import TopAbs_FACE, TopAbs_SOLID, TopAbs_REVERSED
+from OCP.TopAbs import TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID, TopAbs_REVERSED
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS_Shape, TopoDS
 from OCP.TDocStd import TDocStd_Document
@@ -126,8 +141,16 @@ from OCP.TCollection import TCollection_ExtendedString
 from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorType
 from OCP.TDF import TDF_LabelSequence, TDF_Label, TDF_Tool
 from OCP.Quantity import Quantity_Color
-from OCP.TDataStd import TDataStd_Name
+from OCP.TDataStd import TDataStd_Name, TDataStd_NamedData
 from OCP.TCollection import TCollection_AsciiString
+from OCP.TDF import TDF_AttributeIterator
+from OCP.BRepTools import BRepTools
+from OCP.BRep import BRep_Builder
+try:                                     # IGES comes with the same OpenCascade wheel
+    from OCP.IGESCAFControl import IGESCAFControl_Reader
+    from OCP.IGESControl import IGESControl_Reader
+except ImportError:                      # pragma: no cover - only a stripped build
+    IGESCAFControl_Reader = IGESControl_Reader = None
 
 
 def log(msg: str, kind: str = "") -> None:
@@ -141,15 +164,43 @@ class NothingToWrite(RuntimeError):
 
 
 class NoSolids(NothingToWrite):
-    """A STEP that holds only surfaces or wires: there is no solid to mesh."""
+    """A file that holds no solid to mesh (a STEP with only surfaces or wires;
+    for IGES and BREP, where surfaces are meshed, nothing but curves)."""
     def __init__(self):
-        super().__init__("no solid bodies found in this STEP")
+        if CFG.fmt == "step":
+            super().__init__("no solid bodies found in this STEP")
+        else:
+            super().__init__(f"no solid or surface bodies found in this "
+                             f"{_KIND_LABEL.get(CFG.fmt, CFG.fmt)} file")
 
 
 class AllTooSmall(NothingToWrite):
     """--min-size was set so high that no part is left."""
     def __init__(self):
         super().__init__(f"--min-size {CFG.min_size_pct} removed every part: nothing left to write")
+
+
+# ─── Input formats: the extension picks the OpenCascade reader.
+STEP_EXTS = (".step", ".stp")
+IGES_EXTS = (".iges", ".igs")
+BREP_EXTS = (".brep", ".brp")
+SUPPORTED_EXTS = STEP_EXTS + IGES_EXTS + BREP_EXTS
+_KIND_LABEL = {"step": "STEP", "iges": "IGES", "brep": "BREP"}
+
+
+class UnsupportedFormat(ValueError):
+    """The extension is not one the converter reads."""
+
+
+def input_kind(path) -> str:
+    """'step', 'iges' or 'brep' by the file extension (case does not matter)."""
+    ext = Path(path).suffix.lower()
+    if ext in STEP_EXTS: return "step"
+    if ext in IGES_EXTS: return "iges"
+    if ext in BREP_EXTS: return "brep"
+    raise UnsupportedFormat(
+        f"cannot read '{ext or Path(path).name}' files: step2glb reads "
+        + ", ".join(SUPPORTED_EXTS))
 
 
 @dataclass
@@ -183,11 +234,19 @@ class Config:
     read_materials: bool = True
     read_names: bool = True
     read_props: bool = True      # validation properties pass (NOT --props volume/area)
+    extras: bool = True          # CAD metadata into the glTF node extras (--no-extras turns it off)
+    lod: tuple = ()              # triangle percentages, e.g. (100, 50, 25); () = one output
+    lod_error: float = 0.01      # simplifier error limit (fraction of a mesh's size), Node engine
+    fmt: str = "step"            # 'step' | 'iges' | 'brep': set per file by convert()
 
 
 # Module-level Config — set once by main() and read elsewhere. Cleaner than
 # poking into globals() but keeps the function-call overhead low.
 CFG = Config()
+
+# What the last convert() did, for --batch and --summary-json: format, part and
+# triangle counts, the LOD files. Cleared at the start of every conversion.
+RESULT: dict = {}
 
 
 def parse_step_xcaf_cached(path: Path):
@@ -220,6 +279,10 @@ def parse_step_xcaf_cached(path: Path):
             t0 = time.time()
             with Heartbeat("XCAF cache load"):
                 result = _load_xcaf_cache(cache_path)
+            # A cache written before the product metadata was kept holds none;
+            # parse again so the part numbers are not silently missing.
+            if CFG.extras and not _doc_has_product_meta(result[0], result[1]):
+                raise RuntimeError("cache has no product metadata")
             log(f"  → loaded in {time.time()-t0:.2f}s "
                 f"({result[3].Length()} top-level shapes, STEP parse skipped)", "ok")
             return result
@@ -334,7 +397,10 @@ def parse_step_xcaf(path: Path):
                         ("SetLayerMode",    CFG.read_layers),
                         ("SetMaterialMode", CFG.read_materials),
                         ("SetPropsMode",    CFG.read_props),
-                        ("SetSHUOMode",     CFG.read_shuo)):
+                        ("SetSHUOMode",     CFG.read_shuo),
+                        # Part number, name and description of every product go
+                        # into the document as TDataStd_NamedData (read below).
+                        ("SetProductMetaMode", CFG.extras)):
         try:
             fn = getattr(reader, setter, None)
             if fn is not None: fn(val)
@@ -360,6 +426,168 @@ def parse_step_xcaf(path: Path):
     shape_tool.GetFreeShapes(free_labels)
     log(f"parsed in {time.time() - t0:.1f}s, top-level shapes: {free_labels.Length()}", "ok")
     return doc, shape_tool, color_tool, free_labels
+
+
+def _new_xcaf_doc():
+    """An empty XCAF document made through the application (see parse_step_xcaf)."""
+    app = _xcaf_app()
+    doc = TDocStd_Document(TCollection_ExtendedString("BinXCAF"))
+    try:
+        app.NewDocument(TCollection_ExtendedString("BinXCAF"), doc)
+    except Exception as e:
+        log(f"app.NewDocument failed ({e!r})", "warn")
+    return doc
+
+
+def parse_iges_xcaf(path: Path):
+    """Read IGES via XCAF: names, colours and layers where the file has them.
+    Same return as parse_step_xcaf. IGES keeps no assembly structure of its
+    own (instances come out as separate geometry) and no part numbers."""
+    if IGESCAFControl_Reader is None:
+        raise RuntimeError("this OpenCascade build has no IGES reader")
+    size_mb = path.stat().st_size / 1048576
+    log(f"reading IGES via XCAF: {path.name} ({size_mb:.1f} MB)")
+    t0 = time.time()
+    doc = _new_xcaf_doc()
+    reader = IGESCAFControl_Reader()
+    for setter, val in (("SetColorMode", True), ("SetNameMode", CFG.read_names),
+                        ("SetLayerMode", CFG.read_layers)):
+        try: getattr(reader, setter)(val)
+        except Exception: pass
+    with Heartbeat("IGES parsing"):
+        status = reader.ReadFile(str(path))
+    if status != IFSelect_RetDone:
+        raise RuntimeError(f"IGES read failed (status={status})")
+    with Heartbeat("IGES transfer"):
+        ok = reader.Transfer(doc)
+    if not ok:
+        raise RuntimeError("IGES Transfer failed")
+    shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
+    color_tool = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
+    free_labels = TDF_LabelSequence()
+    shape_tool.GetFreeShapes(free_labels)
+    log(f"parsed in {time.time() - t0:.1f}s, top-level shapes: {free_labels.Length()}", "ok")
+    return doc, shape_tool, color_tool, free_labels
+
+
+def parse_xcaf_cached(path: Path):
+    """The XCAF document of a STEP (cached) or IGES file."""
+    if CFG.fmt == "iges":
+        return parse_iges_xcaf(path)
+    return parse_step_xcaf_cached(path)
+
+
+def _nd_string(nd, key: str) -> str | None:
+    """One string out of a TDataStd_NamedData, or None."""
+    try:
+        k = TCollection_ExtendedString(key)
+        if nd.HasString(k):
+            v = nd.GetString(k).ToExtString()
+            return v if v else None
+    except Exception:
+        pass
+    return None
+
+
+def _doc_has_product_meta(doc, shape_tool) -> bool:
+    """True when some shape label of the document carries a product ID."""
+    try:
+        labels = TDF_LabelSequence()
+        shape_tool.GetShapes(labels)
+        for i in range(1, labels.Length() + 1):
+            nd = TDataStd_NamedData()
+            if labels.Value(i).FindAttribute(TDataStd_NamedData.GetID_s(), nd) \
+               and _nd_string(nd, "ProductID"):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def read_product_meta(label: TDF_Label, doc) -> dict:
+    """What the CAD file says about one product (a part or an assembly), read
+    from the XCAF document:
+      partNumber   STEP PRODUCT.id, kept by OCCT's product-metadata mode
+      description  STEP PRODUCT.description (same place)
+      layers       layer names assigned to the product (STEP, IGES)
+      material     {name, description, density, densityUnit} of the material tool
+      volume, area the file's validation properties, in model units
+    Only what is actually there is returned. Never raises."""
+    meta: dict = {}
+    if doc is None:
+        return meta
+    try:
+        nd = TDataStd_NamedData()
+        if label.FindAttribute(TDataStd_NamedData.GetID_s(), nd):
+            pid = _nd_string(nd, "ProductID")
+            if pid: meta["partNumber"] = pid
+            desc = _nd_string(nd, "Description")
+            if desc: meta["description"] = desc
+    except Exception:
+        pass
+    try:
+        from OCP.XCAFDoc import XCAFDoc, XCAFDoc_Material
+        lt = XCAFDoc_DocumentTool.LayerTool_s(doc.Main())
+        ls = TDF_LabelSequence()
+        if lt.GetLayers(label, ls) and ls.Length():
+            names = [get_label_name(ls.Value(k)) for k in range(1, ls.Length() + 1)]
+            names = [n for n in names if n]
+            if names: meta["layers"] = names
+        mat_guid = XCAFDoc.MaterialRefGUID_s()
+        it = TDF_AttributeIterator(label)
+        while it.More():
+            a = it.Value()
+            tname = a.DynamicType().Name()
+            if tname == "TDataStd_TreeNode" and a.ID().IsSame(mat_guid) and a.HasFather():
+                ma = XCAFDoc_Material()
+                if a.Father().Label().FindAttribute(XCAFDoc_Material.GetID_s(), ma):
+                    m = {}
+                    nm = ma.GetName().ToCString() if ma.GetName() is not None else ""
+                    if nm: m["name"] = nm
+                    ds = ma.GetDescription().ToCString() if ma.GetDescription() is not None else ""
+                    if ds: m["description"] = ds
+                    if ma.GetDensity() > 0:
+                        m["density"] = round(float(ma.GetDensity()), 6)
+                        un = ma.GetDensName().ToCString() if ma.GetDensName() is not None else ""
+                        if un and un != "density": m["densityUnit"] = un
+                    if m: meta["material"] = m
+            elif tname == "XCAFDoc_Volume":
+                meta["volume"] = round(float(a.Get()), 4)
+            elif tname == "XCAFDoc_Area":
+                meta["area"] = round(float(a.Get()), 4)
+            it.Next()
+    except Exception:
+        pass
+    return meta
+
+
+def _hex(c) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*(max(0, min(255, int(round(v * 255)))) for v in c))
+
+
+def _surface_bodies(shape, color_tool, default_color):
+    """The bodies of a shape that has no solid (IGES and BREP surface models):
+    its faces, one body per face colour, so a coloured surface model keeps its
+    colours. Returns (shapes, colours), parallel lists."""
+    from OCP.TopoDS import TopoDS_Compound
+    groups: dict = {}
+    exp = TopExp_Explorer(shape, TopAbs_FACE)
+    while exp.More():
+        f = exp.Current()
+        c = get_shape_color(f, color_tool) or default_color
+        key = None if c is None else tuple(round(v, 4) for v in c)
+        groups.setdefault(key, (c, []))[1].append(f)
+        exp.Next()
+    shapes, colours = [], []
+    for c, faces in groups.values():
+        comp = TopoDS_Compound()
+        builder = BRep_Builder()
+        builder.MakeCompound(comp)
+        for f in faces:
+            builder.Add(comp, f)
+        shapes.append(comp)
+        colours.append(c)
+    return shapes, colours
 
 
 def get_label_color(label: TDF_Label, color_tool) -> tuple[float, float, float] | None:
@@ -496,6 +724,7 @@ class XcafNode:
     transform: np.ndarray  # 4x4
     children: list         # list[XcafNode]
     product_key: str | None
+    extras: dict | None = None   # CAD metadata that goes into the glTF node's extras
 
 
 def _label_entry(label: TDF_Label) -> str:
@@ -522,7 +751,7 @@ def _trsf_to_4x4(trsf) -> np.ndarray:
     return M
 
 
-def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
+def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False):
     """Build (products, roots) from the XCAF document.
 
     products  — dict[label_entry → XcafProduct], one entry per unique product.
@@ -539,6 +768,12 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
         if it's a SimpleShape we cache it as a product.
       - On a SimpleShape label encountered directly (a free top-level part),
         cache it as a product and emit a leaf with identity transform.
+
+    surfaces=True (IGES and BREP): a product with no solid is not dropped, its
+    faces become the bodies (one per colour).
+    With CFG.extras every node gets the metadata of the CAD file in .extras:
+    its name in the CAD tree, the path of instance names from the root, the
+    product it instances, part number, colour, layers, material, volume/area.
     """
     from OCP.XCAFDoc import XCAFDoc_ShapeTool
 
@@ -589,22 +824,51 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
             # Final fallback: inherit the product's color.
             solid_colors.append(scol or color)
             exp.Next()
+        if not solids and surfaces:
+            # An IGES or BREP surface model: no solid, so the faces are the body.
+            solids, solid_colors = _surface_bodies(shape, color_tool, color)
         products[key] = XcafProduct(name=name, color=color, solids=solids,
                                      meshes=[], solid_colors=solid_colors)
         return key
 
-    def visit(label: TDF_Label, location: TopLoc_Location):
+    meta_cache: dict[str, dict] = {}
+
+    def product_meta(label: TDF_Label) -> dict:
+        key = _label_entry(label)
+        if key not in meta_cache:
+            meta_cache[key] = read_product_meta(label, doc)
+        return meta_cache[key]
+
+    def node_extras(inst_name: str, parent_path: str, label: TDF_Label,
+                    color, product_name: str | None) -> dict | None:
+        """The extras of one node: label is the product (part or assembly) it
+        instances, inst_name its own name in the tree."""
+        if not CFG.extras:
+            return None
+        ex = {"name": inst_name,
+              "path": f"{parent_path}/{inst_name}" if parent_path else inst_name}
+        if product_name and product_name != inst_name:
+            ex["product"] = product_name
+        ex.update(product_meta(label))
+        if color is not None:
+            ex["color"] = _hex(color)
+        return ex
+
+    def visit(label: TDF_Label, location: TopLoc_Location,
+              parent_path: str = "", name_override: str | None = None):
         # Better default name by context: "Assembly" for nested assemblies,
         # "Part" for leaf products. Was "node" / "part" — too generic to be
         # useful when scanning a tree of 5000 nodes.
         is_asm = shape_tool.IsAssembly_s(label)
-        name = get_label_name(label) or ("Assembly" if is_asm else "Part")
+        own_name = get_label_name(label) or ("Assembly" if is_asm else "Part")
+        name = name_override or own_name
         local_t = _trsf_to_4x4(location.Transformation()) if location is not None else np.eye(4)
 
         if is_asm:
             comps = TDF_LabelSequence()
             shape_tool.GetComponents_s(label, comps)
             kids = []
+            path_here = f"{parent_path}/{name}" if parent_path else name
             for i in range(1, comps.Length() + 1):
                 comp = comps.Value(i)
                 # TDF_Label has no .Location() method directly. The location
@@ -623,24 +887,31 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None):
                 comp_name = (get_label_name(comp) or get_label_name(ref_label)
                              or ("Subassembly" if shape_tool.IsAssembly_s(ref_label) else "Component"))
                 if shape_tool.IsAssembly_s(ref_label):
-                    sub = visit(ref_label, comp_loc)
+                    sub = visit(ref_label, comp_loc, path_here, comp_name)
                     if sub is not None:
-                        sub.name = comp_name
                         kids.append(sub)
                 else:
                     prod_key = get_or_create_product(ref_label)
+                    prod = products[prod_key]
+                    col = prod.color or next((c for c in (prod.solid_colors or []) if c), None)
                     kids.append(XcafNode(
                         name=comp_name,
                         transform=_trsf_to_4x4(comp_loc.Transformation()),
                         children=[],
                         product_key=prod_key,
+                        extras=node_extras(comp_name, path_here, ref_label, col, prod.name),
                     ))
             return XcafNode(name=name, transform=local_t,
-                            children=kids, product_key=None)
+                            children=kids, product_key=None,
+                            extras=node_extras(name, parent_path, label,
+                                               get_label_color(label, color_tool), own_name))
         else:
             prod_key = get_or_create_product(label)
+            prod = products[prod_key]
+            col = prod.color or next((c for c in (prod.solid_colors or []) if c), None)
             return XcafNode(name=name, transform=local_t,
-                            children=[], product_key=prod_key)
+                            children=[], product_key=prod_key,
+                            extras=node_extras(name, parent_path, label, col, own_name))
 
     roots: list[XcafNode] = []
     identity = TopLoc_Location()
@@ -739,7 +1010,9 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     # in the graph. The original name is preserved in metadata for the viewer.
     n_nodes = [0]
     n_geom_refs = [0]
+    n_parts = [0]
     n_product_uses: dict[str, int] = defaultdict(int)
+    node_extras: dict[str, dict] = {}     # frame name -> CAD metadata for the node's extras
 
     def safe_frame(parent: str, name: str) -> str:
         n_nodes[0] += 1
@@ -759,6 +1032,8 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
             frame_from=parent_frame,
             matrix=node.transform,
         )
+        if node.extras:
+            node_extras[frame] = node.extras      # written into the GLB after the export
         if node.product_key is not None:
             prod = products[node.product_key]
             n_product_uses[node.product_key] += 1
@@ -767,6 +1042,8 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
             # this frame to avoid an extra empty layer in the tree.
             geom_keys = [(node.product_key, i) for i in range(len(prod.meshes))
                          if (node.product_key, i) in geom_names]
+            if geom_keys:
+                n_parts[0] += 1
             if len(geom_keys) == 1:
                 gname = geom_names[geom_keys[0]]
                 scene.graph.update(
@@ -810,6 +1087,8 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     scene_meta["hierarchical"] = True
     scene_meta["unique_products"] = len(products)
     scene_meta["instance_groups"] = instanced_products
+    if CFG.extras:
+        scene_meta["source_format"] = CFG.fmt
     try:
         scene.metadata.update(scene_meta)
     except Exception:
@@ -819,8 +1098,42 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     log(f"writing GLB: {output}")
     t0 = time.time()
     scene.export(output)
+    if node_extras:
+        n_done = _inject_node_extras(output, node_extras)
+        log(f"CAD metadata on {n_done} of {len(node_extras)} nodes", "ok" if n_done == len(node_extras) else "warn")
+    RESULT["parts"] = n_parts[0]
+    RESULT["unique_products"] = len(products)
     out_mb = output.stat().st_size / 1048576
     log(f"wrote {out_mb:.2f} MB in {time.time() - t0:.1f}s", "ok")
+
+
+def _inject_node_extras(glb_path: Path, extras_by_name: dict) -> int:
+    """Put `extras` on the glTF nodes whose name is a key of extras_by_name
+    (trimesh writes none of its own). Only the JSON chunk is rewritten; the
+    binary chunk is copied as it is. Returns how many nodes got extras."""
+    data = glb_path.read_bytes()
+    if data[:4] != b"glTF" or data[16:20] != b"JSON":
+        return 0
+    jlen = int.from_bytes(data[12:16], "little")
+    gltf = json.loads(data[20:20 + jlen].decode("utf-8"))
+    n = 0
+    for node in gltf.get("nodes", []):
+        ex = extras_by_name.get(node.get("name"))
+        if ex:
+            node["extras"] = {**node.get("extras", {}), **ex}
+            n += 1
+    if not n:
+        return 0
+    body = json.dumps(gltf, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    body += b" " * (-len(body) % 4)
+    rest = data[20 + jlen:]
+    total = 12 + 8 + len(body) + len(rest)
+    out = (b"glTF" + data[4:8] + total.to_bytes(4, "little")
+           + len(body).to_bytes(4, "little") + b"JSON" + body + rest)
+    tmp = glb_path.with_name(glb_path.name + ".tmp")
+    tmp.write_bytes(out)
+    os.replace(tmp, glb_path)
+    return n
 
 
 def collect_metadata(shape_tool, color_tool, doc, free_labels) -> dict:
@@ -1163,6 +1476,9 @@ def _cache_params(input_path: Path) -> dict:
         "simplify": CFG.simplify,
         "instance": CFG.instance,
         "colors": CFG.colors,
+        "extras": CFG.extras,
+        "lod": list(CFG.lod),
+        "lod_error": CFG.lod_error if CFG.lod else None,
     }
 
 
@@ -1216,6 +1532,244 @@ def _assembled_bbox(roots: list, products: dict) -> tuple[np.ndarray, np.ndarray
     return bbox_min, bbox_max
 
 
+# ─── Levels of detail (--lod) ──────────────────────────────────────────────
+# The simplifier is meshoptimizer's. gltfpack (-si) is what the converter uses
+# for --simplify, so it is also used for the LOD files when it is installed.
+# Without it the same library runs from the app's own bundled copy
+# (vendor/meshoptimizer, a WebAssembly module) through Node.js and
+# lod_simplify.mjs: the browser app simplifies with that very file.
+LOD_HELPER = Path(__file__).resolve().with_name("lod_simplify.mjs")
+LOD_WASM = Path(__file__).resolve().parent / "vendor" / "meshoptimizer" / "meshopt_simplifier.module.js"
+
+
+def _lod_engine() -> str:
+    """'gltfpack' or 'node'; RuntimeError when neither can simplify."""
+    if shutil.which("gltfpack"):
+        return "gltfpack"
+    if shutil.which("node") and LOD_HELPER.exists() and LOD_WASM.exists():
+        return "node"
+    raise RuntimeError(
+        "--lod needs a mesh simplifier and found none: install gltfpack (npm i -g gltfpack) "
+        "or Node.js (the app's bundled meshoptimizer runs through it)")
+
+
+def _lod_paths(output_path: Path) -> list:
+    """<name>.glb for the first level, then <name>_lod1.glb, <name>_lod2.glb ..."""
+    n = max(1, len(CFG.lod))
+    return [output_path] + [output_path.with_name(f"{output_path.stem}_lod{i}{output_path.suffix}")
+                            for i in range(1, n)]
+
+
+def _weld(verts: np.ndarray, tris: np.ndarray):
+    """Merge vertices that sit at the same place (the tessellation gives every
+    face its own, so the faces of a part are not joined: a simplifier would
+    take each face for a separate mesh with a border). Returns (first, tris):
+    first[k] is the index in `verts` of welded vertex k, tris index the welded
+    vertices; triangles that collapse to a line are dropped."""
+    v = np.asarray(verts, dtype=np.float64)
+    span = float(np.linalg.norm(v.max(axis=0) - v.min(axis=0))) if len(v) else 0.0
+    tol = max(span * 1e-6, 1e-9)
+    q = np.round(v / tol).astype(np.int64)
+    _, first, inv = np.unique(q, axis=0, return_index=True, return_inverse=True)
+    t = np.asarray(inv).reshape(-1)[np.asarray(tris, dtype=np.int64)]
+    ok = (t[:, 0] != t[:, 1]) & (t[:, 1] != t[:, 2]) & (t[:, 0] != t[:, 2])
+    return first, t[ok]
+
+
+def _simplify_batch(meshes: list, ratio: float, err: float) -> list:
+    """Simplify (verts, tris) meshes to `ratio` of their triangles with the
+    bundled meshoptimizer (Node engine). Returns, per mesh, (sel, new_tris):
+    the new mesh is verts[sel] with the triangles new_tris. Borders are locked
+    first so the outline of a surface model does not creep; where that stops
+    the reduction well short of the target it runs again without the lock
+    (the same two steps as mesh-worker.js)."""
+    node = shutil.which("node")
+    prepared = []
+    for verts, tris in meshes:
+        first, wt = _weld(verts, tris)
+        target = min(len(wt), max(1, int(len(tris) * ratio)))
+        prepared.append((first, wt, target))
+    tmp = tempfile.mkdtemp(prefix="step2glb_lod_")
+    try:
+        inp, outp = os.path.join(tmp, "in.bin"), os.path.join(tmp, "out.bin")
+        with open(inp, "wb") as f:
+            f.write(struct.pack("<I", len(prepared)))
+            for (first, wt, target), (verts, _) in zip(prepared, meshes):
+                pos = np.ascontiguousarray(np.asarray(verts, dtype=np.float32)[first])
+                idx = np.ascontiguousarray(wt, dtype=np.uint32)
+                f.write(struct.pack("<III", len(pos), idx.size, target * 3))
+                f.write(pos.tobytes())
+                f.write(idx.tobytes())
+        r = subprocess.run([node, str(LOD_HELPER), inp, outp, repr(float(err))],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            raise RuntimeError("the simplifier failed: " + (r.stderr.strip()[-400:] or f"exit {r.returncode}"))
+        data = Path(outp).read_bytes()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    off = 0
+    results = []
+    for first, wt, _target in prepared:
+        n = struct.unpack_from("<I", data, off)[0]
+        off += 4
+        res = np.frombuffer(data, dtype=np.uint32, count=n, offset=off).astype(np.int64)
+        off += 4 * n
+        if n == 0:                       # nothing came back: keep the welded mesh
+            res = wt.reshape(-1).astype(np.int64)
+        used, inv = np.unique(res, return_inverse=True)
+        results.append((first[used], np.asarray(inv).reshape(-1, 3).astype(np.uint32)))
+    return results
+
+
+def _simplified_products(products: dict, ratio: float) -> dict:
+    """The products with every mesh simplified (once per product: all its
+    occurrences share it, so the LOD keeps the instancing)."""
+    items = [(key, i, m) for key, p in products.items() for i, m in enumerate(p.meshes)]
+    res = _simplify_batch([m for _, _, m in items], ratio, CFG.lod_error)
+    out = {key: _dc_replace(p, meshes=list(p.meshes)) for key, p in products.items()}
+    for (key, i, (verts, _t)), (sel, nt) in zip(items, res):
+        out[key].meshes[i] = (np.asarray(verts)[sel], nt)
+    return out
+
+
+def _simplified_parts(parts: list, ratio: float) -> list:
+    """The flat reader's parts, simplified: the ones build_glb really writes
+    (singletons, and the first of each group of instances)."""
+    groups: dict[str, list[int]] = defaultdict(list)
+    for i, p in enumerate(parts):
+        groups[p["hash"]].append(i)
+    need = []
+    for idxs in groups.values():
+        if CFG.instance and len(idxs) > 1: need.append(idxs[0])
+        else: need.extend(idxs)
+    res = _simplify_batch([(parts[i]["canonical"], parts[i]["tris"]) for i in need],
+                          ratio, CFG.lod_error)
+    out = list(parts)
+    for i, (sel, nt) in zip(need, res):
+        p = dict(parts[i])
+        p["verts"] = p["verts"][sel]
+        p["canonical"] = p["canonical"][sel]
+        p["tris"] = nt
+        out[i] = p
+    return out
+
+
+def _write_levels(output_path: Path, write_full, simplified_copy) -> None:
+    """Write the GLB, and with --lod the other levels. write_full(path) builds
+    the GLB from the full-resolution meshes; simplified_copy(ratio) returns a
+    writer for the same scene with every mesh reduced to `ratio`."""
+    levels = CFG.lod or (100.0,)
+    engine = _lod_engine() if any(p < 100 for p in levels) else None
+    if engine:
+        log(f"LOD levels {', '.join(f'{p:g}%' for p in levels)} ({engine} simplifier)")
+    for pct, path in zip(levels, _lod_paths(output_path)):
+        ratio = pct / 100.0
+        if ratio >= 1.0:
+            write_full(path)
+            gltfpack_postprocess(path, CFG.meshopt, CFG.quantize, CFG.simplify)
+        elif engine == "gltfpack":
+            write_full(path)
+            gltfpack_postprocess(path, CFG.meshopt, CFG.quantize, ratio)
+        else:
+            simplified_copy(ratio)(path)
+            gltfpack_postprocess(path, CFG.meshopt, CFG.quantize, 0.0)
+
+
+def _write_levels_hier(roots, products, output_path, scene_meta) -> None:
+    _write_levels(
+        output_path,
+        lambda path: build_glb_hierarchical(roots, products, path, scene_meta, instance=CFG.instance),
+        lambda ratio: (lambda path, _p=_simplified_products(products, ratio):
+                       build_glb_hierarchical(roots, _p, path, scene_meta, instance=CFG.instance)))
+
+
+def _write_levels_flat(parts, output_path, scene_meta) -> None:
+    _write_levels(
+        output_path,
+        lambda path: build_glb(parts, path, scene_meta, instance=CFG.instance),
+        lambda ratio: (lambda path, _p=_simplified_parts(parts, ratio):
+                       build_glb(_p, path, scene_meta, instance=CFG.instance)))
+
+
+def _collect_outputs(output_path: Path) -> None:
+    """Fill RESULT with what is on disk: size and triangles of every level."""
+    levels = []
+    pcts = CFG.lod or (100.0,)
+    for pct, path in zip(pcts, _lod_paths(output_path)):
+        if not path.exists():
+            continue
+        tris, size_mb = _glb_metrics(path)
+        levels.append({"file": path.name, "percent": pct, "tris": tris, "size_mb": round(size_mb, 4)})
+    if not levels:
+        return
+    RESULT["levels"] = levels
+    RESULT["tris_out"] = levels[0]["tris"]
+    RESULT["size_mb"] = levels[0]["size_mb"]
+    if len(levels) > 1:
+        for i, lv in enumerate(levels):
+            log(f"LOD {i}: {lv['percent']:g}% -> {lv['tris']:,} triangles, {lv['size_mb']:.2f} MB  ({lv['file']})", "ok")
+
+
+# ─── Reading without XCAF (no colours, names or assembly): STEP, IGES, BREP.
+def _read_plain_shape(input_path: Path):
+    kind = CFG.fmt
+    if kind == "brep":
+        shape = TopoDS_Shape()
+        with Heartbeat("BREP parsing"):
+            ok = BRepTools.Read_s(shape, str(input_path), BRep_Builder())
+        if not ok or shape.IsNull():
+            raise RuntimeError("BREP read failed: not a BREP file, or it is empty")
+        return shape
+    if kind == "iges":
+        if IGESControl_Reader is None:
+            raise RuntimeError("this OpenCascade build has no IGES reader")
+        reader = IGESControl_Reader()
+        with Heartbeat("plain parsing"):
+            status = reader.ReadFile(str(input_path))
+        if status != IFSelect_RetDone or reader.NbRootsForTransfer() == 0:
+            raise RuntimeError("plain IGES read failed: not an IGES file, or it holds nothing to transfer")
+        with Heartbeat("plain transfer"):
+            reader.TransferRoots()
+        return reader.OneShape()
+    reader = STEPControl_Reader()
+    with Heartbeat("plain parsing"):
+        status = reader.ReadFile(str(input_path))
+    if status != IFSelect_RetDone:
+        raise RuntimeError("plain STEP read failed")
+    with Heartbeat("plain transfer"):
+        reader.TransferRoots()
+    return reader.OneShape()
+
+
+def _plain_bodies(shape) -> list:
+    """The bodies of a shape read without XCAF: its solids. A STEP without
+    solids has nothing to write. An IGES or BREP surface model is meshed as it
+    is: each shell is a body, the faces that belong to no shell are one more."""
+    bodies = []
+    exp = TopExp_Explorer(shape, TopAbs_SOLID); idx = 0
+    while exp.More():
+        bodies.append({"shape": exp.Current(), "color": None, "name": f"solid_{idx:05d}"})
+        idx += 1; exp.Next()
+    if bodies or CFG.fmt == "step":
+        log(f"found {len(bodies)} solids", "ok")
+        return bodies
+    from OCP.TopoDS import TopoDS_Compound
+    exp = TopExp_Explorer(shape, TopAbs_SHELL); idx = 0
+    while exp.More():
+        bodies.append({"shape": exp.Current(), "color": None, "name": f"shell_{idx:05d}"})
+        idx += 1; exp.Next()
+    comp = TopoDS_Compound(); builder = BRep_Builder(); builder.MakeCompound(comp)
+    loose = 0
+    exp = TopExp_Explorer(shape, TopAbs_FACE, TopAbs_SHELL)
+    while exp.More():
+        builder.Add(comp, exp.Current()); loose += 1; exp.Next()
+    if loose:
+        bodies.append({"shape": comp, "color": None, "name": "surfaces"})
+    log(f"no solids: meshing {len(bodies)} surface bodies ({idx} shells, {loose} loose faces)",
+        "ok" if bodies else "warn")
+    return bodies
+
+
 def convert(input_path: Path, output_path: Path) -> None:
     """Run the full STEP→GLB pipeline using the module-level CFG.
 
@@ -1230,7 +1784,12 @@ def convert(input_path: Path, output_path: Path) -> None:
     # is structurally important. Keep the override path: pass --no-colors to
     # skip XCAF on enormous files where you only want geometry as fast as
     # possible.
-    use_xcaf = (CFG.colors == "on") or (CFG.colors == "auto" and size_mb <= 1024)
+    kind = input_kind(input_path)
+    CFG.fmt = kind
+    RESULT.clear()
+    RESULT["format"] = kind
+    # A BREP file holds neither colours nor names nor an assembly: nothing for XCAF to read.
+    use_xcaf = kind != "brep" and ((CFG.colors == "on") or (CFG.colors == "auto" and size_mb <= 1024))
 
     # ─── cache check: skip conversion if output is newer than input AND the
     # sidecar params match. mtime alone misses the "user re-ran with a tighter
@@ -1245,19 +1804,23 @@ def convert(input_path: Path, output_path: Path) -> None:
                     cached_params = json.loads(params_path.read_text())
                 except Exception:
                     cached_params = None
-            if cached_params == current_params:
+            if cached_params == current_params and all(p.exists() for p in _lod_paths(output_path)):
                 out_mb = output_path.stat().st_size / 1048576
                 log(f"cached: {output_path.name} ({out_mb:.1f} MB) is newer than source and params match — skipping conversion (use --force to re-convert)", "ok")
+                RESULT["cached"] = True
+                _collect_outputs(output_path)
                 return
             log("cache stale: conversion params changed — re-converting", "warn")
 
     print()
-    print(f"╭─ STEP → GLB")
+    print(f"╭─ {_KIND_LABEL[kind]} → GLB")
     print(f"│  input:    {input_path}  ({size_mb:.1f} MB)")
     print(f"│  output:   {output_path}")
     print(f"│  quality:  linear deflection {CFG.quality} ({'relative' if CFG.relative else 'absolute'})")
     print(f"│  min size: {CFG.min_size_pct}% of model" if CFG.min_size_pct > 0 else "│  min size: keep all")
     print(f"│  instance: {CFG.instance}")
+    if CFG.lod:
+        print(f"│  lod:      {', '.join(f'{p:g}%' for p in CFG.lod)}  (files {', '.join(p.name for p in _lod_paths(output_path))})")
     print(f"│  colors:   {'XCAF (slow on big files)' if use_xcaf else 'OFF (plain reader, fast)'}"
           f"{'  -- forced --no-colors' if CFG.colors=='off' else ''}"
           f"{'  -- file > 1 GB, skipping XCAF' if CFG.colors=='auto' and not use_xcaf else ''}")
@@ -1272,22 +1835,14 @@ def convert(input_path: Path, output_path: Path) -> None:
 
     t_total = time.time()
     if not use_xcaf:
-        log("using fast plain reader (no colors / names / materials)", "warn")
+        if kind == "brep":
+            log("BREP holds no colours, names or assembly: using the plain reader", "warn")
+        else:
+            log("using fast plain reader (no colors / names / materials)", "warn")
         scene_meta = {}
-        reader = STEPControl_Reader()
-        with Heartbeat("plain parsing"):
-            status = reader.ReadFile(str(input_path))
-        if status != IFSelect_RetDone: raise RuntimeError("plain STEP read failed")
-        with Heartbeat("plain transfer"):
-            reader.TransferRoots()
-        shape = reader.OneShape()
+        shape = _read_plain_shape(input_path)
         tessellate(shape, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
-        solid_meta = []
-        exp = TopExp_Explorer(shape, TopAbs_SOLID); idx = 0
-        while exp.More():
-            solid_meta.append({"shape": exp.Current(), "color": None, "name": f"solid_{idx:05d}"})
-            idx += 1; exp.Next()
-        log(f"found {len(solid_meta)} solids", "ok")
+        solid_meta = _plain_bodies(shape)
         # Jump straight to mesh extraction below
         return _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total)
 
@@ -1295,7 +1850,7 @@ def convert(input_path: Path, output_path: Path) -> None:
     # parse_step_xcaf_cached transparently uses a binary OCAF cache file
     # (next to the STEP, .xcaf-cache.xbf) so re-runs skip the slow ReadFile.
     try:
-        doc, shape_tool, color_tool, free_labels = parse_step_xcaf_cached(input_path)
+        doc, shape_tool, color_tool, free_labels = parse_xcaf_cached(input_path)
         scene_meta = collect_metadata(shape_tool, color_tool, doc, free_labels)
         log(f"document metadata: {len(scene_meta)} top-level entries")
         for k, v in scene_meta.items():
@@ -1323,10 +1878,12 @@ def convert(input_path: Path, output_path: Path) -> None:
         # down is what the plain reader uses.
         log("walking XCAF assembly tree...")
         t_walk = time.time()
-        products, roots = walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=doc)
+        products, roots = walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=doc,
+                                         surfaces=(kind != "step"))
         log(f"  → {len(products)} unique products, {len(roots)} top-level roots "
             f"in {time.time()-t_walk:.2f}s", "ok")
         extract_product_meshes(products)
+        RESULT["tris_in"] = sum(len(t) for p in products.values() for _, t in p.meshes)
 
         if CFG.min_size_pct > 0:
             # Apply size threshold AT THE PRODUCT LEVEL — drop products whose
@@ -1359,9 +1916,9 @@ def convert(input_path: Path, output_path: Path) -> None:
                 if not roots:
                     raise AllTooSmall()
 
-        build_glb_hierarchical(roots, products, output_path, scene_meta, instance=CFG.instance)
-        gltfpack_postprocess(output_path, CFG.meshopt, CFG.quantize, CFG.simplify)
+        _write_levels_hier(roots, products, output_path, scene_meta)
         _write_params(input_path, output_path)
+        _collect_outputs(output_path)
 
         in_mb = input_path.stat().st_size / 1048576
         out_mb = output_path.stat().st_size / 1048576
@@ -1380,18 +1937,10 @@ def convert(input_path: Path, output_path: Path) -> None:
         log(f"XCAF reader failed ({e}), falling back to plain reader (no hierarchy)", "warn")
         traceback.print_exc()
     scene_meta = {}
-    reader = STEPControl_Reader()
-    if reader.ReadFile(str(input_path)) != IFSelect_RetDone:
-        raise RuntimeError("plain STEP read also failed")
-    reader.TransferRoots()
-    shape = reader.OneShape()
+    shape = _read_plain_shape(input_path)
     tessellate(shape, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
-    # Build solid_meta without color/name — flat output
-    solid_meta = []
-    exp = TopExp_Explorer(shape, TopAbs_SOLID); idx = 0
-    while exp.More():
-        solid_meta.append({"shape": exp.Current(), "color": None, "name": f"solid_{idx:05d}"})
-        idx += 1; exp.Next()
+    # Bodies without colour or name -- flat output
+    solid_meta = _plain_bodies(shape)
     return _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total)
 
 
@@ -1589,6 +2138,7 @@ def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
     if not parts:
         raise NoSolids()
 
+    RESULT["tris_in"] = sum(len(p["tris"]) for p in parts)
     if CFG.min_size_pct > 0:
         # Streaming bbox: avoids np.vstack(all parts) which on 100k-part assemblies
         # could allocate gigabytes. min/max accumulators per axis are O(n) memory
@@ -1613,14 +2163,16 @@ def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
     total_verts = sum(len(p["verts"]) for p in parts)
     n_colored = sum(1 for p in parts if p.get("color") is not None)
     log(f"total: {total_verts:,} verts, {total_tris:,} tris, {n_colored}/{len(parts)} colored")
-    build_glb(parts, output_path, scene_meta, instance=CFG.instance)
-
-    # Optional industry-standard post-processing for ~10x smaller files
-    gltfpack_postprocess(output_path, CFG.meshopt, CFG.quantize, CFG.simplify)
+    RESULT["parts"] = len(parts)
+    RESULT["unique_products"] = len({p["hash"] for p in parts})
+    # Writes the GLB (and the other LOD levels), then the optional gltfpack
+    # post-processing for ~10x smaller files.
+    _write_levels_flat(parts, output_path, scene_meta)
 
     # The same record the XCAF path writes, so this output is found in the
     # cache again, and is made again when the settings change.
     _write_params(input_path, output_path)
+    _collect_outputs(output_path)
 
     in_mb = input_path.stat().st_size / 1048576
     out_mb = output_path.stat().st_size / 1048576
@@ -1630,10 +2182,173 @@ def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
     print()
 
 
+def _child_flags(ap, args, skip) -> list:
+    """The options of this run as command-line flags for one file's process:
+    every option that differs from its default, except the batch-only ones."""
+    out = []
+    for act in ap._actions:
+        if not act.option_strings or act.dest in skip or isinstance(act, argparse._HelpAction):
+            continue
+        val = getattr(args, act.dest, None)
+        if val is None or val == act.default:
+            continue
+        flag = ([o for o in act.option_strings if o.startswith("--")] or act.option_strings)[-1]
+        if isinstance(act, argparse._StoreTrueAction):
+            out.append(flag)
+        else:
+            out += [flag, str(val)]
+    return out
+
+
+def _kill_tree(proc) -> None:
+    """Stop a converter process and what it started."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           capture_output=True)
+        else:
+            import signal
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except Exception:
+        try: proc.kill()
+        except Exception: pass
+
+
+def _last_problem(log_text: str) -> str:
+    """The converter's last error line (marked with the cross), else its last line."""
+    lines = [l.strip() for l in log_text.splitlines() if l.strip()]
+    for l in reversed(lines):
+        if l.startswith("\u2717"):
+            return l.lstrip("\u2717").strip()
+    return lines[-1] if lines else ""
+
+
+def run_batch(ap, args) -> int:
+    """--batch DIR: convert every CAD file of a folder, each in a process of
+    its own (OpenCascade can crash on a damaged file; that must not take the
+    run with it), print a table and write batch-report.csv."""
+    root = args.batch
+    if not root.is_dir():
+        log(f"--batch: {root} is not a folder", "err")
+        return 1
+    it = root.rglob("*") if args.recursive else root.iterdir()
+    files = sorted(p for p in it if p.is_file() and p.suffix.lower() in SUPPORTED_EXTS)
+    out_root = args.out
+    if out_root is not None:
+        out_root.mkdir(parents=True, exist_ok=True)
+    report_dir = out_root if out_root is not None else root
+    if not files:
+        log(f"no {' '.join(SUPPORTED_EXTS)} files in {root}" + (" (or below it)" if args.recursive else ""), "err")
+        return 1
+
+    skip = {"input", "out", "batch", "recursive", "file_timeout", "summary_json"}
+    flags = _child_flags(ap, args, skip)
+    me = str(Path(__file__).resolve())
+    env = dict(os.environ, STEP2GLB_NO_HEARTBEAT="1", PYTHONIOENCODING="utf-8")
+
+    def out_for(f: Path, claimed: set) -> Path:
+        base = (out_root / f.relative_to(root).parent) if out_root is not None else f.parent
+        base.mkdir(parents=True, exist_ok=True)
+        cand = base / (f.stem + ".glb")
+        if cand in claimed:               # part.step and part.iges side by side
+            cand = base / f"{f.stem}_{f.suffix.lstrip('.').lower()}.glb"
+        n = 2
+        while cand in claimed:
+            cand = base / f"{f.stem}_{n}.glb"; n += 1
+        claimed.add(cand)
+        return cand
+
+    width = max(len(str(f.relative_to(root))) for f in files)
+    width = min(max(width, 4), 48)
+    head = (f"{'file':<{width}}  {'parts':>6}  {'tris in':>10}  {'tris out':>10}  "
+            f"{'size':>9}  {'sec':>6}  status")
+    print()
+    print(f"  batch: {len(files)} file(s) from {root}" + (" (recursive)" if args.recursive else ""))
+    print(f"  options: {' '.join(flags) if flags else '(defaults)'}")
+    print()
+    print("  " + head)
+    print("  " + "-" * len(head))
+
+    rows = []
+    claimed: set = set()
+    tmp = Path(tempfile.mkdtemp(prefix="step2glb_batch_"))
+    try:
+        for n, f in enumerate(files, 1):
+            out = out_for(f, claimed)
+            summ = tmp / f"{n}.json"
+            logf = tmp / f"{n}.log"
+            cmd = [sys.executable, "-u", me, str(f), "--out", str(out),
+                   "--summary-json", str(summ), *flags]
+            t0 = time.time()
+            status, rc = "failed", None
+            with open(logf, "wb") as lf:
+                proc = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT, env=env,
+                                        start_new_session=(os.name != "nt"))
+                try:
+                    rc = proc.wait(timeout=args.file_timeout or None)
+                except subprocess.TimeoutExpired:
+                    _kill_tree(proc)
+                    proc.wait()
+                    rc = "timeout"
+            secs = time.time() - t0
+            text = logf.read_text(encoding="utf-8", errors="replace") if logf.exists() else ""
+            info = {}
+            if summ.exists():
+                try: info = json.loads(summ.read_text(encoding="utf-8"))
+                except Exception: info = {}
+            message = ""
+            if rc == 0:
+                status = "cached" if info.get("cached") else "ok"
+            elif rc == "timeout":
+                status, message = "timeout", f"no result after {args.file_timeout:g} s"
+            elif rc == 3:
+                status, message = "no geometry", _last_problem(text)
+            elif rc == 1:
+                status, message = "failed", _last_problem(text)
+            else:
+                status, message = f"crashed ({rc})", _last_problem(text)
+            ok = status in ("ok", "cached")
+            lods = [lv["file"] for lv in info.get("levels", [])[1:]] if ok else []
+            row = {
+                "file": str(f.relative_to(root)), "format": info.get("format") or input_kind(f),
+                "parts": info.get("parts", ""), "unique_products": info.get("unique_products", ""),
+                "triangles_in": info.get("tris_in", ""), "triangles_out": info.get("tris_out", ""),
+                "size_mb": info.get("size_mb", "") if ok else "",
+                "seconds": round(secs, 2), "status": status,
+                "output": str(out) if ok else "", "lod_files": ";".join(lods), "message": message,
+            }
+            rows.append(row)
+            nm = row["file"] if len(row["file"]) <= width else "..." + row["file"][-(width - 3):]
+            def num(v): return f"{v:,}" if isinstance(v, int) else "-"
+            size = f"{row['size_mb']:.2f} MB" if isinstance(row["size_mb"], (int, float)) else "-"
+            print(f"  {nm:<{width}}  {num(row['parts']):>6}  {num(row['triangles_in']):>10}  "
+                  f"{num(row['triangles_out']):>10}  {size:>9}  {secs:>6.1f}  {status}"
+                  + (f": {message}" if message and not ok else ""), flush=True)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    report = report_dir / "batch-report.csv"
+    cols = ["file", "format", "parts", "unique_products", "triangles_in", "triangles_out",
+            "size_mb", "seconds", "status", "output", "lod_files", "message"]
+    with open(report, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=cols)
+        w.writeheader()
+        w.writerows(rows)
+    bad = [r for r in rows if r["status"] not in ("ok", "cached")]
+    print()
+    print(f"  {len(rows) - len(bad)} of {len(rows)} converted"
+          + (f", {len(bad)} did not" if bad else "") + f".  Report: {report}")
+    print()
+    return 1 if bad else 0
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="STEP -> optimized GLB")
-    ap.add_argument("input", type=Path, nargs="+")
-    ap.add_argument("--out", "-o", type=Path)
+    ap = argparse.ArgumentParser(description="STEP / IGES / BREP -> optimized GLB")
+    ap.add_argument("input", type=Path, nargs="*",
+                    help="CAD file(s): " + " ".join(SUPPORTED_EXTS) + ". Not needed with --batch.")
+    ap.add_argument("--out", "-o", type=Path,
+                    help="Output GLB (one input file), or with --batch the folder the GLBs and "
+                         "batch-report.csv go to (default: beside each source file).")
     ap.add_argument("--quality", "-q", type=float, default=0.5,
                     help="Linear deflection. Smaller = finer mesh. Default 0.5 (mm).")
     ap.add_argument("--relative", action="store_true",
@@ -1690,7 +2405,33 @@ def main() -> int:
                     help="Skip product names — parts get generic IDs in the tree.")
     ap.add_argument("--no-step-props",action="store_true",
                     help="Skip validation properties (mass, area). Cheap; safe to disable.")
+    ap.add_argument("--no-extras", action="store_true",
+                    help="Do not write the CAD metadata (instance/product name, assembly path, "
+                         "colour, part number, layers, material, volume/area) into the glTF node extras.")
+    ap.add_argument("--lod", type=str, default=None, metavar="100,50,25",
+                    help="Levels of detail as percentages of the triangles. The first level is written to "
+                         "<name>.glb, the others to <name>_lod1.glb, <name>_lod2.glb ... "
+                         "Simplified by gltfpack if it is installed, else by the app's bundled meshoptimizer "
+                         "through Node.js. Cannot be combined with --simplify.")
+    ap.add_argument("--lod-error", type=float, default=0.01, metavar="E",
+                    help="Error limit of the LOD simplifier (Node engine), as a fraction of each mesh's size. "
+                         "Default 0.01 (1%%, gltfpack's own default). A level stays above its percentage "
+                         "where reaching it would exceed this.")
+    ap.add_argument("--batch", type=Path, default=None, metavar="DIR",
+                    help="Convert every STEP/IGES/BREP file in DIR with these options, one process per file "
+                         "(a file that fails or crashes does not stop the run). Prints a table and writes "
+                         "batch-report.csv; exit code 1 if any file failed.")
+    ap.add_argument("--recursive", action="store_true", help="With --batch: include sub-folders.")
+    ap.add_argument("--file-timeout", type=float, default=0.0, metavar="SECONDS",
+                    help="With --batch: give up on a file after this long (default 0 = no limit).")
+    ap.add_argument("--summary-json", type=Path, default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
+    if args.batch is None and not args.input:
+        ap.error("give a file to convert, or --batch DIR")
+    if args.batch is not None and args.input:
+        ap.error("--batch takes a folder: do not list files as well")
+    if args.batch is None and (args.recursive or args.file_timeout):
+        ap.error("--recursive and --file-timeout only go with --batch")
     if args.out and len(args.input) > 1:
         ap.error("--out can only be used with a single input file")
 
@@ -1704,6 +2445,19 @@ def main() -> int:
         ap.error("--parallel must be >= 0")
     if args.simplify and not (0 < args.simplify <= 1.0):
         ap.error(f"--simplify {args.simplify} out of range (must be in (0, 1])")
+    lod_levels = ()
+    if args.lod is not None:
+        try:
+            vals = [float(x) for x in args.lod.replace(" ", "").split(",") if x]
+        except ValueError:
+            ap.error(f"--lod {args.lod!r}: give percentages like 100,50,25")
+        if not vals or len(vals) > 8 or any(not (0 < v <= 100) for v in vals):
+            ap.error(f"--lod {args.lod!r}: one to eight percentages, each above 0 and at most 100")
+        lod_levels = tuple(sorted(set(vals), reverse=True))
+        if args.simplify:
+            ap.error("--lod and --simplify both reduce triangles: use one of them")
+    if not (0 <= args.lod_error <= 1):
+        ap.error("--lod-error must be between 0 and 1")
 
     # Default meshopt to ON when gltfpack is available — most users want the
     # smaller GLB but never remember to pass --meshopt. --no-meshopt opts out.
@@ -1739,7 +2493,18 @@ def main() -> int:
         read_materials = not args.no_materials,
         read_names     = not args.no_step_names,
         read_props     = not args.no_step_props,
+        extras         = not args.no_extras,
+        lod            = lod_levels,
+        lod_error      = float(args.lod_error),
     )
+    if any(p < 100 for p in CFG.lod):
+        try:
+            _lod_engine()
+        except RuntimeError as e:
+            log(str(e), "err")
+            return 1
+    if args.batch is not None:
+        return run_batch(ap, args)
     if CFG.pca_instances:
         log("PCA instancing ENABLED -- may cause rotation glitches on symmetric parts", "warn")
     if CFG.parallel > 1:
@@ -1769,6 +2534,12 @@ def main() -> int:
                 _convert_with_budget(in_path, out_path, target_tris, target_size_mb)
             else:
                 convert(in_path, out_path)
+            if args.summary_json:
+                try: args.summary_json.write_text(json.dumps(RESULT), encoding="utf-8")
+                except OSError: pass
+        except UnsupportedFormat as e:
+            log(str(e), "err")
+            rc = 1
         except NothingToWrite as e:
             # Not a crash, so no traceback: say what is wrong with the file.
             # 3 lets a caller (serve.py) tell this apart from a failure.

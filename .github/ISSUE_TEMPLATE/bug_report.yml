@@ -1,0 +1,45 @@
+name: Something went wrong
+description: A crash, a wrong result, a file that will not open or export
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. The more of this you fill in, the faster it can be fixed. Please do not attach a model that belongs to someone else.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Say what you clicked or ran. A short description is enough.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it go wrong?
+      options:
+        - Opening a file
+        - Converting a STEP / IGES / BREP file
+        - A tool (Fasteners, Fill holes, Decimate, Smart optimise, …)
+        - Exporting
+        - The viewer or the interface
+        - Starting the app or installing it
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: format
+    attributes:
+      label: File type and rough size
+      placeholder: ".step, 85 MB, about 600 parts"
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: In the app press Ctrl+K, choose "Copy diagnostics for a bug report", read it, and paste it here. It leaves out the file name and drive paths; read it before you paste it.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: A screenshot, or a model you are free to share, helps a lot.

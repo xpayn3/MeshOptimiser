@@ -830,7 +830,7 @@
 
           <div class="cln-foot">
             <button type="button" class="cln-btn" data-cln-act="reset" title="Reset all parameters for the current mode"><i data-lucide="rotate-ccw"></i> Reset</button>
-            <button type="button" class="cln-btn cln-btn-warn" data-cln-act="dissolve" title="Dissolve cloner — restore source(s) to the scene"><i data-lucide="layers-2"></i> Dissolve</button>
+            <button type="button" class="cln-btn cln-btn-warn" data-cln-act="dissolve" title="Dissolve cloner — restore source(s) to the scene"><i data-lucide="unlink"></i> Dissolve</button>
           </div>
         </div>`;
     }

@@ -197,7 +197,54 @@ python step2glb.py input.step --quality 0.2 --min-size 0.5
 python step2glb.py input.step --no-instance       # disable instancing (only with --no-colors, the plain reader)
 python step2glb.py input.step --meshopt           # shell out to gltfpack
 python step2glb.py input.step --relative          # quality as fraction of diag
+python step2glb.py part.iges                      # IGES and BREP work the same way
+python step2glb.py input.step --lod 100,50,25     # input.glb + input_lod1.glb + input_lod2.glb
+python step2glb.py --batch cad/ --out glb/        # every CAD file in a folder
 ```
+
+#### 📦 More than STEP
+
+- **Formats.** The reader is picked by the extension: STEP (`.step` `.stp`),
+  IGES (`.iges` `.igs`) and BREP (`.brep` `.brp`), in any case; the server's
+  `/api/convert` takes the same six. IGES keeps the names,
+  colours and layers the file has; it has no assembly structure, so repeated
+  parts come out as separate geometry, and no part numbers. BREP is geometry
+  only. IGES and BREP are often surface models with no solid: those are
+  meshed as they are (an IGES face for face, one body per colour; a BREP one
+  body per shell). A STEP with no solid is still refused. Anything with
+  nothing to mesh, an unknown extension or a damaged file stops with a
+  message that says why and writes no GLB.
+- **Folders.** `--batch DIR` converts every supported file in `DIR` with the
+  options you give, each in a process of its own, so one damaged file cannot
+  stop the run. It prints a table (file, parts, triangles in and out, size,
+  seconds, status) and writes `batch-report.csv` next to the results. `--out
+  OUTDIR` collects the GLBs (and the report) in one folder, `--recursive`
+  includes sub-folders (and keeps them under `OUTDIR`), `--file-timeout
+  SECONDS` gives up on a file that hangs. Two files with the same name in
+  different formats (`part.step`, `part.iges`) get `part.glb` and
+  `part_iges.glb`. The exit code is 1 if any file did not convert.
+  `step2glb.command` passes `--batch` on as it is; on Windows run
+  `.venv\Scripts\python.exe step2glb.py --batch ...`, because `step2glb.bat`
+  takes its first argument for a file.
+- **LODs.** `--lod 100,50,25` writes the model at those percentages of its
+  triangles: the first to `<name>.glb`, the others to `<name>_lod1.glb`,
+  `<name>_lod2.glb`. Every level has the same nodes, names, instances and
+  metadata. It uses meshoptimizer: gltfpack if it is installed (the same as
+  `--simplify`), otherwise the copy bundled in `vendor/meshoptimizer/` through
+  Node.js (`lod_simplify.mjs`; the browser app's Decimate uses that same
+  file). With neither it stops and says so. `--lod-error E` (default 0.01, a
+  fraction of each part's size) is the most a part may change; where reaching
+  a percentage would exceed it, the level stays above it, and the log gives
+  the real triangle count of every level. Cannot be combined with
+  `--simplify`.
+- **Metadata.** Each node of the GLB carries what the CAD file says about it
+  in its `extras`: `name` (as in the CAD tree), `path` (`TestAsm/Bolt-3`),
+  `product` (the part it is an instance of), `partNumber` and `description`
+  (STEP `PRODUCT.id` and description), `color`, `layers`, `material`
+  (`name`, `density`), `volume` and `area` (the file's validation
+  properties, in model units). Only what the file holds is written. The
+  scene's extras say which format it came from. It adds roughly 200 bytes
+  per node; `--no-extras` leaves it out.
 
 ---
 
@@ -213,7 +260,8 @@ python step2glb.py input.step --relative          # quality as fraction of diag
 ## 🗂 Layout
 
 ```text
-step2glb.py        STEP → GLB converter (OCCT + instancing)
+step2glb.py        STEP / IGES / BREP → GLB converter (OCCT + instancing, LOD, batch)
+lod_simplify.mjs   the LOD simplifier when gltfpack is absent (Node, bundled meshoptimizer)
 serve.py           local HTTP server + /api/convert endpoint
 index.html         WebGPU viewer shell
 app-v2.js          viewer logic (scene graph, picking, colour groups)
@@ -224,6 +272,7 @@ cloner.js          cloner (linear / grid / radial arrays)
 tests/
  ├── selftest.js         in-app regression suite (?selftest)
  ├── holefill.test.mjs   hole filler on synthetic shapes (node)
+ ├── converter.test.py   converter end to end: STEP / IGES / BREP, --batch, --lod, metadata, /api/convert (python)
  └── fasteners.test.mjs  fastener recogniser on built bolts, nuts, washers and look-alikes (node)
 vendor/
  ├── three/            three.js r172: the WebGPU build and the add-ons in use
@@ -260,6 +309,16 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 ---
 
 ## 🗒 What's New
+
+**v0.20.0** — draw, organise and trust it: a Draw tool and Sweep, lines that are real parts of the scene, tree organising commands, IGES and BREP, and an app that closes its server with the window.
+
+- ![new][new] **Draw (`L`)** — Pen, Rectangle, Circle, Arc, Polygon, Freehand and Edit, on the ground, front, side, view or the face of a part, with a field of snapping dots, typed sizes, Round and Bevel corners (drag the ring on the corner), Bezier handles that snap to the grid and break with Ctrl. **Sweep** carries a profile along a line.
+- ![new][new] **Lines are parts** — a row in the tree, in groups, with the gizmo, Properties cards for the shape (width, radius, sides, corner) and the spline (type, close, interpolation, angle), and in GLB / glTF.
+- ![new][new] **Organise the tree** — Remove group (keep contents), Flatten this group, Sort A–Z / Z–A, Move up / down, Delete empty groups, Expand / Collapse a branch; Ctrl and Shift pick groups and parts together.
+- ![new][new] **The converter reads IGES and BREP,** converts a whole folder (`--batch`), writes LOD files (`--lod 100,50,25`) and keeps the CAD file's own data on the nodes.
+- ![new][new] **Lighter files you can check** — copies are found in GLB, FBX, OBJ and 3MF files from other tools, Decimate "Within … mm" is measured, Export can check against a web page, Shopify, AR Quick Look or a phone app, Smart optimise keeps recipes, and Merge by colour.
+- ![fix][fix] **Deduplicate geometry no longer deletes real parts,** Scan whole model no longer freezes the app, a leak in Split is closed, the floor grid is no longer cut off close up, and a scene scale change keeps the view.
+- ![new][new] **The server closes with the window,** the converters with it; a crash is noticed at the next start; a warning when the graphics card is not used.
 
 **v0.15.0** — the commands come to the pointer: a Quick wand ring on `W`, four clean-up tools, Untriangulate, a wireframe that shows polygons, and a scale handle for Dynamic place.
 

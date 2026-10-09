@@ -10,7 +10,7 @@
   var KEY = 'stepopt-prefs';
   var root = document.documentElement;
 
-  var DEFAULTS = { uiAccent: '#0d99ff', uiTone: 'graphite', uiFont: 'inter', uiTextScale: 1, uiDensity: 1, uiRadius: 'default', uiMotion: true };
+  var DEFAULTS = { uiAccent: '#0d99ff', uiTone: 'graphite', uiFont: 'inter', uiTextScale: 1, uiDensity: 1, uiRadius: 'default', uiMotion: true, uiTreeColors: false };
 
   // Colours that hold white text. (A lighter custom colour gets dark text: see onAccent.)
   var ACCENTS = [
@@ -98,6 +98,7 @@
     var r = RADII.filter(function (x) { return x[1] === p.uiRadius; })[0] || RADII[1];
     for (var k in RD) set(k, r[2] === 1 ? null : Math.min(14, Math.round(RD[k] * r[2] * 10) / 10) + 'px');
     root.classList.toggle('no-motion', p.uiMotion === false);
+    root.classList.toggle('tree-icons-coded', p.uiTreeColors === true);
   }
 
   window.MOAppearance = { DEFAULTS: DEFAULTS, ACCENTS: ACCENTS, TONES: TONES, FONTS: FONTS, TEXT_SCALES: TEXT_SCALES, DENSITIES: DENSITIES, RADII: RADII, read: read, apply: apply };
