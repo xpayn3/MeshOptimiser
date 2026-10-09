@@ -19263,140 +19263,20 @@ function _stripPhysics(row) {
 }
 
 // ── Shading card (right sidebar, under Properties) ─────────────────────────
-// Clay and CAD, each with its looks, as a small 3D hex nut drawn the way the look draws a part, shaded by
-// the look itself (the CAD ones with the real matcap, a dark outline and the dark line on every edge). A click on a look chooses it and
+// Clay and CAD, each with its looks, as a small 3D hex nut shaded the way the look shades a part (the CAD ones with the
+// matcap and the dark line on every edge). A click on a look chooses it and
 // turns that view on; a click on the look that is on goes back to Solid. Keys 5 and 6 and the Edges choice work as before.
 const _Shading = (() => {
   const q$ = (id) => document.getElementById(id);
-  const SIZE = 128;                                  // drawn at this size, shown at 64 CSS pixels (sharp on a 2x screen)
-  const clamp01 = (x) => Math.max(0, Math.min(1, x));
-  const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
-  // the part: a hex nut (chamfered corners, a bore), centred on the origin, so it sits in the middle of its card
-  const sdCylZ = (px, py, pz, r, h) => { const dx = Math.hypot(px, py) - r, dz = Math.abs(pz) - h; return Math.min(Math.max(dx, dz), 0) + Math.hypot(Math.max(dx, 0), Math.max(dz, 0)); };
-  const sdHex = (px, py, r) => {                                   // a hexagon with inradius r
-    const kx = -0.8660254, ky = 0.5, kz = 0.5773503;
-    let x = Math.abs(px), y = Math.abs(py);
-    const m = 2 * Math.min(kx * x + ky * y, 0); x -= m * kx; y -= m * ky;
-    x -= Math.max(-kz * r, Math.min(kz * r, x)); y -= r;
-    return Math.hypot(x, y) * (y < 0 ? -1 : 1);
-  };
-  const sdf = (x, y, z) => {
-    const prism = Math.max(sdHex(x, y, 0.72), Math.abs(z) - 0.34);
-    const chamfer = (Math.hypot(x, y) + Math.abs(z) * 0.9 - 1.02) * 0.7;           // a double cone takes the corners off, as on a real nut
-    return Math.max(prism, chamfer, -sdCylZ(x, y, z, 0.34, 0.6));
-  };
-  // the camera: three-quarter view from above, a perspective one (38 degrees) as the app's own
-  const YAW = -0.62, PITCH = 0.5;
-  const cy = Math.cos(YAW), sy = Math.sin(YAW), cp = Math.cos(PITCH), sp = Math.sin(PITCH);
-  const CAM_DIST = 3.3, TAN_HALF = Math.tan(19 * Math.PI / 180) * 1.0;
-  const RIGHT = [cy, sy, 0];                                           // the world's X turned by the yaw
-  const FWD = [-sy * cp, cy * cp, -sp];                                // looks into the scene
-  const UP = [-sy * sp, cy * sp, cp];                                  // (right x forward: the three are at right angles)
-  // scene → one buffer of {hit, normal (view space), depth}
-  let _geo = null, _geoP = null;
-  // Ray-marched a few rows at a time in idle moments: it is about thirty thousand rays.
-  function geometryAsync() {
-    if (_geoP) return _geoP;
-    return (_geoP = new Promise((resolve) => {
-    const S = SIZE, hit = new Uint8Array(S * S), nv = new Float32Array(S * S * 3), dep = new Float32Array(S * S);
-    const E = 0.0015;
-    let row = 0;
-    const rows = () => {
-    const t0 = performance.now();
-    for (; row < S && performance.now() - t0 < 8; row++) { const j = row; for (let i = 0; i < S; i++) {
-      const u = ((i + 0.5) / S * 2 - 1) * TAN_HALF, v = (1 - (j + 0.5) / S * 2) * TAN_HALF;
-      let dx = FWD[0] + RIGHT[0] * u + UP[0] * v, dy = FWD[1] + RIGHT[1] * u + UP[1] * v, dz = FWD[2] + RIGHT[2] * u + UP[2] * v;
-      const dl = Math.hypot(dx, dy, dz); dx /= dl; dy /= dl; dz /= dl;
-      const ox = -FWD[0] * CAM_DIST, oy = -FWD[1] * CAM_DIST, oz = -FWD[2] * CAM_DIST;
-      let t = 0, ok = false;
-      for (let s = 0; s < 120 && t < 12; s++) {
-        const d = sdf(ox + dx * t, oy + dy * t, oz + dz * t);
-        if (d < 0.0008) { ok = true; break; }
-        t += d * 0.9;
-      }
-      const k = j * S + i;
-      if (!ok) continue;
-      const px = ox + dx * t, py = oy + dy * t, pz = oz + dz * t;
-      let nx = sdf(px + E, py, pz) - sdf(px - E, py, pz), ny = sdf(px, py + E, pz) - sdf(px, py - E, pz), nz = sdf(px, py, pz + E) - sdf(px, py, pz - E);
-      const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
-      hit[k] = 1; dep[k] = t;
-      nv[k * 3] = nx * RIGHT[0] + ny * RIGHT[1] + nz * RIGHT[2];       // into the camera's frame: x right, y up, z toward the viewer
-      nv[k * 3 + 1] = nx * UP[0] + ny * UP[1] + nz * UP[2];
-      nv[k * 3 + 2] = -(nx * FWD[0] + ny * FWD[1] + nz * FWD[2]);
-    }
-    }
-    if (row < S) (window.requestIdleCallback || ((f) => setTimeout(f, 30)))(rows, { timeout: 500 });
-    else { _geo = { hit, nv, dep }; resolve(_geo); }
-    };
-    rows();
-    }));
-  }
-  const srgb2lin = (c) => Math.pow(c / 255, 2.2), lin2srgb = (c) => Math.round(255 * Math.pow(clamp01(c), 1 / 2.2));
-  function paintClay(canvas, look) {
-    const { hit, nv } = _geo, S = SIZE, ctx = canvas.getContext('2d'), img = ctx.createImageData(S, S), d = img.data;
-    const col = [(look.color >> 16) & 255, (look.color >> 8) & 255, look.color & 255].map(srgb2lin);
-    const L = [-0.45, 0.62, 0.64], ll = Math.hypot(...L); L[0] /= ll; L[1] /= ll; L[2] /= ll;
-    const H = [L[0], L[1], L[2] + 1]; const hl = Math.hypot(...H); H[0] /= hl; H[1] /= hl; H[2] /= hl;
-    const shin = 10 + (1 - look.roughness) * (1 - look.roughness) * 260, m = look.metalness;
-    for (let k = 0; k < S * S; k++) {
-      if (!hit[k]) continue;
-      const nx = nv[k * 3], ny = nv[k * 3 + 1], nz = nv[k * 3 + 2];
-      const ndl = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]), ndh = Math.max(0, nx * H[0] + ny * H[1] + nz * H[2]);
-      const amb = 0.2 + 0.28 * (ny * 0.5 + 0.5);
-      const rx = 2 * nz * nx, ry = 2 * nz * ny, rz = 2 * nz * nz - 1;          // the reflected view ray: what a metal shows
-      const env = 0.16 + 0.95 * sstep(-0.3, 0.9, ry) + 0.25 * Math.pow(Math.max(0, rx * L[0] + ry * L[1] + rz * L[2]), 6);
-      const spec = Math.pow(ndh, shin) * (0.1 + 0.5 * (1 - look.roughness)) * (m ? 1.4 : 1);
-      const i = k * 4;
-      for (let c = 0; c < 3; c++) {
-        const diff = col[c] * (1 - m) * (amb + 0.95 * ndl);
-        const metal = col[c] * m * env * 0.9;
-        const sp2 = spec * (m ? col[c] : 1);
-        d[i + c] = lin2srgb(diff + metal + sp2 * 0.9);
-      }
-      d[i + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-  }
-  function paintCad(canvas, look) {
-    const { hit, nv, dep } = _geo, S = SIZE, ctx = canvas.getContext('2d'), img = ctx.createImageData(S, S), d = img.data;
-    const mc = document.createElement('canvas'); mc.width = mc.height = 128; _cadPaintMatcap(mc, look);
-    const mp = mc.getContext('2d').getImageData(0, 0, 128, 128).data;
-    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
-      const k = j * S + i;
-      if (!hit[k]) continue;
-      const nx = nv[k * 3], ny = nv[k * 3 + 1], nz = nv[k * 3 + 2];
-      let r, g, b;
-      { const u = Math.max(0, Math.min(127, Math.floor((nx * 0.5 + 0.5) * 128))), w = Math.max(0, Math.min(127, Math.floor((0.5 - ny * 0.5) * 128))), o = (w * 128 + u) * 4;
-        const rim = sstep(0.0, 0.2, Math.abs(nz));                              // a surface turning edge-on goes dark, as in the view
-        r = mp[o] * rim * 1.06; g = mp[o + 1] * rim * 1.06; b = mp[o + 2] * rim * 1.06; }
-      // the dark line on an edge: where the surface turns sharply from one pixel to the next, or jumps in depth
-      let edge = 0;
-      for (const [di, dj] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
-        const ii = i + di, jj = j + dj;
-        if (ii < 0 || jj < 0 || ii >= S || jj >= S) { edge = 1; continue; }
-        const k2 = jj * S + ii;
-        if (!hit[k2]) { edge = 1; continue; }
-        const dot = nx * nv[k2 * 3] + ny * nv[k2 * 3 + 1] + nz * nv[k2 * 3 + 2];
-        if (dot < 0.8) edge = Math.max(edge, 1 - sstep(0.55, 0.8, dot) * 0.2);
-        if (Math.abs(dep[k] - dep[k2]) > 0.09) edge = 1;
-      }
-      const o2 = k * 4, e = edge ? 0.9 : 0;
-      d[o2] = Math.round(r * (1 - e) + 3 * e); d[o2 + 1] = Math.round(g * (1 - e) + 3 * e); d[o2 + 2] = Math.round(b * (1 - e) + 6 * e); d[o2 + 3] = 255;
-    }
-    ctx.putImageData(img, 0, 0);
-  }
-
-  const queue = [];
-  let pumping = false;
-  function pump() {
-    if (pumping) return;
-    pumping = true;
-    const step = () => {
-      const job = queue.shift();
-      if (!job) { pumping = false; return; }
-      Promise.resolve().then(job).catch((e) => console.warn('[shading] thumbnail failed:', e)).then(() => (window.requestIdleCallback || ((f) => setTimeout(f, 30)))(step, { timeout: 400 }));
-    };
-    (window.requestIdleCallback || ((f) => setTimeout(f, 30)))(step, { timeout: 400 });
+  // The pictures are baked, not drawn here: a hex nut in each look, rendered at 256 px with antialiasing by
+  // tools/render-shading-thumbs.mjs (re-run it after changing a look in _CLAY_LOOKS or _CAD_LOOKS). They are
+  // small files shown as plain images, so the card costs nothing to open and is sharp on a 3x screen.
+  const THUMB_V = 1;
+  const thumb = (name) => {
+    const im = new Image();
+    im.className = 'shade-thumb'; im.width = im.height = 256; im.alt = ''; im.draggable = false; im.decoding = 'async';
+    im.src = 'assets/shading/' + name + '.webp?v=' + THUMB_V;
+    return im;
   }
   function build() {
     const mk = (row, kind, looks, tip) => {
@@ -19404,12 +19284,10 @@ const _Shading = (() => {
       for (const [k, look] of Object.entries(looks)) {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'shade-sw'; b.dataset.kind = kind; b.dataset.look = k; b.title = look.label + ' — ' + tip;
-        const c = document.createElement('canvas'); c.width = c.height = SIZE; c.className = 'shade-thumb';
         const s = document.createElement('span'); s.textContent = look.label;
-        const card = document.createElement('div'); card.className = 'shade-card'; card.appendChild(c);
+        const card = document.createElement('div'); card.className = 'shade-card'; card.appendChild(thumb(k));
         if (kind === 'cad') { const bd = document.createElement('em'); bd.className = 'shade-badge'; bd.textContent = 'CAD'; card.appendChild(bd); }      // (the family, as a badge on the picture)
         b.append(card, s); row.appendChild(b);
-        queue.push(async () => { await geometryAsync(); (kind === 'clay' ? paintClay : paintCad)(c, look); });
       }
     };
     mk(q$('vw-clay'), 'clay', _CLAY_LOOKS, 'plain matte shading to read the shape (key 5)');
@@ -19419,15 +19297,12 @@ const _Shading = (() => {
       if (first && !first.querySelector('.shade-sw[data-kind="solid"]')) {
         const b = document.createElement('button');
         b.type = 'button'; b.className = 'shade-sw'; b.dataset.kind = 'solid'; b.dataset.look = 'default'; b.title = "Default — the plain view, with the model's own materials";
-        const c = document.createElement('canvas'); c.width = c.height = SIZE; c.className = 'shade-thumb';
         const sp = document.createElement('span'); sp.textContent = 'Default';
-        const card = document.createElement('div'); card.className = 'shade-card'; card.appendChild(c);
+        const card = document.createElement('div'); card.className = 'shade-card'; card.appendChild(thumb('default'));
         b.append(card, sp); first.insertBefore(b, first.firstChild);
-        queue.push(async () => { await geometryAsync(); paintClay(c, { color: 0xc3c6cc, roughness: 0.42, metalness: 0.3 }); });
       }
     }
     mk(q$('vw-cad'), 'cad', _CAD_LOOKS, 'CAD shading with a dark line on every edge (key 6)');
-    pump();
   }
   const curLook = (kind) => (kind === 'clay' ? _clayLook() : _cadLook());
   function sync() {

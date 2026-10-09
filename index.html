@@ -3242,7 +3242,7 @@ body.dyn-placing,body.dyn-placing #canvas{cursor:grabbing!important}
 .shade-sw.is-on{color:var(--tx)}
 .shade-sw.is-on .shade-card{background:var(--ac-tint-12);border-color:var(--ac)}
 .shade-sw span{text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.shade-thumb{position:absolute;inset:4%;width:92%;height:92%;display:block;pointer-events:none}
+.shade-thumb{position:absolute;inset:4%;width:92%;height:92%;display:block;object-fit:contain;pointer-events:none;-webkit-user-drag:none}
 .shade-fam{display:contents}
 #shading-section .section-b{padding-bottom:4px}      /* (the last row is a toggle with room of its own: the card ends as far below it as it starts above it) */
 /* Nothing in the interface is text to copy: dragging or double-clicking must not highlight labels, buttons and numbers.
@@ -5427,7 +5427,7 @@ window.moSplash = function (msg, pct) {
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=20261009-simplify-dev-ch1-wire-na1-ngon-sm2-sw1-wfix-pf1-wtri-wout-wall-dp1-ty1-dp2-dps2-hp1-dps3-v0.15.0-hc1-rp1-cl1"></script>
+<script type="module" src="app-v2.js?v=20261009-simplify-dev-ch1-wire-na1-ngon-sm2-sw1-wfix-pf1-wtri-wout-wall-dp1-ty1-dp2-dps2-hp1-dps3-v0.15.0-hc1-rp1-cl1-sh2"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app-v2.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
