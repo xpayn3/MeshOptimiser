@@ -4,9 +4,24 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
-## Unreleased
+## v0.15.0
 
-Four tools for cleaner, lighter models, each a floating card that opens from the command palette (Ctrl+K).
+Released 9 Oct 2026.
+
+v0.14.0 was about how the app looks and how it explains itself. v0.15.0 is about reaching things quickly and making models lighter: a ring of commands under the pointer, four clean-up tools, Untriangulate, a wireframe that shows the polygons, a simplifier that looks after normals, UVs and colours, and a scale handle for Dynamic place.
+
+**Quick wand**
+
+- ![new][new] **Quick wand: a ring of commands under the pointer.** Hold **W** over the viewport and a ring opens around the pointer. Move toward a slice and let go of W to run it. Only the direction counts, not the distance, so a short flick is enough; the middle of the ring (or Esc) does nothing. It works on the selection when there is one and on the whole scene when there is not, and the slices are always in the same places, so the hand learns them. Delete is red.
+- ![new][new] **With a selection** the ring has four slices: Hide, Reduce, Delete and More. **Reduce** fans out Decimate −50 %, −25 %, −75 % and −90 % (each shows the triangle count before and after), Smart fit, Split and Fill holes. **More** fans out Isolate (Show all while the view is isolated), Select similar, Select same colour, Group, Duplicate, Merge, Frame, Hide others and Show all.
+- ![new][new] **With nothing selected** the ring has six: Fit view, Select all, **View** (Camera, Top, Front and Side views, Solid, Wireframe and X-ray, the ground grid), Show all, **File** (Save screenshot, Save scene, Revert to source file) and **Clean** (Recentre on origin, Align to the floor, Smart fit all parts, Remove empty parts, Deduplicate geometry, Fix degenerate parts).
+- ![new][new] **A slice that holds a group opens its fan as soon as the pointer is on it.** Move out onto a command and let go. The ring remembers which group you were heading for, so going straight to a command does not turn into another slice on the way. Commands show their shortcut, and one that cannot run right now stays on the ring, dimmed, with the reason ("Nothing is hidden", "Select two or more parts", "Too few triangles to take away").
+- ![new][new] **A quick tap of W leaves the ring open** instead: click a slice or a command to run it, W or Esc to close. It is also in the command palette (Ctrl+K) as *Quick wand*, which opens it that way at the pointer.
+- ![new][new] **It cannot be left behind or act by accident.** Esc, any other key, the scroll wheel, a click outside, a window that loses focus, a hidden tab and a resize all close it without running anything. It does not open while a mouse button is down (an orbit or a gizmo drag), in a text field, behind a dialog or outside the viewport, and it keeps the right-click menu from opening on top of it. The ring stays inside the window.
+
+**Cleaner, lighter models**
+
+Four tools, each a floating card that opens from the command palette (Ctrl+K).
 
 **Repair, clean-up and selection**
 

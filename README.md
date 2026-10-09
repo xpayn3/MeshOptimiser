@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 0 . 1 4 . 0
+  O P T I M I S E R   ·   v 0 . 1 5 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
@@ -261,6 +261,15 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.15.0** — the commands come to the pointer: a Quick wand ring on `W`, four clean-up tools, Untriangulate, a wireframe that shows polygons, and a scale handle for Dynamic place.
+
+- ![new][new] **Quick wand** — hold `W` over the viewport: a ring of commands opens round the pointer. Move toward a slice and let go; a short flick is enough. With a selection it has Hide, Reduce, Delete and More; with nothing selected it has Fit view, Select all, View, Show all, File and Clean. Slices that hold a group fan out as soon as the pointer is on them (Decimate −25 % to −90 %, Smart fit, Split, Fill holes; the views; Save; the clean-ups), and a command that cannot run stays on the ring, dimmed, with the reason. A quick tap of `W` leaves the ring open to click. It never acts by accident: Esc, any other key, the wheel or a click outside closes it.
+- ![new][new] **Repair mesh**, **Remove hidden faces**, **Merge by material or group** and **Select by rule** — four cards from the command palette (`Ctrl+K`).
+- ![new][new] **Untriangulate** — flat neighbouring triangles become one polygon and are cut again with fewer triangles, with no change of shape. **Wireframe** is now the solid surfaces with a thin black line on every edge: Triangles, Polygons or Outline.
+- ![new][new] **Decimate and Fit to budget** weigh normals, UVs and vertex colours, and the report shows how far the surfaces moved.
+- ![new][new] **Dynamic place scale handle** — a small cube on top of the part: drag it up to grow the part, down to shrink it, with a ghost of the old size behind.
+- ![polish][polish] **The animations in the Help cards are redrawn** to share one lighting and one material; the sidebar drag handles sit on the status-bar row.
+
 **v0.14.0** — the biggest release so far: a CAD view, Dynamic place, an Align to floor that shows what it will do, Help inside the app, and a Settings window that changes the look.
 
 - ![new][new] **CAD view and a Shading card** — key `6`; a strip of small 3D nuts, one for every look (Default, Clay, Porcelain, Steel, Red wax, and the CAD looks Ceramic, Light, Mono); one Outlines switch for the edge lines.
@@ -273,14 +282,6 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 - ![fix][fix] **72 fixes**, among them Cinema 4D-ready FBX, a server that answers only the app, and undo for instanced parts. The full list is in [CHANGELOG.md](CHANGELOG.md).
 
 **v0.13.0** — it feels like an app: installs to the desktop, opens in a window of its own, and the tabs grew up.
-
-- ![new][new] **Install it** — a web-app manifest and icon, so Chrome and Edge offer *Install*; the title bar can be folded away and the top bar takes its place.
-- ![new][new] **Its own window** — `start.bat` opens the app with no address bar, tabs or extension buttons. `python serve.py --tab` for an ordinary tab.
-- ![new][new] **Drag tabs into order** — sideways only, the others slide over, `Esc` puts it back.
-- ![polish][polish] **The tab, rearranged** — a status dot on the icon's corner, a click on the icon saves, close at the right end.
-- ![new][new] **Same sidebars in every tab** — widths and the folded left sidebar follow you between scenes; a switch turns it off.
-- ![perf][perf] **While the view moves** — parts under a few pixels are skipped, and the resolution steps down only if frames are slow. Both back the moment it stops, both switches under Settings.
-- ![polish][polish] Renderer picker in Settings; a Menu button without an arrow; a flat accent loading bar; Properties that does not jump.
 
 **v0.12.0** — the app builds as well as reduces: a library drawer of 86 parametric parts to drag onto the model, Align to floor, Select hidden parts, Fit to budget, Smart fit Boxes and Blocks, Clay view, and dark parts that have a shape.
 
