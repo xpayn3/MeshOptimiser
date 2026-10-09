@@ -2829,12 +2829,10 @@ const _Settings = (() => {
       if (e.target.closest('#set-about-help')) { hide(); try { window.MOHelp?.show(); } catch (_) {} }
       else if (e.target.closest('#set-about-keys')) { hide(); try { _Shortcuts.show(); } catch (_) {} }
       else if (e.target.closest('#set-about-copy')) {
-        const gpu = await _gpuInfo(), p = _Prefs.all();
-        const text = ['MeshOptimiser details', ..._aboutFacts().map(([k, v]) => k + ': ' + v), 'GPU: ' + gpu,
-          'Look: ' + [p.uiTone || 'graphite', p.uiAccent || 'default accent'].join(', ') + ' · CAD look ' + (p.cadLook || 'ceramic') + ' · outlines ' + (p.edgesMode === 'off' ? 'off' : 'on')].join('\n');
-        try { await navigator.clipboard.writeText(text); toast('Details copied', 'Paste them into the issue', 'success'); }
+        try { await navigator.clipboard.writeText(await _detailsText()); toast('Details copied', 'Paste them into the report', 'success'); }
         catch (_) { toast('Could not copy', 'The browser did not allow it', 'error'); }
       }
+      else if (e.target.closest('#set-about-report')) { _openReport(); }
     });
     // General: undo depth
     $s('set-pane-general')?.addEventListener('click', (e) => {
@@ -2899,6 +2897,18 @@ const _Settings = (() => {
     for (const [name, re] of [['Edge', /Edg[/]([0-9.]+)/], ['Firefox', /Firefox[/]([0-9.]+)/], ['Chrome', /Chrome[/]([0-9.]+)/], ['Safari', /Version[/]([0-9.]+)/]]) { const m = ua.match(re); if (m) return name + ' ' + m[1]; }
     return ua.slice(0, 60);
   };
+  // The details the report page asks for, and the hand-over to it
+  const _REPORT_URL = 'https://lukagrcar.com/apps/meshoptimiser/report.html';
+  async function _detailsText() {
+    const gpu = await _gpuInfo(), p = _Prefs.all();
+    return ['MeshOptimiser details', ..._aboutFacts().map(([k, v]) => k + ': ' + v), 'GPU: ' + gpu,
+      'Look: ' + [p.uiTone || 'graphite', p.uiAccent || 'default accent'].join(', ') + ' · CAD look ' + (p.cadLook || 'ceramic') + ' · outlines ' + (p.edgesMode === 'off' ? 'off' : 'on')].join('\n');
+  }
+  async function _openReport() {
+    let text = '';
+    try { text = await _detailsText(); } catch (_) {}
+    window.open(_REPORT_URL + (text ? '#details=' + encodeURIComponent(text) : ''), '_blank', 'noopener');
+  }
   const _aboutFacts = () => {
     const ver = (document.getElementById('brand-menu-ver')?.textContent || '').trim() || '—', sc = _sceneTotals();
     return [
@@ -2918,7 +2928,7 @@ const _Settings = (() => {
       _group('Help') +
       `<div class="set-row set-action"><span>Help &amp; docs<span class="set-help">How every tool works, with pictures. Works offline (F1).</span></span><button class="btn" id="set-about-help">Open</button></div>` +
       `<div class="set-row set-action"><span>Keyboard shortcuts<span class="set-help">Every key and mouse gesture (?).</span></span><button class="btn" id="set-about-keys">Open</button></div>` +
-      `<div class="set-row set-action"><span>Something wrong?<span class="set-help">Copy the details below, then describe what happened in a new issue.</span></span><span style="display:flex;gap:8px"><button class="btn" id="set-about-copy">Copy details</button><a class="btn" href="https://github.com/xpayn3/MeshOptimiser/issues/new" target="_blank" rel="noopener">Report an issue</a></span></div>` +
+      `<div class="set-row set-action"><span>Something wrong?<span class="set-help">Opens the report page with your version and system already filled in.</span></span><span style="display:flex;gap:8px"><button class="btn" id="set-about-copy">Copy details</button><button class="btn" id="set-about-report">Report a problem</button></span></div>` +
       _group('Project') +
       `<div class="set-row set-action"><span>Website<span class="set-help">Downloads, the full docs and the screenshots.</span></span><a class="btn" href="https://lukagrcar.com/apps/meshoptimiser/" target="_blank" rel="noopener">Open</a></div>` +
       `<div class="set-row set-action"><span>Source code<span class="set-help">Free and open source, under the MIT licence.</span></span><a class="btn" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener">GitHub</a></div>`;
@@ -3042,7 +3052,7 @@ const _Settings = (() => {
   }
   function hide() { $s('settings-modal')?.classList.remove('show'); }
   window.__openSettings = (pane) => show(pane);
-  return { show, hide };
+  return { show, hide, openReport: _openReport };
 })();
 
 const _Welcome = (() => {
@@ -4068,6 +4078,7 @@ window.addEventListener('keydown', e => {
     );
     $('brand-menu-shortcuts')?.addEventListener('click', () => { close(); try { _Shortcuts.show(); } catch(_){} });
     $('brand-menu-help')?.addEventListener('click', () => { close(); try { window.MOHelp?.show(); } catch(_){} });
+    $('brand-menu-report')?.addEventListener('click', (e) => { e.preventDefault(); close(); try { _Settings.openReport(); } catch(_){} });
   })();
   input?.addEventListener('change', e => {
     const f = e.target.files[0]; e.target.value = '';
@@ -5473,7 +5484,6 @@ const _gizmoHud = (() => {
   function update() {
     if (!before || !el || !state.pivot) return;
     const mode = state.gizmoMode;
-    const snapBy = mode === 'translate' && state._gizmoSnapStep ? ' ' + parseFloat(state._gizmoSnapStep.toPrecision(3)) : mode === 'rotate' ? ' ' + Math.round(state.gizmoSnap.rotate * 180 / Math.PI) + '°' : mode === 'scale' ? ' ' + parseFloat(state.gizmoSnap.scale.toPrecision(3)) : '';
     const snap = '';                                   // (snap and its step are on the pill at the top: _snapPillSync)
     // TransformControls.axis is set on grab and cleared on release. Possible
     // values: 'X' | 'Y' | 'Z' (single-axis arrow / ring), 'XY' | 'XZ' | 'YZ'
@@ -7516,7 +7526,6 @@ function _doCameraFlash(durMs = 360) {
   // Re-trigger the animation by clearing then forcing layout.
   flash.style.transition = 'none';
   flash.style.opacity = '0';
-  // eslint-disable-next-line no-unused-expressions
   flash.offsetHeight;
   flash.style.transition = `opacity ${Math.round(durMs * 0.18)}ms cubic-bezier(.2,.9,.3,1.1)`;
   flash.style.opacity = '0.92';
@@ -8838,7 +8847,6 @@ function _bgFogColor() {
 function _fitGridToModel(box) {
   if (!gridHelper || !scene) return;
   const size = box.getSize(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
   const footprint = Math.max(size.x, size.y, 1);
 
   // Pick minor/major near ~5% of the footprint, snapped to a power-of-10
@@ -10724,7 +10732,7 @@ function _goAxisView(axisId) {
   if (!camera || !controls) return;
   _stdViewActive = false;     // (moving the camera here must not look like orbiting out of the old view)
   const zUp = state.sceneUpAxis !== 'y';
-  const up = zUp ? 'z' : 'y', fwd = zUp ? 'y' : 'z';
+  const up = zUp ? 'z' : 'y';
   const ax = axisId[1], pos = axisId[0] === 'p';
   // name + which pill entry (if any) this is
   let label, view = null;
@@ -13027,7 +13035,6 @@ function refreshPropertiesPanel() {
     const p = getPart(ids[0]);
     if (!p) return;
     const sz = p.bbox.getSize(new THREE.Vector3());
-    const hex = '#' + (p.originalColor?.getHexString?.() || 'aaaaaa');
     // Type icon on the left disambiguates instance from a one-off part —
     // matches the tree's typeicon vocabulary so it reads at a glance.
     // Match the tree's typeicon vocabulary: green `box` for a singleton
@@ -18376,9 +18383,9 @@ const _DynPlace = (() => {
   let on = false, busy = false, drag = null, hoverRaf = 0, lastHover = null, hoverOver = false;
   const spinNow = { deg: 0 };
   const tmpM = new THREE.Matrix4(), tmpM2 = new THREE.Matrix4(), tmpN3 = new THREE.Matrix3();
-  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _up = new THREE.Vector3(), _h = new THREE.Vector3();
+  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _h = new THREE.Vector3();
   const _q = new THREE.Quaternion(), _qa = new THREE.Quaternion(), _qs = new THREE.Quaternion();
-  const _plane = new THREE.Plane(), _ray = new THREE.Ray(), _rq = new THREE.Quaternion();
+  const _plane = new THREE.Plane(), _rq = new THREE.Quaternion();
   // Which way a part's own top points. A part is taken to be upright the first time it is picked up (base is its pose then);
   // its top is the chosen axis (X, Y or Z, + or -) of that upright pose, carried along with the part. So after it has been placed
   // on a slope the next drag still turns that same top to the new surface's normal (and not the tilted part's current pose,
@@ -18548,7 +18555,6 @@ const _DynPlace = (() => {
     requestRender();
   }
 
-  const worldUp = (out) => (_floorPlane() === 'xz' ? out.set(0, 1, 0) : out.set(0, 0, 1));
   const selMeshes = () => {
     const out = [], seen = new Set();
     for (const p of (state._pivotedParts || (state._pivotedPart ? [state._pivotedPart] : []))) if (p && p.mesh && !seen.has(p.mesh)) { seen.add(p.mesh); out.push(p.mesh); }
@@ -18840,7 +18846,6 @@ function _pulledPosition() {
 }
 const _CAD_EDGE_MAT = (() => {
   const m = new THREE.LineBasicNodeMaterial({ color: 0x0d0d11, transparent: true, opacity: 0.9, depthWrite: false });
-  const T = THREE.TSL;
   m.positionNode = _pulledPosition();
   return m;
 })();
@@ -19381,7 +19386,6 @@ const _Shading = (() => {
     ctx.putImageData(img, 0, 0);
   }
 
-  const CLAY_ORDER = () => Object.keys(_CLAY_LOOKS), CAD_ORDER = () => Object.keys(_CAD_LOOKS);
   const queue = [];
   let pumping = false;
   function pump() {
@@ -20648,7 +20652,8 @@ function wireUI() {
   // change events rather than 'input' so dragging a slider doesn't stutter.
   $('display-units')?.addEventListener('change', e => {
     state.displayUnit = e.target.value;
-    try { onSelectionChanged?.(); } catch (_) {}
+    try { _transformPanelRefresh(); } catch (_) {}                              // position / size fields and their unit labels
+    try { refreshPropertiesPanel(); } catch (_) {}                              // bounding box, diagonal, volume
     try { _Measure.setSerialized(_Measure.getSerialized()); } catch (_) {}      // measurement labels are drawn text: draw them again in the new unit
   });
   $('scene-up-axis')?.addEventListener('change', e => {
@@ -21458,7 +21463,6 @@ const _FASTENER_M_SIZES = {
   M20: { d: 20, hex_s: 30,  hex_h: 12.5, nut_h: 16,   cap_d: 30,  cap_h: 20,   wash_od: 37, wash_t: 3.0 },
 };
 const _FASTENER_M_KEYS = ['M3','M4','M5','M6','M8','M10','M12','M16','M20'];
-const _FASTENER_KINDS  = new Set(['hexbolt','hexnut','allen','washer']);
 function _fasterDims(p) {
   return _FASTENER_M_SIZES[p?.size] || _FASTENER_M_SIZES.M6;
 }
@@ -23335,7 +23339,6 @@ function _addPrimitive(kind, preset) {
     if (state.selected) { state.selected.clear(); state.selected.add(partId); }
     state.selectedGroupIds?.clear?.();
     if (typeof rebuildTree === 'function') rebuildTree();
-    if (typeof refreshStatusBar === 'function') refreshStatusBar();
     // the counters (status bar, viewport) and the viewport stats, which a
     // scene made only of shapes used to leave at zero / hidden
     try { recomputeStats(); const vi = $('vp-info'); if (vi) vi.style.display = ''; } catch (_) {}
@@ -30456,17 +30459,6 @@ function invalidateExplodeBaseline(opts = {}) {
   }
 }
 
-// Returns true if any selected mesh is currently parented under state.pivot
-// (the gizmo's pivot Object3D), false otherwise. Both per-part and userGroup
-// pivot paths are covered.
-function _isGizmoPivotActive() {
-  return !!(
-    (state._pivotedParts && state._pivotedParts.length) ||
-    state._pivotedPart ||
-    state._pivotedGroup
-  );
-}
-
 // Explode and reset work in world space: each part's target is its rest
 // position in the world (plus the explode offset), converted into the frame
 // of whatever its parent is at that moment (partsRoot, a group, or the
@@ -31299,7 +31291,6 @@ function _wireSidebarResize() {
     handle.addEventListener('dblclick', () => {
       root.style.removeProperty(prop);
       try { localStorage.removeItem(side === 'left' ? STORE_L : STORE_R); } catch {}
-      if (typeof onWindowResize === 'function') onWindowResize();
     });
   }
 
