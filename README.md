@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 0 . 1 5 . 0
+  O P T I M I S E R   ·   v 0 . 2 1 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
@@ -309,6 +309,13 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 ---
 
 ## 🗒 What's New
+
+**v0.21.0** — show it and ship it: a turntable video, export presets for where the file is going, and a Selection bar with the actions I reach for most.
+
+- ![new][new] **Turntable video** — the film button next to the camera takes the camera once round the model and saves a WebM: 720p to 1440p, square or portrait, 4–12 s, 24/30/60 fps, fitted to the frame and looping. Encoded in the browser, nothing uploaded.
+- ![new][new] **Where is it going?** — Web viewer, AR on iPhone, Unreal Engine, Unity and 3D print in the Export dialog: one press sets the format, unit scale, up axis, origin, merge and Draco.
+- ![new][new] **Hide, Isolate, Frame and Duplicate** are buttons in the Selection bar.
+- ![polish][polish] **A calmer Selection bar** — outlined buttons directly on the panel, the Delete count in the header, the selection actions in one bar under Properties.
 
 **v0.20.0** — draw, organise and trust it: a Draw tool and Sweep, lines that are real parts of the scene, tree organising commands, IGES and BREP, and an app that closes its server with the window.
 

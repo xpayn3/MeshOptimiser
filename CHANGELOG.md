@@ -4,6 +4,27 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.21.0
+
+Released 9 Oct 2026.
+
+v0.20.0 was about drawing and trusting the app. v0.21.0 is about getting a model out and showing it: a turntable video, export presets for where the file is going, and a Selection bar with the actions I reach for most.
+
+**Show it**
+
+- ![new][new] **Turntable video.** The film button next to the camera (or "Turntable video…" in the search and the right-click menu) takes the camera once round the model and saves a WebM. Pick a size (720p to 1440p, square or portrait), a length of 4 to 12 seconds, 24, 30 or 60 frames a second, a direction and a view mode, and whether to hide the grid. "Fit the model to the frame" centres it and backs the camera off until it fills the picture, whatever the shape of the frame; the first and last frames are one step apart, so the clip loops. It is encoded in the browser with WebCodecs (VP9, or VP8 where VP9 is missing), so nothing leaves the machine, and the viewport is put back as it was. Chrome and Edge.
+
+**Export**
+
+- ![new][new] **Where is it going?** A row of presets at the top of the Export dialog: Web viewer, AR on iPhone, Unreal Engine, Unity and 3D print. One press picks the format and sets the unit scale, up axis, origin, merge and Draco, and points "Check against" at the same place, so the size meter agrees. They read the scene as millimetres, like the unit-scale choices do. Change any option and the preset lets go.
+- ![new][new] **× 0.1 (mm → cm)** in the unit scale, for Unreal.
+
+**Selection bar**
+
+- ![new][new] **A row for the view.** Hide (H), Isolate (S, and Show all while the view is isolated), Frame (F) and Duplicate (Ctrl+D) are buttons now, not only keys. They dim with nothing selected.
+- ![polish][polish] **Buttons sit directly on the panel.** Each is an outlined button with room around it, no box around the row, and the Delete count lives in the header ("12 selected") instead of squeezing the button.
+- ![polish][polish] **The selection actions are in one bar under Properties,** with a live count; every card title has a small icon and the group labels draw a line.
+
 ## v0.20.0
 
 Released 9 Oct 2026.

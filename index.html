@@ -1429,50 +1429,50 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .dlg-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-xl);transition:color .12s,background .12s}
 .dlg-close:hover{color:var(--tx);background:var(--s3)}
 
-/* ── Save Screenshot dialog (#scrshot-dlg) ───────────────────────────────
+/* ── Save Screenshot dialog (:is(#scrshot-dlg,#turntable-dlg)) ───────────────────────────────
    Migrated from the JS-injected _scrshot-dlg-style block. All rules are
-   scoped to #scrshot-dlg so they can't leak into other popups. */
-#scrshot-dlg .ss-body{padding:14px 16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
-#scrshot-dlg .ss-section-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;margin-bottom:6px}
-#scrshot-dlg .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-sm)}
-#scrshot-dlg .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:var(--r-md);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .14s ease,border-color .14s ease,transform .12s ease}
-#scrshot-dlg .ss-preset:hover{background:var(--s2);border-color:var(--s5)}
-#scrshot-dlg .ss-preset.active{background:linear-gradient(180deg,var(--ac-tint-18),var(--ac-tint-08));border-color:var(--ac-tint-40);color:var(--tx)}
-#scrshot-dlg .ss-preset .lbl{font-size:var(--fs-12);font-weight:var(--fw-semibold);line-height:1.1}
-#scrshot-dlg .ss-preset .sub{font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
-#scrshot-dlg .ss-preset.active .sub{color:var(--ac-text)}
-#scrshot-dlg .ss-custom{display:flex;align-items:center;gap:var(--space-md)}
-#scrshot-dlg .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:var(--r-sm);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
-#scrshot-dlg .ss-custom input:focus{border-color:var(--ac-tint-55)}
-#scrshot-dlg .ss-custom .x{color:var(--tx3);font-size:var(--fs-lg);font-weight:var(--fw-medium)}
-#scrshot-dlg .ss-meta{display:flex;justify-content:space-between;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
-#scrshot-dlg .ss-meta strong{color:var(--tx2);font-weight:var(--fw-medium)}
-#scrshot-dlg .ss-name{display:flex;flex-direction:column;gap:var(--space-sm)}
-#scrshot-dlg .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:var(--r-sm);font-size:var(--fs-md);outline:none}
-#scrshot-dlg .ss-name input:focus{border-color:var(--ac-tint-55)}
-#scrshot-dlg .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:10px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm);cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
-#scrshot-dlg .ss-overlay-row:hover{background:var(--s3);border-color:var(--s5)}
-#scrshot-dlg .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
-#scrshot-dlg .ss-overlay-row .lbl{flex:1;font-size:var(--fs-12);color:var(--tx);font-weight:var(--fw-medium)}
-#scrshot-dlg .ss-overlay-row .hint{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-regular);margin-left:4px}
-#scrshot-dlg .ss-stamp-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:10px 12px;background:var(--s1);border:1px solid var(--bd);border-top:0;border-radius:0 0 var(--r-sm) var(--r-sm);margin-top:-7px}
-#scrshot-dlg .ss-stamp-fields.disabled{opacity:.45;pointer-events:none}
-#scrshot-dlg .ss-stamp-check{display:flex;align-items:center;gap:7px;font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none}
-#scrshot-dlg .ss-stamp-check input{accent-color:var(--ac);width:12px;height:12px;cursor:pointer;margin:0}
-#scrshot-dlg .ss-stamp-pos{display:flex;align-items:center;gap:6px;grid-column:1 / -1;padding-top:6px;margin-top:2px;border-top:1px solid var(--bd);font-size:var(--fs-11);color:var(--tx3)}
-#scrshot-dlg .ss-stamp-pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;flex:1}
-#scrshot-dlg .ss-stamp-pos-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:4px 8px;border-radius:var(--r-sm);font-size:var(--fs-11);cursor:pointer;transition:background .12s,border-color .12s,color .12s;font-variant-numeric:tabular-nums}
-#scrshot-dlg .ss-stamp-pos-btn:hover{background:var(--s3);color:var(--tx)}
-#scrshot-dlg .ss-stamp-pos-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
-#scrshot-dlg .ss-vmode{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-#scrshot-dlg .ss-vmode-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:7px 8px;border-radius:var(--r-sm);font-size:var(--fs-11);cursor:pointer;font-weight:var(--fw-medium);transition:background .12s,border-color .12s,color .12s}
-#scrshot-dlg .ss-vmode-btn:hover{background:var(--s3);color:var(--tx)}
-#scrshot-dlg .ss-vmode-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
-#scrshot-dlg .dlg-foot .ss-cancel,#scrshot-dlg .dlg-foot .ss-save{padding:7px 14px;font-size:var(--fs-12);border-radius:var(--r-sm);border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:var(--fw-medium)}
-#scrshot-dlg .dlg-foot .ss-cancel:hover{background:var(--s3)}
-#scrshot-dlg .dlg-foot .ss-save{background:linear-gradient(180deg,var(--ac-tint-35),var(--ac-tint-18));border-color:var(--ac-tint-55);color:var(--tx-on-accent)}
-#scrshot-dlg .dlg-foot .ss-save:hover{background:linear-gradient(180deg,var(--ac-tint-40),var(--ac-tint-25))}
-#scrshot-dlg .dlg-foot .ss-save:disabled{opacity:.5;cursor:wait}
+   scoped to :is(#scrshot-dlg,#turntable-dlg) so they can't leak into other popups. */
+:is(#scrshot-dlg,#turntable-dlg) .ss-body{padding:14px 16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+:is(#scrshot-dlg,#turntable-dlg) .ss-section-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;margin-bottom:6px}
+:is(#scrshot-dlg,#turntable-dlg) .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-sm)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:var(--r-md);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:2px;transition:background .14s ease,border-color .14s ease,transform .12s ease}
+:is(#scrshot-dlg,#turntable-dlg) .ss-preset:hover{background:var(--s2);border-color:var(--s5)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-preset.active{background:linear-gradient(180deg,var(--ac-tint-18),var(--ac-tint-08));border-color:var(--ac-tint-40);color:var(--tx)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-preset .lbl{font-size:var(--fs-12);font-weight:var(--fw-semibold);line-height:1.1}
+:is(#scrshot-dlg,#turntable-dlg) .ss-preset .sub{font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
+:is(#scrshot-dlg,#turntable-dlg) .ss-preset.active .sub{color:var(--ac-text)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-custom{display:flex;align-items:center;gap:var(--space-md)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:7px 10px;border-radius:var(--r-sm);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
+:is(#scrshot-dlg,#turntable-dlg) .ss-custom input:focus{border-color:var(--ac-tint-55)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-custom .x{color:var(--tx3);font-size:var(--fs-lg);font-weight:var(--fw-medium)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-meta{display:flex;justify-content:space-between;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
+:is(#scrshot-dlg,#turntable-dlg) .ss-meta strong{color:var(--tx2);font-weight:var(--fw-medium)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-name{display:flex;flex-direction:column;gap:var(--space-sm)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:8px 10px;border-radius:var(--r-sm);font-size:var(--fs-md);outline:none}
+:is(#scrshot-dlg,#turntable-dlg) .ss-name input:focus{border-color:var(--ac-tint-55)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:10px;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm);cursor:pointer;user-select:none;transition:background .12s ease,border-color .12s ease}
+:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row:hover{background:var(--s3);border-color:var(--s5)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
+:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row .lbl{flex:1;font-size:var(--fs-12);color:var(--tx);font-weight:var(--fw-medium)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row .hint{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-regular);margin-left:4px}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:10px 12px;background:var(--s1);border:1px solid var(--bd);border-top:0;border-radius:0 0 var(--r-sm) var(--r-sm);margin-top:-7px}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-fields.disabled{opacity:.45;pointer-events:none}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-check{display:flex;align-items:center;gap:7px;font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-check input{accent-color:var(--ac);width:12px;height:12px;cursor:pointer;margin:0}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos{display:flex;align-items:center;gap:6px;grid-column:1 / -1;padding-top:6px;margin-top:2px;border-top:1px solid var(--bd);font-size:var(--fs-11);color:var(--tx3)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:3px;flex:1}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:4px 8px;border-radius:var(--r-sm);font-size:var(--fs-11);cursor:pointer;transition:background .12s,border-color .12s,color .12s;font-variant-numeric:tabular-nums}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos-btn:hover{background:var(--s3);color:var(--tx)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-vmode{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+:is(#scrshot-dlg,#turntable-dlg) .ss-vmode-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:7px 8px;border-radius:var(--r-sm);font-size:var(--fs-11);cursor:pointer;font-weight:var(--fw-medium);transition:background .12s,border-color .12s,color .12s}
+:is(#scrshot-dlg,#turntable-dlg) .ss-vmode-btn:hover{background:var(--s3);color:var(--tx)}
+:is(#scrshot-dlg,#turntable-dlg) .ss-vmode-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
+:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-cancel,:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-save{padding:7px 14px;font-size:var(--fs-12);border-radius:var(--r-sm);border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:var(--fw-medium)}
+:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-cancel:hover{background:var(--s3)}
+:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-save{background:linear-gradient(180deg,var(--ac-tint-35),var(--ac-tint-18));border-color:var(--ac-tint-55);color:var(--tx-on-accent)}
+:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-save:hover{background:linear-gradient(180deg,var(--ac-tint-40),var(--ac-tint-25))}
+:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-save:disabled{opacity:.5;cursor:wait}
 /* Export window — a format list on the left, that format's options on the right.
    Same language as Settings: an inset list, hairline rows with the label (and a
    line saying what it does) on the left and the control on the right. */
@@ -1884,12 +1884,12 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* Top bar: Export and Screenshot sit on the right, before the empty block
    where the renderer switch used to be. */
 #tb .spacer{order:1}
-#tb #tg-screenshot{order:2}
-#tb .spacer ~ *:not(#tg-screenshot){order:3}
+#tb #tg-screenshot,#tb #tg-turntable{order:2}
+#tb .spacer ~ *:not(#tg-screenshot):not(#tg-turntable){order:3}
 /* That block takes exactly the right sidebar's width, so the button before
    it ends at the viewport's right edge. (12px is the bar's own padding, 6px
    its gap.) */
-#tb .spacer ~ *:not(#tg-screenshot):last-child,
+#tb .spacer ~ *:not(#tg-screenshot):not(#tg-turntable):last-child,
 #tb #stat-renderer,#tb .stat-renderer{flex:0 0 calc(var(--side-r-w) - 18px);box-sizing:border-box;display:flex;justify-content:flex-end;min-width:0}
 /* The shape picker stands on the Add button in the bottom toolbar and opens
    upwards like the toolbar's other popovers (app-v2.js lines it up with the
@@ -3438,7 +3438,7 @@ html,body{user-select:none;-webkit-user-select:none}
 :is(.mac-input,.dlg-input,.sc-search,.exp-num,.exp-name-box,
     #_brn-dialog .brn-f :is(input[type=text],input[type=number],select),
     #_flat-dialog .flat-row input[type=number],
-    #scrshot-dlg :is(.ss-custom,.ss-name) input){
+    :is(#scrshot-dlg,#turntable-dlg) :is(.ss-custom,.ss-name) input){
   box-sizing:border-box;height:var(--ctl-h);min-height:var(--ctl-h);padding:0 var(--ctl-px);
   background:var(--ctl-bg);border:1px solid var(--ctl-bd);border-radius:var(--ctl-r);
   font-size:var(--ctl-fs);line-height:1;box-shadow:none;outline:none;
@@ -3447,11 +3447,11 @@ html,body{user-select:none;-webkit-user-select:none}
 :is(.mac-input,.dlg-input,.sc-search,.exp-num,.exp-name-box,
     #_brn-dialog .brn-f :is(input[type=text],input[type=number],select),
     #_flat-dialog .flat-row input[type=number],
-    #scrshot-dlg :is(.ss-custom,.ss-name) input):hover{border-color:var(--ctl-bd-hover);background:var(--ctl-bg)}
+    :is(#scrshot-dlg,#turntable-dlg) :is(.ss-custom,.ss-name) input):hover{border-color:var(--ctl-bd-hover);background:var(--ctl-bg)}
 :is(.mac-input,.dlg-input,.sc-search,.exp-num,
     #_brn-dialog .brn-f :is(input[type=text],input[type=number],select),
     #_flat-dialog .flat-row input[type=number],
-    #scrshot-dlg :is(.ss-custom,.ss-name) input):focus,.exp-name-box:focus-within{border-color:var(--ctl-bd-focus);background:var(--ctl-bg);box-shadow:none}
+    :is(#scrshot-dlg,#turntable-dlg) :is(.ss-custom,.ss-name) input):focus,.exp-name-box:focus-within{border-color:var(--ctl-bd-focus);background:var(--ctl-bg);box-shadow:none}
 /* digits sit a little high in Inter: numbers get the same drop the number scrubbers use */
 :is(.exp-num,#_brn-dialog .brn-f input[type=number],#_flat-dialog .flat-row input[type=number]){padding-top:calc(var(--num-drop) * 2)}
 .exp-name-box{padding:0}
@@ -3572,17 +3572,27 @@ body.app-ready .sp-card{transform:scale(1.025)}
 #sidebar-right .section-h .sec-ico{width:15px;height:15px;margin-right:9px;flex:none;color:var(--tx3);transition:color var(--dur-fast) var(--ease-out)}
 #sidebar-right .section-h > span:first-of-type{flex:1 1 auto;min-width:0}
 #sidebar-right .section-h:hover .sec-ico,#sidebar-right .section-h:not(.collapsed) .sec-ico{color:var(--tx2)}
-.sel-bar{padding:14px 2px 4px;margin:0;display:flex;flex-direction:column;gap:8px}
+.sel-bar{padding:14px 2px 4px;margin:0;display:flex;flex-direction:column;gap:10px}
 .sel-bar-h{display:flex;align-items:center;justify-content:space-between;padding:0 2px 1px;font-size:var(--fs-10,10px);letter-spacing:.09em;text-transform:uppercase;font-weight:var(--fw-regular);color:var(--tx3)}
 .sel-bar-n{font-size:var(--fs-11);font-weight:var(--fw-regular);color:var(--tx3);font-variant-numeric:tabular-nums}
 .sel-bar.has-sel .sel-bar-n{color:var(--ac-text)}
-.sel-bar-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
-.sel-bar-grid .btn{height:30px;min-width:0;padding:0 6px;gap:6px;justify-content:center;font-size:var(--fs-11);white-space:nowrap;overflow:hidden}
-.sel-bar-grid .btn svg{width:14px;height:14px;flex:none;color:var(--tx3)}
+/* Ghost buttons straight on the panel: no wrapper box, a hairline edge, a fill only on hover. */
+.sel-bar-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.sel-bar-grid .btn{height:34px;min-width:0;padding:0 8px;gap:7px;justify-content:center;font-size:var(--fs-11);white-space:nowrap;overflow:hidden;background:transparent;border:1px solid var(--bd);border-radius:var(--r-md,10px);color:var(--tx2)}
+.sel-bar-grid .btn:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
+.sel-bar-grid .btn:active{transform:none;background:var(--bg4)}
+.sel-bar-grid .btn svg{width:14px;height:14px;flex:none;color:var(--tx3);stroke-width:1.75}
 .sel-bar-grid .btn:hover svg{color:var(--tx)}
-.sel-bar-grid.is-edit{margin-top:2px}
-.sel-bar:not(.has-sel) .is-edit .btn{opacity:.5}
-.sel-del-n{margin-left:2px;color:var(--tx3);font-variant-numeric:tabular-nums}
+.sel-bar-grid .btn.danger{color:var(--er)}
+.sel-bar-grid .btn.danger svg{color:currentColor}
+.sel-bar-grid .btn.danger:hover{background:var(--er-soft);border-color:var(--er-line)}
+.sel-bar-grid.is-quad{grid-template-columns:repeat(4,minmax(0,1fr))}
+.sel-bar-grid.is-quad .btn svg{width:16px;height:16px}
+.sel-bar-grid .btn.is-on{color:var(--ac-text);border-color:var(--ac-line,var(--bd2))}
+.sel-bar-grid .btn.is-on svg{color:currentColor}
+.sel-bar-grid.is-edit{margin-top:0}
+.sel-bar:not(.has-sel) .is-edit .btn{opacity:.45}
+.sel-del-n{display:none} /* the count lives in the header; the element stays because the app writes to #del-sel-count */
 </style>
 </head>
 <body>
@@ -3744,20 +3754,18 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.20.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.21.0</div>
         </div>
         <div class="brand-menu-about">Optimise, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.20.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.21.0</span></div>
           <ul>
-            <li>Draw lines and shapes (L), and Sweep along a line</li>
-            <li>Lines are parts: in the tree, in groups, with the gizmo</li>
-            <li>Organise the tree: remove, flatten, sort, move groups</li>
-            <li>Pick groups and parts together with Ctrl and Shift</li>
-            <li>IGES and BREP files, folders and LODs in the converter</li>
-            <li>Copies found in files from other tools; Decimate within a distance</li>
-            <li>The server closes with the window; a crash is handled</li>
+            <li>Turntable video: one slow turn, saved as a WebM</li>
+            <li>Export presets: web, AR, Unreal, Unity, 3D print</li>
+            <li>Hide, Isolate, Frame and Duplicate in the Selection bar</li>
+            <li>The selection actions in one bar under Properties</li>
+            <li>Outlined buttons that sit directly on the panel</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -3824,6 +3832,7 @@ window.moSplash = function (msg, pct) {
       <button class="tbtn" id="btn-export" disabled title="Export the model (Ctrl+E)"><i data-lucide="download"></i>Export</button>
     </div>
     <button class="tbtn icon-only" id="tg-screenshot" title="Capture viewport screenshot (share / copy / download)"><i data-lucide="camera"></i></button>
+    <button class="tbtn icon-only" id="tg-turntable" title="Turntable video: one slow turn around the model, saved as a WebM"><i data-lucide="film"></i></button>
     <button class="tbtn" id="btn-save-scene" disabled style="display:none"><i data-lucide="save"></i>Save scene</button>
     <div class="spacer"></div>
     <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="min-width:80px"><option value="webgpu" data-logo="assets/webgpu.svg">WebGPU</option><option value="webgl2" data-logo="assets/webgl.png">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
@@ -4590,10 +4599,16 @@ window.moSplash = function (msg, pct) {
         <button class="btn" id="btn-select-color" title="By colour: select every part that shares a colour with the current selection"><i data-lucide="palette"></i>Colour</button>
         <button class="btn" id="btn-select-regex" title="By name: select every part whose name matches a regex"><i data-lucide="search"></i>Name</button>
       </div>
+      <div class="sel-bar-grid is-edit is-quad">
+        <button class="btn" id="sel-hide" title="Hide the selection (H)" aria-label="Hide"><i data-lucide="eye-off"></i></button>
+        <button class="btn" id="sel-isolate" title="Isolate: show only the selection (S)" aria-label="Isolate"><i data-lucide="focus"></i></button>
+        <button class="btn" id="sel-frame" title="Frame: zoom to the selection (F)" aria-label="Frame"><i data-lucide="maximize"></i></button>
+        <button class="btn" id="sel-duplicate" title="Duplicate the selection in place (Ctrl+D)" aria-label="Duplicate"><i data-lucide="copy-plus"></i></button>
+      </div>
       <div class="sel-bar-grid is-edit">
         <button class="btn" id="btn-merge-sel" title="Merge selected parts into a single mesh — ideal for STL / 3D printing (Ctrl+M)"><i data-lucide="combine"></i>Merge</button>
         <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together (Ctrl+G)"><i data-lucide="folder-plus"></i>Group</button>
-        <button class="btn danger" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)"><i data-lucide="trash-2"></i>Delete<span class="sel-del-n">(<span id="del-sel-count">0</span>)</span></button>
+        <button class="btn danger" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)"><i data-lucide="trash-2"></i>Delete<span class="sel-del-n"><span id="del-sel-count">0</span></span></button>
       </div>
     </div>
 
@@ -5144,6 +5159,16 @@ window.moSplash = function (msg, pct) {
         <!-- what is about to be written: follows the options below -->
         <div class="sv-sum" id="exp-sum"></div>
 
+        <div class="exp-group-title">Where is it going?</div>
+        <div class="sv-chips" id="exp-presets" style="margin:0 0 2px">
+          <button type="button" class="sv-chip" data-preset="web" title="GLB with Draco, metres, Y up">Web viewer</button>
+          <button type="button" class="sv-chip" data-preset="ar" title="USDZ, metres, Y up, on the floor">AR on iPhone</button>
+          <button type="button" class="sv-chip" data-preset="unreal" title="FBX, centimetres, Z up">Unreal Engine</button>
+          <button type="button" class="sv-chip" data-preset="unity" title="FBX, metres, Y up">Unity</button>
+          <button type="button" class="sv-chip" data-preset="print" title="STL, millimetres, one mesh, on the bed">3D print</button>
+        </div>
+        <div class="field-help" id="exp-preset-note" style="margin:6px 0 0"></div>
+
         <div class="exp-group-title">File name</div>
         <div class="exp-name">
           <div class="exp-name-box">
@@ -5172,6 +5197,7 @@ window.moSplash = function (msg, pct) {
             <option value="1" selected>1.0 (no change)</option>
             <option value="0.001">× 0.001 (mm → m)</option>
             <option value="0.01">× 0.01 (cm → m)</option>
+            <option value="0.1">× 0.1 (mm → cm)</option>
             <option value="1000">× 1000 (m → mm)</option>
             <option value="100">× 100 (m → cm)</option>
             <option value="25.4">× 25.4 (in → mm)</option>
@@ -5787,7 +5813,7 @@ window.moSplash = function (msg, pct) {
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=20261009-icons9"></script>
+<script type="module" src="app-v2.js?v=20261009-v0.21.0"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app-v2.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

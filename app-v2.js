@@ -7885,7 +7885,7 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
     try { _drawScreenshotStamp(ctx, outW, outH, opts.stampOpts); } catch (e) { console.warn('[screenshot] stamp draw failed', e); }
   }
 
-  const blob = await new Promise(res => out.toBlob(res, 'image/png'));
+  const blob = opts.asCanvas ? out : await new Promise(res => out.toBlob(res, 'image/png'));
 
   // Restore view-mode and grid visibility before returning. Doing it AFTER
   // toBlob (rather than in a finally near the top) is intentional — toBlob
@@ -7902,7 +7902,7 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
   }
 
   if (!blob) throw new Error('toBlob returned null');
-  return blob;
+  return blob; // a PNG blob, or the canvas itself with opts.asCanvas
 }
 
 // Default stamp configuration: the model's own lines on, anchored bottom-left.
@@ -8053,7 +8053,7 @@ function _defaultScreenshotName() {
 // Save a blob via showSaveFilePicker (where supported, lets the user choose
 // the destination + name) or fall back to a plain download. Returns the
 // final filename, or null if the user cancelled.
-async function _saveScreenshotBlob(blob, suggestedName) {
+async function _saveScreenshotBlob(blob, suggestedName, kind) {
   if (window.showSaveFilePicker) {
     // FSA writes can fail at three different points and each one needs a
     // different recovery strategy — collapsing them into one try/catch
@@ -8069,7 +8069,7 @@ async function _saveScreenshotBlob(blob, suggestedName) {
     try {
       handle = await window.showSaveFilePicker({
         suggestedName,
-        types: [{ description: 'PNG image', accept: { 'image/png': ['.png'] } }],
+        types: [kind ? { description: kind.description, accept: { [kind.mime]: [kind.ext] } } : { description: 'PNG image', accept: { 'image/png': ['.png'] } }],
       });
     } catch (e) {
       if (e?.name === 'AbortError') return null;          // user cancelled
@@ -8424,6 +8424,272 @@ function _captureViewportScreenshot() {
   // just as the white starts fading out — feels like the dialog is "what
   // came out of the camera" rather than a separate action.
   setTimeout(_openScreenshotDialog, 120);
+}
+
+// ── Turntable video ────────────────────────────────────────────────────────
+// The camera goes once round whatever the view is centred on. Every frame is
+// drawn the way a screenshot is, WebCodecs encodes them (VP9, or VP8 where VP9
+// is not offered) and a small writer wraps the result in a WebM file.
+const _WebmMux = (() => {
+  const enc = new TextEncoder();
+  const num = (n, len) => { const a = new Uint8Array(len); for (let i = len - 1; i >= 0; i--) { a[i] = n % 256; n = Math.floor(n / 256); } return a; };
+  const idOf = (id) => { const a = []; for (let v = id; v > 0; v = Math.floor(v / 256)) a.unshift(v & 255); return Uint8Array.from(a); };
+  const cat = (parts) => { let n = 0; for (const p of parts) n += p.length; const o = new Uint8Array(n); let k = 0; for (const p of parts) { o.set(p, k); k += p.length; } return o; };
+  // Sizes are always written as 8 bytes: longer than needed, and still valid.
+  const el = (id, ...kids) => { const body = cat(kids); const size = new Uint8Array(8); size[0] = 1; size.set(num(body.length, 7), 1); return cat([idOf(id), size, body]); };
+  const uint = (id, n) => el(id, num(n, 8));
+  const str = (id, s) => el(id, enc.encode(s));
+  const f64 = (id, n) => { const b = new Uint8Array(8); new DataView(b.buffer).setFloat64(0, n); return el(id, b); };
+  // frames: [{ data, key, ts (ms) }], each cluster starts on a key frame.
+  function mux({ codec, width, height, durationMs, frames }) {
+    const header = el(0x1A45DFA3, uint(0x4286, 1), uint(0x42F7, 1), uint(0x42F2, 4), uint(0x42F3, 8), str(0x4282, 'webm'), uint(0x4287, 4), uint(0x4285, 2));
+    const info = el(0x1549A966, uint(0x2AD7B1, 1000000), f64(0x4489, durationMs), str(0x4D80, 'MeshOptimiser'), str(0x5741, 'MeshOptimiser'));
+    const tracks = el(0x1654AE6B, el(0xAE, uint(0xD7, 1), uint(0x73C5, 1), uint(0x83, 1), str(0x86, codec), el(0xE0, uint(0xB0, width), uint(0xBA, height))));
+    const clusters = [];
+    let start = 0, blocks = [];
+    const flush = () => { if (blocks.length) clusters.push(el(0x1F43B675, uint(0xE7, start), ...blocks)); blocks = []; };
+    for (const f of frames) {
+      if (f.key || !blocks.length) { flush(); start = f.ts; }
+      const rel = f.ts - start;
+      blocks.push(el(0xA3, Uint8Array.of(0x81, (rel >> 8) & 255, rel & 255, f.key ? 0x80 : 0), f.data));
+    }
+    flush();
+    return new Blob([header, el(0x18538067, info, tracks, ...clusters)], { type: 'video/webm' });
+  }
+  return { mux };
+})();
+
+const _turntableRun = { busy: false, cancel: false };
+
+// Draws one turn and returns a WebM blob. o: { w, h, fps, seconds, dir (1 or -1),
+// viewMode, hideGrid, onProgress(done, total) }. Rejects with name 'AbortError' when cancelled.
+async function _renderTurntableVideo(o) {
+  if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') throw new Error('This browser cannot encode video (WebCodecs is missing). Use Chrome or Edge.');
+  if (!renderer || !scene || !camera || !controls) throw new Error('Renderer not ready');
+  const w = Math.max(16, o.w & ~1), h = Math.max(16, o.h & ~1);
+  const total = Math.max(2, Math.round(o.fps * o.seconds));
+  const bitrate = Math.min(40e6, Math.max(2e6, Math.round(w * h * o.fps * 0.12)));
+  let cfg = null, codecId = '';
+  for (const [codec, id] of [['vp09.00.10.08', 'V_VP9'], ['vp8', 'V_VP8']]) {
+    const c = { codec, width: w, height: h, bitrate, framerate: o.fps };
+    try { const s = await VideoEncoder.isConfigSupported(c); if (s && s.supported) { cfg = c; codecId = id; break; } } catch (_) {}
+  }
+  if (!cfg) throw new Error('This browser has no video encoder for ' + w + ' × ' + h);
+
+  const chunks = [];
+  let encErr = null;
+  const encoder = new VideoEncoder({
+    output: (chunk) => { const d = new Uint8Array(chunk.byteLength); chunk.copyTo(d); chunks.push({ data: d, key: chunk.type === 'key', ts: Math.round(chunk.timestamp / 1000) }); },
+    error: (e) => { encErr = e; },
+  });
+  encoder.configure(cfg);
+
+  // What gets borrowed from the viewport, given back at the end.
+  const target = controls.target.clone();
+  const saved = { pos: camera.position.clone(), quat: camera.quaternion.clone(), zoom: camera.zoom, far: camera.far, target: target.clone() };
+  const axis = camera.up.clone().normalize();
+  let off0 = camera.position.clone().sub(target);
+  // Fit: turn about the middle of the model and stand far enough back that its
+  // bounding sphere fills most of the frame, whatever the frame's shape.
+  if (o.fit && camera.isPerspectiveCamera && !camera.isOrthographicCamera && !camera._isOrtho && state.partsRoot) {
+    const box = new THREE.Box3().setFromObject(state.partsRoot);
+    if (!box.isEmpty()) {
+      const centre = box.getCenter(new THREE.Vector3());
+      const radius = box.getBoundingSphere(new THREE.Sphere()).radius;
+      const dir = off0.lengthSq() > 1e-9 ? off0.clone().normalize() : new THREE.Vector3(1, 1, 1).normalize();
+      // The camera's own axes for this angle of view; the model turns, so the corners are turned
+      // through a full circle and the distance is whatever the widest moment needs.
+      const fwd = dir.clone().negate();
+      let right = new THREE.Vector3().crossVectors(fwd, axis);
+      if (right.lengthSq() < 1e-8) right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(1, 0, 0));
+      right.normalize();
+      const upv = new THREE.Vector3().crossVectors(right, fwd).normalize();
+      const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), tanH = tanV * (w / h), fill = 0.88;
+      let dist = radius * 1.2, q = new THREE.Vector3();
+      for (let k = 0; k < 36; k++) {
+        const ang = k * Math.PI / 18;
+        for (let cx = 0; cx < 8; cx++) {
+          q.set(cx & 1 ? box.max.x : box.min.x, cx & 2 ? box.max.y : box.min.y, cx & 4 ? box.max.z : box.min.z).sub(centre).applyAxisAngle(axis, ang);
+          const z = q.dot(dir);
+          dist = Math.max(dist, z + Math.abs(q.dot(right)) / (tanH * fill), z + Math.abs(q.dot(upv)) / (tanV * fill));
+        }
+      }
+      target.copy(centre); off0 = dir.multiplyScalar(dist);
+      if (camera.far < dist + radius * 2) { camera.far = dist + radius * 2; camera.updateProjectionMatrix(); }
+    }
+  }
+  const hasGrid = (typeof gridHelper !== 'undefined' && gridHelper);
+  const prevMode = state?.viewMode, prevGrid = hasGrid ? gridHelper.visible : null;
+  const prevOrigin = state?._originMarker ? state._originMarker.visible : null;
+  try {
+    if (o.viewMode && o.viewMode !== 'current' && o.viewMode !== prevMode) { try { setViewMode(o.viewMode); } catch (_) {} }
+    if (o.hideGrid) {
+      if (hasGrid) gridHelper.visible = false;
+      if (state?._originMarker) state._originMarker.visible = false;
+    }
+    for (let i = 0; i < total; i++) {
+      if (_turntableRun.cancel) { const e = new Error('Cancelled'); e.name = 'AbortError'; throw e; }
+      const a = (o.dir || 1) * Math.PI * 2 * i / total;     // the last frame stops one step short, so the loop is seamless
+      camera.position.copy(target).add(off0.clone().applyAxisAngle(axis, a));
+      camera.lookAt(target);
+      camera.updateMatrixWorld(true);
+      const cv = await _captureFrameAsBlob(w, h, { asCanvas: true });
+      const frame = new VideoFrame(cv, { timestamp: Math.round(i * 1e6 / o.fps), duration: Math.round(1e6 / o.fps) });
+      encoder.encode(frame, { keyFrame: i % 30 === 0 });
+      frame.close();
+      while (encoder.encodeQueueSize > 6) await new Promise(r => setTimeout(r, 4));
+      if (encErr) throw encErr;
+      o.onProgress?.(i + 1, total);
+      if (i % 3 === 2) await new Promise(r => setTimeout(r, 0));   // let the page paint the progress
+    }
+    await encoder.flush();
+    if (encErr) throw encErr;
+  } finally {
+    try { if (encoder.state !== 'closed') encoder.close(); } catch (_) {}
+    try {
+      camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat); camera.zoom = saved.zoom; camera.far = saved.far;
+      camera.updateProjectionMatrix(); camera.updateMatrixWorld(true);
+      controls.target.copy(saved.target); controls.update();
+    } catch (_) {}
+    try { if (prevMode && state.viewMode !== prevMode) setViewMode(prevMode); } catch (_) {}
+    try { if (hasGrid && prevGrid != null) gridHelper.visible = prevGrid; } catch (_) {}
+    try { if (state?._originMarker && prevOrigin != null) state._originMarker.visible = prevOrigin; } catch (_) {}
+    requestRender();
+  }
+  chunks.sort((a, b) => a.ts - b.ts);
+  return _WebmMux.mux({ codec: codecId, width: w, height: h, durationMs: Math.round(total * 1000 / o.fps), frames: chunks });
+}
+
+function _openTurntableDialog() {
+  if (!renderer || !scene || !camera) { toast('Turntable', 'Renderer not ready', 'warn'); return; }
+  const presets = [
+    { id: 'hd',  label: '720p',     w: 1280, h: 720,  desc: 'Small file' },
+    { id: 'fhd', label: '1080p',    w: 1920, h: 1080, desc: 'Full HD' },
+    { id: 'qhd', label: '1440p',    w: 2560, h: 1440, desc: 'QHD' },
+    { id: 'sq',  label: 'Square',   w: 1080, h: 1080, desc: 'Feeds' },
+    { id: 'tall', label: 'Portrait', w: 1080, h: 1920, desc: 'Stories' },
+  ];
+  const seg = (name, items) => `<div class="ss-vmode" style="grid-template-columns:repeat(${items.length},1fr)">${items.map(([v, t, tip]) => `<button type="button" class="ss-vmode-btn" data-${name}="${v}"${tip ? ` title="${tip}"` : ''}>${t}</button>`).join('')}</div>`;
+  const dlg = _DraggablePopup.create({
+    id: 'turntable-dlg',
+    title: 'Turntable video',
+    subtitle: 'One slow turn around the model, as a WebM',
+    iconName: 'film',
+    width: 460, height: 560, minWidth: 380, minHeight: 460,
+    bodyHtml: `
+      <div class="ss-body">
+        <div>
+          <div class="ss-section-title">Size</div>
+          <div class="ss-presets" id="tt-presets">${presets.map(p => `
+            <button type="button" class="ss-preset" data-w="${p.w}" data-h="${p.h}">
+              <span class="lbl">${p.label}</span><span class="sub">${p.w}×${p.h} · ${p.desc}</span>
+            </button>`).join('')}</div>
+        </div>
+        <div>
+          <div class="ss-section-title">Length</div>
+          ${seg('secs', [[4, '4 s'], [6, '6 s'], [8, '8 s'], [12, '12 s']])}
+        </div>
+        <div>
+          <div class="ss-section-title">Frame rate</div>
+          ${seg('fps', [[24, '24'], [30, '30'], [60, '60']])}
+        </div>
+        <div>
+          <div class="ss-section-title">Direction</div>
+          ${seg('dir', [[1, 'Clockwise', 'Seen from above'], [-1, 'Counter-clockwise', 'Seen from above']])}
+        </div>
+        <div>
+          <div class="ss-section-title">View mode</div>
+          ${seg('vmode', [['current', 'Current'], ['solid', 'Solid'], ['wire', 'Wireframe'], ['xray', 'X-ray']])}
+        </div>
+        <label class="ss-overlay-row" for="tt-fit" title="Centre on the model and back the camera off so it fills the frame. Off: the camera keeps its distance and turns about what the view is centred on.">
+          <input type="checkbox" id="tt-fit">
+          <span class="lbl">Fit the model to the frame <span class="hint">(centre it and fill the picture)</span></span>
+        </label>
+        <label class="ss-overlay-row" for="tt-hide-grid" title="Leave the floor grid out of the video. The viewport is not changed.">
+          <input type="checkbox" id="tt-hide-grid">
+          <span class="lbl">Hide scene grid <span class="hint">(floor lines and origin axes)</span></span>
+        </label>
+        <div class="ss-name">
+          <div class="ss-section-title">Filename</div>
+          <input type="text" id="tt-name" spellcheck="false">
+        </div>
+        <div class="ss-meta"><span id="tt-info"></span><span>The turn starts from the current view angle</span></div>
+      </div>`,
+    footHtml: `
+      <button class="ss-cancel" type="button">Cancel</button>
+      <button class="ss-save" type="button">Render…</button>`,
+  });
+  const root = document.getElementById('turntable-dlg');
+  const nameIn = root.querySelector('#tt-name');
+  const saveBtn = root.querySelector('.ss-save');
+  const cancelBtn = root.querySelector('.ss-cancel');
+  const infoEl = root.querySelector('#tt-info');
+  const KEY = 'stepopt-turntable';
+  const DEFAULTS = { w: 1920, h: 1080, secs: 6, fps: 30, dir: 1, vmode: 'current', hideGrid: true, fit: true };
+  const load = () => { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (_) { return { ...DEFAULTS }; } };
+  const read = () => {
+    const act = (n) => root.querySelector(`[data-${n}].active`)?.dataset[n];
+    const p = root.querySelector('.ss-preset.active');
+    return {
+      w: p ? +p.dataset.w : DEFAULTS.w, h: p ? +p.dataset.h : DEFAULTS.h,
+      secs: +(act('secs') || DEFAULTS.secs), fps: +(act('fps') || DEFAULTS.fps), dir: +(act('dir') || 1),
+      vmode: act('vmode') || 'current', hideGrid: !!root.querySelector('#tt-hide-grid').checked, fit: !!root.querySelector('#tt-fit').checked,
+    };
+  };
+  const paint = (o) => {
+    root.querySelectorAll('.ss-preset').forEach(b => b.classList.toggle('active', +b.dataset.w === o.w && +b.dataset.h === o.h));
+    for (const n of ['secs', 'fps', 'dir', 'vmode']) root.querySelectorAll(`[data-${n}]`).forEach(b => b.classList.toggle('active', String(b.dataset[n]) === String(o[n])));
+    root.querySelector('#tt-hide-grid').checked = !!o.hideGrid;
+    root.querySelector('#tt-fit').checked = !!o.fit;
+    const frames = Math.round(o.secs * o.fps);
+    infoEl.textContent = frames + ' frames · ' + o.w + '×' + o.h;
+  };
+  const stem = () => (document.getElementById('sb-status')?.textContent?.trim() || 'model').replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'model';
+  nameIn.value = stem() + '_turntable.webm';
+  paint(load());
+
+  if (!root.dataset.wired) {
+    root.dataset.wired = '1';
+    const pick = (btn, attr) => { root.querySelectorAll(`[data-${attr}]`).forEach(b => b.classList.remove('active')); btn.classList.add('active'); };
+    const changed = () => { const o = read(); try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (_) {} paint(o); };
+    root.querySelectorAll('.ss-preset').forEach(b => b.addEventListener('click', () => { root.querySelectorAll('.ss-preset').forEach(x => x.classList.remove('active')); b.classList.add('active'); changed(); }));
+    for (const n of ['secs', 'fps', 'dir', 'vmode']) root.querySelectorAll(`[data-${n}]`).forEach(b => b.addEventListener('click', () => { pick(b, n); changed(); }));
+    root.querySelector('#tt-hide-grid').addEventListener('change', changed);
+    root.querySelector('#tt-fit').addEventListener('change', changed);
+    cancelBtn.addEventListener('click', () => { if (_turntableRun.busy) _turntableRun.cancel = true; else dlg.hide(); });
+    saveBtn.addEventListener('click', async () => {
+      if (_turntableRun.busy) return;
+      const o = read();
+      let name = (nameIn.value || (stem() + '_turntable.webm')).trim();
+      if (!/\.webm$/i.test(name)) name += '.webm';
+      _turntableRun.busy = true; _turntableRun.cancel = false;
+      const label = saveBtn.textContent;
+      saveBtn.disabled = true; cancelBtn.textContent = 'Stop';
+      const t0 = performance.now();
+      try {
+        const blob = await _renderTurntableVideo({
+          ...o, seconds: o.secs, viewMode: o.vmode,
+          onProgress: (d, t) => { saveBtn.textContent = 'Rendering ' + Math.round(100 * d / t) + '%'; },
+        });
+        saveBtn.textContent = 'Saving…';
+        const saved = await _saveScreenshotBlob(blob, name, { description: 'WebM video', mime: 'video/webm', ext: '.webm' });
+        if (saved) {
+          toast('Turntable saved', saved + ' (' + (blob.size / 1048576).toFixed(1) + ' MB, ' + Math.round((performance.now() - t0) / 1000) + ' s to render)', 'info', 3500);
+          dlg.hide();
+        }
+      } catch (err) {
+        if (err?.name === 'AbortError') toast('Turntable', 'Stopped', 'info', 1800);
+        else { console.error('[turntable]', err); toast('Turntable failed', err?.message || String(err), 'warn'); }
+      } finally {
+        _turntableRun.busy = false; _turntableRun.cancel = false;
+        saveBtn.textContent = label; saveBtn.disabled = false; cancelBtn.textContent = 'Cancel';
+        requestRender();
+      }
+    });
+  }
+  if (window.lucide?.createIcons) { try { window.lucide.createIcons({ icons: window.lucide.icons, attrs: {} }); } catch (_) {} }
+  dlg.show();
+  setTimeout(() => { try { nameIn.focus(); nameIn.select(); } catch (_) {} }, 60);
 }
 
 // Render the scene into a small offscreen target, encode the result as a JPEG
@@ -20392,6 +20658,44 @@ function wireUI() {
     });
   }
   document.getElementById('format-grid')?.addEventListener('click', () => setTimeout(_updateExportTarget, 0));
+  // Where it is going: one press sets the format and the numbers that place
+  // wants. The scene is read as millimetres, as the unit-scale choices below
+  // are ("mm → m"), so the factors are mm → m (0.001) and mm → cm (0.1).
+  const _EXPORT_PRESETS = {
+    web:    { fmt: 'glb',  scale: '0.001', axis: 'y-up', origin: 'keep',  draco: true,  merge: false, target: 'web',  note: 'GLB with Draco, in metres, Y up. Opens in any web viewer.' },
+    ar:     { fmt: 'usdz', scale: '0.001', axis: 'y-up', origin: 'floor', draco: false, merge: false, target: 'arql', note: 'USDZ in metres, Y up, standing on the floor, for Apple AR Quick Look.' },
+    unreal: { fmt: 'fbx',  scale: '0.1',   axis: 'z-up', origin: 'keep',  draco: false, merge: false, target: 'none', note: 'FBX in centimetres, Z up: the units Unreal Engine works in.' },
+    unity:  { fmt: 'fbx',  scale: '0.001', axis: 'y-up', origin: 'keep',  draco: false, merge: false, target: 'none', note: 'FBX in metres, Y up, as Unity expects.' },
+    print:  { fmt: 'stl',  scale: '1',     axis: 'z-up', origin: 'floor', draco: false, merge: true,  target: 'none', note: 'Binary STL in millimetres, one mesh, standing on the bed (Z = 0).' },
+  };
+  let _presetApplying = false;
+  function _markExportPreset(key) {
+    document.querySelectorAll('#exp-presets .sv-chip').forEach(c => c.classList.toggle('is-on', c.dataset.preset === key));
+    const note = $('exp-preset-note');
+    if (note) note.textContent = key && _EXPORT_PRESETS[key] ? _EXPORT_PRESETS[key].note + ' Change anything below if you need to.' : '';
+  }
+  function _applyExportPreset(key) {
+    const p = _EXPORT_PRESETS[key];
+    if (!p) return;
+    _presetApplying = true;
+    const setSel = (id, v) => { const el = $(id); if (el && [...el.options].some(o => o.value === v)) { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); } };
+    const setCb = (id, v) => { const el = $(id); if (el && el.checked !== v) { el.checked = v; el.dispatchEvent(new Event('change', { bubbles: true })); } };
+    document.querySelector(`#format-grid .fmt-card[data-fmt="${p.fmt}"]`)?.click();
+    setSel('exp-scale', p.scale); setSel('exp-axis', p.axis); setSel('exp-origin', p.origin);
+    setCb('exp-merge', !!p.merge); setCb('exp-visible', true); setCb('exp-selected', false); setCb('exp-flat', false);
+    // The format card refreshes which rows exist on the next tick; the rows that depend on it come after.
+    setTimeout(() => {
+      setCb('exp-draco', !!p.draco); setCb('exp-fbx-ascii', false); setCb('exp-stl-ascii', false);
+      setSel('exp-target', p.target);
+      _refreshFormatToggles(); _updateExportTarget();
+      _markExportPreset(key);
+      _presetApplying = false;
+    }, 0);
+  }
+  document.querySelectorAll('#exp-presets .sv-chip').forEach(c => c.addEventListener('click', () => _applyExportPreset(c.dataset.preset)));
+  // Touching any option by hand means it is no longer exactly the preset.
+  document.querySelector('#export-modal .exp-content-b')?.addEventListener('change', () => { if (!_presetApplying) _markExportPreset(null); });
+  document.getElementById('format-grid')?.addEventListener('click', () => { if (!_presetApplying) _markExportPreset(null); });
   _openExportDialog = () => {
     const b = $('btn-export');
     if (!b || b.disabled) return;                                    // nothing open to export
@@ -21054,6 +21358,27 @@ function wireUI() {
     if (!state.selected.size && !state.selectedGroupIds?.size) return;
     _deleteSelection('Deleted selected');
   });
+  // Selection bar, view row: the same actions as H / S / F / Ctrl+D.
+  $('sel-hide')?.addEventListener('click', () => { if (state.selected.size) hideSelected(); });
+  $('sel-frame')?.addEventListener('click', () => { if (state.selected.size) frameSelected(); });
+  $('sel-duplicate')?.addEventListener('click', () => { if (state.selected.size) duplicateParts([...state.selected]); });
+  {
+    // While the view is isolated the same button leaves it, as in the command search.
+    const iso = $('sel-isolate');
+    const syncIso = () => {
+      if (!iso) return;
+      const on = !!state._isolated;
+      iso.classList.toggle('is-on', on);
+      iso.title = on ? 'Show all parts: leave the isolation (Alt+H)' : 'Isolate: show only the selection (S)';
+      iso.setAttribute('aria-label', on ? 'Show all' : 'Isolate');
+    };
+    iso?.addEventListener('click', () => {
+      if (state._isolated) showAllParts(); else if (state.selected.size) isolateSelected();
+      syncIso();
+    });
+    iso?.addEventListener('pointerenter', syncIso);
+    iso?.addEventListener('focus', syncIso);
+  }
   $('btn-show-all')?.addEventListener('click', showAllParts);
   $('btn-isolate-small')?.addEventListener('click', isolateFlagged);
   $('tree-summary')?.addEventListener('click', () => { $('tree')?.scrollTo({ top: 0, behavior: 'smooth' }); });
@@ -21101,6 +21426,7 @@ function wireUI() {
   // editable position/rotation + read-only size for the active selection.
   $('tg-transform')?.addEventListener('click', () => _toggleTransformPanel());
   $('tg-screenshot')?.addEventListener('click', () => _captureViewportScreenshot());
+  $('tg-turntable')?.addEventListener('click', () => _openTurntableDialog());
 
   // Flat line icons for the shapes, drawn in the same 24px / 2px-stroke style
   // as the rest of the toolbar (the shape picker used to show small shaded
@@ -30971,6 +31297,7 @@ const _Wand = (() => {
       { leaf: L('showall', 'eye', 'Show all', 'Show every hidden part', () => showAllParts(), { kbd: 'Alt+H', off: any ? (hiddenSome ? false : 'Nothing is hidden') : none }) },
       { group: 'File', icon: 'folder', items: [
         L('shot', 'camera', 'Save screenshot…', 'Save an image of the viewport', () => _captureViewportScreenshot?.(), { off: none }),
+        L('turntable', 'film', 'Turntable video…', 'Save a video of the model turning once', () => _openTurntableDialog?.(), { off: none }),
         L('save', 'save', 'Save scene…', 'Save the scene', click('btn-save-scene'), { kbd: 'Ctrl+S', off: any && !document.getElementById('btn-save-scene')?.disabled ? false : 'Nothing to save' }),
         L('revert', 'rotate-ccw', 'Revert to source file…', 'Go back to the file as it was opened', () => _revertToSourceFile(), { off: any ? (state._sourceFile ? false : 'No source file to revert to') : none }) ] },
       { group: 'Clean', icon: 'sparkles', items: [
@@ -33700,6 +34027,7 @@ if (typeof document !== 'undefined') {
         items.push('---');
         // Output
         items.push({ icon: 'camera',           label: 'Save screenshot…',                   off: _noParts, fn: () => _captureViewportScreenshot?.() });
+        items.push({ icon: 'film',             label: 'Turntable video…',                   off: _noParts, fn: () => _openTurntableDialog?.() });
         items.push({ icon: 'save',             label: 'Save scene…',         kbd: 'Ctrl+S', off: _noSave, fn: () => $('btn-save-scene')?.click() });
       }
       _ctxBuild(items, e.clientX, e.clientY);
