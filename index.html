@@ -3564,6 +3564,26 @@ body.app-ready .sp-card{transform:scale(1.025)}
 .set-val{max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx3);font-size:var(--fs-12);font-variant-numeric:tabular-nums;text-align:right}
 </style>
 <script src="appearance.js?v=2"></script>
+<style id="sidebar-v2">
+/* Right sidebar, second pass: the selection actions sit in one bar under Properties, cards get a small icon,
+   and the group labels draw a line. Nothing here changes what a button does. */
+#sidebar-right .side-group{display:flex;align-items:center;gap:10px;padding:18px 4px 9px}
+#sidebar-right .side-group::after{content:'';flex:1;height:1px;background:var(--bd)}
+#sidebar-right .section-h .sec-ico{width:15px;height:15px;margin-right:9px;flex:none;color:var(--tx3);transition:color var(--dur-fast) var(--ease-out)}
+#sidebar-right .section-h > span:first-of-type{flex:1 1 auto;min-width:0}
+#sidebar-right .section-h:hover .sec-ico,#sidebar-right .section-h:not(.collapsed) .sec-ico{color:var(--tx2)}
+.sel-bar{padding:14px 2px 4px;margin:0;display:flex;flex-direction:column;gap:8px}
+.sel-bar-h{display:flex;align-items:center;justify-content:space-between;padding:0 2px 1px;font-size:var(--fs-10,10px);letter-spacing:.09em;text-transform:uppercase;font-weight:var(--fw-regular);color:var(--tx3)}
+.sel-bar-n{font-size:var(--fs-11);font-weight:var(--fw-regular);color:var(--tx3);font-variant-numeric:tabular-nums}
+.sel-bar.has-sel .sel-bar-n{color:var(--ac-text)}
+.sel-bar-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.sel-bar-grid .btn{height:30px;min-width:0;padding:0 6px;gap:6px;justify-content:center;font-size:var(--fs-11);white-space:nowrap;overflow:hidden}
+.sel-bar-grid .btn svg{width:14px;height:14px;flex:none;color:var(--tx3)}
+.sel-bar-grid .btn:hover svg{color:var(--tx)}
+.sel-bar-grid.is-edit{margin-top:2px}
+.sel-bar:not(.has-sel) .is-edit .btn{opacity:.5}
+.sel-del-n{margin-left:2px;color:var(--tx3);font-variant-numeric:tabular-nums}
+</style>
 </head>
 <body>
 
@@ -4560,10 +4580,27 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
 
+    <div class="sel-bar" id="sel-bar" role="toolbar" aria-label="Selection">
+      <div class="sel-bar-h"><span>Selection</span><span class="sel-bar-n"><span id="sel-bar-num">0</span> selected</span></div>
+      <div class="sel-bar-grid">
+        <button class="btn" id="sel-all" title="Select every visible part (Ctrl+A)"><i data-lucide="square-check"></i>All</button>
+        <button class="btn" id="sel-invert" title="Invert the current selection (Ctrl+I)"><i data-lucide="arrow-left-right"></i>Invert</button>
+        <button class="btn" id="sel-clear" title="Deselect everything (Esc)"><i data-lucide="x"></i>Clear</button>
+        <button class="btn" id="sel-similar" title="Select similar: add parts that share geometry with the current selection"><i data-lucide="copy"></i>Similar</button>
+        <button class="btn" id="btn-select-color" title="By colour: select every part that shares a colour with the current selection"><i data-lucide="palette"></i>Colour</button>
+        <button class="btn" id="btn-select-regex" title="By name: select every part whose name matches a regex"><i data-lucide="search"></i>Name</button>
+      </div>
+      <div class="sel-bar-grid is-edit">
+        <button class="btn" id="btn-merge-sel" title="Merge selected parts into a single mesh — ideal for STL / 3D printing (Ctrl+M)"><i data-lucide="combine"></i>Merge</button>
+        <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together (Ctrl+G)"><i data-lucide="folder-plus"></i>Group</button>
+        <button class="btn danger" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)"><i data-lucide="trash-2"></i>Delete<span class="sel-del-n">(<span id="del-sel-count">0</span>)</span></button>
+      </div>
+    </div>
+
     <div class="side-group">View</div>
 
     <div class="section" id="shading-section">
-      <div class="section-h"><span>Shading</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="sun"></i><span>Shading</span><span class="chev">▾</span></div>
       <div class="section-b">
         <div class="shade-row" role="group" aria-label="Shading looks">
           <div class="shade-fam" id="vw-clay" data-mode="clay"></div>
@@ -4574,7 +4611,7 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section">
-      <div class="section-h"><span>Exploded view</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="expand"></i><span>Exploded view</span><span class="chev">▾</span></div>
       <div class="section-b ex-body">
         <div class="field"><div id="explode-all-scrub"></div></div>
         <div class="ex-row">
@@ -4605,7 +4642,7 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section" id="scene-section">
-      <div class="section-h"><span>Scene</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="layout-grid"></i><span>Scene</span><span class="chev">▾</span></div>
       <div class="section-b" title="Saved with the scene">
         <div class="field"><label id="display-units-lbl"><span>Display units</span></label>
           <select id="display-units" aria-labelledby="display-units-lbl" class="mac-sel">
@@ -4639,7 +4676,7 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section" hidden>
-      <div class="section-h"><span>Measurements</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="ruler"></i><span>Measurements</span><span class="chev">▾</span></div>
       <div class="section-b">
         <div class="btn-row">
           <button class="btn" id="msr-add" title="Toggle measure mode (M) — pick two points in the viewport to measure distance"><i data-lucide="ruler"></i>Measure</button>
@@ -4653,19 +4690,9 @@ window.moSplash = function (msg, pct) {
     <div class="side-group">Select</div>
 
     <div class="section">
-      <div class="section-h"><span>Pick parts</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="mouse-pointer-2"></i><span>Pick parts</span><span class="chev">▾</span></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="btn-row">
-          <button class="btn" id="sel-all" title="Select every visible part (Ctrl+A)">All</button>
-          <button class="btn" id="sel-invert" title="Invert the current selection (Ctrl+I)">Invert</button>
-          <button class="btn" id="sel-clear" title="Deselect everything (Esc)">Clear</button>
-          <button class="btn" id="sel-similar" title="Add parts that share geometry with the current selection">Select similar</button>
-        </div>
-        <div class="btn-row">
-          <button class="btn" id="btn-select-color" title="Select every part that shares a colour with the current selection"><i data-lucide="palette"></i>By colour</button>
-          <button class="btn" id="btn-select-regex" title="Select every part whose name matches a regex"><i data-lucide="search"></i>By name</button>
-        </div>
-        <details class="cmd-adv" id="sim-adv">
+        <details class="cmd-adv" id="sim-adv" open>
           <summary><span>How alike Select similar goes</span></summary>
           <div class="cmd-adv-b">
             <div class="field"><div id="sim-strict-scrub"></div></div>
@@ -4676,25 +4703,20 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section">
-      <div class="section-h"><span>Edit selection</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="pencil"></i><span>Edit selection</span><span class="chev">▾</span></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="btn-row">
-          <button class="btn" id="btn-merge-sel" title="Merge selected parts into a single mesh — ideal for STL / 3D printing (Ctrl+M)"><i data-lucide="combine"></i>Merge</button>
-          <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together (Ctrl+G)"><i data-lucide="folder-plus"></i>Group</button>
-        </div>
         <div class="btn-list">
           <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox centre sits at world origin"><i data-lucide="axis-3d"></i>Recentre on origin</button>
           <button class="btn quiet" id="btn-bake-transforms" title="Commit pending gizmo edits permanently into vertex data"><i data-lucide="check"></i>Bake gizmo transforms</button>
           <button class="btn quiet" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox centre (visual position unchanged)"><i data-lucide="crosshair"></i>Centre pivot</button>
         </div>
-        <button class="btn danger" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)"><i data-lucide="trash-2"></i>Delete (<span id="del-sel-count">0</span>)</button>
       </div>
     </div>
 
     <div class="side-group">Find</div>
 
     <div class="section">
-      <div class="section-h"><span>Heavy parts</span><span class="sec-count" id="heavy-count" hidden></span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="weight"></i><span>Heavy parts</span><span class="sec-count" id="heavy-count" hidden></span><span class="chev">▾</span></div>
       <div class="section-b" id="offenders-body">
         <div class="off-empty" style="color:var(--tx3);font-size:var(--fs-12);padding:4px 0">Load a model to see heavy parts.</div>
         <div class="off-list" id="offenders-list"></div>
@@ -4703,7 +4725,7 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section">
-      <div class="section-h"><span>Filters &amp; flags</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="filter"></i><span>Filters &amp; flags</span><span class="chev">▾</span></div>
       <div class="section-b">
         <div class="field"><div id="tri-scrub"></div></div>
         <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-triangle parts</button>
@@ -4716,7 +4738,7 @@ window.moSplash = function (msg, pct) {
     <div class="side-group">Optimise</div>
 
     <div class="section" id="smart-section">
-      <div class="section-h"><span>Smart optimise</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="wand-sparkles"></i><span>Smart optimise</span><span class="chev">▾</span></div>
       <div class="section-b small-card smart-card">
         <div class="cmd-lede">Every clean-up the scene needs, in one run. One undo takes it all back.</div>
         <div class="cmd-seg" id="smart-level" role="group" aria-label="How far to go">
@@ -4761,7 +4783,7 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section">
-      <div class="section-h"><span>Quick fixes</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="wrench"></i><span>Quick fixes</span><span class="chev">▾</span></div>
       <div class="section-b btn-list">
         <button class="btn quiet" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Remove empty parts</button>
         <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy-check"></i>Deduplicate geometry</button>
@@ -4772,7 +4794,7 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section">
-      <div class="section-h"><span>Delete small parts</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="trash-2"></i><span>Delete small parts</span><span class="chev">▾</span></div>
       <div class="section-b small-card">
         <div class="cmd-lede">Screws, washers, clips: the parts too small to matter.</div>
         <!-- how small: a share of the whole model's size -->
@@ -4798,7 +4820,7 @@ window.moSplash = function (msg, pct) {
     </div>
 
     <div class="section">
-      <div class="section-h"><span>Reduce triangles</span><span class="chev">▾</span></div>
+      <div class="section-h"><i class="sec-ico" data-lucide="triangle"></i><span>Reduce triangles</span><span class="chev">▾</span></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
         <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
           <button class="btn primary" id="btn-budget" title="Reduce the whole scene to a triangle budget. The densest meshes give up the most; large, sparse ones are left alone. Lossy, but undoable."><i data-lucide="gauge"></i>Fit to budget</button>
@@ -5799,6 +5821,16 @@ window.moSplash = function (msg, pct) {
     if (location.protocol === 'file:') { booted = true; go(); }
     setTimeout(() => { booted = true; go(); }, 6000);
   })();
+</script>
+<script>
+/* The Selection bar shows the number the app already keeps in #del-sel-count. */
+(function () {
+  var src = document.getElementById('del-sel-count'), num = document.getElementById('sel-bar-num'), bar = document.getElementById('sel-bar');
+  if (!src || !num || !bar) return;
+  var sync = function () { var n = (src.textContent || '0').trim() || '0'; num.textContent = n; bar.classList.toggle('has-sel', n !== '0'); };
+  new MutationObserver(sync).observe(src, { childList: true, characterData: true, subtree: true });
+  sync();
+})();
 </script>
 </body>
 </html>
