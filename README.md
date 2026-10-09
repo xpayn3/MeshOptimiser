@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 0 . 1 3 . 0
+  O P T I M I S E R   ·   v 0 . 1 4 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
