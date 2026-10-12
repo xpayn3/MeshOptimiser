@@ -166,11 +166,86 @@ const faceNormals = (pos, idx) => {
   ok(r.stats.rebuilt === 6 && r.stats.trisAfter === 6 * (4 * n - 2), `turned and in 32 bits: ${r.stats.rebuilt} of 6 plates rebuilt, ${r.stats.trisBefore} → ${r.stats.trisAfter} triangles`);
   ok(Math.abs(area(f32, r.index) - before) < before * 1e-5, 'the same surface area');
   ok(analysePolygons(f32, r.index, 1).adj.every(x => x >= 0), 'still closed: no cracks between the plates');
+  const s = untriangulate(f32, new Uint32Array(idx), { triangulate, straight: true });
+  ok(s.stats.trisAfter === 12 && Math.abs(area(f32, s.index) - before) < before * 1e-5, `turned and in 32 bits, straight runs out: 12 triangles, the same area (${s.stats.trisAfter})`);
+  ok(analysePolygons(f32, s.index, 1).adj.every(x => x >= 0), 'and still closed');
 }
 {
   // no index
   const m = split(plate(5)), r = run(m.pos, null);
   ok(r.stats.rebuilt === 1 && r.stats.trisAfter === 18, 'a mesh without an index works the same');
+}
+
+// ── straight runs (opts.straight): the points on a long edge go, from every polygon at once ─────────
+{
+  const m = plate(10), before = area(m.pos, m.idx);
+  const r = run(m.pos, m.idx, { straight: true });
+  ok(r.stats.trisAfter === 2 && new Set(r.index).size === 4, `a 10×10 plate with straight runs taken out: two triangles on its four corners (${r.stats.trisAfter}, ${new Set(r.index).size})`);
+  ok(Math.abs(area(m.pos, r.index) - before) < 1e-6 && faceNormals(m.pos, r.index).every(n => n[2] > 0.999), 'the same area, the same side up');
+  ok(run(m.pos, m.idx).stats.trisAfter === 38, 'off (the default): the plate keeps every vertex of its outline, 38 triangles');
+}
+{
+  // a box of six plates: no crack where two plates meet, whichever order the points go
+  const n = 6, faces = [
+    plate(n, { o: [0, 0, 0], u: [1, 0, 0], v: [0, 1, 0] }), plate(n, { o: [0, 0, n], u: [0, 1, 0], v: [1, 0, 0] }),
+    plate(n, { o: [0, 0, 0], u: [0, 1, 0], v: [0, 0, 1] }), plate(n, { o: [n, 0, 0], u: [0, 0, 1], v: [0, 1, 0] }),
+    plate(n, { o: [0, 0, 0], u: [0, 0, 1], v: [1, 0, 0] }), plate(n, { o: [0, n, 0], u: [1, 0, 0], v: [0, 0, 1] }),
+  ];
+  const pos = [], idx = [];
+  for (const f of faces) { const s = split(f), base = pos.length / 3; pos.push(...s.pos); for (const v of s.idx) idx.push(v + base); }
+  const before = area(pos, idx), r = run(pos, idx, { straight: true });
+  ok(r.stats.trisAfter === 12 && r.stats.polygons === 6, `a box of six plates: ${r.stats.trisBefore} → ${r.stats.trisAfter} triangles (two to a side)`);
+  ok(Math.abs(area(pos, r.index) - before) < 1e-4, 'the same surface area');
+  ok(analysePolygons(new Float32Array(pos), r.index, 1).adj.every(x => x >= 0), 'still closed: no cracks between the plates');
+}
+{
+  // a 4 × 4 plate with a bent middle: the points on its sides are straight, the rest is left to the flatness check
+  const m = plate(8, { skip: (i, j) => i >= 3 && i < 5 && j >= 3 && j < 5 }), before = area(m.pos, m.idx);
+  const r = run(m.pos, m.idx, { straight: true });
+  ok(Math.abs(area(m.pos, r.index) - before) < 1e-5 && r.stats.trisAfter === 8, `a plate with a hole: 8 corners, 8 triangles (${r.stats.trisAfter})`);
+}
+
+// ── limited dissolve (opts.limitDeg): what is left on faces that are only nearly flat ─────────────────────
+{
+  // a panel with a little noise: every point a few thousandths of its size off the plane, so it is not one flat face
+  const n = 8, m = plate(n);
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) m.pos[(j * (n + 1) + i) * 3 + 2] = 0.004 * Math.sin(i * 1.7 + j * 0.9);
+  const before = area(m.pos, m.idx), plain = run(m.pos, m.idx, { straight: true });
+  const r = run(m.pos, m.idx, { straight: true, limitDeg: 3 });
+  ok(plain.stats.trisAfter > 20, `a noisy panel is not joined by the plain pass (${plain.stats.trisAfter} triangles)`);
+  ok(r.stats.trisAfter <= 4 && new Set(r.index).size <= 6, `with a limit of 3° the points that are left go: ${plain.stats.trisAfter} → ${r.stats.trisAfter} triangles on ${new Set(r.index).size} corners`);
+  ok(Math.abs(area(m.pos, r.index) - before) < before * 0.02, 'the area is within 2%');
+  const corners = [0, n, n * (n + 1), n * (n + 1) + n];
+  ok(corners.every(c => r.index.includes(c)), 'the four corners of the outline are still there: the outline does not move');
+  let zmax = 0; for (let t = 0; t < r.index.length; t++) zmax = Math.max(zmax, Math.abs(m.pos[r.index[t] * 3 + 2]));
+  ok(zmax < 0.01, 'nothing was moved: only vertices that were already there are used');
+}
+{
+  // a bigger panel, 16 × 16 cells of 10 units with noise of 0.06: polygons meet at the rim, and those points go too
+  const n = 16, m = plate(n);
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) { const k = (j * (n + 1) + i) * 3; m.pos[k] *= 10; m.pos[k + 1] *= 10; m.pos[k + 2] = 0.06 * Math.sin(i * 1.7 + j * 0.9); }
+  const r = run(m.pos, m.idx, { straight: true, limitDeg: 3 });
+  ok(r.stats.trisAfter <= 4 && new Set(r.index).size <= 6, `a 16 × 16 noisy panel: 512 → ${r.stats.trisAfter} triangles on ${new Set(r.index).size} points`);
+}
+{
+  // a real fold (25° along the middle) is not dissolved
+  const n = 8, h = Math.tan(25 * Math.PI / 180), m = plate(n);
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) if (i > n / 2) m.pos[(j * (n + 1) + i) * 3 + 2] = (i - n / 2) * h;
+  const r = run(m.pos, m.idx, { straight: true, limitDeg: 3 });
+  const onFold = (v) => m.pos[v * 3] === n / 2;
+  const foldPts = new Set([...r.index].filter(onFold)).size;
+  ok(foldPts >= 2 && r.stats.polygons === 2, `a 25° fold stays two polygons with its edge (${foldPts} points on it, ${r.stats.polygons} polygons)`);
+}
+{
+  // a curved wall (a cylinder in 24 steps, 15° each) is not touched, and neither is a single raised bump
+  const seg = 24, pos = [], idx = [];
+  for (let i = 0; i < seg; i++) { const a = i / seg * Math.PI * 2; pos.push(Math.cos(a), Math.sin(a), 0, Math.cos(a), Math.sin(a), 1); }
+  for (let i = 0; i < seg; i++) { const a = i * 2, b = ((i + 1) % seg) * 2; idx.push(a, b, b + 1, a, b + 1, a + 1); }
+  const r = run(pos, idx, { straight: true, limitDeg: 3 });
+  ok(r.stats.trisAfter === 2 * seg, `a cylinder's wall in 15° steps: left as it is (${r.stats.trisAfter} triangles)`);
+  const m = plate(8); m.pos[(4 * 9 + 4) * 3 + 2] = 0.5;                       // one point 0.5 up on a plate 8 across: a real bump
+  const b = run(m.pos, m.idx, { straight: true, limitDeg: 3 });
+  ok(b.index.includes(4 * 9 + 4), 'a raised bump stays');
 }
 
 console.log(fails ? `\n${fails} failed` : '\nall passed');

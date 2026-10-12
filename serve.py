@@ -667,8 +667,9 @@ MCP_TOOLS = [
          "name_contains": {"type": "string", "description": "Every part whose name contains this text (case-insensitive)."},
          "mode": {"type": "string", "enum": ["replace", "add", "remove"]}})},
     {"name": "frame_selection", "description": "Move the camera to frame the selected parts (the F key). Select something first.", "inputSchema": _obj()},
-    {"name": "screenshot", "description": "A picture of the viewport as it is now, so you can see what the user sees.",
-     "inputSchema": _obj({"width": {"type": "integer", "description": "Width in pixels (default 1280, at most 2400). The height follows the viewport's shape."}})},
+    {"name": "screenshot", "description": "A picture of the viewport, so you can see what the user sees. To SHOW a result (what was found or selected, before and after) pass frame \"model\" or \"selection\": the picture is framed edge to edge on it, without the move handles, and the user's camera is put back afterwards.",
+     "inputSchema": _obj({"width": {"type": "integer", "description": "Width in pixels (default 1280, at most 2400). The height follows the viewport's shape."},
+                          "frame": {"type": "string", "enum": ["view", "model", "selection"], "description": "view (default): the viewport exactly as it is. model: every visible part fills the picture. selection: the selected parts fill it."}})},
 ]
 
 _IDS = {"type": "array", "items": {"type": "integer"}, "description": "From list_parts."}
@@ -1117,11 +1118,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header('Cross-Origin-Opener-Policy', 'same-origin')
         self.send_header('Cross-Origin-Embedder-Policy', 'credentialless')
-        # Everything is fetched fresh, so an edit shows on reload. The app's own
-        # pictures and clips (assets/) are the exception: the browser may keep
-        # them and only asks whether they changed (a 304 with no body).
-        own_asset = (getattr(self, 'path', '') or '').split('?')[0].startswith('/assets/')
-        self.send_header('Cache-Control', 'no-cache' if own_asset else 'no-store')
+        # The browser keeps every file but asks the server each time whether it
+        # changed (a 304 with no body when it has not), so an edit still shows on
+        # reload and nothing stale is ever used. Keeping the file is what lets the
+        # browser also keep the compiled code of the 2.8 MB app script, and not
+        # download three.js and the rest on every start. Only the server's own
+        # answers (/api/..., /mcp: jobs, the bridge, the event stream) are never kept.
+        p = (getattr(self, 'path', '') or '').split('?')[0]
+        live = p.startswith('/api/') or p.startswith('/mcp')
+        self.send_header('Cache-Control', 'no-store' if live else 'no-cache')
         super().end_headers()
 
     def log_message(self, format, *args):

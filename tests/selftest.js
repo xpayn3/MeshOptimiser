@@ -478,8 +478,10 @@
     await T.undo(); T.eq(T.world(), w0, 'undo of Bake transforms');
     await T.redo(); T.eq(T.world(), w0, 'redo of Bake transforms');
     // shared geometry: a duplicate must not be disturbed by a pivot change on the original
-    await T.pick(['Cylinder']); T.act('duplicate'); await T.sleep(450);
-    await T.pick(['Cylinder']);
+    // (the torus: Recentre moved only the selected cylinder, to the origin, so the cylinder's pivot is centred already and
+    // Centre pivot would have nothing to do with it)
+    await T.pick(['Torus']); T.act('duplicate'); await T.sleep(450);
+    await T.pick(['Torus']);
     const w1 = T.world();
     const h1 = state.history.length;
     document.getElementById('btn-center-pivot').click(); await T.sleep(700);
@@ -489,6 +491,86 @@
     const h2 = state.history.length;
     document.getElementById('btn-recompute-normals').click(); await T.sleep(400);
     T.assert(state.history.length > h2, 'Recompute normals pushed no undo entry');
+  });
+
+  test('edit mesh: 1 2 3 4 pick the mode; points, edges and polygons of the selected part are picked, looped, moved, turned round and deleted, each undoable', async () => {
+    await T.fresh(['cylinder', 'cube']);
+    const A = window.__moElements, card = document.querySelector('.section-cmd[data-cmd="elements"]'), btn = document.getElementById('em-mode');
+    if (!A) return 'skipped (no Edit mesh tool)';
+    T.assert(!!card && !!btn, 'no Edit mesh card or mode button');
+    const THREE = T.F().THREE, key = (k, o = {}) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...o }));
+    const view0 = state.viewMode;
+    await T.pick(['Cylinder']);
+    // the keys: 3 polygons, 1 points, 2 edges, 4 back to whole parts; the view mode is left alone
+    key('3'); await T.sleep(500);
+    T.eq(A.mode(), 'faces', 'the 3 key'); T.assert(!card.hidden && btn.classList.contains('active') && !document.getElementById('elem-overlay').hidden, 'Polygons mode did not open its card');
+    T.eq(state.viewMode, view0, 'going into a piece mode changed the view mode');
+    key('1'); await T.sleep(200); T.eq(A.mode(), 'points', 'the 1 key');
+    key('2'); await T.sleep(200); T.eq(A.mode(), 'edges', 'the 2 key');
+    key('4'); await T.sleep(400); T.eq(A.mode(), 'model', 'the 4 key'); T.assert(card.hidden && !btn.classList.contains('active'), 'Model mode left the card open');
+    btn.click(); await T.sleep(400); T.eq(A.mode(), 'edges', 'a click on the mode button goes back to the last piece mode');
+    key('3'); await T.sleep(300);
+    const cyl = T.part('Cylinder'), cube = T.part('Cube');
+    const R = A.read(cyl.partId), t = R.topo, pg = R.pg;
+    T.eq(t.nRegion, 3, 'a cylinder is a wall and two caps');
+    T.eq(pg.count, t.nTri / 4 + t.nTri / 2, 'its polygons: a four-sided one for each pair of wall triangles, and the triangles of the two caps');
+    const centre = (tr) => { const c = [0, 0, 0]; for (let k = 0; k < 3; k++) { const r = t.rep[t.tri[tr * 3 + k]] * 3; c[0] += t.positions[r] / 3; c[1] += t.positions[r + 1] / 3; c[2] += t.positions[r + 2] / 3; } return c; };
+    const size = new Map(); for (let i = 0; i < t.nTri; i++) size.set(t.region[i], (size.get(t.region[i]) || 0) + 1);
+    const wall = [...size].sort((a, b) => b[1] - a[1])[0][0];
+    let wallTri = 0; while (t.region[wallTri] !== wall) wallTri++;
+    let capTri = 0; while (t.region[capTri] === wall) capTri++;
+    // polygons: one, then the loop round the wall; the history of picks goes back and forth
+    T.eq(A.pickAt(cyl.partId, wallTri, centre(wallTri)), 1, 'a click picks one polygon');
+    T.eq(A.pickAt(cyl.partId, wallTri, centre(wallTri), { loop: true }), t.nTri / 4, 'the loop of a wall polygon is the ring round the cylinder');
+    T.assert(A.undo() && A.count() === 1, 'undoing a pick did not bring back what was picked before');
+    T.assert(A.redo() && A.count() === t.nTri / 4, 'redoing a pick');
+    T.eq(state.history.length, 0 + state.history.length, 'picking added to the scene history');
+    T.eq(A.pickAt(cube.partId, 0, [0, 0, 0]), 0, 'a part that is not selected was worked on');
+    // edges and points: the rim of a cap
+    let e = -1, sharp = 0; for (let i = 0; i < t.nEdge; i++) if (t.kind[i] === 1) { if (e < 0) e = i; sharp++; }
+    const tr = t.edgeT[e * 2], ra = t.rep[t.edgeV[e * 2]] * 3, rb = t.rep[t.edgeV[e * 2 + 1]] * 3, mid = [0, 1, 2].map(k => (t.positions[ra + k] + t.positions[rb + k]) / 2);
+    key('2'); await T.sleep(200);
+    T.eq(A.pickAt(cyl.partId, tr, mid), 1, 'a click picks one edge');
+    const rim = A.pickAt(cyl.partId, tr, mid, { loop: true });
+    T.eq(rim, sharp / 2, 'the loop of a sharp edge is one rim');
+    key('1'); await T.sleep(200);
+    T.eq(A.pickAt(cyl.partId, tr, mid, { loop: true }), rim, 'the points of that rim');
+    // the gizmo: the cap moved 25 along its normal makes the part 25 longer, in one undo step, and the cap stays picked
+    key('3'); await T.sleep(200);
+    T.eq(A.pickAt(cyl.partId, capTri, centre(capTri)), 1, 'a click on the cap picks one of its triangles');
+    T.assert(A.gizmoOn(), 'no gizmo on the picked polygon');
+    const span = () => { const s = new THREE.Box3().setFromObject(cyl.mesh).getSize(new THREE.Vector3()); return s.x + s.y + s.z; };
+    const n = new THREE.Vector3(t.normal[capTri * 3], t.normal[capTri * 3 + 1], t.normal[capTri * 3 + 2]).transformDirection(cyl.mesh.matrixWorld).multiplyScalar(25);
+    const h0 = state.history.length, s0 = span(), tris0 = cyl.triCount;
+    T.assert(A.nudge(n.x, n.y, n.z), 'the gizmo did not take the move'); await T.sleep(600);
+    T.assert(Math.abs(span() - s0 - 25) < 0.5, 'the cap did not move by 25: ' + (span() - s0));
+    T.eq(state.history.length, h0 + 1, 'a move is one undo step'); T.eq(cyl.triCount, tris0, 'a move changed the triangle count'); T.eq(A.count(), 1, 'the moved polygon is still picked');
+    T.assert(state.geomByHash.get(cyl.hash) === cyl.mesh.geometry, 'the moved geometry is not registered for export');
+    await T.undo(); T.assert(Math.abs(span() - s0) < 0.01, 'undo did not put the cap back');
+    // reverse normals: a new shape with as many triangles, the polygon still picked, undo puts the old shape back
+    A.pickAt(cyl.partId, capTri, centre(capTri));
+    const g0 = cyl.mesh.geometry;
+    T.assert(!document.getElementById('btn-el-flip').disabled, 'Reverse normals is off with a polygon picked');
+    A.flipPicked(); await T.sleep(500);
+    T.assert(cyl.mesh.geometry !== g0 && cyl.triCount === tris0 && A.count() === 1, 'Reverse normals');
+    await T.undo(); T.assert(cyl.mesh.geometry === g0, 'undo of Reverse normals');
+    // delete: the whole cap (a double-click on one of its triangles: not four-sided, so the loop is the face) in one undo step
+    const capTris = size.get(t.region[capTri]);
+    T.eq(A.pickAt(cyl.partId, capTri, centre(capTri), { loop: true }), capTris, 'the loop of a triangle of the cap is the cap');
+    const h1 = state.history.length;
+    T.assert(!document.getElementById('btn-el-delete').disabled, 'Delete is off with something picked');
+    A.delete(); await T.sleep(600);
+    T.eq(cyl.triCount, tris0 - capTris, 'the cylinder without its cap'); T.eq(state.history.length, h1 + 1, 'a delete is one undo step'); T.eq(A.count(), 0, 'pieces are still picked after the delete');
+    T.assert(state.geomByHash.get(cyl.hash) === cyl.mesh.geometry, 'the new geometry is not registered for export');
+    await T.undo(); T.eq(cyl.triCount, tris0, 'undo of the delete');
+    // every polygon of a part is not taken: that is deleting the part
+    A.selectAll(); T.eq(A.count(), A.read(cyl.partId).pg.count, 'Pick all takes every polygon of the selected part');
+    const r = A.delete(); await T.sleep(400);
+    T.eq(cyl.triCount, tris0, 'a delete of every polygon emptied the part'); T.assert(r && r.whole && r.whole.length === 1, 'the part that was not emptied is not named');
+    A.clear();
+    key('4'); await T.sleep(400);
+    T.assert(card.hidden && document.getElementById('elem-overlay').hidden && A.mode() === 'model', 'the 4 key did not leave the piece modes');
+    T.eq(state.viewMode, view0, 'leaving changed the view mode');
   });
 
   test('edit tools: duplicate, paste, delete, merge, smart fit', async () => {
@@ -1491,18 +1573,29 @@
 
   test('group dots: every group has one, and they are all one draw', async () => {
     await T.fresh(['cube', 'cube', 'cube', 'cube']);
-    await T.group(['Cube', 'Cube.001']);
-    await T.group(['Cube.002', 'Cube.003']);
-    T.act('selClear'); await T.sleep(350);
-    let scene = state.partsRoot; while (scene.parent) scene = scene.parent;
-    const dots = []; scene.traverse(o => { if (o.isSprite && typeof o.count === 'number') dots.push(o); });
-    T.eq(dots.length, 1, 'sprites that draw group dots');
-    T.eq(dots[0].count, 2, 'dots drawn for two groups');
-    T.assert(dots[0].visible, 'the dots are hidden');
-    T.row('Group 1').click(); await T.sleep(350);
-    const again = []; scene.traverse(o => { if (o.isSprite && typeof o.count === 'number') again.push(o); });
-    T.eq(again.length, 1, 'sprites that draw group dots after selecting a group');
-    T.eq(again[0].count, 2, 'dots drawn after selecting a group');
+    // the dots are drawn only with Show origin points on, and it is off to start
+    const tg = document.getElementById('toggle-show-origin-points');
+    if (!tg) return 'skipped (no Show origin points switch)';
+    const was = tg.checked;
+    const set = (on) => { if (tg.checked !== on) { tg.checked = on; tg.dispatchEvent(new Event('change', { bubbles: true })); } };
+    try {
+      set(true);
+      await T.group(['Cube', 'Cube.001']);
+      await T.group(['Cube.002', 'Cube.003']);
+      T.act('selClear'); await T.sleep(350);
+      let scene = state.partsRoot; while (scene.parent) scene = scene.parent;
+      const dots = []; scene.traverse(o => { if (o.isSprite && typeof o.count === 'number') dots.push(o); });
+      T.eq(dots.length, 1, 'sprites that draw group dots');
+      T.eq(dots[0].count, 2, 'dots drawn for two groups');
+      T.assert(dots[0].visible, 'the dots are hidden');
+      T.row('Group 1').click(); await T.sleep(350);
+      const again = []; scene.traverse(o => { if (o.isSprite && typeof o.count === 'number') again.push(o); });
+      T.eq(again.length, 1, 'sprites that draw group dots after selecting a group');
+      T.eq(again[0].count, 2, 'dots drawn after selecting a group');
+      // switched off, none is drawn
+      set(false); T.act('selClear'); await T.sleep(350);
+      T.assert(!again[0].visible || again[0].count === 0, 'dots are still drawn with Show origin points off (' + again[0].count + ')');
+    } finally { set(was); }
   });
 
   test('fasteners: the bolt, the screw, the nut and the washer are found by shape; the cube, the ball, the ring and the bar are not', async () => {
@@ -1540,6 +1633,20 @@
 
   test('heavy parts: a click ticks a row, more clicks add to it, Delete takes the ticked rows only, the list follows undo', async () => {
     await T.fresh(['cube', 'sphere', 'torus', 'cylinder']);
+    // The card lists only the parts over 10,000 triangles, so each of the four gets a dense mesh of its own (the heaviest first:
+    // torus 25,600, sphere 20,224, cylinder 12,544, cube 10,800).
+    {
+      const THREE = T.F().THREE;
+      const dense = { Torus: new THREE.TorusGeometry(40, 12, 80, 160), Sphere: new THREE.SphereGeometry(40, 128, 80), Cylinder: new THREE.CylinderGeometry(30, 30, 80, 128, 48), Cube: new THREE.BoxGeometry(60, 60, 60, 30, 30, 30) };
+      for (const [name, g] of Object.entries(dense)) {
+        const p = T.part(name);
+        g.computeBoundingBox(); g.computeBoundingSphere();
+        p.mesh.geometry = g; p.hash = 'selftest_heavy_' + name; state.geomByHash.set(p.hash, g);
+        p.triCount = g.index.count / 3; p.vertCount = g.attributes.position.count;
+        T.assert(p.triCount > 10000, name + ' is not heavy: ' + p.triCount);
+      }
+      T.F().rebuildTree(); await T.sleep(300);
+    }
     const list = document.getElementById('offenders-list'), btn = document.getElementById('btn-off-delete');
     const rows = () => [...list.querySelectorAll('.off-row')];
     const names = () => rows().map(r => r.querySelector('.off-name').textContent + (r.classList.contains('selected') ? '*' : '')).join(' ');
@@ -1603,12 +1710,17 @@
     const g = state.gizmo, was = g.dragging;
     const wheel = (d) => window.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaX: d, deltaY: 0, shiftKey: true }));
     const key = (type) => document.dispatchEvent(new KeyboardEvent(type, { key: 'Shift', bubbles: true }));
+    const dragWas = state._gizmoDragging;
     try {
       key('keydown'); await T.sleep(50);
       const s0 = state._gizmoSnapStep;
       T.assert(s0 > 0, 'Shift did not switch snap on');
       const pill = document.getElementById('vp-snap-pill');
-      T.assert(pill && !pill.hidden && pill.offsetParent, 'no Snap pill at the top while Shift is held');
+      // the pill shows only while a handle is dragged with Shift held, not for Shift alone
+      T.assert(pill && pill.hidden, 'the Snap pill shows for Shift alone, with no handle held');
+      state._gizmoDragging = true;                            // (as the gizmo sets it when a handle is pressed)
+      key('keyup'); key('keydown'); await T.sleep(50);
+      T.assert(pill && !pill.hidden && pill.offsetParent, 'no Snap pill at the top while a handle is dragged with Shift held');
       T.assert(pill.textContent.trim().startsWith('Snap ' + parseFloat(s0.toPrecision(3))), 'the pill says "' + pill.textContent.trim() + '", the step is ' + s0);
       T.assert(!document.querySelector('#gizmo-hud .ghud-snap'), 'the tooltip beside the gizmo still carries a SNAP badge');
       wheel(-100); await T.sleep(50);
@@ -1629,7 +1741,7 @@
       T.assert(Math.round(state.gizmoSnap.rotate * 180 / Math.PI) > r0, 'wheel up did not coarsen the turn step from ' + r0 + '°');
       wheel(100); await T.sleep(50);
       T.eq(Math.round(state.gizmoSnap.rotate * 180 / Math.PI), r0, 'the turn step after up and down');
-    } finally { g.dragging = was; key('keyup'); state._gizmoSnapUser = null; T.act('gzMove'); }
+    } finally { g.dragging = was; state._gizmoDragging = dragWas; key('keyup'); state._gizmoSnapUser = null; T.act('gzMove'); }
     await T.sleep(60);
     T.assert(document.getElementById('vp-snap-pill').hidden, 'the Snap pill stays after Shift is let go');
   });

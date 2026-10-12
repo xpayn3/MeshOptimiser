@@ -2,6 +2,9 @@
 import * as THREE from 'three';
 import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=21';
 import { findFloating } from './floating.js?v=1';
+import * as MEDIT from './meshedit.js?v=5';
+import { dissolvePoints } from './dissolve.js?v=3';
+import * as MT from './meshtools.js?v=2';
 import { partition as splitPartition, buildChildGeometries as splitBuildChildren } from './split.js?v=1';
 import * as SPL from './splines.js?v=3';
 import { reduceIndex, packAttributes } from './simplify-core.js?v=2';
@@ -31,6 +34,24 @@ import { KTX2Loader }      from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder }  from 'three/addons/libs/meshopt_decoder.module.js';
 
 const $ = id => document.getElementById(id);
+
+// Back faces are drawn darker, as in Cinema 4D, so a flipped face or an open shell shows at a glance. three lights a
+// double-sided back face exactly like a front one (it flips the normal), so the lit colour of every opaque standard
+// material is scaled by this where the triangle faces away from the camera. Set `_backFaceDim.value` to 1 to switch it off.
+const _backFaceDim = THREE.TSL.uniform(0.32);
+window._backFaceDim = _backFaceDim;
+const _backFaceFactor = () => THREE.TSL.select(THREE.TSL.frontFacing, THREE.TSL.float(1), _backFaceDim);
+{
+  const proto = THREE.MeshStandardNodeMaterial && THREE.MeshStandardNodeMaterial.prototype;
+  const base = proto && THREE.NodeMaterial.prototype.setupLighting;
+  if (proto && base) {
+    proto.setupLighting = function (builder) {
+      const out = base.call(this, builder);
+      if (this.transparent || this.side === THREE.FrontSide || (this.userData && this.userData.noBackDim)) return out;
+      return out.mul(_backFaceFactor());
+    };
+  }
+}
 
 const state = {
   parts: [], partById: new Map(), selected: new Set(), modelDiag: 1, history: [], redo: [],
@@ -691,7 +712,7 @@ function _autoScrubField(input) {
     set: (n) => { input.value = String(parseFloat((n * step).toFixed(decimals))) + tail; input.dispatchEvent(new Event('input', { bubbles: true })); },
     end: () => input.dispatchEvent(new Event('change', { bubbles: true })),
   });
-  if (!input.title && !input.closest('[title]')) input.title = _SCRUB_TIP;
+  if (!input.title && !input.closest('[title]') && !input.closest('#transform-panel')) input.title = _SCRUB_TIP;      // (the Transform panel's fields carry no tooltip)
 }
 if (typeof document !== 'undefined') {
   const wire = (e) => { const t = e.target; if (t && t.tagName === 'INPUT' && !t._scrubDrag && !t._noScrub && !t.disabled) _autoScrubField(t); };
@@ -1399,7 +1420,7 @@ const _MeshWorkers = (() => {
       const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
       workers = [];
       for (let i = 0; i < n; i++) {
-        const w = new Worker(new URL('./mesh-worker.js?v=22', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./mesh-worker.js?v=27', import.meta.url), { type: 'module' });
         w.onmessage = (e) => {
           const p = pending.get(e.data && e.data.id);
           if (!p) return;
@@ -1756,8 +1777,11 @@ function _withTransformUndo(tag, fn) {
         } else {
           pushUndo({ type: 'transformGroup', label: 'Transform', items, _panelTag: tag, _panelAt: now });
         }
+        // (a scale typed for a tree group: the number the fields show goes with the step)
+        if (_groupScalePending) { const op = state.history[state.history.length - 1]; if (op && op.type === 'transformGroup') op._gs = op._gs && op._gs.gid === _groupScalePending.gid ? { gid: op._gs.gid, before: op._gs.before, after: _groupScalePending.after } : _groupScalePending; }
       }
     } catch (e) { console.warn('[transform-undo]', e); }
+    _groupScalePending = null;
   }
 }
 
@@ -3345,6 +3369,23 @@ const _Settings = (() => {
     // Appearance: a press on a choice, the colour picker (live, without redrawing under the hand), the motion switch, Reset
     const ap = $s('set-pane-appearance');
     ap?.addEventListener('click', (e) => {
+      const cs = e.target.closest('#ap-accent-custom');
+      if (cs && window._openColorPickerForCallback) {
+        // The app's own picker. While a colour is being dragged the settings window steps aside (see .cp-dragging), so the colour
+        // is judged on the interface itself; Esc goes back to the accent it was opened with, a click outside keeps the new one.
+        const before = _Prefs.get('uiAccent');
+        const paint = (hex) => {
+          _setLook('uiAccent', hex, false);
+          ap.querySelectorAll('.ap-sw').forEach(x => x.classList.toggle('is-on', x === cs));
+          cs.style.setProperty('--sw', hex); cs.dataset.hex = hex;
+        };
+        window._openColorPickerForCallback(cs, cs.dataset.hex || '#0d99ff', {
+          onPreview: paint,
+          onCommit: paint,
+          onCancel: () => { _setLook('uiAccent', before); },
+        });
+        return;
+      }
       const b = e.target.closest('[data-v]'), grp = b && b.closest('[data-ui]');
       if (b && grp) { const k = grp.dataset.ui; _setLook(k, (k === 'uiTextScale' || k === 'uiDensity') ? +b.dataset.v : b.dataset.v); return; }
       if (e.target.closest('#set-reset-look')) {
@@ -3352,12 +3393,6 @@ const _Settings = (() => {
         try { window.MOAppearance.apply(); } catch (_) {}
         _fillAppearance(); toast('Appearance reset', '', 'success');
       }
-    });
-    ap?.addEventListener('input', (e) => {
-      if (e.target.id !== 'ap-accent-custom') return;
-      _setLook('uiAccent', e.target.value, false);
-      ap.querySelectorAll('.ap-sw').forEach(s => s.classList.toggle('is-on', s.classList.contains('ap-sw-custom')));
-      e.target.closest('.ap-sw-custom')?.style.setProperty('--sw', e.target.value);
     });
     ap?.addEventListener('change', (e) => { if (e.target.id === 'set-motion') _setLook('uiMotion', e.target.checked, false); if (e.target.id === 'set-tree-colours') _setLook('uiTreeColors', e.target.checked, false); });
     // Viewport: the CAD look and the edges
@@ -3414,7 +3449,7 @@ const _Settings = (() => {
       _group('Colour') +
       `<div class="set-row set-stack"><span>Accent<span class="set-help">Buttons, selections and highlights.</span></span>
         <div class="ap-swatches" data-ui="uiAccent">${A.ACCENTS.map(([n, h]) => `<button type="button" class="ap-sw${h.toLowerCase() === acc ? ' is-on' : ''}" data-v="${h}" style="--sw:${h}" title="${n}" aria-label="${n}"></button>`).join('')}
-          <label class="ap-sw ap-sw-custom${!preset ? ' is-on' : ''}" style="--sw:${isHex ? acc : '#0d99ff'}" title="Any colour"><input type="color" id="ap-accent-custom" value="${isHex ? acc : '#0d99ff'}" aria-label="Pick any colour"></label></div></div>` +
+          <button type="button" class="ap-sw ap-sw-custom${!preset ? ' is-on' : ''}" id="ap-accent-custom" style="--sw:${isHex ? acc : '#0d99ff'}" data-hex="${isHex ? acc : '#0d99ff'}" title="Any colour" aria-label="Pick any colour"></button></div></div>` +
       `<div class="set-row set-stack"><span>Surfaces<span class="set-help">The greys the interface is built from.</span></span>
         <div class="ap-tones" data-ui="uiTone">${Object.entries(A.TONES).map(([k, t]) => `<button type="button" class="ap-tone${k === p.uiTone ? ' is-on' : ''}" data-v="${k}"><span class="ap-tone-sw"><i style="background:${t['--bg']}"></i><i style="background:${t['--bg2']}"></i><i style="background:${t['--bg4']}"></i></span>${t.label}</button>`).join('')}</div></div>` +
       _group('Type') +
@@ -3683,8 +3718,8 @@ const _Settings = (() => {
       `<div class="set-row set-stack"><span>CAD view look<span class="set-help">The matcap the CAD view (key 6) shades with.</span></span>${_chipsPref('cadLook', Object.entries(_CAD_LOOKS).map(([k, l]) => [l.label, k]), _cadLook())}</div>` +
       _toggleRow('set-outlines', 'Outlines', _Prefs.get('edgesMode') !== 'off', 'A fine dark line on the sharp edges of every part, in every view.') +
       _group('Wireframe') +
-      `<div class="set-row set-stack"><span>Lines<span class="set-help">Triangles is the wireframe: every edge of the mesh. Polygons leaves out the triangle lines inside flat polygons. Outline draws only the sharp edges and borders of the shape. These change what is drawn, not the mesh; Untriangulate, under Reduce triangles, is what changes the mesh.</span></span>${_chipsPref('wireMode', [['Triangles', 'triangles'], ['Polygons', 'polygons'], ['Outline', 'outline']], _wireMode())}</div>` +
-      `<div class="set-row set-stack"><span>Flat within<span class="set-help">For Polygons: how far neighbouring triangles may turn away from each other and still be one polygon. A model whose faces are exactly flat does not care; a tessellated curve breaks into polygons at about this angle.</span></span>${_chipsPref('wireAngle', [['Strict', 0.2], ['Normal', 1], ['Loose', 5]], _Prefs.get('wireAngle') || 1)}</div>`;
+      `<div class="set-row set-stack"><span>Lines<span class="set-help">Quads draws the polygons you edit: two flat triangles that make a four-sided cell show as one cell, with no diagonal. Triangles is every edge of the mesh, as it really is. This changes what is drawn, not the mesh; Untriangulate, under Reduce triangles, is what changes the mesh.</span></span>${_chipsPref('wireMode', [['Quads', 'quads'], ['Triangles', 'triangles']], _wireMode())}</div>` +
+      `<div class="set-row set-stack"><span>Flat within<span class="set-help">For parts that have polygons of their own (from an OBJ or FBX file, or after Untriangulate): how far neighbouring triangles may turn away from each other and still be one polygon. Parts drawn as Quads or Triangles do not use it.</span></span>${_chipsPref('wireAngle', [['Strict', 0.2], ['Normal', 1], ['Loose', 5]], _Prefs.get('wireAngle') || 1)}</div>`;
     $s('set-outlines')?.addEventListener('change', (e) => { _Prefs.set('edgesMode', e.target.checked ? 'on' : 'off'); try { _cadOnPref('edgesMode'); } catch (_) {} try { _Shading.sync(); } catch (_) {} });
     $s('set-sel-glow')?.addEventListener('change', (e) => { _Prefs.set('selGlow', e.target.checked); state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} });
     $s('set-hilite')?.addEventListener('change', (e) => { const t = $s('toggle-highlight'); if (t) { t.checked = e.target.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } });
@@ -4356,9 +4391,9 @@ const _Actions = (() => {
     { id:'camTop',       group:'View',       label:'Top view',                   kbd:'Ctrl+2', run: () => { try { _setStandardView('top'); } catch (_) {} } },
     { id:'camFront',     group:'View',       label:'Front view',                 kbd:'Ctrl+3', run: () => { try { _setStandardView('front'); } catch (_) {} } },
     { id:'camSide',      group:'View',       label:'Side view',                  kbd:'Ctrl+4', run: () => { try { _setStandardView('side'); } catch (_) {} } },
-    { id:'solid',        group:'View',       label:'Solid view',                 kbd:'1', run: () => { try { setViewMode('solid'); } catch (_) {} } },
-    { id:'wire',         group:'View',       label:'Wireframe view',             kbd:'2', run: () => { try { setViewMode('wire'); } catch (_) {} } },
-    { id:'xray',         group:'View',       label:'X-ray view',                 kbd:'3', run: () => { try { setViewMode('xray'); } catch (_) {} } },
+    { id:'solid',        group:'View',       label:'Solid view',                 kbd:'Alt+1', run: () => { try { setViewMode('solid'); } catch (_) {} } },
+    { id:'wire',         group:'View',       label:'Wireframe view',             kbd:'Alt+2', run: () => { try { setViewMode('wire'); } catch (_) {} } },
+    { id:'xray',         group:'View',       label:'X-ray view',                 kbd:'Alt+3', run: () => { try { setViewMode('xray'); } catch (_) {} } },
     { id:'gzMove',       group:'View',       label:'Translate gizmo (Shift to snap 10u)', kbd:'E', run: () => { try { setGizmoMode('translate'); } catch (_) {} } },
     { id:'gzRotate',     group:'View',       label:'Rotate gizmo (Shift to snap 15°)',    kbd:'R', run: () => { try { setGizmoMode('rotate'); } catch (_) {} } },
     { id:'gzScale',      group:'View',       label:'Scale gizmo (Shift to snap 0.1)',     kbd:'T', run: () => { try { setGizmoMode('scale'); } catch (_) {} } },
@@ -4392,7 +4427,13 @@ const _Actions = (() => {
     { id:'sweep',        group:'Edit',       label:'Sweep…',                     run: () => _CmdCards.open('sweep') },
     { id:'draw',         group:'Edit',       label:'Draw lines…',                kbd:'L', run: () => _CmdCards.open('draw') },
     { id:'decimate',     group:'Edit',       label:'Decimate selection',         run: _click('btn-decimate-sel') },
+    { id:'quickRemesh',  group:'Edit',       label:'Quick remesh: pick a level under the pointer', kbd:'B', words:'reduce decimate lighter triangles level live preview', run: () => { try { window.__moQuickRemesh.open(); } catch (_) {} } },
     { id:'floating',      group:'Edit',       label:'Remove floating pieces…',    run: () => _CmdCards.open('floating') },
+    { id:'modePoints',    group:'Edit',       label:'Points mode: pick the points of a mesh',     kbd:'1', run: () => _Elements.api.mode('points') },
+    { id:'modeEdges',     group:'Edit',       label:'Edges mode: pick the edges of a mesh',       kbd:'2', run: () => _Elements.api.mode('edges') },
+    { id:'modeFaces',     group:'Edit',       label:'Polygons mode: pick the polygons of a mesh', kbd:'3', run: () => _Elements.api.mode('faces') },
+    { id:'modeModel',     group:'Edit',       label:'Model mode: pick whole parts',               kbd:'4', run: () => _Elements.api.mode('model') },
+    { id:'flipFaces',     group:'Edit',       label:'Reverse normals of picked faces', words:'flip invert turn face orientation winding inside out', run: () => { try { window.__moElements.flipPicked(); } catch (_) {} } },
     { id:'remesh',        group:'Edit',       label:'Remesh… (untriangulate or triangulate)', run: () => _CmdCards.open('remesh') },
     { id:'untriangulate', group:'Edit',       label:'Untriangulate',              kbd:'U', run: () => { try { window.__showRemesh && window.__showRemesh('ut'); } catch (_) {} } },
     { id:'triangulate',   group:'Edit',       label:'Triangulate',                kbd:'Shift+U', run: () => { try { window.__showRemesh && window.__showRemesh('tr'); } catch (_) {} } },
@@ -4412,7 +4453,7 @@ const _Actions = (() => {
     { id:'materials',    group:'App',        label:'Materials',                  kbd:'Shift+M', run: _click('tg-materials') },
     { id:'library',      group:'App',        label:'Library',                    kbd:'Shift+L', run: _click('tg-library') },
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
-    { id:'heat',         group:'View',       label:'Heatmap view',               kbd:'4', run: () => { try { setViewMode('heat'); } catch (_) {} } },
+    { id:'heat',         group:'View',       label:'Heatmap view',               kbd:'Alt+4', run: () => { try { setViewMode('heat'); } catch (_) {} } },
     { id:'clay',         group:'View',       label:'Clay view',                  kbd:'5', run: () => { try { setViewMode('clay'); } catch (_) {} } },
     { id:'cad',          group:'View',       label:'CAD view',                   kbd:'6', run: () => { try { setViewMode('cad'); } catch (_) {} } },
     { id:'turntable',    group:'File',       label:'Turntable video…',           run: () => _openTurntableDialog?.() },
@@ -4981,6 +5022,7 @@ const _Shortcuts = (() => {
   const GROUP_ORDER = ['File', 'Edit', 'Selection', 'View', 'Mouse', 'Tree', 'Fields', 'Panels', 'App'];
   // Bindings that are not an action in the list: gestures, and keys a panel takes while it is open. Every key the
   // app binds is either an action above (kbd / alt) or one of these; tests/shortcuts.test.mjs checks the two agree.
+  // (`short` is the name drawn on the key in the keyboard picture)
   const EXTRA = [
     { group:'Mouse',  label:'Orbit',                                  kbd:'Left-drag' },
     { group:'Mouse',  label:'Pan',                                    kbd:'Middle-drag', alt:'Right-drag' },
@@ -4996,99 +5038,492 @@ const _Shortcuts = (() => {
     { group:'Tree',   label:'Toggle a row in the selection',          kbd:'Ctrl+Click' },
     { group:'Tree',   label:'Rename a part or group',                 kbd:'Double-click' },
     { group:'Tree',   label:'Move rows into a group',                 kbd:'Drag' },
-    { group:'Tree',   label:'The row above, the row below (after a click in the tree)', kbd:'↑', alt:'↓' },
-    { group:'Tree',   label:'Extend the selection a row',             kbd:'Shift+↑', alt:'Shift+↓' },
-    { group:'Tree',   label:'Open a group, close it (or go to its group)', kbd:'→', alt:'←' },
-    { group:'Tree',   label:'The first row, the last row',            kbd:'Home', alt:'End' },
+    { group:'Tree',   label:'The row above, the row below (after a click in the tree)', kbd:'↑', alt:'↓', short:'Row' },
+    { group:'Tree',   label:'Extend the selection a row',             kbd:'Shift+↑', alt:'Shift+↓', short:'Extend' },
+    { group:'Tree',   label:'Open a group, close it (or go to its group)', kbd:'→', alt:'←', short:'Group' },
+    { group:'Tree',   label:'The first row, the last row',            kbd:'Home', alt:'End', short:'Row' },
     { group:'Fields', label:'Change a number by dragging it',         kbd:'Drag' },
     { group:'Fields', label:'…ten times faster',                      kbd:'Shift+Drag' },
     { group:'Fields', label:'…ten times finer',                       kbd:'Alt+Drag' },
     { group:'Fields', label:'Type a number',                          kbd:'Click' },
-    { group:'Panels', label:'Run the open command (Split, Remove holes…)', kbd:'Enter' },
-    { group:'Panels', label:'Close the open command',                 kbd:'Esc' },
-    { group:'Panels', label:'Apply a batch rename',                   kbd:'Ctrl+Enter' },
+    { group:'Panels', label:'Run the open command (Split, Remove holes…)', kbd:'Enter', short:'Run' },
+    { group:'Panels', label:'Close the open command',                 kbd:'Esc', short:'Close' },
+    { group:'Panels', label:'Apply a batch rename',                   kbd:'Ctrl+Enter', short:'Apply' },
   ];
   function _esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-  function _renderKeys(kbd, alt) {
-    // Split combos like "Ctrl+Shift+O" into separate keycap chips, joined by +; an alternative follows after "or".
-    const one = (c) => c.split('+').map(k => `<kbd class="kbd-chip">${_esc(k)}</kbd>`).join('<span class="sc-plus">+</span>');
-    return one(kbd) + (alt ? `<span class="sc-or">or</span>` + one(alt) : '');
+
+  // ── Combinations ─────────────────────────────────────────────────────────
+  // One spelling for a combination everywhere: Ctrl, Alt, Shift in that order, then the key ("Ctrl+Shift+G"). "?" is Shift + /.
+  const MODS = ['Ctrl', 'Alt', 'Shift'];
+  function canon(s) {
+    s = String(s || '');
+    let key, rest;
+    if (s === '+' || s.endsWith('++')) { key = '+'; rest = s.slice(0, -2); }
+    else { const i = s.lastIndexOf('+'); key = i < 0 ? s : s.slice(i + 1); rest = i < 0 ? '' : s.slice(0, i); }
+    const m = new Set(rest ? rest.split('+') : []);
+    if (key === '?') { key = '/'; m.add('Shift'); }
+    if (key.length === 1) key = key.toUpperCase();
+    return MODS.filter(x => m.has(x)).map(x => x + '+').join('') + key;
   }
-  function _render(query = '') {
-    const body = document.getElementById('shortcuts-body');
-    if (!body) return;
-    const q = query.trim().toLowerCase();
-    const groups = {};
-    let total = 0;
-    const seen = new Set();
-    for (const a of [..._Actions.list, ...EXTRA]) {
-      if (!a.kbd) continue;
-      const dup = a.group + '|' + a.label + '|' + a.kbd; if (seen.has(dup)) continue; seen.add(dup);      // (Fit to view and Frame selection are one key)
-      if (q) {
-        const hay = `${a.label} ${a.group} ${a.kbd} ${a.alt || ''}`.toLowerCase();
-        if (!hay.includes(q)) continue;
+  const pretty = (c) => (c === 'Shift+/' ? '?' : c);
+  function parts(c) {
+    let rest = pretty(c); const out = [];
+    for (const m of MODS) if (rest.startsWith(m + '+') && rest.length > m.length + 1) { out.push(m); rest = rest.slice(m.length + 1); }
+    out.push(rest);
+    return out;
+  }
+  function split(c) {                                    // a canonical combination → its modifiers ("Ctrl+Shift") and its key
+    const out = []; let rest = c;
+    for (const m of MODS) if (rest.startsWith(m + '+') && rest.length > m.length + 1) { out.push(m); rest = rest.slice(m.length + 1); }
+    return { mods: out.join('+'), key: rest };
+  }
+  const chips = (c) => parts(c).map(k => `<kbd class="kbd-chip">${_esc(k)}</kbd>`).join('<span class="sc-plus">+</span>');
+  const CODE = { Escape:'Esc', Delete:'Del', Backspace:'Backspace', Enter:'Enter', NumpadEnter:'Enter', Space:'Space', Tab:'Tab', ArrowUp:'↑', ArrowDown:'↓', ArrowLeft:'←', ArrowRight:'→',
+    Home:'Home', End:'End', PageUp:'PgUp', PageDown:'PgDn', Insert:'Ins', Backquote:'`', Minus:'-', Equal:'=', BracketLeft:'[', BracketRight:']', Backslash:'\\', Semicolon:';', Quote:"'", Comma:',', Period:'.', Slash:'/' };
+  const isModKey = (e) => e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta' || e.key === 'AltGraph' || e.key === 'OS';
+  // The key's name: by what it types for letters, digits and punctuation (as the app's own handlers read them, so Z is Z on a
+  // QWERTZ keyboard), by its place when a held modifier makes it type something else (Option + 1 types ¡ on a Mac).
+  function keyName(e) {
+    const k = e.key || '', c = e.code || '';
+    if (/^[a-z]$/i.test(k)) return k.toUpperCase();
+    if (/^[0-9]$/.test(k)) return k;
+    if (/^Digit[0-9]$/.test(c)) return c.slice(5);
+    if (/^F\d{1,2}$/.test(k)) return k;
+    if (k.length === 1 && "`-=[]\\;',./".includes(k)) return k;
+    if (k === '?') return '/';
+    if (/^Key[A-Z]$/.test(c)) return c.slice(3);
+    return CODE[c] || CODE[k] || (k === ' ' ? 'Space' : k);
+  }
+  const eventCombo = (e) => (e.ctrlKey || e.metaKey ? 'Ctrl+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + keyName(e);
+
+  // ── Your own keys, in profiles ───────────────────────────────────────────
+  // A profile holds only what differs from the keys the app ships with: { command id: [combinations] } (an empty list is a
+  // command with no key). The profile '' is Default and cannot be changed, so there is always a way back. Kept in this browser.
+  // A changed command is run from here (its `run`), and the key it gave up is swallowed before the app's own handlers see it;
+  // while nothing is changed this does nothing at all.
+  const LS = 'mo-key-profiles';
+  const LOCKED = new Set(['selClear', 'wand', 'frameSel']);       // Esc closes things everywhere; the wand is held, not pressed; Frame shares F with Fit
+  const BROWSER = new Set(['Ctrl+W', 'Ctrl+T', 'Ctrl+Shift+T', 'Ctrl+Shift+N', 'Ctrl+Tab', 'Ctrl+Shift+Tab', 'F5', 'Ctrl+R', 'F11', 'F12', 'Ctrl+Shift+I', 'Alt+F4']);
+  let store = { active: '', profiles: {} };
+  let userMap = new Map(), dead = new Set(), moved = new Map(), bypass = false;
+  const curMap = () => (store.active && store.profiles[store.active]) || null;
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(LS) || 'null');
+      if (s && typeof s === 'object' && s.profiles && typeof s.profiles === 'object') {
+        store = { active: typeof s.active === 'string' && s.profiles[s.active] ? s.active : '', profiles: {} };
+        for (const [name, map] of Object.entries(s.profiles)) {
+          const clean = {};
+          for (const [id, list] of Object.entries(map || {})) if (Array.isArray(list)) clean[id] = list.filter(x => typeof x === 'string' && x).map(canon).slice(0, 2);
+          store.profiles[name] = clean;
+        }
       }
-      (groups[a.group] = groups[a.group] || []).push(a);
-      total++;
+    } catch (_) { store = { active: '', profiles: {} }; }
+  }
+  function save() { try { localStorage.setItem(LS, JSON.stringify(store)); } catch (_) {} }
+  const defaultsOf = (a) => (a._k0 || (a._k0 = [a.kbd, a.alt].filter(Boolean).map(canon)));
+  const FOLLOW = { frameSel: 'fit' };                    // Frame selection is the same key as Fit to view, whatever that key is
+  function effective(a) {
+    if (FOLLOW[a.id]) { const b = _Actions.list.find(x => x.id === FOLLOW[a.id]); if (b) return effective(b); }
+    const m = curMap(); return (m && m[a.id]) || defaultsOf(a);
+  }
+  function apply() {
+    const m = curMap();
+    userMap = new Map(); dead = new Set(); moved = new Map();
+    for (const a of _Actions.list) {
+      const d = defaultsOf(a), eff = effective(a);
+      if (d.length || (m && m[a.id])) { a.kbd = eff[0] ? pretty(eff[0]) : undefined; a.alt = eff[1] ? pretty(eff[1]) : undefined; }
+      if (m && m[a.id]) { for (const c of eff) userMap.set(c, a); for (const c of d) if (!eff.includes(c)) dead.add(c); }
+      if (eff !== d && d.length && !moved.has(d[0])) moved.set(d[0], eff[0] ? pretty(eff[0]) : '');
     }
-    if (total === 0) {
-      body.innerHTML = `<div class="sc-empty">No shortcuts match "${_esc(query)}"</div>`;
+    for (const c of userMap.keys()) dead.delete(c);
+  }
+  load(); apply();
+  // A key written somewhere else in the app (a tooltip's "(F)", a menu row) is the key the app ships with: this gives the key
+  // the command has now, '' when it has none, and the text as it was when nothing about it changed or it is not a key at all.
+  window.__moKeyLabel = (k) => { if (!moved.size) return k; const c = canon(String(k).trim()); return moved.has(c) ? moved.get(c) : k; };
+  window.addEventListener('keydown', (e) => {
+    if (bypass || (!userMap.size && !dead.size) || isModKey(e)) return;
+    if (_modalOpen() || _typingTarget(e)) return;
+    const c = eventCombo(e), a = userMap.get(c);
+    if (a) {
+      e.preventDefault(); e.stopImmediatePropagation();
+      bypass = true;
+      try { a.run(); } catch (err) { console.warn('[keys]', err); } finally { bypass = false; }
+    } else if (dead.has(c)) e.stopImmediatePropagation();
+  }, true);
+  function uniqueName(base) { let n = base, i = 2; while (n === '' || store.profiles[n]) n = base + ' ' + i++; return n; }
+  // The first change made on Default starts a profile of its own.
+  function editable() {
+    if (store.active) return;
+    const n = uniqueName('My keys');
+    store.profiles[n] = {}; store.active = n; note = 'Default stays as it is. Your changes are in the profile “' + n + '”.';
+  }
+  function setBinding(a, list) {
+    editable();
+    const m = curMap(), d = defaultsOf(a);
+    if (list.length === d.length && list.every((c, i) => c === d[i])) delete m[a.id]; else m[a.id] = list;
+  }
+
+  // ── What the window lists ────────────────────────────────────────────────
+  const SHORT = { newscene:'New', open:'Open', import:'Import', savescene:'Save', closeall:'Close', export:'Export', sceneSettings:'Scene', wand:'Wand', fit:'Frame', frameSel:'Frame',
+    camPersp:'Camera', camTop:'Top', camFront:'Front', camSide:'Side', solid:'Solid', wire:'Wire', xray:'X-ray', heat:'Heat', clay:'Clay', cad:'CAD', gzMove:'Move', gzRotate:'Rotate', gzScale:'Scale',
+    gzPlace:'Place', gzOff:'Off', tgGrid:'Grid', selAll:'All', selInvert:'Invert', selClear:'Clear', isolate:'Isolate', showAll:'Show', hideUnsel:'Solo', reveal:'Reveal', undo:'Undo',
+    redo:'Redo', delete:'Delete', copy:'Copy', paste:'Paste', duplicate:'Dupe', group:'Group', merge:'Merge', split:'Split', smartFit:'Box fit', fillHoles:'Holes', draw:'Draw',
+    quickRemesh:'Remesh', modePoints:'Points', modeEdges:'Edges', modeFaces:'Polys', modeModel:'Model', untriangulate:'Polys', triangulate:'Tris', ungroup:'Ungroup', hideSel:'Hide',
+    materials:'Mats', library:'Library', measure:'Measure', batchRename:'Rename', settings:'Prefs', help:'Help', shortcuts:'Keys', palette:'Search', console:'Log' };
+  // Every row: a command (its keys can be changed) or a fixed gesture / panel key.
+  function entries() {
+    const out = [], seen = new Set();
+    for (const a of _Actions.list) {
+      const d = defaultsOf(a), binds = effective(a);
+      out.push({ a, id: a.id, group: a.group, label: a.label, short: SHORT[a.id] || String(a.label).split(/[\s:…(]/)[0], binds, fixed: LOCKED.has(a.id),
+        changed: !!(curMap() && curMap()[a.id]), hadKey: d.length > 0 });
+    }
+    for (const x of EXTRA) {
+      const key = x.group + '|' + x.label; if (seen.has(key)) continue; seen.add(key);
+      out.push({ a: null, id: 'x:' + key, group: x.group, label: x.label, short: x.short || '', binds: [x.kbd, x.alt].filter(Boolean).map(canon), fixed: true, changed: false, hadKey: true });
+    }
+    return out;
+  }
+
+  // ── The keyboard picture ─────────────────────────────────────────────────
+  // [code, legend, width in keys, the key's name in a combination when it is not the legend]; no code is a gap.
+  const KB_MAIN = [
+    [['Escape','Esc'], [0,0,1], ['F1','F1'], ['F2','F2'], ['F3','F3'], ['F4','F4'], [0,0,.5], ['F5','F5'], ['F6','F6'], ['F7','F7'], ['F8','F8'], [0,0,.5], ['F9','F9'], ['F10','F10'], ['F11','F11'], ['F12','F12']],
+    [['Backquote','`'], ['Digit1','1'], ['Digit2','2'], ['Digit3','3'], ['Digit4','4'], ['Digit5','5'], ['Digit6','6'], ['Digit7','7'], ['Digit8','8'], ['Digit9','9'], ['Digit0','0'], ['Minus','-'], ['Equal','='], ['Backspace','Backspace',2]],
+    [['Tab','Tab',1.5], ['KeyQ','Q'], ['KeyW','W'], ['KeyE','E'], ['KeyR','R'], ['KeyT','T'], ['KeyY','Y'], ['KeyU','U'], ['KeyI','I'], ['KeyO','O'], ['KeyP','P'], ['BracketLeft','['], ['BracketRight',']'], ['Backslash','\\',1.5]],
+    [['CapsLock','Caps',1.75], ['KeyA','A'], ['KeyS','S'], ['KeyD','D'], ['KeyF','F'], ['KeyG','G'], ['KeyH','H'], ['KeyJ','J'], ['KeyK','K'], ['KeyL','L'], ['Semicolon',';'], ['Quote',"'"], ['Enter','Enter',2.25]],
+    [['ShiftLeft','Shift',2.25], ['KeyZ','Z'], ['KeyX','X'], ['KeyC','C'], ['KeyV','V'], ['KeyB','B'], ['KeyN','N'], ['KeyM','M'], ['Comma',','], ['Period','.'], ['Slash','/'], ['ShiftRight','Shift',2.75]],
+    [['ControlLeft','Ctrl',1.25], ['MetaLeft','Win',1.25], ['AltLeft','Alt',1.25], ['Space','',6.25,'Space'], ['AltRight','Alt',1.25], ['MetaRight','Win',1.25], ['ContextMenu','Menu',1.25], ['ControlRight','Ctrl',1.25]],
+  ];
+  const KB_NAV = [
+    [['PrintScreen','PrtSc'], ['ScrollLock','ScrLk'], ['Pause','Pause']],
+    [['Insert','Ins'], ['Home','Home'], ['PageUp','PgUp']],
+    [['Delete','Del'], ['End','End'], ['PageDown','PgDn']],
+    [[0,0,3]],
+    [[0,0,1], ['ArrowUp','↑'], [0,0,1]],
+    [['ArrowLeft','←'], ['ArrowDown','↓'], ['ArrowRight','→']],
+  ];
+  const MODCODE = { ShiftLeft:'Shift', ShiftRight:'Shift', ControlLeft:'Ctrl', ControlRight:'Ctrl', AltLeft:'Alt', AltRight:'Alt' };
+  const INERT = new Set(['MetaLeft', 'MetaRight', 'ContextMenu', 'CapsLock', 'PrintScreen', 'ScrollLock', 'Pause']);
+  let nameOf = {};                                       // code → the key's name in a combination
+  function buildKeyboard() {
+    const host = document.getElementById('sc-kb'); if (!host) return;
+    nameOf = {};
+    const block = (rows, cls) => `<div class="${cls}">` + rows.map((row, ri) => `<div class="sc-kb-row${ri === 0 ? ' is-fn' : ''}">` + row.map(([code, legend, w, name]) => {
+      if (!code) return `<span class="sc-key is-gap" style="--w:${w || 1}"></span>`;
+      if (!MODCODE[code] && !INERT.has(code)) nameOf[code] = name || legend;
+      const cls = MODCODE[code] ? ' is-mod' : INERT.has(code) ? ' is-inert' : '';
+      return `<span class="sc-key${cls}" data-code="${code}" style="--w:${w || 1}"><i>${_esc(legend)}</i><em></em></span>`;
+    }).join('') + '</div>').join('') + '</div>';
+    host.innerHTML = block(KB_MAIN, 'sc-kb-main') + block(KB_NAV, 'sc-kb-nav');
+    // The legends follow the keyboard that is plugged in, where the browser can tell (a QWERTZ keyboard shows Z where Z is).
+    try {
+      navigator.keyboard && navigator.keyboard.getLayoutMap && navigator.keyboard.getLayoutMap().then((map) => {
+        for (const el of host.querySelectorAll('.sc-key[data-code]')) {
+          const code = el.dataset.code, v = map.get(code);
+          if (!v || v.length !== 1 || !/^(Key|Digit)/.test(code)) continue;
+          nameOf[code] = v.toUpperCase(); el.querySelector('i').textContent = v.toUpperCase();
+        }
+        paint();
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  // ── State of the open window ─────────────────────────────────────────────
+  let rows = [];                                         // the entries drawn in the list, as last rendered
+  let all = [];                                          // every entry (the keyboard shows them all, whatever the list is filtered to)
+  let index = new Map();                                 // combination → entries
+  const phys = new Set(), sticky = new Set(), down = new Set();
+  let last = '', hoverCombo = '', hoverRow = '', keyFilter = '', showAll = false, rec = null, note = '', menuOpen = false, naming = null, confirmDelete = false;
+  const $ = (id) => document.getElementById(id);
+  const isOpen = () => !!$('shortcuts-modal')?.classList.contains('show');
+  const heldMods = () => MODS.filter(m => phys.has(m) || sticky.has(m)).join('+');
+
+  function rebuild() {
+    all = entries(); index = new Map();
+    for (const en of all) for (const c of en.binds) { if (!index.has(c)) index.set(c, []); index.get(c).push(en); }
+  }
+  function _render() {
+    const body = $('shortcuts-body'); if (!body) return;
+    rebuild();
+    const q = ($('shortcuts-search')?.value || '').trim().toLowerCase();
+    rows = all.filter((en) => {
+      if (!en.binds.length && !showAll && !en.changed && !(rec && rec.id === en.id)) return false;
+      if (keyFilter && !en.binds.some(c => split(c).key === keyFilter)) return false;
+      if (q && !`${en.label} ${en.group} ${en.binds.map(pretty).join(' ')}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    const chip = $('sc-keyfilter');
+    if (chip) { chip.hidden = !keyFilter; chip.innerHTML = keyFilter ? `Key <kbd class="kbd-chip">${_esc(keyFilter)}</kbd><i data-lucide="x" aria-hidden="true"></i>` : ''; }
+    $('sc-all')?.classList.toggle('active', showAll);
+    if (!rows.length) {
+      body.innerHTML = `<div class="sc-empty">${keyFilter && !q ? 'Nothing is on ' + _esc(keyFilter) + ' yet.' : 'No shortcuts match.'}</div>`;
+    } else {
+      const groups = {};
+      for (const en of rows) (groups[en.group] = groups[en.group] || []).push(en);
+      const ordered = [...GROUP_ORDER.filter(g => groups[g]), ...Object.keys(groups).filter(g => !GROUP_ORDER.includes(g)).sort()];
+      body.innerHTML = ordered.map(g => `
+        <div class="sc-group">
+          <div class="sc-group-h"><i data-lucide="${GROUP_ICONS[g] || 'square'}" aria-hidden="true"></i><span>${_esc(g)}</span></div>
+          ${groups[g].map(rowHtml).join('')}
+        </div>`).join('');
+    }
+    const changed = all.filter(en => en.changed).length;
+    const foot = $('sc-foot-l');
+    if (foot) foot.textContent = note || (changed ? changed + (changed === 1 ? ' shortcut' : ' shortcuts') + ' changed in this profile.' : 'Click a shortcut to change it. Hold Ctrl, Shift or Alt to see their keys.');
+    renderProfile();
+    _lucide();
+    paint();
+  }
+  function rowHtml(en) {
+    const recording = rec && rec.id === en.id;
+    const keys = recording
+      ? (rec.pending ? chips(rec.pending) : '<span class="sc-press">Press the new keys</span>')
+      : en.binds.length ? en.binds.map(chips).join('<span class="sc-or">or</span>') : '<span class="sc-none">None</span>';
+    let warn = '';
+    if (recording && (rec.pending || rec.msg)) {
+      if (rec.msg) warn = `<div class="sc-warn"><span>${_esc(rec.msg)}</span><button type="button" class="sc-btn" data-act="cancel">Cancel</button></div>`;
+      else {
+        const names = rec.conflicts.map(c => '“' + c.label + '”').join(' and ');
+        const movable = rec.conflicts.every(c => !c.fixed);
+        warn = `<div class="sc-warn"><span>${_esc(pretty(rec.pending))} is already ${_esc(names)}.</span>` +
+          `<button type="button" class="sc-btn is-primary" data-act="confirm">${movable ? 'Replace' : 'Use anyway'}</button><button type="button" class="sc-btn" data-act="cancel">Cancel</button></div>`;
+      }
+    }
+    const acts = en.fixed ? '' :
+      (en.changed ? `<button type="button" class="sc-act" data-act="reset" aria-label="Back to the default key"><i data-lucide="rotate-ccw" aria-hidden="true"></i></button>` : '') +
+      (en.binds.length ? `<button type="button" class="sc-act" data-act="clear" aria-label="Remove the key"><i data-lucide="x" aria-hidden="true"></i></button>` : '');
+    return `<div class="sc-row${en.fixed ? ' is-fixed' : ''}${en.changed ? ' is-changed' : ''}${recording ? ' is-rec' : ''}" data-id="${_esc(en.id)}" data-mods="${_esc(en.binds.map(c => split(c).mods).join('|'))}">
+      <span class="sc-row-label">${_esc(en.label)}</span>
+      <${en.fixed ? 'span' : 'button type="button" data-act="rec"'} class="sc-row-keys">${keys}</${en.fixed ? 'span' : 'button'}>
+      <span class="sc-acts">${acts}</span>${warn}
+    </div>`;
+  }
+  // Everything that follows the keys held or pointed at: no list is rebuilt here, so it is immediate.
+  function paint() {
+    const host = $('sc-kb'); if (!host) return;
+    const held = heldMods();
+    const hov = !held && hoverCombo ? split(hoverCombo) : null;          // pointing at a row shows its keys, on its own layer
+    const layer = rec && rec.pending ? split(rec.pending).mods : hov ? hov.mods : held;
+    const layerSet = new Set(layer ? layer.split('+') : []);
+    const litKey = rec && rec.pending ? split(rec.pending).key : hov ? hov.key : '';
+    for (const el of host.querySelectorAll('.sc-key[data-code]')) {
+      const code = el.dataset.code, mod = MODCODE[code];
+      if (mod) { el.classList.toggle('is-held', layerSet.has(mod)); continue; }
+      const name = nameOf[code]; if (!name) continue;
+      const its = index.get((layer ? layer + '+' : '') + name);
+      el.classList.toggle('has', !!its);
+      el.classList.toggle('is-down', down.has(code));
+      el.classList.toggle('is-lit', !!litKey && name === litKey);
+      el.classList.toggle('is-filter', !!keyFilter && name === keyFilter);
+      const em = el.lastElementChild, text = its ? (its[0].short || its[0].label) : '';
+      if (em.textContent !== text) em.textContent = text;
+    }
+    const hit = last || '';
+    for (const el of document.querySelectorAll('#shortcuts-body .sc-row')) {
+      const mods = el.dataset.mods.split('|');
+      el.classList.toggle('is-off', !!held && !rec && !mods.includes(held));
+      const en = hit && index.get(hit);
+      el.classList.toggle('is-hit', !!en && en.some(x => x.id === el.dataset.id));
+    }
+    // the line above the keyboard
+    const read = $('sc-read');
+    if (read) {
+      let html;
+      const tell = (c) => { const its = index.get(c); return `<span class="sc-read-keys">${chips(c)}</span><span class="sc-read-name${its ? '' : ' is-none'}">${its ? _esc(its.map(x => x.label).join('  ·  ')) : 'Nothing on this yet'}</span>`; };
+      if (rec) { const en = all.find(x => x.id === rec.id); html = `<span class="sc-read-rec">New keys for</span><span class="sc-read-name">${_esc(en ? en.label : '')}</span><span class="sc-read-hint">Esc cancels</span>`; }
+      else if (last) html = tell(last);
+      else if (hoverCombo) html = tell(hoverCombo);
+      else if (held) html = `<span class="sc-read-keys">${chips(held + '+…').replace('<kbd class="kbd-chip">…</kbd>', '<span class="sc-read-hint">a key</span>')}</span>`;
+      else html = '<span class="sc-read-hint">Press any keys to see what they do.</span>';
+      if (read.innerHTML !== html) read.innerHTML = html;
+    }
+    // the mouse, with the same keys held
+    const mouse = $('sc-mouse');
+    if (mouse) {
+      const seen = new Set();
+      const html = all.filter(en => en.group === 'Mouse').flatMap(en => en.binds.filter(c => split(c).mods === layer).map(c => ({ c, en })))
+        .filter(x => !seen.has(x.c) && seen.add(x.c)).map(x => `<span class="sc-mouse-i"><kbd class="kbd-chip">${_esc(split(x.c).key)}</kbd>${_esc(x.en.label)}</span>`).join('');
+      const out = '<i data-lucide="mouse" aria-hidden="true"></i>' + (html || '<span class="sc-read-hint">Nothing for the mouse with these keys.</span>');
+      if (mouse.dataset.h !== out) { mouse.dataset.h = out; mouse.innerHTML = out; _lucide(); }
+    }
+  }
+
+  // ── Changing a key ───────────────────────────────────────────────────────
+  function startRec(id) { rec = { id, pending: '', conflicts: [], msg: '' }; last = ''; hoverCombo = ''; note = ''; _render(); }
+  function stopRec() { rec = null; _render(); }
+  function recKey(e) {
+    const bare = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+    if (e.key === 'Escape' && bare) return stopRec();
+    if (e.key === 'Enter' && bare && rec.pending) return commit();
+    const c = eventCombo(e);
+    rec.msg = ''; rec.pending = ''; rec.conflicts = [];
+    if (BROWSER.has(c)) { rec.msg = 'The browser keeps ' + pretty(c) + ' for itself. Try another.'; return _render(); }
+    rec.pending = c;
+    rec.conflicts = (index.get(c) || []).filter(en => en.id !== rec.id && !FOLLOW[en.id]);
+    if (!rec.conflicts.length) return commit();
+    _render();
+  }
+  function commit() {
+    const en = all.find(x => x.id === rec.id); if (!en || !en.a) return stopRec();
+    const c = rec.pending;
+    for (const other of rec.conflicts) if (other.a && !other.fixed) setBinding(other.a, other.binds.filter(x => x !== c));
+    setBinding(en.a, [c]);
+    save(); apply(); rec = null; last = ''; _render();
+  }
+
+  // ── Profiles ─────────────────────────────────────────────────────────────
+  function renderProfile() {
+    const btn = $('sc-prof-btn'), menu = $('sc-prof-menu'); if (!btn || !menu) return;
+    btn.querySelector('span').textContent = store.active || 'Default';
+    $('sc-prof').classList.toggle('open', menuOpen);
+    if (!menuOpen) { menu.innerHTML = ''; return; }
+    if (naming) {
+      menu.innerHTML = `<div class="sc-prof-name"><label>${naming.kind === 'rename' ? 'Rename the profile' : 'Name the new profile'}</label>
+        <input id="sc-prof-input" type="text" maxlength="32" autocomplete="off" spellcheck="false" value="${_esc(naming.value)}">
+        <div class="sc-prof-name-b"><button type="button" class="sc-btn" data-p="name-cancel">Cancel</button><button type="button" class="sc-btn is-primary" data-p="name-ok">${naming.kind === 'rename' ? 'Rename' : 'Create'}</button></div></div>`;
+      const inp = $('sc-prof-input'); setTimeout(() => { inp && inp.focus(); inp && inp.select(); }, 0);
       return;
     }
-    const known = GROUP_ORDER.filter(g => groups[g]);
-    const unknown = Object.keys(groups).filter(g => !GROUP_ORDER.includes(g)).sort();
-    const ordered = [...known, ...unknown];
-    body.innerHTML = ordered.map(g => `
-      <div class="sc-group">
-        <div class="sc-group-h"><i data-lucide="${GROUP_ICONS[g] || 'square'}" aria-hidden="true"></i><span>${_esc(g)}</span></div>
-        <div class="sc-grid">
-          ${groups[g].map(a => `
-            <div class="sc-row">
-              <span class="sc-row-label" title="${_esc(a.label)}">${_esc(a.label)}</span>
-              <span class="sc-row-keys">${_renderKeys(a.kbd, a.alt)}</span>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `).join('');
-    _lucide();
+    const names = ['', ...Object.keys(store.profiles)];
+    const item = (p, icon, label, off) => `<button type="button" class="sc-prof-i" data-p="${p}"${off ? ' disabled' : ''}><i data-lucide="${icon}" aria-hidden="true"></i><span>${label}</span></button>`;
+    menu.innerHTML = names.map(n => `<button type="button" class="sc-prof-i${n === store.active ? ' is-on' : ''}" data-p="use" data-name="${_esc(n)}"><i data-lucide="${n === store.active ? 'check' : 'user'}" aria-hidden="true"></i><span>${_esc(n || 'Default')}</span>${n ? '' : '<em>the app’s own keys</em>'}</button>`).join('') +
+      '<div class="sc-prof-sep"></div>' +
+      item('new', 'plus', 'New profile…') + item('dup', 'copy', 'Duplicate this one…') + item('rename', 'pencil', 'Rename…', !store.active) +
+      item('reset', 'rotate-ccw', 'Put every key back', !store.active || !Object.keys(curMap() || {}).length) +
+      item('delete', 'trash-2', confirmDelete ? 'Click again to delete' : 'Delete profile', !store.active);
   }
+  function profileAct(p, name) {
+    if (p === 'use') { store.active = name && store.profiles[name] ? name : ''; menuOpen = false; }
+    else if (p === 'new') naming = { kind: 'new', value: uniqueName('Profile') };
+    else if (p === 'dup') naming = { kind: 'dup', value: uniqueName((store.active || 'Default') + ' copy') };
+    else if (p === 'rename') naming = { kind: 'rename', value: store.active };
+    else if (p === 'reset') { if (store.active) store.profiles[store.active] = {}; menuOpen = false; }
+    else if (p === 'delete') { if (!confirmDelete) { confirmDelete = true; return renderProfile(), _lucide(); } delete store.profiles[store.active]; store.active = ''; menuOpen = false; }
+    else if (p === 'name-cancel') naming = null;
+    else if (p === 'name-ok') {
+      const v = ($('sc-prof-input')?.value || '').trim().slice(0, 32);
+      if (!v || (store.profiles[v] && !(naming.kind === 'rename' && v === store.active))) { $('sc-prof-input')?.classList.add('invalid'); return; }
+      if (naming.kind === 'rename') { if (v !== store.active) { store.profiles[v] = store.profiles[store.active]; delete store.profiles[store.active]; } }
+      else store.profiles[v] = naming.kind === 'dup' ? JSON.parse(JSON.stringify(curMap() || {})) : {};
+      store.active = v; naming = null; menuOpen = false;
+    }
+    confirmDelete = false; note = ''; rec = null;
+    save(); apply(); _render();
+  }
+
+  function onKey(e, isDown) {
+    if (!isOpen()) return;
+    const t = e.target, typing = t && (t.id === 'shortcuts-search' || t.id === 'sc-prof-input');
+    if (typing && !rec) {
+      if (isDown && t.id === 'sc-prof-input') { if (e.key === 'Enter') { e.preventDefault(); profileAct('name-ok'); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); profileAct('name-cancel'); } }
+      return;
+    }
+    if (!rec) {
+      if (e.key === 'F5' || e.key === 'F12' || e.key === 'Tab' || ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R'))) return;      // reload, the developer tools and moving the focus stay the browser's
+      if ((e.key === 'Enter' || e.key === ' ') && t && t.tagName === 'BUTTON') return;
+    }
+    e.preventDefault(); e.stopPropagation();
+    phys.clear();
+    if (e.ctrlKey || e.metaKey) phys.add('Ctrl'); if (e.altKey) phys.add('Alt'); if (e.shiftKey) phys.add('Shift');
+    if (isModKey(e)) { if (!rec) last = ''; return paint(); }
+    if (!isDown) { down.delete(e.code); return paint(); }
+    if (rec) return recKey(e);
+    if (e.key === 'Escape' && !phys.size) {
+      if (menuOpen) { menuOpen = false; naming = null; confirmDelete = false; renderProfile(); return; }
+      if (keyFilter) { keyFilter = ''; return _render(); }
+      return hide();
+    }
+    down.add(e.code); last = eventCombo(e); hoverCombo = '';
+    paint();
+    const row = document.querySelector('#shortcuts-body .sc-row.is-hit');
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }
+
   function _wire() {
     if (inited) return;
     inited = true;
-    const bg = document.getElementById('shortcuts-modal');
+    const bg = $('shortcuts-modal');
     if (!bg) return;
-    document.getElementById('shortcuts-close')?.addEventListener('click', hide);
-    bg.addEventListener('click', e => { if (e.target === bg) hide(); });
-    const search = document.getElementById('shortcuts-search');
+    buildKeyboard();
+    $('shortcuts-close')?.addEventListener('click', hide);
+    bg.addEventListener('mousedown', e => { if (e.target === bg) hide(); });
+    const search = $('shortcuts-search');
     if (search) {
-      search.addEventListener('input', () => _render(search.value));
+      search.addEventListener('input', () => { last = ''; _render(); });
       search.addEventListener('keydown', e => {
-        if (e.key === 'Escape') {
-          // Esc: first clear the query, then close if already empty.
-          if (search.value) { e.preventDefault(); e.stopPropagation(); search.value = ''; _render(''); }
-          else { e.preventDefault(); hide(); }
-        }
+        if (e.key !== 'Escape') return;
+        // Esc: first clear the query, then leave the field.
+        e.preventDefault(); e.stopPropagation();
+        if (search.value) { search.value = ''; _render(); } else search.blur();
       });
     }
-    document.addEventListener('keydown', e => {
-      if (!bg.classList.contains('show')) return;
-      const inSearch = document.activeElement === search;
-      if (e.key === 'Escape' && !inSearch) { e.preventDefault(); hide(); }
+    window.addEventListener('keydown', e => onKey(e, true), true);
+    window.addEventListener('keyup', e => onKey(e, false), true);
+    window.addEventListener('blur', () => { if (!isOpen()) return; phys.clear(); down.clear(); paint(); });
+    // the keyboard: a modifier stays held on a click, any other key filters the list to itself
+    const kb = $('sc-kb');
+    kb.addEventListener('mousedown', e => e.preventDefault());
+    kb.addEventListener('click', e => {
+      const el = e.target.closest('.sc-key[data-code]'); if (!el || rec) return;
+      const mod = MODCODE[el.dataset.code], name = nameOf[el.dataset.code];
+      if (mod) { sticky.has(mod) ? sticky.delete(mod) : sticky.add(mod); last = ''; return paint(); }
+      if (!name) return;
+      keyFilter = keyFilter === name ? '' : name; last = '';
+      _render();
     });
-    // Render lucide icons in the static footer/search-icon on first wire.
+    kb.addEventListener('mouseover', e => {
+      const el = e.target.closest('.sc-key[data-code]'); if (rec) return;
+      const name = el && nameOf[el.dataset.code], held = heldMods();
+      const c = name ? (held ? held + '+' : '') + name : '';
+      if (c === last) return;
+      last = c; paint();
+    });
+    kb.addEventListener('mouseleave', () => { if (rec || !last) return; last = ''; paint(); });
+    // the list
+    const body = $('shortcuts-body');
+    body.addEventListener('click', e => {
+      const b = e.target.closest('[data-act]'), row = e.target.closest('.sc-row'); if (!b || !row) return;
+      b.blur();
+      const en = all.find(x => x.id === row.dataset.id); if (!en || !en.a) return;
+      const act = b.dataset.act;
+      if (act === 'rec') return rec && rec.id === en.id ? stopRec() : startRec(en.id);
+      if (act === 'cancel') return stopRec();
+      if (act === 'confirm') return commit();
+      if (act === 'reset') { const m = curMap(); if (m) delete m[en.id]; }
+      else if (act === 'clear') setBinding(en.a, []);
+      rec = null; save(); apply(); _render();
+    });
+    body.addEventListener('mouseover', e => {
+      const row = e.target.closest('.sc-row'), id = row ? row.dataset.id : '';
+      if (id === hoverRow || rec) return;
+      hoverRow = id; last = '';
+      const en = id && all.find(x => x.id === id);
+      hoverCombo = en && en.binds[0] ? en.binds[0] : '';
+      paint();
+    });
+    body.addEventListener('mouseleave', () => { hoverRow = ''; if (!hoverCombo) return; hoverCombo = ''; paint(); });
+    $('sc-keyfilter')?.addEventListener('click', () => { keyFilter = ''; _render(); });
+    $('sc-all')?.addEventListener('click', (e) => { e.currentTarget.blur(); showAll = !showAll; _render(); });
+    // profiles
+    $('sc-prof-btn')?.addEventListener('click', (e) => { e.currentTarget.blur(); menuOpen = !menuOpen; naming = null; confirmDelete = false; renderProfile(); _lucide(); });
+    $('sc-prof-menu')?.addEventListener('click', e => { const b = e.target.closest('[data-p]'); if (b && !b.disabled) { profileAct(b.dataset.p, b.dataset.name); _lucide(); } });
+    bg.addEventListener('mousedown', e => { if (menuOpen && !e.target.closest('#sc-prof')) { menuOpen = false; naming = null; confirmDelete = false; renderProfile(); } });
     _lucide();
   }
   function show() {
     _wire();
-    _render('');
-    const bg = document.getElementById('shortcuts-modal');
-    bg?.classList.add('show');
-    const search = document.getElementById('shortcuts-search');
-    if (search) { search.value = ''; setTimeout(() => search.focus(), 50); }
+    phys.clear(); sticky.clear(); down.clear();
+    last = ''; hoverCombo = ''; hoverRow = ''; keyFilter = ''; rec = null; note = ''; menuOpen = false; naming = null; confirmDelete = false;
+    const search = $('shortcuts-search'); if (search) search.value = '';
+    _render();
+    $('shortcuts-modal')?.classList.add('show');
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   }
-  function hide() { const m = document.getElementById('shortcuts-modal'); m?.classList.remove('show'); if (m && m.contains(document.activeElement)) document.activeElement.blur(); }
-  return { show, hide };
+  function hide() { const m = $('shortcuts-modal'); m?.classList.remove('show'); rec = null; if (m && m.contains(document.activeElement)) document.activeElement.blur(); }
+  return { show, hide, _test: { canon, eventCombo, state: () => ({ store, rec, keyFilter, held: heldMods() }) } };
 })();
 
 // A switch row is one target: a click anywhere on the row (its name, the free space between the name and the switch) turns the switch, not
@@ -5939,6 +6374,7 @@ function initScene() {
   // _attachGizmoToParts, so handles visually follow object rotation — the
   // standard behaviour in Blender / Cinema 4D.
   state.gizmo.space = 'local';
+  try { if (_gizmoSpaceGet() === 'world') state.gizmo.space = 'world'; } catch (_) {}      // (World axes chosen from the toolbar: see _gizmoSpaceGet)
   // Industry-standard snap-while-shift, applied globally to whichever gizmo
   // mode is active. 10 units / 15° / 0.1 — same defaults as Maya/Blender/Max.
   // Snaps are armed/disarmed from the document-level Shift listeners in the
@@ -6027,6 +6463,7 @@ function initScene() {
           // shear-affected (Cinema) parts this is still lossy, but it's the
           // best we can do once a TRS-based transform has been applied.
           p._exactWorld = after.clone();
+          try { _refreshPartBBox(p); } catch (_) {}      // (and its box, which culling while the camera moves, framing and measuring read)
         }
       }
       if (items.length > 0) {
@@ -6116,7 +6553,8 @@ function initScene() {
   // getter to false so TransformControls' internal show/hide logic can't
   // bring them back. Done once after init — the helper structure is built
   // upfront and doesn't change on mode switch.
-  gh.traverse(o => {
+  // (a function, so the gizmo of Edit mesh can be given the very same look: state._styleGizmo)
+  const _styleGizmo = (gh) => gh.traverse(o => {
     if (o.name === 'helper') {
       Object.defineProperty(o, 'visible', {
         get: () => false,
@@ -6238,6 +6676,8 @@ function initScene() {
       } catch (_) { /* already pinned */ }
     }
   });
+  _styleGizmo(gh);
+  state._styleGizmo = _styleGizmo;
 
   // Reusable pivot — gizmo always attaches to this; we re-parent the selected mesh under it
   state.pivot = new THREE.Group();
@@ -6600,6 +7040,7 @@ function _updateGizmoImpl() {
   // next change of the explosion). It comes back when the parts are put back.
   { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { _detachGizmo(); return; } }
   try { if (_Draw.isActive()) { _detachGizmo(); return; } } catch (_) {}      // the Draw tool owns the left button
+  try { if (_Elements.isActive()) { _detachGizmo(); _Elements.gizmo(); return; } } catch (_) {}  // …and so does Edit mesh: its own gizmo sits on the picked pieces
   const ids = [...state.selected];
   // Include instanced parts (p.mesh is null but p.instancedMesh is set) — the
   // promotion code inside _attachGizmoToParts pops them out of the InstancedMesh
@@ -6643,6 +7084,55 @@ function _updateGizmoImpl() {
   }
   const _tgQuat = Number.isFinite(_numId2) ? _groupRotations.get(_numId2) : undefined;
   _attachGizmoToParts(parts, _tgCenter, _tgQuat);
+}
+
+// ── The axes of the object gizmo ──────────────────────────────────────────────────────────────────────────────────────
+// Which way its handles point: World (the scene's X, Y and Z) or Local (the part's own, as it is turned: what it always was for a
+// single part). Chosen from the list a gizmo button of the left toolbar opens when it is held or right-clicked, kept in this
+// browser. In Edit mesh the same list sets that gizmo's axes (World, Local, Normal: the card's own switch, _Elements.api.space).
+// Read from storage when asked (no module state: the scene is set up early). Scale is always along the part's own axes.
+function _gizmoSpaceGet() { try { return localStorage.getItem('stepopt-gizmo-space') === 'world' ? 'world' : 'local'; } catch (_) { return 'local'; } }
+function _gizmoSpaceSet(v) {
+  try { localStorage.setItem('stepopt-gizmo-space', v === 'world' ? 'world' : 'local'); } catch (_) {}
+  try { if (state.gizmo) state.gizmo.setSpace(v === 'world' ? 'world' : 'local'); } catch (_) {}
+  try { requestRender(); } catch (_) {}
+}
+function _wireGizmoSpacePop() {
+  const btns = ['gz-translate', 'gz-rotate', 'gz-scale'].map(id => document.getElementById(id)).filter(Boolean);
+  if (!btns.length || document.getElementById('gz-space-pop')) return;
+  const pop = document.createElement('div');
+  pop.id = 'gz-space-pop'; pop.className = 'vp-prim-pop'; pop.style.display = 'none'; pop.style.minWidth = '150px';
+  pop.setAttribute('role', 'menu'); pop.setAttribute('aria-label', 'Gizmo axes');
+  btns[btns.length - 1].insertAdjacentElement('afterend', pop);
+  // (the same three as the Edit mesh card's switch, with its pictures and words)
+  const ROWS = { world: ['globe', 'World'], local: ['box', 'Local'], normal: ['crosshair', 'Normal'] };
+  const close = () => { pop.style.display = 'none'; };
+  const open = (btn) => {
+    let edit = false; try { edit = _Elements.isActive(); } catch (_) {}
+    const cur = edit ? _Elements.api.space() : _gizmoSpaceGet();
+    pop.innerHTML = '';
+    for (const v of (edit ? ['world', 'local', 'normal'] : ['world', 'local'])) {
+      const row = document.createElement('button');
+      row.type = 'button'; row.className = 'vp-prim-pop-item em-pop-item' + (cur === v ? ' is-on' : '');
+      row.setAttribute('role', 'menuitemradio'); row.setAttribute('aria-checked', String(cur === v));
+      row.innerHTML = '<span class="em-ico prim-ico"><i data-lucide="' + ROWS[v][0] + '"></i></span><span class="em-pop-l">' + ROWS[v][1] + '</span>';
+      row.addEventListener('click', () => { close(); if (edit) { try { _Elements.api.space(v); } catch (_) {} } else _gizmoSpaceSet(v); });
+      pop.appendChild(row);
+    }
+    try { _lucide(); } catch (_) {}
+    pop.style.top = btn.offsetTop + 'px';
+    pop.style.display = 'block';
+  };
+  document.addEventListener('mousedown', (e) => { if (pop.style.display !== 'none' && !pop.contains(e.target) && !btns.some(b => b.contains(e.target))) close(); });
+  for (const btn of btns) {
+    let holdT = 0, held = false;
+    btn.title = (btn.title ? btn.title + ' · ' : '') + 'hold for the axes: World or Local';
+    btn.addEventListener('mousedown', (e) => { if (e.button !== 0) return; held = false; clearTimeout(holdT); holdT = setTimeout(() => { held = true; open(btn); }, 380); });
+    btn.addEventListener('mouseleave', () => clearTimeout(holdT));
+    btn.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); clearTimeout(holdT); open(btn); });
+    // (the press that opened the list is not also a click on the button; a plain click puts away a list left open)
+    btn.addEventListener('click', (e) => { clearTimeout(holdT); if (held) { held = false; e.stopImmediatePropagation(); e.preventDefault(); } else close(); }, true);
+  }
 }
 
 function setGizmoMode(mode) {
@@ -8735,6 +9225,7 @@ function clearModel() {
   state._lastSaveSceneHandle = null;
   _groupOrigins.clear();   // reset stored group origins for new model
   _groupRotations.clear(); // reset stored group rotations for new model
+  _groupScales.clear();
   // Bump the BVH generation token so any in-flight _buildBVHsForAllGeoms
   // bails on its next yield — without this it would continue iterating
   // a geomByHash map that this clear is about to wipe and then leave
@@ -9005,6 +9496,95 @@ function _doCameraFlash(durMs = 360) {
     flash.style.transition = `opacity ${Math.round(durMs * 0.78)}ms ease-out`;
     flash.style.opacity = '0';
   }, Math.round(durMs * 0.18));
+}
+
+// ── A picture framed edge to edge ────────────────────────────────────────────────────────────────────────────────────
+// For a picture that is to show a result (Claude's screenshot with frame: 'model' or 'selection'): come as close as lets all of
+// it in, keeping the angle the camera has, whatever the shape of the picture. `ids`: only these parts; null: every part on show.
+// `fill` is the share of the picture the parts may take (0.94 leaves a thin margin). Returns false when there is nothing to frame.
+// The parts are read from the parts list, not from the scene graph: a selected part hangs on the gizmo's pivot, outside the model's
+// own branch, and would be left out.
+function _frameTight(aspect, fill, ids) {
+  if (!camera || !controls) return false;
+  // The points to fit: the parts' own vertices (a share of them when there are many), not the corners of their boxes. A box seen
+  // at an angle is a good deal wider than what is in it, and the picture came out with wide empty margins.
+  const list = (ids ? ids.map(id => getPart(id)) : state.parts).filter(p => p && !p.deleted && p.visible !== false && (p.mesh || p.instancedMesh));
+  if (!list.length) return false;
+  const perPart = Math.max(64, Math.floor(300000 / list.length));
+  let n = 0;
+  for (const p of list) { const pa = (p.mesh || p.instancedMesh).geometry?.attributes?.position; if (pa) n += Math.min(pa.count, perPart); }
+  if (!n) return false;
+  const P = new Float64Array(n * 3), v = new THREE.Vector3(), m4 = new THREE.Matrix4(), mi = new THREE.Matrix4();
+  let k = 0;
+  for (const p of list) {
+    const o = p.mesh || p.instancedMesh, pa = o.geometry?.attributes?.position;
+    if (!pa) continue;
+    o.updateWorldMatrix(true, false);
+    if (p.mesh) m4.copy(o.matrixWorld);
+    else { if (!(p.instanceIndex >= 0)) continue; o.getMatrixAt(p.instanceIndex, mi); m4.multiplyMatrices(o.matrixWorld, mi); }
+    const take = Math.min(pa.count, perPart), step = pa.count / take;
+    for (let i = 0; i < take; i++) { v.fromBufferAttribute(pa, Math.min(pa.count - 1, Math.floor(i * step))).applyMatrix4(m4); P[k++] = v.x; P[k++] = v.y; P[k++] = v.z; }
+  }
+  n = (k / 3) | 0;
+  if (!n) return false;
+  // the view's own axes: the angle the camera has is kept
+  let dir = camera.position.clone().sub(controls.target); if (dir.lengthSq() < 1e-12) dir.set(1, 1, 1); dir.normalize();
+  const fwd = dir.clone().negate(); let right = new THREE.Vector3().crossVectors(fwd, camera.up); if (right.lengthSq() < 1e-8) right = new THREE.Vector3(1, 0, 0); right.normalize();
+  const upv = new THREE.Vector3().crossVectors(right, fwd).normalize();
+  // every point across (x), up (y) and towards the camera (z)
+  const X = new Float64Array(n), Y = new Float64Array(n), Z = new Float64Array(n);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (let i = 0; i < n; i++) {
+    const px = P[i * 3], py = P[i * 3 + 1], pz = P[i * 3 + 2];
+    const x = px * right.x + py * right.y + pz * right.z, y = px * upv.x + py * upv.y + pz * upv.z, z = px * dir.x + py * dir.y + pz * dir.z;
+    X[i] = x; Y[i] = y; Z[i] = z;
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+  }
+  const radius = Math.max(1e-6, Math.hypot(x1 - x0, y1 - y0, z1 - z0) / 2);
+  const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov || 45) / 2), tanH = tanV * aspect;
+  // The camera looks along -dir from (cx, cy, cz) in these axes. Start in the middle of what is seen, then settle: with perspective
+  // the near parts take more room than the far ones, so the middle and the distance are found in a few rounds.
+  let cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, cz = z1 + radius * 2;
+  const ortho = !!camera._isOrtho;
+  if (!ortho) {
+    for (let round = 0; round < 6; round++) {
+      // how far the camera has to stand off, at this middle, for every point to be inside `fill` of the picture
+      let need = -Infinity;
+      for (let i = 0; i < n; i++) { const d = Z[i] + Math.max(Math.abs(X[i] - cx) / (tanH * fill), Math.abs(Y[i] - cy) / (tanV * fill)); if (d > need) need = d; }
+      cz = Math.max(need, z1 + radius * 0.02);
+      // where the picture's content sits now, as a share of the picture: -1 … 1 across and up
+      let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+      for (let i = 0; i < n; i++) { const dz = cz - Z[i]; const a = (X[i] - cx) / (dz * tanH), b = (Y[i] - cy) / (dz * tanV); if (a < a0) a0 = a; if (a > a1) a1 = a; if (b < b0) b0 = b; if (b > b1) b1 = b; }
+      const ma = (a0 + a1) / 2, mb = (b0 + b1) / 2;
+      if (Math.abs(ma) < 0.004 && Math.abs(mb) < 0.004) break;
+      const dm = cz - (z0 + z1) / 2;                          // move the middle by that share, at the model's own depth
+      cx += ma * dm * tanH; cy += mb * dm * tanV;
+    }
+  }
+  const depthMid = (z0 + z1) / 2;
+  const target = new THREE.Vector3().addScaledVector(right, cx).addScaledVector(upv, cy).addScaledVector(dir, depthMid);
+  let dist = cz - depthMid;
+  camera.zoom = 1;
+  if (ortho) { camera._orthoHalfH = Math.max((y1 - y0) / 2, (x1 - x0) / 2 / aspect) / fill; dist = radius * 4; }
+  dist = Math.max(dist, 1e-4);
+  camera.position.copy(target).addScaledVector(dir, dist);
+  camera.near = Math.max(1e-4, Math.min(dist / 1000, Math.max(1e-4, (dist - (z1 - depthMid)) * 0.5))); camera.far = dist * 1000 + radius * 4;
+  camera.updateProjectionMatrix(); controls.target.copy(target);
+  const lim = [controls.minDistance, controls.maxDistance]; controls.minDistance = 0; controls.maxDistance = Infinity;       // (the orbit limits must not push the camera back)
+  controls.update(); controls.minDistance = lim[0]; controls.maxDistance = lim[1];
+  return true;
+}
+// Where the camera is, to be put back after a picture that moved it. Returns the function that puts it back.
+function _camKeep() {
+  const s = { pos: camera.position.clone(), target: controls.target.clone(), zoom: camera.zoom, near: camera.near, far: camera.far, half: camera._orthoHalfH };
+  return () => {
+    camera.position.copy(s.pos); controls.target.copy(s.target); camera.zoom = s.zoom; camera.near = s.near; camera.far = s.far;
+    if (s.half !== undefined) camera._orthoHalfH = s.half;
+    camera.updateProjectionMatrix();
+    const lim = [controls.minDistance, controls.maxDistance]; controls.minDistance = 0; controls.maxDistance = Infinity;
+    controls.update(); controls.minDistance = lim[0]; controls.maxDistance = lim[1];
+    requestRender();
+  };
 }
 
 // Render the scene into an offscreen target at the requested resolution and
@@ -10407,7 +10987,20 @@ const _ClaudeBridge = (() => {
       const w = Math.min(2400, Math.max(320, (a.width | 0) || 1280));
       const cv = renderer.domElement;
       const h = Math.max(2, Math.round(w * (cv.height || 1) / (cv.width || 1)));
-      const blob = await _captureFrameAsBlob(w, h, {});
+      // frame: 'model' or 'selection' brings it edge to edge for this picture (the angle stays), without the move handles, and the
+      // camera is put back afterwards, so the user's own view is not disturbed. 'view' (the default) is the viewport as it is.
+      const want = a.frame == null ? 'view' : String(a.frame);
+      if (!['view', 'model', 'selection'].includes(want)) throw new Error('frame must be view, model or selection.');
+      if (want === 'selection' && !state.selected.size) throw new Error('Nothing is selected. Select parts first, or use frame: "model".');
+      let back = null, giz = false;
+      if (want !== 'view') {
+        const keep = _camKeep();
+        if (_frameTight(w / h, 0.94, want === 'selection' ? [...state.selected] : null)) { back = keep; await sleep(120); }
+        if (state.gizmoHelper && state.gizmoHelper.visible) { state.gizmoHelper.visible = false; giz = true; }
+      }
+      let blob;
+      try { blob = await _captureFrameAsBlob(w, h, {}); }
+      finally { if (giz) state.gizmoHelper.visible = true; if (back) back(); }
       const b64 = await new Promise((res, rej) => {
         const fr = new FileReader();
         fr.onload = () => res(String(fr.result).split(',')[1] || '');
@@ -10415,7 +11008,7 @@ const _ClaudeBridge = (() => {
         fr.readAsDataURL(blob);
       });
       requestRender();
-      return [{ type: 'image', data: b64, mimeType: 'image/png' }, { type: 'text', text: 'Viewport at ' + w + '×' + h + '.' }];
+      return [{ type: 'image', data: b64, mimeType: 'image/png' }, { type: 'text', text: 'Viewport at ' + w + '×' + h + (back ? ', framed on the ' + want + ' for this picture; the camera is back where it was.' : '.') }];
     },
 
     // — free: they hide or move the view, nothing is removed —
@@ -12285,12 +12878,56 @@ function _applyCameraClip() {
 // which keeps the precision roughly constant however far out the view is.
 const _nearFit = { box: new THREE.Box3(), sphere: new THREE.Sphere(), at: 0, base: 0, set: -1 };
 const _nearFwd = new THREE.Vector3();
+// The far plane, the grid and the size the app reckons with follow the model too. They are set when a model arrives or the view is
+// fitted, for the size the model has then. Scale a part or a group a hundred or a thousand times (the Transform panel, the gizmo), as
+// happens all the time with files that come in the wrong unit, and: zoomed out to see it, its far side lay past the far plane and was
+// cut away; the floor grid stayed cut for the old size; and everything that reads state.modelDiag (the clip presets, the small-part
+// thresholds, tolerances) went on working for a model a thousand times smaller. So, a few times a second at most:
+//   - the size of the model is taken from the boxes of its parts (not from the scene graph: a selected part hangs on the gizmo's pivot,
+//     outside the model's branch), with the exploded view's offsets;
+//   - when it is more than four times bigger or smaller than state.modelDiag (and the view is not exploded), modelDiag is set to it,
+//     the clip preset is applied again for that size and the grid is cut again;
+//   - when the farthest corner of the model comes near the far plane, the plane is moved out (never in: a fit or a preset does that).
+const _farFit = { box: new THREE.Box3(), tb: new THREE.Box3(), at: 0, n: -1 };
+function _fitFarToView() {
+  if (!camera || !state.parts) return;
+  const now = performance.now(), F = _farFit;
+  if (now - F.at > 300 || F.n !== state.parts.length) {
+    F.at = now; F.n = state.parts.length;
+    F.box.makeEmpty();
+    const ex = state.explode, exploded = !!(ex && (ex.x || ex.y || ex.z));
+    for (const p of state.parts) {
+      if (!p || p.deleted || !p.bbox || p.bbox.isEmpty()) continue;
+      F.box.union(exploded && p._exOff ? F.tb.copy(p.bbox).translate(p._exOff) : p.bbox);
+    }
+    if (!F.box.isEmpty() && !exploded) {
+      const diag = F.box.getSize(_nearFwd).length(), was = state.modelDiag;
+      if (Number.isFinite(diag) && diag > 0 && Number.isFinite(was) && was > 0 && (diag > was * 4 || diag < was / 4)) {
+        state.modelDiag = Math.max(diag, 0.0001);
+        try { _applyCameraClip(); } catch (_) {}
+        try { _nearFit.base = camera.near; _nearFit.set = -1; _nearFit.at = 0; } catch (_) {}      // (the near plane's follower starts from the new preset)
+        try { _refitGridSoon(); } catch (_) {}
+      }
+    }
+  }
+  if (F.box.isEmpty()) return;
+  const b = F.box, f = _nearFwd.set(0, 0, -1).applyQuaternion(camera.quaternion), cp = camera.position;
+  let maxD = -Infinity;
+  for (let k = 0; k < 8; k++) {
+    const d = ((k & 1 ? b.max.x : b.min.x) - cp.x) * f.x + ((k & 2 ? b.max.y : b.min.y) - cp.y) * f.y + ((k & 4 ? b.max.z : b.min.z) - cp.z) * f.z;
+    if (d > maxD) maxD = d;
+  }
+  if (Number.isFinite(maxD) && maxD > 0 && maxD * 1.25 > camera.far) { camera.far = maxD * 4; camera.updateProjectionMatrix(); }
+}
 function _fitNearToView() {
+  try { _fitFarToView(); } catch (_) {}
   if (!camera || camera._isOrtho || !state.partsRoot) return;
   const now = performance.now();
   if (now - _nearFit.at > 400) {              // the model's bounds, looked up a few times a second at most
     _nearFit.at = now;
-    _nearFit.box.setFromObject(state.partsRoot);
+    // (the boxes of the parts, as the far plane has them: a selected part hangs on the gizmo's pivot, outside partsRoot, so the scene
+    // graph alone left out the very part that was being scaled or looked at)
+    if (_farFit.box.isEmpty()) _nearFit.box.setFromObject(state.partsRoot); else _nearFit.box.copy(_farFit.box);
     if (!_nearFit.box.isEmpty()) _nearFit.box.getBoundingSphere(_nearFit.sphere);
   }
   if (camera.near !== _nearFit.set) _nearFit.base = camera.near;   // someone else set it (clip preset, fit, a loaded scene)
@@ -12589,6 +13226,49 @@ const _groupOrigins = new Map();
 // write; restored to the pivot on re-attach so each group remembers its own rotation
 // independently of which other groups have been selected/rotated since.
 const _groupRotations = new Map();
+// The scale typed for a tree group in the Transform panel (group id → Vector3; none: 1, 1, 1). A tree group is a row of the tree, not
+// an object that holds its parts, so the scale is carried out on the parts themselves and this is only what the fields show.
+const _groupScales = new Map();
+const _GROUP_SCALE_ONE = new THREE.Vector3(1, 1, 1);
+// A change of that record made while a Transform panel edit runs: _withTransformUndo puts it on the undo step it makes, so Undo and
+// Redo put the number back with the parts.
+let _groupScalePending = null;
+function _groupScaleNote(gid, before, after) { _groupScalePending = { gid, before: _groupScalePending && _groupScalePending.gid === gid ? _groupScalePending.before : (before ? before.clone() : null), after: after ? after.clone() : null }; }
+function _groupScaleApply(op, dir) { const g = op && op._gs; if (!g) return; const v = g[dir]; if (v) _groupScales.set(g.gid, v.clone()); else _groupScales.delete(g.gid); try { _transformPanelRefresh(); } catch (_) {} }
+function _tformGroupId() { const g = state.selectedGroupIds ? [...state.selectedGroupIds][0] : null; const n = g != null ? parseInt(String(g), 10) : NaN; return Number.isFinite(n) ? n : null; }
+function _tformGroupScale() { const id = _tformGroupId(); return (id != null && _groupScales.get(id)) || _GROUP_SCALE_ONE; }
+// Scale the parts of tree group `gid` by `factor` along the group's own axis k ('x', 'y' or 'z'), about its middle. With the gizmo on
+// the group its parts hang on the pivot, which stands in that middle and is turned as the group is: the pivot is scaled, as a drag
+// of the gizmo's scale handle does. Without it each part is moved and scaled in place. Returns false when nothing was scaled.
+function _tformScaleTreeGroup(gid, k, factor, viaPivot) {
+  if (gid == null || !Number.isFinite(factor) || !(factor > 0)) return false;
+  if (viaPivot && state.pivot) { state.pivot.scale[k] *= factor; state.pivot.updateMatrixWorld(true); return true; }
+  _initGroupOrigins();
+  const ids = _treeGroupDescendants(gid), c = _groupOrigins.get(gid);
+  if (!ids.length || !c) return false;
+  const Q = new THREE.Matrix4().makeRotationFromQuaternion(_groupRotations.get(gid) || new THREE.Quaternion());
+  const S = new THREE.Matrix4().makeScale(k === 'x' ? factor : 1, k === 'y' ? factor : 1, k === 'z' ? factor : 1);
+  const D = new THREE.Matrix4().makeTranslation(c.x, c.y, c.z).multiply(Q).multiply(S).multiply(Q.clone().invert()).multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+  const inv = new THREE.Matrix4(), world = new THREE.Matrix4();
+  let n = 0;
+  for (const id of ids) {
+    const p = getPart(id);
+    if (!p || p.deleted || p.locked) continue;
+    if (!p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} }
+    if (!p.mesh) continue;
+    const parent = p.mesh.parent || state.partsRoot;
+    parent.updateWorldMatrix(true, false);
+    p.mesh.updateWorldMatrix(true, false);
+    world.multiplyMatrices(D, p.mesh.matrixWorld);
+    inv.copy(parent.matrixWorld).invert().multiply(world).decompose(p.mesh.position, p.mesh.quaternion, p.mesh.scale);
+    p.mesh.updateMatrix();
+    p.mesh.updateMatrixWorld(true);
+    p._exactWorld = p.mesh.matrixWorld.clone();
+    try { _refreshPartBBox(p); } catch (_) {}
+    n++;
+  }
+  return n > 0;
+}
 
 // Compute the size in a frame where obj's WORLD rotation is stripped,
 // so rotating the object (or any ancestor — like the gizmo pivot)
@@ -12633,6 +13313,22 @@ function _readStableSize(obj, target) {
   else _tfTmpBox.getSize(target);
 }
 
+// The third column of the Transform panel: the size of the part (its box, in the scene's unit) or, with the Scale switch in the
+// panel head on, its scale (a factor, 1 = as it came). A group always shows its scale. The choice is kept in this browser.
+let _tformScale = (() => { try { return localStorage.getItem('stepopt-tform-scale') === '1'; } catch (_) { return false; } })();
+function _tformScaleOn() { return _tformScale; }
+function _tformScaleSet(on) { _tformScale = !!on; try { localStorage.setItem('stepopt-tform-scale', _tformScale ? '1' : '0'); } catch (_) {} }
+// The switch is wired on its own, as soon as the page is there: the rest of the panel is wired the first time it is opened
+// (_wireTransformPanel), and until then a press on the switch did nothing.
+function _tformScaleWire() {
+  const sw = document.getElementById('tform-scale-toggle');
+  if (!sw || sw._wired) return;
+  sw._wired = true;
+  const sync = () => { const on = _tformScaleOn(); sw.setAttribute('aria-pressed', String(on)); sw.classList.toggle('is-on', on); };
+  sw.addEventListener('click', () => { _tformScaleSet(!_tformScaleOn()); sync(); sw.blur(); try { _transformPanelRefresh(); } catch (_) {} });
+  sync();
+}
+if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _tformScaleWire, { once: true }); else _tformScaleWire(); }
 function _transformPanelRefresh() {
   const panel = document.getElementById('transform-panel');
   if (!panel || !panel.classList.contains('show')) return;
@@ -12677,6 +13373,7 @@ function _transformPanelRefresh() {
 
   const obj = target.obj;
   const isGroup = target.kind === 'group' || target.kind === 'user-group';
+  const asScale = isGroup || (_tformScaleOn() && (target.kind === 'part' || target.kind === 'instance'));      // (the third column is a scale factor, not a size)
   const usingWorld = _hasPivotAncestor(obj);
   // True only when the current pivot was set up for the currently-selected tree group.
   // Guards WITH-PIVOT read paths from stale pivots left by previously-selected groups.
@@ -12688,7 +13385,7 @@ function _transformPanelRefresh() {
   // Swap the Size column header to "Scale" for groups.
   const _allColLabels = document.querySelectorAll('#tform-grid .tform-col-label');
   const sizeColLabel = _allColLabels[_allColLabels.length - 1] || null;
-  if (sizeColLabel) sizeColLabel.textContent = isGroup ? 'Scale' : 'Size';
+  if (sizeColLabel) sizeColLabel.textContent = asScale ? 'Scale' : 'Size';
 
   // Keep position/size unit labels in sync with the active displayUnit.
   ['px','py','pz'].forEach(id => {
@@ -12697,7 +13394,7 @@ function _transformPanelRefresh() {
   });
   ['sx','sy','sz'].forEach(id => {
     const c = document.querySelector(`[data-for="tform-${id}"] .tform-unit`);
-    if (c) c.textContent = isGroup ? '' : _ul;
+    if (c) c.textContent = asScale ? '' : _ul;
   });
 
   try {
@@ -12898,8 +13595,8 @@ function _transformPanelRefresh() {
   const isDragging = !!state._gizmoDragging;
   const isScaleDrag = isDragging && state.gizmoMode === 'scale';
   try {
-    if (isGroup) {
-      const sc = obj.scale;
+    if (asScale && target.kind !== 'instance') {
+      const sc = target.kind === 'group' ? _tformGroupScale() : obj.scale;      // (a tree group has no object of its own: see _groupScales)
       if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(sc.x, 3);
       if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(sc.y, 3);
       if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(sc.z, 3);
@@ -12913,6 +13610,12 @@ function _transformPanelRefresh() {
         _ip3.instancedMesh.updateWorldMatrix(true, false);
         new THREE.Matrix4().multiplyMatrices(_ip3.instancedMesh.matrixWorld, _iMat3)
           .decompose(_tfTmpVec, _tfTmpQuat, _tfTmpVec2);
+        // a copy of a shared shape: its scale with the Scale switch on, else its size (the shape's own box times that scale), as a part's is
+        if (!asScale) {
+          const _ig = _ip3.instancedMesh.geometry;
+          if (_ig && !_ig.boundingBox) { try { _ig.computeBoundingBox(); } catch (_) {} }
+          if (_ig && _ig.boundingBox) { const _bs = _ig.boundingBox.getSize(new THREE.Vector3()); _tfTmpVec2.set(_tfTmpVec2.x * _bs.x * _uf, _tfTmpVec2.y * _bs.y * _uf, _tfTmpVec2.z * _bs.z * _uf); }
+        }
         if (inputs.sx && document.activeElement !== inputs.sx) inputs.sx.value = _fmtNum(Math.abs(_tfTmpVec2.x));
         if (inputs.sy && document.activeElement !== inputs.sy) inputs.sy.value = _fmtNum(Math.abs(_tfTmpVec2.y));
         if (inputs.sz && document.activeElement !== inputs.sz) inputs.sz.value = _fmtNum(Math.abs(_tfTmpVec2.z));
@@ -12977,8 +13680,10 @@ function _tformResetSelection() {
       }
       _detachGizmo();                                     // every part back in the scene, world pose kept
       const R = Qc.clone().invert();
-      // x' = T + Qc^-1 (x - O): the group's frame lands on T with no turn.
+      // x' = T + S^-1 Qc^-1 (x - O): the group's frame lands on T with no turn and at the scale it came with.
+      const Sg = _groupScales.get(gid) || _GROUP_SCALE_ONE;
       const D = new THREE.Matrix4().makeTranslation(T.x, T.y, T.z)
+        .multiply(new THREE.Matrix4().makeScale(1 / (Sg.x || 1), 1 / (Sg.y || 1), 1 / (Sg.z || 1)))
         .multiply(new THREE.Matrix4().makeRotationFromQuaternion(R))
         .multiply(new THREE.Matrix4().makeTranslation(-O.x, -O.y, -O.z));
       const inv = new THREE.Matrix4(), world = new THREE.Matrix4();
@@ -13005,6 +13710,7 @@ function _tformResetSelection() {
       // their centres are worked out again from where the parts are now.
       _groupOrigins.set(gid, T);
       _groupRotations.set(gid, new THREE.Quaternion());
+      if (_groupScales.has(gid)) { _groupScaleNote(gid, _groupScales.get(gid), null); _groupScales.delete(gid); }
       const all = state.treeNodes || [];
       const at = all.findIndex(n => n.id === gid);
       for (let i = at + 1; at >= 0 && i < all.length && all[i].depth > all[at].depth; i++) {
@@ -13091,11 +13797,12 @@ function _wireTransformPanel() {
     const raw = parseFloat(e.target.value);
     if (!Number.isFinite(raw)) { _transformPanelRefresh(); return; }
     const isGroup = target.kind === 'group' || target.kind === 'user-group';
+    const asScale = isGroup || (_tformScaleOn() && target.kind === 'part');
     // Convert typed displayUnit value → scene units (mm). Rotation stays in
     // degrees; group scale is a dimensionless factor — only position and
     // part size inputs carry physical length units.
     const _uf_w = (axis === 'rx' || axis === 'ry' || axis === 'rz' ||
-                   ((axis === 'sx' || axis === 'sy' || axis === 'sz') && isGroup))
+                   ((axis === 'sx' || axis === 'sy' || axis === 'sz') && asScale))
       ? 1 : (_UNIT_FACTOR[state.displayUnit] || 1);
     const v = Math.max(-1e6, Math.min(1e6, raw / _uf_w));
     const usingWorld = _hasPivotAncestor(obj);
@@ -13203,14 +13910,22 @@ function _wireTransformPanel() {
           if (axis === 'rz') obj.rotation.z = rad;
         }
       } else if (axis === 'sx' || axis === 'sy' || axis === 'sz') {
-        if (isGroup) {
-          // Groups show their scale factor directly (1 = unscaled). The user
+        if (asScale) {
+          // Groups (and parts, with the Scale switch on) show their scale factor directly (1 = unscaled). The user
           // types the desired scale multiplier; apply it directly to obj.scale.
           const tgt = Math.abs(v);
           if (!Number.isFinite(tgt) || tgt < 1e-4) { _transformPanelRefresh(); return; }
-          if (axis === 'sx') obj.scale.x = tgt;
-          if (axis === 'sy') obj.scale.y = tgt;
-          if (axis === 'sz') obj.scale.z = tgt;
+          if (target.kind === 'group') {
+            // A tree group: its parts are scaled by how much the number changed, and the number is remembered for the fields.
+            const gid = _tformGroupId(), k = axis === 'sx' ? 'x' : axis === 'sy' ? 'y' : 'z';
+            const was = _tformGroupScale()[k];
+            if (!_tformScaleTreeGroup(gid, k, tgt / (was > 1e-9 ? was : 1), usePivot)) { _transformPanelRefresh(); return; }
+            const rec = (_groupScales.get(gid) || new THREE.Vector3(1, 1, 1)).clone(); rec[k] = tgt; _groupScaleNote(gid, _groupScales.get(gid) || null, rec); _groupScales.set(gid, rec);
+          } else {
+            if (axis === 'sx') obj.scale.x = tgt;
+            if (axis === 'sy') obj.scale.y = tgt;
+            if (axis === 'sz') obj.scale.z = tgt;
+          }
         } else {
           // Parts: value is a target bbox dimension in mm. Convert to a scale
           // factor by dividing target by current dimension. Reject < 1e-4.
@@ -13259,6 +13974,7 @@ function _wireTransformPanel() {
           if (p && p.mesh) {
             p.mesh.updateWorldMatrix(true, false);
             p._exactWorld = p.mesh.matrixWorld.clone();
+            try { _refreshPartBBox(p); } catch (_) {}      // (and its box: a part scaled up kept the box of its old size, and was hidden as "too small to see" while the camera moved)
           }
         }
       } catch (_) {}
@@ -13287,6 +14003,14 @@ function _wireTransformPanel() {
         ev.preventDefault();
         el.dispatchEvent(new Event('change', { bubbles: true }));
         el.blur();
+      } else if (ev.key === 'Tab' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        // Tab goes down a column, then to the top of the next: position X Y Z, rotation X Y Z, size X Y Z (Shift+Tab the other way).
+        // The page lists the fields row by row, which is the order the browser would take. Past the last field Tab leaves the panel as usual.
+        const order = ['px','py','pz','rx','ry','rz','sx','sy','sz'].map(k => document.getElementById('tform-' + k));
+        const dir = ev.shiftKey ? -1 : 1;
+        let next = null;
+        for (let j = order.indexOf(el) + dir; j >= 0 && j < order.length; j += dir) { if (order[j] && !order[j].disabled) { next = order[j]; break; } }
+        if (next) { ev.preventDefault(); next.focus(); try { next.select(); } catch (_) {} }      // (leaving a changed field commits it, as any blur does)
       } else if (ev.key === 'Escape') {
         ev.preventDefault();
         // Blur FIRST so the focus-skip in _transformPanelRefresh doesn't
@@ -15065,7 +15789,7 @@ function applySelectionColors() {
   _selColorsQueued = true;
   queueMicrotask(() => {
     _selColorsQueued = false;
-    try { _applySelectionColorsImpl(); state._selDrawnSig = _selVisSig(); _paintSplines(); }
+    try { _applySelectionColorsImpl(); state._selDrawnSig = _selVisSig(); _paintSplines(); try { _Elements.hush(); } catch (_) {} }
     catch (e) { console.warn('[selection] highlight rebuild failed:', e); try { requestRender(); } catch (_) {} }
     try { _updateVpHint(); } catch (_) {}
   });
@@ -15535,7 +16259,7 @@ function _applySelectionColorsImpl() {
   //    highlight stayed in place" the user reported. Materials are shared
   //    across rebuilds so we never dispose them.
   const outlinePlan = _selOutlinePlan(performance.now() + _EDGES_INLINE_BUDGET_MS);
-  const keepOutline = !!outlinePlan.key && outlinePlan.key === state._selChildKey && !!state._selChildLines &&
+  const keepOutline =!!outlinePlan.key && outlinePlan.key === state._selChildKey && !!state._selChildLines &&
     state._selChildLines.every(l => l.parent && l.visible);
   if (state.activeHighlights) {
     for (const h of state.activeHighlights) {
@@ -16397,15 +17121,19 @@ async function _shadeApply(ids, deg, { live }) {
     // a copy of an instanced mesh is made a mesh of its own first (its shared geometry is not changed under the other copies)
     if (!p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} }
     if (!p.mesh || !p.mesh.geometry || !p.mesh.geometry.attributes.position) continue;
-    if (!_shade.orig.has(p.partId)) _shade.orig.set(p.partId, { geom: p.mesh.geometry, hash: p.hash });
+    if (!_shade.orig.has(p.partId)) _shade.orig.set(p.partId, { geom: p.mesh.geometry, hash: p.hash, angle: p.shadeAngle });
     const o = _shade.orig.get(p.partId);
     const oldCur = _shade.cur.get(p.partId);
     let g;
     try { g = _shadeBuild(U, o.geom, deg); } catch (e) { console.warn('[shading] failed for', p.name, e); continue; }
+    // Only the normals change: the triangles keep their order, so the part keeps its polygons (an OBJ or FBX file's quads, or what Edit
+    // mesh froze). Without them the polygons are guessed again and some lines of the mesh come out wrong or go.
+    try { const n = g.index ? g.index.count / 3 : g.attributes.position.count / 3; const pp = _polyIds.get(o.geom); if (pp && pp.length === n) _polyIds.set(g, pp); if (_triOnly.has(o.geom)) _triOnly.add(g); } catch (_) {}
     // the outline's edges depend on the positions only, so the part's cached ones serve the new geometry too (no flicker to boxes)
     try { const e = _edgesCache.get(o.geom); if (e) _edgesCache.set(g, e); } catch (_) {}
     const hash = 'shade_' + p.partId + '_' + (++_shade.seq);
     _shadeSet(p, g, hash);
+    p.shadeAngle = deg;                       // (remembered, so the field shows it again when the part is selected later)
     if (oldCur) { try { state.geomByHash.delete(oldCur.hash); } catch (_) {} try { oldCur.geom.dispose(); } catch (_) {} }
     _shade.cur.set(p.partId, { geom: g, hash });
   }
@@ -16417,7 +17145,7 @@ function _shadeCommit(ids) {
   const items = [];
   for (const [id, o] of _shade.orig) {
     const c = _shade.cur.get(id);
-    if (c && c.geom !== o.geom) items.push({ partId: id, before: { geom: o.geom, hash: o.hash }, after: { geom: c.geom, hash: c.hash } });
+    if (c && c.geom !== o.geom) items.push({ partId: id, before: { geom: o.geom, hash: o.hash, angle: o.angle }, after: { geom: c.geom, hash: c.hash, angle: getPart(id)?.shadeAngle } });
   }
   _shade.orig.clear(); _shade.cur.clear();
   if (items.length) pushUndo({ type: 'shading', label: 'Shading angle', items });
@@ -16428,6 +17156,7 @@ function _applyShadeOp(op, dir) {
     if (!p || !p.mesh) continue;
     const st = it[dir];
     _shadeSet(p, st.geom, st.hash);
+    p.shadeAngle = st.angle;
   }
   try { recomputeStats(); } catch (_) {}
 }
@@ -16440,7 +17169,10 @@ function _wireShadeAngle(rootEl, ids) {
   const idList = parts.map(p => p.partId);
   // A thin row: the name, and a number. The number is typed, or dragged sideways (the app's own number fields do that: Shift for tens, Alt for
   // fine steps). Nothing is worked out while it is dragged; the angle is applied when the drag ends or the typed number is accepted.
-  host.innerHTML = '<span>Shading angle</span><label class="size-field"><input type="text" inputmode="decimal" min="0" max="180" step="1" value="30" spellcheck="false" autocomplete="off" aria-label="Shading angle in degrees"><span>°</span></label>';
+  // what was last set on these parts (when they agree), else the default
+  const known = parts.map(p => p.shadeAngle);
+  const shown = known.every(a => Number.isFinite(a) && a === known[0]) ? Math.round(known[0] * 10) / 10 : 30;
+  host.innerHTML = '<span>Shading angle</span><label class="size-field"><input type="text" inputmode="decimal" min="0" max="180" step="1" value="' + shown + '" spellcheck="false" autocomplete="off" aria-label="Shading angle in degrees"><span>°</span></label>';
   host.title = 'Up to this angle between two faces the surface is shaded smooth; past it the edge stays sharp. 0° is flat, 180° is fully smooth. Only the shading changes, not the shape. Type a number or drag it sideways.';
   const input = host.querySelector('input');
   input.addEventListener('change', async () => {
@@ -16478,7 +17210,7 @@ function refreshPropertiesPanel() {
     let m = p.mesh ? _matOf(p.mesh) : null;                       // (the part's own material: under Clay or CAD it wears the view's)
     if (!m) m = p.instancedMesh ? _matOf(p.instancedMesh) : null;
     if (Array.isArray(m)) m = m[0];
-    return (m && m.isMaterial) ? m : null;
+    return (m && m.isMaterial && !_isNoneMat(m)) ? m : null;
   };
   const _matLabel = (m) => {
     if (!m) return '';
@@ -16529,6 +17261,7 @@ function refreshPropertiesPanel() {
       ${thumbHtml}
       <span class="prop-mat-name"${own ? ' data-mat-name' : ''}>${escapeHtml(name)}</span>
       <span class="prop-mat-sub" aria-label="${parts}">${partsShort}</span>
+      <button type="button" class="prop-mat-del" data-action="remove-material" aria-label="Remove material" title="Remove this material from the selected parts: they are left with no material (one undo step)"><i data-lucide="trash-2"></i></button>
     </div>`;
   };
 
@@ -16839,6 +17572,23 @@ function refreshPropertiesPanel() {
     });
   };
   const _typingIn = (e) => !!(e.target && e.target.closest && e.target.closest('input, textarea'));
+  // The trash can on a material of the card: that material goes off the selected parts (they are left with no material, as the dock's
+  // Delete does; the other parts that use it are not touched) and it is one undo step. The material stays in the dock while a part
+  // elsewhere uses it. A press on it is not a press on the card (which would open the editor).
+  el.querySelectorAll('.prop-mat-del').forEach(btn => {
+    const chip = btn.closest('.prop-mat-btn');
+    const matOfChip = () => {
+      const u = chip && chip.dataset.matUuid;
+      if (u && typeof _collectLiveMaterials === 'function') return (_collectLiveMaterials().find(i => i.mat?.uuid === u) || {}).mat || null;
+      return _resolveSelectedMat();
+    };
+    for (const ev of ['pointerdown', 'mousedown', 'dblclick']) btn.addEventListener(ev, (e) => e.stopPropagation());
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      const mat = matOfChip();
+      if (mat) _removeMaterialFromSelection(mat);
+    });
+  });
   el.querySelectorAll('.prop-mat-multi-row[data-action="edit-material"]').forEach(row => {
     const matOf = () => { const u = row.dataset.matUuid; return u && typeof _collectLiveMaterials === 'function' ? (_collectLiveMaterials().find(i => i.mat?.uuid === u) || {}).mat : null; };
     row.addEventListener('click', (e) => { if (!_typingIn(e)) _openMatFromProps(matOf()); });
@@ -16939,6 +17689,45 @@ function _matEditorResync(mats) {
   if (mats && !mats.includes(st.mat)) return;
   st._matSnapshot = null;                       // nothing of the editor's own to record
   try { _openMaterialEditor(st.info); } catch (e) { console.warn('[mat] editor resync:', e); }
+}
+// The editor is open on a material that no part wears any more and that is not in the library (it was taken off the part, or deleted
+// in the dock): it would go on showing and editing a material that is nowhere, with its old colour. It closes.
+function _matEditorCheckGone() {
+  const st = (typeof _matEditorState !== 'undefined') ? _matEditorState : null;
+  if (!st || !st.mat || !st.popup) return;
+  const m = st.mat;
+  if (state.userMaterials && state.userMaterials.has(m)) return;
+  for (const p of state.parts || []) {
+    if (p.deleted) continue;
+    const h = _matHolder(p); if (!h) continue;
+    const o = _matOf(h);
+    if (Array.isArray(o) ? o.includes(m) : o === m) return;
+  }
+  try { st.popup.hide(); } catch (_) {}
+}
+// The material was changed by something other than the editor (a colour picked elsewhere, a swap of the part's material, a name
+// changed in the dock) and the editor still shows what it had: its colour and name are compared with the material's own, and it is
+// rebuilt when they differ. Not while a field in it is being typed in or a colour is being picked.
+function _matEditorSyncIfStale() {
+  const st = (typeof _matEditorState !== 'undefined') ? _matEditorState : null;
+  if (!st || !st.mat || !st.popup || !st.popup.body) return;
+  const body = st.popup.body, ae = document.activeElement;
+  if (ae && body.contains(ae) && ae.matches && ae.matches('input, textarea, [contenteditable]')) return;
+  const nameEl = body.querySelector('.mat-edit-preview-name');
+  const m = st.mat;
+  const nm = (m.name && m.name.trim()) || _matFallbackName(m);
+  // every colour of the editor against the material's own (the swatch and the hex field of each)
+  let staleColour = false;
+  for (const [cid, c] of [['mat-edit-color', m.color], ['mat-edit-emissive-color', m.emissive], ['mat-edit-sheen-color', m.sheenColor], ['mat-edit-spec-color', m.specularColor], ['mat-edit-attenuation-color', m.attenuationColor]]) {
+    const sw = body.querySelector('#' + cid), hx = body.querySelector('#' + cid + '-hex');
+    if (!c || !c.getHexString) continue;
+    const now = c.getHexString().toLowerCase();
+    if ((sw && (sw.dataset.hex || '').replace(/^#/, '').toLowerCase() !== now) || (hx && hx.value.replace(/^#/, '').toLowerCase() !== now)) { staleColour = true; break; }
+  }
+  const staleName = !!(nameEl && nameEl.dataset.editing !== '1' && nameEl.textContent !== nm);
+  if (!staleColour && !staleName) return;
+  try { const info = _collectLiveMaterials().find(i => i.mat === m); if (info) st.info = info; } catch (_) {}
+  _matEditorResync([m]);
 }
 function _matAfterOutsideChange(mats) {
   for (const m of mats || []) { try { _matPreviewCache.delete(m); } catch (_) {} }
@@ -18626,6 +19415,7 @@ const _transformHandlers = {
       : [{ partId: op.partId, before: op.before, after: op.after }];
     const n = _applyTransformOp(items, 'before');
     if (n <= 0) return false;
+    _groupScaleApply(op, 'before');
     state.redo.push(op);
     _finalizeUndo();
   },
@@ -18634,6 +19424,7 @@ const _transformHandlers = {
       : [{ partId: op.partId, before: op.before, after: op.after }];
     const n = _applyTransformOp(items, 'after');
     if (n <= 0) return false;
+    _groupScaleApply(op, 'after');
     state.history.push(op);
     _finalizeUndo();
   },
@@ -19503,7 +20294,7 @@ function _exportDrawList(visibleOnly) {
   return out;
 }
 
-function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false, lines = false }) {
+function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false, lines = false, quads = false }) {
   const root = new THREE.Group();
   let count = 0;
   const drawList = _exportDrawList(visibleOnly);
@@ -19637,6 +20428,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
       let geom = sharedGeom.get(hash);
       if (!geom) {
         geom = src.clone();
+        if (quads) { const pp = _exportPolysOf(src); if (pp) geom._moPoly = pp; }      // (the OBJ and FBX writers turn these into quads: _exportFaces)
         // Drop the BVH bounds tree from the export clone — it's not a
         // standard BufferAttribute (GLTFExporter would skip it anyway), but
         // disposing here returns the typed-array memory immediately rather
@@ -19690,6 +20482,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
         // Bake shear into vertices. Mesh transform is identity so the FBX
         // / GLTF writer can decompose without losing anything.
         const baked = g.clone();
+        if (quads) { const pp = _exportPolysOf(g); if (pp) baked._moPoly = pp; }
         if (baked.boundsTree) baked.disposeBoundsTree?.();
         baked.applyMatrix4(final);
         geom = baked;
@@ -20413,6 +21206,89 @@ function _collectFbxScene(root) {
   return { nodes };
 }
 
+// ── Quads and n-gons for the OBJ and FBX writers ────────────────────────────────────────────────────────────────────────
+// A geometry in the export root carries `_moPoly` (see buildExportRoot): the polygon each triangle belongs to. This turns that
+// into the faces a modelling program wants: { sizes, verts }, the number of corners of each face and, corner after corner, the
+// mesh's own vertex number (so a corner keeps its own normal and uv), wound as the triangles are. Two triangles of a polygon that
+// share an edge make a quad; a bigger polygon goes round its outline. A polygon whose outline is not one simple loop (a hole in it)
+// is written as its triangles. Returns null when nothing has more than three corners: the writers then keep their fast path.
+function _exportFaces(geom) {
+  const poly = geom && geom._moPoly, pos = geom && geom.attributes && geom.attributes.position;
+  if (!poly || !pos) return null;
+  const idx = geom.index ? geom.index.array : null, nTri = idx ? (idx.length / 3) | 0 : (pos.count / 3) | 0;
+  if (!nTri || poly.length !== nTri) return null;
+  const topo = MEDIT.buildTopology(_wireXYZ(pos, false), idx), W = topo.weld, nW = topo.nVert + 1;      // raw vertex → welded point
+  const raw = (t, k) => idx ? idx[t * 3 + k] : t * 3 + k;
+  let nPoly = 0;
+  for (let t = 0; t < nTri; t++) if (poly[t] >= nPoly) nPoly = poly[t] + 1;
+  const start = new Uint32Array(nPoly + 1);
+  for (let t = 0; t < nTri; t++) start[poly[t] + 1]++;
+  for (let q = 0; q < nPoly; q++) start[q + 1] += start[q];
+  const order = new Uint32Array(nTri), fill = start.slice(0, nPoly);
+  for (let t = 0; t < nTri; t++) order[fill[poly[t]]++] = t;
+  const sizes = new Uint32Array(nTri), verts = new Uint32Array(nTri * 3);       // (a polygon of n triangles has n + 2 corners at most: never more than the triangles' own 3n)
+  let ns = 0, nv = 0, big = false;
+  const tri = (t) => { verts[nv++] = raw(t, 0); verts[nv++] = raw(t, 1); verts[nv++] = raw(t, 2); sizes[ns++] = 3; };
+  for (let q = 0; q < nPoly; q++) {
+    const a = start[q], b = start[q + 1], n = b - a;
+    if (!n) continue;
+    if (n === 1) { tri(order[a]); continue; }
+    if (n === 2) {                                     // the common case: two triangles that share an edge are one quad a, d, b, c
+      const t1 = order[a], t2 = order[a + 1];
+      let done = false;
+      for (let k = 0; k < 3 && !done; k++) {
+        const wa = W[raw(t1, k)], wb = W[raw(t1, (k + 1) % 3)];
+        for (let j = 0; j < 3; j++) {
+          if (W[raw(t2, j)] === wb && W[raw(t2, (j + 1) % 3)] === wa) {
+            verts[nv++] = raw(t1, k); verts[nv++] = raw(t2, (j + 2) % 3); verts[nv++] = raw(t1, (k + 1) % 3); verts[nv++] = raw(t1, (k + 2) % 3);
+            sizes[ns++] = 4; big = true; done = true; break;
+          }
+        }
+      }
+      if (!done) { tri(t1); tri(t2); }
+      continue;
+    }
+    // more triangles: the outline is the edges that have no triangle of the polygon on the other side, chained into one loop
+    const dir = new Set(), next = new Map();
+    for (let i = a; i < b; i++) { const t = order[i]; for (let k = 0; k < 3; k++) { const wa = W[raw(t, k)], wb = W[raw(t, (k + 1) % 3)]; if (wa !== wb) dir.add(wa * nW + wb); } }
+    let ok = true, nb = 0, first = -1;
+    for (let i = a; i < b && ok; i++) {
+      const t = order[i];
+      for (let k = 0; k < 3; k++) {
+        const wa = W[raw(t, k)], wb = W[raw(t, (k + 1) % 3)];
+        if (wa === wb || dir.has(wb * nW + wa)) continue;
+        if (next.has(wa)) { ok = false; break; }
+        next.set(wa, [wb, raw(t, k)]); nb++; if (first < 0) first = wa;
+      }
+    }
+    const loop = [];
+    if (ok && nb >= 3) {
+      let cur = first;
+      do { const e = next.get(cur); if (!e || loop.length > nb) { ok = false; break; } loop.push(e[1]); cur = e[0]; } while (cur !== first);
+      ok = ok && loop.length === nb;
+    } else ok = false;
+    if (ok) { for (const v of loop) verts[nv++] = v; sizes[ns++] = loop.length; big = true; }
+    else for (let i = a; i < b; i++) tri(order[i]);
+  }
+  return big ? { sizes: sizes.subarray(0, ns), verts: verts.subarray(0, nv) } : null;
+}
+// The polygon of each triangle to write for a source geometry: the numbers it has (an OBJ or FBX file's own, or what Untriangulate
+// left), else the four-sided pairs found as in Wireframe (a part that went through Triangulate stays triangles). null: triangles.
+const _exportPolyCache = new WeakMap();
+function _exportPolysOf(src) {
+  if (!src || _triOnly.has(src)) return null;
+  const own = _polyIds.get(src);
+  if (own) return own;
+  if (_exportPolyCache.has(src)) return _exportPolyCache.get(src);
+  let out = null;
+  try {
+    const pos = src.attributes.position, tris = src.index ? src.index.count / 3 : pos.count / 3;
+    if (tris > 0 && tris <= 400000) { const topo = MEDIT.buildTopology(_wireXYZ(pos, false), src.index ? src.index.array : null), q = MEDIT.pairQuads(topo); if (q.quads) out = q.polyOf; }
+  } catch (_) { out = null; }
+  _exportPolyCache.set(src, out);
+  return out;
+}
+
 // Bake mesh.matrixWorld into a fresh typed-array of world-space positions
 // and (inverse-transposed) normals. Returns { positions, normals?, indices? }
 // where indices is a typed array if the source geometry was indexed.
@@ -20443,8 +21319,18 @@ function _fbxBakeMeshGeom(meshObj) {
   // bitwise NOT (~i) so the parser can detect polygon ends. We always emit
   // triangulated geometry, so every 3rd index gets the NOT.
   const triCount = idxAttr ? idxAttr.count / 3 : posAttr.count / 3;
-  const indices = new Int32Array(triCount * 3);
-  if (idxAttr) {
+  // Quads and n-gons (see _exportFaces): one entry per corner of a polygon, the last of each polygon bitwise NOT.
+  const faces = _exportFaces(g);
+  const polyVertCount = faces ? faces.verts.length : triCount * 3;
+  const indices = new Int32Array(polyVertCount);
+  if (faces) {
+    let o = 0;
+    for (let f = 0; f < faces.sizes.length; f++) {
+      const n = faces.sizes[f];
+      for (let k = 0; k < n - 1; k++) { indices[o] = faces.verts[o]; o++; }
+      indices[o] = ~faces.verts[o]; o++;
+    }
+  } else if (idxAttr) {
     const ai = idxAttr.array;
     for (let i = 0; i < ai.length; i += 3) {
       indices[i]   = ai[i];
@@ -20475,11 +21361,10 @@ function _fbxBakeMeshGeom(meshObj) {
     // Size = triCount * 3 * 3 doubles = polyVertCount * 3 doubles.
     const nArr = norAttr.array;
     const ns = norAttr.itemSize;
-    const polyVertCount = triCount * 3;
     const ai = idxAttr ? idxAttr.array : null;
     const normalsDirect = new Float64Array(polyVertCount * 3);
     for (let i = 0; i < polyVertCount; i++) {
-      const vi = ai ? ai[i] : i;   // raw vertex index (no polygon-end NOT)
+      const vi = faces ? faces.verts[i] : ai ? ai[i] : i;   // raw vertex index (no polygon-end NOT)
       tmpN.set(nArr[vi*ns], nArr[vi*ns+1], nArr[vi*ns+2])
           .applyMatrix3(N).normalize();
       normalsDirect[i*3]     = tmpN.x;
@@ -21541,7 +22426,18 @@ GlobalSettings:  {
       // that's every 3rd index. We always emit triangulated geometry.
       let count;
       let parts;
-      if (idxAttr) {
+      const faces = _exportFaces(g);      // (quads and n-gons: see _exportFaces)
+      if (faces) {
+        count = faces.verts.length;
+        parts = new Array(faces.sizes.length);
+        let o = 0;
+        for (let f = 0; f < faces.sizes.length; f++) {
+          const n = faces.sizes[f];
+          let s = '';
+          for (let k = 0; k < n - 1; k++) s += faces.verts[o++] + ',';
+          parts[f] = s + (~faces.verts[o++]);
+        }
+      } else if (idxAttr) {
         count = idxAttr.count;
         const ai = idxAttr.array;
         const triCount = count / 3;
@@ -21918,8 +22814,20 @@ function _exportObjStreaming(root, mtlBaseName) {
     // (`v[/vt][/vn]`).
     const ia = idx ? idx.array : null;
     const triCount = (ia ? ia.length : vc) / 3;
+    const faces = _exportFaces(geom);      // quads and n-gons, when the part has polygons (see _exportFaces)
 
-    if (uv && nrm) {
+    if (faces) {
+      let o = 0;
+      for (let f = 0; f < faces.sizes.length; f++) {
+        const n = faces.sizes[f];
+        let line = 'f';
+        for (let k = 0; k < n; k++) {
+          const a = faces.verts[o++] + 1;
+          line += ' ' + (a + vOffset) + (uv && nrm ? '/' + (a + uvOffset) + '/' + (a + nOffset) : nrm ? '//' + (a + nOffset) : uv ? '/' + (a + uvOffset) : '');
+        }
+        append(line + '\n');
+      }
+    } else if (uv && nrm) {
       for (let t = 0; t < triCount; t++) {
         const a = (ia ? ia[t*3]   : t*3)   + 1;
         const b = (ia ? ia[t*3+1] : t*3+1) + 1;
@@ -22666,7 +23574,7 @@ function _cadMaterialFor(own) {
   const band = T.smoothstep(0.0, T.max(slope.mul(1.5), 0.0001), facing);           // 0 right at the outline, 1 a pixel and a half in
   const curved = T.smoothstep(0.004, 0.012, slope);                                // 0 on a flat face, 1 on a surface that turns away
   const rim = T.mix(T.float(1), band, curved);                                     // a flat face keeps its colour, however slanted
-  m.colorNode = T.mix(T.vec3(0.004, 0.004, 0.006), shaded, rim);
+  m.colorNode = T.mix(T.vec3(0.004, 0.004, 0.006), shaded, rim).mul(_backFaceFactor());
   m.userData.isCad = true;
   if (own) _cadMats.set(own, m);
   return m;
@@ -23399,7 +24307,13 @@ const _CAD_EDGE_PULL = 0.0016;       // the most a line is ever pulled: this sha
 // plates one unit apart, the old pull let 27% of the front plate's pixels show the back one's lines; this lets none through
 // that the surfaces themselves do not. For an orthographic camera the step is (far − near) / 2²⁴.
 const _DEPTH_STEPS = 5e-7;           // about eight steps of a 24-bit buffer
-function _pulledPosition() {
+const _SLOPE_MAX_ANGLE = 1.5;        // radians (86°): past this a face is edge on and gets no more
+const _SLOPE_PULL_MAX = 0.004;       // the most a steep face adds: this share of the distance from the camera
+// With `sloped`, the line geometry carries a vec4 attribute 'slope' on each vertex: the average normal of the faces that meet there
+// (xyz) and how far the faces turn away from it (w, radians). A face seen at a steep angle changes its depth by a pixel's width
+// times tan(angle) across a single pixel, so a line lying on it needs that much more pull to stay in front of the face next to
+// it; the few steps that do for a face seen head on hide the line along a steep face (the gizmo's blue lines on a bend).
+function _pulledPosition(sloped = false) {
   const T = THREE.TSL;
   const wp = T.modelWorldMatrix.mul(T.vec4(T.positionLocal, 1.0)).xyz;       // where the vertex is in the world (instancing is already in positionLocal)
   const toCam = T.cameraPosition.sub(wp);
@@ -23407,7 +24321,16 @@ function _pulledPosition() {
   const persp = T.cameraProjectionMatrix.mul(T.vec4(0.0, 0.0, 1.0, 0.0)).w.abs();      // 1 for a perspective camera, 0 for an orthographic one
   const stepsP = d.mul(d).div(T.max(T.cameraNear, 1e-6)).mul(_DEPTH_STEPS);
   const stepsO = T.cameraFar.sub(T.cameraNear).mul(_DEPTH_STEPS);
-  const pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL));
+  let pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL));
+  if (sloped) {
+    const s = T.attribute('slope', 'vec4');
+    const n = T.normalize(T.modelWorldMatrix.mul(T.vec4(s.xyz, 0.0)).xyz);
+    const c = T.min(T.abs(T.dot(n, toCam.div(T.max(d, 1e-9)))), 1.0);       // cosine of the angle between the view and the faces' average normal
+    const worst = T.min(T.acos(c).add(s.w), _SLOPE_MAX_ANGLE);               // the steepest of the faces that meet here
+    const p11 = T.cameraProjectionMatrix.mul(T.vec4(0.0, 1.0, 0.0, 0.0)).y.abs();
+    const pixel = T.mix(1.0, d, persp).mul(2.0).div(T.max(p11.mul(T.viewportSize.y), 1e-6));   // how wide one pixel is where the line is
+    pull = pull.add(T.min(pixel.mul(T.tan(worst)), d.mul(_SLOPE_PULL_MAX)));
+  }
   const moved = wp.add(toCam.div(T.max(d, 1e-9)).mul(pull));
   return T.modelWorldMatrixInverse.mul(T.vec4(moved, 1.0)).xyz;            // (positionNode is in the object's own space)
 }
@@ -23612,12 +24535,15 @@ const _wireBusy = new Set();                   // geometries a worker is working
 const _wireListened = new WeakSet();
 const _WIRE_INLINE_TRIS = 1500;                // up to this many triangles the outlines are found on the page; more goes to the workers (four at a time)
 const _WIRE_NO_WORKER_TRIS = 150000;           // without workers, a mesh bigger than this shows every triangle edge rather than freeze the page
+const _WIRE_QUADS_INLINE_TRIS = 20000;         // Quads: up to this many triangles the four-sided pairs are found on the page (a few milliseconds); more goes to the workers
 const _wireAngle = () => { const a = parseFloat(_Prefs.get('wireAngle')); return a > 0 && a <= 30 ? a : 1; };
 // What the Wireframe view draws over the surfaces (Settings › Viewport › Wireframe):
-//   triangles  every edge of the mesh, as it is: the wireframe. The default.
-//   polygons   the outline of every flat polygon, curved faces included (their facets are polygons)
-//   outline    only the shape's outline: the sharp edges and the border of every part, the same lines as the CAD view's Outlines
-function _wireMode() { const v = _Prefs.get('wireMode'); return v === 'polygons' || v === 'outline' ? v : 'triangles'; }
+//   quads      the polygons Edit mesh works on: two triangles that make a four-sided cell are drawn as that cell. The default.
+//   triangles  every edge of the mesh, as it is
+//   (polygons is only ever set by _wireModeOverride; a saved 'polygons' or 'outline' from an older version reads as quads)
+let _wireModeOverride = null;                  // 'polygons' while Edit mesh is on: its pieces are the polygons the lines show
+// quads (the default): the polygons of a modelling program, as Edit mesh has them: pairs of coplanar triangles drawn as the four-sided cell they make
+function _wireMode() { if (_wireModeOverride) return _wireModeOverride; const v = _Prefs.get('wireMode'); return v === 'triangles' ? v : 'quads'; }      // (Polygons and Outline were taken out of Settings: a saved one reads as Quads)
 // A part that has been through Untriangulate draws its polygons and a part that has been through Triangulate its triangles, each on
 // its own, whatever the Lines setting is; every other part follows the setting.
 const _wireKeyFor = (g) => {
@@ -23625,7 +24551,7 @@ const _wireKeyFor = (g) => {
   if (m === 'outline') return 'tri';
   if (_triOnly.has(g)) return 'tri';
   if (_polyIds.has(g)) return 'ids';
-  return m === 'polygons' ? 'poly:' + _wireAngle() : 'tri';
+  return m === 'quads' ? 'quads' : m === 'polygons' ? 'poly:' + _wireAngle() : 'tri';
 };
 function _wireXYZ(pos, copy) {
   if (!pos.isInterleavedBufferAttribute && pos.array instanceof Float32Array && pos.itemSize === 3) return copy ? pos.array.slice() : pos.array;
@@ -23644,6 +24570,32 @@ function _wireLinesFor(g) {
   const store = (d) => { if (d) _wireData.set(g, d); return d; };
   const everyEdge = () => { const r = wireIndex(g.index ? g.index.array : null, pos.count); return r ? { key, lines: r.lines, polys: r.tris } : null; };
   if (key === 'tri') return store(everyEdge());
+  if (key === 'quads') {                                   // the same polygons Edit mesh works on (meshedit.js pairQuads); too big a part keeps every edge
+    if (tris > 250000) return store(everyEdge());
+    const quadsInline = () => {
+      try {
+        const topo = MEDIT.buildTopology(_wireXYZ(pos, false), g.index ? g.index.array : null), q = MEDIT.pairQuads(topo);
+        const pg = MEDIT.buildPolygons(topo, q.polyOf, q.count);
+        return store({ key, lines: MEDIT.outlineLines(topo, pg), polys: q.count });
+      } catch (_) { return store(everyEdge()); }
+    };
+    if (tris <= _WIRE_QUADS_INLINE_TRIS) return quadsInline();
+    if (!_MeshWorkers.available()) return tris > _WIRE_NO_WORKER_TRIS ? store(everyEdge()) : quadsInline();
+    if (_wireBusy.has(g)) return false;
+    _wireBusy.add(g);
+    const ver = _wireVer.get(g) || 0;
+    _MeshWorkers.run(() => {
+      const positions = _wireXYZ(pos, true), index = g.index ? Uint32Array.from(g.index.array) : null;
+      const transfer = [positions.buffer]; if (index) transfer.push(index.buffer);
+      return { msg: { op: 'quads', positions, index }, transfer };
+    }).then((reply) => {
+      _wireBusy.delete(g);
+      if ((_wireVer.get(g) || 0) !== ver) { _wireSoon(); return; }            // the surface changed meanwhile
+      store(reply && reply.ok && reply.lines ? { key, lines: reply.lines, polys: reply.polys } : everyEdge());
+      _wireSoon();
+    }).catch(() => { _wireBusy.delete(g); store(everyEdge()); _wireSoon(); });
+    return false;
+  }
   const angle = _wireAngle(), poly = _polyIds.get(g) || null;
   const inline = () => {
     const a = analysePolygons(_wireXYZ(pos, false), g.index ? g.index.array : null, angle, poly);
@@ -23706,6 +24658,7 @@ function _wireHosts() {
 function _wireAdd(host, geom) {
   const l = new THREE.LineSegments(geom, _WIRE_MAT);
   l.userData.wireLine = true; l.raycast = () => {}; l.renderOrder = -2;     // before the ground grid, as the CAD edges are
+  try { _Elements.newLine(host, l); } catch (_) {}                          // (Edit mesh: hidden on a part whose pieces are being worked on)
   if (host.isInstancedMesh) {
     _wireShared.add(geom);
     l.isInstancedMesh = true; l.instanceMatrix = host.instanceMatrix; l.instanceColor = null; l.count = host.count;
@@ -23971,8 +24924,12 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
   const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
   setLoader(true, 'Preparing export…', fmtLabel);
   await new Promise(r => setTimeout(r, 16));
-  const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat, lines: (format === 'glb' || format === 'gltf') && !merge });
+  // OBJ and FBX can hold quads and n-gons: the polygons of the parts are written as they are (the "Keep quads" switch, on by default)
+  const quadsOn = (format === 'obj' || format === 'fbx') && !merge && document.getElementById('exp-quads')?.checked !== false;
+  const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat, lines: (format === 'glb' || format === 'gltf') && !merge, quads: quadsOn });
   if (count === 0) { setLoader(false); toast('Nothing to export', 'No visible parts', 'warn'); return; }
+  let hasQuads = false;
+  if (quadsOn) root.traverse(o => { if (o.isMesh && o.geometry && o.geometry._moPoly) hasQuads = true; });
   // Force-recompute matrixWorld for the entire export subtree. applyMatrix4
   // updates a mesh's local matrix but NOT matrixWorld, and detached subtrees
   // never get an auto-update — the OBJ streaming writer reads matrixWorld
@@ -24096,7 +25053,8 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
         // Houdini, Maya, and Unreal. Falls back to the built-in hand-rolled
         // writer if Assimp is unavailable or fails.
         let exported = false;
-        try {
+        // (Assimp is given a GLB, which only has triangles: with quads to write, the built-in writer below is used)
+        if (!hasQuads) try {
           const glbBuf = await new Promise((ok, fail) =>
             new GLTFExporter().parse(root, ok, fail, { binary: true, forceIndices: true, onlyVisible: true })
           );
@@ -24313,7 +25271,7 @@ function wireUI() {
     setCb('exp-merge', !!p.merge); setCb('exp-visible', true); setCb('exp-selected', false); setCb('exp-flat', false);
     // The format card refreshes which rows exist on the next tick; the rows that depend on it come after.
     setTimeout(() => {
-      setCb('exp-draco', !!p.draco); setCb('exp-fbx-ascii', false); setCb('exp-stl-ascii', false);
+      setCb('exp-draco', !!p.draco); setCb('exp-fbx-ascii', false); setCb('exp-stl-ascii', false); setCb('exp-quads', true);
       setSel('exp-target', p.target);
       _refreshFormatToggles(); _updateExportTarget();
       _markExportPreset(key);
@@ -24511,6 +25469,7 @@ function wireUI() {
   $('gz-translate')?.addEventListener('click', () => setGizmoMode('translate'));
   $('gz-rotate')?.addEventListener('click', () => setGizmoMode('rotate'));
   $('gz-scale')?.addEventListener('click', () => setGizmoMode('scale'));
+  try { _wireGizmoSpacePop(); } catch (e) { console.warn('[gizmo] axes list:', e); }
 
   // Global shift-to-snap. Industry-standard Maya/Blender/Max behaviour: hold
   // Shift while dragging any gizmo handle and the motion snaps to fixed
@@ -25731,7 +26690,9 @@ function wireUI() {
     { const rr = $('exp-reorder-row'), on = !!$('exp-meshopt')?.checked; if (rr) { rr.style.opacity = on ? '.42' : ''; rr.style.pointerEvents = on ? 'none' : ''; } }      // (Meshopt compression reorders too)
     onlyFor('exp-fbx-ascii-row', 'exp-fbx-ascii', fmt === 'fbx');
     onlyFor('exp-stl-ascii-row', 'exp-stl-ascii', fmt === 'stl');
-    show($('exp-fmt-group'), fmt === 'glb' || fmt === 'fbx' || fmt === 'stl');
+    show($('exp-quads-row'), fmt === 'obj' || fmt === 'fbx');                  // (on by default: its state is not reset when the row is out of sight)
+    { const qr = $('exp-quads-row'), off = !!$('exp-merge')?.checked; if (qr) { qr.style.opacity = off ? '.42' : ''; qr.style.pointerEvents = off ? 'none' : ''; } }      // (one merged mesh is triangles)
+    show($('exp-fmt-group'), fmt === 'glb' || fmt === 'fbx' || fmt === 'stl' || fmt === 'obj');
 
     // Flatten groups: formats with no tree have nothing to flatten, and one merged mesh has no groups.
     const flatRow = $('exp-flat-row');
@@ -25794,6 +26755,7 @@ function wireUI() {
     // (these two work on the selection only: a key must never change the whole scene by accident)
     'U':            () => { if (!state.selected.size) { toast('Untriangulate', 'Select a part first', 'info', 2200); return; } try { window.__moAgent && window.__moAgent.untriangulate && window.__moAgent.untriangulate(); } catch (_) {} },
     'Shift+U':      () => { if (!state.selected.size) { toast('Triangulate', 'Select a part first', 'info', 2200); return; } try { window.__moAgent && window.__moAgent.triangulate && window.__moAgent.triangulate(); } catch (_) {} },
+    'B':            () => { try { window.__moQuickRemesh && window.__moQuickRemesh.toggle(); } catch (err) { console.warn('[quick remesh]', err); } },
     'L':            () => _CmdCards.open('draw'),
     'D':            () => _DynPlace.toggle(),
     'H':            () => hideSelected(),
@@ -25830,9 +26792,14 @@ function wireUI() {
       if (view === 'persp') _setPerspectiveView();
       else _setStandardView(view);
     }
-    else if (e.key === '1' && !e.ctrlKey && !e.metaKey) setViewMode('solid');
-    else if (e.key === '2' && !e.ctrlKey && !e.metaKey) setViewMode('wire');
-    else if (e.key === '3' && !e.ctrlKey && !e.metaKey) setViewMode('xray');
+    // 1 2 3 4: what a click picks, as in Cinema 4D (points, edges, polygons, the whole part). The view modes these keys used
+    // to be are on Alt + 1..4.
+    // (by the key's place, not by what it types: on a Mac Option + 1 types ¡)
+    else if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && (/^Digit[1-4]$/.test(e.code || '') || e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4')) { e.preventDefault(); setViewMode(({ '1': 'solid', '2': 'wire', '3': 'xray', '4': 'heat' })[/^Digit[1-4]$/.test(e.code || '') ? e.code.slice(5) : e.key]); }
+    else if (e.key === '1' && !e.ctrlKey && !e.metaKey && !e.altKey) _Elements.api.mode('points');
+    else if (e.key === '2' && !e.ctrlKey && !e.metaKey && !e.altKey) _Elements.api.mode('edges');
+    else if (e.key === '3' && !e.ctrlKey && !e.metaKey && !e.altKey) _Elements.api.mode('faces');
+    else if (e.key === '4' && !e.ctrlKey && !e.metaKey && !e.altKey) _Elements.api.mode('model');
     else if (plain && (e.key === 'e' || e.key === 'E')) setGizmoMode('translate');
     else if (plain && (e.key === 'r' || e.key === 'R')) setGizmoMode('rotate');       // (Ctrl+R stays the browser's reload)
     else if (plain && (e.key === 't' || e.key === 'T')) setGizmoMode('scale');
@@ -30192,6 +31159,9 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     const idx = geom.index?.array;
     const triCount = (idx ? idx.length : pos.count) / 3;
     const vertCount = pos.count;
+    // An OBJ or FBX file keeps its quads and n-gons: the loaders were patched to number the polygon of every triangle (geometry._moPoly),
+    // so Wireframe and Edit mesh draw and pick the file's own polygons instead of guessing them from the triangles.
+    if (geom._moPoly) { if (geom._moPoly.length === triCount) _polyIds.set(geom, geom._moPoly); delete geom._moPoly; }
     totalTris += triCount; totalVerts += vertCount;
     totalBytes += pos.array.byteLength;
     if (geom.attributes.normal) totalBytes += geom.attributes.normal.array.byteLength;
@@ -31985,6 +32955,18 @@ function _matSet(h, m) {
   }
   h.material = m;
 }
+// A part with no material (after its material was deleted, as in Cinema 4D) wears this one shared neutral shader, so there is
+// something to draw. It is not a material the user has: the Materials dock does not list it and the Properties card says
+// "No material assigned".
+let _noneMatInst = null;
+function _noMaterial() {
+  if (!_noneMatInst) {
+    _noneMatInst = new THREE.MeshStandardMaterial({ color: 0xb4b4b8, metalness: 0.05, roughness: 0.75, side: THREE.DoubleSide });
+    _noneMatInst.name = ''; _noneMatInst.userData.isNone = true;
+  }
+  return _noneMatInst;
+}
+const _isNoneMat = (m) => !!(m && m.userData && m.userData.isNone);
 function _matPromoteSelected() {
   let k = 0;
   for (const id of state.selected || []) {
@@ -32002,7 +32984,7 @@ function _collectLiveMaterials() {
     if (p.isPrimitive) continue;
     let m = _matOf(_matHolder(p));
     if (Array.isArray(m)) m = m[0];
-    if (!m || !m.isMaterial) continue;
+    if (!m || !m.isMaterial || _isNoneMat(m)) continue;
     let entry = seen.get(m);
     if (!entry) { entry = { mat: m, count: 0, partIds: [] }; seen.set(m, entry); }
     entry.count++;
@@ -32263,6 +33245,7 @@ function _setMatViewMode(mode) {
 // the calls inside this file went past, so the "used by selection" ring was
 // lost whenever the list was redrawn from here.
 function _populateMaterialsList() {
+  try { _matEditorCheckGone(); _matEditorSyncIfStale(); } catch (_) {}
   try { _wireMaterialActions(); } catch (e) { console.warn('[mat] wiring:', e); }
   const r = _fillMaterialsList();
   _refreshUsedBySelection();
@@ -32737,6 +33720,7 @@ function _openMaterialEditor(info) {
     // About to rebind onto a different material → flush the previous
     // material's edits as a single undo entry first.
     _flushMatEditorUndo();
+    try { window._closeColorPicker?.(); } catch (_) {}      // (a picker open for the old fields must not go on writing to the old material)
     popup = _matEditorState.popup;
     popup.body.innerHTML = bodyHtml;
     if (_matEditorState._previewBall) {
@@ -32762,6 +33746,7 @@ function _openMaterialEditor(info) {
         // Flush before tearing down so the close-time mutation set
         // becomes one consolidated history entry.
         try { _flushMatEditorUndo(); } catch (_) {}
+        try { window._closeColorPicker?.(); } catch (_) {}
         if (_matEditorState?._previewBall) _matEditorState._previewBall.dispose();
         _matEditorState = null;
       },
@@ -32771,6 +33756,11 @@ function _openMaterialEditor(info) {
 
   _matEditorState.mat = mat;
   _matEditorState.info = info;
+  // Whenever the pointer comes to the editor, what it shows is checked against the material first (once for the popup).
+  if (!popup._staleGuard && (popup.card || popup.el)) {
+    popup._staleGuard = true;
+    (popup.card || popup.el).addEventListener('pointerenter', () => { try { _matEditorSyncIfStale(); } catch (_) {} });
+  }
   // Snapshot baseline so the close handler can diff against post-edit state.
   _matEditorState._matSnapshot = _snapshotMat(mat);
   popup.setTitle(mat.name?.trim() || 'Material');
@@ -33452,6 +34442,8 @@ function _pushMaterialUndo(label, before, edits) {
   pushUndo({ type: 'matBatch', label, assigns, edits,
              userBefore: before.user, userAfter: after.user,
              byColorBefore: before.byColor, byColorAfter: after.byColor });
+  // the material card of the Properties panel shows what the selected parts wear: it follows a delete, a merge, an assign by drop...
+  try { refreshPropertiesPanel(); } catch (_) {}
 }
 function _applyMatBatch(op, dir) {
   for (const it of op.assigns || []) {
@@ -33469,12 +34461,45 @@ function _applyMatBatch(op, dir) {
   for (const e of op.edits || []) { try { _matPreviewCache.delete(e.matRef); } catch (_) {} }
   try { _populateMaterialsList?.(); } catch (_) {}
   _matEditorResync((op.edits || []).map(e => e.matRef));
+  try { refreshPropertiesPanel(); } catch (_) {}      // (and an undo or a redo of any of them)
 }
 _UndoOps.register('matBatch', {
   undo(op) { _applyMatBatch(op, 'before'); state.redo.push(op); _finalizeUndo(); },
   redo(op) { _applyMatBatch(op, 'after'); state.history.push(op); _finalizeUndo(); },
 });
 
+// Take one material off the selected parts (the trash can on its card in the Properties panel): they are left with no material, as
+// the Materials dock's Delete leaves them, but only they: the other parts that wear the material keep it, and the material itself
+// stays in the library (at 0 parts if need be). One undo step.
+function _removeMaterialFromSelection(mat) {
+  const ids = [...(state.selected || [])];
+  if (!mat || !ids.length) return 0;
+  try { _matPromoteSelected(); } catch (_) {}            // (a copy of an instanced part is a mesh of its own first: the other copies keep the material)
+  const before = _matStateSnap();
+  const def = _noMaterial();
+  const seen = new Set();
+  let n = 0;
+  for (const id of ids) {
+    const p = getPart(id), h = p && !p.deleted ? _matHolder(p) : null;
+    if (!h || seen.has(h)) continue;
+    seen.add(h);
+    const raw = _matOf(h);
+    if (Array.isArray(raw)) { if (raw.includes(mat)) { _matSet(h, raw.map(m => m === mat ? def : m)); n++; } }
+    else if (raw === mat) { _matSet(h, def); n++; }
+  }
+  if (!n) { try { toast('Remove material', 'None of the selected parts has it', 'info', 2600); } catch (_) {} return 0; }
+  // The material stays in the library, even when no part wears it any more: this button only takes it off these parts (the dock's
+  // Delete is the one that removes a material). A material that only the parts wore is listed by being in userMaterials.
+  if (mat !== def) { state.userMaterials = state.userMaterials || new Set(); state.userMaterials.add(mat); }
+  try { _pushMaterialUndo('Remove material', before, null); } catch (e) { console.warn('[mat-undo]', e); }
+  _matPanelSelected.delete(mat);
+  try { applySelectionColors(); } catch (_) {}
+  requestRender();
+  try { _populateMaterialsList(); } catch (_) {}
+  try { refreshPropertiesPanel(); } catch (_) {}
+  try { toast('Material removed', `${n} part${n === 1 ? '' : 's'} left with no material`, 'success', 2800); } catch (_) {}
+  return n;
+}
 function _wireMaterialActions() {
   if (_matActionsWired) return;
   const addBtn = document.getElementById('mat-act-add');
@@ -33652,13 +34677,11 @@ function _wireMaterialActions() {
   delBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (_matPanelSelected.size === 0) return;
-    // Delete = unassign. Every part using a removed material switches to a
-    // shared neutral-grey default — no source color, no original-load tint,
-    // just plain shading. Built once via getOrCreateMaterial so all
-    // unassigned parts share one Material reference (same draw-call dedupe
-    // benefit as the existing color-shared library).
-    const _DEFAULT_GREY = new THREE.Color(0x9aa0a6);
-    const defaultMat = getOrCreateMaterial(_DEFAULT_GREY);
+    // Delete = unassign. Every part using a removed material is left with no
+    // material: it wears the one shared plain shader (_noMaterial) that the
+    // dock does not list and the Properties card does not show, so all
+    // unassigned parts share one Material reference (one draw-call batch).
+    const defaultMat = _noMaterial();      // (no material: as in Cinema 4D the part keeps none, it is only drawn in a plain neutral shader)
     const removed = [..._matPanelSelected];
     const removedSet = new Set(removed);
     const seen = new Set();
@@ -33698,7 +34721,7 @@ function _wireMaterialActions() {
     _populateMaterialsList();
     try { applySelectionColors?.(); } catch (_) {}
     requestRender();
-    toast?.('Deleted materials', `${removed.length} removed (${n} part${n === 1 ? '' : 's'} reset to default grey)`, 'success');
+    toast?.('Deleted materials', `${removed.length} removed (${n} part${n === 1 ? '' : 's'} left with no material)`, 'success');
   });
 
   document.addEventListener('click', () => {
@@ -33738,6 +34761,7 @@ const _origRefreshPropsPanel_matRing = refreshPropertiesPanel;
 refreshPropertiesPanel = function() {
   const r = _origRefreshPropsPanel_matRing.apply(this, arguments);
   try { _refreshUsedBySelection(); } catch (_) {}
+  try { _matEditorCheckGone(); _matEditorSyncIfStale(); } catch (_) {}
   return r;
 };
 
@@ -35163,7 +36187,7 @@ function _ctxFill(box, items, m) {
       ? `<i class="ctx-menu-icon" data-lucide="${it.icon}"></i>`
       : `<span class="ctx-menu-spacer"></span>`;
     const kbdHtml = it.kbd
-      ? `<kbd class="kbd-chip" style="margin-left:auto">${it.kbd}</kbd>`
+      ? `<kbd class="kbd-chip" style="margin-left:auto">${window.__moKeyLabel ? window.__moKeyLabel(it.kbd) : it.kbd}</kbd>`
       : '';
     const subHtml = it.sub ? '<i class="ctx-menu-chev" data-lucide="chevron-right"></i>' : '';
     row.innerHTML = `${iconHtml}<span class="ctx-menu-label">${it.label}</span>${kbdHtml}${subHtml}`;
@@ -37759,9 +38783,9 @@ if (typeof document !== 'undefined') {
         items.push({ icon: 'view-side',           label: 'Side view',           kbd: 'Ctrl+4', fn: () => _setStandardView('side') });
         items.push('---');
         // Render / display modes
-        items.push({ icon: 'cube-solid',              label: 'Solid view',          kbd: '1',     fn: () => setViewMode('solid') });
-        items.push({ icon: 'cube-wire',         label: 'Wireframe view',      kbd: '2',     fn: () => setViewMode('wire') });
-        items.push({ icon: 'cube-xray',        label: 'X-ray view',          kbd: '3',     fn: () => setViewMode('xray') });
+        items.push({ icon: 'cube-solid',              label: 'Solid view',          kbd: 'Alt+1',     fn: () => setViewMode('solid') });
+        items.push({ icon: 'cube-wire',         label: 'Wireframe view',      kbd: 'Alt+2',     fn: () => setViewMode('wire') });
+        items.push({ icon: 'cube-xray',        label: 'X-ray view',          kbd: 'Alt+3',     fn: () => setViewMode('xray') });
         items.push('---');
         // Helper toggles — labels reflect the current state so the row reads
         // as the action that's about to happen rather than a status line.
@@ -43925,6 +44949,12 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-preset{width:100%;aspect-ratio:1;border-radius:var(--r-xs);border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:transform 100ms var(--ease-out),border-color 100ms var(--ease-out)}
       .cp-preset:hover{transform:scale(1.12);border-color:var(--ac)}
       .cp-actions{display:flex;gap:var(--space-sm);margin-top:12px;justify-content:flex-end}
+      /* while a colour is dragged only the area (or the slider) in hand stays; the rest of the picker and the settings window step aside */
+      html.cp-dragging .modal-bg{opacity:0!important;pointer-events:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;transition:opacity 60ms linear!important}
+      .cp-pop.cp-drag-sv,.cp-pop.cp-drag-hue{background:transparent;border-color:transparent;box-shadow:none;transition:none}
+      .cp-pop.cp-drag-sv .cp-hue,.cp-pop.cp-drag-sv .cp-row,.cp-pop.cp-drag-sv .cp-presets,
+      .cp-pop.cp-drag-hue .cp-sv,.cp-pop.cp-drag-hue .cp-row,.cp-pop.cp-drag-hue .cp-presets{visibility:hidden}
+      .cp-pop.cp-drag-sv .cp-sv,.cp-pop.cp-drag-hue .cp-hue{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 8px 28px rgba(0,0,0,.5)}
       .cp-btn{padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx2);font-size:var(--fs-sm);font-weight:var(--fw-medium);cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
       .cp-btn:hover{background:rgba(255,255,255,.1);color:var(--tx)}
       .cp-btn.primary{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:#fff;border-color:transparent}
@@ -43970,11 +45000,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     // capture is lost): the listeners come off for those too, or each such
     // drag would leave a pointermove listener behind.
     const DRAG_END = ['pointerup', 'pointercancel', 'lostpointercapture'];
+    const dragOn = (cls) => { popEl.classList.add(cls); document.documentElement.classList.add('cp-dragging'); };
+    const dragOff = (cls) => { popEl.classList.remove(cls); document.documentElement.classList.remove('cp-dragging'); };
     svEl.addEventListener('pointerdown', e => {
       svEl.setPointerCapture(e.pointerId);
       onSvPointer(e);
+      dragOn('cp-drag-sv');
       const move = ev => onSvPointer(ev);
-      const up = () => { svEl.removeEventListener('pointermove', move); for (const t of DRAG_END) svEl.removeEventListener(t, up); };
+      const up = () => { dragOff('cp-drag-sv'); svEl.removeEventListener('pointermove', move); for (const t of DRAG_END) svEl.removeEventListener(t, up); };
       svEl.addEventListener('pointermove', move);
       for (const t of DRAG_END) svEl.addEventListener(t, up);
     });
@@ -43987,8 +45020,9 @@ setTimeout(() => _dndDecorateTree(), 0);
     hueEl.addEventListener('pointerdown', e => {
       hueEl.setPointerCapture(e.pointerId);
       onHuePointer(e);
+      dragOn('cp-drag-hue');
       const move = ev => onHuePointer(ev);
-      const up = () => { hueEl.removeEventListener('pointermove', move); for (const t of DRAG_END) hueEl.removeEventListener(t, up); };
+      const up = () => { dragOff('cp-drag-hue'); hueEl.removeEventListener('pointermove', move); for (const t of DRAG_END) hueEl.removeEventListener(t, up); };
       hueEl.addEventListener('pointermove', move);
       for (const t of DRAG_END) hueEl.addEventListener(t, up);
     });
@@ -44057,8 +45091,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     _commit();
   }
   function _onKeyDown(e) {
-    if (e.key === 'Escape') { e.preventDefault(); _cancel(); }
-    else if (e.key === 'Enter') { e.preventDefault(); _commit(); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _cancel(); }
+    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); _commit(); }
   }
   function _onWindow() { if (session) _position(session.anchor); }
 
@@ -44067,7 +45101,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     document.removeEventListener('keydown', _onKeyDown,    true);
     window.removeEventListener('resize',    _onWindow);
     window.removeEventListener('scroll',    _onWindow, true);
-    if (popEl) popEl.classList.remove('show');
+    if (popEl) { popEl.classList.remove('show', 'cp-drag-sv', 'cp-drag-hue'); }
+    document.documentElement.classList.remove('cp-dragging');
   }
 
   function _cancel() {
@@ -44087,6 +45122,9 @@ setTimeout(() => _dndDecorateTree(), 0);
 
   // The opener — used by the material editor swatches to route the picker's
   // output into mat.color / mat.emissive / etc.
+  // Puts the picker away without calling anyone back: for when what it was picking for is rebuilt or gone (the colour it
+  // previewed is already on the material), so that nothing is ever written to a material the editor has let go of.
+  window._closeColorPicker = function () { session = null; _cleanup(); };
   window._openColorPickerForCallback = function (anchor, seedHex, callbacks) {
     _buildPopover();
     session = { callbacks: callbacks || {}, anchor };
@@ -44486,7 +45524,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   window.addEventListener('keydown', (e) => {
     if (_typingTarget(e) || _modalOpen()) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === '4') setViewMode('heat');
+    // (4 is Model mode now; the Heatmap view is Alt + 4, with the other view modes)
   });
 
   // ── Per-part decimation ──────────────────────────────────────────────────
@@ -44897,6 +45935,319 @@ setTimeout(() => _dndDecorateTree(), 0);
   document.getElementById('btn-decimate-sel') && document.getElementById('btn-decimate-sel').addEventListener('click', () => _decimateSelected());
   window.__moDecimateWithin = (mm) => _decimateSelected({ tolMm: mm });
   window.__moAgent = Object.assign(window.__moAgent || {}, { decimate: () => _decimateSelected() });
+  // ▼ Quick remesh (installed block)
+  // ── Quick remesh: a level picked under the pointer ─────────────────────────────────────────────────────────────────────
+  // B, with parts selected, opens a small upright pill under the pointer: the share of its triangles the selection keeps, from 100 %
+  // at the top down to 5 %. The level the pointer is on is carried out on the model at once, so the result is judged on the real
+  // thing: move down the pill and the mesh gets lighter, move back up and it is as it was. Letting go of the mouse button on a level
+  // (or Enter, or letting go of B after holding it) keeps that level, as one undo step; Esc, B again, a press beside the pill or any
+  // other key puts the selection back untouched. The wheel and the arrow keys step through the levels.
+  //
+  // Each level is worked out once per part (in the background workers, as Decimate does it, with the same settings for sharp edges)
+  // and kept until the pill closes, so going back and forth costs nothing. While the pill is open the parts only wear the lighter
+  // geometry: their records (triangle counts, the box, the hash the export reads) are written when a level is kept.
+  const _QuickRemesh = (() => {
+    const LEVELS = [1, 0.75, 0.5, 0.35, 0.25, 0.15, 0.1, 0.05];
+    const ITEM = 34, PAD = 6, WIDTH = 60;
+    let S = null;                                           // the open pill
+    const last = { x: 0, y: 0, seen: false };               // where the pointer is, for the place the pill opens
+    if (typeof window !== 'undefined') window.addEventListener('pointermove', (e) => { last.x = e.clientX; last.y = e.clientY; last.seen = true; }, { capture: true, passive: true });
+
+    function styleOnce() {
+      if (document.getElementById('qr-style')) return;
+      const st = document.createElement('style');
+      st.id = 'qr-style';
+      st.textContent = `
+.qr{position:fixed;z-index:9000;width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:${WIDTH / 2}px;background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 22px 56px rgba(0,0,0,.55),0 3px 10px rgba(0,0,0,.35);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
+.qr.is-in{opacity:1;transform:none}
+.qr.is-out{opacity:0;transform:scale(.92);transition:opacity 110ms ease,transform 110ms ease}
+.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:${ITEM / 2}px;background:var(--ac,#0d99ff);box-shadow:0 4px 14px rgba(13,153,255,.35);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
+.qr.is-first .qr-thumb{background:var(--s5,rgba(255,255,255,.1));box-shadow:none}
+.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:baseline;justify-content:center;line-height:${ITEM}px;font-size:var(--fs-12,12px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;letter-spacing:.01em;color:var(--tx3,#8a8a8a);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-i small{font-size:9px;margin-left:1px;opacity:.65}
+.qr-i.is-near{color:var(--tx2,#bdbdbd)}
+.qr-i.is-hot{color:#fff;transform:scale(1.06)}
+.qr.is-first .qr-i.is-hot{color:var(--tx,#eee)}
+.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 13px;border-radius:${ITEM / 2}px;background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 12px 32px rgba(0,0,0,.45);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3,#8a8a8a);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr.is-left .qr-tip{left:auto;right:calc(100% + 10px)}
+.qr-tip b{font-weight:var(--fw-regular,400);color:var(--tx,#eee)}
+.qr-tip i{width:6px;height:6px;border-radius:50%;background:var(--ac,#0d99ff);opacity:0;transition:opacity 120ms ease}
+.qr.is-busy .qr-tip i{opacity:1;animation:qr-pulse .7s ease-in-out infinite alternate}
+@keyframes qr-pulse{from{transform:scale(.6);opacity:.45}to{transform:scale(1.15);opacity:1}}
+@media (prefers-reduced-motion:reduce){.qr,.qr-thumb,.qr-i,.qr-tip{transition:none!important}.qr.is-busy .qr-tip i{animation:none}}`;
+      document.head.appendChild(st);
+    }
+
+    const trisOf = (g) => ((g.index ? g.index.count : g.attributes.position.count) / 3) | 0;
+    const pctOf = (k) => Math.round(k * 100);
+
+    // one level of one part: its geometry, worked out once
+    function levelOf(sess, part, keep) {
+      if (part.cache.has(keep)) return Promise.resolve(part.cache.get(keep));
+      if (part.jobs.has(keep)) return part.jobs.get(keep);
+      const job = (async () => {
+        await sess.ready;
+        const geom = part.orig, posAttr = geom.attributes.position;
+        let out = null, err = 0;
+        try {
+          const workerOk = sess.url && _MeshWorkers.available() && geom.index && geom.index.count >= 36 &&
+            !posAttr.isInterleavedBufferAttribute && (posAttr.array instanceof Float32Array) && posAttr.itemSize === 3;
+          if (workerOk) {
+            const reply = await _MeshWorkers.run(() => {
+              const positions = posAttr.array.slice(), index = Uint32Array.from(geom.index.array);
+              const groups = (geom.groups && geom.groups.length > 1)
+                ? geom.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
+                : [{ start: 0, count: index.length, materialIndex: 0 }];
+              const ap = packAttributes(geom), attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights } : null;
+              return { msg: { op: 'simplify', positions, index, groups, keep, tol: 0, url: sess.url, attrs, sharp: (_sharpOpts() || {}).sharp || 0 }, transfer: attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer] };
+            });
+            if (reply && reply.ok) { out = _geomFromIndexParts(geom, reply.parts); err = reply.err || 0; }
+          }
+          if (!out && sess.meshopt) out = _simplifyKeepingAttributes(sess.meshopt, geom, keep, 0);
+        } catch (e) { console.warn('[quick remesh]', part.p.name, e); out = null; }
+        if (out && !(trisOf(out) >= 1 && trisOf(out) < part.tris0)) { try { out.dispose(); } catch (_) {} out = null; }      // (cannot be made lighter: it stays as it is)
+        if (out) { out.computeBoundingBox(); out.computeBoundingSphere(); _simpErr.set(out, err); }
+        const res = out || part.orig;
+        if (S !== sess) { if (out) { try { out.dispose(); } catch (_) {} } return part.orig; }      // (the pill closed meanwhile)
+        part.cache.set(keep, res); part.jobs.delete(keep);
+        return res;
+      })();
+      part.jobs.set(keep, job);
+      return job;
+    }
+
+    // the parts wear level i (every part's geometry for it is in its cache)
+    function wear(sess, i) {
+      const keep = LEVELS[i];
+      let tris = 0;
+      for (const part of sess.parts) {
+        const g = part.cache.get(keep) || part.orig;
+        if (part.p.mesh && part.p.mesh.geometry !== g) part.p.mesh.geometry = _stampGeometry(g);
+        tris += trisOf(g);
+      }
+      sess.shown = i;
+      readout(sess, tris);
+      try { if (state.viewMode === 'wire') _wireSoon(); } catch (_) {}
+      requestRender();
+    }
+    function readout(sess, tris) {
+      const b = sess.el.querySelector('.qr-tip b'), s = sess.el.querySelector('.qr-tip span');
+      if (b) b.textContent = fmtNum(tris);
+      if (s) s.textContent = tris >= sess.tris0 ? 'triangles' : 'triangles · −' + Math.round((1 - tris / sess.tris0) * 100) + '%';
+    }
+
+    function setLevel(i, now) {
+      const sess = S; if (!sess) return;
+      i = Math.max(0, Math.min(LEVELS.length - 1, i));
+      if (i === sess.level) return;
+      sess.level = i;
+      const y = 'translateY(' + i * ITEM + 'px)';
+      sess.el.querySelector('.qr-thumb').style.transform = y;
+      sess.el.querySelector('.qr-tip').style.transform = y;
+      sess.el.classList.toggle('is-first', i === 0);
+      sess.items.forEach((it, k) => { it.classList.toggle('is-hot', k === i); it.classList.toggle('is-near', Math.abs(k - i) === 1); });
+      const token = ++sess.token;
+      clearTimeout(sess.reqT);
+      if (i === 0) { sess.el.classList.remove('is-busy'); wear(sess, 0); return; }
+      const go = () => {
+        if (S !== sess || sess.token !== token) return;
+        const keep = LEVELS[i];
+        if (sess.parts.every(p => p.cache.has(keep))) { sess.el.classList.remove('is-busy'); wear(sess, i); return; }
+        sess.el.classList.add('is-busy');
+        Promise.all(sess.parts.map(p => levelOf(sess, p, keep))).then(() => {
+          if (S !== sess || sess.token !== token) return;
+          sess.el.classList.remove('is-busy');
+          wear(sess, i);
+        });
+      };
+      if (now) go(); else sess.reqT = setTimeout(go, 28);      // (a hand passing over a level does not start it)
+    }
+
+    const inBand = (sess, x, y) => { const r = sess.rect; return x >= r.left - 44 && x <= r.right + 44 && y >= r.top - 18 && y <= r.bottom + 18; };
+    const levelAt = (sess, y) => Math.max(0, Math.min(LEVELS.length - 1, Math.floor((y - sess.rect.top - PAD) / ITEM)));
+
+    function onMove(e) {
+      const sess = S; if (!sess) return;
+      if (!sess.armed) { if (Math.hypot(e.clientX - sess.x0, e.clientY - sess.y0) < 3) return; sess.armed = true; }      // (it opens under a pointer at rest: nothing changes until the hand moves)
+      if (inBand(sess, e.clientX, e.clientY)) setLevel(levelAt(sess, e.clientY));
+    }
+    const swallow = (e) => { e.preventDefault(); e.stopImmediatePropagation(); };
+    function onDown(e) {
+      const sess = S; if (!sess) return;
+      swallow(e);
+      if (e.type !== 'pointerdown') return;
+      if (!inBand(sess, e.clientX, e.clientY)) { cancel(); return; }
+      sess.armed = true; sess.pressed = true;
+      setLevel(levelAt(sess, e.clientY), true);
+    }
+    function onUp(e) {
+      const sess = S; if (!sess) return;
+      swallow(e);
+      if (e.type !== 'pointerup') return;
+      if (inBand(sess, e.clientX, e.clientY)) { sess.armed = true; setLevel(levelAt(sess, e.clientY), true); commit(); }
+      else if (sess.pressed) cancel();
+    }
+    function onWheel(e) {
+      const sess = S; if (!sess) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      sess.armed = true;
+      setLevel(sess.level + (e.deltaY > 0 ? 1 : -1), true);
+    }
+    function onKeyDown(e) {
+      const sess = S; if (!sess) return;
+      const k = e.key;
+      if (k === 'Shift' || k === 'Control' || k === 'Alt' || k === 'Meta' || k === 'CapsLock') return;
+      if ((k === 'b' || k === 'B') && !e.ctrlKey && !e.metaKey && !e.altKey) { swallow(e); if (!e.repeat) cancel(); return; }
+      if (k === 'Escape') { swallow(e); cancel(); return; }
+      if (k === 'Enter') { swallow(e); commit(); return; }
+      if (k === 'ArrowDown' || k === 'ArrowUp') { swallow(e); sess.armed = true; setLevel(sess.level + (k === 'ArrowDown' ? 1 : -1), true); return; }
+      cancel();                                             // any other key: the selection is put back first, then the key does what it does
+    }
+    function onKeyUp(e) {
+      const sess = S; if (!sess || !(e.key === 'b' || e.key === 'B')) return;
+      // B held while the hand went to a level, then let go: that level is kept (as the Quick wand runs what the pointer is on)
+      if (performance.now() - sess.openedAt > 320 && sess.level > 0 && sess.armed) { swallow(e); commit(); }
+    }
+    const onBlur = () => cancel();
+
+    function listen(on) {
+      const f = on ? 'addEventListener' : 'removeEventListener';
+      window[f]('pointermove', onMove, true);
+      for (const t of ['pointerdown', 'mousedown']) window[f](t, onDown, true);
+      for (const t of ['pointerup', 'mouseup', 'click', 'dblclick', 'contextmenu']) window[f](t, onUp, true);
+      window[f]('wheel', onWheel, { capture: true, passive: false });
+      window[f]('keydown', onKeyDown, true);
+      window[f]('keyup', onKeyUp, true);
+      window[f]('blur', onBlur);
+    }
+
+    // While the pill is open the selection wears no highlight (its outline and glow lie over the very surface that is being judged,
+    // and were made for the mesh as it was). What was put away is shown again, and drawn again for the mesh as it ends up, on closing.
+    function hush(sess) {
+      sess.hidden = [];
+      const put = (o) => { if (o && o.visible) { o.visible = false; sess.hidden.push(o); } };
+      for (const o of state.activeHighlights || []) put(o);
+      for (const part of sess.parts) if (part.p.mesh) for (const ch of part.p.mesh.children) if (!(ch.userData && ch.userData.wireLine) && (ch.isLineSegments || (ch.userData && ch.userData.selGlow))) put(ch);
+    }
+    function unhush(sess) { for (const o of sess.hidden || []) { try { o.visible = true; } catch (_) {} } sess.hidden = []; state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} }
+    function open() {
+      if (S) return;
+      try { if (_Elements.isActive()) { toast('Quick remesh', 'Leave Edit mesh first (4)', 'info', 2400); return; } } catch (_) {}
+      const parts = [];
+      for (const id of state.selected || []) {
+        const p = getPart(id);
+        if (!p || p.deleted || p.isSpline || p.locked) continue;
+        if (!p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} }
+        const g = p.mesh && p.mesh.geometry;
+        if (!g || !g.attributes || !g.attributes.position) continue;
+        const t = trisOf(g);
+        if (t < 12) continue;
+        parts.push({ p, orig: g, tris0: t, snap: _decSnap(p), cache: new Map([[1, g]]), jobs: new Map() });
+      }
+      if (!parts.length) { toast('Quick remesh', state.selected && state.selected.size ? 'Nothing in the selection can be made lighter' : 'Select a part first', 'info', 2400); return; }
+      styleOnce();
+      const el = document.createElement('div');
+      el.className = 'qr is-first';
+      el.setAttribute('role', 'listbox'); el.setAttribute('aria-label', 'Quick remesh: the share of triangles to keep');
+      el.innerHTML = '<div class="qr-thumb"></div>' + LEVELS.map((k, i) => '<div class="qr-i' + (i === 0 ? ' is-hot' : i === 1 ? ' is-near' : '') + '" role="option">' + pctOf(k) + '<small>%</small></div>').join('') + '<div class="qr-tip"><i></i><b></b><span></span></div>';
+      document.body.appendChild(el);
+      const H = PAD * 2 + ITEM * LEVELS.length;
+      const x = last.seen ? last.x : innerWidth / 2, y = last.seen ? last.y : innerHeight / 2;
+      const left = Math.max(8, Math.min(innerWidth - WIDTH - 8, x - WIDTH / 2));
+      const top = Math.max(8, Math.min(innerHeight - H - 8, y - PAD - ITEM / 2));       // the pointer rests on 100 %
+      el.style.left = left + 'px'; el.style.top = top + 'px';
+      if (left + WIDTH + 200 > innerWidth) el.classList.add('is-left');
+      const sess = S = {
+        el, parts, items: [...el.querySelectorAll('.qr-i')], level: 0, shown: 0, token: 0, reqT: 0, outlineT: 0,
+        rect: { left, top, right: left + WIDTH, bottom: top + H }, x0: x, y0: y, armed: false, pressed: false,
+        openedAt: performance.now(), tris0: parts.reduce((n, p) => n + p.tris0, 0), meshopt: null, url: null, ready: null,
+      };
+      sess.ready = (async () => { try { sess.meshopt = await _loadMeshopt(); sess.url = sess.meshopt ? _importMapUrl('meshoptimizer-simplifier') : null; } catch (_) {} })();
+      readout(sess, sess.tris0);
+      hush(sess);
+      listen(true);
+      void el.offsetWidth; el.classList.add('is-in');
+      // the levels next to the top are worked out ahead while the hand is on its way (a small selection: all of them)
+      sess.ready.then(() => { if (S !== sess) return; const ahead = sess.tris0 <= 400000 ? LEVELS.slice(1) : LEVELS.slice(1, 3); for (const k of ahead) for (const p of sess.parts) levelOf(sess, p, k); });
+    }
+
+    function shut(sess) {
+      listen(false);
+      clearTimeout(sess.reqT); clearTimeout(sess.outlineT);
+      S = null;
+      const el = sess.el;
+      el.classList.remove('is-in'); el.classList.add('is-out');
+      setTimeout(() => { try { el.remove(); } catch (_) {} }, 140);
+    }
+    // the geometries that were worked out and are not worn go
+    function dropUnused(sess, keepGeoms) {
+      for (const part of sess.parts) for (const g of part.cache.values()) if (g !== part.orig && !keepGeoms.has(g)) { try { g.dispose(); } catch (_) {} }
+    }
+
+    function cancel() {
+      const sess = S; if (!sess) return;
+      let changed = false;
+      for (const part of sess.parts) if (part.p.mesh && part.p.mesh.geometry !== part.orig) { part.p.mesh.geometry = _stampGeometry(part.orig); changed = true; }
+      shut(sess);
+      dropUnused(sess, new Set());
+      if (changed) { try { if (state.viewMode === 'wire') _wireSoon(); } catch (_) {} }
+      unhush(sess);
+      requestRender();
+    }
+
+    async function commit() {
+      const sess = S; if (!sess) return;
+      const i = sess.level, keep = LEVELS[i];
+      if (i === 0) { cancel(); return; }
+      if (sess.committing) return;
+      sess.committing = true;
+      sess.el.classList.add('is-busy');
+      try { await Promise.all(sess.parts.map(p => levelOf(sess, p, keep))); } catch (_) {}
+      if (S !== sess) return;
+      wear(sess, i);
+      const undoItems = [], kept = new Set();
+      let before = 0, after = 0, n = 0;
+      for (const part of sess.parts) {
+        const p = part.p, g = part.cache.get(keep) || part.orig;
+        if (!p.mesh || g === part.orig) continue;
+        kept.add(g);
+        p.hash = 'dec_' + p.partId + '_' + (state._decSeq = (state._decSeq | 0) + 1);
+        state.geomByHash.set(p.hash, g);
+        p.triCount = trisOf(g);
+        p.vertCount = g.attributes.position.count;
+        try { _refreshPartBBox(p); } catch (_) {}
+        p._fp = null; p._fpKey = null;
+        try { _addDeviation(p, g); } catch (_) {}
+        undoItems.push({ partId: p.partId, before: part.snap, after: _decSnap(p) });
+        before += part.tris0; after += p.triCount; n++;
+      }
+      shut(sess);
+      dropUnused(sess, kept);
+      if (undoItems.length) pushUndo({ type: 'decimate', label: 'Quick remesh to ' + pctOf(keep) + '%', items: undoItems });
+      unhush(sess);
+      try { recomputeStats(); } catch (_) {}
+      try { rebuildTree(); } catch (_) {}
+      try { refreshPropertiesPanel(); } catch (_) {}
+      try { applySelectionColors(); } catch (_) {}
+      try { _buildBVHsForAllGeoms(); } catch (_) {}
+      if (state.viewMode === 'heat') { try { _exitHeatmap(); _enterHeatmap(); } catch (_) {} }
+      requestRender();
+      if (n) toast('Remeshed', n + (n === 1 ? ' part' : ' parts') + ' · ' + fmtNum(before) + ' → ' + fmtNum(after) + ' triangles (−' + Math.round((1 - after / before) * 100) + '%)', 'success', 3200);
+      else toast('Quick remesh', 'The selection could not be made lighter', 'info', 2600);
+    }
+
+    return {
+      open, cancel, commit,
+      toggle() { if (S) cancel(); else open(); },
+      isOpen: () => !!S,
+      // (for tests and scripts: the level by its number, 0 = 100 %)
+      level(i) { if (S && i !== undefined) { S.armed = true; setLevel(i, true); } return S ? S.level : -1; },
+      shown: () => (S ? S.shown : -1),
+      levels: () => LEVELS.slice(),
+    };
+  })();
+  window.__moQuickRemesh = _QuickRemesh;
+  // ▲ Quick remesh
 
   // ── Untriangulate ────────────────────────────────────────────────────────
   // Cinema 4D's command of the same name. Neighbouring triangles that lie in one plane are one polygon; the vertices that
@@ -44929,8 +46280,12 @@ setTimeout(() => _dndDecorateTree(), 0);
     const normalTol = o.normalTol || parseFloat(document.getElementById('ut-normal')?.value) || 5;
     const flip = o.flip !== undefined ? o.flip : document.getElementById('ut-even')?.checked !== false;
     const fixNormals = o.fixNormals !== undefined ? o.fixNormals : document.getElementById('ut-flatten')?.checked !== false;
+    // the points that only sit on a straight line of an outline go too (from every polygon that touches them, so no crack opens)
+    const straight = !even && (o.straight !== undefined ? !!o.straight : document.getElementById('ut-straight')?.checked !== false);
+    // and the points left on faces that are only nearly flat (limited dissolve): the angle the triangles round a point may turn by
+    const limitDeg = (() => { if (even) return 0; const v = o.limit !== undefined ? +o.limit : parseFloat(String(document.getElementById('ut-limit')?.value ?? '3').replace(',', '.')); return Number.isFinite(v) ? Math.max(0, Math.min(30, v)) : 3; })();
     const skipped = [], failed = [], undoItems = [];
-    const agg = { trisBefore: 0, trisAfter: 0, polygons: 0, rebuilt: 0, vertsRemoved: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
+    const agg = { trisBefore: 0, trisAfter: 0, polygons: 0, rebuilt: 0, vertsRemoved: 0, straight: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
     let parts = 0, done = 0, marked = 0;
     load(true, name, (picked ? 'the selection' : 'the scene') + '…');
     loadPct(2);
@@ -44972,7 +46327,7 @@ setTimeout(() => _dndDecorateTree(), 0);
             for (let i = 0; i < nrm.count; i++) { normals[i * 3] = nrm.getX(i); normals[i * 3 + 1] = nrm.getY(i); normals[i * 3 + 2] = nrm.getZ(i); }
           }
           const transfer = [positions.buffer, index.buffer]; if (normals) transfer.push(normals.buffer);
-          return { msg: { op: even ? 'even' : 'untriangulate', positions, index, groups, angle, normals, normalTol, flip, fixNormals, tolerance: tolLocal, threeUrl }, transfer };
+          return { msg: { op: even ? 'even' : 'untriangulate', positions, index, groups, angle, normals, normalTol, flip, fixNormals, straight, limitDeg, tolerance: tolLocal, threeUrl }, transfer };
         }).then(reply => (reply && reply.ok) ? { src, reply, geom } : null));
       }
       for (const id of ids) {
@@ -44986,8 +46341,9 @@ setTimeout(() => _dndDecorateTree(), 0);
         const { src, reply } = job, st = reply.stats;
         agg.trisBefore += st.trisBefore; agg.polygons += st.polygons;
         for (const k of ['rebuilt', 'vertsRemoved']) agg[k] += st[k];
+        agg.straight += st.straight || 0;
         for (const k in agg.kept) agg.kept[k] += st.kept[k];
-        if (!st.rebuilt) {
+        if (!st.rebuilt && !st.straight) {
           agg.trisAfter += st.trisBefore;
           // Nothing needed rebuilding (every flat face is already as few triangles as its outline needs, as after Triangulate), but
           // the faces are polygons all the same: the mesh stays as it is and remembers them, so it draws and counts them as such.
@@ -45049,7 +46405,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     if (!parts && marked) { say('Untriangulated', marked + (marked === 1 ? ' part' : ' parts') + ': the flat faces are polygons (n-gons) now; their triangles were already as few as the outlines need', 'success', 4500); try { _wireSoon(); } catch (_) {} return; }
     if (parts > 0) {
       const dropped = agg.trisBefore - agg.trisAfter, pct = agg.trisBefore ? dropped / agg.trisBefore * 100 : 0;
-      say('Untriangulated', parts + (parts === 1 ? ' part' : ' parts') + ' · ' + fmtNum(agg.trisBefore) + ' → ' + fmtNum(agg.trisAfter) + ' triangles (−' + pct.toFixed(1) + '%) · ' + fmtNum(agg.vertsRemoved) + ' vertices in the middle of flat faces removed', 'success', 6000);
+      say('Untriangulated', parts + (parts === 1 ? ' part' : ' parts') + ' · ' + fmtNum(agg.trisBefore) + ' → ' + fmtNum(agg.trisAfter) + ' triangles (−' + pct.toFixed(1) + '%) · ' + fmtNum(agg.vertsRemoved - agg.straight) + ' vertices in the middle of flat faces removed' + (agg.straight ? ' · ' + fmtNum(agg.straight) + ' more on straight lines or nearly flat faces' : ''), 'success', 6000);
     } else if (!failed.length) {
       const k = agg.kept, why = [];
       if (k.shading) why.push(fmtNum(k.shading) + ' flat faces have shading that is not flat');
@@ -45083,10 +46439,10 @@ setTimeout(() => _dndDecorateTree(), 0);
     } finally { _untriBusy = false; }
   }
   window.__moAgent = Object.assign(window.__moAgent || {}, { triangulate: () => _triangulateSelected() });
-  for (const [pre, defs] of [['ut', { 'ut-angle': '1', 'ut-normal': '5', 'ut-even': true, 'ut-flatten': true }], ['tr', { 'tr-angle': '1', 'tr-even': true, 'tr-lines': true }]]) {
+  for (const [pre, defs] of [['ut', { 'ut-angle': '1', 'ut-normal': '5', 'ut-even': true, 'ut-straight': true, 'ut-limit': '3', 'ut-flatten': true }], ['tr', { 'tr-angle': '1', 'tr-even': true, 'tr-lines': true }]]) {
     document.getElementById(pre + '-reset')?.addEventListener('click', () => { for (const k in defs) { const el = document.getElementById(k); if (!el) continue; if (el.type === 'checkbox') el.checked = defs[k]; else el.value = defs[k]; el.dispatchEvent(new Event('change')); } });
   }
-  try { for (const id of ['ut-angle', 'tr-angle']) _scrubField(document.getElementById(id), { min: 0.05, max: 30, step: 0.05, decimals: 2 }); _scrubField(document.getElementById('ut-normal'), { min: 0.5, max: 90, step: 0.5, decimals: 1 }); _scrubField(document.getElementById('ut-tol'), { min: 0, max: 100, step: 0.1, decimals: 2 }); } catch (_) {}
+  try { for (const id of ['ut-angle', 'tr-angle']) _scrubField(document.getElementById(id), { min: 0.05, max: 30, step: 0.05, decimals: 2 }); _scrubField(document.getElementById('ut-normal'), { min: 0.5, max: 90, step: 0.5, decimals: 1 }); _scrubField(document.getElementById('ut-tol'), { min: 0, max: 100, step: 0.1, decimals: 2 }); _scrubField(document.getElementById('ut-limit'), { min: 0, max: 30, step: 0.5, decimals: 1 }); } catch (_) {}
   // The Remesh card in the sidebar: shown open and brought into view (from the search, Ctrl+K).
   function _showSection(id) {
     const sec = document.getElementById(id);
@@ -46563,6 +47919,354 @@ setTimeout(() => _dndDecorateTree(), 0);
   document.getElementById('btn-floating-run')?.addEventListener('click', _removeFloating);
   document.getElementById('btn-floating')?.addEventListener('click', () => _CmdCards.open('floating'));
   window.__moAgent = Object.assign(window.__moAgent || {}, { removeFloating: _removeFloating });
+  // ▼ Edit mesh: delete (installed block)
+  // ── Delete triangles (the Edit mesh card: picked points, edges and faces) ───────────────────────────────────────────────
+  // items: [{ partId, removed }], `removed` a Uint8Array over that part's triangles (1 = take it out). Each part gets a new
+  // geometry without them (the vertices nothing uses any more go too); a part that shared its shape with others has one of its
+  // own afterwards, and the others keep theirs. One undo step for all of it. A mask that marks every triangle of a part is not
+  // carried out (that is deleting the part) and its name comes back in `whole`. Returns { parts, tris, whole }.
+  // Dissolve (Edit mesh) uses it too: `caps` (the vertices of triangles that take the place of the removed ones), `capOwner` (an old
+  // triangle each stands in for: it joins that one's material group), `capPoly` (the polygon of each), and `polyBefore` (the
+  // polygon of every old triangle, after polygons were joined; with it the part's polygons are written new and "show triangles" is off).
+  function _deleteTriangles(items, label) {
+    const undoItems = [], whole = [];
+    let parts = 0, tris = 0, capTris = 0;
+    for (const it of items || []) {
+      const p = getPart(it.partId);
+      if (!p || p.deleted || !p.mesh || !it.removed) continue;
+      const geom = p.mesh.geometry, posAttr = geom && geom.attributes && geom.attributes.position;
+      if (!posAttr) continue;
+      let index = geom.index ? geom.index.array : null, src = geom;
+      const nTri = ((index ? index.length : posAttr.count) / 3) | 0;
+      if (it.removed.length !== nTri) continue;                 // (the part has another shape than the one the pieces were picked on)
+      let n = 0;
+      for (let i = 0; i < nTri; i++) if (it.removed[i]) n++;
+      const nCaps = it.caps ? (it.caps.length / 3) | 0 : 0;
+      if (!n && !it.polyBefore) continue;
+      if (n >= nTri && !nCaps) { whole.push(p.name); continue; }
+      if (!index) { index = new Uint32Array(posAttr.count); for (let v = 0; v < index.length; v++) index[v] = v; src = geom.clone(); src.setIndex(new THREE.BufferAttribute(index, 1)); }
+      // Weld and Fill: new positions for the vertices, and copies of rim vertices for the caps, are written into a copy that is built from
+      // (the part's own geometry is not touched, and Undo has it)
+      if ((it.positions && it.positions.length === posAttr.count * 3) || (it.newVerts && it.newVerts.length)) {
+        const base = src === geom ? geom.clone() : src;
+        if (it.positions && it.positions.length === posAttr.count * 3) base.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(it.positions), 3));
+        src = it.newVerts && it.newVerts.length ? _extendGeometry(base, it.newVerts) : base;
+      }
+      const out = _geomFromIndexParts(src, applyHoleFill(index, { removed: it.removed, caps: it.caps || new Uint32Array(0), capOwner: it.capOwner || new Uint32Array(0) }, geom.groups));
+      if (!out) { whole.push(p.name); continue; }
+      if (it.fixNormalsAt && it.fixNormalsAt.length) { try { _renormalLocal(out, it.fixNormalsAt); } catch (e) { console.warn('[elements] shading:', e); } }
+      // the triangles that stay keep their polygons (a file's own, or the ones a move froze), in the order they are written: group after group
+      try {
+        const pp = it.polyBefore || _polyIds.get(geom);
+        if (pp && pp.length === nTri) {
+          const gs = geom.groups && geom.groups.length > 1 ? geom.groups : null, kept = [];
+          if (!gs) { for (let t = 0; t < nTri; t++) if (!it.removed[t]) kept.push(pp[t]); for (let i = 0; i < nCaps; i++) kept.push(it.capPoly[i]); }
+          else {
+            const gOf = new Int32Array(nTri).fill(-1), by = gs.map(() => []);
+            gs.forEach((gr, gi) => { for (let t = (gr.start / 3) | 0, end = ((gr.start + Math.min(gr.count, index.length - gr.start)) / 3) | 0; t < end && t < nTri; t++) gOf[t] = gi; });
+            for (let t = 0; t < nTri; t++) if (!it.removed[t]) by[gOf[t] < 0 ? 0 : gOf[t]].push(pp[t]);
+            for (let i = 0; i < nCaps; i++) { const g = gOf[it.capOwner[i]]; by[g < 0 ? 0 : g].push(it.capPoly[i]); }
+            for (const a of by) for (const q of a) kept.push(q);
+          }
+          if (kept.length === out.index.count / 3) _polyIds.set(out, Int32Array.from(kept));
+        }
+        if (_triOnly.has(geom) && !it.polyBefore) _triOnly.add(out);
+      } catch (_) {}
+      out.computeBoundingBox(); out.computeBoundingSphere();
+      const hash = 'el_' + (state._decSeq = (state._decSeq | 0) + 1);
+      state.geomByHash.set(hash, out);
+      const before = _decSnap(p);
+      p.mesh.geometry = _stampGeometry(out);
+      p.hash = hash;
+      p.triCount = out.index.count / 3;
+      p.vertCount = out.attributes.position.count;
+      _refreshPartBBox(p);
+      p._fp = null; p._fpKey = null;
+      undoItems.push({ partId: p.partId, before, after: _decSnap(p) });
+      parts++; tris += n; capTris += nCaps;
+    }
+    if (undoItems.length) {
+      pushUndo({ type: 'decimate', label: label || 'Delete triangles', items: undoItems });
+      try { recomputeStats(); } catch (_) {}
+      try { rebuildTree(); } catch (_) {}
+      try { refreshPropertiesPanel(); } catch (_) {}
+      try { applySelectionColors(); } catch (_) {}
+      try { _buildBVHsForAllGeoms(); } catch (_) {}
+      if (state.viewMode === 'heat') { try { _exitHeatmap(); _enterHeatmap(); } catch (_) {} }
+      requestRender();
+    }
+    return { parts, tris, whole, caps: capTris };
+  }
+  // A geometry with more vertices: each of `newVerts` ({ from: a vertex number, normal: [x, y, z] (optional) }) is a copy of the vertex
+  // it names, appended at the end of every attribute (the normal replaced when one is given). The triangles stay as they are.
+  function _extendGeometry(base, newVerts) {
+    const out = new THREE.BufferGeometry(), vCount = base.attributes.position.count, total = vCount + newVerts.length;
+    for (const name of Object.keys(base.attributes)) {
+      const a = base.attributes[name], size = a.itemSize, direct = !a.isInterleavedBufferAttribute && a.array;
+      const ArrayType = direct ? a.array.constructor : Float32Array, arr = new ArrayType(total * size);
+      if (direct) arr.set(a.array.subarray(0, vCount * size)); else for (let v = 0; v < vCount; v++) for (let c = 0; c < size; c++) arr[v * size + c] = a.getComponent(v, c);
+      newVerts.forEach((nv, i) => {
+        const w = vCount + i;
+        if (name === 'normal' && nv.normal) { arr[w * size] = nv.normal[0]; arr[w * size + 1] = nv.normal[1]; arr[w * size + 2] = nv.normal[2]; }
+        else for (let c = 0; c < size; c++) arr[w * size + c] = arr[nv.from * size + c];
+      });
+      out.setAttribute(name, new THREE.BufferAttribute(arr, size, !!a.normalized));
+    }
+    if (base.index) out.setIndex(new THREE.BufferAttribute(base.index.array, 1));
+    for (const g of base.groups || []) out.addGroup(g.start, g.count, g.materialIndex);
+    return out;
+  }
+  // The shading again at the places that moved (`places`: [[x, y, z], …] where points stand now): each corner there takes the
+  // area-weighted normal of the triangles at that place that turn from its own triangle by no more than 60°, so a hard edge stays
+  // hard and a smooth surface stays smooth (what the gizmo's own move does, here for a geometry made by Weld or Fill).
+  function _renormalLocal(geom, places) {
+    const pa = geom.attributes.position, na = geom.attributes.normal;
+    if (!na || na.isInterleavedBufferAttribute || !(na.array instanceof Float32Array) || !(pa.array instanceof Float32Array)) return;
+    const P = pa.array, N = na.array, ix = geom.index ? geom.index.array : null, nTri = ((ix ? ix.length : P.length / 3) / 3) | 0;
+    let mnx = Infinity, mny = Infinity, mnz = Infinity, mxx = -Infinity, mxy = -Infinity, mxz = -Infinity;
+    for (let i = 0; i < P.length; i += 3) { if (P[i] < mnx) mnx = P[i]; if (P[i] > mxx) mxx = P[i]; if (P[i + 1] < mny) mny = P[i + 1]; if (P[i + 1] > mxy) mxy = P[i + 1]; if (P[i + 2] < mnz) mnz = P[i + 2]; if (P[i + 2] > mxz) mxz = P[i + 2]; }
+    const q = Math.max(Math.hypot(mxx - mnx, mxy - mny, mxz - mnz) * 1e-6, 1e-9);
+    const key = (x, y, z) => Math.round(x / q) + ',' + Math.round(y / q) + ',' + Math.round(z / q);
+    const want = new Set(places.map(p => key(p[0], p[1], p[2])));
+    const fn = new Float32Array(nTri * 3), fa = new Float32Array(nTri), at = new Map();
+    for (let t = 0; t < nTri; t++) {
+      const a = ix ? ix[t * 3] : t * 3, b = ix ? ix[t * 3 + 1] : t * 3 + 1, c = ix ? ix[t * 3 + 2] : t * 3 + 2;
+      const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2], vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
+      fa[t] = l; if (l > 0) { fn[t * 3] = nx / l; fn[t * 3 + 1] = ny / l; fn[t * 3 + 2] = nz / l; }
+      for (const v of [a, b, c]) { const k = key(P[v * 3], P[v * 3 + 1], P[v * 3 + 2]); if (!want.has(k)) continue; let l2 = at.get(k); if (!l2) at.set(k, l2 = []); l2.push([t, v]); }
+    }
+    const cosA = Math.cos(60 * Math.PI / 180);
+    for (const list of at.values()) {
+      for (const [t, v] of list) {
+        let sx = 0, sy = 0, sz = 0;
+        for (const [u] of list) {
+          if (fn[u * 3] * fn[t * 3] + fn[u * 3 + 1] * fn[t * 3 + 1] + fn[u * 3 + 2] * fn[t * 3 + 2] < cosA) continue;
+          sx += fn[u * 3] * fa[u]; sy += fn[u * 3 + 1] * fa[u]; sz += fn[u * 3 + 2] * fa[u];
+        }
+        const l = Math.hypot(sx, sy, sz);
+        if (l > 0) { N[v * 3] = sx / l; N[v * 3 + 1] = sy / l; N[v * 3 + 2] = sz / l; }
+      }
+    }
+    na.needsUpdate = true;
+  }
+  // ── Extract triangles (the Edit mesh card: picked polygons become a part of their own) ──────────────────────────────────
+  // items: [{ partId, pick, polyOf }], `pick` a Uint8Array over that part's triangles (1 = take it into the new part), `polyOf` the polygon of
+  // each triangle. The new part has the old one's place, material and the picked polygons; the old part loses them. Both are one undo
+  // step. A pick of every triangle is not carried out (that would be the part itself). Returns { parts, tris, ids (the new parts), whole }.
+  function _extractTriangles(items, label) {
+    const hist0 = state.history.length, ids = [], whole = [];
+    let parts = 0, tris = 0;
+    for (const it of items || []) {
+      const p = getPart(it.partId);
+      if (!p || p.deleted || !p.mesh || !it.pick) continue;
+      const geom = p.mesh.geometry, posAttr = geom && geom.attributes && geom.attributes.position;
+      if (!posAttr) continue;
+      let index = geom.index ? geom.index.array : null, src = geom;
+      const nTri = ((index ? index.length : posAttr.count) / 3) | 0;
+      if (it.pick.length !== nTri) continue;
+      let n = 0; for (let t = 0; t < nTri; t++) n += it.pick[t] ? 1 : 0;
+      if (!n) continue;
+      if (n >= nTri) { whole.push(p.name); continue; }
+      if (!index) { index = new Uint32Array(posAttr.count); for (let v = 0; v < index.length; v++) index[v] = v; src = geom.clone(); src.setIndex(new THREE.BufferAttribute(index, 1)); }
+      const inv = new Uint8Array(nTri); for (let t = 0; t < nTri; t++) inv[t] = it.pick[t] ? 0 : 1;
+      const ng = _geomFromIndexParts(src, applyHoleFill(index, { removed: inv, caps: new Uint32Array(0), capOwner: new Uint32Array(0) }, geom.groups));
+      if (!ng) continue;
+      // the polygons of what was picked, numbered from 0, in the order the triangles are written (group after group)
+      try {
+        const pp = it.polyOf, gs = geom.groups && geom.groups.length > 1 ? geom.groups : null, kept = [], ren = new Map();
+        const num = (q) => { let m = ren.get(q); if (m === undefined) ren.set(q, m = ren.size); return m; };
+        if (pp && pp.length === nTri) {
+          if (!gs) { for (let t = 0; t < nTri; t++) if (it.pick[t]) kept.push(num(pp[t])); }
+          else {
+            const gOf = new Int32Array(nTri).fill(-1), by = gs.map(() => []);
+            gs.forEach((gr, gi) => { for (let t = (gr.start / 3) | 0, end = ((gr.start + Math.min(gr.count, index.length - gr.start)) / 3) | 0; t < end && t < nTri; t++) gOf[t] = gi; });
+            for (let t = 0; t < nTri; t++) if (it.pick[t]) by[gOf[t] < 0 ? 0 : gOf[t]].push(num(pp[t]));
+            for (const a of by) for (const q of a) kept.push(q);
+          }
+          if (kept.length === ng.index.count / 3) _polyIds.set(ng, Int32Array.from(kept));
+        }
+      } catch (_) {}
+      ng.computeBoundingBox(); ng.computeBoundingSphere();
+      // the new part: where the old one is, with its material
+      p.mesh.updateWorldMatrix(true, false);
+      const mesh = new THREE.Mesh(ng, p.mesh.material);
+      new THREE.Matrix4().copy(state.partsRoot.matrixWorld).invert().multiply(p.mesh.matrixWorld).decompose(mesh.position, mesh.quaternion, mesh.scale);
+      const np = _addGeometryPart(ng, p.name + ' (extracted)', { mesh, extra: p.originalColor ? { originalColor: p.originalColor.clone() } : {} });
+      if (!np) continue;
+      ids.push(np.partId);
+      const r = _deleteTriangles([{ partId: p.partId, removed: it.pick, polyBefore: it.polyOf ? Int32Array.from(it.polyOf) : undefined }], label);
+      if (r && r.parts) { parts++; tris += n; }
+    }
+    // everything that was pushed on the way (the new parts, the old ones without them) is one step
+    const ops = state.history.splice(hist0);
+    if (ops.length) pushUndo({ type: 'compound', label: label || 'Extract polygons', ops });
+    return { parts, tris, ids, whole };
+  }
+  // 'compound': several undo steps that were made as one. Undone from the last to the first, done again from the first.
+  _UNDO_HEAVY.add('compound');
+  _UndoOps.register('compound', {
+    undo(op) {
+      for (let i = op.ops.length - 1; i >= 0; i--) { try { _UndoOps.dispatchUndo(op.ops[i]); } catch (e) { console.warn('[undo compound]', e); } state.redo.pop(); }
+      state.redo.push(op);
+      _finalizeUndo({ rebuildTree: true });
+    },
+    redo(op) {
+      for (const sub of op.ops) { try { _UndoOps.dispatchRedo(sub); } catch (e) { console.warn('[redo compound]', e); } state.history.pop(); }
+      state.history.push(op);
+      _finalizeUndo({ rebuildTree: true });
+    },
+  });
+  // ── Moving the pieces of a mesh (Edit mesh: the gizmo on picked points, edges and polygons) ──
+  // begin: the part gets a copy of its geometry (so the parts that share the old one, and Undo, keep it), with what the old one
+  // was known by (its polygons, "show triangles"). The caller then writes into that copy's positions while the gizmo is dragged.
+  // commit: boxes, statistics and one undo step for all the parts ('decimate' puts a geometry back, which is all this needs).
+  // cancel: the old geometry back, nothing in the history.
+  function _beginGeomEdit(partId) {
+    const p = getPart(partId);
+    if (!p || p.deleted || !p.mesh || !p.mesh.geometry) return null;
+    const src = p.mesh.geometry, before = _decSnap(p), out = src.clone();
+    try { if (_polyIds.has(src)) _polyIds.set(out, _polyIds.get(src)); if (_triOnly.has(src)) _triOnly.add(out); } catch (_) {}
+    const hash = 'ed_' + (state._decSeq = (state._decSeq | 0) + 1);
+    state.geomByHash.set(hash, out);
+    p.mesh.geometry = _stampGeometry(out);
+    p.hash = hash;
+    return { partId, before, geom: out };
+  }
+  function _commitGeomEdit(edits, label) {
+    const items = [];
+    for (const ed of edits || []) {
+      const p = getPart(ed.partId);
+      if (!p || !p.mesh) continue;
+      // The copy was changed in place while the gizmo was dragged, and the app keeps things per geometry (its wire lines, its
+      // outlines, a box): they were made for the shape as it was at some moment of the drag. So the finished shape is a
+      // geometry of its own, which nothing has seen yet, and the working copy is let go (its lines go with it).
+      const work = p.mesh.geometry, fin = work.clone();
+      try { if (_polyIds.has(work)) _polyIds.set(fin, _polyIds.get(work)); if (_triOnly.has(work)) _triOnly.add(fin); } catch (_) {}
+      try { fin.computeBoundingBox(); fin.computeBoundingSphere(); } catch (_) {}
+      const was = p.hash, hash = 'ed_' + (state._decSeq = (state._decSeq | 0) + 1);
+      state.geomByHash.set(hash, fin);
+      p.mesh.geometry = _stampGeometry(fin);
+      p.hash = hash;
+      try { state.geomByHash.delete(was); work.dispose(); } catch (_) {}
+      _refreshPartBBox(p);
+      p._fp = null; p._fpKey = null;
+      items.push({ partId: p.partId, before: ed.before, after: _decSnap(p) });
+    }
+    if (items.length) {
+      pushUndo({ type: 'decimate', label: label || 'Move pieces', items });
+      try { recomputeStats(); } catch (_) {}
+      try { refreshPropertiesPanel(); } catch (_) {}
+      try { applySelectionColors(); } catch (_) {}
+      try { _buildBVHsForAllGeoms(); } catch (_) {}
+      try { _wireSoon(); } catch (_) {}
+      requestRender();
+    }
+    return items.length;
+  }
+  function _cancelGeomEdit(edits) {
+    for (const ed of edits || []) {
+      const p = getPart(ed.partId);
+      if (!p || !p.mesh) continue;
+      const made = p.hash;
+      p.mesh.geometry = _stampGeometry(ed.before.geom); p.hash = ed.before.hash;
+      if (made !== p.hash) { try { state.geomByHash.delete(made); } catch (_) {} }
+    }
+    try { _wireSoon(); } catch (_) {}
+    requestRender();
+  }
+  window.__moAgent = Object.assign(window.__moAgent || {}, { deleteTriangles: _deleteTriangles, extractTriangles: _extractTriangles, beginGeomEdit: _beginGeomEdit, commitGeomEdit: _commitGeomEdit, cancelGeomEdit: _cancelGeomEdit });
+  // ▲ Edit mesh: delete
+  // ▼ Edit mesh: reverse normals (installed block)
+  // ── Reverse the normals of triangles (the Edit mesh card: picked faces) ─────────────────────────────────────────────────
+  // items: [{ partId, flip }], `flip` a Uint8Array over that part's triangles (1 = turn it round). A turned triangle swaps two of
+  // its corners and its normals are negated. Corners are shared with the triangles round it, so a turned triangle gets three
+  // corners of its own (appended to every attribute) and the neighbours keep theirs. The triangle count and the material groups
+  // stay as they are. One undo step. Returns { parts, tris }.
+  function _flipTriangles(items, label) {
+    const undoItems = [];
+    let parts = 0, tris = 0;
+    for (const it of items || []) {
+      const p = getPart(it.partId);
+      if (!p || p.deleted || !p.mesh || !it.flip) continue;
+      const geom = p.mesh.geometry, posAttr = geom && geom.attributes && geom.attributes.position;
+      if (!posAttr) continue;
+      const index = geom.index ? geom.index.array : null;
+      const nTri = ((index ? index.length : posAttr.count) / 3) | 0;
+      if (it.flip.length !== nTri) continue;                    // (the part has another shape than the one the faces were picked on)
+      const list = [];
+      for (let t = 0; t < nTri; t++) if (it.flip[t]) list.push(t);
+      if (!list.length) continue;
+      const vCount = posAttr.count, extra = index ? list.length * 3 : 0, total = vCount + extra;
+      // The index as it will be, and which corners it still uses: a turned triangle's old corners, and the ones an earlier turn left
+      // behind, may belong to nothing now. They are left out, so turning a face round and back does not grow the mesh.
+      let ni0 = null, remap = null, kept = total;
+      if (index) {
+        ni0 = Uint32Array.from(index);
+        let w0 = vCount;
+        for (const t of list) { ni0[t * 3] = w0; ni0[t * 3 + 1] = w0 + 2; ni0[t * 3 + 2] = w0 + 1; w0 += 3; }
+        const usedV = new Uint8Array(total);
+        for (let i = 0; i < ni0.length; i++) usedV[ni0[i]] = 1;
+        kept = 0; for (let v = 0; v < total; v++) kept += usedV[v];
+        if (kept < total) { remap = new Int32Array(total); let k = 0; for (let v = 0; v < total; v++) remap[v] = usedV[v] ? k++ : -1; }
+      }
+      const out = new THREE.BufferGeometry();
+      for (const name of Object.keys(geom.attributes)) {
+        const a = geom.attributes[name], size = a.itemSize;
+        const direct = !a.isInterleavedBufferAttribute && a.array;
+        const ArrayType = direct ? a.array.constructor : Float32Array;
+        const arr = new ArrayType(total * size);
+        if (direct) arr.set(a.array.subarray(0, vCount * size)); else for (let v = 0; v < vCount; v++) for (let c = 0; c < size; c++) arr[v * size + c] = a.getComponent(v, c);
+        const get = (v, c) => direct ? a.array[v * size + c] : a.getComponent(v, c);
+        const neg = name === 'normal';
+        if (index) {
+          let w = vCount;
+          for (const t of list) for (let k = 0; k < 3; k++, w++) { const v = index[t * 3 + k]; for (let c = 0; c < size; c++) arr[w * size + c] = neg ? -get(v, c) : get(v, c); }
+        } else {
+          for (const t of list) {
+            const b = t * 3;
+            for (let c = 0; c < size; c++) { const x = arr[(b + 1) * size + c]; arr[(b + 1) * size + c] = arr[(b + 2) * size + c]; arr[(b + 2) * size + c] = x; }
+            if (neg) for (let k = 0; k < 3; k++) for (let c = 0; c < size; c++) arr[(b + k) * size + c] = -arr[(b + k) * size + c];
+          }
+        }
+        let fin = arr;
+        if (remap) { fin = new ArrayType(kept * size); for (let v = 0; v < total; v++) { const n = remap[v]; if (n >= 0) for (let c = 0; c < size; c++) fin[n * size + c] = arr[v * size + c]; } }
+        out.setAttribute(name, new THREE.BufferAttribute(fin, size, !!a.normalized));
+      }
+      if (index) {
+        const ni = new (kept > 65535 ? Uint32Array : Uint16Array)(index.length);
+        if (remap) { for (let i = 0; i < ni0.length; i++) ni[i] = remap[ni0[i]]; } else ni.set(ni0);
+        out.setIndex(new THREE.BufferAttribute(ni, 1));
+      }
+      for (const g of geom.groups || []) out.addGroup(g.start, g.count, g.materialIndex);
+      if (!out.attributes.normal) out.computeVertexNormals();
+      out.computeBoundingBox(); out.computeBoundingSphere();
+      try { if (_polyIds.has(geom)) _polyIds.set(out, _polyIds.get(geom)); if (_triOnly.has(geom)) _triOnly.add(out); } catch (_) {}      // (the triangles keep their order: the polygons are the same)
+      const hash = 'fl_' + (state._decSeq = (state._decSeq | 0) + 1);
+      state.geomByHash.set(hash, out);
+      const before = _decSnap(p);
+      p.mesh.geometry = _stampGeometry(out);
+      p.hash = hash;
+      p.vertCount = out.attributes.position.count;
+      p._fp = null; p._fpKey = null;
+      undoItems.push({ partId: p.partId, before, after: _decSnap(p) });
+      parts++; tris += list.length;
+    }
+    if (undoItems.length) {
+      pushUndo({ type: 'decimate', label: label || 'Reverse normals', items: undoItems });
+      try { recomputeStats(); } catch (_) {}
+      try { rebuildTree(); } catch (_) {}
+      try { refreshPropertiesPanel(); } catch (_) {}
+      try { applySelectionColors(); } catch (_) {}
+      try { _buildBVHsForAllGeoms(); } catch (_) {}
+      if (state.viewMode === 'heat') { try { _exitHeatmap(); _enterHeatmap(); } catch (_) {} }
+      requestRender();
+    }
+    return { parts, tris };
+  }
+  window.__moAgent = Object.assign(window.__moAgent || {}, { flipTriangles: _flipTriangles });
+  // ▲ Edit mesh: reverse normals
+
   {
     // what is set in the card is kept in this browser
     const els = ['fl-size', 'fl-tris'].map(i => document.getElementById(i)).filter(Boolean);
@@ -48053,6 +49757,23 @@ if (new URLSearchParams(location.search).has('selftest')) {
       } catch (err) { console.warn('[materials] merge by drop failed:', err); }
     });
     const isMat = (e) => !!dragMat && !!e.dataTransfer && [...(e.dataTransfer.types || [])].includes(TYPE);
+    // …and onto the material card of the Properties panel: the same drop, onto the selected parts (the card is drawn again at every
+    // change, so the listeners are on the sidebar)
+    const side = document.getElementById('sidebar-right');
+    if (side) {
+      const rowOf = (e) => (e.target && e.target.closest ? e.target.closest('.prop-material-row') : null);
+      side.addEventListener('dragover', (e) => { const row = isMat(e) ? rowOf(e) : null; if (row) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; row.classList.add('mat-drop-over'); } });
+      side.addEventListener('dragleave', (e) => { const row = rowOf(e); if (row && !row.contains(e.relatedTarget)) row.classList.remove('mat-drop-over'); });
+      side.addEventListener('drop', (e) => {
+        const row = isMat(e) ? rowOf(e) : null;
+        if (!row) return;
+        e.preventDefault(); row.classList.remove('mat-drop-over');
+        const mat = dragMat; dragMat = null; hotOff();
+        if (!state.selected || !state.selected.size) { toast('Assign', 'Select the parts first', 'info', 2600); return; }
+        try { assign(mat, e); } catch (err) { console.warn('[materials] drop on the card failed:', err); }
+      });
+      dock.addEventListener('dragend', () => { side.querySelectorAll('.mat-drop-over').forEach(r => r.classList.remove('mat-drop-over')); });
+    }
     vp.addEventListener('dragover', (e) => { if (isMat(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; hotAt(e); } });
     vp.addEventListener('dragleave', (e) => { if (dragMat && (!e.relatedTarget || !vp.contains(e.relatedTarget))) hotOff(); });
     vp.addEventListener('drop', (e) => {
@@ -48247,3 +49968,1548 @@ if (new URLSearchParams(location.search).has('selftest')) {
     mouse = false; root.classList.remove('no-mod-ring');
   }, true);
 })();
+
+// ▼ Edit mesh (installed block)
+// ── Edit mesh: the points, edges and polygons of a part ────────────────────────────────────────────────────────────────────────────
+// The mode button at the top of the left toolbar works as in Cinema 4D: Points, Edges, Polygons, and Model, which is the app as it
+// always was (a click selects a part). A click on the button goes in and out of the last piece mode; holding it lists all four.
+// In a piece mode the card "Edit mesh" is open, the view shows the mesh lines (the Wireframe view, in blue, with flat polygons as
+// polygons), and the left button picks pieces with one of three tools: Click, Rectangle (drag a box) and Brush (paint). Shift adds,
+// Ctrl takes away, a click beside the model clears, a double-click (or any click with "Pick loops" on) picks a loop, and Delete takes
+// the picked pieces out of their parts in one undo step. Picked pieces are orange, the one under the pointer is light.
+//
+// What a point, an edge, a polygon and a loop are is worked out in meshedit.js (the tests run it in Node), on the polygons that
+// wirelines.js finds: the same ones the lines show. This is the part that knows the app: what is under the pointer, how the picked
+// pieces are drawn, the tools and the keys.
+//
+// How it is drawn. Picked polygons are a mesh of their own over the part, with their outlines, drawn with the depth of the scene.
+// Picked points and edges, every point of the part in work (Points mode), the piece under the pointer and the tools' own marks
+// (the box, the brush) are painted on a canvas over the view, each only while a polygon it belongs to looks at the camera.
+// Nothing runs between frames: the canvas is painted when the camera, the selection or the pointer changes.
+//
+// The selection lives here and nowhere else: it is numbers into one geometry, so it is dropped for a part as soon as that part has
+// another geometry (after a delete, any tool). Leaving the piece modes clears it. Ctrl+Z takes back the last change of what is
+// picked (a history of its own, so picking never marks the scene as changed); once those are used up, or when a delete came
+// after them, Ctrl+Z is the app's own undo, and the pieces that were picked before a delete are picked again when it is undone.
+const _Elements = (() => {
+  const $q = (id) => document.getElementById(id);
+  const MODES = ['points', 'edges', 'faces'], TOOLS = ['click', 'rect', 'brush'];
+  const NAME = { points: 'Points', edges: 'Edges', faces: 'Polygons', model: 'Model' };
+  const ONE = { points: 'point', edges: 'edge', faces: 'polygon' }, MANY = { points: 'points', edges: 'edges', faces: 'polygons' };
+  const ORANGE = '#ff9a2e', LINE_BLUE = 0x3aa0e8;
+  const BIG = 400000;                    // triangles: a part over this is read when it is clicked, not when the pointer passes over it
+  const DRAW_MAX = 40000;                // points or edges painted per part (more are picked all the same)
+  const ALL_POINTS_MAX = 20000;          // a part with more points than this does not show them all in Points mode
+  const OCCLUDE_MAX = 25000;             // pieces a box may test one by one for something standing in front of them
+  // the mode button's pictures: a cube with its corners, one edge, one side, or all of it
+  const CUBE = '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>';
+  const SVG = (inner) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round">' + inner + '</svg>';
+  const ICON = {
+    points: SVG('<g opacity=".5">' + CUBE + '</g><g fill="currentColor" stroke="none"><circle cx="12" cy="3" r="2"/><circle cx="20" cy="7.5" r="2"/><circle cx="20" cy="16.5" r="2"/><circle cx="12" cy="21" r="2"/><circle cx="4" cy="16.5" r="2"/><circle cx="4" cy="7.5" r="2"/><circle cx="12" cy="12" r="2"/></g>'),
+    edges: SVG('<g opacity=".5">' + CUBE + '</g><path d="M12 12v9" stroke-width="3.2"/>'),
+    faces: SVG('<g opacity=".5">' + CUBE + '</g><path d="M12 12l8-4.5v9L12 21z" fill="currentColor" stroke="none"/>'),
+    model: SVG('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity=".38"/>' + CUBE),
+  };
+  let active = false, wired = false, mode = 'faces', tool = 'click', loops = false, brushR = 20, space = 'world';      // space: which way the gizmo's axes point (world, the part's own, or along the picked pieces' normal)
+  const SPACES = ['world', 'local', 'normal'];
+  let ov = null, ctx = null, hover = null, pending = false, down = null, lastMove = null, moveRaf = 0, group = null, ray = null;
+  let box = null, stroke = null, altOrbit = false, prevButtons = null, prevView = null, ptr = null, sizing = null, gzOver = false;      // sizing: the brush being resized with the middle button; gzOver: the pointer is on a handle of the gizmo (the brush gives way to the normal pointer)
+  const sel = new Map();                 // partId → { geom, R, points: Set, edges: Set, faces: Set (polygons), fill, outline, dirty }
+  const reads = new WeakMap();           // geometry → { key, topo, pg }
+  const picks = [], unpicks = [];        // the history of what was picked: { before, after, at } (at: how long the app's own history was)
+  let tc = null, tcHelper = null, pivot = null, grab = null;     // the gizmo on the picked pieces, the point it sits on, and a drag in progress
+  let afterDelete = null;                // what was picked before the last delete, to pick it again when the delete is undone
+  const FILL_MAT = new THREE.MeshBasicMaterial({ color: 0xff9a2e, transparent: true, opacity: 0.55, depthTest: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  let OUTLINE_MAT = null;
+  const outlineMat = () => { if (!OUTLINE_MAT) { OUTLINE_MAT = new THREE.LineBasicNodeMaterial({ color: 0xffb45c }); OUTLINE_MAT.positionNode = _pulledPosition(); } return OUTLINE_MAT; };
+  const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _cam = new THREE.Vector3(), _nm = new THREE.Matrix3(), _ptr = new THREE.Vector2();
+  const canvas = () => $q('canvas');
+  const save = () => { try { localStorage.setItem('stepopt-elements', JSON.stringify({ mode, tool, loops, brushR, space })); } catch (_) {} };
+
+  // ── a geometry as points, edges and polygons ──
+  // What a polygon is: the polygons Untriangulate left when the part has been through it; triangles after Triangulate; otherwise
+  // the four-sided pairs of triangles meshedit.js finds (a cell of a grid, a strip of a tube wall), and a triangle of its own where
+  // there is no such pair. A whole flat plate is never one polygon: a click on it would take the lot.
+  const keyFor = (g) => _triOnly.has(g) ? 'tri' : _polyIds.has(g) ? 'ids' : 'quads';
+  function read(p, build = true) {
+    const geom = p && p.mesh && p.mesh.geometry, pos = geom && geom.attributes && geom.attributes.position;
+    if (!pos) return null;
+    const key = keyFor(geom);
+    let R = reads.get(geom);
+    if (R && R.key === key) return R;
+    if (!build) return null;
+    const P = _wireXYZ(pos, false), index = geom.index ? geom.index.array : null;
+    const topo = R ? R.topo : MEDIT.buildTopology(P, index);
+    let polyOf = null, count = 0;
+    if (key === 'ids') { try { const a = analysePolygons(P, index, _wireAngle(), _polyIds.get(geom)); if (a) { polyOf = a.poly; count = a.polys; } } catch (_) {} }
+    else if (key === 'quads') { const q = MEDIT.pairQuads(topo); polyOf = q.polyOf; count = q.count; }
+    const pg = MEDIT.buildPolygons(topo, polyOf, count);
+    R = { key, topo, pg, lines: MEDIT.outlineLines(topo, pg) };      // (the lines: the outlines of those polygons, as pairs of the mesh's own vertices)
+    reads.set(geom, R);
+    return R;
+  }
+  // The points that are corners of the polygons (on an outline), as flags and as a set. A point inside a polygon (what is left of the
+  // triangles' corners after Untriangulate) is not shown, picked or counted in Points mode.
+  function cornerFlags(R) { return R.corner || (R.corner = MEDIT.outlinePoints(R.topo, R.pg)); }
+  function cornerSet(R) {
+    if (R.cornerSet) return R.cornerSet;
+    const on = cornerFlags(R), s = new Set();
+    for (let v = 0; v < on.length; v++) if (on[v]) s.add(v);
+    return (R.cornerSet = s);
+  }
+  const triCountOf = (p) => { const g = p.mesh.geometry; return ((g.index ? g.index.count : g.attributes.position.count) / 3) | 0; };
+  function entry(p, make) {
+    let e = sel.get(p.partId);
+    if (e && (e.geom !== p.mesh.geometry || reads.get(e.geom) !== e.R)) { drop(p.partId); e = null; }      // (another shape, or other polygons: the numbers mean nothing)
+    if (!e && make) {
+      const R = read(p);
+      if (!R) return null;
+      e = { geom: p.mesh.geometry, R, points: new Set(), edges: new Set(), faces: new Set(), fill: null, outline: null, dirty: false };
+      sel.set(p.partId, e);
+    }
+    return e || null;
+  }
+  function unshow(e) {
+    let had = false;
+    for (const k of ['fill', 'outline']) if (e[k]) { try { group && group.remove(e[k]); e[k].geometry.dispose(); } catch (_) {} e[k] = null; had = true; }
+    return had;
+  }
+  function drop(partId) {
+    const e = sel.get(partId);
+    if (!e) return;
+    if (unshow(e)) requestRender();                    // (the view is drawn again, or the polygons would stay on screen)
+    sel.delete(partId);
+  }
+  function clearAll() { for (const id of [...sel.keys()]) drop(id); }
+  // (entries whose part is gone or reshaped are let go; the rest are returned with their part)
+  function live() {
+    const out = [];
+    for (const [id, e] of [...sel]) {
+      const p = getPart(id);
+      if (!p || p.deleted || !p.mesh || p.mesh.geometry !== e.geom || reads.get(e.geom) !== e.R || !state.selected.has(id)) { drop(id); continue; }
+      out.push([p, e]);
+    }
+    return out;
+  }
+  const total = (m = mode) => { let n = 0; for (const [, e] of live()) n += e[m].size; return n; };
+  const trisOfPolys = (pg, polys) => { const out = []; for (const p of polys) for (let i = pg.pStart[p]; i < pg.pStart[p + 1]; i++) out.push(pg.pTris[i]); return out; };
+
+  // ── the history of what is picked ──
+  const snap = () => live().filter(([, e]) => e.points.size || e.edges.size || e.faces.size).map(([p, e]) => ({ id: p.partId, geom: e.geom, R: e.R, points: [...e.points], edges: [...e.edges], faces: [...e.faces] }));
+  const sig = (s) => s.map(x => x.id + ':' + x.points.length + ',' + x.edges.length + ',' + x.faces.length + ':' + (x.points.reduce((a, b) => a + b, 0) + x.edges.reduce((a, b) => a + b, 0) * 3 + x.faces.reduce((a, b) => a + b, 0) * 7)).join('|');
+  function restore(s) {
+    clearAll();
+    for (const x of s) {
+      const p = getPart(x.id);
+      if (!p || p.deleted || !p.mesh || p.mesh.geometry !== x.geom || reads.get(x.geom) !== x.R) continue;      // (that shape is gone: nothing to pick on it)
+      const e = entry(p, true); if (!e) continue;
+      for (const i of x.points) e.points.add(i); for (const i of x.edges) e.edges.add(i); for (const i of x.faces) e.faces.add(i);
+      e.dirty = true;
+    }
+    changed();
+  }
+  // every change of what is picked goes through here: remembered when it changed something
+  function record(fn) {
+    const before = snap(), r = fn(), after = snap();
+    if (sig(before) !== sig(after)) { picks.push({ before, after, at: state.history.length }); if (picks.length > 200) picks.shift(); unpicks.length = 0; }
+    return r;
+  }
+  function undoPick() {
+    const top = picks[picks.length - 1];
+    if (!top || top.at !== state.history.length) return false;        // (a delete came after it: that goes first, by the app's own undo)
+    picks.pop(); unpicks.push(top); restore(top.before);
+    return true;
+  }
+  function redoPick() {
+    const top = unpicks[unpicks.length - 1];
+    if (!top || top.at !== state.history.length) return false;
+    unpicks.pop(); picks.push(top); restore(top.after);
+    return true;
+  }
+
+  // ── what is under a place on the screen ──
+  let targets = null;
+  function freshTargets() {
+    if (state.partsRoot) { state.partsRoot.updateMatrix(); state.partsRoot.updateMatrixWorld(true); }
+    // Only the parts selected in Model mode are worked on, as in Cinema 4D: nothing else can be picked by accident, and what
+    // stands in front of them does not get in the way. (A selected copy of a shared shape has a shape of its own by then.)
+    targets = []; const seen = new Set();
+    for (const id of state.selected) { const p = getPart(id); if (!p || p.deleted || !p.visible) continue; if (p.mesh && !p.isSpline && !seen.has(p.mesh.id)) { targets.push(p.mesh); seen.add(p.mesh.id); } }
+    if (!ray) { ray = new THREE.Raycaster(); ray.firstHitOnly = true; }
+  }
+  // (one ray; freshTargets() must have been called for this round of rays)
+  function hitXY(x, y, rect) {
+    _ptr.set(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
+    ray.setFromCamera(_ptr, camera);
+    const h = ray.intersectObjects(targets, false)[0];
+    if (!h) return null;
+    if (h.object.isInstancedMesh) {
+      const grp = h.object.userData._group || state.instancedGroups.find(g => g.instanced === h.object);
+      const en = grp && grp.parts[h.instanceId];
+      return { instanced: en && en.partInfo ? en.partInfo : null };
+    }
+    const p = getPart(h.object.userData.partId);
+    if (!p || !p.mesh || h.faceIndex == null) return null;
+    const lp = p.mesh.worldToLocal(h.point.clone());
+    return { p, tri: h.faceIndex, point: [lp.x, lp.y, lp.z], dist: h.distance };
+  }
+  // A point or an edge is only under the pointer when it is near it on the screen. What is found is the corner or side of the
+  // polygon under the pointer that is nearest: zoomed in on a big polygon that can be hundreds of pixels away, and a click in the
+  // middle of the polygon picked (and the pointer lit) a point far off, as if it snapped there. A polygon is under the pointer or not.
+  const NEAR_POINT = 16, NEAR_EDGE = 12;      // pixels
+  function nearEnough(p, R, el, ev) {
+    if (el.mode === 'faces') return true;
+    const rect = canvas().getBoundingClientRect(), M = p.mesh.matrixWorld, P3 = [0, 0, 0];
+    const at = (v) => { MEDIT.pointPosition(R.topo, v, P3); _v.set(P3[0], P3[1], P3[2]).applyMatrix4(M).project(camera); return _v.z > 1 || _v.z < -1 ? null : [rect.left + (_v.x * 0.5 + 0.5) * rect.width, rect.top + (-_v.y * 0.5 + 0.5) * rect.height]; };
+    const x = ev.clientX, y = ev.clientY;
+    if (el.mode === 'points') { const s = at(el.id); return !!s && Math.hypot(s[0] - x, s[1] - y) <= NEAR_POINT; }
+    const a = at(R.topo.edgeV[el.id * 2]), b = at(R.topo.edgeV[el.id * 2 + 1]);
+    if (!a || !b) return true;                         // (an end behind the camera: it cannot be measured on the screen, and the edge is the nearest there is)
+    const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy, u = l2 > 0 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / l2)) : 0;
+    return Math.hypot(a[0] + dx * u - x, a[1] + dy * u - y) <= NEAR_EDGE;
+  }
+  function elementAt(ev, build) {
+    freshTargets();
+    const h = hitXY(ev.clientX, ev.clientY, canvas().getBoundingClientRect());
+    if (!h || !h.p) return h;
+    const R = read(h.p, build || triCountOf(h.p) <= BIG);
+    if (!R) return { ...h, el: null };
+    const el = MEDIT.pickPolygonElement(R.topo, R.pg, h.tri, h.point, mode);
+    return { ...h, R, el: el && nearEnough(h.p, R, el, ev) ? el : null };
+  }
+  // the loop a picked piece belongs to, as numbers of the current mode
+  function loopOf(R, el, point) {
+    const { topo, pg } = R;
+    if (mode === 'faces') {
+      const e = MEDIT.nearestOutlineEdge(topo, pg, el.poly, point);
+      const loop = e >= 0 ? MEDIT.polygonLoop(topo, pg, el.poly, e) : Uint32Array.of(el.poly);
+      if (loop.length > 1) return loop;
+      const face = new Set();                              // not a row of four-sided polygons: the whole face, up to its sharp edges
+      for (const t of MEDIT.faceRegion(topo, el.tri)) face.add(pg.polyOf[t]);
+      return [...face];
+    }
+    if (mode === 'edges') return MEDIT.edgeLoop(topo, el.id, { tri: el.tri, real: pg.real });
+    const e = MEDIT.edgeAtPoint(topo, el.tri, el.id, point, pg.real);
+    return e >= 0 ? MEDIT.pointLoop(topo, e, { tri: el.tri, real: pg.real }) : Uint32Array.of(el.id);
+  }
+  // how a pick changes what is picked: 'set' (alone), 'add' (Shift), 'take' (Ctrl)
+  const howOf = (ev) => (ev.ctrlKey || ev.metaKey) ? 'take' : ev.shiftKey ? 'add' : 'set';
+  function put(e, ids, how, toggle) {
+    const set = e[mode];
+    if (how === 'take' && toggle && ids.length === 1) { if (set.has(ids[0])) set.delete(ids[0]); else set.add(ids[0]); }
+    else if (how === 'take') for (const i of ids) set.delete(i);
+    else for (const i of ids) set.add(i);
+    e.dirty = true;
+  }
+  function promote(h) {      // a copy that shares its shape with others gets a shape of its own first (as it does when it is selected)
+    try { if (h && h.instanced && _promoteInstanceToMesh(h.instanced)) { requestRender(); return true; } } catch (_) {}
+    return false;
+  }
+
+  // ── Click ──
+  let toldAt = 0;
+  function needPart() {      // nothing is selected: say how to get going (not on every click)
+    if (state.selected.size) return false;
+    if (performance.now() - toldAt > 2500) { toldAt = performance.now(); toast('Select a part first', 'Press 4 for Model mode, click the part to work on, then press 1, 2 or 3 again', 'info', 4200); }
+    return true;
+  }
+  function pick(ev, asLoop) {
+    if (needPart()) return;
+    let h = elementAt(ev, true);
+    const how = howOf(ev);
+    if (h && h.instanced) h = promote(h) ? elementAt(ev, true) : null;
+    record(() => {
+      if (!h || !h.p || !h.el) { if (how === 'set') clearAll(); return; }
+      if (how === 'set') for (const id of [...sel.keys()]) if (id !== h.p.partId) drop(id);
+      const e = entry(h.p, true);
+      if (!e) return;
+      if (how === 'set') e[mode].clear();
+      put(e, asLoop ? loopOf(e.R, h.el, h.point) : [h.el.id], how, true);
+    });
+    changed();
+  }
+
+  // ── Rectangle: what is in the box and can be seen ──
+  // Rays through the box find the parts that show in it; of those parts, every piece that lies in the box whole and looks at the
+  // camera is taken, unless something stands in front of it (one ray each, while there are not too many).
+  function boxPick(x0, y0, x1, y1, how) {
+    if (needPart()) return 0;
+    const rect = canvas().getBoundingClientRect();
+    const L = Math.min(x0, x1), Rr = Math.max(x0, x1), T = Math.min(y0, y1), B = Math.max(y0, y1), w = Rr - L, hgt = B - T;
+    freshTargets();
+    const step = Math.max(3, Math.min(24, Math.sqrt((w * hgt) / 5000)));
+    const parts = new Map();
+    for (let y = T + step / 2; y < B; y += step) for (let x = L + step / 2; x < Rr; x += step) {
+      let h = hitXY(x, y, rect);
+      if (h && h.instanced && promote(h)) { freshTargets(); h = hitXY(x, y, rect); }
+      if (h && h.p && !parts.has(h.p.partId)) parts.set(h.p.partId, h.p);
+    }
+    let found = 0;
+    record(() => {
+      if (how === 'set') clearAll();
+      camera.getWorldPosition(_cam);
+      const ortho = !!camera._isOrtho, look = ortho ? camera.getWorldDirection(new THREE.Vector3()).negate() : null;
+      const cand = [];                       // [entry, id, world x, y, z]
+      for (const p of parts.values()) {
+        const e = entry(p, true); if (!e) continue;
+        const { topo, pg } = e.R;
+        p.mesh.updateWorldMatrix(true, false);
+        const M = p.mesh.matrixWorld; _nm.getNormalMatrix(M);
+        const P3 = [0, 0, 0];
+        // every point of the part on the screen, once
+        const inside = new Uint8Array(topo.nVert);
+        for (let v = 0; v < topo.nVert; v++) {
+          MEDIT.pointPosition(topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); _v.copy(_w).project(camera);
+          if (_v.z > 1 || _v.z < -1) continue;
+          const x = rect.left + (_v.x * 0.5 + 0.5) * rect.width, y = rect.top + (-_v.y * 0.5 + 0.5) * rect.height;
+          inside[v] = (x >= L && x <= Rr && y >= T && y <= B) ? 1 : 0;
+        }
+        const faces = (t) => { if (t < 0) return false; _n.set(topo.normal[t * 3], topo.normal[t * 3 + 1], topo.normal[t * 3 + 2]).applyMatrix3(_nm); return ortho ? _n.dot(look) > 0 : (_n.x * (_cam.x - _w.x) + _n.y * (_cam.y - _w.y) + _n.z * (_cam.z - _w.z)) > 0; };
+        const at = (v) => { MEDIT.pointPosition(topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); };
+        if (mode === 'points') {
+          const on = cornerFlags(e.R);
+          for (let v = 0; v < topo.nVert; v++) {
+            if (!inside[v] || !on[v]) continue;
+            at(v);
+            let seen = false;
+            for (let i = topo.vStart[v]; i < topo.vStart[v + 1] && !seen; i++) { const ed = topo.vEdges[i]; seen = faces(topo.edgeT[ed * 2]) || faces(topo.edgeT[ed * 2 + 1]); }
+            if (seen) cand.push([e, v, _w.x, _w.y, _w.z]);
+          }
+        } else if (mode === 'edges') {
+          for (let ed = 0; ed < topo.nEdge; ed++) {
+            if (!pg.real[ed]) continue;
+            const a = topo.edgeV[ed * 2], b = topo.edgeV[ed * 2 + 1];
+            if (!inside[a] || !inside[b]) continue;
+            at(a); const ax = _w.x, ay = _w.y, az = _w.z;
+            if (!(faces(topo.edgeT[ed * 2]) || faces(topo.edgeT[ed * 2 + 1]))) continue;
+            at(b);
+            cand.push([e, ed, (ax + _w.x) / 2, (ay + _w.y) / 2, (az + _w.z) / 2]);
+          }
+        } else {
+          for (let q = 0; q < pg.count; q++) {
+            let ok = pg.pStart[q + 1] > pg.pStart[q];
+            for (let i = pg.pStart[q]; ok && i < pg.pStart[q + 1]; i++) { const t = pg.pTris[i]; ok = !!(inside[topo.tri[t * 3]] && inside[topo.tri[t * 3 + 1]] && inside[topo.tri[t * 3 + 2]]); }
+            if (!ok) continue;
+            const t0 = pg.pTris[pg.pStart[q]];
+            at(topo.tri[t0 * 3]); let cx = _w.x, cy = _w.y, cz = _w.z;
+            if (!faces(t0)) continue;
+            at(topo.tri[t0 * 3 + 1]); cx += _w.x; cy += _w.y; cz += _w.z;
+            at(topo.tri[t0 * 3 + 2]); cx += _w.x; cy += _w.y; cz += _w.z;
+            cand.push([e, q, cx / 3, cy / 3, cz / 3]);
+          }
+        }
+      }
+      // nothing in front of it: the first thing a ray from the camera meets on the way is the piece itself
+      const check = cand.length <= OCCLUDE_MAX;
+      const touched = new Set();
+      for (const [e, id, x, y, z] of cand) {
+        if (check) {
+          _v.set(x, y, z).project(camera); _ptr.set(_v.x, _v.y); ray.setFromCamera(_ptr, camera);
+          const h = ray.intersectObjects(targets, false)[0];
+          if (h) { const d = ray.ray.origin.distanceTo(_w.set(x, y, z)); if (h.distance < d - Math.max(1e-4, d * 2e-3)) continue; }
+        }
+        if (how === 'take') e[mode].delete(id); else e[mode].add(id);
+        touched.add(e); found++;
+      }
+      for (const e of touched) e.dirty = true;
+      for (const [id, e] of [...sel]) if (!e.points.size && !e.edges.size && !e.faces.size) drop(id);
+    });
+    changed();
+    return found;
+  }
+
+  // ── Brush: what the brush passes over ──
+  // Rays through the round of the brush: whatever each meets first is taken, so nothing behind something else is.
+  function brushAt(x, y, how) {
+    const rect = canvas().getBoundingClientRect(), r = brushR, step = Math.max(3, r / 3.5);
+    let any = false;
+    for (let dy = -r; dy <= r; dy += step) for (let dx = -r; dx <= r; dx += step) {
+      if (dx * dx + dy * dy > r * r) continue;
+      let h = hitXY(x + dx, y + dy, rect);
+      if (h && h.instanced && promote(h)) { freshTargets(); h = hitXY(x + dx, y + dy, rect); }
+      if (!h || !h.p) continue;
+      const e = entry(h.p, true); if (!e) continue;
+      const put = (id) => {
+        if (how === 'take') { if (e[mode].delete(id)) { e.dirty = true; any = true; } }
+        else if (!e[mode].has(id)) { e[mode].add(id); e.dirty = true; any = true; }
+      };
+      if (mode === 'faces') {
+        const el = MEDIT.pickPolygonElement(e.R.topo, e.R.pg, h.tri, h.point, mode); if (el) put(el.id);
+        continue;
+      }
+      // Points and edges: those of the polygon under the ray that really lie inside the round of the brush. (The point or edge of that
+      // polygon nearest the ray can be far from the brush: zoomed in, a polygon is big on the screen and its corners are outside it.)
+      const { topo, pg } = e.R, poly = pg.polyOf[h.tri];
+      if (poly === undefined || poly < 0) continue;
+      h.p.mesh.updateWorldMatrix(true, false);
+      const M = h.p.mesh.matrixWorld, P3 = [0, 0, 0], scr = new Map();
+      const at = (v) => {                                    // the point v on the screen (client pixels), cached
+        let s = scr.get(v); if (s) return s;
+        MEDIT.pointPosition(topo, v, P3); _v.set(P3[0], P3[1], P3[2]).applyMatrix4(M).project(camera);
+        s = _v.z > 1 || _v.z < -1 ? null : [rect.left + (_v.x * 0.5 + 0.5) * rect.width, rect.top + (-_v.y * 0.5 + 0.5) * rect.height];
+        scr.set(v, s || false); return s;
+      };
+      const inside = (s) => !!s && Math.hypot(s[0] - x, s[1] - y) <= r;
+      if (mode === 'points') {
+        for (let i = pg.pStart[poly]; i < pg.pStart[poly + 1]; i++) { const t = pg.pTris[i]; for (let k = 0; k < 3; k++) { const v = topo.tri[t * 3 + k]; if (inside(at(v))) put(v); } }
+      } else {
+        for (let i = pg.oStart[poly]; i < pg.oStart[poly + 1]; i++) {
+          const ed = pg.oEdges[i], a = at(topo.edgeV[ed * 2]), b = at(topo.edgeV[ed * 2 + 1]);
+          if (!a || !b) continue;
+          // the distance from the brush's centre to the segment a-b
+          const dx2 = b[0] - a[0], dy2 = b[1] - a[1], l2 = dx2 * dx2 + dy2 * dy2;
+          const u = l2 > 0 ? Math.max(0, Math.min(1, ((x - a[0]) * dx2 + (y - a[1]) * dy2) / l2)) : 0;
+          if (Math.hypot(a[0] + dx2 * u - x, a[1] + dy2 * u - y) <= r) put(ed);
+        }
+      }
+    }
+    return any;
+  }
+  function brushTo(ev) {      // from where the brush was to where it is, so a fast stroke leaves no gaps
+    const a = stroke.last, n = Math.max(1, Math.ceil(Math.hypot(ev.clientX - a.x, ev.clientY - a.y) / Math.max(4, brushR / 2)));
+    freshTargets();
+    let any = false;
+    for (let i = 1; i <= n; i++) any = brushAt(a.x + (ev.clientX - a.x) * (i / n), a.y + (ev.clientY - a.y) * (i / n), stroke.how) || any;
+    stroke.last = { x: ev.clientX, y: ev.clientY };
+    if (any) changed(); else schedule();
+  }
+  function endStroke() {      // a whole stroke is one step of the history
+    const s = stroke; stroke = null;
+    if (!s) return;
+    const after = snap();
+    if (sig(s.before) !== sig(after)) { picks.push({ before: s.before, after, at: state.history.length }); if (picks.length > 200) picks.shift(); unpicks.length = 0; }
+    changed();
+  }
+
+  function selectAll() {
+    record(() => {
+      const any = [];                                     // every selected part, whether something of it is picked yet or not
+      for (const id of state.selected) { const p = getPart(id); if (p && p.mesh && !p.deleted && !p.isSpline) { const e = entry(p, true); if (e) any.push([p, e]); } }
+      for (const [, e] of any) {
+        const { topo, pg } = e.R, set = e[mode];
+        if (mode === 'points') { const on = cornerFlags(e.R); for (let i = 0; i < topo.nVert; i++) if (on[i]) set.add(i); }
+        else if (mode === 'edges') { for (let i = 0; i < topo.nEdge; i++) if (pg.real[i]) set.add(i); }
+        else for (let i = 0; i < pg.count; i++) if (pg.pStart[i + 1] > pg.pStart[i]) set.add(i);
+        e.dirty = true;
+      }
+      if (!any.length) needPart();
+    });
+    changed();
+  }
+  function clearPicked() { record(clearAll); changed(); }
+
+  // ── delete ──
+  function del() {
+    const items = [];
+    let n = 0;
+    for (const [p, e] of live()) {
+      if (!e[mode].size) continue;
+      const m = MEDIT.removalMask(e.R.topo, mode === 'faces' ? { faces: trisOfPolys(e.R.pg, e.faces) } : { [mode]: e[mode] });
+      if (m.count) { items.push({ partId: p.partId, removed: m.removed }); n += e[mode].size; }
+    }
+    if (!items.length) { toast('Edit mesh', 'Nothing is picked: click a ' + ONE[mode] + ' first', 'info', 2600); return null; }
+    const what = fmtNum(n) + ' ' + (n === 1 ? ONE[mode] : MANY[mode]);
+    const before = snap(), at = state.history.length;
+    let res = null;
+    try { res = window.__moAgent.deleteTriangles(items, 'Delete ' + what); } catch (err) { console.warn('[elements] delete failed:', err); toast('Delete failed', String(err && err.message || err), 'error', 5000); }
+    if (res && res.parts) afterDelete = { snap: before, at };
+    clearAll(); hover = null;
+    changed();
+    if (res) {
+      if (res.tris) toast('Deleted', what + ' · −' + fmtNum(res.tris) + ' triangles from ' + fmtNum(res.parts) + (res.parts === 1 ? ' part' : ' parts'), 'success', 3200);
+      if (res.whole && res.whole.length) toast('Not deleted', 'That is all of ' + res.whole.slice(0, 2).join(', ') + (res.whole.length > 2 ? ' and ' + (res.whole.length - 2) + ' more' : '') + ': delete the part itself instead (Model mode)', 'warn', 5200);
+    }
+    return res;
+  }
+  // ── dissolve ──
+  // The picked points, or the points of the picked edges and polygons that this leaves with nothing to do, are taken out of the mesh
+  // and the surface closes over them (dissolve.js; the app's deleteTriangles puts the new triangles in, in one undo step).
+  //   points    each picked point goes, and the polygons round it become one (the surface closes over where it was: a point that is
+  //             not in the plane of the points round it moves the surface a little, as it does in a modelling program)
+  //   edges     the polygons on both sides of each picked edge become one, and the ends of the edge go when nothing needs them now
+  //   polygons  the picked polygons that touch become one, and every point of them that is only inside the polygon, or on a straight
+  //             run of its outline, goes. Nothing about the shape changes. (This is how the points Untriangulate left are cleared.)
+  const shapeTriangulate = (contour, holes) => THREE.ShapeUtils.triangulateShape(contour.map(p => new THREE.Vector2(p[0], p[1])), holes.map(h => h.map(p => new THREE.Vector2(p[0], p[1]))));
+  function dissolvePicked() {
+    if (!active) return null;
+    const items = [];
+    let n = 0, dissolved = 0, left = 0, joined = 0;
+    for (const [p, e] of live()) {
+      if (!e[mode].size) continue;
+      const geom = p.mesh.geometry, pa = geom.attributes.position, topo = e.R.topo, pg = e.R.pg, nTri = topo.nTri;
+      if (!pa || pa.isInterleavedBufferAttribute || !(pa.array instanceof Float32Array) || pa.itemSize !== 3) continue;      // (a packed mesh: not changed)
+      const index = geom.index ? Uint32Array.from(geom.index.array) : Uint32Array.from({ length: nTri * 3 }, (_, i) => i);
+      if (index.length !== nTri * 3) continue;
+      // the polygons that become one
+      const uf = new Int32Array(pg.count); for (let i = 0; i < pg.count; i++) uf[i] = i;
+      const find = (x) => { while (uf[x] !== x) { uf[x] = uf[uf[x]]; x = uf[x]; } return x; };
+      const join = (a, b) => { a = find(a); b = find(b); if (a !== b) { if (a < b) uf[b] = a; else uf[a] = b; joined++; } };
+      const cand = new Set();
+      if (mode === 'points') { for (const v of e.points) cand.add(v); }
+      else if (mode === 'edges') {
+        for (const ed of e.edges) {
+          const a = topo.edgeT[ed * 2], b = topo.edgeT[ed * 2 + 1];
+          if (a >= 0 && b >= 0 && pg.polyOf[a] !== pg.polyOf[b]) join(pg.polyOf[a], pg.polyOf[b]);
+          cand.add(topo.edgeV[ed * 2]); cand.add(topo.edgeV[ed * 2 + 1]);
+        }
+      } else {
+        const picked = e.faces;
+        for (const q of picked) for (let i = pg.pStart[q]; i < pg.pStart[q + 1]; i++) {
+          const t = pg.pTris[i];
+          for (let k = 0; k < 3; k++) {
+            cand.add(topo.tri[t * 3 + k]);
+            const ed = topo.triE[t * 3 + k], o = topo.edgeT[ed * 2] === t ? topo.edgeT[ed * 2 + 1] : topo.edgeT[ed * 2];
+            if (o >= 0 && picked.has(pg.polyOf[o]) && pg.polyOf[o] !== q) join(q, pg.polyOf[o]);
+          }
+        }
+      }
+      const lab = new Int32Array(nTri); for (let t = 0; t < nTri; t++) lab[t] = find(pg.polyOf[t]);
+      const nrm = geom.attributes.normal;
+      const normals = mode !== 'points' && nrm && !nrm.isInterleavedBufferAttribute && nrm.array instanceof Float32Array && nrm.itemSize === 3 ? nrm.array : null;
+      let res;
+      // (polygons and edges: also what is left inside the picked faces that are only nearly flat, within 5°; a point that is picked goes whatever)
+      try { res = dissolvePoints(pa.array, index, lab, topo.weld, cand, { triangulate: shapeTriangulate, normals, strict: mode !== 'points', allowMerge: mode === 'points', limitDeg: mode === 'points' ? 0 : 5 }); }
+      catch (err) { console.warn('[elements] dissolve failed:', err); continue; }
+      dissolved += res.dissolved; left += res.left; n += e[mode].size;
+      // the polygons are written new when anything changed: a point went, or two polygons became one
+      let polysChanged = res.dissolved > 0;
+      if (!polysChanged) for (let t = 0; t < nTri; t++) if (lab[t] !== pg.polyOf[t]) { polysChanged = true; break; }
+      if (!polysChanged) continue;
+      items.push({ partId: p.partId, removed: res.removed, caps: res.caps, capOwner: res.capOwner, capPoly: res.capPoly, polyBefore: res.polyOld });
+    }
+    if (!items.length) { toast('Dissolve', n || total() ? 'Nothing could be dissolved: ' + (mode === 'points' ? 'a point that sits at a corner, or where the surface cannot close over it, stays' : 'every point of what is picked is a corner of the outline') : 'Nothing is picked: click a ' + ONE[mode] + ' first', 'info', 3600); return null; }
+    const before = snap(), at = state.history.length;
+    const what = fmtNum(n) + ' ' + (n === 1 ? ONE[mode] : MANY[mode]);
+    let res = null;
+    try { res = window.__moAgent.deleteTriangles(items, 'Dissolve ' + what); } catch (err) { console.warn('[elements] dissolve failed:', err); toast('Dissolve failed', String(err && err.message || err), 'error', 5000); return null; }
+    if (res && res.parts) afterDelete = { snap: before, at };
+    clearAll(); hover = null;
+    changed();
+    if (res && res.parts) {
+      const bits = [];
+      if (dissolved) bits.push(fmtNum(dissolved) + (dissolved === 1 ? ' point' : ' points') + ' dissolved');
+      if (joined) bits.push(fmtNum(joined) + (joined === 1 ? ' join' : ' joins') + ' of polygons');
+      if (left) bits.push(fmtNum(left) + ' could not be (they stay)');
+      toast('Dissolved', bits.join(' · ') + ' · ' + fmtNum(res.tris) + ' → ' + fmtNum(res.caps) + ' triangles', 'success', 4200);
+    }
+    return res;
+  }
+  // ── Planarize, Straighten, Weld, Fill, Extract ──
+  // meshtools.js works out what each does; the app puts it in (the gizmo's own move for what only moves points, deleteTriangles for what
+  // changes triangles) with one undo step each.
+  const scaleOf = (p) => { p.mesh.updateWorldMatrix(true, false); const s = new THREE.Vector3().setFromMatrixScale(p.mesh.matrixWorld); return Math.cbrt(Math.abs(s.x * s.y * s.z)) || 1; };
+  // the polygon of each triangle numbered 0, 1, 2, … over what stays (-1 for a removed triangle), so no number is left unused
+  const compactPolys = (polyOf, removed) => {
+    const ids = new Map(), out = new Int32Array(polyOf.length);
+    for (let t = 0; t < polyOf.length; t++) { if (removed && removed[t]) { out[t] = -1; continue; } let m = ids.get(polyOf[t]); if (m === undefined) ids.set(polyOf[t], m = ids.size); out[t] = m; }
+    return out;
+  };
+  // Points to new places: `targetsOf(part, entry)` → Map point → [x, y, z] (in the part's own space). It goes through the gizmo's move
+  // (grabStart … grabEnd), so the shading is made again, the same pieces stay picked, and it is one undo step. Returns whether anything moved.
+  function movePoints(label, targetsOf) {
+    gizmoMake();
+    if (grab) return false;
+    grabStart();
+    if (!grab) return false;
+    let any = false;
+    for (const g of grab.parts) {
+      const T = targetsOf(g.p, g.e); if (!T || !T.size) continue;
+      const weld = g.e.R.topo.weld;
+      for (let k = 0; k < g.raw.length; k++) { const r = g.raw[k], t = T.get(weld[r]); if (!t) continue; g.arr[r * 3] = t[0]; g.arr[r * 3 + 1] = t[1]; g.arr[r * 3 + 2] = t[2]; any = true; }
+      g.attr.needsUpdate = true; g.e.dirty = true;
+    }
+    grab.moved = any; grab.label = label;
+    grabEnd();
+    return any;
+  }
+  function planarizePicked() {
+    if (!active) return null;
+    if (mode !== 'faces') { toast('Planarize', 'Go to Polygons mode (3) and pick the polygons to make flat', 'info', 3200); return null; }
+    const n = total(); if (!n) { toast('Planarize', 'Nothing is picked: click a polygon first', 'info', 2600); return null; }
+    let polys = 0, skipped = 0, far = 0;
+    const done = movePoints('Planarize ' + fmtNum(n) + (n === 1 ? ' polygon' : ' polygons'), (p, e) => {
+      const r = MT.planarize(e.R.topo, e.R.pg, e.faces); polys += r.polygons; skipped += r.skipped; far = Math.max(far, r.maxMove * scaleOf(p)); return r.targets;
+    });
+    if (done) toast('Planarized', fmtNum(polys) + (polys === 1 ? ' polygon is' : ' polygons are') + ' flat now · the furthest point moved ' + (far < 0.01 ? far.toExponential(1) : far.toFixed(3)) + ' mm' + (skipped ? ' · ' + fmtNum(skipped) + ' would have to bend too far and ' + (skipped === 1 ? 'was' : 'were') + ' left' : ''), 'success', 4200);
+    else toast('Planarize', skipped ? fmtNum(skipped) + (skipped === 1 ? ' polygon is' : ' polygons are') + ' curved, not noisy: they would have to bend too far, so they are left as they are' : 'The picked polygons are flat already', 'info', 4200);
+    return done;
+  }
+  function straightenPicked() {
+    if (!active) return null;
+    if (mode !== 'edges') { toast('Straighten', 'Go to Edges mode (2) and pick the edges of a line (a double-click picks a loop)', 'info', 3400); return null; }
+    const n = total(); if (!n) { toast('Straighten', 'Nothing is picked: click an edge first', 'info', 2600); return null; }
+    let paths = 0, skipped = 0, far = 0;
+    const done = movePoints('Straighten ' + fmtNum(n) + (n === 1 ? ' edge' : ' edges'), (p, e) => {
+      const r = MT.straighten(e.R.topo, e.edges); paths += r.paths; skipped += r.skipped; far = Math.max(far, r.maxMove * scaleOf(p)); return r.targets;
+    });
+    if (done) toast('Straightened', fmtNum(paths) + (paths === 1 ? ' line' : ' lines') + ' · the furthest point moved ' + (far < 0.01 ? far.toExponential(1) : far.toFixed(3)) + ' mm' + (skipped ? ' · ' + fmtNum(skipped) + ' picked as a loop or a branch and left' : ''), 'success', 4200);
+    else toast('Straighten', skipped ? 'A loop or a branch has no two ends to run between: pick one open line of edges' : 'The picked edges are straight already', 'info', 4200);
+    return done;
+  }
+  function weldPicked() {
+    if (!active) return null;
+    if (mode !== 'points' && mode !== 'edges') { toast('Weld', 'Go to Points mode (1) to weld points, or Edges mode (2) to collapse edges into points', 'info', 3600); return null; }
+    if (!total()) { toast('Weld', 'Nothing is picked: click a ' + ONE[mode] + ' first', 'info', 2600); return null; }
+    const mm = parseFloat(String($q('el-weld') ? $q('el-weld').value : '0').replace(',', '.')) || 0;
+    const items = []; let merged = 0, n = 0;
+    for (const [p, e] of live()) {
+      if (!e[mode].size) continue;
+      const topo = e.R.topo;
+      const clusters = mode === 'points' ? MT.weldPoints(topo, e.points, mm > 0 ? mm / scaleOf(p) : 0) : MT.collapseEdges(topo, e.edges);
+      if (!clusters.length) continue;
+      const w = MT.applyWeld(topo, clusters);
+      items.push({ partId: p.partId, removed: w.removed, positions: w.positions, fixNormalsAt: w.moved, polyBefore: compactPolys(e.R.pg.polyOf, w.removed) });
+      merged += w.merged; n += e[mode].size;
+    }
+    if (!items.length) { toast('Weld', mode === 'points' ? 'Pick at least two points (or raise the distance)' : 'Pick the edges to collapse', 'info', 3200); return null; }
+    const before = snap(), at = state.history.length;
+    let res = null;
+    try { res = window.__moAgent.deleteTriangles(items, (mode === 'points' ? 'Weld ' : 'Collapse ') + fmtNum(n) + ' ' + (n === 1 ? ONE[mode] : MANY[mode])); }
+    catch (err) { console.warn('[elements] weld failed:', err); toast('Weld failed', String(err && err.message || err), 'error', 5000); return null; }
+    if (res && res.parts) afterDelete = { snap: before, at };
+    clearAll(); hover = null; changed();
+    if (res && res.parts) toast(mode === 'points' ? 'Welded' : 'Collapsed', fmtNum(merged) + (merged === 1 ? ' point' : ' points') + ' joined another · −' + fmtNum(res.tris) + ' triangles', 'success', 3600);
+    else if (res && res.whole && res.whole.length) toast('Not welded', 'That would take the whole part away', 'warn', 3600);
+    return res;
+  }
+  function fillPicked() {
+    if (!active) return null;
+    if (mode !== 'edges') { toast('Fill', 'Go to Edges mode (2) and pick the rim of a hole: a double-click on an open edge picks the whole loop', 'info', 4200); return null; }
+    if (!total()) { toast('Fill', 'Nothing is picked: click an edge of the rim first', 'info', 2600); return null; }
+    const items = []; let loops = 0, skipped = 0, caps = 0;
+    for (const [p, e] of live()) {
+      if (!e.edges.size) continue;
+      const topo = e.R.topo, pg = e.R.pg, vCount = p.mesh.geometry.attributes.position.count;
+      const r = MT.fillLoops(topo, e.edges, shapeTriangulate);
+      skipped += r.skipped || 0;
+      if (!r.loops.length) continue;
+      const newVerts = [], cap = [], owner = [], poly = [];
+      r.loops.forEach((L, li) => {
+        const first = newVerts.length;
+        L.points.forEach((w, i) => newVerts.push({ from: L.raw[i], normal: L.normal }));
+        for (const [a, b, c] of L.tris) { cap.push(vCount + first + a, vCount + first + b, vCount + first + c); owner.push(L.owner); poly.push(pg.count + li); }
+      });
+      loops += r.loops.length; caps += cap.length / 3;
+      items.push({ partId: p.partId, removed: new Uint8Array(topo.nTri), caps: Uint32Array.from(cap), capOwner: Int32Array.from(owner), capPoly: Int32Array.from(poly), newVerts, polyBefore: Int32Array.from(pg.polyOf) });
+    }
+    if (!items.length) { toast('Fill', 'The picked edges are not a closed rim of open edges: pick every edge round the hole (a double-click picks the loop)', 'info', 4800); return null; }
+    const before = snap(), at = state.history.length;
+    let res = null;
+    try { res = window.__moAgent.deleteTriangles(items, 'Fill ' + fmtNum(loops) + (loops === 1 ? ' hole' : ' holes')); }
+    catch (err) { console.warn('[elements] fill failed:', err); toast('Fill failed', String(err && err.message || err), 'error', 5000); return null; }
+    if (res && res.parts) afterDelete = { snap: before, at };
+    clearAll(); hover = null; changed();
+    if (res && res.parts) toast('Filled', fmtNum(loops) + (loops === 1 ? ' hole' : ' holes') + ' closed · +' + fmtNum(caps) + ' triangles' + (skipped ? ' · ' + fmtNum(skipped) + ' picked edges were not part of a closed rim' : ''), 'success', 3800);
+    return res;
+  }
+  function extractPicked() {
+    if (!active) return null;
+    if (mode !== 'faces') { toast('Extract', 'Go to Polygons mode (3) and pick the polygons to take out into a part of their own', 'info', 3600); return null; }
+    if (!total()) { toast('Extract', 'Nothing is picked: click a polygon first', 'info', 2600); return null; }
+    const items = [], keepSel = [...state.selected]; let n = 0;
+    for (const [p, e] of live()) {
+      if (!e.faces.size) continue;
+      const pick = new Uint8Array(e.R.topo.nTri);
+      for (const t of trisOfPolys(e.R.pg, e.faces)) pick[t] = 1;
+      items.push({ partId: p.partId, pick, polyOf: Int32Array.from(e.R.pg.polyOf) }); n += e.faces.size;
+    }
+    const before = snap(), at = state.history.length, what = fmtNum(n) + (n === 1 ? ' polygon' : ' polygons');
+    let res = null;
+    try { res = window.__moAgent.extractTriangles(items, 'Extract ' + what); }
+    catch (err) { console.warn('[elements] extract failed:', err); toast('Extract failed', String(err && err.message || err), 'error', 5000); return null; }
+    if (res && res.parts) {
+      // the old parts stay the ones that are worked on (the app selected the new part)
+      state.selected.clear(); for (const id of keepSel) state.selected.add(id);
+      try { applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo(); } catch (_) {}
+      afterDelete = { snap: before, at };
+    }
+    clearAll(); hover = null; changed();
+    if (res && res.parts) toast('Extracted', what + ' are a part of their own now (' + res.ids.map(id => { const q = getPart(id); return q ? q.name : id; }).slice(0, 2).join(', ') + ')', 'success', 4200);
+    else if (res && res.whole && res.whole.length) toast('Not extracted', 'That is all of ' + res.whole.slice(0, 2).join(', ') + ': it is the part itself', 'warn', 4200);
+    return res;
+  }
+  // ── reverse normals ──
+  // The picked polygons are turned round (their front becomes their back). The app's flipTriangles does it in one undo step and
+  // gives the turned triangles vertices of their own, so their neighbours keep their shading; the triangles keep their numbers,
+  // so the same polygons are picked again on the new shape.
+  function flipPicked() {
+    if (!active || mode !== 'faces') { toast('Reverse normals', 'Go to Polygons mode (3) and pick the polygons to turn round', 'info', 3200); return null; }
+    const items = [], keep = [];
+    let n = 0;
+    for (const [p, e] of live()) {
+      if (!e.faces.size) continue;
+      const tris = trisOfPolys(e.R.pg, e.faces), flip = new Uint8Array(e.R.topo.nTri);
+      for (const t of tris) flip[t] = 1;
+      items.push({ partId: p.partId, flip }); keep.push([p, tris]); n += e.faces.size;
+    }
+    if (!items.length) { toast('Reverse normals', 'Nothing is picked: click a polygon first', 'info', 2600); return null; }
+    const before = snap(), at = state.history.length;
+    let res = null;
+    try { res = window.__moAgent.flipTriangles(items, 'Reverse normals of ' + fmtNum(n) + (n === 1 ? ' polygon' : ' polygons')); } catch (err) { console.warn('[elements] flip failed:', err); toast('Reverse normals failed', String(err && err.message || err), 'error', 5000); return null; }
+    clearAll();
+    for (const [p, tris] of keep) { const e = entry(p, true); if (!e) continue; for (const t of tris) if (t < e.R.topo.nTri) e.faces.add(e.R.pg.polyOf[t]); e.dirty = true; }
+    afterDelete = { snap: before, at };
+    changed();
+    return res;
+  }
+  // the app's own undo has run: if it took the last delete back, the pieces that were picked for it are picked again
+  function afterAppUndo() {
+    if (!active || !afterDelete || state.history.length !== afterDelete.at) return;
+    const s = afterDelete.snap; afterDelete = null;
+    live();                                              // (what was picked on the shape that is gone is let go first)
+    if (!sel.size) restore(s);
+  }
+
+  // ── the gizmo: move, turn and scale the picked pieces ──
+  // It sits in the middle of what is picked and is the app's own kind (E moves, R turns, T scales, Q puts it away). A drag changes
+  // the positions of the points the picked pieces stand on, in a copy of the part's geometry, so everything that uses those points
+  // follows; letting go makes it one undo step. The pieces stay picked: their numbers are found again on the new shape.
+  const _pt = new THREE.Vector3(), _m4 = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _start = new THREE.Matrix4(), _delta = new THREE.Matrix4();
+  // the average normal of what is picked (in the scene), for the gizmo's Normal axes
+  const _nSum = new THREE.Vector3(), _qFrame = new THREE.Quaternion(), _ref = new THREE.Vector3(), _fx = new THREE.Vector3(), _fy = new THREE.Vector3();
+  function addNormals(p, e) {
+    const { topo, pg } = e.R, nm = topo.normal;
+    _nm.getNormalMatrix(p.mesh.matrixWorld);
+    const add = (t) => { if (t < 0) return; _n.set(nm[t * 3], nm[t * 3 + 1], nm[t * 3 + 2]); if (_n.lengthSq() > 0) { _n.applyMatrix3(_nm).normalize(); _nSum.add(_n); } };
+    if (mode === 'faces') { for (const t of trisOfPolys(pg, e.faces)) add(t); }
+    else if (mode === 'edges') { for (const ed of e.edges) { add(topo.edgeT[ed * 2]); add(topo.edgeT[ed * 2 + 1]); } }
+    else { for (const v of e.points) for (let k = topo.vStart[v]; k < topo.vStart[v + 1]; k++) { const ed = topo.vEdges[k]; add(topo.edgeT[ed * 2]); add(topo.edgeT[ed * 2 + 1]); } }
+  }
+  // the points (welded) the picked pieces of one part stand on
+  function pointsOf(e) {
+    const { topo, pg } = e.R, set = new Set();
+    if (mode === 'points') for (const v of e.points) set.add(v);
+    else if (mode === 'edges') for (const ed of e.edges) { set.add(topo.edgeV[ed * 2]); set.add(topo.edgeV[ed * 2 + 1]); }
+    else for (const t of trisOfPolys(pg, e.faces)) { set.add(topo.tri[t * 3]); set.add(topo.tri[t * 3 + 1]); set.add(topo.tri[t * 3 + 2]); }
+    return set;
+  }
+  function gizmoMake() {
+    if (tc) return;
+    tc = new TransformControls(camera, renderer.domElement);
+    tc.size = 0.6; tc.space = 'world';
+    pivot = new THREE.Object3D();
+    tcHelper = (typeof tc.getHelper === 'function') ? tc.getHelper() : tc;
+    try { if (state._styleGizmo) state._styleGizmo(tcHelper); } catch (_) {}      // (the object gizmo's look: slim arrows, soft colours, no guide lines)
+    tc.addEventListener('dragging-changed', (ev) => { controls.enabled = !ev.value; if (ev.value) grabStart(); else grabEnd(); requestRender(); });
+    tc.addEventListener('change', () => { if (grab) grabMove(); requestRender(); });
+  }
+  function gizmoSync() {
+    if (grab) return;
+    const gm = state.gizmoMode || 'translate';
+    let n = 0; _pt.set(0, 0, 0);
+    _nSum.set(0, 0, 0); let haveLocal = false;
+    if (active && gm !== 'off' && !stroke) {          // (while the brush is painting the gizmo is put away; it is back when the stroke ends)
+      const P3 = [0, 0, 0];
+      for (const [p, e] of live()) {
+        if (!e[mode].size) continue;
+        p.mesh.updateWorldMatrix(true, false);
+        for (const v of pointsOf(e)) { MEDIT.pointPosition(e.R.topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(p.mesh.matrixWorld); _pt.add(_w); n++; }
+        if (space === 'local' && !haveLocal) { haveLocal = true; _m4.extractRotation(p.mesh.matrixWorld); _qFrame.setFromRotationMatrix(_m4); }      // (the first part's own turn)
+        if (space === 'normal') addNormals(p, e);
+      }
+    }
+    if (!n) { if (tc && tc.object) { tc.detach(); requestRender(); } if (tcHelper && tcHelper.parent) tcHelper.parent.remove(tcHelper); if (pivot && pivot.parent) pivot.parent.remove(pivot); return; }
+    gizmoMake();
+    if (pivot.parent !== scene) scene.add(pivot);
+    if (tcHelper.parent !== scene) scene.add(tcHelper);
+    pivot.position.copy(_pt.multiplyScalar(1 / n)); pivot.quaternion.identity(); pivot.scale.set(1, 1, 1);
+    // which way the axes point: the scene's (the pivot stays square), the part's own, or Z along what is picked
+    let turned = false;
+    if (space === 'local' && haveLocal) { pivot.quaternion.copy(_qFrame); turned = true; }
+    else if (space === 'normal' && _nSum.lengthSq() > 1e-12) {
+      _nSum.normalize();
+      _ref.set(0, 0, 1); if (Math.abs(_nSum.z) > 0.99) _ref.set(0, 1, 0);
+      _fx.crossVectors(_ref, _nSum).normalize(); _fy.crossVectors(_nSum, _fx);       // (X runs along the face, level with the floor when it can; Y completes the turn)
+      _m4.makeBasis(_fx, _fy, _nSum); pivot.quaternion.setFromRotationMatrix(_m4); turned = true;
+    }
+    tc.space = turned ? 'local' : 'world';
+    pivot.updateMatrixWorld(true);
+    try { tc.setMode(gm === 'rotate' || gm === 'scale' ? gm : 'translate'); } catch (_) {}
+    snapSync();
+    if (tc.object !== pivot) tc.attach(pivot);
+    requestRender();
+  }
+  // Shift held: the steps the app's gizmo uses (it sets them on its own gizmo when Shift goes down; this one copies them)
+  function snapSync() {
+    if (!tc) return;
+    try { const g = state.gizmo; tc.translationSnap = g ? g.translationSnap : null; tc.rotationSnap = g ? g.rotationSnap : null; tc.scaleSnap = g ? g.scaleSnap : null; } catch (_) {}
+  }
+  function grabStart() {
+    snapSync();
+    const before = snap(), at = state.history.length, parts = [];
+    for (const [p, e] of live()) {
+      if (!e[mode].size) continue;
+      const pos0 = p.mesh.geometry.attributes.position;
+      if (!pos0 || pos0.isInterleavedBufferAttribute || !(pos0.array instanceof Float32Array) || pos0.itemSize !== 3) continue;      // (a packed mesh: not moved)
+      const welded = pointsOf(e), topo = e.R.topo;
+      // The polygons as they are now stay this part's polygons. Guessed again on the moved shape, the quads next to a face that was pulled
+      // out are bent past what a quad may be, and they fall apart into triangles. (A file's own polygons are kept already.)
+      const ed = window.__moAgent.beginGeomEdit(p.partId);
+      if (!ed) continue;
+      { const g1 = ed.geom, po = e.R.pg && e.R.pg.polyOf; if (!_polyIds.has(g1) && !_triOnly.has(g1) && po && po.length === triCountOf(p)) _polyIds.set(g1, Int32Array.from(po)); }
+      const attr = ed.geom.attributes.position, arr = attr.array;
+      const raw = []; for (let i = 0; i < topo.nRaw; i++) if (welded.has(topo.weld[i])) raw.push(i);
+      const orig = new Float32Array(raw.length * 3); for (let k = 0; k < raw.length; k++) { orig[k * 3] = arr[raw[k] * 3]; orig[k * 3 + 1] = arr[raw[k] * 3 + 1]; orig[k * 3 + 2] = arr[raw[k] * 3 + 2]; }
+      // the same points, edges and polygons, read on the copy (its positions are the ones that move)
+      const R2 = { key: keyFor(ed.geom), topo: Object.assign({}, topo, { positions: arr }), pg: e.R.pg, lines: e.R.lines };
+      reads.set(ed.geom, R2);
+      const oldR = e.R; e.geom = ed.geom; e.R = R2; e.dirty = true;
+      p.mesh.updateWorldMatrix(true, false);
+      parts.push({ p, e, ed, attr, arr, raw, orig, oldR, M: p.mesh.matrixWorld.clone(), Mi: p.mesh.matrixWorld.clone().invert() });
+    }
+    if (!parts.length) return;
+    pivot.updateMatrixWorld(true);
+    _start.copy(pivot.matrixWorld).invert();
+    grab = { parts, before, at, moved: false, p0: pivot.position.clone(), q0: pivot.quaternion.clone(), s0: pivot.scale.clone() };
+    try { _wireSoon(); } catch (_) {}
+  }
+  function grabMove() {
+    snapSync();
+    if (state.gizmoMode === 'scale' && (tc.axis === 'XY' || tc.axis === 'YZ' || tc.axis === 'XZ')) {      // a plane handle scales its two axes alike, as on an object
+      const s = pivot.scale, dom = (a, b) => (Math.abs(a - 1) >= Math.abs(b - 1) ? a : b);
+      if (tc.axis === 'XY') { const m = dom(s.x, s.y); s.x = m; s.y = m; } else if (tc.axis === 'YZ') { const m = dom(s.y, s.z); s.y = m; s.z = m; } else { const m = dom(s.x, s.z); s.x = m; s.z = m; }
+    }
+    pivot.updateMatrixWorld(true);
+    // (the gizmo says "change" as soon as a handle is pressed: nothing has moved until the pivot has, and a press that never moves is
+    // let go in grabEnd without a step in the history)
+    if (!grab.moved && pivot.position.equals(grab.p0) && pivot.quaternion.equals(grab.q0) && pivot.scale.equals(grab.s0)) return;
+    _delta.multiplyMatrices(pivot.matrixWorld, _start);
+    for (const g of grab.parts) {
+      _m4.multiplyMatrices(g.Mi, _delta).multiply(g.M);                 // the part's own space → world → moved → back
+      const { arr, raw, orig } = g;
+      for (let k = 0; k < raw.length; k++) { _w.set(orig[k * 3], orig[k * 3 + 1], orig[k * 3 + 2]).applyMatrix4(_m4); const o = raw[k] * 3; arr[o] = _w.x; arr[o + 1] = _w.y; arr[o + 2] = _w.z; }
+      g.attr.needsUpdate = true; g.e.dirty = true;
+    }
+    grab.moved = true;
+    const now = performance.now();
+    if (now - (grab.linesAt || 0) > 120) { grab.linesAt = now; for (const g of grab.parts) { try { _wireDrop(g.ed.geom); } catch (_) {} } }
+    // drawn now, in the same step that moved the points: a paint left for the next frame puts the picked faces and the blue lines one
+    // frame behind the mesh, and they trail it when it is pulled out of the model
+    try { pending = false; paint(); } catch (err) { console.warn('[elements] paint:', err); schedule(); }
+  }
+  // The shading of what moved. Every triangle that touches a moved point gets its normal again, and each corner of those triangles is
+  // shaded as a modelling program does: from the triangles that meet at the same place (a mesh of an OBJ or FBX file has a corner of
+  // its own for every triangle, so sharing a vertex number says nothing) that belong to the same polygon or turn away from it by no
+  // more than EDIT_SHADE_DEG. A quad bent along its diagonal is one smooth polygon, a face pulled out of a flat plate is shaded smooth
+  // up to the angle where the edge should look sharp, and a cube's 90° edge stays sharp.
+  const EDIT_SHADE_DEG = 60;
+  function renormal(g) {
+    const geom = g.ed.geom, na = geom.attributes.normal;
+    if (!na || na.isInterleavedBufferAttribute || !(na.array instanceof Float32Array)) return;
+    const ix = geom.index ? geom.index.array : null, P = g.arr, N = na.array, nRaw = P.length / 3, nTri = ((ix ? ix.length : nRaw) / 3) | 0;
+    const topo = g.e.R.topo, pg = g.e.R.pg;
+    if (!topo || topo.nTri !== nTri) return;
+    const polyOf = pg && pg.polyOf && pg.polyOf.length === nTri ? pg.polyOf : null;
+    const corner = (t, k) => ix ? ix[t * 3 + k] : t * 3 + k;
+    // the normal of every triangle now (unit, and the length it had: the area, twice)
+    const fn = new Float32Array(nTri * 3), fa = new Float32Array(nTri);
+    for (let t = 0; t < nTri; t++) {
+      const a = corner(t, 0), b = corner(t, 1), c = corner(t, 2);
+      const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2], vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
+      fa[t] = l;
+      if (l > 0) { fn[t * 3] = nx / l; fn[t * 3 + 1] = ny / l; fn[t * 3 + 2] = nz / l; }
+    }
+    // the normal of each polygon (its triangles' normals added by area): what a corner is compared with, so that the two triangles of a
+    // quad, which meet at the same corners, are shaded from the very same neighbours and agree
+    let pn = null;
+    if (polyOf) {
+      pn = new Float32Array(pg.count * 3);
+      for (let t = 0; t < nTri; t++) { const q = polyOf[t] * 3; pn[q] += fn[t * 3] * fa[t]; pn[q + 1] += fn[t * 3 + 1] * fa[t]; pn[q + 2] += fn[t * 3 + 2] * fa[t]; }
+      for (let q = 0; q < pg.count; q++) { const l = Math.hypot(pn[q * 3], pn[q * 3 + 1], pn[q * 3 + 2]) || 1; pn[q * 3] /= l; pn[q * 3 + 1] /= l; pn[q * 3 + 2] /= l; }
+    }
+    const moved = new Uint8Array(nRaw); for (const r of g.raw) moved[r] = 1;
+    // the triangles at each place (CSR over the welded points)
+    const nV = topo.nVert, start = new Uint32Array(nV + 1);
+    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) start[topo.tri[t * 3 + k] + 1]++;
+    for (let v = 0; v < nV; v++) start[v + 1] += start[v];
+    const fill = start.slice(0, nV), around = new Uint32Array(nTri * 3);
+    for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) around[fill[topo.tri[t * 3 + k]]++] = t;
+    const cosA = Math.cos(EDIT_SHADE_DEG * Math.PI / 180);
+    // a polygon with a moved corner is shaded whole (the half of a quad that does not hold the moved corner is not left as it was)
+    const polyHit = polyOf ? new Uint8Array(pg.count) : null;
+    if (polyHit) for (let t = 0; t < nTri; t++) if (moved[corner(t, 0)] || moved[corner(t, 1)] || moved[corner(t, 2)]) polyHit[polyOf[t]] = 1;
+    const done = new Uint8Array(nRaw);
+    for (let t = 0; t < nTri; t++) {
+      if (!(moved[corner(t, 0)] || moved[corner(t, 1)] || moved[corner(t, 2)] || (polyHit && polyHit[polyOf[t]]))) continue;
+      for (let k = 0; k < 3; k++) {
+        const v = corner(t, k);
+        if (done[v]) continue;
+        done[v] = 1;
+        const w = topo.tri[t * 3 + k];
+        const rx = pn ? pn[polyOf[t] * 3] : fn[t * 3], ry = pn ? pn[polyOf[t] * 3 + 1] : fn[t * 3 + 1], rz = pn ? pn[polyOf[t] * 3 + 2] : fn[t * 3 + 2];
+        let sx = 0, sy = 0, sz = 0;
+        for (let i = start[w]; i < start[w + 1]; i++) {
+          const u = around[i];
+          const uses = corner(u, 0) === v || corner(u, 1) === v || corner(u, 2) === v;        // (a vertex that triangles share is shaded from all of them, as it was)
+          if (!(uses || (polyOf && polyOf[u] === polyOf[t]) || fn[u * 3] * rx + fn[u * 3 + 1] * ry + fn[u * 3 + 2] * rz >= cosA)) continue;
+          sx += fn[u * 3] * fa[u]; sy += fn[u * 3 + 1] * fa[u]; sz += fn[u * 3 + 2] * fa[u];
+        }
+        const l = Math.hypot(sx, sy, sz);
+        if (l > 0) { N[v * 3] = sx / l; N[v * 3 + 1] = sy / l; N[v * 3 + 2] = sz / l; }
+      }
+    }
+    na.needsUpdate = true;
+  }
+  function grabEnd() {
+    const g0 = grab; grab = null;
+    if (!g0) return;
+    if (!g0.moved) { window.__moAgent.cancelGeomEdit(g0.parts.map(g => g.ed)); for (const g of g0.parts) { g.e.geom = g.ed.before.geom; g.e.R = g.oldR; g.e.dirty = true; } changed(); return; }
+    let n = 0;
+    for (const g of g0.parts) { renormal(g); n += g.e[mode].size; }
+    const verb = (state.gizmoMode === 'rotate') ? 'Turn ' : (state.gizmoMode === 'scale') ? 'Scale ' : 'Move ';
+    window.__moAgent.commitGeomEdit(g0.parts.map(g => g.ed), g0.label || (verb + fmtNum(n) + ' ' + (n === 1 ? ONE[mode] : MANY[mode])));
+    // the same pieces on the shape as it is now: read again, and found by the corners they stand on
+    for (const g of g0.parts) {
+      const { p, e } = g, oldTopo = g.oldR.topo, oldPg = g.oldR.pg;
+      const keep = { points: [...e.points], edges: [...e.edges], faces: [...e.faces] };
+      reads.delete(p.mesh.geometry);
+      sel.delete(p.partId); unshow(e);
+      const ne = entry(p, true); if (!ne) continue;
+      const T = ne.R.topo, G = ne.R.pg;
+      for (const v of keep.points) ne.points.add(T.weld[oldTopo.rep[v]]);
+      for (const ed of keep.edges) {
+        const a = T.weld[oldTopo.rep[oldTopo.edgeV[ed * 2]]], b = T.weld[oldTopo.rep[oldTopo.edgeV[ed * 2 + 1]]];
+        for (let i = T.vStart[a]; i < T.vStart[a + 1]; i++) { const x = T.vEdges[i]; if ((T.edgeV[x * 2] === a && T.edgeV[x * 2 + 1] === b) || (T.edgeV[x * 2] === b && T.edgeV[x * 2 + 1] === a)) { ne.edges.add(x); break; } }
+      }
+      for (const q of keep.faces) for (let i = oldPg.pStart[q]; i < oldPg.pStart[q + 1]; i++) ne.faces.add(G.polyOf[oldPg.pTris[i]]);
+      ne.dirty = true;
+    }
+    afterDelete = { snap: g0.before, at: g0.at };
+    hover = null;
+    changed();
+  }
+  // the part's own highlight (its outline, its glow, a shape's wire) is put away while its pieces are worked on: the mesh lines
+  // and the picked pieces are what there is to see. It is drawn again by the app when this is left.
+  function hush() {
+    if (!active) return;
+    let any = appLines(false);
+    for (const o of state.activeHighlights || []) if (o && o.visible) { o.visible = false; any = true; }
+    for (const id of state.selected) {
+      const p = getPart(id); if (!p || !p.mesh) continue;
+      for (const ch of p.mesh.children) if (ch.visible && !(ch.userData && ch.userData.wireLine) && (ch.isLineSegments || (ch.userData && ch.userData.selGlow))) { ch.visible = false; any = true; }
+    }
+    if (any) requestRender();
+  }
+
+  // ── the picture ──
+  function changed() { syncCard(); gizmoSync(); schedule(); }
+  function schedule() {
+    if (!active || pending) return;
+    pending = true;
+    const run = () => { if (!pending) return; pending = false; paint(); };
+    requestAnimationFrame(run);
+    setTimeout(run, 60);
+  }
+  function size() {
+    const c = canvas(), dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+    if (ov.width !== Math.round(w * dpr) || ov.height !== Math.round(h * dpr)) { ov.width = Math.round(w * dpr); ov.height = Math.round(h * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { w, h };
+  }
+  // the picked polygons of one part, as a mesh of their own with their outlines (new ones each time: no stale buffers that way)
+  // (while the gizmo drags, the same two objects take the new positions: new buffers at every frame flicker and trail behind)
+  function showFaces(p, e, inPlace) {
+    const keep = !!(inPlace && e.fill && e.outline && mode === 'faces' && e.faces.size);
+    if (!keep) unshow(e);
+    e.dirty = false;
+    if (mode !== 'faces' || !e.faces.size) return;
+    const { topo, pg } = e.R, P = topo.positions, ix = topo.index;
+    const tris = trisOfPolys(pg, e.faces), out = new Float32Array(tris.length * 9);
+    let o = 0;
+    for (const t of tris) for (let k = 0; k < 3; k++) { const v = (ix ? ix[t * 3 + k] : t * 3 + k) * 3; out[o++] = P[v]; out[o++] = P[v + 1]; out[o++] = P[v + 2]; }
+    let n = 0; for (const q of e.faces) n += pg.oStart[q + 1] - pg.oStart[q];
+    const lines = new Float32Array(n * 6), P3 = [0, 0, 0]; o = 0;
+    for (const q of e.faces) for (let i = pg.oStart[q]; i < pg.oStart[q + 1]; i++) { const ed = pg.oEdges[i]; for (let s = 0; s < 2; s++) { MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + s], P3); lines[o++] = P3[0]; lines[o++] = P3[1]; lines[o++] = P3[2]; } }
+    if (keep) {
+      const fa = e.fill.geometry.attributes.position, la = e.outline.geometry.attributes.position;
+      if (fa.array.length === out.length && la.array.length === lines.length) { fa.array.set(out); fa.needsUpdate = true; la.array.set(lines); la.needsUpdate = true; return; }
+      unshow(e);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(out, 3));
+    e.fill = new THREE.Mesh(_stampGeometry(g), FILL_MAT);
+    const lg = new THREE.BufferGeometry();
+    lg.setAttribute('position', new THREE.BufferAttribute(lines, 3));
+    e.outline = new THREE.LineSegments(_stampGeometry(lg), outlineMat());
+    for (const m of [e.fill, e.outline]) { m.matrixAutoUpdate = false; m.frustumCulled = false; m.raycast = () => {}; m.userData.partId = p.partId; group.add(m); }
+    e.fill.renderOrder = 6; e.outline.renderOrder = 7;
+  }
+  function paint() {
+    if (!active || !ov) return;
+    const { w, h } = size();
+    ctx.clearRect(0, 0, w, h);
+    camera.getWorldPosition(_cam);
+    const ortho = !!camera._isOrtho, look = ortho ? camera.getWorldDirection(new THREE.Vector3()).negate() : null;
+    const rect = canvas().getBoundingClientRect();
+    let render = showWires();
+    if (appLines(false)) render = true;
+    const P3 = [0, 0, 0];
+    // a point of a part on the canvas: [x, y] or null when it is behind the camera
+    const proj = (M, x, y, z) => { _w.set(x, y, z).applyMatrix4(M); _v.copy(_w).project(camera); if (_v.z > 1 || _v.z < -1) return null; return [(_v.x * 0.5 + 0.5) * rect.width, (-_v.y * 0.5 + 0.5) * rect.height]; };
+    // does triangle t of a part look at the camera (from the point _w, already in the world)
+    const faces = (topo, t) => { if (t < 0) return false; _n.set(topo.normal[t * 3], topo.normal[t * 3 + 1], topo.normal[t * 3 + 2]).applyMatrix3(_nm); return ortho ? _n.dot(look) > 0 : (_n.x * (_cam.x - _w.x) + _n.y * (_cam.y - _w.y) + _n.z * (_cam.z - _w.z)) > 0; };
+    const edgeSeen = (topo, e) => faces(topo, topo.edgeT[e * 2]) || faces(topo, topo.edgeT[e * 2 + 1]);
+    const pointSeen = (topo, v) => { for (let i = topo.vStart[v]; i < topo.vStart[v + 1]; i++) if (edgeSeen(topo, topo.vEdges[i])) return true; return false; };
+    const hot = hover && hover.p && hover.el && hover.p.mesh && !hover.p.deleted && reads.get(hover.p.mesh.geometry) === hover.R ? hover : null;
+    // Points mode: every point of the parts in work, small and dark, so there is something to aim at
+    // (sprites in the scene, not marks on the canvas: what stands in front of a point hides it)
+    {
+      const items = [];
+      if (mode === 'points') for (const id of state.selected) {
+        const p = getPart(id); if (!p || p.deleted || !p.visible || !p.mesh || p.isSpline) continue;
+        const R = read(p, triCountOf(p) <= BIG); if (!R || R.topo.nVert > ALL_POINTS_MAX) continue;
+        items.push({ p, topo: R.topo, list: cornerSet(R) });      // (the corners of the polygons only, not the points inside one)
+      }
+      if (fillDots('all', items, [0.03, 0.05, 0.08], 0.0036, 8)) render = true;
+    }
+    const pickedDots = [];
+    for (const [p, e] of live()) {
+      p.mesh.updateWorldMatrix(true, false);
+      const M = p.mesh.matrixWorld, topo = e.R.topo;
+      _nm.getNormalMatrix(M);
+      if (e.dirty || ((mode === 'faces' && e.faces.size > 0) !== !!e.fill)) { showFaces(p, e, !!grab); render = true; }
+      for (const m of [e.fill, e.outline]) if (m && !m.matrix.equals(M)) { m.matrix.copy(M); m.matrixWorld.copy(M); render = true; }
+      if (mode === 'edges' && e.edges.size) {
+        ctx.beginPath(); let k = 0;
+        for (const ed of e.edges) {
+          if (++k > DRAW_MAX) break;
+          MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3);
+          const a = proj(M, P3[0], P3[1], P3[2]); if (!a || !edgeSeen(topo, ed)) continue;
+          MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + 1], P3);
+          const b = proj(M, P3[0], P3[1], P3[2]); if (!b) continue;
+          ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+        }
+        ctx.lineCap = 'round'; ctx.lineWidth = 2.5; ctx.strokeStyle = ORANGE; ctx.stroke();
+      }
+      if (mode === 'points' && e.points.size) pickedDots.push({ p, topo, list: e.points });
+    }
+    if (fillDots('pick', pickedDots, [1, 0.604, 0.18], 0.0062, 9)) render = true;
+    // what is under the pointer, light over the rest (not while a box is dragged or the brush paints)
+    if (hot && !box && !stroke && tool !== 'brush') {
+      const { topo, pg } = hot.R, M = hot.p.mesh.matrixWorld, el = hot.el;
+      const at = (v) => { MEDIT.pointPosition(topo, v, P3); return proj(M, P3[0], P3[1], P3[2]); };
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      const lp = hot.loop && hot.loop.length > 1 && hot.loop.length <= DRAW_MAX ? hot.loop : null;      // (Pick loops is on: the whole loop a click would pick)
+      if (lp && el.mode === 'points') { ctx.beginPath(); for (const v of lp) { const a = at(v); if (a) { ctx.moveTo(a[0] + 3.5, a[1]); ctx.arc(a[0], a[1], 3.5, 0, Math.PI * 2); } } ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.stroke(); }
+      else if (lp && el.mode === 'edges') { ctx.beginPath(); for (const ed of lp) { const a = at(topo.edgeV[ed * 2]), b = at(topo.edgeV[ed * 2 + 1]); if (a && b) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); } } ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); }
+      else if (lp && el.mode === 'faces') {
+        ctx.beginPath(); let k = 0;
+        for (const q of lp) for (let i = pg.pStart[q]; i < pg.pStart[q + 1] && k < 12000; i++, k++) { const t = pg.pTris[i], a = at(topo.tri[t * 3]), b = at(topo.tri[t * 3 + 1]), c = at(topo.tri[t * 3 + 2]); if (a && b && c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath(); } }
+        ctx.fillStyle = 'rgba(255,255,255,.34)'; ctx.fill('nonzero');
+      }
+      else if (el.mode === 'points') { const a = at(el.id); if (a) { ctx.beginPath(); ctx.arc(a[0], a[1], 4, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.stroke(); } }
+      else if (el.mode === 'edges') { const a = at(topo.edgeV[el.id * 2]), b = at(topo.edgeV[el.id * 2 + 1]); if (a && b) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); } }
+      else if (pg.pStart[el.poly + 1] - pg.pStart[el.poly] <= 6000) {
+        ctx.beginPath();
+        for (let i = pg.pStart[el.poly]; i < pg.pStart[el.poly + 1]; i++) { const t = pg.pTris[i], a = at(topo.tri[t * 3]), b = at(topo.tri[t * 3 + 1]), c = at(topo.tri[t * 3 + 2]); if (a && b && c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath(); } }
+        ctx.fillStyle = 'rgba(255,255,255,.34)'; ctx.fill('nonzero');
+      }
+    }
+    // the tools' own marks
+    if (box) { const x = Math.min(box.x0, box.x1) - rect.left, y = Math.min(box.y0, box.y1) - rect.top, bw = Math.abs(box.x1 - box.x0), bh = Math.abs(box.y1 - box.y0); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(x, y, bw, bh); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeRect(x + .5, y + .5, bw, bh); }
+    if (tool === 'brush' && ptr && !gzOver) { ctx.beginPath(); ctx.arc(ptr.x - rect.left, ptr.y - rect.top, brushR, 0, Math.PI * 2); ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.stroke(); ctx.lineWidth = 1; ctx.strokeStyle = '#fff'; ctx.stroke(); }
+    if (render) requestRender();
+  }
+
+  // ── the card and the mode button ──
+  const current = () => active ? mode : 'model';
+  function syncCard() {
+    for (const [id, attr, val] of [['el-mode', 'mode', mode], ['el-tool', 'tool', tool], ['el-space', 'space', space]]) { const c = $q(id); if (c) for (const b of c.querySelectorAll('button')) b.classList.toggle('active', b.dataset[attr] === val); }
+    for (const b of document.querySelectorAll('.vpb.em-tool')) { b.hidden = !active; b.classList.toggle('active', b.dataset.tool === tool); }      // (the toolbar's own Click / Box / Brush)
+    const n = total(), parts = live().filter(([, e]) => e[mode].size).length;
+    const info = $q('el-info');
+    if (info) info.textContent = n ? fmtNum(n) + ' ' + (n === 1 ? ONE[mode] : MANY[mode]) + ' picked' + (parts > 1 ? ' on ' + parts + ' parts' : '') + '.' : '';
+    const d = $q('btn-el-delete'); if (d) d.disabled = !n;
+    const cl = $q('btn-el-clear'); if (cl) cl.disabled = !n;
+    const fd = $q('el-foot-delete'); if (fd) fd.classList.toggle('is-off', !n);
+    const fl = $q('btn-el-flip'); if (fl) fl.disabled = !(n && mode === 'faces');
+    const ds = $q('btn-el-dissolve'); if (ds) ds.disabled = !n;
+    // the tools that work on one kind of piece: Planarize and Extract on polygons, Straighten and Fill on edges, Weld on points or edges
+    const en = (id, on) => { const b = $q(id); if (b) b.disabled = !(n && on); };
+    en('btn-el-planar', mode === 'faces'); en('btn-el-straight', mode === 'edges'); en('btn-el-weld', mode === 'points' || mode === 'edges');
+    en('btn-el-fill', mode === 'edges'); en('btn-el-extract', mode === 'faces');
+    const wr = $q('el-weld-row'); if (wr) wr.hidden = mode !== 'points';
+    const lp = $q('el-loop'); if (lp) lp.checked = loops;
+    const br = $q('el-brush-row'); if (br) br.hidden = tool !== 'brush';
+    const bs = $q('el-brush'); if (bs && document.activeElement !== bs) bs.value = String(brushR);
+    const b = $q('em-mode');
+    if (b) {
+      const m = current();
+      const ico = b.querySelector('.em-ico'); if (ico && ico.dataset.m !== m) { ico.innerHTML = ICON[m]; ico.dataset.m = m; }
+      b.classList.toggle('active', m !== 'model');
+      b.title = NAME[m] + ' mode: a click picks ' + (m === 'model' ? 'a whole part' : MANY[m]) + '. Click to switch between Model and ' + NAME[mode] + ', hold for all four modes';
+      b.setAttribute('aria-label', NAME[m] + ' mode');
+    }
+  }
+  function setMode(m) {
+    if (m === 'model') { if (active) _CmdCards.close('elements'); else syncCard(); return; }
+    if (!MODES.includes(m)) return;
+    const was = mode; mode = m; save();
+    if (!active) { _CmdCards.open('elements'); return; }
+    if (was !== m) { hover = null; for (const [, e] of live()) e.dirty = true; }
+    changed();
+  }
+  function setSpace(s) {
+    if (!SPACES.includes(s)) return;
+    space = s; save(); syncCard();
+    if (active && !grab) gizmoSync();
+    requestRender();
+  }
+  function setTool(t) {
+    if (!TOOLS.includes(t)) return;
+    tool = t; box = null; stroke = null; save();
+    if (active) { applyButtons(); canvas().style.cursor = tool === 'click' ? '' : tool === 'brush' ? 'none' : 'crosshair'; }      // (the brush circle is the cursor)
+    changed();
+  }
+  // Click leaves the left button to the camera (a press that does not move is the pick); the box and the brush take it, and Alt + drag turns the camera.
+  function applyButtons() {
+    if (!prevButtons) prevButtons = { ...controls.mouseButtons };
+    controls.mouseButtons = tool === 'click' ? { ...prevButtons } : { LEFT: -1, MIDDLE: prevButtons.MIDDLE, RIGHT: prevButtons.RIGHT };
+  }
+
+  // the mode button: a click goes in and out, holding it (or a right-click) lists the four modes
+  function wireModeButton() {
+    const btn = $q('em-mode'), pop = $q('em-pop');
+    if (!btn || !pop) return;
+    let holdT = 0, held = false;
+    const close = () => { pop.style.display = 'none'; };
+    const open = () => {
+      held = true;
+      pop.innerHTML = '';
+      for (const [m, kbd] of [['points', '1'], ['edges', '2'], ['faces', '3'], ['model', '']]) {
+        const row = document.createElement('button');
+        row.type = 'button'; row.className = 'vp-prim-pop-item em-pop-item' + (current() === m ? ' is-on' : '');
+        row.innerHTML = '<span class="em-ico prim-ico">' + ICON[m] + '</span><span class="em-pop-l">' + NAME[m] + '</span>' + (kbd ? '<span class="em-pop-k">' + kbd + '</span>' : '');
+        row.addEventListener('click', () => { close(); setMode(m); });
+        pop.appendChild(row);
+      }
+      pop.style.top = btn.offsetTop + 'px';
+      pop.style.display = 'block';
+    };
+    document.addEventListener('mousedown', (e) => { if (pop.style.display !== 'none' && !pop.contains(e.target) && !btn.contains(e.target)) close(); });
+    btn.addEventListener('mousedown', (e) => { if (e.button !== 0) return; held = false; clearTimeout(holdT); holdT = setTimeout(open, 380); });
+    btn.addEventListener('mouseleave', () => clearTimeout(holdT));
+    btn.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); clearTimeout(holdT); open(); });
+    btn.addEventListener('click', (e) => {
+      clearTimeout(holdT);
+      if (held) { held = false; e.preventDefault(); return; }       // (the press that opened the list is not also a click)
+      close();
+      setMode(active ? 'model' : mode);
+    });
+  }
+
+  // ── the points: sprites in the scene, so whatever stands in front of them hides them ──
+  // (Drawn as marks on the canvas they showed through every part in front. As in the app's group dots, one instanced sprite holds
+  // them all: 'all' is every point of the parts in work, small and dark; 'pick' the picked ones, bigger and orange. Each sits a hair
+  // toward the camera, like the lines, so the surface it lies on does not cut it in half.)
+  const dotLayers = {};
+  function dotLayer(name, n, rgb, scale, order) {
+    let L = dotLayers[name];
+    if (L && n <= L.cap) return L;
+    if (L) { try { if (L.sprite.parent) L.sprite.parent.remove(L.sprite); L.sprite.material.dispose(); } catch (_) {} }
+    const T = THREE.TSL, cap = Math.max(256, Math.ceil(n * 1.5));
+    const pos = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+    const nrm = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);      // the surface normal at each point, in the world
+    const mat = new THREE.SpriteNodeMaterial({ transparent: true, depthTest: true, depthWrite: false, sizeAttenuation: false });
+    const wp = T.instancedDynamicBufferAttribute(pos), wn = T.instancedDynamicBufferAttribute(nrm);
+    const toCam = T.cameraPosition.sub(wp), d = T.length(toCam), view = toCam.div(T.max(d, 1e-9));
+    const persp = T.cameraProjectionMatrix.mul(T.vec4(0.0, 0.0, 1.0, 0.0)).w.abs();
+    const stepsP = d.mul(d).div(T.max(T.cameraNear, 1e-6)).mul(_DEPTH_STEPS), stepsO = T.cameraFar.sub(T.cameraNear).mul(_DEPTH_STEPS);
+    // A dot is a flat disc facing the camera, the surface it lies on is not: across the dot's width the surface runs deeper by the
+    // width times the tangent of the angle between the view and the surface's normal, and a dot only that far in front is cut by it
+    // where the surface rises. So it is lifted by that much, and a point on a surface seen edge-on is lifted most.
+    const c = T.abs(T.dot(wn, view));
+    const tanT = T.min(T.sqrt(T.max(T.float(1).sub(c.mul(c)), 0.0)).div(T.max(c, 0.08)), 12.0);
+    const lift = d.mul(scale * 0.5 * 1.3).mul(tanT);                                 // (a sprite is `scale` times its depth wide)
+    const pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL * 2)).add(lift);
+    mat.positionNode = wp.add(view.mul(pull));
+    mat.colorNode = T.vec4(T.vec3(rgb[0], rgb[1], rgb[2]), T.smoothstep(0.36, 0.5, T.uv().sub(0.5).length()).oneMinus());      // a disc with a soft edge
+    mat.scaleNode = T.float(scale);
+    const sprite = new THREE.Sprite(mat);
+    sprite.renderOrder = order; sprite.frustumCulled = false; sprite.count = 0; sprite.visible = false; sprite.raycast = () => {};
+    L = dotLayers[name] = { sprite, pos, nrm, cap, n: 0 };
+    return L;
+  }
+  // a unit normal for each (welded) point of a mesh: the sum of the normals of the triangles that meet there (made once per mesh)
+  const pointNormalCache = new WeakMap();
+  function pointNormals(topo) {
+    let a = pointNormalCache.get(topo.normal);
+    if (a) return a;
+    a = new Float32Array(topo.nVert * 3);
+    for (let t = 0; t < topo.nTri; t++) for (let k = 0; k < 3; k++) { const v = topo.tri[t * 3 + k] * 3; a[v] += topo.normal[t * 3]; a[v + 1] += topo.normal[t * 3 + 1]; a[v + 2] += topo.normal[t * 3 + 2]; }
+    for (let v = 0; v < topo.nVert; v++) { const l = Math.hypot(a[v * 3], a[v * 3 + 1], a[v * 3 + 2]) || 1; a[v * 3] /= l; a[v * 3 + 1] /= l; a[v * 3 + 2] /= l; }
+    pointNormalCache.set(topo.normal, a);
+    return a;
+  }
+  // items: [{ p, topo, list }] (list: the points to show, or null for all of them). Returns true when something on screen changed.
+  function fillDots(name, items, rgb, scale, order) {
+    let n = 0;
+    for (const it of items) n += it.list ? Math.min(it.list.size, DRAW_MAX) : it.topo.nVert;
+    const had = dotLayers[name];
+    if (!n) { if (had && had.sprite.visible) { had.sprite.visible = false; had.sprite.count = 0; return true; } return false; }
+    const L = dotLayer(name, n, rgb, scale, order), a = L.pos.array, na = L.nrm.array, P3 = [0, 0, 0];
+    let k = 0;
+    for (const it of items) {
+      it.p.mesh.updateWorldMatrix(true, false);
+      const M = it.p.mesh.matrixWorld, vn = pointNormals(it.topo);
+      _nm.getNormalMatrix(M);
+      const put = (v) => {
+        MEDIT.pointPosition(it.topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); a[k * 3] = _w.x; a[k * 3 + 1] = _w.y; a[k * 3 + 2] = _w.z;
+        _n.set(vn[v * 3], vn[v * 3 + 1], vn[v * 3 + 2]).applyMatrix3(_nm).normalize(); na[k * 3] = _n.x; na[k * 3 + 1] = _n.y; na[k * 3 + 2] = _n.z;
+        k++;
+      };
+      if (it.list) { let c = 0; for (const v of it.list) { if (++c > DRAW_MAX) break; put(v); } } else for (let v = 0; v < it.topo.nVert; v++) put(v);
+    }
+    L.pos.needsUpdate = true; L.nrm.needsUpdate = true; L.sprite.count = k; L.sprite.visible = true;
+    if (group && L.sprite.parent !== group) group.add(L.sprite);
+    return true;
+  }
+  function dotsOff() { for (const L of Object.values(dotLayers)) { L.sprite.visible = false; L.sprite.count = 0; } }
+
+  // ── the mesh lines: blue, on the selected parts only, while a piece mode is on ──
+  // The outlines of a part's polygons as lines of its own over it (pulled toward the camera like the app's wire lines, so they win
+  // against the faces they lie on). The view mode is not touched: a solid model stays solid, and the rest of the scene has no lines.
+  // Each keeps its own copy of the positions, made again when the part's positions change (a drag of the gizmo), so nothing of the
+  // part's own buffers is shared or freed.
+  const wires = new Map();               // partId → { geom, R, ver, obj }
+  let WIRE_MAT = null;
+  const wireMat = () => { if (!WIRE_MAT) { WIRE_MAT = new THREE.LineBasicNodeMaterial({ color: LINE_BLUE }); WIRE_MAT.positionNode = _pulledPosition(true); } return WIRE_MAT; };
+  // For each vertex of the surface: the average normal of the triangles that meet at its point (xyz) and how far the most turned
+  // one is from it (w), so the line's shader can pull it further in front where the faces are steep to the view. The normals are
+  // taken the same way round (a mesh with mixed winding would cancel itself out), made once per read.
+  function slopeOf(R) {
+    if (R.slope) return R.slope;
+    const t = R.topo, nV = t.nVert, nRaw = t.nRaw, sum = new Float32Array(nV * 3), ref = new Float32Array(nV * 3), spread = new Float32Array(nV);
+    const nrm = t.normal, tri = t.tri;
+    for (let i = 0; i < t.nTri; i++) {
+      const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
+      if (!nx && !ny && !nz) continue;                                  // (a triangle of no area has no direction)
+      for (let k = 0; k < 3; k++) {
+        const w = tri[i * 3 + k] * 3;
+        if (!ref[w] && !ref[w + 1] && !ref[w + 2]) { ref[w] = nx; ref[w + 1] = ny; ref[w + 2] = nz; }
+        const s = (nx * ref[w] + ny * ref[w + 1] + nz * ref[w + 2]) < 0 ? -1 : 1;
+        sum[w] += s * nx; sum[w + 1] += s * ny; sum[w + 2] += s * nz;
+      }
+    }
+    for (let w = 0; w < nV; w++) { const l = Math.hypot(sum[w * 3], sum[w * 3 + 1], sum[w * 3 + 2]) || 1; sum[w * 3] /= l; sum[w * 3 + 1] /= l; sum[w * 3 + 2] /= l; }
+    for (let i = 0; i < t.nTri; i++) {
+      const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
+      if (!nx && !ny && !nz) continue;
+      for (let k = 0; k < 3; k++) {
+        const w = tri[i * 3 + k], d = Math.abs(nx * sum[w * 3] + ny * sum[w * 3 + 1] + nz * sum[w * 3 + 2]);
+        const a = Math.acos(Math.min(1, d));
+        if (a > spread[w]) spread[w] = a;
+      }
+    }
+    const out = new Float32Array(nRaw * 4);
+    for (let i = 0; i < nRaw; i++) { const w = t.weld[i]; out[i * 4] = sum[w * 3]; out[i * 4 + 1] = sum[w * 3 + 1]; out[i * 4 + 2] = sum[w * 3 + 2]; out[i * 4 + 3] = spread[w]; }
+    return (R.slope = out);
+  }
+  function unwire(id) { const w = wires.get(id); if (!w) return false; try { group && group.remove(w.obj); w.obj.geometry.dispose(); } catch (_) {} wires.delete(id); return true; }
+  function showWires() {
+    let ch = false;
+    const want = new Set();
+    if (active) for (const id of state.selected) {
+      const p = getPart(id);
+      if (!p || p.deleted || !p.visible || !p.mesh || p.isSpline) continue;
+      const R = read(p, triCountOf(p) <= BIG);
+      if (!R || !R.lines || !R.lines.length) continue;
+      want.add(id);
+      const geom = p.mesh.geometry, attr = geom.attributes.position, w0 = wires.get(id);
+      // while the gizmo drags, only the positions change: they are copied into the line's own buffer (a new buffer at each frame flickers)
+      if (w0 && w0.geom === geom && w0.R.lines === R.lines && w0.obj.geometry.attributes.position.count === attr.count) {
+        if (w0.ver !== attr.version || w0.R !== R) {
+          const dst = w0.obj.geometry.attributes.position;
+          dst.array.set(_wireXYZ(attr, false)); dst.needsUpdate = true;
+          w0.ver = attr.version; w0.R = R; ch = true;
+        }
+      }
+      const w = wires.get(id);
+      if (!w || w.geom !== geom || w.R.lines !== R.lines || w.ver !== attr.version || w.obj.geometry.attributes.position.count !== attr.count) {
+        unwire(id);
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(Float32Array.from(_wireXYZ(attr, false)), 3));
+        g.setIndex(new THREE.BufferAttribute(R.lines, 1));
+        g.setAttribute('slope', new THREE.BufferAttribute(slopeOf(R), 4));
+        const obj = new THREE.LineSegments(_stampGeometry(g), wireMat());
+        obj.matrixAutoUpdate = false; obj.frustumCulled = false; obj.raycast = () => {}; obj.renderOrder = 5; obj.userData.partId = id;
+        group.add(obj);
+        wires.set(id, { geom, R, ver: attr.version, obj });
+        ch = true;
+      }
+      const o = wires.get(id).obj;
+      p.mesh.updateWorldMatrix(true, false);
+      if (!o.matrix.equals(p.mesh.matrixWorld)) { o.matrix.copy(p.mesh.matrixWorld); o.matrixWorld.copy(p.mesh.matrixWorld); ch = true; }
+    }
+    for (const id of [...wires.keys()]) if (!want.has(id)) ch = unwire(id) || ch;
+    return ch;
+  }
+  // In the Wireframe view the app draws lines of its own on every part. On a part whose pieces are being worked on they would lie
+  // under the blue ones as a second mesh (and show triangles where the blue ones show polygons), so they are put away there, each
+  // time the picture is painted (the app makes them again whenever a shape changes), and shown again when this is left.
+  function appLines(show) {
+    let ch = false;
+    for (const p of state.parts) {
+      if (!p || !p.mesh || p.deleted) continue;
+      const hide = !show && active && state.selected.has(p.partId);
+      for (const c of p.mesh.children) {
+        if (!(c.userData && c.userData.wireLine)) continue;
+        if (hide && c.visible) { c.visible = false; c.userData.emHidden = true; ch = true; }
+        else if (!hide && c.userData.emHidden) { c.visible = true; c.userData.emHidden = false; ch = true; }
+      }
+    }
+    return ch;
+  }
+  // (the app has just made wire lines for a part: on one whose pieces are being worked on they start out put away)
+  function newLine(host, line) { if (active && host && host.userData && state.selected.has(host.userData.partId)) { line.visible = false; line.userData.emHidden = true; } }
+  function linesOn() {}                  // (the lines are drawn with the rest, in paint())
+  function linesOff() { for (const id of [...wires.keys()]) unwire(id); appLines(true); dotsOff(); }
+
+  // ── the pointer and the keys ──
+  const typing = (t) => { const tag = (t && t.tagName || '').toUpperCase(); return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || !!(t && t.isContentEditable); };
+  function onMouseDown(ev) { if (ev.button === 0) ev.stopImmediatePropagation(); else if (ev.button === 1 && tool === 'brush' && !ev.altKey) ev.preventDefault(); }      // (the left button picks pieces here, not parts; the middle one, with the brush, resizes it: no autoscroll)
+  function onDown(ev) {
+    if (ev.button === 1 && tool === 'brush' && !ev.altKey) {      // middle button held and dragged: the brush gets bigger to the right, smaller to the left, as in Cinema 4D (with Alt held the middle button is the camera's: it pans)
+      sizing = { x0: ev.clientX, r0: brushR }; down = null; ev.preventDefault(); ev.stopImmediatePropagation();
+      try { canvas().setPointerCapture(ev.pointerId); } catch (_) {}
+      return;
+    }
+    if (ev.button !== 0) { down = null; return; }
+    if (tc && tc.object && tc.axis) { down = null; return; }                // (a handle of the gizmo: the press is the gizmo's)
+    down = { x: ev.clientX, y: ev.clientY };
+    if (tool === 'click') return;                                          // the camera has the drag; the pick is on release
+    if (ev.altKey) { altOrbit = true; controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE; return; }      // Alt + drag turns the camera
+    ev.preventDefault();
+    try { canvas().setPointerCapture(ev.pointerId); } catch (_) {}
+    if (tool === 'rect') box = { x0: ev.clientX, y0: ev.clientY, x1: ev.clientX, y1: ev.clientY, how: howOf(ev) };
+    else {
+      if (needPart()) return;
+      stroke = { how: howOf(ev), last: { x: ev.clientX, y: ev.clientY }, before: snap() };
+      if (stroke.how === 'set') { clearAll(); stroke.how = 'add'; }
+      freshTargets();
+      brushAt(ev.clientX, ev.clientY, stroke.how);
+      changed();
+    }
+  }
+  function onUp(ev) {
+    if (sizing && ev.button === 1) { sizing = null; save(); schedule(); return; }
+    const d = down; down = null;
+    if (altOrbit) { altOrbit = false; controls.mouseButtons.LEFT = -1; return; }
+    if (ev.button !== 0) return;
+    if (box) {
+      const b = box; box = null;
+      if (Math.abs(b.x1 - b.x0) + Math.abs(b.y1 - b.y0) > 5) boxPick(b.x0, b.y0, b.x1, b.y1, b.how);
+      else pick(ev, loops);                                                // a press that did not move is a click
+      schedule();
+      return;
+    }
+    if (stroke) { endStroke(); return; }
+    if (!d || tool !== 'click' || ev.target !== canvas()) return;
+    if (Math.abs(ev.clientX - d.x) + Math.abs(ev.clientY - d.y) > 4) return;          // a drag turned the camera
+    pick(ev, loops);
+  }
+  function onDbl(ev) { if (ev.button !== 0) return; ev.preventDefault(); ev.stopImmediatePropagation(); if (tc && tc.object && tc.axis) return; if (tool !== 'brush') pick(ev, true); }
+  // With the brush the pointer is the brush circle; over a handle of the gizmo the circle goes and the normal pointer is back
+  // (the gizmo works out which handle is under the pointer in its own listener, so this looks after the other listeners have run)
+  function gzSync() {
+    const over = !!(active && tool === 'brush' && !stroke && !sizing && tc && tc.object && tc.axis);
+    if (over === gzOver) return;
+    gzOver = over;
+    const cv = canvas(); if (cv && active && tool === 'brush') cv.style.cursor = over ? '' : 'none';
+    schedule();
+  }
+  function onMove(ev) {
+    if (tool === 'brush') setTimeout(gzSync, 0);
+    if (sizing) {                                           // (the circle stays where it is while it grows)
+      brushR = Math.max(4, Math.min(200, Math.round(sizing.r0 + (ev.clientX - sizing.x0) * 0.5)));
+      const bs = $q('el-brush'); if (bs) bs.value = String(brushR);
+      schedule(); return;
+    }
+    lastMove = ev; ptr = { x: ev.clientX, y: ev.clientY };
+    if (box) { box.x1 = ev.clientX; box.y1 = ev.clientY; schedule(); return; }
+    if (stroke) {
+      // a stroke whose release was never seen (let go outside the window, over another frame): a move with no button down ends it,
+      // or the brush would go on painting under a pointer that is only passing over
+      if (ev.pointerType === 'mouse' && !(ev.buttons & 1)) { endStroke(); schedule(); return; }
+      brushTo(ev); return;
+    }
+    if (box && ev.pointerType === 'mouse' && !(ev.buttons & 1)) { box = null; schedule(); return; }      // (the same for a box)
+    if (tool === 'brush') schedule();
+    if (moveRaf || ev.buttons) return;
+    moveRaf = requestAnimationFrame(() => {
+      moveRaf = 0;
+      if (!active || !lastMove || box || stroke || grab) return;
+      if (tc && tc.object && tc.axis) { if (hover) { hover = null; schedule(); } return; }      // (over the gizmo: nothing else is under the pointer)
+      // With the brush the circle is what will be picked: no single piece is lit under the pointer. (The lit one was the corner or
+      // side of the polygon nearest the pointer, which close up is far outside the circle, and it looked as if the brush snapped to it.)
+      if (tool === 'brush') { if (hover) { hover = null; schedule(); } return; }
+      const h = elementAt(lastMove, false);
+      const next = h && h.p && h.el ? h : null;
+      if (next && loops && tool !== 'brush') {
+        const { topo, pg } = next.R;
+        next.way = mode === 'faces' ? MEDIT.nearestOutlineEdge(topo, pg, next.el.poly, next.point) : mode === 'points' ? MEDIT.edgeAtPoint(topo, next.el.tri, next.el.id, next.point, pg.real) : next.el.id;
+      }
+      const same = (a, b) => (!a && !b) || (a && b && a.p === b.p && a.el.mode === b.el.mode && a.el.id === b.el.id && a.way === b.way);
+      if (!same(hover, next)) {
+        // the loop a click here would pick, to be shown before the click
+        if (next && next.way !== undefined) { try { next.loop = loopOf(next.R, next.el, next.point); } catch (_) { next.loop = null; } }
+        hover = next; schedule();
+      }
+    });
+  }
+  function onLeave() { lastMove = null; ptr = null; gzOver = false; if (hover || tool === 'brush') { hover = null; schedule(); } }
+  function onLost() { box = null; if (sizing) { sizing = null; save(); } if (stroke) endStroke(); down = null; if (altOrbit) { altOrbit = false; controls.mouseButtons.LEFT = -1; } schedule(); }
+  // the canvas lost the pointer while a box or a stroke was on (the release never came here: another window took it, a dialog opened):
+  // the gesture ends where it is. After an ordinary release there is nothing left to end.
+  function onLostCapture() { if (box || stroke || sizing) onLost(); }
+  function onKey(ev) {
+    if (!active || typing(ev.target)) return;
+    if (document.querySelector('.modal-bg.show:not(#welcome-modal), .dlg-bg.show')) return;
+    const k = ev.key, cmd = ev.ctrlKey || ev.metaKey, stop = () => { ev.preventDefault(); ev.stopImmediatePropagation(); };
+    if ((k === 'Delete' || k === 'Backspace') && !cmd && !ev.altKey) { stop(); del(); return; }
+    if (k === 'Backspace' && cmd && !ev.altKey) { stop(); dissolvePicked(); return; }                   // (Ctrl + Backspace: dissolve instead of delete)
+    if (k === 'Escape' && (box || stroke)) { stop(); onLost(); return; }
+    if (k === 'Escape' && total() > 0) { stop(); clearPicked(); return; }                 // first the picked pieces, then the mode
+    if (cmd && !ev.altKey && (k === 'z' || k === 'Z') && !ev.shiftKey) { if (undoPick()) stop(); else setTimeout(afterAppUndo, 80); return; }
+    if (cmd && !ev.altKey && (k === 'y' || k === 'Y' || ((k === 'z' || k === 'Z') && ev.shiftKey))) { if (redoPick()) stop(); return; }
+    if (cmd && !ev.shiftKey && !ev.altKey && (k === 'a' || k === 'A')) { stop(); selectAll(); return; }
+    if (!cmd && !ev.altKey && (k === '1' || k === '2' || k === '3')) { stop(); setMode(MODES[+k - 1]); return; }
+  }
+
+  function activate() {
+    if (active) return;
+    active = true; hover = null; down = null; box = null; stroke = null; ptr = null; picks.length = 0; unpicks.length = 0; afterDelete = null;
+    if (!group) { group = new THREE.Group(); group.name = '_elements'; group.matrixAutoUpdate = false; }
+    if (group.parent !== scene) scene.add(group);
+    const cv = canvas();
+    ov.hidden = false;
+    prevButtons = { ...controls.mouseButtons };
+    applyButtons();
+    cv.style.cursor = tool === 'click' ? '' : tool === 'brush' ? 'none' : 'crosshair';
+    cv.addEventListener('mousedown', onMouseDown, true);
+    cv.addEventListener('pointerdown', onDown, true);
+    cv.addEventListener('pointermove', onMove);
+    cv.addEventListener('pointerleave', onLeave);
+    cv.addEventListener('lostpointercapture', onLostCapture);
+    cv.addEventListener('dblclick', onDbl, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onLost, true);
+    window.addEventListener('blur', onLost);
+    window.addEventListener('keydown', onKey, true);
+    controls.addEventListener('change', schedule);
+    window.addEventListener('resize', schedule);
+    try { updateGizmo(); } catch (_) {}                 // (the gizmo steps aside: a click on it would move the part)
+    if (!state.selected.size) needPart();
+    linesOn();
+    try { applySelectionColors(); } catch (_) {}        // (drawn once more, then put away by hush())
+    changed();
+  }
+  function deactivate() {
+    if (!active) return;
+    if (grab) { try { grabEnd(); } catch (err) { console.warn('[elements] drag end:', err); grab = null; } }      // (left in the middle of a drag: the move is finished as it stands, as one undo step)
+    active = false; hover = null; down = null; lastMove = null; box = null; stroke = null; ptr = null; picks.length = 0; unpicks.length = 0; afterDelete = null;
+    const cv = canvas();
+    cv.removeEventListener('mousedown', onMouseDown, true);
+    cv.removeEventListener('pointerdown', onDown, true);
+    cv.removeEventListener('pointermove', onMove);
+    cv.removeEventListener('pointerleave', onLeave);
+    cv.removeEventListener('lostpointercapture', onLostCapture);
+    cv.removeEventListener('dblclick', onDbl, true);
+    window.removeEventListener('pointerup', onUp, true);
+    window.removeEventListener('pointercancel', onLost, true);
+    window.removeEventListener('blur', onLost);
+    window.removeEventListener('keydown', onKey, true);
+    controls.removeEventListener('change', schedule);
+    window.removeEventListener('resize', schedule);
+    if (prevButtons) { controls.mouseButtons = prevButtons; prevButtons = null; }
+    altOrbit = false;
+    cv.style.cursor = '';
+    clearAll();
+    linesOff();
+    grab = null; gizmoSync();
+    if (group && group.parent) group.parent.remove(group);
+    ov.hidden = true;
+    ctx.clearRect(0, 0, ov.width, ov.height);
+    linesOff();
+    try { updateGizmo(); } catch (_) {}
+    try { applySelectionColors(); } catch (_) {}        // (the part's own highlight again)
+    syncCard();
+    requestRender();
+  }
+  function wire() {
+    if (wired) return;
+    const card = document.querySelector('.section-cmd[data-cmd="elements"]');
+    ov = $q('elem-overlay');
+    if (!card || !ov) return;
+    wired = true;
+    ctx = ov.getContext('2d');
+    try { const s = JSON.parse(localStorage.getItem('stepopt-elements') || 'null'); if (s) { if (MODES.includes(s.mode)) mode = s.mode; if (TOOLS.includes(s.tool)) tool = s.tool; loops = !!s.loops; if (s.brushR >= 4 && s.brushR <= 200) brushR = +s.brushR; if (SPACES.includes(s.space)) space = s.space; } } catch (_) {}
+    for (const b of card.querySelectorAll('#el-space button')) b.addEventListener('click', () => { setSpace(b.dataset.space); b.blur(); });
+    for (const b of card.querySelectorAll('#el-mode button')) b.addEventListener('click', () => { setMode(b.dataset.mode); b.blur(); });
+    for (const b of card.querySelectorAll('#el-tool button')) b.addEventListener('click', () => { setTool(b.dataset.tool); b.blur(); });
+    for (const b of document.querySelectorAll('.vpb.em-tool')) b.addEventListener('click', () => { setTool(b.dataset.tool); b.blur(); });
+    $q('el-loop')?.addEventListener('change', (e) => { loops = !!e.target.checked; save(); hover = null; schedule(); });
+    const bs = $q('el-brush');
+    if (bs) {
+      bs.addEventListener('change', () => { const v = parseFloat(String(bs.value).replace(',', '.')); if (isFinite(v)) brushR = Math.max(4, Math.min(200, Math.round(v))); bs.value = String(brushR); save(); schedule(); });
+      try { _scrubField(bs, { min: 4, max: 200, step: 1 }); } catch (_) {}
+    }
+    $q('btn-el-all')?.addEventListener('click', selectAll);
+    $q('btn-el-clear')?.addEventListener('click', clearPicked);
+    $q('btn-el-delete')?.addEventListener('click', del);
+    $q('el-foot-delete')?.addEventListener('click', del);
+    $q('btn-el-flip')?.addEventListener('click', flipPicked);
+    $q('btn-el-dissolve')?.addEventListener('click', dissolvePicked);
+    $q('btn-el-planar')?.addEventListener('click', planarizePicked);
+    $q('btn-el-straight')?.addEventListener('click', straightenPicked);
+    $q('btn-el-weld')?.addEventListener('click', weldPicked);
+    $q('btn-el-fill')?.addEventListener('click', fillPicked);
+    $q('btn-el-extract')?.addEventListener('click', extractPicked);
+    { const wf = $q('el-weld'); if (wf) { wf.addEventListener('change', () => { const v = parseFloat(String(wf.value).replace(',', '.')); wf.value = String(isFinite(v) && v > 0 ? v : 0); }); try { _scrubField(wf, { min: 0, max: 1000, step: 0.1, decimals: 2 }); } catch (_) {} } }
+    card.addEventListener('cmd-open', activate);
+    card.addEventListener('cmd-close', deactivate);
+    wireModeButton();
+    syncCard();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
+
+  // For the self-test and for scripts: the same steps without a pointer. pickAt takes a part, a triangle of it and a place on that
+  // triangle (the part's own space), and does what a click there does; boxPick and brush take places on the screen.
+  const api = {
+    mode: (m) => { if (m) setMode(m); return current(); },
+    tool: (t) => { if (t) setTool(t); return tool; },
+    pickAt(partId, tri, point, o = {}) {
+      const p = getPart(partId); if (!p || !p.mesh || !state.selected.has(partId)) return 0;      // (only a selected part is worked on)
+      const how = o.take ? 'take' : o.add ? 'add' : 'set';
+      let n = 0;
+      record(() => {
+        if (how === 'set') for (const id of [...sel.keys()]) if (id !== partId) drop(id);
+        const e = entry(p, true); if (!e) return;
+        const el = MEDIT.pickPolygonElement(e.R.topo, e.R.pg, tri, point, mode); if (!el) return;
+        if (how === 'set') e[mode].clear();
+        put(e, o.loop ? loopOf(e.R, el, point) : [el.id], how, false);
+        n = e[mode].size;
+      });
+      changed();
+      return n;
+    },
+    boxPick: (x0, y0, x1, y1, how = 'set') => boxPick(x0, y0, x1, y1, how),
+    brush: (x, y, how = 'add') => { freshTargets(); const any = record(() => brushAt(x, y, how)); changed(); return any; },
+    count: (m) => total(m || mode),
+    picked: () => snap().map(x => ({ partId: x.id, points: x.points, edges: x.edges, faces: x.faces })),      // (what is picked, as numbers: for tests)
+    selectAll, clear: clearPicked, delete: del, flipPicked, dissolve: dissolvePicked, planarize: planarizePicked, straighten: straightenPicked, weld: weldPicked, fill: fillPicked, extract: extractPicked, undo: undoPick, redo: redoPick,
+    hover: () => (hover && hover.el ? { partId: hover.p.partId, mode: hover.el.mode, id: hover.el.id, loop: hover.loop ? hover.loop.length : 0 } : null),
+    loops: (on) => { if (on !== undefined) { loops = !!on; hover = null; syncCard(); schedule(); } return loops; },
+    // (for the self-test: what a drag of the gizmo by a world-space offset does)
+    nudge(dx, dy, dz) { gizmoSync(); if (!tc || !tc.object) return false; grabStart(); if (!grab) return false; pivot.position.x += dx; pivot.position.y += dy; pivot.position.z += dz; grabMove(); grabEnd(); return true; },
+    gizmoOn: () => !!(tc && tc.object),
+    space(s) { if (s) setSpace(s); return space; },
+    gizmoQuat: () => (pivot ? pivot.quaternion.toArray() : null),
+    read: (partId) => { const p = getPart(partId); return p && p.mesh ? read(p) : null; },
+    topology: (partId) => { const p = getPart(partId); const R = p && p.mesh ? read(p) : null; return R ? R.topo : null; },
+  };
+  return { isActive: () => active, repaint: schedule, gizmo: gizmoSync, hush, newLine, api };
+})();
+window.__moElements = _Elements.api;
+// ▲ Edit mesh

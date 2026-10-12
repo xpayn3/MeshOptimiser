@@ -1636,6 +1636,10 @@ class GeometryParser {
 
 		geo.setAttribute( 'position', positionAttribute );
 
+		// MeshOptimiser patch: the polygon (face of the file) of each triangle, when some polygon has more than three corners
+		// (a plain property, not userData: a clone must not copy a typed array through JSON)
+		if ( buffers.polyBig && buffers.polyIds.length === buffers.vertex.length / 9 ) geo._moPoly = Int32Array.from( buffers.polyIds );
+
 		if ( buffers.colors.length > 0 ) {
 
 			geo.setAttribute( 'color', new Float32BufferAttribute( buffers.colors, 3 ) );
@@ -1805,6 +1809,9 @@ class GeometryParser {
 			materialIndex: [],
 			vertexWeights: [],
 			weightsIndices: [],
+			polyIds: [],       // MeshOptimiser patch: the polygon of the file each triangle came from
+			polyCount: 0,
+			polyBig: false,    // (some polygon has more than three corners)
 		};
 
 		let polygonIndex = 0;
@@ -1968,6 +1975,7 @@ class GeometryParser {
 
 				scope.genFace( buffers, geoInfo, facePositionIndexes, materialIndex, faceNormals, faceColors, faceUVs, faceWeights, faceWeightIndices, faceLength );
 
+				buffers.polyCount ++;
 				polygonIndex ++;
 				faceLength = 0;
 
@@ -2083,8 +2091,11 @@ class GeometryParser {
 
 		}
 
+		// MeshOptimiser patch: every triangle of this polygon carries its number (see geometry._moPoly)
+		if ( faceLength > 3 ) buffers.polyBig = true;
 		for ( const [ i0, i1, i2 ] of triangles ) {
 
+			buffers.polyIds.push( buffers.polyCount );
 			buffers.vertex.push( geoInfo.vertexPositions[ facePositionIndexes[ i0 * 3 ] ] );
 			buffers.vertex.push( geoInfo.vertexPositions[ facePositionIndexes[ i0 * 3 + 1 ] ] );
 			buffers.vertex.push( geoInfo.vertexPositions[ facePositionIndexes[ i0 * 3 + 2 ] ] );

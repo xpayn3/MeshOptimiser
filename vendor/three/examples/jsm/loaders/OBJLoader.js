@@ -78,7 +78,10 @@ function ParserState() {
 					normals: [],
 					colors: [],
 					uvs: [],
-					hasUVIndices: false
+					hasUVIndices: false,
+					polyIds: [],      // MeshOptimiser patch: the face (line) of the file each triangle came from
+					polyCount: 0,
+					polyBig: false    // (some face has more than three corners)
 				},
 				materials: [],
 				smooth: true,
@@ -591,6 +594,11 @@ class OBJLoader extends Loader {
 
 				const v1 = faceVertices[ 0 ];
 
+				// MeshOptimiser patch: every triangle of this face gets the face's number, so the quads and n-gons of the file
+				// are known after they are split (see geometry._moPoly below)
+				const polyGeo = state.object.geometry, polyId = polyGeo.polyCount;
+				if ( faceVertices.length > 3 ) polyGeo.polyBig = true;
+
 				for ( let j = 1, jl = faceVertices.length - 1; j < jl; j ++ ) {
 
 					const v2 = faceVertices[ j ];
@@ -601,8 +609,11 @@ class OBJLoader extends Loader {
 						v1[ 1 ], v2[ 1 ], v3[ 1 ],
 						v1[ 2 ], v2[ 2 ], v3[ 2 ]
 					);
+					polyGeo.polyIds.push( polyId );
 
 				}
+
+				if ( faceVertices.length > 2 ) polyGeo.polyCount ++;
 
 			} else if ( lineFirstChar === 'l' ) {
 
@@ -739,6 +750,10 @@ class OBJLoader extends Loader {
 				const buffergeometry = new BufferGeometry();
 
 				buffergeometry.setAttribute( 'position', new Float32BufferAttribute( geometry.vertices, 3 ) );
+
+				// MeshOptimiser patch: the polygon (face of the file) of each triangle, only when some face has more than three
+				// corners (a plain property, not userData: a clone must not copy a typed array through JSON)
+				if ( geometry.polyBig && geometry.polyIds.length === geometry.vertices.length / 9 ) buffergeometry._moPoly = Int32Array.from( geometry.polyIds );
 
 				if ( geometry.normals.length > 0 ) {
 

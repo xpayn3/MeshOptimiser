@@ -310,6 +310,14 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.24.0** — into the mesh: an Edit mesh mode with points, edges and polygons, a shortcuts window with a keyboard and keys you can change, and a faster start.
+
+- ![new][new] **Edit mesh** — Points, Edges, Polygons and Model modes (`1` `2` `3` `4`), as in Cinema 4D. Pick with Click, Box or Brush, pick loops, then move, turn, scale, delete or reverse what is picked with the gizmo. The view modes moved to `Alt+1` to `Alt+4`.
+- ![new][new] **Dissolve, Planarize, Straighten, Weld, Fill and Extract** on the picked pieces, one undo step each.
+- ![new][new] **A keyboard in the shortcuts window.** Lit keys carry their command, Ctrl, Shift and Alt switch the picture, and every key can be changed, with a warning when it is taken and named profiles to keep the changes in.
+- ![new][new] **Untriangulate** can take away the points on straight lines and dissolve faces that are only nearly flat, and **Claude's screenshots** can frame the model or the selection.
+- ![fix][fix] **Edit mesh fixes** (a press on the gizmo is not a move, Delete keeps the polygons of what stays, Reverse normals no longer grows the mesh), `Alt+1` to `Alt+4` on a Mac, and **a faster start**: the browser keeps the app's files between starts.
+
 **v0.23.0** — back to the mesh itself: you decide how a CAD file becomes triangles, Fill holes is now Remove holes and closes far more, three tools clean up what is left, and the search looks through Settings.
 
 - ![new][new] **Tessellation settings on import** — sag, angle and smallest edge for STEP, IGES and BREP, with four presets or your own numbers, and **By part size** for a fine housing and coarse screws. **Smooth shading** takes the normals from the CAD surfaces, and **Swap Y and Z** stands up a file that comes in on its side.

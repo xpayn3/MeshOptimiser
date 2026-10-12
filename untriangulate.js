@@ -23,12 +23,18 @@
 //   opts.normalTol     degrees a vertex normal may differ from the plane's normal (default 5)
 //   opts.tolerance     how far the surface may move (mesh units) where a vertex that is not quite in the plane of its polygon
 //                      is taken away; 0 (the default) is a hair: 2e-5 of the part's size, so nothing visibly moves
+//   opts.straight      also dissolve the points that only sit on a straight run of an outline, from every polygon at once (dissolve.js);
+//                      off by default: the plate keeps every vertex of its outline
+//   opts.limitDeg      also a limited dissolve of what is left on faces that are nearly flat: a point goes when the triangles round it
+//                      turn from each other by no more than this (degrees) and the surface moves by less than opts.limitTol (mesh units;
+//                      default a thousandth of the part's size). 0 (the default) is off.
 //   opts.triangulate   (contour, holes) → [[i, j, k], …]: indices into contour then holes, each a list of [x, y]
 //                      (THREE.ShapeUtils does this; it is passed in so this file needs no library)
 // Returns { index, poly, stats } or null: `index` the new triangle list (the mesh's own vertex numbers, so the
 // caller drops the vertices nothing uses any more), `poly` the polygon of every new triangle.
 
 import { analysePolygons } from './wirelines.js?v=2';
+import { dissolvePoints, applyDissolve, reduceCollinear, restoreDropped } from './dissolve.js?v=3';
 
 export function untriangulate(positions, index, opts = {}) {
   const { angleDeg = 1, normals = null, normalTol = 5, triangulate, flip = true, tolerance = 0 } = opts;
@@ -313,31 +319,27 @@ export function untriangulate(positions, index, opts = {}) {
     }
   }
   stats.trisAfter = total;
-  return { index: outIdx.slice(0, total * 3), poly: outPoly.slice(0, total), stats };
-}
-
-// Put back the outline vertices `missing` (local numbers into `pts`) that lie on a side of one of `tris`.
-function restoreDropped(tris, pts, missing, tol) {
-  for (const d of missing) {
-    const dx = pts[d][0], dy = pts[d][1];
-    let found = false;
-    for (let i = 0; i < tris.length && !found; i++) {
-      const q = tris[i];
-      for (let k = 0; k < 3; k++) {
-        const p0 = q[k], p1 = q[(k + 1) % 3], p2 = q[(k + 2) % 3];
-        const ex = pts[p1][0] - pts[p0][0], ey = pts[p1][1] - pts[p0][1], fx = dx - pts[p0][0], fy = dy - pts[p0][1];
-        const len2 = ex * ex + ey * ey;
-        if (!len2) continue;
-        const dot = ex * fx + ey * fy;
-        if (Math.abs(ex * fy - ey * fx) <= tol * Math.sqrt(len2) && dot > 0 && dot < len2) {
-          tris[i] = [p0, d, p2]; tris.push([d, p1, p2]);
-          found = true; break;
-        }
-      }
+  let resIndex = outIdx.slice(0, total * 3), resPoly = outPoly.slice(0, total);
+  // Points that only sit on a straight run of an outline (a long edge cut up into pieces) are kept above, so that a neighbour that
+  // still has them does not get a crack. Here they go from every polygon that touches them at once, which is safe.
+  // And what is left on faces that are only nearly flat (opts.limitDeg > 0): a limited dissolve. A point goes when the triangles round
+  // it turn from each other by no more than limitDeg and the surface moves by less than limitTol where it was; the polygons round it
+  // become one.
+  const limitDeg = +opts.limitDeg > 0 ? +opts.limitDeg : 0;
+  if (opts.straight || limitDeg) {
+    const places = new Set();
+    for (let i = 0; i < resIndex.length; i++) places.add(canon[resIndex[i]]);
+    const d = dissolvePoints(positions, resIndex, resPoly, canon, places, {
+      triangulate, normals, normalTol, strict: true, allowInterior: !!limitDeg, allowStraight: !!opts.straight, allowMerge: false, planeTol, lineTol,
+      limitDeg, limitTol: opts.limitTol > 0 ? opts.limitTol : diag * 1e-3, limitMerge: !!limitDeg,
+    });
+    if (d.dissolved) {
+      const ap = applyDissolve(resIndex, d);
+      resIndex = ap.index; resPoly = ap.poly;
+      stats.straight = d.dissolved; stats.vertsRemoved += d.dissolved; stats.trisAfter = resIndex.length / 3;
     }
-    if (!found) return false;
   }
-  return true;
+  return { index: resIndex, poly: resPoly, stats };
 }
 
 // The sides left open by `tris` must be exactly the outline (the loops of the given sizes, numbered one after the
@@ -354,34 +356,6 @@ function outlineIsOnlyOpenEdge(tris, sizes) {
     base += n;
   }
   return open === want;
-}
-
-// The points of a closed loop that are not just on a straight run between their neighbours (local numbers).
-// A point is dropped when it lies on the line through the one before and the one after and between them.
-function reduceCollinear(pts, tol) {
-  const n = pts.length;
-  if (n < 4) return pts.map((_, i) => i);
-  // q is on the straight run from p to r: within `tol` of the line through them, and between them
-  const straight = (p, q, r) => {
-    const ex = r[0] - p[0], ey = r[1] - p[1], fx = q[0] - p[0], fy = q[1] - p[1], len2 = ex * ex + ey * ey;
-    if (!len2) return false;
-    const dot = ex * fx + ey * fy;
-    return Math.abs(ex * fy - ey * fx) <= tol * Math.sqrt(len2) && dot > 0 && dot < len2;
-  };
-  const keep = [];
-  for (let i = 0; i < n; i++) {
-    keep.push(i);
-    while (keep.length >= 3 && straight(pts[keep[keep.length - 3]], pts[keep[keep.length - 2]], pts[keep[keep.length - 1]])) keep.splice(keep.length - 2, 1);
-  }
-  // the seam where the loop closes
-  let again = true;
-  while (again && keep.length > 3) {
-    again = false;
-    const m = keep.length;
-    if (straight(pts[keep[m - 1]], pts[keep[0]], pts[keep[1]])) { keep.shift(); again = true; }
-    else if (straight(pts[keep[m - 2]], pts[keep[m - 1]], pts[keep[0]])) { keep.pop(); again = true; }
-  }
-  return keep;
 }
 
 // Edge flips (Lawson) over a triangulation of a flat polygon: an inside edge is turned when the corner opposite it lies

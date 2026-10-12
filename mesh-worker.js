@@ -10,6 +10,7 @@
 //   { op: 'simplify', …, tol } instead of keep: as far as no point moves more than `tol` (in the mesh's units)
 //
 //   { op: 'ngons',    positions, index, angle, poly }       → the outlines of the polygons (wirelines.js)
+//   { op: 'quads',    positions, index }                    → the outlines of the four-sided pairs of triangles (meshedit.js)
 //   { op: 'untriangulate', positions, index, groups, angle, normals, threeUrl }
 //                                                            → rebuilt triangles per material group (untriangulate.js)
 //
@@ -18,7 +19,8 @@
 import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=21';
 import { reduceIndex } from './simplify-core.js?v=2';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=2';
-import { untriangulate, evenTriangles } from './untriangulate.js?v=7';
+import { buildTopology, pairQuads, buildPolygons, outlineLines } from './meshedit.js?v=5';
+import { untriangulate, evenTriangles } from './untriangulate.js?v=10';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
 // then in the middle of one. (Three more passes at most; each is a fraction of the first.)
 function untriangulatePasses(positions, index, opts) {
@@ -30,6 +32,7 @@ function untriangulatePasses(positions, index, opts) {
     r2.stats.trisBefore = r.stats.trisBefore;
     r2.stats.rebuilt += r.stats.rebuilt;
     r2.stats.vertsRemoved += r.stats.vertsRemoved;
+    r2.stats.straight = (r2.stats.straight || 0) + (r.stats.straight || 0);
     r = r2;
   }
   return r;
@@ -98,6 +101,12 @@ self.onmessage = async (e) => {
       self.postMessage({ id: m.id, ok: true, parts, err }, transfer);
       return;
     }
+    if (m.op === 'quads') {
+      const topo = buildTopology(m.positions, m.index || null), q = pairQuads(topo);
+      const lines = outlineLines(topo, buildPolygons(topo, q.polyOf, q.count));
+      self.postMessage({ id: m.id, ok: true, lines, polys: q.count }, [lines.buffer]);
+      return;
+    }
     if (m.op === 'ngons') {
       const a = analysePolygons(m.positions, m.index || null, m.angle || 1, m.poly || null);
       if (!a) { self.postMessage({ id: m.id, ok: true, none: true }); return; }
@@ -110,11 +119,11 @@ self.onmessage = async (e) => {
       // a vertex whose triangles all lie in one plane shades flat (the rim of a hole that was closed keeps the tilted normal it had)
       if (!even && m.fixNormals && m.normals) flattenRimNormals(m.positions, m.index, m.normals, null);
       const triangulate = even ? null : await getTriangulator(m.threeUrl);
-      const parts = [], transfer = [], stats = { trisBefore: 0, trisAfter: 0, polygons: 0, joined: 0, rebuilt: 0, vertsRemoved: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
+      const parts = [], transfer = [], stats = { trisBefore: 0, trisAfter: 0, polygons: 0, joined: 0, rebuilt: 0, vertsRemoved: 0, straight: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
       let polyBase = 0;
       for (const g of m.groups) {
         const sub = m.index.subarray(g.start, g.start + g.count);
-        const opts = { angleDeg: m.angle || 1, normals: m.normals || null, triangulate, normalTol: m.normalTol || 5, flip: m.flip !== false, tolerance: m.tolerance || 0 };
+        const opts = { angleDeg: m.angle || 1, normals: m.normals || null, triangulate, normalTol: m.normalTol || 5, flip: m.flip !== false, tolerance: m.tolerance || 0, straight: !!m.straight, limitDeg: m.limitDeg || 0, limitTol: m.tolerance || 0 };
         const r = even ? evenTriangles(m.positions, sub, { angleDeg: m.angle || 1 }) : untriangulatePasses(m.positions, sub, opts);
         if (!r) { const n = sub.length / 3; parts.push({ idx: sub.slice(), poly: Int32Array.from({ length: n }, (_, i) => polyBase + i), materialIndex: g.materialIndex }); polyBase += n; stats.trisBefore += sub.length / 3; stats.trisAfter += sub.length / 3; continue; }
         const poly = r.poly;
@@ -122,7 +131,7 @@ self.onmessage = async (e) => {
         polyBase += r.stats.polygons;
         parts.push({ idx: r.index, poly, materialIndex: g.materialIndex });
         transfer.push(r.index.buffer, poly.buffer);
-        for (const k of ['trisBefore', 'trisAfter', 'polygons', 'joined', 'rebuilt', 'vertsRemoved']) stats[k] += r.stats[k];
+        for (const k of ['trisBefore', 'trisAfter', 'polygons', 'joined', 'rebuilt', 'vertsRemoved', 'straight']) stats[k] += r.stats[k] || 0;
         for (const k in stats.kept) stats.kept[k] += r.stats.kept[k];
       }
       self.postMessage({ id: m.id, ok: true, parts, stats }, transfer);
