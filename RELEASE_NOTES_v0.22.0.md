@@ -1,32 +1,42 @@
 # MeshOptimiser v0.22.0
 
-Claude can drive the optimiser, the app can update itself, and a crash no longer costs the scene.
+This release is about three things. You can now ask Claude to do the clean-up for you. The app can update itself. And if the app crashes, you get your work back.
 
-## New
+## Ask Claude to do it for you
 
-**Work with Claude.** Switch on **Let Claude connect** in Settings, add the app to Claude once with `claude mcp add --transport http meshoptimiser http://localhost:4242/mcp`, and Claude can use the same tools you click, on the scene you have open: 65 of them, from finding bolts and hidden parts to Smart optimise, reducing to a size, pictures and exports. It is off until you switch it on. Four switches decide what it may do, an Allow or Don't allow prompt comes before every edit, deleting always asks, and every change is one undo step. Sixteen steps take a dry run (the app does it, reads the numbers and takes it back), `optimise_to_target` goes to a size in one call, `compare_images` draws before and after, `batch_optimise` does a folder, and long jobs show their progress with a Stop button. It arrives knowing the app: six playbooks, about fifty help articles and six ready-made jobs.
+Claude can now use MeshOptimiser. Turn on **Let Claude connect** in Settings, paste one line into a terminal once (Settings shows it, with a Copy button), and then you can just say what you want: "find all the bolts and hide them", or "get this under 5 MB". Claude clicks the same buttons you would. It is off until you turn it on.
 
-**Updates inside the app.** Settings, Updates looks for a newer version and installs it: a few megabytes of the app's own files, checked against a fingerprint before any file is replaced, with one earlier version kept and a way back that works by itself if the new one does not start. Check automatically, Stable or Beta, a notice in the corner. Versions before this one need one manual update.
+- **You stay in control.** Claude asks before it changes anything (Allow or Don't allow), deleting always asks, and you can switch off whole kinds of things it may do. Every change is one step you can undo with Ctrl+Z.
+- **Try it first.** Claude can try a step, tell you what would happen, and take it back.
+- **Big jobs in one go.** Take a model down to a size you choose, show a before and after picture, or do a whole folder. A bar shows the progress, and a Stop button ends it.
+- **Pictures for a client.** Clean pictures up to 8192 pixels, from several angles, with a plain or see-through background.
+- **Claude already knows the app,** so it works in a sensible order instead of guessing.
 
-**Your scene back after a crash.** While a scene has changes that are not saved, a copy is kept in the browser (every 2 minutes by default; Settings, General, Recovery). After a crash the app offers it back, and the start screen shows it first as a yellow Continue card. Saving clears it.
+## The app updates itself
 
-**Keep sharp edges.** Decimate and Fit to budget hold on to rims, steps and corners while triangles go. On by default; parts that are mostly hard edges, like gears, are reduced as before.
+Settings, Updates tells you when a new version is out and installs it with one click. It is a small download (a few megabytes), and your files and settings stay as they are. The last version is kept, so **Earlier version** puts it back. If a new version does not start, the old one comes back by itself.
 
-**Meshopt compression and Faster to draw** in Export (GLB). Meshopt is about a quarter of the plain size, Draco is smaller still. Faster to draw only reorders for the graphics card, and any viewer opens it.
+You choose how often it checks, Stable or Beta, and whether a notice shows in the corner. Older versions cannot update themselves, so they need one manual update first.
 
-**New scenes start your way.** A unit and an up axis in Settings, General.
+## Your work comes back after a crash
 
-## Around the app
+While you have changes you have not saved, the app keeps a copy of your scene in your browser (every 2 minutes by default; change it or turn it off in Settings, General, Recovery). If the app crashes, it offers to bring the scene back the next time you open it, as a yellow **Continue** card at the top of the start screen.
 
-- A Tasks chip in the status bar for every tab's running job, with Cancel.
-- Hover a tree row and the part pulses; hover a part and its row lights up. A soft glow on the selection.
-- Explode along each part's own axis, Recentre moves only the selected parts, a Shading angle in Properties, and about forty more actions in the search.
-- Drop a folder to open the model in it; a glTF with external files asks for its folder; a converted STEP opens at once from Recent.
-- A new loader, a six-step list when a STEP opens, a camera pill under the view cube, a wider left sidebar, sharper turntable videos.
+It is only for crashes. If you close or reload the window yourself, nothing is offered back. It is a safety net, not a backup, so keep saving your scene.
+
+## Smaller things that help
+
+- **Keep sharp edges** when you reduce triangles: rims, steps and corners stay crisp. On by default.
+- **Two new export options for GLB.** Meshopt compression makes the file about a quarter of its size (Draco is smaller still, but some viewers read Meshopt and some do not). Faster to draw only re-orders the file so it draws faster, and every viewer opens it.
+- **New scenes start the way you like:** pick a unit and an up direction in Settings, General.
+- **A Tasks chip** at the bottom shows what each tab is working on, with a Cancel button.
+- **Point to find:** point at a row in the list and the part flashes; point at a part and its row lights up.
+- **Open a folder** by dropping it in. **Explode** can send each part along its own direction. A **Shading angle** row in Properties. About forty more things in the search.
+- A new loading animation, a six-step list when a STEP file opens, a wider left sidebar and sharper turntable videos.
 
 ## Fixed
 
-- Closing or reloading a tab while a conversion runs stops the converter at once; the server cancels jobs nobody asks about for ten minutes.
-- The selection stays while exploding, and an exploded model's bounding box is no longer offset twice.
-- The grid refits after a model is added to a scene or a library part arrives.
-- Smart fit's cylinder copes with a ring that has a tab or ears.
+- Closing a tab while a file is converting now stops the conversion at once. Before, it could keep your computer busy for hours.
+- The selection stays selected while a model explodes, and the box around parts is no longer off after exploding.
+- The floor grid fits again after you add a model to a scene.
+- Smart fit now handles a ring that has a small tab or ears.

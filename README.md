@@ -310,13 +310,13 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v0.22.0** — let Claude do the work, and never lose the scene: Claude can drive the optimiser, the app updates itself, and a crash is recoverable.
+**v0.22.0** — ask Claude to do the clean-up, let the app update itself, and get your work back after a crash.
 
-- ![new][new] **Work with Claude** — switch on **Let Claude connect** in Settings and Claude can use the same 65 tools you click (find bolts and hidden parts, Smart optimise, reduce to a size, renders, exports). Four permission switches, an Allow / Don't allow prompt before every edit, dry runs, one-call jobs with progress and Stop, and every change is one undo step. Off until you switch it on.
-- ![new][new] **Updates inside the app** — Settings → Updates installs a newer version (a few MB, checked before any file is replaced) and keeps one earlier version to go back to.
-- ![new][new] **Your scene back after a crash** — a recovery copy while there are unsaved changes (Settings → General → Recovery), offered first on the start screen as a yellow Continue card.
-- ![new][new] **Keep sharp edges** in Decimate and Fit to budget, **Meshopt compression** and **Faster to draw** in Export, **a unit and up axis for new scenes**, a **Tasks chip**, hover-to-find in the tree, a Shading angle and drop-a-folder.
-- ![fix][fix] **Closing a tab stops a running conversion at once,** the selection stays while exploding, and the grid refits after an import into a scene.
+- ![new][new] **Claude can use MeshOptimiser.** Turn on **Let Claude connect** in Settings and just say what you want: "find all the bolts and hide them", "get this under 5 MB". It asks before it changes anything, and every change is one undo.
+- ![new][new] **The app updates itself.** Settings → Updates installs a new version in one click (a few MB) and keeps the old one so you can go back.
+- ![new][new] **Your scene comes back after a crash.** A safety copy is kept while you have unsaved changes, and offered at the top of the start screen. It is for crashes only: save your scene as you go.
+- ![new][new] **Keep sharp edges** when reducing triangles, **Meshopt compression** and **Faster to draw** when exporting GLB, a unit and up direction for new scenes, a **Tasks chip**, point-to-find in the list, and drop a folder to open it.
+- ![fix][fix] Closing a tab now stops a running conversion at once, and the selection stays while exploding.
 
 **v0.21.0** — show it and ship it: a turntable video, export presets for where the file is going, and a Selection bar with the actions I reach for most.
 
