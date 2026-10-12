@@ -1,6 +1,6 @@
 # Keyboard shortcuts
 
-Every keyboard shortcut and mouse action in MeshOptimiser v0.20.0, grouped by what it does.
+Every keyboard shortcut and mouse action in MeshOptimiser v0.23.0, grouped by what it does.
 
 On macOS, use `⌘` wherever this page says `Ctrl`.
 
@@ -8,7 +8,7 @@ Inside the app, press `?` for the same list with a search field. Shortcuts with 
 
 ## File
 
-- `Ctrl + N`: New scene, in a new tab
+- `Alt + N`: New scene, in a new tab. A browser keeps Ctrl + N for itself, to open a new browser window. In the installed app, Ctrl + N works too.
 - `Ctrl + O`: Open a file
 - `Ctrl + Shift + O`: Import a file into the open scene
 - `Ctrl + S`: Save the scene
@@ -33,14 +33,18 @@ Inside the app, press `?` for the same list with a search field. Shortcuts with 
 ## Tools
 
 - `X`: Split
-- `P`: Fill holes
+- `P`: Remove holes
 - `Ctrl + B`: Smart fit
+- `U`: Untriangulate the selection
+- `Shift + U`: Triangulate the selection
 - `M`: Measure
 - `L`: Draw lines and shapes
 - `Enter`: Run the open command card
 - `Esc`: Put the open command card away. A second press clears the selection.
 
-Smart optimise, Decimate, Fit to budget, Select hidden parts, Fasteners, Stacked copies and Align to floor have no key of their own. Find them on the toolbar, in the `…` list or with the search.
+The key of a tool also closes its card when the card is already open. `U` and `Shift + U` work on the selection only. See [Remesh](meshoptimiser://docs/remesh).
+
+Smart optimise, Decimate, Fit to budget, Remove floating pieces, Sweep, Select hidden parts, Fasteners, Stacked copies and Align to floor have no key of their own. Find them on the toolbar, in the `…` list or with the search.
 
 ## Selection
 
@@ -50,6 +54,9 @@ Smart optimise, Decimate, Fit to budget, Select hidden parts, Fasteners, Stacked
 - `Shift + S`: Find the selected part in the tree
 - `Ctrl + Click`: In the tree: add a row to the selection or take it out. A group goes in or out with its parts.
 - `Shift + Click`: In the tree: pick every row from the last one you clicked to this one, groups and parts alike.
+- `↑ ↓`: After a click in the tree: go to the row above or below. With `Shift`, add a row to the selection.
+- `→ ←`: After a click in the tree: open a group, or close it. On a part, `←` goes to the group that holds it.
+- `Home End`: After a click in the tree: go to the first or the last row.
 
 ## Visibility
 
@@ -85,7 +92,9 @@ Smart optimise, Decimate, Fit to budget, Select hidden parts, Fasteners, Stacked
 
 ## Panels and windows
 
-- `Ctrl + K`: Search commands, parts and the library
+- `Ctrl + K`: Search commands, parts, the library and settings
+- `Shift + C`: The same search
+- `Shift + Enter`: In the search, on a switch: go to the switch instead of turning it
 - `W`: Quick wand: hold it over the viewport, flick toward a command, let go. A quick tap leaves the ring open.
 - `Shift + L`: Library drawer
 - `Shift + M`: Materials drawer
@@ -95,7 +104,7 @@ Smart optimise, Decimate, Fit to budget, Select hidden parts, Fasteners, Stacked
 - `?`: Keyboard shortcuts
 - `Ctrl + F`: In Settings: jump to the search field
 - `Ctrl + Enter`: In Batch rename: apply
-- `Esc`: Close the open window or menu
+- `Esc`: Close the open window or menu. It closes the Export, Import and Save scene windows too.
 
 ## In the help window
 
@@ -130,6 +139,10 @@ Smart optimise, Decimate, Fit to budget, Select hidden parts, Fasteners, Stacked
 - `Shift`: While dragging a number: ten times faster
 - `Alt`: While dragging a number: ten times finer
 - `Click`: On a number: type a value
+- `Right-click`: On a number field: Cut, Copy, Paste, Select all, Reset and quick edits of the number
+- `Double-click`: On the material card in Properties: rename the material
+- `Drag`: A material from the Materials dock into the view: assign it
+- `Shift + Drag`: A material onto another material: merge the two
 
 ## On the start screen
 

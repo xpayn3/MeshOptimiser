@@ -24,9 +24,9 @@ It shows the parts tree: every part of the model, arranged in groups, with a sea
 - **Tool strip, left edge**: Move, rotate and scale tools, **Dynamic place** (`D`), a button for the transform card, then four view modes (solid, wireframe, X-ray, heatmap) and a button that highlights small parts. The Clay and CAD looks are in the **Shading** card on the right.
 - **View name, top centre**: Says which camera view is active, **Cam** to begin with. Click it to switch to Top, Front or Side. Small pills to its right show a mode that is on: **Isolated**, **Exploded**, **Measure** and **Snap**. Click a pill to leave that mode.
 - **View cube, top right**: A small cube that turns with the model. Click a face or an axis dot and the view turns there.
-- **Toolbar, bottom centre**: Search, add a shape, **Split**, **Fill holes**, **Smart fit**, **Select hidden parts**, **Fasteners**, **Measure**, **Library**, **Materials**, and `…` for the list of all commands.
+- **Toolbar, bottom centre**: Search, add a shape, **Split**, **Remove holes**, **Draw lines**, **Smart fit**, **Remesh**, **Select hidden parts**, **Fasteners**, **Measure**, **Library**, **Materials**, and `…` for the list of all commands.
 - **Shortcut tips, bottom right**: A faint list of what the mouse and keys do right now. It changes when you select something.
-- **Command cards, bottom left**: A tool with settings, such as Fill holes, Align to floor or Dynamic place, opens as a card over the viewport. `Enter` runs it and `Esc` puts it away.
+- **Command cards, bottom left**: A tool with settings, such as Remove holes, Align to floor or Dynamic place, opens as a card over the viewport. `Enter` runs it and `Esc` puts it away.
 
 ## Right sidebar
 
@@ -47,7 +47,7 @@ Under the viewport: the number of vertices, the size of the mesh data, how many 
 
 ## Drawers
 
-Three panels slide up from the bottom of the viewport and take turns: only one is open at a time. Drag the top edge of a drawer to change its height.
+Three panels slide up from the bottom of the viewport and take turns: only one is open at a time. Drag the top edge of a drawer to change its height. The Library and the Materials drawer can also pop out as floating windows over the view. Then they do not take turns, and both can be open side by side.
 
 - **Library**: The parts you can add. Opened with the **Library** button on the bottom toolbar or `Shift + L`. See [The library](meshoptimiser://docs/library).
 - **Materials**: Every material in the scene. Opened with `Shift + M`. See [Colours and materials](meshoptimiser://docs/colours-materials).

@@ -19,7 +19,7 @@ To change your mind, let go with the pointer in the middle of the ring, or press
 The ring works on the selection, and has four slices.
 
 - **Hide**: Hides the selected parts.
-- **Reduce**: Opens a fan of commands: Decimate −50 %, −25 %, −75 % and −90 % (each shows how many triangles there are before and after), Smart fit, Split and Fill holes.
+- **Reduce**: Opens a fan of commands: Decimate −50 %, −25 %, −75 % and −90 % (each shows how many triangles there are before and after), Smart fit, Split and Remove holes.
 - **Delete**: Deletes the selection. It is red, so it is hard to pick by mistake.
 - **More**: Opens a fan of commands: Isolate, Select similar, Select same colour, Group, Duplicate, Merge, Frame, Hide others and Show all.
 
@@ -38,7 +38,7 @@ The ring works on the whole scene, and has six slices.
 
 A slice that holds a group opens its fan as soon as the pointer is on it. Keep going outward onto a command and let go. You can head straight for a command: the ring remembers which group you were going for, so it does not turn into another slice on the way.
 
-Every command shows its shortcut. A command that cannot run right now stays on the ring, dimmed, and says why: “Nothing is hidden”, “Select two or more parts” or “Too few triangles to take away”.
+The ring shows icons only. In a fan, the command under the pointer shows its name and its shortcut in a small label beside it. A command that cannot run right now stays on the ring, dimmed, and says why: “Nothing is hidden”, “Select two or more parts” or “Too few triangles to take away”.
 
 ## Tap instead of hold
 

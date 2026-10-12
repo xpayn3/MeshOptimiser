@@ -1,8 +1,8 @@
 # Settings
 
-One window with ten sections and a search. What each section holds, in a sentence or two, from the start-up options to the look of the interface.
+One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.
 
-Open it with `Ctrl + ,` or **Menu**, then **Settings…**. Changes apply as you make them. There is nothing to confirm: press **Done** or `Esc` to close the window.
+Open it with `Ctrl + ,` or **Menu**, then **Settings…**. Changes apply as you make them. A click anywhere on a row with a switch turns the switch. There is nothing to confirm: press **Done** or `Esc` to close the window.
 
 The list at the left has the sections. The field at the top searches every section at once. Press `Ctrl + F` to jump to it. While a search is typed, `Esc` clears it first. At the bottom of the list are links to **Help & docs** and **Keyboard shortcuts**, and the version number.
 
@@ -22,6 +22,25 @@ How the app starts and behaves.
 - **Keep a recovery copy**: While a scene has changes that are not saved, a copy of it is kept inside this browser every minute, every 2 minutes (the default) or every 5 minutes, and only when something changed. If the app crashes, it offers the scene back. **Off** stops it. See [Get your scene back after a crash](meshoptimiser://docs/crash-recovery).
 - **New scenes: Unit and Up axis**: What a scene you start from now on shows sizes in (mm, cm, m, in, ft, or none), and which way is up (Z-up for CAD, Y-up for Maya, glTF and Unity). It applies to every new tab and every reload. The scene you have open keeps its own; change that one under **Scene**.
 
+## Search
+
+What the search (`Ctrl + K` or `Shift + C`) looks through, and how closely a name has to fit. The search itself is explained in [Search and commands](meshoptimiser://docs/search-and-commands).
+
+- **Sidebar controls**: Every button, switch and field of the sidebars, besides the commands. Choosing one opens its card and takes you to it.
+- **Parts of the scene**: Parts by name. `Enter` selects and frames one. When several carry what you typed in their name, one row selects them all.
+- **Library parts**: Standard parts by name. `Enter` adds one to the scene.
+- **Sums and lengths**: Type `12*25.4` or `2 in` and the answer is the first row. `Enter` copies it.
+- **Settings**: The rows of this window, by name. Choosing one opens the window and takes you to its row.
+- **Switches in the results**: A switch that is found is drawn in its row. Press it, or `Enter`, to turn it on or off without leaving the search. `Shift + Enter` goes to it instead. Off: choosing the row goes to the switch.
+- **Other words for the same thing**: `remove` also finds Delete, `bolts` finds Fasteners, `picture` finds Screenshot.
+- **Forgive a slip of the finger**: One letter wrong, missing, one too many, or two the wrong way round still finds the command.
+- **Initials**: `rh` finds Remove holes, `ss` finds Save scene.
+- **Coloured icons**: Each kind of result has a colour of its own on its icon. Off: the icons are all grey.
+- **What you used lately comes first**: Among commands that fit about as well, the ones you ran last stand higher.
+- **How many results**: The most commands listed for what you typed: **Few**, **Normal** or **Many**.
+- **A mark in front narrows the search**: A reminder of the four marks: `>` for commands, `@` for parts, `+` for library parts and `#` for settings.
+- **Recent commands**: The commands you ran last lead the list while nothing is typed. **Forget them** empties that list.
+
 ## Appearance
 
 The look of the interface. It does not change the model or the 3D view. **Reset** at the bottom puts everything in this section back to the defaults.
@@ -39,6 +58,7 @@ The look of the interface. It does not change the model or the 3D view. **Reset*
 What the 3D view draws around the model.
 
 - **Highlight small parts**: Tints the parts that are under the size threshold of Delete small parts.
+- **Arrow to a selection out of view**: A faint arrow at the edge of the view points to the selection when none of it is on screen. Click the arrow to frame the selection. On by default.
 - **CAD view look**: The look the CAD view (key `6`) shades with: **Ceramic**, **Light** or **Mono**. The same choice is in the **Shading** card on the right.
 - **Outlines**: A fine dark line on the sharp edges of every part, in every view. On by default. The same switch is in the **Shading** card.
 - **Ground grid**: The floor grid. `G` switches it too.
@@ -55,9 +75,11 @@ Projection, field of view, clip planes, and how the view moves.
 - **Projection**: Perspective, as a camera sees, or Orthographic, with no perspective.
 - **Field of view**: How wide the lens is, in perspective.
 - **Clip planes**: How near and how far the camera sees. **Auto** fits the scene. **Tight** is for tiny parts, **Wide** for large assemblies and **Huge** for the size of a factory.
-- **Orbit around the selection**: With something selected, the view turns around it. Off, or with nothing selected: around the centre of the view.
+- **Orbit around**: What the view turns around when you drag. **Selection**: the selected parts, or the centre of the view when nothing is selected. **Scene**: always the centre of the view. **Cursor**: the point under the pointer when the drag starts. That is the surface the pointer is over, or, over empty space, a point at the depth the view was turning around.
 - **Zoom toward the cursor**: The wheel zooms toward the pointer instead of the centre of the view.
-- **Orbit speed and Zoom speed**: How far the view turns for a drag and moves for the wheel: **Slow**, **Normal** or **Fast**.
+- **Orbit speed, Pan speed and Zoom speed**: How far the view turns for a drag, slides for a pan drag (middle or right button) and moves for the wheel. Pan and zoom are **Slow**, **Normal** or **Fast**. Orbit has two more steps, **Very slow** and **Very fast**.
+- **Invert orbit direction**: The view turns the other way for a drag: drag right and the model turns left.
+- **Stop at the horizon**: The camera cannot go below the grid, so you cannot end up looking at a model from underneath by accident. Off: it turns freely all the way round.
 
 The mouse moves are explained in [Move the view](meshoptimiser://docs/move-the-view).
 

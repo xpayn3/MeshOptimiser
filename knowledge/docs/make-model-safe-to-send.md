@@ -16,7 +16,7 @@ A GLB holds triangles, colours and the names of parts. It has no feature tree, n
 2. Decide what the customer should see. Usually that is the closed product, seen from outside.
 3. Remove what is inside. Use **Select hidden parts**, press **Isolate** to check what it found, and press **Delete**. See [Select hidden parts](meshoptimiser://docs/select-hidden-parts).
 4. Remove the hardware: bolts, screws, nuts and washers. See [How to remove bolts and screws from a STEP assembly](meshoptimiser://docs/remove-bolts-from-step-assembly).
-5. Simplify the parts whose shape is the secret. [Smart fit](meshoptimiser://docs/smart-fit) can swap a part for a box, a cylinder, a few boxes or blocks that keep its outline. **Fill holes** closes bolt holes and pockets.
+5. Simplify the parts whose shape is the secret. [Smart fit](meshoptimiser://docs/smart-fit) can swap a part for a box, a cylinder, a few boxes or blocks that keep its outline. **Remove holes** closes bolt holes and pockets.
 6. Bring the weight down to a number with [Fit to budget](meshoptimiser://docs/fit-to-budget), if the file must be small.
 7. Clean the names (below).
 8. Export a GLB. See [Export](meshoptimiser://docs/export) and the settings below.

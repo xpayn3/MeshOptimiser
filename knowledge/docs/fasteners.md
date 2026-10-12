@@ -13,7 +13,7 @@ Before you delete or simplify the hardware, when the names do not help. Not when
 ## Steps
 
 1. Click the **Fasteners** button (a bolt) on the bottom toolbar. You can also find it in the `…` list, or with the search (`Ctrl + K`, “Select fasteners”). Its panel opens at the bottom left of the viewport.
-2. Set **up to M** to the largest thread to look for. It starts at 30. A thread size is written M and the width in millimetres: M6 is a bolt 6 mm wide. A bolt, nut or washer for a bigger thread is left alone.
+2. Set **Thread size up to** to the largest thread to look for. It starts at 30. A thread size is written M and the width in millimetres: M6 is a bolt 6 mm wide. A bolt, nut or washer for a bigger thread is left alone.
 3. Leave the three switches on: **Bolts and screws**, **Nuts** and **Washers**. Switch off a kind you do not want.
 4. Press **Select fasteners**, or `Enter`. It looks at every visible part. On a large assembly it shows its progress and takes a few seconds.
 5. The fasteners are selected. A line says how many, how many triangles they hold and what share of the scene that is, for example “48 fasteners selected: 22,760 triangles, 3.5% of the scene”.
@@ -52,6 +52,6 @@ Selecting changes nothing. The delete is one undo step: `Ctrl + Z`.
 
 - Show all parts first (`Alt + H`). Only visible parts are looked at.
 - If a part that is not a fastener was selected, press **Certain** under **How sure** and run it again.
-- If a fastener was missed, raise **up to M**, or switch on **Pins, studs and threaded rods**.
+- If a fastener was missed, raise **Thread size up to**, or switch on **Pins, studs and threaded rods**.
 
 Related: [select-hidden-parts](meshoptimiser://docs/select-hidden-parts), [delete-small-parts](meshoptimiser://docs/delete-small-parts), [smart-fit](meshoptimiser://docs/smart-fit), [smart-optimise](meshoptimiser://docs/smart-optimise)

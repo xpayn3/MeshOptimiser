@@ -10,11 +10,11 @@ There are no undo buttons on screen. Undo and redo are keyboard only.
 
 ## What can be undone
 
-Every editing action: deleting, hiding and showing, moving, renaming, grouping, flattening, recolouring, and every mesh tool such as Fill holes, Decimate, Smart fit and Split.
+Every editing action: deleting, hiding and showing, moving, renaming, grouping, flattening, recolouring, and every mesh tool such as Remove holes, Decimate, Smart fit and Split.
 
 ## What counts as one step
 
-- A tool that changes many parts at once is one step. One `Ctrl + Z` takes back a whole Fill holes run or a whole Fit to budget.
+- A tool that changes many parts at once is one step. One `Ctrl + Z` takes back a whole Remove holes run or a whole Fit to budget.
 - In Align to floor, a run of adjustments is one step.
 - Changing the threshold of Delete small parts while its parts are isolated adds no step of its own.
 

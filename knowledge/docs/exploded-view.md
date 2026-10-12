@@ -20,7 +20,7 @@ Click **Fine tune each axis** to open three more sliders, **X axis**, **Y axis**
 
 - A pill that says **Exploded**, with the amount, appears at the top of the viewport beside the camera pill. Click it to put the parts back and set the sliders to zero.
 - Moving a slider lets go of the selection. You can still click parts and see their outlines, but they have no gizmo to move them until the parts are back together.
-- Smart fit and Fill holes work on the model at rest, then put the explosion back as it was.
+- Smart fit and Remove holes work on the model at rest, then put the explosion back as it was.
 
 > A suggestion: put the parts back before you edit, save or export. The exploded view is for looking, and a model is easier to work on when its parts are where they belong.
 

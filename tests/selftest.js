@@ -1082,7 +1082,8 @@
     range.value = String(+range.value + 200); range.dispatchEvent(new Event('input', { bubbles: true }));
     await T.sleep(120);
     T.assert(state.threshold !== t0, 'the threshold did not follow the slider while it was held');
-    T.assert(!btn.disabled && !btn.classList.contains('is-busy'), 'the Delete button is blocked while the slider is held');
+    // (the button is off while nothing is flagged, and never busy while the slider is held)
+    T.assert(btn.disabled === !(state.pendingFlagged.size > 0) && !btn.classList.contains('is-busy'), 'the Delete button does not follow the count while the slider is held');
     T.eq(document.getElementById('btn-delete-small-count').textContent, state.pendingFlagged.size.toLocaleString(), 'the count on the Delete button is stale');
     window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     await T.sleep(300);
@@ -1151,7 +1152,7 @@
     await T.undo();
   });
 
-  test('fill holes: a recess in a flat face is closed, undo brings it back', async () => {
+  test('remove holes: a recess in a flat face is closed, undo brings it back', async () => {
     await T.fresh(['cube', 'sphere']);
     const THREE = T.F().THREE, p = T.part('Cube');
     // a 17 × 17 plate with a plus-shaped recess, one quad per grid cell
@@ -1178,14 +1179,19 @@
     const lowest = () => { const a = p.mesh.geometry.attributes.position, ix = p.mesh.geometry.index; let z = Infinity; const n = ix ? ix.count : a.count; for (let i = 0; i < n; i++) z = Math.min(z, a.getZ(ix ? ix.getX(i) : i)); return z; };
     T.eq(lowest(), TOP - D, 'test plate has no recess');
     const btn = document.getElementById('btn-fill-holes'), size = document.getElementById('fill-holes-size');
-    T.assert(!!btn && !!size, 'no Fill holes control');
+    T.assert(!!btn && !!size, 'no Remove holes control');
     await T.pick(['Cube']);
     const run = async () => { btn.click(); await T.sleep(200); for (let i = 0; i < 100 && btn.disabled; i++) await T.sleep(50); await T.sleep(300); };
-    // too small a limit: nothing happens and nothing lands on the undo stack
+    // too small a limit: nothing happens and nothing lands on the undo stack (Remove vertices left over is off for this step:
+    // with it on, the flat face is tidied even when no hole is closed)
+    const tidy = document.getElementById('fh-tidy'), tidy0 = tidy ? tidy.checked : false;
+    const setTidy = (on) => { if (tidy && tidy.checked !== on) { tidy.checked = on; tidy.dispatchEvent(new Event('change', { bubbles: true })); } };
+    setTidy(false);
     size.value = '1'; const h0 = state.history.length;
     await run();
     T.eq(p.triCount, tris0, 'a hole over the size limit was filled');
     T.eq(state.history.length, h0, 'a fill that changed nothing pushed an undo entry');
+    setTidy(tidy0);
     size.value = '12';
     await run();
     T.assert(p.triCount < tris0, 'the recess was not filled (' + document.getElementById('fill-holes-info').textContent + ')');
@@ -1261,7 +1267,7 @@
     f2.blur();
   });
 
-  test('command panels: Split and Fill holes show on demand, Esc leaves the panel before the selection', async () => {
+  test('command panels: Split and Remove holes show on demand, Esc leaves the panel before the selection', async () => {
     await T.fresh(['cube', 'sphere']);
     const key = (k) => window.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
     const split = document.querySelector('.section-cmd[data-cmd="split"]'), fill = document.querySelector('.section-cmd[data-cmd="fillholes"]');
@@ -1274,11 +1280,11 @@
     T.assert(document.getElementById('tg-split').classList.contains('active'), 'the Split toolbar button is not lit while its panel is open');
     T.assert(/split\.webm/.test(split.querySelector('video')?.getAttribute('src') || ''), 'the Split panel has no clip');
     key('p'); await T.sleep(300);
-    T.assert(!fill.hidden && split.hidden, 'P did not swap to the Fill holes panel');
+    T.assert(!fill.hidden && split.hidden, 'P did not swap to the Remove holes panel');
     T.assert(document.getElementById('tg-fill-holes').classList.contains('active'), 'the toolbar button is not lit while its panel is open');
-    T.assert(fill.contains(document.getElementById('btn-fill-holes')), 'Fill holes is not in its own panel');
+    T.assert(fill.contains(document.getElementById('btn-fill-holes')), 'Remove holes is not in its own panel');
     const clip = fill.querySelector('video');
-    T.assert(clip && clip.muted && clip.loop && /fill-holes\.webm/.test(clip.getAttribute('src')), 'the Fill holes panel has no looping clip');
+    T.assert(clip && clip.muted && clip.loop && /fill-holes\.webm/.test(clip.getAttribute('src')), 'the Remove holes panel has no looping clip');
     key('Escape'); await T.sleep(250);
     T.assert(fill.hidden && state.selected.size === 1, 'Esc did not just close the panel (selection ' + state.selected.size + ')');
     T.assert(!clip || clip.paused, 'the clip keeps playing after its panel was put away');
@@ -1289,9 +1295,9 @@
     split.querySelector('.cmd-foot .cmd-close').click(); await T.sleep(200);
     T.assert(split.hidden, 'Cancel did not close the panel');
     document.getElementById('tg-fill-holes').click(); await T.sleep(200);
-    T.assert(!fill.hidden, 'the toolbar button did not open Fill holes');
+    T.assert(!fill.hidden, 'the toolbar button did not open Remove holes');
     document.getElementById('tg-fill-holes').click(); await T.sleep(200);
-    T.assert(fill.hidden, 'the toolbar button did not close Fill holes');
+    T.assert(fill.hidden, 'the toolbar button did not close Remove holes');
   });
 
   test('isolate: the viewport says so, the pill leaves the mode, undo returns to it', async () => {
@@ -1328,16 +1334,17 @@
     T.eq(m.name, 'mat_1cda4d', 'name after a colour change');
     T.eq(nameEl().textContent, 'mat_1cda4d', 'name shown in the editor');
     T.assert(cells().find(c => c._mat === m).textContent.includes('1cda4d'), 'the dock still lists the old colour');
-    // a preset from the dock, with the editor open
+    // a preset from the dock, with the editor open: the arrow beside the + lists them, and one makes a new material for the selection
     cells().find(c => c._mat === m).click(); await T.sleep(200);
-    document.getElementById('mat-act-presets').click(); await T.sleep(250);
+    document.getElementById('mat-act-add-more').click(); await T.sleep(250);
     [...document.querySelectorAll('#mat-presets-menu .mat-preset')].find(r => /Ceramic/.test(r.textContent)).click(); await T.sleep(700);
-    T.eq(nameEl().textContent, m.name, 'editor name after a preset');
-    T.eq(document.getElementById('mat-edit-color-hex').value.toLowerCase(), m.color.getHexString(), 'editor colour after a preset');
+    const m2 = T.part('Cube').mesh.material;
+    T.assert(m2 !== m && /Ceramic/.test(m2.name), 'a preset did not make a new material, named after it, for the selection: ' + m2.name);
+    T.eq(m.color.getHexString(), '1cda4d', 'the material that was open changed with the preset');
     await T.undo(); await T.sleep(500);
+    T.assert(T.part('Cube').mesh.material === m, 'undoing the preset did not give the part its material back');
     T.eq(m.color.getHexString(), '1cda4d', 'colour after undoing the preset');
     T.eq(m.name, 'mat_1cda4d', 'name after undoing the preset');
-    T.eq(nameEl().textContent, 'mat_1cda4d', 'editor name after undoing the preset');
     // the dock can be made taller and its inspector wider, and both reset
     const drag = (el, dx, dy) => { const b = el.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + 2;
       const ev = (type, cx, cy) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 5, button: 0, clientX: cx, clientY: cy }));

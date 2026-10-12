@@ -26,17 +26,32 @@ A STEP file holds exact surfaces. The converter, running in Python on your compu
 
 ## The import settings for a STEP file
 
-- **Tessellation quality**: How closely the triangles follow curved surfaces. The choices run from Coarse (1.0), the fastest with visibly faceted curves, to Ultra (0.05), slow and very smooth. Standard (0.5) is the recommended one.
-- **Colours & materials**: Read colours, names and the hierarchy, or geometry only. Geometry only is the fastest and gives you neither colours nor a tree. It suits huge files where you only need the shape.
-- **XCAF read modes**: Five switches for extra information in the file. Each one costs time. Turning off **SHUO overrides** saves the most on assemblies with many repeated parts.
-- **Drop parts smaller than (% of model)**: Leaves out tiny parts during conversion. 0 keeps everything.
-- **Force re-convert**: Ignores a stored conversion of the same file, if there is one, and converts from scratch.
-- **Collapse identical shapes into instances**: Stores a repeated shape once. Leave it on.
-- **Append to current scene**: Adds the file to the scene that is open, instead of opening it as a scene of its own.
-- **Fit view after loading**: Moves the camera so the whole model is in view when it has loaded.
+- **Surface quality**: How closely the triangles follow curved surfaces: **Coarse**, **Standard**, **Fine** or **Ultra**. Coarse is the fastest and shows facets on curves. Ultra is slow and very smooth. Standard is the recommended one. **Custom** means your own numbers, under Tessellation.
+- **Tessellation**: The numbers behind that choice. Click the row to open it. It is explained below.
+- **Colours and structure**: **Colours & hierarchy** reads colours, names and the assembly tree. **Geometry only** is the fastest and gives you neither colours nor a tree. It suits huge files where you only need the shape.
+- **What to read**: Five switches for extra information in the file: **Instance overrides**, **Layers**, **Materials**, **Product names** and **Validation properties**. Each one adds a pass over the file. Instance overrides is the slowest on assemblies with many repeated parts.
+- **Drop small parts**: Leaves out parts smaller than this share of the model during conversion. 0 keeps everything.
+- **Share identical shapes**: Stores a repeated shape once. Leave it on.
+- **Swap Y and Z**: Stands a model up that comes in lying on its side.
+- **Convert again**: Ignores a stored conversion of the same file, if there is one, and converts from scratch.
+- **Add to the open scene**: Adds the file to the scene that is open, instead of opening it as a scene of its own.
+- **Fit the view**: Moves the camera so the whole model is in view when it has loaded.
 - **Don't ask again for this format**: Skips this window next time and uses the same answers. Leave it unticked until you know which settings you want.
 
-FBX, OBJ, 3MF and STL files get a shorter version of this window, with only the last three choices. GLB and glTF files open without it.
+IGES and BREP files, two other CAD formats, get the same window. FBX, OBJ, 3MF and STL files get a shorter version of it, with only the last three choices. GLB and glTF files open without it.
+
+## Tessellation: how the surfaces become triangles
+
+Tessellation is the step that covers the exact CAD surfaces with triangles. You do not have to open this block: the four choices of **Surface quality** fill it in for you. Open it when curves come in too faceted, or the model comes in too heavy.
+
+- **Sag**: How far a triangle may stand off the true surface, in millimetres. Smaller is smoother, and makes more triangles.
+- **Angle**: The most a curve may turn from one triangle to the next, in degrees. Smaller means rounder holes and rounder fillets (a fillet is a rounded edge).
+- **Min edge**: The smallest triangle edge allowed, in millimetres. It keeps tiny fillets and threads from filling up with thin slivers. 0 is no limit.
+- **The four choices and Custom**: Each choice sets the sag and the angle: Coarse is 1 mm and 30°, Standard 0.5 mm and 30°, Fine 0.2 mm and 20°, Ultra 0.05 mm and 12°. Type a number of your own and **Custom** is selected.
+- **By part size**: Fine on the large parts, coarse on the small ones. Small, medium and large parts each get a sag and an angle of their own, so the housing comes in fine and the screws coarse. Two fields, **Small under** and **large from**, say where the limits are, as a share of the model’s size: 5% and 30% to begin with. While it is on, the four choices are greyed out. **Min edge** still applies.
+- **Smooth shading**: Takes the normals, the directions the light is worked out from, from the real CAD surfaces. A fillet then runs into the faces beside it without a visible seam, and sharp edges stay sharp. On by default.
+
+> A coarser setting here makes fewer triangles at the source. That usually looks better than reducing a fine mesh afterwards.
 
 ## Follow the progress, or stop it
 

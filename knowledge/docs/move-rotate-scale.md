@@ -87,6 +87,6 @@ Right-click a part in the tree and choose **Lock**. A locked part cannot be move
 
 Moves, turns and scalings are undo steps, whether you dragged the gizmo or typed a value.
 
-> Moving a part with the gizmo changes where it sits, not its mesh. To write the change into the mesh itself, use **Bake gizmo transforms** in the card **Tidy geometry**. Most people never need to.
+> Moving a part with the gizmo changes where it sits, not its mesh. To write the change into the mesh itself, use **Bake gizmo transforms** in the card **Edit selection**. Most people never need to.
 
 Related: [align-to-floor](meshoptimiser://docs/align-to-floor), [select-parts](meshoptimiser://docs/select-parts), [cleanup](meshoptimiser://docs/cleanup)

@@ -238,6 +238,14 @@ class Config:
     lod: tuple = ()              # triangle percentages, e.g. (100, 50, 25); () = one output
     lod_error: float = 0.01      # simplifier error limit (fraction of a mesh's size), Node engine
     fmt: str = "step"            # 'step' | 'iges' | 'brep': set per file by convert()
+    # Tessellation by part size (--tiers): None, or a dict with "split" (two
+    # limits, in % of the size of the whole model: under the first a part is
+    # small, from the second on it is large) and "small" / "medium" / "large",
+    # each (linear deflection, angular deflection in radians).
+    tiers: dict | None = None
+    min_edge: float = 0.0        # smallest triangle edge the mesher may make (0 = no limit)
+    normals: bool = True         # write the CAD surface normals (smooth shading across face seams)
+    swap_yz: bool = False        # turn the model a quarter about X (a Z-up file for a Y-up scene, or back)
 
 
 # Module-level Config — set once by main() and read elsewhere. Cleaner than
@@ -984,7 +992,7 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
         for i, (verts, tris) in enumerate(prod.meshes):
             if len(verts) == 0 or len(tris) == 0:
                 continue
-            mesh = trimesh.Trimesh(vertices=verts, faces=tris, process=False)
+            mesh = _trimesh(verts, tris)
             # Per-solid color (NX/CATIA pattern) takes precedence over the
             # product-level fallback. _apply_color handles None → neutral grey.
             mcolor = sc[i] if i < len(sc) else prod.color
@@ -1107,6 +1115,34 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     log(f"wrote {out_mb:.2f} MB in {time.time() - t0:.1f}s", "ok")
 
 
+def _swap_yz_glb(glb_path: Path) -> bool:
+    """Turn the whole scene a quarter about X (Z-up to Y-up) by hanging its
+    root nodes under one new node. Only the JSON chunk is rewritten."""
+    data = glb_path.read_bytes()
+    if data[:4] != b"glTF" or data[16:20] != b"JSON":
+        return False
+    jlen = int.from_bytes(data[12:16], "little")
+    gltf = json.loads(data[20:20 + jlen].decode("utf-8"))
+    scenes = gltf.get("scenes") or []
+    if not scenes or not scenes[gltf.get("scene", 0)].get("nodes"):
+        return False
+    sc = scenes[gltf.get("scene", 0)]
+    nodes = gltf.setdefault("nodes", [])
+    h = 0.5 ** 0.5
+    nodes.append({"name": "Y-up", "rotation": [-h, 0.0, 0.0, h], "children": list(sc["nodes"])})
+    sc["nodes"] = [len(nodes) - 1]
+    body = json.dumps(gltf, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    body += b" " * (-len(body) % 4)
+    rest = data[20 + jlen:]
+    total = 12 + 8 + len(body) + len(rest)
+    out = (b"glTF" + data[4:8] + total.to_bytes(4, "little")
+           + len(body).to_bytes(4, "little") + b"JSON" + body + rest)
+    tmp = glb_path.with_name(glb_path.name + ".tmp")
+    tmp.write_bytes(out)
+    os.replace(tmp, glb_path)
+    return True
+
+
 def _inject_node_extras(glb_path: Path, extras_by_name: dict) -> int:
     """Put `extras` on the glTF nodes whose name is a key of extras_by_name
     (trimesh writes none of its own). Only the JSON chunk is rewritten; the
@@ -1190,6 +1226,34 @@ def collect_metadata(shape_tool, color_tool, doc, free_labels) -> dict:
     return meta
 
 
+def _mesh_shape(shape, linear: float, angular: float, relative: bool) -> None:
+    """One run of the mesher. (The constructor does the work: calling
+    Perform() after it, as this used to, walked every face a second time.)"""
+    from OCP.IMeshTools import IMeshTools_Parameters
+    prm = IMeshTools_Parameters()
+    prm.Deflection = float(linear)
+    prm.Angle = float(angular)
+    prm.Relative = bool(relative)
+    prm.InParallel = True
+    if CFG.min_edge > 0:
+        prm.MinSize = float(CFG.min_edge)
+    BRepMesh_IncrementalMesh(shape, prm)
+
+
+def _shape_diag(shape) -> float:
+    """Diagonal of a shape's bounding box, from its geometry (no mesh needed)."""
+    from OCP.Bnd import Bnd_Box
+    from OCP.BRepBndLib import BRepBndLib
+    box = Bnd_Box()
+    try:
+        BRepBndLib.Add_s(shape, box, False)
+        if box.IsVoid(): return 0.0
+        x0, y0, z0, x1, y1, z1 = box.Get()
+        return float(((x1 - x0) ** 2 + (y1 - y0) ** 2 + (z1 - z0) ** 2) ** 0.5)
+    except Exception:
+        return 0.0
+
+
 def tessellate(shape: TopoDS_Shape, linear_deflection: float = 0.5,
                angular_deflection: float = 0.5, relative: bool = False) -> None:
     """Tessellate every face on `shape` in place.
@@ -1198,14 +1262,63 @@ def tessellate(shape: TopoDS_Shape, linear_deflection: float = 0.5,
     own bbox diagonal — gives unit-independent quality (0.001 == 0.1% of diag).
     Default is absolute deflection in model units (typically mm).
 
-    Last argument is parallel=True — OCCT splits faces across threads.
+    With CFG.tiers the solids are sorted by size into small / medium / large
+    (their own bounding box against the whole model's) and each group is meshed
+    with its own pair of deflections: fine on the big visible parts, coarse on
+    the screws. A shape that is placed several times is meshed once; when its
+    copies fall in different groups the finer setting wins.
     """
     mode = "relative" if relative else "absolute"
-    log(f"tessellating (linear={linear_deflection} {mode}, angular={angular_deflection}, parallel)")
     t0 = time.time()
+    tiers = CFG.tiers
+    if not tiers:
+        log(f"tessellating (linear={linear_deflection} {mode}, angular={angular_deflection}, parallel)")
+        with Heartbeat("tessellation"):
+            _mesh_shape(shape, linear_deflection, angular_deflection, relative)
+        log(f"tessellated in {time.time() - t0:.1f}s", "ok")
+        return
+
+    from OCP.TopoDS import TopoDS_Compound
+    model = _shape_diag(shape)
+    lo, hi = (model * tiers["split"][0] / 100.0, model * tiers["split"][1] / 100.0)
+    names = ("small", "medium", "large")
+    groups = {n: TopoDS_Compound() for n in names}
+    counts = {n: 0 for n in names}
+    builder = BRep_Builder()
+    for c in groups.values(): builder.MakeCompound(c)
+    exp = TopExp_Explorer(shape, TopAbs_SOLID)
+    while exp.More():
+        d = _shape_diag(exp.Current())
+        n = "small" if d < lo else ("large" if d >= hi else "medium")
+        builder.Add(groups[n], exp.Current()); counts[n] += 1
+        exp.Next()
+    # faces that belong to no solid (surface models) take the medium setting
+    exp = TopExp_Explorer(shape, TopAbs_FACE, TopAbs_SOLID)
+    loose = 0
+    while exp.More():
+        builder.Add(groups["medium"], exp.Current()); loose += 1
+        exp.Next()
+    log(f"tessellating by part size (model {model:.1f}; small < {lo:.1f} <= medium < {hi:.1f} <= large)")
     with Heartbeat("tessellation"):
-        BRepMesh_IncrementalMesh(shape, linear_deflection, relative, angular_deflection, True).Perform()
+        # coarse first: a shared shape met again by a finer group is refined
+        for n in sorted(names, key=lambda k: -tiers[k][0]):
+            if not counts[n] and not (n == "medium" and loose): continue
+            lin, ang = tiers[n]
+            log(f"   {n}: {counts[n]} solids, linear={lin} {mode}, angular={ang:.3f}")
+            _mesh_shape(groups[n], lin, ang, relative)
     log(f"tessellated in {time.time() - t0:.1f}s", "ok")
+
+
+# Surface normals of the meshes solid_to_mesh() has made, kept beside the
+# (verts, tris) pairs the rest of the pipeline passes around: id(verts) ->
+# (verts, normals). Holding verts here keeps the id from being reused.
+_NORMALS: dict = {}
+
+def _normals_of(verts):
+    hit = _NORMALS.get(id(verts))
+    if hit is not None and hit[0] is verts and len(hit[1]) == len(verts):
+        return hit[1]
+    return None
 
 
 def _identity_trsf(t) -> bool:
@@ -1233,6 +1346,10 @@ def solid_to_mesh(solid: TopoDS_Shape):
     """
     all_verts: list[np.ndarray] = []
     all_tris:  list[np.ndarray] = []
+    all_norms: list[np.ndarray] = []
+    want_normals = CFG.normals
+    if want_normals:
+        from OCP.BRepLib import BRepLib_ToolTriangulatedShape
     offset = 0
     exp = TopExp_Explorer(solid, TopAbs_FACE)
     loc = TopLoc_Location()
@@ -1279,11 +1396,52 @@ def solid_to_mesh(solid: TopoDS_Shape):
         if offset:
             tris_buf = tris_buf + np.uint32(offset)
 
+        # ── normals: the surface's own, at every node. This is what makes a
+        # fillet run smoothly into the faces beside it: every face has nodes
+        # of its own, so normals worked out from the triangles alone leave a
+        # visible seam wherever two faces meet, however smooth the joint is.
+        if want_normals:
+            n_arr = None
+            try:
+                if not tri.HasNormals():
+                    BRepLib_ToolTriangulatedShape.ComputeNormals_s(face, tri)
+                if tri.HasNormals():
+                    n_arr = np.asarray([(d.X(), d.Y(), d.Z()) for d in (tri.Normal(j) for j in range(1, n_nodes + 1))],
+                                       dtype=np.float64)
+                    if not _identity_trsf(t):
+                        n_arr = n_arr @ m[:, :3].T
+                    if reverse:
+                        n_arr = -n_arr
+                    ln = np.linalg.norm(n_arr, axis=1)
+                    if not np.all(np.isfinite(ln)) or np.any(ln < 1e-6):
+                        n_arr = None          # a degenerate point of the surface (a cone's tip): leave this solid to the viewer
+                    else:
+                        n_arr = (n_arr / ln[:, None]).astype(np.float32)
+            except Exception:
+                n_arr = None
+            if n_arr is None:
+                want_normals = False
+            else:
+                all_norms.append(n_arr)
+
         all_verts.append(verts); all_tris.append(tris_buf)
         offset += n_nodes
         exp.Next()
     if not all_verts: return None
-    return np.vstack(all_verts), np.vstack(all_tris)
+    out_v = np.vstack(all_verts)
+    if want_normals and len(all_norms) == len(all_verts):
+        _NORMALS[id(out_v)] = (out_v, np.vstack(all_norms))
+    return out_v, np.vstack(all_tris)
+
+
+def _trimesh(verts, tris, normals=None) -> "trimesh.Trimesh":
+    """The trimesh for one body, with its surface normals when there are any
+    (the glTF writer then stores them as NORMAL)."""
+    if normals is None:
+        normals = _normals_of(verts)
+    if normals is not None and normals is not False:
+        return trimesh.Trimesh(vertices=verts, faces=tris, vertex_normals=normals, process=False)
+    return trimesh.Trimesh(vertices=verts, faces=tris, process=False)
 
 
 def solid_volume_area(solid: TopoDS_Shape) -> tuple[float, float]:
@@ -1392,7 +1550,8 @@ def build_glb(parts: list[dict], output: Path, scene_meta: dict, instance: bool 
             # Build ONE mesh in canonical pose, reuse via geom_name across instances
             verts = ref["canonical"]; tris = ref["tris"]
             if len(verts) == 0 or len(tris) == 0: continue
-            mesh = trimesh.Trimesh(vertices=verts, faces=tris, process=False)
+            # (the canonical pose is the mesh itself unless --pca-instances turned it)
+            mesh = _trimesh(verts, tris, None if verts is ref["verts"] else False)
             _apply_color(mesh, ref.get("color"))
             geom_name = f"shape_{h[:10]}"
             for p in group:
@@ -1408,7 +1567,7 @@ def build_glb(parts: list[dict], output: Path, scene_meta: dict, instance: bool 
             # Singletons: bake into world coords (no transform, simplest)
             for p in group:
                 if len(p["verts"]) == 0 or len(p["tris"]) == 0: continue
-                mesh = trimesh.Trimesh(vertices=p["verts"], faces=p["tris"], process=False)
+                mesh = _trimesh(p["verts"], p["tris"])
                 _apply_color(mesh, p.get("color"))
                 scene.add_geometry(mesh, node_name=p["name"], metadata=_node_meta(p))
 
@@ -1471,6 +1630,11 @@ def _cache_params(input_path: Path) -> dict:
         "quality": CFG.quality,
         "min_size_pct": CFG.min_size_pct,
         "relative": CFG.relative,
+        "angular": CFG.angular,
+        "tiers": CFG.tiers,
+        "min_edge": CFG.min_edge,
+        "normals": CFG.normals,
+        "swap_yz": CFG.swap_yz,
         "meshopt": CFG.meshopt,
         "quantize": CFG.quantize,
         "simplify": CFG.simplify,
@@ -1673,6 +1837,8 @@ def _write_levels(output_path: Path, write_full, simplified_copy) -> None:
         else:
             simplified_copy(ratio)(path)
             gltfpack_postprocess(path, CFG.meshopt, CFG.quantize, 0.0)
+        if CFG.swap_yz and path.exists() and _swap_yz_glb(path):
+            log(f"swapped Y and Z in {path.name}", "ok")
 
 
 def _write_levels_hier(roots, products, output_path, scene_meta) -> None:
@@ -1816,7 +1982,10 @@ def convert(input_path: Path, output_path: Path) -> None:
     print(f"╭─ {_KIND_LABEL[kind]} → GLB")
     print(f"│  input:    {input_path}  ({size_mb:.1f} MB)")
     print(f"│  output:   {output_path}")
-    print(f"│  quality:  linear deflection {CFG.quality} ({'relative' if CFG.relative else 'absolute'})")
+    print(f"│  quality:  linear deflection {CFG.quality} ({'relative' if CFG.relative else 'absolute'}), angular {CFG.angular:.3f} rad")
+    if CFG.tiers:
+        print("│  by size:  " + "  ".join(f"{n} {CFG.tiers[n][0]:g}/{CFG.tiers[n][1]:.3f}" for n in ("small", "medium", "large"))
+              + f"  (limits {CFG.tiers['split'][0]:g}% / {CFG.tiers['split'][1]:g}% of the model)")
     print(f"│  min size: {CFG.min_size_pct}% of model" if CFG.min_size_pct > 0 else "│  min size: keep all")
     print(f"│  instance: {CFG.instance}")
     if CFG.lod:
@@ -2026,7 +2195,8 @@ def _worker_extract(args):
     for i in indices:
         if 0 <= i < len(solids):
             try:
-                out[i] = solid_to_mesh(solids[i])
+                r = solid_to_mesh(solids[i])
+                out[i] = r if r is None else (r[0], r[1], _normals_of(r[0]))
             except Exception:
                 out[i] = None
     return out
@@ -2068,6 +2238,10 @@ def parallel_extract_meshes(solid_meta, num_workers):
             for fut in futures:
                 chunk_result = fut.result()
                 for i, mesh in chunk_result.items():
+                    if mesh is not None:
+                        v, tr, nr = mesh
+                        if nr is not None: _NORMALS[id(v)] = (v, nr)
+                        mesh = (v, tr)
                     results[i] = mesh
                 done += 1
                 log(f"worker {done}/{num_workers} returned {len(chunk_result)} meshes")
@@ -2356,6 +2530,18 @@ def main() -> int:
     ap.add_argument("--angular", type=float, default=0.5,
                     help="Angular deflection in radians. Default 0.5 (~28.6°).")
     ap.add_argument("--min-size", type=float, default=0.0)
+    ap.add_argument("--tiers", type=str, default=None, metavar="A,B:Ls,As:Lm,Am:Ll,Al",
+                    help="Tessellate by part size. A and B are the limits between small / medium / "
+                         "large parts in %% of the size of the whole model; then linear,angular "
+                         "(mm, degrees) for small, medium and large. "
+                         "Example: 5,30:2,60:0.2,30:0.05,10")
+    ap.add_argument("--min-edge", type=float, default=0.0,
+                    help="Smallest triangle edge the mesher may make, in model units (0 = no limit). "
+                         "Stops tiny fillets and threads from filling up with slivers.")
+    ap.add_argument("--no-normals", action="store_true",
+                    help="Do not write the CAD surface normals (the viewer then shades from the triangles).")
+    ap.add_argument("--swap-yz", action="store_true",
+                    help="Turn the model a quarter about X: a Z-up CAD file for a Y-up scene.")
     # Four options below only do something in the plain (non-XCAF) reader:
     # the one --no-colors asks for, and the one a file over 1 GB gets unless
     # --force-colors is given. The XCAF reader takes its instancing from the
@@ -2472,6 +2658,25 @@ def main() -> int:
     else:
         meshopt_resolved = _has_gltfpack
 
+    tiers = None
+    if args.tiers:
+        try:
+            head, *rest = args.tiers.split(":")
+            a, b = (float(x) for x in head.split(","))
+            pairs = [tuple(float(x) for x in r.split(",")) for r in rest]
+            if len(pairs) != 3 or any(len(pr) != 2 for pr in pairs): raise ValueError
+            if not (0 < a < b <= 100): raise ValueError
+            for lin, deg in pairs:
+                if not (1e-6 <= lin <= 1e3) or not (0.06 <= deg <= 180): raise ValueError
+            import math
+            tiers = {"split": [a, b]}
+            for n, (lin, deg) in zip(("small", "medium", "large"), pairs):
+                tiers[n] = [lin, math.radians(deg)]
+        except ValueError:
+            ap.error("--tiers wants A,B:lin,deg:lin,deg:lin,deg with 0 < A < B <= 100, e.g. 5,30:2,60:0.2,30:0.05,10")
+    if not (0.0 <= args.min_edge <= 1e3):
+        ap.error(f"--min-edge {args.min_edge} out of range (0 .. 1000)")
+
     # Populate the module-level config once. Conversion code reads CFG directly.
     global CFG
     CFG = Config(
@@ -2496,6 +2701,10 @@ def main() -> int:
         extras         = not args.no_extras,
         lod            = lod_levels,
         lod_error      = float(args.lod_error),
+        tiers          = tiers,
+        min_edge       = float(args.min_edge),
+        normals        = not args.no_normals,
+        swap_yz        = bool(args.swap_yz),
     )
     if any(p < 100 for p in CFG.lod):
         try:

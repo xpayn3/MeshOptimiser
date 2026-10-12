@@ -15,10 +15,25 @@
 //
 // Every reply carries the request's id and ok: true / false.
 
-import { fillFlatHoles } from './holefill.js?v=9';
+import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=21';
 import { reduceIndex } from './simplify-core.js?v=2';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=2';
-import { untriangulate } from './untriangulate.js?v=1';
+import { untriangulate, evenTriangles } from './untriangulate.js?v=7';
+// Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
+// then in the middle of one. (Three more passes at most; each is a fraction of the first.)
+function untriangulatePasses(positions, index, opts) {
+  let r = untriangulate(positions, index, opts);
+  if (!r) return r;
+  for (let pass = 0; pass < 3; pass++) {
+    const r2 = untriangulate(positions, r.index, opts);
+    if (!r2 || r2.index.length >= r.index.length) break;
+    r2.stats.trisBefore = r.stats.trisBefore;
+    r2.stats.rebuilt += r.stats.rebuilt;
+    r2.stats.vertsRemoved += r.stats.vertsRemoved;
+    r = r2;
+  }
+  return r;
+}
 
 let simplifier = null;          // meshoptimizer's simplifier, loaded on first use
 async function getSimplifier(url) {
@@ -90,13 +105,17 @@ self.onmessage = async (e) => {
       self.postMessage({ id: m.id, ok: true, lines: r.lines, tris: r.tris, polys: r.polys }, [r.lines.buffer]);
       return;
     }
-    if (m.op === 'untriangulate') {
-      const triangulate = await getTriangulator(m.threeUrl);
+    if (m.op === 'untriangulate' || m.op === 'even') {
+      const even = m.op === 'even';
+      // a vertex whose triangles all lie in one plane shades flat (the rim of a hole that was closed keeps the tilted normal it had)
+      if (!even && m.fixNormals && m.normals) flattenRimNormals(m.positions, m.index, m.normals, null);
+      const triangulate = even ? null : await getTriangulator(m.threeUrl);
       const parts = [], transfer = [], stats = { trisBefore: 0, trisAfter: 0, polygons: 0, joined: 0, rebuilt: 0, vertsRemoved: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
       let polyBase = 0;
       for (const g of m.groups) {
         const sub = m.index.subarray(g.start, g.start + g.count);
-        const r = untriangulate(m.positions, sub, { angleDeg: m.angle || 1, normals: m.normals || null, triangulate });
+        const opts = { angleDeg: m.angle || 1, normals: m.normals || null, triangulate, normalTol: m.normalTol || 5, flip: m.flip !== false, tolerance: m.tolerance || 0 };
+        const r = even ? evenTriangles(m.positions, sub, { angleDeg: m.angle || 1 }) : untriangulatePasses(m.positions, sub, opts);
         if (!r) { const n = sub.length / 3; parts.push({ idx: sub.slice(), poly: Int32Array.from({ length: n }, (_, i) => polyBase + i), materialIndex: g.materialIndex }); polyBase += n; stats.trisBefore += sub.length / 3; stats.trisAfter += sub.length / 3; continue; }
         const poly = r.poly;
         for (let i = 0; i < poly.length; i++) poly[i] += polyBase;

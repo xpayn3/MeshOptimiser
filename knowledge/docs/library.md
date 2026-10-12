@@ -10,6 +10,7 @@ Press `Shift + L`, or click the button with the small shapes on the bottom toolb
 
 - Drag the top edge of the drawer to make it taller. Double-click the edge to reset it.
 - One drawer is open at a time. The library, the materials dock and the console give way to each other.
+- To keep the library open next to the materials, press **Pop out as a floating window** in its header. The library becomes a window over the view: drag it by its head, and resize it from any edge or corner. The same button, now **Dock to the bottom**, puts it back. Where you left it is remembered in this browser.
 
 The drawer has two halves. On the left are the parts, in shelves, each with a small picture. On the right is the part you have picked: a view of it, its facts, its parameters, and the button that adds it.
 
@@ -25,8 +26,8 @@ The drawer has two halves. On the left are the parts, in shelves, each with a sm
 ## Find a part
 
 - **Search…** in the header filters all the shelves as you type, by name or by shelf.
-- The dropdown next to it shows one shelf at a time. **All shelves** shows everything.
-- The parts you used last wait on a shelf called **Recently used** at the top. Its **Clear** button forgets them.
+- The shelves are tabs in a row under the header. Click a tab to see one shelf at a time. **All** shows everything.
+- The parts you used last wait on a shelf called **Recently used** at the top, and under the tab **Recent**. Its **Clear** button forgets them.
 - Pick a part and press the star in the right half to keep it on the **Favourites** shelf. Press the star again to take it off.
 - Two buttons in the header switch between large and small tiles.
 
@@ -41,7 +42,7 @@ What you set in the right half is what the part has when it goes in. The numbers
 
 ## Add a part
 
-1. For a fastener, first choose its thread size and length in the drawer’s header, under **Fasteners**. M6 and 24 mm to begin with. Every screw, nut and washer you add comes out in that size, even one you changed in the right half.
+1. For a fastener, first choose its thread size and length. They sit at the right of the row of tabs, beside the word **Fasteners**, and show only on the shelves they are for: open the tab **Fasteners** or **Nuts**. M6 and 24 mm to begin with. Every screw, nut and washer you add comes out in that size, even one you changed in the right half.
 2. Add the part in one of three ways: double-click its tile, or press **Add to scene** in the right half, or drag the tile into the viewport.
 3. A double-click or **Add to scene** puts the part on the selected part, or on the floor at the origin when nothing is selected.
 4. When you drag, a see-through copy follows the pointer and shows where the part will stand: square to the face under the pointer, or upright on the floor. It has the parameters you set. Let go to drop it.

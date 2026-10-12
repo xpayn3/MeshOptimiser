@@ -132,7 +132,9 @@ const faceNormals = (pos, idx) => {
   const m = plate(8);
   m.pos[(4 * 9 + 4) * 3 + 2] = 0.01;                                                  // one vertex 0.01 off a plate 8 across (about 1.2e-3 of its size)
   const r = run(m.pos, m.idx, { angleDeg: 5 });
-  ok(r.stats.rebuilt === 0 && r.stats.kept.curved >= 1, 'a vertex off the plane: nothing moves, the plate is kept');
+  // The plate as a whole is not rebuilt (it is not flat), but vertices whose own ring is flat still go, one at a time, and the bump
+  // and everything round it stay: no vertex is ever moved.
+  ok(r.stats.kept.curved === 0 && r.index.includes(4 * 9 + 4) && Array.from(r.index).every(v => v < m.pos.length / 3), 'a vertex off the plane: the bump stays, nothing moves');
 }
 {
   // curved surface: the side of a cylinder has no vertex in the middle of any plate: left alone

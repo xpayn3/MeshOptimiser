@@ -7,6 +7,7 @@ Run via:
                                     # (asks about re-convert + quality if CAD)
 """
 from __future__ import annotations
+import math
 import argparse, atexit, http.server, json, os, re, select, shutil, signal, subprocess
 import sys, threading, time, uuid, webbrowser
 from pathlib import Path
@@ -529,6 +530,13 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
         if not opts.get("instance", True):       cmd += ["--no-instance"]
         if opts.get("force"):                    cmd += ["--force"]
         if min_size > 0: cmd += ["--min-size", str(min_size)]
+        # Tessellation settings of the import window. Each is left out when it
+        # is the converter's own default, so an older client changes nothing.
+        if opts.get("angular"):  cmd += ["--angular", f"{opts['angular']:.6f}"]
+        if opts.get("tiers"):    cmd += ["--tiers", opts["tiers"]]
+        if opts.get("min_edge"): cmd += ["--min-edge", str(opts["min_edge"])]
+        if not opts.get("normals", True): cmd += ["--no-normals"]
+        if opts.get("swap_yz"):  cmd += ["--swap-yz"]
         # Log which Python interpreter we're calling — makes it obvious in the
         # browser conversion log when a stale serve.py is still using the
         # global Python instead of the venv one.
@@ -820,7 +828,7 @@ _TITLES = {"scene_summary": "What is open", "list_parts": "List parts", "get_sel
            "set_grid": "Show or hide the grid", "set_camera_view": "Move the camera", "undo": "Undo", "redo": "Redo", "find_fasteners": "Find bolts and nuts",
            "find_stacked_copies": "Find stacked copies", "measure_parts": "Measure between parts", "list_groups": "List groups", "scene_tabs": "Scene tabs",
            "delete_parts": "Delete parts", "remove_small_parts": "Delete small parts", "merge_parts": "Merge parts", "merge_by_colour": "Merge by colour",
-           "decimate": "Reduce triangles", "fit_to_budget": "Fit to a triangle budget", "fill_holes": "Fill holes", "remove_hidden_faces": "Remove hidden faces",
+           "decimate": "Reduce triangles", "fit_to_budget": "Fit to a triangle budget", "fill_holes": "Remove holes", "remove_hidden_faces": "Remove hidden faces",
            "repair_mesh": "Repair meshes", "clean_up": "Clean up", "split_parts": "Split into pieces", "duplicate_parts": "Duplicate parts", "group_parts": "Group parts",
            "ungroup": "Ungroup", "rename_parts": "Rename parts", "transform_parts": "Move, turn, scale", "recenter_model": "Recentre the model",
            "align_to_floor": "Stand on the floor", "export_model": "Export the model", "turntable_video": "Turntable video", "render_image": "Render a picture", "open_file": "Open a file", "select_similar": "Select similar parts", "select_by_colour": "Select by colour", "list_materials": "List materials", "select_by_material": "Select by material", "check_model": "Check the model", "optimisation_report": "Optimisation report", "estimate_export_size": "Estimate the export size", "list_recipes": "List recipes", "run_recipe": "Run a recipe", "list_library": "List the library", "add_library_part": "Add a library part", "save_scene": "Save the scene", "smart_optimise": "Smart optimise", "optimise_to_target": "Optimise to a size", "compare_images": "Before and after picture", "list_folder": "List a folder", "batch_optimise": "Optimise a folder", "find_hidden_parts": "Find hidden parts", "smart_fit": "Replace with simple shapes",
@@ -1546,7 +1554,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "props":     _qbool("props",     True),
             "instance":  _qbool("instance",  True),
             "force":     _qbool("force",     False),
+            "normals":   _qbool("normals",   True),
+            "swap_yz":   _qbool("swap_yz",   False),
         }
+        # Angle in degrees (the converter takes radians), the smallest edge in
+        # model units, and the three size groups as the converter's --tiers
+        # string. All checked here: they end up on a command line.
+        try:
+            ang = float(q.get("angle", ["0"])[0])
+            min_edge = float(q.get("min_edge", ["0"])[0])
+        except ValueError:
+            return self._json({"error": "angle and min_edge must be numeric"}, 400)
+        if ang:
+            if not (0.06 <= ang <= 180):
+                return self._json({"error": "angle out of range (0.06 .. 180 degrees)"}, 400)
+            opts["angular"] = math.radians(ang)
+        if not (0.0 <= min_edge <= 1000.0):
+            return self._json({"error": "min_edge out of range (0 .. 1000)"}, 400)
+        opts["min_edge"] = min_edge
+        tiers = q.get("tiers", [""])[0]
+        if tiers:
+            if not re.fullmatch(r"[0-9.]+,[0-9.]+(:[0-9.]+,[0-9.]+){3}", tiers):
+                return self._json({"error": "tiers must look like 5,30:2,60:0.2,30:0.05,10"}, 400)
+            opts["tiers"] = tiers
 
         try:
             size = int(self.headers.get("Content-Length", "0"))

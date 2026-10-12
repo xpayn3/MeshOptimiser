@@ -20,7 +20,7 @@ You do not need to learn these before you start. Come back to this page when a w
 - **Group**: A folder in the parts tree. It holds parts or other groups.
 - **Mesh**: The surface of a part, built from many small flat triangles.
 - **Triangle (tri)**: The smallest piece of a mesh. The app counts everything in triangles: more triangles mean a heavier model.
-- **Polygon**: Another word for the flat pieces of a mesh. In this app it means the same as triangle.
+- **Polygon (n-gon)**: A flat face with any number of corners. Several triangles that lie in one plane can be joined into one polygon. [Remesh](meshoptimiser://docs/remesh) does that, and turns polygons back into triangles.
 - **Vertex**: A corner point of a triangle. The plural is vertices.
 - **Normal**: A hidden arrow on the surface that tells the light which way the surface faces. Wrong normals make a part look oddly shaded.
 - **Bounding box (bbox)**: The smallest box that a part fits inside. The app uses it to measure how big a part is.

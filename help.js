@@ -7,14 +7,14 @@
  */
 (function () {
   'use strict';
-  var DATA_URL = 'help-content.js?v=7';
+  var DATA_URL = 'help-content.js?v=10';
   var LAST_KEY = 'stepopt-help-last';
   var data = null, loading = null, wired = false, current = null, query = '';
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
   var slug = function (s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); };
 
-  // Text in an article may hold `code`, [[Ctrl + K]] for keys, {{Fill holes}} for the name of something in the app,
+  // Text in an article may hold `code`, [[Ctrl + K]] for keys, {{Remove holes}} for the name of something in the app,
   // [words](#article) for another article and [words](https://…) for a link out.
   function rich(text) {
     return esc(text)

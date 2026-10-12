@@ -15,7 +15,7 @@ Early, when the model is for looking at as a whole and the small hardware does n
 3. Read the line under it. It says how many parts would go and how long that is, for example “710 parts under 70.5 mm corner to corner”.
 4. Press **Isolate**. Only the parts that would be deleted are shown, so you can check them.
 5. Drag the slider again if needed. While the small parts are isolated, the view follows the slider.
-6. Press **Delete**. The button says how many small parts it will remove.
+6. Press **Delete**. The button says how many small parts it will remove. When no part is under the threshold, the button is off.
 7. Press **Show all** to see the rest of the model again.
 
 ## What the options mean

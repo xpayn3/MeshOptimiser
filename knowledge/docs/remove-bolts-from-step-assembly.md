@@ -34,7 +34,7 @@ If the bolts must be visible but light, do not delete them. Select them the same
 
 ## After they are gone
 
-- Bolt holes stay in the plates they held. [Fill holes](meshoptimiser://docs/fill-holes) closes holes in flat faces, so the surfaces look whole again.
+- Bolt holes stay in the plates they held. [Remove holes](meshoptimiser://docs/fill-holes) closes holes in flat faces, so the surfaces look whole again.
 - Take out the bolts that hold a cover only if you do not mind a cover that seems to float. From outside it usually looks fine.
 
 > Hide (`H`) is not delete. A hidden part is still in the scene, and whether it is written to a file depends on the export options. To be sure a part is not in the file, delete it.

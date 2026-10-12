@@ -425,6 +425,99 @@ function plateThrough(r = 5, n = N) {
   // a looser flatness must not change the result on a clean mesh
   const h2 = run(through, 12, { cosTol: Math.cos(3 * Math.PI / 180) });
   check('3° flatness on a clean plate: same single hole, watertight', h2.res.holes === 1 && h2.open === 0, brief(h2.res));
+  // the rim left behind: with the hole closed, its ring of vertices in the middle of the face goes too (no vertex has only flat triangles round it)
+  const rimOn = run(through, 12, { rimVertices: true }), rimOff = run(through, 12);
+  const vertsOf = (r) => new Set(r.out.index ? [...r.out.index] : r.out).size;
+  check('a closed hole takes its rim vertices with it', rimOn.res.holes === 1 && rimOn.res.rimVertices > 0 && vertsOf(rimOn) < vertsOf(rimOff) && rimOn.open === 0, brief(rimOn.res) + ' rim=' + rimOn.res.rimVertices);
+
+  // broken geometry: the wall of the hole wound the wrong way round (normals pointing into the hole's own metal)
+  {
+    const m = mesh();
+    const to = square(N, HALF, TH), bo = square(N, HALF, 0), ti = ring(N, 5, TH), bi = ring(N, 5, 0);
+    band(m, to, ti, true); band(m, bo, bi, false); wall(m, to, bo, true); wall(m, ti, bi, true);
+    const g = m.done();
+    const a = run(g, 12, { rimVertices: true });
+    check('a flipped hole wall is still found and taken out', a.res.holes === 1 && a.res.removedTris >= 32, brief(a.res));
+    const b2 = fillFlatHoles(g.positions, a.out, { maxSize: 12, rimVertices: true, cleanup: true });
+    check('and filling again finds nothing more (no doubled cap)', b2.holes === 0, brief(b2));
+  }
+
+  // a countersunk bore: the opening on the face is wider than the limit, the bore is not
+  {
+    const m = mesh();
+    const to = square(N, HALF, TH), bo = square(N, HALF, 0), cs = ring(N, 8, TH), cb = ring(N, 3, TH - 1.5), bt = ring(N, 3, 0);
+    band(m, to, cs, true); band(m, bo, bt, false);
+    wall(m, to, bo, true);                       // outer sides
+    // cone from the countersink down to the bore, then the bore wall
+    for (let i = 0; i < N; i++) { const j = (i + 1) % N; m.quad(cs[i], cs[j], cb[j], cb[i]); }
+    wall(m, cb, bt, false);
+    const g = m.done();
+    check('countersink input is watertight', watertight(g.positions, g.index) === 0, 'open ' + watertight(g.positions, g.index));
+    const a = run(g, 8);
+    check('a countersunk bore (opening wider than the limit) is closed whole', a.res.holes === 1 && a.open === 0, brief(a.res) + ' open=' + a.open);
+    const none = run(g, 5);
+    check('a limit under the bore leaves it alone', none.res.holes === 0, brief(none.res));
+  }
+
+}
+
+// Two openings that meet at one point of a face. The face's boundary passes that point twice; the whole face used to be given up
+// ("two loops touch at one vertex") and none of its holes were closed.
+{
+  const G = 5, m = mesh();                              // a 5 × 5 plate of unit cells, 1 thick
+  const hole = (x, y) => (x === 1 && y === 1) || (x === 2 && y === 2);      // two square holes, corner to corner at (2, 2)
+  const solid = (x, y) => x >= 0 && y >= 0 && x < G && y < G && !hole(x, y);
+  for (let x = 0; x < G; x++) for (let y = 0; y < G; y++) {
+    if (!solid(x, y)) continue;
+    m.quad([x, y, 1], [x + 1, y, 1], [x + 1, y + 1, 1], [x, y + 1, 1]);
+    m.quad([x, y + 1, 0], [x + 1, y + 1, 0], [x + 1, y, 0], [x, y, 0]);
+    // a wall wherever there is no solid cell beside this one: the plate's edge, and round each hole
+    if (!solid(x, y - 1)) m.quad([x, y, 0], [x + 1, y, 0], [x + 1, y, 1], [x, y, 1]);
+    if (!solid(x + 1, y)) m.quad([x + 1, y, 0], [x + 1, y + 1, 0], [x + 1, y + 1, 1], [x + 1, y, 1]);
+    if (!solid(x, y + 1)) m.quad([x + 1, y + 1, 0], [x, y + 1, 0], [x, y + 1, 1], [x + 1, y + 1, 1]);
+    if (!solid(x - 1, y)) m.quad([x, y + 1, 0], [x, y, 0], [x, y, 1], [x, y + 1, 1]);
+  }
+  const g = m.done();
+  console.log('two square holes that meet corner to corner');
+  check('volume of the input is the plate less two cells', Math.abs(volume(g.positions, g.index) - 23) < 1e-6, 'vol ' + volume(g.positions, g.index));
+  const a = run(g, 2);
+  check('both are closed', a.res.holes >= 1 && a.res.loops === 4, brief(a.res));
+  check('the result is the solid plate', Math.abs(a.vol - 25) < 1e-6, 'vol ' + a.vol);
+  check('result is watertight', a.open === 0, a.open + ' open edges');
+  check('nothing was skipped', !Object.values(a.res.skipped).some(v => v), JSON.stringify(a.res.skipped));
+}
+
+// A sheet (one face, nothing behind it) with two openings that meet at a point: the same, in a mesh that is not a solid.
+{
+  const G = 5, m = mesh();
+  const hole = (x, y) => (x === 1 && y === 1) || (x === 2 && y === 2);
+  for (let x = 0; x < G; x++) for (let y = 0; y < G; y++) if (!hole(x, y)) m.quad([x, y, 0], [x + 1, y, 0], [x + 1, y + 1, 0], [x, y + 1, 0]);
+  const g = m.done();
+  console.log('a sheet with two openings that meet at a point');
+  const a = run(g, 2);
+  check('both openings are closed', a.res.holes === 2 && a.res.open === 2, brief(a.res));
+  check('the sheet is whole again (50 triangles)', a.out.length / 3 === 50, (a.out.length / 3) + ' triangles');
+}
+
+// A small piece of a part made of several pieces, with a hole through it (a spacer beside a plate, after Merge). Once its hole is
+// capped, what is left of its own triangles is open, small, and every facet runs along one axis or across it: just what a loose
+// hole wall looks like. It was taken out as one, leaving the two caps hanging in the air.
+{
+  const m = mesh();
+  const to = square(N, HALF, TH), bo = square(N, HALF, 0);
+  disc(m, to, true); disc(m, bo, false); wall(m, to, bo, true);                         // the plate, no holes
+  const so = ring(N, 6, 2, 80, 0), si = ring(N, 2, 2, 80, 0), bo2 = ring(N, 6, 1, 80, 0), bi2 = ring(N, 2, 1, 80, 0);
+  band(m, so, si, true); band(m, bo2, bi2, false); wall(m, so, bo2, true); wall(m, si, bi2, false);      // the spacer: Ø12, bore Ø4
+  // six plain pins as well (a loose wall is never a large share of its mesh, so the spacer has to be a small one)
+  for (let k = 0; k < 6; k++) { const pt = ring(N, 3, 5, -40 + k * 15, 80), pb = ring(N, 3, 0, -40 + k * 15, 80); disc(m, pt, true); disc(m, pb, false); wall(m, pt, pb, true); }
+  const g = m.done();
+  console.log('a spacer with a bore, beside a plate, with Tidy on');
+  check('input is watertight', watertight(g.positions, g.index) === 0);
+  const a = run(g, 12, { rimVertices: true, cleanup: true, floating: true });
+  check('the bore is closed', a.res.through === 1, brief(a.res));
+  check('the spacer is still there, solid', Math.abs(a.vol - (100 * 100 * TH + volumePrism(6, 1) + 6 * volumePrism(3, 5))) < 1e-3, 'vol ' + a.vol);
+  check('nothing was taken for a loose wall', !a.res.floating, 'floating ' + a.res.floating);
+  check('result is watertight', a.open === 0, a.open + ' open edges');
 }
 
 console.log(failed ? '\n' + failed + ' check(s) failed' : '\nall checks passed');

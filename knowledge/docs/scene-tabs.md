@@ -6,7 +6,7 @@ A scene is everything you are working on in one tab: its parts, materials, camer
 
 ## Open and close
 
-- Click the `+` after the last tab, or press `Ctrl + N`, for a new empty scene.
+- Click the `+` after the last tab, or press `Alt + N`, for a new empty scene. A browser keeps `Ctrl + N` for itself: there it opens a new browser window. In the installed app, `Ctrl + N` works as well.
 - Opening a file never replaces a scene that has something in it. The file opens in a new tab.
 - Click a tab to switch to it. Nothing is reloaded.
 - Click the cross at the right end of a tab to close it. A click with the middle mouse button closes it too.

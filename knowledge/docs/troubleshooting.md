@@ -57,10 +57,10 @@ The window cannot be smaller than 960 by 560 pixels. In a smaller window the app
 
 Large assemblies take time, and the reading of names, colours and the tree is the slowest part. The progress card keeps showing the converter’s latest message while it works. To make it faster, change the import settings:
 
-- Leave **SHUO overrides**, **Layer attributes** and **Validation properties (mass, area)** off.
-- Choose a coarser **Tessellation quality**.
-- Set **Drop parts smaller than (% of model)** above 0 to skip tiny fasteners.
-- For a huge file where you only need the shape, choose geometry only under **Colours & materials**.
+- Under **What to read**, leave **Instance overrides**, **Layers** and **Validation properties** off.
+- Choose a coarser **Surface quality**.
+- Set **Drop small parts** above 0 to skip tiny fasteners.
+- For a huge file where you only need the shape, choose **Geometry only** under **Colours and structure**.
 
 **Cancel** on the progress card stops a conversion that is running.
 
@@ -68,9 +68,11 @@ Large assemblies take time, and the reading of names, colours and the tree is th
 
 A STEP file with nothing solid in it gets a plain message that says so. For any other failure, press **Copy log** on the progress card and read the last lines. To see everything the converter prints, drag the STEP file onto `test-converter.bat` or `test-converter.command`. Include the log when you report the problem.
 
+When the conversion fails because a Python package is not installed, the log and the notice name the package and the command that installs it: `python -m pip install -r requirements.txt`.
+
 ## The model has no colours or no parts tree
 
-A STEP file may have been converted with geometry only. Open it again and choose the option that reads colours, names and hierarchy under **Colours & materials**. A GLB, FBX, OBJ or STL file can only show what the file itself contains.
+A STEP file may have been converted with geometry only. Open it again and choose **Colours & hierarchy** under **Colours and structure**. A GLB, FBX, OBJ or STL file can only show what the file itself contains.
 
 ## The view stutters on a heavy model
 

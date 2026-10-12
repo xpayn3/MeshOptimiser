@@ -36,7 +36,7 @@ While the drawing differs from the real model, it says **Preview: not applied ye
 - **Sits at zero with its: X and Y**: Which side of the model goes to 0 on that axis: **Low**, **Mid** (the middle), **High**, or **Keep** to leave it where it is. The rows are named after the scene’s floor axes: X and Y when Z is up.
 - **Sits at zero with its: Up**: **Floor** stands the model on the grid. **Top** hangs it from the grid. **Mid** centres it. **Keep** leaves its height alone.
 - **Align to floor**: Does it: turns and moves the model as the drawing shows.
-- **Reset**: Puts the model back where and how it was loaded, and puts the card back to its start: no turn waiting, and Mid, Mid and Floor.
+- **Back to how it was loaded**: Puts the model back where and how it was loaded, and puts the card back to its start: no turn waiting, and Mid, Mid and Floor.
 
 Mid, Mid and Floor is the usual choice: it stands the model on the grid, centred over the origin.
 
@@ -44,7 +44,7 @@ To repeat the last choices without opening the card, press `Ctrl + K` and choose
 
 ## Undo
 
-Pressing **Align to floor** is one undo step. **Reset** in the card goes back to how the file was loaded.
+Pressing **Align to floor** is one undo step. **Back to how it was loaded** in the card does what its name says.
 
 > Which direction is “up” is a setting of the scene: **Up axis (viewport)** under **Settings**, **Scene**. CAD files normally use Z as up. If the whole scene looks turned by a quarter, check that setting before you turn the model.
 

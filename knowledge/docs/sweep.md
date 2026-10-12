@@ -5,7 +5,7 @@ Turn a path and a profile into a solid part: a pipe, a rail, a ring.
 Sweep carries a shape (the profile) along a line (the path) and makes a solid part of it. A circle along a curve makes a pipe, a rectangle along a straight line makes a bar, and a closed path makes a ring.
 
 1. Draw the path with the Draw tool (see [Draw lines and shapes](meshoptimiser://docs/draw-lines)). If the profile should be a drawn shape, draw that too.
-2. Open the **Sweep** card from the bottom toolbar or the search (`Ctrl + K`).
+2. Open the Sweep card from the search: press `Ctrl + K`, type `sweep` and choose **Sweep…**. It has no button on the bottom toolbar.
 3. Pick the **Path** in the list.
 4. Choose the **Profile**: a **Circle** (give its size), a **Rectangle** (width and height) or another **Line** from the list.
 5. Press **Sweep**.

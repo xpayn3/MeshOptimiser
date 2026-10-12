@@ -8,7 +8,7 @@ Ten identical bolts in ten different places are not stacked copies. Only parts i
 
 ## Open the card
 
-Press `Ctrl + K` to open the search, type `stacked`, and choose **Find stacked copies…**. The card opens over the viewport, at the bottom left, like [Split](meshoptimiser://docs/split) and [Fill holes](meshoptimiser://docs/fill-holes). `Esc` puts it away.
+Press `Ctrl + K` to open the search, type `stacked`, and choose **Find stacked copies…**. The card opens over the viewport, at the bottom left, like [Split](meshoptimiser://docs/split) and [Remove holes](meshoptimiser://docs/fill-holes). `Esc` puts it away.
 
 ## Steps
 

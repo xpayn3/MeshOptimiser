@@ -37,6 +37,7 @@ Two tools select for you in a cleverer way: [Select hidden parts](meshoptimiser:
 - Press `Shift + S` to scroll the tree to the selected part and open the groups it is in.
 - Press `F` to frame the selection in the viewport.
 - The status bar shows how many parts are selected. Click that number to frame them.
+- When none of the selection is in the picture, a faint arrow at the edge of the view points to the side it is on. Click the arrow to frame the selection. See [Move the view](meshoptimiser://docs/move-the-view).
 - **Properties** shows the triangle count of the selection and its share of the scene.
 
 ## The right-click menu

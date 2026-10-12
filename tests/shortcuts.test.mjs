@@ -28,7 +28,7 @@ for (const k of keymapKeys) ok(listed.has(k), `_KEYMAP binds ${k}, the shortcuts
 
 // the keys written out by hand in the handlers (each is checked to still be there, then to be listed)
 const byHand = [
-  ['Ctrl+K', /e\.key === 'k' \|\| e\.key === 'K'/], ['F1', /e\.key === 'F1'/], ['Ctrl+,', /e\.key === ','/], ['Ctrl+N', /e\.key === 'n' \|\| e\.key === 'N'/],
+  ['Ctrl+K', /e\.key === 'k' \|\| e\.key === 'K'/], ['F1', /e\.key === 'F1'/], ['Ctrl+,', /e\.key === ','/], ['Ctrl+N', /e\.key === 'n' \|\| e\.key === 'N'/], ['Alt+N', /e\.code === 'KeyN'/],
   ['Ctrl+O', /e\.key === 'o' \|\| e\.key === 'O'/], ['Ctrl+Shift+O', /e\.shiftKey && \(e\.key === 'o' \|\| e\.key === 'O'\)/],
   ['Ctrl+S', /e\.key === 's' \|\| e\.key === 'S'/], ['Ctrl+;', /e\.key === ';'/], ['?', /e\.key === '\?'/], ['F2', /e\.key === 'F2'/],
   ['Ctrl+Z', /e\.key\.toLowerCase\(\) === 'z'/], ['Ctrl+Shift+Z', /e\.shiftKey && e\.key\.toLowerCase\(\) === 'z'/], ['Ctrl+Y', /e\.key\.toLowerCase\(\) === 'y'/],

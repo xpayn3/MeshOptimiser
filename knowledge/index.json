@@ -13,7 +13,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "A plain-language glossary: STEP, mesh, triangle, GLB, instancing, decimation, WebGPU, virtual environment and the other terms these pages use.",
-  "chars": 5360
+  "chars": 5482
  },
  {
   "slug": "first-file",
@@ -21,7 +21,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "Drop a file on the window. What the import settings mean, what conversion does, how to follow its progress, and where the result is kept.",
-  "chars": 4466
+  "chars": 6564
  },
  {
   "slug": "cad-files-step-first",
@@ -69,7 +69,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
-  "chars": 6928
+  "chars": 7113
  },
  {
   "slug": "move-the-view",
@@ -77,7 +77,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Orbit, pan and zoom with the mouse, frame a part with F, and switch between the camera, Top, Front and Side views.",
-  "chars": 2462
+  "chars": 3406
  },
  {
   "slug": "select-parts",
@@ -85,7 +85,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Click, add with Shift, toggle with Ctrl, drag a box, or let the app select by shape, colour or name.",
-  "chars": 2693
+  "chars": 2905
  },
  {
   "slug": "hide-isolate",
@@ -101,7 +101,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Search, rename, group and reorder the parts of a model, rename many at once, and flatten a hierarchy that is deeper than you need.",
-  "chars": 5662
+  "chars": 6135
  },
  {
   "slug": "organise-the-tree",
@@ -116,8 +116,8 @@
   "title": "Search and commands",
   "group": "around",
   "groupTitle": "Find your way around",
-  "summary": "Press Ctrl + K to find any command, part or library part by name, and to work out a sum or convert a length.",
-  "chars": 4047
+  "summary": "Press Ctrl + K or Shift + C to find any command, part, library part or setting by name, turn a switch without leaving the list, and work out a sum or convert a length.",
+  "chars": 7013
  },
  {
   "slug": "quick-wand",
@@ -125,7 +125,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Hold W and a ring of commands opens under the pointer. Flick toward one and let go.",
-  "chars": 3377
+  "chars": 3472
  },
  {
   "slug": "undo-redo",
@@ -133,7 +133,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Every editing action can be taken back with Ctrl + Z. What counts as one step, and how to go back to the file as it was opened.",
-  "chars": 1622
+  "chars": 1626
  },
  {
   "slug": "scene-tabs",
@@ -141,15 +141,15 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Each tab is a scene of its own. Open several files side by side, drop a file to add it or open it in a tab, drag tabs into order, and save from the tab’s dot.",
-  "chars": 3190
+  "chars": 3313
  },
  {
   "slug": "settings",
   "title": "Settings",
   "group": "around",
   "groupTitle": "Find your way around",
-  "summary": "One window with ten sections and a search. What each section holds, in a sentence or two, from the start-up options to the look of the interface.",
-  "chars": 8933
+  "summary": "One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.",
+  "chars": 11740
  },
  {
   "slug": "read-the-numbers",
@@ -173,7 +173,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "One card, one button: every clean-up the app has, run one after another on the whole scene. Choose how far to go, read the plan, press Optimise.",
-  "chars": 5073
+  "chars": 5075
  },
  {
   "slug": "delete-small-parts",
@@ -181,7 +181,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Remove the screws, washers and clips that are too small to matter, with a slider and a preview of what will go.",
-  "chars": 3158
+  "chars": 3214
  },
  {
   "slug": "select-hidden-parts",
@@ -197,7 +197,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Find every bolt, screw, nut and washer by its shape, whatever the parts are called, then isolate or delete them in one step.",
-  "chars": 4499
+  "chars": 4519
  },
  {
   "slug": "stacked-copies",
@@ -205,23 +205,39 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Find parts that sit exactly on top of an identical copy of themselves, drawn twice, and remove the extra ones.",
-  "chars": 2472
+  "chars": 2474
  },
  {
   "slug": "fill-holes",
-  "title": "Fill holes",
+  "title": "Remove holes",
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Close bolt holes, slots, pockets and lettering in flat faces. Each closed hole removes the triangles of its walls.",
-  "chars": 3630
+  "chars": 6236
+ },
+ {
+  "slug": "remove-floating-pieces",
+  "title": "Remove floating pieces",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Delete the small loose pieces of a part that touch nothing: a plug, a shaving, a dot of a thread. The biggest piece of each part always stays.",
+  "chars": 2393
+ },
+ {
+  "slug": "remesh",
+  "title": "Remesh: Untriangulate and Triangulate",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Join the triangles of each flat face into one polygon and take away the vertices in its middle, or go back to even triangles. The shape stays as it is.",
+  "chars": 4522
  },
  {
   "slug": "split",
   "title": "Split",
   "group": "lighter",
   "groupTitle": "Make it lighter",
-  "summary": "Take apart a mesh that arrived as one piece but is really several separate solids, so each can be selected on its own.",
-  "chars": 2634
+  "summary": "Take apart a mesh that arrived as one piece but is really several separate solids, or cut it into its faces, so each can be selected on its own.",
+  "chars": 3951
  },
  {
   "slug": "smart-fit",
@@ -249,11 +265,11 @@
  },
  {
   "slug": "cleanup",
-  "title": "Auto cleanup and Tidy geometry",
+  "title": "Quick fixes and tidying up",
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Small one-click repairs: remove empty parts and empty groups, fix shading, recentre the model and make moves permanent.",
-  "chars": 2645
+  "chars": 2962
  },
  {
   "slug": "workflow",
@@ -261,7 +277,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "A suggested routine for a first clean-up: look, delete what is not needed, simplify what remains, check, save and export.",
-  "chars": 3072
+  "chars": 3319
  },
  {
   "slug": "view-modes",
@@ -276,8 +292,8 @@
   "title": "Colours and materials",
   "group": "look",
   "groupTitle": "Look and arrange",
-  "summary": "Open the materials dock to see every material in the scene, recolour all the parts that share one, and assign materials to parts.",
-  "chars": 2906
+  "summary": "Open the materials dock to see every material in the scene, recolour all the parts that share one, assign a material with a button or by dragging it onto a part, and let the dock float as a window.",
+  "chars": 5112
  },
  {
   "slug": "move-rotate-scale",
@@ -285,7 +301,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Use the gizmo to move, turn and resize parts, drag a part over other surfaces with Dynamic place, type exact values in the transform card, and measure the distance between two points.",
-  "chars": 5820
+  "chars": 5821
  },
  {
   "slug": "align-to-floor",
@@ -293,7 +309,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Stand a model upright on the grid, centred over the origin, when it arrived on its side or far away from the centre of the scene. A small drawing shows the result first.",
-  "chars": 3719
+  "chars": 3746
  },
  {
   "slug": "exploded-view",
@@ -301,7 +317,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Push the parts of an assembly apart with one slider, choose the directions, and put them back with one click.",
-  "chars": 2021
+  "chars": 2023
  },
  {
   "slug": "library",
@@ -309,7 +325,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Add standard parts to a scene from a drawer under the viewport: 86 bolts, nuts, pipes, profiles and machine parts. Look at a part and set its size before it goes in.",
-  "chars": 5423
+  "chars": 5910
  },
  {
   "slug": "draw-lines",
@@ -325,7 +341,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Turn a path and a profile into a solid part: a pipe, a rail, a ring.",
-  "chars": 1487
+  "chars": 1542
  },
  {
   "slug": "screenshots",
@@ -373,7 +389,7 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Convert a STEP CAD file to a small GLB for the web, on your own computer and for free. The model is never uploaded. Drop it in, check it, export.",
-  "chars": 3701
+  "chars": 5379
  },
  {
   "slug": "remove-bolts-from-step-assembly",
@@ -381,7 +397,7 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Take the bolts, screws, nuts and washers out of a CAD assembly before it goes on the web. Select one, select the rest, check, delete, and undo if needed.",
-  "chars": 4035
+  "chars": 4037
  },
  {
   "slug": "make-model-safe-to-send",
@@ -389,15 +405,15 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Show your product without handing over your design. Remove hidden parts and fasteners, simplify what is left, clean the names and export a small GLB.",
-  "chars": 4561
+  "chars": 4563
  },
  {
   "slug": "shortcuts",
   "title": "Keyboard shortcuts",
   "group": "reference",
   "groupTitle": "Reference",
-  "summary": "Every keyboard shortcut and mouse action in MeshOptimiser v0.20.0, grouped by what it does.",
-  "chars": 4630
+  "summary": "Every keyboard shortcut and mouse action in MeshOptimiser v0.23.0, grouped by what it does.",
+  "chars": 5800
  },
  {
   "slug": "file-formats",
@@ -421,7 +437,7 @@
   "group": "help",
   "groupTitle": "Help",
   "summary": "Fixes for the usual problems: Python not found, a blocked launcher on macOS, missing modules, a blank view and slow conversions.",
-  "chars": 6422
+  "chars": 6572
  },
  {
   "slug": "faq",

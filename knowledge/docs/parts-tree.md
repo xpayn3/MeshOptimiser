@@ -83,9 +83,13 @@ A STEP file can have groups inside groups ten levels deep. Flatten removes level
 - **Preserve user groups**: Leaves alone the groups you made yourself.
 - **Remove empty groups left behind**: Deletes groups that end up with nothing in them.
 
+## Walk the tree with the keyboard
+
+Click a row in the tree, and the arrow keys work in it until you click somewhere else. `↑` and `↓` go to the row above and below. Hold `Shift` to add rows to the selection one at a time. `→` opens a closed group, and on an open group steps to its first row. `←` closes an open group, and on a part or a closed group goes to the group that holds it. `Home` and `End` go to the first and the last row.
+
 ## The right-click menu
 
-Right-click a part row for frame, isolate, hide, select similar, group, merge, Split, Fill holes, lock, Smart fit, copy, duplicate and delete. Right-click a group row to select its parts, frame it, rename it, ungroup it or delete it with its contents.
+The menu opens where you clicked. Right-click a part row for frame, isolate, hide, select similar, group, merge, Split, Remove holes, lock, Smart fit, copy, duplicate and delete. Right-click a group row to select its parts, frame it, rename it, ungroup it or delete it with its contents.
 
 A locked part cannot be moved, and delete skips it. Use the same menu entry to unlock it.
 

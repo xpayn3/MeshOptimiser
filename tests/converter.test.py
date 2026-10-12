@@ -625,7 +625,7 @@ def t4_cache_keeps_metadata():
 def t5_api_convert():
     """serve.py /api/convert takes each format and refuses the rest (a copy of the app in a temp folder)."""
     app = W / "app_copy"; app.mkdir()
-    for n in ("serve.py", "step2glb.py"):
+    for n in ("serve.py", "step2glb.py", "updater.py"):       # (serve.py imports updater)
         shutil.copy(APP / n, app / n)
     proc = subprocess.Popen([sys.executable, "-u", str(app / "serve.py"), "--no-browser", "--port", "0"],
                             cwd=app, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8")

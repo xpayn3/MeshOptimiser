@@ -34,7 +34,7 @@ A 1,583-part, 5.4-million-triangle assembly in v0.11.
 | | |
 |---|---|
 | ![The viewer](docs/screenshots/meshoptimiser-viewer.webp)<br>**The viewer** — tree, viewport, and the scene's totals | ![A part selected](docs/screenshots/meshoptimiser-assembly-inspect.webp)<br>**Inspect** — a part's triangles, share of the scene and rank |
-| ![Fill holes](docs/screenshots/meshoptimiser-fill-holes.webp)<br>**Fill holes** — the command panel, and what the fill saved | ![Before and after](docs/screenshots/meshoptimiser-fill-holes-closeup.webp)<br>**Before / after** — 27 holes closed, the rest untouched |
+| ![Remove holes](docs/screenshots/meshoptimiser-fill-holes.webp)<br>**Remove holes** — the command panel, and what the fill saved | ![Before and after](docs/screenshots/meshoptimiser-fill-holes-closeup.webp)<br>**Before / after** — 27 holes closed, the rest untouched |
 | ![All commands](docs/screenshots/meshoptimiser-commands.webp)<br>**All commands** — one list, with shortcuts | ![Search](docs/screenshots/meshoptimiser-palette.webp)<br>**Search** — suggestions follow the selection |
 | ![Scene tabs](docs/screenshots/meshoptimiser-tabs.webp)<br>**Scene tabs** — every tab is its own scene | ![Isolate](docs/screenshots/meshoptimiser-isolate.webp)<br>**Isolate** — one sub-assembly, 360 of 1,583 parts |
 | ![Exploded view](docs/screenshots/meshoptimiser-exploded.webp)<br>**Exploded view** — a slider per axis | ![X-ray](docs/screenshots/meshoptimiser-xray.webp)<br>**X-ray** |
@@ -108,7 +108,7 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 ### 🧹 Mesh tools
 | | |
 |---|---|
-| 🕳 **Fill holes** (`P`)         | Closes bolt holes, slots, pockets and engraved lettering in flat faces; leaves bosses, washer bores and cavity openings alone. Size limit in mm, watertight result, undoable |
+| 🕳 **Remove holes** (`P`)         | Closes bolt holes, slots, pockets and engraved lettering in flat faces; leaves bosses, washer bores and cavity openings alone. Size limit in mm, watertight result, undoable |
 | 🔩 **Fasteners**                | Finds bolts, screws, nuts and washers by their shape, whatever they are called, and selects them to isolate or delete; bushings, bearings, O-rings and pipe fittings are left alone |
 | 🔻 **Decimate**                 | meshoptimizer simplifier — keeps normals, UVs and vertex colours; −25 … −90 % or a triangle target for the selection |
 | 📦 **Smart fit**                | Replace parts with the best low-poly proxy: box, oriented box or cylinder |
@@ -137,7 +137,7 @@ A CAD preprocessor, viewer, hierarchy editor, and exporter, in one local app.
 |---|---|
 | 👋 **Welcome modal**            | Drag-drop, browse, recent files (IndexedDB-persisted handles) |
 | 🗂 **Scene tabs**                | Every tab is its own scene, with its own undo history. New and Open never replace a scene that has something in it |
-| 🧩 **Command panels**            | Split (`X`) and Fill holes (`P`) open as a panel beside the viewport: `Enter` runs, `Esc` puts it away |
+| 🧩 **Command panels**            | Split (`X`) and Remove holes (`P`) open as a panel beside the viewport: `Enter` runs, `Esc` puts it away |
 | ⋯ **All commands**              | Every command that acts on the model in one list, with its shortcut; what cannot run now is dimmed |
 | ⌘ **Search (⌘K)**                | Every menu item and every sidebar button and control, one keystroke away, with suggestions for the selection |
 | 🔢 **Drag any number**           | Shape parameters and limits are numbers you drag sideways, or click to type. Shift ×10, Alt ÷10 |
@@ -267,7 +267,7 @@ index.html         WebGPU viewer shell
 app-v2.js          viewer logic (scene graph, picking, colour groups)
 holefill.js        hole filler (pure module, no dependencies)
 fasteners.js       fastener recogniser (pure module, no dependencies)
-mesh-worker.js     background worker for Fill holes and Decimate
+mesh-worker.js     background worker for Remove holes and Decimate
 cloner.js          cloner (linear / grid / radial arrays)
 tests/
  ├── selftest.js         in-app regression suite (?selftest)
@@ -310,6 +310,14 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.23.0** — back to the mesh itself: you decide how a CAD file becomes triangles, Fill holes is now Remove holes and closes far more, three tools clean up what is left, and the search looks through Settings.
+
+- ![new][new] **Tessellation settings on import** — sag, angle and smallest edge for STEP, IGES and BREP, with four presets or your own numbers, and **By part size** for a fine housing and coarse screws. **Smooth shading** takes the normals from the CAD surfaces, and **Swap Y and Z** stands up a file that comes in on its side.
+- ![new][new] **Remove holes** — the new name of Fill holes. It also takes out the loose walls a broken file leaves where a hole was, seals an opening into a hollow space flush from outside, and removes the ring of vertices a closed hole used to leave.
+- ![new][new] **Remove floating pieces**, **Remesh** (Untriangulate and Triangulate in one panel, `U` and `Shift+U`) and **Split by faces** with a smallest part.
+- ![new][new] **A search that looks through Settings** and reads loosely (words in any order, other words, a slip of the finger, initials), Materials and Library docks that **pop out as floating windows**, **drag a material onto the view**, an **arrow to a selection out of sight** and **Orbit around: Selection, Scene or Cursor**.
+- ![fix][fix] **Remove holes no longer finds the same hole again and again** or gives up on a face where two openings meet, a changed angle counts as a changed setting, the scale gizmo's centre handle no longer jumps, and Centre pivot pressed twice keeps the gizmo.
+
 **v0.22.0** — let Claude do the work, and never lose the scene: Claude can drive the optimiser, the app updates itself, and a crash is recoverable.
 
 - ![new][new] **Work with Claude** — switch on **Let Claude connect** in Settings and Claude can use the same 65 tools you click (find bolts and hidden parts, Smart optimise, reduce to a size, renders, exports). Four permission switches, an Allow / Don't allow prompt before every edit, dry runs, one-call jobs with progress and Stop, and every change is one undo step. Off until you switch it on.
@@ -337,7 +345,7 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 **v0.15.0** — the commands come to the pointer: a Quick wand ring on `W`, four clean-up tools, Untriangulate, a wireframe that shows polygons, and a scale handle for Dynamic place.
 
-- ![new][new] **Quick wand** — hold `W` over the viewport: a ring of commands opens round the pointer. Move toward a slice and let go; a short flick is enough. With a selection it has Hide, Reduce, Delete and More; with nothing selected it has Fit view, Select all, View, Show all, File and Clean. Slices that hold a group fan out as soon as the pointer is on them (Decimate −25 % to −90 %, Smart fit, Split, Fill holes; the views; Save; the clean-ups), and a command that cannot run stays on the ring, dimmed, with the reason. A quick tap of `W` leaves the ring open to click. It never acts by accident: Esc, any other key, the wheel or a click outside closes it.
+- ![new][new] **Quick wand** — hold `W` over the viewport: a ring of commands opens round the pointer. Move toward a slice and let go; a short flick is enough. With a selection it has Hide, Reduce, Delete and More; with nothing selected it has Fit view, Select all, View, Show all, File and Clean. Slices that hold a group fan out as soon as the pointer is on them (Decimate −25 % to −90 %, Smart fit, Split, Remove holes; the views; Save; the clean-ups), and a command that cannot run stays on the ring, dimmed, with the reason. A quick tap of `W` leaves the ring open to click. It never acts by accident: Esc, any other key, the wheel or a click outside closes it.
 - ![new][new] **Repair mesh**, **Remove hidden faces**, **Merge by material or group** and **Select by rule** — four cards from the command palette (`Ctrl+K`).
 - ![new][new] **Untriangulate** — flat neighbouring triangles become one polygon and are cut again with fewer triangles, with no change of shape. **Wireframe** is now the solid surfaces with a thin black line on every edge: Triangles, Polygons or Outline.
 - ![new][new] **Decimate and Fit to budget** weigh normals, UVs and vertex colours, and the report shows how far the surfaces moved.
