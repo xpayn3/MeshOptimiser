@@ -7,7 +7,7 @@
 ██║╚██╔╝██║██╔══╝  ╚════██║██╔══██║
 ██║ ╚═╝ ██║███████╗███████║██║  ██║
 ╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  O P T I M I S E R   ·   v 0 . 2 1 . 0
+  O P T I M I S E R   ·   v 0 . 2 2 . 0
 </pre>
 
 ### From bloated CAD to browser-ready, locally.
@@ -309,6 +309,14 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 ---
 
 ## 🗒 What's New
+
+**v0.22.0** — let Claude do the work, and never lose the scene: Claude can drive the optimiser, the app updates itself, and a crash is recoverable.
+
+- ![new][new] **Work with Claude** — switch on **Let Claude connect** in Settings and Claude can use the same 65 tools you click (find bolts and hidden parts, Smart optimise, reduce to a size, renders, exports). Four permission switches, an Allow / Don't allow prompt before every edit, dry runs, one-call jobs with progress and Stop, and every change is one undo step. Off until you switch it on.
+- ![new][new] **Updates inside the app** — Settings → Updates installs a newer version (a few MB, checked before any file is replaced) and keeps one earlier version to go back to.
+- ![new][new] **Your scene back after a crash** — a recovery copy while there are unsaved changes (Settings → General → Recovery), offered first on the start screen as a yellow Continue card.
+- ![new][new] **Keep sharp edges** in Decimate and Fit to budget, **Meshopt compression** and **Faster to draw** in Export, **a unit and up axis for new scenes**, a **Tasks chip**, hover-to-find in the tree, a Shading angle and drop-a-folder.
+- ![fix][fix] **Closing a tab stops a running conversion at once,** the selection stays while exploding, and the grid refits after an import into a scene.
 
 **v0.21.0** — show it and ship it: a turntable video, export presets for where the file is going, and a Selection bar with the actions I reach for most.
 

@@ -2,7 +2,7 @@
 // The reported error is an estimate; the test measures the real distance on a sphere and
 // requires the estimate to be in the right range (not far below what was measured).
 import { MeshoptSimplifier as S } from '../vendor/meshoptimizer/meshopt_simplifier.module.js';
-import { packAttributes, reduceIndex } from '../simplify-core.js';
+import { packAttributes, reduceIndex, analyseCreases, lockSharp } from '../simplify-core.js';
 
 await S.ready;
 S.useExperimentalFeatures = true;
@@ -97,6 +97,42 @@ ok(small.idx.length === 30, 'at the target already: nothing removed');
 const big = sphere(R * 10, 96, 64);
 const bigR = reduceIndex(S, big.index, big.positions, target, packAttributes(big.geom));
 ok(Math.abs(bigR.err / withAttr.err - 10) < 0.5, `error scales with size (×${(bigR.err / withAttr.err).toFixed(2)})`);
+
+
+// — sharp edges —
+// A flat-topped cylinder: smooth sides (6 degrees between facets), hard rims (90 degrees).
+function cylinder(r, h, nSeg, nRing) {
+  const pos = [], idx = [];
+  for (let j = 0; j <= nRing; j++) for (let i = 0; i < nSeg; i++) { const a = (i / nSeg) * Math.PI * 2; pos.push(Math.cos(a) * r, (j / nRing - 0.5) * h, Math.sin(a) * r); }
+  const ring = (j, i) => j * nSeg + (i % nSeg);
+  for (let j = 0; j < nRing; j++) for (let i = 0; i < nSeg; i++) { idx.push(ring(j, i), ring(j + 1, i), ring(j, i + 1), ring(j, i + 1), ring(j + 1, i), ring(j + 1, i + 1)); }
+  for (const [j, up] of [[0, false], [nRing, true]]) {                       // caps: duplicated vertices, as a CAD export has
+    const c = pos.length / 3; pos.push(0, (j / nRing - 0.5) * h, 0);
+    const base = pos.length / 3; for (let i = 0; i < nSeg; i++) pos.push(pos[ring(j, i) * 3], pos[ring(j, i) * 3 + 1], pos[ring(j, i) * 3 + 2]);
+    for (let i = 0; i < nSeg; i++) { const a = base + i, b = base + ((i + 1) % nSeg); if (up) idx.push(c, b, a); else idx.push(c, a, b); }
+  }
+  return { positions: new Float32Array(pos), index: new Uint32Array(idx) };
+}
+const cyl = cylinder(10, 40, 64, 100);
+const an = analyseCreases(cyl.index, cyl.positions);
+const l40 = lockSharp(an, 40), l3 = lockSharp(an, 3);
+console.log('locked at 40:', l40.count, ' at 3:', l3.count, ' vertices:', cyl.positions.length / 3);
+ok(l40.count > 0 && l40.count <= 64 * 2 * 2 + 2, `40 degrees locks the rims only (${l40.count} vertices)`);
+ok(l3.count > l40.count * 5, `3 degrees would lock every facet edge (${l3.count} vertices): the angle matters`);
+const cylTarget = Math.floor(cyl.index.length / 3 * 0.09) * 3;
+const rimsOf = (idx) => { const used = new Set(idx); let n = 0; for (const v of used) { const y = cyl.positions[v * 3 + 1]; if (Math.abs(Math.abs(y) - 20) < 1e-4) n++; } return n; };
+const free = reduceIndex(S, cyl.index, cyl.positions, cylTarget, null);
+const held = reduceIndex(S, cyl.index, cyl.positions, cylTarget, null, { sharp: 40 });
+console.log('triangles: original', cyl.index.length / 3, 'free', free.idx.length / 3, 'held', held.idx.length / 3, 'rim vertices free/held', rimsOf(free.idx), rimsOf(held.idx), 'sharpKept', held.sharpKept);
+ok(held.sharpKept > 0, 'the sharp-edge path was the one that got there');
+ok(held.idx.length <= cylTarget * 1.25, `...and it reached the target (${held.idx.length / 3} triangles of ${cyl.index.length / 3})`);
+ok(rimsOf(held.idx) >= 128, `all the rim vertices are still there with the edges kept (${rimsOf(held.idx)})`);
+ok(rimsOf(free.idx) <= rimsOf(held.idx), `without it the rims keep the same or fewer (${rimsOf(free.idx)})`);
+const tiny = Math.floor(cyl.index.length / 3 * 0.012) * 3;
+const hard = reduceIndex(S, cyl.index, cyl.positions, tiny, null, { sharp: 40 });
+ok(hard.idx.length <= tiny * 1.25 && !hard.sharpKept, `a goal the rims cannot keep to falls back and is reached (${hard.idx.length / 3} triangles)`);
+const sph = reduceIndex(S, s.index, s.positions, target, packAttributes(s.geom), { sharp: 40 });
+ok(!sph.sharpKept && sph.idx.length === withAttr.idx.length, 'a smooth sphere is reduced exactly as before');
 
 console.log(fails ? `\n${fails} failed` : '\nall passed');
 process.exit(fails ? 1 : 0);

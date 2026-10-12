@@ -4,6 +4,50 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.22.0
+
+Released 12 Oct 2026.
+
+v0.21.0 was about getting a model out and showing it. v0.22.0 is about letting something else do the work, and about trusting the app not to lose it: Claude can drive the optimiser, the app can update itself, and a crash no longer costs the scene.
+
+**Work with Claude**
+
+- ![new][new] **Let Claude use the app.** Switch on **Let Claude connect** in Settings, add the app to Claude once with `claude mcp add --transport http meshoptimiser http://localhost:4242/mcp`, and Claude can use the same tools you click, on the scene you have open: 65 of them, from finding bolts and hidden parts to Smart optimise, reducing to a size, pictures and exports. It is off until you switch it on, and a small pill in the top bar says when Claude is listening, working or waiting for you.
+- ![new][new] **You stay in charge.** Four switches decide what it may do at all (change the model; move, rename and group; delete; open files and save exports). With **Ask before Claude edits** on, an Allow or Don't allow prompt comes before every edit, and deleting asks even when that is off. Looking, selecting, hiding, isolating, exploding and moving the camera never ask. Every change is one undo step.
+- ![new][new] **Try it, watch it, stop it.** Sixteen steps take `dry_run`: the app does the step, reads the numbers and takes it back, so Claude can say what would happen with nothing kept. `optimise_to_target` takes a scene to a size or a place (web, Shopify, AR, a phone) in one call, `compare_images` puts the model as opened beside the model now, and `batch_optimise` does a folder one file after another. Long jobs show their progress in the pill and have a Stop button.
+- ![new][new] **Claude arrives knowing the app.** The server hands it six playbooks, about fifty of the help articles (searchable, read one at a time) and six ready-made jobs, and every tool says whether it only reads or changes the model.
+- ![new][new] **Pictures for a client.** `render_image` makes PNGs up to 8192 pixels a side in one angle or several, in solid, clay, CAD, wireframe, x-ray or heat view, on a plain or transparent background. `turntable_video` saves the film.
+- ![new][new] **Settings, Claude** shows the state of the connection, how many requests were done, declined or failed, the last thirty requests, and has Reconnect and Restart the server. The hosted demo has none of it.
+
+**Updates**
+
+- ![new][new] **Updates inside the app.** Settings, Updates (and Check for updates in the menu) looks for a newer version, shows what is new and installs it. It downloads a small archive of the app's own files (a few megabytes, not the Python environment), checks its size and fingerprint and every file in it, replaces only what changed and restarts. Your scenes, settings, inbox, exports and Python environment are never touched.
+- ![new][new] **A way back.** One earlier version is kept: **Earlier version** puts it back. If a new version does not get a working window up in three starts, the old one comes back by itself. Launcher files are never replaced while they run; a release that changes them sends you to the full download.
+- ![new][new] **Your choices.** Check automatically (and how often), Stable or Beta, a notice in the corner with Update, Later and Skip this version. A check downloads one small file from lukagrcar.com and sends nothing about you. Versions before this one have no updater, so they need one manual update.
+
+**Crashes**
+
+- ![new][new] **Your scene back after a crash.** While a scene has changes that are not saved, a copy of it is kept inside the browser: every 2 minutes by default (1 or 5, or off, in Settings, General, Recovery), only when something changed, never while you drag. After a crash the app says so and offers the scene back, and the start screen shows it first as a wide yellow Continue card. Saving clears the copy, and a window you close or reload on purpose is not offered back.
+- ![fix][fix] **Closing or reloading a tab while a conversion runs stops the converter at once,** and the server cancels a job that nobody has asked about for ten minutes. Before, a core and gigabytes of memory could stay busy for hours.
+
+**Reduce and export**
+
+- ![new][new] **Keep sharp edges** in the Reduce triangles card, on by default. While triangles are taken out, the vertices on a part's hard edges (faces that turn by more than 40 degrees: a rim, a step, a corner) stay where they are, when the part has few of them and the goal can still be reached. A part that is mostly hard edges, like a gear, is reduced as before. Decimate, Fit to budget and Claude's tools use it.
+- ![new][new] **Meshopt compression and Faster to draw** in the Export window, for GLB. Meshopt makes the file about a quarter of the plain size (Draco is smaller still, about a fifth on a CAD assembly) and needs a viewer that reads it. Faster to draw only puts the triangles and vertices in the order the graphics card likes: the shape does not change and any viewer opens it. The first use fetches glTF Transform, so it needs a connection once.
+- ![new][new] **New scenes start the way you like.** Settings, General has a unit and an up axis for every scene you start from now on.
+- ![polish][polish] **Turntable videos are sharper** (a higher bit rate), and Export sits beside the sidebar button in the top bar.
+
+**Around the app**
+
+- ![new][new] **A Tasks chip** in the status bar shows every tab's running job and can cancel it. It is a small empty ring when nothing runs.
+- ![new][new] **Point at a row in the tree and the part pulses in the view; point at a part and its row lights up.** The selection has a soft glow, and the tree scrolls only when the picked row is out of sight.
+- ![new][new] **Explode along each part's own axis** (Part axis), as well as along the scene's axes. **Recentre on origin** with parts selected moves only them, together. **Shading angle** in Properties re-smooths normals, one undo step.
+- ![new][new] **Drop a folder** to open the model in it, and a glTF with an external .bin or textures asks for its folder. A converted STEP is kept as GLB, so its Recent card opens at once. About forty more actions are in the search.
+- ![polish][polish] **The loader is a spinning low-poly sphere,** and opening a STEP shows its six steps with times and folds the log under Details. The Import dialog has segmented Quality and Colours choices. The camera pill sits under the view cube, the left sidebar starts wider on a big screen, the grid stays visible until the camera is nearly level with it, and the tree's colours are on by default.
+- ![fix][fix] **The selection stays selected while a model explodes,** and a tool run on an exploded model no longer offsets the bounding box twice.
+- ![fix][fix] **The floor grid refits after a model is added to a scene or a library part arrives.**
+- ![fix][fix] **Smart fit's cylinder copes with a ring that has a tab or ears.**
+
 ## v0.21.0
 
 Released 9 Oct 2026.

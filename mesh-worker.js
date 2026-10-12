@@ -16,7 +16,7 @@
 // Every reply carries the request's id and ok: true / false.
 
 import { fillFlatHoles } from './holefill.js?v=9';
-import { reduceIndex } from './simplify-core.js?v=1';
+import { reduceIndex } from './simplify-core.js?v=2';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=2';
 import { untriangulate } from './untriangulate.js?v=1';
 
@@ -73,7 +73,7 @@ self.onmessage = async (e) => {
         let idx;
         if (sub.length <= target) idx = sub.slice();
         else {
-          const r = reduceIndex(S, sub, m.positions, target, m.attrs || null);
+          const r = reduceIndex(S, sub, m.positions, target, m.attrs || null, m.sharp > 0 ? { sharp: m.sharp } : null);
           idx = r.idx.slice();                     // off the WASM heap, into a buffer of its own
           err = Math.max(err, r.err);
         }

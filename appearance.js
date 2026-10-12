@@ -10,7 +10,7 @@
   var KEY = 'stepopt-prefs';
   var root = document.documentElement;
 
-  var DEFAULTS = { uiAccent: '#0d99ff', uiTone: 'graphite', uiFont: 'inter', uiTextScale: 1, uiDensity: 1, uiRadius: 'default', uiMotion: true, uiTreeColors: false };
+  var DEFAULTS = { uiAccent: '#0d99ff', uiTone: 'graphite', uiFont: 'inter', uiTextScale: 1, uiDensity: 1, uiRadius: 'default', uiMotion: true, uiTreeColors: true };
 
   // Colours that hold white text. (A lighter custom colour gets dark text: see onAccent.)
   var ACCENTS = [

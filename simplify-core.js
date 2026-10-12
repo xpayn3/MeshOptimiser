@@ -39,6 +39,55 @@ export function packAttributes(geom) {
   return { data, stride, weights };
 }
 
+// Sharp edges, for the simplifier's vertex lock. A CAD part is smooth faces meeting at hard edges; the quadric error alone
+// will happily round a hard edge off when it has to remove a lot. This finds the edges where two neighbouring faces turn
+// by more than `deg` degrees (a rim, a step, a corner, not the 5 to 30 degrees between the facets of a tessellated cylinder)
+// and marks the vertices on them, so the simplifier leaves those vertices where they are. Vertices at the same place count
+// as one (a hard edge is usually two vertices, one for each face). Border edges are the simplifier's LockBorder business.
+export function analyseCreases(sub, positions) {
+  const n = positions.length / 3, canon = new Int32Array(n).fill(-1);
+  let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < sub.length; i++) { const v = sub[i]; for (let k = 0; k < 3; k++) { const x = positions[v * 3 + k]; if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x; } }
+  const cell = Math.max(1e-12, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1e-6);
+  const seen = new Map(); let next = 0;
+  const idOf = (v) => {
+    let c = canon[v]; if (c >= 0) return c;
+    const key = Math.round((positions[v * 3] - lo[0]) / cell) + ',' + Math.round((positions[v * 3 + 1] - lo[1]) / cell) + ',' + Math.round((positions[v * 3 + 2] - lo[2]) / cell);
+    c = seen.get(key); if (c === undefined) { c = next++; seen.set(key, c); }
+    canon[v] = c; return c;
+  };
+  const tris = sub.length / 3, nx = new Float32Array(tris), ny = new Float32Array(tris), nz = new Float32Array(tris);
+  const first = new Map(), a = [], b = [], cosv = [];
+  for (let t = 0; t < tris; t++) {
+    const i0 = sub[t * 3], i1 = sub[t * 3 + 1], i2 = sub[t * 3 + 2];
+    const ux = positions[i1 * 3] - positions[i0 * 3], uy = positions[i1 * 3 + 1] - positions[i0 * 3 + 1], uz = positions[i1 * 3 + 2] - positions[i0 * 3 + 2];
+    const vx = positions[i2 * 3] - positions[i0 * 3], vy = positions[i2 * 3 + 1] - positions[i0 * 3 + 1], vz = positions[i2 * 3 + 2] - positions[i0 * 3 + 2];
+    let x = uy * vz - uz * vy, y = uz * vx - ux * vz, z = ux * vy - uy * vx; const m = Math.hypot(x, y, z);
+    if (m > 0) { x /= m; y /= m; z /= m; } else { x = y = z = NaN; }      // (a triangle with no area has no direction: it takes no part in a crease)
+    nx[t] = x; ny[t] = y; nz[t] = z;
+    const c0 = idOf(i0), c1 = idOf(i1), c2 = idOf(i2);
+    for (const [p, q] of [[c0, c1], [c1, c2], [c2, c0]]) {
+      if (p === q) continue;
+      const key = p < q ? p * 67108864 + q : q * 67108864 + p, f = first.get(key);
+      if (f === undefined) first.set(key, t);
+      else if (f >= 0) {                               // the second face on this edge (a third one, a non-manifold edge, is left alone)
+        a.push(p < q ? p : q); b.push(p < q ? q : p); cosv.push(nx[f] * x + ny[f] * y + nz[f] * z);
+        first.set(key, -1);
+      }
+    }
+  }
+  return { canon, count: next, a: Int32Array.from(a), b: Int32Array.from(b), cos: Float32Array.from(cosv), n };
+}
+
+// vertex_lock flags (Uint8Array, one per vertex) for the edges sharper than `deg`; `count` is how many vertices are locked.
+export function lockSharp(an, deg) {
+  const lim = Math.cos(deg * Math.PI / 180), hot = new Uint8Array(an.count);
+  for (let e = 0; e < an.cos.length; e++) if (an.cos[e] < lim) { hot[an.a[e]] = 1; hot[an.b[e]] = 1; }
+  const flags = new Uint8Array(an.n); let count = 0;
+  for (let v = 0; v < an.n; v++) { const c = an.canon[v]; if (c >= 0 && hot[c]) { flags[v] = 1; count++; } }
+  return { flags, count };
+}
+
 // Reduce the triangles in `sub` (an index range) towards `target` indices.
 // `attrs` is what packAttributes returned, or null.
 //
@@ -52,12 +101,31 @@ export function packAttributes(geom) {
 // new surface moved, in the units of `positions` (the library reports it
 // relative to the size of the mesh; it is scaled back here). It is an
 // estimate of the largest collapse error, not a measured distance.
-export function reduceIndex(S, sub, positions, target, attrs) {
+export function reduceIndex(S, sub, positions, target, attrs, opts) {
   const scale = S.getScale(positions, 3) || 1;
   const near = (r) => r.idx.length <= target * 1.25;
   let best = null;
   const keep = (idx, rel) => { const r = { idx, err: rel * scale }; if (!best || r.idx.length < best.idx.length) best = r; return r; };
 
+  // 0. sharp edges first, when asked for (opts.sharp is an angle in degrees): the vertices on them are locked. It only counts if
+  //    the target is still reached with them locked, so a part made of nothing but hard edges falls through to the paths below
+  //    (a gear cannot be both). A harder angle is tried second: only the sharpest edges are kept then.
+  if (opts && opts.sharp > 0 && S.simplifyWithAttributes && S.useExperimentalFeatures) {
+    try {
+      const an = analyseCreases(sub, positions), a = attrs || { data: new Float32Array(positions.length / 3), stride: 1, weights: [0] };
+      for (const deg of [opts.sharp, Math.min(85, opts.sharp * 1.7)]) {
+        const lock = lockSharp(an, deg);
+        if (!lock.count) break;                            // nothing is that sharp: the paths below do the work
+        // A part whose vertices are mostly on hard edges (a gear, a knurled knob) would spend its whole budget on them and then
+        // pay for it everywhere else: measured on a real assembly, locking more than about a twelfth of the vertices made the
+        // surface drift further than leaving the edges to the quadric. Those parts are left to the usual paths.
+        if (lock.count > (opts.maxShare > 0 ? opts.maxShare : 0.08) * (positions.length / 3)) continue;
+        const [idx, rel] = S.simplifyWithAttributes(sub, positions, 3, a.data, a.stride, a.weights, lock.flags, target, 1.0, ['LockBorder']);
+        const r = keep(idx, rel);
+        if (near(r)) { r.sharpKept = lock.count; return r; }
+      }
+    } catch (_) { /* fall through to the usual paths */ }
+  }
   if (attrs && S.simplifyWithAttributes && S.useExperimentalFeatures) {
     try {
       const [idx, rel] = S.simplifyWithAttributes(sub, positions, 3, attrs.data, attrs.stride, attrs.weights, null, target, 1.0, ['LockBorder']);

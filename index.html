@@ -381,6 +381,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
    on a 9700-node tree (was ~1s on each toggle due to the Lucide icon pass). */
 .tree-node.is-hidden{display:none}
 .tree-node:hover{background:var(--s1);--row-tint:rgba(255,255,255,.03);}
+.tree-node.is-link{background:color-mix(in srgb,var(--ac) 15%,transparent);box-shadow:inset 2px 0 0 var(--ac)}      /* the part under the pointer in the view (Settings > Viewport: Link the list and the view) */
 .tree-node.hidden-vis{opacity:.45}
 /* Subtle yellow tint on flagged-small-part rows, only when the
    "Highlight small" toggle is on. */
@@ -409,6 +410,12 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prop-name{font-size:var(--fs-lg);font-weight:var(--fw-medium);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;word-break:break-all}
 .prop-tags{display:flex;flex-wrap:wrap;gap:var(--space-xs);margin-bottom:8px;min-height:14px}
 .prop-material-row{margin:10px 0 10px}
+/* The Shading angle: a thin row (the name, and a number to type or drag), between two hairlines, above the material strip. */
+.prop-shade{display:flex;align-items:center;justify-content:space-between;gap:10px;height:28px;margin:0 0 10px;padding:0;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);font-size:var(--fs-12);color:var(--tx3)}
+.prop-shade .size-field{height:22px;width:62px;padding:0 6px;margin-right:-6px;background:transparent;border:0;border-radius:6px;justify-content:flex-end;color:var(--tx3);transition:background 140ms var(--ease-out)}
+.prop-shade .size-field:hover,.prop-shade .size-field:focus-within{background:var(--s2);color:var(--tx)}
+.prop-shade .size-field input{width:30px;text-align:right;background:transparent;border:0;color:var(--tx);font:inherit;font-variant-numeric:tabular-nums;cursor:ew-resize}
+.prop-shade .size-field input:focus{cursor:text;outline:none}
 /* Material chip under the part name — full-width row with a 36px shaded
    sphere preview, the material name, a usage hint, and quick-access action
    icons. Reuses the same preview thumbs as the materials grid so the
@@ -1342,18 +1349,47 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .cmdk-item{display:flex;align-items:center;gap:var(--space-xl);padding:9px 12px;border-radius:var(--r-md);cursor:pointer;font-size:var(--fs-md);background:transparent;transition:background var(--dur-fast) var(--ease-out)}
 .sc-footer{flex:0 0 auto;padding:10px 20px 14px;border-top:1px solid var(--hairline);background:var(--bg1);color:var(--tx3);font-size:var(--fs-xs);display:flex;align-items:center;justify-content:space-between;gap:12px}
 
+/* Loader steps: a short checklist (done, doing, to do) with the log folded under "Details" */
+.ld-steps{list-style:none;margin:16px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+.ld-steps[hidden]{display:none}
+.ld-step{display:flex;align-items:center;gap:12px;min-height:30px;padding:3px 2px;font-size:var(--fs-md);color:var(--tx3);transition:color var(--dur-base) var(--ease-out)}
+.ld-dot{position:relative;flex:none;width:18px;height:18px;box-sizing:border-box;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--s4);transition:background var(--dur-base) var(--ease-out),box-shadow var(--dur-base) var(--ease-out)}
+.ld-step.is-active .ld-dot{box-shadow:none;border:2px solid var(--s4);border-top-color:var(--ac);animation:spin .8s linear infinite}
+.ld-step.is-done .ld-dot{background:var(--ok);box-shadow:none}
+.ld-step.is-done .ld-dot::after{content:'';position:absolute;left:6px;top:2.6px;width:4px;height:8px;border:solid var(--white);border-width:0 2px 2px 0;transform:rotate(45deg)}      /* (the tick's bounding box, turned, is centred on the 18px circle: 6px / 2.6px) */
+.ld-step.is-fail .ld-dot{background:var(--er);box-shadow:none}
+.ld-step.is-fail .ld-dot::before,.ld-step.is-fail .ld-dot::after{content:'';position:absolute;left:8px;top:4px;width:2px;height:10px;border-radius:1px;background:var(--white);transform:rotate(45deg)}
+.ld-step.is-fail .ld-dot::after{transform:rotate(-45deg)}
+.ld-name{flex:none}
+.ld-step.is-active .ld-name{color:var(--tx);font-weight:var(--fw-medium)}
+.ld-step.is-done .ld-name{color:var(--tx2)}
+.ld-step.is-fail .ld-name{color:var(--er)}
+.ld-note{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-sm);color:var(--tx3);font-variant-numeric:tabular-nums}
+.ld-time{margin-left:auto;font-size:var(--fs-sm);color:var(--tx3);font-variant-numeric:tabular-nums}
+.ld-details{margin-top:12px}
+.ld-details>summary{list-style:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:var(--fs-12);color:var(--tx3)}
+.ld-details>summary::-webkit-details-marker{display:none}
+.ld-details>summary::after{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-1px) rotate(-45deg);transition:transform var(--dur-base) var(--ease-out)}      /* (-1px: the text sits a little high in its line, and the arrow is centred on the line) */
+.ld-details[open]>summary::after{transform:translateY(.5px) rotate(45deg)}      /* (a down arrow's weight is above its box centre: a little lower) */
+.ld-details>summary:hover{color:var(--tx)}
+.ld-details>.loader-log{margin-top:8px}
+@media (prefers-reduced-motion:reduce){.ld-step.is-active .ld-dot{animation-duration:2s}}
 /* Loader */
-#loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:transparent;z-index:100}
+/* the progress card of an import into a scene that is already open: it dims the viewport it sits in (the loader is inside the viewport's panel), not the whole app */
+#loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 62%,transparent);z-index:100}
 #loader.show{display:flex}
-.loader-card{width:480px;max-width:90vw;padding:18px 20px 16px}
-.loader-head{display:flex;align-items:center;gap:var(--space-2xl)}
-.spinner{width:28px;height:28px;border-radius:50%;border:2.5px solid var(--bg3);border-top-color:var(--ac);animation:spin .7s linear infinite;flex-shrink:0}
+.loader-card{width:600px;max-width:92vw;padding:20px 22px 18px}
+.loader-head{display:flex;align-items:center;gap:14px}
+.spinner{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--bg3);border-top-color:var(--ac);animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* The loading mark: a low-poly sphere that turns while a wave of light climbs through its edges and vertices (a smooth surface being
+   meshed). It is drawn on a canvas by _MeshMark in app-v2.js, and only while a loader is on screen. */
+.ml-cv{width:44px;height:44px;flex:none;display:block}
 .loader-text{flex:1;min-width:0}
 #loader-msg{color:var(--tx);font-weight:var(--fw-semibold);font-size:var(--fs-xl);margin-bottom:2px}
-#loader-sub{color:var(--tx2);font-size:var(--fs-12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#loader-sub{color:var(--tx2);font-size:var(--fs-12);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}      /* (two lines at most, wrapped: never a sideways scroll) */
 #loader-time{color:var(--tx2);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;padding:4px 8px;background:var(--hairline);border-radius:var(--r-sm)}
-.loader-bar{height:6px;background:var(--s3);border-radius:var(--r-xs);margin-top:14px;overflow:hidden;position:relative}
+.loader-bar{height:6px;background:var(--s3);border-radius:var(--r-xs);margin-top:16px;overflow:hidden;position:relative}
 .loader-bar-fill{height:100%;width:35%;background:var(--ac);border-radius:var(--r-xs);transition:width .3s ease;position:absolute;left:0;overflow:hidden}
 /* One flat accent colour. While something is loading a faint band of light
    drifts across the filled part and back; it only runs while the bar is on
@@ -1363,11 +1399,13 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 @media (prefers-reduced-motion:reduce){.loader-bar-fill::after{animation:none;display:none}}
 .loader-bar-fill.indeterminate{animation:slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
 @keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(360%)}}
-.loader-log{margin-top:12px;height:120px;overflow-y:auto;background:rgba(0,0,0,.3);border:1px solid var(--hairline);border-radius:var(--r-sm);padding:8px 10px;font:11px/1.55 var(--font-sans);color:var(--tx2)}
-.log-line{display:flex;gap:var(--space-md)}
-.log-time{color:var(--tx3);flex-shrink:0;width:48px}
+.loader-log{margin-top:14px;height:176px;overflow-y:auto;overflow-x:hidden;background:rgba(0,0,0,.28);border:1px solid var(--hairline);border-radius:var(--r-md,10px);padding:10px 4px 10px 12px;font:11.5px/1.5 var(--font-sans);color:var(--tx2);scrollbar-width:thin;scrollbar-color:var(--bd2) transparent}
+.log-line{display:flex;gap:12px;padding:1px 0}
+.log-time{color:var(--tx3);flex-shrink:0;width:44px;text-align:right;font-variant-numeric:tabular-nums}
+.log-msg{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;padding-right:8px}      /* long lines (paths, tracebacks) wrap; nothing scrolls sideways */
+.log-line:last-child .log-msg{color:var(--tx)}
 .log-msg.ok{color:var(--ok)}.log-msg.warn{color:var(--wn)}.log-msg.err{color:var(--er)}
-.loader-cancel{margin-top:12px;text-align:right}
+.loader-cancel{margin-top:14px;text-align:right}
 .loader-cancel button{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .loader-cancel button:hover{color:var(--er);border-color:var(--er-line)}
 
@@ -1380,8 +1418,37 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 #sb .sb-action:hover{background:var(--hairline);border-color:var(--bd);color:var(--tx)}
 #sb .sb-action svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
 #sb .sb-action.empty{opacity:.45;cursor:default;pointer-events:none}
-#sb #sb-selected.active{color:var(--ac-text);background:var(--ac-soft);border-color:var(--ac-line)}
-#sb #sb-selected.active strong{color:var(--ac-text)}
+/* The Tasks chip: always in the status bar. Idle: a small empty ring. Running: the ring fills, or turns when the end is not known. */
+#sb-bg{display:inline-flex;align-items:center;gap:7px;max-width:340px;min-width:0;padding:2px 8px 2px 6px;border:1px solid transparent;border-radius:99px;background:transparent;color:var(--tx3);font:inherit;font-size:var(--fs-xs);line-height:1.2;cursor:pointer;transition:color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+#sb-bg:hover,#sb-bg.is-open{color:var(--tx);background:var(--hairline);border-color:var(--bd)}
+#sb-bg.is-active{color:var(--tx2)}
+.sb-bg-ring{flex:none;width:12px;height:12px;border-radius:50%;background:conic-gradient(var(--ac) calc(var(--p,0) * 1%),var(--s3) 0);-webkit-mask:radial-gradient(circle,transparent 3px,#000 3.5px);mask:radial-gradient(circle,transparent 3px,#000 3.5px)}
+#sb-bg.is-spin .sb-bg-ring{animation:sb-bg-turn .9s linear infinite}
+@keyframes sb-bg-turn{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#sb-bg.is-spin .sb-bg-ring{animation-duration:3s}}
+.sb-bg-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
+.sb-bg-txt:empty{display:none}
+/* the list of tasks, over the status bar */
+#sb-bg-pop{position:fixed;z-index:calc(var(--z-overlay,100) + 5);width:min(360px,calc(100vw - 16px));max-height:min(60vh,420px);overflow-y:auto;padding:6px;border-radius:var(--r-xl,12px);background:var(--surface-pop,var(--bg2));box-shadow:var(--surface-shadow,0 12px 40px rgba(0,0,0,.5)),var(--surface-ring,0 0 0 1px var(--bd));scrollbar-width:thin}
+.bgp-h{padding:6px 8px 8px;font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx2)}
+.bgp-none{padding:10px 8px 14px;font-size:var(--fs-sm);color:var(--tx3)}
+.bgp-row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--r-lg,8px)}
+.bgp-row.is-other{cursor:pointer}
+.bgp-row.is-other:hover{background:var(--s2)}
+.bgp-main{flex:1;min-width:0}
+.bgp-title{font-size:var(--fs-md);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bgp-sub{margin-top:1px;font-size:var(--fs-sm);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bgp-bar{position:relative;height:4px;margin-top:7px;border-radius:99px;background:var(--s3);overflow:hidden}
+.bgp-bar>i{display:block;height:100%;border-radius:inherit;background:var(--ac);transition:width .3s var(--ease-out)}
+.bgp-bar.is-indet>i{position:absolute;width:35%;animation:bgp-slide 1.4s cubic-bezier(.4,0,.2,1) infinite}
+@keyframes bgp-slide{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+@media (prefers-reduced-motion:reduce){.bgp-bar.is-indet>i{animation:none;width:100%;opacity:.4}}
+.bgp-side{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;min-width:44px;font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+.bgp-pct{color:var(--tx)}
+.bgp-time{color:var(--tx3)}
+.bgp-x{flex:none;width:24px;height:24px;display:grid;place-items:center;border:0;border-radius:var(--r-sm);background:transparent;color:var(--tx3);cursor:pointer;font-size:12px;line-height:1}
+.bgp-x::before{content:'\2715'}
+.bgp-x:hover{background:var(--er-line,var(--s3));color:var(--er,var(--tx))}
 
 /* Modal */
 /* Modal: stays display:grid so .show can drive opacity transitions. The bg
@@ -1881,15 +1948,17 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .vpc.vp-stats{display:none!important}
 /* Shortcut tips are a quiet reference, not part of the scene. */
 .vp-tips .vp-hint-lbl{color:var(--tx3)}
-/* Top bar: Export and Screenshot sit on the right, before the empty block
-   where the renderer switch used to be. */
+/* Top bar: Export sits on the left, next to Menu. Screenshot and the turntable video are hidden (the camera menu and the
+   command search still reach them). The Claude badge sits on the right, before the empty block where the renderer switch
+   used to be. */
 #tb .spacer{order:1}
-#tb #tg-screenshot,#tb #tg-turntable{order:2}
-#tb .spacer ~ *:not(#tg-screenshot):not(#tg-turntable){order:3}
+#tb #tg-screenshot,#tb #tg-turntable{display:none}          /* (their buttons stay in the page: the rest of the app talks to them) */
+#tb #claude-pill{order:2}                                   /* the Claude badge takes their place at the right */
+#tb .spacer ~ *:not(#claude-pill){order:3}
 /* That block takes exactly the right sidebar's width, so the button before
    it ends at the viewport's right edge. (12px is the bar's own padding, 6px
    its gap.) */
-#tb .spacer ~ *:not(#tg-screenshot):not(#tg-turntable):last-child,
+#tb .spacer ~ *:not(#claude-pill):last-child,
 #tb #stat-renderer,#tb .stat-renderer{flex:0 0 calc(var(--side-r-w) - 18px);box-sizing:border-box;display:flex;justify-content:flex-end;min-width:0}
 /* The shape picker stands on the Add button in the bottom toolbar and opens
    upwards like the toolbar's other popovers (app-v2.js lines it up with the
@@ -2201,6 +2270,12 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
   :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb{border-width:4px;border-radius:7px;min-height:44px;min-width:44px;background:#4a4a4e;background-clip:padding-box}
   :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb:hover{border-width:3px;background:#6a6a70;background-clip:padding-box}
   :is(#tree,#tree-hscroll,.off-list)::-webkit-scrollbar-thumb:active{border-width:3px;background:var(--ac);background-clip:padding-box}
+  /* The left sidebar's bar is a thin line (2px) until the pointer is anywhere over the sidebar, then it opens up to the full bar. The
+     strip stays 14px wide in both states, so nothing shifts: only how much of it the thumb fills changes. */
+  :is(#tree,#tree-hscroll)::-webkit-scrollbar-thumb{border-width:6px}
+  #sidebar-left:hover :is(#tree,#tree-hscroll)::-webkit-scrollbar-thumb{border-width:4px}
+  #sidebar-left:hover :is(#tree,#tree-hscroll)::-webkit-scrollbar-thumb:hover{border-width:3px;background:#6a6a70;background-clip:padding-box}
+  #sidebar-left:hover :is(#tree,#tree-hscroll)::-webkit-scrollbar-thumb:active{border-width:3px;background:var(--ac);background-clip:padding-box}
 }
 /* A control the command search has just jumped to. */
 .cmdk-flash{outline:2px solid var(--ac);outline-offset:2px;border-radius:var(--r-sm)}
@@ -2462,6 +2537,47 @@ body.cmd-dragging .vp-cmd-host{transition:none}
    pill, tinted with the accent so it reads as "you are in a mode". */
 .vpc.tc{flex-direction:row;flex-wrap:wrap;justify-content:center}
 .vpc.tc>.vp-pill-menu{position:absolute;top:calc(100% + 4px);left:50%;translate:-50% 0}
+/* The camera pill sits at the top right, under the view cube (4px + 92px from the top), a little see-through until the pointer is on it.
+   The mode pills (Isolated, Exploded, Measure, Snap) stay at the top centre, now on their own. */
+.vpc.cam-corner{top:100px;right:6px;width:92px;flex-direction:column;align-items:center;gap:0}      /* (as wide as the cube: the pill is centred under it) */
+.vpc.cam-corner>.vp-pill-menu{position:absolute;top:calc(100% + 4px);right:0;left:auto;translate:none;transform-origin:top right}
+#vp-view-pill.vp-pill{background:rgba(0,0,0,.16);opacity:.78;transition:opacity 160ms var(--ease-out),background var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out)}
+#vp-view-pill.vp-pill:hover,#vp-view-pill.vp-pill:focus-visible,#vp-view-pill.vp-pill[aria-expanded="true"]{opacity:1}
+/* Only an icon, in a vertical pill: the camera on top, the arrow below it. The icon grows a little under the pointer. The words stay
+   in the page for screen readers (the button's name says which view is on). */
+#vp-view-pill.vp-pill{flex-direction:column;justify-content:center;gap:5px;width:32px!important;height:54px!important;min-height:54px!important;padding:0!important;border-radius:999px!important}
+#vp-view-pill .vp-pill-label{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+#vp-view-pill.vp-pill::after{margin-left:0;flex:none;transition:none!important;transform:none!important}      /* (the arrow stays as it is, open or shut) */
+#vp-view-pill .vp-pill-icon{width:16px;height:16px;transition:transform 160ms var(--ease-out),opacity 160ms var(--ease-out)}
+#vp-view-pill .vp-pill-icon svg{width:16px!important;height:16px!important}
+#vp-view-pill.vp-pill:hover .vp-pill-icon,#vp-view-pill.vp-pill:focus-visible .vp-pill-icon{transform:scale(1.22)}
+@media (prefers-reduced-motion:reduce){#vp-view-pill .vp-pill-icon{transition:none}#vp-view-pill.vp-pill:hover .vp-pill-icon{transform:none}}
+/* The pill shows the view that is on: the camera for the free camera, a cube with the face looked at for Top, Front and Side
+   (the same icons as the menu's buttons). */
+#vp-view-pill .vp-pill-cubeico{display:none}
+#vp-view-pill[data-view="top"] .cubeico-top,#vp-view-pill[data-view="front"] .cubeico-front,#vp-view-pill[data-view="side"] .cubeico-side{display:block}
+#vp-view-pill:is([data-view="top"],[data-view="front"],[data-view="side"]) .vp-pill-icon:not(.vp-pill-cubeico){display:none}
+#vp-view-pill .cube-edge{fill:none;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round;stroke-linecap:round}
+#vp-view-pill .cube-face{fill:currentColor;fill-opacity:.85;stroke:none}
+/* The view menu is the pill's own shape again: a vertical capsule of round icon buttons, hung centred under the pill. The camera, then a
+   cube with the face that is looked at filled in (top, front, side). The words and the keys stay in the page for screen readers and are the
+   buttons' tooltips. The one in use is a filled accent circle. */
+#vp-view-pill-menu.vp-pill-menu{min-width:0;width:auto;padding:4px;gap:2px;align-items:center;border-radius:999px;transform-origin:top center}
+.vpc.cam-corner>#vp-view-pill-menu.vp-pill-menu{top:calc(100% + 6px);right:auto;left:50%;translate:-50% 0}
+#vp-view-pill-menu .vp-pill-item{width:30px;height:30px;padding:0;gap:0;justify-content:center;border-radius:50%;background:transparent;color:var(--tx3);transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+#vp-view-pill-menu .vp-pill-item::before{display:none}
+#vp-view-pill-menu .vp-pill-item:hover,#vp-view-pill-menu .vp-pill-item:focus-visible{background:var(--s3);color:var(--tx)}
+#vp-view-pill-menu .vp-pill-item:hover .vp-pill-cube,#vp-view-pill-menu .vp-pill-item:focus-visible .vp-pill-cube,#vp-view-pill-menu .vp-pill-item:hover .vp-pill-ico{transform:scale(1.12)}
+#vp-view-pill-menu .vp-pill-item.active,#vp-view-pill-menu .vp-pill-item.active:hover{background:var(--ac);color:var(--tx-on-accent,#fff)}
+#vp-view-pill-menu .vp-pill-item:focus-visible{outline:2px solid var(--ac-text,var(--ac));outline-offset:1px}
+#vp-view-pill-menu .vp-pill-ico,#vp-view-pill-menu .vp-pill-cube{width:16px;height:16px;flex:none;transition:transform var(--dur-fast) var(--ease-out)}
+#vp-view-pill-menu .vp-pill-ico svg{width:16px;height:16px}
+#vp-view-pill-menu .vp-pill-cube{display:block;overflow:visible}
+#vp-view-pill-menu .cube-edge{fill:none;stroke:currentColor;stroke-width:1.2;stroke-linejoin:round;stroke-linecap:round}
+#vp-view-pill-menu .cube-face{fill:currentColor;fill-opacity:.85;stroke:none}
+#vp-view-pill-menu .vp-pill-item-lbl,#vp-view-pill-menu .vp-pill-item-kbd{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;padding:0;border:0}
+@media (prefers-reduced-motion:reduce){#vp-view-pill-menu .vp-pill-item:hover .vp-pill-cube,#vp-view-pill-menu .vp-pill-item:hover .vp-pill-ico{transform:none}}
+.vpc.tc #vp-mode-pills{left:0;transform:translateX(-50%)}
 .vp-pill[hidden]{display:none}
 :is(.vp-pill.vp-pill-mode,#_a#_b){background:color-mix(in srgb,var(--ac) 26%,rgba(0,0,0,.5));color:var(--tx-on-accent)}
 :is(.vp-pill.vp-pill-mode,#_a#_b):hover{background:color-mix(in srgb,var(--ac) 40%,rgba(0,0,0,.5));color:var(--tx-on-accent)}
@@ -2519,11 +2635,10 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 .small-card .cmd-lede{margin:0}
 .small-card .btn-row{margin:0}
 .small-by{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-12);color:var(--tx2)}
-.small-found{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border-radius:var(--r-md);background:var(--hairline);color:var(--tx2);font-size:var(--fs-12);line-height:1.45}
-.small-found svg{flex:0 0 auto;width:14px;height:14px;margin-top:2px;stroke:currentColor;fill:none;stroke-width:2;color:var(--tx3)}
-.small-found #thr-info{margin:0;color:inherit;font-size:inherit}
-.small-found.has{background:var(--wn-tint-08);color:var(--tx)}
-.small-found.has svg{color:var(--wn)}      /* (a row that belongs to another choice: see Smart fit's shapes) */
+.small-found{display:flex;align-items:baseline;gap:8px;margin:2px 0 0;padding:1px 0 1px 11px;border-left:2px solid var(--surface-line);color:var(--tx3);font-size:var(--fs-12);line-height:1.45}      /* a readout, not a control: a line with a bar beside it, no fill, no box */
+.small-found svg{display:none}
+.small-found #thr-info{margin:0;color:inherit;font-size:inherit;font-variant-numeric:tabular-nums}
+.small-found.has{border-left-color:var(--wn);color:var(--tx-control-hover)}
 :is(.cmd-link,#_a#_b){align-self:flex-start;margin-top:6px;padding:0;background:none;border:0;color:var(--tx3);font:inherit;font-size:var(--fs-11);cursor:pointer}
 :is(.cmd-link,#_a#_b):hover{color:var(--tx-control-hover);text-decoration:underline}
 .size-field .scrub-drag{cursor:ew-resize}
@@ -2533,7 +2648,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
    page, hidden, because the rest of the app talks to them. Export sits on
    the right with Screenshot. The scene's name is a document tab. */
 #tb #btn-undo,#tb #btn-redo,#tb #btn-redo+.doc-tabs~.divider,#tb .divider:has(+#btn-undo){display:none}
-#tb .export-wrap:has(#btn-export){order:2}
+#tb .export-wrap:has(#btn-export){order:0}
 .doc-tabs{display:flex;min-width:0;flex:0 1 auto;margin-left:6px;gap:2px;align-items:center;}       /* margin-left is set by _alignDocTab: the tab starts at the viewport's left edge */
 .doc-tab{display:inline-flex;align-items:center;gap:7px;min-width:0;width:var(--doc-tab-w,172px);height:var(--btn-h-md,32px);box-sizing:border-box;padding:0 10px;
   background:var(--bg2);border-radius:var(--btn-r-md,6px);color:var(--tx-control);font-size:var(--fs-12)}
@@ -2700,6 +2815,31 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-nav-item.active svg{color:var(--tx-control-hover)}
 .set-nav.searching .set-nav-item.active{background:none}
 .set-nav-gap{flex:1 1 auto;min-height:10px}
+/* Claude: the connection state on its nav item, the card at the top of its section, the request log */
+.set-nav-item .set-nav-state{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-11);color:var(--tx3)}
+.set-nav-dot{display:inline-block;width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:var(--tx3);opacity:.55}
+:is(.set-nav-state,.set-claude-card)[data-state="idle"] .set-nav-dot{background:#22c55e;opacity:1}
+:is(.set-nav-state,.set-claude-card)[data-state="busy"] .set-nav-dot{background:var(--ac);opacity:1;animation:cl-pulse 1s ease-in-out infinite}
+:is(.set-nav-state,.set-claude-card)[data-state="ask"] .set-nav-dot,:is(.set-nav-state,.set-claude-card)[data-state="superseded"] .set-nav-dot{background:var(--wn);opacity:1}
+.set-nav-state[data-state="idle"],.set-nav-state[data-state="busy"],.set-nav-state[data-state="ask"]{color:var(--tx2)}
+.set-claude-card .cl-state{display:flex;align-items:center;gap:8px;font-size:var(--fs-13);color:var(--tx-control-hover)}
+.set-claude-card .cl-state b{font-weight:var(--fw-medium)}
+.cl-can{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;width:100%}
+.cl-can li{display:grid;grid-template-columns:128px minmax(0,1fr);gap:12px;font-size:var(--fs-12);line-height:1.45}
+.cl-can b{font-weight:var(--fw-medium);color:var(--tx-control-hover)}
+.cl-can span{color:var(--tx2)}
+.cl-log{display:flex;flex-direction:column;gap:3px;width:100%;font-size:var(--fs-12)}
+.cl-log-row{display:flex;align-items:baseline;gap:10px;color:var(--tx2)}
+.cl-log-tool{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx-control)}
+.cl-log-out{flex:0 0 auto;font-size:var(--fs-11);color:var(--tx3)}
+.cl-log-out.is-failed,.cl-log-out.is-blocked,.cl-log-out.is-declined{color:rgb(251,191,36)}
+.cl-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;width:100%}
+.cl-stats b{display:block;font-size:20px;font-weight:300;font-variant-numeric:tabular-nums;color:var(--tx-control-hover)}
+.cl-stats span{font-size:var(--fs-11);color:var(--tx3)}
+.cl-log-tool small{margin-left:6px;font-size:var(--fs-11);color:var(--tx3)}
+.cl-log-ms{flex:0 0 52px;text-align:right;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
+.cl-log-at{flex:0 0 64px;text-align:right;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
+@media (max-width:700px){.cl-can li{grid-template-columns:1fr;gap:2px}.set-nav-state .set-nav-txt{display:none}}
 .set-nav-ver{padding:8px 10px 2px;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
 .set-main{overflow-y:auto;min-height:0;padding:18px 24px 26px}
 .set-pane{display:none}
@@ -2878,6 +3018,12 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    cards, twice as wide. The same window shows the progress while a file
    loads. */
 .wl-modal{width:min(980px,calc(100vw - 48px));min-height:min(720px,calc(100vh - 48px));max-height:min(880px,calc(100vh - 48px));border-radius:16px}
+.wl-modal.is-loading .wl-nav{display:none}      /* while a file imports the window is only its progress: no Help / Shortcuts / Settings */
+.wl-modal.is-loading{min-height:0}      /* the import progress is short: let the window shrink to it */
+/* While a file imports the window is a progress card floating over the app, not a modal: the app is not dimmed or blurred, and the tab strip
+   and the rest of the page stay usable (a tab can be switched to while this one converts). Only the card itself takes the mouse. */
+#welcome-modal:has(.wl-modal.is-loading){background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;pointer-events:none}
+#welcome-modal:has(.wl-modal.is-loading) .wl-modal{pointer-events:auto}
 .wl-top{flex:0 0 auto;display:flex;align-items:center;gap:10px;height:56px;padding:0 14px 0 24px}
 .wl-mark{display:grid;place-items:center;flex:0 0 auto}
 .wl-mark svg{width:18px;height:18px;stroke:var(--white);fill:var(--white);stroke-width:1.5}
@@ -2939,6 +3085,8 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .welcome-recent:hover .wr-thumb img{transform:scale(1.03)}
 .welcome-recent .wr-noimg{font-size:var(--fs-12);letter-spacing:.1em;color:var(--tx3)}
 .welcome-recent .wr-tag{position:absolute;left:8px;top:8px;display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:var(--r-lg);background:var(--ac);color:var(--white);font-size:var(--fs-11)}
+.welcome-recent .wr-tag.is-rec{background:var(--wn);color:var(--bg)}
+.welcome-recent.is-recovered:focus-visible{box-shadow:inset 0 0 0 1.5px var(--wn)}
 .welcome-recent .wr-meta{display:flex;flex-direction:column;gap:3px;min-width:0;padding:9px 11px 10px}
 .welcome-recent .wr-name{font-size:var(--fs-md);line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .welcome-recent .wr-sub{display:flex;align-items:center;gap:6px;font-size:var(--fs-11);line-height:14px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -3195,6 +3343,21 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
    stands outside the row (to the right of it), so the Cam pill does not move
    when Shift goes down and up. */
 #vp-snap-pill{position:absolute;left:calc(100% + var(--space-xs));top:0;white-space:nowrap;cursor:default;pointer-events:none;font-variant-numeric:tabular-nums}
+/* The Snap card: the step, and under it a strip drawn at the snap's real spacing: a thin tick for every snap point, a longer one every fifth,
+   a bright mark at zero and a dot on the first step. Turn the wheel and the ticks open up or close in. No numbers: the step is in the line above. */
+@property --sp{syntax:'<length>';inherits:true;initial-value:26px}
+/* (the id twice: the rule that sizes every .vp-pill, with its height of 30px and its side padding, is written with two ids and would win over one) */
+#vp-snap-pill#vp-snap-pill.vp-pill{flex-direction:column;align-items:flex-start;justify-content:center;gap:5px;height:auto;min-height:0;padding:8px 20px 9px;border-radius:999px;min-width:0}      /* (a full pill: the ends are half circles, so the side padding keeps the text and the ruler off the curve) */
+#vp-snap-pill .snap-top{display:flex;align-items:center;line-height:1}
+#vp-snap-pill .snap-top .vp-pill-label{font-weight:var(--fw-semibold);line-height:1}
+#vp-snap-pill .snap-ruler{--sp:26px;flex:none;width:118px;height:8px;transition:--sp .34s cubic-bezier(.25,.8,.25,1);
+  background:
+    radial-gradient(circle 2.6px at var(--sp) 50%, currentColor 80%, transparent 100%),
+    linear-gradient(currentColor, currentColor) 0 50% / 1.5px 100% no-repeat,
+    repeating-linear-gradient(90deg, color-mix(in srgb, currentColor 85%, transparent) 0 1px, transparent 1px calc(var(--sp) * 5)) 0 100% / 100% 66% no-repeat,
+    repeating-linear-gradient(90deg, color-mix(in srgb, currentColor 42%, transparent) 0 1px, transparent 1px var(--sp)) 0 100% / 100% 36% no-repeat;
+  -webkit-mask-image:linear-gradient(90deg,#000 62%,transparent);mask-image:linear-gradient(90deg,#000 62%,transparent)}
+@media (prefers-reduced-motion:reduce){#vp-snap-pill .snap-ruler{transition:none}}
 
 /* Measure is yellow everywhere: toolbar button, mode pill, picked card. Same
    weight trick as the other pills, so these outrank the generic rules. */
@@ -3344,17 +3507,87 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms cubi
 /* The Scene card flashes once when it is opened from the menu or the command list */
 .section.flash-card{animation:card-flash .9s ease-out}
 @keyframes card-flash{0%{box-shadow:0 0 0 2px var(--ac)}100%{box-shadow:0 0 0 2px transparent}}
+/* Import settings: file header, segmented choices, grouped rows (one rounded card each), a folded "what to read" */
+#import-modal .modal-b{scrollbar-width:thin}
+.imp-file{display:flex;align-items:center;gap:14px;padding:18px 22px 6px}
+.imp-ico{flex:none;width:44px;height:44px;border-radius:var(--r-lg);display:grid;place-items:center;background:color-mix(in srgb,var(--ac) 16%,transparent);color:var(--ac)}
+.imp-ico svg{width:22px;height:22px;stroke:currentColor}
+.imp-file-t{min-width:0;flex:1}
+.imp-name{font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imp-meta{font-size:var(--fs-sm);color:var(--tx3);margin-top:2px;font-variant-numeric:tabular-nums}
+.imp-panel{padding:6px 22px 4px}
+/* Two columns on a wide window (the read-and-quality choices left, the clean-up and scene right), so it is about 16:9 instead of a tall strip */
+#import-modal .modal{width:min(880px,94vw);max-height:90vh}
+#import-modal .modal.is-mesh{width:min(520px,94vw)}
+.imp-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;padding:0 0 20px}
+.imp-col{min-width:0;padding:0 22px}
+.imp-col-b{border-left:1px solid var(--hairline)}
+.imp-col .imp-panel,.imp-col .imp-scene{padding:0}
+.imp-col>.imp-panel:first-child>.imp-sec:first-child,.imp-col-b>.imp-scene{margin-top:0}
+.imp-col-a{padding-top:8px}.imp-col-b{padding-top:8px}
+.imp-col-b>.imp-scene{margin-top:14px}
+#import-modal .modal.is-mesh .imp-cols{grid-template-columns:minmax(0,1fr)}
+#import-modal .modal.is-mesh .imp-col-b{border-left:0;padding-top:0}
+@media (max-width:720px){.imp-cols{grid-template-columns:minmax(0,1fr)}.imp-col-b{border-left:0}}
+.imp-row>.imp-t{flex:1 1 0;min-width:0}
+.imp-t small{display:block;white-space:normal;overflow:visible;text-overflow:clip}
+.imp-sec{margin:14px 0 0}
+.imp-h{font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx2);margin:0 0 8px 2px}
+.imp-hide{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.imp-seg{display:flex;gap:2px;padding:2px;border-radius:var(--r-md);background:var(--s2)}
+.imp-seg button{flex:1;min-width:0;padding:6px 8px;border:0;border-radius:calc(var(--r-md) - 2px);background:transparent;color:var(--tx2);font:inherit;font-size:var(--fs-md);cursor:pointer;white-space:nowrap;transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),box-shadow var(--dur-base) var(--ease-out)}
+.imp-seg button:hover{color:var(--tx)}
+.imp-seg button.is-on{background:var(--bg4);color:var(--tx);font-weight:var(--fw-medium);box-shadow:0 1px 2px rgba(0,0,0,.28),0 0 0 .5px var(--s3)}
+.imp-seg button:focus-visible{outline:2px solid var(--ac-text);outline-offset:1px}
+.imp-note{margin:8px 2px 0;font-size:var(--fs-sm);line-height:var(--lh-relaxed);color:var(--tx3)}
+.imp-note-2{margin-top:4px}
+.imp-grp{border-radius:var(--r-lg);background:var(--s1);box-shadow:inset 0 0 0 .5px var(--s2);overflow:hidden}
+.imp-grp>.toggle{border-top:1px solid var(--hairline);padding:11px 14px;gap:16px}
+.imp-grp>.toggle:first-child{border-top:0}
+.imp-row>.imp-t{display:flex;flex-direction:column;gap:2px;white-space:normal;overflow:visible;text-overflow:clip}
+.imp-t b{font-weight:var(--fw-regular);font-size:var(--fs-lg);color:var(--tx)}
+.imp-t small{font-size:var(--fs-sm);color:var(--tx3);line-height:var(--lh-relaxed)}
+.imp-tag{margin-left:6px;padding:1px 6px;border-radius:99px;background:var(--s3);color:var(--tx2);font-size:var(--fs-11);font-weight:var(--fw-regular)}
+.imp-num{flex:none;display:inline-flex;align-items:center;gap:4px;color:var(--tx3)}
+.imp-num input{width:62px;padding:5px 8px;text-align:right;background:var(--s2);border:1px solid transparent;border-radius:var(--r-md);color:var(--tx);font:inherit;font-size:var(--fs-md);font-variant-numeric:tabular-nums;outline:none;transition:border-color var(--dur-base) var(--ease-out),background var(--dur-base) var(--ease-out)}
+.imp-num input:focus{border-color:var(--ac);background:var(--bg3)}
+.imp-more{margin:14px 0 0}
+.imp-more>summary{list-style:none;display:flex;align-items:baseline;gap:8px;margin:0 0 8px 2px;cursor:pointer;user-select:none;font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx2)}
+.imp-more>summary::-webkit-details-marker{display:none}
+.imp-more>summary em{flex:1;font-style:normal;font-weight:var(--fw-regular);color:var(--tx3)}
+.imp-more>summary::after{content:'';order:3;width:6px;height:6px;margin-right:4px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform var(--dur-base) var(--ease-out);align-self:center}
+.imp-more[open]>summary::after{transform:rotate(45deg)}
+.imp-more>summary:hover{color:var(--tx)}
+#import-panel-step.geo-only .imp-reads{opacity:.4;pointer-events:none}
+.imp-scene{padding-bottom:0}
+.imp-foot{align-items:center}
+.imp-skip{display:inline-flex;align-items:center;gap:8px;margin-right:auto;color:var(--tx3);font-size:var(--fs-sm);cursor:pointer;min-width:0}
+.imp-skip:hover{color:var(--tx2)}
+.imp-skip input{margin:0;accent-color:var(--ac)}
 /* Exploded view: one amount, the axes as pills, the per-axis sliders folded away */
-.ex-body .field{margin-bottom:12px}
-.ex-row{display:flex;align-items:center;gap:10px;margin:0 0 10px}
-.ex-l{flex:0 0 38px;font-size:var(--fs-sm);color:var(--tx3)}
-.ex-axes{display:flex;flex-wrap:wrap;gap:6px}
+.ex-body .field{margin-bottom:8px}
+.ex-row{display:flex;align-items:center;gap:8px;margin:0 0 4px}
+.ex-l{flex:0 0 34px;font-size:var(--fs-sm);color:var(--tx3)}
+.ex-axes{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
 .ex-axis{display:inline-flex;align-items:center;gap:6px}
-.ex-dot{display:block;width:7px;height:7px;border-radius:50%;background:var(--tx3);flex:none}
+.ex-dot{display:block;width:6px;height:6px;border-radius:50%;background:var(--tx3);flex:none}
 .ex-dot.x{background:#f0525f}.ex-dot.y{background:#3fb85a}.ex-dot.z{background:#3b8cf2}
 .ex-axis:not(.is-on) .ex-dot{opacity:.4}
-.ex-fine{margin:4px 0 12px;border-top:1px solid var(--surface-line)}
-.ex-fine>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:11px 0 9px;font-size:var(--fs-12);color:var(--tx2);cursor:pointer;user-select:none}
+/* An axis that is on: a solid fill in its own colour (the dot turns white so it stays visible on the fill). */
+/* (the colour comes from the button's own data-axis: the x / y / z classes are only on the little dot inside it) */
+#explode-axes .ex-axis{--ax-c:var(--tx3);border-radius:999px;box-sizing:border-box;height:24px;padding:0 10px 0 8px;gap:5px;font-size:var(--fs-12);line-height:1;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
+#explode-axes .ex-axis[data-axis="x"]{--ax-c:#f0525f}#explode-axes .ex-axis[data-axis="y"]{--ax-c:#3fb85a}#explode-axes .ex-axis[data-axis="z"]{--ax-c:#3b8cf2}
+#explode-axes .ex-axis.is-on,#explode-axes .ex-axis.is-on:hover,#explode-axes .ex-axis.is-on:focus-visible{color:#0a0a0a;font-weight:var(--fw-semibold);background:var(--ax-c);border-color:transparent;box-shadow:none}      /* (black letters on the colour) */
+#explode-axes .ex-axis.is-on .ex-dot{background:rgba(0,0,0,.55)}
+#explode-axes .ex-axis:not(.is-on){color:var(--tx2);background:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ax-c) 55%,transparent)}
+#explode-axes .ex-axis:not(.is-on):hover{background:color-mix(in srgb,var(--ax-c) 16%,transparent)}
+.ex-mode{margin:0 0 10px}
+.ex-body.is-part #explode-axes,.ex-body.is-part .ex-l,.ex-body.is-part .ex-fine{display:none}
+.ex-fine{margin:6px 0 0;border-top:1px solid var(--surface-line)}
+.ex-body .ex-row .ex-reset{margin-left:auto!important;flex:0 0 24px!important;width:24px!important;min-width:0!important;height:24px!important;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
+.ex-body .ex-row .ex-reset svg{width:13px;height:13px}
+.ex-row .ex-axes{flex-wrap:nowrap}
+.ex-fine>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:9px 0 2px;font-size:var(--fs-12);color:var(--tx2);cursor:pointer;user-select:none}
 .ex-fine>summary::-webkit-details-marker{display:none}
 .ex-fine>summary:hover{color:var(--tx-control-hover)}
 .ex-fine>summary::after{content:'';width:6px;height:6px;margin-right:3px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform var(--dur-base) var(--ease-out)}
@@ -3384,15 +3617,16 @@ body.dyn-placing,body.dyn-placing #canvas{cursor:grabbing!important}
 @media (prefers-reduced-motion:reduce){.shade-row.rb-spring .shade-sw{transition:color var(--dur-fast) var(--ease-out)}}
 @media (hover:hover) and (pointer:fine){.shade-row{scroll-snap-type:none}}      /* (a mouse drags it freely and it stays where it is let go; snapping is for touch, where a swipe needs it) */
 .shade-sw{flex:0 0 64px;scroll-snap-align:start;display:flex;flex-direction:column;align-items:stretch;gap:5px;min-width:0;padding:0;border:0;background:none;color:var(--tx2);font:inherit;font-size:var(--fs-11);cursor:pointer;transition:color var(--dur-fast) var(--ease-out)}
-.shade-card{position:relative;aspect-ratio:1/1;border:1px solid transparent;border-radius:var(--r-sm);background:var(--s1);overflow:hidden;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
+.shade-card{position:relative;aspect-ratio:1/1;border:1px solid transparent;border-radius:var(--r-sm);background:var(--bg);overflow:hidden;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .shade-sw:hover{color:var(--tx)}
-.shade-sw:hover .shade-card{background:var(--s3)}
+.shade-sw:hover .shade-card{background:var(--bg2)}
 .shade-sw.is-on{color:var(--tx)}
-.shade-sw.is-on .shade-card{background:var(--ac-tint-12);border-color:var(--ac)}
+.shade-sw.is-on .shade-card{background:var(--bg);border-color:var(--ac)}
 .shade-sw span{text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shade-thumb{position:absolute;inset:4%;width:92%;height:92%;display:block;object-fit:contain;pointer-events:none;-webkit-user-drag:none}
 .shade-fam{display:contents}
 #shading-section .section-b{padding-bottom:4px}      /* (the last row is a toggle with room of its own: the card ends as far below it as it starts above it) */
+#shading-section .toggle.shade-outlines{border-top:0}      /* (no hairline between the shapes and Outlines) */
 /* Nothing in the interface is text to copy: dragging or double-clicking must not highlight labels, buttons and numbers.
    Only the places where text is typed or read at length stay selectable: fields, the console log, the help articles. */
 html,body{user-select:none;-webkit-user-select:none}
@@ -3563,17 +3797,71 @@ body.app-ready .sp-card{transform:scale(1.025)}
 /* a fact on a Settings row (About) */
 .set-val{max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx3);font-size:var(--fs-12);font-variant-numeric:tabular-nums;text-align:right}
 </style>
-<script src="appearance.js?v=2"></script>
+<script src="appearance.js?v=4"></script>
+<script src="updater.js?v=1"></script>
+<style id="updates-css">
+/* Updates: the card in the corner, and Settings › Updates (updater.js). Tokens only. */
+.up-card{position:fixed;right:16px;bottom:44px;z-index:calc(var(--z-overlay) + 1);width:340px;max-width:calc(100vw - 32px);padding:14px 16px;border-radius:var(--surface-pop-r);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);color:var(--tx2);font-size:var(--fs-12);line-height:1.45;opacity:0;transform:translateY(8px);transition:opacity .2s ease,transform .2s ease}
+.up-card.is-in{opacity:1;transform:none}
+body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Updates shows the same, and its Done button is under the card) */
+.up-card[hidden]{display:none}
+.up-c-h{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.up-c-h b{flex:1 1 auto;font-size:var(--fs-13);font-weight:var(--fw-medium);color:var(--tx-control-hover)}
+.up-x{all:unset;cursor:pointer;flex:0 0 auto;width:22px;height:22px;display:grid;place-items:center;border-radius:var(--r-sm);color:var(--tx3);font-size:11px}
+.up-x:hover,.up-x:focus-visible{background:var(--s4);color:var(--tx)}
+.up-c-s{color:var(--tx3);font-size:var(--fs-11)}
+.up-c-p{margin:8px 0 0;color:var(--tx2)}
+.up-warn{color:var(--wn)}
+.up-c-l{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px}
+.up-c-l li{position:relative;padding-left:12px;color:var(--tx2)}
+.up-c-l li::before{content:"";position:absolute;left:1px;top:.6em;width:4px;height:4px;border-radius:50%;background:var(--tx3)}
+.up-c-l .up-more{color:var(--tx3)}
+.up-c-a{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+.up-c-a .btn{width:auto;min-height:var(--btn-h-sm);height:var(--btn-h-sm);padding:0 12px;justify-content:center}
+.up-link{all:unset;cursor:pointer;margin-left:auto;font-size:var(--fs-11);color:var(--tx3);text-decoration:underline;text-underline-offset:2px}
+.up-link:hover,.up-link:focus-visible{color:var(--tx)}
+.up-bar{height:4px;margin:10px 0 8px;border-radius:2px;background:var(--s4);overflow:hidden}
+.up-bar i{display:block;height:100%;border-radius:2px;background:var(--ac);transition:width .3s ease}
+.up-bar.is-wait i{animation:up-slide 1.2s ease-in-out infinite}
+@keyframes up-slide{0%{margin-left:-40%}100%{margin-left:100%}}
+.up-status .up-state{display:flex;align-items:center;gap:8px;font-size:var(--fs-13);color:var(--tx-control-hover)}
+.up-status .up-state b{font-weight:var(--fw-medium)}
+.up-status[data-state="ok"] .set-nav-dot{background:var(--ok);opacity:1}
+.up-status[data-state="new"] .set-nav-dot{background:var(--ac);opacity:1}
+.up-status[data-state="busy"] .set-nav-dot{background:var(--ac);opacity:1;animation:cl-pulse 1s ease-in-out infinite}
+.up-status[data-state="warn"] .set-nav-dot{background:var(--wn);opacity:1}
+.up-btns{display:flex;gap:8px;flex:0 0 auto}
+.up-btns .btn{width:auto;min-height:var(--btn-h-sm);height:var(--btn-h-sm);padding:0 12px;justify-content:center}
+.up-notes .up-c-l{margin-top:6px;width:100%}
+.up-notes .up-link{margin:8px 0 0}
+.set-nav-state[data-state="new"] .set-nav-dot{background:var(--ac);opacity:1}
+.set-nav-state[data-state="new"],.set-nav-state[data-state="busy"]{color:var(--tx2)}
+.set-nav-state[hidden]{display:none}
+.brand-mark[data-update="new"]::after{content:"";position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--ac);box-shadow:0 0 0 2px var(--bg)}
+.brand-menu-item[hidden]{display:none}
+.brand-menu-item.is-new{color:var(--tx)}
+.brand-menu-item.is-new .lbl{font-weight:var(--fw-medium)}
+@media (prefers-reduced-motion:reduce){.up-card{transition:none}.up-bar.is-wait i{animation:none}}
+</style>
 <style id="sidebar-v2">
 /* Right sidebar, second pass: the selection actions sit in one bar under Properties, cards get a small icon,
    and the group labels draw a line. Nothing here changes what a button does. */
 #sidebar-right .side-group{display:flex;align-items:center;gap:10px;padding:18px 4px 9px}
-#sidebar-right .side-group::after{content:'';flex:1;height:1px;background:var(--bd)}
+/* (the group labels, SELECT / VIEW / …, are plain text: no rule running out to the right of them) */
 #sidebar-right .section-h .sec-ico{width:15px;height:15px;margin-right:9px;flex:none;color:var(--tx3);transition:color var(--dur-fast) var(--ease-out)}
 #sidebar-right .section-h > span:first-of-type{flex:1 1 auto;min-width:0}
 #sidebar-right .section-h:hover .sec-ico,#sidebar-right .section-h:not(.collapsed) .sec-ico{color:var(--tx2)}
-.sel-bar{padding:14px 2px 4px;margin:0;display:flex;flex-direction:column;gap:10px}
-.sel-bar-h{display:flex;align-items:center;justify-content:space-between;padding:0 2px 1px;font-size:var(--fs-10,10px);letter-spacing:.09em;text-transform:uppercase;font-weight:var(--fw-regular);color:var(--tx3)}
+.sel-bar{padding:0 2px 4px;margin:0;display:flex;flex-direction:column;gap:10px}
+.section-fixed:has(+ .sel-bar){margin-bottom:2px}      /* (the buttons sit close under the Properties card) */
+/* The selection buttons stay at the top of the panel while it scrolls, and whatever scrolls up under them fades out (the fade shows only
+   once they have reached the top: .is-stuck, set by _wireSelBarStick, so the View heading below them is never veiled at rest) */
+#sidebar-right > .sel-bar{position:sticky;top:0;z-index:6;background:var(--bg);padding-top:8px;margin-top:-6px}
+#sidebar-right > .sel-bar::after{content:'';position:absolute;left:0;right:0;top:100%;height:26px;pointer-events:none;opacity:0;transition:opacity .18s ease;
+  background:linear-gradient(to bottom,var(--bg) 0%,color-mix(in srgb,var(--bg) 70%,transparent) 35%,transparent 100%)}
+#sidebar-right > .sel-bar.is-stuck::after{opacity:1}
+@media (prefers-reduced-motion:reduce){#sidebar-right > .sel-bar::after{transition:none}}
+/* The header line ("Selection", "N selected") is not shown: the buttons say it. Its elements stay because a script writes the number into them. */
+.sel-bar-h{display:none;align-items:center;justify-content:space-between;padding:0 2px 1px;font-size:var(--fs-10,10px);letter-spacing:.09em;text-transform:uppercase;font-weight:var(--fw-regular);color:var(--tx3)}
 .sel-bar-n{font-size:var(--fs-11);font-weight:var(--fw-regular);color:var(--tx3);font-variant-numeric:tabular-nums}
 .sel-bar.has-sel .sel-bar-n{color:var(--ac-text)}
 /* Ghost buttons straight on the panel: no wrapper box, a hairline edge, a fill only on hover. */
@@ -3592,7 +3880,65 @@ body.app-ready .sp-card{transform:scale(1.025)}
 .sel-bar-grid .btn.is-on svg{color:currentColor}
 .sel-bar-grid.is-edit{margin-top:0}
 .sel-bar:not(.has-sel) .is-edit .btn{opacity:.45}
-.sel-del-n{display:none} /* the count lives in the header; the element stays because the app writes to #del-sel-count */
+.sel-del-n{display:none}
+/* Claude connection: the pill in the top bar, and the Allow / Don't allow prompt */
+.claude-pill{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 11px;border-radius:var(--r-pill);border:1px solid var(--bd);color:var(--tx2);font-size:var(--fs-11);white-space:nowrap;cursor:pointer}
+.claude-pill:hover,.claude-pill[aria-expanded="true"]{background:var(--bg3);color:var(--tx)}
+/* the pill's dropdown */
+#claude-pop{position:fixed;z-index:900;width:304px;box-sizing:border-box;padding:14px;border-radius:12px;background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);color:var(--tx-control);font-size:var(--fs-12);display:none;flex-direction:column;gap:12px}
+#claude-pop.show{display:flex;animation:clp-in .14s var(--ease-out,ease-out)}
+@keyframes clp-in{from{opacity:0;transform:translateY(-4px)}}
+@media (prefers-reduced-motion:reduce){#claude-pop.show{animation:none}}
+.clp-head{display:flex;align-items:flex-start;gap:9px}
+.clp-head .cl-dot{margin-top:5px;width:8px;height:8px;border-radius:50%;background:var(--tx3);flex:none}
+.clp-head[data-state="idle"] .cl-dot{background:#22c55e}
+.clp-head[data-state="busy"] .cl-dot{background:var(--ac);animation:cl-pulse 1s ease-in-out infinite}
+.clp-head[data-state="ask"] .cl-dot,.clp-head[data-state="superseded"] .cl-dot{background:var(--wn)}
+.clp-head b{display:block;font-size:var(--fs-13);font-weight:var(--fw-medium);color:var(--tx-control-hover)}
+.clp-ico{all:unset;box-sizing:border-box;margin-left:auto;flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-sm,6px);color:var(--tx3);cursor:pointer}
+.clp-ico:hover{background:var(--bg3);color:var(--tx)}
+.clp-ico:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.clp-ico:disabled{opacity:.4;pointer-events:none}
+.clp-sub{display:block;margin-top:2px;font-size:var(--fs-11);color:var(--tx3);line-height:1.4}
+.clp-job{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid var(--surface-line);border-radius:var(--r-sm,6px);background:var(--bg)}
+.clp-job-t{display:flex;align-items:center;gap:8px;font-size:var(--fs-11);color:var(--tx2)}
+.clp-job-t span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#claude-pop .clp-job-t .btn{flex:none;width:auto;height:24px;padding:0 12px}
+.clp-job-bar{display:block;height:3px;border-radius:2px;background:var(--bg3);overflow:hidden}
+.clp-job-bar b{display:block;height:100%;background:var(--ac);transition:width .3s}
+.clp-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.clp-stats b{display:block;font-size:18px;font-weight:300;font-variant-numeric:tabular-nums;color:var(--tx-control-hover)}
+.clp-stats span{font-size:var(--fs-11);color:var(--tx3)}
+.clp-log{display:flex;flex-direction:column;gap:3px;padding-top:10px;border-top:1px solid var(--surface-line)}
+.clp-log>div{display:flex;align-items:baseline;gap:8px;font-size:var(--fs-11)}
+.clp-tool{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx-control)}
+.clp-out{flex:0 0 auto;color:var(--tx3)}
+.clp-out.is-failed,.clp-out.is-blocked,.clp-out.is-declined{color:rgb(251,191,36)}
+.clp-ms{flex:0 0 46px;text-align:right;color:var(--tx3);font-variant-numeric:tabular-nums}
+.clp-sw{display:flex;flex-direction:column;padding-top:4px;border-top:1px solid var(--surface-line)}
+.clp-row{padding:7px 0;font-size:var(--fs-12)}
+.clp-row>span:first-child{flex:1 1 auto;min-width:0}
+.clp-foot{display:flex;gap:6px;padding-top:10px;border-top:1px solid var(--surface-line)}
+.clp-foot .btn{height:var(--btn-h-sm,28px);padding:0 10px;font-size:var(--fs-12)}
+.clp-foot #clp-more{margin-left:auto}
+.claude-pill[hidden]{display:none}
+.claude-pill .cl-dot,.cl-ask .cl-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex:none}
+.claude-pill[data-state="busy"] .cl-dot{background:var(--ac);animation:cl-pulse 1s ease-in-out infinite}
+.claude-pill[data-state="ask"]{border-color:var(--wn-line,var(--bd2));color:var(--tx)}
+.claude-pill[data-state="ask"] .cl-dot{background:var(--wn)}
+@keyframes cl-pulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.claude-pill[data-state="busy"] .cl-dot{animation:none}}
+.cl-ask-bg{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;background:rgba(0,0,0,.5)}
+.cl-ask{width:min(420px,calc(100vw - 32px));padding:18px 20px;border-radius:var(--r-lg,14px);background:var(--bg2);border:1px solid var(--bd2);box-shadow:0 18px 50px rgba(0,0,0,.55);display:flex;flex-direction:column;gap:8px}
+.cl-ask-h{display:flex;align-items:center;gap:8px;font-size:var(--fs-11);letter-spacing:.09em;text-transform:uppercase;color:var(--tx3)}
+.cl-ask-t{font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx)}
+.cl-ask-d{font-size:var(--fs-md);color:var(--tx2);line-height:1.45}
+.cl-ask-f{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.cl-ask-f button{height:34px;padding:0 16px;border-radius:var(--r-md,10px);border:1px solid var(--bd2);background:transparent;color:var(--tx);cursor:pointer;font:inherit;font-size:var(--fs-md)}
+.cl-ask-f button:hover{background:var(--bg3)}
+.cl-ask-f .cl-yes{background:var(--ac);border-color:var(--ac);color:var(--tx-on-accent,#fff)}
+.cl-ask-f .cl-yes:hover{filter:brightness(1.08);background:var(--ac)}
+.cl-ask-f button:focus-visible{outline:2px solid var(--ac);outline-offset:2px} /* the count lives in the header; the element stays because the app writes to #del-sel-count */
 </style>
 </head>
 <body>
@@ -3754,18 +4100,18 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.21.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.22.0</div>
         </div>
         <div class="brand-menu-about">Optimise, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.21.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.22.0</span></div>
           <ul>
-            <li>Turntable video: one slow turn, saved as a WebM</li>
-            <li>Export presets: web, AR, Unreal, Unity, 3D print</li>
-            <li>Hide, Isolate, Frame and Duplicate in the Selection bar</li>
-            <li>The selection actions in one bar under Properties</li>
-            <li>Outlined buttons that sit directly on the panel</li>
+            <li>Work with Claude: 65 tools, with your permission</li>
+            <li>Updates inside the app, with a way back</li>
+            <li>Your scene back after a crash</li>
+            <li>Keep sharp edges, Meshopt export, Faster to draw</li>
+            <li>A unit and up axis for new scenes</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -3776,6 +4122,9 @@ window.moSplash = function (msg, pct) {
         <a class="brand-menu-item" id="brand-menu-report" href="https://lukagrcar.com/apps/meshoptimiser/report.html" target="_blank" rel="noopener">
           <i data-lucide="message-square-warning"></i><span class="lbl">Report a problem</span><i class="ext" data-lucide="external-link"></i>
         </a>
+        <button class="brand-menu-item" id="brand-menu-updates" hidden>
+          <i data-lucide="refresh-cw"></i><span class="lbl">Check for updates</span>
+        </button>
         <button class="brand-menu-item" id="brand-menu-help">
           <i data-lucide="life-buoy"></i><span class="lbl">Help &amp; docs</span><kbd class="kbd-chip">F1</kbd>
         </button>
@@ -3813,6 +4162,9 @@ window.moSplash = function (msg, pct) {
         <button class="export-menu-item" role="menuitem" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:8px;vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
       </div>
     </div>
+    <div class="export-wrap">
+      <button class="tbtn" id="btn-export" disabled title="Export the model (Ctrl+E)"><i data-lucide="download"></i>Export</button>
+    </div>
     <button class="tbtn icon-only" id="btn-toggle-left" title="Toggle sidebar"><i data-lucide="panel-left"></i></button>
     <div class="divider"></div>
     <button class="tbtn" id="btn-undo" disabled><i data-lucide="undo-2"></i>Undo</button>
@@ -3828,11 +4180,9 @@ window.moSplash = function (msg, pct) {
         <button type="button" class="doc-tab-x" title="Close this scene" aria-label="Close this scene"></button>
       </div>
     </div>
-    <div class="export-wrap">
-      <button class="tbtn" id="btn-export" disabled title="Export the model (Ctrl+E)"><i data-lucide="download"></i>Export</button>
-    </div>
     <button class="tbtn icon-only" id="tg-screenshot" title="Capture viewport screenshot (share / copy / download)"><i data-lucide="camera"></i></button>
     <button class="tbtn icon-only" id="tg-turntable" title="Turntable video: one slow turn around the model, saved as a WebM"><i data-lucide="film"></i></button>
+    <button type="button" class="claude-pill" id="claude-pill" hidden title="Claude is connected to this app. Click for its settings."><span class="cl-dot"></span><span class="cl-txt">Claude connected</span></button>
     <button class="tbtn" id="btn-save-scene" disabled style="display:none"><i data-lucide="save"></i>Save scene</button>
     <div class="spacer"></div>
     <div class="stat" id="stat-renderer"><span class="dot off"></span><span>Renderer</span><select id="renderer-select" class="mac-sel" style="min-width:80px"><option value="webgpu" data-logo="assets/webgpu.svg">WebGPU</option><option value="webgl2" data-logo="assets/webgl.png">WebGL2</option></select><strong id="renderer-name" style="display:none">—</strong></div>
@@ -3906,10 +4256,6 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="highlighter"></i></button>
       </div>
       <div class="vpc tc">
-        <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Camera view">
-          <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
-          <span class="vp-pill-label">Cam</span>
-        </button>
         <!-- Status pills (a mode that is on): always just right of the camera pill, in this order,
              out of the flow so the camera pill never moves when one comes or goes. -->
         <div id="vp-mode-pills">
@@ -3930,15 +4276,23 @@ window.moSplash = function (msg, pct) {
           </button>
           <!-- Snap is on (Shift is held and a gizmo is on a part): what a drag snaps to. -->
           <div id="vp-snap-pill" class="vp-pill vp-pill-mode" hidden role="status" aria-live="polite" title="Snap is on while Shift is held. Turn the wheel during a drag to change the step.">
-            <i class="vp-pill-icon" data-lucide="magnet" aria-hidden="true"></i>
-            <span class="vp-pill-label" id="vp-snap-label">Snap</span>
+            <div class="snap-top"><span class="vp-pill-label" id="vp-snap-label">Snap</span></div>
+            <div class="snap-ruler" id="vp-snap-ruler" aria-hidden="true"></div>
           </div>
         </div>
-        <div id="vp-view-pill-menu" class="vp-pill-menu" role="menu">
-          <button class="vp-pill-item active" type="button" data-view="persp" role="menuitem"><span class="vp-pill-item-lbl">Cam</span><kbd class="vp-pill-item-kbd" data-kbd="1"></kbd></button>
-          <button class="vp-pill-item" type="button" data-view="top" role="menuitem"><span class="vp-pill-item-lbl">Top</span><kbd class="vp-pill-item-kbd" data-kbd="2"></kbd></button>
-          <button class="vp-pill-item" type="button" data-view="front" role="menuitem"><span class="vp-pill-item-lbl">Front</span><kbd class="vp-pill-item-kbd" data-kbd="3"></kbd></button>
-          <button class="vp-pill-item" type="button" data-view="side" role="menuitem"><span class="vp-pill-item-lbl">Side</span><kbd class="vp-pill-item-kbd" data-kbd="4"></kbd></button>
+      </div>
+      <!-- The camera pill: top right, under the view cube -->
+      <div class="vpc cam-corner">
+        <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="menu" aria-expanded="false" data-tip-side="left" aria-label="Camera view: Cam" title="Camera view: Cam">
+          <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
+          <svg class="vp-pill-icon vp-pill-cubeico cubeico-top" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="8 1.5 14 5 8 8.5 2 5"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><svg class="vp-pill-icon vp-pill-cubeico cubeico-front" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="2 5 8 8.5 8 14.5 2 11"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><svg class="vp-pill-icon vp-pill-cubeico cubeico-side" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="8 8.5 14 5 14 11 8 14.5"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg>
+          <span class="vp-pill-label">Cam</span>
+        </button>
+        <div id="vp-view-pill-menu" class="vp-pill-menu" role="menu" data-tip-side="left">
+          <button class="vp-pill-item active" type="button" data-view="persp" role="menuitem" aria-label="Cam view"><i class="vp-pill-ico" data-lucide="video" aria-hidden="true"></i><span class="vp-pill-item-lbl">Cam</span><kbd class="vp-pill-item-kbd" data-kbd="1"></kbd></button>
+          <button class="vp-pill-item" type="button" data-view="top" role="menuitem" aria-label="Top view"><svg class="vp-pill-cube" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="8 1.5 14 5 8 8.5 2 5"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><span class="vp-pill-item-lbl">Top</span><kbd class="vp-pill-item-kbd" data-kbd="2"></kbd></button>
+          <button class="vp-pill-item" type="button" data-view="front" role="menuitem" aria-label="Front view"><svg class="vp-pill-cube" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="2 5 8 8.5 8 14.5 2 11"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><span class="vp-pill-item-lbl">Front</span><kbd class="vp-pill-item-kbd" data-kbd="3"></kbd></button>
+          <button class="vp-pill-item" type="button" data-view="side" role="menuitem" aria-label="Side view"><svg class="vp-pill-cube" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="8 8.5 14 5 14 11 8 14.5"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><span class="vp-pill-item-lbl">Side</span><kbd class="vp-pill-item-kbd" data-kbd="4"></kbd></button>
         </div>
       </div>
       <div class="vpc tr">
@@ -3948,9 +4302,9 @@ window.moSplash = function (msg, pct) {
         <div id="vp-add-pop" class="vp-prim-pop" style="display:none"></div>
         <div class="vpb-sep"></div>
         <button class="vpb" id="tg-split" data-cmd-toggle="split" title="Split (X)"><i data-lucide="split"></i></button>
-        <button class="vpb" id="tg-fill-holes" data-cmd-toggle="fillholes" title="Fill holes (P)"><i data-lucide="square-dot"></i></button>
+        <button class="vpb" id="tg-fill-holes" data-cmd-toggle="fillholes" title="Fill holes (P)"><i data-lucide="circle-off"></i></button>
         <button class="vpb" id="tg-sweep" data-cmd-toggle="sweep" title="Sweep"><i data-lucide="spline"></i></button>
-        <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="pen-tool"></i></button>
+        <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="pencil-line"></i></button>
         <button class="vpb" id="tg-smart-fit" data-cmd-toggle="smartfit" title="Smart fit (Ctrl+B)"><i data-lucide="wand-2"></i></button>
         <button class="vpb" id="tg-select-hidden" data-cmd-toggle="selhidden" title="Select hidden parts"><i data-lucide="ghost"></i></button>
         <button class="vpb" id="tg-fasteners" data-cmd-toggle="fasteners" title="Fasteners: select bolts, nuts and washers"><i data-lucide="bolt"></i></button>
@@ -4063,7 +4417,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Repair</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Repair</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="hidfaces" hidden>
@@ -4093,7 +4447,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Remove</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Remove</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="sweep" hidden>
@@ -4128,7 +4482,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Sweep</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Sweep</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="draw" id="draw-card" hidden>
@@ -4202,7 +4556,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </div>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the tool away"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="mergeby" hidden>
@@ -4224,7 +4578,7 @@ window.moSplash = function (msg, pct) {
         <button class="btn warn" id="mb-run" data-cmd-primary title="Merge the parts. Ctrl+Z takes it all back."><i data-lucide="layers"></i>Merge</button>
         <div class="field-help" id="mb-info"></div>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Merge</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Merge</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="selrule" hidden>
@@ -4246,7 +4600,7 @@ window.moSplash = function (msg, pct) {
         <button class="btn primary" id="sr-run" data-cmd-primary title="Select what fits"><i data-lucide="list-filter"></i>Select</button>
         <div class="field-help" id="sr-info"></div>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Select</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Select</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="stacked" hidden>
@@ -4262,7 +4616,7 @@ window.moSplash = function (msg, pct) {
           <button class="btn danger" id="stk-delete" title="Delete the extra copies. Can be undone."><i data-lucide="trash-2"></i>Delete</button>
         </div>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the card away"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="align" hidden>
@@ -4287,7 +4641,7 @@ window.moSplash = function (msg, pct) {
         </div>
         <div class="field-help" id="align-info"></div>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the card away"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="place" hidden>
@@ -4327,7 +4681,7 @@ window.moSplash = function (msg, pct) {
         </div>
         <div class="btn-row" style="grid-template-columns:auto minmax(0,1fr)">
           <label class="size-field" title="Largest hole to fill, measured across its widest point"><span>up to</span><input type="text" inputmode="decimal" id="fill-holes-size" value="12"><span>mm</span></label>
-          <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="square-dot"></i><span id="fill-holes-label">Fill holes</span></button>
+          <button class="btn warn" id="btn-fill-holes" data-cmd-primary title="Close holes in flat faces — through, blind and counterbored — and leave everything else as it is. Works on the selection, or on every visible part when nothing is selected. Undoable."><i data-lucide="circle-off"></i><span id="fill-holes-label">Fill holes</span></button>
         </div>
         <div class="field-help" id="fill-holes-info"></div>
         <details class="cmd-adv" id="fh-adv">
@@ -4346,7 +4700,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Fill holes</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Fill holes</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd has-hero" data-cmd="smartfit" hidden>
@@ -4382,7 +4736,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Smart fit</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Smart fit</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd has-hero" data-cmd="selhidden" hidden>
@@ -4422,7 +4776,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Select hidden</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Select hidden</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd has-hero" data-cmd="fasteners" hidden>
@@ -4472,7 +4826,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Select fasteners</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Select fasteners</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd has-hero" data-cmd="split" hidden>
@@ -4511,7 +4865,7 @@ window.moSplash = function (msg, pct) {
           </div>
         </details>
       </div>
-      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Put the command away"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok" title="Run it"><span>Split selected</span><kbd class="kbd-chip">↵</kbd></button></div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Split selected</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
       </div>
       <div class="vpc br"><div class="vp-tips" id="vp-hint"></div></div>
@@ -4560,12 +4914,13 @@ window.moSplash = function (msg, pct) {
     <div id="loader">
       <div class="loader-card">
         <div class="loader-head">
-          <div class="spinner"></div>
+          <canvas class="ml-cv" width="88" height="88" aria-hidden="true"></canvas>
           <div class="loader-text"><div id="loader-msg">Loading…</div><div id="loader-sub"></div></div>
           <div id="loader-time">0.0s</div>
         </div>
         <div class="loader-bar"><div class="loader-bar-fill" id="loader-bar"></div></div>
-        <div id="loader-log" class="loader-log"></div>
+        <ol id="loader-steps" class="ld-steps" hidden></ol>
+        <details class="ld-details" id="loader-details" open><summary>Details</summary><div id="loader-log" class="loader-log"></div></details>
         <div class="loader-cancel" style="display:flex;gap:var(--space-sm);justify-content:flex-end"><button id="loader-copy-btn" title="Copy the log to clipboard">Copy log</button><button id="loader-cancel-btn" title="Abort the current load / operation">Cancel</button></div>
       </div>
     </div>
@@ -4629,22 +4984,18 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><i class="sec-ico" data-lucide="expand"></i><span>Exploded view</span><span class="chev">▾</span></div>
       <div class="section-b ex-body">
         <div class="field"><div id="explode-all-scrub"></div></div>
-        <div class="ex-row">
+        <div class="cmd-seg ex-mode" id="explode-mode" role="group" aria-label="How the parts move apart">
+          <button type="button" class="active" data-mode="world" aria-pressed="true" title="Move the parts apart along the scene's X, Y and Z">Scene axes</button>
+          <button type="button" data-mode="part" aria-pressed="false" title="Each part goes out along its own axis: a bolt at an angle travels along that angle, a flat part along its normal">Part axis</button>
+        </div>
+        <div class="ex-row ex-along">
           <span class="ex-l">Along</span>
           <div class="ex-axes" id="explode-axes" role="group" aria-label="Axes to explode along">
             <button type="button" class="sv-chip ex-axis is-on" data-axis="x" aria-pressed="true" title="Move the parts apart along X"><i class="ex-dot x"></i>X</button>
             <button type="button" class="sv-chip ex-axis is-on" data-axis="y" aria-pressed="true" title="Move the parts apart along Y"><i class="ex-dot y"></i>Y</button>
             <button type="button" class="sv-chip ex-axis is-on" data-axis="z" aria-pressed="true" title="Move the parts apart along Z"><i class="ex-dot z"></i>Z</button>
           </div>
-        </div>
-        <div class="ex-row">
-          <span class="ex-l">Quick</span>
-          <div class="ex-axes" id="explode-presets" role="group" aria-label="Amounts">
-            <button type="button" class="sv-chip" data-v="25">25%</button>
-            <button type="button" class="sv-chip" data-v="50">50%</button>
-            <button type="button" class="sv-chip" data-v="100">100%</button>
-            <button type="button" class="sv-chip" data-v="200">200%</button>
-          </div>
+          <button type="button" class="btn ex-reset" id="btn-explode-reset" title="Put every part back where it was" aria-label="Put every part back"><i data-lucide="rotate-ccw"></i></button>
         </div>
         <details class="ex-fine">
           <summary>Fine tune each axis</summary>
@@ -4652,7 +5003,6 @@ window.moSplash = function (msg, pct) {
           <div class="field"><div id="explode-y-scrub"></div></div>
           <div class="field"><div id="explode-z-scrub"></div></div>
         </details>
-        <button class="btn" id="btn-explode-reset" title="Put every part back where it was"><i data-lucide="rotate-ccw"></i>Reset</button>
       </div>
     </div>
 
@@ -4721,7 +5071,7 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><i class="sec-ico" data-lucide="pencil"></i><span>Edit selection</span><span class="chev">▾</span></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
         <div class="btn-list">
-          <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox centre sits at world origin"><i data-lucide="axis-3d"></i>Recentre on origin</button>
+          <button class="btn quiet" id="btn-recenter" title="Move the model so its bbox centre sits at the world origin. With parts selected, only they move (together), to the origin."><i data-lucide="axis-3d"></i>Recentre on origin</button>
           <button class="btn quiet" id="btn-bake-transforms" title="Commit pending gizmo edits permanently into vertex data"><i data-lucide="check"></i>Bake gizmo transforms</button>
           <button class="btn quiet" id="btn-center-pivot" title="Re-pivot a part's local origin to its bbox centre (visual position unchanged)"><i data-lucide="crosshair"></i>Centre pivot</button>
         </div>
@@ -4856,6 +5206,7 @@ window.moSplash = function (msg, pct) {
         <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
         <label class="size-field" id="decimate-tol-row" style="display:none" title="Take out as many triangles as possible without moving any point of the surface by more than this"><span>no point moves more than</span><input type="text" inputmode="decimal" id="decimate-tol" value="0.1"><span>mm</span></label>
         <div class="field-help plan-line" style="margin-top:-2px"><span id="decimate-info"></span><button type="button" class="plan-link" id="decimate-preview" hidden title="See what each part will lose before running it">Preview…</button></div>
+        <div class="toggle" id="keep-sharp-row" title="While triangles are taken out, hold on to the hard edges of a part (a rim, a step, a corner), when the part has few of them and the goal can still be reached. Parts that are mostly hard edges, like gears, are reduced as before."><span id="keep-sharp-lbl">Keep sharp edges</span><label><input type="checkbox" id="keep-sharp" checked aria-labelledby="keep-sharp-lbl"><span class="switch"></span></label></div>
         <div class="btn-row">
           <button class="btn" id="btn-untriangulate" title="Join neighbouring triangles that lie in one plane into polygons (n-gons), take away the vertices in the middle of each flat face and triangulate it again with the fewest triangles. The shape does not change. Works on the selection, or on the whole scene when nothing is selected. Undoable."><i data-lucide="hexagon"></i>Untriangulate</button>
           <select id="untri-angle" class="mac-sel" title="How flat neighbouring triangles must be to join into one polygon" style="flex:0 0 96px">
@@ -4878,7 +5229,6 @@ window.moSplash = function (msg, pct) {
     <div class="item" style="display:none"><strong id="sb-tris">0</strong>triangles</div>
     <div class="item"><strong id="sb-verts">0</strong>vertices</div>
     <div class="item"><strong id="sb-mem">0 MB</strong>mesh data</div>
-    <div class="item sb-action" id="sb-selected" title="Click to frame the current selection in the viewport"><i data-lucide="mouse-pointer-2"></i><strong id="sb-selected-n">0</strong>selected</div>
     <div class="item sb-fps"><strong id="fps">0</strong>fps</div>
     <button id="sb-console-btn" title="Toggle log console (`)">
       <i data-lucide="terminal"></i>
@@ -5005,78 +5355,100 @@ window.moSplash = function (msg, pct) {
      replace, etc). For .glb/.gltf there's nothing useful to ask, so the
      wiring code skips the modal entirely. -->
 <div class="modal-bg" id="import-modal">
-  <div class="modal" role="dialog" aria-labelledby="import-modal-title" style="width:560px;max-height:88vh">
+  <div class="modal" role="dialog" aria-labelledby="import-modal-title" >
     <div class="modal-h">
       <h3 id="import-modal-title">Import settings</h3>
       <button class="x" id="import-modal-close" title="Close (Esc)">✕</button>
     </div>
     <div class="modal-b" style="padding:0">
-      <div style="padding:16px 20px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px">
-        <i data-lucide="file" style="width:28px;height:28px;stroke:var(--ac);flex:0 0 auto"></i>
-        <div style="min-width:0;flex:1">
-          <div id="import-modal-name" style="font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">filename.step</div>
-          <div id="import-modal-meta" style="font-size:var(--fs-sm);color:var(--tx3);margin-top:2px">— · STEP</div>
+      <div class="imp-file">
+        <span class="imp-ico"><i data-lucide="file"></i></span>
+        <div class="imp-file-t">
+          <div id="import-modal-name" class="imp-name">filename.step</div>
+          <div id="import-modal-meta" class="imp-meta">— · STEP</div>
         </div>
       </div>
 
+      <div class="imp-cols">
+      <div class="imp-col imp-col-a">
       <!-- STEP-only panel -->
-      <div id="import-panel-step" style="padding:16px 20px;display:none">
-        <div class="field" style="margin-bottom:14px">
-          <label id="imp-step-quality-lbl"><span>Tessellation quality</span></label>
-          <select id="imp-step-quality" aria-labelledby="imp-step-quality-lbl" class="mac-sel">
+      <div id="import-panel-step" class="imp-panel" style="display:none">
+        <div class="imp-sec">
+          <div class="imp-h">Surface quality</div>
+          <select id="imp-step-quality" aria-label="Tessellation quality" class="imp-hide" data-native>
             <option value="1.0">Coarse (1.0) — fastest, jagged curves</option>
             <option value="0.5" selected>Standard (0.5) — recommended</option>
             <option value="0.2">Fine (0.2) — smoother surfaces</option>
             <option value="0.05">Ultra (0.05) — slow, very smooth</option>
           </select>
-          <div style="margin-top:6px;font-size:var(--fs-sm);color:var(--tx3);line-height:var(--lh-relaxed)">A coarser setting makes fewer triangles at the source, which usually looks better than decimating a fine mesh afterwards. Curves are the part that grows with it.</div>
+          <div class="imp-seg" role="radiogroup" aria-label="Tessellation quality" data-for="imp-step-quality">
+            <button type="button" role="radio" data-v="1.0">Coarse</button>
+            <button type="button" role="radio" data-v="0.5">Standard</button>
+            <button type="button" role="radio" data-v="0.2">Fine</button>
+            <button type="button" role="radio" data-v="0.05">Ultra</button>
+          </div>
+          <div class="imp-note" id="imp-quality-hint"></div>
+          <div class="imp-note imp-note-2">A coarser setting makes fewer triangles at the source, which usually looks better than decimating a fine mesh afterwards.</div>
         </div>
-        <div class="field" style="margin-bottom:14px">
-          <label id="imp-step-colors-lbl"><span>Colours &amp; materials</span></label>
-          <select id="imp-step-colors" aria-labelledby="imp-step-colors-lbl" class="mac-sel">
+
+        <div class="imp-sec">
+          <div class="imp-h">Colours and structure</div>
+          <select id="imp-step-colors" aria-label="Colours and materials" class="imp-hide" data-native>
             <option value="on" selected>Read XCAF (colours + names + hierarchy)</option>
             <option value="off">Geometry only (fastest, no colours / hierarchy)</option>
           </select>
-          <div style="font-size:var(--fs-sm);color:var(--tx3);margin-top:6px;line-height:var(--lh-relaxed)">"Geometry only" skips the slow XCAF transfer entirely — best for huge files where you only need the shape.</div>
+          <div class="imp-seg" role="radiogroup" aria-label="Colours and materials" data-for="imp-step-colors">
+            <button type="button" role="radio" data-v="on">Colours &amp; hierarchy</button>
+            <button type="button" role="radio" data-v="off">Geometry only</button>
+          </div>
+          <div class="imp-note" id="imp-colors-hint"></div>
         </div>
 
-        <div style="font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin:18px 0 4px">XCAF read modes</div>
-        <div style="font-size:var(--fs-sm);color:var(--tx3);margin-bottom:6px;line-height:var(--lh-relaxed)">Each mode adds a pass over the STEP entity graph. Disable what you don't need — turning off SHUO is the biggest win on instanced assemblies.</div>
-        <div class="toggle" title="Specified Higher-Usage Occurrence overrides — per-instance colour/material overrides resolved combinatorially. The single biggest cost on instanced assemblies."><span id="imp-step-shuo-lbl">SHUO overrides <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(slowest)</span></span><label><input type="checkbox" id="imp-step-shuo" aria-labelledby="imp-step-shuo-lbl"><span class="switch"></span></label></div>
-        <div class="toggle"><span id="imp-step-layers-lbl">Layer attributes</span><label><input type="checkbox" id="imp-step-layers" aria-labelledby="imp-step-layers-lbl"><span class="switch"></span></label></div>
-        <div class="toggle"><span id="imp-step-materials-lbl">Material attributes</span><label><input type="checkbox" id="imp-step-materials" aria-labelledby="imp-step-materials-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle"><span id="imp-step-names-lbl">Product names</span><label><input type="checkbox" id="imp-step-names" aria-labelledby="imp-step-names-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle"><span id="imp-step-props-lbl">Validation properties (mass, area)</span><label><input type="checkbox" id="imp-step-props" aria-labelledby="imp-step-props-lbl"><span class="switch"></span></label></div>
-
-        <div style="font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin:18px 0 4px">Filter</div>
-        <div class="field" style="margin:0 0 6px">
-          <label for="imp-step-min-size"><span>Drop parts smaller than (% of model)</span></label>
-          <input type="number" id="imp-step-min-size" min="0" max="100" step="0.1" value="0" style="width:100%;padding:var(--space-7) var(--space-lg);background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums">
-          <div style="font-size:var(--fs-sm);color:var(--tx3);margin-top:6px;line-height:var(--lh-relaxed)">Useful for skipping tiny fasteners. 0 keeps everything.</div>
-        </div>
-
-        <div class="toggle" style="margin-top:10px"><span id="imp-step-force-lbl">Force re-convert (ignore the GLB / XCAF cache)</span><label><input type="checkbox" id="imp-step-force" aria-labelledby="imp-step-force-lbl"><span class="switch"></span></label></div>
-        <div class="toggle"><span id="imp-step-instance-lbl">Collapse identical shapes into instances</span><label><input type="checkbox" id="imp-step-instance" aria-labelledby="imp-step-instance-lbl" checked><span class="switch"></span></label></div>
+        <details class="imp-more imp-reads">
+          <summary><span>What to read</span><em>Each one adds a pass over the file</em></summary>
+          <div class="imp-grp">
+          <div class="toggle imp-row"><span id="imp-step-shuo-lbl" class="imp-t"><b>Instance overrides <span class="imp-tag">slowest</span></b><small>Per-instance colour and material overrides (SHUO). The biggest cost on instanced assemblies.</small></span><label><input type="checkbox" id="imp-step-shuo" aria-labelledby="imp-step-shuo-lbl"><span class="switch"></span></label></div>
+          <div class="toggle imp-row"><span id="imp-step-layers-lbl" class="imp-t"><b>Layers</b><small>Layer attributes</small></span><label><input type="checkbox" id="imp-step-layers" aria-labelledby="imp-step-layers-lbl"><span class="switch"></span></label></div>
+          <div class="toggle imp-row"><span id="imp-step-materials-lbl" class="imp-t"><b>Materials</b><small>Material attributes</small></span><label><input type="checkbox" id="imp-step-materials" aria-labelledby="imp-step-materials-lbl" checked><span class="switch"></span></label></div>
+          <div class="toggle imp-row"><span id="imp-step-names-lbl" class="imp-t"><b>Product names</b><small>Names from the assembly</small></span><label><input type="checkbox" id="imp-step-names" aria-labelledby="imp-step-names-lbl" checked><span class="switch"></span></label></div>
+          <div class="toggle imp-row"><span id="imp-step-props-lbl" class="imp-t"><b>Validation properties</b><small>Mass and area</small></span><label><input type="checkbox" id="imp-step-props" aria-labelledby="imp-step-props-lbl"><span class="switch"></span></label></div>
+          </div>
+        </details>
       </div>
 
       <!-- Mesh-format panel (FBX / OBJ / 3MF / STL) -->
-      <div id="import-panel-mesh" style="padding:16px 20px;display:none">
-        <div style="font-size:var(--fs-sm);color:var(--tx3);margin-bottom:14px;line-height:var(--lh-relaxed)">Mesh formats load directly via three.js — there's no slow conversion step to tune. The options below apply to the resulting scene.</div>
+      <div id="import-panel-mesh" class="imp-panel" style="display:none">
+        <div class="imp-note" style="margin:0">Mesh formats load directly, with no slow conversion to tune. The options below apply to the resulting scene.</div>
       </div>
+      </div>
+      <div class="imp-col imp-col-b">
+      <div id="import-panel-step-b" class="imp-panel" style="display:none">
+        <div class="imp-sec">
+          <div class="imp-h">Clean-up</div>
+          <div class="imp-grp">
+            <div class="toggle imp-row"><span id="imp-step-min-size-lbl" class="imp-t"><b>Drop small parts</b><small>Smaller than this share of the model. Skips tiny fasteners; 0 keeps everything.</small></span><span class="imp-num"><input type="number" id="imp-step-min-size" aria-labelledby="imp-step-min-size-lbl" min="0" max="100" step="0.1" value="0"><i>%</i></span></div>
+          <div class="toggle imp-row"><span id="imp-step-instance-lbl" class="imp-t"><b>Share identical shapes</b><small>Collapse copies into instances; far less memory</small></span><label><input type="checkbox" id="imp-step-instance" aria-labelledby="imp-step-instance-lbl" checked><span class="switch"></span></label></div>
+          <div class="toggle imp-row"><span id="imp-step-force-lbl" class="imp-t"><b>Convert again</b><small>Ignore the GLB / XCAF cache</small></span><label><input type="checkbox" id="imp-step-force" aria-labelledby="imp-step-force-lbl"><span class="switch"></span></label></div>
+          </div>
+        </div>
+      </div>
+
 
       <!-- Universal section -->
-      <div style="padding:16px 20px;border-top:1px solid var(--bd)">
-        <div style="font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin-bottom:8px">Scene</div>
-        <div class="toggle"><span id="imp-append-lbl">Append to current scene <span style="color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-regular)">(off = replace)</span></span><label><input type="checkbox" id="imp-append" aria-labelledby="imp-append-lbl"><span class="switch"></span></label></div>
-        <div class="toggle"><span id="imp-fit-lbl">Fit view after loading</span><label><input type="checkbox" id="imp-fit" aria-labelledby="imp-fit-lbl" checked><span class="switch"></span></label></div>
+      <div class="imp-panel imp-scene">
+        <div class="imp-sec">
+          <div class="imp-h">Scene</div>
+          <div class="imp-grp">
+            <div class="toggle imp-row"><span id="imp-append-lbl" class="imp-t"><b>Add to the open scene</b><small>Off replaces what is open</small></span><label><input type="checkbox" id="imp-append" aria-labelledby="imp-append-lbl"><span class="switch"></span></label></div>
+            <div class="toggle imp-row"><span id="imp-fit-lbl" class="imp-t"><b>Fit the view</b><small>Frame the model when it has loaded</small></span><label><input type="checkbox" id="imp-fit" aria-labelledby="imp-fit-lbl" checked><span class="switch"></span></label></div>
+          </div>
+        </div>
       </div>
-
-      <div style="padding:12px 20px 16px;border-top:1px solid var(--bd);display:flex;align-items:center;gap:10px">
-        <input type="checkbox" id="imp-skip-next" style="margin:0">
-        <label for="imp-skip-next" style="color:var(--tx2);font-size:var(--fs-sm);cursor:pointer;flex:1">Don't ask again for this format <span style="color:var(--tx3)">(undo in Settings › Storage)</span></label>
+      </div>
       </div>
     </div>
-    <div class="modal-f">
+    <div class="modal-f imp-foot">
+      <label class="imp-skip" for="imp-skip-next" title="Undo in Settings › Storage"><input type="checkbox" id="imp-skip-next"><span>Don't ask again for this format</span></label>
       <button class="btn" id="import-modal-cancel" title="Close without importing (Esc)">Cancel</button>
       <button class="tbtn primary" id="import-modal-confirm" title="Start import with these settings (Enter)">Import</button>
     </div>
@@ -5230,6 +5602,8 @@ window.moSplash = function (msg, pct) {
 
         <div class="exp-group-title" id="exp-fmt-group">Format options</div>
         <div class="toggle exp-row" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only."><span class="exp-row-l" id="exp-draco-lbl"><b>Draco compression</b><small>Shrinks the file 5–20× · slower to write</small></span><label><input type="checkbox" id="exp-draco" aria-labelledby="exp-draco-lbl"><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-meshopt-row" title="Compress the vertex data with Meshopt (EXT_meshopt_compression) and round positions, normals and UVs to a fixed number of bits. Quick to decode and streams well, but larger than Draco on disk (about a quarter of the plain size against Draco's fifth, measured on a CAD assembly; the gap narrows once the server compresses it with gzip or brotli). The viewer must read it: three.js, Babylon.js and model-viewer do, some others do not (Draco is the safer choice for those). GLB only."><span class="exp-row-l" id="exp-meshopt-lbl"><b>Meshopt compression</b><small>Quick to decode · larger than Draco · the viewer must read it</small></span><label><input type="checkbox" id="exp-meshopt" aria-labelledby="exp-meshopt-lbl"><span class="switch"></span></label></div>
+        <div class="toggle exp-row" id="exp-reorder-row" title="Put the triangles and vertices in the order the graphics card likes, so the model draws faster. The shape and every attribute stay exactly as they are, and any viewer opens it. Meshopt compression does this too. GLB only."><span class="exp-row-l" id="exp-reorder-lbl"><b>Faster to draw</b><small>Reorders for the GPU · the shape does not change · any viewer</small></span><label><input type="checkbox" id="exp-reorder" aria-labelledby="exp-reorder-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII format instead of binary."><span class="exp-row-l" id="exp-fbx-ascii-lbl"><b>ASCII FBX</b><small>Readable text · try it if binary fails</small></span><label><input type="checkbox" id="exp-fbx-ascii" aria-labelledby="exp-fbx-ascii-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-stl-ascii-row" title="Write STL as readable text instead of binary. Much larger; only for tools that cannot read binary STL."><span class="exp-row-l" id="exp-stl-ascii-lbl"><b>ASCII STL</b><small>Readable text · much larger than binary</small></span><label><input type="checkbox" id="exp-stl-ascii" aria-labelledby="exp-stl-ascii-lbl"><span class="switch"></span></label></div>
         <div class="exp-group-title" id="exp-target-title">Where it is going</div>
@@ -5423,7 +5797,7 @@ window.moSplash = function (msg, pct) {
 
       <div id="welcome-load-pane" style="display:none">
         <div style="display:flex;align-items:center;gap:var(--space-2xl);padding:6px 0 14px">
-          <div class="spinner" style="flex-shrink:0"></div>
+          <canvas class="ml-cv" width="88" height="88" aria-hidden="true"></canvas>
           <div style="flex:1;min-width:0">
             <div id="wl-msg" style="font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);margin-bottom:3px">Loading…</div>
             <div id="wl-sub" style="color:var(--tx3);font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
@@ -5431,7 +5805,8 @@ window.moSplash = function (msg, pct) {
           <div id="wl-time" style="color:var(--tx3);font-size:var(--fs-sm);font-variant-numeric:tabular-nums;flex-shrink:0">0.0s</div>
         </div>
         <div class="loader-bar" style="margin-top:0"><div class="loader-bar-fill" id="wl-bar"></div></div>
-        <div id="wl-log" class="loader-log" style="margin-top:12px;max-height:160px"></div>
+        <ol id="wl-steps" class="ld-steps" hidden></ol>
+        <details class="ld-details" id="wl-details" open><summary>Details</summary><div id="wl-log" class="loader-log" style="max-height:160px"></div></details>
         <div style="display:flex;gap:var(--space-sm);justify-content:flex-end;margin-top:10px">
           <button id="wl-copy-btn" class="btn" style="width:auto" title="Copy the log to clipboard">Copy log</button>
           <button id="wl-cancel-btn" class="btn" style="width:auto" title="Abort the current load">Cancel</button>
@@ -5524,6 +5899,15 @@ window.moSplash = function (msg, pct) {
     // above a button would cover the button over it. It goes beside the
     // pill instead, level with its button, on the viewport side (the other
     // side is the parts tree and its eye icons).
+    // A menu that is a column of icons at the right edge (the camera views) puts its tips to the LEFT of the column, level with the
+    // button, so a tip never covers the icons.
+    const leftOf = anchor.closest('[data-tip-side="left"]');
+    if (leftOf) {
+      const lr = leftOf.getBoundingClientRect();
+      el.style.left = Math.max(6, lr.left - tr.width - 8) + 'px';
+      el.style.top = Math.max(6, Math.min(window.innerHeight - tr.height - 6, r.top + r.height / 2 - tr.height / 2)) + 'px';
+      return;
+    }
     const pill = anchor.closest('.vpc.tl');
     if (pill) {
       const pr = pill.getBoundingClientRect();
@@ -5809,16 +6193,17 @@ window.moSplash = function (msg, pct) {
     "three": "./vendor/three/build/three.webgpu.js",
     "three/addons/": "./vendor/three/examples/jsm/",
     "three-mesh-bvh": "./vendor/three-mesh-bvh/index.module.js",
-    "meshoptimizer-simplifier": "./vendor/meshoptimizer/meshopt_simplifier.module.js"
+    "meshoptimizer-simplifier": "./vendor/meshoptimizer/meshopt_simplifier.module.js",
+    "meshoptimizer-encoder": "./vendor/meshoptimizer/meshopt_encoder.module.js"
   }
 }
 </script>
-<script type="module" src="app-v2.js?v=20261009-v0.21.0"></script>
+<script type="module" src="app-v2.js?v=20261012-v0.22.0"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app-v2.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
 <script defer src="cloner.js?v=20261009-icons"></script>
-<script defer src="help.js?v=2"></script>
+<script defer src="help.js?v=3"></script>
 <script>
   // Reveal the app when it says it has booted (app-v2.js: 'mo-boot-ready', after the renderer and the
   // scene are up and the icons are drawn), the splash has been up long enough not to flash, and the

@@ -22,3 +22,10 @@ Thumbs.db
 CLAUDE.md
 *.swp
 *.lnk
+
+exports/
+server.log
+
+# In-app updater: the backup of the previous version, and what tools/build-update.py writes
+.update/
+dist/

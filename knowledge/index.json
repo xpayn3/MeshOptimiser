@@ -1,0 +1,434 @@
+[
+ {
+  "slug": "what-it-is",
+  "title": "What MeshOptimiser is",
+  "group": "start",
+  "groupTitle": "Start here",
+  "summary": "A free app that runs on your own computer. It turns a heavy CAD file into a light 3D file and lets you inspect, clean up and export it.",
+  "chars": 3161
+ },
+ {
+  "slug": "glossary",
+  "title": "Words you will meet",
+  "group": "start",
+  "groupTitle": "Start here",
+  "summary": "A plain-language glossary: STEP, mesh, triangle, GLB, instancing, decimation, WebGPU, virtual environment and the other terms these pages use.",
+  "chars": 5360
+ },
+ {
+  "slug": "first-file",
+  "title": "Open your first file",
+  "group": "start",
+  "groupTitle": "Start here",
+  "summary": "Drop a file on the window. What the import settings mean, what conversion does, how to follow its progress, and where the result is kept.",
+  "chars": 4466
+ },
+ {
+  "slug": "cad-files-step-first",
+  "title": "Native CAD files: export a STEP file first",
+  "group": "cad",
+  "groupTitle": "Getting your model out of your CAD program",
+  "summary": "MeshOptimiser opens STEP, not SolidWorks, Inventor, Creo or CATIA files. Why, which STEP version to pick, and where to find the steps for your program.",
+  "chars": 3057
+ },
+ {
+  "slug": "step-from-inventor",
+  "title": "How to export a STEP assembly from Autodesk Inventor",
+  "group": "cad",
+  "groupTitle": "Getting your model out of your CAD program",
+  "summary": "Save an Inventor assembly as one STEP file with Save Copy As, pick AP214, and learn what Shrinkwrap can do for a very large assembly.",
+  "chars": 2547
+ },
+ {
+  "slug": "step-from-onshape",
+  "title": "How to export a STEP assembly from Onshape",
+  "group": "cad",
+  "groupTitle": "Getting your model out of your CAD program",
+  "summary": "Export an Onshape assembly or Part Studio as STEP by right-clicking its tab, and why STEP is a better start than Onshape’s own glTF export.",
+  "chars": 1879
+ },
+ {
+  "slug": "step-from-creo",
+  "title": "How to export a STEP assembly from PTC Creo",
+  "group": "cad",
+  "groupTitle": "Getting your model out of your CAD program",
+  "summary": "Save a Creo assembly as one STEP file with Save a Copy, set the application protocol and keep Export assembly as on Single File.",
+  "chars": 2626
+ },
+ {
+  "slug": "step-from-rhino",
+  "title": "How to export a STEP file from Rhino",
+  "group": "cad",
+  "groupTitle": "Getting your model out of your CAD program",
+  "summary": "Export selected Rhino objects as STEP with File, Export Selected: which protocol keeps colours, what happens to black objects, and what to do with meshes.",
+  "chars": 2212
+ },
+ {
+  "slug": "the-window",
+  "title": "The window",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
+  "chars": 6928
+ },
+ {
+  "slug": "move-the-view",
+  "title": "Move the view",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Orbit, pan and zoom with the mouse, frame a part with F, and switch between the camera, Top, Front and Side views.",
+  "chars": 2462
+ },
+ {
+  "slug": "select-parts",
+  "title": "Select parts",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Click, add with Shift, toggle with Ctrl, drag a box, or let the app select by shape, colour or name.",
+  "chars": 2693
+ },
+ {
+  "slug": "hide-isolate",
+  "title": "Hide, isolate, show all",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Hide parts that are in the way, look at a few parts on their own, and bring everything back with one key.",
+  "chars": 1423
+ },
+ {
+  "slug": "parts-tree",
+  "title": "The parts tree",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Search, rename, group and reorder the parts of a model, rename many at once, and flatten a hierarchy that is deeper than you need.",
+  "chars": 5662
+ },
+ {
+  "slug": "organise-the-tree",
+  "title": "Organise the tree: groups, sorting and picking",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Pick groups and parts together, take a group out of the tree without losing what is in it, flatten, sort and move groups.",
+  "chars": 2178
+ },
+ {
+  "slug": "search-and-commands",
+  "title": "Search and commands",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Press Ctrl + K to find any command, part or library part by name, and to work out a sum or convert a length.",
+  "chars": 4047
+ },
+ {
+  "slug": "quick-wand",
+  "title": "Quick wand",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Hold W and a ring of commands opens under the pointer. Flick toward one and let go.",
+  "chars": 3377
+ },
+ {
+  "slug": "undo-redo",
+  "title": "Undo and redo",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Every editing action can be taken back with Ctrl + Z. What counts as one step, and how to go back to the file as it was opened.",
+  "chars": 1622
+ },
+ {
+  "slug": "scene-tabs",
+  "title": "Scene tabs",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "Each tab is a scene of its own. Open several files side by side, drop a file to add it or open it in a tab, drag tabs into order, and save from the tab’s dot.",
+  "chars": 3190
+ },
+ {
+  "slug": "settings",
+  "title": "Settings",
+  "group": "around",
+  "groupTitle": "Find your way around",
+  "summary": "One window with ten sections and a search. What each section holds, in a sentence or two, from the start-up options to the look of the interface.",
+  "chars": 8933
+ },
+ {
+  "slug": "read-the-numbers",
+  "title": "How to read the numbers",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "What a triangle count tells you, where the app shows it, how to find the heaviest parts, and how to see what your work has saved.",
+  "chars": 3459
+ },
+ {
+  "slug": "heavy-parts",
+  "title": "Heavy parts",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "A list of the parts that hold the most triangles, heaviest first, with a count beside its title. Tick the ones you do not need and delete them in one step.",
+  "chars": 2949
+ },
+ {
+  "slug": "smart-optimise",
+  "title": "Smart optimise",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "One card, one button: every clean-up the app has, run one after another on the whole scene. Choose how far to go, read the plan, press Optimise.",
+  "chars": 5073
+ },
+ {
+  "slug": "delete-small-parts",
+  "title": "Delete small parts",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Remove the screws, washers and clips that are too small to matter, with a slider and a preview of what will go.",
+  "chars": 3158
+ },
+ {
+  "slug": "select-hidden-parts",
+  "title": "Select hidden parts",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Find every part that cannot be seen from outside the model, such as screws inside a housing, and delete them in one step.",
+  "chars": 3196
+ },
+ {
+  "slug": "fasteners",
+  "title": "Fasteners",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Find every bolt, screw, nut and washer by its shape, whatever the parts are called, then isolate or delete them in one step.",
+  "chars": 4499
+ },
+ {
+  "slug": "stacked-copies",
+  "title": "Stacked copies",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Find parts that sit exactly on top of an identical copy of themselves, drawn twice, and remove the extra ones.",
+  "chars": 2472
+ },
+ {
+  "slug": "fill-holes",
+  "title": "Fill holes",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Close bolt holes, slots, pockets and lettering in flat faces. Each closed hole removes the triangles of its walls.",
+  "chars": 3630
+ },
+ {
+  "slug": "split",
+  "title": "Split",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Take apart a mesh that arrived as one piece but is really several separate solids, so each can be selected on its own.",
+  "chars": 2634
+ },
+ {
+  "slug": "smart-fit",
+  "title": "Smart fit",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Replace a detailed part with a simple stand-in of the same size and position: a box, a cylinder, a few boxes, or blocks that keep its outline.",
+  "chars": 3996
+ },
+ {
+  "slug": "decimate",
+  "title": "Decimate",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Remove a share of the triangles from the selected parts while keeping their shape. Choose a percentage or a target, and preview first.",
+  "chars": 2833
+ },
+ {
+  "slug": "fit-to-budget",
+  "title": "Fit to budget",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Type the number of triangles the whole scene may have. The densest meshes are reduced first until the total fits.",
+  "chars": 2391
+ },
+ {
+  "slug": "cleanup",
+  "title": "Auto cleanup and Tidy geometry",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Small one-click repairs: remove empty parts and empty groups, fix shading, recentre the model and make moves permanent.",
+  "chars": 2645
+ },
+ {
+  "slug": "workflow",
+  "title": "A sensible order to work in",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "A suggested routine for a first clean-up: look, delete what is not needed, simplify what remains, check, save and export.",
+  "chars": 3072
+ },
+ {
+  "slug": "view-modes",
+  "title": "View modes",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Six ways to draw the same model: solid, wireframe, X-ray, heatmap, clay and CAD. One key each, plus the Shading card for the clay and CAD looks.",
+  "chars": 4850
+ },
+ {
+  "slug": "colours-materials",
+  "title": "Colours and materials",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Open the materials dock to see every material in the scene, recolour all the parts that share one, and assign materials to parts.",
+  "chars": 2906
+ },
+ {
+  "slug": "move-rotate-scale",
+  "title": "Move, rotate, scale and measure",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Use the gizmo to move, turn and resize parts, drag a part over other surfaces with Dynamic place, type exact values in the transform card, and measure the distance between two points.",
+  "chars": 5820
+ },
+ {
+  "slug": "align-to-floor",
+  "title": "Align to floor",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Stand a model upright on the grid, centred over the origin, when it arrived on its side or far away from the centre of the scene. A small drawing shows the result first.",
+  "chars": 3719
+ },
+ {
+  "slug": "exploded-view",
+  "title": "Exploded view",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Push the parts of an assembly apart with one slider, choose the directions, and put them back with one click.",
+  "chars": 2021
+ },
+ {
+  "slug": "library",
+  "title": "The parts library and shapes",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Add standard parts to a scene from a drawer under the viewport: 86 bolts, nuts, pipes, profiles and machine parts. Look at a part and set its size before it goes in.",
+  "chars": 5423
+ },
+ {
+  "slug": "draw-lines",
+  "title": "Draw lines and shapes",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Draw curves, rectangles, circles and polygons on the floor or on a face, edit their points, and use them as paths.",
+  "chars": 4814
+ },
+ {
+  "slug": "sweep",
+  "title": "Sweep a profile along a line",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Turn a path and a profile into a solid part: a pipe, a rail, a ring.",
+  "chars": 1487
+ },
+ {
+  "slug": "screenshots",
+  "title": "Screenshots",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Save a picture of the viewport as a PNG, at the size of the view or at any resolution up to poster size.",
+  "chars": 1644
+ },
+ {
+  "slug": "save-scene",
+  "title": "Save a scene",
+  "group": "save",
+  "groupTitle": "Save and export",
+  "summary": "Save your work as a scene file so you can carry on later. What a scene file is, how to name it with the file-name buttons, and how it differs from an export.",
+  "chars": 4482
+ },
+ {
+  "slug": "crash-recovery",
+  "title": "Get your scene back after a crash",
+  "group": "save",
+  "groupTitle": "Save and export",
+  "summary": "While a scene has changes that are not saved, a copy is kept inside your browser. If the app crashes, it offers the scene back the next time it starts.",
+  "chars": 3026
+ },
+ {
+  "slug": "export",
+  "title": "Export",
+  "group": "save",
+  "groupTitle": "Save and export",
+  "summary": "Write the model to GLB, glTF, FBX, USDZ, OBJ, STL, PLY or a parts list, name the file, and set the scale, up axis and origin the next program needs.",
+  "chars": 8305
+ },
+ {
+  "slug": "choose-format",
+  "title": "Which format should I choose",
+  "group": "save",
+  "groupTitle": "Save and export",
+  "summary": "A short guide by purpose: the web, Cinema 4D, Blender, game engines, AR on an iPhone, 3D printing, or a parts list.",
+  "chars": 2392
+ },
+ {
+  "slug": "convert-step-to-glb",
+  "title": "How to convert a STEP file to GLB",
+  "group": "jobs",
+  "groupTitle": "Common jobs, start to finish",
+  "summary": "Convert a STEP CAD file to a small GLB for the web, on your own computer and for free. The model is never uploaded. Drop it in, check it, export.",
+  "chars": 3701
+ },
+ {
+  "slug": "remove-bolts-from-step-assembly",
+  "title": "How to remove bolts and screws from a STEP assembly",
+  "group": "jobs",
+  "groupTitle": "Common jobs, start to finish",
+  "summary": "Take the bolts, screws, nuts and washers out of a CAD assembly before it goes on the web. Select one, select the rest, check, delete, and undo if needed.",
+  "chars": 4035
+ },
+ {
+  "slug": "make-model-safe-to-send",
+  "title": "How to make a CAD model safe to send to a customer",
+  "group": "jobs",
+  "groupTitle": "Common jobs, start to finish",
+  "summary": "Show your product without handing over your design. Remove hidden parts and fasteners, simplify what is left, clean the names and export a small GLB.",
+  "chars": 4561
+ },
+ {
+  "slug": "shortcuts",
+  "title": "Keyboard shortcuts",
+  "group": "reference",
+  "groupTitle": "Reference",
+  "summary": "Every keyboard shortcut and mouse action in MeshOptimiser v0.20.0, grouped by what it does.",
+  "chars": 4630
+ },
+ {
+  "slug": "file-formats",
+  "title": "File formats",
+  "group": "reference",
+  "groupTitle": "Reference",
+  "summary": "Which files the app opens and which it writes, and what each format keeps: the parts tree, materials and vertex colours.",
+  "chars": 2501
+ },
+ {
+  "slug": "privacy-offline",
+  "title": "Privacy and offline use",
+  "group": "reference",
+  "groupTitle": "Reference",
+  "summary": "MeshOptimiser runs on your own computer. What stays local, when the internet is used, and what the browser remembers.",
+  "chars": 1955
+ },
+ {
+  "slug": "troubleshooting",
+  "title": "Troubleshooting",
+  "group": "help",
+  "groupTitle": "Help",
+  "summary": "Fixes for the usual problems: Python not found, a blocked launcher on macOS, missing modules, a blank view and slow conversions.",
+  "chars": 6422
+ },
+ {
+  "slug": "faq",
+  "title": "Frequently asked questions",
+  "group": "help",
+  "groupTitle": "Help",
+  "summary": "Short answers: cost and licence, privacy, browsers, file sizes, whether Python is needed, and where to report a bug.",
+  "chars": 3997
+ }
+]
