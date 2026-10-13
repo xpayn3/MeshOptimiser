@@ -310,6 +310,14 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.26.0** — faster, lighter and easier to pick with: Box and Brush select whole parts, big files open without freezing the page, the same STEP opens instantly the second time, and the app gives memory back.
+
+- ![new][new] **Box and Brush select whole parts** — in Model mode the selection tool has Click, Box and Brush, as in Edit mesh, behind one button in the left toolbar. Shift adds, Alt turns the camera, the middle button sets the brush size.
+- ![new][new] **The same STEP opens instantly** — the converted model is kept by the file's content and settings (`inbox/cache/`, 3 GB at most). Two conversions run at a time and the rest wait.
+- ![perf][perf] **Memory is given back** — geometry that Undo can no longer reach, and the geometry of deleted parts, is freed. Big GLB, OBJ and FBX files no longer freeze the page while they open, and Repair mesh runs in the background.
+- ![perf][perf] **A selection draws at once** — the outline of a heavy part is worked out on a worker. A spring or a coarse curve is no longer drawn as a bundle of lines.
+- ![polish][polish] **One look for the controls** — sliders, scrollbars, number fields and menus share one set of tokens; the command cards open with a line drawing; Isolate in Delete small parts is a switch.
+
 **v0.25.0** — more to build with, and a better way to line it up: 26 new library parts, an Align parts panel, a Transform panel for several parts, and a search you can move.
 
 - ![new][new] **26 new library parts, and two new shelves** — 112 parts on eight shelves. New: Flange bolt, Clevis pin, Wood screw, Thumb screw, bearings, a stepped shaft, a shaft coupler, a GT2 timing pulley, a rail carriage, a strut channel, and the new *Electronics* and *Brackets and connectors* shelves.

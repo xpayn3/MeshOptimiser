@@ -4,7 +4,11 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
-## Unreleased
+## v0.26.0
+
+Released 13 Oct 2026.
+
+v0.25.0 gave you more to build with. v0.26.0 is about speed and weight, and about picking: Box and Brush now select whole parts, big files open without freezing the page, opening the same STEP again takes no time, and the app gives memory back.
 
 **Selecting parts**
 
