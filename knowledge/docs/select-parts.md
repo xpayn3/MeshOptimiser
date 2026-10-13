@@ -13,6 +13,16 @@ Most tools work on the parts you have selected. A selected part gets an outline 
 - `Ctrl + Shift + Drag`: Box select and add to what is already selected
 - `Esc`: Select nothing. A click on empty space does the same.
 
+## Click, Box or Brush
+
+The selection-tool button in the left toolbar chooses what a drag does. Press it and let go over a row of its list to pick that tool, or let go on the button and click a row. With **Edit mesh** on, the same button picks pieces of a mesh instead of whole parts.
+
+- **Click**: The usual way: click a part.
+- **Box**: A plain left drag draws a rectangle. A part is picked only when one of its own triangles is under the rectangle, not when its bounding box is.
+- **Brush**: A left drag paints: every part under the circle is picked. Hold `Shift` to add to what is picked; without it, every stroke starts from nothing. Drag with the middle button to change the size of the circle: to the right is bigger, to the left smaller.
+
+In every tool, `Alt` + drag turns the camera.
+
 ## In the parts tree
 
 - `Click`: Select one part. Click a group to select every part inside it.

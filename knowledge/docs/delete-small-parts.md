@@ -16,7 +16,7 @@ Early, when the model is for looking at as a whole and the small hardware does n
 4. Press **Isolate**. Only the parts that would be deleted are shown, so you can check them.
 5. Drag the slider again if needed. While the small parts are isolated, the view follows the slider.
 6. Press **Delete**. The button says how many small parts it will remove. When no part is under the threshold, the button is off.
-7. Press **Show all** to see the rest of the model again.
+7. Press **Isolate** again to see the rest of the model again. The button stays lit while the small parts are all that shows.
 
 ## What the options mean
 
@@ -31,7 +31,7 @@ Only parts that are on show are looked at: the ones with an open eye in the part
 
 ## See the small parts without deleting them
 
-The button with the warning triangle on the viewport’s tool strip tints every part under the threshold. The same switch is **Highlight small parts** under **Settings**, **Viewport**.
+The **Highlight** button on the card tints every part under the threshold, in the view and in the parts tree, so you can see what would go. The same switch is **Highlight small parts** under **Settings**, **Viewport**.
 
 ## Undo
 

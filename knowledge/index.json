@@ -85,7 +85,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Click, add with Shift, toggle with Ctrl, drag a box, or let the app select by shape, colour or name.",
-  "chars": 2905
+  "chars": 3699
  },
  {
   "slug": "hide-isolate",
@@ -181,7 +181,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Remove the screws, washers and clips that are too small to matter, with a slider and a preview of what will go.",
-  "chars": 3214
+  "chars": 3318
  },
  {
   "slug": "select-hidden-parts",
@@ -405,7 +405,7 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Convert a STEP CAD file to a small GLB for the web, on your own computer and for free. The model is never uploaded. Drop it in, check it, export.",
-  "chars": 5385
+  "chars": 5494
  },
  {
   "slug": "remove-bolts-from-step-assembly",
