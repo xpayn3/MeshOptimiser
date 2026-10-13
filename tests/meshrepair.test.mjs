@@ -76,5 +76,13 @@ const edgesConsistent = (r) => { const e = new Map(); const x = r.index; let goo
   const t0 = performance.now(); const r = repairMesh({ position: Float32Array.from(pos) }); const ms = performance.now() - t0;
   ok(r.stats.vertsAfter === (N + 1) * (N + 1), 'grid welds to ' + (N + 1) * (N + 1) + ', got ' + r.stats.vertsAfter);
   ok(ms < 8000, '200k triangles in under 8 s, took ' + Math.round(ms) + ' ms'); console.log('200k triangles repaired in ' + Math.round(ms) + ' ms'); }
+// far from the origin: two different cells must not wrap to the same number, and doubled triangles are found
+{ const off = 3e6, c = cubeSoup(); const pos = Float32Array.from(c.position, (x, i) => x * 1000 + (i % 3 === 0 ? off : 0));
+  const r = repairMesh({ position: pos }); ok(r.stats.vertsAfter === 8, 'a cube 3e6 away welds to 8, got ' + r.stats.vertsAfter);
+  const dbl = Float32Array.from([...c.position, ...c.position]); const r2 = repairMesh({ position: dbl });
+  ok(r2.stats.duplicate === 12 && r2.stats.trisAfter === 12, 'a doubled cube loses 12 triangles, lost ' + r2.stats.duplicate); }
+// several material groups come out in their own ranges
+{ const c = cubeSoup(); const r = repairMesh({ position: c.position, groups: [{ start: 0, count: 18, materialIndex: 0 }, { start: 18, count: 18, materialIndex: 1 }] });
+  ok(r.groups.length === 2 && r.groups[0].start === 0 && r.groups[1].start === r.groups[0].count && r.groups[0].count + r.groups[1].count === 36, 'two groups kept: ' + JSON.stringify(r.groups)); }
 if (fails) { console.error(fails + ' failed'); process.exit(1); }
 console.log('meshrepair: all checks pass');

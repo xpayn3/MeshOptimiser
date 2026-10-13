@@ -53,9 +53,9 @@
 // Pure function, no dependencies: the app calls it per part, the tests call
 // it from Node.
 
-// The most triangles a mesh may have: three half-edges each have to fit in
-// one Map (2^24 entries).
-const MAX_TRIS = Math.floor(16777216 / 3);
+// The most triangles a mesh may have. The adjacency is a typed table (three half-edges per triangle, twice as many slots), so
+// what limits it is memory in the worker, not the 2^24 entries of a Map.
+const MAX_TRIS = 12000000;
 
 export function fillFlatHoles(positions, index, opts = {}) {
   const P = positions;
@@ -81,10 +81,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
                    removed: null, caps: null, capOwner: null,
                    skipped: { raised: 0, raisedTall: 0, leaking: 0, tooDeep: 0, tooLarge: 0, partOfShape: 0, tooSmall: 0, kind: 0, uncappable: 0, tooBig: 0 } };
   if (!(maxSize > 0) || T < 4) return result;
-  // The adjacency below keeps one Map entry per triangle edge, and a Map
-  // holds 2^24 entries at most: past that, set() throws. A mesh that large
-  // (about 5.6 million triangles) is left as it is, and says so in
-  // skipped.tooBig (1 = this mesh was not looked at).
+  // A mesh larger than MAX_TRIS is left as it is, and says so in skipped.tooBig (1 = this mesh was not looked at).
   if (T > MAX_TRIS) { result.skipped.tooBig = 1; return result; }
 
   // ── bounding box, tolerances ─────────────────────────────────────────────
@@ -143,13 +140,34 @@ export function fillFlatHoles(positions, index, opts = {}) {
   // ── 3. adjacency over welded, directed edges ─────────────────────────────
   // key(a→b) = a * W + b. A second triangle on the same directed edge means
   // the surface is not a clean manifold there; such edges get no neighbour.
-  const he = new Map();
-  const bad = new Set();
+  // An open-addressing table of half-edges (a number per slot, no Map): heFind(a, b) is the first half-edge running a→b, or -1.
+  // badHe[h] marks the half-edges whose directed edge is used by a second triangle.
+  let heCap = 16; while (heCap < T * 6) heCap <<= 1;
+  const heMask = heCap - 1;
+  const heTab = new Int32Array(heCap).fill(-1);
+  const badHe = new Uint8Array(T * 3);
+  let badCount = 0;
+  const heSlot = (a, b) => (Math.imul(a, 73856093) ^ Math.imul(b, 19349663)) & heMask;
+  const heFind = (a, b) => {
+    for (let s = heSlot(a, b); ; s = (s + 1) & heMask) {
+      const h = heTab[s];
+      if (h < 0) return -1;
+      const t = (h / 3) | 0, e = h - t * 3;
+      if (tw[t * 3 + e] === a && tw[t * 3 + (e + 1) % 3] === b) return h;
+    }
+  };
+  const heHas = (a, b) => heFind(a, b) >= 0;
+  const heIsBad = (a, b) => { const h = heFind(a, b); return h >= 0 && badHe[h] === 1; };
   for (let t = 0; t < T; t++) {
     if (!ok[t]) continue;
     for (let e = 0; e < 3; e++) {
-      const k = tw[t * 3 + e] * W + tw[t * 3 + (e + 1) % 3];
-      if (he.has(k)) bad.add(k); else he.set(k, t * 3 + e);
+      const a = tw[t * 3 + e], b = tw[t * 3 + (e + 1) % 3], h = t * 3 + e;
+      let s = heSlot(a, b), dup = -1;
+      for (; heTab[s] >= 0; s = (s + 1) & heMask) {
+        const g = heTab[s], gt = (g / 3) | 0, ge = g - gt * 3;
+        if (tw[gt * 3 + ge] === a && tw[gt * 3 + (ge + 1) % 3] === b) { dup = g; break; }
+      }
+      if (dup >= 0) { if (!badHe[dup]) { badHe[dup] = 1; badCount++; } badHe[h] = 1; } else heTab[s] = h;
     }
   }
   const nb = new Int32Array(T * 3).fill(-1);            // half-edge → twin half-edge
@@ -157,22 +175,21 @@ export function fillFlatHoles(positions, index, opts = {}) {
     if (!ok[t]) continue;
     for (let e = 0; e < 3; e++) {
       const a = tw[t * 3 + e], b = tw[t * 3 + (e + 1) % 3];
-      const k = a * W + b, kt = b * W + a;
-      if (bad.has(k) || bad.has(kt)) continue;
-      const o = he.get(kt);
-      if (o !== undefined) nb[t * 3 + e] = o;
+      if (heIsBad(a, b) || heIsBad(b, a)) continue;
+      const o = heFind(b, a);
+      if (o >= 0) nb[t * 3 + e] = o;
     }
   }
 
   // Where a directed edge is used twice (a wall wound the wrong way round, a doubled face) the pair is no neighbour above, so the hole's
   // wall would never be found. These edges keep their triangles in a list of their own, and `twins` hands them out as neighbours.
   const badTris = new Map();                            // undirected edge → half-edges on it
-  if (bad.size) {
+  if (badCount) {
     for (let t = 0; t < T; t++) {
       if (!ok[t]) continue;
       for (let e = 0; e < 3; e++) {
         const a = tw[t * 3 + e], b = tw[t * 3 + (e + 1) % 3];
-        if (!(bad.has(a * W + b) || bad.has(b * W + a))) continue;
+        if (!(heIsBad(a, b) || heIsBad(b, a))) continue;
         const k = a < b ? a * W + b : b * W + a;
         const l = badTris.get(k); if (l) l.push(t * 3 + e); else badTris.set(k, [t * 3 + e]);
       }
@@ -509,7 +526,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
               // wall comes out with the rest of S, the cap follows the face's own rim, nothing is left hanging. If one does run the
               // other way (a doubled or non-manifold edge) it is not clean.
               const t = (h / 3) | 0, e = h % 3;
-              if (he.has(tw[t * 3 + (e + 1) % 3] * W + tw[t * 3 + e])) { reason = 'leaking'; break outer2; }
+              if (heHas(tw[t * 3 + (e + 1) % 3], tw[t * 3 + e])) { reason = 'leaking'; break outer2; }
               continue;
             }
             if (stamp[(o / 3) | 0] !== visit) { reason = 'leaking'; break outer2; }

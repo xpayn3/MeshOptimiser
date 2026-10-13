@@ -5,7 +5,7 @@
   "id": "./index.html",
   "start_url": "./index.html",
   "scope": "./",
-  "display_override": ["window-controls-overlay"],
+  "display_override": ["window-controls-overlay", "standalone"],
   "display": "standalone",
   "background_color": "#101010",
   "theme_color": "#101010",

@@ -29,3 +29,8 @@ server.log
 # In-app updater: the backup of the previous version, and what tools/build-update.py writes
 .update/
 dist/
+
+# Backups the editing sessions leave next to the files
+*.bak
+*.bak-*
+_before-*.html

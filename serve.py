@@ -9,7 +9,7 @@ Run via:
 from __future__ import annotations
 import math
 import argparse, atexit, http.server, json, os, re, select, shutil, signal, subprocess
-import sys, threading, time, uuid, webbrowser
+import sys, threading, time, uuid, webbrowser, hashlib
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, quote
 import updater                     # updating the app's own files: see updater.py
@@ -56,6 +56,11 @@ _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._\- ]")
 # Background conversion job registry for the /api/convert browser endpoint
 JOBS: dict[str, dict] = {}
 JOBS_LOCK = threading.Lock()
+# How many conversions run at once. Each one starts a multi-process mesher and can take gigabytes, so two big STEP files
+# side by side only fight over memory and cores. The rest wait as "queued". MESHOPT_CONVERT_JOBS changes it.
+try: _CONVERT_LIMIT = max(1, int(os.environ.get("MESHOPT_CONVERT_JOBS", "2")))
+except ValueError: _CONVERT_LIMIT = 2
+_CONVERT_SLOTS = threading.BoundedSemaphore(_CONVERT_LIMIT)
 # Converter processes still running, by job id (kept out of JOBS, which is
 # served as JSON). /api/cancel/<id> uses this to stop one.
 PROCS: dict[str, subprocess.Popen] = {}
@@ -291,8 +296,13 @@ _watchdog_started = False
 
 
 def _job_watchdog() -> None:
+    ticks = 0
     while True:
         time.sleep(30)
+        ticks += 1
+        if ticks % 120 == 0:          # hourly: a server left running for days would otherwise only sweep at start-up
+            try: _sweep_stale_inbox()
+            except Exception: pass
         now = time.time()
         with JOBS_LOCK:
             stale = [jid for jid, j in JOBS.items()
@@ -484,9 +494,101 @@ def interactive_convert(src: Path) -> Path | None:
 
 
 # ─── /api/convert background job runner (for in-browser drag-and-drop)
+# ── Converted files are kept, so opening the same STEP again is instant ──────────────────────────────────────────────────
+# The key is the content of the file (not its name or where it came from) plus every setting that changes the result plus the
+# converter itself, so a new release or another tessellation setting never gets an old answer. The cache lives in
+# inbox/cache/ (the hourly sweep only looks at the top level of inbox/), is capped in size and drops its oldest files first.
+CACHE_DIR = INBOX / "cache"
+CACHE_MAX_BYTES = 3 * 1024 ** 3
+
+def _converter_signature() -> str:
+    parts = []
+    for f in (ROOT / "step2glb.py", ROOT / "version.json"):
+        try:
+            st = f.stat(); parts.append(f"{f.name}:{st.st_size}:{st.st_mtime_ns}")
+        except OSError:
+            parts.append(f.name + ":?")
+    return "|".join(parts)
+
+def _cache_key(file_digest: str, suffix: str, quality: float, min_size: float, opts: dict) -> str:
+    clean = {k: v for k, v in sorted(opts.items()) if not k.startswith("_") and k != "force"}
+    blob = json.dumps([file_digest, suffix.lower(), quality, min_size, clean, _converter_signature()], sort_keys=True, default=str)
+    return hashlib.blake2b(blob.encode("utf-8"), digest_size=16).hexdigest()
+
+def _cache_lookup(key: str, dst_path: Path) -> bool:
+    """Copy a kept result to where the job expects it. True when there was one."""
+    try:
+        glb = CACHE_DIR / f"{key}.glb"
+        if not glb.is_file(): return False
+        shutil.copyfile(glb, dst_path)
+        params = CACHE_DIR / f"{key}.glb.params.json"
+        if params.is_file():
+            shutil.copyfile(params, dst_path.with_suffix(dst_path.suffix + ".params.json"))
+        try: os.utime(glb, None)            # recently used stays
+        except OSError: pass
+        return True
+    except OSError:
+        try: dst_path.unlink(missing_ok=True)
+        except OSError: pass
+        return False
+
+def _cache_store(key: str, dst_path: Path) -> None:
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(dst_path, CACHE_DIR / f"{key}.glb")
+        params = dst_path.with_suffix(dst_path.suffix + ".params.json")
+        if params.is_file(): shutil.copyfile(params, CACHE_DIR / f"{key}.glb.params.json")
+        files = [f for f in CACHE_DIR.iterdir() if f.is_file()]
+        total = sum(f.stat().st_size for f in files)
+        for f in sorted(files, key=lambda f: f.stat().st_mtime):
+            if total <= CACHE_MAX_BYTES: break
+            try: sz = f.stat().st_size; f.unlink(); total -= sz
+            except OSError: pass
+    except OSError:
+        pass
+
+
 def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
-                     quality: float, min_size: float,
-                     opts: dict | None = None) -> None:
+                    quality: float, min_size: float,
+                    opts: dict | None = None) -> None:
+    """Wait for a free conversion slot (the job stays "queued", and Cancel still works), then run it."""
+    ckey = (opts or {}).get("_ckey")
+    if ckey and not (opts or {}).get("force") and _cache_lookup(ckey, dst_path):
+        for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf")):
+            try: stale.unlink(missing_ok=True)
+            except OSError: pass
+        with JOBS_LOCK:
+            job = JOBS.get(job_id)
+            if job is not None and job.get("status") != "cancelled":
+                job["log"].append("same file and settings as before: the kept result is used")
+                job["message"] = "opened from the kept result"
+                job["status"] = "done"; job["result"] = dst_path.name; job["progress"] = 100
+        return
+    waited = False
+    while not _CONVERT_SLOTS.acquire(timeout=1.0):
+        with JOBS_LOCK:
+            job = JOBS.get(job_id)
+            if job is None or job.get("status") == "cancelled":
+                cancelled = True
+            else:
+                cancelled = False
+                if not waited:
+                    job["message"] = "waiting for another conversion to finish"
+                    waited = True
+        if cancelled:
+            for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf")):
+                try: stale.unlink(missing_ok=True)
+                except OSError: pass
+            return
+    try:
+        _convert_thread_run(job_id, src_path, dst_path, quality, min_size, opts)
+    finally:
+        _CONVERT_SLOTS.release()
+
+
+def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
+                        quality: float, min_size: float,
+                        opts: dict | None = None) -> None:
     """Spawn step2glb.py for the queued upload.
 
     `opts` carries the optional import-settings modal flags. None / missing
@@ -577,7 +679,7 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
             said = next((l.strip()[1:].strip() for l in reversed(JOBS[job_id]["log"])
                          if l.strip().startswith("✗")), "")
         if cancelled:
-            for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf"), dst_path):
+            for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf"), dst_path, dst_path.with_suffix(".tmp.glb")):
                 try: stale.unlink(missing_ok=True)
                 except OSError: pass
             return
@@ -604,6 +706,7 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
             JOBS[job_id]["status"] = "done"
             JOBS[job_id]["result"] = dst_path.name
             JOBS[job_id]["progress"] = 100
+        if opts.get("_ckey"): _cache_store(opts["_ckey"], dst_path)
     except Exception as e:
         with JOBS_LOCK:
             PROCS.pop(job_id, None)
@@ -611,7 +714,7 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
                 JOBS[job_id]["status"] = "error"
                 JOBS[job_id]["message"] = str(e)
         # A failed job leaves nothing worth keeping; don't let uploads pile up.
-        for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf")):
+        for stale in (src_path, src_path.with_suffix(".xcaf-cache.xbf"), dst_path.with_suffix(".tmp.glb")):
             try: stale.unlink(missing_ok=True)
             except OSError: pass
 
@@ -1107,6 +1210,7 @@ def _mcp_dispatch(msg):
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    timeout = 300          # seconds a read from the client may stall (an upload that stopped, an idle connection)
     extensions_map = {
         **http.server.SimpleHTTPRequestHandler.extensions_map,
         '.js': 'application/javascript', '.mjs': 'application/javascript',
@@ -1595,6 +1699,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                          f"{MAX_UPLOAD_BYTES / 1048576:.0f} MB cap)"
             }, 413)
 
+        # The upload is written in full, then converted into a file about as big: say so now if the disk cannot hold it.
+        try:
+            free = shutil.disk_usage(INBOX).free
+            if free < size * 3:
+                return self._json({
+                    "error": f"not enough free disk space for this file ({free / 1048576:.0f} MB free, "
+                             f"about {size * 3 / 1048576:.0f} MB needed)"
+                }, 507)
+        except OSError:
+            pass
+
         # Bound the job dict before we start (cheap, idempotent).
         _prune_jobs()
 
@@ -1612,12 +1727,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # Stream-read the body, enforcing the cap precisely (Content-Length
         # could lie). Cleanup the partial file on any failure.
         remaining = size
+        digest = hashlib.blake2b(digest_size=16)
         try:
             with open(src, "xb") as f:
                 while remaining > 0:
                     chunk = self.rfile.read(min(remaining, 1048576))
                     if not chunk: break
                     f.write(chunk)
+                    digest.update(chunk)
                     remaining -= len(chunk)
             if remaining > 0:
                 raise RuntimeError(f"upload truncated: {remaining} bytes missing")
@@ -1626,6 +1743,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             except Exception: pass
             return self._json({"error": f"upload failed: {e}"}, 500)
 
+        opts["_ckey"] = _cache_key(digest.hexdigest(), src.suffix, quality, min_size, opts)
         with JOBS_LOCK:
             JOBS[job_id] = {
                 "id": job_id, "status": "queued", "started_at": time.time(), "polled_at": time.time(),
