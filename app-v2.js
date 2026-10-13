@@ -1,13 +1,13 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
-import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=21';
+import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=23';
 import { findFloating } from './floating.js?v=1';
 import * as MEDIT from './meshedit.js?v=5';
 import { dissolvePoints } from './dissolve.js?v=3';
 import * as MT from './meshtools.js?v=2';
 import { partition as splitPartition, buildChildGeometries as splitBuildChildren } from './split.js?v=1';
 import * as SPL from './splines.js?v=3';
-import { reduceIndex, packAttributes } from './simplify-core.js?v=2';
+import { reduceIndex, packAttributes } from './simplify-core.js?v=3';
 import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=2';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
@@ -18,11 +18,9 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { PLYExporter } from 'three/addons/exporters/PLYExporter.js';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
-import { USDZExporter } from 'three/addons/exporters/USDZExporter.js';
+// (USDZExporter, FBXLoader and 3MFLoader are loaded when a file of that kind is exported / opened: most sessions never need them)
 import { GLTFLoader }  from 'three/addons/loaders/GLTFLoader.js';
-import { FBXLoader }   from 'three/addons/loaders/FBXLoader.js';
 import { OBJLoader }   from 'three/addons/loaders/OBJLoader.js';
-import { ThreeMFLoader } from 'three/addons/loaders/3MFLoader.js';
 import { STLLoader }   from 'three/addons/loaders/STLLoader.js';
 // Optional decoders. Imported eagerly so they're cached at boot, but only
 // attached to the loader when present. step2glb.py's --meshopt flag emits GLBs
@@ -600,6 +598,24 @@ document.addEventListener('pointerdown', (e) => {
   api?.activate();
 }, true);
 
+// Sliders: the filled part of a track is drawn by CSS from --sl-pct (see "Sliders" in index.html). It is kept here, for every range
+// input in the app, so no slider has to know about it: when the value is set from code, when it is dragged, when a slider is
+// added to the page, and when the pointer reaches one (a last catch for a slider that was filled in some other way).
+const _sliderFill = (() => {
+  const set = (el) => {
+    const mn = parseFloat(el.min) || 0, mx = el.max === '' ? 100 : parseFloat(el.max), v = parseFloat(el.value);
+    el.style.setProperty('--sl-pct', (mx > mn && v === v ? Math.max(0, Math.min(1, (v - mn) / (mx - mn))) * 100 : 0) + '%');
+  };
+  const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  if (d && d.set && d.get) Object.defineProperty(HTMLInputElement.prototype, 'value', { configurable: true, enumerable: d.enumerable, get: d.get, set(v) { d.set.call(this, v); if (this.type === 'range') set(this); } });
+  const scan = () => document.querySelectorAll('input[type=range]').forEach(set);
+  document.addEventListener('input', (e) => { if (e.target && e.target.type === 'range') set(e.target); }, true);
+  document.addEventListener('pointerover', (e) => { if (e.target && e.target.type === 'range') set(e.target); }, true);
+  let queued = 0;
+  new MutationObserver(() => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; scan(); }); }).observe(document.documentElement, { childList: true, subtree: true });
+  scan();
+  return set;
+})();
 function initScrubber(opts) {
   try { return _initScrubberImpl(opts); }
   catch (e) {
@@ -1156,6 +1172,7 @@ if (typeof document !== 'undefined') {
 // callers fire on state transitions, no per-frame poll.
 function _updateVpHint() {
   try { _offscreenArrowSoon(); } catch (_) {}
+  try { _syncIsolateSmall(); } catch (_) {}
   const el = document.getElementById('vp-hint');
   if (!el) return;
   const selN  = (state.selected && state.selected.size) || 0;
@@ -1437,7 +1454,7 @@ const _MeshWorkers = (() => {
       const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
       workers = [];
       for (let i = 0; i < n; i++) {
-        const w = new Worker(new URL('./mesh-worker.js?v=27', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./mesh-worker.js?v=34', import.meta.url), { type: 'module' });
         w.onmessage = (e) => {
           const p = pending.get(e.data && e.data.id);
           if (!p) return;
@@ -2483,7 +2500,11 @@ async function _handleSelectedFile(file) {
   // (This used to look only at whether live parts were left, so a scene
   // whose parts had all been deleted was replaced, undo history and all.)
   const untouched = state.parts.length === 0 && !(state.history && state.history.length) && !(state.redo && state.redo.length);
-  if (!forceAppend && !window.__moNoTabs && !untouched) { _Tabs.add({ file }); return; }
+  if (!forceAppend && !window.__moNoTabs && !untouched) {
+    // (the start screen is shown over the scene: left up it would hide the new tab, which opens behind it)
+    try { if (_welcomeActive()) _Welcome?.hide?.(); } catch (_) {}
+    _Tabs.add({ file }); return;
+  }
   state._recoveredFile = file.__moRecovered ? file : null;       // (a scene brought back from a recovery copy: see _Autosave.recovered)
 
   // If the welcome modal is open, hide it before showing the import-settings
@@ -3729,7 +3750,7 @@ const _Settings = (() => {
     const vx = $s('set-viewport-extra');
     if (vx) vx.innerHTML = _toggleRow('set-hilite', 'Highlight small parts', !!$s('toggle-highlight')?.checked, 'Tint the parts that are under the size threshold of Delete small parts.') +
       _toggleRow('set-offscreen', 'Arrow to a selection out of view', p.offscreenArrow !== false, 'A faint arrow at the edge of the view points to the selection when none of it is on screen. Click it to frame the selection.') +
-      _toggleRow('set-hover-link', 'Link the list and the view on hover', p.hoverLink !== false, 'Point at a part in the list and it pulses in the view; point at it in the view and its row lights up in the list.') +
+      _toggleRow('set-hover-link', 'Link the list and the view on hover', p.hoverLink !== false, 'Point at a part in the list and it lights up in the view.') +
       _toggleRow('set-sel-glow', 'Glow on the selection', _Prefs.get('selGlow') !== false, 'A soft cyan light on the surface of the selected parts, brightest at their edges, so they stand out in a busy model. Off: the thin outline alone.') +
       _group('Shading') +
       `<div class="set-row set-stack"><span>CAD view look<span class="set-help">The matcap the CAD view (key 6) shades with.</span></span>${_chipsPref('cadLook', Object.entries(_CAD_LOOKS).map(([k, l]) => [l.label, k]), _cadLook())}</div>` +
@@ -8270,8 +8291,11 @@ function tick() {
         _watchdogLastHealthyMs = performance.now();
       }
       try { updateAxisGizmo(); } catch (e) { _logTickErr('axis-gizmo', e); }
-      state.needsRender = false;
-      if (state.activeFrames > 0) state.activeFrames--;
+      // A frame that failed is asked for again (up to the point the recovery steps above have had their turn), so a passing
+      // failure does not leave a stale or blank picture until something else happens to redraw.
+      const retryFrame = !!renderErr && state._renderErrCount <= 120;
+      state.needsRender = retryFrame;
+      if (state.activeFrames > 0 && !retryFrame) state.activeFrames--;
       frameCount++;
     }
 
@@ -9025,7 +9049,7 @@ function _buildHierarchyFromScene(scene, meshToPart) {
 // geometries made of positions, normals and an index are looked at (a UV or a
 // vertex colour could differ between copies and would be lost). Returns
 // { groups, shared } where `shared` is how many geometries were replaced.
-function _shareRepeatedGeometry(meshList) {
+async function _shareRepeatedGeometry(meshList) {
   const byGeom = new Map();
   for (const m of meshList) {
     const g = m.geometry;
@@ -9046,11 +9070,14 @@ function _shareRepeatedGeometry(meshList) {
   }
   const ents = [...byGeom.values()].filter(e => e.plain);
   if (ents.length < 2) return { groups: 0, shared: 0 };
-  const res = findRepeats(ents.map(e => ({
+  const items = ents.map(e => ({
     positions: e.g.attributes.position.array,
     index: e.g.index ? e.g.index.array : null,
     normals: e.g.attributes.normal ? e.g.attributes.normal.array : null,
-  })));
+  }));
+  // (Tried on a worker: starting the pool and copying every part's numbers during the load cost seconds on a 1,500-part scene
+  // where the search itself takes a millisecond, so it stays here. The worker op 'repeats' is still in mesh-worker.js.)
+  const res = findRepeats(items);
   let shared = 0;
   const M = new THREE.Matrix4();
   for (const grp of res.groups) {
@@ -9778,6 +9805,7 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
       ctx.drawImage(cv, 0, 0, outW, outH);
     } finally {
       renderer.setPixelRatio?.(prevPxRatio);
+      onResize._w = -1;                                   // (the size above went in behind onResize's back: its cache would skip the restore)
       try { onResize(); } catch (_) { renderer.setSize(prevW / (prevPxRatio || 1), prevH / (prevPxRatio || 1), false); }
       if (stashedAspect2 != null) {
         camera.aspect = stashedAspect2;
@@ -14449,7 +14477,7 @@ function _transformPollLoop() {
   if (isGroupTarget) {
     state.pivot?.updateWorldMatrix?.(true, false); // flush after position change before reading
     const pm = state.pivot?.matrixWorld?.elements;
-    const firstId = state.selected ? [...state.selected][0] : null;
+    const firstId = state.selected && state.selected.size ? state.selected.values().next().value : null;
     const fp = firstId != null && typeof getPart === 'function' ? getPart(firstId) : null;
     fp?.mesh?.updateMatrixWorld?.(true);
     const fm = fp?.mesh?.matrixWorld?.elements;
@@ -14625,6 +14653,7 @@ function buildAxisGizmo() {
     </g>`;
   }
   svg.innerHTML = html;
+  _AXG.last = null;
   svg.querySelectorAll('.axg-handle, .axg-face').forEach(el => {
     el.addEventListener('click', ev => { ev.stopPropagation(); _goAxisView(el.dataset.axis); });
   });
@@ -14636,6 +14665,11 @@ function updateAxisGizmo() {
   if (!svg) return;
   // Camera-space projection: world axes → view space (rotation only).
   _AXG.m3.setFromMatrix4(camera.matrixWorldInverse);
+  // Only the camera's turn changes the cube, and most frames (a hover, a selection) do not turn it: nothing to redraw then.
+  const el9 = _AXG.m3.elements, last9 = _AXG.last || (_AXG.last = [NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN]);
+  let same9 = true;
+  for (let i = 0; i < 9; i++) if (el9[i] !== last9[i]) { same9 = false; last9[i] = el9[i]; }
+  if (same9) return;
   const project = (x, y, z) => {
     _AXG.v.set(x, y, z).applyMatrix3(_AXG.m3);
     return { x: _AXG.v.x, y: -_AXG.v.y, z: _AXG.v.z }; // SVG y is flipped
@@ -16102,6 +16136,7 @@ const MAX_FLAGGED_HIGHLIGHTS   = 2500;
 // is GC'd. Keep the value disposed manually before delete (WeakMap doesn't
 // give us hooks for finalization).
 const _edgesCache = new WeakMap();
+const _edgesFailed = new WeakSet();       // geometries whose outline could not be built: not tried again on every click
 // Where two faces of a part do not meet exactly (a crack from a STEP tessellation, a decimated mesh, a T-junction), the
 // edge of one side has no partner on the other and is drawn as a line of its own: a double line along a curved edge. So
 // vertices closer than a small tolerance count as one point when the outline is found. The tolerance scales with the part,
@@ -16111,34 +16146,123 @@ function _edgeWeldTol(g) {
   const d = g.boundingBox && !g.boundingBox.isEmpty() ? g.boundingBox.min.distanceTo(g.boundingBox.max) : 0;
   return Math.max(1e-4, d * 2e-5);
 }
-// The same triangles with the vertices in one cell of size tol merged (indices remapped): a copy only for finding the edges.
-function _weldedForEdges(g, tol) {
-  const pos = g.attributes.position, n = pos.count, src = g.index ? g.index.array : null, m = src ? src.length : n;
-  const inv = 1 / tol, cells = new Map(), remap = new Uint32Array(n), out = [];
-  for (let i = 0; i < n; i++) {
-    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-    const k = Math.round(x * inv) + "," + Math.round(y * inv) + "," + Math.round(z * inv);
-    let w = cells.get(k);
-    if (w === undefined) { w = out.length / 3; cells.set(k, w); out.push(x, y, z); }
-    remap[i] = w;
+// The outline's one routine, as source text: the worker runs it, and so does the main thread for a small part (see _EDGES_WORKER_SRC).
+const _EDGES_CORE_SRC = `
+function __edgesCore(d) {
+  var pos = d.pos, idx = d.idx, nrm = d.nrm || null;
+  var vCount = pos.length / 3, triCount = idx ? idx.length / 3 : vCount / 3;
+  var cosT = Math.cos(d.thresholdDeg * Math.PI / 180), P = 1 / (d.weld || 1e-4);
+  var ids = new Uint32Array(vCount), map = new Map(), next = 0, i, k, w;
+  for (i = 0; i < vCount; i++) {
+    k = Math.round(pos[i*3]*P) + ',' + Math.round(pos[i*3+1]*P) + ',' + Math.round(pos[i*3+2]*P);
+    w = map.get(k);
+    if (w === undefined) { w = next++; map.set(k, w); }
+    ids[i] = w;
   }
-  const idx = new Uint32Array(m);
-  for (let i = 0; i < m; i++) idx[i] = remap[src ? src[i] : i];
-  const w = new THREE.BufferGeometry();
-  w.setAttribute("position", new THREE.Float32BufferAttribute(out, 3));
-  w.setIndex(new THREE.BufferAttribute(idx, 1));
-  return w;
+  map = null;
+  var N = next, edges = new Map(), out = [];
+  var push = function (a, b) { out.push(pos[a*3], pos[a*3+1], pos[a*3+2], pos[b*3], pos[b*3+1], pos[b*3+2]); };
+  // Faces that meet smoothly (under the threshold) are one patch. A curved surface that was tessellated coarsely, such as the wire
+  // of a spring with eight sides, has its facets meeting at a modest angle; it would be drawn as a bundle of lines along the wire.
+  // A ring of patches that turns once round (each step 30 to 55 degrees, the steps adding up to about 360) is a smooth surface,
+  // not a set of features, so its edges are left out. A chamfer or a bevel is not a ring and keeps its lines.
+  var parent = new Int32Array(triCount); for (i = 0; i < triCount; i++) parent[i] = i;
+  var find = function (a) { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
+  var sharp = [];                                   // va, vb, tri, tri, cos of the angle
+  var nsm = function (a, b) { return a === b || nrm[a*3]*nrm[b*3] + nrm[a*3+1]*nrm[b*3+1] + nrm[a*3+2]*nrm[b*3+2] >= 0.966; };
+  var v = [0, 0, 0], h = [0, 0, 0];
+  for (var t = 0; t < triCount; t++) {
+    v[0] = idx ? idx[t*3] : t*3; v[1] = idx ? idx[t*3+1] : t*3+1; v[2] = idx ? idx[t*3+2] : t*3+2;
+    h[0] = ids[v[0]]; h[1] = ids[v[1]]; h[2] = ids[v[2]];
+    if (h[0] === h[1] || h[1] === h[2] || h[2] === h[0]) continue;
+    var ax = pos[v[0]*3], ay = pos[v[0]*3+1], az = pos[v[0]*3+2];
+    var e1x = pos[v[1]*3]-ax, e1y = pos[v[1]*3+1]-ay, e1z = pos[v[1]*3+2]-az;
+    var e2x = pos[v[2]*3]-ax, e2y = pos[v[2]*3+1]-ay, e2z = pos[v[2]*3+2]-az;
+    var nx = e1y*e2z - e1z*e2y, ny = e1z*e2x - e1x*e2z, nz = e1x*e2y - e1y*e2x;
+    var len = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1; nx /= len; ny /= len; nz /= len;
+    for (var j = 0; j < 3; j++) {
+      var j1 = (j + 1) % 3, key = h[j] * N + h[j1], rkey = h[j1] * N + h[j];
+      var o = edges.get(rkey);
+      if (o) {
+        // a triangle with no area has no normal (zero): it is no feature, whatever the dot product says
+        var c = (nx === 0 && ny === 0 && nz === 0) || (o[2] === 0 && o[3] === 0 && o[4] === 0) ? 1 : nx*o[2] + ny*o[3] + nz*o[4];
+        // An edge the mesh itself shades as smooth (the vertex normals carry on across it) and that turns by no more than 60
+        // degrees is the facet of a curved surface, not a feature, whatever its angle.
+        if (c <= cosT && !(nrm && nsm(o[0], v[j1]) && nsm(o[1], v[j]))) sharp.push(v[j], v[j1], o[5], t, c);
+        else { var ra = find(o[5]), rb = find(t); if (ra !== rb) parent[ra] = rb; }
+        edges.set(rkey, null);
+      } else if (!edges.has(key)) {
+        edges.set(key, [v[j], v[j1], nx, ny, nz, t]);
+      }
+    }
+  }
+  edges.forEach(function (o) { if (o) push(o[0], o[1]); });
+  // Steps between patches in the range of a facet of a curved surface.
+  var cosHi = Math.cos(55 * Math.PI / 180), DEG = 180 / Math.PI;
+  var pairs = new Map(), nS = sharp.length / 5, cand = new Uint8Array(nS), pa = new Int32Array(nS), pb = new Int32Array(nS);
+  for (i = 0; i < nS; i++) {
+    if (sharp[i*5+4] < cosHi) continue;
+    var a = find(sharp[i*5+2]), b = find(sharp[i*5+3]);
+    if (a === b) continue;
+    if (a > b) { var tmp = a; a = b; b = tmp; }
+    pa[i] = a; pb[i] = b; cand[i] = 1;
+    var pk = a * triCount + b, pr = pairs.get(pk);
+    if (!pr) { pr = [a, b, 0, 0]; pairs.set(pk, pr); }
+    pr[2] += Math.acos(Math.max(-1, Math.min(1, sharp[i*5+4]))) * DEG; pr[3]++;
+  }
+  var adj = new Map();
+  pairs.forEach(function (pr) {
+    (adj.get(pr[0]) || adj.set(pr[0], []).get(pr[0])).push(pr);
+    (adj.get(pr[1]) || adj.set(pr[1], []).get(pr[1])).push(pr);
+  });
+  var smooth = new Set(), keep = new Set(), seen = new Set();
+  adj.forEach(function (_, start) {
+    if (seen.has(start)) return;
+    var stack = [start], members = [], ok = true, sum = 0, cnt = 0;
+    seen.add(start);
+    while (stack.length) {
+      var p = stack.pop(); members.push(p);
+      var ps = adj.get(p);
+      if (ps.length !== 2) ok = false;
+      for (var q = 0; q < ps.length; q++) {
+        var other = ps[q][0] === p ? ps[q][1] : ps[q][0];
+        if (!seen.has(other)) { seen.add(other); stack.push(other); }
+      }
+    }
+    if (!ok || members.length < 6) return;
+    var counted = new Set(), best = null;
+    members.forEach(function (p) { adj.get(p).forEach(function (pr) { if (!counted.has(pr)) { counted.add(pr); sum += pr[2] / pr[3]; cnt++; if (!best || pr[3] > best[3]) best = pr; } }); });
+    // One line of the ring stays, the one with the most edges, so the part still shows where it is.
+    if (cnt === members.length && sum > 300 && sum < 420) { members.forEach(function (p) { smooth.add(p); }); keep.add(best[0] * triCount + best[1]); }
+  });
+  for (i = 0; i < nS; i++) {
+    if (cand[i] && smooth.has(pa[i]) && !keep.has(pa[i] * triCount + pb[i])) continue;
+    push(sharp[i*5], sharp[i*5+1]);
+  }
+  return new Float32Array(out);
+}
+`;
+const _edgesCoreFn = (() => { try { return new Function(_EDGES_CORE_SRC + ';return __edgesCore;')(); } catch (_) { return null; } })();
+// The vertex normals of a mesh, when it has plain ones: they tell the outline which edges the mesh itself shades as smooth.
+function _edgeNormals(g) {
+  const n = g.attributes.normal;
+  return n && !n.isInterleavedBufferAttribute && !n.normalized && n.itemSize === 3 && n.array instanceof Float32Array && n.count === g.attributes.position.count ? n.array : null;
 }
 function _getEdgesGeom(g) {
   let e = _edgesCache.get(g);
   if (e) return e;
+  if (_edgesFailed.has(g)) return null;
   try {
-    const welded = _weldedForEdges(g, _edgeWeldTol(g));
-    e = new THREE.EdgesGeometry(welded, 30);
-    e.parameters.geometry = null;                 // (the welded copy is not kept with the edges)
-    welded.dispose();
+    const pos = g.attributes.position;
+    let p = pos.array;
+    if (pos.isInterleavedBufferAttribute || pos.normalized || !(p instanceof Float32Array) || pos.itemSize !== 3) {
+      p = new Float32Array(pos.count * 3);
+      for (let i = 0; i < pos.count; i++) { p[i * 3] = pos.getX(i); p[i * 3 + 1] = pos.getY(i); p[i * 3 + 2] = pos.getZ(i); }
+    }
+    e = new THREE.BufferGeometry();
+    e.setAttribute('position', new THREE.BufferAttribute(_edgesCoreFn({ pos: p, idx: g.index ? g.index.array : null, nrm: _edgeNormals(g), thresholdDeg: 30, weld: _edgeWeldTol(g) }), 3));
   }
-  catch (_) { return null; }
+  catch (_) { _edgesFailed.add(g); return null; }
   _edgesCache.set(g, e);
   return e;
 }
@@ -16163,45 +16287,11 @@ const _edgesWaitingSet = new Set();
 const _edgesInFlight = new Map();     // job id → geometry
 const _edgesNoWorker = new WeakSet(); // geometries the worker can't take (non-float positions)
 let _edgesWorker = null, _edgesWorkerBroken = false, _edgesSeq = 0, _edgesRefreshTimer = 0;
-const _EDGES_WORKER_SRC = `
+const _EDGES_WORKER_SRC = _EDGES_CORE_SRC + `
 self.onmessage = function (e) {
-  var d = e.data, pos = d.pos, idx = d.idx;
-  var vCount = pos.length / 3, triCount = idx ? idx.length / 3 : vCount / 3;
-  var cosT = Math.cos(d.thresholdDeg * Math.PI / 180), P = 1 / (d.weld || 1e-4);
-  var ids = new Uint32Array(vCount), map = new Map(), next = 0, i, k, w;
-  for (i = 0; i < vCount; i++) {
-    k = Math.round(pos[i*3]*P) + ',' + Math.round(pos[i*3+1]*P) + ',' + Math.round(pos[i*3+2]*P);
-    w = map.get(k);
-    if (w === undefined) { w = next++; map.set(k, w); }
-    ids[i] = w;
-  }
-  map = null;
-  var N = next, edges = new Map(), out = [];
-  var push = function (a, b) { out.push(pos[a*3], pos[a*3+1], pos[a*3+2], pos[b*3], pos[b*3+1], pos[b*3+2]); };
-  var v = [0, 0, 0], h = [0, 0, 0];
-  for (var t = 0; t < triCount; t++) {
-    v[0] = idx ? idx[t*3] : t*3; v[1] = idx ? idx[t*3+1] : t*3+1; v[2] = idx ? idx[t*3+2] : t*3+2;
-    h[0] = ids[v[0]]; h[1] = ids[v[1]]; h[2] = ids[v[2]];
-    if (h[0] === h[1] || h[1] === h[2] || h[2] === h[0]) continue;
-    var ax = pos[v[0]*3], ay = pos[v[0]*3+1], az = pos[v[0]*3+2];
-    var e1x = pos[v[1]*3]-ax, e1y = pos[v[1]*3+1]-ay, e1z = pos[v[1]*3+2]-az;
-    var e2x = pos[v[2]*3]-ax, e2y = pos[v[2]*3+1]-ay, e2z = pos[v[2]*3+2]-az;
-    var nx = e1y*e2z - e1z*e2y, ny = e1z*e2x - e1x*e2z, nz = e1x*e2y - e1y*e2x;
-    var len = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1; nx /= len; ny /= len; nz /= len;
-    for (var j = 0; j < 3; j++) {
-      var j1 = (j + 1) % 3, key = h[j] * N + h[j1], rkey = h[j1] * N + h[j];
-      var o = edges.get(rkey);
-      if (o) {
-        if (nx*o[2] + ny*o[3] + nz*o[4] <= cosT) push(v[j], v[j1]);
-        edges.set(rkey, null);
-      } else if (!edges.has(key)) {
-        edges.set(key, [v[j], v[j1], nx, ny, nz]);
-      }
-    }
-  }
-  edges.forEach(function (o) { if (o) push(o[0], o[1]); });
-  var arr = new Float32Array(out);
-  self.postMessage({ id: d.id, edges: arr }, [arr.buffer]);
+  var arr;
+  try { arr = __edgesCore(e.data); } catch (err) { self.postMessage({ id: e.data.id, failed: true }); return; }
+  self.postMessage({ id: e.data.id, edges: arr }, [arr.buffer]);
 };`;
 function _edgesWorkerGet() {
   if (_edgesWorker || _edgesWorkerBroken) return _edgesWorker;
@@ -16210,7 +16300,8 @@ function _edgesWorkerGet() {
     _edgesWorker.onmessage = (ev) => {
       const g = _edgesInFlight.get(ev.data.id);
       _edgesInFlight.delete(ev.data.id);
-      if (g) {
+      if (g && ev.data.failed) _edgesFailed.add(g);      // this part only: it is drawn as a box, and the worker carries on
+      else if (g && !_edgesCache.has(g)) {                // (an inline build or a copy that shares the geometry may have got there first)
         const eg = new THREE.BufferGeometry();
         eg.setAttribute('position', new THREE.BufferAttribute(ev.data.edges, 3));
         _edgesCache.set(g, eg);
@@ -16279,7 +16370,9 @@ function _edgesPump() {
     const p = new Float32Array(pos.array);                   // the worker gets its own copy
     const ix = g.index ? new Uint32Array(g.index.array) : null;
     _edgesInFlight.set(id, g);
-    wk.postMessage({ id, pos: p, idx: ix, thresholdDeg: 30, weld: _edgeWeldTol(g) }, ix ? [p.buffer, ix.buffer] : [p.buffer]);
+    const nsrc = _edgeNormals(g), nr = nsrc ? new Float32Array(nsrc) : null;
+    const tr = [p.buffer]; if (ix) tr.push(ix.buffer); if (nr) tr.push(nr.buffer);
+    wk.postMessage({ id, pos: p, idx: ix, nrm: nr, thresholdDeg: 30, weld: _edgeWeldTol(g) }, tr);
   }
 }
 // Edges for a geometry without ever stalling: the cached result, an inline
@@ -16288,6 +16381,7 @@ function _edgesPump() {
 function _edgesFor(g, deadline) {
   const cached = _edgesCache.get(g);
   if (cached) return cached;
+  if (_edgesFailed.has(g)) return null;
   const pos = g.attributes && g.attributes.position;
   if (!pos) return null;
   const tris = g.index ? g.index.count / 3 : pos.count / 3;
@@ -16388,45 +16482,44 @@ function _buildNgonEdgesGeom(geom) {
   const posAttr = geom.attributes.position;
   const idxArr = geom.index?.array;
   if (!posAttr) return null;
+  const n = Math.max(1, posAttr.count);
   const triCount = idxArr ? idxArr.length / 3 : posAttr.count / 3;
   const vi = (i) => idxArr ? idxArr[i] : i;
+  const keyOf = (u, v) => u < v ? u * n + v : v * n + u;          // (a number, not a string: a pair of indices below 2^26 stays exact)
 
-  // Pass 1: mark diagonal edges from each consecutive triangle pair.
+  // Pass 1: the diagonal of a four-sided cell is the edge two neighbouring triangles share. They are paired in order, and a
+  // triangle that has no partner (a pole of a sphere, the tip of a cone) is stepped over on its own, so the pairs that follow
+  // do not slip by one.
   const diagonals = new Set();
-  for (let t = 0; t + 1 < triCount; t += 2) {
-    const b1 = t * 3, b2 = (t + 1) * 3;
-    const t1 = [vi(b1), vi(b1+1), vi(b1+2)];
-    const t2 = [vi(b2), vi(b2+1), vi(b2+2)];
-    const shared = t1.filter(v => t2.includes(v));
-    if (shared.length === 2) {
-      const lo = Math.min(shared[0], shared[1]), hi = Math.max(shared[0], shared[1]);
-      diagonals.add(`${lo}:${hi}`);
-    }
+  for (let t = 0; t + 1 < triCount;) {
+    const b1 = t * 3, b2 = b1 + 3;
+    const a0 = vi(b1), a1 = vi(b1 + 1), a2 = vi(b1 + 2), c0 = vi(b2), c1 = vi(b2 + 1), c2 = vi(b2 + 2);
+    let shared = 0, s0 = 0, s1 = 0;
+    for (const v of [a0, a1, a2]) if (v === c0 || v === c1 || v === c2) { if (shared === 0) s0 = v; else s1 = v; shared++; }
+    if (shared === 2 && s0 !== s1) { diagonals.add(keyOf(s0, s1)); t += 2; }
+    else t += 1;
   }
 
-  // Pass 2: collect all edges, skipping diagonals and duplicates.
+  // Pass 2: every other edge, once.
   const edgeSet = new Set();
   for (let t = 0; t < triCount; t++) {
     const b = t * 3;
-    const a = vi(b), c = vi(b+1), d = vi(b+2);
-    for (const [u, v] of [[a,c],[c,d],[a,d]]) {
+    const a = vi(b), c = vi(b + 1), d = vi(b + 2);
+    for (let e = 0; e < 3; e++) {
+      const u = e === 0 ? a : e === 1 ? c : a, v = e === 0 ? c : e === 1 ? d : d;
       if (u === v) continue;
-      const lo = Math.min(u,v), hi = Math.max(u,v);
-      const key = `${lo}:${hi}`;
+      const key = keyOf(u, v);
       if (!diagonals.has(key)) edgeSet.add(key);
     }
   }
 
   const p = posAttr.array;
-  const edges = [...edgeSet];
-  const verts = new Float32Array(edges.length * 6);
+  const verts = new Float32Array(edgeSet.size * 6);
   let off = 0;
-  for (const key of edges) {
-    const sep = key.indexOf(':');
-    const ai = parseInt(key.slice(0, sep)) * 3;
-    const bi = parseInt(key.slice(sep + 1)) * 3;
-    verts[off++]=p[ai]; verts[off++]=p[ai+1]; verts[off++]=p[ai+2];
-    verts[off++]=p[bi]; verts[off++]=p[bi+1]; verts[off++]=p[bi+2];
+  for (const key of edgeSet) {
+    const hi = key % n, ai = ((key - hi) / n) * 3, bi = hi * 3;
+    verts[off++] = p[ai]; verts[off++] = p[ai + 1]; verts[off++] = p[ai + 2];
+    verts[off++] = p[bi]; verts[off++] = p[bi + 1]; verts[off++] = p[bi + 2];
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(verts, 3));
@@ -16454,6 +16547,7 @@ function _syncPrimWireframe(p) {
     }
     const made = { g, pos, posV: pos?.version, idx, idxV: idx ? idx.version : -1 };
     const wfGeom = _buildNgonEdgesGeom(p.mesh.geometry);
+    if (!wfGeom) return;
     if (existing) {
       try { existing.geometry?.dispose(); } catch (_) {}
       existing.geometry = _stampGeometry(wfGeom);
@@ -16486,7 +16580,7 @@ function _selOutlinePlan(deadline) {
       const p = getPart(id);
       if (!p || p.deleted || !p.visible || !p.mesh || !p.mesh.isMesh || !p.mesh.geometry) continue;
       const e = _edgesFor(p.mesh.geometry, deadline);
-      if (e === _EDGES_PENDING || !e || !e.attributes.position || !e.attributes.position.count) continue;
+      if (e === _EDGES_PENDING || !e || !e.attributes.position) continue;      // (a smooth part with no feature edges stays in: its glow is its highlight)
       items.push({ p, e }); key += p.mesh.id + ':' + e.id + ',';
     }
   }
@@ -16636,7 +16730,10 @@ function _applySelectionColorsImpl() {
     if (!usedBboxFallback && totalFloats < SELECTION_EDGE_VERT_BUDGET) {
       const edgesGeom = _edgesFor(geom, edgeDeadline);
       if (edgesGeom === _EDGES_PENDING) edgesPending = true;
-      else epos = edgesGeom?.attributes?.position?.array || null;
+      else {
+        epos = edgesGeom?.attributes?.position?.array || null;
+        if (epos && !epos.length) { epos = null; edgesPending = true; }      // no feature edges (a smooth part): a box, not counted against the budget
+      }
       // Skip parts whose feature-edges blew up on construction (returned null);
       // they'll fall through to the bbox path below for this iteration only.
       if (epos && totalFloats + epos.length > SELECTION_EDGE_VERT_BUDGET) {
@@ -17194,11 +17291,42 @@ function _marqueeHits(m) {
     }
     if (pts.length === 0) continue;
 
-    // Convex hull (≤6 vertices in practice) → SAT vs marquee rect.
+    // Convex hull (≤6 vertices in practice) → SAT vs marquee rect. This is only the first look: the box of a part is a poor stand-in for the
+    // part (a thin plate on a slant has a box much bigger than itself), so a part that passes is then tested on its own triangles.
     const hull = pts.length >= 3 ? _convexHull2D(pts) : pts;
-    if (_polyRectOverlap(hull, rMinX, rMinY, rMaxX, rMaxY)) matched.add(p.partId);
+    if (!_polyRectOverlap(hull, rMinX, rMinY, rMaxX, rMaxY)) continue;
+    const exact = (p.mesh && pts.length === 8) ? _meshTouchesRect(p.mesh, cw, ch, cx, cy, rMinX, rMinY, rMaxX, rMaxY) : null;
+    if (exact !== false) matched.add(p.partId);
   }
   return matched;
+}
+// Does any triangle of a mesh, as drawn, touch a rectangle on the screen? (null: it could not be told, the box decides.)
+// A part with many triangles is tested on a spread of its points instead, so a drag over a big scene stays quick.
+let _mtV = null, _mtM = null;
+function _meshTouchesRect(mesh, cw, ch, cx, cy, x0, y0, x1, y1) {
+  const g = mesh.geometry, pos = g && g.attributes && g.attributes.position;
+  if (!pos || mesh.isInstancedMesh) return null;
+  if (!_mtV) { _mtV = new THREE.Vector3(); _mtM = new THREE.Matrix4(); }
+  _mtM.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(mesh.matrixWorld);
+  const n = pos.count, idx = g.index;
+  const sx = new Float32Array(n), sy = new Float32Array(n), ok = new Uint8Array(n);
+  const tris = idx ? idx.count / 3 : n / 3;
+  const stride = tris > 3000 ? Math.ceil(n / 4000) : 1;
+  for (let i = 0; i < n; i += stride) {
+    _mtV.fromBufferAttribute(pos, i).applyMatrix4(_mtM);
+    if (_mtV.z < -1 || _mtV.z > 1) continue;
+    sx[i] = (_mtV.x + 1) * 0.5 * cw + cx; sy[i] = (1 - _mtV.y) * 0.5 * ch + cy; ok[i] = 1;
+    if (stride > 1 && sx[i] >= x0 && sx[i] <= x1 && sy[i] >= y0 && sy[i] <= y1) return true;
+  }
+  if (stride > 1) return false;
+  const a = { x: 0, y: 0 }, b = { x: 0, y: 0 }, c = { x: 0, y: 0 }, tri = [a, b, c];
+  for (let t = 0; t < tris; t++) {
+    const i0 = idx ? idx.getX(t * 3) : t * 3, i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, i2 = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    if (!(ok[i0] && ok[i1] && ok[i2])) continue;
+    a.x = sx[i0]; a.y = sy[i0]; b.x = sx[i1]; b.y = sy[i1]; c.x = sx[i2]; c.y = sy[i2];
+    if (_polyRectOverlap(tri, x0, y0, x1, y1)) return true;
+  }
+  return false;
 }
 
 // While the marquee is dragged: show what it would select, as it goes. The real
@@ -18145,7 +18273,119 @@ let _UNDO_MAX = Math.max(10, Math.min(1000, +_Prefs.get('undoMax') || 200));
 const _UNDO_MAX_HEAVY = 30;
 function _setUndoMax(n) { _UNDO_MAX = Math.max(10, Math.min(1000, +n || 200)); }
 const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'recenter', 'normals', 'merge', 'flatten', 'duplicate', 'paste-group', 'addPart', 'decimate', 'budget']);
+// ── Geometry nobody can reach any more ───────────────────────────────────────
+// Decimate, Budget, Repair, Remesh … each put the geometry they make into state.geomByHash and keep the old one so that undo can put
+// it back. When the undo (or redo) entry that held it falls off the end, nothing frees it: on a large scene every superseded
+// full-size geometry stays in memory and on the GPU until the model is cleared. This finds those and frees them.
+//  · Only tool-made entries are looked at (a hash like "dec_12"; the file's own geometries keep their uuid / idx_ names).
+//  · An entry counts as reachable if a part, an instanced group, a mesh in the scene or ANY undo / redo entry mentions its hash
+//    or holds the geometry itself (the entries are searched as plain data, to a limited depth).
+//  · It must be unreachable on two sweeps in a row, a few seconds apart, before it goes; the GPU buffers are released two frames
+//    after it leaves the table (the same wait _drainDisposeQueue uses for the WebGPU backend).
+let _geomSweepTimer = 0, _geomSweepMaybe = new Set();
+function _geomSweepSoon() {
+  clearTimeout(_geomSweepTimer);
+  _geomSweepTimer = setTimeout(() => {
+    const run = () => { try { _geomSweep(); } catch (e) { console.warn('[sweep]', e); } };
+    if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 4000 }); else run();
+  }, 3000);
+}
+function _geomSweepReachable() {
+  const hashes = new Set(), geoms = new Set(), seen = new WeakSet();
+  const table = state.geomByHash;
+  const scan = (v, depth) => {
+    if (v == null || depth > 7) return;
+    const t = typeof v;
+    if (t === 'string') { if (table.has(v)) hashes.add(v); return; }
+    if (t !== 'object') return;
+    if (seen.has(v)) return;
+    seen.add(v);
+    if (v.isBufferGeometry) { geoms.add(v); return; }
+    if (ArrayBuffer.isView(v) || v instanceof ArrayBuffer || v instanceof Node) return;
+    if (v.isObject3D) { if (v.geometry && v.geometry.isBufferGeometry) geoms.add(v.geometry); for (const c of v.children || []) scan(c, depth + 1); return; }
+    if (v.isMaterial || v.isTexture || v.isMatrix4 || v.isVector3 || v.isBox3 || v.isColor || v.isQuaternion) return;
+    if (v instanceof Map) { for (const [k, x] of v) { scan(k, depth + 1); scan(x, depth + 1); } return; }
+    if (v instanceof Set || Array.isArray(v)) { for (const x of v) scan(x, depth + 1); return; }
+    for (const k of Object.keys(v)) scan(v[k], depth + 1);
+  };
+  for (const p of state.parts) { if (p.hash != null) hashes.add(p.hash); if (p.mesh && p.mesh.geometry) geoms.add(p.mesh.geometry); }
+  scan(state.instancedGroups, 0);
+  scan(state.history, 0);
+  scan(state.redo, 0);
+  for (const root of [state.partsRoot, state.pivot]) if (root) root.traverse(o => { if (o.geometry && o.geometry.isBufferGeometry) geoms.add(o.geometry); });
+  return { hashes, geoms };
+}
+function _geomSweep() {
+  const table = state.geomByHash;
+  if (!table || !table.size || state._geomSweepBusy) return;
+  const TOOL_MADE = /^(?!idx_)[a-z]+_\d+$/i;
+  const cand = [];
+  for (const [h, g] of table) if (typeof h === 'string' && TOOL_MADE.test(h)) cand.push([h, g]);
+  if (!cand.length) { _geomSweepMaybe.clear(); return; }
+  const { hashes, geoms } = _geomSweepReachable();
+  const orphans = cand.filter(([h, g]) => !hashes.has(h) && !geoms.has(g));
+  const confirmed = orphans.filter(([h]) => _geomSweepMaybe.has(h));
+  _geomSweepMaybe = new Set(orphans.map(([h]) => h));
+  if (orphans.length && !confirmed.length) _geomSweepSoon();          // look once more before anything is freed
+  if (!confirmed.length) return;
+  const gone = [];
+  for (const [h, g] of confirmed) { if (table.get(h) === g) { table.delete(h); gone.push(g); } _geomSweepMaybe.delete(h); }
+  state._geomSweepBusy = true;
+  (async () => {
+    try {
+      await _nextFrame(); await _nextFrame();
+      for (const g of gone) {
+        try { _disposeEdgesFor(g); } catch (_) {}
+        if (g.boundsTree) { try { g.disposeBoundsTree?.(); } catch (_) {} }
+        _safeDispose(g);
+      }
+      Log.debug(`freed ${gone.length} geometries nothing refers to any more`, { tag: 'dispose' });
+    } finally { state._geomSweepBusy = false; }
+  })();
+}
+// A deleted part stays in state.parts (its place in the list is its number, and a lot of code counts on that), and it keeps its mesh
+// and geometry so that Undo can bring it back. Once the Delete entry has fallen off the far end of the history it can never come
+// back: its geometry is released here (the part itself stays as an empty shell, flagged deleted, which every loop already skips).
+const _purgeQueue = [];
+let _purgeTimer = 0;
+const _EMPTY_GEOM = (() => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(0), 3)); return g; })();
+function _purgeSoon(op) {
+  _purgeQueue.push(op);
+  clearTimeout(_purgeTimer);
+  _purgeTimer = setTimeout(() => { try { _purgeDeleted(); } catch (e) { console.warn('[purge]', e); } }, 2500);
+}
+function _purgeDeleted() {
+  const ops = _purgeQueue.splice(0);
+  if (!ops.length) return;
+  // a geometry still drawn by a part that is not deleted (copies share one) must stay
+  const live = new Set();
+  for (const q of state.parts) if (!q.deleted && q.mesh && q.mesh.geometry) live.add(q.mesh.geometry);
+  const freed = [];
+  for (const op of ops) for (const it of op.items || []) {
+    const p = getPart(it.partId);
+    if (!p || !p.deleted || !p.mesh || p.instancedMesh || p.instanceIndex >= 0) continue;
+    const g = p.mesh.geometry;
+    if (!g || g === _EMPTY_GEOM || live.has(g)) continue;
+    let heldElsewhere = false;
+    for (const x of state.history) if (x !== op && x.items && x.items.some(i => i && i.partId === p.partId)) { heldElsewhere = true; break; }
+    if (heldElsewhere) continue;
+    if (state.geomByHash.get(p.hash) === g) state.geomByHash.delete(p.hash);
+    p.mesh.geometry = _EMPTY_GEOM;
+    freed.push(g);
+  }
+  if (!freed.length) return;
+  (async () => {
+    await _nextFrame(); await _nextFrame();
+    for (const g of new Set(freed)) {
+      try { _disposeEdgesFor(g); } catch (_) {}
+      if (g.boundsTree) { try { g.disposeBoundsTree?.(); } catch (_) {} }
+      _safeDispose(g);
+    }
+    Log.debug(`freed the geometry of ${freed.length} deleted parts`, { tag: 'dispose' });
+  })();
+}
 function pushUndo(op) {
+  let droppedAny = false;
   state.history.push(op);
   if (op.type === 'vis') _flagVisSoon();
   // (the entry that falls off the far end can no longer be undone: the
@@ -18157,13 +18397,17 @@ function pushUndo(op) {
       const gone = state.history.shift();
       if (_UNDO_HEAVY.has(gone.type)) heavy--;
       try { _Dirty.dropped(gone); } catch (_) {}
+      if (gone.type === 'delete') _purgeSoon(gone);
+      droppedAny = true;
     }
   }
   // Any new user action invalidates the redo stack — same convention as
   // every editor (Photoshop, VS Code, Figma). Without this the user could
   // undo, do something new, then redo back to a state inconsistent with
   // the new action.
+  if (state.redo.length) droppedAny = true;
   state.redo.length = 0;
+  if (droppedAny) _geomSweepSoon();
   _refreshUndoRedoButtons();
   // one look at the groups after the action has settled (see _autoCleanCheck)
   if (!op.auto && !_emptyWatch.queued) { _emptyWatch.queued = true; setTimeout(_autoCleanCheck, 0); }
@@ -20363,6 +20607,12 @@ function isolateSelected() {
   else { showAllParts(); /* visible in viewport — no toast */ }
   try { _updateVpHint(); } catch (_) {}
   requestRender();
+}
+// the Isolate button in Delete small parts is a switch: on while the small parts are all that shows
+function _syncIsolateSmall() {
+  const b = document.getElementById('btn-isolate-small'); if (!b) return;
+  const on = !!(state._isolated && state._isolatedBy === 'flagged');
+  b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
 }
 function isolateFlagged() {
   if (state.pendingFlagged.size === 0) return toast('Nothing flagged', 'Set a size threshold first', 'warn');
@@ -24856,7 +25106,8 @@ const _wireAngle = () => { const a = parseFloat(_Prefs.get('wireAngle')); return
 //   (polygons is only ever set by _wireModeOverride; a saved 'polygons' or 'outline' from an older version reads as quads)
 let _wireModeOverride = null;                  // 'polygons' while Edit mesh is on: its pieces are the polygons the lines show
 // quads (the default): the polygons of a modelling program, as Edit mesh has them: pairs of coplanar triangles drawn as the four-sided cell they make
-function _wireMode() { if (_wireModeOverride) return _wireModeOverride; const v = _Prefs.get('wireMode'); return v === 'triangles' ? v : 'quads'; }      // (Polygons and Outline were taken out of Settings: a saved one reads as Quads)
+let _wireModeMemo = null;                      // (the mode read once for a whole sync, not once per part)
+function _wireMode() { if (_wireModeOverride) return _wireModeOverride; const v = _wireModeMemo || _Prefs.get('wireMode'); return v === 'triangles' ? v : 'quads'; }      // (Polygons and Outline were taken out of Settings: a saved one reads as Quads)
 // A part that has been through Untriangulate draws its polygons and a part that has been through Triangulate its triangles, each on
 // its own, whatever the Lines setting is; every other part follows the setting.
 const _wireKeyFor = (g) => {
@@ -24929,7 +25180,7 @@ function _wireLinesFor(g) {
     if ((_wireVer.get(g) || 0) !== ver) { _wireSoon(); return; }            // the surface changed meanwhile
     store(reply && reply.ok && !reply.none ? { key, lines: reply.lines, polys: reply.polys } : everyEdge());
     _wireSoon();
-  });
+  }).catch(() => { _wireBusy.delete(g); store(everyEdge()); _wireSoon(); });
   return false;
 }
 const _wireShared = new WeakSet();             // line geometries drawn with another mesh's instance matrices: disposing them would free those
@@ -24952,6 +25203,17 @@ function _wireGeomFor(g) {
   _wireGeoms.set(g, { key, geom: w });
   if (!_wireListened.has(g)) { _wireListened.add(g); g.addEventListener('dispose', () => _wireDrop(g)); }
   return w;
+}
+// The surface's points moved and its triangles did not: the lines are sent to the GPU again. False if they cannot be (they hold
+// a copy of the points, or there are none yet), and then _wireDrop is the way.
+function _wireTouch(g) {
+  const cur = _wireGeoms.get(g), pa = g.attributes && g.attributes.position;
+  if (!cur || !pa) return false;
+  const wa = cur.geom.attributes.position;
+  if (!wa || wa.array !== pa.array) return false;
+  wa.needsUpdate = true;
+  if (state.viewMode === 'wire') requestRender();
+  return true;
 }
 // The surface changed (or went): its lines are made again.
 function _wireDrop(g) {
@@ -24979,6 +25241,7 @@ function _wireAdd(host, geom) {
     l.onBeforeRender = () => { l.count = host.count; };
   }
   host.add(l);
+  host.userData._wl = l;                                                    // (the sync finds it again without going through the children)
   return l;
 }
 let _wireTimer = 0;
@@ -24996,18 +25259,24 @@ function _wireSync() {
     return;
   }
   const deadline = performance.now() + 14;
-  let more = false;
-  for (const host of _wireHosts()) {
-    const g = host.geometry, have = _wireKids(host), cur = _wireGeoms.get(g);
-    if (cur && cur.key === _wireKeyFor(g) && have.length === 1 && have[0].geometry === cur.geom) { have[0].visible = true; continue; }
-    if (performance.now() > deadline) { more = true; continue; }
-    const w = _wireGeomFor(g);
-    if (w === false) continue;
-    if (!w) { for (const k of have) host.remove(k); continue; }
-    if (have.length === 1 && have[0].geometry === w) have[0].visible = true;
-    else { for (const k of have) host.remove(k); _wireAdd(host, w); }       // (a new object, not a new geometry on the old one: the renderer keeps its draw call per object)
-  }
-  requestRender();
+  let more = false, changed = false;
+  _wireModeMemo = _Prefs.get('wireMode');
+  try {
+    for (const host of _wireHosts()) {
+      const g = host.geometry, cur = _wireGeoms.get(g), line = host.userData._wl;
+      // (the usual case: the part already has its line, so nothing to look up or allocate)
+      if (cur && line && line.parent === host && line.geometry === cur.geom && cur.key === _wireKeyFor(g)) { if (!line.visible) { line.visible = true; changed = true; } continue; }
+      const have = _wireKids(host);
+      if (cur && cur.key === _wireKeyFor(g) && have.length === 1 && have[0].geometry === cur.geom) { have[0].visible = true; changed = true; continue; }
+      if (performance.now() > deadline) { more = true; continue; }
+      const w = _wireGeomFor(g);
+      if (w === false) continue;
+      if (!w) { for (const k of have) { host.remove(k); changed = true; } continue; }
+      if (have.length === 1 && have[0].geometry === w) { have[0].visible = true; changed = true; }
+      else { for (const k of have) host.remove(k); _wireAdd(host, w); changed = true; }       // (a new object, not a new geometry on the old one: the renderer keeps its draw call per object)
+    }
+  } finally { _wireModeMemo = null; }
+  if (changed) requestRender();
   if (more) _wireSoon(0);
 }
 function _wireClear() {
@@ -25396,6 +25665,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       // it. three.js ships USDZExporter which packs PBR materials and
       // mesh hierarchy into a .usdz zip (no compression — USD spec
       // requires STORED to allow mmap'd reads).
+      const { USDZExporter } = await import('three/addons/exporters/USDZExporter.js');
       const exp = new USDZExporter();
       const arr = await exp.parseAsync(root);
       downloadBlob(new Blob([arr], { type: 'model/vnd.usdz+zip' }), base + '.usdz');
@@ -25844,7 +26114,15 @@ function wireUI() {
     mouseDown = { x: e.clientX, y: e.clientY };
     // Marquee gated on Ctrl/Cmd ONLY. Shift alone keeps standard
     // shift+click-add behaviour and shift+drag stays as orbit.
-    if (e.ctrlKey || e.metaKey) {
+    const _objDrag = !(e.ctrlKey || e.metaKey) && !e.altKey && _objTool !== 'click' && !_editOn() && !state.gizmo?.dragging;      // (the Box and Brush tools take the plain left drag)
+    if (_objDrag && _objTool === 'brush') {
+      _brushStroke = { x: e.clientX, y: e.clientY };
+      controls.enabled = false;
+      if (!e.shiftKey) clearSelection();
+      _brushPaint(e.clientX, e.clientY);
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || _objDrag) {
       _marquee = {
         startX: e.clientX, startY: e.clientY,
         endX:   e.clientX, endY:   e.clientY,
@@ -25904,6 +26182,97 @@ function wireUI() {
     // deliberately do NOT call this (would jump on every arrow-key step).
     if (typeof _scrollTreeToPart === 'function') _scrollTreeToPart(id);
   });
+
+
+  // ─── Selection tool for whole parts (Model mode): Click, Box or Brush, as in Edit mesh ───
+  // Click: the pick above. Box: a plain left drag is the marquee. Brush: a left drag paints; every part under the circle is picked
+  // (Shift adds to what is picked, otherwise the stroke starts from nothing). Alt + drag turns the camera in every tool.
+  const OBJ_TOOLS = ['click', 'rect', 'brush'];
+  let _objTool = 'click', _brushStroke = null, _brushRing = null, _brushLast = null;
+  try { const t = localStorage.getItem('stepopt-objtool'); if (OBJ_TOOLS.includes(t)) _objTool = t; } catch (_) {}
+  const _editOn = () => { try { return _Elements.isActive(); } catch (_) { return false; } };
+  const _brushRadius = () => { try { return _Elements.api.brushR(); } catch (_) { return 20; } };
+  function _applyObjCursor(over) {
+    const cv = $('canvas'), want = (_objTool === 'brush' && !_editOn());
+    if (want && over !== false) { if (cv.style.cursor !== 'none') cv.style.cursor = 'none'; }
+    else if (cv.style.cursor === 'none' && !_editOn()) cv.style.cursor = '';
+    if (!want || over === false) { if (_brushRing) _brushRing.style.display = 'none'; }
+  }
+  window.__moObjTool = {
+    get: () => _objTool,
+    set: (t) => {
+      if (!OBJ_TOOLS.includes(t)) return _objTool;
+      _objTool = t; _brushStroke = null;
+      try { localStorage.setItem('stepopt-objtool', t); } catch (_) {}
+      _applyObjCursor(); document.dispatchEvent(new CustomEvent('mo-objtool'));
+      return _objTool;
+    },
+  };
+  // every part under a circle on the screen: a ray at its centre and around it
+  function _partsUnder(cx, cy, r) {
+    const c = $('canvas'), rc = c.getBoundingClientRect();
+    if (state.partsRoot) { state.partsRoot.updateMatrix(); state.partsRoot.updateMatrixWorld(true); }
+    const targets = [];
+    for (const p of state.parts) if (!p.deleted && p.visible && p.mesh) targets.push(p.mesh);
+    for (const g of state.instancedGroups) targets.push(g.instanced);
+    const out = new Set(), pts = [[0, 0]];
+    for (const k of [0.5, 1]) for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; pts.push([Math.cos(a) * r * k, Math.sin(a) * r * k]); }
+    for (const [dx, dy] of pts) {
+      pointer.x = ((cx + dx - rc.left) / rc.width) * 2 - 1;
+      pointer.y = -((cy + dy - rc.top) / rc.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const h = raycaster.intersectObjects(targets, false)[0]; if (!h) continue;
+      let id = null;
+      if (h.object.isInstancedMesh) {
+        let grp = h.object.userData._group;
+        if (!grp) { grp = state.instancedGroups.find(g => g.instanced === h.object); if (grp) h.object.userData._group = grp; }
+        const en = grp && grp.parts[h.instanceId]; id = (en && en.partInfo && en.partInfo.partId) ?? null;
+      } else id = h.object.userData.partId ?? null;
+      if (id != null) out.add(id);
+    }
+    return out;
+  }
+  function _brushPaint(x, y) {
+    let n = 0;
+    for (const id of _partsUnder(x, y, _brushRadius())) if (!state.selected.has(id)) { selectPart(id, 'add'); n++; }
+    return n;
+  }
+  // the middle button held and dragged sets the brush's size (right: bigger, left: smaller), as in Edit mesh; the circle stays where the drag began
+  let _objSize = null, _objHold = null, _ringAt = null;
+  const _ringDraw = () => {
+    if (!_brushRing || !_ringAt) return;
+    const r = _brushRadius();
+    _brushRing.style.cssText += ';display:block;width:' + r * 2 + 'px;height:' + r * 2 + 'px;left:' + (_ringAt.x - r) + 'px;top:' + (_ringAt.y - r) + 'px';
+  };
+  $('canvas').addEventListener('mousedown', e => {
+    if (e.button !== 1 || e.altKey || _objTool !== 'brush' || _editOn()) return;
+    e.preventDefault(); controls.enabled = false;
+    _objSize = { x0: e.clientX, r0: _brushRadius() };
+  });
+  window.addEventListener('mouseup', e => {
+    if (!_objSize || e.button !== 1) return;
+    _objSize = null; controls.enabled = true; _objHold = { x: e.clientX, y: e.clientY };
+  }, true);
+  window.addEventListener('mousemove', e => {
+    if (_objTool !== 'brush' || _editOn()) { if (_brushRing && _brushRing.style.display !== 'none') _applyObjCursor(false); return; }
+    if (_objSize) { try { _Elements.api.brushR(_objSize.r0 + (e.clientX - _objSize.x0) * 0.5); } catch (_) {} _ringDraw(); return; }
+    if (_objHold) { if (Math.hypot(e.clientX - _objHold.x, e.clientY - _objHold.y) < 6) return; _objHold = null; }
+    const over = e.target === $('canvas');
+    _applyObjCursor(over);
+    if (over || _brushStroke) {
+      if (!_brushRing) {
+        _brushRing = document.createElement('div');
+        _brushRing.style.cssText = 'position:fixed;z-index:149;pointer-events:none;border:1.5px solid rgba(190,225,255,.85);border-radius:50%;box-sizing:border-box;background:rgba(190,225,255,.08)';
+        document.body.appendChild(_brushRing);
+      }
+      _ringAt = { x: e.clientX, y: e.clientY }; _ringDraw();
+    }
+    if (_brushStroke) { _brushPaint(e.clientX, e.clientY); }
+  });
+  window.addEventListener('mouseup', () => {
+    if (!_brushStroke) return;
+    _brushStroke = null; controls.enabled = true; mouseDown = null;
+  }, true);
 
   // Tree search rebuilds every node on each keystroke — collapse to one rebuild
   // per frame so typing stays responsive on 5k-part trees.
@@ -26210,7 +26579,7 @@ function wireUI() {
     maxSteps: 1000,
     stepToVal: (s) => (s / 1000) ** 2 * THR_MAX,
     valToStep: (v) => Math.sqrt(Math.max(0, Math.min(THR_MAX, v)) / THR_MAX) * 1000,
-    format: (v) => ({ value: v < 1 ? v.toFixed(2) : v.toFixed(1), unit: '% of the model' }),
+    format: (v) => ({ value: v < 1 ? v.toFixed(2) : v.toFixed(1), unit: '%' }),
     initialValue: 2,
     promptTitle: 'Size threshold',
     promptUnit: '%',
@@ -26286,8 +26655,10 @@ function wireUI() {
     iso?.addEventListener('pointerenter', syncIso);
     iso?.addEventListener('focus', syncIso);
   }
-  $('btn-show-all')?.addEventListener('click', showAllParts);
-  $('btn-isolate-small')?.addEventListener('click', isolateFlagged);
+  $('btn-isolate-small')?.addEventListener('click', () => {      // (one switch: on shows only the small parts, off shows everything again)
+    if (state._isolated && state._isolatedBy === 'flagged') showAllParts(); else isolateFlagged();
+    _syncIsolateSmall();
+  });
   $('tree-summary')?.addEventListener('click', () => { $('tree')?.scrollTo({ top: 0, behavior: 'smooth' }); });
   $('tree-summary')?.setAttribute('title', 'Scroll to top');
 
@@ -31803,7 +32174,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   // exported once. Nothing is merged unless it fits within a hair (repeats.js).
   let _repeatStats = null;
   if (state.autoInstance && meshList.length > 1) {
-    try { _repeatStats = _shareRepeatedGeometry(meshList); }
+    try { _repeatStats = await _shareRepeatedGeometry(meshList); }
     catch (e) { console.warn('[load] repeated-part search failed:', e); }
   }
   if (!meshList.length) { try { toast('Nothing to show', 'This file has no meshes in it.', 'warn', 6000); } catch (_) {} }
@@ -31811,7 +32182,21 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   // `i` counts the file's meshes (it names the unnamed ones); a mesh with no
   // positions is skipped, so ids are counted separately and leave no gap.
   let i = 0, made = 0;
+  // A file with thousands of parts must not hold the page for the whole pass (the spinner freezes and the browser offers to
+  // kill the tab): hand control back every so often, as the STEP path does, and show how far it has got.
+  const _ingestYield = Math.max(50, (meshList.length / 50) | 0);
+  let _ingestSince = performance.now();
   for (const m of meshList) {
+    // (Only while the page is in front: nobody sees the spinner otherwise, and a background tab runs a timer once a second, which
+    // would turn every hand-back into a wait. A message round trip is not held back that way.)
+    if (i > 0 && i % _ingestYield === 0 && !document.hidden && performance.now() - _ingestSince > 40) {
+      try {
+        setLoaderProgress(50 + (i / meshList.length) * 35);
+        const sub = $('loader-sub'); if (sub) sub.textContent = `${i.toLocaleString()} / ${meshList.length.toLocaleString()} parts processed`;
+      } catch (_) {}
+      await new Promise(r => { const ch = new MessageChannel(); ch.port1.onmessage = () => { ch.port1.close(); r(); }; ch.port2.postMessage(0); });
+      _ingestSince = performance.now();
+    }
     const geom = m.geometry;
     const pos = geom.attributes.position;
     if (!pos) { i++; continue; }
@@ -32288,6 +32673,7 @@ async function loadFbxFile(file) {
     setLoader(true, 'Parsing FBX scene…', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
     let root;
     try {
+      const { FBXLoader } = await import('three/addons/loaders/FBXLoader.js');
       root = new FBXLoader().parse(buffer, '');
     } catch (e) {
       // Three's FBXLoader requires FBX 7000+ (FBX 7.0 / 2011 onward). The
@@ -32380,6 +32766,7 @@ async function load3mfFile(file) {
     const buffer = await _fileBytes(file);
     setLoaderProgress(35);
     setLoader(true, 'Parsing 3MF scene…', `${(buffer.byteLength/1048576).toFixed(1)} MB`);
+    const { ThreeMFLoader } = await import('three/addons/loaders/3MFLoader.js');
     const root = new ThreeMFLoader().parse(buffer);
     await _ingestSceneRoot(root, file, buffer.byteLength, '3mf');
   });
@@ -34551,6 +34938,7 @@ function _openMaterialEditor(info) {
       },
     });
     _matEditorState = { popup, mat: null, info: null, _previewBall: null, _matSnapshot: null };
+    try { _lucide(); } catch (_) {}      // (the header's icon is a placeholder until this draws it)
   }
 
   _matEditorState.mat = mat;
@@ -39646,9 +40034,9 @@ wireUI = function() {
 // 16px-wide cells of that grid, centred on the gap between a sidebar and the
 // viewport; a faint line shows in the middle of one under the pointer. Width is
 // persisted in localStorage so the user's preference survives reloads.
-// ── Hover link: the list and the view point at each other ─────────────────────────────────────────────────────────
+// ── Hover link: the list points at the view ─────────────────────────────────────────────────────────
 // Point at a part's row in the tree and the part lights up in the view (a tint in the accent colour that fades in smoothly, then fades
-// when the pointer leaves); point at a part in the view and its row lights up in the tree. Switch: Settings > Viewport. The view is
+// when the pointer leaves). Switch: Settings > Viewport. The view is
 // drawn on demand, so a frame is asked for only while a pulse or a fade is running; at rest nothing runs. A part is tinted by a
 // second mesh that shares its geometry and sits in the scene outside the model, so it can be neither picked nor exported.
 function _wireHoverLink() {
@@ -39725,51 +40113,8 @@ function _wireHoverLink() {
   }, { passive: true });
   treeEl.addEventListener('mouseleave', () => { clearTimeout(enterT); hide(); });
 
-  // the view -> the list
-  let linked = null, pend = null, pickRaf = 0, lastX = -99, lastY = -99, targets = null, targetsAt = 0;
-  const clearLink = () => { if (linked) { linked.classList.remove('is-link'); linked = null; } };
-  const targetsNow = () => {
-    const now = performance.now();
-    if (targets && now - targetsAt < 400) return targets;
-    if (state.partsRoot) { state.partsRoot.updateMatrix(); state.partsRoot.updateMatrixWorld(true); }
-    const list = [], seen = new Set();
-    for (const p of state.parts) { if (p.deleted || !p.visible) continue; if (p.mesh && !seen.has(p.mesh.id)) { list.push(p.mesh); seen.add(p.mesh.id); } }
-    for (const g of (state.instancedGroups || [])) list.push(g.instanced);
-    targets = list; targetsAt = now; return list;
-  };
-  const pickId = (ev) => {
-    const r = cv.getBoundingClientRect();
-    pointer.x = ((ev.clientX - r.left) / r.width) * 2 - 1; pointer.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
-    raycaster.setFromCamera(pointer, camera);
-    const hits = raycaster.intersectObjects(targetsNow(), false);
-    if (!hits.length) return null;
-    const h = hits[0];
-    if (h.object.isInstancedMesh) {
-      let grp = h.object.userData._group;
-      if (!grp) { grp = (state.instancedGroups || []).find(g => g.instanced === h.object); if (!grp) return null; h.object.userData._group = grp; }
-      const en = grp.parts[h.instanceId]; return (en && en.partInfo && en.partInfo.partId) ?? null;
-    }
-    return h.object.userData.partId ?? null;
-  };
-  // (the quick wand is drawn over the view and lets the pointer through: choosing a slice of it is not pointing at a part)
-  const wandOpen = () => { try { return _Wand.isOpen(); } catch (_) { return false; } };
-  const run = (ev) => {
-    if (!ev || !on()) return;
-    if (wandOpen()) { clearLink(); return; }
-    let id = null; try { id = pickId(ev); } catch (_) {}
-    const row = id != null ? _treeRowOf('part', id) : null;
-    if (row === linked) return;
-    clearLink();
-    if (row && !row.classList.contains('is-hidden') && !row.classList.contains('is-gone')) { row.classList.add('is-link'); linked = row; }
-  };
-  cv.addEventListener('pointermove', (e) => {
-    if (!on() || e.buttons || wandOpen()) { clearLink(); return; }          // (orbiting, panning, dragging and choosing in the quick wand are not hovering)
-    if (Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY) < 3) return;
-    lastX = e.clientX; lastY = e.clientY; pend = e;
-    if (!pickRaf) pickRaf = requestAnimationFrame(() => { pickRaf = 0; run(pend); });
-  }, { passive: true });
-  cv.addEventListener('pointerleave', () => { pend = null; clearLink(); });
-  window.__moHoverLink = { off: () => { clearTimeout(enterT); hide(); clearLink(); }, state: () => ({ overlay: !!ov, id: shownId, linked: linked ? linked.dataset.partId : null }) };
+  // (pointing at a part in the view does nothing to the list: only the list points at the view)
+  window.__moHoverLink = { off: () => { clearTimeout(enterT); hide(); }, state: () => ({ overlay: !!ov, id: shownId }) };
 }
 
 // The selection buttons of the right panel are sticky (see .sel-bar in index.html); this tells the CSS when they have reached the top,
@@ -47715,7 +48060,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   let _budgetInfoKey = '';
   function _updateBudgetInfo() {
     const info = document.getElementById('budget-info'), link = document.getElementById('budget-preview');
-    if (!info || !info.parentElement || !document.getElementById('btn-budget')?.offsetParent) return;
+    if (document.hidden || !info || !info.parentElement || !document.getElementById('btn-budget')?.offsetParent) return;
     const target = _budgetFromField(), cur = _sceneTris();
     const key = target + '|' + cur + '|' + state.parts.length;
     if (key === _budgetInfoKey) return;
@@ -48006,7 +48351,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     sec.addEventListener('cmd-open', () => { result = null; show(); });
     // the "selected parts" line follows the selection while the panel is open
     let seen = -1;
-    setInterval(() => { if (sec.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; show(); } }, 400);
+    setInterval(() => { if (document.hidden || sec.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; show(); } }, 400);
     show();
   })();
 
@@ -48320,7 +48665,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     sec.addEventListener('cmd-open', () => { result = null; only = null; show(); });
     // the lines that name the selection follow it while the panel is open
     let seen = -1;
-    setInterval(() => { if (sec.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; if (result && !n) { result = null; only = null; } show(); } }, 400);
+    setInterval(() => { if (document.hidden || sec.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; if (result && !n) { result = null; only = null; } show(); } }, 400);
     show();
   })();
 
@@ -49411,6 +49756,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     const info = document.getElementById('decimate-info');
     const sel = document.getElementById('decimate-strength');
     const tgt = document.getElementById('decimate-target');
+    // Nothing below is visible while the card is closed or the tab is in the background: skip the walk over the selection.
+    if (document.hidden || !(info && info.offsetParent)) return;
     if (tgt) tgt.style.display = (sel && sel.value === 'target') ? '' : 'none';
     const tolRow = document.getElementById('decimate-tol-row');
     if (tolRow) tolRow.style.display = (sel && sel.value === 'tol') ? '' : 'none';
@@ -49441,7 +49788,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const $id = (id) => document.getElementById(id);
     const sec = (n) => document.querySelector(`.section-cmd[data-cmd="${n}"]`);
     let _mr = null;
-    const lib = async () => _mr || (_mr = await import('./meshrepair.js?v=1'));
+    const lib = async () => _mr || (_mr = await import('./meshrepair.js?v=2'));
     const parseNum = (el, d) => { const v = parseFloat(String(el && el.value).replace(',', '.')); return isFinite(v) ? v : d; };
 
     // A row of choices (.cmd-seg) that sets one field of `o`.
@@ -49538,7 +49885,19 @@ setTimeout(() => _dndDecorateTree(), 0);
               try {
                 const src = { position: arr3(g.attributes.position), uv: g.attributes.uv ? arr3(g.attributes.uv) : null, normal: g.attributes.normal ? arr3(g.attributes.normal) : null,
                   index: g.index ? g.index.array : null, groups: g.groups && g.groups.length ? g.groups : null };
-                const r = M.repairMesh(src, { weld: o.weld, degenerate: o.degen, orient: o.orient, tol: o.tol });
+                const ropts = { weld: o.weld, degenerate: o.degen, orient: o.orient, tol: o.tol };
+                // On a worker when there is one (a large part takes seconds and must not hold the page); here otherwise.
+                let r = null;
+                if (_MeshWorkers.available()) {
+                  const copy = (a) => (a ? a.slice() : a);
+                  const reply = await _MeshWorkers.run(() => {
+                    const s2 = { position: copy(src.position), uv: copy(src.uv), normal: copy(src.normal), index: copy(src.index), groups: src.groups ? src.groups.map(x => ({ start: x.start, count: x.count, materialIndex: x.materialIndex })) : null };
+                    const transfer = [s2.position.buffer]; if (s2.uv) transfer.push(s2.uv.buffer); if (s2.normal) transfer.push(s2.normal.buffer); if (s2.index) transfer.push(s2.index.buffer);
+                    return { msg: { op: 'repair', src: s2, opts: ropts }, transfer };
+                  });
+                  if (reply && reply.ok) r = reply.res;
+                }
+                if (!r) r = M.repairMesh(src, ropts);
                 if (r.changed || o.normals) {
                   let out = new THREE.BufferGeometry();
                   out.setAttribute('position', new THREE.BufferAttribute(r.position, 3));
@@ -49586,7 +49945,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       }
       $id('rp-run')?.addEventListener('click', run);
       root.addEventListener('cmd-open', () => { msg = ''; show(); });
-      let seen = -1; setInterval(() => { if (root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
+      let seen = -1; setInterval(() => { if (document.hidden || root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
       show();
     })();
 
@@ -49807,7 +50166,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       }
       $id('hf-run')?.addEventListener('click', run);
       root.addEventListener('cmd-open', () => { msg = ''; show(); });
-      let seen = -1; setInterval(() => { if (root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
+      let seen = -1; setInterval(() => { if (document.hidden || root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
       show();
     })();
 
@@ -49921,7 +50280,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       }
       $id('mb-run')?.addEventListener('click', run);
       root.addEventListener('cmd-open', () => { msg = ''; show(); });
-      let seen = -1; setInterval(() => { if (root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
+      let seen = -1; setInterval(() => { if (document.hidden || root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
       show();
     })();
 
@@ -50074,7 +50433,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       $id('sr-add')?.addEventListener('click', () => addRule());
       $id('sr-run')?.addEventListener('click', run);
       root.addEventListener('cmd-open', () => { if (!rules.length) addRule(); else show(); });
-      let seen = -1; setInterval(() => { if (root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; if (rules.some(r => r.field === 'selected')) show(); } }, 500);
+      let seen = -1; setInterval(() => { if (document.hidden || root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; if (rules.some(r => r.field === 'selected')) show(); } }, 500);
       window.__moSelectByRule = { addRule, rules, run, evaluate };
     })();
   })();
@@ -50877,7 +51236,7 @@ const _Elements = (() => {
   let active = false, wired = false, mode = 'faces', tool = 'click', loops = false, brushR = 20, space = 'world';      // space: which way the gizmo's axes point (world, the part's own, or along the picked pieces' normal)
   const SPACES = ['world', 'local', 'normal'];
   let ov = null, ctx = null, hover = null, pending = false, down = null, lastMove = null, moveRaf = 0, group = null, ray = null;
-  let box = null, stroke = null, altOrbit = false, prevButtons = null, prevView = null, ptr = null, sizing = null, gzOver = false;      // sizing: the brush being resized with the middle button; gzOver: the pointer is on a handle of the gizmo (the brush gives way to the normal pointer)
+  let box = null, stroke = null, altOrbit = false, prevButtons = null, prevView = null, ptr = null, sizing = null, sizeHold = null, gzOver = false;      // sizing: the brush being resized with the middle button; gzOver: the pointer is on a handle of the gizmo (the brush gives way to the normal pointer)
   const sel = new Map();                 // partId → { geom, R, points: Set, edges: Set, faces: Set (polygons), fill, outline, dirty }
   const reads = new WeakMap();           // geometry → { key, topo, pg }
   const picks = [], unpicks = [];        // the history of what was picked: { before, after, at } (at: how long the app's own history was)
@@ -51672,7 +52031,10 @@ const _Elements = (() => {
     }
     grab.moved = true;
     const now = performance.now();
-    if (now - (grab.linesAt || 0) > 120) { grab.linesAt = now; for (const g of grab.parts) { try { _wireDrop(g.ed.geom); } catch (_) {} } }
+    // The wireframe moves with the points: its lines are the same numbers in a buffer of their own, so they are sent again at
+    // once, with no new topology. Only lines that hold a copy of the points (not the surface's own array) are made again, and
+    // not more often than every 120 ms.
+    for (const g of grab.parts) { try { if (_wireTouch(g.ed.geom)) continue; if (now - (grab.linesAt || 0) > 120) { grab.linesAt = now; _wireDrop(g.ed.geom); } } catch (_) {} }
     // drawn now, in the same step that moved the points: a paint left for the next frame puts the picked faces and the blue lines one
     // frame behind the mesh, and they trail it when it is pulled out of the model
     try { pending = false; paint(); } catch (err) { console.warn('[elements] paint:', err); schedule(); }
@@ -51924,6 +52286,7 @@ const _Elements = (() => {
       const ico = b.querySelector('.em-ico'); if (ico && !ico.dataset.m) { ico.innerHTML = ICON[b.dataset.mode]; ico.dataset.m = b.dataset.mode; }
       b.hidden = !active; b.classList.toggle('active', active && b.dataset.mode === mode);
     }
+    syncToolButton();
     { const k = active + '|' + mode + '|' + tool + '|' + (total() > 0); if (k !== tipsKey) { tipsKey = k; try { _updateVpHint(); } catch (_) {} } }      // (the tips at the bottom right follow the mode and the tool)
     const bar = $q('el-bar'); if (bar) bar.hidden = !active;
     // Weld has a number of its own, so it is a floating card (Edit mesh's own card, which is drawn only for this): the bar's Weld button
@@ -51960,6 +52323,57 @@ const _Elements = (() => {
       b.title = m === 'model' ? 'Model mode: a click picks a whole part. Click for ' + NAME[mode] + ', hold for all four modes' : 'Back to Model mode: a click picks a whole part (4)';
       b.setAttribute('aria-label', 'Model mode');
     }
+  }
+  // the selection tool's button in the left toolbar (Click, Box or Brush: the same choice as in the Edit mesh bar)
+  const TOOL_ROWS = { click: ['mouse-pointer-2', 'Click'], rect: ['box-select', 'Box'], brush: ['circle-dashed', 'Brush'] };
+  // (one button for both: with Edit mesh on it is the tool that picks pieces, otherwise the one that picks whole parts)
+  const curTool = () => active ? tool : (window.__moObjTool ? window.__moObjTool.get() : 'click');
+  const putTool = (t) => { if (active) setTool(t); else window.__moObjTool && window.__moObjTool.set(t); };
+  function syncToolButton() {
+    const b = $q('em-tool-btn'); if (!b) return;
+    const cur = curTool();
+    if (b.dataset.t !== cur) { b.dataset.t = cur; b.innerHTML = '<i data-lucide="' + TOOL_ROWS[cur][0] + '"></i>'; try { _lucide(); } catch (_) {} }
+    b.title = (active ? 'Selection tool for pieces: ' : 'Selection tool for parts: ') + TOOL_ROWS[cur][1] + '. Click for the next one, hold for all three';
+  }
+  document.addEventListener('mo-objtool', () => { try { syncToolButton(); } catch (_) {} });
+  function wireToolButton() {
+    const btn = $q('em-tool-btn'), pop = $q('em-tool-pop');
+    if (!btn || !pop) return;
+    let holdT = 0, held = false;
+    const close = () => { pop.style.display = 'none'; };
+    const open = () => {
+      held = true; pop.innerHTML = '';
+      for (const t of TOOLS) {
+        const row = document.createElement('button');
+        row.type = 'button'; row.className = 'vp-prim-pop-item em-pop-item' + (curTool() === t ? ' is-on' : '');
+        row.setAttribute('role', 'menuitemradio'); row.setAttribute('aria-checked', String(curTool() === t));
+        row.innerHTML = '<span class="em-ico prim-ico"><i data-lucide="' + TOOL_ROWS[t][0] + '"></i></span><span class="em-pop-l">' + TOOL_ROWS[t][1] + '</span>';
+        row.addEventListener('click', () => { close(); putTool(t); });
+        pop.appendChild(row);
+      }
+      try { _lucide(); } catch (_) {}
+      pop.style.top = btn.offsetTop + 'px';
+      pop.style.display = 'block';
+    };
+    document.addEventListener('mousedown', (e) => { if (pop.style.display !== 'none' && !pop.contains(e.target) && !btn.contains(e.target)) close(); });
+    let holding = false;      // the list was opened by a hold and the button is still down
+    btn.addEventListener('mousedown', (e) => { if (e.button !== 0) return; held = false; holding = false; clearTimeout(holdT); holdT = setTimeout(() => { open(); holding = true; }, 380); });
+    btn.addEventListener('mouseleave', () => clearTimeout(holdT));
+    btn.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); clearTimeout(holdT); open(); });
+    // let go over a row of the list and that tool is picked; let go on the button and the list stays for a click; anywhere else it closes
+    document.addEventListener('mouseup', (e) => {
+      clearTimeout(holdT);
+      if (!holding) return;
+      holding = false;
+      const row = e.target.closest && e.target.closest('#em-tool-pop .em-pop-item');
+      if (row) { setTimeout(() => { held = false; }, 0); row.click(); }
+      else if (!btn.contains(e.target)) { setTimeout(() => { held = false; }, 0); close(); }
+    });
+    btn.addEventListener('click', () => {
+      clearTimeout(holdT);
+      if (held) { held = false; return; }       // (the press that opened the list is not also a click)
+      close(); putTool(TOOLS[(TOOLS.indexOf(curTool()) + 1) % TOOLS.length]); btn.blur();
+    });
   }
   function setMode(m) {
     if (m === 'model') { if (active) _CmdCards.close('elements'); else syncCard(); return; }
@@ -52216,7 +52630,7 @@ const _Elements = (() => {
     }
   }
   function onUp(ev) {
-    if (sizing && ev.button === 1) { sizing = null; save(); schedule(); return; }
+    if (sizing && ev.button === 1) { sizing = null; sizeHold = { x: ev.clientX, y: ev.clientY }; save(); schedule(); return; }      // (the circle stays where the drag began until the pointer moves on: see onMove)
     const d = down; down = null;
     if (altOrbit) { altOrbit = false; controls.mouseButtons.LEFT = -1; return; }
     if (ev.button !== 0) return;
@@ -52248,6 +52662,7 @@ const _Elements = (() => {
       const bs = $q('el-brush'); if (bs) bs.value = String(brushR);
       schedule(); return;
     }
+    if (sizeHold) { if (Math.hypot(ev.clientX - sizeHold.x, ev.clientY - sizeHold.y) < 6) return; sizeHold = null; }      // (just after a resize the circle keeps its place until the pointer is moved on purpose)
     lastMove = ev; ptr = { x: ev.clientX, y: ev.clientY };
     if (box) { box.x1 = ev.clientX; box.y1 = ev.clientY; if (!box.raf) box.raf = requestAnimationFrame(boxLive); schedule(); return; }
     if (stroke) {
@@ -52394,6 +52809,7 @@ const _Elements = (() => {
     card.addEventListener('cmd-open', activate);
     card.addEventListener('cmd-close', deactivate);
     wireModeButton();
+    wireToolButton();
     syncCard();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
@@ -52403,6 +52819,7 @@ const _Elements = (() => {
   const api = {
     mode: (m) => { if (m) setMode(m); return current(); },
     tool: (t) => { if (t) setTool(t); return tool; },
+    brushR: (v) => { if (v >= 4 && v <= 200) { brushR = Math.round(v); save(); } return brushR; },
     pickAt(partId, tri, point, o = {}) {
       const p = getPart(partId); if (!p || !p.mesh || !state.selected.has(partId)) return 0;      // (only a selected part is worked on)
       const how = o.take ? 'take' : o.add ? 'add' : 'set';

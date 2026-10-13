@@ -1190,7 +1190,7 @@
       T.eq(visible(), flagged(), 'the isolated view did not follow the slider');
       range.dispatchEvent(new Event('change', { bubbles: true })); await T.sleep(300);
       T.eq(state.history.length, steps + 1, 'following the slider added undo steps of its own');
-      document.getElementById('btn-show-all').click(); await T.sleep(300);
+      document.getElementById('btn-isolate-small').click(); await T.sleep(300);
       T.eq(T.live().filter(p => !p.visible).length, 0, 'Show all left parts hidden');
       range.value = String(max); range.dispatchEvent(new Event('input', { bubbles: true })); await T.sleep(150);
       T.eq(T.live().filter(p => !p.visible).length, 0, 'the slider hid parts although nothing is isolated any more');
@@ -1362,13 +1362,13 @@
     key('x'); await T.sleep(300);
     T.assert(!split.hidden && split.closest('#vp-overlay'), 'X did not open the Split panel over the viewport');
     T.assert(document.getElementById('tg-split').classList.contains('active'), 'the Split toolbar button is not lit while its panel is open');
-    T.assert(/split\.webm/.test(split.querySelector('video')?.getAttribute('src') || ''), 'the Split panel has no clip');
+    T.assert(!!split.querySelector('.cmd-hero svg.tile-art'), 'the Split panel has no line drawing');
     key('p'); await T.sleep(300);
     T.assert(!fill.hidden && split.hidden, 'P did not swap to the Remove holes panel');
     T.assert(document.getElementById('tg-fill-holes').classList.contains('active'), 'the toolbar button is not lit while its panel is open');
     T.assert(fill.contains(document.getElementById('btn-fill-holes')), 'Remove holes is not in its own panel');
-    const clip = fill.querySelector('video');
-    T.assert(clip && clip.muted && clip.loop && /fill-holes\.webm/.test(clip.getAttribute('src')), 'the Remove holes panel has no looping clip');
+    const clip = fill.querySelector('video');                    // (the cards carry a line drawing now, not a clip)
+    T.assert(!!fill.querySelector('.cmd-hero svg.tile-art'), 'the Remove holes panel has no line drawing');
     key('Escape'); await T.sleep(250);
     T.assert(fill.hidden && state.selected.size === 1, 'Esc did not just close the panel (selection ' + state.selected.size + ')');
     T.assert(!clip || clip.paused, 'the clip keeps playing after its panel was put away');

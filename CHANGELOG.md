@@ -4,6 +4,50 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## Unreleased
+
+**Selecting parts**
+
+- ![new][new] **Box and Brush select whole parts.** In Model mode the selection tool has the same three choices as the Edit mesh bar: *Click*, *Box* (a plain left drag draws the marquee) and *Brush* (a left drag paints, and every part under the circle is picked). Shift adds to what is picked; otherwise a stroke starts from nothing. Alt + drag turns the camera in every tool, and the middle button dragged sets the brush size (right bigger, left smaller). A part counts as touched only when one of its own triangles is under the box or circle, not its bounding box.
+- ![new][new] **One selection-tool button in the left toolbar.** It shows the tool in use and a menu: let go over a row and that tool is picked, let go on the button and the list stays open for a click. With Edit mesh on it picks pieces, otherwise whole parts.
+- ![new][new] **The list points at the view.** Hovering a row of the part list lights the part in the view (the other way round does nothing). Switch it off in Settings › Viewport.
+- ![polish][polish] **Delete small parts: Isolate is a switch.** *Isolate* now shows only the parts that would be deleted, so they can be checked first, and pressing it again shows everything (it replaces *Show all*). *Highlight*, which colours those parts in the view and the tree, moved onto the card.
+- ![polish][polish] **The Transform toggle sits with the part tree's buttons.**
+
+**Drawing**
+
+- ![perf][perf] **A selection draws at once.** Finding the edges of a part took about a second for 125,000 triangles, inside the click. Now the click draws immediately (cached edges where there are, small parts built inline within a few milliseconds, a bounding box for anything else) and the missing edges are worked out on a worker and swapped in when ready.
+- ![fix][fix] **A curved surface is not drawn as a bundle of lines.** A coarsely tessellated curve (the wire of a spring with eight sides) has facets that meet at a modest angle. Edges the mesh itself shades as smooth and that turn by no more than 60 degrees are facets, not features; a ring of patches that turns once round is a smooth surface and keeps one line. A chamfer or bevel is not a ring and keeps its lines. A triangle with no area is no feature.
+- ![perf][perf] **The wireframe follows moved points.** When the points of a surface move and its triangles do not, the lines are sent to the graphics card again at once (at most every 120 ms) instead of being rebuilt.
+- ![perf][perf] **The view cube redraws only when the camera turns.** A hover or a selection no longer redraws it.
+- ![fix][fix] **A frame that failed is asked for again,** so a passing failure does not leave a stale or blank picture until something else redraws.
+- ![fix][fix] **The start screen no longer hides a newly opened tab.** It used to stay up over the scene, with the new tab opening behind it.
+
+**Look**
+
+- ![polish][polish] **The command cards open with a line drawing, not a video clip.** Remove holes, Split, Select hidden, Fasteners and Smart fit show a thin-stroke drawing of what the tool does, in two greys and the accent colour, that moves only while the card is open.
+- ![polish][polish] **One look for the controls.** New colour steps and tokens for sliders (a white thumb that grows under the pointer and takes a soft halo while held; the filled part of every range input is drawn by CSS from its value, wherever it was set), scrollbars, number fields (a context sets only what differs), transitions, the part tree's search, the menu rows and the context menu.
+
+**Memory and speed**
+
+- ![perf][perf] **Geometry nothing needs any more is freed.** Decimate, Budget, Repair and Remesh keep the old geometry for Undo. When the Undo (or Redo) step that held it fell off the end of the history, nothing released it: on a large scene every earlier full-size copy stayed in memory and on the graphics card until the model was cleared. A check now finds geometry that no part, group or history step can reach and frees it (only after it has been unreachable twice in a row, a few seconds apart).
+- ![perf][perf] **A deleted part gives its memory back.** Once the Delete step has fallen off the end of the history the part cannot come back, so its own geometry is released. Geometry that a live part shares stays.
+- ![perf][perf] **Large GLB, glTF, OBJ and FBX files no longer freeze the page while they are read.** The loop over the file's meshes now hands control back every so often and shows how many parts are done, as the STEP path already did. It does so only while the window is in front.
+- ![perf][perf] **Opening the same STEP again is instant.** The converted model is kept in `inbox/cache/`, keyed by the file's content, the import settings and the converter itself, so a new release or another setting never gets an old answer. The cache holds 3 GB at most and drops the oldest first.
+- ![perf][perf] **Two conversions at a time.** More wait as queued (Cancel still works), so two big STEP files do not fight over memory and cores. `MESHOPT_CONVERT_JOBS` changes the number.
+- ![perf][perf] **Repair mesh runs in the background.** A large part took seconds on the page; it now goes to a worker (and stays on the page when no worker is available).
+- ![perf][perf] **The idle timers rest.** The counters behind the Decimate and Budget cards and the selection watchers do nothing while the window is in the background, and the Decimate one nothing while its card is closed.
+- ![perf][perf] **FBX, 3MF and USDZ code is loaded when needed.** About 160 KB less to read at start; opening or exporting one of those formats loads it then.
+
+**Repair, Remove holes and the converter**
+
+- ![fix][fix] **Repair mesh welds a model far from the origin correctly.** The weld cells were counted from the origin and could wrap around for a model millions of units away; they are now counted from the corner of its box.
+- ![perf][perf] **Repair mesh uses numbers, not text, for doubled triangles, and sorts material groups in one pass.** 200,000 triangles take about 200 ms; a mesh with many materials no longer slows down with every group.
+- ![perf][perf] **Remove holes handles larger meshes.** The edge table is a typed one now and the limit is 12 million triangles (it was about 5.6 million).
+- ![perf][perf] **Keeping hard edges while decimating** looks up the vertices at one place with numbers instead of a text per vertex.
+- ![fix][fix] **The inbox is cleaned every hour**, not only when the server starts, a cancelled or failed conversion no longer leaves its half-written file, and an upload is refused with a clear message when the disk cannot hold it. A client that stops sending is dropped after five minutes.
+- ![polish][polish] **The installed app falls back to a normal window** where the browser has no window-controls overlay.
+
 ## v0.25.0
 
 Released 13 Oct 2026.
