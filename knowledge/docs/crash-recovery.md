@@ -23,7 +23,7 @@ Saving the scene clears the copy, and so does undoing back to the saved state. C
 
 ## Turn it off
 
-In **Settings**, **General**, **Recovery**, choose **Off**. **Recovery copies** under **Storage** deletes the copies that are kept. The hosted demo keeps none.
+In **Settings**, **General**, **Recovery**, choose **Off**. **Recovery copies** under **Storage** deletes the copies that are kept. The online version keeps none.
 
 > A recovery copy is not a backup. It lives in the browser that made it: clearing the site’s data deletes it, and another browser or another computer cannot see it. Save the scene to a file as you go.
 

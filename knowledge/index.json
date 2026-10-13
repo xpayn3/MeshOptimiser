@@ -149,7 +149,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.",
-  "chars": 11929
+  "chars": 11935
  },
  {
   "slug": "read-the-numbers",
@@ -381,7 +381,7 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "While a scene has changes that are not saved, a copy is kept inside your browser. If the app crashes, it offers the scene back the next time it starts.",
-  "chars": 3026
+  "chars": 3029
  },
  {
   "slug": "export",

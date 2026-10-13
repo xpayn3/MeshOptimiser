@@ -94,11 +94,11 @@ The mouse moves are explained in [Move the view](meshoptimiser://docs/move-the-v
 
 ## Claude
 
-The connection that lets Claude work with the open scene: the switch, what it may do, whether it asks first, and what it has asked for. It is explained in [Work with Claude](not in this knowledge base). It is not in the hosted demo.
+The connection that lets Claude work with the open scene: the switch, what it may do, whether it asks first, and what it has asked for. It is explained in [Work with Claude](not in this knowledge base). It is not in the online version.
 
 ## Updates
 
-Look for a newer version, choose how the app tells you, and go back to the one before. It is explained in [Stop, restart and update](not in this knowledge base). It is not in the hosted demo.
+Look for a newer version, choose how the app tells you, and go back to the one before. It is explained in [Stop, restart and update](not in this knowledge base). It is not in the online version.
 
 ## Scene
 
