@@ -237,6 +237,25 @@
     when.observe(cx3d.closest('[data-cx-grid]') || cx3d);
   }
 
+  // the live models of the features page (features3d.js): a real mesh, loaded when the section is near, on a wide screen with a mouse and with
+  // motion allowed; elsewhere (a phone, Data Saver, no WebGL2, reduced motion) the picture in the page stays and nothing is fetched
+  const lives = $$('[data-live]');
+  if (lives.length && 'IntersectionObserver' in window && window.matchMedia('(min-width: 1000px) and (hover: hover)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    let webgl = false;
+    try { webgl = !!document.createElement('canvas').getContext('webgl2'); } catch (e) { webgl = false; }
+    const net = navigator.connection;
+    if (webgl && !(net && (net.saveData || /(^|-)2g$/.test(net.effectiveType || '')))) {
+      const near = new IntersectionObserver((entries) => {
+        for (const en of entries) {
+          if (!en.isIntersecting) continue;
+          near.unobserve(en.target);
+          import('./features3d.js?v=4').then((m) => m.start(en.target, '')).catch(() => {});
+        }
+      }, { rootMargin: '500px 0px' });
+      lives.forEach((el) => near.observe(el));
+    }
+  }
+
   const pop = $('[data-pop]');
   if (pop && !calm && 'IntersectionObserver' in window) {
     let queued = false, last = -1, hero3d = null, asked = false;
@@ -248,7 +267,7 @@
       // Data Saver, or a slow connection: the poster stays, and nothing of the 3D (the library, 1.3 MB of model) is fetched
       const net = navigator.connection;
       if (net && (net.saveData || /(^|-)2g$/.test(net.effectiveType || ''))) return;
-      const load = () => import('./hero3d.js?v=21').then(m => m.start(pop, '')).then((h) => { hero3d = h; h.setP(Math.max(0, last)); }).catch(() => {});
+      const load = () => import('./hero3d.js?v=25').then(m => m.start(pop, '')).then((h) => { hero3d = h; h.setP(Math.max(0, last)); }).catch(() => {});
       // on a phone it waits for the first touch or scroll, so a visit that goes no further costs nothing but the poster
       if (window.matchMedia('(pointer: coarse)').matches) { let done = false; const go = () => { if (done) return; done = true; window.removeEventListener('scroll', go); window.removeEventListener('touchstart', go); load(); }; window.addEventListener('scroll', go, { passive: true }); window.addEventListener('touchstart', go, { passive: true }); }
       else load();
@@ -431,8 +450,25 @@
       return out + esc(name.slice(i));
     };
     const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // With data.icons the list is the app's own: each command has its icon and the colour of its kind (the app's --cat-* colours), a shortcut
+    // drawn as keys, and nothing is cut off; the list scrolls. Without it the older typed lists are shown with the plain icons above.
+    const rich = !!data.icons;
+    const glyph = (name, colour) => {
+      const nodes = (data.icons || {})[name];
+      if (!nodes) return '';
+      return `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="color:${colour}" aria-hidden="true">${nodes.map(([t, a]) => '<' + t + Object.entries(a).map(([k, v]) => ' ' + k + '="' + String(v).replace(/"/g, '') + '"').join('') + '/>').join('')}</svg>`;
+    };
+    const keys = (k) => (k ? k.split(' + ').map((x) => `<kbd>${esc(x)}</kbd>`).join('') : '');
     const find = (group, words, max) => {
-      const hits = data[group.toLowerCase()].filter(item => words.every(w => (item[0] + ' ' + (item[2] || '')).toLowerCase().includes(w)));
+      const label = (item) => (group === 'Commands' && rich ? item[0] + ' ' + item[4] + ' ' + item[5] : item[0] + ' ' + (item[2] || '')).toLowerCase();   // (a command also answers to its group and its hidden words: "toggle grid")
+      let hits = data[group.toLowerCase()].filter(item => words.every(w => label(item).includes(w)));
+      // nothing: forgive a slip of the keys ("fastners"), as the app's search does: each word may be a letter or two off a word of the name
+      if (!hits.length && words.join('').length >= 4) {
+        const off = (a, b) => { const d = Array.from({ length: b.length + 1 }, (_, j) => j); for (let i = 1; i <= a.length; i++) { let prev = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const keep = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = keep; } } return d[b.length]; };
+        hits = data[group.toLowerCase()].filter(item => { const tokens = label(item).split(/[^a-z0-9]+/).filter(Boolean); return words.every(w => w.length >= 4 && tokens.some(t => Math.abs(t.length - w.length) <= 2 && off(w, t) <= (w.length >= 7 ? 2 : 1))); });
+      }
+      // names that start with what was typed come first
+      hits.sort((a, b) => (b[0].toLowerCase().startsWith(words[0]) ? 1 : 0) - (a[0].toLowerCase().startsWith(words[0]) ? 1 : 0));
       return hits.slice(0, max);
     };
     const draw = () => {
@@ -441,15 +477,29 @@
       let html = '';
       const s = sum(input.value);
       if (s) { html += `<li class="pal-sum" role="presentation"><span>${esc(s.label)} =</span><b>${esc(s.value)}</b></li>`; rows.push({ kind: 'sum', s }); }
-      ['Parts', 'Library', 'Commands'].forEach((group) => {
-        const hits = words.length ? find(group, words, group === 'Parts' ? 6 : 5) : (group === 'Commands' ? data.commands.slice(0, 5) : []);
+      const colours = data.colours || {};
+      // (as in the app, commands lead the list; with none for what was typed, the parts do)
+      (rich ? ['Commands', 'Parts', 'Library'] : ['Parts', 'Library', 'Commands']).forEach((group) => {
+        let title = group, hits;
+        if (words.length) hits = find(group, words, rich ? (group === 'Commands' ? 90 : 24) : (group === 'Parts' ? 6 : 5));
+        else if (group === 'Commands') {
+          // nothing typed: what the app suggests with a model open
+          const picked = rich ? (data.suggest || []).map((id) => data.commands.find((c) => c[6] === id)).filter(Boolean) : [];
+          title = picked.length ? 'Suggested' : group;
+          hits = picked.length ? picked : data.commands.slice(0, 5);
+        } else hits = [];
         if (!hits.length) return;
-        html += `<li class="pal-h" role="presentation">${group}</li>`;
+        html += `<li class="pal-h" role="presentation">${title}</li>`;
         hits.forEach((item) => {
           const id = rows.length;
           rows.push({ kind: group, item });
-          const right = group === 'Commands' ? (item[1] || '') : verb[group];
-          html += `<li class="pal-r" role="option" data-i="${id}">${icon[group]}<b>${mark(item[0], words)}</b><span>${esc(right)}</span></li>`;
+          let ico = icon[group], right;
+          if (rich) {
+            if (group === 'Commands') { ico = glyph(item[3], colours[item[2]] || colours.app); right = (item[4] ? '<em class="pal-g">' + esc(item[4]) + '</em>' : '') + keys(item[1]); }
+            else if (group === 'Parts') { ico = glyph('box', colours.part); right = esc(verb[group]); }
+            else { ico = glyph('blocks', colours.library); right = esc(verb[group]); }
+          } else right = esc(group === 'Commands' ? (item[1] || '') : verb[group]);
+          html += `<li class="pal-r" role="option" data-i="${id}">${ico}<b>${mark(item[0], words)}</b><span>${right}</span></li>`;
         });
       });
       if (!rows.length) html = `<li class="pal-none" role="presentation">${q ? 'Nothing called “' + esc(input.value.trim()) + '”' : 'Type a part, a command or a sum'}</li>`;
@@ -469,6 +519,7 @@
         if (navigator.clipboard) navigator.clipboard.writeText(r.s.copy).catch(() => {});
       } else if (r.kind === 'Parts') out.innerHTML = `Selected <b>${esc(r.item[0])}</b> and framed it${r.item[2] ? ' · ' + esc(r.item[2]) : ''}`;
       else if (r.kind === 'Library') out.innerHTML = `Added <b>${esc(r.item[0])}</b> to the scene${r.item[2] ? ' · ' + esc(r.item[2]) : ''}`;
+      else if (rich) out.innerHTML = `<b>${esc(r.item[0])}</b> runs${r.item[1] ? ' · shortcut ' + esc(r.item[1].split(' + ').join('+')) : ''}`;
       else out.innerHTML = `<b>${esc(r.item[0])}</b> opens${r.item[2] ? ': ' + esc(r.item[2]) : ' its panel'}`;
     };
     input.addEventListener('input', () => { at = 0; out.textContent = ''; draw(); });
@@ -481,6 +532,27 @@
     list.addEventListener('mousemove', (e) => { const row = e.target.closest('.pal-r'); if (row && +row.dataset.i !== at) { at = +row.dataset.i; mark_on(); } });
     list.addEventListener('click', (e) => { const row = e.target.closest('.pal-r,.pal-sum'); if (!row) return; if (row.dataset.i) { at = +row.dataset.i; mark_on(); } run(row.dataset.i ? at : 0); });
     draw();
+
+    // When the search comes into view it types for itself, to show what it does: one command, deleted, the next, and back to the first.
+    // Any touch of it (a click, a key, a finger) stops it where it is; nothing runs with reduced motion or without IntersectionObserver.
+    if (!calm && 'IntersectionObserver' in window) {
+      // the commands worth showing, by words that find them in the app's own list, with a few playful ones (a typo it forgives, a sum, odd parts); the last is what the box held at the start
+      const examples = ['hidden parts', 'fastners', '12*25.4', 'smart optimise', 'micro servo', '2 in', 'remove holes', 'circuit board', 'heatmap', 'wing nut', input.value];
+      let timer = 0, stopped = false;
+      const set = (text) => { input.value = text; at = 0; out.textContent = ''; draw(); };
+      const stop = () => { stopped = true; clearTimeout(timer); };
+      ['pointerdown', 'keydown', 'focusin', 'touchstart'].forEach((type) => demo.addEventListener(type, stop, { once: true, passive: true }));
+      const wait = (ms, next) => { timer = setTimeout(() => { if (!stopped) next(); }, ms); };
+      const type = (text, i, done) => { if (i > text.length) return wait(1100, done); set(text.slice(0, i)); wait(70 + Math.random() * 50, () => type(text, i + 1, done)); };
+      const erase = (done) => { if (!input.value) return wait(260, done); set(input.value.slice(0, -1)); wait(34, () => erase(done)); };
+      const play = (k) => { if (k >= examples.length) return; erase(() => type(examples[k], 1, () => (k === examples.length - 1 ? undefined : play(k + 1)))); };
+      const seen = new IntersectionObserver((entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        seen.disconnect();
+        wait(900, () => play(0));
+      }, { threshold: 0.6 });
+      seen.observe(demo);
+    }
   });
 
   // ---- the Quick wand, working ----

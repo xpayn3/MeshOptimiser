@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { studioEnvironment, kindOfMesh, settleKinds } from './axle-look.js?v=4';
 
 const MAX_EXPLODE = 1.65;                                 // the app's exploded view at 165 %; the offsets in the file are for 100 %
 
@@ -35,22 +36,8 @@ export async function start(pop, base) {
   const root = new THREE.Group();
   scene.add(root);
   // The app's lighting (a soft sky, a key light, a cool fill and a headlight that travels with the camera) on the app's Steel metal, but in a
-  // studio with some contrast: grey walls with a few bright strips and soft boxes, so the metal has something to catch and the light is not even.
-  const studio = new THREE.Scene();
-  studio.add(new THREE.Mesh(new THREE.SphereGeometry(60, 48, 24), new THREE.MeshBasicMaterial({ color: 0x45484d, side: THREE.BackSide })));
-  const panel = (w, h, at, power, color = 0xffffff) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(power), side: THREE.DoubleSide }));
-    m.position.set(...at); m.lookAt(0, 0, 0); studio.add(m);
-  };
-  // (Y is up here: the GLB is Y up)
-  panel(54, 16, [-6, 40, -10], 3.8);                 // a soft box overhead
-  panel(5, 46, [-42, 6, 6], 5, 0xfff0e0);            // a tall warm strip on the left
-  panel(5, 46, [42, 4, -10], 4.5, 0xd4e4ff);         // a tall cool strip on the right
-  panel(40, 4, [0, 20, 40], 4);                      // a strip in front, up high
-  panel(70, 5, [0, -12, -38], 2.2, 0xe8f0ff);        // a low strip behind
-  panel(90, 90, [0, -44, 0], 0.7, 0x8a94a4);         // the floor, a soft glow
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(studio, 0.025).texture;
+  // studio with some contrast (axle-look.js): grey walls with a few bright strips and soft boxes, so the metal has something to catch.
+  scene.environment = studioEnvironment(renderer);
   scene.environmentIntensity = 1.3;
   const hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0.3);
   const keyL = new THREE.DirectionalLight(0xffffff, 1.1); keyL.position.set(80, 100, -60);
@@ -58,9 +45,6 @@ export async function start(pop, base) {
   const head = new THREE.DirectionalLight(0xffffff, 0.3);
   scene.add(hemi, keyL, fill, head, head.target);
 
-  // the app's Steel look (colour #c2c7cd, roughness 0.3, fully metallic); the rubber of the air springs stays dark
-  const STEEL = new THREE.MeshStandardMaterial({ color: 0xbdc3ca, roughness: 0.28, metalness: 1, side: THREE.DoubleSide });
-  const RUBBER = new THREE.MeshStandardMaterial({ color: 0x2a2b2d, roughness: 0.5, metalness: 0.3, side: THREE.DoubleSide });
   // the app's outlines: the edges where the surface turns sharply, thin and dark (one set per shape: repeated parts share it)
   const lineMat = new THREE.LineBasicMaterial({ color: 0x0b0c0e, transparent: true, opacity: 0.55 });
   const edgesOf = new Map();
@@ -72,9 +56,8 @@ export async function start(pop, base) {
   const corner = new THREE.Vector3();
   const parts = meshes.map((mesh) => {
     const rest = mesh.matrixWorld.clone();
-    const c = mesh.material && mesh.material.color;
-    const dark = !!c && (c.r + c.g + c.b) / 3 < 0.09;
-    const part = new THREE.Mesh(mesh.geometry, dark ? RUBBER : STEEL);
+    const kind = kindOfMesh(mesh);
+    const part = new THREE.Mesh(mesh.geometry, mesh.material);
     part.matrixAutoUpdate = false;
     if (!edgesOf.has(mesh.geometry)) edgesOf.set(mesh.geometry, new THREE.EdgesGeometry(mesh.geometry, 38));
     part.add(new THREE.LineSegments(edgesOf.get(mesh.geometry), lineMat));          // (a child: it moves with the part)
@@ -84,8 +67,10 @@ export async function start(pop, base) {
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     const bb = mesh.geometry.boundingBox, pts = [];
     for (let k = 0; k < 8; k++) { corner.set(k & 1 ? bb.max.x : bb.min.x, k & 2 ? bb.max.y : bb.min.y, k & 4 ? bb.max.z : bb.min.z).applyMatrix4(rest); pts.push(corner.clone()); }
-    return { part, rest, off: new THREE.Vector3(...o), pts };
+    return { part, rest, off: new THREE.Vector3(...o), pts, kind };
   });
+  settleKinds(parts);                                          // (which material each part gets: by its name, see axle-look.js)
+  for (const entry of parts) entry.part.material = entry.material;
   gltf.scene.clear();                                          // (the file's own tree is not drawn)
 
   // ---- the camera: Y up, a three-quarter view that turns a little as the model comes apart ----

@@ -21,7 +21,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=298" />
+  <link rel="stylesheet" href="site.css?v=306" />
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"}}</script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -63,6 +64,34 @@
         <figure><a class="zoom" href="Images/apps/meshoptimiser-appearance.webp" data-group="spots" data-caption="Appearance"><img src="Images/apps/meshoptimiser-appearance.webp" alt="MeshOptimiser: Appearance" width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption><i>09</i><strong>Appearance</strong><span>Accent colour, surfaces, font and text size.</span></figcaption></figure>
       </div>
       <div class="dots" aria-hidden="true"></div>
+    </section>
+
+    <section class="band live" id="before-after" data-live="wipe">
+      <div class="wrap">
+        <div class="band-head">
+          <p class="kicker">Before and after</p>
+          <h2>Drag the line. Same gearbox, far fewer triangles.</h2>
+        </div>
+        <p class="lead sv-lead">On the left is the Gearbox Assy as it came, 646,064 triangles. On the right is what the app’s own simplifier makes of it. Pick how far to go and drag the line to compare.</p>
+        <div class="live-stage" data-stage>
+          <img class="live-poster" src="Images/apps/meshoptimiser-smart-optimise.webp" alt="Smart optimise on the gearbox: every clean-up in order, aiming at half the triangles." width="2400" height="1350" loading="lazy" decoding="async" />
+        </div>
+        <p class="live-note">Gearbox Assy: Khronos glTF-Sample-Models, a JT CAD sample converted by Okino. The right side is a real run of the simplifier the app’s Decimate uses; the numbers are counted, not typed.</p>
+      </div>
+    </section>
+
+    <section class="band live" id="find-fasteners" data-live="fast">
+      <div class="wrap">
+        <div class="band-head">
+          <p class="kicker">Fasteners</p>
+          <h2>Find every screw. Take it out.</h2>
+        </div>
+        <p class="lead sv-lead">This axle is 295 parts, and 30 of them are socket screws. Find them, take them out, and watch what that does to the triangle count. Drag to turn the model.</p>
+        <div class="live-stage" data-stage>
+          <img class="live-poster" src="Images/apps/meshoptimiser-fasteners-axle.webp" alt="The Fasteners tool on the truck axle: the screws found by shape and listed." width="1920" height="1031" loading="lazy" decoding="async" />
+        </div>
+        <p class="live-note">Model: Mercedes-Benz Arocs 8×8 front axle. Trademarks belong to their owners; not affiliated. Here the screws are picked out by part name; the app finds them by their shape, in one click.</p>
+      </div>
     </section>
 
     <section class="band" id="clean-up-tools">
@@ -232,6 +261,40 @@
           <div><dt>Faster to draw</dt><dd>Same file size, smoother on screen. Opens in any viewer.</dd></div>
         </dl>
         <p class="sv-note">Measured on the Khronos sample models (Gearbox, Reciprocating Saw, Two-Cylinder Engine) with glTF Transform 4.1: Meshopt at high, Draco at its defaults. 1 MB = 1,000,000 bytes. Very light meshes can come out larger with Draco.</p>
+      </div>
+    </section>
+
+    <section class="band" id="library">
+      <div class="wrap">
+        <div class="band-head">
+          <p class="kicker">The library</p>
+          <h2>112 parts, ready to use.</h2>
+        </div>
+        <p class="lead lib-lead">Bolts, nuts, pipe fittings, bearings, brackets, gears, a servo, a circuit board. Set the size, then drag it in.</p>
+        <div class="lib-show">
+          <ul class="lib-tiles">
+            <li><img src="library/cube.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Cube</span></li>
+            <li><img src="library/hexbolt.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Hex bolt</span></li>
+            <li><img src="library/hexnut.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Hex nut</span></li>
+            <li><img src="library/tube.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Tube</span></li>
+            <li><img src="library/plate.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Plate</span></li>
+            <li><img src="library/gear.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Spur gear</span></li>
+            <li><img src="library/fan.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Axial fan</span></li>
+            <li><img src="library/anglebracket.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Angle bracket</span></li>
+            <li><img src="library/sphere.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Sphere</span></li>
+            <li><img src="library/allen.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Socket head screw</span></li>
+            <li><img src="library/jamnut.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Thin nut</span></li>
+            <li><img src="library/elbow.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Pipe elbow</span></li>
+            <li><img src="library/flatbar.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Flat bar</span></li>
+            <li><img src="library/rack.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Gear rack</span></li>
+            <li><img src="library/heatsink.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Heatsink</span></li>
+            <li><img src="library/tslotangle.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>T-slot bracket</span></li>
+            <li><img src="library/cylinder.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Cylinder</span></li>
+            <li><img src="library/countersunk.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Countersunk screw</span></li>
+            <li><img src="library/locknut.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Lock nut</span></li>
+            <li><img src="library/tee.webp" alt="" width="192" height="192" loading="lazy" decoding="async" /><span>Pipe tee</span></li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -495,6 +558,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="site.js?v=61"></script>
+  <script defer src="site.js?v=74"></script>
 </body>
 </html>

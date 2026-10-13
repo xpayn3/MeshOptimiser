@@ -445,6 +445,27 @@ bushings, bearings, O-rings, cable glands, shafts and boxes are not.
 
 ---
 
+## 🙏 Credits
+
+MeshOptimiser is built on open source. Thank you to everyone who made these. Their licence files are in [`vendor/`](vendor/); the same list is on the [website](https://xpayn3.github.io/MeshOptimiser/credits.html) and in Settings › About.
+
+| Library | By | Licence | What it does here |
+|---|---|---|---|
+| [three.js](https://threejs.org) | the three.js authors | MIT | The 3D view, on WebGPU or WebGL2 |
+| [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) | Garrett Johnson | MIT | Fast picking on very large meshes |
+| [meshoptimizer](https://github.com/zeux/meshoptimizer) | Arseny Kapoulkine | MIT | The simplifier behind Decimate and Smart Fit, and Meshopt compression (gltfpack too, when installed) |
+| [Draco](https://github.com/google/draco) | Google | Apache 2.0 | Reads and writes Draco-compressed GLB |
+| [Open Asset Import Library](https://github.com/assimp/assimp) (assimpjs) | the assimp team; Viktor Kovacs | BSD 3-Clause; MIT | Opens other 3D formats in the browser |
+| [CadQuery OCP](https://github.com/CadQuery/OCP) | the CadQuery contributors | Apache 2.0 | The Python bindings that read STEP files |
+| [Open CASCADE Technology](https://dev.opencascade.org) | Open Cascade SAS | LGPL 2.1 with exception | The geometry kernel under OCP |
+| [trimesh](https://github.com/mikedh/trimesh) | Michael Dawson-Haggerty | MIT | Meshes and GLB writing in the converter |
+| [NumPy](https://numpy.org) | the NumPy developers | BSD 3-Clause | The numbers underneath |
+| [Inter](https://rsms.me/inter/) | Rasmus Andersson and the Inter Project Authors | SIL OFL 1.1 | The typeface |
+| [Lucide](https://lucide.dev) | the Lucide contributors | ISC | The icons |
+| [Gearbox Assy](https://github.com/KhronosGroup/glTF-Sample-Models/tree/main/2.0/GearboxAssy) | Khronos glTF-Sample-Models; converted by Okino Computer Graphics | see the repository | The sample assembly in the screenshots and the online version |
+
+---
+
 ## 📜 License
 
 **MIT.** Do whatever — just don't blame me when your assembly tessellates into a black hole.

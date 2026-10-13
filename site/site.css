@@ -1602,3 +1602,49 @@ main { overflow-x: clip; }
 .credit-note { max-width: 62ch; color: var(--tx-2); font-size: 14px; line-height: 1.6; }
 .credit-note a { color: var(--tx); }
 @media (max-width: 720px) { .credit-group li { grid-template-columns: 1fr; } .credit-group li em { text-align: left; } }
+
+/* Live models on the features page (features3d.js): a picture until the model is drawn, then a canvas with the numbers over it */
+.live-stage { position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--r); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.live-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.live-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.live.is-live .live-poster { display: none; }
+.live.is-live .live-stage { touch-action: none; user-select: none; }
+.live[data-live="wipe"].is-live .live-stage { cursor: ew-resize; }
+.live[data-live="fast"].is-live .live-stage { cursor: grab; }
+.live-stage.is-drag { cursor: grabbing !important; }
+.live-note { max-width: 72ch; margin-top: 14px; color: var(--tx-3); font-size: 13px; line-height: 1.55; }
+.live-bar { position: absolute; inset: 20px 24px auto; display: flex; justify-content: space-between; gap: 24px; pointer-events: none; }
+.live-bar.is-single { justify-content: flex-start; gap: 48px; }
+.live-side { display: grid; gap: 3px; }
+.live-side.is-after { text-align: right; }
+.live-side small { color: var(--tx-3); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; }
+.live-side strong { font-size: clamp(22px, 3vw, 40px); font-weight: 400; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.live-side span { color: var(--tx-2); font-size: 13px; }
+.live-handle { position: absolute; top: 0; bottom: 0; width: 48px; margin-left: -24px; display: grid; place-items: center; cursor: ew-resize; outline-offset: -6px; }
+.live-handle::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: rgba(255, 255, 255, 0.9); }
+.live-handle i { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #f2f2f3; color: #111; font-style: normal; font-size: 15px; letter-spacing: 2px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45); }
+.live-handle i::before { content: '‹ ›'; }
+.live-chips { position: absolute; bottom: 20px; left: 50%; display: flex; gap: 4px; padding: 4px; transform: translateX(-50%); border-radius: 999px; background: rgba(16, 16, 16, 0.82); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.live-chips button { height: 34px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--tx-2); font: inherit; font-size: 14px; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; }
+.live-chips button:hover { color: var(--tx); }
+.live-chips button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.live-go { position: absolute; bottom: 20px; left: 24px; display: flex; gap: 10px; }
+@media (prefers-reduced-motion: reduce) { .live-chips button { transition: none; } }
+
+/* The search section is laid out like the Quick wand's: the palette sits on the page itself, with a soft spotlight behind it, the tips in a row below */
+.demo-band .demo { position: relative; display: grid; justify-items: center; align-content: center; gap: 18px; height: auto; min-height: 460px; padding: 0; margin-top: clamp(0px, 1vw, 12px); overflow: visible; border-radius: 0; background: none; box-shadow: none; }
+.demo-band .demo::before { content: ''; position: absolute; left: 50%; top: 50%; width: min(100%, 860px); aspect-ratio: 1; transform: translate(-50%, -50%); background: radial-gradient(closest-side, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.062) 12%, rgba(255, 255, 255, 0.046) 26%, rgba(255, 255, 255, 0.03) 42%, rgba(255, 255, 255, 0.016) 58%, rgba(255, 255, 255, 0.006) 78%, rgba(255, 255, 255, 0) 100%); pointer-events: none; z-index: 0; }
+.demo-band .pal { z-index: 1; width: min(100%, 640px); }
+.demo-band .demo-out { z-index: 1; max-width: 64ch; }
+
+/* the search rows as the app draws them: the icon in the colour of its kind, the shortcut as keys */
+.pal-list .pal-r span { display: inline-flex; gap: 3px; align-items: center; }
+.pal-list .pal-r span kbd { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 4px; background: #232325; color: var(--tx-2); font: 400 11px/1.5 var(--font); text-align: center; }
+.demo-band .pal-list { height: 352px; }
+.demo-band .demo { grid-template-columns: minmax(0, 1fr); }
+.pal-list .pal-r span kbd { display: inline-flex; align-items: center; justify-content: center; height: 20px; padding: 0 6px; line-height: 1; }
+.demo-band .lead.wand-lead { margin-bottom: clamp(28px, 3.4vw, 48px); }
+
+/* a soft light on the page behind the axle, so the model stands out from the dark (the same kind of spotlight as behind the Quick wand) */
+.pop.is-axle .pop-pin::before { content: ''; position: absolute; left: 55%; top: 55%; width: min(96%, 1240px); height: min(92%, 840px); transform: translate(-50%, -50%); background: radial-gradient(closest-side, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.043) 12%, rgba(255, 255, 255, 0.032) 26%, rgba(255, 255, 255, 0.021) 42%, rgba(255, 255, 255, 0.011) 58%, rgba(255, 255, 255, 0.004) 78%, rgba(255, 255, 255, 0) 100%); pointer-events: none; }
+.pal-list .pal-r span .pal-g { margin-right: 8px; color: var(--tx-3); font-size: 12px; font-style: normal; white-space: nowrap; }
