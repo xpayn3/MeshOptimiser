@@ -20,8 +20,10 @@ You do not need to learn these before you start. Come back to this page when a w
 - **Group**: A folder in the parts tree. It holds parts or other groups.
 - **Mesh**: The surface of a part, built from many small flat triangles.
 - **Triangle (tri)**: The smallest piece of a mesh. The app counts everything in triangles: more triangles mean a heavier model.
-- **Polygon (n-gon)**: A flat face with any number of corners. Several triangles that lie in one plane can be joined into one polygon. [Remesh](meshoptimiser://docs/remesh) does that, and turns polygons back into triangles.
-- **Vertex**: A corner point of a triangle. The plural is vertices.
+- **Polygon (n-gon)**: A flat face with any number of corners. Several triangles that lie in one plane can be joined into one polygon. [Remesh](meshoptimiser://docs/remesh) does that, and turns polygons back into triangles. In [Edit mesh](meshoptimiser://docs/edit-mesh), two triangles that make a four-sided shape count as one polygon.
+- **Vertex**: A corner point of a triangle. The plural is vertices. In [Edit mesh](meshoptimiser://docs/edit-mesh) it is called a point.
+- **Edge**: The line between two points where two polygons meet, or where a surface ends.
+- **Loop**: A row of polygons or edges that runs round a part, like a ring round a tube. [Edit mesh](meshoptimiser://docs/edit-mesh) picks one with a double-click.
 - **Normal**: A hidden arrow on the surface that tells the light which way the surface faces. Wrong normals make a part look oddly shaded.
 - **Bounding box (bbox)**: The smallest box that a part fits inside. The app uses it to measure how big a part is.
 - **Origin and pivot**: The origin is the point 0,0,0 of the scene. A pivot is the point a part turns around.
@@ -43,9 +45,14 @@ You do not need to learn these before you start. Come back to this page when a w
 
 - **Viewport**: The large 3D view in the middle of the window.
 - **Parts tree**: The list of parts and groups in the left sidebar.
-- **Gizmo**: The coloured arrows, rings or handles that appear on a selected part, for moving, rotating or scaling it.
+- **Gizmo**: The coloured arrows, rings or handles that appear on a selected part, for moving, rotating or scaling it. In Edit mesh it moves the picked points, edges or polygons instead.
 - **Orbit, pan, zoom**: Turning the view around the model, sliding it sideways, and moving closer or further away.
 - **Isolate**: Showing only the selected parts and hiding everything else for a moment.
+- **Edit mesh**: A mode in which you pick and change the points, edges and polygons of a part instead of whole parts. See [Edit mesh](meshoptimiser://docs/edit-mesh).
+- **Bake geo**: A button in **Properties** that turns a library shape into an ordinary mesh. The shape’s numbers go, and the mesh tools work on it. See [The parts library](meshoptimiser://docs/library).
+- **Align and spread**: Lining parts up on one side or the middle along an axis, or spacing them evenly. See [Align parts](meshoptimiser://docs/align-parts).
+- **Dissolve, weld**: Two Edit mesh tools. Dissolve takes pieces out and closes the surface over them. Weld makes several points one.
+- **Shortcut profile**: A named set of keys that you changed. The app’s own keys are the Default profile, which cannot be changed. See [Keyboard shortcuts](meshoptimiser://docs/shortcuts).
 - **Draw call**: One instruction to the graphics card to draw something. Fewer draw calls usually mean a smoother view. The optimisation report counts them.
 
 ## The technical side

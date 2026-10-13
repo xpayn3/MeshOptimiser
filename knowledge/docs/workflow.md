@@ -8,7 +8,7 @@ If you want the shortest way, [Smart optimise](meshoptimiser://docs/smart-optimi
 
 1. Open the file and look at it. Read the totals in **Properties**. See [How to read the numbers](meshoptimiser://docs/read-the-numbers).
 2. If the model lies on its side or sits far from the grid, stand it up with [Align to floor](meshoptimiser://docs/align-to-floor).
-3. Find out where the weight is: open [Heavy parts](meshoptimiser://docs/heavy-parts) and press `4` for the heatmap. Delete the heavy parts that nobody needs.
+3. Find out where the weight is: open [Heavy parts](meshoptimiser://docs/heavy-parts) and press `Alt + 4` for the heatmap. Delete the heavy parts that nobody needs.
 4. Remove what nobody will see with [Select hidden parts](meshoptimiser://docs/select-hidden-parts). Isolate, check, delete.
 5. Remove copies that lie on top of each other with [Stacked copies](meshoptimiser://docs/stacked-copies). Find, isolate, check, delete.
 6. Find the bolts, nuts and washers with [Fasteners](meshoptimiser://docs/fasteners). Delete them if the model does not need them, or replace them with stand-ins using [Smart fit](meshoptimiser://docs/smart-fit).
@@ -17,7 +17,7 @@ If you want the shortest way, [Smart optimise](meshoptimiser://docs/smart-optimi
 9. Replace other filler parts with stand-ins, using [Smart fit](meshoptimiser://docs/smart-fit).
 10. Reduce the heavy parts that remain with [Decimate](meshoptimiser://docs/decimate), or bring the whole scene to a number with [Fit to budget](meshoptimiser://docs/fit-to-budget).
 11. Tidy up: **Remove empty parts** and **Delete empty groups** in the card **Quick fixes**.
-12. Look at the whole model again in the normal view (`1`) and in clay (`5`). Open the **Optimisation report** to see what you saved.
+12. Look at the whole model again in the normal view (`Alt + 1`) and in clay (`5`). Open the **Optimisation report** to see what you saved.
 13. Save the scene, so you can come back to it. See [Save a scene](meshoptimiser://docs/save-scene).
 14. Export the file for the program it is meant for. See [Export](meshoptimiser://docs/export).
 

@@ -41,7 +41,7 @@ Leave the extra information off when you convert a STEP file. In the import sett
 
 1. Drop the exported GLB onto the app window. A file never replaces a scene that has something in it, so it opens in a new tab.
 2. Open the parts tree and read every name.
-3. Press `3` for X-ray and look inside. Nothing should be there that you took out.
+3. Press `Alt + 3` for X-ray and look inside. Nothing should be there that you took out.
 4. Look at **Properties** and the **Optimisation report**. The parts and triangle counts should match what you expect.
 
 ## What to send, and what not to send

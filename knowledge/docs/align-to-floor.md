@@ -48,4 +48,4 @@ Pressing **Align to floor** is one undo step. **Back to how it was loaded** in t
 
 > Which direction is “up” is a setting of the scene: **Up axis (viewport)** under **Settings**, **Scene**. CAD files normally use Z as up. If the whole scene looks turned by a quarter, check that setting before you turn the model.
 
-Related: [move-rotate-scale](meshoptimiser://docs/move-rotate-scale), [export](meshoptimiser://docs/export), [workflow](meshoptimiser://docs/workflow)
+Related: [align-parts](meshoptimiser://docs/align-parts), [move-rotate-scale](meshoptimiser://docs/move-rotate-scale), [export](meshoptimiser://docs/export), [workflow](meshoptimiser://docs/workflow)

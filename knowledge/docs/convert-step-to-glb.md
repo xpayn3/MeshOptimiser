@@ -15,7 +15,7 @@ A STEP file is how engineers share a design. A web page cannot show one. GLB is 
 2. Drag the STEP file onto the window.
 3. In the **Import settings** window, leave everything as it is and press **Import**. **Standard** under **Surface quality** is the recommended choice. See [Open your first file](meshoptimiser://docs/first-file).
 4. Wait while the progress card works. A big assembly can take several minutes. Repeated parts are found and stored once, and the result is compressed.
-5. Look at the model. **Properties** on the right shows how heavy it is. Press `1` for the normal view.
+5. Look at the model. **Properties** on the right shows how heavy it is. Press `Alt + 1` for the normal view.
 6. Press `Ctrl + E` and choose **GLB**. In the Export window, check **Unit scale** and **Up axis** (below).
 7. Press **Export GLB**. The file arrives in your downloads folder.
 

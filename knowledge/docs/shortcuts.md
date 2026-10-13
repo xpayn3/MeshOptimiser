@@ -1,10 +1,10 @@
 # Keyboard shortcuts
 
-Every keyboard shortcut and mouse action in MeshOptimiser v0.23.0, grouped by what it does.
+Every keyboard shortcut and mouse action in MeshOptimiser v0.24.0, grouped by what it does.
 
 On macOS, use `⌘` wherever this page says `Ctrl`.
 
-Inside the app, press `?` for the same list with a search field. Shortcuts with a single key do nothing while you are typing in a field, or while a window is open in front.
+Inside the app, press `?` for the same list with a search field and a picture of the keyboard. Shortcuts with a single key do nothing while you are typing in a field, or while a window is open in front. This page lists the keys the app comes with. If you have changed some (see “Change a key” below), the app shows yours.
 
 ## File
 
@@ -37,12 +37,13 @@ Inside the app, press `?` for the same list with a search field. Shortcuts with 
 - `Ctrl + B`: Smart fit
 - `U`: Untriangulate the selection
 - `Shift + U`: Triangulate the selection
+- `B`: Quick remesh: pick how many triangles stay, under the pointer
 - `M`: Measure
 - `L`: Draw lines and shapes
 - `Enter`: Run the open command card
 - `Esc`: Put the open command card away. A second press clears the selection.
 
-The key of a tool also closes its card when the card is already open. `U` and `Shift + U` work on the selection only. See [Remesh](meshoptimiser://docs/remesh).
+The key of a tool also closes its card when the card is already open. `U` and `Shift + U` work on the selection only. See [Remesh](meshoptimiser://docs/remesh), which also describes Quick remesh.
 
 Smart optimise, Decimate, Fit to budget, Remove floating pieces, Sweep, Select hidden parts, Fasteners, Stacked copies and Align to floor have no key of their own. Find them on the toolbar, in the `…` list or with the search.
 
@@ -68,10 +69,10 @@ Smart optimise, Decimate, Fit to budget, Remove floating pieces, Sweep, Select h
 ## View
 
 - `F`: Frame the selection, or the whole model
-- `1`: Solid
-- `2`: Wireframe
-- `3`: X-ray
-- `4`: Heatmap
+- `Alt + 1`: Solid
+- `Alt + 2`: Wireframe
+- `Alt + 3`: X-ray
+- `Alt + 4`: Heatmap
 - `5`: Clay, and back to solid
 - `6`: CAD view, and back to solid
 - `Ctrl + 1`: Camera view (perspective)
@@ -79,6 +80,21 @@ Smart optimise, Decimate, Fit to budget, Remove floating pieces, Sweep, Select h
 - `Ctrl + 3`: Front view
 - `Ctrl + 4`: Side view
 - `G`: Show or hide the floor grid
+
+## Edit mesh
+
+These work in the piece modes of [Edit mesh](meshoptimiser://docs/edit-mesh). `1` to `4` are the keys that used to switch the view; the view modes are now on `Alt` and the same numbers.
+
+- `1`: Points mode
+- `2`: Edges mode
+- `3`: Polygons mode
+- `4`: Model mode: a click picks a whole part, as before
+- `Ctrl + A`: Pick everything of the selected parts
+- `Del`: Take out the picked pieces
+- `Ctrl + Backspace`: Dissolve the picked pieces
+- `Shift + Click`: With any pick tool: add to what is picked
+- `Ctrl + Click`: With any pick tool: take away from what is picked
+- `Double-click`: With the Click tool: pick a loop
 
 ## Move, rotate, scale
 
@@ -149,4 +165,20 @@ Smart optimise, Decimate, Fit to budget, Remove floating pieces, Sweep, Select h
 - `← → ↑ ↓`: Walk the cards of the recent files. Up and down move by a row.
 - `Enter`: In the search field of the recent files: open the first match
 
-Related: [search-and-commands](meshoptimiser://docs/search-and-commands), [move-the-view](meshoptimiser://docs/move-the-view), [select-parts](meshoptimiser://docs/select-parts), [help-window](not in this knowledge base)
+## Change a key
+
+Every key can be changed except `Esc`, the Quick wand’s `W` and the mouse gestures. Open the list with `?`.
+
+1. Click the shortcut you want to change, and press the new keys.
+2. If another command already has that combination, the app says which one and offers **Replace**. A few combinations are kept by the browser for itself (such as `Ctrl + W` and `F5`) and are refused.
+3. Use **All commands** to list the commands that have no key yet, so you can give them one.
+
+The picture of the keyboard shows the keys that do something, lit and named after their command. Hold `Ctrl`, `Shift` or `Alt`, or click them in the picture, to see the keys of that combination, with the mouse gestures for the same keys under it. Press any combination to see what it does, or click a key to list everything on it.
+
+## Profiles
+
+Your changes are kept in named profiles, in this browser. You can make a new one, duplicate, rename or delete one, and put every key back. **Default** is the app’s own keys and cannot be changed, so your first change starts a profile of your own.
+
+The command search, the tooltips and the right-click menu show your keys. The keys written in the app menu and in the toolbar’s lists are still the default ones, and a command left without a key shows none.
+
+Related: [search-and-commands](meshoptimiser://docs/search-and-commands), [move-the-view](meshoptimiser://docs/move-the-view), [select-parts](meshoptimiser://docs/select-parts), [help-window](not in this knowledge base), [edit-mesh](meshoptimiser://docs/edit-mesh)

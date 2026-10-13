@@ -26,12 +26,30 @@ While you hold `Shift` and drag a handle, turn the mouse wheel to change the ste
 
 While snap is on, a small green pill at the top of the viewport, beside the camera pill, shows the step, for example **Snap 10 mm** or **Snap 15°**.
 
+## Gizmo axes: World or Local
+
+Hold the Move, Rotate or Scale button on the tool strip, or right-click it, for a short list. **World** lines the gizmo up with the scene’s X, Y and Z. **Local** lines it up with the part’s own axes, as the part is turned. In [Edit mesh](meshoptimiser://docs/edit-mesh) the list also has **Normal**, where the gizmo’s Z points along the average normal of the picked pieces, so a face can be pulled straight out of itself.
+
 ## Type exact values
 
 1. Click the transform panel button on the viewport’s tool strip, the fifth button from the top. The **Transform** card rises into place at the foot of the left sidebar, under the parts tree.
 2. It has three columns, **Position**, **Rotation** and **Size**, with a row for X, Y and Z.
 3. Click a number and type a value, or drag it sideways.
 4. Press **Reset** to put position, rotation and size back.
+
+The switch beside **Reset** turns the third column from **Size** into a scale factor. It works for instanced copies too. A scale typed for a group in the parts tree scales the parts inside it, with undo, and **Reset** takes it back. `Tab` goes down each column.
+
+## Several parts at once
+
+The nine fields work on a whole selection too. With several parts selected, a field shows the number when every part has the same one, and **mixed** when they differ.
+
+A number you type goes to each part on its own, about its own origin. Every part gets that position, that rotation or that size, and the other eight numbers of each part stay as they were. The whole change is one undo step.
+
+- Locked parts, shared (instanced) copies and parts with no thickness along an axis are skipped. A message lists what stayed.
+- With more than 400 parts selected, the fields just say **mixed**, without comparing the parts. You can still type a number into them.
+- The **Scale** switch is respected: with it on, the third column is a scale factor for every part.
+
+The gizmo helps too. When the selected parts are all turned the same way, the gizmo keeps that turn instead of snapping to the scene’s axes as soon as a second part is picked. To line parts up on an axis or space them evenly, see [Align parts](meshoptimiser://docs/align-parts).
 
 Right-click a column heading to copy all three values or paste them onto another part. The units follow **Display units** under **Settings**, **Scene**.
 
@@ -89,4 +107,4 @@ Moves, turns and scalings are undo steps, whether you dragged the gizmo or typed
 
 > Moving a part with the gizmo changes where it sits, not its mesh. To write the change into the mesh itself, use **Bake gizmo transforms** in the card **Edit selection**. Most people never need to.
 
-Related: [align-to-floor](meshoptimiser://docs/align-to-floor), [select-parts](meshoptimiser://docs/select-parts), [cleanup](meshoptimiser://docs/cleanup)
+Related: [align-parts](meshoptimiser://docs/align-parts), [align-to-floor](meshoptimiser://docs/align-to-floor), [select-parts](meshoptimiser://docs/select-parts), [cleanup](meshoptimiser://docs/cleanup), [edit-mesh](meshoptimiser://docs/edit-mesh)

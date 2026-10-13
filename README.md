@@ -310,6 +310,15 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.25.0** — more to build with, and a better way to line it up: 26 new library parts, an Align parts panel, a Transform panel for several parts, and a search you can move.
+
+- ![new][new] **26 new library parts, and two new shelves** — 112 parts on eight shelves. New: Flange bolt, Clevis pin, Wood screw, Thumb screw, bearings, a stepped shaft, a shaft coupler, a GT2 timing pulley, a rail carriage, a strut channel, and the new *Electronics* and *Brackets and connectors* shelves.
+- ![new][new] **Align parts** — align or spread the selected parts along X, Y and Z, to the selection, the last part picked or the origin, with an optional fixed gap. One undo step each press.
+- ![new][new] **Transform works on several parts** — a field shows the number the parts share, or *mixed*. A number typed in goes to each part on its own, about its own origin.
+- ![new][new] **Move the search** — drag the search icon, drag the right edge to resize, double-click the icon to put it back. The place is remembered.
+- ![new][new] **A tree search that forgives a typo**, with quotes, *or*, exclusions, `>5000` triangle filters and `is:hidden`.
+- ![new][new] **Bake geo** turns a library shape into an ordinary mesh. The Edit mesh tools are a bar at the right of the view, and Box pick is live.
+
 **v0.24.0** — into the mesh: an Edit mesh mode with points, edges and polygons, a shortcuts window with a keyboard and keys you can change, and a faster start.
 
 - ![new][new] **Edit mesh** — Points, Edges, Polygons and Model modes (`1` `2` `3` `4`), as in Cinema 4D. Pick with Click, Box or Brush, pick loops, then move, turn, scale, delete or reverse what is picked with the gizmo. The view modes moved to `Alt+1` to `Alt+4`.

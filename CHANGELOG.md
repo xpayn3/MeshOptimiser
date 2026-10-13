@@ -4,6 +4,47 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.25.0
+
+Released 13 Oct 2026.
+
+v0.24.0 let you into the mesh. v0.25.0 gives you more to build with and a better way to line it all up: 26 new library parts on eight shelves, an Align parts panel, a Transform panel that works on several parts at once, a tree search that forgives a typo, and a command search you can move out of the way.
+
+**Library**
+
+- ![new][new] **26 new parts, and two new shelves.** The library has 112 parts on eight shelves now, up from 86 on six. *Fasteners* gain Flange bolt, Clevis pin, Wood screw and Thumb screw. *Machine parts* gain Thrust bearing, Flanged bearing, Roller bearing, Stepped shaft, Shaft coupler, Timing pulley (GT2, 10 to 80 teeth) and Rail carriage. *Profiles and plates* gains Strut channel. The new *Electronics* shelf holds Axial fan, Heatsink, Pin header, Circuit board and Micro servo. The new *Brackets and connectors* shelf holds Angle bracket, T-slot bracket, Three-way corner, Joining plate, Shelf bracket, Joist hanger, Post base, Column base plate and Pipe clamp. Each has a picture of its own.
+- ![new][new] **Bake geo.** A library shape's properties have a new button that turns the shape into an ordinary mesh: the shape's parameters go and the mesh tools work on it. Ctrl+Z gives the parameters back. The button is off while the part is locked. Edit mesh skips shapes that are still parametric and says *Bake geo first*.
+
+**Parts and layout**
+
+- ![new][new] **Align parts.** A new card, found by the search as *Align and spread parts…* and as a slice of the Quick wand (no default key). *Align to* has three choices: the selection, the last part picked, or the origin. For X, Y and Z there are three Align buttons (low sides, middles, high sides) and two Spread buttons (middles evenly apart, equal gaps). A *Gap* field sets a fixed gap, counted from the lowest part; empty means even. Parts are measured by their box in the scene. Each press is one undo step, locked parts stay where they are, and Explode is put back first. Spread needs three parts (two when a gap is typed), Align needs two or the origin. A line under the buttons says what moved.
+- ![new][new] **The Transform panel works on several parts.** The nine fields used to be closed once a second part was picked. Now a field shows the number when every selected part has it, and *mixed* when they differ. A number typed in goes to each part on its own, about its own origin, and the other eight numbers of every part stay as they were. One undo step. Locked parts, shared (instanced) copies and parts with no thickness along an axis are skipped, and a toast lists what stayed. Above 400 parts the fields just say *mixed*. The Scale switch is respected.
+- ![polish][polish] **The gizmo keeps its turn.** With several parts selected that are all turned the same way, the gizmo now keeps that orientation. It used to snap to the scene's axes as soon as a second part was picked.
+
+**Search**
+
+- ![new][new] **Move the search.** Hold the search icon and drag, and the card goes where you want it. Drag its right edge to change the width (at least 320 px). The place and the width are remembered, also after you close it and the next time you open the app. Double-click the icon to put it back in the middle at its own width.
+- ![new][new] **The part tree's search reads more.** Several words all have to match, in any order. Case, accents and the marks `_` `-` `.` are ignored, and so are the joins of camelCase, so `gearbox` finds Gear_Box. `"two words"` in quotes matches as written, a comma means or, and `-word` leaves a word out. `>5000` and `<200` filter by triangles, and `5k` and `1.2m` work. `is:hidden`, `is:visible` and `is:selected` filter by state. When nothing is found at all, it tries again forgivingly: one wrong, missing, extra or swapped letter in a word of four letters or more, two in a word of eight or more. `braket` finds Bracket. Groups match by name only.
+
+**Edit mesh**
+
+- ![polish][polish] **The Edit mesh tools are a bar at the right of the view.** The card is gone. A vertical icon bar holds Click, Box and Brush, World, Local and Normal, Loops, Planarize, Straighten, Weld, Fill, Reverse normals, Dissolve and Extract. The icons are one calm colour, and the tool you are using is lit. The left toolbar shows Points, Edges and Polygons as three buttons, and the mode button goes back to Model. Weld has a small card of its own (*Join within* and a Weld button). Key tips show at the bottom right of the view.
+- ![polish][polish] **Box pick is live.** The selection follows the box while you drag, pieces the box lets go of are let go, and the history gets one entry when you release. The gizmo is put away during the drag. Changing tool or losing the pointer in the middle cancels the box and gives back what was picked.
+
+**Around the app**
+
+- ![polish][polish] **Long messages scroll like a banner.** A toast too long for its width waits a moment, slides to the end, rests, and stays until it has been read. With reduced motion it wraps onto more lines and stays at least five seconds.
+- ![polish][polish] **A slimmer Quick remesh column.** 52 px wide, with 13 px numbers and no % sign (a screen reader still says *N percent*).
+
+**Fixes**
+
+- ![fix][fix] **Frame selected from an orthographic camera** framed nothing and put the camera inside the model. It now fits the box by its half-height.
+- ![fix][fix] **Wireframe lines of a thin part's far side showed through the near side** when seen from far away. Fixed in the Wireframe view and for the points in Edit mesh, by lifting only faces that look at the camera.
+- ![fix][fix] **Edit mesh edges that run past the camera vanished** in a very close view. They are cut at the near plane and still drawn.
+- ![fix][fix] **Quick remesh could ruin a small part.** A result that loses more than 40 % of the surface, or 10 % of the diagonal, is refused and the part takes the next gentler level (a 100-triangle bolt was left with a quarter of its surface at 25 %). A level you are keeping can no longer be changed by a hand still moving.
+- ![fix][fix] **Dragging the size of a heavy shape** (over 12,000 triangles) is smoother: the outline is hidden until you let go. Lighter shapes keep it live.
+- ![fix][fix] **The start fade:** a sidebar folded to a lower opacity now fades to its own opacity, not to 1, and the first tab's parts fade in again when you switch back to it.
+
 ## v0.24.0
 
 Released 12 Oct 2026.

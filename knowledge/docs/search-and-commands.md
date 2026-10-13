@@ -13,7 +13,7 @@ You do not have to remember where a button is. The search finds it. It is the fa
 
 ## What it finds
 
-- **Commands**: Everything in the menus and on the toolbars, each with its shortcut. Before you type, the commands you ran lately come first, with suggestions that fit what is selected.
+- **Commands**: Everything in the menus and on the toolbars, each with its shortcut (the one you have set, if you changed it). Before you type, the commands you ran lately come first, with suggestions that fit what is selected.
 - **Sidebar controls**: Every button, slider, switch and field in the right sidebar, listed under the name of its card. Choosing a button runs it. Choosing anything else opens its card and scrolls to it.
 - **Parts**: Parts of the scene by name. `Enter` selects the part and frames it, even when it is hidden. When several parts carry what you typed in their name, one row selects them all. Hidden parts are left out of that row.
 - **Library parts**: Parts you can add. Type `add flange` or just `flange`, and `Enter` adds one.
@@ -45,6 +45,12 @@ Type one of these marks in front of the words, and the list holds one kind of re
 - **`+`**: Library parts.
 - **`#`**: Settings.
 
+## Move the search
+
+The search does not have to stay in the middle of the window. Press and hold the magnifying glass at its left and drag, and the whole card follows. Drag its right edge to make it wider or narrower. It cannot be narrower than 320 pixels.
+
+The place and the width are remembered, also after you close the search and the next time you open the app. Double-click the magnifying glass to put it back in the middle at its own width.
+
 ## Commands that cannot run right now
 
 A command that cannot run right now is greyed out, and says why: “Select a part first”, “Open a model first” or “Nothing to undo”. A command that works on the selection, or on every part when nothing is selected, needs only an open model.
@@ -60,6 +66,7 @@ Some tools have no button in the sidebar, or no key of their own. The search is 
 - **Find stacked copies…**: Finds parts that sit on an identical copy of themselves. See [Stacked copies](meshoptimiser://docs/stacked-copies).
 - **Select hidden parts…**: Finds the parts that cannot be seen from outside. See [Select hidden parts](meshoptimiser://docs/select-hidden-parts).
 - **Align model to the floor…**: Opens the card that stands the model on the floor. **Align model to the floor (with the last choices)** does it at once, without opening the card. See [Align to floor](meshoptimiser://docs/align-to-floor).
+- **Align and spread parts…**: Opens the Align parts card, which lines the selected parts up or spaces them evenly. See [Align parts](meshoptimiser://docs/align-parts).
 - **Dynamic place**: Turns on dragging the selected part over other surfaces (`D`). See [Move, rotate and scale](meshoptimiser://docs/move-rotate-scale).
 - **Remove floating pieces…**: Deletes the small loose pieces of a part. See [Remove floating pieces](meshoptimiser://docs/remove-floating-pieces).
 - **Sweep…**: Opens the Sweep card, which has no button on the toolbar. See [Sweep](meshoptimiser://docs/sweep).
@@ -85,7 +92,7 @@ The `…` button at the right end of the bottom toolbar opens every command that
 
 ## Command cards
 
-Some commands have settings: Split, Remove holes, Remove floating pieces, Remesh, Smart fit, Select hidden parts, Fasteners, Stacked copies, Align to floor and Dynamic place. They open as a card over the bottom left of the viewport.
+Some commands have settings: Split, Remove holes, Remove floating pieces, Remesh, Smart fit, Select hidden parts, Fasteners, Stacked copies, Align to floor, Align parts and Dynamic place. They open as a card over the bottom left of the viewport.
 
 - `Enter`: Run the open card
 - `Esc`: Put the card away. A second press clears the selection.
@@ -98,4 +105,4 @@ Any number field in the app can be dragged sideways to change it, or clicked to 
 
 Right-click a number field for a menu of its own. It has Cut, Copy, Paste, Select all and Reset, which puts the field back to its own default. It also has a few quick edits of the number: a step up or down, doubled or halved, a round value, or the other sign. The value of a slider has the same menu. A name you are typing has a menu like it, with quick edits for names: the case, a suffix such as `_L` or `_01`, and a clean-up.
 
-Related: [shortcuts](meshoptimiser://docs/shortcuts), [library](meshoptimiser://docs/library), [the-window](meshoptimiser://docs/the-window)
+Related: [shortcuts](meshoptimiser://docs/shortcuts), [library](meshoptimiser://docs/library), [align-parts](meshoptimiser://docs/align-parts), [the-window](meshoptimiser://docs/the-window)

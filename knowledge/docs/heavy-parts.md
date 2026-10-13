@@ -32,6 +32,6 @@ The card is in the right sidebar, under Inspect. Beside its title is a small num
 
 - The list follows the scene. After a delete, an undo or a decimate it updates a moment later.
 - The limit of 10,000 triangles is fixed. A scene made of many lighter parts can be heavy without one part in the list. To bring a whole scene down to a number, use [Fit to budget](meshoptimiser://docs/fit-to-budget) or [Smart optimise](meshoptimiser://docs/smart-optimise).
-- For a picture of where the density is, press `4` for the heatmap. See [How to read the numbers](meshoptimiser://docs/read-the-numbers).
+- For a picture of where the density is, press `Alt + 4` for the heatmap. See [How to read the numbers](meshoptimiser://docs/read-the-numbers).
 
 Related: [read-the-numbers](meshoptimiser://docs/read-the-numbers), [decimate](meshoptimiser://docs/decimate), [smart-fit](meshoptimiser://docs/smart-fit), [fit-to-budget](meshoptimiser://docs/fit-to-budget)

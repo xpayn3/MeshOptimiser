@@ -32,7 +32,7 @@ The ring works on the whole scene, and has six slices.
 - **View**: Opens a fan of commands: Camera, Top, Front and Side views, Solid, Wireframe and X-ray, and the ground grid.
 - **Show all**: Shows every hidden part.
 - **File**: Opens a fan of commands: Save screenshot, Save scene and Revert to source file.
-- **Clean**: Opens a fan of commands: Recentre on origin, Align to the floor, Smart fit all parts, Remove empty parts, Deduplicate geometry and Fix degenerate parts.
+- **Clean**: Opens a fan of commands: Recentre on origin, Align to the floor, Align parts, Smart fit all parts, Remove empty parts, Deduplicate geometry and Fix degenerate parts.
 
 ## The fans
 

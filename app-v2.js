@@ -254,16 +254,29 @@ function toast(title, msg='', type='info', dur=2400) {
   // logic here to avoid the temporal-dead-zone (toast is hoisted into module
   // top-level scope and may be called before escapeHtml's binding is reached).
   const esc = (s) => s == null ? '' : String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  el.innerHTML = `<span class="t">${esc(title)}</span>${msg ? `<span class="m">${esc(msg)}</span>` : ''}`;
+  el.innerHTML = `<span class="t">${esc(title)}</span>${msg ? `<span class="m"><span class="mc"><span class="mi">${esc(msg)}</span></span></span>` : ''}`;
   stack.appendChild(el);
   // Force a layout flush so the browser sees the "enter" state, then flip to
   // "open" so the CSS transition runs. Cheaper than animation/keyframes and
   // can be retargeted mid-flight by the exit transition.
   requestAnimationFrame(() => { el.dataset.state = 'open'; });
+  // A message too long for the pill runs past like a banner: it waits a moment, slides to its end and rests there, and the toast
+  // stays until it has been read. (With reduced motion it wraps onto more lines instead.)
+  let stay = dur;
+  const clip = el.querySelector('.mc'), run = clip && clip.firstElementChild, over = clip ? clip.scrollWidth - clip.clientWidth : 0;
+  if (over > 4) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.classList.add('is-wrap'); stay = Math.max(dur, 5200); }
+    else {
+      const d = over + 14, wait = 900, slide = d / 70 * 1000, rest = 1400, all = wait + slide + rest;      // (14: the faded right edge)
+      el.classList.add('is-run');
+      run.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(0)', offset: wait / all, easing: 'cubic-bezier(.4,0,.6,1)' }, { transform: `translateX(${-d}px)`, offset: (wait + slide) / all }, { transform: `translateX(${-d}px)` }], { duration: all, fill: 'forwards' });
+      stay = Math.max(dur, all);
+    }
+  }
   setTimeout(() => {
     el.dataset.state = 'exit';
     setTimeout(() => el.remove(), 220);
-  }, dur);
+  }, stay);
 }
 
 // ─── Shared popover dismissal helper ──────────────────────────────────────
@@ -1152,8 +1165,12 @@ function _updateVpHint() {
   let tips;
   let drawTips = null;
   try { if (_Draw.isActive()) drawTips = _Draw.tips(); } catch (_) {}      // (_Draw is defined further down the file)
+  let editTips = null;
+  try { if (_Elements.isActive()) editTips = _Elements.tips(); } catch (_) {}      // (_Elements is defined further down the file)
   if (drawTips) {
     tips = drawTips;
+  } else if (editTips) {
+    tips = editTips;
   } else if (state.dynPlaceOn) {
     tips = [[['Drag'], 'Place the selected part'], [['Drag cube'], 'Scale it'], [['Scroll'], 'Turn it (while held)'], [['Esc'], 'Put it back, while held'], [['D'], 'Leave Dynamic place']];
   } else if (msr) {
@@ -4415,6 +4432,7 @@ const _Actions = (() => {
     { id:'paste',        group:'Edit',       label:'Paste',                      kbd:'Ctrl+V', run: () => pasteParts() },
     { id:'duplicate',    group:'Edit',       label:'Duplicate selection',        kbd:'Ctrl+D', run: () => { if (state.selected.size) duplicateParts([...state.selected]); } },
     { id:'recenter',     group:'Edit',       label:'Recentre model',             run: _click('btn-recenter') },
+    { id:'alignParts',   group:'Edit',       label:'Align and spread parts…',    run: () => _CmdCards.open('arrange') },
     { id:'alignFloor',   group:'Edit',       label:'Align model to the floor…',  run: () => _CmdCards.open('align') },
     { id:'alignFloorNow', group:'Edit',      label:'Align model to the floor (with the last choices)', run: _click('btn-align-floor') },
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
@@ -4964,13 +4982,47 @@ const _CmdK = (() => {
     if (!card) return;
     const r = vp && vp.offsetParent ? vp.getBoundingClientRect() : null;
     const v = r && r.width > 200 ? r : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight, bottom: window.innerHeight };
-    const w = Math.min(560, v.width - 24), top = v.top + Math.max(24, Math.round(v.height * 0.2));
+    let w = Math.min(560, v.width - 24), top = v.top + Math.max(24, Math.round(v.height * 0.2)), left = null, floor = v.bottom;
+    // where it was dragged to and how wide it was made (see _wireGeo), kept inside the window
+    const W = window.innerWidth, H = window.innerHeight;
+    if (_geo && _geo.w) w = Math.max(GEO_MIN_W, Math.min(W - 16, _geo.w));
+    if (_geo && _geo.x != null) { left = Math.max(8, Math.min(W - w - 8, _geo.x)); top = Math.max(8, Math.min(H - 120, _geo.y)); floor = H; }
     card.style.position = 'fixed';
     card.style.width = w + 'px';
-    card.style.left = Math.round(v.left + (v.width - w) / 2) + 'px';
+    card.style.left = (left != null ? left : Math.round(v.left + (v.width - w) / 2)) + 'px';
     card.style.top = top + 'px';
     card.style.bottom = 'auto';
-    card.style.maxHeight = Math.max(200, Math.min(440, v.bottom - top - 24)) + 'px';      // results scroll inside it
+    card.style.maxHeight = Math.max(200, Math.min(440, floor - top - 24)) + 'px';      // results scroll inside it
+  }
+  // The search can be moved and made wider or narrower: hold its search icon and drag to move it, drag its right edge for the width.
+  // A double-click on the icon puts it back in the middle at its own width. Both are remembered.
+  const GEO_KEY = 'stepopt-cmdk-geo', GEO_MIN_W = 320;
+  let _geo = null;
+  try { const g = JSON.parse(localStorage.getItem(GEO_KEY) || 'null'); if (g && typeof g === 'object') _geo = { x: isFinite(g.x) ? +g.x : null, y: isFinite(g.y) ? +g.y : null, w: isFinite(g.w) && g.w ? +g.w : null }; if (_geo && _geo.x != null && _geo.y == null) _geo.x = null; } catch (_) {}
+  const _geoSave = () => { try { if (_geo) localStorage.setItem(GEO_KEY, JSON.stringify(_geo)); else localStorage.removeItem(GEO_KEY); } catch (_) {} };
+  function _wireGeo(bg) {
+    const card = bg.querySelector('.modal'), head = card && card.querySelector('.modal-h'), edge = card && card.querySelector('.cmdk-resize');
+    if (!card || !head) return;
+    const drag = (el, ev, onMove) => {
+      ev.preventDefault();                                   // (the field keeps the keyboard)
+      try { el.setPointerCapture(ev.pointerId); } catch (_) {}
+      const r = card.getBoundingClientRect(), x0 = ev.clientX, y0 = ev.clientY;
+      const move = (e) => { onMove(e.clientX - x0, e.clientY - y0, r); _place(); };
+      const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); card.classList.remove('is-moving'); _geoSave(); };
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+      card.classList.add('is-moving');
+    };
+    // (the icon is drawn after the page is: found from the heading each time)
+    head.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0 || !ev.target.closest || !ev.target.closest('.cmdk-search-icon')) return;
+      drag(head, ev, (dx, dy, r) => { _geo = { x: Math.round(r.left + dx), y: Math.round(r.top + dy), w: _geo && _geo.w }; });
+    });
+    head.addEventListener('dblclick', (ev) => { if (!ev.target.closest || !ev.target.closest('.cmdk-search-icon')) return; _geo = null; _geoSave(); _place(); });
+    if (edge) edge.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0) return;
+      drag(edge, ev, (dx, dy, r) => { _geo = { x: Math.round(r.left), y: Math.round(r.top), w: Math.max(GEO_MIN_W, Math.round(r.width + dx)) }; });      // (the left edge stays where it is)
+    });
+    window.addEventListener('resize', () => { if (_shown()) _place(); });
   }
   function _wire() {
     if (inited) return;
@@ -4979,6 +5031,7 @@ const _CmdK = (() => {
     const input = document.getElementById('cmdk-input');
     if (!bg || !input) return;
     bg.addEventListener('click', e => { if (e.target === bg) hide(); });
+    _wireGeo(bg);
     input.addEventListener('input', () => { activeIdx = 0; _render(input.value); });
     input.addEventListener('keydown', e => {
       if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(visibleItems.length - 1, activeIdx + 1); _render(input.value); }
@@ -6925,6 +6978,20 @@ function _attachGizmoToParts(parts, centerOverride, quatOverride) {
     const _qWorld = new THREE.Quaternion();
     parts[0].mesh.getWorldQuaternion(_qWorld);
     state.pivot.quaternion.copy(_qWorld);
+  } else {
+    // Several parts that are all turned the same way have an "object rotation" after all: the gizmo keeps it, instead of
+    // snapping to the scene's axes the moment a second part is picked. Parts turned differently stay on the scene's axes.
+    // (q and -q are the same rotation, hence the absolute value.)
+    const q0 = new THREE.Quaternion(), q = new THREE.Quaternion();
+    parts[0].mesh.updateWorldMatrix(true, false);
+    parts[0].mesh.getWorldQuaternion(q0);
+    let same = true;
+    for (let i = 1; i < parts.length && same; i++) {
+      parts[i].mesh.updateWorldMatrix(true, false);
+      parts[i].mesh.getWorldQuaternion(q);
+      if (Math.abs(q0.dot(q)) < 1 - 1e-6) same = false;
+    }
+    if (same) state.pivot.quaternion.copy(q0);
   }
   state.pivot.updateMatrixWorld();
   // Track original parent for local-coordinate display (e.g. parts inside
@@ -13329,6 +13396,142 @@ function _tformScaleWire() {
   sync();
 }
 if (typeof document !== 'undefined') { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _tformScaleWire, { once: true }); else _tformScaleWire(); }
+// ── Several parts selected ──
+// The fields then speak for every selected part at once. Each of the nine shows the number when all the parts have the same one
+// (compared as it is written, so what reads the same is the same) and "mixed" only when they really differ. A number typed into a
+// field is given to each part on its own: every part gets that position, that rotation or that size about its own origin, and the
+// other eight numbers of each part stay as they were. One undo step.
+// What a field means is what it means for one part: position is the part's place in the world less its group's origin, rotation
+// and scale are the part's own inside its parent, size is its box along its own axes.
+const _TFORM_MULTI_READ_MAX = 400;      // more parts than this are not compared on every refresh: the fields say "mixed" and can still be typed into
+function _tformMultiParts() {
+  if (state.selectedGroupIds && state.selectedGroupIds.size) return null;
+  if (!state.selected || state.selected.size < 2) return null;
+  const out = [];
+  for (const id of state.selected) { const p = getPart(id); if (p && !p.deleted && p.mesh) out.push(p); }
+  return out.length >= 2 ? out : null;
+}
+let _tformParentMapOf = null, _tformParentMap = null;
+function _tformPartOrigin(p) {      // the origin of the group the part is in (what its position is counted from), or null
+  const nodes = state.treeNodes || null;
+  if (!nodes) return null;
+  if (_tformParentMapOf !== nodes || !_tformParentMap || _tformParentMap._n !== nodes.length) {
+    _tformParentMap = new Map(); _tformParentMap._n = nodes.length; _tformParentMapOf = nodes;
+    for (const n of nodes) if (n.kind === 'part') _tformParentMap.set(n.partId, n.parentId);
+  }
+  const pid = _tformParentMap.get(p.partId);
+  return pid != null ? (_groupOrigins.get(pid) || null) : null;
+}
+// The frame a part's rotation and scale are read in: its parent, or the scene's root while the gizmo's pivot holds it (that is where
+// it goes back to when the gizmo lets go).
+function _tformPartFrame(p) { const par = p.mesh.parent; return (!par || par === state.pivot) ? (state.partsRoot || par) : par; }
+const _tfmM = new THREE.Matrix4(), _tfmInv = new THREE.Matrix4(), _tfmP = new THREE.Vector3(), _tfmQ = new THREE.Quaternion(), _tfmS = new THREE.Vector3(), _tfmE = new THREE.Euler(), _tfmW = new THREE.Vector3(), _tfmSize = new THREE.Vector3();
+function _tformPartRead(p, asScale, out) {      // out: nine numbers (position, rotation in degrees, scale or size), in the scene's units
+  const obj = p.mesh, frame = _tformPartFrame(p);
+  obj.updateWorldMatrix(true, false);
+  if (frame) { frame.updateWorldMatrix(true, false); _tfmM.multiplyMatrices(_tfmInv.copy(frame.matrixWorld).invert(), obj.matrixWorld); } else _tfmM.copy(obj.matrixWorld);
+  _tfmM.decompose(_tfmP, _tfmQ, _tfmS);
+  _tfmE.setFromQuaternion(_tfmQ, obj.rotation.order);
+  obj.getWorldPosition(_tfmW);
+  const o = _tformPartOrigin(p);
+  out[0] = _tfmW.x - (o ? o.x : 0); out[1] = _tfmW.y - (o ? o.y : 0); out[2] = _tfmW.z - (o ? o.z : 0);
+  out[3] = _tfmE.x * 180 / Math.PI; out[4] = _tfmE.y * 180 / Math.PI; out[5] = _tfmE.z * 180 / Math.PI;
+  if (asScale) { out[6] = _tfmS.x; out[7] = _tfmS.y; out[8] = _tfmS.z; }
+  else { _readStableSize(obj, _tfmSize); out[6] = _tfmSize.x; out[7] = _tfmSize.y; out[8] = _tfmSize.z; }
+  return out;
+}
+const _TFORM_KEYS = ['px', 'py', 'pz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz'];
+function _tformMultiFill(parts, inputs, uf, ul) {
+  const asScale = _tformScaleOn();
+  try { _initGroupOrigins(); } catch (_) {}
+  // how a number is written in its field (the same as for one part), with -0 written as 0
+  const write = (i, v) => { if (!Number.isFinite(v)) return null; if (Math.abs(v) < 1e-9) v = 0; const s = i < 3 ? _fmtNum(v * uf) : i < 6 ? _fmtNum(v, 2) : asScale ? _fmtNum(v, 3) : _fmtNum(Math.abs(v) * uf); return /^-0(\.0*)?$/.test(s) ? s.slice(1) : s; };
+  const same = new Array(9).fill(null), mixed = new Array(9).fill(parts.length > _TFORM_MULTI_READ_MAX);
+  if (parts.length <= _TFORM_MULTI_READ_MAX) {
+    const v = new Array(9);
+    try {
+      for (let n = 0; n < parts.length; n++) {
+        _tformPartRead(parts[n], asScale, v);
+        for (let i = 0; i < 9; i++) {
+          if (mixed[i]) continue;
+          const s = write(i, v[i]);
+          if (n === 0) same[i] = s; else if (s !== same[i]) mixed[i] = true;
+        }
+      }
+    } catch (err) { console.warn('[transform-panel] reading several parts:', err); mixed.fill(true); }
+  }
+  _TFORM_KEYS.forEach((k, i) => {
+    const el = inputs[k]; if (!el) return;
+    el.disabled = false;
+    el.placeholder = 'mixed';
+    el.classList.toggle('mixed', !!mixed[i]);
+    if (document.activeElement !== el) el.value = mixed[i] || same[i] == null ? '' : same[i];
+  });
+  document.querySelectorAll('#tform-grid .tform-num.disabled').forEach(n => n.classList.remove('disabled'));
+  document.querySelectorAll('#tform-grid .tform-step[disabled]').forEach(b => { b.disabled = false; });
+  const labels = document.querySelectorAll('#tform-grid .tform-col-label'), last = labels[labels.length - 1];
+  if (last) last.textContent = asScale ? 'Scale' : 'Size';
+  for (const id of ['px', 'py', 'pz']) { const c = document.querySelector(`[data-for="tform-${id}"] .tform-unit`); if (c) c.textContent = ul; }
+  for (const id of ['sx', 'sy', 'sz']) { const c = document.querySelector(`[data-for="tform-${id}"] .tform-unit`); if (c) c.textContent = asScale ? '' : ul; }
+}
+// A number typed into one field, given to every selected part (see above). Runs inside _withTransformUndo, which makes the undo step.
+function _tformMultiApply(parts, axis, text) {
+  const raw = parseFloat(String(text).replace(',', '.'));
+  if (!Number.isFinite(raw)) { _transformPanelRefresh(); return; }
+  const kind = axis[0], k = axis[1], asScale = _tformScaleOn();
+  const uf = (kind === 'r' || (kind === 's' && asScale)) ? 1 : (_UNIT_FACTOR[state.displayUnit] || 1);
+  const v = Math.max(-1e6, Math.min(1e6, raw / uf));
+  if (kind === 's' && !(Math.abs(v) >= 1e-4)) { _transformPanelRefresh(); return; }
+  let locked = 0, done = 0, flat = 0;
+  const instanced = [...state.selected].filter(id => { const p = getPart(id); return p && !p.deleted && !p.mesh; }).length;
+  try {
+    _initGroupOrigins();
+    _detachGizmo();                                       // every part back under its own parent, where it stands
+    const M = new THREE.Matrix4(), W = new THREE.Matrix4(), inv = new THREE.Matrix4(), P = new THREE.Vector3(), Q = new THREE.Quaternion(), S = new THREE.Vector3(), E = new THREE.Euler(), wp = new THREE.Vector3(), size = new THREE.Vector3();
+    for (const p of parts) {
+      if (p.locked) { locked++; continue; }
+      const obj = p.mesh, frame = _tformPartFrame(p), par = obj.parent;
+      obj.updateWorldMatrix(true, false);
+      if (frame) frame.updateWorldMatrix(true, false);
+      if (kind === 'p') {
+        // the world position, one axis of it replaced (counted from the part's group, as the field shows it)
+        const o = _tformPartOrigin(p);
+        obj.getWorldPosition(wp);
+        wp[k] = v + (o ? o[k] : 0);
+        obj.position.copy(par ? par.worldToLocal(wp) : wp);
+      } else {
+        if (frame) M.multiplyMatrices(inv.copy(frame.matrixWorld).invert(), obj.matrixWorld); else M.copy(obj.matrixWorld);
+        M.decompose(P, Q, S);
+        if (kind === 'r') { E.setFromQuaternion(Q, obj.rotation.order); E[k] = v * Math.PI / 180; Q.setFromEuler(E); }
+        else if (asScale) S[k] = Math.abs(v);
+        else {
+          _readStableSize(obj, size);
+          const dim = size[k];
+          if (!(dim > 1e-9)) { flat++; continue; }        // (no thickness that way: there is nothing to stretch)
+          S[k] *= Math.abs(v) / dim;
+        }
+        M.compose(P, Q, S);
+        if (frame) W.multiplyMatrices(frame.matrixWorld, M); else W.copy(M);
+        if (par) { par.updateWorldMatrix(true, false); W.premultiply(inv.copy(par.matrixWorld).invert()); }
+        W.decompose(obj.position, obj.quaternion, obj.scale);
+      }
+      obj.updateMatrix(); obj.updateMatrixWorld(true);
+      p._exactWorld = obj.matrixWorld.clone();
+      try { _refreshPartBBox(p); } catch (_) {}
+      done++;
+    }
+  } catch (err) { console.warn('[transform-panel] edit of several parts failed:', err); }
+  try { updateGizmo?.(); } catch (_) {}                   // the gizmo comes back in the middle of where the parts are now
+  try { applySelectionColors?.(); } catch (_) {}
+  requestRender();
+  refreshPropertiesPanel?.();
+  _transformPanelRefresh();
+  const left = [];
+  if (locked) left.push(locked + ' locked');
+  if (instanced) left.push(instanced + ' shared ' + (instanced === 1 ? 'copy' : 'copies') + ' (move ' + (instanced === 1 ? 'it' : 'them') + ' once with the gizmo first)');
+  if (flat) left.push(flat + ' with no size that way');
+  if (left.length) { try { toast(done ? 'Some parts stayed' : 'Nothing changed', left.join(', '), 'warn', 3600); } catch (_) {} }
+}
 function _transformPanelRefresh() {
   const panel = document.getElementById('transform-panel');
   if (!panel || !panel.classList.contains('show')) return;
@@ -13352,6 +13555,8 @@ function _transformPanelRefresh() {
   // user is actively typing into.
   const selN = (state.selected?.size || 0) + (state.selectedGroupIds?.size || 0);
   if (!target) {
+    const multi = _tformMultiParts();
+    if (multi) { _tformMultiFill(multi, inputs, _uf, _ul); return; }
     for (const k of Object.keys(inputs)) {
       const el = inputs[k];
       if (!el) continue;
@@ -13782,7 +13987,11 @@ function _wireTransformPanel() {
   // so the round-trip works. Without a pivot, write straight to local.
   const handle = (axis) => (e) => {
     const target = _transformTarget();
-    if (!target) { _transformPanelRefresh(); return; }
+    if (!target) {
+      const multi = _tformMultiParts();
+      if (multi) _tformMultiApply(multi, axis, e.target.value); else _transformPanelRefresh();
+      return;
+    }
     // Locked parts must reject typed transform edits too — gizmo lock alone
     // wouldn't be enough since the user can still type into the panel.
     if (target.part?.locked) {
@@ -14797,7 +15006,8 @@ function rebuildTree() {
     return _rebuildTreeHierarchical(reuse);
   }
   const ft = ($('tree-filter').value || '').toLowerCase();
-  const visible = state.parts.filter(p => !p.deleted && (!ft || p.name.toLowerCase().includes(ft)));
+  const _tm = _treeMatcher(ft);
+  const visible = state.parts.filter(p => !p.deleted && (!ft || _tm(p.name, p)));
   $('tree-summary').textContent = `${visible.length} of ${state.parts.filter(p => !p.deleted).length} parts`;
   const frag = document.createDocumentFragment();
   const MAX = 5000;
@@ -14833,6 +15043,88 @@ function rebuildTree() {
 // the rows near the viewport are put in the document and given their
 // contents (_treeFillVisible), so the cost of the tree on screen does not
 // grow with the model, and there is no limit on how many rows a model has.
+// ── What the tree's search understands ──
+//   gear box        every word must be in the name, in any order; case, accents and the signs between words (_ - . and
+//                   a capital in the middle) do not matter, so "gearbox" finds Gear_Box and "gear box" finds GearBox
+//   "m6 bolt"       the words exactly as written, together
+//   bolt, nut       a comma means or
+//   -washer         leaves out what has the word
+//   >5000  <200     by triangles (5k and 1.2m are understood)
+//   is:hidden  is:visible  is:selected
+// When nothing at all is found the words are read less strictly: one letter of a word may be wrong, missing or swapped (two in
+// a long word), so "braket" still finds Bracket. Groups are matched by their names only.
+let _tmLast = null;
+function _treeMatcher(q) {
+  q = String(q || '').trim();
+  const n = state.parts.length;
+  if (_tmLast && _tmLast.q === q && _tmLast.n === n && _tmLast.sel === state.selected.size) return _tmLast.fn;
+  const fold = (s) => String(s == null ? '' : s).replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const squeeze = (s) => s.replace(/[^a-z0-9]+/g, '');
+  const num = (s) => { const m = /^(\d+(?:[.,]\d+)?)([km]?)$/.exec(s); return m ? parseFloat(m[1].replace(',', '.')) * (m[2] === 'k' ? 1e3 : m[2] === 'm' ? 1e6 : 1) : NaN; };
+  // the query: alternatives (commas), each a list of terms
+  const alts = [];
+  for (const part of q.split(',')) {
+    const terms = [];
+    for (const m of part.matchAll(/(-?)"([^"]*)"|(\S+)/g)) {
+      if (m[2] != null) { const t = fold(m[2]).trim(); if (t) terms.push({ kind: 'phrase', not: !!m[1], t }); continue; }
+      let w = m[3], not = false;
+      if (w.length > 1 && w[0] === '-') { not = true; w = w.slice(1); }
+      const lw = w.toLowerCase();
+      const cmp = /^(?:tris?|triangles?)?([<>]=?)(.+)$/.exec(lw);
+      if (cmp && isFinite(num(cmp[2]))) { terms.push({ kind: 'tris', not, op: cmp[1], v: num(cmp[2]) }); continue; }
+      const is = /^is:(hidden|visible|selected)$/.exec(lw);
+      if (is) { terms.push({ kind: 'is', not, what: is[1] }); continue; }
+      const t = fold(w).trim(), sq = squeeze(t);
+      if (t) terms.push({ kind: 'word', not, t, sq });
+    }
+    if (terms.length) alts.push(terms);
+  }
+  // one letter wrong, missing, extra or swapped with its neighbour (Damerau-Levenshtein, stopped as soon as it is over the limit)
+  const near = (a, b, max) => {
+    if (Math.abs(a.length - b.length) > max) return false;
+    let p2 = null, p1 = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i]; let low = i;
+      for (let j = 1; j <= b.length; j++) {
+        let v = Math.min(p1[j] + 1, cur[j - 1] + 1, p1[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (p2 && i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, p2[j - 2] + 1);
+        cur.push(v); if (v < low) low = v;
+      }
+      if (low > max) return false;
+      p2 = p1; p1 = cur;
+    }
+    return p1[b.length] <= max;
+  };
+  const looseWord = (t, flat) => {
+    if (t.sq.length < 4) return false;
+    const max = t.sq.length >= 8 ? 2 : 1;
+    // (against the start of each word of the name, and anywhere in the name with its signs taken out: "gearbx" finds Gear_Box)
+    for (const tok of flat.split(/[^a-z0-9]+/)) {
+      if (!tok) continue;
+      for (let L = t.sq.length - max; L <= t.sq.length + max; L++) if (L > 0 && L <= tok.length && near(tok.slice(0, L), t.sq, max)) return true;
+    }
+    const all = squeeze(flat);
+    for (let i = 0; i + t.sq.length - max <= all.length; i++) for (let L = t.sq.length - max; L <= t.sq.length + max; L++) if (L > 0 && i + L <= all.length && near(all.slice(i, i + L), t.sq, max)) return true;
+    return false;
+  };
+  const termHit = (t, flat, p, loose) => {
+    if (t.kind === 'phrase') return flat.includes(t.t);
+    if (t.kind === 'word') return flat.includes(t.t) || (!!t.sq && squeeze(flat).includes(t.sq)) || (loose && looseWord(t, flat));
+    if (!p) return false;                                  // (a group has no triangles of its own and is not hidden or selected as a part is)
+    if (t.kind === 'tris') { const c = +p.triCount || 0; return t.op === '>' ? c > t.v : t.op === '>=' ? c >= t.v : t.op === '<' ? c < t.v : c <= t.v; }
+    if (t.what === 'selected') return state.selected.has(p.partId);
+    return (t.what === 'hidden') === (p.visible === false);
+  };
+  const test = (name, p, loose) => {
+    if (!alts.length) return true;
+    const flat = fold(name);
+    return alts.some(terms => terms.every(t => termHit(t, flat, p, loose) !== t.not));
+  };
+  const strictAny = !alts.length || state.parts.some(p => !p.deleted && test(p.name, p, false));
+  const fn = (name, p) => test(name, p, !strictAny);
+  _tmLast = { q, n, sel: state.selected.size, fn };
+  return fn;
+}
 function _rebuildTreeHierarchical(reuse = null) {
   const root = $('tree');
   const ft = ($('tree-filter').value || '').toLowerCase();
@@ -14852,9 +15144,9 @@ function _rebuildTreeHierarchical(reuse = null) {
       if (n.kind === 'part') {
         const p = getPart(n.partId);
         if (!p || p.deleted) continue;
-        hit = p.name.toLowerCase().includes(ft);
+        hit = _treeMatcher(ft)(p.name, p);
       } else {
-        hit = String(n.name || '').toLowerCase().includes(ft);
+        hit = _treeMatcher(ft)(String(n.name || ''), null);
         if (hit) matchedGroups.add(n.id);
       }
       if (hit) {
@@ -16141,6 +16433,8 @@ function _buildNgonEdgesGeom(geom) {
   return g;
 }
 
+// The outline of a shape being dragged follows it live up to this many triangles; a heavier one is hidden until the drag ends.
+const _PRIM_WF_LIVE_TRIS = 12000;
 const _PRIM_WF_MAT = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.3, depthTest: false, depthWrite: false });
 function _syncPrimWireframe(p) {
   if (!p?.mesh || !p.isPrimitive) return;
@@ -17970,11 +18264,26 @@ const _Tabs = (() => {
     } catch (_) {}
   }
 
+  // A tab in a frame fades in by parts each time it is shown: its start-up animation (boot-fade) runs again when the frame
+  // gets its boxes back. The first tab is the page itself and is never hidden, so the same animation is restarted by hand.
+  function fadeMain() {
+    try {
+      const d = TOP.document;
+      if (!d.body.classList.contains('app-ready')) return;
+      const els = ['tb', 'sidebar-left', 'viewport', 'sidebar-right'].map(k => d.getElementById(k)).filter(Boolean);
+      for (const el of els) el.style.animation = 'none';
+      void d.body.offsetWidth;
+      for (const el of els) el.style.animation = '';
+    } catch (_) {}
+  }
+
   function activate(id) {
     const t = find(id);
     if (!t || t.closed) return;
-    if (REG.active !== id) carryLayout(REG.active, id);
+    const from = REG.active;
+    if (from !== id) carryLayout(from, id);
     REG.active = id;
+    if (id === 'main' && from !== 'main') fadeMain();
     for (const fr of TOP.document.querySelectorAll('iframe.mo-tab-frame')) {
       if (fr.dataset.booting) continue;           // still starting up, out of sight: leave it be
       fr.style.display = fr.dataset.tab === id ? 'block' : 'none';
@@ -24325,11 +24634,15 @@ function _pulledPosition(sloped = false) {
   if (sloped) {
     const s = T.attribute('slope', 'vec4');
     const n = T.normalize(T.modelWorldMatrix.mul(T.vec4(s.xyz, 0.0)).xyz);
-    const c = T.min(T.abs(T.dot(n, toCam.div(T.max(d, 1e-9)))), 1.0);       // cosine of the angle between the view and the faces' average normal
+    const facing = T.dot(n, toCam.div(T.max(d, 1e-9)));
+    const c = T.min(T.abs(facing), 1.0);                                     // cosine of the angle between the view and the faces' average normal
     const worst = T.min(T.acos(c).add(s.w), _SLOPE_MAX_ANGLE);               // the steepest of the faces that meet here
     const p11 = T.cameraProjectionMatrix.mul(T.vec4(0.0, 1.0, 0.0, 0.0)).y.abs();
     const pixel = T.mix(1.0, d, persp).mul(2.0).div(T.max(p11.mul(T.viewportSize.y), 1e-6));   // how wide one pixel is where the line is
-    pull = pull.add(T.min(pixel.mul(T.tan(worst)), d.mul(_SLOPE_PULL_MAX)));
+    // Only for faces that look at the camera. The extra is a share of the distance, so from far away it is more than a thin part
+    // is thick, and the lines of its far side came through the near one. A face that looks away is behind its own part: it gets
+    // the few steps and no more (the fade between the two is for the vertices on the outline, whose average normal is side on).
+    pull = pull.add(T.min(pixel.mul(T.tan(worst)), d.mul(_SLOPE_PULL_MAX)).mul(T.smoothstep(-0.45, -0.15, facing)));
   }
   const moved = wp.add(toCam.div(T.max(d, 1e-9)).mul(pull));
   return T.modelWorldMatrixInverse.mul(T.vec4(moved, 1.0)).xyz;            // (positionNode is in the object's own space)
@@ -28065,6 +28378,305 @@ const _LIB_EXTRA = {
   },
 };
 Object.assign(_LIB_PARTS, _LIB_EXTRA);
+// ── A third batch: more fasteners, bearings and drives, and electronics ──
+// Same form again; their shelves are _LIB_EXTRA2_SHELVES. Dimensions follow the
+// usual catalogue sizes (ISO 2341 clevis pin, DIN 6921 flange bolt, 608 / 6205 /
+// 51104 bearings, GT2 belt, 2.54 mm headers, 80 mm fans, SG90 servo) and the
+// FreeCAD parts library's proportions; details a sheet leaves open are proportions.
+const _lz = (rTop, rBot, h, z, segs = 24) => { const g = new THREE.CylinderGeometry(rTop, rBot, h, Math.max(8, segs | 0)); g.rotateX(Math.PI / 2); g.translate(0, 0, z); return g; };
+const _lbox = (w, d, h, x = 0, y = 0, z = 0) => { const g = new THREE.BoxGeometry(w, d, h); g.translate(x, y, z); return g; };
+const _lhex = (s, h, z) => { const R = s / 2 / Math.cos(Math.PI / 6), pts = []; for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; pts.push([Math.cos(a) * R, Math.sin(a) * R]); } const g = _libExtrude(_libPoly(pts), h); g.translate(0, 0, z); return g; };
+const _lcen = (g) => { g.center(); return g; };
+const _lRot = (a) => new THREE.Matrix4().makeRotationZ(a);
+const _lBallRing = (od, id, width, segs, ballD, rollers) => {     // outer and inner race with balls (or rollers) between
+  const gap = (od - id) / 2, t = gap * 0.3, ball = ballD || gap * 0.42, rp = (od + id) / 4, parts = [{ geom: _libRing(od, od - 2 * t, width, segs) }, { geom: _libRing(id + 2 * t, id, width, segs) }];
+  const n = Math.max(6, Math.floor(Math.PI * 2 * rp / (ball * 1.5)));
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, m = new THREE.Matrix4().makeTranslation(Math.cos(a) * rp, Math.sin(a) * rp, 0); parts.push({ geom: rollers ? _lz(ball / 2, ball / 2, width * 0.85, 0, 12) : new THREE.SphereGeometry(ball / 2, 12, 8), matrix: m }); }
+  return parts;
+};
+const _LIB_EXTRA2 = {
+  // ── fasteners
+  flangebolt: {
+    name: 'Flange bolt', params: { size: 'M8', length: 30, segs: 24 }, sized: true,
+    schema: [{ id: 'size', label: 'Size', choices: _FASTENER_M_KEYS }, _S('length', 'Length'), _SEGS],
+    build(p) {
+      const D = _fasterDims(p), d = D.d, r = d / 2, L = Math.max(p.length, d), t = Math.max(1, d * 0.22), c = r * 0.2, segs = _clampSegs(p);
+      return _lcen(_libMerge([_libLathe([[0, -L], [r - c, -L], [r, -L + c], [r, 0.1], [0, 0.1]], segs), _lz(d * 1.2, d, t, t / 2, segs), _lhex(D.hex_s, D.hex_h * 0.9, t + D.hex_h * 0.45)]));
+    },
+  },
+  clevispin: {
+    name: 'Clevis pin', params: { dia: 8, length: 30, head: 13, headT: 2, segs: 32 },
+    schema: [_S('dia', 'Diameter'), _S('length', 'Length'), _S('head', 'Head dia.'), _S('headT', 'Head thickness'), _SEGS],
+    build(p) {
+      const r = p.dia / 2, L = Math.max(p.length, p.dia), H = Math.max(p.head / 2, r + 0.3), T = Math.max(0.5, p.headT), c = Math.min(0.5, r * 0.2);
+      const gr = Math.max(0.3, r * 0.12), gw = Math.min(Math.max(0.8, r * 0.25), L * 0.3), z0 = -L + Math.min(L * 0.3, r * 1.6);          // the groove for a retaining clip
+      return _lcen(_libLathe([[0, -L], [r - c, -L], [r, -L + c], [r, z0], [r - gr, z0], [r - gr, z0 + gw], [r, z0 + gw], [r, 0], [H, 0], [H, T], [0, T]], _clampSegs(p)));
+    },
+  },
+  woodscrew: {
+    name: 'Wood screw', params: { dia: 4, length: 30, head: 8, segs: 24 },
+    schema: [_S('dia', 'Diameter'), _S('length', 'Length'), _S('head', 'Head dia.'), _SEGS],
+    build(p) {
+      const r = p.dia / 2, L = Math.max(p.length, p.dia * 2), Hd = Math.max(p.head / 2, r * 1.4), hh = Hd * 0.55, pitch = Math.max(r * 0.8, 0.5), tip = Math.min(r * 2.2, L * 0.3);
+      const pts = [[0, -L], [r * 0.9, -L + tip]];
+      for (let z = -L + tip; z + pitch <= -L * 0.25; z += pitch) pts.push([r * 0.62, z], [r, z + pitch * 0.7]);
+      pts.push([r * 0.62, -L * 0.25 + 0.01], [r * 0.62, 0], [Hd, 0]);
+      for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; pts.push([Math.cos(a) * Hd, Math.sin(a) * hh]); }
+      pts.push([0, hh]);
+      return _lcen(_libLathe(pts, _clampSegs(p)));
+    },
+  },
+  thumbscrew: {
+    name: 'Thumb screw', params: { size: 'M6', length: 20, segs: 24 }, sized: true,
+    schema: [{ id: 'size', label: 'Size', choices: _FASTENER_M_KEYS }, _S('length', 'Length'), _SEGS],
+    build(p) {
+      const D = _fasterDims(p), r = D.d / 2, L = Math.max(p.length, D.d), R = D.cap_d * 1.15, T = D.cap_h * 0.9, n = 20, pts = [];
+      for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * Math.PI * 2; pts.push([Math.cos(a) * R * (i % 2 ? 0.92 : 1), Math.sin(a) * R * (i % 2 ? 0.92 : 1)]); }
+      const head = _libExtrude(_libPoly(pts), T); head.translate(0, 0, T / 2);
+      return _lcen(_libMerge([head, _libLathe([[0, -L], [r - r * 0.2, -L], [r, -L + r * 0.2], [r, 0.1], [0, 0.1]], _clampSegs(p))]));
+    },
+  },
+  // ── bearings and motion
+  thrustbearing: {
+    name: 'Thrust bearing', params: { id: 20, od: 40, height: 9, segs: 48 },
+    schema: [_S('id', 'Bore'), _S('od', 'Outer dia.'), _S('height', 'Height'), _SEGS],
+    build(p) {
+      const od = p.od, id = Math.min(p.id, od - 4), h = p.height, tw = h * 0.22, ball = Math.max(0.4, h - 2 * tw), rp = (od + id) / 4;
+      const parts = [{ geom: _libRing(od, id, tw, p.segs), matrix: new THREE.Matrix4().makeTranslation(0, 0, h / 2 - tw / 2) }, { geom: _libRing(od - 1, id + 1, tw, p.segs), matrix: new THREE.Matrix4().makeTranslation(0, 0, -h / 2 + tw / 2) }];
+      const n = Math.max(6, Math.floor(Math.PI * 2 * rp / (ball * 1.4)));
+      for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; parts.push({ geom: new THREE.SphereGeometry(ball / 2, 12, 8), matrix: new THREE.Matrix4().makeTranslation(Math.cos(a) * rp, Math.sin(a) * rp, 0) }); }
+      return _libMerge(parts);
+    },
+  },
+  flangebearing: {
+    name: 'Flanged bearing', params: { id: 8, od: 22, width: 7, flange: 25, flangeT: 1.5, segs: 48 },
+    schema: [_S('id', 'Bore'), _S('od', 'Outer dia.'), _S('width', 'Width'), _S('flange', 'Flange dia.'), _S('flangeT', 'Flange thickness'), _SEGS],
+    build(p) {
+      const od = p.od, id = Math.min(p.id, od - 2), parts = _lBallRing(od, id, p.width, p.segs), t = (od - id) / 2 * 0.3;
+      parts.push({ geom: _libRing(Math.max(p.flange, od + 1), od - 2 * t, p.flangeT, p.segs), matrix: new THREE.Matrix4().makeTranslation(0, 0, p.width / 2 + p.flangeT / 2) });
+      return _lcen(_libMerge(parts));
+    },
+  },
+  rollerbearing: {
+    name: 'Roller bearing', params: { id: 25, od: 52, width: 15, segs: 48 },
+    schema: [_S('id', 'Bore'), _S('od', 'Outer dia.'), _S('width', 'Width'), _SEGS],
+    build(p) { const od = p.od, id = Math.min(p.id, od - 2); return _libMerge(_lBallRing(od, id, p.width, p.segs, (od - id) / 2 * 0.42, true)); },
+  },
+  shaft: {
+    name: 'Stepped shaft', params: { dia: 20, length: 120, endDia: 15, endLen: 25, chamfer: 1.5, segs: 32 },
+    schema: [_S('dia', 'Diameter'), _S('length', 'Length'), _S('endDia', 'End dia.'), _S('endLen', 'End length'), _S('chamfer', 'Chamfer'), _SEGS],
+    build(p) {
+      const r = p.dia / 2, e = Math.min(p.endDia / 2, r), L = Math.max(p.length, 2) / 2, el = Math.min(p.endLen, L - 1), c = Math.min(p.chamfer, e * 0.5, el * 0.5);
+      return _libLathe([[0, -L], [e - c, -L], [e, -L + c], [e, -L + el], [r, -L + el], [r, L - el], [e, L - el], [e, L - c], [e - c, L], [0, L]], _clampSegs(p));
+    },
+  },
+  coupler: {
+    name: 'Shaft coupler', params: { od: 25, length: 30, bore: 8, segs: 32 },
+    schema: [_S('od', 'Outer dia.'), _S('length', 'Length'), _S('bore', 'Bore'), _SEGS],
+    build(p) {
+      const R = p.od / 2, sd = Math.max(1, p.od * 0.18), parts = [_libRing(p.od, Math.min(p.bore, p.od - 2), p.length, p.segs)];
+      for (const s of [-1, 1]) { const g = new THREE.CylinderGeometry(sd / 2, sd / 2, 3, 12); g.rotateZ(Math.PI / 2); g.translate(R - 0.5, 0, s * p.length * 0.25); parts.push(g); }
+      return _libMerge(parts);
+    },
+  },
+  gt2pulley: {
+    name: 'Timing pulley', params: { teeth: 20, bore: 5, width: 7 },
+    schema: [_N('teeth', 'Teeth', 10, 80), _S('bore', 'Bore'), _S('width', 'Belt width')],
+    build(p) {
+      const n = Math.max(10, Math.min(80, p.teeth | 0)), ro = (n * 2 / Math.PI - 0.76) / 2, ri = ro - 1.1, th = 2 * Math.PI / n, pts = [], at = (r, a) => [Math.cos(a) * r, Math.sin(a) * r];
+      for (let i = 0; i < n; i++) { const a = i * th; pts.push(at(ri, a), at(ri, a + 0.2 * th), at(ro, a + 0.32 * th), at(ro, a + 0.68 * th), at(ri, a + 0.8 * th)); }
+      const bore = Math.max(0.5, Math.min(p.bore, ri * 2 - 2)), w = p.width, hub = Math.max(bore + 3, Math.min(bore + 6.5, ri * 2 - 1)), hubL = 6, fl = ro * 2 + 1.5;
+      const s = _libPoly(pts); _libCircleHole(s, 0, 0, bore / 2);
+      return _lcen(_libMerge([_libExtrude(s, w, 4), { geom: _libRing(fl, bore, 1, 32), matrix: new THREE.Matrix4().makeTranslation(0, 0, w / 2 + 0.5) }, { geom: _libRing(fl, bore, 1, 32), matrix: new THREE.Matrix4().makeTranslation(0, 0, -w / 2 - 0.5) }, { geom: _libRing(hub, bore, hubL, 32), matrix: new THREE.Matrix4().makeTranslation(0, 0, -w / 2 - 1 - hubL / 2) }]));
+    },
+  },
+  carriage: {
+    name: 'Rail carriage', params: { length: 61, width: 34, height: 28, rail: 15, hole: 4.5 },
+    schema: [_S('length', 'Length'), _S('width', 'Width'), _S('height', 'Height'), _S('rail', 'Rail width'), _S('hole', 'Hole dia.')],
+    build(p) {
+      const H = p.height, t = Math.max(1, H * 0.35), s = Math.max(1, (p.width - p.rail - 1) / 2), top = _libRoundRect(p.length, p.width, 2), hr = Math.min(p.hole / 2, s / 2 - 0.3), hx = p.length * 0.3, hy = (p.width - s) / 2;
+      if (hr > 0.2) for (const [x, y] of [[hx, hy], [-hx, hy], [hx, -hy], [-hx, -hy]]) _libCircleHole(top, x, y, hr);
+      const plate = _libExtrude(top, t, 8); plate.translate(0, 0, H / 2 - t / 2);
+      const z = -H / 2 + (H - t) / 2;
+      return _libMerge([plate, _lbox(p.length, s, H - t, 0, (p.width - s) / 2, z), _lbox(p.length, s, H - t, 0, -(p.width - s) / 2, z)]);
+    },
+  },
+  // ── electronics
+  fan: {
+    name: 'Axial fan', params: { size: 80, thickness: 25, blades: 7 },
+    schema: [_S('size', 'Size'), _S('thickness', 'Thickness'), _N('blades', 'Blades', 3, 12)],
+    build(p) {
+      const S = p.size, T = p.thickness, R = S * 0.46, hubR = S * 0.2, n = Math.max(3, Math.min(12, p.blades | 0)), fr = _libRoundRect(S, S, S * 0.06), sp = S * 0.447, hr = S * 0.027;
+      _libCircleHole(fr, 0, 0, R);
+      for (const x of [-sp, sp]) for (const y of [-sp, sp]) _libCircleHole(fr, x, y, hr);
+      const parts = [_libExtrude(fr, T, 32), _lz(hubR, hubR, T * 0.7, 0, 32)];
+      for (let i = 0; i < 3; i++) parts.push({ geom: _lbox(R - hubR + 1, 3, 2), matrix: _lRot(i * Math.PI * 2 / 3 + 0.4).multiply(new THREE.Matrix4().makeTranslation((R + hubR) / 2, 0, -T / 2 + 1)) });
+      for (let i = 0; i < n; i++) parts.push({ geom: _lbox(R - hubR - 1, S * 0.17, 1.2), matrix: _lRot(i * Math.PI * 2 / n).multiply(new THREE.Matrix4().makeTranslation((R + hubR) / 2, 0, 0)).multiply(new THREE.Matrix4().makeRotationX(0.6)) });
+      return _libMerge(parts);
+    },
+  },
+  heatsink: {
+    name: 'Heatsink', params: { width: 60, depth: 60, base: 4, height: 25, fins: 11, fin: 1.5 },
+    schema: [_S('width', 'Width'), _S('depth', 'Depth'), _S('base', 'Base thickness'), _S('height', 'Fin height'), _N('fins', 'Fins', 2, 60), _S('fin', 'Fin thickness')],
+    build(p) {
+      const n = Math.max(2, Math.min(60, p.fins | 0)), ft = Math.min(p.fin, p.width / n * 0.8), step = (p.width - ft) / (n - 1), parts = [_lbox(p.width, p.depth, p.base, 0, 0, p.base / 2)];
+      for (let i = 0; i < n; i++) parts.push(_lbox(ft, p.depth, p.height, -(p.width - ft) / 2 + i * step, 0, p.base + p.height / 2));
+      return _lcen(_libMerge(parts));
+    },
+  },
+  pinheader: {
+    name: 'Pin header', params: { pins: 8, rows: 1, pitch: 2.54 },
+    schema: [_N('pins', 'Pins per row', 1, 40), _N('rows', 'Rows', 1, 2), _S('pitch', 'Pitch')],
+    build(p) {
+      const n = Math.max(1, Math.min(40, p.pins | 0)), r = Math.max(1, Math.min(2, p.rows | 0)), P = p.pitch, k = P * 0.25, parts = [_lbox(n * P, r * P, P, 0, 0, P / 2)];
+      for (let i = 0; i < n; i++) for (let j = 0; j < r; j++) parts.push(_lbox(k, k, P * 4.5, (i - (n - 1) / 2) * P, (j - (r - 1) / 2) * P, P * 1.1));
+      return _lcen(_libMerge(parts));
+    },
+  },
+  pcb: {
+    name: 'Circuit board', params: { width: 85, depth: 56, thickness: 1.6, hole: 2.7, inset: 3.5, radius: 3 },
+    schema: [_S('width', 'Width'), _S('depth', 'Depth'), _S('thickness', 'Thickness'), _S('hole', 'Hole dia.'), _S('inset', 'Hole inset'), _S('radius', 'Corner radius')],
+    build(p) {
+      const s = _libRoundRect(p.width, p.depth, p.radius), hx = p.width / 2 - p.inset, hy = p.depth / 2 - p.inset, hr = Math.min(p.hole / 2, p.inset - 0.2);
+      if (hr > 0.2 && hx > 0 && hy > 0) for (const x of [-hx, hx]) for (const y of [-hy, hy]) _libCircleHole(s, x, y, hr);
+      return _libExtrude(s, p.thickness, 12);
+    },
+  },
+  servo: {
+    name: 'Micro servo', params: { length: 22.5, width: 12.2, height: 22.7, ear: 5, horn: 20 },
+    schema: [_S('length', 'Body length'), _S('width', 'Body width'), _S('height', 'Body height'), _S('ear', 'Ear length'), _S('horn', 'Horn length')],
+    build(p) {
+      const L = p.length, W = p.width, H = p.height, sx = -L / 2 + W / 2, zt = H / 2, parts = [_lbox(L, W, H), _lbox(L + 2 * p.ear, W, 2.5, 0, 0, H / 2 - 6)];
+      parts.push(_lz(W * 0.45, W * 0.45, 4, zt + 2, 24), _lz(W * 0.2, W * 0.2, 7, zt + 5.5, 16), _lbox(p.horn, 4.6, 1.6, sx + p.horn / 2 - 3.5, 0, zt + 9), _lz(3.6, 3.6, 1.6, zt + 9, 16));
+      for (const i of [2, 3, 5]) parts[i].translate(sx, 0, 0);
+      return _lcen(_libMerge(parts));
+    },
+  },
+};
+Object.assign(_LIB_PARTS, _LIB_EXTRA2);
+const _LIB_EXTRA2_SHELVES = {
+  'Fasteners': ['flangebolt', 'clevispin', 'woodscrew', 'thumbscrew'],
+  'Machine parts': ['thrustbearing', 'flangebearing', 'rollerbearing', 'shaft', 'coupler', 'gt2pulley', 'carriage'],
+  'Electronics': ['fan', 'heatsink', 'pinheader', 'pcb', 'servo'],
+};
+// ── A fourth batch: brackets and connectors for the usual construction systems ──
+// T-slot aluminium (2020 to 4545 angle brackets, cast corners, joining plates),
+// timber (joist hangers, post bases), strut channel, structural steel (base plates)
+// and shelving / pipe work. Sizes follow the common catalogue parts; details a
+// sheet leaves open are proportions.
+const _lplate = (w, d, t, holes, hr, r = 0) => { const s = _libRoundRect(w, d, r); if (hr > 0.2) for (const [x, y] of holes) _libCircleHole(s, x, y, hr); return _libExtrude(s, t, 12); };   // thickness along Z, centred
+const _MX = new THREE.Matrix4().set(1, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1);     // plate's width to X, its depth to Z, thickness along Y
+const _MY = new THREE.Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);      // plate's width to Y, its depth to Z, thickness along X
+const _lTo = (g, m, x, y, z) => { if (m) g.applyMatrix4(m); g.translate(x, y, z); return g; };
+const _lAlong = (n, len, from) => Array.from({ length: n }, (_, i) => from + (len - from) * (i + 0.5) / n);     // n positions spread over a leg, clear of the corner
+const _lAngle = (L1, L2, W, t, n, hd, rib) => {      // an angle bracket with its corner at the origin: one leg along X, one up Z, width along Y
+  const hr = Math.min(hd / 2, W / 2 - 0.6, (Math.min(L1, L2) - t) / (n * 2) - 0.3);
+  const flat = _lTo(_lplate(L1, W, t, _lAlong(n, L1, t).map(x => [x - L1 / 2, 0]), hr), null, L1 / 2, 0, t / 2);
+  const wall = _lTo(_lplate(W, L2, t, _lAlong(n, L2, t).map(z => [0, z - L2 / 2]), hr), _MY, t / 2, 0, L2 / 2);
+  const parts = [flat, wall];
+  if (rib) parts.push(_lTo(_libExtrude(_libPoly([[t, t], [L1 * 0.75, t], [t, L2 * 0.75]]), Math.max(t, W * 0.12), 4), _MX, 0, 0, 0));
+  return parts;
+};
+const _TSLOT = { '2020': [20, 20, 3, 5.5, 1], '3030': [30, 28, 4, 6.6, 1], '4040': [40, 38, 5, 8.5, 2], '4545': [45, 43, 5, 8.5, 2] };      // leg, width, thickness, hole, holes per leg
+const _LIB_EXTRA3 = {
+  anglebracket: {
+    name: 'Angle bracket', params: { width: 40, legA: 50, legB: 50, thickness: 3, holes: 2, hole: 6.5, rib: 1 },
+    schema: [_S('width', 'Width'), _S('legA', 'Base leg'), _S('legB', 'Upright leg'), _S('thickness', 'Thickness'), _N('holes', 'Holes per leg', 1, 4), _S('hole', 'Hole dia.'), _N('rib', 'Rib', 0, 1)],
+    build(p) { return _lcen(_libMerge(_lAngle(Math.max(p.legA, p.thickness * 2), Math.max(p.legB, p.thickness * 2), p.width, p.thickness, Math.max(1, Math.min(4, p.holes | 0)), p.hole, p.rib | 0))); },
+  },
+  tslotangle: {
+    name: 'T-slot bracket', params: { profile: '2020' },
+    schema: [{ id: 'profile', label: 'Profile', choices: Object.keys(_TSLOT) }],
+    build(p) { const [L, W, t, hd, n] = _TSLOT[p.profile] || _TSLOT['2020']; return _lcen(_libMerge(_lAngle(L, W, W, t, n, hd, 0))); },
+  },
+  corner3: {
+    name: 'Three-way corner', params: { size: 30, thickness: 3, hole: 5.5 },
+    schema: [_S('size', 'Size'), _S('thickness', 'Thickness'), _S('hole', 'Hole dia.')],
+    build(p) {
+      const S = p.size, t = Math.min(p.thickness, S / 4), hr = Math.min(p.hole / 2, S / 2 - t - 0.5), pl = () => _lplate(S, S, t, [[0, 0]], hr);
+      return _lcen(_libMerge([_lTo(pl(), null, S / 2, S / 2, t / 2), _lTo(pl(), _MY, t / 2, S / 2, S / 2), _lTo(pl(), _MX, S / 2, t / 2, S / 2)]));
+    },
+  },
+  jointplate: {
+    name: 'Joining plate', params: { shape: 'T', size: 80, width: 20, thickness: 3, hole: 5.5 },
+    schema: [{ id: 'shape', label: 'Shape', choices: ['L', 'T', 'Cross'] }, _S('size', 'Size'), _S('width', 'Arm width'), _S('thickness', 'Thickness'), _S('hole', 'Hole dia.')],
+    build(p) {
+      const S = Math.max(p.size, p.width * 2.2), w = Math.min(p.width, S / 2.2), h = w / 2, hr = Math.min(p.hole / 2, h - 0.8);
+      let pts, holes;
+      if (p.shape === 'L') { pts = [[0, 0], [S, 0], [S, w], [w, w], [w, S], [0, S]]; holes = [[S - h, h], [h, S - h], [h, h]]; }
+      else if (p.shape === 'Cross') { const a = S / 2; pts = [[-h, -a], [h, -a], [h, -h], [a, -h], [a, h], [h, h], [h, a], [-h, a], [-h, h], [-a, h], [-a, -h], [-h, -h]]; holes = [[0, a - h], [0, h - a], [a - h, 0], [h - a, 0]]; }
+      else { pts = [[-S / 2, 0], [S / 2, 0], [S / 2, w], [h, w], [h, S], [-h, S], [-h, w], [-S / 2, w]]; holes = [[S / 2 - h, h], [h - S / 2, h], [0, S - h]]; }
+      const s = _libPoly(pts); if (hr > 0.2) for (const [x, y] of holes) _libCircleHole(s, x, y, hr);
+      return _lcen(_libExtrude(s, p.thickness, 12));
+    },
+  },
+  shelfbracket: {
+    name: 'Shelf bracket', params: { depth: 200, height: 150, width: 30, thickness: 4, holes: 2, hole: 5 },
+    schema: [_S('depth', 'Depth'), _S('height', 'Height'), _S('width', 'Width'), _S('thickness', 'Thickness'), _N('holes', 'Screw holes', 1, 4), _S('hole', 'Hole dia.')],
+    build(p) {
+      const t = p.thickness, L1 = Math.max(p.depth, t * 4), L2 = Math.max(p.height, t * 4), dx = t - L1, dz = L2 - t, D = Math.hypot(dx, dz);
+      const diag = new THREE.BoxGeometry(D, p.width * 0.7, t); diag.applyMatrix4(new THREE.Matrix4().makeTranslation((L1 + t) / 2, 0, (t + L2) / 2).multiply(new THREE.Matrix4().makeRotationY(-Math.atan2(dz, dx))));
+      return _lcen(_libMerge([..._lAngle(L1, L2, p.width, t, Math.max(1, Math.min(4, p.holes | 0)), p.hole, 0), diag]));
+    },
+  },
+  joisthanger: {
+    name: 'Joist hanger', params: { joist: 45, height: 100, seat: 60, flange: 25, thickness: 2, holes: 3, hole: 4 },
+    schema: [_S('joist', 'Joist width'), _S('height', 'Height'), _S('seat', 'Seat depth'), _S('flange', 'Flange width'), _S('thickness', 'Thickness'), _N('holes', 'Nail holes', 1, 6), _S('hole', 'Hole dia.')],
+    build(p) {
+      const W = p.joist, H = p.height, t = p.thickness, fw = p.flange, hr = Math.min(p.hole / 2, fw / 2 - 1), n = Math.max(1, Math.min(6, p.holes | 0));
+      const parts = [_lbox(W + 2 * t, p.seat, t, 0, p.seat / 2, t / 2), _lbox(t, p.seat, H, -(W / 2 + t / 2), p.seat / 2, H / 2), _lbox(t, p.seat, H, W / 2 + t / 2, p.seat / 2, H / 2)];
+      const ys = _lAlong(n, H - 8, 4).map(z => z - H / 2);
+      for (const s of [-1, 1]) parts.push(_lTo(_lplate(fw, H, t, ys.map(y => [0, y]), hr), _MX, s * (W / 2 + t + fw / 2), t / 2, H / 2));
+      return _lcen(_libMerge(parts));
+    },
+  },
+  postbase: {
+    name: 'Post base', params: { plate: 120, thickness: 6, post: 90, rise: 30, height: 80, depth: 100, hole: 12 },
+    schema: [_S('plate', 'Plate'), _S('thickness', 'Plate thickness'), _S('post', 'Post width'), _S('rise', 'Stand-off'), _S('height', 'Saddle height'), _S('depth', 'Saddle depth'), _S('hole', 'Hole dia.')],
+    build(p) {
+      const P = p.plate, t = p.thickness, st = 4, a = P / 2 - Math.max(p.hole, 12), hr = Math.min(p.hole / 2, P / 8), z0 = t + p.rise, W = Math.min(p.post, P - 2 * st);
+      return _lcen(_libMerge([_lTo(_lplate(P, P, t, [[a, a], [-a, a], [a, -a], [-a, -a]], hr, 4), null, 0, 0, t / 2), _lz(8, 8, p.rise + 0.2, t + p.rise / 2, 16), _lbox(W + 2 * st, p.depth, st, 0, 0, z0 + st / 2), _lbox(st, p.depth, p.height, -(W / 2 + st / 2), 0, z0 + st + p.height / 2), _lbox(st, p.depth, p.height, W / 2 + st / 2, 0, z0 + st + p.height / 2)]));
+    },
+  },
+  baseplate: {
+    name: 'Column base plate', params: { plate: 250, thickness: 12, hole: 22, inset: 40, column: 100, wall: 6, height: 80 },
+    schema: [_S('plate', 'Plate'), _S('thickness', 'Thickness'), _S('hole', 'Bolt hole dia.'), _S('inset', 'Hole inset'), _S('column', 'Column size'), _S('wall', 'Column wall'), _S('height', 'Column height')],
+    build(p) {
+      const P = p.plate, t = p.thickness, c = Math.min(p.column, P * 0.7), w = Math.min(p.wall, c / 4), a = P / 2 - p.inset, hr = Math.min(p.hole / 2, p.inset - 1);
+      const tube = _libRoundRect(c, c, 0); tube.holes.push(new THREE.Path(_libRoundRect(c - 2 * w, c - 2 * w, 0).getPoints()));
+      const parts = [_lTo(_lplate(P, P, t, [[a, a], [-a, a], [a, -a], [-a, -a]], hr, 4), null, 0, 0, t / 2), _lTo(_libExtrude(tube, p.height, 4), null, 0, 0, t + p.height / 2)];
+      const rl = Math.min((P - c) / 2 - 2, c * 0.6), rh = Math.min(p.height * 0.7, rl * 1.5);
+      for (let k = 0; k < 4; k++) parts.push({ geom: _lTo(_libExtrude(_libPoly([[c / 2, 0], [c / 2 + rl, 0], [c / 2, rh]]), w, 4), _MX, 0, 0, t), matrix: new THREE.Matrix4().makeRotationZ(k * Math.PI / 2) });
+      return _lcen(_libMerge(parts));
+    },
+  },
+  pipeclamp: {
+    name: 'Pipe clamp', params: { pipe: 33.7, strap: 20, thickness: 2.5, ear: 22, hole: 9, segs: 32 },
+    schema: [_S('pipe', 'Pipe dia.'), _S('strap', 'Strap width'), _S('thickness', 'Thickness'), _S('ear', 'Ear length'), _S('hole', 'Bolt hole'), _SEGS],
+    build(p) {
+      const r = p.pipe / 2, t = p.thickness, Ro = r + t, n = _clampSegs(p), pts = [];
+      for (let i = 0; i <= n; i++) { const a = Math.PI + i / n * Math.PI; pts.push([Math.cos(a) * Ro, Math.sin(a) * Ro]); }
+      for (let i = n; i >= 0; i--) { const a = Math.PI + i / n * Math.PI; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+      const ring = _libExtrude(_libPoly(pts), p.strap, 4), hr = Math.min(p.hole / 2, p.ear / 2 - 1, p.strap / 2 - 1), parts = [ring];
+      for (const s of [-1, 1]) parts.push(_lTo(_lplate(p.ear, p.strap, t, [[0, 0]], hr), _MX, s * (Ro + p.ear / 2 - 0.01), -t / 2, 0));
+      return _lcen(_libMerge(parts));
+    },
+  },
+  strutchannel: {
+    name: 'Strut channel', params: { width: 41.3, height: 41.3, thickness: 2.7, slot: 22.2, lip: 7, length: 300 },
+    schema: [_S('width', 'Width'), _S('height', 'Height'), _S('thickness', 'Thickness'), _S('slot', 'Slot width'), _S('lip', 'Lip depth'), _S('length', 'Length')],
+    build(p) {
+      const w = p.width, h = p.height, t = Math.min(p.thickness, w / 8, h / 6), sl = Math.min(p.slot, w - 4 * t - 2) / 2, lip = Math.min(p.lip, h - 2 * t - 1), x = w / 2;
+      const pts = [[-x, 0], [x, 0], [x, h], [sl, h], [sl, h - lip], [sl + t, h - lip], [sl + t, h - t], [x - t, h - t], [x - t, t], [-x + t, t], [-x + t, h - t], [-sl - t, h - t], [-sl - t, h - lip], [-sl, h - lip], [-sl, h], [-x, h]];
+      return _lcen(_libExtrude(_libPoly(pts), p.length, 4));
+    },
+  },
+};
+Object.assign(_LIB_PARTS, _LIB_EXTRA3);
+const _LIB_EXTRA3_SHELVES = {
+  'Profiles and plates': ['strutchannel'],
+  'Brackets and connectors': ['anglebracket', 'tslotangle', 'corner3', 'jointplate', 'shelfbracket', 'joisthanger', 'postbase', 'baseplate', 'pipeclamp'],
+};
 const _LIB_EXTRA_SHELVES = {
   'Shapes': ['roundedbox', 'halfcyl', 'tetra', 'star', 'plus', 'arrow'],
   'Fasteners': ['setscrew', 'carriagebolt', 'ubolt', 'circlip', 'springwasher'],
@@ -28150,6 +28762,34 @@ window._LIB_ICON_PATHS = {
   foot: '<path d="M11 3h2v11h-2z"/><path d="m5 20 3-6h8l3 6z"/>',
   handle: '<path d="M5 19v-9a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v9"/><path d="M3 19h4M17 19h4"/>',
   enclosure: '<rect x="3" y="6" width="18" height="14" rx="1.5"/><path d="M3 10h18"/><path d="M6.5 8v.01M17.5 8v.01"/>',
+  // The third batch (_LIB_EXTRA2).
+  flangebolt: '<path d="M7 3h10v5H7z"/><path d="M3 11h18v3H3z"/><path d="M10 14v8h4v-8"/>',
+  clevispin: '<path d="M3 8h3v8H3z"/><path d="M6 10h14v4H6z"/><path d="M16 10v4"/>',
+  woodscrew: '<path d="M5 3h14l-1 3H6z"/><path d="M10 6h4v11l-2 4-2-4z"/><path d="M10 9l4 1M10 12l4 1M10 15l4 1"/>',
+  thumbscrew: '<path d="M4 4h16v6H4z"/><path d="M7 4v6M10 4v6M13 4v6M16 4v6"/><path d="M10 10v11h4V10"/>',
+  thrustbearing: '<ellipse cx="12" cy="8" rx="9" ry="3"/><ellipse cx="12" cy="15" rx="9" ry="3"/><path d="M3 8v7M21 8v7"/>',
+  flangebearing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="2"/><path d="M12 3V1M21 12h2M3 12H1M12 21v2"/>',
+  rollerbearing: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 5.5v3M12 15.5v3M5.5 12h3M15.5 12h3"/>',
+  shaft: '<path d="M2 9h4V8h12v1h4v6h-4v1H6v-1H2z"/>',
+  coupler: '<rect x="5" y="5" width="14" height="14" rx="2"/><path d="M12 5v14"/><path d="M8 3v2M16 3v2"/>',
+  gt2pulley: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
+  carriage: '<path d="M3 5h18v6H3z"/><path d="M5 11v7h4v-3h6v3h4v-7"/>',
+  fan: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M12 10c0-3 2-5 5-4M14 12c3 0 5 2 4 5M12 14c0 3-2 5-5 4M10 12c-3 0-5-2-4-5"/>',
+  heatsink: '<path d="M3 20h18v-3H3z"/><path d="M5 17V4M8.5 17V4M12 17V4M15.5 17V4M19 17V4"/>',
+  pinheader: '<rect x="3" y="14" width="18" height="5"/><path d="M6 14V4M10 14V4M14 14V4M18 14V4"/>',
+  pcb: '<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="5.5" cy="8.5" r="1"/><circle cx="18.5" cy="8.5" r="1"/><circle cx="5.5" cy="15.5" r="1"/><circle cx="18.5" cy="15.5" r="1"/><path d="M9 10h6v4H9z"/>',
+  servo: '<rect x="3" y="8" width="14" height="10" rx="1"/><path d="M1 12h18"/><circle cx="19" cy="9" r="2"/>',
+  // The fourth batch (_LIB_EXTRA3).
+  anglebracket: '<path d="M4 3h5v12h11v5H4z"/><path d="M6.5 7v.01M6.5 11v.01M12 17.5v.01M16 17.5v.01"/>',
+  tslotangle: '<path d="M5 4h6v9h8v7H5z"/><path d="M8 8v.01M14 16.5v.01"/>',
+  corner3: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9z"/><path d="M12 12v9M12 12 4 7.5M12 12l8-4.5"/>',
+  jointplate: '<path d="M3 5h18v5h-7v10h-4V10H3z"/><path d="M5.5 7.5v.01M18.5 7.5v.01M12 17v.01"/>',
+  shelfbracket: '<path d="M4 3h3v14h13v3H4z"/><path d="M7 7l11 10"/>',
+  joisthanger: '<path d="M2 4h4v16H2zM18 4h4v16h-4z"/><path d="M6 17h12"/><path d="M6 10v7M18 10v7"/>',
+  postbase: '<path d="M4 20h16v-2H4z"/><path d="M12 18v-3"/><path d="M6 6v9h12V6"/><path d="M9 10v.01M15 10v.01"/>',
+  baseplate: '<path d="M3 18h18v3H3z"/><path d="M8 18V4h8v14"/><path d="M5.5 19.5v.01M18.5 19.5v.01"/>',
+  pipeclamp: '<path d="M3 7h5a4 4 0 0 0 8 0h5"/><path d="M3 7v3h3M21 7v3h-3"/><path d="M5 13v.01M19 13v.01"/>',
+  strutchannel: '<path d="M4 4h16v4h-5V6H9v2H4z"/><path d="M4 8v12h16V8"/>',
 };
 {
   const params0 = _primitiveDefaultParams, schema0 = _primitiveSchema, geom0 = _primitiveGeometry, name0 = _primitiveDefaultName;
@@ -28218,7 +28858,12 @@ const _LIB_SHELVES = [
 ];
 const _LIB_SIZED = new Set(['hexbolt', 'allen', 'countersunk', 'hexnut', 'washer', ...Object.keys(_LIB_NUTS), ...Object.keys(_LIB_MORE).filter(k => _LIB_MORE[k].sized)]);   // take the size (and length) chosen in the panel
 for (const s of _LIB_SHELVES) if (_LIB_EXTRA_SHELVES[s[0]]) s[1].push(..._LIB_EXTRA_SHELVES[s[0]]);
+for (const s of _LIB_SHELVES) if (_LIB_EXTRA2_SHELVES[s[0]]) s[1].push(..._LIB_EXTRA2_SHELVES[s[0]]);
+_LIB_SHELVES.push(["Electronics", [..._LIB_EXTRA2_SHELVES["Electronics"]]]);
+for (const s of _LIB_SHELVES) if (_LIB_EXTRA3_SHELVES[s[0]]) s[1].push(..._LIB_EXTRA3_SHELVES[s[0]]);
+_LIB_SHELVES.push(["Brackets and connectors", [..._LIB_EXTRA3_SHELVES["Brackets and connectors"]]]);
 for (const k of Object.keys(_LIB_EXTRA)) if (_LIB_EXTRA[k].sized) _LIB_SIZED.add(k);
+for (const k of Object.keys(_LIB_EXTRA2)) if (_LIB_EXTRA2[k].sized) _LIB_SIZED.add(k);
 const _LIB_KEY = 'stepopt-lib';
 function _libPrefs() {
   const base = { size: 'M6', length: 24, recent: [], fav: [], view: 'grid' };
@@ -30812,7 +31457,7 @@ function _rebuildPrimitiveGeometry(p) {
   // axis) we still refresh the lightweight ngon wireframe so the user sees
   // the segments update — that's the cheaper _syncPrimWireframe path.
   if (state._primDragging) {
-    if (state._primDragKind !== 'size') {
+    if (state._primDragKind !== 'size' || (p.triCount || 0) <= _PRIM_WF_LIVE_TRIS) {
       try { _syncPrimWireframe(p); } catch (_) {}
     }
   } else {
@@ -30899,7 +31544,23 @@ function _renderPrimitiveSection(p) {
         <button type="button" class="prim-reset" title="Reset all parameters to defaults"${p.locked ? ' disabled' : ''}><i data-lucide="rotate-ccw"></i></button>
       </div>
       <div style="${_lockedStyle}">${rows}</div>
+      ${p.partId != null ? `<button type="button" class="prim-bake" title="Turn this shape into an ordinary mesh. The shape parameters go, and the mesh tools (edit mesh, decimate, split, fill holes) work on it. Ctrl+Z gets the parameters back."${p.locked ? ' disabled' : ''}><i data-lucide="hammer"></i> Bake geo</button>` : ''}
     </div>`;
+}
+
+// Bake geo: the shape stays exactly as it is, but it is no longer a library shape
+// with parameters. It becomes a plain mesh part, so everything that works on an
+// imported mesh works on it. What it was made from is kept on the part for undo.
+function _bakePrimitive(p) {
+  if (!p?.isPrimitive || !p.mesh) return;
+  for (const c of [...p.mesh.children]) if (c._isPrimWireframe) { p.mesh.remove(c); try { c.geometry?.dispose(); } catch (_) {} }
+  p.bakedFrom = { primitiveKind: p.primitiveKind, primParams: p.primParams, primBaseSize: p.primBaseSize };
+  p.isPrimitive = false;
+  delete p.primitiveKind; delete p.primParams; delete p.primBaseSize;
+  try { applySelectionColors(); } catch (_) {}
+  try { updateGizmo(); } catch (_) {}
+  try { recomputeStats(); } catch (_) {}
+  requestRender();
 }
 function _wirePrimitiveSliders(rootEl, p) {
   if (!rootEl || !p?.isPrimitive) return;
@@ -30939,7 +31600,7 @@ function _wirePrimitiveSliders(rootEl, p) {
     // Hide the primitive's ngon wireframe ONLY for size drags. For topology
     // drags (segments, axis) we keep it visible and let _rebuildPrimitiveGeometry
     // refresh it each frame so the user can see the segments change.
-    if (isSize && p.mesh) {
+    if (isSize && p.mesh && (p.triCount || 0) > _PRIM_WF_LIVE_TRIS) {
       for (const c of p.mesh.children) {
         if (c._isPrimWireframe) c.visible = false;
       }
@@ -31087,6 +31748,12 @@ function _wirePrimitiveSliders(rootEl, p) {
   // Reset → rebuild defaults at the original baseSize and re-render.
   // Capture the full pre-reset params so a single Ctrl+Z restores the
   // user's tweaked values.
+  rootEl.querySelector('.prim-bake')?.addEventListener('click', () => {
+    if (p.locked || !p.isPrimitive) return;
+    _bakePrimitive(p);
+    refreshPropertiesPanel();
+    try { pushUndo({ type: 'primBake', partId: p.partId }); } catch (_) {}
+  });
   rootEl.querySelector('.prim-reset')?.addEventListener('click', () => {
     const before = { ...p.primParams };
     p.primParams = _primitiveDefaultParams(p.primitiveKind, p.primBaseSize || 100);
@@ -32174,6 +32841,138 @@ function _recenterSelectedParts() {
   toast('Recentred the selection', 'Moved ' + parts.length + ' part' + (parts.length === 1 ? '' : 's') + ' by (' + f(-c.x) + ', ' + f(-c.y) + ', ' + f(-c.z) + '). The middle of the selection is now on the origin.' + (lockedN ? ' ' + lockedN + ' locked part' + (lockedN === 1 ? ' stayed' : 's stayed') + '.' : ''), 'success');
   requestRender();
 }
+
+// ── Align parts ──
+// Lines the selected parts up, or spreads them out evenly, along the scene's X, Y or Z: what the Align panel of a drawing program does
+// in two directions, here in three. A part is measured by its box in the scene (its vertices while that is affordable, the corners of
+// its own box beyond that, as Recentre does). Every press moves the parts at once and is one undo step; locked parts stay put.
+const _Arrange = (() => {
+  let to = 'sel';
+  const K = ['x', 'y', 'z'];
+  const say = (s) => { const el = document.getElementById('arr-info'); if (el) el.textContent = s || ''; };
+  const plural = (n) => n + (n === 1 ? ' part' : ' parts');
+  function gather() {
+    _detachGizmo();      // selected parts sit outside partsRoot until released
+    { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { try { resetExplode(); } catch (_) {} } }      // (the parts at rest are what is lined up)
+    const parts = []; let locked = 0, verts = 0;
+    for (const id of state.selected || []) {
+      const p = getPart(id);
+      if (!p || p.deleted || p.isSpline) continue;
+      if (p.locked) { locked++; continue; }
+      if (!p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} }
+      const pos = p.mesh && p.mesh.geometry && p.mesh.geometry.attributes && p.mesh.geometry.attributes.position;
+      if (pos) { parts.push(p); verts += pos.count; }
+    }
+    const exact = verts <= _ALIGN_EXACT_VERTS, v = new THREE.Vector3();
+    const list = [];
+    for (const p of parts) {
+      p.mesh.updateWorldMatrix(true, false);
+      const g = p.mesh.geometry, W = p.mesh.matrixWorld, box = new THREE.Box3();
+      if (exact) { const pos = g.attributes.position; for (let i = 0; i < pos.count; i++) box.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(W)); }
+      else { if (!g.boundingBox) g.computeBoundingBox(); if (g.boundingBox && !g.boundingBox.isEmpty()) box.copy(g.boundingBox).applyMatrix4(W); }
+      if (!box.isEmpty()) list.push({ p, box });
+    }
+    return { list, locked };
+  }
+  // moves: [{ p, d: [dx, dy, dz], size }]. Returns how many parts moved.
+  function move(moves, label) {
+    let span = 0;
+    for (const m of moves) span = Math.max(span, m.size || 0);
+    const tol = Math.max(1e-9, span * 1e-7);
+    const items = [];
+    for (const m of moves) {
+      if (!(Math.abs(m.d[0]) > tol || Math.abs(m.d[1]) > tol || Math.abs(m.d[2]) > tol)) continue;
+      const before = Array.from(m.p.mesh.matrixWorld.elements), after = before.slice();
+      after[12] += m.d[0]; after[13] += m.d[1]; after[14] += m.d[2];
+      items.push({ partId: m.p.partId, before, after });
+    }
+    if (!items.length) return 0;
+    _applyTransformOp(items, 'after');
+    try { invalidateExplodeBaseline(); } catch (_) {}      // (their rest positions are new)
+    pushUndo({ type: 'transformGroup', label, items });
+    try { _tfParentCentroidForChild = null; } catch (_) {}
+    try { applySelectionColors(); } catch (_) {}
+    try { updateGizmo(); } catch (_) {}
+    try { refreshPropertiesPanel(); } catch (_) {}
+    try { refreshFlagged(); } catch (_) {}
+    requestRender();
+    return items.length;
+  }
+  const lockedNote = (n) => n ? ' ' + plural(n) + ' locked and left alone.' : '';
+  const at = (box, k, v) => v === 'min' ? box.min[k] : v === 'max' ? box.max[k] : (box.min[k] + box.max[k]) / 2;
+  const sizeOf = (list) => { const b = new THREE.Box3(); for (const it of list) b.union(it.box); return b.isEmpty() ? 0 : b.min.distanceTo(b.max); };
+
+  function align(axis, v) {
+    const k = K.includes(axis) ? axis : 'x', i = K.indexOf(k);
+    const { list, locked } = gather();
+    if (!list.length) { say(locked ? 'The selected parts are locked.' : 'Select the parts to line up first.'); return 0; }
+    if (to !== 'origin' && list.length < 2) { say('Select at least two parts, or line up on the Origin.'); return 0; }
+    let t = 0;
+    if (to === 'key') t = at(list[list.length - 1].box, k, v);
+    else if (to === 'sel') { const b = new THREE.Box3(); for (const it of list) b.union(it.box); t = at(b, k, v); }
+    const size = sizeOf(list), moves = [];
+    for (const it of list) { const d = [0, 0, 0]; d[i] = t - at(it.box, k, v); moves.push({ p: it.p, d, size }); }
+    const what = v === 'min' ? 'low sides' : v === 'max' ? 'high sides' : 'middles';
+    const n = move(moves, 'Align ' + what + ' on ' + k.toUpperCase());
+    say((n ? 'Moved ' + plural(n) + ': the ' + what + ' are in line on ' + k.toUpperCase() + '.' : 'Already in line on ' + k.toUpperCase() + '.') + lockedNote(locked));
+    return n;
+  }
+
+  function spread(axis, v) {
+    const k = K.includes(axis) ? axis : 'x', i = K.indexOf(k);
+    const { list, locked } = gather();
+    const gf = document.getElementById('arr-gap'), raw = gf ? String(gf.value).trim().replace(',', '.') : '';
+    const gap = raw === '' ? NaN : parseFloat(raw);
+    const fixedGap = v === 'gaps' && Number.isFinite(gap);
+    const need = fixedGap ? 2 : 3;
+    if (list.length < need) { say(locked && !list.length ? 'The selected parts are locked.' : 'Select at least ' + (need === 2 ? 'two parts to spread.' : 'three parts to spread (two with a Gap typed in).')); return 0; }
+    const mid = (it) => (it.box.min[k] + it.box.max[k]) / 2;
+    list.sort((a, b) => mid(a) - mid(b));
+    const size = sizeOf(list), n = list.length, moves = [];
+    const put = (it, delta) => { const d = [0, 0, 0]; d[i] = delta; moves.push({ p: it.p, d, size }); };
+    if (v === 'centers') {
+      const a = mid(list[0]), step = (mid(list[n - 1]) - a) / (n - 1);
+      for (let j = 1; j < n - 1; j++) put(list[j], a + step * j - mid(list[j]));
+    } else {
+      let used = 0; for (const it of list) used += it.box.max[k] - it.box.min[k];
+      const g = fixedGap ? gap : ((list[n - 1].box.max[k] - list[0].box.min[k]) - used) / (n - 1);
+      let cursor = list[0].box.max[k] + g;
+      for (let j = 1; j < n; j++) { put(list[j], cursor - list[j].box.min[k]); cursor += (list[j].box.max[k] - list[j].box.min[k]) + g; }
+    }
+    const moved = move(moves, 'Spread parts on ' + k.toUpperCase());
+    say((moved ? 'Moved ' + plural(moved) + ': ' + (v === 'centers' ? 'the middles are evenly apart' : 'the gaps are equal') + ' on ' + k.toUpperCase() + '.' : 'Already evenly spread on ' + k.toUpperCase() + '.') + lockedNote(locked));
+    return moved;
+  }
+
+  // Measuring takes the parts off the gizmo (gather). Whatever a press ends in (parts moved, nothing to move, too few parts), the
+  // gizmo goes back on: it used to stay off whenever there was nothing to do.
+  const regizmo = (fn) => (...a) => { try { return fn(...a); } finally { try { updateGizmo(); } catch (_) {} } };
+  const alignG = regizmo(align), spreadG = regizmo(spread);
+
+  function setTo(t) {
+    if (!['sel', 'key', 'origin'].includes(t)) return;
+    to = t;
+    const seg = document.getElementById('arr-to'); if (!seg) return;
+    [...seg.querySelectorAll('button')].forEach((b, j) => { const on = b.dataset.to === t; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); if (on) seg.style.setProperty('--seg-i', j); });
+  }
+  if (typeof document !== 'undefined') {
+    document.addEventListener('click', (e) => {
+      const b = e.target && e.target.closest && e.target.closest('.section-cmd[data-cmd="arrange"] button');
+      if (!b) return;
+      if (b.dataset.to) { setTo(b.dataset.to); b.blur(); return; }
+      if (b.dataset.arr === 'align') { alignG(b.dataset.axis, b.dataset.v); b.blur(); }
+      else if (b.dataset.arr === 'spread') { spreadG(b.dataset.axis, b.dataset.v); b.blur(); }
+    });
+    document.addEventListener('cmd-open', (e) => {
+      if (!(e.target && e.target.dataset && e.target.dataset.cmd === 'arrange')) return;
+      const n = state.selected ? state.selected.size : 0;
+      say(n ? plural(n) + ' selected.' : 'Select the parts to line up first.');
+      e.target.dataset.up = state.sceneUpAxis === 'y' ? 'y' : 'z';      // (which row's pictures stand upright: see .arr-set in the page)
+    }, true);
+  }
+  return { align: alignG, spread: spreadG, to: (t) => { if (t) setTo(t); return to; } };
+})();
+window.__moArrange = _Arrange;
 
 function recenterModel(opts) {
   // (with a selection: only the selection. The button passes its click event, Claude's tool says { whole: true })
@@ -36125,7 +36924,7 @@ rebuildTree = function() {
   if (state.treeNodes && state.treeNodes.length) return _origRebuildTree3();
   const ft = ($('tree-filter').value || '').toLowerCase();
   const visible = state.parts
-    .filter(p => !p.deleted && (!ft || p.name.toLowerCase().includes(ft)))
+    .filter(p => !p.deleted && (!ft || _treeMatcher(ft)(p.name, p)))
     .sort(_treeSortFn(state.sortMode));
   $('tree-summary').textContent = `${visible.length} of ${state.parts.filter(p => !p.deleted).length} parts`;
   root.innerHTML = '';
@@ -36384,6 +37183,7 @@ const _Wand = (() => {
       { group: 'Clean', icon: 'sparkles', items: [
         L('recentre', 'axis-3d', 'Recentre on origin', 'Move the model to the origin', click('btn-recenter'), { off: none }),
         L('align', 'arrow-down-to-line', 'Align to the floor…', 'Stand the model on the floor', act('alignFloor'), { off: none }),
+        L('alignparts', 'align-start-vertical', 'Align parts…', 'Line the selected parts up, or spread them out evenly', act('alignParts'), { off: none }),
         L('smartall', 'box-select', 'Smart fit all parts', 'Replace every part with its simplest fit', act('smartFitAll'), { off: none }),
         L('c-empty', 'circle-minus', 'Remove empty parts', 'Delete parts without geometry', click('btn-clean-empty'), { off: none }),
         L('c-dupes', 'copy-check', 'Deduplicate geometry', 'Share geometry between equal parts', click('btn-clean-dupes'), { off: none }),
@@ -38474,9 +39274,26 @@ function frameSelected(only) {
   }
   // never inside the part, and never absurdly close to something with no size
   dist = Math.max(dist, maxDim * 0.6, 1e-3);
-  camera.position.copy(center).add(dir.multiplyScalar(dist));
-  camera.near = Math.max(0.001, dist / 1000);
-  camera.far = dist * 1000;
+  if (camera._isOrtho) {
+    // An orthographic view is sized by its half-height, not by how far away the camera is. Moved up to a small part as a
+    // perspective camera is, it showed as much as before (nothing was framed) from a place inside the model, and everything
+    // nearer than that place was cut away. So: the half-height that fits the box, and the camera kept outside the whole model.
+    let hh = 0;
+    for (let i = 0; i < 8; i++) {
+      c.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(center);
+      hh = Math.max(hh, Math.abs(c.dot(up)), Math.abs(c.dot(right)) / (camera.aspect || 1));
+    }
+    const span = Math.max(Number.isFinite(state.modelDiag) ? state.modelDiag : 0, maxDim);
+    camera._orthoHalfH = Math.max(hh * MARGIN, 1e-6); camera.zoom = 1;
+    dist = Math.max(dist, span * 2);
+    camera.position.copy(center).add(dir.multiplyScalar(dist));
+    camera.near = Math.max(1e-4, dist / 1000);
+    camera.far = dist + span * 4;
+  } else {
+    camera.position.copy(center).add(dir.multiplyScalar(dist));
+    camera.near = Math.max(0.001, dist / 1000);
+    camera.far = dist * 1000;
+  }
   camera.updateProjectionMatrix();
   controls.target.copy(center);
   controls.update();
@@ -39758,7 +40575,7 @@ rebuildTree = function() {
   const ft = ($('tree-filter').value || '').toLowerCase();
   const aliveParts = state.parts.filter(p => !p.deleted);
   const visible = aliveParts
-    .filter(p => !ft || p.name.toLowerCase().includes(ft))
+    .filter(p => !ft || _treeMatcher(ft)(p.name, p))
     .sort(_treeSortFn(state.sortMode));
   $('tree-summary').textContent = `${visible.length} of ${aliveParts.length} parts`;
 
@@ -43311,6 +44128,28 @@ _UndoOps.register('primParams', {
   },
 });
 
+// 'primBake' — a library shape was turned into a plain mesh (Bake geo).
+_UndoOps.register('primBake', {
+  undo(op) {
+    const p = getPart(op.partId);
+    if (p && !p.isPrimitive && p.bakedFrom) {
+      Object.assign(p, { isPrimitive: true, ...p.bakedFrom });
+      delete p.bakedFrom;
+      try { _syncPrimWireframe(p); applySelectionColors(); updateGizmo(); recomputeStats(); } catch (_) {}
+    }
+    state.redo.push(op);
+    refreshPropertiesPanel?.();
+    _finalizeUndo();
+  },
+  redo(op) {
+    const p = getPart(op.partId);
+    if (p && p.isPrimitive) _bakePrimitive(p);
+    state.history.push(op);
+    refreshPropertiesPanel?.();
+    _finalizeUndo();
+  },
+});
+
 // 'vis' — per-part visibility change. items: [{partId, before, after}].
 // Covers single eye-icon clicks + bulk hide-unselected / show-all / isolate.
 _UndoOps.register('vis', {
@@ -45948,7 +46787,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   // geometry: their records (triangle counts, the box, the hash the export reads) are written when a level is kept.
   const _QuickRemesh = (() => {
     const LEVELS = [1, 0.75, 0.5, 0.35, 0.25, 0.15, 0.1, 0.05];
-    const ITEM = 34, PAD = 6, WIDTH = 60;
+    const ITEM = 32, PAD = 5, WIDTH = 52;
     let S = null;                                           // the open pill
     const last = { x: 0, y: 0, seen: false };               // where the pointer is, for the place the pill opens
     if (typeof window !== 'undefined') window.addEventListener('pointermove', (e) => { last.x = e.clientX; last.y = e.clientY; last.seen = true; }, { capture: true, passive: true });
@@ -45958,17 +46797,16 @@ setTimeout(() => _dndDecorateTree(), 0);
       const st = document.createElement('style');
       st.id = 'qr-style';
       st.textContent = `
-.qr{position:fixed;z-index:9000;width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:${WIDTH / 2}px;background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 22px 56px rgba(0,0,0,.55),0 3px 10px rgba(0,0,0,.35);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
+.qr{position:fixed;z-index:9000;width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 22px 56px rgba(0,0,0,.55),0 3px 10px rgba(0,0,0,.35);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
 .qr.is-in{opacity:1;transform:none}
 .qr.is-out{opacity:0;transform:scale(.92);transition:opacity 110ms ease,transform 110ms ease}
-.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:${ITEM / 2}px;background:var(--ac,#0d99ff);box-shadow:0 4px 14px rgba(13,153,255,.35);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
+.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:var(--r-sm,6px);background:var(--ac,#0d99ff);box-shadow:0 4px 14px rgba(13,153,255,.35);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
 .qr.is-first .qr-thumb{background:var(--s5,rgba(255,255,255,.1));box-shadow:none}
-.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:baseline;justify-content:center;line-height:${ITEM}px;font-size:var(--fs-12,12px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;letter-spacing:.01em;color:var(--tx3,#8a8a8a);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
-.qr-i small{font-size:9px;margin-left:1px;opacity:.65}
+.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:center;justify-content:center;line-height:1;font-size:var(--fs-13,13px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;color:var(--tx3,#8a8a8a);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
 .qr-i.is-near{color:var(--tx2,#bdbdbd)}
 .qr-i.is-hot{color:#fff;transform:scale(1.06)}
 .qr.is-first .qr-i.is-hot{color:var(--tx,#eee)}
-.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 13px;border-radius:${ITEM / 2}px;background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 12px 32px rgba(0,0,0,.45);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3,#8a8a8a);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:var(--r-lg,10px);background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 12px 32px rgba(0,0,0,.45);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3,#8a8a8a);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
 .qr.is-left .qr-tip{left:auto;right:calc(100% + 10px)}
 .qr-tip b{font-weight:var(--fw-regular,400);color:var(--tx,#eee)}
 .qr-tip i{width:6px;height:6px;border-radius:50%;background:var(--ac,#0d99ff);opacity:0;transition:opacity 120ms ease}
@@ -45980,6 +46818,21 @@ setTimeout(() => _dndDecorateTree(), 0);
 
     const trisOf = (g) => ((g.index ? g.index.count : g.attributes.position.count) / 3) | 0;
     const pctOf = (k) => Math.round(k * 100);
+    // how much surface a geometry has, and how far across it is (what a reduced copy is held against)
+    function shapeOf(g) {
+      const p = g.attributes.position, ix = g.index ? g.index.array : null, n = ix ? ix.length : p.count;
+      const flat = !p.isInterleavedBufferAttribute && p.itemSize === 3 && p.array ? p.array : null;
+      const X = (v, c) => flat ? flat[v * 3 + c] : p.getComponent(v, c);
+      let area = 0;
+      for (let i = 0; i + 2 < n; i += 3) {
+        const a = ix ? ix[i] : i, b = ix ? ix[i + 1] : i + 1, c = ix ? ix[i + 2] : i + 2;
+        const ux = X(b, 0) - X(a, 0), uy = X(b, 1) - X(a, 1), uz = X(b, 2) - X(a, 2), vx = X(c, 0) - X(a, 0), vy = X(c, 1) - X(a, 1), vz = X(c, 2) - X(a, 2);
+        area += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+      }
+      if (!g.boundingBox) g.computeBoundingBox();
+      const bb = g.boundingBox;
+      return { area, diag: bb ? bb.min.distanceTo(bb.max) : 0 };
+    }
 
     // one level of one part: its geometry, worked out once
     function levelOf(sess, part, keep) {
@@ -46006,8 +46859,19 @@ setTimeout(() => _dndDecorateTree(), 0);
           if (!out && sess.meshopt) out = _simplifyKeepingAttributes(sess.meshopt, geom, keep, 0);
         } catch (e) { console.warn('[quick remesh]', part.p.name, e); out = null; }
         if (out && !(trisOf(out) >= 1 && trisOf(out) < part.tris0)) { try { out.dispose(); } catch (_) {} out = null; }      // (cannot be made lighter: it stays as it is)
-        if (out) { out.computeBoundingBox(); out.computeBoundingSphere(); _simpErr.set(out, err); }
-        const res = out || part.orig;
+        // A small or open part can be taken so far that most of its surface is gone (measured: a 100-triangle bolt left with a
+        // quarter of its surface at 25 %, which reads as the part disappearing). Such a result is refused, and the part wears
+        // the lightest gentler level that still has its shape.
+        let lostShape = false;
+        if (out) {
+          out.computeBoundingBox(); out.computeBoundingSphere();
+          if (!part.shape0) part.shape0 = shapeOf(part.orig);
+          const a = part.shape0, b = shapeOf(out);
+          if (!(b.area >= a.area * 0.6 && b.diag >= a.diag * 0.9)) { try { out.dispose(); } catch (_) {} out = null; lostShape = true; }
+        }
+        if (out) _simpErr.set(out, err);
+        let res = out || part.orig;
+        if (lostShape) { const i = LEVELS.indexOf(keep); if (i > 1) res = await levelOf(sess, part, LEVELS[i - 1]); }
         if (S !== sess) { if (out) { try { out.dispose(); } catch (_) {} } return part.orig; }      // (the pill closed meanwhile)
         part.cache.set(keep, res); part.jobs.delete(keep);
         return res;
@@ -46037,7 +46901,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
 
     function setLevel(i, now) {
-      const sess = S; if (!sess) return;
+      const sess = S; if (!sess || sess.committing) return;      // (a level being kept is not changed by a hand that is still moving)
       i = Math.max(0, Math.min(LEVELS.length - 1, i));
       if (i === sess.level) return;
       sess.level = i;
@@ -46149,7 +47013,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const el = document.createElement('div');
       el.className = 'qr is-first';
       el.setAttribute('role', 'listbox'); el.setAttribute('aria-label', 'Quick remesh: the share of triangles to keep');
-      el.innerHTML = '<div class="qr-thumb"></div>' + LEVELS.map((k, i) => '<div class="qr-i' + (i === 0 ? ' is-hot' : i === 1 ? ' is-near' : '') + '" role="option">' + pctOf(k) + '<small>%</small></div>').join('') + '<div class="qr-tip"><i></i><b></b><span></span></div>';
+      el.innerHTML = '<div class="qr-thumb"></div>' + LEVELS.map((k, i) => '<div class="qr-i' + (i === 0 ? ' is-hot' : i === 1 ? ' is-near' : '') + '" role="option" aria-label="' + pctOf(k) + ' percent">' + pctOf(k) + '</div>').join('') + '<div class="qr-tip"><i></i><b></b><span></span></div>';
       document.body.appendChild(el);
       const H = PAD * 2 + ITEM * LEVELS.length;
       const x = last.seen ? last.x : innerWidth / 2, y = last.seen ? last.y : innerHeight / 2;
@@ -50005,10 +50869,10 @@ const _Elements = (() => {
   const CUBE = '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>';
   const SVG = (inner) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round">' + inner + '</svg>';
   const ICON = {
-    points: SVG('<g opacity=".5">' + CUBE + '</g><g fill="currentColor" stroke="none"><circle cx="12" cy="3" r="2"/><circle cx="20" cy="7.5" r="2"/><circle cx="20" cy="16.5" r="2"/><circle cx="12" cy="21" r="2"/><circle cx="4" cy="16.5" r="2"/><circle cx="4" cy="7.5" r="2"/><circle cx="12" cy="12" r="2"/></g>'),
-    edges: SVG('<g opacity=".5">' + CUBE + '</g><path d="M12 12v9" stroke-width="3.2"/>'),
-    faces: SVG('<g opacity=".5">' + CUBE + '</g><path d="M12 12l8-4.5v9L12 21z" fill="currentColor" stroke="none"/>'),
-    model: SVG('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity=".38"/>' + CUBE),
+    points: SVG('<g class="em-c" opacity=".5">' + CUBE + '</g><g class="em-hf" fill="currentColor" stroke="none"><circle cx="12" cy="3" r="2"/><circle cx="20" cy="7.5" r="2"/><circle cx="20" cy="16.5" r="2"/><circle cx="12" cy="21" r="2"/><circle cx="4" cy="16.5" r="2"/><circle cx="4" cy="7.5" r="2"/><circle cx="12" cy="12" r="2"/></g>'),
+    edges: SVG('<g class="em-c" opacity=".5">' + CUBE + '</g><path class="em-hs" d="M12 12v9" stroke-width="3.2"/>'),
+    faces: SVG('<g class="em-c" opacity=".5">' + CUBE + '</g><path class="em-hf" d="M12 12l8-4.5v9L12 21z" fill="currentColor" stroke="none"/>'),
+    model: SVG('<path class="em-cf" d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity=".38"/><g class="em-c">' + CUBE + '</g>'),
   };
   let active = false, wired = false, mode = 'faces', tool = 'click', loops = false, brushR = 20, space = 'world';      // space: which way the gizmo's axes point (world, the part's own, or along the picked pieces' normal)
   const SPACES = ['world', 'local', 'normal'];
@@ -50134,7 +50998,7 @@ const _Elements = (() => {
     // Only the parts selected in Model mode are worked on, as in Cinema 4D: nothing else can be picked by accident, and what
     // stands in front of them does not get in the way. (A selected copy of a shared shape has a shape of its own by then.)
     targets = []; const seen = new Set();
-    for (const id of state.selected) { const p = getPart(id); if (!p || p.deleted || !p.visible) continue; if (p.mesh && !p.isSpline && !seen.has(p.mesh.id)) { targets.push(p.mesh); seen.add(p.mesh.id); } }
+    for (const id of state.selected) { const p = getPart(id); if (!p || p.deleted || !p.visible) continue; if (p.mesh && !p.isSpline && !p.isPrimitive && !seen.has(p.mesh.id)) { targets.push(p.mesh); seen.add(p.mesh.id); } }
     if (!ray) { ray = new THREE.Raycaster(); ray.firstHitOnly = true; }
   }
   // (one ray; freshTargets() must have been called for this round of rays)
@@ -50232,8 +51096,9 @@ const _Elements = (() => {
   // ── Rectangle: what is in the box and can be seen ──
   // Rays through the box find the parts that show in it; of those parts, every piece that lies in the box whole and looks at the
   // camera is taken, unless something stands in front of it (one ray each, while there are not too many).
-  function boxPick(x0, y0, x1, y1, how) {
-    if (needPart()) return 0;
+  // (live: a pass during the drag. It says nothing, and the history is written once, on release: see boxLive and boxEnd)
+  function boxPick(x0, y0, x1, y1, how, live) {
+    if (live ? !state.selected.size : needPart()) return 0;
     const rect = canvas().getBoundingClientRect();
     const L = Math.min(x0, x1), Rr = Math.max(x0, x1), T = Math.min(y0, y1), B = Math.max(y0, y1), w = Rr - L, hgt = B - T;
     freshTargets();
@@ -50245,7 +51110,7 @@ const _Elements = (() => {
       if (h && h.p && !parts.has(h.p.partId)) parts.set(h.p.partId, h.p);
     }
     let found = 0;
-    record(() => {
+    (live ? (fn) => fn() : record)(() => {
       if (how === 'set') clearAll();
       camera.getWorldPosition(_cam);
       const ortho = !!camera._isOrtho, look = ortho ? camera.getWorldDirection(new THREE.Vector3()).negate() : null;
@@ -50318,6 +51183,31 @@ const _Elements = (() => {
     return found;
   }
 
+  // The box picks as it is dragged: each pass starts again from what was picked when the button went down, so pieces the box has
+  // left are let go. A pass that took long makes the next one wait (twice as long as it took), so a heavy part does not hold the drag up.
+  const boxMoved = (b) => Math.abs(b.x1 - b.x0) + Math.abs(b.y1 - b.y0) > 5;
+  function boxLive() {
+    const b = box; if (!b) return;
+    b.raf = 0;
+    const now = performance.now();
+    if (now < b.wait) { b.raf = requestAnimationFrame(boxLive); return; }
+    if (b.at === b.x1 + ',' + b.y1) return;
+    b.at = b.x1 + ',' + b.y1;
+    restore(b.before);
+    if (boxMoved(b)) boxPick(b.x0, b.y0, b.x1, b.y1, b.how, true);
+    b.wait = performance.now() + Math.min(400, (performance.now() - now) * 2);
+  }
+  function boxEnd(b, keep) {      // the release (keep), or the drag given up: what was picked before is back
+    if (b.raf) cancelAnimationFrame(b.raf);
+    restore(b.before);
+    if (!keep || !boxMoved(b)) return false;
+    if (needPart()) return true;
+    boxPick(b.x0, b.y0, b.x1, b.y1, b.how, true);
+    const after = snap();
+    if (sig(b.before) !== sig(after)) { picks.push({ before: b.before, after, at: state.history.length }); if (picks.length > 200) picks.shift(); unpicks.length = 0; }
+    return true;
+  }
+
   // ── Brush: what the brush passes over ──
   // Rays through the round of the brush: whatever each meets first is taken, so nothing behind something else is.
   function brushAt(x, y, how) {
@@ -50384,7 +51274,7 @@ const _Elements = (() => {
   function selectAll() {
     record(() => {
       const any = [];                                     // every selected part, whether something of it is picked yet or not
-      for (const id of state.selected) { const p = getPart(id); if (p && p.mesh && !p.deleted && !p.isSpline) { const e = entry(p, true); if (e) any.push([p, e]); } }
+      for (const id of state.selected) { const p = getPart(id); if (p && p.mesh && !p.deleted && !p.isSpline && !p.isPrimitive) { const e = entry(p, true); if (e) any.push([p, e]); } }
       for (const [, e] of any) {
         const { topo, pg } = e.R, set = e[mode];
         if (mode === 'points') { const on = cornerFlags(e.R); for (let i = 0; i < topo.nVert; i++) if (on[i]) set.add(i); }
@@ -50698,7 +51588,7 @@ const _Elements = (() => {
     const gm = state.gizmoMode || 'translate';
     let n = 0; _pt.set(0, 0, 0);
     _nSum.set(0, 0, 0); let haveLocal = false;
-    if (active && gm !== 'off' && !stroke) {          // (while the brush is painting the gizmo is put away; it is back when the stroke ends)
+    if (active && gm !== 'off' && !stroke && !box) {          // (while the brush is painting or a box is dragged the gizmo is put away; it is back when the stroke or the drag ends)
       const P3 = [0, 0, 0];
       for (const [p, e] of live()) {
         if (!e[mode].size) continue;
@@ -50947,6 +51837,18 @@ const _Elements = (() => {
     const P3 = [0, 0, 0];
     // a point of a part on the canvas: [x, y] or null when it is behind the camera
     const proj = (M, x, y, z) => { _w.set(x, y, z).applyMatrix4(M); _v.copy(_w).project(camera); if (_v.z > 1 || _v.z < -1) return null; return [(_v.x * 0.5 + 0.5) * rect.width, (-_v.y * 0.5 + 0.5) * rect.height]; };
+    // an edge of a part on the canvas: [x0, y0, x1, y1], or null when all of it is behind the camera. An end that is behind the near
+    // plane (the view is very close, the edge runs past the camera) is cut off there, so the part of the edge in view is still drawn.
+    const segA = new THREE.Vector3(), segB = new THREE.Vector3();
+    const seg = (M, topo, ed) => {
+      MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); segA.set(P3[0], P3[1], P3[2]).applyMatrix4(M).applyMatrix4(camera.matrixWorldInverse);
+      MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + 1], P3); segB.set(P3[0], P3[1], P3[2]).applyMatrix4(M).applyMatrix4(camera.matrixWorldInverse);
+      const zn = -camera.near - Math.abs(camera.near) * 1e-4;      // (the camera looks down -z: in view at z <= -near)
+      if (segA.z > zn && segB.z > zn) return null;
+      if (segA.z > zn) segA.lerp(segB, (zn - segA.z) / (segB.z - segA.z)); else if (segB.z > zn) segB.lerp(segA, (zn - segB.z) / (segA.z - segB.z));
+      segA.applyMatrix4(camera.projectionMatrix); segB.applyMatrix4(camera.projectionMatrix);
+      return [(segA.x * 0.5 + 0.5) * rect.width, (-segA.y * 0.5 + 0.5) * rect.height, (segB.x * 0.5 + 0.5) * rect.width, (-segB.y * 0.5 + 0.5) * rect.height];
+    };
     // does triangle t of a part look at the camera (from the point _w, already in the world)
     const faces = (topo, t) => { if (t < 0) return false; _n.set(topo.normal[t * 3], topo.normal[t * 3 + 1], topo.normal[t * 3 + 2]).applyMatrix3(_nm); return ortho ? _n.dot(look) > 0 : (_n.x * (_cam.x - _w.x) + _n.y * (_cam.y - _w.y) + _n.z * (_cam.z - _w.z)) > 0; };
     const edgeSeen = (topo, e) => faces(topo, topo.edgeT[e * 2]) || faces(topo, topo.edgeT[e * 2 + 1]);
@@ -50957,7 +51859,7 @@ const _Elements = (() => {
     {
       const items = [];
       if (mode === 'points') for (const id of state.selected) {
-        const p = getPart(id); if (!p || p.deleted || !p.visible || !p.mesh || p.isSpline) continue;
+        const p = getPart(id); if (!p || p.deleted || !p.visible || !p.mesh || p.isSpline || p.isPrimitive) continue;
         const R = read(p, triCountOf(p) <= BIG); if (!R || R.topo.nVert > ALL_POINTS_MAX) continue;
         items.push({ p, topo: R.topo, list: cornerSet(R) });      // (the corners of the polygons only, not the points inside one)
       }
@@ -50974,11 +51876,10 @@ const _Elements = (() => {
         ctx.beginPath(); let k = 0;
         for (const ed of e.edges) {
           if (++k > DRAW_MAX) break;
-          MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3);
-          const a = proj(M, P3[0], P3[1], P3[2]); if (!a || !edgeSeen(topo, ed)) continue;
-          MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + 1], P3);
-          const b = proj(M, P3[0], P3[1], P3[2]); if (!b) continue;
-          ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+          MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M);
+          if (!edgeSeen(topo, ed)) continue;
+          const s = seg(M, topo, ed); if (!s) continue;
+          ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]);
         }
         ctx.lineCap = 'round'; ctx.lineWidth = 2.5; ctx.strokeStyle = ORANGE; ctx.stroke();
       }
@@ -50992,14 +51893,14 @@ const _Elements = (() => {
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       const lp = hot.loop && hot.loop.length > 1 && hot.loop.length <= DRAW_MAX ? hot.loop : null;      // (Pick loops is on: the whole loop a click would pick)
       if (lp && el.mode === 'points') { ctx.beginPath(); for (const v of lp) { const a = at(v); if (a) { ctx.moveTo(a[0] + 3.5, a[1]); ctx.arc(a[0], a[1], 3.5, 0, Math.PI * 2); } } ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.stroke(); }
-      else if (lp && el.mode === 'edges') { ctx.beginPath(); for (const ed of lp) { const a = at(topo.edgeV[ed * 2]), b = at(topo.edgeV[ed * 2 + 1]); if (a && b) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); } } ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); }
+      else if (lp && el.mode === 'edges') { ctx.beginPath(); for (const ed of lp) { const s = seg(M, topo, ed); if (s) { ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); } } ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); }
       else if (lp && el.mode === 'faces') {
         ctx.beginPath(); let k = 0;
         for (const q of lp) for (let i = pg.pStart[q]; i < pg.pStart[q + 1] && k < 12000; i++, k++) { const t = pg.pTris[i], a = at(topo.tri[t * 3]), b = at(topo.tri[t * 3 + 1]), c = at(topo.tri[t * 3 + 2]); if (a && b && c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath(); } }
         ctx.fillStyle = 'rgba(255,255,255,.34)'; ctx.fill('nonzero');
       }
       else if (el.mode === 'points') { const a = at(el.id); if (a) { ctx.beginPath(); ctx.arc(a[0], a[1], 4, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.stroke(); } }
-      else if (el.mode === 'edges') { const a = at(topo.edgeV[el.id * 2]), b = at(topo.edgeV[el.id * 2 + 1]); if (a && b) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); } }
+      else if (el.mode === 'edges') { const s = seg(M, topo, el.id); if (s) { ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); } }
       else if (pg.pStart[el.poly + 1] - pg.pStart[el.poly] <= 6000) {
         ctx.beginPath();
         for (let i = pg.pStart[el.poly]; i < pg.pStart[el.poly + 1]; i++) { const t = pg.pTris[i], a = at(topo.tri[t * 3]), b = at(topo.tri[t * 3 + 1]), c = at(topo.tri[t * 3 + 2]); if (a && b && c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath(); } }
@@ -51014,9 +51915,26 @@ const _Elements = (() => {
 
   // ── the card and the mode button ──
   const current = () => active ? mode : 'model';
+  let weldOpen = false;      // the Weld card is up
+  let tipsKey = '';
   function syncCard() {
     for (const [id, attr, val] of [['el-mode', 'mode', mode], ['el-tool', 'tool', tool], ['el-space', 'space', space]]) { const c = $q(id); if (c) for (const b of c.querySelectorAll('button')) b.classList.toggle('active', b.dataset[attr] === val); }
-    for (const b of document.querySelectorAll('.vpb.em-tool')) { b.hidden = !active; b.classList.toggle('active', b.dataset.tool === tool); }      // (the toolbar's own Click / Box / Brush)
+    // the toolbar's Points / Edges / Polygons, shown while Edit mesh is on (Click / Box / Brush are in the card)
+    for (const b of document.querySelectorAll('.vpb.em-pick')) {
+      const ico = b.querySelector('.em-ico'); if (ico && !ico.dataset.m) { ico.innerHTML = ICON[b.dataset.mode]; ico.dataset.m = b.dataset.mode; }
+      b.hidden = !active; b.classList.toggle('active', active && b.dataset.mode === mode);
+    }
+    { const k = active + '|' + mode + '|' + tool + '|' + (total() > 0); if (k !== tipsKey) { tipsKey = k; try { _updateVpHint(); } catch (_) {} } }      // (the tips at the bottom right follow the mode and the tool)
+    const bar = $q('el-bar'); if (bar) bar.hidden = !active;
+    // Weld has a number of its own, so it is a floating card (Edit mesh's own card, which is drawn only for this): the bar's Weld button
+    // opens and closes it, and it goes when the mode is one Weld does not work on
+    const canWeld = mode === 'points' || mode === 'edges';
+    if (!active || !canWeld) weldOpen = false;
+    const wc = document.querySelector('.section-cmd[data-cmd="elements"]'); if (wc) wc.classList.toggle('el-weld-on', weldOpen);
+    const wo = $q('btn-el-weld-open'); if (wo) { wo.disabled = !canWeld; wo.classList.toggle('active', weldOpen); }      // the tools, in a bar of their own at the right of the view
+    // the card's heading says which pieces are being picked, with the same icon as the toolbar's button
+    const tag = $q('el-mode-tag');
+    if (tag && tag.dataset.m !== mode) { tag.dataset.m = mode; tag.innerHTML = '<span class="em-ico">' + ICON[mode] + '</span>' + NAME[mode]; }
     const n = total(), parts = live().filter(([, e]) => e[mode].size).length;
     const info = $q('el-info');
     if (info) info.textContent = n ? fmtNum(n) + ' ' + (n === 1 ? ONE[mode] : MANY[mode]) + ' picked' + (parts > 1 ? ' on ' + parts + ' parts' : '') + '.' : '';
@@ -51036,16 +51954,19 @@ const _Elements = (() => {
     const b = $q('em-mode');
     if (b) {
       const m = current();
-      const ico = b.querySelector('.em-ico'); if (ico && ico.dataset.m !== m) { ico.innerHTML = ICON[m]; ico.dataset.m = m; }
-      b.classList.toggle('active', m !== 'model');
-      b.title = NAME[m] + ' mode: a click picks ' + (m === 'model' ? 'a whole part' : MANY[m]) + '. Click to switch between Model and ' + NAME[mode] + ', hold for all four modes';
-      b.setAttribute('aria-label', NAME[m] + ' mode');
+      // (always the Model icon: while Edit mesh is on, the three buttons under it show which piece mode it is)
+      const ico = b.querySelector('.em-ico'); if (ico && ico.dataset.m !== 'model') { ico.innerHTML = ICON.model; ico.dataset.m = 'model'; }
+      b.classList.toggle('active', false);
+      b.title = m === 'model' ? 'Model mode: a click picks a whole part. Click for ' + NAME[mode] + ', hold for all four modes' : 'Back to Model mode: a click picks a whole part (4)';
+      b.setAttribute('aria-label', 'Model mode');
     }
   }
   function setMode(m) {
     if (m === 'model') { if (active) _CmdCards.close('elements'); else syncCard(); return; }
     if (!MODES.includes(m)) return;
     const was = mode; mode = m; save();
+    // a library shape with parameters is not edited in place: its parameters would rebuild it (Bake geo first)
+    try { const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive); if (raw.length) toast('Bake geo first', raw.length === 1 ? 'This shape still has shape parameters. Press Bake geo under them to make it editable.' : 'These shapes still have shape parameters. Press Bake geo under them to make them editable.', 'info', 3600); } catch (_) {}
     if (!active) { _CmdCards.open('elements'); return; }
     if (was !== m) { hover = null; for (const [, e] of live()) e.dirty = true; }
     changed();
@@ -51058,7 +51979,7 @@ const _Elements = (() => {
   }
   function setTool(t) {
     if (!TOOLS.includes(t)) return;
-    tool = t; box = null; stroke = null; save();
+    if (box) { const b = box; box = null; boxEnd(b, false); } tool = t; stroke = null; save();
     if (active) { applyButtons(); canvas().style.cursor = tool === 'click' ? '' : tool === 'brush' ? 'none' : 'crosshair'; }      // (the brush circle is the cursor)
     changed();
   }
@@ -51119,9 +52040,11 @@ const _Elements = (() => {
     // A dot is a flat disc facing the camera, the surface it lies on is not: across the dot's width the surface runs deeper by the
     // width times the tangent of the angle between the view and the surface's normal, and a dot only that far in front is cut by it
     // where the surface rises. So it is lifted by that much, and a point on a surface seen edge-on is lifted most.
-    const c = T.abs(T.dot(wn, view));
+    const facing = T.dot(wn, view), c = T.abs(facing);
     const tanT = T.min(T.sqrt(T.max(T.float(1).sub(c.mul(c)), 0.0)).div(T.max(c, 0.08)), 12.0);
-    const lift = d.mul(scale * 0.5 * 1.3).mul(tanT);                                 // (a sprite is `scale` times its depth wide)
+    // (a sprite is `scale` times its depth wide. A point whose surface looks away from the camera is not lifted: the lift grows
+    // with the distance, and from far away it carried the points of a thin part's far side through to the near one.)
+    const lift = d.mul(scale * 0.5 * 1.3).mul(tanT).mul(T.smoothstep(-0.45, -0.15, facing));
     const pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL * 2)).add(lift);
     mat.positionNode = wp.add(view.mul(pull));
     mat.colorNode = T.vec4(T.vec3(rgb[0], rgb[1], rgb[2]), T.smoothstep(0.36, 0.5, T.uv().sub(0.5).length()).oneMinus());      // a disc with a soft edge
@@ -51212,7 +52135,7 @@ const _Elements = (() => {
     const want = new Set();
     if (active) for (const id of state.selected) {
       const p = getPart(id);
-      if (!p || p.deleted || !p.visible || !p.mesh || p.isSpline) continue;
+      if (!p || p.deleted || !p.visible || !p.mesh || p.isSpline || p.isPrimitive) continue;
       const R = read(p, triCountOf(p) <= BIG);
       if (!R || !R.lines || !R.lines.length) continue;
       want.add(id);
@@ -51282,7 +52205,7 @@ const _Elements = (() => {
     if (ev.altKey) { altOrbit = true; controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE; return; }      // Alt + drag turns the camera
     ev.preventDefault();
     try { canvas().setPointerCapture(ev.pointerId); } catch (_) {}
-    if (tool === 'rect') box = { x0: ev.clientX, y0: ev.clientY, x1: ev.clientX, y1: ev.clientY, how: howOf(ev) };
+    if (tool === 'rect') box = { x0: ev.clientX, y0: ev.clientY, x1: ev.clientX, y1: ev.clientY, how: howOf(ev), before: snap(), raf: 0, wait: 0, at: '' };
     else {
       if (needPart()) return;
       stroke = { how: howOf(ev), last: { x: ev.clientX, y: ev.clientY }, before: snap() };
@@ -51299,8 +52222,7 @@ const _Elements = (() => {
     if (ev.button !== 0) return;
     if (box) {
       const b = box; box = null;
-      if (Math.abs(b.x1 - b.x0) + Math.abs(b.y1 - b.y0) > 5) boxPick(b.x0, b.y0, b.x1, b.y1, b.how);
-      else pick(ev, loops);                                                // a press that did not move is a click
+      if (!boxEnd(b, true)) pick(ev, loops);                               // a press that did not move is a click
       schedule();
       return;
     }
@@ -51327,7 +52249,7 @@ const _Elements = (() => {
       schedule(); return;
     }
     lastMove = ev; ptr = { x: ev.clientX, y: ev.clientY };
-    if (box) { box.x1 = ev.clientX; box.y1 = ev.clientY; schedule(); return; }
+    if (box) { box.x1 = ev.clientX; box.y1 = ev.clientY; if (!box.raf) box.raf = requestAnimationFrame(boxLive); schedule(); return; }
     if (stroke) {
       // a stroke whose release was never seen (let go outside the window, over another frame): a move with no button down ends it,
       // or the brush would go on painting under a pointer that is only passing over
@@ -51359,7 +52281,7 @@ const _Elements = (() => {
     });
   }
   function onLeave() { lastMove = null; ptr = null; gzOver = false; if (hover || tool === 'brush') { hover = null; schedule(); } }
-  function onLost() { box = null; if (sizing) { sizing = null; save(); } if (stroke) endStroke(); down = null; if (altOrbit) { altOrbit = false; controls.mouseButtons.LEFT = -1; } schedule(); }
+  function onLost() { if (box) { const b = box; box = null; boxEnd(b, false); } if (sizing) { sizing = null; save(); } if (stroke) endStroke(); down = null; if (altOrbit) { altOrbit = false; controls.mouseButtons.LEFT = -1; } schedule(); }
   // the canvas lost the pointer while a box or a stroke was on (the release never came here: another window took it, a dialog opened):
   // the gesture ends where it is. After an ordinary release there is nothing left to end.
   function onLostCapture() { if (box || stroke || sizing) onLost(); }
@@ -51445,10 +52367,10 @@ const _Elements = (() => {
     wired = true;
     ctx = ov.getContext('2d');
     try { const s = JSON.parse(localStorage.getItem('stepopt-elements') || 'null'); if (s) { if (MODES.includes(s.mode)) mode = s.mode; if (TOOLS.includes(s.tool)) tool = s.tool; loops = !!s.loops; if (s.brushR >= 4 && s.brushR <= 200) brushR = +s.brushR; if (SPACES.includes(s.space)) space = s.space; } } catch (_) {}
-    for (const b of card.querySelectorAll('#el-space button')) b.addEventListener('click', () => { setSpace(b.dataset.space); b.blur(); });
+    for (const b of document.querySelectorAll('#el-space button')) b.addEventListener('click', () => { setSpace(b.dataset.space); b.blur(); });
     for (const b of card.querySelectorAll('#el-mode button')) b.addEventListener('click', () => { setMode(b.dataset.mode); b.blur(); });
-    for (const b of card.querySelectorAll('#el-tool button')) b.addEventListener('click', () => { setTool(b.dataset.tool); b.blur(); });
-    for (const b of document.querySelectorAll('.vpb.em-tool')) b.addEventListener('click', () => { setTool(b.dataset.tool); b.blur(); });
+    for (const b of document.querySelectorAll('#el-tool button')) b.addEventListener('click', () => { setTool(b.dataset.tool); b.blur(); });
+    for (const b of document.querySelectorAll('.vpb.em-pick')) b.addEventListener('click', () => { setMode(b.dataset.mode); b.blur(); });
     $q('el-loop')?.addEventListener('change', (e) => { loops = !!e.target.checked; save(); hover = null; schedule(); });
     const bs = $q('el-brush');
     if (bs) {
@@ -51464,6 +52386,8 @@ const _Elements = (() => {
     $q('btn-el-planar')?.addEventListener('click', planarizePicked);
     $q('btn-el-straight')?.addEventListener('click', straightenPicked);
     $q('btn-el-weld')?.addEventListener('click', weldPicked);
+    $q('btn-el-weld-open')?.addEventListener('click', (e) => { weldOpen = !weldOpen; e.currentTarget.blur(); syncCard(); });
+    $q('el-weld-close')?.addEventListener('click', () => { weldOpen = false; syncCard(); });
     $q('btn-el-fill')?.addEventListener('click', fillPicked);
     $q('btn-el-extract')?.addEventListener('click', extractPicked);
     { const wf = $q('el-weld'); if (wf) { wf.addEventListener('change', () => { const v = parseFloat(String(wf.value).replace(',', '.')); wf.value = String(isFinite(v) && v > 0 ? v : 0); }); try { _scrubField(wf, { min: 0, max: 1000, step: 0.1, decimals: 2 }); } catch (_) {} } }
@@ -51509,7 +52433,19 @@ const _Elements = (() => {
     read: (partId) => { const p = getPart(partId); return p && p.mesh ? read(p) : null; },
     topology: (partId) => { const p = getPart(partId); const R = p && p.mesh ? read(p) : null; return R ? R.topo : null; },
   };
-  return { isActive: () => active, repaint: schedule, gizmo: gizmoSync, hush, newLine, api };
+  // The tips at the bottom right of the view while Edit mesh is on: how the tool in hand picks, then what the keys do to what is picked
+  // (or, with nothing picked, how to get going and out).
+  function tips() {
+    const many = MANY[mode], n = total();
+    const t = tool === 'rect' ? [[['Drag'], 'Box-pick ' + many], [['Shift', 'Drag'], 'Add'], [['Ctrl', 'Drag'], 'Take away'], [['Alt', 'Drag'], 'Orbit']]
+      : tool === 'brush' ? [[['Drag'], 'Paint ' + many], [['Shift', 'Drag'], 'Add'], [['Ctrl', 'Drag'], 'Take away'], [['Middle drag'], 'Brush size'], [['Alt', 'Drag'], 'Orbit']]
+      : [[['Click'], 'Pick ' + (n ? 'another ' : 'a ') + ONE[mode]], [['Double-click'], 'Pick a loop'], [['Shift', 'Click'], 'Add'], [['Ctrl', 'Click'], 'Take away']];
+    if (n) t.push([['Del'], 'Delete'], [['Ctrl', 'Backspace'], 'Dissolve'], [['Esc'], 'Let go']);
+    else t.push([['Ctrl', 'A'], 'Pick all'], [['Esc'], 'Model mode']);
+    t.push([['1 2 3'], 'Points, edges, polygons']);
+    return t;
+  }
+  return { isActive: () => active, tips, repaint: schedule, gizmo: gizmoSync, hush, newLine, api };
 })();
 window.__moElements = _Elements.api;
 // ▲ Edit mesh

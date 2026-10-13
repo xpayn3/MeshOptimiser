@@ -501,13 +501,15 @@
     const THREE = T.F().THREE, key = (k, o = {}) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...o }));
     const view0 = state.viewMode;
     await T.pick(['Cylinder']);
+    // a library shape is not edited in place since 0.25.0: Bake geo first, as a person would
+    document.querySelector('.prim-bake')?.click(); await T.sleep(400);
     // the keys: 3 polygons, 1 points, 2 edges, 4 back to whole parts; the view mode is left alone
     key('3'); await T.sleep(500);
-    T.eq(A.mode(), 'faces', 'the 3 key'); T.assert(!card.hidden && btn.classList.contains('active') && !document.getElementById('elem-overlay').hidden, 'Polygons mode did not open its card');
+    T.eq(A.mode(), 'faces', 'the 3 key'); T.assert(!card.hidden && !document.getElementById('el-bar').hidden && !document.getElementById('elem-overlay').hidden, 'Polygons mode did not open the Edit mesh bar');
     T.eq(state.viewMode, view0, 'going into a piece mode changed the view mode');
     key('1'); await T.sleep(200); T.eq(A.mode(), 'points', 'the 1 key');
     key('2'); await T.sleep(200); T.eq(A.mode(), 'edges', 'the 2 key');
-    key('4'); await T.sleep(400); T.eq(A.mode(), 'model', 'the 4 key'); T.assert(card.hidden && !btn.classList.contains('active'), 'Model mode left the card open');
+    key('4'); await T.sleep(400); T.eq(A.mode(), 'model', 'the 4 key'); T.assert(card.hidden && document.getElementById('el-bar').hidden, 'Model mode left the Edit mesh bar open');
     btn.click(); await T.sleep(400); T.eq(A.mode(), 'edges', 'a click on the mode button goes back to the last piece mode');
     key('3'); await T.sleep(300);
     const cyl = T.part('Cylinder'), cube = T.part('Cube');
@@ -558,7 +560,7 @@
     const capTris = size.get(t.region[capTri]);
     T.eq(A.pickAt(cyl.partId, capTri, centre(capTri), { loop: true }), capTris, 'the loop of a triangle of the cap is the cap');
     const h1 = state.history.length;
-    T.assert(!document.getElementById('btn-el-delete').disabled, 'Delete is off with something picked');
+    // (Delete has no button in the bar since 0.25.0: the Del key does it)
     A.delete(); await T.sleep(600);
     T.eq(cyl.triCount, tris0 - capTris, 'the cylinder without its cap'); T.eq(state.history.length, h1 + 1, 'a delete is one undo step'); T.eq(A.count(), 0, 'pieces are still picked after the delete');
     T.assert(state.geomByHash.get(cyl.hash) === cyl.mesh.geometry, 'the new geometry is not registered for export');

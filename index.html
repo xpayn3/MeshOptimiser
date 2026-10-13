@@ -253,7 +253,7 @@ body{font:var(--fs-lg)/1.4 var(--font-sans);color:var(--tx);background:var(--bg)
    in Settings › General (the pref is read in the head: html.no-splash). */
 #app{visibility:hidden}
 body.app-ready #app{visibility:visible}
-@keyframes boot-fade{from{opacity:0}to{opacity:1}}
+@keyframes boot-fade{from{opacity:0}}      /* (no "to": a folded sidebar fades to its own opacity, not to 1) */
 body.app-ready #tb{animation:boot-fade .5s var(--ease-out) backwards}
 body.app-ready #sidebar-left{animation:boot-fade .55s var(--ease-out) 70ms backwards}
 body.app-ready #viewport{animation:boot-fade .6s var(--ease-out) 110ms backwards}
@@ -532,6 +532,10 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:1;font-styl
 .prim-section .prim-reset{background:transparent;border:1px solid var(--bd);border-radius:var(--r-sm);padding:3px 6px;color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast)}
 .prim-section .prim-reset:hover{background:var(--bg2);color:var(--tx);border-color:var(--bd2)}
 .prim-section .prim-reset svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2}
+.prim-section .prim-bake{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:var(--ctl-h,28px);margin-top:10px;background:transparent;border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);font:inherit;font-size:var(--fs-11);cursor:pointer;transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast)}
+.prim-section .prim-bake:hover:not(:disabled){background:var(--bg2);color:var(--tx);border-color:var(--bd2)}
+.prim-section .prim-bake:disabled{opacity:.45;cursor:default}
+.prim-section .prim-bake svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
 .prim-axis-group{grid-column:2;grid-row:1;justify-self:end;display:inline-flex;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm);padding:1px;gap:1px}
 .prim-axis-btn{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:18px;padding:0 6px;background:transparent;border:0;border-radius:var(--r-xs);color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-wide);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .prim-axis-btn:hover{color:var(--tx2);background:var(--s2)}
@@ -1788,8 +1792,15 @@ button.sc-row-keys:hover{background:var(--s5)}
 .toast.warn::before{background:var(--wn)}
 .toast.error::before{background:var(--er)}
 .toast .t{font-weight:var(--fw-semibold);color:var(--tx)}
-.toast .m{color:var(--tx2);font-weight:var(--fw-regular);margin-left:4px}
-.toast .m::before{content:'·';color:var(--tx3);margin-right:6px}
+.toast .t{flex:0 0 auto}
+.toast .m{color:var(--tx2);font-weight:var(--fw-regular);margin-left:4px;display:flex;flex:0 1 auto;min-width:0}
+.toast .m::before{content:'·';color:var(--tx3);margin-right:6px;flex:0 0 auto}
+/* a message longer than the pill: it is clipped here and slid past like a banner (see toast()), its ends faded */
+.toast .mc{flex:0 1 auto;min-width:0;overflow:hidden}
+.toast .mi{display:inline-block;white-space:nowrap;will-change:auto}
+.toast.is-run .mc{padding-right:14px;-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 12px,#000 calc(100% - 14px),transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 12px,#000 calc(100% - 14px),transparent 100%)}
+.toast.is-wrap{white-space:normal;border-radius:var(--r-lg);align-items:baseline}
+.toast.is-wrap .mi{white-space:normal}
 
 /* file:// warning */
 #file-warn{display:none;position:fixed;inset:0;background:transparent;z-index:var(--z-modal);place-items:center;padding:20px}
@@ -2281,6 +2292,24 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .align-box{display:flex;flex-direction:column;gap:var(--space-sm)}
 .align-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--fs-11);color:var(--tx3);min-height:20px}
 .align-head .size-field{height:24px;padding:0 8px}
+/* Align parts: an axis to a row; three ways to line up, two ways to spread */
+.arr-grid{display:grid;grid-template-columns:14px minmax(0,3fr) minmax(0,2fr);gap:5px 10px;align-items:center;margin:12px 0 8px}
+.arr-col{font-size:var(--fs-11);color:var(--tx3)}
+.arr-ax{font-size:var(--fs-11);font-weight:var(--fw-medium);color:var(--ax-c,var(--tx2))}
+/* (the letters in the colours of the axes, as on the Exploded view's axis buttons) */
+.arr-ax[data-axis="x"]{--ax-c:#f0525f}.arr-ax[data-axis="y"]{--ax-c:#3fb85a}.arr-ax[data-axis="z"]{--ax-c:#3b8cf2}
+.arr-set{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px}
+#sidebar-right .arr-set .btn,#vp-cmd-host .arr-set .btn,.arr-set .btn{padding:0;justify-content:center;min-width:0}
+/* The pictures are drawn for left and right, which is X. The axis that points up has them turned a quarter (low side at the bottom,
+   high side at the top), and the third axis, which runs into the picture, has them on the slant. Which axis is up is the scene's
+   (data-up on the card, set when it opens). */
+.arr-set .btn :is(svg,[data-lucide]){transition:none}
+.section-cmd[data-cmd="arrange"][data-up="z"] .arr-set .btn[data-axis="z"] :is(svg,[data-lucide]),
+.section-cmd[data-cmd="arrange"][data-up="y"] .arr-set .btn[data-axis="y"] :is(svg,[data-lucide]){transform:rotate(-90deg)}
+.section-cmd[data-cmd="arrange"][data-up="z"] .arr-set .btn[data-axis="y"] :is(svg,[data-lucide]),
+.section-cmd[data-cmd="arrange"][data-up="y"] .arr-set .btn[data-axis="z"] :is(svg,[data-lucide]){transform:rotate(-45deg)}
+.arr-box .size-field input{width:52px;text-align:right}
+.arr-box #arr-info{margin:6px 0 0;min-height:1.55em}
 .align-head .size-field input{width:38px}
 .align-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
 .align-cell{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:var(--fs-11);color:var(--tx3)}
@@ -2419,7 +2448,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* View cube (top-right): a little larger, fully opaque, faces light up on hover. */
 #axis-gizmo{opacity:1;width:92px;height:92px;}
 #axis-gizmo .axg-face:hover{filter:brightness(1.12)}
-.vpc.bl:not(#sun-gizmo-wrap){top:4px;right:6px}
+.vpc.bl:not(#sun-gizmo-wrap){top:4px;left:6px}      /* (the view cube: in the top left corner) */
 /* Nothing drawn over the viewport is selectable text. */
 #vp-overlay,#vp-overlay *{user-select:none;-webkit-user-select:none}
 #vp-overlay input,#vp-overlay textarea{user-select:text;-webkit-user-select:text}
@@ -2739,7 +2768,7 @@ body.cmd-dragging .vp-cmd-host{transition:none}
 .vpc.tc>.vp-pill-menu{position:absolute;top:calc(100% + 4px);left:50%;translate:-50% 0}
 /* The camera pill sits at the top right, under the view cube (4px + 92px from the top), a little see-through until the pointer is on it.
    The mode pills (Isolated, Exploded, Measure, Snap) stay at the top centre, now on their own. */
-.vpc.cam-corner{top:100px;right:6px;width:92px;flex-direction:column;align-items:center;gap:0}      /* (as wide as the cube: the pill is centred under it) */
+.vpc.cam-corner{top:8px;right:8px;flex-direction:column;align-items:flex-end;gap:0}      /* (the camera pill: in the top right corner) */
 .vpc.cam-corner>.vp-pill-menu{position:absolute;top:calc(100% + 4px);right:0;left:auto;translate:none;transform-origin:top right}
 #vp-view-pill.vp-pill{background:rgba(0,0,0,.16);opacity:.78;transition:opacity 160ms var(--ease-out),background var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out)}
 #vp-view-pill.vp-pill:hover,#vp-view-pill.vp-pill:focus-visible,#vp-view-pill.vp-pill[aria-expanded="true"]{opacity:1}
@@ -2763,7 +2792,7 @@ body.cmd-dragging .vp-cmd-host{transition:none}
    cube with the face that is looked at filled in (top, front, side). The words and the keys stay in the page for screen readers and are the
    buttons' tooltips. The one in use is a filled accent circle. */
 #vp-view-pill-menu.vp-pill-menu{min-width:0;width:auto;padding:4px;gap:2px;align-items:center;border-radius:999px;transform-origin:top center}
-.vpc.cam-corner>#vp-view-pill-menu.vp-pill-menu{top:calc(100% + 6px);right:auto;left:50%;translate:-50% 0}
+.vpc.cam-corner>#vp-view-pill-menu.vp-pill-menu{top:calc(100% + 6px);right:0;left:auto;translate:none}
 #vp-view-pill-menu .vp-pill-item{width:30px;height:30px;padding:0;gap:0;justify-content:center;border-radius:50%;background:transparent;color:var(--tx3);transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 #vp-view-pill-menu .vp-pill-item::before{display:none}
 #vp-view-pill-menu .vp-pill-item:hover,#vp-view-pill-menu .vp-pill-item:focus-visible{background:var(--s3);color:var(--tx)}
@@ -3119,7 +3148,14 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #cmdk-modal{align-items:flex-start}
 #cmdk-modal .modal{max-height:60vh;transform-origin:top center;transition:transform var(--dur-slow) var(--ease-out),opacity 180ms var(--ease-out),height 200ms cubic-bezier(.32,.72,0,1);border-radius:14px;box-shadow:0 24px 70px rgba(0,0,0,.6),0 0 0 1px var(--s4)}
 #cmdk-modal .modal-h{padding:14px 16px!important;gap:11px}
-#cmdk-modal .cmdk-search-icon{width:19px;height:19px;flex-basis:19px}
+#cmdk-modal .cmdk-search-icon{width:19px;height:19px;flex-basis:19px;cursor:grab;touch-action:none;transition:color var(--dur-fast) var(--ease-out)}
+#cmdk-modal .cmdk-search-icon:hover{color:var(--tx)}
+#cmdk-modal .modal.is-moving,#cmdk-modal .modal.is-moving .cmdk-search-icon{cursor:grabbing}
+#cmdk-modal .modal.is-moving{transition:none;user-select:none}
+/* the right edge: drag it for the width */
+#cmdk-modal .cmdk-resize{position:absolute;top:12px;right:0;bottom:12px;width:8px;cursor:ew-resize;touch-action:none}
+#cmdk-modal .cmdk-resize::after{content:'';position:absolute;top:50%;right:3px;width:2px;height:28px;margin-top:-14px;border-radius:2px;background:var(--s6);opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
+#cmdk-modal .cmdk-resize:hover::after,#cmdk-modal .modal.is-moving .cmdk-resize::after{opacity:1}
 .cmdk-search-icon{width:16px;height:16px;flex:0 0 16px;color:var(--tx3);stroke-width:1.8}
 :is(#cmdk-input,#_a#_b){flex:1;min-width:0;background:none;border:0;outline:none;font:inherit;font-size:17px}
 #cmdk-list{padding:4px 6px 6px!important;scrollbar-width:none;flex:1 1 auto;min-height:0;overflow-y:auto}
@@ -4253,30 +4289,64 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .section-cmd[data-cmd="elements"] [hidden]{display:none!important}
 #el-foot-delete.is-off{opacity:.45;pointer-events:none}
 /* the card: icons only. Two segmented groups on one row, the brush size when the brush is the tool, then one row of actions. */
-.section-cmd[data-cmd="elements"] .el-card{display:flex;flex-direction:column;gap:12px;padding-top:6px}
-.section-cmd[data-cmd="elements"] .el-top{display:flex;gap:10px}
-.section-cmd[data-cmd="elements"] .el-seg{flex:1 1 0;min-width:0}
-.section-cmd[data-cmd="elements"] .el-seg>button{display:grid;place-items:center;height:32px;padding:0}
-.section-cmd[data-cmd="elements"] .el-seg>button svg,.section-cmd[data-cmd="elements"] .el-seg>button [data-lucide],.section-cmd[data-cmd="elements"] .el-seg>button .lucide{width:17px;height:17px;display:block;stroke-width:1.6}
-.section-cmd[data-cmd="elements"] .el-axes-row{display:flex;align-items:center;gap:10px;color:var(--tx2)}
-.section-cmd[data-cmd="elements"] .el-axes-row>[data-lucide],.section-cmd[data-cmd="elements"] .el-axes-row>.lucide{width:17px;height:17px;flex:0 0 auto;stroke-width:1.6}
-.section-cmd[data-cmd="elements"] .el-size{display:flex;align-items:center;gap:10px;color:var(--tx2)}
-.section-cmd[data-cmd="elements"] .el-size>[data-lucide],.section-cmd[data-cmd="elements"] .el-size>.lucide{width:17px;height:17px;flex:0 0 auto;stroke-width:1.6}
-.section-cmd[data-cmd="elements"] .el-size .size-field{flex:0 0 104px;width:104px}
-.section-cmd[data-cmd="elements"] .el-actions{display:flex;align-items:center;gap:6px}
-.section-cmd[data-cmd="elements"] .el-sep{flex:0 0 1px;align-self:stretch;margin:4px 3px;background:var(--bd)}
-.el-ibtn{position:relative;flex:1 1 0;min-width:0;height:34px;display:grid;place-items:center;padding:0;background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
-.el-ibtn [data-lucide],.el-ibtn .lucide,.el-ibtn svg{width:17px;height:17px;display:block;stroke-width:1.6}
-.el-ibtn:hover:not(:disabled){color:var(--tx);background:var(--s6)}
-.el-ibtn:disabled{opacity:.38;cursor:default}
-.el-ibtn.danger:hover:not(:disabled){color:var(--er);background:var(--er-soft);border-color:var(--er-line)}
+.section-cmd[data-cmd="elements"]:not(.el-weld-on){display:none!important}
+.section-cmd[data-cmd="elements"] #el-weld-row[hidden]{display:none}
+/* Edit mesh's bar: one column at the right edge under the view cube, in the same dark pill as the toolbar on the left. The brush size,
+   the weld distance and the count of what is picked do not fit in it: they stand out to its left, beside the button they go with. */
+.vpc.el-bar{top:50%;right:8px;transform:translateY(-50%);flex-direction:column;align-items:center;gap:2px;padding:4px;border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:0 6px 20px rgba(0,0,0,.4),var(--surface-ring)}
+.vpc.el-bar[hidden]{display:none}
+.el-bar .el-row{display:grid;grid-template-columns:30px;gap:2px}
+.el-bar .vpb-sep{height:1px;width:18px;margin:3px auto;background:var(--s5)}
+.el-bar .el-row>button,.el-ibtn{position:relative;width:30px;height:30px;display:grid;place-items:center;padding:0;background:transparent;border:0;border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+.el-bar .el-row>button>span,.el-ibtn>span{display:none}
+.el-bar .el-row [data-lucide],.el-bar .el-row .lucide,.el-bar .el-row svg{width:16px;height:16px;display:block;stroke-width:1.6}
+.el-bar .el-row>button:hover,.el-ibtn:hover:not(:disabled){color:var(--tx);background:var(--s4)}
+.el-bar .el-row>button.active,.el-bar .el-row>button.active:hover,.el-ibtn:has(>input:checked),.el-ibtn:has(>input:checked):hover{color:var(--tx-control-hover);background:var(--s6)}
+/* the two groups where one of three is on (how a pick is made, the gizmo's axes): one grey pill that slides to the button that is on */
+:is(#el-tool,#el-space){position:relative}
+:is(#el-tool,#el-space)::before{content:'';position:absolute;top:0;left:0;width:30px;height:30px;border-radius:var(--r-sm);background:var(--s6);pointer-events:none;transition:transform var(--dur-slow) var(--ease-ios),opacity var(--dur-fast) var(--ease-out)}
+:is(#el-tool,#el-space):has(>button:nth-child(2).active)::before{transform:translateY(32px)}
+:is(#el-tool,#el-space):has(>button:nth-child(3).active)::before{transform:translateY(64px)}
+:is(#el-tool,#el-space):not(:has(>button.active))::before{opacity:0}
+:is(#el-tool,#el-space)>button.active,:is(#el-tool,#el-space)>button.active:hover{background:transparent}
+@media (prefers-reduced-motion:reduce){:is(#el-tool,#el-space)::before{transition:none}}
+.el-ibtn:disabled{opacity:.3;cursor:default}
+.el-ibtn.danger:hover:not(:disabled){color:var(--er);background:var(--er-soft)}
 .el-ibtn>input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
-.el-ibtn:has(>input:checked),.el-ibtn:has(>input:checked):hover:not(:disabled){color:var(--tx-on-accent);background:var(--ac);border-color:var(--ac)}
-.el-ibtn:has(>input:focus-visible),.el-ibtn:focus-visible{outline:2px solid var(--ac-text);outline-offset:1px}
+.el-ibtn:has(>input:focus-visible),.el-ibtn:focus-visible,.el-bar .el-row>button:focus-visible{outline:2px solid var(--ac-text);outline-offset:1px}
+.el-bar .el-size{position:absolute;right:calc(100% + 6px);top:66px;display:flex;align-items:center;gap:6px;width:112px;box-sizing:border-box;padding:4px 4px 4px 8px;border-radius:var(--r-md);background:var(--surface-bar);box-shadow:0 6px 20px rgba(0,0,0,.4),var(--surface-ring);color:var(--tx3)}
+/* the brush size is not shown (it is still there for the code: the middle button and a drag change it) */
+.el-bar .el-size{display:none!important}
+.el-bar .el-size>[data-lucide],.el-bar .el-size>.lucide{width:15px;height:15px;flex:0 0 auto;stroke-width:1.6}
+.el-bar .el-size .el-size-l{display:none}
+.el-bar .el-size .size-field{flex:1 1 0;min-width:0;width:auto}
 /* the mode button at the top of the left toolbar, and the list it opens when held */
-.vpb.em-tool[hidden]{display:none}
-#em-mode .em-ico{display:grid;place-items:center;width:16px;height:16px}
-#em-mode .em-ico svg,.em-pop-item .em-ico svg{width:16px;height:16px;display:block}
+/* The three piece buttons are not taken out when Edit mesh is off: they are folded to nothing, so the toolbar grows and shrinks
+   smoothly round them instead of jumping (the margin takes back the gap a folded button would leave). They come in one after
+   the other, and leave together. */
+.vpc .vpb.em-pick{overflow:hidden;transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),height var(--dur-slow) var(--ease-ios),flex-basis var(--dur-slow) var(--ease-ios),margin var(--dur-slow) var(--ease-ios),opacity var(--dur-base) var(--ease-out),visibility 0s,transform var(--dur-fast) var(--ease-out)}
+.vpc .vpb.em-pick .em-ico{transition:transform var(--dur-slow) var(--ease-pop)}
+.vpc .vpb.em-pick:not([hidden]) .em-ico{transition-delay:var(--em-d,0ms)}
+.vpc .vpb.em-pick:not([hidden]){transition-delay:0s,0s,0s,0s,0s,var(--em-d,0ms),0s,0s}
+#em-pick-edges{--em-d:35ms}
+#em-pick-faces{--em-d:70ms}
+.vpc .vpb.em-pick[hidden]{display:grid;height:0;flex-basis:0;margin-bottom:-2px;opacity:0;visibility:hidden;pointer-events:none;transition-delay:0s,0s,0s,0s,0s,0s,var(--dur-slow),0s}
+.vpc .vpb.em-pick[hidden] .em-ico{transform:scale(.6)}
+@media (prefers-reduced-motion:reduce){.vpc .vpb.em-pick,.vpc .vpb.em-pick .em-ico{transition:none}}
+/* the mode buttons are greyed when on, like the rest of the toolbar; the colour is in the icon: a blue cube, and the piece the
+   mode picks (its points, an edge, a polygon) in yellow */
+:is(#em-mode,.vpb.em-pick) .em-ico .em-c{stroke:var(--ac);opacity:1}
+#em-mode .em-ico .em-cf{fill:var(--ac)}
+:is(.vpb.em-pick,.el-mode-tag) .em-ico .em-hf{fill:var(--wn)}
+:is(.vpb.em-pick,.el-mode-tag) .em-ico .em-hs{stroke:var(--wn)}
+.el-mode-tag .em-ico .em-c{stroke:var(--ac);opacity:1}
+/* the mode, in the Edit mesh card's heading */
+.el-head{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.el-mode-tag{display:inline-flex;align-items:center;gap:5px;color:var(--tx)}
+.el-mode-tag .em-ico{display:grid;place-items:center;width:14px;height:14px}
+.el-mode-tag .em-ico svg{width:14px;height:14px;display:block}
+#em-mode .em-ico,.vpb.em-pick .em-ico{display:grid;place-items:center;width:16px;height:16px}
+#em-mode .em-ico svg,.vpb.em-pick .em-ico svg,.em-pop-item .em-ico svg{width:16px;height:16px;display:block}
 #em-pop{left:40px;min-width:150px}
 .em-pop-item .em-ico{display:grid;place-items:center;width:16px;height:16px;flex:0 0 auto}
 .em-pop-item .em-pop-l{flex:1 1 auto}
@@ -4600,18 +4670,18 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.24.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.25.0</div>
         </div>
         <div class="brand-menu-about">Optimise, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.24.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.25.0</span></div>
           <ul>
-            <li>Edit mesh: points, edges and polygons</li>
-            <li>Dissolve, Weld, Fill, Planarize, Straighten, Extract</li>
-            <li>A keyboard in the shortcuts window, and your own keys</li>
-            <li>Untriangulate clears points on straight lines</li>
-            <li>A faster start</li>
+            <li>26 new library parts, on eight shelves</li>
+            <li>Align parts, and Transform on several parts</li>
+            <li>Move the search by its icon</li>
+            <li>A tree search that forgives a typo</li>
+            <li>Edit mesh tools in a bar, and Bake geo</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -4689,7 +4759,7 @@ window.moSplash = function (msg, pct) {
   </header>
 
   <aside id="sidebar-left" class="panel">
-    <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts…"><button type="button" class="tree-search-clear" id="tree-filter-clear" title="Clear the search" hidden><i data-lucide="x"></i></button></div>
+    <div class="tree-search"><i data-lucide="search"></i><input type="text" id="tree-filter" placeholder="Search parts…" autocomplete="off" spellcheck="false" title="Several words narrow it down, in any order. A comma means or. -word leaves it out. &quot;two words&quot; in quotes are found as written. &gt;5000 or &lt;200 finds parts by triangles. is:hidden, is:visible, is:selected"><button type="button" class="tree-search-clear" id="tree-filter-clear" title="Clear the search" hidden><i data-lucide="x"></i></button></div>
     <div class="tree-toolbar">
       <!-- Each button says what it does: an icon over one word. (Hide
            unselected and Show all used to be here too; they are in the
@@ -4750,10 +4820,10 @@ window.moSplash = function (msg, pct) {
         <!-- What a click picks, as in Cinema 4D: Points, Edges, Polygons or Model (the whole part). A click goes in and out of the last piece mode, holding it lists all four (keys 1 2 3 4). -->
         <button class="vpb" id="em-mode" title="Model mode"><span class="em-ico"></span></button>
         <div id="em-pop" class="vp-prim-pop" style="display:none" role="menu" aria-label="Mode"></div>
-        <!-- How a pick is made in Points, Edges and Polygons mode (only shown while one is on): one piece per click, a box, or painted with a brush -->
-        <button class="vpb em-tool" id="em-tool-click" data-tool="click" hidden title="Click: pick one piece at a time. Shift adds, Ctrl takes away"><i data-lucide="mouse-pointer-2"></i></button>
-        <button class="vpb em-tool" id="em-tool-rect" data-tool="rect" hidden title="Box: drag a box round the pieces to pick"><i data-lucide="box-select"></i></button>
-        <button class="vpb em-tool" id="em-tool-brush" data-tool="brush" hidden title="Brush: paint over the pieces to pick them. Hold the middle button and drag to change its size"><i data-lucide="paintbrush"></i></button>
+        <!-- The three piece modes, one button each (only shown while Edit mesh is on). How a pick is made (Click, Box, Brush) is in the card. -->
+        <button class="vpb em-pick" id="em-pick-points" data-mode="points" hidden title="Points (1)" aria-label="Points"><span class="em-ico"></span></button>
+        <button class="vpb em-pick" id="em-pick-edges" data-mode="edges" hidden title="Edges (2)" aria-label="Edges"><span class="em-ico"></span></button>
+        <button class="vpb em-pick" id="em-pick-faces" data-mode="faces" hidden title="Polygons (3)" aria-label="Polygons"><span class="em-ico"></span></button>
         <div class="vpb-sep"></div>
         <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to round steps sized to the model"><i data-lucide="move"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
@@ -4766,6 +4836,37 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="vw-xray" data-mode="xray" title="X-ray (Alt+3)"><i data-lucide="cube-xray"></i></button>
         <button class="vpb" id="vw-heat" data-mode="heat" title="Heatmap — colour parts by triangle density (Alt+4)"><i data-lucide="flame"></i></button>
         <button class="vpb" id="tg-hilite" title="Highlight parts smaller than the threshold"><i data-lucide="highlighter"></i></button>
+      </div>
+      <!-- Edit mesh's tools, shown while it is on: how a pick is made, the gizmo's axes, the selection, and the tools that change the mesh
+           (each works on one kind of piece: the button is on when that kind is picked). Icons only; the name and the explanation are in
+           the tooltip. -->
+      <div class="vpc el-bar" id="el-bar" hidden data-tip-side="left" role="toolbar" aria-label="Edit mesh">
+        <div class="el-size" id="el-brush-row" hidden title="How wide the brush is on the screen (its radius, in pixels). Hold the middle button and drag in the view to change it"><i data-lucide="circle-dashed"></i><span class="el-size-l">Brush size</span><label class="size-field"><input type="text" inputmode="numeric" id="el-brush" value="20" aria-label="Brush size"><span>px</span></label></div>
+        <div class="el-row" id="el-tool" role="group" aria-label="Selection tool" title="How the left button picks. With all three, Shift adds and Ctrl takes away.">
+          <button type="button" class="active" data-tool="click" title="Click: one piece at a time; a double-click picks a loop" aria-label="Click"><i data-lucide="mouse-pointer-2"></i><span>Click</span></button>
+          <button type="button" data-tool="rect" title="Box: drag a box, and what lies in it whole and can be seen is picked" aria-label="Box"><i data-lucide="box-select"></i><span>Box</span></button>
+          <button type="button" data-tool="brush" title="Brush: paint over the model, and what the brush passes over is picked. Hold the middle button and drag to change its size" aria-label="Brush"><i data-lucide="circle-dashed"></i><span>Brush</span></button>
+        </div>
+        <div class="vpb-sep"></div>
+        <div class="el-row" id="el-space" role="group" aria-label="Gizmo axes">
+          <button type="button" class="active" data-space="world" title="World: the gizmo's axes are the scene's X, Y and Z" aria-label="World axes"><i data-lucide="globe"></i><span>World</span></button>
+          <button type="button" data-space="local" title="Local: the gizmo's axes are the part's own, as it is turned" aria-label="Local axes"><i data-lucide="box"></i><span>Local</span></button>
+          <button type="button" data-space="normal" title="Normal: the gizmo's Z points along the picked pieces' average normal, so a face can be pulled straight out of itself" aria-label="Normal axes"><i data-lucide="crosshair"></i><span>Normal</span></button>
+        </div>
+        <div class="vpb-sep"></div>
+        <div class="el-row">
+          <label class="el-ibtn" id="el-loop-btn" title="Pick loops: every click picks a loop, as a double-click does"><input type="checkbox" id="el-loop" aria-label="Pick loops"><i data-lucide="repeat-2"></i><span>Loops</span></label>
+        </div>
+        <div class="vpb-sep"></div>
+        <div class="el-row">
+          <button type="button" class="el-ibtn" id="btn-el-planar" title="Planarize (polygons): make the picked polygons flat. Their points move onto the best-fit plane of each polygon, a little. A polygon that would have to bend a long way (a curved face) is left. One undo step" aria-label="Planarize" disabled><i data-lucide="square"></i><span>Planarize</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-straight" title="Straighten (edges): the points along a picked line of edges move onto the straight line between its two ends. One undo step" aria-label="Straighten" disabled><i data-lucide="minus"></i><span>Straighten</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-weld-open" title="Weld (points or edges): opens the Weld card, where the picked points become one, or the ones that are close enough to each other" aria-label="Weld" aria-haspopup="dialog" disabled><i data-lucide="merge"></i></button>
+          <button type="button" class="el-ibtn" id="btn-el-fill" title="Fill (edges): close a hole whose whole rim is picked (a double-click on an open edge picks the loop). The cap has points of its own, so it shades on its own. One undo step" aria-label="Fill" disabled><i data-lucide="circle-dot"></i><span>Fill</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-flip" title="Reverse normals: turn the picked polygons round, their front becomes their back. For faces that came in facing the wrong way (dark, or see-through from one side). One undo step" aria-label="Reverse normals" disabled><i data-lucide="flip-horizontal-2"></i><span>Reverse</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-dissolve" title="Dissolve: take the picked points out and close the surface over them; the polygons round them become one. For edges and polygons: the polygons become one, and the points left inside them or on a straight line of their outline go. The shape does not change there. One undo step (Ctrl+Backspace)" aria-label="Dissolve" disabled><i data-lucide="diamond-minus"></i><span>Dissolve</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-extract" title="Extract (polygons): take the picked polygons out into a part of their own, in the same place and with the same material. One undo step" aria-label="Extract" disabled><i data-lucide="split"></i><span>Extract</span></button>
+        </div>
       </div>
       <div class="vpc tc">
         <!-- Status pills (a mode that is on): always just right of the camera pill, in this order,
@@ -5131,6 +5232,56 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
     </div>
 
+    <!-- Align parts: line the selected parts up or spread them out, as the Align panel of a drawing program does, on the three axes of the scene. Every press acts at once and is one undo step. -->
+    <div class="section section-cmd" data-cmd="arrange" data-up="z" hidden>
+      <div class="section-h"><span>Align parts</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b arr-box">
+        <div class="cmd-lede">Line the selected parts up, or spread them out evenly. Each press is one undo step.</div>
+        <div class="align-head"><span>Align to</span></div>
+        <div class="cmd-seg" id="arr-to" role="group" aria-label="Align to" style="--seg-n:3">
+          <button type="button" class="active" data-to="sel" title="The parts line up on the box round the whole selection: its low side, its middle or its high side">Selection</button>
+          <button type="button" data-to="key" title="The parts line up on the part that was picked last, which stays where it is">Last picked</button>
+          <button type="button" data-to="origin" title="The parts line up on zero">Origin</button>
+        </div>
+        <div class="arr-grid">
+          <span></span><span class="arr-col">Align</span><span class="arr-col">Spread</span>
+          <span class="arr-ax" data-axis="x">X</span>
+          <div class="arr-set">
+            <button type="button" class="btn" data-arr="align" data-axis="x" data-v="min" title="Line up the low sides along X" aria-label="Align low sides on X"><i data-lucide="align-start-vertical"></i></button>
+            <button type="button" class="btn" data-arr="align" data-axis="x" data-v="center" title="Line up the middles along X" aria-label="Align middles on X"><i data-lucide="align-center-vertical"></i></button>
+            <button type="button" class="btn" data-arr="align" data-axis="x" data-v="max" title="Line up the high sides along X" aria-label="Align high sides on X"><i data-lucide="align-end-vertical"></i></button>
+          </div>
+          <div class="arr-set">
+            <button type="button" class="btn" data-arr="spread" data-axis="x" data-v="centers" title="Spread along X so the middles are the same distance apart. The two outermost parts stay where they are." aria-label="Spread middles evenly on X"><i data-lucide="align-horizontal-distribute-center"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="x" data-v="gaps" title="Spread along X so the gaps between the parts are the same. With a Gap typed in below, that gap is used, counted from the lowest part." aria-label="Spread with even gaps on X"><i data-lucide="align-horizontal-space-between"></i></button>
+          </div>
+          <span class="arr-ax" data-axis="y">Y</span>
+          <div class="arr-set">
+            <button type="button" class="btn" data-arr="align" data-axis="y" data-v="min" title="Line up the low sides along Y" aria-label="Align low sides on Y"><i data-lucide="align-start-vertical"></i></button>
+            <button type="button" class="btn" data-arr="align" data-axis="y" data-v="center" title="Line up the middles along Y" aria-label="Align middles on Y"><i data-lucide="align-center-vertical"></i></button>
+            <button type="button" class="btn" data-arr="align" data-axis="y" data-v="max" title="Line up the high sides along Y" aria-label="Align high sides on Y"><i data-lucide="align-end-vertical"></i></button>
+          </div>
+          <div class="arr-set">
+            <button type="button" class="btn" data-arr="spread" data-axis="y" data-v="centers" title="Spread along Y so the middles are the same distance apart. The two outermost parts stay where they are." aria-label="Spread middles evenly on Y"><i data-lucide="align-horizontal-distribute-center"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="y" data-v="gaps" title="Spread along Y so the gaps between the parts are the same. With a Gap typed in below, that gap is used, counted from the lowest part." aria-label="Spread with even gaps on Y"><i data-lucide="align-horizontal-space-between"></i></button>
+          </div>
+          <span class="arr-ax" data-axis="z">Z</span>
+          <div class="arr-set">
+            <button type="button" class="btn" data-arr="align" data-axis="z" data-v="min" title="Line up the low sides along Z" aria-label="Align low sides on Z"><i data-lucide="align-start-vertical"></i></button>
+            <button type="button" class="btn" data-arr="align" data-axis="z" data-v="center" title="Line up the middles along Z" aria-label="Align middles on Z"><i data-lucide="align-center-vertical"></i></button>
+            <button type="button" class="btn" data-arr="align" data-axis="z" data-v="max" title="Line up the high sides along Z" aria-label="Align high sides on Z"><i data-lucide="align-end-vertical"></i></button>
+          </div>
+          <div class="arr-set">
+            <button type="button" class="btn" data-arr="spread" data-axis="z" data-v="centers" title="Spread along Z so the middles are the same distance apart. The two outermost parts stay where they are." aria-label="Spread middles evenly on Z"><i data-lucide="align-horizontal-distribute-center"></i></button>
+            <button type="button" class="btn" data-arr="spread" data-axis="z" data-v="gaps" title="Spread along Z so the gaps between the parts are the same. With a Gap typed in below, that gap is used, counted from the lowest part." aria-label="Spread with even gaps on Z"><i data-lucide="align-horizontal-space-between"></i></button>
+          </div>
+        </div>
+        <div class="cmd-num" title="The gap the second Spread button leaves between one part and the next. Empty: the parts are spread evenly between the two outermost ones."><span>Gap</span><label class="size-field"><input type="text" inputmode="decimal" id="arr-gap" value="" placeholder="even"><span>mm</span></label></div>
+        <div class="field-help" id="arr-info"></div>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
+    </div>
+
     <div class="section section-cmd" data-cmd="align" hidden>
       <div class="section-h"><span>Align to floor</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b align-box" id="align-box">
@@ -5229,50 +5380,12 @@ window.moSplash = function (msg, pct) {
 
     <!-- ▼ Edit mesh card -->
     <div class="section section-cmd" data-cmd="elements" hidden>
-      <div class="section-h"><span>Edit mesh</span><button type="button" class="lc-icon-btn cmd-close" title="Back to Model mode (Esc)"><i data-lucide="x"></i></button></div>
-      <!-- Icons only: what each one does is in its tooltip. Left: what is picked (1 2 3) and how (click, box, brush). Below: the brush size,
-           then the actions on what is picked. -->
-      <div class="section-b el-card">
-        <div class="el-top">
-          <div class="cmd-seg el-seg" id="el-mode" role="group" aria-label="What is picked">
-            <button type="button" data-mode="points" title="Points (1)" aria-label="Points"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><g opacity=".5"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></g><g fill="currentColor" stroke="none"><circle cx="12" cy="3" r="2"/><circle cx="20" cy="7.5" r="2"/><circle cx="20" cy="16.5" r="2"/><circle cx="12" cy="21" r="2"/><circle cx="4" cy="16.5" r="2"/><circle cx="4" cy="7.5" r="2"/><circle cx="12" cy="12" r="2"/></g></svg></button>
-            <button type="button" data-mode="edges" title="Edges (2)" aria-label="Edges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><g opacity=".5"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></g><path d="M12 12v9" stroke-width="3.2"/></svg></button>
-            <button type="button" class="active" data-mode="faces" title="Polygons (3)" aria-label="Polygons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"><g opacity=".5"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></g><path d="M12 12l8-4.5v9L12 21z" fill="currentColor" stroke="none"/></svg></button>
-          </div>
-          <div class="cmd-seg el-seg" id="el-tool" role="group" aria-label="Selection tool" title="How the left button picks. With all three, Shift adds and Ctrl takes away.">
-            <button type="button" class="active" data-tool="click" title="Click: one piece at a time; a double-click picks a loop" aria-label="Click"><i data-lucide="mouse-pointer-2"></i></button>
-            <button type="button" data-tool="rect" title="Box: drag a box, and what lies in it whole and can be seen is picked" aria-label="Box"><i data-lucide="box-select"></i></button>
-            <button type="button" data-tool="brush" title="Brush: paint over the model, and what the brush passes over is picked. Hold the middle button and drag to change its size" aria-label="Brush"><i data-lucide="paintbrush"></i></button>
-          </div>
-        </div>
-        <div class="el-axes-row">
-          <i data-lucide="axis-3d" title="The gizmo's axes"></i>
-          <div class="cmd-seg el-seg" id="el-space" role="group" aria-label="Gizmo axes">
-            <button type="button" class="active" data-space="world" title="World: the gizmo's axes are the scene's X, Y and Z" aria-label="World axes"><i data-lucide="globe"></i></button>
-            <button type="button" data-space="local" title="Local: the gizmo's axes are the part's own, as it is turned" aria-label="Local axes"><i data-lucide="box"></i></button>
-            <button type="button" data-space="normal" title="Normal: the gizmo's Z points along the picked pieces' average normal, so a face can be pulled straight out of itself" aria-label="Normal axes"><i data-lucide="crosshair"></i></button>
-          </div>
-        </div>
-        <div class="el-size" id="el-brush-row" hidden title="How wide the brush is on the screen (its radius, in pixels). Hold the middle button and drag in the view to change it"><i data-lucide="circle-dashed"></i><label class="size-field"><input type="text" inputmode="numeric" id="el-brush" value="20" aria-label="Brush size"><span>px</span></label></div>
-        <div class="el-actions">
-          <label class="el-ibtn" id="el-loop-btn" title="Pick loops: every click picks a loop, as a double-click does"><input type="checkbox" id="el-loop" aria-label="Pick loops"><i data-lucide="repeat-2"></i></label>
-          <button type="button" class="el-ibtn" id="btn-el-all" title="Pick all: every point, edge or polygon of the parts in work (Ctrl+A)" aria-label="Pick all"><i data-lucide="check-check"></i></button>
-          <button type="button" class="el-ibtn" id="btn-el-clear" title="Clear: let go of what is picked (Esc)" aria-label="Clear" disabled><i data-lucide="eraser"></i></button>
-          <span class="el-sep"></span>
-          <button type="button" class="el-ibtn" id="btn-el-flip" title="Reverse normals: turn the picked polygons round, their front becomes their back. For faces that came in facing the wrong way (dark, or see-through from one side). One undo step" aria-label="Reverse normals" disabled><i data-lucide="flip-horizontal-2"></i></button>
-          <button type="button" class="el-ibtn" id="btn-el-dissolve" title="Dissolve: take the picked points out and close the surface over them; the polygons round them become one. For edges and polygons: the polygons become one, and the points left inside them or on a straight line of their outline go. The shape does not change there. One undo step (Ctrl+Backspace)" aria-label="Dissolve" disabled><i data-lucide="diamond-minus"></i></button>
-          <button type="button" class="el-ibtn danger" id="btn-el-delete" title="Delete: take the picked pieces out of their parts. A point or an edge takes every polygon that uses it. One undo step (Del)" aria-label="Delete" disabled><i data-lucide="trash-2"></i></button>
-        </div>
-        <!-- The tools that change the mesh: each works on one kind of piece (the button is on when that kind is picked). -->
-        <div class="el-actions">
-          <button type="button" class="el-ibtn" id="btn-el-planar" title="Planarize (polygons): make the picked polygons flat. Their points move onto the best-fit plane of each polygon, a little. A polygon that would have to bend a long way (a curved face) is left. One undo step" aria-label="Planarize" disabled><i data-lucide="square"></i></button>
-          <button type="button" class="el-ibtn" id="btn-el-straight" title="Straighten (edges): the points along a picked line of edges move onto the straight line between its two ends. One undo step" aria-label="Straighten" disabled><i data-lucide="minus"></i></button>
-          <button type="button" class="el-ibtn" id="btn-el-weld" title="Weld (points or edges): the picked points become one, at their middle; with a distance, the points that are that close become one each. Picked edges collapse to a point. The triangles that are left with two corners at one place go. One undo step" aria-label="Weld" disabled><i data-lucide="merge"></i></button>
-          <button type="button" class="el-ibtn" id="btn-el-fill" title="Fill (edges): close a hole whose whole rim is picked (a double-click on an open edge picks the loop). The cap has points of its own, so it shades on its own. One undo step" aria-label="Fill" disabled><i data-lucide="circle-dot"></i></button>
-          <button type="button" class="el-ibtn" id="btn-el-extract" title="Extract (polygons): take the picked polygons out into a part of their own, in the same place and with the same material. One undo step" aria-label="Extract" disabled><i data-lucide="split"></i></button>
-        </div>
-        <div class="el-size" id="el-weld-row" hidden title="Weld: the points that are no further apart than this become one each, at their middle. 0: all the picked points become one."><i data-lucide="merge"></i><label class="size-field"><input type="text" inputmode="decimal" id="el-weld" value="0" aria-label="Weld distance"><span>mm</span></label></div>
-        <div class="field-help" id="el-info" style="margin:0"></div>
+      <div class="section-h"><span>Weld</span><button type="button" class="lc-icon-btn" id="el-weld-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button></div>
+      <!-- Drawn only while Weld is open (.el-weld-on, the bar's Weld button): Weld and its distance. The rest of Edit mesh's tools are in the bar
+           at the right of the view (#el-bar). Opening and closing this card is still what turns the mode on and off. -->
+      <div class="section-b el-card" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="cmd-num" id="el-weld-row" hidden title="Weld: the points that are no further apart than this become one each, at their middle. 0: all the picked points become one."><span>Join within</span><label class="size-field"><input type="text" inputmode="decimal" id="el-weld" value="0" aria-label="Weld distance"><span>mm</span></label></div>
+        <button type="button" class="btn primary" id="btn-el-weld" title="Weld (points or edges): the picked points become one, at their middle; with a distance, the points that are that close become one each. Picked edges collapse to a point. The triangles that are left with two corners at one place go. One undo step" disabled><i data-lucide="merge"></i><span>Weld</span></button>
       </div>
     </div>
 
@@ -6370,10 +6483,11 @@ window.moSplash = function (msg, pct) {
 <div class="modal-bg" id="cmdk-modal">
   <div class="modal" role="dialog" aria-label="Command palette" style="width:520px;max-height:60vh">
     <div class="modal-h" style="padding:10px 14px">
-      <i data-lucide="search" class="cmdk-search-icon"></i>
+      <i data-lucide="search" class="cmdk-search-icon" title="Hold and drag to move the search. Double-click to put it back"></i>
       <input type="text" id="cmdk-input" placeholder="Search commands, parts and the library, or type a sum" autocomplete="off" spellcheck="false">
     </div>
     <div class="modal-b" id="cmdk-list" style="padding:6px"></div>
+    <div class="cmdk-resize" title="Drag to change the width" aria-hidden="true"></div>
     <div class="cmdk-foot"><span><kbd class="kbd-chip">↑</kbd><kbd class="kbd-chip">↓</kbd>choose</span><span><kbd class="kbd-chip">↵</kbd>run</span><span><kbd class="kbd-chip">Esc</kbd>close</span><span class="cmdk-foot-tip">12*25.4 · 2 in · a part's name · add nut</span></div>
   </div>
 </div>
@@ -6824,12 +6938,12 @@ window.moSplash = function (msg, pct) {
      transcoder, glTF-Transform (for a Draco-compressed export) and the
      in-browser STEP reader. -->
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
-<script type="module" src="app-v2.js?v=20261012-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr2-mt2"></script>
+<script type="module" src="app-v2.js?v=20261013-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app-v2.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
 <script defer src="cloner.js?v=20261009-icons"></script>
-<script defer src="help.js?v=3"></script>
+<script defer src="help.js?v=4"></script>
 <script>
   // Reveal the app when it says it has booted (app-v2.js: 'mo-boot-ready', after the renderer and the
   // scene are up and the icons are drawn), the splash has been up long enough not to flash, and the

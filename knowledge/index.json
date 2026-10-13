@@ -13,7 +13,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "A plain-language glossary: STEP, mesh, triangle, GLB, instancing, decimation, WebGPU, virtual environment and the other terms these pages use.",
-  "chars": 5482
+  "chars": 6837
  },
  {
   "slug": "first-file",
@@ -69,7 +69,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
-  "chars": 7113
+  "chars": 7740
  },
  {
   "slug": "move-the-view",
@@ -101,7 +101,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Search, rename, group and reorder the parts of a model, rename many at once, and flatten a hierarchy that is deeper than you need.",
-  "chars": 6135
+  "chars": 7169
  },
  {
   "slug": "organise-the-tree",
@@ -117,7 +117,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Press Ctrl + K or Shift + C to find any command, part, library part or setting by name, turn a switch without leaving the list, and work out a sum or convert a length.",
-  "chars": 7013
+  "chars": 7734
  },
  {
   "slug": "quick-wand",
@@ -125,7 +125,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Hold W and a ring of commands opens under the pointer. Flick toward one and let go.",
-  "chars": 3472
+  "chars": 3485
  },
  {
   "slug": "undo-redo",
@@ -133,7 +133,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Every editing action can be taken back with Ctrl + Z. What counts as one step, and how to go back to the file as it was opened.",
-  "chars": 1626
+  "chars": 2477
  },
  {
   "slug": "scene-tabs",
@@ -149,7 +149,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.",
-  "chars": 11740
+  "chars": 11929
  },
  {
   "slug": "read-the-numbers",
@@ -157,7 +157,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "What a triangle count tells you, where the app shows it, how to find the heaviest parts, and how to see what your work has saved.",
-  "chars": 3459
+  "chars": 3465
  },
  {
   "slug": "heavy-parts",
@@ -165,7 +165,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "A list of the parts that hold the most triangles, heaviest first, with a count beside its title. Tick the ones you do not need and delete them in one step.",
-  "chars": 2949
+  "chars": 2955
  },
  {
   "slug": "smart-optimise",
@@ -229,7 +229,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Join the triangles of each flat face into one polygon and take away the vertices in its middle, or go back to even triangles. The shape stays as it is.",
-  "chars": 4522
+  "chars": 6638
  },
  {
   "slug": "split",
@@ -277,7 +277,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "A suggested routine for a first clean-up: look, delete what is not needed, simplify what remains, check, save and export.",
-  "chars": 3319
+  "chars": 3331
  },
  {
   "slug": "view-modes",
@@ -285,7 +285,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Six ways to draw the same model: solid, wireframe, X-ray, heatmap, clay and CAD. One key each, plus the Shading card for the clay and CAD looks.",
-  "chars": 4850
+  "chars": 5300
  },
  {
   "slug": "colours-materials",
@@ -301,7 +301,15 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Use the gizmo to move, turn and resize parts, drag a part over other surfaces with Dynamic place, type exact values in the transform card, and measure the distance between two points.",
-  "chars": 5821
+  "chars": 7694
+ },
+ {
+  "slug": "edit-mesh",
+  "title": "Edit mesh: points, edges and polygons",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Pick and change the pieces a part is made of: its points, edges and polygons. Move, delete, dissolve, planarize, straighten, weld, fill and extract them, from a bar at the right of the view.",
+  "chars": 7977
  },
  {
   "slug": "align-to-floor",
@@ -309,7 +317,15 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Stand a model upright on the grid, centred over the origin, when it arrived on its side or far away from the centre of the scene. A small drawing shows the result first.",
-  "chars": 3746
+  "chars": 3795
+ },
+ {
+  "slug": "align-parts",
+  "title": "Align parts",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Line the selected parts up along an axis, or space them evenly, with one press. Each press is one undo step.",
+  "chars": 3226
  },
  {
   "slug": "exploded-view",
@@ -324,8 +340,8 @@
   "title": "The parts library and shapes",
   "group": "look",
   "groupTitle": "Look and arrange",
-  "summary": "Add standard parts to a scene from a drawer under the viewport: 86 bolts, nuts, pipes, profiles and machine parts. Look at a part and set its size before it goes in.",
-  "chars": 5910
+  "summary": "Add standard parts to a scene from a drawer under the viewport: 112 bolts, nuts, pipes, profiles, machine parts, electronics and brackets. Look at a part and set its size before it goes in.",
+  "chars": 7394
  },
  {
   "slug": "draw-lines",
@@ -389,7 +405,7 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Convert a STEP CAD file to a small GLB for the web, on your own computer and for free. The model is never uploaded. Drop it in, check it, export.",
-  "chars": 5379
+  "chars": 5385
  },
  {
   "slug": "remove-bolts-from-step-assembly",
@@ -405,15 +421,15 @@
   "group": "jobs",
   "groupTitle": "Common jobs, start to finish",
   "summary": "Show your product without handing over your design. Remove hidden parts and fasteners, simplify what is left, clean the names and export a small GLB.",
-  "chars": 4563
+  "chars": 4569
  },
  {
   "slug": "shortcuts",
   "title": "Keyboard shortcuts",
   "group": "reference",
   "groupTitle": "Reference",
-  "summary": "Every keyboard shortcut and mouse action in MeshOptimiser v0.23.0, grouped by what it does.",
-  "chars": 5800
+  "summary": "Every keyboard shortcut and mouse action in MeshOptimiser v0.24.0, grouped by what it does.",
+  "chars": 8043
  },
  {
   "slug": "file-formats",

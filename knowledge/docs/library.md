@@ -1,8 +1,8 @@
 # The parts library and shapes
 
-Add standard parts to a scene from a drawer under the viewport: 86 bolts, nuts, pipes, profiles and machine parts. Look at a part and set its size before it goes in.
+Add standard parts to a scene from a drawer under the viewport: 112 bolts, nuts, pipes, profiles, machine parts, electronics and brackets. Look at a part and set its size before it goes in.
 
-MeshOptimiser can also add parts. The library holds 86 ready-made parts. Each one is parametric, which means it is built from numbers such as a diameter and a length, and you can change those numbers before you place it and after.
+MeshOptimiser can also add parts. The library holds 112 ready-made parts on eight shelves. Each one is parametric, which means it is built from numbers such as a diameter and a length, and you can change those numbers before you place it and after.
 
 ## Open the library
 
@@ -17,11 +17,15 @@ The drawer has two halves. On the left are the parts, in shelves, each with a sm
 ## What is in it
 
 - **Shapes**: Cube, sphere, cylinder, cone, torus, capsule, wedge, rounded box, star and more.
-- **Fasteners**: Hex bolt, Allen screw, countersunk and button head screws, carriage bolt, U-bolt, eye bolt, set screw, threaded rod, rivet, washers, retaining ring, standoff.
+- **Fasteners**: Hex bolt, flange bolt, Allen screw, countersunk and button head screws, wood screw, thumb screw, carriage bolt, U-bolt, eye bolt, set screw, threaded rod, rivet, clevis pin, washers, retaining ring, standoff.
 - **Nuts**: Hex, lock, jam, flange, cap, castle, wing, thumb, square, coupling, eye and T-slot nuts.
 - **Pipes and flanges**: Tube, elbow, tee, cross, reducer, pipe cap, flange.
-- **Profiles and plates**: I-beam, box tube, angle, C-channel, T and Z profiles, T-slot extrusion, flat bar, round and hex bar, perforated and slotted plate, gusset, hinge.
-- **Machine parts**: Gear, rack, sprocket, pulley, bearing, bushing, pillow block, shaft collar, linear rail, spring, handwheel, star knob, pull handle, levelling foot, wheel, enclosure, stepper motor.
+- **Profiles and plates**: I-beam, box tube, angle, C-channel, strut channel, T and Z profiles, T-slot extrusion, flat bar, round and hex bar, perforated and slotted plate, gusset, hinge.
+- **Machine parts**: Gear, rack, sprocket, pulley, timing pulley, bearing, thrust bearing, flanged bearing, roller bearing, bushing, pillow block, shaft collar, stepped shaft, shaft coupler, linear rail, rail carriage, spring, handwheel, star knob, pull handle, levelling foot, wheel, enclosure, stepper motor.
+- **Electronics**: Axial fan, heatsink, pin header, circuit board, micro servo.
+- **Brackets and connectors**: Angle bracket, T-slot bracket, three-way corner, joining plate, shelf bracket, joist hanger, post base, column base plate, pipe clamp.
+
+The timing pulley is made for GT2 belts, with 10 to 80 teeth.
 
 ## Find a part
 
@@ -55,6 +59,12 @@ What you set in the right half is what the part has when it goes in. The numbers
 3. Drag a number sideways to change it, or click it and type. Hold `Shift` to go ten times faster and `Alt` to go ten times finer.
 4. The part rebuilds as you go.
 
+## Turn a shape into an ordinary mesh: Bake geo
+
+A library part is built from its numbers, so the mesh tools cannot change it in place: a change to its parameters would build it again. When you want to work on its mesh, select the part and press **Bake geo**, the button under **Shape parameters** in **Properties**. The shape looks exactly as it did, but it is now an ordinary mesh part. The parameters go, and [Edit mesh](meshoptimiser://docs/edit-mesh), [Decimate](meshoptimiser://docs/decimate), [Split](meshoptimiser://docs/split) and [Remove holes](meshoptimiser://docs/fill-holes) work on it as they do on an imported part.
+
+Baking is one undo step, and `Ctrl + Z` gives the parameters back. The button is off while the part is locked. A part that has been baked cannot be resized with its parameters any more, so bake it last.
+
 ## A bolt with its own nut
 
 A hex bolt, an Allen screw, a threaded rod or an eye bolt can carry a nut.
@@ -74,8 +84,8 @@ The nut is part of the bolt’s own shape. It follows the bolt’s size and leng
 
 ## Undo
 
-Adding a part is an undo step, and so is each change to its parameters.
+Adding a part is an undo step, and so is each change to its parameters and each use of **Bake geo**.
 
 > Library parts count like any other part: they have triangles, appear in the totals, and are saved and exported with the scene.
 
-Related: [search-and-commands](meshoptimiser://docs/search-and-commands), [move-rotate-scale](meshoptimiser://docs/move-rotate-scale), [parts-tree](meshoptimiser://docs/parts-tree)
+Related: [search-and-commands](meshoptimiser://docs/search-and-commands), [move-rotate-scale](meshoptimiser://docs/move-rotate-scale), [parts-tree](meshoptimiser://docs/parts-tree), [edit-mesh](meshoptimiser://docs/edit-mesh), [align-parts](meshoptimiser://docs/align-parts)

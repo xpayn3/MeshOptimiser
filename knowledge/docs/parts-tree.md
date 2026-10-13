@@ -42,6 +42,17 @@ When you add a file to a scene that is already open (**Import into scene…**, o
 
 Type in **Search parts…** above the tree. Only the rows whose names match stay, including matches inside closed groups. Press the small cross in the field to clear the search.
 
+The search reads more than a plain word. Case, accents and the marks `_`, `-` and `.` are ignored, and so are the joins inside a name such as GearBox, so `gearbox` finds Gear_Box and `gear box` finds GearBox. You can combine these:
+
+- **`gear box`**: Several words: every word has to be in the name, in any order.
+- **`"m6 bolt"`**: Words in quotes are matched together, as you wrote them.
+- **`bolt, nut`**: A comma means or: names with either.
+- **`-washer`**: A minus sign leaves out the names that have the word.
+- **`>5000`, `<200`**: Parts with more or fewer triangles than the number. `5k` and `1.2m` work as numbers.
+- **`is:hidden`, `is:visible`, `is:selected`**: Parts by state.
+
+When nothing at all is found, the search tries again more forgivingly. In a word of four letters or more, one letter may be wrong, missing, extra or swapped with its neighbour, and in a word of eight letters or more, two. So `braket` finds Bracket. Groups are matched by their names only, so the triangle and state marks do not apply to them.
+
 ## Rename one row
 
 1. Double-click the name of a part or a group.

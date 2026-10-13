@@ -4,7 +4,7 @@ Join the triangles of each flat face into one polygon and take away the vertices
 
 Screens draw triangles, so every flat face of a part is cut into triangles, often more than it needs. A polygon, also called an n-gon, is a flat face with any number of corners: several triangles in one plane, joined into one face.
 
-Remesh has two actions in one panel. **Untriangulate** joins flat triangles into polygons and takes away the vertices in the middle of each flat face. **Triangulate** is the way back: the flat faces stop being polygons and show their triangles again.
+Remesh has two actions in one panel, and a quick way to make a part lighter, [Quick remesh](meshoptimiser://docs/remesh), further down. **Untriangulate** joins flat triangles into polygons and takes away the vertices in the middle of each flat face. **Triangulate** is the way back: the flat faces stop being polygons and show their triangles again.
 
 ## When to use it
 
@@ -33,6 +33,8 @@ The two keys work on the selection only, so a key never changes the whole scene 
 - **Flatten shading on flat faces**: A vertex whose triangles all lie in one plane is shaded flat. The rim of a hole you closed needs this. It still carries the tilted shading it had against the wall of the hole, and a face like that is not joined.
 - **Shading tolerance**: A flat face is left alone if the shading at its vertices differs from the face by more than this, because joining it would change smooth shading. It starts at 5°.
 - **Surface may move**: A vertex that is a little off the plane of its face, as on a gently curved panel, may still go if the surface moves no more than this, and never more than 1% of the part’s size. It starts at 0: only vertices in the plane go.
+- **Points on straight lines**: Also takes away the points that only sit on a straight line of a face’s outline, such as a long edge cut into pieces. They go from every face that touches them at once, so nothing cracks and the shape does not change.
+- **Dissolve nearly flat within**: For faces that are only nearly flat, such as a panel with a little noise or a gentle bend. A point that is left goes if the triangles round it turn from each other by less than this angle and the surface moves by less than **Surface may move**. 0 turns it off.
 
 Untriangulate repeats until nothing more can be joined. Joining faces makes bigger faces, and a vertex that was on the edge between two of them is then in the middle of one.
 
@@ -48,10 +50,23 @@ The shape of the part. Untriangulate takes away only vertices that lie in the mi
 
 ## How it shows in the view
 
-In the wireframe view (`2`), a part that has been through Untriangulate draws its polygons, and a part that has been through Triangulate draws its triangles. That holds whatever **Lines** is set to under **Settings**, **Viewport**.
+In the wireframe view (`Alt + 2`), a part that has been through Untriangulate draws its polygons, and a part that has been through Triangulate draws its triangles. That holds whatever **Lines** is set to under **Settings**, **Viewport**.
+
+## Quick remesh
+
+Quick remesh makes the selected parts lighter by choosing a level, with a live preview, instead of typing numbers. It is a separate tool from Untriangulate and Triangulate: it removes triangles, so it is lossy, like [Decimate](meshoptimiser://docs/decimate).
+
+1. Select the parts to make lighter.
+2. Press `B`, or find **Quick remesh** with the search. A column of levels opens under the pointer. Each level is how many of the triangles stay, written as a number without a % sign.
+3. Move up and down the column. The selected parts take the level the pointer is on straight away, so you judge the result on the real model. Moving back up gives the detail back.
+4. Let go of the mouse button on a level, press `Enter`, or let go of `B` if you held it, to keep that level.
+
+Keeping a level is one undo step. `Esc` or a press beside the column puts the parts back as they were. It needs a selection: with nothing selected it says “Select a part first”. It does not run while [Edit mesh](meshoptimiser://docs/edit-mesh) is on.
+
+A small or thin part can lose its shape if too much is taken away. If a level would leave a part with less than about 60 % of its surface, or would shrink it by more than about 10 % of its diagonal, that result is refused and the part takes the next gentler level instead. So a small bolt does not shrink to a scrap while the big parts beside it go down to the level you chose.
 
 ## Undo
 
 A run is one undo step. Press `Ctrl + Z` and the mesh is as it was.
 
-Related: [fill-holes](meshoptimiser://docs/fill-holes), [remove-floating-pieces](meshoptimiser://docs/remove-floating-pieces), [decimate](meshoptimiser://docs/decimate), [view-modes](meshoptimiser://docs/view-modes), [workflow](meshoptimiser://docs/workflow)
+Related: [fill-holes](meshoptimiser://docs/fill-holes), [remove-floating-pieces](meshoptimiser://docs/remove-floating-pieces), [decimate](meshoptimiser://docs/decimate), [view-modes](meshoptimiser://docs/view-modes), [workflow](meshoptimiser://docs/workflow), [edit-mesh](meshoptimiser://docs/edit-mesh)

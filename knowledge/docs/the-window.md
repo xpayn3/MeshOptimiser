@@ -17,16 +17,17 @@ When the app starts, a short splash screen shows the version and what the app is
 
 ## Left sidebar
 
-It shows the parts tree: every part of the model, arranged in groups, with a search field and three buttons above it (**Collapse**, **Rename**, **Flatten**). A **Transform** card with position, rotation and size can be shown at its foot. It floats over the bottom of the sidebar and takes its own room under the tree. The library of parts you can add is not in this sidebar any more. It is a drawer under the viewport (see below).
+It shows the parts tree: every part of the model, arranged in groups, with a search field and three buttons above it (**Collapse**, **Rename**, **Flatten**). A **Transform** card with position, rotation and size can be shown at its foot. It works on several selected parts at once (see [Move, rotate, scale](meshoptimiser://docs/move-rotate-scale)). It floats over the bottom of the sidebar and takes its own room under the tree. The library of parts you can add is not in this sidebar any more. It is a drawer under the viewport (see below).
 
 ## Viewport
 
-- **Tool strip, left edge**: Move, rotate and scale tools, **Dynamic place** (`D`), a button for the transform card, then four view modes (solid, wireframe, X-ray, heatmap) and a button that highlights small parts. The Clay and CAD looks are in the **Shading** card on the right.
+- **Tool strip, left edge**: At the top, the mode button: Model, or the points, edges and polygons of [Edit mesh](meshoptimiser://docs/edit-mesh). Then the move, rotate and scale tools, **Dynamic place** (`D`), a button for the transform card, four view modes (solid, wireframe, X-ray, heatmap) and a button that highlights small parts. The Clay and CAD looks are in the **Shading** card on the right.
 - **View name, top centre**: Says which camera view is active, **Cam** to begin with. Click it to switch to Top, Front or Side. Small pills to its right show a mode that is on: **Isolated**, **Exploded**, **Measure** and **Snap**. Click a pill to leave that mode.
 - **View cube, top right**: A small cube that turns with the model. Click a face or an axis dot and the view turns there.
 - **Toolbar, bottom centre**: Search, add a shape, **Split**, **Remove holes**, **Draw lines**, **Smart fit**, **Remesh**, **Select hidden parts**, **Fasteners**, **Measure**, **Library**, **Materials**, and `…` for the list of all commands.
+- **Edit mesh bar, right edge**: A vertical bar that appears under the view cube while Edit mesh is on: how a click picks (Click, Box, Brush), the gizmo’s axes, Loops, and the buttons that change the picked pieces. The tool strip shows Points, Edges and Polygons as three buttons then. See [Edit mesh](meshoptimiser://docs/edit-mesh).
 - **Shortcut tips, bottom right**: A faint list of what the mouse and keys do right now. It changes when you select something.
-- **Command cards, bottom left**: A tool with settings, such as Remove holes, Align to floor or Dynamic place, opens as a card over the viewport. `Enter` runs it and `Esc` puts it away.
+- **Command cards, bottom left**: A tool with settings, such as Remove holes, Align to floor, Align parts or Dynamic place, opens as a card over the viewport. `Enter` runs it and `Esc` puts it away.
 
 ## Right sidebar
 
@@ -67,4 +68,4 @@ Each sidebar has a drag handle on its inner edge. A thin line shows when you res
 
 Press `F1` to open the help inside the app. It holds the same articles as this website and works without an internet connection. See [The help window](not in this knowledge base).
 
-Related: [help-window](not in this knowledge base), [move-the-view](meshoptimiser://docs/move-the-view), [parts-tree](meshoptimiser://docs/parts-tree), [search-and-commands](meshoptimiser://docs/search-and-commands), [read-the-numbers](meshoptimiser://docs/read-the-numbers)
+Related: [help-window](not in this knowledge base), [move-the-view](meshoptimiser://docs/move-the-view), [parts-tree](meshoptimiser://docs/parts-tree), [search-and-commands](meshoptimiser://docs/search-and-commands), [read-the-numbers](meshoptimiser://docs/read-the-numbers), [edit-mesh](meshoptimiser://docs/edit-mesh)
