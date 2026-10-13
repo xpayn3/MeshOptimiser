@@ -3543,15 +3543,6 @@ const _Settings = (() => {
       ['Browser', (navigator.userAgentData && navigator.userAgentData.platform ? navigator.userAgentData.platform + ' · ' : '') + _browserName()],
     ];
   };
-  function _fillAbout() {
-    const dst = $s('set-pane-about'); if (!dst) return;
-    const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    dst.innerHTML =
-      _group('MeshOptimiser') +
-      _aboutFacts().map(([k, v]) => `<div class="set-row"><span>${k}</span><span class="set-val" title="${esc(v)}">${esc(v)}</span></div>`).join('') +
-      _group('Help') +
-      `<div class="set-row set-action"><span>Help &amp; docs<span class="set-help">How every tool works, with pictures. Works offline (F1).</span></span><button class="btn" id="set-about-help">Open</button></div>` +
-      `<div class="set-row set-action"><span>Keyboard shortcuts<span class="set-help">Every key and mouse gesture (?).</span></span><button class="btn" id="set-about-keys">Open</button></div>` +
   // Everything the app is built on, shown in Settings, About. The same list is on the website (Credits) and in the README; licence files are in vendor/.
   const _CREDITS = [
     ['three.js', 'the three.js authors', 'MIT', 'https://threejs.org', 'The 3D view.'],
@@ -3567,7 +3558,19 @@ const _Settings = (() => {
     ['Lucide', 'the Lucide contributors', 'ISC', 'https://lucide.dev', 'The icons.'],
     ['Gearbox Assy', 'Khronos glTF-Sample-Models; converted by Okino Computer Graphics', 'See the repository', 'https://github.com/KhronosGroup/glTF-Sample-Models/tree/main/2.0/GearboxAssy', 'The sample assembly.'],
   ];
+  function _fillAbout() {
+    const dst = $s('set-pane-about'); if (!dst) return;
+    const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    dst.innerHTML =
+      _group('MeshOptimiser') +
+      _aboutFacts().map(([k, v]) => `<div class="set-row"><span>${k}</span><span class="set-val" title="${esc(v)}">${esc(v)}</span></div>`).join('') +
+      _group('Help') +
+      `<div class="set-row set-action"><span>Help &amp; docs<span class="set-help">How every tool works, with pictures. Works offline (F1).</span></span><button class="btn" id="set-about-help">Open</button></div>` +
+      `<div class="set-row set-action"><span>Keyboard shortcuts<span class="set-help">Every key and mouse gesture (?).</span></span><button class="btn" id="set-about-keys">Open</button></div>` +
       `<div class="set-row set-action"><span>Something wrong?<span class="set-help">Opens the report page with your version and system already filled in.</span></span><span style="display:flex;gap:8px"><button class="btn" id="set-about-copy">Copy details</button><button class="btn" id="set-about-report">Report a problem</button></span></div>` +
+      _group('Credits') +
+      `<div class="set-row"><span class="set-help" style="margin:0">MeshOptimiser is built on open source. Thank you to everyone who made these.</span></div>` +
+      _CREDITS.map(([name, by, lic, url, what]) => `<div class="set-row"><span><a href="${url}" target="_blank" rel="noopener">${esc(name)}</a><span class="set-help">${esc(what)} By ${esc(by)}.</span></span><span class="set-val" title="${esc(lic)}">${esc(lic)}</span></div>`).join('') +
       _group('Project') +
       `<div class="set-row set-action"><span>Website<span class="set-help">Downloads, the full docs and the screenshots.</span></span><a class="btn" href="https://lukagrcar.com/apps/meshoptimiser/" target="_blank" rel="noopener">Open</a></div>` +
       `<div class="set-row set-action"><span>Source code<span class="set-help">Free and open source, under the MIT licence.</span></span><a class="btn" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener">GitHub</a></div>`;
@@ -3577,9 +3580,6 @@ const _Settings = (() => {
   function _setLook(key, val, refill = true) {
     _Prefs.set(key, val);
     try { window.MOAppearance.apply(); } catch (_) {}
-      _group('Credits') +
-      `<div class="set-row"><span class="set-help" style="margin:0">MeshOptimiser is built on open source. Thank you to everyone who made these.</span></div>` +
-      _CREDITS.map(([name, by, lic, url, what]) => `<div class="set-row"><span><a href="${url}" target="_blank" rel="noopener">${esc(name)}</a><span class="set-help">${esc(what)} By ${esc(by)}.</span></span><span class="set-val" title="${esc(lic)}">${esc(lic)}</span></div>`).join('') +
     if (refill) _fillAppearance();
   }
   const _chipsPref = (key, list, cur) => `<div class="set-chips" data-pref="${key}">${list.map(([l, v]) => `<button type="button" class="sv-chip${String(cur) === String(v) ? ' is-on' : ''}" data-v="${v}">${l}</button>`).join('')}</div>`;
