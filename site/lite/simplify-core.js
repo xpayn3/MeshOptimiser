@@ -49,11 +49,21 @@ export function analyseCreases(sub, positions) {
   let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (let i = 0; i < sub.length; i++) { const v = sub[i]; for (let k = 0; k < 3; k++) { const x = positions[v * 3 + k]; if (x < lo[k]) lo[k] = x; if (x > hi[k]) hi[k] = x; } }
   const cell = Math.max(1e-12, Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * 1e-6);
-  const seen = new Map(); let next = 0;
+  // vertices at the same place: a table of cell numbers (open addressing), not a string per vertex
+  let cap = 16; while (cap < n * 2) cap <<= 1;
+  const mask = cap - 1, slots = new Int32Array(cap).fill(-1);
+  const qx = new Int32Array(n), qy = new Int32Array(n), qz = new Int32Array(n);
+  let next = 0;
   const idOf = (v) => {
     let c = canon[v]; if (c >= 0) return c;
-    const key = Math.round((positions[v * 3] - lo[0]) / cell) + ',' + Math.round((positions[v * 3 + 1] - lo[1]) / cell) + ',' + Math.round((positions[v * 3 + 2] - lo[2]) / cell);
-    c = seen.get(key); if (c === undefined) { c = next++; seen.set(key, c); }
+    const ix = Math.round((positions[v * 3] - lo[0]) / cell), iy = Math.round((positions[v * 3 + 1] - lo[1]) / cell), iz = Math.round((positions[v * 3 + 2] - lo[2]) / cell);
+    let h = (Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(iz, 83492791)) & mask;
+    for (;;) {
+      const w = slots[h];
+      if (w < 0) { c = next++; slots[h] = c; qx[c] = ix; qy[c] = iy; qz[c] = iz; break; }
+      if (qx[w] === ix && qy[w] === iy && qz[w] === iz) { c = w; break; }
+      h = (h + 1) & mask;
+    }
     canon[v] = c; return c;
   };
   const tris = sub.length / 3, nx = new Float32Array(tris), ny = new Float32Array(tris), nz = new Float32Array(tris);
@@ -66,7 +76,8 @@ export function analyseCreases(sub, positions) {
     if (m > 0) { x /= m; y /= m; z /= m; } else { x = y = z = NaN; }      // (a triangle with no area has no direction: it takes no part in a crease)
     nx[t] = x; ny[t] = y; nz[t] = z;
     const c0 = idOf(i0), c1 = idOf(i1), c2 = idOf(i2);
-    for (const [p, q] of [[c0, c1], [c1, c2], [c2, c0]]) {
+    for (let side = 0; side < 3; side++) {
+      const p = side === 0 ? c0 : side === 1 ? c1 : c2, q = side === 0 ? c1 : side === 1 ? c2 : c0;
       if (p === q) continue;
       const key = p < q ? p * 67108864 + q : q * 67108864 + p, f = first.get(key);
       if (f === undefined) first.set(key, t);

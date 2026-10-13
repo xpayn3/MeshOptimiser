@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.25.0." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.26.0." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.25.0." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.26.0." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-hero.webp" />
   <meta property="og:url" content="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:type" content="website" />
@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=91" />
+  <link rel="stylesheet" href="site.css?v=298" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -52,9 +52,33 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.26.0">
+          <div class="log-head">
+            <strong>v0.26.0<b class="rel-code">Bovec</b></strong><em>Latest</em><span>13 Oct 2026 · 16:10</span><span>5 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>Faster, lighter and easier to pick with. Box and Brush now select whole parts, big files open without freezing the page, opening the same STEP again is instant, and the app gives memory back.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>Box and Brush pick whole parts. In Model mode the selection tool has the same Click, Box and Brush as Edit mesh. Shift adds, Alt turns the camera, and the middle button sets the brush size.</span></li>
+              <li><b class="is-new">New</b><span>One selection-tool button in the left toolbar. Let go over a row of its list and that tool is picked.</span></li>
+              <li><b class="is-new">New</b><span>Point at a row of the part list and the part lights up in the view. Switch it off in Settings › Viewport.</span></li>
+              <li><b class="is-new">New</b><span>Opening the same STEP file again takes no time. The converted model is kept, and a new release or a different import setting never gets an old answer.</span></li>
+              <li><b class="is-polish">Polish</b><span>Delete small parts: Isolate is a switch that shows only the parts that would go, so you can check them first. Highlight sits on the card.</span></li>
+              <li><b class="is-polish">Polish</b><span>One look for sliders, scrollbars, number fields and menus. Sliders have a white thumb with a soft halo while you hold them.</span></li>
+              <li><b class="is-polish">Polish</b><span>A selection draws at once. The outline of a heavy part is worked out in the background and appears when it is ready.</span></li>
+              <li><b class="is-polish">Polish</b><span>Big GLB, glTF, OBJ and FBX files no longer freeze the page while they open, and Repair mesh works in the background.</span></li>
+              <li><b class="is-polish">Polish</b><span>The app gives memory back: geometry that Undo can no longer reach is freed, and so is the geometry of parts you deleted.</span></li>
+              <li><b class="is-polish">Polish</b><span>Two conversions run at a time and the rest wait their turn. The upload folder cleans itself every hour.</span></li>
+              <li><b class="is-fix">Fix</b><span>A spring or a coarse curve is no longer drawn as a bundle of lines. Its smooth facets are not edges.</span></li>
+              <li><b class="is-fix">Fix</b><span>Repair mesh welds a model that is far from the origin correctly.</span></li>
+              <li><b class="is-fix">Fix</b><span>The start screen no longer hides a newly opened tab, and a frame that failed to draw is tried again.</span></li>
+              <li><b class="is-fix">Fix</b><span>Remove holes now handles meshes of up to twelve million triangles.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.25.0">
           <div class="log-head">
-            <strong>v0.25.0<b class="rel-code">Bled</b></strong><em>Latest</em><span>13 Oct 2026 · 10:39</span><span>6 fixes</span>
+            <strong>v0.25.0<b class="rel-code">Bled</b></strong><span>13 Oct 2026 · 10:39</span><span>6 fixes</span>
           </div>
           <div class="log-body">
             <p>More to build with, and a better way to line it all up. Twenty-six new library parts, an Align parts panel, a Transform panel that works on several parts, and a search you can move.</p>
@@ -106,7 +130,7 @@
         </li>
         <li id="v0.23.0">
           <div class="log-head">
-            <strong>v0.23.0</strong><span>12 Oct 2026 · 16:41</span><span>15 fixes</span>
+            <strong>v0.23.0<b class="rel-code">Rače</b></strong><span>12 Oct 2026 · 16:41</span><span>15 fixes</span>
           </div>
           <div class="log-body">
             <p>Cleaner meshes, your way. Decide how a CAD file turns into triangles, close the holes that used to slip through, and find anything, even a setting, by typing a word or two.</p>
@@ -146,7 +170,7 @@
         </li>
         <li id="v0.22.0">
           <div class="log-head">
-            <strong>v0.22.0</strong><span>12 Oct 2026 · 08:57</span><span>5 fixes</span>
+            <strong>v0.22.0<b class="rel-code">Ig</b></strong><span>12 Oct 2026 · 08:57</span><span>5 fixes</span>
           </div>
           <div class="log-body">
             <p>Just ask Claude. Updates that install themselves. And if the app ever crashes, your work is waiting for you.</p>
@@ -171,7 +195,7 @@
         </li>
         <li id="v0.21.0">
           <div class="log-head">
-            <strong>v0.21.0</strong><span>9 Oct 2026 · 19:37</span>
+            <strong>v0.21.0<b class="rel-code">Bloke</b></strong><span>9 Oct 2026 · 19:37</span>
           </div>
           <div class="log-body">
             <p>Show it and ship it. A turntable video saves one slow turn round the model as a WebM, the Export dialog has presets for where the file is going, and the Selection bar has the actions I reach for most.</p>
@@ -185,7 +209,7 @@
         </li>
         <li id="v0.20.0">
           <div class="log-head">
-            <strong>v0.20.0</strong><span>9 Oct 2026 · 14:50</span><span>9 fixes</span>
+            <strong>v0.20.0<b class="rel-code">Kanal</b></strong><span>9 Oct 2026 · 14:50</span><span>9 fixes</span>
           </div>
           <div class="log-body">
             <p>You can draw. A Draw tool makes lines and shapes, and they are real parts of the scene: rows in the tree, in groups, moved with the gizmo, with Shape and Spline cards in Properties and a Sweep that turns a path and a profile into a solid. The tree gets organising commands, the converter reads IGES and BREP, copies are found in files from other tools, and the app looks after itself.</p>
@@ -212,7 +236,7 @@
         </li>
         <li id="v0.15.0">
           <div class="log-head">
-            <strong>v0.15.0</strong><span>9 Oct 2026 · 02:07</span>
+            <strong>v0.15.0<b class="rel-code">Tabor</b></strong><span>9 Oct 2026 · 02:07</span>
           </div>
           <div class="log-body">
             <p>The commands come to the pointer. Hold W and a ring of commands opens under it. The rest is about making a model lighter without breaking it: a repair, a way to remove the faces nobody sees, merging and selecting by rule, Untriangulate, a wireframe that shows polygons, and a simplifier that now looks after normals, UVs and colours.</p>
@@ -229,7 +253,7 @@
         </li>
         <li id="v0.14.0">
           <div class="log-head">
-            <strong>v0.14.0</strong><span>8 Oct 2026 · 23:50</span><span>72 fixes</span>
+            <strong>v0.14.0<b class="rel-code">Most</b></strong><span>8 Oct 2026 · 23:50</span><span>72 fixes</span>
           </div>
           <div class="log-body">
             <p>The biggest release so far. A CAD view and a Shading card, Dynamic place, an Align to floor that shows what it will do, Help inside the app, a Settings window that can change the look of the interface, a rebuilt Export window, and three tools that clean a scene up for you. I also read the whole code base, tested it hard on assemblies with thousands of parts and fixed 72 things, most of them in the places you only notice when they go wrong: undo, exports and big files. Opening a big model is faster, too.</p>
@@ -278,7 +302,7 @@
         </li>
         <li id="v0.13.0">
           <div class="log-head">
-            <strong>v0.13.0</strong><span>8 Oct 2026 · 03:04</span><span>1 fix</span>
+            <strong>v0.13.0<b class="rel-code">Gore</b></strong><span>8 Oct 2026 · 03:04</span><span>1 fix</span>
           </div>
           <div class="log-body">
             <p>It now feels like an app. You can install it, it opens in a window with no address bar or browser tabs, and the title bar can fold away. The scene tabs got better too, and a view that’s moving skips what you couldn’t see anyway.</p>
@@ -296,7 +320,7 @@
         </li>
         <li id="v0.12.0">
           <div class="log-head">
-            <strong>v0.12.0</strong><span>8 Oct 2026 · 01:43</span><span>2 fixes</span>
+            <strong>v0.12.0<b class="rel-code">Med</b></strong><span>8 Oct 2026 · 01:43</span><span>2 fixes</span>
           </div>
           <div class="log-body">
             <p>Until now MeshOptimiser opened a model and made it lighter. From this version it can build too: a drawer of 86 parts to drag in, a sideways model stood up on the floor from one card, a whole scene brought down to a triangle count you type, and dark parts that finally look like something.</p>
@@ -317,7 +341,7 @@
         </li>
         <li id="v0.11.0">
           <div class="log-head">
-            <strong>v0.11.0</strong><span>7 Oct 2026 · 19:11</span><span>11 fixes</span>
+            <strong>v0.11.0<b class="rel-code">Sol</b></strong><span>7 Oct 2026 · 19:11</span><span>11 fixes</span>
           </div>
           <div class="log-body">
             <p>The way you use it changed. Scenes open in tabs, tools show up as cards beside the model instead of sitting in a sidebar, every number can be dragged, and one Settings window replaces the three places that used to hold options. It also fixed a long list of things that went wrong with undo.</p>
@@ -340,7 +364,7 @@
         </li>
         <li id="v0.10">
           <div class="log-head">
-            <strong>v0.10</strong><span>7 Oct 2026 · 15:37 and 15:47</span><span>17 fixes</span>
+            <strong>v0.10<b class="rel-code">Kit</b></strong><span>7 Oct 2026 · 15:37 and 15:47</span><span>17 fixes</span>
           </div>
           <div class="log-body">
             <p>Faster, with tools it didn’t have before: a hole filler that can tell a hole from a boss, a materials drawer, a decimator that keeps normals and UVs, background workers, and a part tree that keeps up with five million triangles. And a long list of things that were quietly wrong in the tree. Version 0.10.1 followed ten minutes later with one change: the libraries the viewer needs now come with the app, so it starts without a CDN and works with no connection at all.</p>
@@ -363,7 +387,7 @@
         </li>
         <li id="v0.9.0">
           <div class="log-head">
-            <strong>v0.9.0</strong><span>7 Oct 2026 · 12:41</span><span>24 fixes</span>
+            <strong>v0.9.0<b class="rel-code">Mir</b></strong><span>7 Oct 2026 · 12:41</span><span>24 fixes</span>
           </div>
           <div class="log-body">
             <p>More trustworthy. A self-test that runs inside the app, undo for every action, exports that match the scene, and a restyled interface. This was the version where I stopped trusting that things worked and started checking.</p>
@@ -385,7 +409,7 @@
         </li>
         <li id="v0.8.0">
           <div class="log-head">
-            <strong>v0.8.0</strong><span>11 May 2026 · 17:20</span><span>9 fixes</span>
+            <strong>v0.8.0<b class="rel-code">Dim</b></strong><span>11 May 2026 · 17:20</span><span>9 fixes</span>
           </div>
           <div class="log-body">
             <p>The groundwork got modern: a ray-marched floor grid, one keycap style on every shortcut, undo rebuilt as a flat list of commands, and all the CSS that was injected at runtime moved into the stylesheet.</p>
@@ -403,7 +427,7 @@
         </li>
         <li id="v0.7.0">
           <div class="log-head">
-            <strong>v0.7.0</strong><span>11 May 2026 · 13:12</span>
+            <strong>v0.7.0<b class="rel-code">Slap</b></strong><span>11 May 2026 · 13:12</span>
           </div>
           <div class="log-body">
             <p>A GPU path tracer with a render window that builds up samples, a hint strip that follows what you’re doing, an add-a-shape picker on long press, a standalone Cloner you can drag parts into, and Revert to source.</p>
@@ -411,7 +435,7 @@
         </li>
         <li id="v0.6.0">
           <div class="log-head">
-            <strong>v0.6.0</strong><span>11 May 2026 · 09:18</span><span>3 fixes</span>
+            <strong>v0.6.0<b class="rel-code">Sir</b></strong><span>11 May 2026 · 09:18</span><span>3 fixes</span>
           </div>
           <div class="log-body">
             <p>A live Cloner, a Ctrl-click measure tool, an origin marker for every group, a two-panel Export window, simplification and Meshopt on by default, and mouse buttons that work the way CAD programs expect.</p>
@@ -424,7 +448,7 @@
         </li>
         <li id="v0.5.0">
           <div class="log-head">
-            <strong>v0.5.0</strong><span>8 May 2026 · 14:35</span><span>1 fix</span>
+            <strong>v0.5.0<b class="rel-code">Vas</b></strong><span>8 May 2026 · 14:35</span><span>1 fix</span>
           </div>
           <div class="log-body">
             <p>Scene management (New scene, Import and merge, Scene settings), parametric shapes with millimetre inputs, transforms that know their units, backgrounds without banding, and a clean shutdown.</p>
@@ -435,7 +459,7 @@
         </li>
         <li id="v0.4.0">
           <div class="log-head">
-            <strong>v0.4.0</strong><span>7 May 2026 · 18:57</span><span>4 fixes</span>
+            <strong>v0.4.0<b class="rel-code">Rob</b></strong><span>7 May 2026 · 18:57</span><span>4 fixes</span>
           </div>
           <div class="log-body">
             <p>HDRI lighting, an endless floor grid with fog, parametric shapes, a camera pill with Ctrl or ⌘ + 1 to 4, popups without borders, and a refreshed blue.</p>
@@ -448,7 +472,7 @@
         </li>
         <li id="v0.3.0">
           <div class="log-head">
-            <strong>v0.3.0</strong><span>7 May 2026 · 03:22</span><span>5 fixes</span>
+            <strong>v0.3.0<b class="rel-code">Log</b></strong><span>7 May 2026 · 03:22</span><span>5 fixes</span>
           </div>
           <div class="log-body">
             <p>A full material editor with shader-ball previews, a scale gizmo that snaps with Shift and shows live values, screenshots at any size, Top, Front and Side views, and a rescue path for old FBX files.</p>
@@ -461,7 +485,7 @@
         </li>
         <li id="v0.2.0">
           <div class="log-head">
-            <strong>v0.2.0</strong><span>6 May 2026 · 20:58</span>
+            <strong>v0.2.0<b class="rel-code">Dom</b></strong><span>6 May 2026 · 20:58</span>
           </div>
           <div class="log-body">
             <p>The editing side arrived: a start screen, a command palette, a shortcuts overlay, settings, section planes, a switchable renderer, batch rename, flatten, dissolve and ungroup, undo and redo, and Save scene. Expanding and collapsing a tree of 10,000 nodes went from about a second to under 10 ms.</p>
@@ -469,7 +493,7 @@
         </li>
         <li id="v0.1.0">
           <div class="log-head">
-            <strong>v0.1.0</strong><span>5 May 2026 · 21:30</span>
+            <strong>v0.1.0<b class="rel-code">Pot</b></strong><span>5 May 2026 · 21:30</span>
           </div>
           <div class="log-body">
             <p>The first public commit: the STEP to GLB pipeline, the WebGPU viewer with the part tree, picking, hide, isolate and colouring by group, the local server, one-click launchers, and bundled Draco and Assimp decoders.</p>
@@ -478,16 +502,63 @@
       </ol>
       <p class="log-more"><a class="more" href="https://github.com/xpayn3/MeshOptimiser/blob/main/CHANGELOG.md" rel="noopener">Every change, on GitHub</a></p>
     </section>
-    <section class="band get">
-      <div class="wrap get-in">
-        <div>
-          <h2>Run it on your own machine.</h2>
-          <p>Free and open source, MIT. Windows and macOS. Your files never leave the computer.</p>
-        </div>
-        <div class="actions">
-          <a class="btn is-primary is-large" href="download.html">Download v0.25.0</a>
-          <a class="btn is-large btn-demo" href="demo/index.html" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5v15l12-7.5Z"/></svg>Open online</a>
-          <a class="btn is-large" href="https://github.com/xpayn3/MeshOptimiser" rel="noopener">View on GitHub</a>
+    <section class="band get compare">
+      <div class="wrap">
+        <h2>Pick how you run it.</h2>
+        <div class="cmp">
+          <div class="cmp-head">
+            <div class="cmp-col">
+              <p class="cmp-tag">In your browser</p>
+              <h3>MeshOptimiser Lite</h3>
+              <p class="cmp-sub">Try the app in a tab. Nothing to install.</p>
+              <div class="cmp-act"><a class="cmp-btn btn-lite" href="lite/index.html" target="_blank" rel="noopener">Open Lite</a><a class="cmp-link" href="docs/what-it-is.html">What is it</a></div>
+            </div>
+            <div class="cmp-col">
+              <p class="cmp-tag">On your machine</p>
+              <h3>MeshOptimiser</h3>
+              <p class="cmp-sub">The full app. Windows and macOS.</p>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.26.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+            </div>
+          </div>
+          <div class="cmp-table" role="table">
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Free</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Free</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Browser tab</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Your computer</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Files stay local</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Files stay local</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-off"><span class="cmp-no" aria-hidden="true">—</span><span>STEP to GLB</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>STEP to GLB</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Clean-up tools</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Clean-up tools</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Part library</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Part library</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-off"><span class="cmp-no" aria-hidden="true">—</span><span>Folders and CLI</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Folders and CLI</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-off"><span class="cmp-no" aria-hidden="true">—</span><span>Claude</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Claude</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-off"><span class="cmp-no" aria-hidden="true">—</span><span>Works offline</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Works offline</span></span></div>
+          </div>
+          </div>
+          <p class="cmp-note">Lite opens a sample gearbox first and needs a window 960 px wide. Best in Chrome: Safari on a Mac can lag.</p>
         </div>
       </div>
     </section>
@@ -517,6 +588,7 @@
         <a href="https://github.com/xpayn3/MeshOptimiser" rel="noopener">Source on GitHub</a>
         <a href="report.html">Report a problem</a>
         <a href="https://github.com/xpayn3/MeshOptimiser/issues" rel="noopener">Issues on GitHub</a>
+        <a href="credits.html">Credits</a>
         <a href="https://github.com/xpayn3/MeshOptimiser/blob/main/LICENSE" rel="noopener">MIT licence</a>
       </nav>
     </div>
@@ -525,6 +597,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="site.js?v=28"></script>
+  <script defer src="site.js?v=61"></script>
 </body>
 </html>

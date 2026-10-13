@@ -1,97 +1,142 @@
-// ========== MESHOPTIMISER SITE: THE PART IN THE HERO ==========
-// The rear derailleur of the opening picture as a real mesh: 43 parts, about
-// 68,000 triangles, read from hero-mesh.json + hero-mesh.bin (baked from the
-// app itself, so every part is where the app had it and carries the offset the
-// app's exploded view gave it). The camera is the app's camera for that
-// picture, so at rest, together, this lands on the cut-out it replaces; site.js
-// then feeds it the scroll (setP) and it comes forward, turns and pulls itself
-// apart (up to the app's 60 % exploded view). It draws only when asked to (a scroll or a resize), never in a loop.
-// Loaded by site.js on a desktop screen with motion allowed; anything that
-// goes wrong leaves the cut-out in place.
+// ========== MESHOPTIMISER SITE: THE AXLE IN THE HERO ==========
+// A truck front axle (Mercedes-Benz Arocs 8x8, 295 parts) as the optimised GLB MeshOptimiser itself exported for the web: axle-web.glb,
+// 250,075 triangles, 1.3 MB (it was 11.4 MB), meshopt-compressed. axle-offsets.json holds the offset the app's exploded view gives each part
+// at 100 % (by part name, in metres, Y up as in the GLB). The model sits on the page's own dark background in polished metal, and the scroll
+// pulls it apart up to the app's 165 % (site.js feeds the scroll through setP). It draws only when asked to (a scroll or a resize), never
+// in a loop. Loaded by site.js where WebGL works and motion is allowed; anything that goes wrong leaves the poster picture in place.
 // (the import map in the page head says where 'three' and the add-ons come from)
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+const MAX_EXPLODE = 1.65;                                 // the app's exploded view at 165 %; the offsets in the file are for 100 %
 
 export async function start(pop, base) {
-  const [meta, bin] = await Promise.all([
-    fetch(base + 'hero-mesh.json?v=4').then(r => r.json()),
-    fetch(base + 'hero-mesh.bin?v=4').then(r => r.arrayBuffer()),
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  const [gltf, table] = await Promise.all([
+    loader.loadAsync(base + 'axle-web.glb?v=1'),
+    fetch(base + 'axle-offsets.json?v=1').then(r => r.json()),
   ]);
-  const pin = pop.querySelector('.pop-pin'), art = pop.querySelector('.pop-art');
+  const pin = pop.querySelector('.pop-pin');
   const canvas = document.createElement('canvas');
   canvas.className = 'pop-3d';
   canvas.setAttribute('aria-hidden', 'true');
   pin.appendChild(canvas);
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: !coarse, alpha: true, powerPreference: 'low-power' });   // (no edge smoothing on a phone: it costs battery, and the pixels are small)
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMapping = THREE.NeutralToneMapping || THREE.ACESFilmicToneMapping;   // as the app draws
+  renderer.toneMappingExposure = 1.0;
 
-  // ---- the parts ----
   const scene = new THREE.Scene();
   const root = new THREE.Group();
   scene.add(root);
-  // a little metal, lit by the same studio room the app uses
+  // The app's lighting (a soft sky, a key light, a cool fill and a headlight that travels with the camera) on the app's Steel metal, but in a
+  // studio with some contrast: grey walls with a few bright strips and soft boxes, so the metal has something to catch and the light is not even.
+  const studio = new THREE.Scene();
+  studio.add(new THREE.Mesh(new THREE.SphereGeometry(60, 48, 24), new THREE.MeshBasicMaterial({ color: 0x45484d, side: THREE.BackSide })));
+  const panel = (w, h, at, power, color = 0xffffff) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(power), side: THREE.DoubleSide }));
+    m.position.set(...at); m.lookAt(0, 0, 0); studio.add(m);
+  };
+  // (Y is up here: the GLB is Y up)
+  panel(54, 16, [-6, 40, -10], 3.8);                 // a soft box overhead
+  panel(5, 46, [-42, 6, 6], 5, 0xfff0e0);            // a tall warm strip on the left
+  panel(5, 46, [42, 4, -10], 4.5, 0xd4e4ff);         // a tall cool strip on the right
+  panel(40, 4, [0, 20, 40], 4);                      // a strip in front, up high
+  panel(70, 5, [0, -12, -38], 2.2, 0xe8f0ff);        // a low strip behind
+  panel(90, 90, [0, -44, 0], 0.7, 0x8a94a4);         // the floor, a soft glow
   const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.85;
-  const material = new THREE.MeshStandardMaterial({ color: 0xc4c7cc, roughness: 0.34, metalness: 0.72, side: THREE.DoubleSide });
-  const { min, span } = meta;
-  const parts = meta.parts.map((p) => {
-    const q = new Int16Array(bin, p.op, p.v * 3), n = new Int8Array(bin, p.on, p.v * 3);
-    const pos = new Float32Array(p.v * 3), nor = new Float32Array(p.v * 3);
-    for (let i = 0; i < p.v; i++) for (let k = 0; k < 3; k++) {
-      pos[i * 3 + k] = min[k] + ((q[i * 3 + k] + 32768) / 65535) * span[k];
-      nor[i * 3 + k] = n[i * 3 + k] / 127;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-    geo.setIndex(new THREE.BufferAttribute(p.big ? new Uint32Array(bin, p.oi, p.i) : new Uint16Array(bin, p.oi, p.i), 1));
-    const mesh = new THREE.Mesh(geo, material);
-    mesh.matrixAutoUpdate = false;
-    root.add(mesh);
-    return { mesh, off: new THREE.Vector3(...p.off) };
+  scene.environment = pmrem.fromScene(studio, 0.025).texture;
+  scene.environmentIntensity = 1.3;
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0.3);
+  const keyL = new THREE.DirectionalLight(0xffffff, 1.1); keyL.position.set(80, 100, -60);
+  const fill = new THREE.DirectionalLight(0xb0c4ff, 0.18); fill.position.set(-80, 60, 40);
+  const head = new THREE.DirectionalLight(0xffffff, 0.3);
+  scene.add(hemi, keyL, fill, head, head.target);
+
+  // the app's Steel look (colour #c2c7cd, roughness 0.3, fully metallic); the rubber of the air springs stays dark
+  const STEEL = new THREE.MeshStandardMaterial({ color: 0xbdc3ca, roughness: 0.28, metalness: 1, side: THREE.DoubleSide });
+  const RUBBER = new THREE.MeshStandardMaterial({ color: 0x2a2b2d, roughness: 0.5, metalness: 0.3, side: THREE.DoubleSide });
+  // the app's outlines: the edges where the surface turns sharply, thin and dark (one set per shape: repeated parts share it)
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x0b0c0e, transparent: true, opacity: 0.55 });
+  const edgesOf = new Map();
+
+  // the parts: each mesh of the file is taken out of the file's tree and put under one group, where it keeps the place it had
+  gltf.scene.updateMatrixWorld(true);
+  const meshes = [];
+  gltf.scene.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const corner = new THREE.Vector3();
+  const parts = meshes.map((mesh) => {
+    const rest = mesh.matrixWorld.clone();
+    const c = mesh.material && mesh.material.color;
+    const dark = !!c && (c.r + c.g + c.b) / 3 < 0.09;
+    const part = new THREE.Mesh(mesh.geometry, dark ? RUBBER : STEEL);
+    part.matrixAutoUpdate = false;
+    if (!edgesOf.has(mesh.geometry)) edgesOf.set(mesh.geometry, new THREE.EdgesGeometry(mesh.geometry, 38));
+    part.add(new THREE.LineSegments(edgesOf.get(mesh.geometry), lineMat));          // (a child: it moves with the part)
+    root.add(part);
+    const o = table.offsets[mesh.name] || [0, 0, 0];
+    // the eight corners of the part's box where it rests: for the camera, which has to know how big the whole thing is
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const bb = mesh.geometry.boundingBox, pts = [];
+    for (let k = 0; k < 8; k++) { corner.set(k & 1 ? bb.max.x : bb.min.x, k & 2 ? bb.max.y : bb.min.y, k & 4 ? bb.max.z : bb.min.z).applyMatrix4(rest); pts.push(corner.clone()); }
+    return { part, rest, off: new THREE.Vector3(...o), pts };
   });
+  gltf.scene.clear();                                          // (the file's own tree is not drawn)
 
-  // ---- light: a soft sky and a headlight that follows the camera, like the app's Clay ----
-  const sky = new THREE.HemisphereLight(0xffffff, 0x3a3a40, 0.35);
-  const head = new THREE.DirectionalLight(0xffffff, 0.9);
-  scene.add(sky, head, head.target);
-
-  // ---- the camera of the picture ----
-  const W0 = 1200, H0 = 1051;                 // the app's viewport in the picture (css px), inside a 1728 x 1117 window
-  const camera = new THREE.PerspectiveCamera(meta.fov, W0 / H0, 1, 5000);
-  camera.up.set(0, 0, 1);
-  const tgt0 = new THREE.Vector3(...meta.camState.tgt);
-  const pos0 = new THREE.Vector3(...meta.camState.pos);
-  const arm = pos0.clone().sub(tgt0);
-  const spin = new THREE.Vector3(0, 0, 1);
+  // ---- the camera: Y up, a three-quarter view that turns a little as the model comes apart ----
+  const FOV = 30;
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.01, 60);
+  camera.up.set(0, 1, 0);
+  const mix = (a, b, t) => a + (b - a) * t;
+  const dir = new THREE.Vector3(), tgt = new THREE.Vector3(), box = new THREE.Box3(), pt = new THREE.Vector3(), shift = new THREE.Matrix4();
 
   let p = 0, queued = false, ready = false, cw = 0, ch = 0;
   const draw = () => {
     queued = false;
-    const a = art.getBoundingClientRect(), b = pin.getBoundingClientRect();
+    if (document.hidden) return;                               // (nothing is drawn for a tab nobody is looking at)
+    const b = canvas.getBoundingClientRect();                  // (on a phone the canvas is a band of the pinned screen, set in the CSS)
     const w = Math.round(b.width), h = Math.round(b.height);
-    if (w !== cw || h !== ch) { cw = w; ch = h; renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setSize(w, h, false); }
-    const k = a.width / 1728;                                  // css px per px of the picture
-    const vx = a.left - b.left + 248 * k, vy = a.top - b.top + 44 * k;
-    // the model comes forward, turns a little and drifts up and to the left
-    const forward = 1 - 0.2 * p, yaw = -0.5 * p;
-    const e = 2 * p;                                           // the offsets in the file are the app's 30 % explode: it starts together and ends at 60 %
-    parts.forEach(({ mesh, off }) => { mesh.matrix.makeTranslation(off.x * e, off.y * e, off.z * e); mesh.matrixWorldNeedsUpdate = true; });
-    const arm2 = arm.clone().multiplyScalar(forward).applyAxisAngle(spin, yaw);
-    camera.position.copy(tgt0).add(arm2);
-    camera.lookAt(tgt0);
-    camera.setViewOffset(W0, H0, -(vx - 0.06 * a.width * p) / k, -(vy + 0.02 * a.width * p) / k, w / k, h / k);
-    head.position.copy(camera.position).add(new THREE.Vector3(-60, 40, 80));
-    head.target.position.copy(tgt0);
+    if (!w || !h) return;
+    if (w !== cw || h !== ch) { cw = w; ch = h; renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2)); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+    const e = MAX_EXPLODE * p;
+    box.makeEmpty();
+    for (const { part, rest, off, pts } of parts) {
+      shift.makeTranslation(off.x * e, off.y * e, off.z * e);
+      part.matrix.multiplyMatrices(shift, rest); part.matrixWorldNeedsUpdate = true;
+      for (const q of pts) box.expandByPoint(pt.copy(q).addScaledVector(off, e));
+    }
+    // where the model is now, and how far back the camera has to stand to have all of it in the picture
+    box.getCenter(tgt);
+    const radius = box.min.distanceTo(box.max) / 2;
+    const vf = THREE.MathUtils.degToRad(FOV) / 2, hf = Math.atan(Math.tan(vf) * camera.aspect);
+    const narrow = camera.aspect < 0.85;
+    const dist = (radius * (narrow ? 0.62 : 0.66)) / Math.sin(narrow ? hf : Math.min(vf, hf));        // (on a phone it is wider than the screen on purpose)
+    const az = THREE.MathUtils.degToRad(mix(52, 70, p)), el = THREE.MathUtils.degToRad(mix(24, 20, p));
+    dir.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
+    camera.position.copy(tgt).addScaledVector(dir, dist);
+    camera.near = dist / 100; camera.far = dist * 40;
+    camera.lookAt(tgt);
+    camera.setViewOffset(w, h, 0, narrow ? h * 0.05 : h * 0.07, w, h);
+    camera.updateMatrixWorld(true);
+    // the headlight: just above and beside the eye, looking where the camera looks
+    const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0), up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+    head.position.copy(camera.position).addScaledVector(right, -0.035 * dist).addScaledVector(up, 0.05 * dist);
+    head.target.position.copy(camera.position).addScaledVector(dir, -dist);
     renderer.render(scene, camera);
     if (!ready) { ready = true; pop.classList.add('is-3d'); }
   };
   const ask = () => { if (!queued) { queued = true; requestAnimationFrame(draw); } };
   window.addEventListener('resize', ask);
   draw();
-  return { setP(v) { if (Math.abs(v - p) > 0.0004) { p = v; ask(); } }, redraw: ask };
+  return {
+    setP(v) { if (Math.abs(v - p) > 0.0004) { p = v; ask(); } },
+    redraw: ask,
+    // the picture as it is at `v` (0 to 1), drawn now: used to make the poster that stands in on a phone
+    snapshot(v) { p = v; draw(); return canvas.toDataURL('image/png'); },
+  };
 }

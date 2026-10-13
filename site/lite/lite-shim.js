@@ -1,15 +1,15 @@
 /* ===================================================================
-   demo-shim.js — loaded first by the hosted demo (apps/meshoptimiser/demo/).
+   lite-shim.js — loaded first by the hosted demo (apps/meshoptimiser/lite/).
 
    The app is a web page that talks to a small local server for three
    things: a heartbeat, STEP conversion, and the inbox/ folder. On the site
    there is no server, so this file answers those requests itself:
      - /api/alive         404, so the app leaves the heartbeat alone
-     - /api/convert       501 with a plain explanation of what the demo opens
+     - /api/convert       501 with a plain explanation of what Lite opens
      - /api/job, cancel   404
-   and opens a sample model (inbox/GearboxAssy.glb by default; the welcome has a picker
-   for the others, all from Khronos's glTF-Sample-Models) the first time the
-   demo is opened in a tab. Nothing is uploaded: the files stay in the page.
+   and adds the sample models (Khronos's glTF-Sample-Models, inbox/) as tiles on the
+   app's own start screen, which is what opens first. The Lite mark beside the logo opens
+   a page that explains this version. Nothing is uploaded: the files stay in the page.
    =================================================================== */
 (function () {
   'use strict';
@@ -35,22 +35,11 @@
     return realFetch(input, init);
   };
 
-  // the first time this tab opens the demo, open the sample model (the app removes ?file= again once it has loaded it)
   var top = window.top === window;
-  var q = new URLSearchParams(location.search);
-  if (top && !q.has('file') && !q.has('tab') && !q.has('selftest') && !q.has('safe')) {
-    try {
-      if (!sessionStorage.getItem('meshopt-demo-sample')) {
-        sessionStorage.setItem('meshopt-demo-sample', '1');
-        q.set('file', 'inbox/GearboxAssy.glb');
-        history.replaceState(null, '', location.pathname + '?' + q.toString() + location.hash);
-      }
-    } catch (_) { /* storage blocked: the demo opens on the start screen */ }
-  }
 
   if (!top) return;
 
-  // the welcome: what the demo is, what it leaves out, what the installed app adds. Once per tab; the Lite tag opens it again.
+  // the welcome: what the Lite version is, what it leaves out, what the installed app adds. It opens from the Lite mark beside the logo, top left.
   var W_ICON = {
     try: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16l.7 1.8L21.5 18.5l-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
     out: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
@@ -179,12 +168,7 @@
     });
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    try { if (sessionStorage.getItem('meshopt-demo-welcome')) return; sessionStorage.setItem('meshopt-demo-welcome', '1'); } catch (_) {}
-    setTimeout(showWelcome, 400);
-  });
-
-  // a small "Lite" mark beside the logo; it opens the welcome again
+  // a small "Lite" mark beside the logo; it opens the welcome that explains this version
   document.addEventListener('DOMContentLoaded', function () {
     var btn = document.getElementById('btn-brand');
     if (!btn) return;
@@ -195,5 +179,57 @@
     tag.style.cssText = 'all:unset;cursor:pointer;align-self:center;margin-left:2px;padding:0 6px;height:16px;display:inline-flex;align-items:center;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);color:#a8a8a8;font:400 9.5px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.09em;text-transform:uppercase;user-select:none';
     tag.addEventListener('click', showWelcome);
     btn.parentNode.insertBefore(tag, btn.nextSibling);
+  });
+
+  // the app's own start screen gets a row of sample models, since there is no inbox/ folder to open from
+  document.addEventListener('DOMContentLoaded', function () {
+    var anchor = document.getElementById('welcome-start-empty');
+    if (!anchor || !anchor.parentNode || document.getElementById('demo-samples')) return;
+    var row = document.createElement('div');
+    row.id = 'demo-samples';
+    row.style.cssText = 'display:contents';
+    SAMPLES.forEach(function (s) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wl-tile';
+      b.innerHTML = '<i data-lucide="box"></i><span class="wl-tile-t">' + s[1] + '</span><span class="wl-tile-s">Sample model</span>';
+      b.addEventListener('click', function () { location.href = location.pathname + '?file=inbox/' + s[0] + '.glb'; });
+      row.appendChild(b);
+    });
+    anchor.parentNode.insertBefore(row, anchor.nextSibling);
+    try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (_) {}
+  });
+
+  // what the online version leaves out stays visible in Settings, greyed out
+  var GREYED = [['Claude', 'sparkles'], ['Updates', 'refresh-cw']];
+  function greyOut() {
+    var nav = document.getElementById('set-nav');
+    if (!nav || nav.querySelector('[data-lite-off]')) return;
+    var before = nav.querySelector('[data-pane="data"]');
+    if (!before) return;
+    GREYED.forEach(function (g) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'set-nav-item';
+      b.setAttribute('data-lite-off', '');
+      b.setAttribute('aria-disabled', 'true');
+      b.title = 'In the full app, which runs on your computer.';
+      b.style.cssText = 'opacity:.38;cursor:not-allowed';
+      b.innerHTML = '<i data-lucide="' + g[1] + '"></i><span>' + g[0] + '</span><span class="set-nav-state" style="font-size:10px;letter-spacing:.06em;text-transform:uppercase">Full app</span>';
+      b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); });
+      nav.insertBefore(b, before);
+    });
+    try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (_) {}
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    new MutationObserver(greyOut).observe(document.body, { childList: true, subtree: true });
+  });
+
+  // the start screen's list of formats: the CAD ones belong to the full app
+  document.addEventListener('DOMContentLoaded', function () {
+    var el = Array.prototype.find.call(document.querySelectorAll('span'), function (n) { return /^Opens STEP · IGES · BREP · /.test(n.textContent); });
+    if (!el) return;
+    var rest = el.textContent.replace('Opens STEP · IGES · BREP · ', '');
+    el.innerHTML = 'Opens <span style="opacity:.38;cursor:not-allowed" title="CAD files are read by the full app, which runs on your computer.">STEP · IGES · BREP</span> · ' + rest;
   });
 })();

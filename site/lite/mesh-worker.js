@@ -9,6 +9,7 @@
 //                                                                  and the error estimate (see simplify-core.js)
 //   { op: 'simplify', …, tol } instead of keep: as far as no point moves more than `tol` (in the mesh's units)
 //
+//   { op: 'repair',   src: { position, uv?, normal?, index?, groups? }, opts } → what repairMesh returns (meshrepair.js)
 //   { op: 'ngons',    positions, index, angle, poly }       → the outlines of the polygons (wirelines.js)
 //   { op: 'quads',    positions, index }                    → the outlines of the four-sided pairs of triangles (meshedit.js)
 //   { op: 'untriangulate', positions, index, groups, angle, normals, threeUrl }
@@ -16,9 +17,11 @@
 //
 // Every reply carries the request's id and ok: true / false.
 
-import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=21';
-import { reduceIndex } from './simplify-core.js?v=2';
+import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=23';
+import { reduceIndex } from './simplify-core.js?v=3';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=2';
+import { repairMesh } from './meshrepair.js?v=2';
+import { findRepeats } from './repeats.js?v=1';
 import { buildTopology, pairQuads, buildPolygons, outlineLines } from './meshedit.js?v=5';
 import { untriangulate, evenTriangles } from './untriangulate.js?v=10';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
@@ -69,6 +72,18 @@ self.onmessage = async (e) => {
       self.postMessage(out, transfer);
       return;
     }
+    if (m.op === 'repeats') {
+      self.postMessage({ id: m.id, ok: true, res: findRepeats(m.items, m.opts || {}) });
+      return;
+    }
+    if (m.op === 'repair') {
+      const r = repairMesh(m.src, m.opts || {});
+      const transfer = [r.position.buffer, r.index.buffer];
+      if (r.uv) transfer.push(r.uv.buffer);
+      if (r.normal) transfer.push(r.normal.buffer);
+      self.postMessage({ id: m.id, ok: true, res: r }, transfer);
+      return;
+    }
     if (m.op === 'simplify') {
       const S = await getSimplifier(m.url);
       const parts = [], transfer = [];
@@ -80,6 +95,9 @@ self.onmessage = async (e) => {
         if (byTol) {
           // The simplifier's error is relative to the mesh's extent; with no
           // triangle target it stops only when the next step would cross it.
+          // (Borders are free here and normals / UVs are not weighted: Remove holes and its tidy step use this mode to collapse
+          // a recess and the flat face around it, and `tol` already limits how far any point, a border one included, may move.
+          // Locking borders / weighting attributes would keep outlines and seams exact but stop flat open faces from collapsing.)
           const [res, rel] = S.simplify(sub, m.positions, 3, 0, Math.min(1, m.tol / scale));
           const idx = res.slice();
           err = Math.max(err, rel * scale);

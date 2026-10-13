@@ -14,7 +14,11 @@ export function weldIds(position, tol, uv) {
   const table = new Int32Array(size).fill(-1);
   const rep = new Uint32Array(n);                    // welded id → its first vertex
   let count = 0;
-  const cell = (i, k) => Math.round(position[i * 3 + k] * inv);
+  // Counted from the lowest corner of the box: a mesh far from the origin would otherwise run past what `|0` can hold, and two
+  // different cells would wrap to the same number.
+  const lo3 = [Infinity, Infinity, Infinity];
+  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) { const v = position[i * 3 + k]; if (v < lo3[k]) lo3[k] = v; }
+  const cell = (i, k) => Math.round((position[i * 3 + k] - lo3[k]) * inv);
   for (let i = 0; i < n; i++) {
     const a = cell(i, 0), b = cell(i, 1), c = cell(i, 2);
     const u = uv ? Math.round(uv[i * 2] * UVQ) : 0, v = uv ? Math.round(uv[i * 2 + 1] * UVQ) : 0;
@@ -116,7 +120,15 @@ export function repairMesh(src, opts = {}) {
   // 2. empty and doubled triangles
   if (o.degenerate) {
     const areaMin = tol * tol;
-    const seenTri = new Set();
+    // Doubled triangles (the same three corners in any order): an open-addressing table of triangle numbers, compared by their
+    // sorted corners. A string per triangle used to cost a few hundred bytes each on a large mesh.
+    const tsize = nextPow2(Math.max(16, triN * 2)), tmask = tsize - 1;
+    const tri = new Int32Array(tsize).fill(-1);
+    const sorted = (t) => {
+      let a = A[t], b = B[t], c = C[t], x;
+      if (a > b) { x = a; a = b; b = x; } if (b > c) { x = b; b = c; c = x; } if (a > b) { x = a; a = b; b = x; }
+      return [a, b, c];
+    };
     for (let t = 0; t < triN; t++) {
       const a = A[t], b = B[t], c = C[t];
       if (a === b || b === c || a === c) { keep[t] = 0; stats.degenerate++; continue; }
@@ -126,8 +138,13 @@ export function repairMesh(src, opts = {}) {
       if (cl < areaMin) { keep[t] = 0; stats.degenerate++; continue; }
       let lo = a, mid = b, hi = c, x;
       if (lo > mid) { x = lo; lo = mid; mid = x; } if (mid > hi) { x = mid; mid = hi; hi = x; } if (lo > mid) { x = lo; lo = mid; mid = x; }
-      const k = lo + ',' + mid + ',' + hi;
-      if (seenTri.has(k)) { keep[t] = 0; stats.duplicate++; } else seenTri.add(k);
+      let slot = (Math.imul(lo, 73856093) ^ Math.imul(mid, 19349663) ^ Math.imul(hi, 83492791)) & tmask, dup = false;
+      while (tri[slot] !== -1) {
+        const s2 = sorted(tri[slot]);       // the corners of the triangle already in this slot
+        if (s2[0] === lo && s2[1] === mid && s2[2] === hi) { dup = true; break; }
+        slot = (slot + 1) & tmask;
+      }
+      if (dup) { keep[t] = 0; stats.duplicate++; } else tri[slot] = t;
     }
   }
 
@@ -140,7 +157,7 @@ export function repairMesh(src, opts = {}) {
   // 4. what is left, with the vertices nobody uses any more taken out
   const remap = new Int32Array(m).fill(-1);
   let used = 0, keptTris = 0;
-  for (let t = 0; t < triN; t++) if (keep[t]) { keptTris++; for (const v of [A[t], B[t], C[t]]) if (remap[v] < 0) remap[v] = used++; }
+  for (let t = 0; t < triN; t++) if (keep[t]) { keptTris++; const a = A[t], b = B[t], c = C[t]; if (remap[a] < 0) remap[a] = used++; if (remap[b] < 0) remap[b] = used++; if (remap[c] < 0) remap[c] = used++; }
   const position = new Float32Array(used * 3), uv = Wuv ? new Float32Array(used * 2) : null, normal = Wn ? new Float32Array(used * 3) : null;
   for (let j = 0; j < m; j++) {
     const r = remap[j]; if (r < 0) continue;
@@ -150,16 +167,21 @@ export function repairMesh(src, opts = {}) {
   }
   const index = new Uint32Array(keptTris * 3);
   const outGroups = [];
-  let wp = 0;
   const nGroups = groups ? groups.length : 1;
-  for (let g = 0; g < nGroups; g++) {
-    const start = wp;
-    for (let t = 0; t < triN; t++) {
-      if (!keep[t] || (groups ? grp[t] !== g : false)) continue;
-      index[wp++] = remap[A[t]]; index[wp++] = remap[B[t]]; index[wp++] = remap[C[t]];
-    }
-    if (groups && wp > start) outGroups.push({ start, count: wp - start, materialIndex: groups[g].materialIndex || 0 });
+  // where each group's triangles start in the output (counted once), then one pass over the triangles
+  const fill = new Int32Array(nGroups + 1);
+  for (let t = 0; t < triN; t++) if (keep[t]) fill[(groups ? grp[t] : 0) + 1] += 3;
+  for (let g = 0; g < nGroups; g++) fill[g + 1] += fill[g];
+  const starts = fill.slice(0, nGroups);
+  const at = fill.slice(0, nGroups);
+  for (let t = 0; t < triN; t++) {
+    if (!keep[t]) continue;
+    const g = groups ? grp[t] : 0;
+    let w2 = at[g];
+    index[w2++] = remap[A[t]]; index[w2++] = remap[B[t]]; index[w2++] = remap[C[t]];
+    at[g] = w2;
   }
+  if (groups) for (let g = 0; g < nGroups; g++) if (at[g] > starts[g]) outGroups.push({ start: starts[g], count: at[g] - starts[g], materialIndex: groups[g].materialIndex || 0 });
   stats.vertsAfter = used; stats.trisAfter = keptTris;
   const changed = stats.welded > 0 || stats.degenerate > 0 || stats.duplicate > 0 || stats.flipped > 0;
   return { position, uv, normal, index, groups: outGroups, stats, changed };

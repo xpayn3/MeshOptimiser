@@ -43,6 +43,56 @@
     const middle = fig.offsetLeft - strip.offsetLeft + fig.offsetWidth / 2 - strip.clientWidth / 2;
     return Math.max(0, Math.min(max, middle));
   };
+  // the feature cards: the arrows move one card; an arrow is off at its end
+  $$('[data-fcar]').forEach((car) => {
+    const track = car.querySelector('.fcar-track'), prev = car.querySelector('[data-dir="-1"]'), next = car.querySelector('[data-dir="1"]');
+    const sync = () => { prev.disabled = track.scrollLeft < 4; next.disabled = track.scrollLeft > track.scrollWidth - track.clientWidth - 4; };
+    car.querySelectorAll('[data-dir]').forEach(b => b.addEventListener('click', () => {
+      const card = track.firstElementChild;
+      track.scrollBy({ left: Number(b.dataset.dir) * (card.offsetWidth + 16), behavior: 'smooth' });
+    }));
+    // a mouse can grab the row and drag it. Snapping is off for the whole gesture; on release the row glides, with the speed of the throw, to the nearest card, and snapping comes back only when it has landed
+    let down = false, moved = false, startX = 0, startLeft = 0, lastX = 0, lastT = 0, speed = 0, glide = 0;
+    const stop = () => { cancelAnimationFrame(glide); glide = 0; };
+    track.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      stop(); down = true; moved = false; startX = lastX = e.clientX; startLeft = track.scrollLeft; lastT = performance.now(); speed = 0;
+      track.classList.add('is-drag');
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!down) return;
+      const now = performance.now(), dx = e.clientX - startX;
+      if (!moved && Math.abs(dx) > 4) moved = true;
+      if (!moved) return;
+      const dt = Math.max(1, now - lastT);
+      speed = speed * 0.6 + ((lastX - e.clientX) / dt) * 0.4;
+      lastX = e.clientX; lastT = now;
+      track.scrollLeft = startLeft - dx;
+    });
+    const release = () => {
+      if (!down) return;
+      down = false;
+      if (!moved) { track.classList.remove('is-drag'); return; }
+      const step = track.firstElementChild.offsetWidth + 16, max = track.scrollWidth - track.clientWidth;
+      const from = track.scrollLeft, throwTo = from + (performance.now() - lastT < 80 ? speed * 220 : 0);
+      const to = Math.max(0, Math.min(max, Math.round(throwTo / step) * step)), t0 = performance.now(), dur = 380 + Math.min(260, Math.abs(to - from) * 0.25);
+      const tick = (now) => {
+        const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        track.scrollLeft = from + (to - from) * e;
+        if (k < 1) glide = requestAnimationFrame(tick);
+        else { glide = 0; track.classList.remove('is-drag'); }
+      };
+      glide = requestAnimationFrame(tick);
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    track.addEventListener('wheel', stop, { passive: true });
+    track.addEventListener('click', (e) => { if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; } }, true);
+    track.addEventListener('dragstart', (e) => e.preventDefault());
+    track.addEventListener('scroll', sync, { passive: true });
+    window.addEventListener('resize', sync);
+    sync();
+  });
   $$('[data-strip]').forEach((strip) => {
     const figs = [...strip.children];
     const rests = () => figs.map(fig => restOf(strip, fig));
@@ -188,26 +238,40 @@
   }
 
   const pop = $('[data-pop]');
-  if (pop && !calm && 'IntersectionObserver' in window && window.matchMedia('(min-width: 861px)').matches) {
+  if (pop && !calm && 'IntersectionObserver' in window) {
     let queued = false, last = -1, hero3d = null, asked = false;
     // the real mesh (hero3d.js): fetched once the section is near, and only where WebGL works
     const wakeMesh = () => {
       if (asked) return;
       asked = true;
       try { const gl = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl'); if (!gl) return; } catch (e) { return; }
-      import('./hero3d.js?v=6').then(m => m.start(pop, '')).then((h) => { hero3d = h; h.setP(Math.max(0, last)); }).catch(() => {});
+      // Data Saver, or a slow connection: the poster stays, and nothing of the 3D (the library, 1.3 MB of model) is fetched
+      const net = navigator.connection;
+      if (net && (net.saveData || /(^|-)2g$/.test(net.effectiveType || ''))) return;
+      const load = () => import('./hero3d.js?v=21').then(m => m.start(pop, '')).then((h) => { hero3d = h; h.setP(Math.max(0, last)); }).catch(() => {});
+      // on a phone it waits for the first touch or scroll, so a visit that goes no further costs nothing but the poster
+      if (window.matchMedia('(pointer: coarse)').matches) { let done = false; const go = () => { if (done) return; done = true; window.removeEventListener('scroll', go); window.removeEventListener('touchstart', go); load(); }; window.addEventListener('scroll', go, { passive: true }); window.addEventListener('touchstart', go, { passive: true }); }
+      else load();
     };
+    pop.classList.add('is-armed');                       // (the graph's bars start empty and grow in when the section comes into view)
+    const cards = $$('.pop-parts li', pop); let lit = -2;
+    const pct = $('[data-pop-pct]', pop);
     const place = () => {
       queued = false;
       const rect = pop.getBoundingClientRect();
       const room = rect.height - ($('.pop-pin', pop).offsetHeight || window.innerHeight);
       const p = Math.max(0, Math.min(1, room > 0 ? -rect.top / room : 0));
       const eased = p * p * (3 - 2 * p);
-      if (Math.abs(eased - last) > 0.0005) { last = eased; pop.style.setProperty('--p', eased.toFixed(4)); if (hero3d) hero3d.setP(eased); }
+      if (Math.abs(eased - last) > 0.0005) {
+        last = eased; pop.style.setProperty('--p', eased.toFixed(4)); if (hero3d) hero3d.setP(eased);
+        if (pct) pct.textContent = String(Math.round(eased * 165));
+        // the part card the scroll is on lights up, and moves down the list as the model pulls apart
+        if (cards.length) { const cur = Math.max(-1, Math.min(cards.length - 1, Math.floor((eased - 0.16) / 0.075))); if (cur !== lit) { lit = cur; cards.forEach((c, k) => c.classList.toggle('is-cur', k === cur && k > 0)); } }
+      }
     };
     const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(place); } };
     new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) { wakeMesh(); window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', onScroll); onScroll(); }
+      if (entry.isIntersecting) { pop.classList.add('is-in'); wakeMesh(); window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', onScroll); onScroll(); }
       else { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); }
     }, { rootMargin: '200px 0px' }).observe(pop);
   }
@@ -432,7 +496,9 @@
     const data = JSON.parse($('[data-wand-data]', demo).textContent), ICONS = data.icons || {};
     const parts = data.parts.map(([name, tris], i) => ({ name, orig: tris, tris, hidden: false, gone: false, on: false }));
     const fmt = (n) => n.toLocaleString('en-US');
-    const R_IN = 22, R_OUT = 58, F_IN = 64, F_OUT = 94, DEAD = 12, V = F_OUT + 24, R_ICON = (R_IN + R_OUT) / 2, POP = 0.075, POP2 = 0.03;
+    let K, R_IN, R_OUT, F_IN, F_OUT, DEAD, V, R_ICON; const POP = 0.075, POP2 = 0.03;
+    // the ring's size follows the window when it opens (the window may still have been settling when the page started)
+    const setK = () => { K = (window.innerWidth > 0 && window.innerWidth <= 760) ? 1.3 : 1.7; R_IN = 22 * K; R_OUT = 58 * K; F_IN = 64 * K; F_OUT = 94 * K; DEAD = 12 * K; V = F_OUT + 24; R_ICON = (R_IN + R_OUT) / 2; }; setK();
     let isolated = false, view = 'solid', grid = true, root = null, open = false, sticky = false, rested = false, viaPointer = false;
     let startedAt = 0, moved = false, ox = 0, oy = 0, px = 0, py = 0, lastX = 0, lastY = 0, over = false, closedAt = -1e9;
     let slots = [], slice = 90, hot = -1, sub = -1, fanFor = -1, entryD = 0, committed = false, hold = null;
@@ -544,6 +610,7 @@
     };
     const build = () => {
       if (!root) { root = el('div', 'wq'); root.setAttribute('aria-hidden', 'true'); stage.appendChild(root); }
+      setK(); root.style.setProperty('--k', K);
       slots = layout().filter((sl) => sl && (sl.leaf || (sl.items && sl.items.length))); slice = 360 / slots.length;
       let svg = '<g class="wq-slices">', items = '';
       slots.forEach((sl, i) => {
@@ -583,7 +650,7 @@
         const dn = arcR(F_IN, F_OUT, aa, aa + step, [first, last, last, first], 6), dl = arcR(F_IN, F_OUT, aa, aa + step, [true, true, true, true], 6);
         paths += '<path class="wq-sub' + (it.off ? ' is-off' : '') + (it.danger ? ' danger' : '') + '" data-j="' + j + '" data-d="' + dn + '" data-dh="' + dl + '" d="' + dn + '" style="--j:' + j + '"/>';
         const [ix, iy] = pol((F_IN + F_OUT) / 2, am), [kx, ky] = pol((F_IN + F_OUT) / 2 * POP2, am);
-        icons += '<foreignObject x="' + (ix - 9).toFixed(1) + '" y="' + (iy - 9).toFixed(1) + '" width="18" height="18" class="wq-subico' + (it.off ? ' is-off' : '') + '" data-j="' + j + '" style="--j:' + j + ';--dx:' + kx.toFixed(1) + 'px;--dy:' + ky.toFixed(1) + 'px"><div xmlns="http://www.w3.org/1999/xhtml">' + ico(it.icon) + '</div></foreignObject>';
+        icons += '<foreignObject x="' + (ix - 9 * K).toFixed(1) + '" y="' + (iy - 9 * K).toFixed(1) + '" width="' + (18 * K).toFixed(1) + '" height="' + (18 * K).toFixed(1) + '" class="wq-subico' + (it.off ? ' is-off' : '') + '" data-j="' + j + '" style="--j:' + j + ';--dx:' + kx.toFixed(1) + 'px;--dy:' + ky.toFixed(1) + 'px"><div xmlns="http://www.w3.org/1999/xhtml">' + ico(it.icon) + '</div></foreignObject>';
         const [lx, ly] = pol(F_OUT + 10, am), sx = Math.sin(am * Math.PI / 180);
         const al = Math.abs(sx) > 0.2 ? (sx > 0 ? '0 -50%' : '-100% -50%') : '-50% ' + (-Math.cos(am * Math.PI / 180) > 0 ? '0' : '-100%');
         labels += '<div class="wq-lab' + (it.off ? ' is-off' : '') + '" data-j="' + j + '" style="--j:' + j + ';left:' + lx.toFixed(1) + 'px;top:' + ly.toFixed(1) + 'px;translate:' + al + '">' + esc(it.label) + ((it.off || it.right) ? '<span class="wq-lab-r">' + esc(it.off ? String(it.off) : it.right) + '</span>' : '') + '</div>';
@@ -636,7 +703,7 @@
     const show = (asSticky) => {
       if (open) return;
       ox = px = lastX; oy = py = lastY; sticky = !!asSticky; moved = false; startedAt = performance.now(); hot = -1; sub = -1; fanFor = -1; committed = false;
-      build(); place();
+      setK(); build(); place();
       open = true; demo.classList.add('is-open');
       root.classList.remove('is-in'); root.style.display = 'block'; void root.offsetWidth; root.classList.add('is-in');
       aim();
@@ -751,6 +818,9 @@
     const start = (v) => { if (!v.src) v.src = v.dataset.src; v.muted = true; v.setAttribute('playsinline', ''); const p = v.play(); if (p && p.catch) p.catch(() => {}); };
     const toggle = (v) => { if (v.paused) { v.dataset.held = ''; start(v); } else { v.dataset.held = '1'; v.pause(); } };
     clips.forEach((v) => {
+      // a phone drops the poster the moment a source is set and shows an empty box until the first frame is ready (the blink): the same
+      // picture stays under the video as its background, so the first frame lands on it without a gap
+      if (v.poster) v.style.background = 'var(--surface) url("' + v.poster + '") center / cover no-repeat';
       v.tabIndex = 0;
       v.setAttribute('role', 'button');
       v.addEventListener('click', () => toggle(v));
@@ -762,9 +832,22 @@
         if (entry.isIntersecting) { if (!v.dataset.held) start(v); } else v.pause();
       }), { threshold: 0.35 });
       clips.forEach(v => watch.observe(v));
+      // a clip starts loading a little before it scrolls into view, so it is ready when it arrives
+      const near = new IntersectionObserver(entries => entries.forEach((entry) => {
+        const v = entry.target;
+        if (entry.isIntersecting) { if (!v.src) { v.preload = 'auto'; v.src = v.dataset.src; } near.unobserve(v); }
+      }), { rootMargin: '400px 0px' });
+      clips.forEach(v => near.observe(v));
     } else {
       clips.forEach(v => v.parentElement.classList.add('is-tap'));
     }
+  }
+
+  // ---- tile drawings move only while their tile is on screen ----
+  const tiles = $$('.tile, .clip, .star');
+  if (tiles.length && 'IntersectionObserver' in window) {
+    const live = new IntersectionObserver(entries => entries.forEach(e => e.target.classList.toggle('is-live', e.isIntersecting)), { threshold: 0.2 });
+    tiles.forEach(t => live.observe(t));
   }
 
   // ---- commands that copy ----

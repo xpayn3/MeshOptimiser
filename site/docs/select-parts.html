@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=91" />
+  <link rel="stylesheet" href="../site.css?v=298" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -150,6 +150,14 @@
             <div><dt><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>Drag</kbd></dt><dd>Box select and add to what is already selected</dd></div>
             <div><dt><kbd>Esc</kbd></dt><dd>Select nothing. A click on empty space does the same.</dd></div>
           </dl>
+          <h2 id="click-box-or-brush">Click, Box or Brush</h2>
+          <p>The selection-tool button in the left toolbar chooses what a drag does. Press it and let go over a row of its list to pick that tool, or let go on the button and click a row. With <span class="ui">Edit mesh</span> on, the same button picks pieces of a mesh instead of whole parts.</p>
+          <dl class="table">
+            <div><dt>Click</dt><dd>The usual way: click a part.</dd></div>
+            <div><dt>Box</dt><dd>A plain left drag draws a rectangle. A part is picked only when one of its own triangles is under the rectangle, not when its bounding box is.</dd></div>
+            <div><dt>Brush</dt><dd>A left drag paints: every part under the circle is picked. Hold <kbd>Shift</kbd> to add to what is picked; without it, every stroke starts from nothing. Drag with the middle button to change the size of the circle: to the right is bigger, to the left smaller.</dd></div>
+          </dl>
+          <p>In every tool, <kbd>Alt</kbd> + drag turns the camera.</p>
           <h2 id="in-the-parts-tree">In the parts tree</h2>
           <dl class="kb-keys">
             <div><dt><kbd>Click</kbd></dt><dd>Select one part. Click a group to select every part inside it.</dd></div>
@@ -203,16 +211,63 @@
         <a href="../docs/faq.html">FAQ</a>
       </aside>
     </section>
-    <section class="band get">
-      <div class="wrap get-in">
-        <div>
-          <h2>Run it on your own machine.</h2>
-          <p>Free and open source, MIT. Windows and macOS. Your files never leave the computer.</p>
-        </div>
-        <div class="actions">
-          <a class="btn is-primary is-large" href="../download.html">Download v0.25.0</a>
-          <a class="btn is-large btn-demo" href="../demo/index.html" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4.5v15l12-7.5Z"/></svg>Open online</a>
-          <a class="btn is-large" href="https://github.com/xpayn3/MeshOptimiser" rel="noopener">View on GitHub</a>
+    <section class="band get compare">
+      <div class="wrap">
+        <h2>Pick how you run it.</h2>
+        <div class="cmp">
+          <div class="cmp-head">
+            <div class="cmp-col">
+              <p class="cmp-tag">In your browser</p>
+              <h3>MeshOptimiser Lite</h3>
+              <p class="cmp-sub">Try the app in a tab. Nothing to install.</p>
+              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Open Lite</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
+            </div>
+            <div class="cmp-col">
+              <p class="cmp-tag">On your machine</p>
+              <h3>MeshOptimiser</h3>
+              <p class="cmp-sub">The full app. Windows and macOS.</p>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.26.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+            </div>
+          </div>
+          <div class="cmp-table" role="table">
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Free</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Free</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Browser tab</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Your computer</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Files stay local</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Files stay local</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-off"><span class="cmp-no" aria-hidden="true">—</span><span>STEP to GLB</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>STEP to GLB</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Clean-up tools</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Clean-up tools</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Part library</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Part library</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-off"><span class="cmp-no" aria-hidden="true">—</span><span>Folders and CLI</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Folders and CLI</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-off"><span class="cmp-no" aria-hidden="true">—</span><span>Claude</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Claude</span></span></div>
+          </div>
+          <div class="cmp-row" role="row">
+            <div class="cmp-a"><span class="cmp-off"><span class="cmp-no" aria-hidden="true">—</span><span>Works offline</span></span></div>
+            <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Works offline</span></span></div>
+          </div>
+          </div>
+          <p class="cmp-note">Lite opens a sample gearbox first and needs a window 960 px wide. Best in Chrome: Safari on a Mac can lag.</p>
         </div>
       </div>
     </section>
@@ -242,6 +297,7 @@
         <a href="https://github.com/xpayn3/MeshOptimiser" rel="noopener">Source on GitHub</a>
         <a href="../report.html">Report a problem</a>
         <a href="https://github.com/xpayn3/MeshOptimiser/issues" rel="noopener">Issues on GitHub</a>
+        <a href="../credits.html">Credits</a>
         <a href="https://github.com/xpayn3/MeshOptimiser/blob/main/LICENSE" rel="noopener">MIT licence</a>
       </nav>
     </div>
@@ -250,6 +306,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="../site.js?v=28"></script>
+  <script defer src="../site.js?v=61"></script>
 </body>
 </html>
