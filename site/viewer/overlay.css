@@ -1,0 +1,1126 @@
+/* ========== SHARED OVERLAY / LIGHTBOX / MOBILE PROJECT LIST STYLES ==========
+   Used by both grid.html and index.html. Loaded via <link> from overlay.css
+   AFTER each page's own stylesheet so it can reference tokens but win on
+   specificity ties. */
+
+/* Prevent background scroll while overlay/lightbox is open — home also needs
+   this now, so it lives in the shared overlay stylesheet. */
+html:has(body.scroll-locked) {
+  overflow: hidden !important;
+}
+
+/* ========== MOBILE PROJECT LIST ========== */
+.mobile-proj-list {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #ffffff;
+  transform: translateY(100%);
+  transition: transform 0.5s cubic-bezier(0.16,1,0.3,1), visibility 0s 0.5s;
+  overflow: hidden;
+  display: none;
+  /* Parked just below the screen. Phone browsers grow the visible area when
+     their toolbar hides, which can bring the top edge of this panel into
+     reach: while closed it must be invisible to touches, or a swipe that
+     starts there scrolls nothing. */
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.mobile-proj-list.open {
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition: transform 0.5s cubic-bezier(0.16,1,0.3,1);
+}
+
+.mobile-proj-bg {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 150px;
+  height: 150px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.mobile-proj-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mobile-proj-bg.visible {
+  opacity: 1;
+}
+
+.mobile-proj-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 210;
+  background: rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.1);
+  color: #111;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-proj-scroll {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior: contain;
+  padding: 0 24px;
+  mask-image: linear-gradient(to bottom, transparent 0%, black 35%, black 65%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 35%, black 65%, transparent 100%);
+}
+
+.mobile-proj-spacer {
+  height: 42vh;
+}
+
+.mobile-proj-item {
+  height: 5vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
+  cursor: pointer;
+}
+
+.mobile-proj-item-inner {
+  text-align: center;
+}
+
+.mobile-proj-name {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: rgba(0,0,0,0.2);
+  transition: color 0.25s ease, transform 0.25s ease, opacity 0.25s ease;
+}
+
+.mobile-proj-item.center .mobile-proj-name,
+.mobile-proj-item.active .mobile-proj-name {
+  color: #111 !important;
+  font-weight: 600;
+}
+
+
+.mobile-proj-year {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .mobile-proj-list { display: none !important; }
+}
+
+@media (max-width: 768px) {
+  .mobile-proj-list { display: block; }
+}
+
+/* ========== OVERLAY / PROJECT DETAIL ========== */
+/* The project view is rendered into #overlay. Closed, it takes no part in
+   the page; open, it IS the page (see "Project as the page" further down). */
+.overlay { display: none; }
+.overlay.open {
+  display: block;
+  min-height: 100vh;
+  background: var(--bg, var(--paper));
+  transition: background-color 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Close button look: a small uppercase pill on a blurred page-coloured
+   surface, like the home page's controls. --bg/--ink/--line come from
+   home.css when present. */
+.overlay-close {
+  font-family: var(--font-grotesk);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink, var(--paper-ink));
+  background: color-mix(in srgb, var(--bg, var(--paper)) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--line, rgba(11, 11, 12, 0.14));
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* Close: "Close ×" pill, top right; the cross turns on hover. */
+.overlay-close {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 250;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 14px 0 16px;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.3s ease 0.2s, transform 0.3s ease 0.2s, border-color 0.2s ease, background-color 0.7s ease, color 0.7s ease;
+  pointer-events: none;
+}
+.overlay-close::before { content: 'Close'; }
+.overlay-close svg {
+  width: 11px;
+  height: 11px;
+  transition: rotate 0.45s cubic-bezier(0.34,1.56,0.64,1);
+}
+.overlay.open ~ .overlay-close,
+.overlay-close.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+.overlay-close:hover { border-color: var(--ink, var(--paper-ink)); }
+.overlay-close:hover svg { rotate: 90deg; }
+.overlay-close:focus-visible { outline: 2px solid var(--ink, var(--paper-ink)); outline-offset: 3px; }
+
+.overlay-inner { padding-bottom: env(safe-area-inset-bottom); }
+/* a project arrives with a short fade and rise */
+.overlay.open .overlay-inner { animation: pvEnter 0.5s cubic-bezier(0.19, 1, 0.22, 1) both; }
+@keyframes pvEnter {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .overlay.open .overlay-inner { animation: none; }
+}
+
+/* media grid base (the project view below turns it into 12 columns) */
+.proj-media-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.media-cell {
+  min-height: 0;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  position: relative;
+}
+
+.media-cell img,
+.media-cell video {
+  width: 100%;
+  height: auto;
+  max-height: 100vh;
+  max-height: 100dvh;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  border-radius: 0;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  transform: scale(1.15);
+}
+
+.media-cell img:hover,
+.media-cell video:hover {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .proj-media-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tool-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* ========== LIGHTBOX ========== */
+.lb-swipe-hint {
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.lb-swipe-hint span {
+  font-size: 1.4rem;
+}
+
+.lightbox {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 300;
+  background: var(--dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  overscroll-behavior: contain;
+  touch-action: pan-x pan-y;
+}
+
+.lightbox.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lightbox-content {
+  width: 100vw;
+  max-width: 100vw;
+  max-height: calc(100vh - 180px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 120px;
+  /* every touch on the picture is a gesture handled in overlay.js ("Lightbox
+     gestures"): slide, pinch, drag down. The browser must not scroll or zoom. */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.lightbox-content img,
+.lightbox-content video { -webkit-user-drag: none; -webkit-touch-callout: none; }
+@media (hover: hover) and (pointer: fine) {
+  .lightbox-content { cursor: grab; }
+  .lightbox-content:active { cursor: grabbing; }
+}
+
+/* The neighbour that slides in beside the current picture while it is
+   dragged (overlay.js: lbMakePeek). It is laid over the very spot the
+   current picture occupies, so when the slide lands it sits exactly where
+   the real picture is then rendered. */
+.lightbox-content.lb-peek {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 120px;
+  max-height: none;
+  margin: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+/* a picture rendered where a slide just landed needs no entrance of its own */
+.lightbox-content.slide-none img,
+.lightbox-content.slide-none video,
+.lightbox-content.lb-peek img { animation: none; }
+
+/* zoomed in: the picture has the screen to itself */
+.lightbox-bottom,
+.lightbox-info,
+.lightbox-histogram { transition: opacity 0.25s ease; }
+.lightbox.lb-zoomed .lightbox-bottom,
+.lightbox.lb-zoomed .lightbox-info,
+.lightbox.lb-zoomed .lightbox-histogram { opacity: 0; pointer-events: none; }
+
+.lightbox-content img,
+.lightbox-content video {
+  width: 100vw;
+  max-width: 100vw;
+  height: auto;
+  max-height: calc(100vh - 180px);
+  object-fit: contain;
+  border-radius: 0;
+}
+
+@keyframes lbSlideInRight {
+  0% { transform: translateX(80px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes lbSlideInLeft {
+  0% { transform: translateX(-80px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+.lightbox-content.slide-right img,
+.lightbox-content.slide-right video {
+  animation: lbSlideInRight 0.35s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+.lightbox-content.slide-left img,
+.lightbox-content.slide-left video {
+  animation: lbSlideInLeft 0.35s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+.lightbox-content.slide-init img,
+.lightbox-content.slide-init video {
+  animation: lbSlideInRight 0.3s cubic-bezier(0.16,1,0.3,1) both;
+}
+
+.lightbox.open .lightbox-content img,
+.lightbox.open .lightbox-content video {
+  transform: translateX(0);
+}
+
+/* Zoom transition (overlay.js "Lightbox zoom transition"): the stand-in
+   picture that travels between a gallery cell and the lightbox. */
+.lb-fly {
+  position: absolute;   /* page coordinates: scrolls with the gallery */
+  z-index: 320;
+  pointer-events: none;
+  transform-origin: center center;
+  will-change: transform, clip-path;
+}
+.lb-fly img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* while zooming, the real picture must sit still at its final place */
+.lightbox.lb-zoom .lightbox-content img,
+.lightbox.lb-zoom .lightbox-content video { animation: none; }
+
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 310;
+}
+
+.lightbox-close:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.lightbox-bottom {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 310;
+}
+
+.lightbox-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(16px);
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.lb-ctrl-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.5);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+.lb-ctrl-btn:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+
+.lightbox-info {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  z-index: 310;
+  font-family: 'Inter', monospace;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.35);
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+}
+
+.lightbox-histogram {
+  position: absolute;
+  top: 90px;
+  left: 24px;
+  z-index: 310;
+  width: 160px;
+  height: 60px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.4);
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.lightbox-strip {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: transparent;
+  border-radius: 0;
+  max-width: 80vw;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  z-index: 310;
+}
+
+.lightbox-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.lightbox-strip-item {
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 1;
+  transition: transform 0.2s;
+  border: 2px solid transparent;
+}
+
+.lightbox-strip-item:hover {
+  transform: scale(1.05);
+}
+
+.lightbox-strip-item.active {
+  opacity: 1;
+  border-color: #fff;
+  transform: scale(1.1);
+}
+
+.lightbox-strip-item.is-film::before,
+.lightbox-strip-item.is-film::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.5) 0px,
+    rgba(255,255,255,0.5) 3px,
+    transparent 3px,
+    transparent 5px
+  );
+  z-index: 1;
+}
+
+.lightbox-strip-item.is-film::before { left: 2px; }
+.lightbox-strip-item.is-film::after { right: 2px; }
+
+.lightbox-strip-item.is-film {
+  position: relative;
+}
+
+.lightbox-strip-item img {
+  height: 100%;
+  width: auto;
+  display: block;
+}
+
+.lightbox-counter {
+  color: rgba(255,255,255,0.4);
+  font-size: 0.75rem;
+}
+
+/* Lightbox strip mobile */
+@media (max-width: 768px) {
+  .lightbox-bottom {
+    left: 0;
+    right: 0;
+    transform: none;
+    padding: 0 8px;
+  }
+  .lightbox-strip {
+    max-width: 100%;
+    border-radius: 0;
+    padding: 4px;
+  }
+  .lightbox-strip-item {
+    height: 56px;
+  }
+}
+
+
+/* Touch devices: no flying picture. Opening, the picture settles in with a
+   short fade and a slight scale; closing, it eases back the same way while
+   the lightbox fades. Two cheap properties, nothing measured. */
+@keyframes lbSettle {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@media (pointer: coarse) {
+  .lightbox-content.slide-init img,
+  .lightbox-content.slide-init video {
+    animation: lbSettle 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .lightbox-content { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  .lightbox:not(.open) .lightbox-content { transform: scale(0.96); }
+}
+
+/* Touch devices: the strip is a scrubber (overlay.js "Strip scrubbing").
+   It spans the screen, pads its ends so the first and last thumbnails can
+   reach the centre, and snaps thumbnails to the centre when it settles. */
+@media (pointer: coarse) {
+  .lightbox-bottom {
+    left: 0;
+    right: 0;
+    transform: none;
+    padding: 0;
+  }
+  .lightbox-strip {
+    width: 100%;
+    max-width: 100%;
+    padding: 6px calc(50% - 30px);
+    scroll-snap-type: x proximity;
+    scroll-behavior: auto;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
+    -webkit-overflow-scrolling: touch;
+  }
+  .lightbox-strip-item { scroll-snap-align: center; }
+  .lightbox-strip-item:hover { transform: none; }
+  .lightbox-strip-item.active { transform: scale(1.1); }
+}
+
+/* ========== PROJECT VIEW ==========
+   Layout of a single project inside the overlay (built in overlay.js):
+   intro (counter · big title · fact sheet) → hero media → labelled sections
+   (brief / about / tools) → 12-column gallery → next project.
+   Follows the home page theme when its --bg/--ink are set, else white. */
+.pv {
+  --pv-bg: var(--bg, var(--paper));
+  --pv-ink: var(--ink, var(--paper-ink));
+  --pv-muted: var(--muted, var(--paper-muted));
+  --pv-line: var(--line, var(--paper-line));
+  --pv-gutter: clamp(16px, 3vw, 40px);
+  min-height: 100dvh;
+  padding: 0 var(--pv-gutter);
+  background: var(--pv-bg);
+  color: var(--pv-ink);
+  font-family: var(--font-grotesk);
+  -webkit-font-smoothing: antialiased;
+  cursor: auto;
+}
+
+/* Smooth scroll (Lenis) drives the scroll position itself, frame by frame.
+   A page that also sets `scroll-behavior: smooth` (the Work page does) makes
+   the browser animate every one of those tiny steps, so the wheel barely
+   moves the page and it feels laggy. Lenis marks <html> while it is active;
+   switch the CSS smoothing off for that time. */
+html.lenis,
+html.lenis body { height: auto; }
+html.lenis { scroll-behavior: auto !important; }
+
+/* ---- Project as the page ----
+   overlay.js shows a project by hiding everything else on the page
+   (body.project-page) and letting the project sit in normal flow, scrolled by
+   the window. Phone browsers then treat it like any page and draw it under
+   their translucent bars; there is no inner scroller or scroll lock. */
+body.project-page > :not(#overlay):not(#overlayClose):not(#lightbox):not(.lb-fly) {
+  display: none !important;
+}
+body.project-page {
+  background: var(--bg, var(--paper)) !important;   /* also what the browser bars pick up */
+  overflow-x: hidden;
+  /* clip, not hidden: where <html> has its own overflow set (the Work page),
+     hidden would turn <body> into a scroll box of its own and the sticky
+     section index would stop following the window. */
+  overflow-x: clip;
+}
+/* Keep the scrollbar's space reserved on project pages. Opening the lightbox
+   locks the page and hides the scrollbar; without this the whole gallery
+   would shift sideways by the scrollbar's width, then back on close. */
+html:has(body.project-page) { scrollbar-gutter: stable; }
+
+/* Gallery mode: overlay.js adds body.project-dark while the gallery is on
+   screen. Everything in the project view reads its colours from these
+   variables, so swapping them turns the whole view (and its chrome) black. */
+.pv,
+.pv-label,
+.pv-cell::before,
+.pv-colophon,
+.pv-next-thumb,
+.pv-next-meta,
+.pv-tools span {
+  transition-property: background-color, color, border-color;
+  transition-duration: 0.7s;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+body.project-dark .pv {
+  --pv-bg: var(--dark);
+  --pv-ink: var(--dark-ink);
+  --pv-muted: var(--dark-muted);
+  --pv-line: var(--dark-line);
+}
+body.project-dark .overlay-close,
+body.project-dark .overlay:has(.pv) {
+  --bg: var(--dark);
+  --ink: var(--dark-ink);
+  --line: var(--dark-line);
+}
+body.project-page.project-dark { background: var(--dark) !important; }
+body.project-page { transition: background-color 0.7s cubic-bezier(0.4, 0, 0.2, 1); }
+
+/* The site nav would sit on top of the project view; tuck it away. */
+.site-nav { transition: opacity var(--duration-normal, 0.3s) ease, visibility 0s; }
+/* ...and behind the lightbox, on every page that opens one (Lab, the app
+   pages): only the picture and the lightbox's own controls show. */
+body.project-open .site-nav,
+body:has(.lightbox.open) .site-nav {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity var(--duration-normal, 0.3s) ease, visibility 0s var(--duration-normal, 0.3s);
+}
+
+.pv-label,
+.pv-kicker,
+.pv-facts dt,
+.pv-colophon {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pv-muted);
+}
+
+/* ---- cover: most of the first screen — kicker on top, big title, fact sheet,
+   and a foot row like the home hero's ---- */
+.pv-intro {
+  display: flex;
+  flex-direction: column;
+  /* a little short of the full screen, so the top of the hero picture
+     peeks in below and invites the scroll */
+  min-height: 82vh;
+  min-height: 82svh;
+  padding: 32px 0 var(--pv-gutter);
+}
+.pv-kicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 28px;
+  padding-right: 120px;                  /* clear of the Close pill */
+}
+.pv-title {
+  font-size: clamp(44px, 10vw, 160px);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  font-weight: 400;
+  text-wrap: balance;
+  margin-top: auto;                      /* pushes title + facts to the bottom */
+  padding-top: 64px;
+}
+/* each word sits in a clipping box and rises into it */
+.pv-word {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  /* The tight letter-spacing makes each box narrower than its glyphs, which
+     clipped the last character; pad the box out and pull the layout back. */
+  padding: 0 0.08em 0.12em;
+  margin: 0 -0.08em -0.12em;
+}
+.pv-word > span { display: inline-block; transform: translateY(115%); }
+.overlay.open .pv-word > span {
+  animation: pvRise 0.9s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  animation-delay: calc(0.3s + var(--i) * 70ms);
+}
+@keyframes pvRise {
+  from { transform: translateY(115%); }
+  to { transform: none; }
+}
+.pv-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 20px 24px;
+  margin-top: clamp(28px, 4vw, 56px);
+  padding-top: 20px;
+  border-top: 1px solid var(--pv-line);
+}
+.pv-facts dd { margin-top: 6px; font-size: 17px; line-height: 1.35; }
+
+/* ---- media ----
+   Every cell has a fixed aspect ratio and its media covers it, so the page
+   never shifts as (lazy-loaded) media arrives. A faint tint holds the place. */
+.pv .media-cell {
+  border-radius: 14px;
+  max-height: none;
+  background: color-mix(in srgb, var(--pv-ink) 6%, transparent);
+}
+.pv .media-cell img,
+.pv .media-cell video { height: 100%; max-height: none; }
+.pv .media-cell img:not([src]) { visibility: hidden; }   /* not downloaded yet */
+/* no parallax (phones, reduced motion): media sits at its natural size */
+.overlay.no-parallax .media-cell img,
+.overlay.no-parallax .media-cell video { transform: none; }
+.pv-hero { aspect-ratio: 16 / 9; max-height: 92vh; max-height: 92dvh; }
+/* Media is inset rather than edge to edge: it starts at the same line as
+   the section text (past the label column), leaving the left column clear. */
+.pv-hero { margin-left: calc((100% - 24px) / 5 + 24px); }
+
+.pv-reveal {
+  opacity: 0;
+  translate: 0 48px;
+  transition: opacity 0.8s ease, translate 1s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.pv-reveal.is-in { opacity: 1; translate: 0 0; }
+/* a static project page ships with its hero already on screen: no fade-in */
+body.page-project .pv-hero.pv-reveal { opacity: 1; translate: 0 0; transition: none; }
+
+.pv-grid {
+  grid-template-columns: repeat(12, 1fr);
+  gap: clamp(12px, 1.6vw, 24px);
+}
+/* cells in a shared row get matching heights through their aspect ratios */
+.pv-grid .span-12 { grid-column: span 12; aspect-ratio: 16 / 9; }
+.pv-grid .span-7 { grid-column: span 7; aspect-ratio: 7 / 5; }
+.pv-grid .span-5 { grid-column: span 5; aspect-ratio: 5 / 5; }
+.pv-grid .span-6 { grid-column: span 6; aspect-ratio: 6 / 4.5; }
+.pv-grid .span-4 { grid-column: span 4; aspect-ratio: 4 / 5; }
+
+/* ---- body: labelled rows with stacking labels ----
+   One grid for every row. Each label is sticky and spans from its own row
+   to the last one, so it stays pinned for the rest of the body; staggered
+   `top` offsets make the labels pile up as a list while you scroll. */
+.pv-body {
+  --pv-pad: clamp(48px, 8vw, 120px);
+  --pv-step: 30px;                         /* vertical pitch of the stacked labels */
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 4fr;
+  column-gap: 24px;
+}
+.pv-body > .pv-label {
+  grid-column: 1;
+  grid-row: var(--r) / span calc(var(--n) - var(--r) + 1);
+  align-self: start;
+  position: sticky;
+  top: calc(32px + (var(--r) - 1) * var(--pv-step));
+  margin-top: var(--pv-pad);
+  /* keeps the pile intact when the body's end pushes the labels out */
+  margin-bottom: calc((var(--n) - var(--r)) * var(--pv-step) + var(--pv-pad));
+}
+/* Reading progress: a hairline that fills, with a tiny percentage, pinned
+   just under the pile of labels. */
+.pv-progress {
+  grid-column: 1;
+  grid-row: 1 / span var(--n);
+  align-self: start;
+  position: sticky;
+  top: calc(32px + var(--n) * var(--pv-step) + 14px);
+  margin-top: calc(var(--pv-pad) + var(--n) * var(--pv-step) + 14px);
+  margin-bottom: calc(var(--pv-pad) - 30px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 132px);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
+  color: var(--pv-muted);
+  pointer-events: none;
+  transition: color 0.7s ease;
+}
+/* fixed-width read so "100%" doesn't shorten the line */
+.pv-progress span { flex: none; width: 4.5ch; text-align: right; }
+.pv-progress i {
+  position: relative;
+  flex: 1;
+  height: 1px;
+  background: var(--pv-line);
+}
+.pv-progress i::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--pv-ink);
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
+}
+
+/* Each label is a button: click to glide to its row. It springs a little
+   on hover, and the row being read grows, darkens and gets a dot. */
+.pv-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+  transform-origin: left center;
+  transition:
+    scale 0.5s var(--ease-bounce, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    translate 0.5s var(--ease-bounce, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    color var(--duration-normal, 0.3s) ease;
+}
+.pv-jump i {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+}
+.pv-jump::before {
+  content: '';
+  width: 0;
+  height: 6px;
+  margin-right: -10px;                     /* cancels the gap while hidden */
+  border-radius: 50%;
+  background: currentColor;
+  transition:
+    width 0.45s var(--ease-bounce, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    margin-right 0.45s var(--ease-bounce, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+.pv-jump:hover { scale: 1.14; translate: 4px 0; color: var(--pv-ink); }
+.pv-label.is-active .pv-jump { scale: 1.3; color: var(--pv-ink); }
+.pv-label.is-active .pv-jump:hover { scale: 1.38; }
+.pv-label.is-active .pv-jump::before { width: 6px; margin-right: 0; }
+.pv-jump:active { scale: 1.2; }
+.pv-jump:focus-visible { outline: 2px solid var(--pv-ink); outline-offset: 4px; }
+
+.pv-cell {
+  grid-column: 2;
+  grid-row: var(--r);
+  position: relative;
+  min-width: 0;
+  padding: var(--pv-pad) 0;
+}
+/* rule across both columns */
+.pv-cell::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: calc(-25% - 24px);
+  border-top: 1px solid var(--pv-line);
+}
+.pv-body > .pv-cell:first-of-type::before { display: none; }
+
+.pv-next {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 4fr;
+  gap: 24px;
+  padding: clamp(48px, 8vw, 120px) 0;
+  border-top: 1px solid var(--pv-line);
+}
+.pv-statement {
+  max-width: 24em;
+  font-size: clamp(26px, 3.6vw, 56px);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+.pv-text p {
+  max-width: 60ch;
+  font-size: clamp(16px, 1.4vw, 19px);
+  line-height: 1.6;
+  color: var(--pv-muted);
+}
+.pv-text p + p { margin-top: 1em; }
+.pv-text a { color: var(--pv-ink); text-underline-offset: 0.25em; }
+.pv-tools { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
+.pv-tools span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--pv-line);
+  border-radius: var(--radius-pill, 999px);
+  font-size: 14px;
+}
+
+/* ---- next project: a compact card in the content column ---- */
+.pv-next {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.pv-next-card {
+  display: grid;
+  grid-template-columns: clamp(140px, 20vw, 300px) 1fr auto;
+  align-items: center;
+  gap: clamp(16px, 2.5vw, 36px);
+  max-width: 980px;
+}
+.pv-next-thumb {
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--pv-line);
+  border-radius: 14px;
+}
+.pv-next-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: scale 0.6s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.pv-next-text { display: grid; gap: 8px; min-width: 0; }
+.pv-next-name {
+  font-size: clamp(22px, 2.6vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+.pv-next-meta { font-size: 14px; color: var(--pv-muted); }
+.pv-next-arrow {
+  display: grid;
+  place-items: center;
+  width: clamp(44px, 4.5vw, 64px);
+  aspect-ratio: 1;
+  border: 1px solid var(--pv-line);
+  border-radius: 50%;
+  font-size: clamp(16px, 1.6vw, 22px);
+  transition:
+    translate 0.5s var(--ease-bounce, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    background-color var(--duration-normal, 0.3s) ease,
+    color var(--duration-normal, 0.3s) ease,
+    border-color var(--duration-normal, 0.3s) ease;
+}
+.pv-next:hover .pv-next-thumb img { scale: 1.06; }
+.pv-next:hover .pv-next-arrow {
+  translate: 6px 0;
+  background: var(--pv-ink);
+  border-color: var(--pv-ink);
+  color: var(--pv-bg);
+}
+.pv-next:focus-visible { outline: 2px solid var(--pv-ink); outline-offset: 4px; }
+
+/* colophon row, like the home page's */
+.pv-colophon {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px 32px;
+  padding: 24px 0 var(--pv-gutter);
+  border-top: 1px solid var(--pv-line);
+}
+.pv-colophon span { max-width: 70ch; line-height: 1.5; }
+.pv-top {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--pv-ink);
+  cursor: pointer;
+}
+.pv-top:hover { text-decoration: underline; text-underline-offset: 0.3em; }
+.pv-top:focus-visible { outline: 2px solid var(--pv-ink); outline-offset: 4px; }
+
+@media (max-width: 768px) {
+  .pv-intro { padding-top: 76px; }
+  .pv-kicker { padding-right: 0; }
+  .pv-colophon { flex-direction: column; }
+  .pv-next { grid-template-columns: 1fr; padding: 64px 0; }
+  .pv-hero { margin-left: 0; }
+  /* single column: labels sit above their content, no stacking */
+  .pv-body { grid-template-columns: 1fr; }
+  /* taller rows on phones, stepped by the golden ratio: 24 -> 40 -> 64px */
+  .pv-body > .pv-label { grid-row: auto; position: static; margin: 64px 0 0; }
+  .pv-cell { grid-column: 1; grid-row: auto; padding: 24px 0 64px; }
+  .pv-cell::before { display: none; }
+  .pv-progress { display: none; }
+  .pv-grid { grid-template-columns: 1fr; }
+  /* one column: landscape cells, with the narrow spans kept as portraits */
+  .pv-hero { aspect-ratio: 4 / 3; }
+  .pv-grid .media-cell[class*="span-"] { grid-column: 1; aspect-ratio: 4 / 3; }
+  .pv-grid .media-cell.span-5,
+  .pv-grid .media-cell.span-4 { aspect-ratio: 4 / 5; }
+  .pv-next-card { grid-template-columns: 96px 1fr auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pv-word > span,
+  .overlay.open .pv-word > span { animation: none; transform: none; }
+  .pv-reveal { opacity: 1; translate: 0 0; transition: none; }
+  .pv-jump,
+  .pv-jump::before { transition: none; }
+}
+
+/* ---- late pictures fade in (overlay.js: fadeLazyImages) ----
+   An animation, not a transition, so it doesn't replace the transitions
+   these pictures already have (hover, parallax, the feature wipe). */
+html.fade-imgs :is(.grid-item > img, .entry-slide > img, .wall-feature-media img,
+  .pv .media-cell img, .pv-next-thumb img, .card .thumb img):not(.is-loaded) { opacity: 0; }
+html.fade-imgs :is(.grid-item > img, .entry-slide > img, .wall-feature-media img,
+  .pv .media-cell img, .pv-next-thumb img, .card .thumb img).is-loaded { animation: img-fade-in 0.8s ease; }
+@keyframes img-fade-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  html.fade-imgs img.is-loaded { animation: none; }
+}
+
+/* ---- no sharp corners ----
+   Every picture on the site gets the same slight rounding: Work tiles and
+   feature blocks, Lab entries, project galleries, home cards, and the
+   lightbox. One value, set here. */
+:root { --img-radius: 6px; }
+.pv .media-cell,
+.media-cell,
+.pv-next-thumb,
+.card .thumb,
+.wall-feature-media,
+.entry-media,
+.app-entry-cover,
+.grid:not(.list-view) > .grid-item > img,
+.grid:not(.list-view) .hover-video-wrap,
+.grid:not(.list-view) > .grid-item.loading::before,
+.lightbox .lightbox-content img,
+.lightbox .lightbox-content video,
+.lb-fly,
+.lb-fly img { border-radius: var(--img-radius); }
+.lb-fly { overflow: hidden; }

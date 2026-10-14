@@ -162,69 +162,41 @@
   });
 
   // ---- pictures that open full size ----
-  // Every a.zoom is a link to its picture, so it works without this script;
-  // with it the picture opens over the page, with the others of its group.
+  // Every a.zoom is a link to its picture, so it works without this script. With it the picture opens in the same viewer as on
+  // lukagrcar.com (/overlay.js and /overlay.css: thumbnail strip, swipe, pinch and double-tap zoom, room round the picture). It is
+  // loaded the first time a picture is clicked, so a visit that never opens one does not pay for it.
   const zooms = $$('a.zoom');
   if (zooms.length) {
-    const box = el('div', 'lb');
-    box.setAttribute('role', 'dialog');
-    box.setAttribute('aria-modal', 'true');
-    box.setAttribute('aria-label', 'Screenshot');
-    const stage = el('div', 'lb-stage'), img = el('img'), foot = el('div', 'lb-foot');
-    const caption = el('p'), count = el('span');
-    const close = el('button', 'lb-close', '×'), prev = el('button', 'lb-prev', '←'), next = el('button', 'lb-next', '→');
-    close.setAttribute('aria-label', 'Close'); prev.setAttribute('aria-label', 'Previous'); next.setAttribute('aria-label', 'Next');
-    [close, prev, next].forEach(b => { b.type = 'button'; });
-    stage.append(img); foot.append(caption, count); box.append(stage, foot, close, prev, next);
-    document.body.append(box);
-
-    let set = [], at = 0, from = null;
-    const show = (i) => {
-      at = (i + set.length) % set.length;
-      img.src = set[at].href;
-      img.alt = set[at].dataset.caption || '';
-      caption.textContent = set[at].dataset.caption || '';
-      count.textContent = set.length > 1 ? `${at + 1} / ${set.length}` : '';
-      prev.hidden = next.hidden = set.length < 2;
-    };
-    const open = (link) => {
-      set = zooms.filter(z => z.dataset.group === link.dataset.group);
-      from = link;
-      show(set.indexOf(link));
-      box.classList.add('is-open');
-      document.documentElement.classList.add('lb-lock');
-      close.focus();
-    };
-    const shut = () => {
-      box.classList.remove('is-open');
-      document.documentElement.classList.remove('lb-lock');
-      if (from) from.focus({ preventScroll: true });
-    };
+    // (the same files and versions as lab.html: the viewer needs the project template before it starts, one after the other)
+    // (on lukagrcar.com they are at the root; the standalone copy carries its own in viewer/, named by data-viewer on this script)
+    const base = (document.currentScript && document.currentScript.dataset.viewer) || '/';
+    const VIEWER = { css: base + 'overlay.css?v=38', js: [base + 'project-template.js?v=4', base + 'overlay.js?v=48'] };
+    let viewer = null;
+    const loadScript = (src) => new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src; el.onload = () => resolve(); el.onerror = () => reject(new Error(src));
+      document.head.append(el);
+    });
+    const loadViewer = () => viewer || (viewer = (() => {
+      if (!window.projects) window.projects = {};                       // (the viewer is written for the portfolio's project list; here there is none)
+      const css = document.createElement('link');
+      css.rel = 'stylesheet'; css.href = VIEWER.css;
+      document.head.append(css);
+      return VIEWER.js.reduce((p, src) => p.then(() => loadScript(src)), Promise.resolve()).catch((err) => { viewer = null; throw err; });
+    })());
+    const open = (link) => loadViewer().then(() => {
+      const set = zooms.filter(z => z.dataset.group === link.dataset.group);
+      window.setLightboxItems(set.map(z => z.href), false);              // false: not the Lab (no file details or histogram)
+      window.openLightbox(Math.max(0, set.indexOf(link)));
+    }).catch(() => { window.location.href = link.href; });              // no viewer: the picture itself, as the link says
     zooms.forEach(link => link.addEventListener('click', (e) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
       e.preventDefault();
       open(link);
     }));
-    close.addEventListener('click', shut);
-    prev.addEventListener('click', () => show(at - 1));
-    next.addEventListener('click', () => show(at + 1));
-    box.addEventListener('click', (e) => { if (e.target === box || e.target === stage) shut(); });
-    document.addEventListener('keydown', (e) => {
-      if (!box.classList.contains('is-open')) return;
-      if (e.key === 'Escape') shut();
-      else if (e.key === 'ArrowLeft') show(at - 1);
-      else if (e.key === 'ArrowRight') show(at + 1);
-      else if (e.key === 'Tab') { e.preventDefault(); const order = [close, prev, next].filter(b => !b.hidden); order[(order.indexOf(document.activeElement) + (e.shiftKey ? -1 : 1) + order.length) % order.length].focus(); }
-    });
-    // a sideways swipe on a touch screen
-    let downX = null;
-    stage.addEventListener('touchstart', (e) => { downX = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
-    stage.addEventListener('touchend', (e) => {
-      if (downX === null) return;
-      const dx = e.changedTouches[0].clientX - downX;
-      downX = null;
-      if (Math.abs(dx) > 48) show(at + (dx < 0 ? 1 : -1));
-    }, { passive: true });
+    // a hint of what is coming: start fetching the viewer when a picture is first pointed at
+    const warm = () => { loadViewer().catch(() => {}); zooms.forEach(z => { z.removeEventListener('pointerenter', warm); z.removeEventListener('touchstart', warm); }); };
+    zooms.forEach(z => { z.addEventListener('pointerenter', warm, { once: true }); z.addEventListener('touchstart', warm, { once: true, passive: true }); });
   }
 
   // ---- the opening: the part steps out of the window ----
