@@ -124,9 +124,9 @@
   --select-arrow:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%23ededed' stroke-width='1.5'/></svg>");
 
   /* Shadows / elevation */
-  --sh:0 8px 24px var(--blk-50);
-  --sh-pop:0 12px 32px var(--blk-50);
-  --sh-card:0 2px 10px var(--blk-12);
+  --sh:0 3px 9px var(--blk-50);
+  --sh-pop:0 4px 10px var(--blk-50);
+  --sh-card:0 1px 6px var(--blk-12);
   --sh-thumb:0 1px 2px var(--blk-40);
   /* sliders (one look for every range input: see "Sliders" below) */
   --sl-hit:16px; --sl-track-h:4px; --sl-track:var(--bg3); --sl-fill:var(--ac);
@@ -524,10 +524,10 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 /* The material slot is a faint well, always 90px high, whether nothing, one
    material or twenty are in it: the cards below it never move. The materials
    are square tiles in one strip that scrolls sideways. */
-.prop-material-row{display:flex;align-items:center;height:90px;margin:0 0 var(--space-xl);padding:var(--space-7);box-sizing:border-box;border-radius:var(--r-2xl);background:color-mix(in srgb,var(--tx) 3%,transparent)}
+.prop-material-row{display:flex;align-items:center;height:90px;margin:0 0 var(--space-xl);padding:var(--space-7) 0;box-sizing:border-box;border-radius:var(--r-2xl);overflow:hidden;background:color-mix(in srgb,var(--tx) 3%,transparent)}
 .prop-material-row>.prop-mat-strip{flex:1;min-width:0}
 .prop-mat-empty{flex:1;text-align:center;font-size:var(--fs-11);color:var(--tx3)}
-.prop-mat-strip{display:flex;gap:var(--space-md);height:100%;box-sizing:border-box;padding:2px;scroll-padding:0 2px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
+.prop-mat-strip{display:flex;gap:var(--space-xs);height:100%;box-sizing:border-box;padding:2px var(--space-7);scroll-padding:0 var(--space-7);overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
 .prop-mat-strip.is-dragging{cursor:grabbing;scroll-snap-type:none}
 .prop-mat-strip>*{translate:var(--rb,0px) 0}      /* the rubber band: how far the strip is pulled past an end (_stripPhysics) */
 @media (hover:hover) and (pointer:fine){.prop-mat-strip{scroll-snap-type:none}}
@@ -552,9 +552,6 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 /* …and with the count out of the column, the picture is larger and the name sits at the foot of the tile: the same room under it as beside it */
 .prop-mat-strip .prop-mat-btn{justify-content:flex-end;padding-bottom:var(--space-7)}
 .prop-mat-strip .prop-mat-sphere,.prop-mat-strip .prop-mat-color{width:42px;height:42px}
-.prop-mat-strip.more-r{-webkit-mask-image:linear-gradient(90deg,var(--black) calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,var(--black) calc(100% - 28px),transparent)}
-.prop-mat-strip.more-l{-webkit-mask-image:linear-gradient(90deg,transparent,var(--black) 28px);mask-image:linear-gradient(90deg,transparent,var(--black) 28px)}
-.prop-mat-strip.more-l.more-r{-webkit-mask-image:linear-gradient(90deg,transparent,var(--black) 28px,var(--black) calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,transparent,var(--black) 28px,var(--black) calc(100% - 28px),transparent)}
 .prop-bar{flex:1;height:6px;background:var(--s3);border-radius:var(--r-pill);overflow:hidden}
 .prop-bar-fill{height:100%;background:var(--ac);border-radius:var(--r-pill);transition:width var(--dur-200) var(--ease-out),background var(--dur-200) var(--ease-out)}
 .prop-bar-fill.heavy{background:var(--wn)}
@@ -937,7 +934,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
    per-axis Euler) for rotate, scale factor for scale. Position is updated
    each frame from the pivot's projected screen coords. */
-#gizmo-hud{position:absolute;left:0;top:0;display:none;background:var(--glass-strong);border:1px solid var(--bd);border-radius:var(--r-sm);padding:var(--space-sm) 8px;font-family:var(--font-sans);font-size:var(--fs-xs);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:0 6px 18px var(--blk-50);pointer-events:none;z-index:var(--z-sticky);backdrop-filter:blur(8px);white-space:nowrap;line-height:var(--lh-relaxed)}
+#gizmo-hud{position:absolute;left:0;top:0;display:none;background:var(--glass-strong);border:1px solid var(--bd);border-radius:var(--r-sm);padding:var(--space-sm) 8px;font-family:var(--font-sans);font-size:var(--fs-xs);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:0 4px 10px var(--blk-50);pointer-events:none;z-index:var(--z-sticky);backdrop-filter:blur(8px);white-space:nowrap;line-height:var(--lh-relaxed)}
 #gizmo-hud.show{display:block}
 #gizmo-hud .ghud-row{display:flex;align-items:center;gap:var(--space-md)}
 #gizmo-hud .ghud-mode{font-size:var(--fs-9);font-weight:var(--fw-bold);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-right:var(--space-2xs)}
@@ -1063,6 +1060,8 @@ body.msr-mode #canvas{cursor:crosshair}
    clicks the presets button. Same blur/shadow as other system popovers. */
 #vp-materials-pop .mat-actions .mat-act.mat-act-new{background:var(--ac);border-color:transparent;color:var(--white)}
 #vp-materials-pop .mat-actions .mat-act.mat-act-new:hover{background:var(--ac);border-color:transparent;color:var(--white);filter:brightness(1.1)}
+/* Whatever is filled with the accent blue has white text and icons. (The shared control colour is grey; these set their own, so a later rule that reads it cannot turn the text grey.) */
+#vp-materials-pop .mat-actions .mat-act.mat-act-new,.mat-inspector .mi-actions .btn[data-mi=assign]:not(:disabled),.mat-inspector .mi-actions .mi-merge-btn,.vp-pill-item.active,.vp-pill-item.active:hover{--tx-control:var(--white);--tx-control-hover:var(--white);color:var(--white)}
 #vp-materials-pop .mat-actions-icons{gap:var(--space-sm)}
 .mat-presets-menu .mat-preset-head{padding:var(--space-sm) var(--space-md) var(--space-xs);font-size:var(--fs-11);color:var(--tx3)}
 .mat-presets-menu{position:fixed;padding:var(--space-xs);z-index:var(--z-popover);display:none;max-height:280px;overflow-y:auto}
@@ -1127,7 +1126,7 @@ body.msr-mode #canvas{cursor:crosshair}
 
 .mat-edit-body{display:flex;flex-direction:column;gap:0;padding:0}
 .mat-edit-preview-wrap{position:relative;background:var(--s1);padding:var(--space-lg) var(--space-xl);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:var(--space-xl)}
-.mat-edit-preview-canvas{flex:0 0 92px;width:92px;height:92px;border-radius:var(--r-md);background:var(--bg-checker);box-shadow:0 2px 10px var(--blk-50),inset 0 0 0 1px var(--s2);object-fit:cover;display:block}
+.mat-edit-preview-canvas{flex:0 0 92px;width:92px;height:92px;border-radius:var(--r-md);background:var(--bg-checker);box-shadow:0 1px 6px var(--blk-50),inset 0 0 0 1px var(--s2);object-fit:cover;display:block}
 .mat-edit-preview-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-3)}
 .mat-edit-preview-name{font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mat-edit-preview-type{font-size:var(--fs-10);color:var(--tx3);font-family:var(--font-sans);letter-spacing:var(--tracking-wide);text-transform:uppercase}
@@ -1418,7 +1417,7 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .tree-drop-line{position:absolute;left:0;right:0;height:0;border-top:2px solid var(--ac);box-shadow:0 0 6px var(--ac-tint-55);pointer-events:none;z-index:var(--z-sticky)}
 .tree-drop-line::before{content:'';position:absolute;left:2px;top:-4px;width:6px;height:6px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px var(--ac)}
 #tree-newgroup-zone{display:none!important}
-#_dnd-ghost{position:fixed;pointer-events:none;z-index:var(--z-drag);background:rgba(28,28,28,.95);border:1px solid var(--ac);border-radius:var(--r-sm);padding:var(--space-sm) var(--space-lg);font-size:var(--fs-12);color:var(--tx);box-shadow:0 4px 18px var(--blk-50);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#_dnd-ghost{position:fixed;pointer-events:none;z-index:var(--z-drag);background:rgba(28,28,28,.95);border:1px solid var(--ac);border-radius:var(--r-sm);padding:var(--space-sm) var(--space-lg);font-size:var(--fs-12);color:var(--tx);box-shadow:0 2px 10px var(--blk-50);transform:translate(8px,8px);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #_dnd-ghost .badge{display:inline-block;margin-right:var(--space-sm);padding:1px var(--space-sm);background:var(--ac);color:var(--bg);border-radius:var(--r-lg);font-weight:var(--fw-bold);font-variant-numeric:tabular-nums}
 
 /* ── Right-click context menu (#ctx-menu) ────────────────────────────────
@@ -1526,7 +1525,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .sc-prof-btn:hover,.sc-prof.open .sc-prof-btn{background:var(--s5);color:var(--tx-control-hover)}
 .sc-prof-btn svg{width:var(--icon-sm);height:var(--icon-sm);color:var(--tx3)}
 .sc-prof-btn span{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sc-prof-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:5;width:250px;padding:var(--space-5);border-radius:var(--surface-pop-r,10px);background:var(--surface-pop);box-shadow:0 0 0 1px var(--s4),0 12px 32px var(--blk-50);opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
+.sc-prof-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:5;width:250px;padding:var(--space-5);border-radius:var(--surface-pop-r,10px);background:var(--surface-pop);box-shadow:0 0 0 1px var(--s4),0 4px 10px var(--blk-50);opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 .sc-prof.open .sc-prof-menu{opacity:1;transform:none;pointer-events:auto}
 .sc-prof-i{display:flex;align-items:center;gap:var(--space-lg);width:100%;height:30px;padding:0 8px;border:0;border-radius:var(--r-sm);background:none;color:var(--tx-control);font:inherit;font-size:var(--fs-md);text-align:left;cursor:pointer}
 .sc-prof-i:hover:not(:disabled){background:var(--ac);color:var(--white,#fff)}
@@ -1638,7 +1637,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .sb-bg-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}
 .sb-bg-txt:empty{display:none}
 /* the list of tasks, over the status bar */
-#sb-bg-pop{position:fixed;z-index:calc(var(--z-overlay,100) + 5);width:min(360px,calc(100vw - 16px));max-height:min(60vh,420px);overflow-y:auto;padding:var(--space-sm);border-radius:var(--r-xl,12px);background:var(--surface-pop,var(--bg2));box-shadow:var(--surface-shadow,0 12px 40px var(--blk-50)),var(--surface-ring,0 0 0 1px var(--bd));scrollbar-width:thin}
+#sb-bg-pop{position:fixed;z-index:calc(var(--z-overlay,100) + 5);width:min(360px,calc(100vw - 16px));max-height:min(60vh,420px);overflow-y:auto;padding:var(--space-sm);border-radius:var(--r-xl,12px);background:var(--surface-pop,var(--bg2));box-shadow:var(--surface-shadow,0 4px 10px var(--blk-50)),var(--surface-ring,0 0 0 1px var(--bd));scrollbar-width:thin}
 .bgp-h{padding:var(--space-sm) var(--space-md) var(--space-md);font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx2)}
 .bgp-none{padding:var(--space-lg) var(--space-md) var(--space-2xl);font-size:var(--fs-sm);color:var(--tx3)}
 .bgp-row{display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-md);border-radius:var(--r-lg,8px)}
@@ -2201,8 +2200,10 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
    things (menus, popovers) and windows. Change a token and all follow. */
 :root{                              /* (the surface colour, the radii and the inner lines are set under "Corner radii" further down) */
   --surface-ring:0 0 0 1px var(--wht-8);     /* hairline edge instead of a border */
-  --surface-shadow:0 12px 36px var(--blk-60);       /* small surfaces */
-  --surface-shadow-win:0 24px 64px var(--blk-60);    /* windows */
+  --surface-shadow:0 1px 3px var(--blk-30),0 8px 20px -4px var(--blk-50);       /* small surfaces: a close shadow and a longer one under it, as a menu has on macOS */
+  --surface-ring-dark:0 0 transparent;     /* a dark hairline round a window */
+  --surface-shadow-win:0 2px 5px var(--blk-40),0 18px 36px -8px var(--blk-60);    /* the window in front: deep, and almost all of it below */
+  --surface-shadow-win-off:var(--surface-ring-dark);    /* a window that is not the one in use: no shadow, only the dark hairline */
   --surface-bar:rgba(16,16,16,.94);                   /* toolbars floating over the viewport */
   --mat-dock-h:330px;
 }
@@ -2217,14 +2218,14 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* windows */
 .modal,.dlg-card,.dlg-popup .dlg-pop,#_mat-editor-popup .dlg-pop,.loader-card,#file-warn .card{
   background:var(--surface-pop);border:0;border-radius:var(--surface-win-r);
-  box-shadow:var(--surface-shadow-win),var(--surface-ring);
+  box-shadow:var(--surface-shadow-win);
 }
 .modal-h,.dlg-popup .dlg-head,#_mat-editor-popup .dlg-head{border-bottom:1px solid var(--surface-line)}
 .modal-f,.dlg-foot,.dlg-popup .dlg-foot,#_mat-editor-popup .dlg-foot{
   background:var(--surface-inset);border-top:1px solid var(--surface-line);box-shadow:none;
 }
 /* toolbars over the viewport */
-.vp-bar,.vpc.tl:not(#vp-perf){background:var(--surface-bar);box-shadow:0 6px 20px var(--blk-40),var(--surface-ring)}
+.vp-bar,.vpc.tl:not(#vp-perf){background:var(--surface-bar);box-shadow:0 4px 10px var(--blk-40),var(--surface-ring)}
 /* the left toolbar is a column of two pills (Model mode, then the tools), so the column itself has no background */
 :is(.vpc.tl:not(#vp-perf),#_a#_b){background:transparent;box-shadow:none;padding:0;gap:var(--space-sm)}
 .vp-bar-col{flex-direction:column;gap:var(--space-2xs)}
@@ -2417,7 +2418,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:var(--space-md)}
 /* A tile: the part's studio picture on a soft spot of light, its name under it. */
 .lib-item{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;border:0;border-radius:var(--r-lg);overflow:hidden;background:#1d1d1f;box-shadow:0 0 0 1px var(--s3);color:var(--tx2);font:inherit;text-align:center;cursor:grab;transition:box-shadow var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
-.lib-item:hover{color:var(--white);background:var(--ac);box-shadow:0 0 0 1px var(--s6),0 8px 22px var(--blk-50)}
+.lib-item:hover{color:var(--white);background:var(--ac);box-shadow:0 0 0 1px var(--s6),0 4px 12px var(--blk-50)}
 .lib-item:active{cursor:grabbing;transform:scale(.97)}
 .lib-item[hidden],.lib-sec[hidden],.lib-empty[hidden]{display:none}
 .lib-pic{position:relative;display:block;aspect-ratio:1/0.86}
@@ -2476,7 +2477,8 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .vpc.tr,.vpc.br{transition:bottom var(--dur-200) var(--ease-out)}
 
 .mat-dock-h{gap:var(--space-lg)}
-.mat-dock-count{color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mat-dock-h .dock-pop{margin-right:calc(var(--space-2xs) - var(--space-lg))}      /* (the pop-out and close buttons sit together: 2px apart) */
+.mat-dock-count{margin-left:auto;padding-right:var(--space-md);color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap}
 .mat-dock-search{display:inline-flex;align-items:center;gap:var(--space-sm);flex:0 1 200px;min-width:110px;height:var(--btn-h-sm);padding:0 var(--space-md);background:var(--bg3);border:1px solid var(--bd);border-radius:var(--btn-r-sm);color:var(--tx3)}
 .mat-dock-search:focus-within{border-color:var(--bd-field-focus)}
 .mat-dock-search svg{width:var(--icon-sm);height:var(--icon-sm);flex:0 0 13px;stroke:currentColor;fill:none;stroke-width:2}
@@ -2547,7 +2549,9 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .mat-inspector .mi-hex.invalid{border-color:var(--er,#e5484d)}
 .mat-inspector .mi-range{width:100%;min-width:0;margin:0}
 /* Merge lives in the inspector, under the picked materials, with what it will make; its header button is put away */
-#vp-materials-pop #mat-act-merge{display:none}
+#vp-materials-pop :is(#mat-act-merge,#mat-act-duplicate,#mat-act-delete){display:none}      /* (they stay as the engine: the inspector's Duplicate, Delete and Merge press them) */
+.mat-inspector .mi-actions .mi-danger{color:var(--er)}
+.mat-inspector .mi-actions .mi-danger:hover:not(:disabled){background:var(--er-tint-10);border-color:var(--er-line);color:var(--er)}
 .mat-inspector .mi-actions .mi-merge-btn{grid-column:1 / -1;background:var(--ac);border-color:transparent;color:var(--white)}
 .mat-inspector .mi-merge{display:flex;flex-direction:column;gap:var(--space-md);margin:var(--space-lg) 0;padding:var(--space-lg) 0;border-top:1px solid var(--s2);border-bottom:1px solid var(--s2)}
 .mat-inspector .mi-merge-h{color:var(--tx3);font-size:var(--fs-11)}
@@ -2890,7 +2894,7 @@ body.cmd-dragging .vp-cmd-host{transition:none}
 @media (prefers-reduced-motion:reduce){#vp-view-pill-menu .vp-pill-item:hover .vp-pill-cube,#vp-view-pill-menu .vp-pill-item:hover .vp-pill-ico{transform:none}}
 .vpc.tc #vp-mode-pills{left:0;transform:translateX(-50%)}
 .vp-pill[hidden]{display:none}
-#vp-brep-pop{position:fixed;z-index:60;width:272px;padding:var(--space-lg);border-radius:var(--r-lg);background:var(--bg3,#1c1c20);border:1px solid var(--s3);box-shadow:0 12px 32px var(--blk-40);color:var(--tx);font-size:var(--fs-md);display:flex;flex-direction:column;gap:var(--space-md)}
+#vp-brep-pop{position:fixed;z-index:60;width:272px;padding:var(--space-lg);border-radius:var(--r-lg);background:var(--bg3,#1c1c20);border:1px solid var(--s3);box-shadow:0 7px 18px var(--blk-40);color:var(--tx);font-size:var(--fs-md);display:flex;flex-direction:column;gap:var(--space-md)}
 #vp-brep-pop[hidden]{display:none}
 #vp-brep-pop .bp-h{font-weight:var(--fw-medium)}
 #vp-brep-pop .bp-s{color:var(--tx2);font-size:var(--fs-sm);line-height:1.45}
@@ -3114,7 +3118,7 @@ button.doc-tab-lead:hover::after{background:var(--s4)}
 .doc-tabs.is-reordering,.doc-tabs.is-reordering *{user-select:none;-webkit-user-select:none;cursor:grabbing!important}
 /* (solid, whatever the tab is: an unopened tab has no background of its own,
    and the tabs it passes over must not show through it) */
-:is(.doc-tabs .doc-tab.is-dragged,.doc-tabs .doc-tab.is-dragged:hover,#_a#_b){z-index:2;background:var(--bg3);opacity:1;box-shadow:0 4px 14px var(--blk-50);transition:none}
+:is(.doc-tabs .doc-tab.is-dragged,.doc-tabs .doc-tab.is-dragged:hover,#_a#_b){z-index:2;background:var(--bg3);opacity:1;box-shadow:0 2px 8px var(--blk-50);transition:none}
 body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name tip trailing a tab that is being moved */
 :is(.doc-tab>.doc-tab-x,#_a#_b){margin:0 -5px 0 -1px}
 .doc-tab.is-loading{pointer-events:none;animation:doc-tab-load 1s ease-in-out infinite}
@@ -3235,7 +3239,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-pane-b .field>input[type=range]{flex:0 0 230px;width:230px}
 .set-help{display:block;margin-top:var(--space-2xs);font-size:var(--fs-11);color:var(--tx3);line-height:var(--lh-body);white-space:normal;font-weight:var(--fw-regular)}
 /* Crash safety: one calm panel for a problem that needs a decision (see _Recover) */
-#mo-recover{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:9500;display:flex;align-items:center;gap:16px;max-width:min(680px,calc(100vw - 32px));padding:var(--space-2xl) 16px;background:var(--surface-pop,#161616);border:1px solid var(--bd2);border-radius:var(--r-2xl);box-shadow:0 18px 50px var(--blk-60);font-size:var(--fs-12);color:var(--tx2)}
+#mo-recover{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:9500;display:flex;align-items:center;gap:16px;max-width:min(680px,calc(100vw - 32px));padding:var(--space-2xl) 16px;background:var(--surface-pop,#161616);border:1px solid var(--bd2);border-radius:var(--r-2xl);box-shadow:0 5px 13px var(--blk-60);font-size:var(--fs-12);color:var(--tx2)}
 #mo-recover[hidden]{display:none}
 #mo-recover .mr-text{display:flex;flex-direction:column;gap:var(--space-3);min-width:0}
 #mo-recover .mr-title{color:var(--tx);font-size:var(--fs-13,13px)}
@@ -3264,7 +3268,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    field, then suggestions (or results) with an icon, the name and the
    shortcut. */
 #cmdk-modal{align-items:flex-start}
-#cmdk-modal .modal{max-height:60vh;transform-origin:top center;transition:transform var(--dur-slow) var(--ease-out),opacity var(--dur-180) var(--ease-out),height var(--dur-200) var(--ease-ios);border-radius:var(--r-3xl);box-shadow:0 24px 70px var(--blk-60),0 0 0 1px var(--s4)}
+#cmdk-modal .modal{max-height:60vh;transform-origin:top center;transition:transform var(--dur-slow) var(--ease-out),opacity var(--dur-180) var(--ease-out),height var(--dur-200) var(--ease-ios);border-radius:var(--r-3xl);box-shadow:0 5px 13px var(--blk-60),0 0 0 1px var(--s4)}
 #cmdk-modal .modal-h{padding:var(--space-2xl) 16px!important;gap:11px}
 #cmdk-modal .cmdk-search-icon{width:19px;height:19px;flex-basis:19px;cursor:grab;touch-action:none;transition:var(--tr-fg)}
 #cmdk-modal .cmdk-search-icon:hover{color:var(--tx)}
@@ -3322,7 +3326,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 /* The commands that come with a clip are the app's headline tools, and their
    cards say so: the name set large over the foot of the clip, a line of
    plain description under it, and one filled button that runs the command. */
-.vp-cmd-host>.section-cmd.has-hero{box-shadow:0 18px 50px var(--blk-60),0 0 0 1px var(--s4)}
+.vp-cmd-host>.section-cmd.has-hero{box-shadow:0 5px 13px var(--blk-60),0 0 0 1px var(--s4)}
 .vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:-32px;padding:0 var(--space-2xl) var(--space-lg)}
 /* The close button stays in the card's top corner. While Advanced is open the clip is gone and the title slides up to
    the button's line (the clip's strip is just tall enough to put the title's middle level with the button's), and stops short of it. */
@@ -3722,7 +3726,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
 .lib-view-btn:hover{color:var(--tx2);background:var(--s2)}
 .lib-view-btn.active{color:var(--tx-control-hover);background:var(--s3)}
 .lib-view-btn :is(i,svg){width:var(--icon-xs);height:var(--icon-xs);stroke-width:2}
-@container libdock (max-width:900px){.lib-inspector{flex-basis:min(var(--lib-insp-w),330px)}.lib-inspector .li-view{display:none}}
+@container libdock (max-width:900px){.lib-inspector{flex-basis:min(var(--lib-insp-w),330px);flex-direction:column;gap:var(--space-lg)}.lib-inspector .li-side{display:contents}.lib-inspector .li-top{order:0}.lib-inspector .li-view{order:1;flex:0 0 clamp(150px,40%,280px)}.lib-inspector .li-params{order:2}.lib-inspector .li-actions{order:3}}
 @container libdock (max-width:640px){.lib-inspector,#lib-insp-grip{display:none}#vp-library-pop .lib-view-toggle{display:none}}
 @container libdock (max-width:500px){#vp-library-pop .cs-wrap:has(#lib-shelf){display:none}}
 #vp-library-pop{container:libdock / inline-size}
@@ -3764,7 +3768,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
    mode with a coloured ring, icon and label. The camera pill shows a caret
    because it opens a list. */
 :is(.vp-pill,#_a#_b){height:30px;padding:0 var(--space-lg);gap:var(--space-sm);min-width:0;border-radius:var(--r-lg);background:rgba(16,16,16,.94);color:var(--tx-control);backdrop-filter:none;
-  box-shadow:0 6px 20px var(--blk-40),0 0 0 1px var(--s4);font-size:var(--fs-12,12px);font-weight:var(--fw-regular)}
+  box-shadow:0 4px 10px var(--blk-40),0 0 0 1px var(--s4);font-size:var(--fs-12,12px);font-weight:var(--fw-regular)}
 :is(.vp-pill,#_a#_b):hover{background:rgba(34,34,36,.96);color:var(--tx)}
 :is(.vp-pill,#_a#_b)[aria-expanded="true"]{background:rgba(34,34,36,.96);color:var(--tx)}
 :is(.vp-pill,#_a#_b) .vp-pill-icon{opacity:.7}
@@ -3773,7 +3777,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
 :is(#vp-view-pill,#_a#_b)[aria-expanded="true"]::after{transform:rotate(180deg)}
 /* a state chip (isolated, exploded, measure, snap): the colour itself, solid and bright, floating, not a dim tint with a ring */
 /* (three ids: the colour rules for every .vp-pill further up would otherwise keep the text pale) */
-:is(.vp-pill.vp-pill-mode,#_a#_b#_c){--pc:var(--ac);--pc-ink:var(--tx-on-accent);background:var(--pc);color:var(--pc-ink);box-shadow:0 6px 20px var(--blk-40)}
+:is(.vp-pill.vp-pill-mode,#_a#_b#_c){--pc:var(--ac);--pc-ink:var(--tx-on-accent);background:var(--pc);color:var(--pc-ink);box-shadow:0 4px 10px var(--blk-40)}
 :is(.vp-pill.vp-pill-mode,#_a#_b#_c):is(:hover,:focus,:focus-visible){background:color-mix(in srgb,var(--pc) 86%,var(--white));color:var(--pc-ink)}
 :is(.vp-pill.vp-pill-mode,#_a#_b) .vp-pill-icon{opacity:1}
 :is(.vp-pill.vp-pill-mode,#_a#_b) .vp-pill-x{opacity:var(--op-75)}
@@ -3899,7 +3903,8 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms var(
 .tree-split-caret:focus-visible{outline:2px solid var(--ac-text);outline-offset:1px}
 /* The materials: a card under the numbers, as wide as the other cards in this column
    (it reaches past the block's side padding to their edges). */
-#prop-body .prop-material-row{margin:var(--space-sm) 0 0;padding:8px var(--space-lg);height:90px;border-radius:var(--r-xl);background:color-mix(in srgb,var(--tx) 2.5%,transparent)}
+#prop-body .prop-material-row{margin:var(--space-sm) 0 0;padding:4px 0;height:84px;border-radius:var(--r-3xl);background:color-mix(in srgb,var(--tx) 2.5%,transparent)}
+#prop-body .prop-material-row>.prop-mat-strip{padding-left:6px;padding-right:6px;scroll-padding:0 6px}      /* (the strip reaches the card's edges, so the cards are cut off there; the first card sits 6px from the left, as far as from the top and bottom: 4px + the strip's 2px) */
 /* The Scene card flashes once when it is opened from the menu or the command list */
 .section.flash-card{animation:card-flash .9s ease-out}
 @keyframes card-flash{0%{box-shadow:0 0 0 2px var(--ac)}100%{box-shadow:0 0 0 2px transparent}}
@@ -4082,7 +4087,7 @@ html,body{user-select:none;-webkit-user-select:none}
    Smart fit...) have none, only their shadow. */
 .export-menu,.vp-pill-menu,.vp-prim-pop,.cs-pop,#ctx-menu,#ctx-menu .ctx-sub,#vp-settings-pop,.mat-presets-menu,.mat-tex-pop,.brn-token-pop,.brand-menu,.cp-pop,#vp-add-pop{box-shadow:var(--surface-shadow),var(--surface-ring)}
 .vp-cmd-host>.section-cmd,.vp-cmd-host>.section-cmd.has-hero{box-shadow:var(--surface-shadow)}
-.vp-cmd-host>.section-cmd.has-hero{box-shadow:0 18px 50px var(--blk-60)}
+.vp-cmd-host>.section-cmd.has-hero{box-shadow:0 5px 13px var(--blk-60)}
 /* ── Controls: one set of values ────────────────────────────────────────
    A button, a text field, a number field, a dropdown and a search box are the
    same height, the same corner, the same edge and the same type, at rest, under
@@ -4144,7 +4149,7 @@ html.no-motion *,html.no-motion *::before,html.no-motion *::after{animation-dura
    rear derailleur of the site (43 parts, 68,000 triangles) as 3D lines: its parts fly together, then it turns slowly while a
    band of light sweeps up it (the script after the markup, from assets/splash-model.*; tools/build-splash-model.mjs bakes it).
    The card is always dark, whatever the theme: it is a picture. */
-.sp-card{position:relative;width:min(720px,92vw);border-radius:var(--r-3xl);overflow:hidden;background:var(--black);box-shadow:0 30px 90px var(--blk-70),0 0 0 1px color-mix(in srgb,var(--white) 9%,transparent);animation:sp-card-in .7s var(--ease-out) both;transition:transform .5s var(--ease-out)}
+.sp-card{position:relative;width:min(720px,92vw);border-radius:var(--r-3xl);overflow:hidden;background:var(--black);box-shadow:0 6px 15px var(--blk-70),0 0 0 1px color-mix(in srgb,var(--white) 9%,transparent);animation:sp-card-in .7s var(--ease-out) both;transition:transform .5s var(--ease-out)}
 body.app-ready .sp-card{transform:scale(1.025)}
 @keyframes sp-card-in{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
 .sp-art{position:relative;aspect-ratio:2/1;overflow:hidden;
@@ -4236,7 +4241,7 @@ body.app-ready .sp-card{transform:scale(1.025)}
 
 /* ── Materials and Library popped out as floating windows (see _floatDocks in app-v2.js) ── */
 #vp-materials-pop.mat-dock.is-float,#vp-library-pop.is-float{position:fixed;left:var(--fx,80px);top:var(--fy,100px);right:auto;bottom:auto;width:var(--fw,780px);height:var(--fh,380px);max-height:none;
-  border:1px solid var(--bd);border-radius:var(--surface-win-r);box-shadow:var(--surface-shadow-win),var(--surface-ring);transform:none;transition:none;z-index:var(--z-dock-float)}
+  border:0;border-radius:var(--surface-win-r);box-shadow:var(--surface-shadow-win);transform:none;transition:none;z-index:var(--z-dock-float)}   /* (no border: the grab zones below lie on the very edge of the box, which clips them) */
 #vp-materials-pop.mat-dock.is-float:not(.show),#vp-library-pop.is-float:not(.show){pointer-events:none}
 .is-float>.mat-dock-grip{display:none}
 .is-float>.mat-dock-h{cursor:grab}
@@ -4259,14 +4264,115 @@ body.dock-resizing .is-float>.mat-dock-h{cursor:grabbing}
 /* a material dragged over another with Shift held takes that one over: the one that will go is marked like a selected one */
 #vp-materials-pop :is(.mat-cell,.mat-row).mat-drop-into{background:var(--ac-soft);border-color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac)}
 /* only the floating window in use keeps its hairline edge (see _winFocus in app-v2.js) */
-#vp-materials-pop.mat-dock.is-float:not(.win-focus),#vp-library-pop.is-float:not(.win-focus){border-color:transparent;box-shadow:0 18px 50px var(--blk-60)}
-.dlg-popup .dlg-pop:not(.win-focus),#_mat-editor-popup .dlg-pop:not(.win-focus){box-shadow:var(--surface-shadow-win)}
+#vp-materials-pop.mat-dock.is-float:not(.win-focus),#vp-library-pop.is-float:not(.win-focus){border-color:transparent;box-shadow:var(--surface-shadow-win-off)}
+.dlg-popup .dlg-pop:not(.win-focus),#_mat-editor-popup .dlg-pop:not(.win-focus){box-shadow:var(--surface-shadow-win-off)}
 /* the window rises into place when it opens or pops out, and the dock settles when it goes back (transform and opacity only) */
-@keyframes dockPopIn{from{opacity:0;transform:translateY(14px) scale(.975)}to{opacity:1;transform:none}}
+@keyframes dockPopIn{0%{opacity:0;transform:translateY(60px) scale(.88)}55%{opacity:1;transform:translateY(-3px) scale(1.012)}100%{opacity:1;transform:none}}   /* (a spring: it overshoots a little and settles) */
 @keyframes dockBackIn{from{opacity:var(--op-35);transform:translateY(16px)}to{opacity:1;transform:none}}
 #vp-materials-pop.mat-dock.is-float.show,#vp-library-pop.is-float.show{animation:dockPopIn var(--dur-slow) var(--ease-pop)}
 #vp-materials-pop.mat-dock.dock-anim-back.show:not(.is-float),#vp-library-pop.dock-anim-back.show:not(.is-float){animation:dockBackIn var(--dur-slow) var(--ease-pop)}
 @media (prefers-reduced-motion:reduce){#vp-materials-pop.is-float.show,#vp-library-pop.is-float.show,.dock-anim-back.show{animation:none!important}}
+/* The way macOS moves: a window or a dialog springs open (it overshoots a little and settles), a menu appears at once and fades out
+   quickly when it goes. The spring is on the open state, so it plays only on the way in. */
+@media (prefers-reduced-motion:no-preference){
+  .modal{transform:translateY(8px) scale(.94)}
+  .dlg-card{transform:translateY(8px) scale(.94)}
+  .dlg-popup .dlg-pop{transform:translateY(-8px) scale(.94)}
+  .modal-bg.show .modal,.dlg-bg.show .dlg-card,.dlg-popup.show .dlg-pop{transition:transform .38s cubic-bezier(.34,1.5,.5,1),opacity .14s ease-out}
+  .vp-pill-menu,.export-menu{transition:opacity .15s ease-out,transform 0s linear .15s}
+  .vp-pill-menu.show,.export-menu.show{transition:none}
+}
+/* Whole pixels. These were measured in the browser (every box that draws something, at 100%): a box that starts or ends between two pixels
+   has soft edges. Each rule below removes one cause: a centred item in an odd height, a share of a width that does not divide, a line height
+   that is not a whole number. */
+#tb{padding-bottom:calc(var(--space-2xs) + 1px)}                     /* (the bar's inside is 40px, not 41: its 32px buttons start on a whole pixel) */
+#btn-export{width:83px}                                              /* (its text made it 82.94px wide, and everything after it was off by .94) */
+#tree>.tree-node{height:26px}                                        /* (25px: a 14px icon in the middle of it sat on half a pixel) */
+.tree-toolbar{gap:4px}
+#sidebar-left>.tree-toolbar{position:relative;z-index:2}
+#sidebar-left>.tree-toolbar::after{content:'';position:absolute;left:0;right:0;top:100%;height:10px;background:linear-gradient(var(--blk-30),transparent);pointer-events:none}      /* (a soft shadow under the whole row, over the tree as it scrolls beneath) */
+.tree-toolbar .tree-icon-btn{flex:1 1 0;height:30px}                  /* (seven buttons share the width, about 28px each: near square, so the 16px icon has air round it) */
+
+.sel-bar-grid.is-icons .btn svg{width:15px;height:15px}              /* (an odd icon in an odd button: 37px wide, 35 inside the border) */
+.brand-caret{width:14px;height:14px}                                 /* (13px in an even box sat on half a pixel) */
+#prop-body .prop-grid{line-height:16px}                              /* (the rows took their height from the font: 23.39px) */
+#sb-console-btn .badge{line-height:14px}                          /* (12.6px high by the font: 14px, even, so it sits on whole pixels in the 16px inside the button) */
+#sb-console-btn{justify-content:flex-start}                          /* (the button is a whole number of pixels wider than its content now: the content stays at its left, on a whole pixel) */
+#sidebar-left .tree-toolbar>.tree-icon-btn{flex:0 0 28px}                 /* (sharing the width made them 28.43px: 28px each, whole, and the rest of the row stays empty) */
+#sidebar-right{line-height:18px}                                      /* (the line height was 1.4 times the font: 16.8px in the section heads, which made them 36.8px high and moved everything below by .8px; 18px whole, for all that has no line height of its own) */
+.tree-inst svg{width:10px;height:10px}                               /* (a 9px icon in a 14px box sat on a half pixel) */
+/* The Shading angle row now stands in the Shading section (under Outlines), not in the Properties card: no rules round it there, and it is dimmed with no selection */
+#shading-section .prop-shade{height:32px;margin:0;border-top:0;border-bottom:0}
+#shading-section .prop-shade.is-off{opacity:.45;pointer-events:none}
+/* The grab handle under the selection buttons ("back to the top") shows only while the buttons are stuck at the top of the panel; at rest the panel is already at the top, so it is out of sight (it keeps its place, so nothing moves) */
+.side-top{transition:opacity var(--dur-fast) var(--ease-out)}
+.sel-bar:not(.is-stuck) .side-top{opacity:0;visibility:hidden;pointer-events:none}
+/* One gap, 12px, between the blocks at the bottom of the Properties card: the tags, the material card, the selection buttons and the Shading heading
+   (it was 6, 15 and 15) */
+#prop-body .prop-material-row{margin-top:12px}
+#sidebar-right > #sel-bar{margin-top:-9px}
+#sidebar-right > .sel-bar{padding-bottom:calc(var(--space-2xl) - 3px)}
+/* Heavy parts: the bars. A 4px pill (whole pixels) on a dark inset track; the fill fades from a softer tone of its colour to the full one, so the
+   length reads as weight, and it grows in from the left when the list is drawn (the heaviest first, 40ms apart). The colour is still the rank's, red to green. */
+.off-bar{height:4px;bottom:7px;border-radius:999px;background:rgba(255,255,255,.06);box-shadow:inset 0 1px 1px rgba(0,0,0,.35)}
+.off-bar-fill{position:relative;border-radius:999px;opacity:1;min-width:4px;transition:width var(--dur-200) var(--ease-out),filter var(--dur-fast) var(--ease-out)}
+/* (the colour is set inline on the fill, so the shading is a layer over it: a light top edge, and the start of the bar a little darker than its end) */
+.off-bar-fill::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,0) 58%),linear-gradient(90deg,rgba(0,0,0,.30),rgba(0,0,0,0) 75%)}
+.off-row:hover .off-bar{background:rgba(255,255,255,.1)}
+.off-row:hover .off-bar-fill,.off-row.selected .off-bar-fill{filter:saturate(1.25) brightness(1.08)}
+@keyframes offGrow{from{clip-path:inset(0 100% 0 0 round 999px)}to{clip-path:inset(0 0 0 0 round 999px)}}
+@media (prefers-reduced-motion:no-preference){
+  .off-bar-fill{animation:offGrow 460ms var(--ease-out) both}
+  .off-row:nth-child(2) .off-bar-fill{animation-delay:40ms}
+  .off-row:nth-child(3) .off-bar-fill{animation-delay:80ms}
+  .off-row:nth-child(4) .off-bar-fill{animation-delay:120ms}
+  .off-row:nth-child(5) .off-bar-fill{animation-delay:160ms}
+  .off-row:nth-child(6) .off-bar-fill{animation-delay:200ms}
+  .off-row:nth-child(7) .off-bar-fill{animation-delay:240ms}
+  .off-row:nth-child(n+8) .off-bar-fill{animation-delay:280ms}
+/* Heavy parts: the rows touch (no gap), and rows that are selected next to each other are one shape: rounded at the two ends of the run, straight where they
+   meet, with the outline only round the whole. (The outline is a border, so it follows the rounded corners; every row has one, transparent, and the
+   padding and the bar give back the pixel, so nothing moves.) */
+.off-list{gap:0}
+.off-row{border:1px solid transparent;padding:0 calc(var(--space-lg) - 1px) calc(var(--space-7) - 1px) calc(var(--space-sm) - 1px)}
+.off-bar{left:35px;right:9px;bottom:6px}
+.off-row.selected,.off-row.selected:hover{box-shadow:none;border-color:var(--ac-line)}
+.off-row.selected + .off-row.selected{border-top-width:0;padding-top:7px;border-top-left-radius:0;border-top-right-radius:0}
+.off-row.selected:has(+ .off-row.selected){border-bottom-width:0;padding-bottom:var(--space-7);border-bottom-left-radius:0;border-bottom-right-radius:0}      /* (no border where two rows meet, so the outline runs straight down the sides; the missing pixel is given back by the row's padding) */
+.off-row.selected:has(+ .off-row.selected) .off-bar{bottom:7px}                  /* (these two follow the padding edge, which moved a pixel with the border) */
+.off-row.selected + .off-row.selected .off-check{top:7px}
+/* Heavy parts rows, centred. The text (18px), a 4px gap and the 4px bar are 26px; the row is 40px: 7px above and 7px below, whole pixels. The tick circle
+   is centred on the text line, drawn with an inset ring and no border (a 1.5px border made its inside 15px, so the 11px tick sat half a pixel off its
+   middle), and the tick no longer grows from 60% when a row is ticked: it only fades in, so it does not jump. */
+.off-row{align-items:start;padding-top:6px}
+.off-check{top:6px;left:7px;border:0;box-shadow:inset 0 0 0 1px var(--tx3)}
+.off-row.selected .off-check{box-shadow:inset 0 0 0 1px var(--ac)}
+.off-check::after{background-size:12px 12px;transform:none}
+.off-row.selected .off-check::after{transform:none}
+}
+/* The tool pill on the left: the selection tool is the blue one, and the gizmo tools (move, rotate, scale, dynamic place) are marked in grey like the rest. */
+:is(.vpc .vpb#em-tool-btn,#_a#_b){background:var(--ac);color:var(--white)}
+:is(.vpc .vpb#em-tool-btn,#_a#_b):hover{background:var(--ac)}
+:is(.vpc:is(.tr,.tl) .vpb.active[id^="gz-"],#_a#_b){background:var(--s6);color:var(--tx-control-hover)}
+:is(.vpc:is(.tr,.tl) .vpb.active[id^="gz-"],#_a#_b):hover{background:var(--s6)}
+#sidebar-right .sel-bar-grid.is-icons .btn{height:33px!important}                                /* (37px wide and 33px high: an odd 15px icon is in the middle of both, on whole pixels) */
+/* The name row of the Properties card is one height, always: the same with a name and a Lock badge, with a name and a material note, or with nothing but
+   "Empty scene". The badge has one size for "Lock" and "🔒 Locked", and the name takes what is left of the row and ends in an ellipsis, so neither the name
+   nor the badge can make the row taller or wider, and nothing below it moves. */
+#prop-body .prop-head{height:24px;min-height:24px;box-sizing:border-box;flex-wrap:nowrap;overflow:hidden}
+#prop-body .prop-head .prop-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#prop-body .prop-head .prop-lock-badge{flex:none;box-sizing:border-box;width:68px;height:20px;margin-left:0!important;padding:0 6px!important;display:inline-flex;align-items:center;justify-content:center;line-height:1;white-space:nowrap;overflow:hidden}
+#prop-body .prop-head .prop-head-note{flex:none}
+/* A press scaled the button to .92 (or .97): while that animates the icon is resampled, so it goes soft and sharp again with every click. The press
+   is shown by dimming instead, and nothing is scaled. */
+.vpb:active,.tree-icon-btn:active,.lc-icon-btn:active,.dlg-x:active,.dlg-popup .dlg-x:active,.tbtn:active,.lc-pill:active,.vp-pill:active,.btn:active,.sel-bar-grid .btn:active,#draw-card .dr-grid button:active,#draw-card #dr-edit .btn:active{transform:none!important;opacity:.72}
+.sel-bar-grid.is-icons .btn svg{width:15px!important;height:15px!important}   /* (the rule above lost to the icon size set on every button svg) */
+/* Icons: a line has the thickness of a whole device pixel. An icon is drawn on a 24 unit grid and scaled, so its line was 2 units x (14/24) = 1.17px
+   at 14px and 1.33px at 16px: soft on every screen. The stroke does not scale now (vector-effect), and its width is one device pixel (two on a
+   screen of 2x and more): --icon-stroke, set from the screen's scale in app-v2.js (_iconStroke). */
+:root{--icon-stroke:1px}
+svg.lucide{stroke-width:var(--icon-stroke)!important}
+svg.lucide *{vector-effect:non-scaling-stroke}
 /* ── Material editor: the look of the newer panels ──────────────────────────────────────────────────────────────
    The same rows in the same order and the same sizes. What changes is the skin: no bold and no capitals, a neutral head
    icon, rows without dashed rules, boxed number fields, a slider dot without a ring, and the four switches at the bottom
@@ -4482,7 +4588,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .section-cmd[data-cmd="elements"] #el-weld-row[hidden]{display:none}
 /* Edit mesh's bar: one column at the right edge under the view cube, in the same dark pill as the toolbar on the left. The brush size,
    the weld distance and the count of what is picked do not fit in it: they stand out to its left, beside the button they go with. */
-.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:var(--space-2xs);padding:var(--space-xs);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:0 6px 20px var(--blk-40),var(--surface-ring)}
+.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:var(--space-2xs);padding:var(--space-xs);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:0 4px 10px var(--blk-40),var(--surface-ring)}
 .vpc.el-bar[hidden]{display:none}
 .vpc.el-bar{transition:opacity 220ms var(--ease-out),translate 260ms cubic-bezier(.2,.9,.3,1)}
 .vpc.el-bar.is-out{opacity:0;translate:14px 0;pointer-events:none}
@@ -4511,7 +4617,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .el-ibtn.danger:hover:not(:disabled){color:var(--er);background:var(--er-soft)}
 .el-ibtn>input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
 .el-ibtn:has(>input:focus-visible),.el-ibtn:focus-visible,.el-bar .el-row>button:focus-visible{outline:2px solid var(--ac-text);outline-offset:1px}
-.el-bar .el-size{position:absolute;right:calc(100% + 6px);top:66px;display:flex;align-items:center;gap:var(--space-sm);width:112px;box-sizing:border-box;padding:var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);border-radius:var(--r-md);background:var(--surface-bar);box-shadow:0 6px 20px var(--blk-40),var(--surface-ring);color:var(--tx3)}
+.el-bar .el-size{position:absolute;right:calc(100% + 6px);top:66px;display:flex;align-items:center;gap:var(--space-sm);width:112px;box-sizing:border-box;padding:var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);border-radius:var(--r-md);background:var(--surface-bar);box-shadow:0 4px 10px var(--blk-40),var(--surface-ring);color:var(--tx3)}
 /* the brush size is not shown (it is still there for the code: the middle button and a drag change it) */
 .el-bar .el-size{display:none!important}
 .el-bar .el-size>[data-lucide],.el-bar .el-size>.lucide{width:var(--icon-md);height:var(--icon-md);flex:0 0 auto;stroke-width:1.6}
@@ -4632,7 +4738,7 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 .sel-bar-grid .btn.is-on{color:var(--ac-text);border-color:var(--ac-line,var(--bd2))}
 .sel-bar-grid .btn.is-on svg{color:currentColor}
 .sel-bar-grid.is-edit{margin-top:0}
-.sel-bar-grid.is-icons{grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-xs)}
+.sel-bar-grid.is-icons{grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}      /* (6px: six buttons in 252px come out 37px each; with 4px they were 38.67) */
 .sel-bar-grid.is-icons .btn{height:var(--ctl-h);padding:0}
 .sel-bar-grid.is-icons .btn svg{width:var(--icon-md);height:var(--icon-md);stroke-width:2}
 .sel-bar-spare[hidden]{display:none}
@@ -4701,7 +4807,7 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 @keyframes cl-pulse{50%{opacity:var(--op-3)}}
 @media (prefers-reduced-motion:reduce){.claude-pill[data-state="busy"] .cl-dot{animation:none}}
 .cl-ask-bg{position:fixed;inset:0;z-index:var(--z-top);display:grid;place-items:center;background:var(--blk-50)}
-.cl-ask{width:min(420px,calc(100vw - 32px));padding:18px 20px;border-radius:var(--r-lg,14px);background:var(--bg2);border:1px solid var(--bd2);box-shadow:0 18px 50px var(--blk-60);display:flex;flex-direction:column;gap:var(--space-md)}
+.cl-ask{width:min(420px,calc(100vw - 32px));padding:18px 20px;border-radius:var(--r-lg,14px);background:var(--bg2);border:1px solid var(--bd2);box-shadow:0 5px 13px var(--blk-60);display:flex;flex-direction:column;gap:var(--space-md)}
 .cl-ask-h{display:flex;align-items:center;gap:var(--space-md);font-size:var(--fs-11);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--tx3)}
 .cl-ask-t{font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx)}
 .cl-ask-d{font-size:var(--fs-md);color:var(--tx2);line-height:var(--lh-body)}
@@ -5025,18 +5131,18 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.28.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.29.0</div>
         </div>
         <div class="brand-menu-about">Optimise, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.28.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.29.0</span></div>
           <ul>
-            <li>A Model inspector shows what is wrong with a model</li>
-            <li>Fix normals turns wrong-way faces round</li>
-            <li>STEP files keep their true CAD faces and edges</li>
-            <li>Hold C for the quick colour wheel</li>
-            <li>One View button, one-click install</li>
+            <li>Align and Spread work on groups</li>
+            <li>Copied groups keep their pivots</li>
+            <li>Windows, menus and the colour wheel move like macOS</li>
+            <li>Every edge and icon line sits on a whole pixel</li>
+            <li>Copy, duplicate and delete in the materials window</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -5200,10 +5306,10 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="gz-translate" title="Translate gizmo (E) — hold Shift while dragging to snap to round steps sized to the model"><i data-lucide="move"></i></button>
         <button class="vpb" id="gz-rotate" title="Rotate gizmo (R) — hold Shift while dragging to snap to 15°"><i data-lucide="rotate-cw"></i></button>
         <button class="vpb" id="gz-scale" title="Scale gizmo (T) — hold Shift while dragging to snap to 0.1 steps"><i data-lucide="scaling"></i></button>
-        <button class="vpb" id="gz-place" data-cmd-toggle="place" title="Dynamic place (D): pick the selected part up and drag it over other surfaces. It rests on them and turns to face them."><i data-lucide="arrow-down-to-dot"></i></button>
         <div class="vpb-sep"></div>
         <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
         <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="pencil-line"></i></button>
+        <button class="vpb" id="gz-place" data-cmd-toggle="place" title="Dynamic place (D): pick the selected part up and drag it over other surfaces. It rests on them and turns to face them."><i data-lucide="arrow-down-to-dot"></i></button>
         <div class="vpb-sep"></div>
         <!-- How the model is drawn, as one button like the selection tool's: it shows the view in use, a click goes to the next, holding it (or a right-click) lists the four. -->
         <button class="vpb" id="vw-mode-btn" title="View: Solid. Click for the next one, hold for all four" aria-label="View"><i data-lucide="cube-solid"></i></button>
@@ -6126,6 +6232,7 @@ window.moSplash = function (msg, pct) {
           <div class="shade-fam" id="vw-cad" data-mode="cad"></div>
         </div>
         <div class="toggle shade-outlines"><span id="shade-outlines-lbl" title="A fine dark line on the sharp edges of every part, in every view">Outlines</span><label><input type="checkbox" id="shade-outlines" aria-labelledby="shade-outlines-lbl" checked><span class="switch"></span></label></div>
+        <div class="prop-shade cmd-num is-off" id="prop-shade"></div>
       </div>
     </div>
 
@@ -6381,7 +6488,6 @@ window.moSplash = function (msg, pct) {
   <div class="mat-dock-grip" id="mat-dock-grip" title="Drag to resize · double-click to reset"></div>
   <div class="lc-h mat-dock-h">
     <div class="lc-title">Materials</div>
-    <span class="mat-dock-count" id="mat-dock-count"></span>
     <label class="mat-dock-search" title="Filter by name, colour (hex) or type"><i data-lucide="search"></i><input type="text" id="mat-search" placeholder="Filter…" autocomplete="off" spellcheck="false"></label>
     <div class="mat-view-toggle" role="group" aria-label="Materials view">
       <button type="button" id="mat-view-grid" class="mat-view-btn" data-view="grid" title="Grid view" aria-pressed="true"><i data-lucide="grid-2x2"></i></button>
@@ -6411,6 +6517,7 @@ window.moSplash = function (msg, pct) {
           <option value="name">Name</option>
           <option value="hue">Colour</option>
         </select>
+        <span class="mat-dock-count" id="mat-dock-count"></span>
       </div>
       <div class="mat-list" id="mat-list">
         <div class="mat-empty">No materials yet — load a model.</div>

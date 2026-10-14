@@ -908,7 +908,7 @@ module.exports = {
         ['p', 'It shows the parts tree: every part of the model, arranged in groups, with a search field and three buttons above it ({{Collapse}}, {{Rename}}, {{Flatten}}). A {{Transform}} card with position, rotation and size can be shown at its foot. It works on several selected parts at once (see [Move, rotate, scale](#move-rotate-scale)). It floats over the bottom of the sidebar and takes its own room under the tree. The library of parts you can add is not in this sidebar any more. It is a drawer under the viewport (see below).'],
         ['h', 'Viewport'],
         ['terms', [
-          ['Tool strip, left edge', 'At the top, the mode button: Model, or the points, edges and polygons of [Edit mesh](#edit-mesh). Then the move, rotate and scale tools, {{Dynamic place}} ([[D]]), a button for the transform card, four view modes (solid, wireframe, X-ray, heatmap) and a button that highlights small parts. The Clay and CAD looks are in the {{Shading}} card on the right.'],
+          ['Tool strip, left edge', 'At the top, the mode button: Model, or the points, edges and polygons of [Edit mesh](#edit-mesh). Then the selection tool, which is the blue one, and the move, rotate and scale tools, which show grey when they are on. After them come {{Measure}}, {{Draw lines}} and {{Dynamic place}} ([[D]]), and then one View button for solid, wireframe, X-ray and heatmap (a click goes to the next, holding it lists all four). The Clay and CAD looks are in the {{Shading}} card on the right.'],
           ['View name, top centre', 'Says which camera view is active, {{Cam}} to begin with. Click it to switch to Top, Front or Side. Small pills to its right show a mode that is on: {{Isolated}}, {{Exploded}}, {{Measure}} and {{Snap}}. Click a pill to leave that mode.'],
           ['View cube, top right', 'A small cube that turns with the model. Click a face or an axis dot and the view turns there.'],
           ['Toolbar, bottom centre', 'Search, add a shape, {{Split}}, {{Remove holes}}, {{Draw lines}}, {{Smart fit}}, {{Remesh}}, {{Select hidden parts}}, {{Fasteners}}, {{Measure}}, {{Library}}, {{Materials}}, and `…` for the list of all commands.'],
@@ -920,6 +920,7 @@ module.exports = {
         ['p', 'At the top is {{Properties}}. With nothing selected it describes the whole scene. With a selection it describes that: the name, the material, the triangle count with a bar that shows its share of the scene, and the number of vertices, the size and the mesh data. Under it are cards you open and close by clicking their title. A card slides open and shut. Every card starts folded except {{Properties}} and {{Shading}}, and the ones you open or close are remembered.'],
         ['terms', [
           ['Shading', 'Every look for the Clay and CAD views as a small picture: Clay, Porcelain, Steel and Red wax, and the CAD looks Ceramic, Light and Mono. Click one to choose it and turn the view on. Click the lit one again to go back to Solid. The {{Outlines}} switch draws a fine dark line on the sharp edges of every part. See [Colours and materials](#colours-materials) and [View modes](#view-modes).'],
+          ['Shading angle', 'Under {{Outlines}} in the {{Shading}} card, for the selected parts: up to this angle between two faces the surface is shaded smooth, and past it the edge stays sharp. 0° is flat and 180° is fully smooth. Only the shading changes, not the shape. Type a number, or drag it sideways. It is dimmed when nothing is selected.'],
           ['Selection & actions', 'Select all, invert, select similar, by colour, by name, and Merge, Group and Delete.'],
           ['Select similar', 'Sets how close a part has to look to the selected ones to count as similar.'],
           ['Inspect', '{{Heavy parts}} (with a small count of how many there are), {{Filters & flags}}, {{Measurements}} (only while there is a measurement) and {{Exploded view}}.'],
@@ -1053,6 +1054,7 @@ module.exports = {
         ]],
         ['h', 'The right-click menu'],
         ['p', 'Right-click a part, in the viewport or in the tree, for a menu of things to do with the selection: frame it, isolate it, select similar parts, copy, duplicate or delete.'],
+        ['p', 'Copy and Paste with several groups selected makes a copy of each group, as a whole folder next to its original, with its own pivot. A group inside another selected group is copied along with it. One Undo takes back one group.'],
         ['img', 'Images/apps/meshoptimiser-context-menu.webp', 'Right-click a part to frame, isolate, select similar, copy or delete.'],
         ['note', 'A common mistake: dragging without [[Ctrl]] turns the view instead of drawing a selection box. Hold [[Ctrl]] first, then drag.'],
         ['see', ['hide-isolate', 'parts-tree', 'search-and-commands']],
@@ -1666,6 +1668,7 @@ module.exports = {
         ['p', 'A few parts often hold a large share of a model’s triangles. The card {{Heavy parts}} lists them, so you can see where the weight is without searching the tree.'],
         ['h', 'What the card lists'],
         ['p', 'Only parts with more than 10,000 triangles are listed. The heaviest is at the top, and the list holds at most 500 parts. Each row shows the part’s place in the list, its name, its triangle count (for example 12.4k) and a bar that compares it with the heaviest part. Hover over a row to see the full name, the exact count and the rank.'],
+        ['p', 'The bar is a rounded pill, coloured by rank from red for the heaviest to green for the lightest, and it grows in from the left when the list is drawn. Ticked rows that touch join into one shape.'],
         ['p', 'The card is in the right sidebar, under Inspect. Beside its title is a small number: how many parts are over the limit. You can read it while the card is folded. It goes down as you delete or reduce parts, and it reads 0, dimmed, when no part is that big.'],
         ['h', 'Steps'],
         ['steps', [
@@ -2396,6 +2399,7 @@ module.exports = {
           ['The scroll wheel', 'Sets the brightness. The percentage shows under the wheel.'],
         ]],
         ['p', 'The selected parts change as you move, so you see the result on the model and not on a swatch. A small strip under the wheel shows the colour it was, the colour it is now, its hex code and the brightness.'],
+        ['p', 'While the wheel is open the pointer is hidden over it, and a dot shows where the colour is. The selection outline and the move gizmo are put away so that they do not cover the colour, and they come back when you let go. Inside the middle hole the dot stays on the edge of the hole, on the side the pointer is.'],
         ['h', 'Keep it or cancel it'],
         ['list', [
           'Let go of [[C]], or click, to keep the colour. It is one step in the undo list.',
@@ -2525,6 +2529,7 @@ module.exports = {
         ['list', [
           'A floating dock does not push the toolbar up and does not close the other dock. Materials and [the library](#library) can both float, so the two can be open side by side.',
           'Where you left the window, and whether it floats, is remembered in this browser.',
+          'Closing a floating window shrinks it toward the bottom toolbar, and opening it grows it back from there.',
           'With several windows open, the one you pressed or typed in last stands in front.',
         ]],
         ['h', 'See where a material is used'],
@@ -2559,11 +2564,12 @@ module.exports = {
         ['terms', [
           ['New material', 'The `+` button. Makes a new material. If parts are selected, they get it.'],
           ['New material from a preset', 'Hold the `+` down, or right-click it, and a list of ready-made looks opens. You can press, slide to a preset and let go in one move. The arrow beside the `+` opens the same list with one click. A preset makes a new material, assigned to the selected parts if there are any, in one undo step.'],
-          ['Duplicate', 'Copies the picked material.'],
+          ['Duplicate', 'Copies the picked material. The button is in the inspector at the right of the dock, and [[Ctrl + D]] does the same.'],
           ['Merge', 'Turns several picked materials into one. Hold [[Ctrl]] and click to pick several.'],
-          ['Delete', 'Deletes the picked materials.'],
+          ['Delete', 'Deletes the picked materials. The button is in the inspector at the right of the dock. The parts that used them are left with no material.'],
         ]],
         ['p', 'To merge two materials with the mouse, hold [[Shift]] and drag one onto the other. The dragged material stays and takes the other one over. A tip that starts with “Merge into” shows before you let go. Without [[Shift]], a drop on another material does nothing.'],
+        ['p', 'While the materials window is the last one you worked in and a material is picked, [[Ctrl + C]] and [[Ctrl + D]] copy and duplicate the material, and [[Ctrl + V]] pastes a copied material as a new one. In that case the keys belong to the materials window and do not copy parts.'],
         ['p', 'A right-click on a material gives the same commands, and one to copy its colour code. The material card in {{Properties}} has the same menu.'],
         ['h', 'Good to know'],
         ['list', [
@@ -2625,7 +2631,7 @@ module.exports = {
         ['p', 'Dynamic place moves a part by dragging it over the model, instead of by its handles. The part rests on whatever surface is under the pointer and turns to face it, as when you drag a part out of the [library](#library) onto a model. It is handy for putting a bolt on a plate or a bracket on a wall.'],
         ['steps', [
           'Select the part, or several parts.',
-          'Press [[D]], or click the fourth button on the tool strip (an arrow pointing down at a dot). The {{Dynamic place}} card opens over the viewport. The gizmo is hidden, and a thin blue box appears round the selection to show which box is being set down.',
+          'Press [[D]], or click {{Dynamic place}} on the tool strip (an arrow pointing down at a dot, beside the ruler and the pencil). The {{Dynamic place}} card opens over the viewport. The gizmo is hidden, and a thin blue box appears round the selection to show which box is being set down.',
           'Press on the selected part and drag. The part follows the pointer and rests on the surface under it. The underside of the box touches the surface and never sinks into it.',
           'Let go to drop it there.',
           'Press [[Esc]] or {{Done}} to close the card and get the gizmo back.',
@@ -2797,6 +2803,8 @@ module.exports = {
       blocks: [
         ['p', 'Align parts moves the selected parts so they line up on one side or on the middle along X, Y or Z, or so they stand evenly apart. It is a floating card over the viewport. It moves whole parts, the way a layout program moves boxes, and does not change their meshes.'],
         ['p', 'To stand the whole model on the floor, use [Align to floor](#align-to-floor) instead.'],
+        ['h', 'Groups'],
+        ['p', 'Select a group in the tree, or several, and each group is lined up as one item. It is measured by the box round all its parts and it moves whole, so its parts keep their places against each other. A group inside another selected group goes along with it. You can mix groups and loose parts. A group with a locked part stays where it is, and the card says how many parts were locked.'],
         ['h', 'Open the card'],
         ['list', [
           'Press [[Ctrl + K]] and choose {{Align and spread parts…}}.',
@@ -2904,7 +2912,7 @@ module.exports = {
         ['h', 'Look at a part first'],
         ['steps', [
           'Click a tile. A single click only picks the part. It does not add it.',
-          'The right half shows the part. Drag it to turn it about any axis, so you can roll it over and see it from underneath. Use the mouse wheel to zoom. Double-click to go back to the first view.',
+          'The right half shows the part. Drag it to turn it about any axis, so you can roll it over and see it from underneath. If you let go while it is moving it keeps turning a little and slows down. Use the mouse wheel to zoom. Double-click to go back to the first view.',
           'Under the name are its number of triangles and its size.',
           'Below that are the same rows as the {{Shape parameters}} of a placed part (see below). Change a number there and the view follows.',
         ]],

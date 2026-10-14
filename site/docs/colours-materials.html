@@ -161,6 +161,7 @@
           <ul class="kb-points">
             <li>A floating dock does not push the toolbar up and does not close the other dock. Materials and <a href="../docs/library.html">the library</a> can both float, so the two can be open side by side.</li>
             <li>Where you left the window, and whether it floats, is remembered in this browser.</li>
+            <li>Closing a floating window shrinks it toward the bottom toolbar, and opening it grows it back from there.</li>
             <li>With several windows open, the one you pressed or typed in last stands in front.</li>
           </ul>
           <h2 id="see-where-a-material-is-used">See where a material is used</h2>
@@ -195,11 +196,12 @@
           <dl class="table">
             <div><dt>New material</dt><dd>The <code>+</code> button. Makes a new material. If parts are selected, they get it.</dd></div>
             <div><dt>New material from a preset</dt><dd>Hold the <code>+</code> down, or right-click it, and a list of ready-made looks opens. You can press, slide to a preset and let go in one move. The arrow beside the <code>+</code> opens the same list with one click. A preset makes a new material, assigned to the selected parts if there are any, in one undo step.</dd></div>
-            <div><dt>Duplicate</dt><dd>Copies the picked material.</dd></div>
+            <div><dt>Duplicate</dt><dd>Copies the picked material. The button is in the inspector at the right of the dock, and <kbd>Ctrl</kbd><kbd>D</kbd> does the same.</dd></div>
             <div><dt>Merge</dt><dd>Turns several picked materials into one. Hold <kbd>Ctrl</kbd> and click to pick several.</dd></div>
-            <div><dt>Delete</dt><dd>Deletes the picked materials.</dd></div>
+            <div><dt>Delete</dt><dd>Deletes the picked materials. The button is in the inspector at the right of the dock. The parts that used them are left with no material.</dd></div>
           </dl>
           <p>To merge two materials with the mouse, hold <kbd>Shift</kbd> and drag one onto the other. The dragged material stays and takes the other one over. A tip that starts with “Merge into” shows before you let go. Without <kbd>Shift</kbd>, a drop on another material does nothing.</p>
+          <p>While the materials window is the last one you worked in and a material is picked, <kbd>Ctrl</kbd><kbd>C</kbd> and <kbd>Ctrl</kbd><kbd>D</kbd> copy and duplicate the material, and <kbd>Ctrl</kbd><kbd>V</kbd> pastes a copied material as a new one. In that case the keys belong to the materials window and do not copy parts.</p>
           <p>A right-click on a material gives the same commands, and one to copy its colour code. The material card in <span class="ui">Properties</span> has the same menu.</p>
           <h2 id="good-to-know">Good to know</h2>
           <ul class="kb-points">
@@ -247,7 +249,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.28.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.29.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
