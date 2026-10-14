@@ -27,10 +27,10 @@ export function studioEnvironment(renderer) {
 
 // Not everything is polished steel. The app's Steel look (colour #c2c7cd, roughness 0.3, fully metallic) is the base; the parts that do a job
 // take the colours the site's function animations use (the palette in site.css and the tiles), so the model and the page are one design:
-// gears amber, socket screws teal, brake calipers pink and the seals purple; the big cast housings stay graphite. The rubber of the air springs stays dark.
+// gears amber, socket screws the accent blue, brake calipers pink and the seals purple; the big cast housings stay graphite. The rubber of the air springs stays dark.
 // Parts are told apart by their names (see `kindOf`).
 const mat = (color, roughness, metalness) => new THREE.MeshStandardMaterial({ color, roughness, metalness, side: THREE.DoubleSide });
-export const PALETTE = { amber: 0xf5a524, teal: 0x35c9c0, pink: 0xf472b6, purple: 0xa78bfa };
+export const PALETTE = { amber: 0xf5a524, teal: 0x35c9c0, accent: 0x0d99ff, pink: 0xf472b6, purple: 0xa78bfa };
 export const STEEL = mat(0xbdc3ca, 0.28, 1);
 export const MATERIALS = {
   steel: STEEL,
@@ -38,7 +38,7 @@ export const MATERIALS = {
   seal: mat(PALETTE.purple, 0.5, 0.15),    // the seals (blue in the CAD file)
   brass: mat(PALETTE.amber, 0.3, 0.95),    // gears, pinion shaft and splines
   paint: mat(0x4b5058, 0.46, 0.5),         // cast housings and covers: neutral graphite (the big parts stay quiet, the colours are for the small ones)
-  bolt: mat(PALETTE.teal, 0.36, 0.95),     // socket screws
+  bolt: mat(PALETTE.accent, 0.36, 0.95),   // socket screws: the blue of the site's buttons
   caliper: mat(PALETTE.pink, 0.38, 0.5),   // brake calipers (only the big pieces: the small ones inside stay steel)
 };
 // `blue` and `dark` come from the colour the part has in the file

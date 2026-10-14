@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { studioEnvironment, kindOfMesh, settleKinds } from './axle-look.js?v=4';
+import { studioEnvironment, kindOfMesh, settleKinds } from './axle-look.js?v=5';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const ease = (t) => t * t * (3 - 2 * t);
@@ -208,7 +208,7 @@ async function fast(el, base) {
   scene.add(hemi, keyL, fill, head, head.target);
   const lights = [[scene, 'environmentIntensity', 1.3], [hemi, 'intensity', 0.3], [keyL, 'intensity', 1.1], [fill, 'intensity', 0.18], [head, 'intensity', 0.3]];
   const lineMat = new THREE.LineBasicMaterial({ color: 0x0b0c0e, transparent: true, opacity: 0.55 });
-  // the screws, when they have been found: lit by themselves, the teal of the Fasteners animation
+  // the screws, when they have been found: lit by themselves, the accent blue of the buttons
   const FOUND = new THREE.MeshBasicMaterial({ color: 0x5fe3d9, transparent: true, opacity: 1, side: THREE.DoubleSide });
   const edgesOf = new Map();
 
@@ -256,7 +256,7 @@ async function fast(el, base) {
       p.lines.visible = found < 0.001;
     }
     FOUND.opacity = 1 - o;
-    FOUND.color.setHex(0x5fe3d9).lerp(new THREE.Color(0x35c9c0), found * 0.5);
+    FOUND.color.setHex(0x6cc4ff).lerp(new THREE.Color(0x0d99ff), found * 0.5);
   };
   for (const p of parts) { p.part.matrix.copy(p.rest); p.part.matrixWorldNeedsUpdate = true; }
   apply();

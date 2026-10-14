@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { studioEnvironment, kindOfMesh, settleKinds } from './axle-look.js?v=4';
+import { studioEnvironment, kindOfMesh, settleKinds } from './axle-look.js?v=5';
 
 const MAX_EXPLODE = 1.65;                                 // the app's exploded view at 165 %; the offsets in the file are for 100 %
 

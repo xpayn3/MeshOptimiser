@@ -226,7 +226,7 @@
         for (const en of entries) {
           if (!en.isIntersecting) continue;
           near.unobserve(en.target);
-          import('./features3d.js?v=4').then((m) => m.start(en.target, '')).catch(() => {});
+          import('./features3d.js?v=5').then((m) => m.start(en.target, '')).catch(() => {});
         }
       }, { rootMargin: '500px 0px' });
       lives.forEach((el) => near.observe(el));
@@ -244,7 +244,7 @@
       // Data Saver, or a slow connection: the poster stays, and nothing of the 3D (the library, 1.3 MB of model) is fetched
       const net = navigator.connection;
       if (net && (net.saveData || /(^|-)2g$/.test(net.effectiveType || ''))) return;
-      const load = () => import('./hero3d.js?v=25').then(m => m.start(pop, '')).then((h) => { hero3d = h; h.setP(Math.max(0, last)); }).catch(() => {});
+      const load = () => import('./hero3d.js?v=26').then(m => m.start(pop, '')).then((h) => { hero3d = h; h.setP(Math.max(0, last)); }).catch(() => {});
       // on a phone it waits for the first touch or scroll, so a visit that goes no further costs nothing but the poster
       if (window.matchMedia('(pointer: coarse)').matches) { let done = false; const go = () => { if (done) return; done = true; window.removeEventListener('scroll', go); window.removeEventListener('touchstart', go); load(); }; window.addEventListener('scroll', go, { passive: true }); window.addEventListener('touchstart', go, { passive: true }); }
       else load();
