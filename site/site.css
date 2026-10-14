@@ -68,6 +68,8 @@ i, em { font-style: normal; }
 .bar .brand { justify-self: start; margin: -6px 0 -6px -7px; padding: 6px 14px 6px 7px; border-radius: 999px; }
 .brand img { width: 28px; height: 28px; border-radius: 8px; box-shadow: 0 0 0 1px var(--line-strong); transition: border-radius 0.3s ease; }
 .bar.is-scrolled .brand img { border-radius: 50%; }
+/* at the very top of the page the menu has no pill around it (on a phone it is a dropdown and keeps its panel) */
+@media (min-width: 761px) { .bar:not(.is-scrolled) .nav { background: transparent; box-shadow: none; } }
 .brand i {
   margin-left: 2px;
   padding: 2px 7px;
@@ -148,6 +150,11 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 .split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(28px, 5vw, 88px); align-items: start; }
 .split-head { display: grid; gap: 14px; justify-items: start; position: sticky; top: calc(var(--bar-h) + 32px); }
 .split-body { display: grid; gap: 18px; color: var(--tx-2); font-size: 17px; }
+/* the "why" band: three short rows with a thin line between them */
+.why-points { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.why-points li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: 16px; align-items: baseline; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.why-points span { color: var(--tx-3); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
+.why-points p { margin: 0; color: var(--tx-1); font-size: clamp(18px, 2vw, 22px); }
 
 /* the claims: big type on tiles, as on a product page */
 .bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(12px, 1.4vw, 18px); }
@@ -160,8 +167,9 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 .tile h2 span { color: var(--tx-3); }
 .tile-line { margin-top: -12px; max-width: 40ch; color: var(--tx-2); font-size: clamp(13px, 1vw, 15px); line-height: 1.45; }
 /* tile drawings: thin strokes, grey with a little blue; they move only while the tile is on screen */
-.tile-art { flex: 0 0 auto; align-self: stretch; width: 100%; height: clamp(110px, 11vw, 150px); margin: 0; color: #77777c; --art-dim: #46464a; overflow: visible; }
+.tile-art { --cycle: 5s; flex: 0 0 auto; align-self: stretch; width: 100%; height: clamp(110px, 11vw, 150px); margin: 0; color: #77777c; --art-dim: #46464a; overflow: visible; }
 .tile-art .art-hot { stroke: var(--tile-c, var(--accent)); }
+.tile-art .art-edge { opacity: 0; }
 .tile-art .art-dim { stroke: var(--art-dim); }
 .tile-art text.art-t { fill: var(--tx-3); stroke: none; font: 400 11px var(--mono); letter-spacing: 0.08em; }
 .tile-art .art-flow { stroke-dasharray: 4 7; }
@@ -189,37 +197,38 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 .tile-art, .tile-art * { animation-play-state: paused; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .tile-art .art-flow { animation: art-flow 1.2s linear infinite; }
-  .tile-art .art-tri { animation: art-draw 4.2s ease-in-out infinite; }
-  .tile-art .art-scan { animation: art-scan 6s linear infinite; }
-  .tile-art .art-hida { animation: art-hida 6s ease-in-out infinite; }
-  .tile-art .art-hidb { animation: art-hidb 6s ease-in-out infinite; }
-  .tile-art .art-hidc { animation: art-hidc 6s ease-in-out infinite; }
-  .tile-art .art-fine { animation: art-fine 6s ease-in-out infinite; }
-  .tile-art .art-low { animation: art-low 6s ease-in-out infinite; }
-  .tile-art .art-edit { animation: art-edit 4.6s ease-in-out infinite; }
-  .tile-art .art-wipeclip { animation: art-clipwipe 6s linear infinite; }
-  .tile-art .art-parts { animation: art-partsin 6s ease-in-out infinite; }
-  .tile-art .art-box { animation: art-hop 7s linear infinite; animation-delay: calc(var(--i) * 0.28s); }
-  .tile-art .art-bounce { animation: art-gone 7s ease-in-out infinite; }
-  .tile-art .art-box:nth-child(even) .art-bounce { animation-name: art-gone-r; }
-  .tile-art .art-shackle { animation: art-shackle 7s ease-in-out infinite; }
-  .tile-art .art-lockbody { animation: art-lockpop 7s ease-in-out infinite; }
-  .tile-art .art-lockg { animation: art-lockc 7s ease-in-out infinite; }
-  .tile-art .art-dots { animation: art-flow 1.1s linear infinite; }
-  .tile-art .art-ring { animation: art-ring 6.4s ease-in-out infinite; animation-delay: calc(var(--k) * 0.11s); }
-  .tile-art .art-mesh { animation: art-meshin 6.4s ease-in-out infinite; animation-delay: 1.4s; }
-  .tile-art .art-rep { animation: art-merge 5s ease-in-out infinite; }
-  .tile-art .art-core { animation: art-core 5s ease-in-out infinite; }
-  .tile-art .art-once { animation: art-once 5s ease-in-out infinite; }
-  .tile-art .art-nut { animation: art-nut 4.6s ease-in-out infinite; }
-  .tile-art .art-back { animation: art-back 4.6s ease-in-out infinite; }
-  .tile-art .art-head { animation: art-head 4.6s ease-in-out infinite; }
-  .tile-art .art-gear { animation: art-gear 8s linear infinite; }
-  .tile-art .art-cursor { animation: art-blink 1.1s steps(2, jump-none) infinite; }
+  .tile-art .art-flow { animation: art-flow 1.25s linear infinite; }
+  .tile-art .art-tri { animation: art-draw var(--cycle) ease-in-out infinite; }
+  .tile-art .art-scan { animation: art-scan var(--cycle) linear infinite; }
+  .tile-art .art-hida { animation: art-hida var(--cycle) ease-in-out infinite; }
+  .tile-art .art-hidb { animation: art-hidb var(--cycle) ease-in-out infinite; }
+  .tile-art .art-hidc { animation: art-hidc var(--cycle) ease-in-out infinite; }
+  .tile-art .art-fine { animation: art-fine var(--cycle) ease-in-out infinite; }
+  .tile-art .art-low { animation: art-low var(--cycle) ease-in-out infinite; }
+  .tile-art .art-edit { animation: art-edit var(--cycle) ease-in-out infinite; }
+  .tile-art .art-wipeclip { animation: art-clipwipe var(--cycle) linear infinite; }
+  .tile-art .art-parts { animation: art-partsin var(--cycle) ease-in-out infinite; }
+  .tile-art .art-box { animation: art-hop var(--cycle) linear infinite; animation-delay: calc(var(--i) * 0.28s); }
+  .tile-art .art-shackle { animation: art-shackle var(--cycle) ease-in-out infinite; }
+  .tile-art .art-lockbody { animation: art-lockpop var(--cycle) ease-in-out infinite; }
+  .tile-art .art-lockg { animation: art-lockc var(--cycle) ease-in-out infinite; }
+  .tile-art .art-dots { animation: art-dots 1s linear infinite; }
+  .tile-art .art-ring { animation: art-ring var(--cycle) ease-in-out infinite; animation-delay: calc(var(--k) * 0.11s); }
+  .tile-art .art-mesh { animation: art-meshin var(--cycle) ease-in-out infinite; animation-delay: 1.4s; }
+  .tile-art .art-rep { animation: art-merge var(--cycle) ease-in-out infinite; }
+  .tile-art .art-edge { animation: art-edge var(--cycle) ease-in-out infinite; }
+  .tile-art .art-core { animation: art-core var(--cycle) ease-in-out infinite; }
+  .tile-art .art-once { animation: art-once var(--cycle) ease-in-out infinite; }
+  .tile-art .art-nut { animation: art-nut var(--cycle) ease-in-out infinite; }
+  .tile-art .art-back { animation: art-back var(--cycle) ease-in-out infinite; }
+  .tile-art .art-head { animation: art-head var(--cycle) ease-in-out infinite; }
+  .tile-art .art-gear { animation: art-gear var(--cycle) linear infinite; }
+  .tile-art .art-cursor { animation: art-blink 1.25s steps(2, jump-none) infinite; }
 }
 @media (prefers-reduced-motion: reduce) { .tile-art .art-tri { stroke-dashoffset: 0; } .tile-art .art-hida, .tile-art .art-hidb, .tile-art .art-hidc { opacity: 1; } .tile-art .art-once { opacity: 1; } .tile-art .art-low { opacity: 1; } .tile-art .art-fine { opacity: 0.3; } .tile-art .art-head { opacity: 1; } .tile-art .art-edit { opacity: 1; } .tile-art .art-rep { opacity: 0.4; } }
 @keyframes art-flow { to { stroke-dashoffset: -22; } }
+/* the dots of the Convert tile move by exactly one gap (0.1 + 10), so the loop has no jump; the line is seven gaps long, centred between the sheet and the mesh */
+@keyframes art-dots { to { stroke-dashoffset: -10.1; } }
 @keyframes art-draw { 0%, 10% { stroke-dashoffset: 1; } 55%, 82% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1; } }
 @keyframes art-scan { 0%, 12% { transform: translateX(0); opacity: 0; } 15% { opacity: 1; } 58% { transform: translateX(268px); opacity: 1; } 61%, 100% { transform: translateX(268px); opacity: 0; } }
 @keyframes art-clipwipe { 0%, 12% { transform: translateX(0); } 58%, 77.9% { transform: translateX(268px); } 78%, 100% { transform: translateX(0); } }
@@ -228,10 +237,13 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 @keyframes art-hidb { 0%, 30% { opacity: 0.7; } 33%, 47% { opacity: 1; } 52%, 92% { opacity: 0; } 100% { opacity: 0.7; } }
 @keyframes art-hidc { 0%, 49% { opacity: 0.7; } 52%, 58% { opacity: 1; } 63%, 92% { opacity: 0; } 100% { opacity: 0.7; } }
 @keyframes art-fine { 0%, 22% { opacity: 1; } 48%, 78% { opacity: 0; } 100% { opacity: 1; } }
+/* Repair mesh: the edge of the hole lights up in the tile colour and glows, then the hole closes (art-fine fades from 22 %) and the glow goes with it */
+@keyframes art-edge { 0%, 4% { opacity: 0; filter: none; } 16%, 24% { opacity: 1; filter: drop-shadow(0 0 3px var(--tile-c, #fff)) drop-shadow(0 0 7px var(--tile-c, #fff)); } 40%, 100% { opacity: 0; filter: none; } }
 @keyframes art-low { 0%, 22% { opacity: 0; } 48%, 78% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes art-edit { 0%, 8% { opacity: 0; transform: scale(0.4); } 20%, 48% { opacity: 1; transform: scale(1); } 60%, 100% { opacity: 0; transform: scale(0.4); } }
 @keyframes art-bounce { 0%, 100% { transform: translateY(0) scale(1.1, 0.88); animation-timing-function: cubic-bezier(0.2, 0.7, 0.3, 1); } 45% { transform: translateY(-13px) scale(0.94, 1.08); animation-timing-function: cubic-bezier(0.7, 0, 0.8, 0.3); } }
-@keyframes art-hop { 0%, 22% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(0.34, 1.7, 0.5, 1); } 40%, 70% { transform: translate(var(--tx), var(--ty)) scale(var(--s)); } 70.1%, 100% { transform: translate(0, 0) scale(1); } }
+/* a box slides to the computer and fades out as it goes in through the screen (no scaling), then comes back by fading in where it started */
+@keyframes art-hop { 0%, 22% { transform: translate(0, 0); opacity: 1; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); } 27% { opacity: 1; } 37% { opacity: 0; } 40%, 70% { transform: translate(var(--tx), var(--ty)); opacity: 0; } 70.1% { transform: translate(0, 0); opacity: 0; } 84%, 100% { transform: translate(0, 0); opacity: 1; } }
 @keyframes art-gone { 0%, 28% { opacity: 1; transform: scale(1); animation-timing-function: ease-out; } 33% { opacity: 0; transform: scale(0.5); } 93% { opacity: 0; transform: scale(0.5); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes art-gone-r { 0%, 33% { opacity: 1; transform: scale(1); animation-timing-function: ease-out; } 38% { opacity: 0; transform: scale(0.5); } 93% { opacity: 0; transform: scale(0.5); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes art-shackle { 0%, 60% { transform: translateY(-9px); animation-timing-function: cubic-bezier(0.3, 1.7, 0.5, 1); } 68% { transform: translateY(0); } 90% { transform: translateY(0); } 97%, 100% { transform: translateY(-9px); } }
@@ -254,6 +266,7 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 :is(.clip, .star) .clip-art { stroke-width: 1.9px; }
 :is(.clip, .star):hover .clip-art { --card-bg: color-mix(in srgb, var(--tile-c, #ffffff) 13%, var(--surface)); background: var(--card-bg); }
 .tile-art .art-hole, .tile-art .art-sa, .tile-art .art-sb, .tile-art .art-fnd { transform-box: fill-box; transform-origin: center; }
+.tile-art .art-fnd { transform-origin: 50% 100%; }
 .tile-art .art-hole { fill: var(--tile-c, #fff); fill-opacity: 0; }
 .tile-art .art-fnd { fill: var(--card-bg, var(--surface)); }
 .tile-art .art-sil { stroke: none; }
@@ -272,22 +285,23 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
    which costs battery on a phone. This wins over them: a card moves only while it is on screen.) */
 :is(.tile, .clip, .star):not(.is-live) .tile-art, :is(.tile, .clip, .star):not(.is-live) .tile-art * { animation-play-state: paused !important; }
 @media (prefers-reduced-motion: no-preference) {
-  .tile-art .art-hole { animation: art-close 6s ease-in-out infinite; animation-delay: calc(var(--i) * 0.16s); }
-  .tile-art .art-sa { animation: art-apart-l 4.6s ease-in-out infinite; }
-  .tile-art .art-sb { animation: art-apart-r 4.6s ease-in-out infinite; }
-  .tile-art .art-cut { animation: art-cut 4.6s ease-in-out infinite; }
-  .tile-art .art-face { animation: art-flash 4.6s ease-in-out infinite; }
-  .tile-art .art-bolt { animation: art-bolt 4.6s ease-in-out infinite; }
-  .tile-art .art-plane { animation: art-plane 4.6s ease-in-out infinite; }
-  .tile-art .art-shell-solid { animation: art-shellsolid 5.6s ease-in-out infinite; }
-  .tile-art .art-shell-dash { animation: art-shelldash 5.6s ease-in-out infinite; }
-  .tile-art .art-found { animation: art-found 5.6s ease-in-out infinite; }
-  .tile-art .art-spin { animation: art-spin 3.6s linear infinite; }
-  .tile-art .art-spinr { animation: art-spinr 3.6s linear infinite; }
-  .tile-art .art-brk { animation: art-brk 5.6s ease-in-out infinite; }
-  .tile-art .art-fnd { animation: art-find 6.4s ease-in-out infinite; animation-delay: calc(var(--i) * 0.07s); }
-  .tile-art .art-dense2 { animation: art-dense2 5.6s ease-in-out infinite; }
-  .tile-art .art-fit { animation: art-fit 5.6s ease-in-out infinite; }
+  .tile-art .art-hole { animation: art-close var(--cycle) ease-in-out infinite; animation-delay: calc(var(--i) * 0.16s); }
+  .tile-art .art-sa { animation: art-apart-l var(--cycle) ease-in-out infinite; }
+  .tile-art .art-sb { animation: art-apart-r var(--cycle) ease-in-out infinite; }
+  .tile-art .art-cut { animation: art-cut var(--cycle) ease-in-out infinite; }
+  .tile-art .art-face { animation: art-flash var(--cycle) ease-in-out infinite; }
+  .tile-art .art-bolt { animation: art-bolt var(--cycle) ease-in-out infinite; }
+  .tile-art .art-plane { animation: art-plane var(--cycle) ease-in-out infinite; }
+  .tile-art .art-shell-solid { animation: art-shellsolid var(--cycle) ease-in-out infinite; }
+  .tile-art .art-shell-dash { animation: art-shelldash var(--cycle) ease-in-out infinite; }
+  .tile-art .art-found { animation: art-found var(--cycle) ease-in-out infinite; }
+  .tile-art .art-spin { animation: art-spin var(--cycle) linear infinite; }
+  .tile-art .art-spinr { animation: art-spinr var(--cycle) linear infinite; }
+  .tile-art .art-brk { animation: art-brk var(--cycle) ease-in-out infinite; }
+  .tile-art .art-fnd { animation: var(--snap) var(--cycle) linear infinite; }
+  .tile-art .art-f0 { --snap: art-snap0; } .tile-art .art-f1 { --snap: art-snap1; } .tile-art .art-f2 { --snap: art-snap2; } .tile-art .art-f3 { --snap: art-snap3; } .tile-art .art-f4 { --snap: art-snap4; }
+  .tile-art .art-dense2 { animation: art-dense2 var(--cycle) ease-in-out infinite; }
+  .tile-art .art-fit { animation: art-fit var(--cycle) ease-in-out infinite; }
 }
 @keyframes art-close { 0%, 12% { stroke: #77777c; opacity: 1; fill-opacity: 0; transform: scale(1); filter: none; } 22% { stroke: var(--tile-c, #fff); opacity: 1; fill-opacity: 0.55; transform: scale(1.12); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); } 32% { stroke: var(--tile-c, #fff); opacity: 1; fill-opacity: 0.9; transform: scale(1); filter: drop-shadow(0 0 3px var(--tile-c, #fff)); } 46%, 86% { stroke: var(--tile-c, #fff); opacity: 0; fill-opacity: 0.9; transform: scale(1); filter: none; } 100% { stroke: #77777c; opacity: 1; fill-opacity: 0; transform: scale(1); filter: none; } }
 @keyframes art-apart-l { 0%, 47% { transform: translate(0, 0); animation-timing-function: ease-in; } 50% { transform: translate(2px, 1.1px); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 56% { transform: translate(-22px, -12.7px); animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1); } 62% { transform: translate(-13px, -7.5px); animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1); } 66%, 86% { transform: translate(-16px, -9.2px); animation-timing-function: ease-in-out; } 100% { transform: translate(0, 0); } }
@@ -302,18 +316,16 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 @keyframes art-spin { to { transform: rotate(360deg); } }
 @keyframes art-spinr { from { transform: rotate(15deg); } to { transform: rotate(-345deg); } }
 @keyframes art-brk { 0%, 30% { stroke-dashoffset: 1; opacity: 0; } 46%, 82% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+/* Fasteners: they light up and snap off almost together (a small offset each), hang there until the last has lifted, then dissolve together; they come back one by one, each with a small bounce that grows from its own foot. Twice in the cycle. */
+@keyframes art-snap0 { 0%, 3% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 6% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 7.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 9% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 11% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 13%, 24% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 31% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 31.01%, 33.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 34% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 37.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 40% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 42% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } 53% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 55% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 56% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 57.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 59% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 61% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 63%, 74% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 81% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 81.01%, 83.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 84% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 87.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 90% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 92%, 100% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes art-snap1 { 0%, 5.5% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 7.5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 8.5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 10% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 11.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 13.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 15.5%, 24% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 31% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 31.01%, 35.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 36% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 39.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 42% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 44% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } 55.5% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 57.5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 58.5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 60% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 61.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 63.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 65.5%, 74% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 81% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 81.01%, 85.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 86% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 89.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 92% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 94%, 100% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes art-snap2 { 0%, 8% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 10% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 11% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 12.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 14% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 16% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 18%, 24% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 31% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 31.01%, 37.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 38% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 41.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 44% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 46% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } 58% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 60% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 61% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 62.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 64% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 66% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 68%, 74% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 81% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 81.01%, 87.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 88% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 91.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 94% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 96%, 100% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes art-snap3 { 0%, 10.5% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 12.5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 13.5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 15% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 16.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 18.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 20.5%, 24% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 31% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 31.01%, 39.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 40% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 43.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 46% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 48% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } 60.5% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 62.5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 63.5% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 65% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 66.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 68.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 70.5%, 74% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 81% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 81.01%, 89.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 90% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 93.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 96% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 98%, 100% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes art-snap4 { 0%, 13% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 15% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 16% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 17.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 19% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 21% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 23%, 24% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 31% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 31.01%, 41.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 42% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 45.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 48% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 50% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } 63% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-out; } 65% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 5px var(--tile-c, #fff)); opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; } 66% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); opacity: 1; transform: translateY(1.8px) scale(1); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 67.5% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-24px) scale(1); animation-timing-function: ease-in-out; } 69% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-21.5px) scale(1); animation-timing-function: ease-in-out; } 71% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22.4px) scale(1); animation-timing-function: ease-in-out; } 73%, 74% { stroke: var(--tile-c, #fff); filter: none; opacity: 1; transform: translateY(-22px) scale(1); animation-timing-function: ease-in; } 81% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); opacity: 0; transform: translateY(-28px) scale(1); } 81.01%, 91.99% { stroke: var(--tile-c, #fff); filter: none; opacity: 0; transform: translateY(0) scale(1); } 92% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(0.82); } 95.5% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(1.06); } 98% { stroke: #77777c; opacity: 1; transform: translateY(0) scale(0.99); } 100%, 100% { stroke: #77777c; filter: none; opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes art-find { 0%, 26% { stroke: #77777c; filter: none; transform: translateY(0); animation-timing-function: ease-out; } 38% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 6px var(--tile-c, #fff)); transform: translateY(0); } 47% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); transform: translateY(0); animation-timing-function: ease-in; } 50% { stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 4px var(--tile-c, #fff)); transform: translateY(1.6px); animation-timing-function: cubic-bezier(0.05, 0.85, 0.2, 1); } 56% { stroke: var(--tile-c, #fff); filter: none; transform: translateY(-26px); animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1); } 62% { stroke: var(--tile-c, #fff); filter: none; transform: translateY(-14px); animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1); } 66%, 84% { stroke: var(--tile-c, #fff); filter: none; transform: translateY(-17px); animation-timing-function: ease-in-out; } 94% { stroke: var(--tile-c, #fff); filter: none; transform: translateY(0); } 100% { stroke: #77777c; filter: none; transform: translateY(0); } }
 @keyframes art-dense2 { 0%, 20% { opacity: 1; } 52%, 84% { opacity: 0.12; } 100% { opacity: 1; } }
 @keyframes art-fit { 0%, 20% { stroke-dashoffset: 1; opacity: 1; } 52%, 82% { stroke-dashoffset: 0; opacity: 1; } 96% { stroke-dashoffset: 0; opacity: 0; } 100% { stroke-dashoffset: 1; opacity: 0; } }
 /* each drawing starts at once, a little way into its loop (no waiting, nothing staggered): the idle part at the start of every loop is skipped */
-.tile-art.art-holes *, .tile-art.art-holes { animation-delay: -0.5s; }
-.tile-art.art-split *, .tile-art.art-split { animation-delay: -0.9s; }
-.tile-art.art-hidden *, .tile-art.art-hidden { animation-delay: -0.9s; }
-.tile-art.art-fast *, .tile-art.art-fast { animation-delay: -1.5s; }
-.tile-art.art-smart *, .tile-art.art-smart { animation-delay: -1s; }
-.tile-art.art-trust *, .tile-art.art-trust { animation-delay: -1.2s; }
-.tile-art.art-optimise *, .tile-art.art-optimise { animation-delay: -1.2s; }
-.tile-art.art-shrink *, .tile-art.art-shrink { animation-delay: -1.2s; }
 @media (max-width: 760px) { .bento { grid-template-columns: minmax(0, 1fr); } .bento > .tile, .bento > .tile:last-child { grid-column: span 1; } .tile { min-height: 0; gap: 40px; } }
 /* headline figures */
 .figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: clamp(20px, 3vw, 48px); row-gap: clamp(28px, 4vw, 48px); counter-reset: fig; }
@@ -1364,15 +1376,26 @@ main { overflow-x: clip; }
 .tile-art .art-m-away, .tile-art .art-m-flash, .tile-art .art-m-stack { transform-box: fill-box; transform-origin: center; }
 .tile-art .art-m-flash { opacity: 0; }
 @media (prefers-reduced-motion: no-preference) {
-  .tile-art .art-m-away { animation: art-m-away 6s ease-in-out infinite; animation-delay: calc(var(--i) * 0.35s); }
-  .tile-art .art-m-flash { animation: art-m-flash 6s ease-in-out infinite; }
-  .tile-art .art-m-stack { animation: art-m-stack 6s ease-in-out infinite; }
+  .tile-art .art-m-away { animation: art-m-away var(--cycle) ease-in-out infinite; animation-delay: calc(var(--i) * 0.35s); }
+  .tile-art .art-m-flash { animation: art-m-flash var(--cycle) ease-in-out infinite; }
+  .tile-art .art-m-stack { animation: art-m-stack var(--cycle) ease-in-out infinite; }
 }
+/* Delete small parts: the little parts sit on the model in the same grey, then light up in the tile colour (picked out), then fade away one after another (no scaling) */
+@keyframes art-m-small { 0% { opacity: 0; stroke: #77777c; filter: none; } 8%, 28% { opacity: 1; stroke: #77777c; filter: none; } 38%, 46% { opacity: 1; stroke: var(--tile-c, #fff); filter: drop-shadow(0 0 3px var(--tile-c, #fff)); } 58%, 100% { opacity: 0; stroke: var(--tile-c, #fff); filter: none; } }
+/* Remove floating pieces: a stray piece pops out of sight at once; a burst of short lines (drawn out and then wiped away, never faded) (a drawn "poof") mark where it was */
+.tile-art .art-piece { transform-box: fill-box; transform-origin: center; }
+.tile-art .art-pop { stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; stroke-width: 1.2; }
+@media (prefers-reduced-motion: no-preference) {
+  .tile-art .art-m-fade { animation: art-m-fade var(--cycle) linear infinite; animation-delay: calc(var(--i) * 0.14s); }
+  .tile-art .art-pop { animation: art-pop var(--cycle) ease-out infinite; animation-delay: calc(var(--i) * 0.14s); }
+}
+/* (the card-wide start offset of this tile would otherwise win over the stagger above) */
+.tile-art.art-floating .art-m-fade, .tile-art.art-floating .art-pop { animation-delay: calc(var(--i) * 0.14s); }
+@keyframes art-m-fade { 0%, 22% { opacity: 1; transform: scale(1); } 22.01%, 89.99% { opacity: 0; transform: scale(1); } 90% { opacity: 1; transform: scale(0.82); } 94% { opacity: 1; transform: scale(1.07); } 97% { opacity: 1; transform: scale(0.98); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes art-pop { 0%, 22% { stroke-dashoffset: 1; opacity: 0; } 22.01% { stroke-dashoffset: 1; opacity: 1; } 26% { stroke-dashoffset: 0; opacity: 1; } 31% { stroke-dashoffset: -1; opacity: 1; } 31.01%, 100% { stroke-dashoffset: -1; opacity: 0; } }
 @keyframes art-m-away { 0%, 24% { opacity: 1; transform: translate(0, 0) scale(1); } 46%, 88% { opacity: 0; transform: translate(0, -10px) scale(0.3); } 100% { opacity: 1; transform: translate(0, 0) scale(1); } }
 @keyframes art-m-flash { 0%, 14% { opacity: 0; } 24%, 44% { opacity: 1; } 58%, 88% { opacity: 0; } 100% { opacity: 0; } }
 @keyframes art-m-stack { 0%, 12% { opacity: 1; transform: translate(26px, -16px); } 40%, 52% { opacity: 1; transform: translate(0, 0); } 66%, 88% { opacity: 0; transform: translate(0, 0); } 100% { opacity: 1; transform: translate(26px, -16px); } }
-.tile-art.art-floating *, .tile-art.art-faces *, .tile-art.art-small *, .tile-art.art-stack *, .tile-art.art-remesh *, .tile-art.art-repair * { animation-delay: -0.6s; }
-.tile-art.art-floating .art-m-away, .tile-art.art-small .art-m-away { animation-delay: calc(var(--i) * 0.35s - 0.6s); }
 .cmp { display: block; max-width: 980px; }
 .cmp-head { display: grid; grid-template-columns: minmax(0, 1.1fr) repeat(2, minmax(0, 1fr)); gap: 0 clamp(16px, 3vw, 48px); }
 .cmp-head::before { content: ''; }
@@ -1392,7 +1415,7 @@ main { overflow-x: clip; }
 .compare .cmp-q { color: #1d1d1f; max-width: none; }
 .cmp-col h3 { white-space: nowrap; }
 .fcar-stars .star .clip-art, .fcar-clips .clip .clip-art { padding: 0; }
-.fcar-stars .star .clip-art > *, .fcar-clips .clip .clip-art > * { transform-box: view-box; }
+/* (the cards of the carousel used to force transform-box: view-box on every part of a drawing, so each part scaled about the middle of the card; the drawings set fill-box themselves: each part grows from its own place) */
 /* Claude band, second take: big headline at the left, the whole screenshot below it, the prompts on the picture */
 .band.cl-band { padding-top: clamp(72px, 9vw, 136px); }
 .cl-hero { display: block; min-height: 0; background: none; overflow: visible; }
@@ -1425,12 +1448,12 @@ main { overflow-x: clip; }
 :is(.clip, .star) .clip-art { transition: background-color 0.35s ease, color 0.35s ease, stroke-width 0.35s ease, --art-dim 0.35s ease, --card-bg 0.35s ease; }
 :is(.clip, .star) .clip-art .art-hot { transition: filter 0.35s ease; }
 .tile-art .art-m-small { transform-box: fill-box; transform-origin: center; }
-@media (prefers-reduced-motion: no-preference) { .tile-art .art-m-small { animation: art-m-away 6s ease-in-out infinite; animation-delay: calc(var(--i) * 0.2s - 0.6s); } }
+@media (prefers-reduced-motion: no-preference) { .tile-art .art-m-small { animation: art-m-small var(--cycle) ease-in-out infinite; animation-delay: calc(var(--i) * 0.09s); } }
 .tile-art .art-m-bob { transform-box: fill-box; transform-origin: center; }
-@media (prefers-reduced-motion: no-preference) { .tile-art .art-m-bob { animation: art-m-bob 2.6s ease-in-out infinite; animation-delay: var(--bd); } .tile-art.art-floating .art-m-away { animation-delay: calc(var(--i) * 0.22s - 0.6s); } }
+@media (prefers-reduced-motion: no-preference) { .tile-art .art-m-bob { animation: art-m-bob 2.5s ease-in-out infinite; animation-delay: var(--bd); } }
 @keyframes art-m-bob { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(var(--bx), var(--by)); } }
 .tile-art .art-m-draw { stroke-dasharray: 1; stroke-dashoffset: 1; }
-@media (prefers-reduced-motion: no-preference) { .tile-art .art-m-draw { animation: art-m-draw 6s ease-in-out infinite; } }
+@media (prefers-reduced-motion: no-preference) { .tile-art .art-m-draw { animation: art-m-draw var(--cycle) ease-in-out infinite; } }
 @media (prefers-reduced-motion: reduce) { .tile-art .art-m-draw { stroke-dashoffset: 0; } }
 @keyframes art-m-draw { 0%, 26% { stroke-dashoffset: 1; opacity: 1; } 56%, 82% { stroke-dashoffset: 0; opacity: 1; } 94% { stroke-dashoffset: 0; opacity: 0; } 100% { stroke-dashoffset: 1; opacity: 0; } }
 /* Claude band: the picture sits inside the page margins with rounded corners, not edge to edge */
