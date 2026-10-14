@@ -4,6 +4,16 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.28.0
+
+Released 14 Oct 2026.
+
+v0.27.0 was about how things look and how they are kept. v0.28.0 is a small one, and it is about the pictures you take of them: pictures with a transparent background, at last.
+
+**Pictures**
+
+- ![fix][fix] **A picture with a transparent background came out black.** Render image (and Claude's `render_image`) now gives a real see-through PNG when the background is transparent, and a white, light, grey, dark or black background shows its own colour instead of black. I draw the model once on black and once on white and work the see-through part out from the difference, so the edges are clean on any page.
+
 ## v0.27.0
 
 Released 14 Oct 2026.
