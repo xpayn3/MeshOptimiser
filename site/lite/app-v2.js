@@ -11277,12 +11277,8 @@ const _ClaudeBridge = (() => {
       const BG = { white: 0xffffff, light: 0xf0f0f0, grey: 0x646464, dark: 0x222831, black: 0x000000 }, bgName = a.background || 'current';
       if (bgName !== 'current' && bgName !== 'transparent' && !(bgName in BG)) throw new Error('background must be current, transparent, white, light, grey, dark or black.');
       const saved = { bg: scene.background, bn: scene.backgroundNode, clear: renderer.getClearColor(new THREE.Color()), alpha: renderer.getClearAlpha ? renderer.getClearAlpha() : 1 };
-      // A plain background is not drawn by the renderer (its colour management would turn white into a light grey): the model is
-      // drawn on nothing, then laid on the exact colour.
-      const setBg = () => {
-        if (bgName === 'current') return;
-        scene.background = null; if (scene.backgroundNode !== undefined) scene.backgroundNode = null; renderer.setClearColor(0x000000, 0);
-      };
+      // A plain background is not asked of the renderer (its colour management would turn white into a light grey): the model is drawn
+      // on black and on white and laid on the exact colour (see the loop below).
       const flat = async (blob, hex) => {
         const bmp = await createImageBitmap(blob), c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
         const x = c.getContext('2d'); x.fillStyle = '#' + hex.toString(16).padStart(6, '0'); x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0); if (bmp.close) bmp.close();
@@ -11342,11 +11338,41 @@ const _ClaudeBridge = (() => {
         if (v === 'perspective') _setPerspectiveView(); else if (v !== 'current') _setStandardView(v);
         if (v !== 'current') await sleep(700);
         if (a.fit !== false) { frame(0.9); await sleep(200); }
-        setBg();
         let blob;
-        try { blob = await _captureFrameAsBlob(W * ss, H * ss, { viewMode: mode, hideGrid: a.hide_grid !== false }); }
-        finally { restoreBg(); requestRender(); }
-        if (bgName in BG) blob = await flat(blob, BG[bgName]);
+        if (bgName === 'current') {
+          try { blob = await _captureFrameAsBlob(W * ss, H * ss, { viewMode: mode, hideGrid: a.hide_grid !== false }); }
+          finally { restoreBg(); requestRender(); }
+        } else {
+          // The picture is drawn twice, once on opaque black and once on opaque white, and the see-through part is worked out from the
+          // difference. (Asking the renderer for an empty background did not work: the picture is read back from a canvas that has no alpha,
+          // so "transparent" and every plain colour came out black.)
+          const over = async (hex) => {
+            scene.background = null; if (scene.backgroundNode !== undefined) scene.backgroundNode = null; renderer.setClearColor(hex, 1);
+            try { return await _captureFrameAsBlob(W * ss, H * ss, { viewMode: mode, hideGrid: a.hide_grid !== false }); }
+            finally { restoreBg(); requestRender(); }
+          };
+          const pixels = async (b) => {
+            const bm = await createImageBitmap(b), c = document.createElement('canvas'); c.width = bm.width; c.height = bm.height;
+            const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(bm, 0, 0); if (bm.close) bm.close();
+            return { c, x, img: x.getImageData(0, 0, c.width, c.height) };
+          };
+          const k = await pixels(await over(0x000000)), w = await pixels(await over(0xffffff));
+          const kd = k.img.data, wd = w.img.data, n = kd.length;
+          // how far black and white are apart on the empty background (the renderer's own colour handling may not give exactly 255)
+          let L = 0;
+          for (let i = 0; i < n; i += 4) { const d = (wd[i] - kd[i] + wd[i + 1] - kd[i + 1] + wd[i + 2] - kd[i + 2]) / 3; if (d > L) L = d; }
+          if (L < 64) throw new Error('Could not tell the model from its background for a transparent picture.');
+          for (let i = 0; i < n; i += 4) {
+            const d = (wd[i] - kd[i] + wd[i + 1] - kd[i + 1] + wd[i + 2] - kd[i + 2]) / 3;
+            let al = 1 - d / L; if (al < 0.012) al = 0; else if (al > 0.992) al = 1;
+            if (al === 0) { kd[i] = kd[i + 1] = kd[i + 2] = 0; kd[i + 3] = 0; continue; }
+            // over black the colour is the model's colour times its coverage; divide the coverage out
+            kd[i] = Math.min(255, kd[i] / al); kd[i + 1] = Math.min(255, kd[i + 1] / al); kd[i + 2] = Math.min(255, kd[i + 2] / al); kd[i + 3] = Math.round(al * 255);
+          }
+          k.x.putImageData(k.img, 0, 0);
+          blob = await new Promise(r => k.c.toBlob(r, 'image/png'));
+          if (bgName in BG) blob = await flat(blob, BG[bgName]);
+        }
         let out = blob;
         if (ss > 1) out = (await scaled(blob, W, H, 'image/png')).blob;
         if (!corner) { try { const bm = await createImageBitmap(out), c = document.createElement('canvas'); c.width = c.height = 1; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(bm, 0, 0, 1, 1); corner = Array.from(x.getImageData(0, 0, 1, 1).data); } catch (_) {} }
