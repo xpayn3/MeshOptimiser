@@ -44,7 +44,7 @@ Requirements:
     optional: gltfpack on PATH (https://meshoptimizer.org/gltf/)
 """
 from __future__ import annotations
-import argparse, csv, hashlib, json, os, shutil, struct, subprocess, sys, tempfile, time, traceback
+import argparse, csv, hashlib, json, math, os, shutil, struct, subprocess, sys, tempfile, time, traceback
 from dataclasses import dataclass, replace as _dc_replace
 from pathlib import Path
 from collections import defaultdict
@@ -136,8 +136,8 @@ from OCP.STEPControl import STEPControl_Reader
 from OCP.IFSelect import IFSelect_RetDone
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
 from OCP.BRep import BRep_Tool
-from OCP.TopExp import TopExp_Explorer
-from OCP.TopAbs import TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID, TopAbs_REVERSED
+from OCP.TopExp import TopExp_Explorer, TopExp
+from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE, TopAbs_SHELL, TopAbs_SOLID, TopAbs_REVERSED
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS_Shape, TopoDS
 from OCP.TDocStd import TDocStd_Document
@@ -249,7 +249,9 @@ class Config:
     tiers: dict | None = None
     min_edge: float = 0.0        # smallest triangle edge the mesher may make (0 = no limit)
     normals: bool = True         # write the CAD surface normals (smooth shading across face seams)
+    surfaces: bool = True        # keep the parts of a STEP that are surfaces only (open shells, no solid)
     swap_yz: bool = False        # turn the model a quarter about X (a Z-up file for a Y-up scene, or back)
+    brep: bool = False           # write the B-rep beside the GLB (<name>.glb.brep.json / .bin): CAD faces and true edges
 
 
 # Module-level Config — set once by main() and read elsewhere. Cleaner than
@@ -609,6 +611,19 @@ def _surface_bodies(shape, color_tool, default_color):
     return shapes, colours
 
 
+def _loose_shells(shape, color_tool, default_color):
+    """The shells of a shape that sit outside every solid (the open surface bodies a STEP can carry beside its
+    solids), one body each. Returns (shapes, colours), parallel lists."""
+    shapes, colours = [], []
+    exp = TopExp_Explorer(shape, TopAbs_SHELL, TopAbs_SOLID)
+    while exp.More():
+        sh = exp.Current()
+        shapes.append(sh)
+        colours.append(get_shape_color(sh, color_tool) or default_color)
+        exp.Next()
+    return shapes, colours
+
+
 def get_label_color(label: TDF_Label, color_tool) -> tuple[float, float, float] | None:
     """Get the RGB color of a shape label, trying surface/generic/curve types in order."""
     c = Quantity_Color()
@@ -770,7 +785,7 @@ def _trsf_to_4x4(trsf) -> np.ndarray:
     return M
 
 
-def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False):
+def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False, loose_shells=False):
     """Build (products, roots) from the XCAF document.
 
     products  — dict[label_entry → XcafProduct], one entry per unique product.
@@ -846,6 +861,10 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
         if not solids and surfaces:
             # An IGES or BREP surface model: no solid, so the faces are the body.
             solids, solid_colors = _surface_bodies(shape, color_tool, color)
+        elif loose_shells:
+            # A STEP with surface-only parts beside its solids: each open shell is a body of its own.
+            sh, shc = _loose_shells(shape, color_tool, color)
+            solids += sh; solid_colors += shc
         products[key] = XcafProduct(name=name, color=color, solids=solids,
                                      meshes=[], solid_colors=solid_colors)
         return key
@@ -996,6 +1015,7 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     # dict of {name → Trimesh} that the exporter de-dupes on; multiple graph
     # frames pointing at the same name produce one glTF mesh + N nodes.
     geom_names: dict[tuple[str, int], str] = {}
+    brep_out: dict = {}        # geometry name -> B-rep record (--brep), for the sidecar
     n_geoms = 0
     n_colored = 0
     for key, prod in products.items():
@@ -1017,6 +1037,9 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
             scene.geometry[gname] = mesh
             geom_names[(key, i)] = gname
             n_geoms += 1
+            hit = _BREP.get(id(verts)) if CFG.brep else None
+            if hit is not None and hit[0] is verts:
+                brep_out[gname] = hit[1]
     log(f"applied colors to {n_colored}/{n_geoms} mesh geometries", "ok" if n_colored else "warn")
 
     # Nothing to put in a GLB (surfaces or wires only). The caller decides
@@ -1071,6 +1094,7 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
                     matrix=np.eye(4),
                     geometry=gname,
                 )
+                if gname in brep_out: node_extras[frame + "__geom"] = {"brep": gname}
                 n_geom_refs[0] += 1
             else:
                 for k in geom_keys:
@@ -1082,6 +1106,7 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
                         matrix=np.eye(4),
                         geometry=gname,
                     )
+                    if gname in brep_out: node_extras[f"{frame}__geom_{idx:03d}"] = {"brep": gname}
                     n_geom_refs[0] += 1
         else:
             for child in node.children:
@@ -1120,6 +1145,8 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     if node_extras:
         n_done = _inject_node_extras(output, node_extras)
         log(f"CAD metadata on {n_done} of {len(node_extras)} nodes", "ok" if n_done == len(node_extras) else "warn")
+    if brep_out:
+        write_brep_sidecar(brep_out, output)
     RESULT["parts"] = n_parts[0]
     RESULT["unique_products"] = len(products)
     out_mb = output.stat().st_size / 1048576
@@ -1332,6 +1359,106 @@ def _normals_of(verts):
     return None
 
 
+# ─── The B-rep of a solid, kept beside its mesh (--brep).
+# For every solid solid_to_mesh() meshes it also notes what the mesh came from: the CAD faces (kind, size, which
+# triangles) and the real CAD edges (the polylines the mesher put on them). The record is filed under id(verts), as
+# _NORMALS is, and written beside the GLB by write_brep_sidecar().
+_BREP: dict = {}
+
+# Face kinds, in the order of the codes the viewer reads (see _brepKinds in app-v2.js).
+_FACE_KINDS = ("plane", "cylinder", "cone", "sphere", "torus", "bezier", "bspline", "revolution", "extrusion", "offset", "other")
+
+
+def _face_kind(face) -> tuple:
+    """(kind code, [numbers]) of a CAD face: plane / cylinder / cone / sphere / torus ... and the radii that describe it
+    (frame independent: radius; semi-angle in degrees and reference radius; major and minor radius)."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.GeomAbs import GeomAbs_SurfaceType as T
+    try:
+        ad = BRepAdaptor_Surface(face, True)
+        t = ad.GetType()
+        if t == T.GeomAbs_Plane: return 0, []
+        if t == T.GeomAbs_Cylinder: return 1, [ad.Cylinder().Radius()]
+        if t == T.GeomAbs_Cone: return 2, [math.degrees(ad.Cone().SemiAngle()), ad.Cone().RefRadius()]
+        if t == T.GeomAbs_Sphere: return 3, [ad.Sphere().Radius()]
+        if t == T.GeomAbs_Torus: return 4, [ad.Torus().MajorRadius(), ad.Torus().MinorRadius()]
+        if t == T.GeomAbs_BezierSurface: return 5, []
+        if t == T.GeomAbs_BSplineSurface: return 6, []
+        if t == T.GeomAbs_SurfaceOfRevolution: return 7, []
+        if t == T.GeomAbs_SurfaceOfExtrusion: return 8, []
+        if t == T.GeomAbs_OffsetSurface: return 9, []
+    except Exception:
+        pass
+    return 10, []
+
+
+def _solid_edges(solid, faces: dict, fmap) -> tuple:
+    """The CAD edges of a solid as polylines on its mesh. `fmap` is the solid's face map; `faces` maps a face's index in
+    it to (triangulation, location, transformed vertices, record number). Returns (rows, points):
+      rows    [first point, point count, smooth (1 = the two faces meet tangent), face a, face b] per edge
+      points  float32 (N, 3), the same space as the mesh
+    A seam (an edge that closes a cylinder on itself) and a degenerate edge (the tip of a cone) are not CAD lines
+    and are left out."""
+    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+    from OCP.GeomAbs import GeomAbs_Shape
+    emap = TopTools_IndexedDataMapOfShapeListOfShape()
+    TopExp.MapShapesAndAncestors_s(solid, TopAbs_EDGE, TopAbs_FACE, emap)
+    rows, chunks, n = [], [], 0
+    for i in range(1, emap.Extent() + 1):
+        edge = TopoDS.Edge_s(emap.FindKey(i))
+        if BRep_Tool.Degenerated_s(edge): continue
+        owners = [TopoDS.Face_s(f) for f in emap.FindFromIndex(i)]
+        if not owners: continue
+        seam = any(BRep_Tool.IsClosed_s(edge, f) for f in owners)
+        if seam: continue
+        pts = None
+        for f in owners:
+            hit = faces.get(fmap.FindIndex(f))
+            if not hit: continue
+            tri, floc, fverts, _ = hit
+            poly = BRep_Tool.PolygonOnTriangulation_s(edge, tri, floc)
+            if poly is None: continue
+            idx = poly.Nodes()
+            ids = [idx.Value(k) - 1 for k in range(idx.Lower(), idx.Upper() + 1)]
+            if len(ids) >= 2 and max(ids) < len(fverts):
+                pts = fverts[ids]; break
+        if pts is None: continue
+        nums = []
+        for f in owners[:2]:
+            hit = faces.get(fmap.FindIndex(f))
+            nums.append(hit[3] if hit else -1)
+        while len(nums) < 2: nums.append(-1)
+        smooth = 0
+        if len(owners) == 2 and not owners[0].IsSame(owners[1]):
+            try: smooth = 1 if BRep_Tool.Continuity_s(edge, owners[0], owners[1]) != GeomAbs_Shape.GeomAbs_C0 else 0
+            except Exception: smooth = 0
+        rows.append([n, len(pts), smooth, nums[0], nums[1]])
+        chunks.append(np.asarray(pts, dtype=np.float32)); n += len(pts)
+    return rows, (np.vstack(chunks) if chunks else np.zeros((0, 3), np.float32))
+
+
+def write_brep_sidecar(solids: dict, output: Path) -> None:
+    """Write <output>.brep.json (the index) and <output>.brep.bin (the edge points, float32 xyz) from
+    {geometry key: record}. The key is what the GLB names on the node that carries the geometry (extras.brep)."""
+    if not solids: return
+    index, blobs, off = {}, [], 0
+    for key, rec in solids.items():
+        pts = rec["points"]
+        index[key] = {"faces": rec["faces"], "edges": rec["edges"], "tris": rec["tris"], "pts": [off, int(len(pts))]}
+        blobs.append(pts.astype("<f4", copy=False)); off += len(pts)
+    base = output.with_suffix(output.suffix + ".brep")
+    body = {"v": 1, "kinds": list(_FACE_KINDS), "solids": index}
+    tmp = base.with_name(base.name + ".bin.tmp")
+    with tmp.open("wb") as f:
+        for b in blobs: f.write(b.tobytes())
+    os.replace(tmp, base.with_name(base.name + ".bin"))
+    tmpj = base.with_name(base.name + ".json.tmp")
+    tmpj.write_text(json.dumps(body, separators=(",", ":")), encoding="utf-8")
+    os.replace(tmpj, base.with_name(base.name + ".json"))
+    n_faces = sum(len(r["faces"]) for r in solids.values()); n_edges = sum(len(r["edges"]) for r in solids.values())
+    log(f"B-rep: {n_faces:,} faces, {n_edges:,} edges, {off:,} edge points for {len(solids)} solids", "ok")
+
+
 def _identity_trsf(t) -> bool:
     """gp_Trsf is identity? Cheap check before allocating + matmul."""
     try:
@@ -1364,6 +1491,13 @@ def solid_to_mesh(solid: TopoDS_Shape):
     offset = 0
     exp = TopExp_Explorer(solid, TopAbs_FACE)
     loc = TopLoc_Location()
+    want_brep = CFG.brep
+    if want_brep:
+        from OCP.TopTools import TopTools_IndexedMapOfShape
+        fmap = TopTools_IndexedMapOfShape()
+        brep_faces: list = []          # per CAD face: [kind, first triangle, triangle count, area, *numbers]
+        brep_hits: dict = {}           # face map index -> (triangulation, location, vertices, record number)
+        tri_total = 0
     while exp.More():
         face = TopoDS.Face_s(exp.Current())
         tri = BRep_Tool.Triangulation_s(face, loc)
@@ -1404,6 +1538,17 @@ def solid_to_mesh(solid: TopoDS_Shape):
             tris_buf[j - 1, 2] = c - 1
         if reverse:
             tris_buf = tris_buf[:, [1, 0, 2]]
+        if want_brep:
+            try:
+                a = verts[tris_buf[:, 1]].astype(np.float64) - verts[tris_buf[:, 0]]
+                b = verts[tris_buf[:, 2]].astype(np.float64) - verts[tris_buf[:, 0]]
+                area = float(0.5 * np.linalg.norm(np.cross(a, b), axis=1).sum())
+                kind, nums = _face_kind(face)
+                brep_faces.append([kind, tri_total, n_tris, round(area, 4)] + [round(float(x), 5) for x in nums])
+                brep_hits[fmap.Add(face)] = (tri, loc.Multiplied(TopLoc_Location()), verts, len(brep_faces) - 1)
+                tri_total += n_tris
+            except Exception:
+                want_brep = False       # (an odd face: this solid goes without a B-rep, and the mesh is unharmed)
         if offset:
             tris_buf = tris_buf + np.uint32(offset)
 
@@ -1442,6 +1587,12 @@ def solid_to_mesh(solid: TopoDS_Shape):
     out_v = np.vstack(all_verts)
     if want_normals and len(all_norms) == len(all_verts):
         _NORMALS[id(out_v)] = (out_v, np.vstack(all_norms))
+    if want_brep and brep_faces:
+        try:
+            rows, pts = _solid_edges(solid, brep_hits, fmap)
+            _BREP[id(out_v)] = (out_v, {"faces": brep_faces, "edges": rows, "points": pts, "tris": tri_total})
+        except Exception as e:
+            log(f"B-rep edges of one solid skipped: {e}", "warn")
     return out_v, np.vstack(all_tris)
 
 
@@ -1555,6 +1706,7 @@ def build_glb(parts: list[dict], output: Path, scene_meta: dict, instance: bool 
     if instance and n_instanced:
         log(f"  → {n_instanced} parts will be instanced ({n_total - n_unique} draws saved)", "ok")
 
+    brep_out: dict = {}        # key on the node (extras.brep) -> B-rep record (--brep), for the sidecar
     for h, group in groups.items():
         ref = group[0]
         if instance and len(group) > 1:
@@ -1565,6 +1717,9 @@ def build_glb(parts: list[dict], output: Path, scene_meta: dict, instance: bool 
             mesh = _trimesh(verts, tris, None if verts is ref["verts"] else False)
             _apply_color(mesh, ref.get("color"))
             geom_name = f"shape_{h[:10]}"
+            bkey = None
+            if ref.get("brep") is not None and verts is ref["verts"]:       # (a turned copy no longer matches the B-rep)
+                bkey = geom_name; brep_out[bkey] = ref["brep"]
             for p in group:
                 # Pass the part's world transform — trimesh stores it on the node
                 scene.add_geometry(
@@ -1572,7 +1727,7 @@ def build_glb(parts: list[dict], output: Path, scene_meta: dict, instance: bool 
                     geom_name=geom_name,
                     node_name=p["name"],
                     transform=p["transform"],
-                    metadata=_node_meta(p),
+                    metadata=({**_node_meta(p), "brep": bkey} if bkey else _node_meta(p)),
                 )
         else:
             # Singletons: bake into world coords (no transform, simplest)
@@ -1580,7 +1735,10 @@ def build_glb(parts: list[dict], output: Path, scene_meta: dict, instance: bool 
                 if len(p["verts"]) == 0 or len(p["tris"]) == 0: continue
                 mesh = _trimesh(p["verts"], p["tris"])
                 _apply_color(mesh, p.get("color"))
-                scene.add_geometry(mesh, node_name=p["name"], metadata=_node_meta(p))
+                meta = _node_meta(p)
+                if p.get("brep") is not None:
+                    bkey = f"part_{len(brep_out):06d}"; brep_out[bkey] = p["brep"]; meta["brep"] = bkey
+                scene.add_geometry(mesh, node_name=p["name"], metadata=meta)
 
     # Stash document-level metadata so the web side can show it
     if scene_meta:
@@ -1593,6 +1751,8 @@ def build_glb(parts: list[dict], output: Path, scene_meta: dict, instance: bool 
     scene.export(output)
     out_mb = output.stat().st_size / 1048576
     log(f"wrote {out_mb:.2f} MB in {time.time() - t0:.1f}s", "ok")
+    if brep_out:
+        write_brep_sidecar(brep_out, output)
 
 
 def _apply_color(mesh: trimesh.Trimesh, color):
@@ -1646,12 +1806,14 @@ def _cache_params(input_path: Path) -> dict:
         "min_edge": CFG.min_edge,
         "normals": CFG.normals,
         "swap_yz": CFG.swap_yz,
+        "surfaces": CFG.surfaces,
         "meshopt": CFG.meshopt,
         "quantize": CFG.quantize,
         "simplify": CFG.simplify,
         "instance": CFG.instance,
         "colors": CFG.colors,
         "extras": CFG.extras,
+        "brep": CFG.brep,
         "lod": list(CFG.lod),
         "lod_error": CFG.lod_error if CFG.lod else None,
     }
@@ -1825,6 +1987,7 @@ def _simplified_parts(parts: list, ratio: float) -> list:
         p["verts"] = p["verts"][sel]
         p["canonical"] = p["canonical"][sel]
         p["tris"] = nt
+        p["brep"] = None            # (the faces and edges belong to the full mesh, not this one)
         out[i] = p
     return out
 
@@ -2059,7 +2222,7 @@ def convert(input_path: Path, output_path: Path) -> None:
         log("walking XCAF assembly tree...")
         t_walk = time.time()
         products, roots = walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=doc,
-                                         surfaces=(kind != "step"))
+                                         surfaces=(kind != "step"), loose_shells=(kind == "step" and CFG.surfaces))
         log(f"  → {len(products)} unique products, {len(roots)} top-level roots "
             f"in {time.time()-t_walk:.2f}s", "ok")
         extract_product_meshes(products)
@@ -2310,6 +2473,7 @@ def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
                 "color": entry.get("color"),
                 "volume": vol, "area": area,
                 "diag": bbox_diag(verts),
+                "brep": (lambda h: h[1] if h is not None and h[0] is verts else None)(_BREP.get(id(verts)) if CFG.brep else None),
             })
             # Periodic progress for huge files (was silent during extraction)
             if (idx + 1) % log_every == 0:
@@ -2549,8 +2713,13 @@ def main() -> int:
     ap.add_argument("--min-edge", type=float, default=0.0,
                     help="Smallest triangle edge the mesher may make, in model units (0 = no limit). "
                          "Stops tiny fillets and threads from filling up with slivers.")
+    ap.add_argument("--brep", action="store_true",
+                    help="Also write the B-rep beside the GLB (<name>.glb.brep.json and .brep.bin): the CAD faces "
+                         "(type, size, which triangles) and the true CAD edges, for the viewer.")
     ap.add_argument("--no-normals", action="store_true",
                     help="Do not write the CAD surface normals (the viewer then shades from the triangles).")
+    ap.add_argument("--no-surfaces", action="store_true",
+                    help="STEP: leave out the parts that are surfaces only (open shells), keep the solids.")
     ap.add_argument("--swap-yz", action="store_true",
                     help="Turn the model a quarter about X: a Z-up CAD file for a Y-up scene.")
     # Four options below only do something in the plain (non-XCAF) reader:
@@ -2715,7 +2884,9 @@ def main() -> int:
         tiers          = tiers,
         min_edge       = float(args.min_edge),
         normals        = not args.no_normals,
+        surfaces       = not args.no_surfaces,
         swap_yz        = bool(args.swap_yz),
+        brep           = bool(args.brep),
     )
     if any(p < 100 for p in CFG.lod):
         try:

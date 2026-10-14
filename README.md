@@ -310,6 +310,15 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.28.0** — see what is wrong with your model, fix it in a tap, and keep the real edges of your CAD file.
+
+- ![new][new] **Model inspector** — one window for what the model is and what is broken in it: inside-out parts, wrong-way faces, holes, doubled and needle triangles, with a button that opens the right fix.
+- ![new][new] **Fix normals** — find faces that point the wrong way, turn them round or line them up, and paint the wrong side red while you look. **UV layout** shows how a texture is laid out.
+- ![new][new] **CAD edges** — a STEP keeps its own faces and edges, with the face under the pointer named and tinted; surface-only parts come along too.
+- ![new][new] **Quick colour wheel** (hold C), a rebuilt **colour picker**, editable materials, and **one View button** for Solid, Wireframe, X-ray and Heatmap.
+- ![new][new] **One-click installer for Windows**, and a Settings switch to show or hide the terminal window.
+- ![fix][fix] Undo now reaches colours and sliders, shortcuts work while a slider has the focus, and switching Shadows quickly no longer loses the view.
+
 **v0.27.1** — pictures with a transparent background, at last.
 
 - ![fix][fix] **A picture with a transparent background came out black.** Render image (and Claude's `render_image`) now gives a real see-through PNG when the background is transparent, and a white, light, grey, dark or black background shows its own colour instead of black.

@@ -364,7 +364,7 @@ def _sweep_stale_inbox() -> None:
             name = p.name.lower()
             is_job_file = (
                 _JOB_PREFIX_RE.match(p.name) is not None
-                and name.endswith(CAD_EXTS + (".glb", ".glb.params.json"))
+                and name.endswith(CAD_EXTS + (".glb", ".glb.params.json", ".glb.brep.json", ".glb.brep.bin"))
             )
             is_orphan_cache = name.endswith(".xcaf-cache.xbf")
             if is_job_file or is_orphan_cache:
@@ -500,6 +500,7 @@ def interactive_convert(src: Path) -> Path | None:
 # inbox/cache/ (the hourly sweep only looks at the top level of inbox/), is capped in size and drops its oldest files first.
 CACHE_DIR = INBOX / "cache"
 CACHE_MAX_BYTES = 3 * 1024 ** 3
+_BREP_EXTS = (".brep.json", ".brep.bin")        # what step2glb.py --brep writes beside a GLB (<name>.glb.brep.json / .bin)
 
 def _converter_signature() -> str:
     parts = []
@@ -524,6 +525,9 @@ def _cache_lookup(key: str, dst_path: Path) -> bool:
         params = CACHE_DIR / f"{key}.glb.params.json"
         if params.is_file():
             shutil.copyfile(params, dst_path.with_suffix(dst_path.suffix + ".params.json"))
+        for ext in _BREP_EXTS:              # the B-rep beside the GLB, when it was asked for
+            side = CACHE_DIR / f"{key}.glb{ext}"
+            if side.is_file(): shutil.copyfile(side, dst_path.with_suffix(dst_path.suffix + ext))
         try: os.utime(glb, None)            # recently used stays
         except OSError: pass
         return True
@@ -538,6 +542,9 @@ def _cache_store(key: str, dst_path: Path) -> None:
         shutil.copyfile(dst_path, CACHE_DIR / f"{key}.glb")
         params = dst_path.with_suffix(dst_path.suffix + ".params.json")
         if params.is_file(): shutil.copyfile(params, CACHE_DIR / f"{key}.glb.params.json")
+        for ext in _BREP_EXTS:
+            side = dst_path.with_suffix(dst_path.suffix + ext)
+            if side.is_file(): shutil.copyfile(side, CACHE_DIR / f"{key}.glb{ext}")
         files = [f for f in CACHE_DIR.iterdir() if f.is_file()]
         total = sum(f.stat().st_size for f in files)
         for f in sorted(files, key=lambda f: f.stat().st_mtime):
@@ -563,6 +570,7 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
                 job["log"].append("same file and settings as before: the kept result is used")
                 job["message"] = "opened from the kept result"
                 job["status"] = "done"; job["result"] = dst_path.name; job["progress"] = 100
+                job["brep"] = all(dst_path.with_suffix(dst_path.suffix + e).is_file() for e in _BREP_EXTS)
         return
     waited = False
     while not _CONVERT_SLOTS.acquire(timeout=1.0):
@@ -638,7 +646,9 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
         if opts.get("tiers"):    cmd += ["--tiers", opts["tiers"]]
         if opts.get("min_edge"): cmd += ["--min-edge", str(opts["min_edge"])]
         if not opts.get("normals", True): cmd += ["--no-normals"]
+        if not opts.get("surfaces", True): cmd += ["--no-surfaces"]
         if opts.get("swap_yz"):  cmd += ["--swap-yz"]
+        if opts.get("brep"):     cmd += ["--brep"]
         # Log which Python interpreter we're calling — makes it obvious in the
         # browser conversion log when a stale serve.py is still using the
         # global Python instead of the venv one.
@@ -706,6 +716,7 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
             JOBS[job_id]["status"] = "done"
             JOBS[job_id]["result"] = dst_path.name
             JOBS[job_id]["progress"] = 100
+            JOBS[job_id]["brep"] = all(dst_path.with_suffix(dst_path.suffix + e).is_file() for e in _BREP_EXTS)
         if opts.get("_ckey"): _cache_store(opts["_ckey"], dst_path)
     except Exception as e:
         with JOBS_LOCK:
@@ -1278,6 +1289,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._handle_bridge_status()
         if u.path == "/api/update/status":
             return self._json(updater.status())
+        if u.path == "/api/console":
+            return self._json({"show": (ROOT / ".show-console").exists()})
         if u.path == "/mcp":
             self.send_response(405); self.send_header("Allow", "POST"); self.send_header("Content-Length", "0"); self.end_headers(); return
         if u.path.startswith("/api/job/"):
@@ -1305,6 +1318,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if u.path == "/api/bridge/off": return self._handle_bridge_off()
         if u.path == "/api/bridge/restart": return self._handle_bridge_restart()
         if u.path == "/api/restart": return self._handle_restart()
+        if u.path == "/api/console": return self._handle_console()
         if u.path.startswith("/api/update/"): return self._handle_update(u.path[len("/api/update/"):])
         if u.path == "/mcp":         return self._handle_mcp()
         if u.path == "/api/bridge/result": return self._handle_bridge_result()
@@ -1406,6 +1420,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         _reload_knowledge()
         _mcp_log(f"the connection was restarted ({len(KB)} knowledge entries, {len(MCP_TOOLS)} tools)")
         return self._json({"ok": True, "knowledge": len(KB), "tools": len(MCP_TOOLS)})
+
+    def _handle_console(self):
+        """Settings > General > "Show a terminal window": a marker file that start_hidden.vbs looks for the next time the app is started from its shortcut."""
+        body = self._read_json() or {}
+        flag = ROOT / ".show-console"
+        try:
+            if body.get("show"): flag.write_text("1", encoding="utf-8")
+            elif flag.exists(): flag.unlink()
+        except OSError as e:
+            return self._json({"ok": False, "error": str(e)}, 500)
+        return self._json({"ok": True, "show": flag.exists()})
 
     def _handle_restart(self):
         """The whole server: stop it and start it again. The page and its scenes stay; it reconnects within seconds."""
@@ -1664,7 +1689,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "instance":  _qbool("instance",  True),
             "force":     _qbool("force",     False),
             "normals":   _qbool("normals",   True),
+            "surfaces":  _qbool("surfaces",  True),
             "swap_yz":   _qbool("swap_yz",   False),
+            "brep":      _qbool("brep",      False),
         }
         # Angle in degrees (the converter takes radians), the smallest edge in
         # model units, and the three size groups as the converter's --tiers

@@ -4,6 +4,59 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.28.0
+
+Released 14 Oct 2026.
+
+v0.27.1 fixed your pictures. v0.28.0 is about trusting your model: the app now tells you what is wrong with it, turns wrong-way faces round in one tap, shows how a texture is laid out, and keeps the real faces and edges of your CAD file. It is also easier to start: one double-click installs it, and a switch in Settings decides whether it opens with a terminal window or without one.
+
+**See what is wrong, then fix it**
+
+- ![new][new] **Model inspector: everything about the model, and what is broken in it.** One window shows what you have (parts, triangles, size, materials, how much is shared) and lists the heaviest parts. Press *Scan the geometry* and it reads every mesh once and tells you about inside-out parts, faces turned the wrong way, triangles with no area, doubled triangles, holes and cracks, edges shared by three or more triangles, pinched corners, parts in several pieces and needle triangles. Each problem has a *Select* button and, where there is one, a button that opens the tool that fixes it. Open it from the command search (Ctrl+K).
+- ![new][new] **Fix normals.** A face that points the wrong way looks dark, or see-through from one side. *Find problems* looks without changing anything and selects the parts that have one. *Reverse* turns the faces of the selected parts round. *Align* makes neighbouring faces agree and points every closed shape outward (a hollow inside a part stays pointing inward, as it should). *Highlight back faces* paints the wrong side red while you look. Everything can be undone with Ctrl+Z, and all of it is in the command search too.
+- ![new][new] **UV layout.** See how a part's texture is laid out. The card draws the 0 to 1 square, every island, what covers the same place twice and what lies outside the square, and puts numbers beside it: islands, space used, overlap, collapsed and mirrored triangles, texel density. It follows your selection. Open it from the command search (Ctrl+K).
+
+**Your CAD file, as it was drawn**
+
+- ![new][new] **The true faces and edges of a STEP file.** Open a STEP and a *CAD edges* pill appears in the view. The outlines are the file's own edges, not lines guessed from triangle angles. Switch on *Face info on hover* and the face under the pointer is named (plane, cylinder, cone, sphere, torus and more, with its radius, area and triangles) and tinted blue. *Tangent edges* hides the lines where two faces run smoothly into each other, like the borders of a fillet.
+- ![new][new] **Surface parts come along.** Sheet covers, shields and other bodies that are open surfaces with no solid inside used to vanish when a STEP was opened. *Surface parts* in the import window (on by default) keeps them as parts of their own.
+
+**Colour, in a flick**
+
+- ![new][new] **Quick colour wheel.** Hold C over the model, move, let go. The angle is the hue, the distance from the middle is the saturation, the very middle is white, and the scroll wheel sets the brightness. Your selected parts take the colour as you move. Drag far out, or press Esc, to cancel and get the old colour back. It is one undo step.
+- ![new][new] **A colour picker built for modelling.** A square or a wheel; HEX, RGB, HSV or HSL, all typeable (the arrow keys step the value); a pipette for the screen, a button that takes the colour of any part you click, a Was / New strip, and rows of recent, scene and preset colours. Ctrl+Z steps back through the colours you picked and leaves the picker open.
+- ![new][new] **Edit a material where you see it.** The materials panel now has a colour swatch with its hex, and sliders with number boxes for roughness, metalness and opacity. Each change is its own undo step. Pick several materials and *Merge* (Ctrl+M) shows what the merged one will be before you commit.
+
+**A calmer workspace**
+
+- ![new][new] **One View button.** Solid, Wireframe, X-ray and Heatmap are one button now: a click goes to the next view, and holding it (or a right-click) lists all four with their shortcuts. Model mode has a pill of its own above the tools.
+- ![new][new] **Quick choices on the tree toolbar.** Click *Collapse*, *Rename* or *Flatten* to see what they can do in one step: collapse or expand the tree or the selection; rename with a preset such as *Strip _geom suffix*, *Add parent prefix* or *snake_case*; flatten everything, merge groups with one child, or flatten only the deepest level. Move across to the next button with the menu open and it opens at once. The toolbar is icons only, and *Recentre*, *Centre pivot* and *Bake transforms* have moved onto it.
+- ![new][new] **The Commands menu knows more.** Four lists beside it, *Select*, *Edit*, *Repair* and *Share*, put copy, paste, ungroup, batch rename, repair mesh, fix normals, screenshot, turntable video, measure and save one step away.
+- ![new][new] **A tidier Quick wand.** *Isolate* is on the ring itself, a new *Select* fan holds Select similar, Select same colour, Invert and Show in tree, and the name of the command under your pointer stays in one place.
+- ![polish][polish] **Edge to edge.** Properties and Shading sit on the sidebar without a card around them, lined up with the buttons below. A small handle under the selection buttons takes you back to the top, and the version number sits at the bottom of the sidebar.
+- ![polish][polish] **Plainer words, calmer motion.** *Reduce* shows what it will do as a figure (2,731,301 → 149,996 triangles, with how many meshes or parts it touches), the clean-up cards use shorter names, and the Edit mesh tool bar and the Batch rename tabs fade and slide instead of snapping.
+
+**Getting started**
+
+- ![new][new] **A one-click installer for Windows.** Double-click *Install MeshOptimiser.bat*: it finds the current version, downloads it with a progress bar, puts it in your user folder and adds MeshOptimiser to the Desktop and the Start menu. Run it again to update; your Python environment, inbox and exports stay as they are.
+- ![new][new] **Show a terminal window, if you want one.** *Settings › General › Show a terminal window* decides whether MeshOptimiser opens with the window that holds its log (on) or with no window of its own (off, the default). It applies the next time you start it from its shortcut.
+
+**Fixes**
+
+- ![fix][fix] **Ctrl+Z did nothing for a colour or a slider changed in the material editor until I closed the editor.** Each finished change in the editor is now a step of its own, and Undo records a change that is still pending before it undoes.
+- ![fix][fix] **After dragging a slider I had to click somewhere else before Ctrl+Z worked.** Shortcuts now work while a slider, a switch or a button has the focus; the keys such a control uses itself stay with it.
+- ![fix][fix] **The command search listed commands as ready that cannot run, and listed the quick colour wheel twice.** It now greys out, with the reason, the commands that need a selection or a model, and the wheel is listed once.
+- ![fix][fix] **The bottom corners of the colour square showed a dark rim.** The square is clipped to its rounded shape, so the corners are clean.
+- ![fix][fix] **The Was / New strip of the colour picker vanished while I dragged a colour.** It stays on screen during a drag, with room round the words, in dark or light text, whichever reads on the colour.
+- ![fix][fix] **Ctrl+Z closed the colour picker.** While the picker is open, Ctrl+Z and Ctrl+Y step through the colours picked in it and the picker stays open.
+- ![fix][fix] **I could not undo a change of the light, the exposure, the field of view, the fog or the environment strength.** Each of those sliders now records a step when I let go of it.
+- ![fix][fix] **Align did nothing on a part that was inverted all over, and would have turned a cavity wall outward.** A piece with a gap, or one inside another, is now judged as well as a fully closed one.
+- ![fix][fix] **The red back-face highlight stayed on some parts after it was switched off, and a first version of it stopped the app drawing.** The tint is now added to the colour once, and it goes away when the switch does.
+- ![fix][fix] **Switching Shadows on and off several times quickly lost the viewport.** The clicks now settle for a moment and only the last state is applied.
+- ![fix][fix] **Closing the tab or the window with a model open asked nothing.** The warning now appears whenever a model is open (Settings › General › *Warn before closing with a model open*, on by default), not only when there are unsaved changes.
+- ![fix][fix] **Points in Edit mesh showed through thin parts from the far side.** Points that face away are not drawn, and the ones in front sit closer to the surface.
+- ![fix][fix] **Repair mesh turned only fully closed pieces outward.** A piece with a gap is now turned outward when most of its faces agree, and a hollow inside another part is left pointing inward.
+
 ## v0.27.1
 
 Released 14 Oct 2026.

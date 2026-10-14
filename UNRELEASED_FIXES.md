@@ -7,8 +7,7 @@ wrong and why. When a version is released, its entries move into the changelog a
 Entry format: the changelog's own (`![fix][fix] **What was wrong, in the user's words.** What now happens.`), written as one person
 ("I"), never "we". Under each entry, a line for the maintainer: `Cause:` and `Where:` (and `Test:` if one covers it).
 
-Last release in the changelog: **v0.27.1**.
+Last release in the changelog: **v0.28.0**.
 
 ## Fixed
 
-(nothing yet)

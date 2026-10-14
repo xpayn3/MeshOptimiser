@@ -86,3 +86,12 @@ const edgesConsistent = (r) => { const e = new Map(); const x = r.index; let goo
   ok(r.groups.length === 2 && r.groups[0].start === 0 && r.groups[1].start === r.groups[0].count && r.groups[0].count + r.groups[1].count === 36, 'two groups kept: ' + JSON.stringify(r.groups)); }
 if (fails) { console.error(fails + ' failed'); process.exit(1); }
 console.log('meshrepair: all checks pass');
+// Align: a piece that is inside-out all over, with a gap in it, is turned outward; an open sheet is left as it is
+{
+  const position = new Float32Array([0,0,0, 1,0,0, 0,1,0, 0,0,1]);
+  const open = repairMesh({ position, index: Uint32Array.from([0,1,2, 0,3,1, 0,2,3]) }, { weld: false, degenerate: false, orient: true, outward: true });
+  console.assert(open.stats.flipped === 3, 'open inside-out piece is turned outward, got ' + open.stats.flipped);
+  const sheet = repairMesh({ position: new Float32Array([0,0,0, 1,0,0, 0,1,0, 1,1,0]), index: Uint32Array.from([0,1,2, 1,3,2]) }, { weld: false, degenerate: false, orient: true, outward: true });
+  console.assert(sheet.stats.flipped === 0, 'a flat sheet is not turned, got ' + sheet.stats.flipped);
+  console.log('meshrepair: align checks pass');
+}

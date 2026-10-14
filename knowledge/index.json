@@ -272,6 +272,46 @@
   "chars": 2962
  },
  {
+  "slug": "model-inspector",
+  "title": "Model inspector: what the model is, and what is wrong with it",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "One window that shows what is in the model and finds the faults in it: faces turned the wrong way, holes, doubled triangles. Each fault has a button that fixes it.",
+  "chars": 3116
+ },
+ {
+  "slug": "fix-normals",
+  "title": "Fix normals: faces that point the wrong way",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Find faces that are turned the wrong way and turn them right, in one tap, without guessing.",
+  "chars": 2200
+ },
+ {
+  "slug": "uv-layout",
+  "title": "UV layout: how a texture sits on a part",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "See how the picture on a part is laid out, and where it overlaps, runs outside its square or stretches.",
+  "chars": 1989
+ },
+ {
+  "slug": "cad-edges",
+  "title": "CAD faces and edges from a STEP file",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "A STEP file knows its real faces and real edges. MeshOptimiser keeps them, so the outlines are the ones the designer drew.",
+  "chars": 2113
+ },
+ {
+  "slug": "quick-colour-wheel",
+  "title": "Quick colour wheel: colour a part without a dialog",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Hold a key, move, let go. The selected parts take the colour as you go.",
+  "chars": 1540
+ },
+ {
   "slug": "workflow",
   "title": "A sensible order to work in",
   "group": "lighter",
@@ -461,6 +501,6 @@
   "group": "help",
   "groupTitle": "Help",
   "summary": "Short answers: cost and licence, privacy, browsers, file sizes, whether Python is needed, and where to report a bug.",
-  "chars": 3997
+  "chars": 4047
  }
 ]

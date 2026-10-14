@@ -24,7 +24,7 @@ Only for the first start, which downloads the Python add-ons. After that the app
 
 ## Which browsers work?
 
-A recent Chrome, Edge, Firefox or Safari. The viewer uses WebGPU and falls back to WebGL2. For the app to open in a window of its own, the launcher needs Chrome, Edge or Brave. Installing it as an app is offered by Chrome and Edge.
+Chrome is the best choice. A recent Edge or Firefox works too, and Safari on a Mac can lag. The viewer uses WebGPU and falls back to WebGL2. For the app to open in a window of its own, the launcher needs Chrome, Edge or Brave. Installing it as an app is offered by Chrome and Edge.
 
 ## Which systems does it run on?
 
