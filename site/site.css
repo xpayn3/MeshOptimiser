@@ -90,6 +90,27 @@ i, em { font-style: normal; }
 @media (min-width: 761px) { .nav .nav-out { display: none; } }          /* on a wide screen GitHub is the button under the title on the home page; in the phone menu it stays a link */
 .nav a[aria-current] { color: var(--tx); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
 .bar-get { justify-self: end; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 999px; font-size: 14px; }
+/* the Download buttons: flat, with a faint blue ambient light round them: two soft blobs that drift slowly (mouse only, not with reduced motion).
+   The light is one layer behind the button, larger than it, with the button's own area cut out so it never shows on the button. */
+.bar-get, .btn.is-primary[href*="download"], .btn.is-primary[download] { position: relative; isolation: isolate; }
+.bar-get::before, .btn.is-primary[href*="download"]::before, .btn.is-primary[download]::before {
+  content: ''; position: absolute; inset: -70px -80px -80px; z-index: -1; pointer-events: none; filter: blur(16px);
+  background: radial-gradient(closest-side, rgba(40, 90, 255, 0.32), transparent) 20% 52% / 46% 48% no-repeat, radial-gradient(closest-side, rgba(13, 153, 255, 0.28), transparent) 52% 58% / 40% 44% no-repeat, radial-gradient(closest-side, rgba(90, 215, 255, 0.24), transparent) 82% 52% / 44% 46% no-repeat;
+  -webkit-mask: linear-gradient(#000 0 0), linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-composite: exclude;
+  -webkit-mask-size: 100% 100%, calc(100% - 160px) calc(100% - 150px); mask-size: 100% 100%, calc(100% - 160px) calc(100% - 150px);
+  -webkit-mask-position: 0 0, 80px 70px; mask-position: 0 0, 80px 70px; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .bar-get::before, .btn.is-primary[href*="download"]::before, .btn.is-primary[download]::before { animation: blob-drift 9s ease-in-out infinite alternate, blob-hue 7s ease-in-out infinite alternate; }
+}
+/* the one in the top bar glows only while the page is at the top; once it scrolls, the light fades out slowly (site.js sets .is-scrolled) */
+.bar-get::before { transition: opacity 0.9s ease, visibility 0s; }
+.is-scrolled .bar-get::before { opacity: 0; visibility: hidden; transition: opacity 0.9s ease, visibility 0s 0.9s; }
+/* ...and then it comes back on hover */
+.is-scrolled .bar-get:hover::before, .is-scrolled .bar-get:focus-visible::before { opacity: 1; visibility: visible; transition: opacity 0.4s ease, visibility 0s; }
+@keyframes blob-drift { from { background-position: 20% 52%, 52% 58%, 82% 52%; } to { background-position: 76% 60%, 30% 48%, 22% 56%; } }
+@keyframes blob-hue { from { filter: blur(16px) hue-rotate(-24deg) saturate(1.1); } to { filter: blur(16px) hue-rotate(22deg) saturate(1.3); } }
 .bar-get svg { width: 16px; height: 16px; flex: none; }
 .bar-menu { display: none; }
 
@@ -111,17 +132,6 @@ i, em { font-style: normal; }
 .btn:hover { background: #28282b; }
 .btn.is-primary { background: var(--accent); color: #fff; }
 .btn.is-primary:hover { background: var(--accent-hover); }
-/* the Download buttons (top bar and home page): a lit blue with a fine top edge, a soft glow, and a light that sweeps across on hover; the arrow drops a little */
-.bar-get { position: relative; overflow: hidden; isolation: isolate; background: linear-gradient(180deg, #38b0ff 0%, #0d99ff 52%, #0a84e0 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38), inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 8px 22px -8px rgba(13, 153, 255, 0.75); transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease; }
-.bar-get::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.4) 50%, transparent 65%); transform: translateX(-130%); transition: transform 0.7s ease; }
-.bar-get:hover { background: linear-gradient(180deg, #4ab8ff 0%, #1fa3ff 52%, #0d8ae8 100%); transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 12px 28px -8px rgba(13, 153, 255, 0.9); }
-.bar-get:hover::after { transform: translateX(130%); }
-.bar-get:active { transform: translateY(0); filter: brightness(0.96); }
-.bar-get svg { transition: transform 0.25s ease; }
-.bar-get:hover svg { transform: translateY(2px); }
-@media (prefers-reduced-motion: reduce) { .bar-get,
-.bar-get svg,
-.bar-get::after { transition: none; } .bar-get:hover { transform: none; } }
 .btn.is-large { height: 46px; padding: 0 22px; font-size: 15px; border-radius: 8px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .more { color: var(--tx-2); font-size: 14px; text-decoration: none; white-space: nowrap; transition: color 0.15s ease; }
@@ -265,7 +275,7 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 :is(.clip, .star) .clip-art { stroke-width: 1.9px; }
 :is(.clip, .star):hover .clip-art { --card-bg: color-mix(in srgb, var(--tile-c, #ffffff) 13%, var(--surface)); background: var(--card-bg); }
 .tile-art .art-hole, .tile-art .art-sa, .tile-art .art-sb, .tile-art .art-fnd { transform-box: fill-box; transform-origin: center; }
-.tile-art .art-fnd { transform-origin: 50% 100%; }
+.tile-art .art-fnd { transform-origin: 50% 85%; }
 .tile-art .art-hole { fill: var(--tile-c, #fff); fill-opacity: 0; }
 .tile-art .art-fnd { fill: var(--card-bg, var(--surface)); }
 .tile-art .art-sil { stroke: none; }
@@ -400,7 +410,12 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 .strip .zoom { cursor: inherit; }
 .rm-shot { margin: 0; }
 /* the clip is the app edge to edge, so a big radius would cut into its own corners */
-.rm-shot video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 30px 70px -20px rgba(0, 0, 0, 0.55); cursor: pointer; }
+.rm-shot video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 30px 70px -20px rgba(0, 0, 0, 0.55); cursor: default; outline: none; }
+/* tips up out of the page as it scrolls in (--t 0 to 1, set by site.js) */
+.rm-shot.is-tilt .rm-lean { perspective: 1100px; }
+.rm-shot.is-tilt video { transform-origin: 50% 50%; transform: rotateX(calc((1 - var(--t, 0)) * -32deg)) scale(calc(0.82 + 0.18 * var(--t, 0))); border-radius: calc(6px + (1 - var(--t, 0)) * 18px); opacity: calc(0.35 + 0.65 * var(--t, 0)); will-change: transform; }
+/* the full-size viewer (overlay.css) takes its black from tokens.css, which this site does not load */
+body .lightbox { background: #000; }   /* (overlay.css loads after this file and would win at equal weight) */
 .rm-shot figcaption { margin-top: 20px; max-width: 62ch; color: var(--tx-2); font-size: 16px; line-height: 1.55; }
 .strip video { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05); cursor: inherit; }
 .strip figcaption { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin-top: 20px; max-width: 62ch; }
@@ -1544,6 +1559,15 @@ main { overflow-x: clip; }
 .live-chips button { height: 34px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--tx-2); font: inherit; font-size: 14px; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; }
 .live-chips button:hover { color: var(--tx); }
 .live-chips button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+/* the step button of the Fasteners model: flat like the other buttons, a pill with an arrow that nudges on hover */
+.btn.live-step { border: 0; cursor: pointer; gap: 10px; height: 46px; padding: 0 16px 0 22px; border-radius: 999px; }
+.live-step svg { flex: none; transition: transform 0.2s ease; }
+.live-step:hover svg { transform: translateX(3px); }
+.live-step[data-phase="2"] svg { transform: rotate(180deg); }
+.live-step[data-phase="2"]:hover svg { transform: rotate(180deg) translateX(3px); }
+.btn.live-step:focus, .btn.live-step:focus-visible { outline: none; border-radius: 999px; }
+.btn.live-step:focus-visible { background: var(--accent-hover); }
+@media (prefers-reduced-motion: reduce) { .live-step svg { transition: none; } }
 .live-go { position: absolute; bottom: 20px; left: 24px; display: flex; gap: 10px; }
 @media (prefers-reduced-motion: reduce) { .live-chips button { transition: none; } }
 

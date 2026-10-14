@@ -226,7 +226,7 @@
         for (const en of entries) {
           if (!en.isIntersecting) continue;
           near.unobserve(en.target);
-          import('./features3d.js?v=5').then((m) => m.start(en.target, '')).catch(() => {});
+          import('./features3d.js?v=7').then((m) => m.start(en.target, '')).catch(() => {});
         }
       }, { rootMargin: '500px 0px' });
       lives.forEach((el) => near.observe(el));
@@ -273,6 +273,35 @@
       if (entry.isIntersecting) { pop.classList.add('is-in'); wakeMesh(); window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', onScroll); onScroll(); }
       else { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); }
     }, { rootMargin: '200px 0px' }).observe(pop);
+  }
+
+  // the glow of the Download button in the top bar is on only at the top of the page (see .is-scrolled in site.css)
+  {
+    const root = document.documentElement;
+    const mark = () => root.classList.toggle('is-scrolled', window.scrollY > 24);
+    window.addEventListener('scroll', mark, { passive: true });
+    mark();
+  }
+
+  // ---- the Quick remesh picture tips up out of the page as it scrolls in (like a tvOS cover), ----
+  const rm = $('.rm-shot');
+  if (rm && !calm && 'IntersectionObserver' in window) {
+    let queued = false;
+    const tilt = () => {
+      queued = false;
+      const r = rm.getBoundingClientRect(), vh = window.innerHeight;
+      const mid = (vh - r.height) / 2;   // flat when the picture is centred, tilted while it comes up from the bottom edge
+      const t = Math.max(0, Math.min(1, (vh - r.top) / Math.max(1, vh - mid)));
+      const e = 1 - Math.pow(1 - t, 3);
+      rm.style.setProperty('--t', e.toFixed(4));
+    };
+    const onScroll = () => { if (!queued) { queued = true; requestAnimationFrame(tilt); } };
+    rm.classList.add('is-tilt');
+    tilt();
+    new IntersectionObserver(([en]) => {
+      if (en.isIntersecting) { window.addEventListener('scroll', onScroll, { passive: true }); window.addEventListener('resize', onScroll); onScroll(); }
+      else { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); }
+    }, { rootMargin: '100px 0px' }).observe(rm);
   }
 
   // ---- things that arrive as they come into view ----

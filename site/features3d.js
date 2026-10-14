@@ -57,30 +57,57 @@ function frame(camera, box, yaw, pitch, aspect, fill = 0.72) {
 // ---------------------------------------------------------------------------------------------------------------------------------
 async function wipe(el, base) {
   const stage = $('[data-stage]', el);
+  // data-model="axle": the truck axle of the Fasteners model, in its look (axle-look.js); otherwise the Gearbox Assy
+  const axle = el.dataset.model === 'axle', name = axle ? 'axle' : 'gearbox';
+  const loader = new GLTFLoader();
+  loader.setMeshoptDecoder(MeshoptDecoder);
   const [gltf, meta, lodBuf] = await Promise.all([
-    new GLTFLoader().loadAsync(base + 'wipe/gearbox.glb?v=1'),
-    fetch(base + 'wipe/gearbox-lod.json?v=1').then((r) => r.json()),
-    fetch(base + 'wipe/gearbox-lod.bin?v=1').then((r) => r.arrayBuffer()),
+    loader.loadAsync(base + (axle ? 'axle-web.glb?v=1' : 'wipe/gearbox.glb?v=1')),
+    fetch(base + 'wipe/' + name + '-lod.json?v=2').then((r) => r.json()),
+    fetch(base + 'wipe/' + name + '-lod.bin?v=2').then((r) => r.arrayBuffer()),
   ]);
   let level = Math.max(0, meta.levels.findIndex((l) => l.id === (el.dataset.level || 'half')));
-  let split = 0.5, queued = false, yaw = THREE.MathUtils.degToRad(38), pitch = THREE.MathUtils.degToRad(20);
+  const yaw0 = axle ? 52 : 38;
+  let split = 0.5, queued = false, yaw = THREE.MathUtils.degToRad(yaw0), pitch = THREE.MathUtils.degToRad(axle ? 24 : 20);
   const { renderer, size, fit } = makeRenderer(stage, () => ask());
 
   const scene = new THREE.Scene();
   scene.add(gltf.scene);
-  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.9;
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x303642, 0.35));
-  const key = new THREE.DirectionalLight(0xffffff, 1.3); key.position.set(60, 90, 50); scene.add(key);
+  if (axle) {
+    scene.environment = studioEnvironment(renderer);
+    scene.environmentIntensity = 1.3;
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x303642, 0.3));
+    const k = new THREE.DirectionalLight(0xffffff, 1.1); k.position.set(80, 100, -60); scene.add(k);
+    const f = new THREE.DirectionalLight(0xb0c4ff, 0.18); f.position.set(-80, 60, 40); scene.add(f);
+  } else {
+    scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environmentIntensity = 0.9;
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x303642, 0.35));
+    const key = new THREE.DirectionalLight(0xffffff, 1.3); key.position.set(60, 90, 50); scene.add(key);
+  }
 
   // The surfaces are pushed back a little so the triangle lines drawn on them are not eaten by the faces they lie on.
   const WIRE = new THREE.MeshBasicMaterial({ color: 0x0a0a0c, wireframe: true, transparent: true, opacity: 0.3, depthWrite: false });
   const meshes = [];
   gltf.scene.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  if (axle) {
+    // the parts take the materials of the axle by their names (a copy of each, because the surfaces below are pushed back)
+    gltf.scene.updateMatrixWorld(true);
+    const corner = new THREE.Vector3();
+    const entries = meshes.map((m) => {
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      const bb = m.geometry.boundingBox, pts = [];
+      for (let k = 0; k < 8; k++) { corner.set(k & 1 ? bb.max.x : bb.min.x, k & 2 ? bb.max.y : bb.min.y, k & 4 ? bb.max.z : bb.min.z).applyMatrix4(m.matrixWorld); pts.push(corner.clone()); }
+      return { mesh: m, pts, kind: kindOfMesh(m) };
+    });
+    settleKinds(entries);
+    const own = new Map();
+    for (const e of entries) { if (!own.has(e.material)) own.set(e.material, e.material.clone()); e.mesh.material = own.get(e.material); }
+  }
   const afterOf = new Map();      // geometry key -> geometry at the current level
   const afters = [];
   for (const m of meshes) {
-    for (const mt of [].concat(m.material)) { mt.polygonOffset = true; mt.polygonOffsetFactor = 1; mt.polygonOffsetUnits = 1; mt.metalness = Math.max(mt.metalness || 0, 0.25); mt.roughness = Math.min(mt.roughness == null ? 0.6 : mt.roughness, 0.55); }
+    for (const mt of [].concat(m.material)) { mt.polygonOffset = true; mt.polygonOffsetFactor = 1; mt.polygonOffsetUnits = 1; if (!axle) { mt.metalness = Math.max(mt.metalness || 0, 0.25); mt.roughness = Math.min(mt.roughness == null ? 0.6 : mt.roughness, 0.55); } }
     m.layers.set(1);
     const before = new THREE.Mesh(m.geometry, WIRE); before.layers.set(1); m.add(before);        // (the lines of the original, a child of the part)
     const a = new THREE.Mesh(m.geometry, m.material);
@@ -147,7 +174,7 @@ async function wipe(el, base) {
     fit();
     const { w, h } = size;
     if (!w || !h) return;
-    frame(camera, box, yaw, pitch, w / h, 0.6);
+    frame(camera, box, yaw, pitch, w / h, axle ? 0.66 : 0.6);
     const sx = Math.round(w * split);
     renderer.setScissorTest(true);
     renderer.setViewport(0, 0, w, h);
@@ -162,7 +189,7 @@ async function wipe(el, base) {
 
   // dragging: the line follows the pointer anywhere on the picture; a small turn of the model follows it too
   let drag = false;
-  const at = (e) => { const b = stage.getBoundingClientRect(); split = Math.min(0.97, Math.max(0.03, (e.clientX - b.left) / b.width)); yaw = THREE.MathUtils.degToRad(38 + (split - 0.5) * 10); ask(); };
+  const at = (e) => { const b = stage.getBoundingClientRect(); split = Math.min(0.97, Math.max(0.03, (e.clientX - b.left) / b.width)); yaw = THREE.MathUtils.degToRad(yaw0 + (split - 0.5) * 10); ask(); };
   stage.addEventListener('pointerdown', (e) => { if (e.target.closest('.live-chips') || e.button) return; drag = true; stage.setPointerCapture(e.pointerId); stage.classList.add('is-drag'); at(e); });
   stage.addEventListener('pointermove', (e) => { if (drag) at(e); });
   const up = (e) => { if (!drag) return; drag = false; stage.classList.remove('is-drag'); try { stage.releasePointerCapture(e.pointerId); } catch (_) {} };
@@ -284,9 +311,9 @@ async function fast(el, base) {
     + '<div class="live-side"><small>Parts</small><strong data-n="parts"></strong><span>screws are ' + screws.length + ' of them</span></div>';
   const go = document.createElement('div');
   go.className = 'live-go';
-  go.innerHTML = '<button type="button" class="btn is-primary is-large" data-step></button>';
+  go.innerHTML = '<button type="button" class="btn is-primary is-large live-step" data-step><span class="live-step-label"></span><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9M8.5 4l4 4-4 4"/></svg></button>';
   stage.append(bar, go);
-  const stepBtn = $('[data-step]', go);
+  const stepBtn = $('[data-step]', go), stepLabel = $('.live-step-label', go);
   const labels = [`Find the ${screws.length} screws`, 'Take them out', 'Put them back'];
   let phase = 0;
   const hud = () => {
@@ -294,7 +321,7 @@ async function fast(el, base) {
     $('[data-n="tris"]', bar).textContent = fmt(now);
     $('[data-n="parts"]', bar).textContent = String(parts.length - Math.round(screws.length * ease(out)));
     $('[data-n="note"]', bar).textContent = phase === 0 ? 'the whole axle' : out > 0.999 ? `${fmt(screwTris)} fewer, ${(screwTris / total * 100).toFixed(1)}%` : `${screws.length} screws, ${fmt(screwTris)} triangles`;
-    stepBtn.textContent = labels[phase];
+    stepLabel.textContent = labels[phase]; stepBtn.dataset.phase = String(phase);
   };
 
   // one animation at a time, only for as long as it runs
