@@ -11,4 +11,7 @@ Last release in the changelog: **v0.27.0**.
 
 ## Fixed
 
-(nothing yet)
+![fix][fix] **A picture with a transparent background came out black.** Render image (and Claude's `render_image`) now gives a real see-through PNG when the background is transparent, and a white, light, grey, dark or black background now shows its own colour instead of black. I draw the model once on black and once on white and work the see-through part out from the difference.
+Cause: the picture is read back from a canvas without an alpha channel, so an empty background was always opaque black, and every plain colour was laid over that black.
+Where: `render_image` in `app-v2.js`.
+
