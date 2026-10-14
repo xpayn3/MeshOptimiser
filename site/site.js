@@ -249,6 +249,9 @@
       if (window.matchMedia('(pointer: coarse)').matches) { let done = false; const go = () => { if (done) return; done = true; window.removeEventListener('scroll', go); window.removeEventListener('touchstart', go); load(); }; window.addEventListener('scroll', go, { passive: true }); window.addEventListener('touchstart', go, { passive: true }); }
       else load();
     };
+    // with a mouse the model is fetched as soon as the page is idle, not when the section comes near: a quick scroll down then finds it ready
+    // (a phone still waits for its first touch or scroll, see wakeMesh)
+    if (!window.matchMedia('(pointer: coarse)').matches) (window.requestIdleCallback || ((fn) => setTimeout(fn, 600)))(wakeMesh, { timeout: 2500 });
     pop.classList.add('is-armed');                       // (the graph's bars start empty and grow in when the section comes into view)
     const cards = $$('.pop-parts li', pop); let lit = -2;
     const pct = $('[data-pop-pct]', pop);
