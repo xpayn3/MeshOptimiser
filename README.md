@@ -310,7 +310,7 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
-**v0.28.0** — pictures with a transparent background, at last.
+**v0.27.1** — pictures with a transparent background, at last.
 
 - ![fix][fix] **A picture with a transparent background came out black.** Render image (and Claude's `render_image`) now gives a real see-through PNG when the background is transparent, and a white, light, grey, dark or black background shows its own colour instead of black.
 

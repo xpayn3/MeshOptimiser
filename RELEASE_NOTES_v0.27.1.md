@@ -1,6 +1,6 @@
-# MeshOptimiser v0.28.0
+# MeshOptimiser v0.27.1
 
-A small release: pictures with a transparent background, at last.
+A small fix: pictures with a transparent background, at last.
 
 ## Fixed
 

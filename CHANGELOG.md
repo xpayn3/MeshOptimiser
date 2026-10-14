@@ -4,11 +4,11 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
-## v0.28.0
+## v0.27.1
 
 Released 14 Oct 2026.
 
-v0.27.0 was about how things look and how they are kept. v0.28.0 is a small one, and it is about the pictures you take of them: pictures with a transparent background, at last.
+v0.27.0 was about how things look and how they are kept. v0.27.1 is a small fix, and it is about the pictures you take of them: pictures with a transparent background, at last.
 
 **Pictures**
 
