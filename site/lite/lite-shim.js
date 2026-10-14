@@ -5,10 +5,10 @@
    things: a heartbeat, STEP conversion, and the inbox/ folder. On the site
    there is no server, so this file answers those requests itself:
      - /api/alive         404, so the app leaves the heartbeat alone
-     - /api/convert       501 with a plain explanation of what Lite opens
+     - /api/convert       501 with a plain explanation of what Web opens
      - /api/job, cancel   404
    and adds the sample models (Khronos's glTF-Sample-Models, inbox/) as tiles on the
-   app's own start screen, which is what opens first. The Lite mark beside the logo opens
+   app's own start screen, which is what opens first. The Web mark beside the logo opens
    a page that explains this version. Nothing is uploaded: the files stay in the page.
    =================================================================== */
 (function () {
@@ -39,7 +39,7 @@
 
   if (!top) return;
 
-  // the welcome: what the Lite version is, what it leaves out, what the installed app adds. It opens from the Lite mark beside the logo, top left.
+  // the welcome: what the Web version is, what it leaves out, what the installed app adds. It opens from the Web mark beside the logo, top left.
   var W_ICON = {
     try: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16l.7 1.8L21.5 18.5l-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/></svg>',
     out: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
@@ -105,7 +105,7 @@
     }).join('');
     wrap.innerHTML =
       '<div data-card style="width:min(1040px,100%);max-height:100%;overflow:auto;box-sizing:border-box;padding:clamp(24px,4vw,52px);border-radius:20px;background:#161617;box-shadow:0 40px 120px rgba(0,0,0,.7),0 12px 32px rgba(0,0,0,.4),0 0 0 1px rgba(255,255,255,.09);color:#e6e6e8">' +
-        '<div data-rise style="display:inline-flex;align-items:center;gap:10px;height:26px;padding:0 12px;border-radius:999px;background:rgba(13,153,255,.12);box-shadow:inset 0 0 0 1px rgba(13,153,255,.35);color:#3aadff;font:400 11px/1 ' + mono + ';letter-spacing:.1em;text-transform:uppercase"><i style="width:6px;height:6px;border-radius:50%;background:#0d99ff;display:block"></i>Lite version</div>' +
+        '<div data-rise style="display:inline-flex;align-items:center;gap:10px;height:26px;padding:0 12px;border-radius:999px;background:rgba(13,153,255,.12);box-shadow:inset 0 0 0 1px rgba(13,153,255,.35);color:#3aadff;font:400 11px/1 ' + mono + ';letter-spacing:.1em;text-transform:uppercase"><i style="width:6px;height:6px;border-radius:50%;background:#0d99ff;display:block"></i>Web version</div>' +
         '<h2 id="meshopt-demo-welcome-title" data-rise style="margin:22px 0 0;max-width:18ch;font:500 clamp(30px,4.6vw,52px)/1.04 Inter,system-ui,sans-serif;letter-spacing:-.03em">Heavy CAD, light enough for your browser.</h2>' +
         '<p data-rise style="margin:18px 0 0;max-width:56ch;font-size:16px;line-height:1.55;color:#a3a3a8">This is the real app, running right here. Open a model, press a button, watch the triangles fall. Your files never leave this page.</p>' +
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:24px;margin-top:34px">' + stats + '</div>' +
@@ -116,7 +116,7 @@
         '<div data-rise style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:34px">' +
           '<button type="button" data-go style="all:unset;cursor:pointer;box-sizing:border-box;display:inline-flex;align-items:center;gap:10px;height:46px;padding:0 22px;border-radius:10px;background:#0d99ff;color:#fff;font:500 15px/1 Inter,system-ui,sans-serif">Start exploring' + W_ICON.arrow + '</button>' +
           '<a href="../download.html" style="display:inline-flex;align-items:center;height:46px;padding:0 20px;border-radius:10px;background:#212123;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);color:#e6e6e8;font:500 15px/1 Inter,system-ui,sans-serif;text-decoration:none">Download the app</a>' +
-          '<span style="margin-left:auto;font-size:12px;color:#6e6e72">Esc to close. Reopen it from the Lite tag.</span>' +
+          '<span style="margin-left:auto;font-size:12px;color:#6e6e72">Esc to close. Reopen it from the Web tag.</span>' +
         '</div>' +
       '</div>';
     var prev = document.activeElement;
@@ -168,36 +168,78 @@
     });
   }
 
-  // a small "Lite" mark beside the logo; it opens the welcome that explains this version
+  // a small "Web" mark beside the logo; it opens the welcome that explains this version
   document.addEventListener('DOMContentLoaded', function () {
     var btn = document.getElementById('btn-brand');
     if (!btn) return;
     var tag = document.createElement('button');
     tag.type = 'button';
-    tag.textContent = 'Lite';
+    tag.textContent = 'Web';
     tag.title = 'The light version, in your browser. The full app runs on your computer.';
     tag.style.cssText = 'all:unset;cursor:pointer;align-self:center;margin-left:2px;padding:0 6px;height:16px;display:inline-flex;align-items:center;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);color:#a8a8a8;font:400 9.5px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.09em;text-transform:uppercase;user-select:none';
     tag.addEventListener('click', showWelcome);
     btn.parentNode.insertBefore(tag, btn.nextSibling);
   });
 
-  // the app's own start screen gets a row of sample models, since there is no inbox/ folder to open from
+  // the app's own start screen gets a Library tab next to Settings: the sample models as cards with a picture, since there is no inbox/ folder to open from
+  var LIBRARY = [
+    ['GearboxAssy', 'Gearbox assembly', '95 parts · 646,064 triangles · 4.7 MB', 'A gearbox with shafts, gears and housings. Heavy enough to see what the tools do.'],
+    ['2CylinderEngine', 'Two-cylinder engine', '115 parts · 121,496 triangles · 1.8 MB', 'Pistons, crank and cylinders.'],
+    ['ReciprocatingSaw', 'Reciprocating saw', '113 parts · 198,470 triangles · 3.4 MB', 'A power tool with its motor, gears and casing.']
+  ];
   document.addEventListener('DOMContentLoaded', function () {
-    var anchor = document.getElementById('welcome-start-empty');
-    if (!anchor || !anchor.parentNode || document.getElementById('demo-samples')) return;
-    var row = document.createElement('div');
-    row.id = 'demo-samples';
-    row.style.cssText = 'display:contents';
-    SAMPLES.forEach(function (s) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'wl-tile';
-      b.innerHTML = '<i data-lucide="box"></i><span class="wl-tile-t">' + s[1] + '</span><span class="wl-tile-s">Sample model</span>';
-      b.addEventListener('click', function () { location.href = location.pathname + '?file=inbox/' + s[0] + '.glb'; });
-      row.appendChild(b);
+    var nav = document.querySelector('.wl-nav'), pane = document.getElementById('welcome-pick-pane'), stage = document.getElementById('welcome-drop');
+    if (!nav || !pane || !stage || document.getElementById('welcome-library')) return;
+    var css = document.createElement('style');
+    css.textContent =
+      '#demo-library{position:relative;flex:1 1 auto;min-height:0;overflow:auto;padding:4px 24px 22px;display:none}' +
+      '#demo-library.is-open{display:block}' +
+      '#demo-library .dl-head{display:flex;align-items:baseline;gap:14px;margin:22px 0 16px}' +
+      '#demo-library .dl-head .wl-label{margin:0}' +
+      '#demo-library .dl-back{all:unset;box-sizing:border-box;cursor:pointer;font-size:var(--fs-12);color:var(--tx2);padding:4px 8px;margin-left:-8px;border-radius:var(--r-sm)}' +
+      '#demo-library .dl-back:hover,#demo-library .dl-back:focus-visible{background:var(--s3);color:var(--tx)}' +
+      '#demo-library .dl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}' +
+      '#demo-library .dl-card{all:unset;box-sizing:border-box;display:flex;flex-direction:column;border-radius:var(--r-lg);background:var(--bg2);color:var(--tx);cursor:pointer;overflow:hidden;transition:var(--tr-bg)}' +
+      '#demo-library .dl-card:hover,#demo-library .dl-card:focus-visible{background:var(--bg3)}' +
+      '#demo-library .dl-pic{display:block;aspect-ratio:8/5;background:#111;overflow:hidden}' +
+      '#demo-library .dl-pic img{display:block;width:100%;height:100%;object-fit:cover}' +
+      '#demo-library .dl-txt{display:flex;flex-direction:column;gap:3px;padding:12px 14px 14px}' +
+      '#demo-library .dl-t{font-size:var(--fs-13)}' +
+      '#demo-library .dl-s{font-size:var(--fs-sm);color:var(--tx3)}' +
+      '#demo-library .dl-d{font-size:var(--fs-sm);color:var(--tx2);margin-top:4px}';
+    document.head.appendChild(css);
+
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'wl-link'; btn.id = 'welcome-library';
+    btn.title = 'Sample models to try the tools on';
+    btn.textContent = 'Library';
+    var settings = document.getElementById('welcome-settings');
+    nav.insertBefore(btn, settings ? settings.nextSibling : null);
+
+    var panel = document.createElement('div');
+    panel.id = 'demo-library';
+    panel.innerHTML =
+      '<div class="dl-head"><button type="button" class="dl-back" data-back>← Start</button><div class="wl-label">Library</div></div>' +
+      '<div class="dl-grid">' + LIBRARY.map(function (m) {
+        return '<button type="button" class="dl-card" data-sample="' + m[0] + '"><span class="dl-pic"><img src="previews/' + m[0] + '.webp" alt="" width="720" height="450" decoding="async"></span>' +
+          '<span class="dl-txt"><span class="dl-t">' + m[1] + '</span><span class="dl-s">' + m[2] + '</span><span class="dl-d">' + m[3] + '</span></span></button>';
+      }).join('') + '</div>';
+    stage.parentNode.insertBefore(panel, stage.nextSibling);
+
+    function show(on) {
+      panel.classList.toggle('is-open', on);
+      stage.style.display = on ? 'none' : '';
+      btn.style.background = on ? 'var(--s3)' : ''; btn.style.color = on ? 'var(--tx)' : '';
+      var foot = pane.querySelector('.wl-foot'); if (foot) foot.style.display = on ? 'none' : '';
+    }
+    btn.addEventListener('click', function () { show(!panel.classList.contains('is-open')); });
+    panel.querySelector('[data-back]').addEventListener('click', function () { show(false); });
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-sample]'), function (c) {
+      c.addEventListener('click', function () { location.href = location.pathname + '?file=inbox/' + c.getAttribute('data-sample') + '.glb'; });
     });
-    anchor.parentNode.insertBefore(row, anchor.nextSibling);
-    try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (_) {}
+    // whenever the start screen opens again it opens on Start
+    var modal = document.getElementById('welcome-modal');
+    if (modal && window.MutationObserver) new MutationObserver(function () { if (!modal.classList.contains('open') && !modal.classList.contains('show') && !modal.classList.contains('is-open')) show(false); }).observe(modal, { attributes: true, attributeFilter: ['class'] });
   });
 
   // what the online version leaves out stays visible in Settings, greyed out

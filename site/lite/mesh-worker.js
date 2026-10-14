@@ -24,7 +24,7 @@
 import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=27';
 import { reduceIndex } from './simplify-core.js?v=3';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=2';
-import { repairMesh } from './meshrepair.js?v=2';
+import { repairMesh, analyseNormals } from './meshrepair.js?v=4';
 import { findRepeats } from './repeats.js?v=1';
 import { buildTopology, pairQuads, buildPolygons, outlineLines } from './meshedit.js?v=5';
 import { untriangulate, evenTriangles } from './untriangulate.js?v=10';
@@ -97,6 +97,10 @@ self.onmessage = async (e) => {
     }
     if (m.op === 'repeats') {
       self.postMessage({ id: m.id, ok: true, res: findRepeats(m.items, m.opts || {}) });
+      return;
+    }
+    if (m.op === 'normals') {
+      self.postMessage({ id: m.id, ok: true, res: analyseNormals(m.src, m.opts || {}) });
       return;
     }
     if (m.op === 'repair') {

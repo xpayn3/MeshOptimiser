@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.27.1." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.28.0." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.27.1." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.28.0." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-hero.webp" />
   <meta property="og:url" content="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:type" content="website" />
@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=359" />
+  <link rel="stylesheet" href="site.css?v=365" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -52,9 +52,32 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.28.0">
+          <div class="log-head">
+            <strong>v0.28.0<b class="rel-code">Postojna</b></strong><em>Latest</em><span>14 Oct 2026 · 16:55</span><span>13 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>MeshOptimiser now tells you what is wrong inside a model, and helps you fix it. Faces that point the wrong way, holes, needle triangles, a texture laid out badly: found, shown and one tap from fixed. Your CAD file keeps its true edges. And it installs with a double-click.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>Model inspector. One window shows what the model is and what is broken in it: inside-out parts, faces turned the wrong way, holes and cracks, doubled and needle triangles. Every problem has a button to select it and a button that opens the tool that fixes it.</span></li>
+              <li><b class="is-new">New</b><span>Fix normals. Find the faces that point the wrong way, turn them round or line them up with their neighbours, and paint the wrong side red while you look. One undo takes it back.</span></li>
+              <li><b class="is-new">New</b><span>UV layout. See how a texture sits on a part: the islands, what covers the same place twice, what lies outside the square, with the numbers beside it.</span></li>
+              <li><b class="is-new">New</b><span>The true faces and edges of a STEP file. A CAD edges pill appears when you open one. Point at a face and it is named and tinted; hide the tangent edges of fillets when they are in the way. Sheet covers and other surface-only parts come along too.</span></li>
+              <li><b class="is-new">New</b><span>Quick colour wheel. Hold C over the model, move, let go. The angle is the hue, the distance is the saturation, the scroll wheel is the brightness. Drag far out to cancel.</span></li>
+              <li><b class="is-new">New</b><span>A colour picker built for modelling: a square or a wheel, HEX, RGB, HSV and HSL, a pipette, and Ctrl+Z that steps back through the colours you picked. Materials are edited right where you see them.</span></li>
+              <li><b class="is-new">New</b><span>One View button for Solid, Wireframe, X-ray and Heatmap, quick choices on Collapse, Rename and Flatten, four more lists in the Commands menu, and a tidier Quick wand.</span></li>
+              <li><b class="is-new">New</b><span>A one-click installer for Windows. It finds the newest version, downloads it with a progress bar, adds MeshOptimiser to your Desktop and Start menu, and gets Chrome if you do not have it. Settings › General can show or hide the terminal window.</span></li>
+              <li><b class="is-polish">Polish</b><span>Properties and Shading sit edge to edge, Reduce shows what it will do as a figure, and the Edit mesh tool bar slides in and out.</span></li>
+              <li><b class="is-fix">Fix</b><span>Undo now reaches colours and sliders in the material editor and the light, exposure, field of view and fog sliders, and shortcuts work while a slider has the focus.</span></li>
+              <li><b class="is-fix">Fix</b><span>The colour picker keeps its Was and New strip while you drag, its corners are clean, and Ctrl+Z no longer closes it.</span></li>
+              <li><b class="is-fix">Fix</b><span>Switching Shadows on and off quickly no longer loses the view, and closing with a model open asks first.</span></li>
+              <li><b class="is-fix">Fix</b><span>Align and Repair mesh turn pieces with gaps outward, a part inverted all over included, and points in Edit mesh no longer show through thin parts.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.27.1">
           <div class="log-head">
-            <strong>v0.27.1</strong><em>Latest</em><span>14 Oct 2026 Â· 10:43</span><span>1 fix</span>
+            <strong>v0.27.1</strong><span>14 Oct 2026 · 10:43</span><span>1 fix</span>
           </div>
           <div class="log-body">
             <p>A small fix, about the pictures you take: a transparent background is really transparent now.</p>
@@ -542,15 +565,15 @@
           <div class="cmp-head">
             <div class="cmp-col">
               <p class="cmp-tag">In your browser</p>
-              <h3>MeshOptimiser Lite</h3>
+              <h3>MeshOptimiser Web</h3>
               <p class="cmp-sub">Try the app in a tab. Nothing to install.</p>
-              <div class="cmp-act"><a class="cmp-btn btn-lite" href="lite/index.html" target="_blank" rel="noopener">Open Lite</a><a class="cmp-link" href="docs/what-it-is.html">What is it</a></div>
+              <div class="cmp-act"><a class="cmp-btn btn-lite" href="lite/index.html" target="_blank" rel="noopener">Open Web</a><a class="cmp-link" href="docs/what-it-is.html">What is it</a></div>
             </div>
             <div class="cmp-col">
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.27.1</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.28.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
@@ -591,7 +614,7 @@
             <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Works offline</span></span></div>
           </div>
           </div>
-          <p class="cmp-note">Lite opens a sample gearbox first and needs a window 960 px wide. Best in Chrome: Safari on a Mac can lag.</p>
+          <p class="cmp-note">Web opens a sample gearbox first and needs a window 960 px wide. Best in Chrome: Safari on a Mac can lag.</p>
         </div>
       </div>
     </section>

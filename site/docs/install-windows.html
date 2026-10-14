@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Install on Windows, step by step — MeshOptimiser Docs</title>
-  <meta name="description" content="From the zip to a working app on Windows 10 or 11: what to check first, what each line in the launcher window means, and how to know it worked." />
+  <meta name="description" content="One double-click installs MeshOptimiser on Windows 10 or 11: it downloads the app, adds a shortcut, checks for Chrome and starts it. The zip way, step by step,…" />
   <link rel="icon" type="image/svg+xml" href="../Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/docs/install-windows" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Install on Windows, step by step — MeshOptimiser Docs" />
-  <meta property="og:description" content="From the zip to a working app on Windows 10 or 11: what to check first, what each line in the launcher window means, and how to know it worked." />
+  <meta property="og:description" content="One double-click installs MeshOptimiser on Windows 10 or 11: it downloads the app, adds a shortcut, checks for Chrome and starts it. The zip way, step by step,…" />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-hero.webp" />
   <meta property="og:url" content="https://xpayn3.github.io/MeshOptimiser/docs/install-windows" />
   <meta property="og:type" content="website" />
@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=359" />
+  <link rel="stylesheet" href="../site.css?v=365" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -100,8 +100,13 @@
         <a href="../docs/decimate.html">Decimate</a>
         <a href="../docs/fit-to-budget.html">Fit to budget</a>
         <a href="../docs/cleanup.html">Quick fixes and tidying up</a>
+        <a href="../docs/model-inspector.html">Model inspector: what the model is, and what is wrong with it</a>
+        <a href="../docs/fix-normals.html">Fix normals: faces that point the wrong way</a>
         <a href="../docs/workflow.html">A sensible order to work in</a>
         <h2>Look and arrange</h2>
+        <a href="../docs/uv-layout.html">UV layout: how a texture sits on a part</a>
+        <a href="../docs/cad-edges.html">CAD faces and edges from a STEP file</a>
+        <a href="../docs/quick-colour-wheel.html">Quick colour wheel: colour a part without a dialog</a>
         <a href="../docs/view-modes.html">View modes</a>
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
@@ -138,9 +143,18 @@
       <article class="kb-article">
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#install">Install and set up</a></p>
         <h1>Install on Windows, step by step</h1>
-        <p class="lead">From the zip to a working app on Windows 10 or 11: what to check first, what each line in the launcher window means, and how to know it worked.</p>
+        <p class="lead">One double-click installs MeshOptimiser on Windows 10 or 11: it downloads the app, adds a shortcut, checks for Chrome and starts it. The zip way, step by step, follows for those who prefer it.</p>
         <div class="kb-body">
-          <p>This page walks through the whole install on Windows, one step at a time, and says what you should see at each step. It takes about ten minutes, most of it the one-time setup on the first start. There is nothing to run as administrator and nothing to uninstall later: the app lives in one folder.</p>
+          <h2 id="the-quick-way-one-double-click">The quick way: one double-click</h2>
+          <ol class="kb-steps">
+            <li>Open the Download page of this site and press <span class="ui">Install for Windows</span>. Your browser saves a small file called <code>Install-MeshOptimiser.bat</code>.</li>
+            <li>Double-click it. If Windows asks whether you are sure, confirm. A window opens and shows five short steps with a progress bar: it finds the newest version, downloads it, puts it in your user folder, checks for Chrome and adds MeshOptimiser to the Desktop and the Start menu.</li>
+            <li>If Chrome is not on the computer, it asks whether to install it (<span class="ui">Y</span> for yes). Chrome is free, takes about a minute and is the browser the app is made for. Edge and Brave work too.</li>
+            <li>MeshOptimiser starts. The very first start sets up Python and the CAD reader, which takes a few minutes and shows its progress in a window. Every start after that takes a second or two and shows no window.</li>
+          </ol>
+          <aside class="kb-note"><p>To update later, run the installer again. It replaces the app and keeps your Python environment, your inbox and your exports. The app also updates itself in <span class="ui">Settings</span>, <span class="ui">Updates</span>.</p></aside>
+          <p>The rest of this page is the same install done by hand from the zip. You only need it when you prefer to see every step, when you want the app in a folder of your choice, or when the installer cannot run.</p>
+          <p>This page walks through the whole install on Windows by hand, one step at a time, and says what you should see at each step. It takes about ten minutes, most of it the one-time setup on the first start. There is nothing to run as administrator and nothing to uninstall later: the app lives in one folder.</p>
           <h2 id="before-you-start">Before you start</h2>
           <ul class="kb-points">
             <li>Windows 10 or 11. The launcher can install Python for you through <code>winget</code>, which comes with current versions of Windows, and falls back to a direct download if <code>winget</code> is missing.</li>
@@ -221,15 +235,15 @@
           <div class="cmp-head">
             <div class="cmp-col">
               <p class="cmp-tag">In your browser</p>
-              <h3>MeshOptimiser Lite</h3>
+              <h3>MeshOptimiser Web</h3>
               <p class="cmp-sub">Try the app in a tab. Nothing to install.</p>
-              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Open Lite</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
+              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Open Web</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
             </div>
             <div class="cmp-col">
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.27.1</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.28.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
@@ -270,7 +284,7 @@
             <div class="cmp-a"><span class="cmp-on"><svg class="cmp-yes" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Works offline</span></span></div>
           </div>
           </div>
-          <p class="cmp-note">Lite opens a sample gearbox first and needs a window 960 px wide. Best in Chrome: Safari on a Mac can lag.</p>
+          <p class="cmp-note">Web opens a sample gearbox first and needs a window 960 px wide. Best in Chrome: Safari on a Mac can lag.</p>
         </div>
       </div>
     </section>

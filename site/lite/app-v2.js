@@ -11,6 +11,7 @@ import { reduceIndex, packAttributes } from './simplify-core.js?v=3';
 import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=2';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
+import { checkMesh } from './meshcheck.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // OBJ export uses our own streaming writer (_exportObjStreaming) to avoid
@@ -38,7 +39,12 @@ const $ = id => document.getElementById(id);
 // material is scaled by this where the triangle faces away from the camera. Set `_backFaceDim.value` to 1 to switch it off.
 const _backFaceDim = THREE.TSL.uniform(0.32);
 window._backFaceDim = _backFaceDim;
+// The Normals card can paint every back face red (`_backFaceTint.value = 1`) so reversed faces and inside-out parts stand out.
+const _backFaceTint = THREE.TSL.uniform(0).setGroup(THREE.TSL.renderGroup);      // (render group: re-sent every frame to every part; the default per-object group only when the part itself changes)
+const _backFaceColor = THREE.TSL.vec3(0.85, 0.03, 0.02);     // added to a back face while highlighted: red (added, not multiplied, so a black part shows it too)
+window._backFaceTint = _backFaceTint;
 const _backFaceFactor = () => THREE.TSL.select(THREE.TSL.frontFacing, THREE.TSL.float(1), _backFaceDim);
+const _backFaceGlow = () => THREE.TSL.select(THREE.TSL.frontFacing, THREE.TSL.vec3(0, 0, 0), _backFaceColor.mul(_backFaceTint));
 {
   const proto = THREE.MeshStandardNodeMaterial && THREE.MeshStandardNodeMaterial.prototype;
   const base = proto && THREE.NodeMaterial.prototype.setupLighting;
@@ -46,7 +52,7 @@ const _backFaceFactor = () => THREE.TSL.select(THREE.TSL.frontFacing, THREE.TSL.
     proto.setupLighting = function (builder) {
       const out = base.call(this, builder);
       if (this.transparent || this.side === THREE.FrontSide || (this.userData && this.userData.noBackDim)) return out;
-      return out.mul(_backFaceFactor());
+      return out.mul(_backFaceFactor()).add(_backFaceGlow());
     };
   }
 }
@@ -1389,7 +1395,13 @@ function _modalOpen() {
 // True when a key event is aimed at a text field or a dropdown.
 function _typingTarget(e) {
   const t = e && e.target;
-  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  if (!t) return false;
+  // A slider, a switch or a button that has the focus (it keeps it after a drag or a click) has no text to edit: the app's own
+  // shortcuts, Ctrl+Z first among them, must still work. The keys such a control uses itself stay with it.
+  if (t.tagName === 'INPUT' && /^(range|checkbox|radio|button|submit|reset|color|file|image)$/i.test(t.type)) {
+    return /^(Arrow|Home$|End$|Page|Enter$|Tab$| $)/.test(e.key || '');
+  }
+  return t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable;
 }
 
 // p.bbox is the part's WORLD-space box everywhere it is read (properties,
@@ -2241,7 +2253,7 @@ const _ImportSettings = (() => {
     // for small / medium / large parts, split at two shares of the model's size.
     sag: 0.5, angle: 30, minEdge: 0, tiered: false,
     tiers: { a: 5, b: 30, s: [2, 60], m: [0.2, 30], l: [0.05, 10] },
-    normals: true, swapYZ: false,
+    normals: true, surfaces: true, swapYZ: false,
     append: false, fit: true,
   };
   // What each preset stands for. A finer preset also turns less per triangle:
@@ -2298,6 +2310,7 @@ const _ImportSettings = (() => {
       _setNum('imp-tier-a', tr.a); _setNum('imp-tier-b', tr.b);
       document.getElementById('imp-step-tiered').checked  = !!opts.tiered;
       document.getElementById('imp-step-normals').checked = opts.normals !== false;
+      document.getElementById('imp-step-surfaces').checked = opts.surfaces !== false;
       document.getElementById('imp-step-swap').checked    = !!opts.swapYZ;
       { const d = document.getElementById('imp-tess'); if (d) d.open = !!opts.tiered || _presetFor(sag, ang) === 'custom' || (+opts.minEdge || 0) > 0; }
       document.getElementById('imp-step-colors').value    = opts.colors;
@@ -2389,6 +2402,7 @@ const _ImportSettings = (() => {
       out.tiered    = document.getElementById('imp-step-tiered').checked;
       out.tiers     = _tiersRead();
       out.normals   = document.getElementById('imp-step-normals').checked;
+      out.surfaces  = document.getElementById('imp-step-surfaces').checked;
       out.swapYZ    = document.getElementById('imp-step-swap').checked;
       out.colors    = document.getElementById('imp-step-colors').value;
       out.shuo      = document.getElementById('imp-step-shuo').checked;
@@ -2598,7 +2612,9 @@ async function convertStepViaServer(file, opts = {}) {
     if (+opts.minEdge > 0) q.set('min_edge', String(+opts.minEdge));
     if (opts.tiered && opts.tiers) { const t = opts.tiers; q.set('tiers', `${t.a},${t.b}:${t.s.join(',')}:${t.m.join(',')}:${t.l.join(',')}`); }
     if (opts.normals === false) q.set('normals', '0');
+    if (opts.surfaces === false) q.set('surfaces', '0');
     if (opts.swapYZ) q.set('swap_yz', '1');
+    q.set('brep', '1');                   // (the CAD faces and edges come with every conversion: the viewer draws the true CAD edges)
     if (opts.colors)    q.set('colors',    opts.colors);
     if (opts.shuo      !== undefined) q.set('shuo',      opts.shuo      ? '1' : '0');
     if (opts.layers    !== undefined) q.set('layers',    opts.layers    ? '1' : '0');
@@ -2670,6 +2686,9 @@ async function convertStepViaServer(file, opts = {}) {
         const glbBlob = new Blob([buf]);
         const glbFile = new File([glbBlob], file.name.replace(/\.[^.\\/]+$/, '') + '.glb');
         _cacheConvertedGlb(file.name, file.size, glbBlob).then(ok => { if (ok) { try { _Welcome?.markConverted(file.name, file.size, glbBlob.size); } catch (_) {} } });
+        // The CAD faces and edges come with the GLB (see _Brep).
+        if (j.brep) _Brep.stage(await _Brep.fetchSidecar(j.result), { name: file.name, size: file.size });
+        else _Brep.stage(null);
         // From here on this is an ordinary load; it is no longer a
         // conversion that a later Open should cancel.
         if (state._activeConvertAbort === ac) { state._activeConvertAbort = null; state._activeConvertJob = null; }
@@ -3162,7 +3181,7 @@ const _Prefs = (() => {
     dynPlaceSign: 1,                 // ...and whether it is that axis (1) or the opposite one (-1)
     dynPlaceGround: true,            // Dynamic place: land on the grid where nothing is under the cursor
     dynPlaceHead: false,             // Dynamic place: a bolt goes in by its shank and shows only its head
-    warnUnsaved: true,               // ask before the window closes with changes that are not saved
+    warnUnsaved: true,               // ask before the window closes while a model is open or changes are not saved
     undoMax: 200,                    // how many steps Undo goes back
     autoRestoreSession: true,
     autoFitOnLoad: true,
@@ -3793,13 +3812,14 @@ const _Settings = (() => {
       _toggleRow('set-splash', 'Splash screen', p.splashOnStart !== false, 'A short splash while the app opens. Off: the app just fades in.') +
       _toggleRow('set-welcome', 'Start screen', p.welcomeOnBoot, 'Show the start screen when the app opens.') +
       _toggleRow('set-restore', 'Offer the last file', p.autoRestoreSession, 'A Resume button for the file you had open last.') +
+      `<div id="set-console-row" hidden>${_toggleRow('set-console', 'Show a terminal window', false, 'The window with the app’s log, kept open behind it. Off: MeshOptimiser opens with no window of its own. It applies from the next time you start it from its shortcut.')}</div>` +
       _group('Opening files') +
       _toggleRow('set-autofit', 'Fit the view after loading', p.autoFitOnLoad, 'Frame the whole model as soon as it opens.') +
       _group('Tabs') +
       _toggleRow('set-same-sidebars', 'Same sidebars in every tab', (() => { try { return _Tabs.sameSidebars(); } catch (_) { return true; } })(), 'Switching tabs keeps the sidebar widths, and the folded left sidebar, of the tab you came from. Off: each tab keeps its own.') +
       _group('Editing') +
       _toggleRow('set-confirm', 'Confirm destructive actions', p.confirmDestructive, 'Ask before deletes and other steps that are hard to take back.') +
-      _toggleRow('set-warn-unsaved', 'Warn before leaving with unsaved changes', p.warnUnsaved !== false, 'Closing or reloading the window asks first when a scene has changes that are not saved.') +
+      _toggleRow('set-warn-unsaved', 'Warn before closing with a model open', p.warnUnsaved !== false, 'Closing the tab (Ctrl+W) or reloading asks first while a model is open or a scene has changes that are not saved. The question is the browser\'s own: a page cannot cancel Ctrl+W itself.') +
       `<div class="set-row set-stack"><span>Undo history<span class="set-help">How many steps Ctrl+Z can go back. A longer history uses more memory.</span></span>${_chipsPref('undoMax', [['Short', 50], ['Normal', 200], ['Long', 500]], p.undoMax || 200)}</div>` +
       _toggleRow('set-auto-empty', 'Delete groups when they become empty', p.autoDeleteEmptyGroups === true, 'Off: a group you empty stays in the hierarchy, marked “empty”, until you delete it.') +
       _group('Recovery') +
@@ -3870,6 +3890,16 @@ const _Settings = (() => {
       `<div class="set-row set-stack"><span>Lines<span class="set-help">Quads draws the polygons you edit: two flat triangles that make a four-sided cell show as one cell, with no diagonal. Triangles is every edge of the mesh, as it really is. This changes what is drawn, not the mesh; Untriangulate, under Reduce triangles, is what changes the mesh.</span></span>${_chipsPref('wireMode', [['Quads', 'quads'], ['Triangles', 'triangles']], _wireMode())}</div>` +
       `<div class="set-row set-stack"><span>Flat within<span class="set-help">For parts that have polygons of their own (from an OBJ or FBX file, or after Untriangulate): how far neighbouring triangles may turn away from each other and still be one polygon. Parts drawn as Quads or Triangles do not use it.</span></span>${_chipsPref('wireAngle', [['Strict', 0.2], ['Normal', 1], ['Loose', 5]], _Prefs.get('wireAngle') || 1)}</div>`;
     $s('set-outlines')?.addEventListener('change', (e) => { _Prefs.set('edgesMode', e.target.checked ? 'on' : 'off'); try { _cadOnPref('edgesMode'); } catch (_) {} try { _Shading.sync(); } catch (_) {} });
+    // Show a terminal window: only where there is a local server that can keep the marker the launcher looks for (not the online version)
+    (async () => {
+      const row = $s('set-console-row'), cb = $s('set-console'); if (!row || !cb) return;
+      try {
+        const r = await fetch('/api/console'); if (!r.ok) return;
+        const j = await r.json(); if (typeof j.show !== 'boolean') return;
+        cb.checked = j.show; row.hidden = false;
+        cb.addEventListener('change', () => fetch('/api/console', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ show: cb.checked }) }).catch(() => {}));
+      } catch (_) {}
+    })();
     $s('set-sel-glow')?.addEventListener('change', (e) => { _Prefs.set('selGlow', e.target.checked); state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} });
     $s('set-hilite')?.addEventListener('change', (e) => { const t = $s('toggle-highlight'); if (t) { t.checked = e.target.checked; t.dispatchEvent(new Event('change', { bubbles: true })); } });
     [
@@ -4607,6 +4637,155 @@ const _CmdCards = (() => {
   return { open, close, closeTop, runTop, isOpen };
 })();
 
+// ── UV layout card ──────────────────────────────────────────────────────────
+// Shows how the selected part's texture coordinates lie on the 0–1 square: the islands, the space they use, where islands lie on each
+// other, what is outside the square, and how even the texel density is. Read-only: nothing in the scene changes. The numbers come from
+// uvtools.js (loaded when the card is first opened); the card looks at the selection while it is open (every 400 ms, only then).
+const _UVView = (() => {
+  const card = document.querySelector('.section-cmd[data-cmd="uvview"]');
+  if (!card) return null;
+  const MAX_TRIS = 600000;                      // a bigger part is not read on the page: reduce it first
+  const cache = new WeakMap();                  // geometry → { sig, r }
+  let mod = null, timer = 0, lastSig = '', token = 0, last = null, ro = null, raf = 0;
+  const el = (id) => document.getElementById(id);
+  const loadMod = async () => mod || (mod = await import('./uvtools.js?v=1'));
+  const pickPart = () => {
+    if (!state.selected) return null;
+    const ids = [...state.selected];
+    for (let i = ids.length - 1; i >= 0; i--) { const p = getPart(ids[i]); if (p && !p.deleted && !p.isSpline) return { p, n: ids.length }; }
+    return null;
+  };
+  const geomOf = (p) => (p.mesh && p.mesh.geometry) || (p.instancedMesh && p.instancedMesh.geometry) || (state.geomByHash && state.geomByHash.get(p.hash)) || null;
+  const sigOf = (hit) => {
+    if (!hit) return '';
+    const g = geomOf(hit.p), uv = g && g.attributes && g.attributes.uv, pos = g && g.attributes && g.attributes.position;
+    return [hit.p.partId, hit.n, g ? g.uuid : '-', uv ? uv.version : -1, pos ? pos.version + ':' + pos.count : -1, g && g.index ? g.index.count : -1].join('|');
+  };
+  const flat = (a, size) => {
+    if (!a.isInterleavedBufferAttribute && a.array instanceof Float32Array && a.itemSize === size) return a.array;
+    const out = new Float32Array(a.count * size);
+    for (let i = 0; i < a.count; i++) { out[i * size] = a.getX(i); out[i * size + 1] = a.getY(i); if (size > 2) out[i * size + 2] = a.getZ(i); }
+    return out;
+  };
+  const pct = (v) => { const x = v * 100; return (x >= 10 || x === 0 ? Math.round(x) : x.toFixed(1)) + ' %'; };
+  const say = (lede, info) => {
+    el('uv-box').classList.add('is-empty');
+    el('uv-lede').textContent = lede;
+    el('uv-info').textContent = info || '';
+    last = null;
+  };
+  function stats(r) {
+    const rows = [
+      ['Texture coordinates', 'yes', false],
+      ['Islands', String(r.islands), false],
+      ['Space used', pct(r.used), false],
+      ['On another island', r.overlap > 0 ? pct(r.overlap) : 'none', r.overlap > 0.005],
+      ['Outside the square', r.outside ? r.outside.toLocaleString() + ' triangles' : 'none', r.outside > 0],
+      ['Collapsed triangles', r.collapsed ? r.collapsed.toLocaleString() : 'none', r.collapsed > 0],
+      ['Mirrored triangles', r.flipped ? r.flipped.toLocaleString() : 'none', false],
+      ['Texel density', r.density.uneven > 0.1 ? pct(r.density.uneven) + ' uneven' : 'even', r.density.uneven > 0.1],
+    ];
+    const dl = el('uv-stats');
+    dl.textContent = '';
+    for (const [k, v, warn] of rows) {
+      const dt = document.createElement('dt'), dd = document.createElement('dd');
+      dt.textContent = k; dd.textContent = v; if (warn) dd.className = 'warn';
+      dl.append(dt, dd);
+    }
+  }
+  function paint() {
+    raf = 0;
+    const c = el('uv-view');
+    if (!c || !c.offsetParent || !last) return;
+    if (!ro && window.ResizeObserver) { ro = new ResizeObserver(() => draw()); ro.observe(c); }
+    const r = last, dpr = Math.min(2, window.devicePixelRatio || 1), W = c.clientWidth, H = c.clientHeight;
+    if (!W || !H) return;
+    if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(H * dpr); }
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const MARK = getComputedStyle(document.documentElement).getPropertyValue('--marker').trim() || '#ffc928';
+    const b = r.bounds, x0 = Math.min(0, b.minU), x1 = Math.max(1, b.maxU), y0 = Math.min(0, b.minV), y1 = Math.max(1, b.maxV);
+    const m = 0.06 * Math.max(x1 - x0, y1 - y0), ux0 = x0 - m, ux1 = x1 + m, uy0 = y0 - m, uy1 = y1 + m;
+    const sc = Math.min(W / (ux1 - ux0), H / (uy1 - uy0)), ox = (W - sc * (ux1 - ux0)) / 2 - ux0 * sc, oy = (H - sc * (uy1 - uy0)) / 2 + uy1 * sc;
+    const X = (u) => ox + u * sc, Y = (v) => oy - v * sc;
+    // the 0–1 square
+    g.fillStyle = 'rgba(0,0,0,.38)'; g.fillRect(X(0), Y(1), sc, sc);
+    // what the islands cover inside it
+    if (r.res && r.cover.length) {
+      const R = r.res, cv = document.createElement('canvas'); cv.width = cv.height = R;
+      const cg = cv.getContext('2d'), img = cg.createImageData(R, R), d = img.data;
+      const mk = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(MARK), mr = mk ? parseInt(mk[1], 16) : 255, mg = mk ? parseInt(mk[2], 16) : 201, mb = mk ? parseInt(mk[3], 16) : 40;
+      for (let y = 0; y < R; y++) for (let x = 0; x < R; x++) {
+        const v = r.cover[y * R + x]; if (!v) continue;
+        const o = ((R - 1 - y) * R + x) * 4;
+        if (v === 2) { d[o] = mr; d[o + 1] = mg; d[o + 2] = mb; d[o + 3] = 190; } else { d[o] = 255; d[o + 1] = 255; d[o + 2] = 255; d[o + 3] = 70; }
+      }
+      cg.putImageData(img, 0, 0);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(cv, X(0), Y(1), sc, sc);
+    }
+    g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.strokeRect(X(0) + .5, Y(1) + .5, sc - 1, sc - 1);
+    // the rim of every island; what lies outside the square is drawn in the marker colour
+    const bd = r.border;
+    g.lineWidth = 1;
+    for (const outside of [false, true]) {
+      g.beginPath();
+      for (let i = 0; i < bd.length; i += 4) {
+        const out = bd[i] < -1e-4 || bd[i] > 1 + 1e-4 || bd[i + 1] < -1e-4 || bd[i + 1] > 1 + 1e-4 || bd[i + 2] < -1e-4 || bd[i + 2] > 1 + 1e-4 || bd[i + 3] < -1e-4 || bd[i + 3] > 1 + 1e-4;
+        if (out !== outside) continue;
+        g.moveTo(X(bd[i]), Y(bd[i + 1])); g.lineTo(X(bd[i + 2]), Y(bd[i + 3]));
+      }
+      g.strokeStyle = outside ? MARK : 'rgba(225,225,230,.8)';
+      g.stroke();
+    }
+  }
+  function draw() { if (!raf) raf = requestAnimationFrame(paint); }
+  async function refresh() {
+    const my = ++token;
+    const hit = pickPart();
+    lastSig = sigOf(hit);
+    if (!hit) { say('Select a part to see how its texture is laid out.'); return; }
+    const name = hit.p.name || 'This part', which = hit.n > 1 ? ' · 1 of ' + hit.n + ' selected' : '';
+    const g = geomOf(hit.p);
+    if (!g || !g.attributes || !g.attributes.position) { say(name + ' has no mesh to read.'); return; }
+    let M;
+    try { M = await loadMod(); } catch (e) { console.warn('[uv] module failed:', e); say('The UV check could not be loaded.'); return; }
+    if (my !== token) return;
+    const pos = g.attributes.position, uvA = g.attributes.uv;
+    const tris = g.index ? Math.floor(g.index.count / 3) : Math.floor(pos.count / 3);
+    if (!uvA || uvA.count !== pos.count || !M.hasUsableUV(uvA.isInterleavedBufferAttribute ? flat(uvA, 2) : uvA.array, pos.count)) {
+      say(name + ' has no texture coordinates' + which + '.', 'A part with no UVs shows no texture. Import it with “Keep texture coordinates” on, or add them in a modelling tool.');
+      return;
+    }
+    if (tris > MAX_TRIS) { say(name + ' has ' + tris.toLocaleString() + ' triangles: too many to check here' + which + '.', 'Reduce the part first, or select a smaller one.'); return; }
+    let r, c = cache.get(g);
+    if (c && c.sig === lastSig) r = c.r;
+    else {
+      el('uv-lede').textContent = 'Reading ' + name + '…';
+      if (tris > 100000) await new Promise((res) => setTimeout(res, 30));       // (let the line above show before the page is busy)
+      if (my !== token) return;
+      try { r = M.analyseUV(flat(pos, 3), flat(uvA, 2), g.index ? g.index.array : null); }
+      catch (e) { console.warn('[uv] analysis failed:', e); say('The UV check failed on ' + name + '.'); return; }
+      cache.set(g, { sig: lastSig, r });
+    }
+    last = r;
+    el('uv-box').classList.remove('is-empty');
+    el('uv-lede').textContent = name + which;
+    el('uv-info').textContent = r.overlap > 0.005 ? 'Islands that lie on each other share the same texels: a texture painted on one shows on the other. Mirrored or repeated parts do this on purpose.' : '';
+    stats(r);
+    draw();
+  }
+  const start = () => {
+    clearInterval(timer);
+    refresh();
+    timer = setInterval(() => { if (card.hidden) return; const s = sigOf(pickPart()); if (s !== lastSig) refresh(); }, 400);
+  };
+  const stop = () => { clearInterval(timer); timer = 0; token++; last = null; };
+  card.addEventListener('cmd-open', start);
+  card.addEventListener('cmd-close', stop);
+  return { refresh };
+})();
+
 const _Actions = (() => {
   const _click = id => () => document.getElementById(id)?.click();
   const list = [
@@ -4653,6 +4832,7 @@ const _Actions = (() => {
     { id:'recenter',     group:'Edit',       label:'Recentre model',             run: _click('btn-recenter') },
     { id:'alignParts',   group:'Edit',       label:'Align and spread parts…',    run: () => _CmdCards.open('arrange') },
     { id:'alignFloor',   group:'Edit',       label:'Align model to the floor…',  run: () => _CmdCards.open('align') },
+    { id:'uvView',       group:'View',       label:'UV layout…',                 words:'uv texture coordinates map islands overlap unwrap', run: () => _CmdCards.open('uvview') },
     { id:'pivotOrient',  group:'Edit',       label:'Change pivot orientation…',  run: () => _CmdCards.open('pivot') },
     { id:'alignFloorNow', group:'Edit',      label:'Align model to the floor (with the last choices)', run: _click('btn-align-floor') },
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
@@ -4672,6 +4852,11 @@ const _Actions = (() => {
     { id:'modeFaces',     group:'Edit',       label:'Polygons mode: pick the polygons of a mesh', kbd:'3', run: () => _Elements.api.mode('faces') },
     { id:'modeModel',     group:'Edit',       label:'Model mode: pick whole parts',               kbd:'4', run: () => _Elements.api.mode('model') },
     { id:'flipFaces',     group:'Edit',       label:'Reverse normals of picked faces', words:'flip invert turn face orientation winding inside out', run: () => { try { window.__moElements.flipPicked(); } catch (_) {} } },
+    { id:'normals',       group:'Edit',       label:'Fix normals…',                words:'normal orientation reverse flip align unify consistent outward inside out winding face direction highlight back faces', run: () => _CmdCards.open('normals') },
+    { id:'normalsFind',   group:'Edit',       label:'Find flipped normals and inside-out parts', words:'detect check find problems faces orientation wrong direction inside out flipped reversed dark see-through select', run: () => { try { window.__moNormals.find(); } catch (_) {} } },
+    { id:'normalsReverse',group:'Edit',       label:'Reverse normals of the selected parts', words:'flip invert turn inside out faces', run: () => { try { window.__moNormals.reverse(); } catch (_) {} } },
+    { id:'normalsAlign',  group:'Edit',       label:'Align normals: turn faces the same way, outward', words:'unify consistent orient fix winding inside out faces', run: () => { try { window.__moNormals.align(); } catch (_) {} } },
+    { id:'normalsHighlight', group:'Edit',    get label() { return window.__moNormals && window.__moNormals.isHighlighting() ? 'Stop highlighting back faces' : 'Highlight back faces (flipped normals in red)'; }, words:'show hide toggle flipped reversed normals inside out faces red', run: () => { try { window.__moNormals.highlight(); } catch (_) {} } },
     { id:'remesh',        group:'Edit',       label:'Remesh… (untriangulate or triangulate)', run: () => _CmdCards.open('remesh') },
     { id:'untriangulate', group:'Edit',       label:'Untriangulate',              kbd:'U', run: () => { try { window.__showRemesh && window.__showRemesh('ut'); } catch (_) {} } },
     { id:'triangulate',   group:'Edit',       label:'Triangulate',                kbd:'Shift+U', run: () => { try { window.__showRemesh && window.__showRemesh('tr'); } catch (_) {} } },
@@ -4963,16 +5148,16 @@ const _CmdK = (() => {
     solid: 'cube-solid', wire: 'cube-wire', xray: 'cube-xray', clay: 'sphere-clay', gzMove: 'move', gzRotate: 'rotate-cw', gzScale: 'scaling', gzOff: 'circle-slash', tgGrid: 'land-plot',
     selAll: 'square-check', selInvert: 'arrow-left-right', selClear: 'square-x', isolate: 'focus', showAll: 'eye', hideUnsel: 'eye-off', hideSel: 'eye-off', reveal: 'locate',
     undo: 'undo-2', redo: 'redo-2', delete: 'trash-2', copy: 'copy', paste: 'clipboard-paste', duplicate: 'copy-plus', recenter: 'axis-3d', group: 'folder-plus', ungroup: 'folder-minus',
-    pivotOrient: 'axis-3d', merge: 'combine', repairMesh: 'wrench', hiddenFaces: 'scan-eye', mergeBy: 'layers', selRule: 'list-filter', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'circle-off', decimate: 'shrink', flatten: 'list-tree', measure: 'ruler', materials: 'palette',
+    pivotOrient: 'axis-3d', merge: 'combine', repairMesh: 'wrench', normals: 'flip-horizontal-2', normalsFind: 'scan-search', normalsReverse: 'flip-horizontal-2', normalsAlign: 'align-center-vertical', normalsHighlight: 'scan-eye', hiddenFaces: 'scan-eye', mergeBy: 'layers', selRule: 'list-filter', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'circle-off', decimate: 'shrink', flatten: 'list-tree', measure: 'ruler', materials: 'palette',
     settings: 'settings', shortcuts: 'command', palette: 'search', console: 'terminal', welcome: 'home',
   };
   const GROUP_ICON = { File: 'file', View: 'eye', Selection: 'mouse-pointer-2', Edit: 'pencil', App: 'settings' };
   // Is a command usable now? null when it is, else the reason in a few words. A command that works on "the selection, or on every part
   // when nothing is selected" (Remove holes, Repair, Remesh...) needs only a model. The search greys the others out and says why.
-  const NEED_SEL = new Set(['pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'selSimilar', 'selColour', 'selClear']);
-  const NEED_MODEL = new Set(['fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
+  const NEED_SEL = new Set(['quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'selSimilar', 'selColour', 'selClear']);
+  const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
-    'flagSliver', 'isolateSmall', 'deleteSmall', 'splitAll', 'split', 'fillHoles', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
+    'flagSliver', 'isolateSmall', 'deleteSmall', 'splitAll', 'split', 'fillHoles', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
   function _cmdOff(a) {
     const id = a && a.id; if (!id || typeof id !== 'string') return null;
     try {
@@ -4981,6 +5166,10 @@ const _CmdK = (() => {
       if (NEED_MODEL.has(id)) return live ? null : 'Open a model first';
       switch (id) {
         case 'merge': return nSel >= 2 ? null : 'Select two or more parts';
+        case 'alignParts': return nSel >= 2 ? null : (live ? 'Select two or more parts' : 'Open a model first');
+        case 'revert': return state._sourceFile ? null : 'No source file to go back to';
+        case 'measureClear': case 'msrClear': return (window._Measure && window._Measure.getSerialized().length) ? null : 'No measurements';
+        case 'closeall': return _Tabs.count() > 0 ? null : 'No scene is open';
         case 'ungroup': return (state.selectedGroupIds && state.selectedGroupIds.size) ? null : 'Select a group first';
         case 'undo': return state.history.length ? null : 'Nothing to undo';
         case 'redo': return state.redo.length ? null : 'Nothing to redo';
@@ -15144,6 +15333,7 @@ function _shadowRefit() {
 function _applyShadows() {
   if (!renderer || !state._lights?.dir) return;
   const on = !!state.shadowsEnabled;
+  state._shadowsApplied = on;
   // (the renderer's shadow system is switched on for good, here and at start: lights and parts that do not cast or receive cost nothing, and the
   // lighting programs are built once with it; switching it later left them with a missing shadow node and a shader that did not compile)
   try { if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; } } catch (_) {}
@@ -16873,7 +17063,116 @@ function _getEdgesGeom(g) {
   _edgesCache.set(g, e);
   return e;
 }
+// ── B-rep: the CAD faces and the true CAD edges of a STEP that was opened "as B-rep" ────────────────────────────────────
+// step2glb.py --brep writes, beside the GLB, <name>.glb.brep.json (per solid: its CAD faces as [kind, first triangle, triangle
+// count, area, ...radii], and its edges as [first point, point count, tangent 0/1, face a, face b]) and <name>.glb.brep.bin (the
+// edge points, float32 xyz, in the mesh's own space). Each node that carries a solid names it in extras.brep. Here the records
+// are tied to the loaded geometries (a WeakMap, so nothing is added to the geometry's own data, which the exporter would write),
+// and the edge layer (_edgesFor, the selection outline) is given the CAD edges instead of the ones it would find by angle.
+const _Brep = (() => {
+  const recs = new WeakMap();                // BufferGeometry -> { faces, rows, pts, tris, key }
+  const info = { on: false, solids: 0, faces: 0, edges: 0, kinds: [], source: null, tangent: true };
+  let onChange = null;                       // the viewport's pill and panel follow this
+  let pending = null;                        // { json, pts } fetched with the conversion, taken by the next load
+  const KINDS_FALLBACK = ['plane', 'cylinder', 'cone', 'sphere', 'torus', 'bezier', 'bspline', 'revolution', 'extrusion', 'offset', 'other'];
+
+  // The sidecar of a conversion (null when it has none or cannot be read).
+  async function fetchSidecar(resultName) {
+    try {
+      const base = 'inbox/' + encodeURIComponent(resultName) + '.brep';
+      const [rj, rb] = await Promise.all([fetch(base + '.json'), fetch(base + '.bin')]);
+      if (!rj.ok || !rb.ok) return null;
+      const json = await rj.json(), buf = await rb.arrayBuffer();
+      return { json, pts: new Float32Array(buf) };
+    } catch (_) { return null; }
+  }
+  function stage(side, source) { pending = side ? { ...side, source } : null; }
+
+  // The edge lines of one record as line-segment pairs.
+  function build(rec, tangent) {
+    let n = 0;
+    for (const r of rec.rows) if (tangent || !r[2]) n += Math.max(0, r[1] - 1);
+    const out = new Float32Array(n * 6), p = rec.pts;
+    let o = 0;
+    for (const r of rec.rows) {
+      if (!tangent && r[2]) continue;
+      const s = r[0] * 3;
+      for (let k = 0; k < r[1] - 1; k++) { const a = s + k * 3; for (let c = 0; c < 6; c++) out[o++] = p[a + c]; }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(out, 3));
+    return g;
+  }
+  function give(g, rec) {
+    const old = _edgesCache.get(g);
+    if (old) { try { old.dispose(); } catch (_) {} }
+    _edgesCache.set(g, build(rec, info.tangent));
+    _edgesFailed.delete(g);
+  }
+
+  // Tie the sidecar to the meshes of a freshly parsed scene. Returns how many geometries got a record.
+  function attach(sceneRoot, append = false) {
+    const side = pending; pending = null;
+    if (!append) reset();
+    if (!side || !side.json || !side.json.solids) return 0;
+    const solids = side.json.solids;
+    let n = 0;
+    sceneRoot.traverse(o => {
+      if (!o.isMesh || !o.geometry) return;
+      const key = o.userData && o.userData.brep;
+      const s = key && solids[key];
+      if (!s || recs.has(o.geometry)) return;
+      const g = o.geometry, tris = g.index ? g.index.count / 3 : (g.attributes.position ? g.attributes.position.count / 3 : 0);
+      if (tris !== s.tris) return;                    // not the mesh the faces were counted on
+      const rec = { faces: s.faces, rows: s.edges, pts: side.pts.subarray(s.pts[0] * 3, (s.pts[0] + s.pts[1]) * 3), tris: s.tris, key };
+      recs.set(g, rec);
+      give(g, rec);
+      info.solids++; info.faces += rec.faces.length; info.edges += rec.rows.length;
+      n++;
+      delete o.userData.brep;                         // (it was a pointer for this step; the part keeps nothing of it)
+    });
+    if (n) {
+      info.on = true; info.kinds = side.json.kinds || KINDS_FALLBACK; info.source = side.source || null;
+    }
+    try { onChange && onChange(); } catch (_) {}
+    return n;
+  }
+  function reset() { info.on = false; info.solids = info.faces = info.edges = 0; info.source = null; info.kinds = []; try { onChange && onChange(); } catch (_) {} }
+
+  // Tangent edges (where two faces run smoothly into each other, a fillet's borders) can be left out.
+  function setTangent(on) {
+    info.tangent = !!on;
+    for (const p of state.parts) {
+      const g = p && p.mesh && p.mesh.geometry, rec = g && recs.get(g);
+      if (rec) give(g, rec);
+    }
+    for (const grp of (state.instancedGroups || [])) {
+      const g = grp.instanced && grp.instanced.geometry, rec = g && recs.get(g);
+      if (rec) give(g, rec);
+    }
+    try { for (const p of state.parts) if (p && p.mesh && p.mesh.geometry && recs.get(p.mesh.geometry)) _cadEdgeStale.add(p.mesh.geometry); } catch (_) {}
+    try { _cadEdgesSchedule(0); } catch (_) {}
+    try { requestRender(); } catch (_) {}
+  }
+  // Which CAD face does triangle `tri` of geometry `g` belong to? -> { index, kind, kindName, area, nums, triStart, triCount } or null.
+  function faceAt(g, tri) {
+    const rec = recs.get(g);
+    if (!rec) return null;
+    const f = rec.faces;
+    let lo = 0, hi = f.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (f[mid][1] <= tri) lo = mid; else hi = mid - 1; }
+    const r = f[lo];
+    if (!r || tri < r[1] || tri >= r[1] + r[2]) return null;
+    return { index: lo, kind: r[0], kindName: (info.kinds[r[0]] || KINDS_FALLBACK[r[0]] || 'other'), area: r[3], nums: r.slice(4), triStart: r[1], triCount: r[2], of: f.length };
+  }
+  const has = (g) => recs.has(g);
+  const drop = (g) => { recs.delete(g); };
+  return { fetchSidecar, stage, attach, reset, setTangent, faceAt, has, drop, info, record: (g) => recs.get(g) || null, onChange: (fn) => { onChange = fn; } };
+})();
+window._Brep = _Brep;
+
 function _disposeEdgesFor(g) {
+  _Brep.drop(g);                                      // (the geometry changed: its CAD faces and edges are no longer its own)
   const e = _edgesCache.get(g);
   if (e) { e.dispose?.(); _edgesCache.delete(g); }
   try { _cadEdgesGeomChanged(g); } catch (_) {}
@@ -18822,7 +19121,7 @@ function refreshFlagged(live = false) {
   {
     const side = thr * state.modelDiag;                       // the length the threshold stands for
     const len = _fmtLen(side, side >= 100 ? 0 : side >= 10 ? 1 : 2);   // in the unit the scene is shown in
-    const what = metric === 'max' ? `with no side longer than ${len}` : metric === 'vol' ? `whose box is smaller than a ${len} cube` : `under ${len}`;
+    const what = metric === 'max' ? `no side over ${len}` : metric === 'vol' ? `under a ${len} cube` : `under ${len}`;
     {
       let hid = 0; for (const p of state.parts) if (!p.deleted && !_flagEligible(p)) hid++;
       if (!state.parts.some(p => !p.deleted)) _thrSay(null, 'Load a model to see what would go.');
@@ -20111,6 +20410,9 @@ window.addEventListener('beforeunload', (e) => {
   if (_Prefs.get('warnUnsaved') === false) return;
   let unsaved = false;
   try { unsaved = _Dirty.dirty() || _Tabs.list().some(t => t.dirty); } catch (_) {}
+  // Also while a model is simply open: Ctrl+W (or the tab's x) used to close the page and the scene with it, with nothing asked. A
+  // browser does not let a page cancel Ctrl+W, so its own question is what stops it.
+  if (!unsaved) { try { unsaved = state.parts.some(p => p && !p.deleted); } catch (_) {} }
   if (unsaved) { e.preventDefault(); e.returnValue = ''; }
 });
 // Single source of truth for "after-undo / after-redo cleanup". Every branch
@@ -27937,9 +28239,17 @@ function wireUI() {
     const lbl = $('light-ele-val'); if (lbl) lbl.textContent = state.sunElevation;
     _applySunDirection(); requestRender();
   });
+  // (each change re-links every material, so flicking the switch several times in a second queued a pile of shader compiles and
+  // lost the viewport; the clicks now settle for a moment and only the last state is applied, and only if it differs from what is shown)
+  let _shadowTimer = 0;
   $('toggle-shadows')?.addEventListener('change', e => {
     state.shadowsEnabled = e.target.checked;
-    _applyShadows(); requestRender();
+    clearTimeout(_shadowTimer);
+    _shadowTimer = setTimeout(() => {
+      _shadowTimer = 0;
+      if (!!state.shadowsEnabled === state._shadowsApplied) return;
+      _applyShadows(); requestRender();
+    }, 180);
   });
   $('grid-cell')?.addEventListener('change', e => {
     state.gridCellMode = e.target.value;
@@ -33213,6 +33523,7 @@ function _plainLoadError(e, file) {
 }
 
 async function _runLoad(file, formatLabel, parser) {
+  if (!state._importMode) { try { _Brep.reset(); } catch (_) {} }       // (a scene that is not a B-rep has none of it left)
   setLoader(true, `Reading ${formatLabel}…`, file.name);
   setLoaderProgress(10);
   // Only a successful, non-appending load becomes the "source file" that
@@ -33467,6 +33778,9 @@ async function loadGlbFile(file) {
     } catch (_) { /* parser shape may differ between three.js versions; non-fatal */ }
     const flattened = _flattenSkinnedMeshes(gltf.scene);
     if (flattened) Log.info(`Flattened ${flattened} SkinnedMesh${flattened === 1 ? '' : 'es'} to static geometry (rigging dropped)`, { tag: 'glb' });
+    // A STEP opened as B-rep brings its CAD faces and edges with it: tie them to the meshes before they are taken in.
+    try { const nb = _Brep.attach(gltf.scene, !!state._importMode); if (nb) Log.info(`B-rep: ${fmtNum(_Brep.info.faces)} faces and ${fmtNum(_Brep.info.edges)} CAD edges on ${fmtNum(nb)} solid${nb === 1 ? '' : 's'}`, { tag: 'load' }); }
+    catch (e) { console.warn('[B-rep] could not read the B-rep of this file:', e); }
     await _ingestSceneRoot(gltf.scene, file, buffer.byteLength, 'glb');
   });
 }
@@ -34960,7 +35274,7 @@ function wireAdvancedUI() {
   // Sliver aspect ratio scrubber: linear 3..200, integer step.
   const _aspScrub = initScrubber({
     el: 'aspect-scrub',
-    label: 'Sliver aspect ratio',
+    label: 'Sliver ratio',
     maxSteps: 197,
     stepToVal: (s) => s + 3,
     valToStep: (v) => Math.max(0, Math.min(197, Math.round(v - 3))),
@@ -34999,6 +35313,429 @@ function _safeRun(fn, label) {
 const _origWireUI = wireUI;
 wireUI = function() { _safeRun(_origWireUI, 'base'); _safeRun(wireAdvancedUI, 'advanced'); };
 
+
+// ─── B-rep pill and panel ────────────────────────────────────────────────────────────────────────────────────────────────
+// A scene from a STEP (see _Brep) shows a pill; it opens a small panel: what the scene holds and the two switches (tangent edges,
+// face info on hover).
+// Face info: the CAD face under the pointer is named in a tip (type, radius, area) and its triangles are tinted.
+const _BrepUI = (() => {
+  const $id = (i) => document.getElementById(i);
+  let wired = false, faceOn = false, overlay = null, lastKey = '';
+  const KIND_LABEL = { plane: 'Plane', cylinder: 'Cylinder', cone: 'Cone', sphere: 'Sphere', torus: 'Torus', bezier: 'Bezier surface', bspline: 'B-spline surface', revolution: 'Surface of revolution', extrusion: 'Extruded surface', offset: 'Offset surface', other: 'Surface' };
+  const nf = (v) => String(+(Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(2)));
+  function describe(f) {
+    const bits = [KIND_LABEL[f.kindName] || f.kindName];
+    if (f.kindName === 'cylinder' || f.kindName === 'sphere') bits.push('R ' + nf(f.nums[0]));
+    else if (f.kindName === 'cone') bits.push(nf(f.nums[0]) + '° half angle');
+    else if (f.kindName === 'torus') bits.push('R ' + nf(f.nums[0]) + ' / r ' + nf(f.nums[1]));
+    return bits;
+  }
+  function sync() {
+    const on = !!_Brep.info.on;
+    const pill = $id('vp-brep-pill'); if (pill) pill.hidden = !on;
+    if (!on) { closePop(); hideFace(); }
+    const sum = $id('bp-sum');
+    if (sum && on) {
+      const i = _Brep.info;
+      sum.textContent = (i.source ? i.source.name + ' · ' : '') + fmtNum(i.solids) + ' solid' + (i.solids === 1 ? '' : 's') + ' · ' + fmtNum(i.faces) + ' CAD faces · ' + fmtNum(i.edges) + ' CAD edges';
+    }
+    try { _lucide(); } catch (_) {}
+  }
+  function openPop() {
+    const pill = $id('vp-brep-pill'), pop = $id('vp-brep-pop'); if (!pill || !pop) return;
+    pop.hidden = false; pill.setAttribute('aria-expanded', 'true');
+    const place = () => {
+      const r = pill.getBoundingClientRect();
+      pop.style.left = Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, r.left + r.width / 2 - pop.offsetWidth / 2)) + 'px';
+      pop.style.top = (r.bottom + 8) + 'px';
+    };
+    place(); requestAnimationFrame(place);       // (again once the pill row has settled)
+  }
+  function closePop() { const pop = $id('vp-brep-pop'), pill = $id('vp-brep-pill'); if (pop) pop.hidden = true; if (pill) pill.setAttribute('aria-expanded', 'false'); }
+  function hideFace() {
+    const tip = $id('vp-brep-tip'); if (tip) tip.hidden = true;
+    if (overlay) { if (overlay.parent) overlay.parent.remove(overlay); overlay = null; try { requestRender(); } catch (_) {} }
+    lastKey = '';
+  }
+  function tint(mesh, geom, f) {
+    if (overlay && overlay.parent) overlay.parent.remove(overlay);
+    overlay = null;
+    if (!mesh || mesh.isInstancedMesh || !geom.index) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', geom.attributes.position);
+    g.setIndex(new THREE.BufferAttribute(geom.index.array.subarray(f.triStart * 3, (f.triStart + f.triCount) * 3), 1));
+    const m = new THREE.MeshBasicMaterial({ color: 0x0d99ff, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    overlay = new THREE.Mesh(g, m);
+    overlay.raycast = () => {}; overlay.renderOrder = 6; overlay.frustumCulled = false;
+    mesh.add(overlay);
+  }
+  function onMove(ev) {
+    if (!faceOn || !_Brep.info.on) return;
+    if (ev.buttons) { hideFace(); return; }
+    const c = $('canvas'), r = c.getBoundingClientRect();
+    pointer.x = ((ev.clientX - r.left) / r.width) * 2 - 1;
+    pointer.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
+    if (state.partsRoot) state.partsRoot.updateMatrixWorld(true);
+    const targets = [];
+    for (const p of state.parts) if (!p.deleted && p.visible && p.mesh) targets.push(p.mesh);
+    for (const g of state.instancedGroups) if (g.instanced) targets.push(g.instanced);
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObjects(targets, false)[0];
+    const tip = $id('vp-brep-tip');
+    const f = hit && hit.faceIndex != null ? _Brep.faceAt(hit.object.geometry, hit.faceIndex) : null;
+    if (!f) { hideFace(); return; }
+    const key = hit.object.id + ':' + f.index;
+    if (key !== lastKey) { lastKey = key; tint(hit.object, hit.object.geometry, f); try { requestRender(); } catch (_) {} }
+    const bits = describe(f);
+    tip.innerHTML = '<b>' + bits[0] + '</b>' + (bits[1] ? ' · ' + bits[1] : '') + ' <i>· ' + nf(f.area) + ' mm² · ' + fmtNum(f.triCount) + ' triangles</i>';
+    tip.hidden = false;
+    tip.style.left = Math.max(8, Math.min(innerWidth - tip.offsetWidth - 8, ev.clientX + 14)) + 'px';
+    tip.style.top = Math.max(8, Math.min(innerHeight - tip.offsetHeight - 8, ev.clientY + 16)) + 'px';
+  }
+  function wire() {
+    if (wired) return; wired = true;
+    $id('vp-brep-pill')?.addEventListener('click', () => { const pop = $id('vp-brep-pop'); if (pop && pop.hidden) openPop(); else closePop(); });
+    document.addEventListener('pointerdown', (e) => { const pop = $id('vp-brep-pop'); if (pop && !pop.hidden && !pop.contains(e.target) && !e.target.closest('#vp-brep-pill')) closePop(); }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePop(); }, true);
+    $id('bp-faceinfo')?.addEventListener('change', (e) => { faceOn = !!e.target.checked; if (!faceOn) hideFace(); });
+    $id('bp-tangent')?.addEventListener('change', (e) => { _Brep.setTangent(!!e.target.checked); });
+    $('canvas')?.addEventListener('pointermove', onMove);
+    $('canvas')?.addEventListener('pointerleave', hideFace);
+    _Brep.onChange(sync);
+    sync();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
+  return { sync, hideFace };
+})();
+
+// ─── One button for how the model is drawn ───────────────────────────────────────────────────────────────────────────────
+// Solid, Wireframe, X-ray and Heat were four buttons in the left toolbar. They are one now, with the same logic as the selection tool's
+// button: it shows the view in use; a click goes to the next one; holding it (or a right-click) lists all four, and letting go over a
+// row picks it (letting go on the button leaves the list open for a click). The four old buttons stay in the page, out of sight: the
+// rest of the app still marks them as it changes the view, and this button follows along.
+const _ViewModeButton = (() => {
+  const ROWS = [
+    ['solid', 'cube-solid', 'Solid', 'Alt+1'],
+    ['wire',  'cube-wire',  'Wireframe', 'Alt+2'],
+    ['xray',  'cube-xray',  'X-ray', 'Alt+3'],
+    ['heat',  'flame',      'Heatmap', 'Alt+4'],
+  ];
+  const $q = (id) => document.getElementById(id);
+  // The view in use: the old button the rest of the app has marked (the heatmap finishes setting itself up a moment after the call
+  // that starts it, and marks its button when it is ready), else the view itself. Clay and CAD are looks of the solid view.
+  const cur = () => {
+    const marked = ROWS.find(r => { const e = $q('vw-' + r[0]); return e && e.classList.contains('active'); });
+    if (marked) return marked[0];
+    const m = state.viewMode; return ROWS.some(r => r[0] === m) ? m : 'solid';
+  };
+  function sync() {
+    const b = $q('vw-mode-btn'); if (!b) return;
+    const m = cur(), row = ROWS.find(r => r[0] === m);
+    if (b.dataset.m !== m) { b.dataset.m = m; b.innerHTML = '<i data-lucide="' + row[1] + '"></i>'; try { _lucide(); } catch (_) {} }
+    b.title = 'View: ' + row[2] + '. Click for the next one, hold for all four';
+    b.setAttribute('aria-label', 'View: ' + row[2]);
+  }
+  function wire() {
+    const btn = $q('vw-mode-btn'), pop = $q('vw-mode-pop');
+    if (!btn || !pop || btn._vmWired) return;
+    btn._vmWired = true;
+    let holdT = 0, held = false, holding = false;
+    const close = () => { pop.style.display = 'none'; };
+    const open = () => {
+      held = true; pop.innerHTML = '';
+      for (const [m, icon, label, kbd] of ROWS) {
+        const row = document.createElement('button');
+        row.type = 'button'; row.className = 'vp-prim-pop-item em-pop-item' + (cur() === m ? ' is-on' : '');
+        row.setAttribute('role', 'menuitemradio'); row.setAttribute('aria-checked', String(cur() === m));
+        row.innerHTML = '<span class="em-ico prim-ico"><i data-lucide="' + icon + '"></i></span><span class="em-pop-l">' + label + '</span><span class="em-pop-k">' + kbd + '</span>';
+        row.addEventListener('click', () => { close(); setViewMode(m); });
+        pop.appendChild(row);
+      }
+      try { _lucide(); } catch (_) {}
+      pop.style.top = btn.offsetTop + 'px';
+      pop.style.display = 'block';
+    };
+    document.addEventListener('mousedown', (e) => { if (pop.style.display !== 'none' && !pop.contains(e.target) && !btn.contains(e.target)) close(); });
+    btn.addEventListener('mousedown', (e) => { if (e.button !== 0) return; held = false; holding = false; clearTimeout(holdT); holdT = setTimeout(() => { open(); holding = true; }, 380); });
+    btn.addEventListener('mouseleave', () => clearTimeout(holdT));
+    btn.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); clearTimeout(holdT); open(); });
+    // let go over a row of the list and that view is picked; let go on the button and the list stays for a click; anywhere else it closes
+    document.addEventListener('mouseup', (e) => {
+      clearTimeout(holdT);
+      if (!holding) return;
+      holding = false;
+      const row = e.target.closest && e.target.closest('#vw-mode-pop .em-pop-item');
+      if (row) { setTimeout(() => { held = false; }, 0); row.click(); }
+      else if (!btn.contains(e.target)) { setTimeout(() => { held = false; }, 0); close(); }
+    });
+    btn.addEventListener('click', () => {
+      clearTimeout(holdT);
+      if (held) { held = false; return; }       // (the press that opened the list is not also a click)
+      close();
+      const i = ROWS.findIndex(r => r[0] === cur());
+      setViewMode(ROWS[(i + 1) % ROWS.length][0]);
+      btn.blur();
+    });
+    sync();
+    for (const r of ROWS) { const e = $q('vw-' + r[0]); if (e) new MutationObserver(sync).observe(e, { attributes: true, attributeFilter: ['class'] }); }
+  }
+  // the button follows every change of the view (the other code that sets it stays as it is)
+  const _svm = setViewMode;
+  setViewMode = function () { const r = _svm.apply(this, arguments); try { sync(); } catch (_) {} return r; };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true }); else wire();
+  return { sync };
+})();
+
+// ─── Model inspector ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// A floating card that says what the model is, and what is wrong with it. Overview: parts, groups, triangles, size, materials, memory,
+// sharing, the heaviest parts. Checks that cost nothing run as the card draws: parts with no material, with no triangles, tiny parts,
+// heavy parts, hidden parts. The geometry scan looks at every mesh once (a mesh used by many parts is looked at once): triangles with no
+// area, the same triangle twice, open edges (holes and cracks), edges shared by three or more triangles, and parts that are in several
+// separate pieces. Every row can select the parts it is about, and most point to the tool that mends it.
+const _ModelInspector = (() => {
+  const SCAN_MAX_TRIS = 1000000;           // a single mesh with more triangles than this is left out of the scan (and said so)
+  let pop = null, body = null, scan = null, scanning = false, abort = false, scanPct = 0, timer = 0, sig = '';
+  const esc = (t) => escapeHtml(String(t));
+  const live = () => state.parts.filter(p => p && !p.deleted);
+  const geomOf = (p) => (p.mesh && p.mesh.geometry) || (p.instancedMesh && p.instancedMesh.geometry) || null;
+
+  // ── what the model is ──
+  function overview() {
+    const parts = live();
+    let tris = 0, verts = 0, hidden = 0, minDiag = Infinity;
+    const box = new THREE.Box3(), geoms = new Map();
+    for (const p of parts) {
+      tris += p.triCount || 0; verts += p.vertCount || 0;
+      if (p.visible === false) hidden++;
+      if (p.bbox && !p.bbox.isEmpty()) box.union(p.bbox);
+      const g = geomOf(p); if (g) geoms.set(g.uuid, g);
+    }
+    let bytes = 0;
+    for (const g of geoms.values()) {
+      for (const k in g.attributes) { const a = g.attributes[k]; if (a && a.array) bytes += a.array.byteLength; }
+      if (g.index && g.index.array) bytes += g.index.array.byteLength;
+    }
+    const size = box.isEmpty() ? new THREE.Vector3() : box.getSize(new THREE.Vector3());
+    const diag = size.length();
+    const nodes = state.treeNodes || [];
+    const groups = nodes.filter(n => n.kind !== 'part').length;
+    const depth = nodes.reduce((m, n) => Math.max(m, (n.depth || 0) + 1), 0);
+    const mats = _collectLiveMaterials();
+    const inst = (state.instancedGroups || []);
+    const instParts = inst.reduce((n, g) => n + ((g.parts && g.parts.length) || 0), 0);
+    const shared = parts.length - geoms.size;               // parts that use a mesh another part already has
+    return { parts, tris, verts, hidden, box, size, diag, groups, depth, mats, bytes, geoms: geoms.size, shared, instGroups: inst.length, instParts };
+  }
+  // the checks that cost nothing
+  function quick(o) {
+    const rows = [];
+    const none = o.parts.filter(p => { const h = _matHolder(p); const m = h ? _matOf(h) : null; return !m || (Array.isArray(m) ? !m.length : _isNoneMat(m)); });
+    const empty = o.parts.filter(p => !(p.triCount > 0));
+    const tiny = o.diag > 0 ? o.parts.filter(p => p.sizeMetrics && p.sizeMetrics.diag < o.diag * 0.001) : [];
+    const heavy = o.tris > 0 ? o.parts.filter(p => (p.triCount || 0) > o.tris * 0.05) : [];
+    const hid = o.parts.filter(p => p.visible === false);
+    rows.push({ key: 'nomat', tone: none.length ? 'warn' : 'ok', label: 'Parts with no material', n: none.length, ids: none.map(p => p.partId), note: 'They are drawn in a plain grey.', fix: ['Materials', () => document.getElementById('tg-materials')?.click()] });
+    rows.push({ key: 'empty', tone: empty.length ? 'bad' : 'ok', label: 'Parts with no triangles', n: empty.length, ids: empty.map(p => p.partId), note: 'Nothing to see or export.', fix: ['Delete', () => _Actions.list.find(a => a.id === 'delete')?.run()] });
+    rows.push({ key: 'tiny', tone: tiny.length ? 'info' : 'ok', label: 'Tiny parts', n: tiny.length, ids: tiny.map(p => p.partId), note: 'Smaller than a thousandth of the model.', fix: ['Delete small parts…', () => _CmdKRun('deleteSmall')] });
+    rows.push({ key: 'heavy', tone: heavy.length ? 'info' : 'ok', label: 'Heavy parts', n: heavy.length, ids: heavy.map(p => p.partId), note: 'Each is more than a twentieth of all the triangles.', fix: ['Decimate', () => _CmdKRun('decimate')] });
+    rows.push({ key: 'hidden', tone: 'ok', label: 'Hidden parts', n: hid.length, ids: hid.map(p => p.partId), note: 'Not drawn, but still in the file.', fix: ['Show all', () => _Actions.list.find(a => a.id === 'showAll')?.run()] });
+    return rows;
+  }
+  const _CmdKRun = (id) => { try { _Actions.list.find(a => a.id === id)?.run(); } catch (_) {} };
+
+  // ── the geometry scan: one mesh, by meshcheck.js (the same code the node tests run) ──
+  function analyseGeo(g) {
+    const pa = g.attributes && g.attributes.position; if (!pa) return null;
+    const vc = pa.count, ia = g.index, T = ia ? Math.floor(ia.count / 3) : Math.floor(vc / 3);
+    if (T > SCAN_MAX_TRIS) return { skipped: true, tris: T };
+    let p = pa.array;
+    if (pa.isInterleavedBufferAttribute || pa.normalized || !(p instanceof Float32Array) || pa.itemSize !== 3) {
+      p = new Float32Array(vc * 3);
+      for (let i = 0; i < vc; i++) { p[i * 3] = pa.getX(i); p[i * 3 + 1] = pa.getY(i); p[i * 3 + 2] = pa.getZ(i); }
+    }
+    return checkMesh(p, ia ? ia.array : null);
+  }
+  async function runScan() {
+    if (scanning) return;
+    const o = overview(), byGeo = new Map(), results = new Map(), skipped = [];
+    for (const p of o.parts) { const g = geomOf(p); if (!g) continue; if (!byGeo.has(g.uuid)) byGeo.set(g.uuid, { g, parts: [] }); byGeo.get(g.uuid).parts.push(p); }
+    scanning = true; abort = false; scanPct = 0; render();
+    let done = 0; const total = byGeo.size; let last = performance.now();
+    for (const [k, e] of byGeo) {
+      if (abort) break;
+      let r = null;
+      try { r = analyseGeo(e.g); } catch (err) { console.warn('[inspector] scan failed on a mesh:', err); }
+      if (r && r.skipped) skipped.push(...e.parts.map(p => p.partId));
+      else if (r) results.set(k, { r, parts: e.parts });
+      done++; scanPct = Math.round(done / total * 100);
+      if (performance.now() - last > 60) { last = performance.now(); render(); await new Promise(res => setTimeout(res, 0)); }
+    }
+    scanning = false;
+    if (abort) { scan = null; render(); return; }
+    // the rows: how many parts and how much of each problem
+    const sum = (fn) => { const ids = []; let n = 0; for (const { r, parts } of results.values()) { const v = fn(r); if (v > 0) { n += v * parts.length; for (const p of parts) ids.push(p.partId); } } return { n, ids }; };
+    const deg = sum(r => r.degenerate), dup = sum(r => r.duplicate), holes = sum(r => r.holes), openE = sum(r => r.openEdges), non = sum(r => r.nonManifoldEdges),
+      nmv = sum(r => r.nonManifoldVertices), flip = sum(r => r.inconsistent), inside = sum(r => r.insideOut), sliv = sum(r => r.slivers), pcs = sum(r => r.pieces > 1 ? r.pieces - 1 : 0);
+    const cav = sum(r => r.cavities);
+    scan = {
+      at: Date.now(), meshes: results.size, skipped,
+      rows: [
+        { key: 'inside', tone: inside.n ? 'bad' : 'ok', label: 'Parts turned inside out', n: inside.n, unit: 'pieces', ids: inside.ids, note: 'Every face of a closed piece points inward, so it shades dark and exports inverted.' + (cav.n ? ' ' + fmtNum(cav.n) + ' hollow' + (cav.n === 1 ? '' : 's') + ' (a wall that points inward inside another piece) is correct and not counted.' : ''), fix: ['Fix normals…', () => _CmdKRun('normals')] },
+        { key: 'flip', tone: flip.n ? 'bad' : 'ok', label: 'Faces turned the wrong way', n: flip.n, unit: 'edges', ids: flip.ids, note: 'Neighbouring triangles that disagree about which side is out: single flipped faces and patches.', fix: ['Fix normals…', () => _CmdKRun('normals')] },
+        { key: 'degenerate', tone: deg.n ? 'bad' : 'ok', label: 'Triangles with no area', n: deg.n, unit: 'triangles', ids: deg.ids, note: 'Collapsed to a line or a point: they draw nothing and only add weight.', fix: ['Repair mesh…', () => _CmdKRun('repairMesh')] },
+        { key: 'dup', tone: dup.n ? 'bad' : 'ok', label: 'The same triangle twice', n: dup.n, unit: 'triangles', ids: dup.ids, note: 'Stacked faces flicker where they overlap.', fix: ['Repair mesh…', () => _CmdKRun('repairMesh')] },
+        { key: 'holes', tone: holes.n ? 'warn' : 'ok', label: 'Holes and cracks', n: holes.n, unit: 'holes', ids: holes.ids, note: (openE.n ? fmtNum(openE.n) + ' open edges in all. ' : '') + 'An open edge has a triangle on one side only. A sheet or a thin shell has them by design.', fix: ['Remove holes…', () => _CmdKRun('fillHoles')] },
+        { key: 'nonman', tone: non.n ? 'bad' : 'ok', label: 'Edges shared by three or more triangles', n: non.n, unit: 'edges', ids: non.ids, note: 'Not a clean surface: ribs, doubled faces or pieces glued along an edge.', fix: ['Repair mesh…', () => _CmdKRun('repairMesh')] },
+        { key: 'nmv', tone: nmv.n ? 'warn' : 'ok', label: 'Pinched corners', n: nmv.n, unit: 'corners', ids: nmv.ids, note: 'A point where the triangles round it do not make one fan: two surfaces touching at a point.', fix: ['Repair mesh…', () => _CmdKRun('repairMesh')] },
+        { key: 'pieces', tone: pcs.n ? 'warn' : 'ok', label: 'Parts in several pieces', n: pcs.n, unit: 'extra pieces', ids: pcs.ids, note: 'Floating bits that are not joined to the rest of their part.', fix: ['Remove floating pieces…', () => _CmdKRun('floating')] },
+        { key: 'sliver', tone: sliv.n ? 'info' : 'ok', label: 'Needle triangles', n: sliv.n, unit: 'triangles', ids: sliv.ids, note: 'Very long and thin: they shade badly and decimate poorly.', fix: ['Repair mesh…', () => _CmdKRun('repairMesh')] },
+      ],
+    };
+    render();
+  }
+
+  // ── the card ──
+  function selectParts(ids, frame) {
+    const live = ids.filter(id => { const p = getPart(id); return p && !p.deleted; });
+    if (!live.length) return;
+    state.selected.clear();
+    try { state.selectedGroupIds.clear(); } catch (_) {}
+    for (const id of live) state.selected.add(id);
+    applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo();
+    const c = $('del-sel-count'); if (c) c.textContent = state.selected.size;
+    if (frame) { try { frameSelected(); } catch (_) {} }
+  }
+  const TONE = { ok: 'No problem', warn: 'Look at it', bad: 'Broken', info: 'Note' };
+  function row(r, i) {
+    const has = r.n === null ? false : r.n > 0;
+    const count = r.n === null ? '—' : fmtNum(r.n);
+    const parts = r.unit && r.ids && r.ids.length ? ' <span class="mi2-parts">' + fmtNum(r.ids.length) + ' part' + (r.ids.length === 1 ? '' : 's') + '</span>' : '';
+    return '<div class="mi2-row t-' + r.tone + '"><span class="mi2-dot" title="' + esc(TONE[r.tone]) + '"></span>' +
+      '<div class="mi2-main"><div class="mi2-l">' + esc(r.label) + '</div><div class="mi2-n">' + esc(r.note || '') + '</div></div>' +
+      '<div class="mi2-c"><b>' + count + '</b>' + (r.unit && has ? ' <em>' + esc(r.unit) + '</em>' : '') + parts + '</div>' +
+      '<div class="mi2-b">' +
+      (r.ids && r.ids.length ? '<button type="button" data-mi2="sel" data-i="' + i + '" data-g="' + (r._g || '') + '">Select</button>' : '') +
+      (r.fix && (has || r.n === null) ? '<button type="button" data-mi2="fix" data-i="' + i + '" data-g="' + (r._g || '') + '">' + esc(r.fix[0]) + '</button>' : '') +
+      '</div></div>';
+  }
+  let rowsQ = [], rowsS = [];
+  function render() {
+    if (!body) return;
+    const o = overview();
+    const sz = o.size, dims = o.parts.length ? _fmtDims(sz) : '—';
+    const stat = (l, v, sub) => '<div class="mi2-stat"><span>' + esc(l) + '</span><b>' + v + '</b>' + (sub ? '<em>' + sub + '</em>' : '') + '</div>';
+    const heavy = [...o.parts].sort((a, b) => (b.triCount || 0) - (a.triCount || 0)).slice(0, 6);
+    rowsQ = quick(o); rowsS = scan ? scan.rows : [];
+    rowsQ.forEach(r => { r._g = 'q'; }); rowsS.forEach(r => { r._g = 's'; });
+    const file = state._loadedFilename || 'This scene';
+    let h = '<div class="mi2-file"><i data-lucide="box"></i><div><div class="mi2-fn" title="' + esc(file) + '">' + esc(file) + '</div><div class="mi2-fs">' +
+      fmtNum(o.parts.length) + ' part' + (o.parts.length === 1 ? '' : 's') + ' · ' + fmtNum(o.tris) + ' triangles · ' + esc(state.displayUnit && state.displayUnit !== 'none' ? state.displayUnit : 'no unit') + '</div></div>' +
+      '<button type="button" class="mi2-ref" data-mi2="refresh" title="Count again">Refresh</button></div>';
+    h += '<div class="mi2-sec">Overview</div><div class="mi2-stats">' +
+      stat('Parts', fmtNum(o.parts.length), o.hidden ? fmtNum(o.hidden) + ' hidden' : '') +
+      stat('Groups', fmtNum(o.groups), o.depth ? o.depth + ' level' + (o.depth === 1 ? '' : 's') + ' deep' : '') +
+      stat('Triangles', fmtNum(o.tris), '') +
+      stat('Vertices', fmtNum(o.verts), '') +
+      stat('Mesh data', fmtBytes(o.bytes), fmtNum(o.geoms) + ' mesh' + (o.geoms === 1 ? '' : 'es')) +
+      stat('Size', dims, o.diag ? 'diagonal ' + _fmtLen(o.diag, 1) : '') +
+      stat('Materials', fmtNum(o.mats.length), '') +
+      stat('Sharing', o.shared > 0 ? fmtNum(o.shared) + ' parts' : 'none', o.instGroups ? fmtNum(o.instGroups) + ' as copies' : (o.shared > 0 ? 'share a mesh' : '')) +
+      '</div>';
+    h += '<div class="mi2-sec">Heaviest parts</div><div class="mi2-heavy">' +
+      (heavy.length ? heavy.map(p => '<button type="button" class="mi2-hp" data-mi2="part" data-id="' + p.partId + '"><span class="mi2-hn">' + esc(p.name || ('part ' + p.partId)) + '</span><span class="mi2-hb"><i style="width:' + Math.max(2, Math.round((p.triCount || 0) / Math.max(1, heavy[0].triCount || 1) * 100)) + '%"></i></span><span class="mi2-ht">' + fmtNum(p.triCount || 0) + '</span></button>').join('') : '<div class="mi2-none">No parts.</div>') + '</div>';
+    h += '<div class="mi2-sec">Checks</div><div class="mi2-rows">' + rowsQ.map((r, i) => row(r, i)).join('') + '</div>';
+    h += '<div class="mi2-sec">Geometry <span class="mi2-sub">' + (scan ? 'scanned ' + fmtNum(scan.meshes) + ' mesh' + (scan.meshes === 1 ? '' : 'es') + (scan.skipped.length ? ', ' + fmtNum(scan.skipped.length) + ' part' + (scan.skipped.length === 1 ? '' : 's') + ' too big to scan' : '') : 'not scanned yet') + '</span></div>';
+    if (scanning) h += '<div class="mi2-prog"><i style="width:' + scanPct + '%"></i></div><div class="mi2-scanrow"><span>Scanning… ' + scanPct + '%</span><button type="button" data-mi2="stop">Stop</button></div>';
+    else {
+      if (scan) h += '<div class="mi2-rows">' + rowsS.map((r, i) => row(r, i)).join('') + '</div>';
+      h += '<div class="mi2-scanrow"><span>' + (scan ? 'The scan reads every mesh once.' : 'Looks at every mesh once for broken geometry: open edges, doubled and empty triangles, loose pieces.') + '</span><button type="button" class="mi2-go" data-mi2="scan">' + (scan ? 'Scan again' : 'Scan the geometry') + '</button></div>';
+    }
+    body.innerHTML = h;
+    try { _lucide(); } catch (_) {}
+    sig = signature();
+  }
+  const signature = () => state.parts.length + ':' + state.parts.filter(p => p.deleted).length + ':' + (state.parts.reduce((n, p) => n + (p.triCount || 0), 0)) + ':' + state.parts.filter(p => p.visible === false).length + ':' + (state._loadedFilename || '');
+  function css() {
+    if (document.getElementById('mi2-style')) return;
+    const st = document.createElement('style'); st.id = 'mi2-style';
+    st.textContent = `
+      #_model-inspector .dlg-body{padding:0}
+      .mi2{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--tx)}
+      .mi2-file{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--s2)}
+      .mi2-file>i,.mi2-file>svg{width:22px;height:22px;color:var(--tx3);flex:0 0 22px}
+      .mi2-file>div{min-width:0;flex:1}
+      .mi2-fn{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .mi2-fs{color:var(--tx3);font-size:11px;margin-top:2px}
+      .mi2-sec{margin:12px 0 4px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--tx3)}
+      .mi2-sub{text-transform:none;letter-spacing:0;margin-left:8px;opacity:.8}
+      .mi2-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+      .mi2-stat{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:10px;background:var(--s1);min-width:0}
+      .mi2-stat span{font-size:10px;color:var(--tx3)}
+      .mi2-stat b{font-weight:400;font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .mi2-stat em{font-style:normal;font-size:10px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:12px}
+      .mi2-heavy{display:flex;flex-direction:column;gap:2px}
+      .mi2-hp{display:grid;grid-template-columns:minmax(0,1fr) 90px 64px;align-items:center;gap:10px;height:26px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--tx2);font:inherit;cursor:pointer;text-align:left}
+      .mi2-hp:hover{background:var(--s3);color:var(--tx)}
+      .mi2-hn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .mi2-hb{height:3px;border-radius:2px;background:var(--s4);overflow:hidden}
+      .mi2-hb i{display:block;height:100%;background:var(--tx3);border-radius:2px}
+      .mi2-ht{text-align:right;font-variant-numeric:tabular-nums;color:var(--tx3)}
+      .mi2-none{color:var(--tx3);padding:4px 8px}
+      .mi2-rows{display:flex;flex-direction:column;gap:2px}
+      .mi2-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:8px 8px;border-radius:9px}
+      .mi2-row:hover{background:var(--s1)}
+      .mi2-dot{width:8px;height:8px;border-radius:50%;background:var(--tx3)}
+      .mi2-row.t-ok .mi2-dot{background:#3ecf8e}
+      .mi2-row.t-warn .mi2-dot{background:#f5a524}
+      .mi2-row.t-bad .mi2-dot{background:#ef5350}
+      .mi2-row.t-info .mi2-dot{background:#6b8dff}
+      .mi2-l{color:var(--tx)}
+      .mi2-n{color:var(--tx3);font-size:11px;line-height:1.4;margin-top:1px}
+      .mi2-c{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;min-width:96px}
+      .mi2-c b{font-weight:400;font-size:13px}
+      .mi2-c em{font-style:normal;color:var(--tx3);font-size:10px}
+      .mi2-parts{display:block;color:var(--tx3);font-size:10px}
+      .mi2-row.t-ok .mi2-c b{color:var(--tx3)}
+      .mi2-b{display:flex;gap:6px;justify-content:flex-end;min-width:0}
+      .mi2 button[data-mi2]:not(.mi2-hp){height:24px;padding:0 10px;border:0;border-radius:7px;background:var(--s3);color:var(--tx2);font:inherit;font-size:11px;cursor:pointer;white-space:nowrap}
+      .mi2 button[data-mi2]:not(.mi2-hp):hover{background:var(--s5);color:var(--tx)}
+      .mi2-ref{flex:0 0 auto}
+      .mi2-scanrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px;color:var(--tx3);font-size:11px}
+      .mi2 .mi2-go{background:var(--ac)!important;color:var(--white)!important}
+      .mi2-prog{height:3px;border-radius:2px;background:var(--s4);overflow:hidden;margin:6px 8px 0}
+      .mi2-prog i{display:block;height:100%;background:var(--ac);transition:width 120ms linear}
+    `;
+    document.head.appendChild(st);
+  }
+  function open() {
+    css();
+    if (!pop) {
+      pop = _DraggablePopup.create({
+        id: '_model-inspector', title: 'Model inspector', subtitle: 'What the model is, and what is wrong with it', iconName: 'scan-search',
+        width: 640, height: 640, minWidth: 460, minHeight: 360, bodyHtml: '<div class="mi2" id="mi2-body"></div>', bodyScroll: true,
+        onClose: () => { clearInterval(timer); timer = 0; abort = true; },
+      });
+      body = pop.body.querySelector('#mi2-body') || pop.body;
+      body.addEventListener('click', (e) => {
+        const b = e.target.closest && e.target.closest('[data-mi2]'); if (!b) return;
+        const act = b.dataset.mi2;
+        if (act === 'refresh') { render(); return; }
+        if (act === 'scan') { runScan(); return; }
+        if (act === 'stop') { abort = true; return; }
+        if (act === 'part') { selectParts([+b.dataset.id], true); return; }
+        const rows = b.dataset.g === 's' ? rowsS : rowsQ, r = rows[+b.dataset.i]; if (!r) return;
+        if (act === 'sel') selectParts(r.ids, true);
+        else if (act === 'fix') { if (r.ids && r.ids.length) selectParts(r.ids, false); try { r.fix[1](); } catch (err) { console.warn('[inspector]', err); } }
+      });
+    }
+    abort = false; pop.show(); render();
+    // while it is open it follows the model (a count when something changed, nothing otherwise)
+    clearInterval(timer);
+    timer = setInterval(() => { if (document.hidden || !pop || !pop.el.classList.contains('show') || scanning) return; if (signature() !== sig) { scan = null; render(); } }, 900);
+  }
+  return { open, render, isOpen: () => !!pop && pop.el.classList.contains('show') };
+})();
+try { _Actions.list.push({ id: 'inspectModel', group: 'View', label: 'Model inspector: everything about the model, and what is broken in it', words: 'inspect stats statistics info overview broken geometry holes open edges degenerate non manifold floating pieces problems check scan report', run: () => _ModelInspector.open() }); } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
 
 // ─── checkAutoLoad: read ?file= query param at startup and auto-load ─────────
 (function checkAutoLoad(){
@@ -35245,6 +35982,7 @@ function _wireMatDock() {
     const infos = _collectLiveMaterials().filter(i => _matPanelSelected.has(i.mat));
     if (!infos.length) return;
     const act = b.dataset.mi;
+    if (act === 'merge') { document.getElementById('mat-act-merge')?.click(); return; }
     if (act === 'edit') { try { _openMaterialEditor(infos[0]); } catch (err) { console.warn('[mat] editor:', err); } return; }
     if (act === 'select' || act === 'isolate') {
       const ids = [];
@@ -35295,16 +36033,30 @@ function _renderMatInspector() {
   const usageRows = L('Used by') + `<span class="mi-wide">${fmtNum(parts)} ${parts === 1 ? 'part' : 'parts'}</span>` +
     L('Triangles') + `<span class="mi-wide">${fmtNum(tris)}${share >= 0.05 ? ' · ' + share.toFixed(share < 10 ? 1 : 0) + '% of the model' : ''}</span>`;
   const bar = (v) => `<span class="mi-bar"><i style="width:${Math.round(Math.max(0, Math.min(1, v)) * 100)}%"></i></span><span class="mi-num">${(+v).toFixed(2)}</span>`;
+  const nMat = infos.length;
   const actions = (one) =>
     `<div class="mi-actions">` +
       (one ? `<button class="btn" data-mi="edit" title="Open the material editor (same as a double-click)">Edit…</button>` : '') +
       `<button class="btn" data-mi="select" title="Select every part that uses ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Select parts</button>` +
       `<button class="btn" data-mi="isolate" title="Show only the parts that use ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Isolate</button>` +
+      (!one ? `<button class="btn mi-merge-btn" data-mi="merge" title="Merge the picked materials into one: the first one picked is kept (Ctrl+M)">Merge ${nMat} materials</button>` : '') +
       (one ? `<button class="btn" data-mi="assign" title="Give this material to the ${nSel} selected part${nSel === 1 ? '' : 's'}"${nSel ? '' : ' disabled'}>Assign${nSel ? ' to ' + fmtNum(nSel) : ''}</button>` : '') +
     `</div>`;
   if (infos.length > 1) {
-    el.innerHTML = `<div class="mi-top"><div class="mi-id"><div class="mi-name">${infos.length} materials picked</div><div class="mi-type">Merge puts their parts on the first one</div></div></div>` +
-      actions(false) + `<div class="mi-rows">${usageRows}</div>`;
+    // What Merge makes: the first picked material takes every part of the others (see the Merge handler), so the result is that
+    // material, wearing all of their parts. It is shown here before the button is pressed.
+    const first = [..._matPanelSelected][0];
+    const target = (infos.find(i => i.mat === first) || infos[0]).mat;
+    const tName = _matLabel(target).name, tHex = _matLabel(target).hex;
+    const tUrl = _renderMaterialPreview(target);
+    const tBall = tUrl ? `<img class="mi-ball" src="${tUrl}" alt="" draggable="false">` : `<span class="mi-ball" style="background:${tHex}"></span>`;
+    const result = `<div class="mi-merge"><div class="mi-merge-h">Merge makes</div>` +
+      `<div class="mi-top mi-merge-card">${tBall}<div class="mi-id"><div class="mi-name" title="${escapeHtml(tName)}">${escapeHtml(tName)}</div>` +
+      `<div class="mi-type">${fmtNum(parts)} ${parts === 1 ? 'part' : 'parts'} · ${fmtNum(tris)} triangles</div></div></div>` +
+      `<div class="mi-merge-note">The first one picked is kept as it is. The other ${infos.length - 1} ${infos.length - 1 === 1 ? 'material is' : 'materials are'} taken out of the list, and their parts wear it.</div></div>`;
+    el.innerHTML = `<div class="mi-top"><div class="mi-id"><div class="mi-name">${infos.length} materials picked</div><div class="mi-type">Ctrl-click to add or take one away</div></div></div>` +
+      actions(false) + result + `<div class="mi-rows">${usageRows}</div>`;
+    el._miMat = null;
     return;
   }
   const m = infos[0].mat;
@@ -35312,16 +36064,130 @@ function _renderMatInspector() {
   const url = _renderMaterialPreview(m);
   const kind = String(m.type || 'Material').replace(/^Mesh/, '').replace(/(Node)?Material$/, '') || 'Standard';
   const textured = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'].filter(k => m[k]).length;
-  const rows = [L('Colour') + `<span class="mi-wide"><i class="mi-chip" style="background:${hex}"></i>${hex}</span>`];
-  if (typeof m.roughness === 'number') rows.push(L('Roughness') + bar(m.roughness));
-  if (typeof m.metalness === 'number') rows.push(L('Metalness') + bar(m.metalness));
-  rows.push(L('Opacity') + bar(m.transparent ? (m.opacity ?? 1) : 1));
-  if (textured) rows.push(L('Textures') + `<span class="mi-wide">${textured} map${textured === 1 ? '' : 's'}</span>`);
-  rows.push(usageRows);
+  // The basics are edited here, in place: the colour, roughness, metalness and opacity. Each finished change is one undo step
+  // (the same 'materialEdit' step the material editor makes); the full editor is the Edit… button.
+  el._miMat = m;
+  const num2 = (v) => (+v).toFixed(2);
+  const slider = (prop, label, v) => L(label) +
+    `<input type="range" class="mi-range" data-mi-prop="${prop}" min="0" max="1" step="0.01" value="${v}" aria-label="${label}">` +
+    `<input type="number" class="mi-numin" data-mi-prop="${prop}" min="0" max="1" step="0.01" value="${num2(v)}" aria-label="${label}">`;
+  const edit = [];
+  if (m.color) edit.push(L('Colour') + `<span class="mi-colour"><button type="button" class="mi-swatch" data-mi-colour style="background:${hex}" title="Pick a colour" aria-label="Pick a colour"></button><input type="text" class="mi-hex" value="${hex.replace('#', '').toUpperCase()}" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Colour as hex"></span>`);
+  if (typeof m.roughness === 'number') edit.push(slider('roughness', 'Roughness', m.roughness));
+  if (typeof m.metalness === 'number') edit.push(slider('metalness', 'Metalness', m.metalness));
+  edit.push(slider('opacity', 'Opacity', m.transparent ? (m.opacity ?? 1) : 1));
+  const info = [];
+  if (textured) info.push(L('Textures') + `<span class="mi-wide">${textured} map${textured === 1 ? '' : 's'}</span>`);
+  info.push(usageRows);
   el.innerHTML =
     `<div class="mi-top">${url ? `<img class="mi-ball" src="${url}" alt="" draggable="false">` : `<span class="mi-ball" style="background:${hex}"></span>`}` +
     `<div class="mi-id"><div class="mi-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div><div class="mi-type">${escapeHtml(kind)}${m.transparent ? ' · transparent' : ''}${m.side === THREE.DoubleSide ? ' · double-sided' : ''}</div></div></div>` +
-    actions(true) + `<div class="mi-rows">${rows.join('')}</div>`;
+    actions(true) + `<div class="mi-rows mi-edit">${edit.join('')}</div><div class="mi-rows mi-info">${info.join('')}</div>`;
+  try { _wireMatInspectorEdit(el); } catch (e) { console.warn('[mat] inspector edit:', e); }
+}
+
+// ── the inspector's own editing ──────────────────────────────────────────────────────────────────────────────────────────
+function _matParseHex(v) {
+  const raw = String(v || '').trim().replace(/^#/, '');
+  if (/^[0-9a-fA-F]{6}$/.test(raw)) return '#' + raw.toLowerCase();
+  if (/^[0-9a-fA-F]{3}$/.test(raw)) return '#' + raw.split('').map(c => c + c).join('').toLowerCase();
+  return null;
+}
+function _matSnapDiffers(a, b) {
+  if (!a || !b) return false;
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const x = a[k], y = b[k];
+    if (Array.isArray(x) || Array.isArray(y)) { if (!Array.isArray(x) || !Array.isArray(y) || x.length !== y.length || x.some((v, i) => v !== y[i])) return true; }
+    else if (x !== y) return true;
+  }
+  return false;
+}
+// A colour set on a material, with what the editor does with it: the lookup by colour follows, the parts that wear it take it as their own.
+function _matApplyColorHex(mat, rawHex) {
+  if (!mat || !mat.color) return;
+  mat.color.set(rawHex);
+  if (state.materialByColor) {
+    let stale = null;
+    for (const [k, v] of state.materialByColor) { if (v === mat && k !== mat.color.getHex()) { stale = k; break; } }
+    if (stale != null) { state.materialByColor.delete(stale); const nk = mat.color.getHex(); if (!state.materialByColor.has(nk)) state.materialByColor.set(nk, mat); }
+  }
+  for (const p of state.parts) {
+    if (!p || p.deleted || !p.originalColor) continue;
+    const holder = p.mesh || p.instancedMesh;
+    const pm = holder ? _ownMaterialOf(holder) : null;
+    if (pm === mat || (Array.isArray(pm) && pm.includes(mat))) p.originalColor.copy(mat.color);
+  }
+  try { _matFollowColorName(mat); } catch (_) {}
+  mat.needsUpdate = true;
+  requestRender();
+}
+// Roughness, metalness or opacity (0 to 1). A material made see-through here turns transparent by itself, and back when opacity returns to 1.
+function _matSetBasic(m, prop, v) {
+  if (!m) return;
+  if (prop === 'opacity') {
+    m.opacity = v;
+    m.userData = m.userData || {};
+    if (v < 1 && !m.transparent) { m.transparent = true; m.userData._miT = true; m.needsUpdate = true; }
+    else if (v >= 1 && m.userData._miT) { m.transparent = false; delete m.userData._miT; m.needsUpdate = true; }
+  } else if (typeof m[prop] === 'number') m[prop] = v;
+  requestRender();
+}
+function _wireMatInspectorEdit(el) {
+  if (el._miEdit) return;
+  el._miEdit = true;
+  const cur = () => el._miMat;
+  const mine = (t) => t && t.closest && t.closest('[data-mi-prop],[data-mi-colour],.mi-hex');
+  const snap = () => { if (!el._miSnap && cur()) el._miSnap = _snapshotMat(cur()); };
+  const commit = () => {
+    const m = cur(), before = el._miSnap;
+    el._miSnap = null;
+    if (!m || !before) return;
+    const after = _snapshotMat(m);
+    if (!_matSnapDiffers(before, after)) return;
+    try { pushUndo({ type: 'materialEdit', matRef: m, before, after }); } catch (_) {}
+    _matAfterOutsideChange([m]);
+  };
+  el.addEventListener('pointerdown', (e) => { if (mine(e.target)) snap(); }, true);
+  el.addEventListener('focusin', (e) => { if (mine(e.target)) snap(); });
+  el.addEventListener('input', (e) => {
+    const t = e.target, m = cur();
+    if (!t || !m) return;
+    const prop = t.dataset && t.dataset.miProp;
+    if (prop) {
+      let v = parseFloat(t.value);
+      if (!Number.isFinite(v)) return;
+      v = Math.max(0, Math.min(1, v));
+      snap(); _matSetBasic(m, prop, v);
+      const pair = el.querySelector((t.type === 'range' ? 'input[type=number]' : 'input[type=range]') + '[data-mi-prop="' + prop + '"]');
+      if (pair) pair.value = t.type === 'range' ? v.toFixed(2) : String(v);
+    } else if (t.classList && t.classList.contains('mi-hex')) {
+      const h = _matParseHex(t.value);
+      t.classList.toggle('invalid', !h);
+      if (h) { snap(); _matApplyColorHex(m, h); const sw = el.querySelector('[data-mi-colour]'); if (sw) sw.style.background = h; }
+    }
+  });
+  el.addEventListener('change', (e) => {
+    const t = e.target;
+    if (!t || !((t.dataset && t.dataset.miProp) || (t.classList && t.classList.contains('mi-hex')))) return;
+    if (t.classList.contains('mi-hex') && !_matParseHex(t.value)) { el._miSnap = null; _matAfterOutsideChange([cur()]); return; }     // (not a colour: what was there comes back)
+    commit();
+  });
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && mine(e.target) && e.target.tagName === 'INPUT') { e.preventDefault(); e.target.blur(); } });
+  el.addEventListener('click', (e) => {
+    const sw = e.target.closest && e.target.closest('[data-mi-colour]');
+    if (!sw) return;
+    e.stopPropagation();
+    const m = cur();
+    if (!m || !m.color) return;
+    snap();
+    const hexIn = el.querySelector('.mi-hex');
+    const show = (h) => { sw.style.background = h; if (hexIn) { hexIn.value = h.replace('#', '').toUpperCase(); hexIn.classList.remove('invalid'); } };
+    window._openColorPickerForCallback?.(sw, '#' + m.color.getHexString(), {
+      onPreview: (h) => { _matApplyColorHex(m, h); show(h); },
+      onCommit:  (h) => { _matApplyColorHex(m, h); show(h); commit(); },
+      onCancel:  ()  => { const was = el._miSnap && el._miSnap.color; el._miSnap = null; if (was != null) { const h = '#' + new THREE.Color(was).getHexString(); _matApplyColorHex(m, h); show(h); } },
+    });
+  });
 }
 
 // Persisted across sessions so the user's preferred materials view sticks.
@@ -35796,7 +36662,7 @@ function _openMaterialEditor(info) {
   // a different material and when the popup closes — covers every
   // way the user can leave the editor without taking dozens of small
   // history entries from individual slider drags.
-  const _flushMatEditorUndo = () => {
+  const _flushMatEditorUndo = (keepOpen = false) => {
     if (!_matEditorState || !_matEditorState._matSnapshot || !_matEditorState.mat) return;
     const before = _matEditorState._matSnapshot;
     const after  = _snapshotMat(_matEditorState.mat);
@@ -35811,7 +36677,8 @@ function _openMaterialEditor(info) {
     if (dirty) {
       try { pushUndo({ type: 'materialEdit', matRef: _matEditorState.mat, before, after }); } catch (_) {}
     }
-    _matEditorState._matSnapshot = null;
+    // (editor still open: what is shown now is the baseline of the next edit)
+    _matEditorState._matSnapshot = keepOpen ? after : null;
   };
 
   // Reuse existing popup if present (rebind to new material instead of
@@ -35900,6 +36767,12 @@ function _openMaterialEditor(info) {
     popup.setTitle(m.name?.trim() || 'Material');
   };
   _matEditorState.flush = _flushMatEditorUndo;
+  // Each finished edit is a history step of its own (a typed colour, a slider let go, a switch), so Undo goes back one
+  // change at a time, not all of the editor's changes at once when it closes. (`change` fires at the end of each.)
+  if (!popup._undoChange) {
+    popup._undoChange = true;
+    popup.body.addEventListener('change', () => { try { _matEditorState && _matEditorState.flush && _matEditorState.flush(true); } catch (_) {} });
+  }
   // The dock and the Properties card show the name and the hex too: bring
   // them up to date once the colour has settled.
   let _relistTimer = 0;
@@ -35992,7 +36865,7 @@ function _openMaterialEditor(info) {
         const before = seed;
         window._openColorPickerForCallback?.(swatch, seed, {
           onPreview: (h) => _applyColor(h),
-          onCommit:  (h) => _applyColor(h),
+          onCommit:  (h) => { _applyColor(h); try { _matEditorState && _matEditorState.flush && _matEditorState.flush(true); } catch (_) {} },      // (a colour picked is a step of its own)
           onCancel:  ()  => _applyColor(before),
         });
       });
@@ -36197,9 +37070,18 @@ function _openMaterialEditor(info) {
         || tex?.userData?.dataUrl
         || '';
   }
+  // The marker of a texture slot is a square like a colour's swatch; with a texture set it shows the picture.
+  function _paintTexMarker(ind, propName) {
+    if (!ind) return;
+    const tex = mat[propName];
+    ind.classList.toggle('has-tex', !!tex);
+    let url = '';
+    try { url = tex ? _texThumbUrl(tex) : ''; } catch (_) {}
+    ind.style.backgroundImage = url ? `url("${url}")` : '';
+    ind.classList.toggle('has-thumb', !!url);
+  }
   function _refreshAttach(propName) {
-    const ind = popup.body.querySelector(`.mat-row-tex[data-tex-prop="${propName}"]`);
-    if (ind) ind.classList.toggle('has-tex', !!mat[propName]);
+    _paintTexMarker(popup.body.querySelector(`.mat-row-tex[data-tex-prop="${propName}"]`), propName);
   }
   // A texture loaded here holds a blob: URL for its image (_loadTexture), and
   // with it the file's bytes. Once the texture has been replaced or cleared
@@ -36313,6 +37195,7 @@ function _openMaterialEditor(info) {
       _refreshAll();
     });
   }
+  popup.body.querySelectorAll('.mat-row-tex').forEach(btn => { try { _paintTexMarker(btn, btn.dataset.texProp); } catch (_) {} });
   popup.body.querySelectorAll('.mat-row-tex').forEach(btn => {
     const propName = btn.dataset.texProp;
     if (!propName) return;
@@ -38554,11 +39437,14 @@ const _Wand = (() => {
       const C = Object.fromEntries(_SelCmds.commands().map(c => [c.id, c]));
       const pick = (...ids) => ids.map(i => C[i]).filter(Boolean);
       // (while the view is isolated, Isolate already reads Show all: the second one is left out)
-      const more = [...pick('isolate', 'similar', 'colour', 'group', 'duplicate', 'merge', 'frame', 'hideothers'), ...(state._isolated ? [] : pick('showall'))];
+      // (what is done most with a selection is on the ring itself: Isolate, Hide, Delete; the rest is in three fans)
+      const more = [...pick('frame', 'duplicate', 'group', 'merge', 'pivot', 'hideothers'), ...(state._isolated ? [] : pick('showall'))];
       return [
+        { leaf: C.isolate },
         { leaf: C.hide },
-        { group: 'Reduce', icon: 'shrink', items: pick('dec50', 'dec25', 'dec75', 'dec90', 'smartfit', 'split', 'fillholes') },
         { leaf: C.delete },
+        { group: 'Reduce', icon: 'shrink', items: pick('dec50', 'dec25', 'dec75', 'dec90', 'smartfit', 'split', 'fillholes') },
+        { group: 'Select', icon: 'mouse-pointer-2', items: pick('similar', 'colour', 'invert', 'intree') },
         { group: 'More', icon: 'ellipsis', items: more },
       ];
     }
@@ -38572,10 +39458,10 @@ const _Wand = (() => {
         L('v-front', 'view-front', 'Front view', 'Look from the front', () => _setStandardView('front'), { kbd: 'Ctrl+3' }),
         L('v-side', 'view-side', 'Side view', 'Look from the side', () => _setStandardView('side'), { kbd: 'Ctrl+4' }),
         mode('solid', 'Solid view', '1'), mode('wire', 'Wireframe view', '2'), mode('xray', 'X-ray view', '3'),
-        L('grid', state.showGrid ? 'eye-off' : 'eye', state.showGrid ? 'Hide ground grid' : 'Show ground grid', 'Toggle the floor grid', click('tg-grid'), { kbd: 'G' }) ] },
-      { leaf: L('showall', 'eye', 'Show all', 'Show every hidden part', () => showAllParts(), { kbd: 'Alt+H', off: any ? (hiddenSome ? false : 'Nothing is hidden') : none }) },
+        L('grid', state.showGrid ? 'eye-off' : 'eye', state.showGrid ? 'Hide ground grid' : 'Show ground grid', 'Toggle the floor grid', click('tg-grid'), { kbd: 'G' }),
+        L('showall', 'eye', 'Show all', 'Show every hidden part', () => showAllParts(), { kbd: 'Alt+H', off: any ? (hiddenSome ? false : 'Nothing is hidden') : none }) ] },
+      { leaf: L('shot', 'camera', 'Save screenshot…', 'Save an image of the viewport', () => _captureViewportScreenshot?.(), { off: none }) },
       { group: 'File', icon: 'folder', items: [
-        L('shot', 'camera', 'Save screenshot…', 'Save an image of the viewport', () => _captureViewportScreenshot?.(), { off: none }),
         L('turntable', 'film', 'Turntable video…', 'Save a video of the model turning once', () => _openTurntableDialog?.(), { off: none }),
         L('save', 'save', 'Save scene…', 'Save the scene', click('btn-save-scene'), { kbd: 'Ctrl+S', off: any && !document.getElementById('btn-save-scene')?.disabled ? false : 'Nothing to save' }),
         L('revert', 'rotate-ccw', 'Revert to source file…', 'Go back to the file as it was opened', () => _revertToSourceFile(), { off: any ? (state._sourceFile ? false : 'No source file to revert to') : none }) ] },
@@ -38641,9 +39527,11 @@ const _Wand = (() => {
       const first = j === 0, last = j === n - 1, RHO = 6;
       const dn = arcR(F_IN, F_OUT, aa, aa + step, [first, last, last, first], RHO), dl = arcR(F_IN, F_OUT, aa, aa + step, [true, true, true, true], RHO);
       p += '<path class="qw-sub' + (it.off ? ' is-off' : '') + (it.danger ? ' danger' : '') + '" data-j="' + j + '" data-d="' + dn + '" data-dh="' + dl + '" d="' + dn + '" style="--j:' + j + '"/>';
-      const [ix, iy] = pol((F_IN + F_OUT) / 2, am), [kx, ky] = pol((F_IN + F_OUT) / 2 * POP2, am), [lx, ly] = pol(F_OUT + 10, am), sx = Math.sin(am * Math.PI / 180);
+      // (the name stays in one place, at the middle of the fan: it is the text that changes as the pointer goes from command to command)
+      const mid = a0 + total / 2;
+      const [ix, iy] = pol((F_IN + F_OUT) / 2, am), [kx, ky] = pol((F_IN + F_OUT) / 2 * POP2, am), [lx, ly] = pol(F_OUT + 10, mid), sx = Math.sin(mid * Math.PI / 180);
       ic += '<foreignObject x="' + (ix - 9).toFixed(1) + '" y="' + (iy - 9).toFixed(1) + '" width="18" height="18" class="qw-subico' + (it.off ? ' is-off' : '') + '" data-j="' + j + '" style="--j:' + j + ';--dx:' + kx.toFixed(1) + 'px;--dy:' + ky.toFixed(1) + 'px"><div xmlns="http://www.w3.org/1999/xhtml"><i data-lucide="' + it.icon + '"></i></div></foreignObject>';
-      const al = Math.abs(sx) > 0.2 ? (sx > 0 ? '0 -50%' : '-100% -50%') : '-50% ' + (-Math.cos(am * Math.PI / 180) > 0 ? '0' : '-100%');
+      const al = Math.abs(sx) > 0.2 ? (sx > 0 ? '0 -50%' : '-100% -50%') : '-50% ' + (-Math.cos(mid * Math.PI / 180) > 0 ? '0' : '-100%');
       l += '<div class="qw-lab' + (it.off ? ' is-off' : '') + '" data-j="' + j + '" style="--j:' + j + ';left:' + lx.toFixed(1) + 'px;top:' + ly.toFixed(1) + 'px;translate:' + al + '">' + esc(it.label) + ((it.off || it.right || it.kbd) ? '<span class="qw-lab-r">' + esc(it.off ? String(it.off) : it.right || it.kbd) + '</span>' : '') + '</div>';
     });
     g.innerHTML = p; lab.innerHTML = l; root.querySelector('.qw-fanico').innerHTML = ic;
@@ -38781,6 +39669,242 @@ const _Wand = (() => {
   document.addEventListener('visibilitychange', () => { if (document.hidden) close(false); });
   return { toggle: () => { if (open) close(false); else { if (!lastX && !lastY) { lastX = window.innerWidth / 2; lastY = window.innerHeight / 2; } show(true); } }, isOpen: () => open };
 })();
+// ─── Quick colour wheel ──────────────────────────────────────────────────────────────────────────────────────────────────
+// Hold C over the model: the colour wheel opens at the pointer at once; let go without moving and nothing has changed. Nothing changes until the pointer moves. Then
+// the angle is the hue and the distance from the middle the saturation: the very middle is white (at full brightness), and the colour
+// follows the pointer all the way, with no dead spot. Scroll for brightness. The selected parts take the colour
+// at once, as they are on screen, and it is written into their material. Let go of C (or click) to keep it, Esc to put it back.
+// One undo step. A material shared with parts that are not selected changes for them too, as it always does when a material is edited.
+const _QuickColour = (() => {
+  const SIZE = 212, R = SIZE / 2 - 14, MOVE = 4, HOLE = 20, WHITE = 5, CANCEL = R + 100;       // CANCEL: how far out the pointer goes to cancel (a Cancel pill shows; letting go there puts the colour back). MOVE: how far the pointer goes before the colour starts to follow it; HOLE: the round window in the middle
+  let root = null, canvas = null, cap = null, open = false, sticky = false, startedAt = 0, moved = false, revealed = false, holdT = 0, cancelling = false, cancelPill = null, dotEl = null, glideT = 0;
+  let ox = 0, oy = 0, px = 0, py = 0, lastX = 0, lastY = 0, lastButtons = 0;
+  let h = 0, s = 0, v = 1, orig = null, mats = [], snaps = [], origHex = '#808080';
+  const hsv2hex = (hh, ss, vv) => {
+    const i = Math.floor(((hh % 1) + 1) % 1 * 6), f = ((hh % 1) + 1) % 1 * 6 - i, p = vv * (1 - ss), q = vv * (1 - f * ss), t = vv * (1 - (1 - f) * ss);
+    const [r, g, b] = [[vv, t, p], [q, vv, p], [p, vv, t], [p, q, vv], [t, p, vv], [vv, p, q]][i % 6];
+    const to2 = (x) => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, '0');
+    return '#' + to2(r) + to2(g) + to2(b);
+  };
+  function hex2hsv(hex) {
+    const n = parseInt(hex.replace('#', ''), 16), r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    let hh = 0;
+    if (d) { hh = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; hh /= 6; if (hh < 0) hh += 1; }
+    return { h: hh, s: max ? d / max : 0, v: max };
+  }
+  // the materials of the selected parts (each once)
+  function targets() {
+    const out = [], seen = new Set();
+    for (const id of state.selected) {
+      const p = getPart(id);
+      if (!p || p.deleted) continue;
+      const holder = p.mesh || p.instancedMesh;
+      if (!holder) continue;
+      let m = _ownMaterialOf(holder);
+      if (Array.isArray(m)) m = m[0];
+      if (m && m.color && !seen.has(m)) { seen.add(m); out.push(m); }
+    }
+    return out;
+  }
+  function build() {
+    if (root) return;
+    const st = document.createElement('style');
+    st.textContent = `
+      #qc-wheel{position:fixed;z-index:450;width:${SIZE}px;pointer-events:none;visibility:hidden;display:flex;flex-direction:column;align-items:center;font:12px var(--font-sans);color:var(--tx)}
+      /* it grows out of its middle, the ring opening outward as it does; it goes away at once */
+      #qc-wheel.show{visibility:visible}
+      #qc-wheel.show canvas{animation:qc-grow 280ms cubic-bezier(.2,.9,.3,1.04) both}
+      #qc-wheel.show .qc-cap{animation:qc-cap-in 200ms 110ms ease-out both}
+      @keyframes qc-grow{from{transform:scale(.3);opacity:0;clip-path:circle(10% at 50% 50%)}35%{opacity:1}to{transform:none;opacity:1;clip-path:circle(72% at 50% 50%)}}
+      @keyframes qc-cap-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+      @media (prefers-reduced-motion:reduce){#qc-wheel.show canvas,#qc-wheel.show .qc-cap{animation:none}}
+      #qc-wheel canvas{display:block;width:${SIZE}px;height:${SIZE}px;transition:opacity 140ms ease-out}
+      #qc-wheel.cancelling canvas{opacity:.45}
+      #qc-wheel .qc-dot{position:absolute;left:0;top:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;box-sizing:border-box;border:2.5px solid #000;pointer-events:none;display:none;transform:translate3d(var(--x,0px),var(--y,0px),0);transition:background 180ms ease-out}
+      /* crossing the cancel line (either way) the dot and the pill glide to their new place; while the pointer drags them they follow it at once */
+      #qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:background 180ms ease-out,opacity 140ms ease-out,transform 240ms cubic-bezier(.16,1,.3,1)}
+      #qc-wheel .qc-cancel{position:absolute;left:0;top:0;will-change:transform,opacity;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%) scale(.9);display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.94);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 6px 16px rgba(0,0,0,.35);white-space:nowrap;opacity:0;transition:opacity 140ms ease-out,transform 140ms ease-out}
+      #qc-wheel .qc-cancel svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+      #qc-wheel .qc-cancel em{font-style:normal;color:var(--tx3);font-size:11px}
+      #qc-wheel.cancelling .qc-cancel{opacity:1;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%)}
+      @media (prefers-reduced-motion:reduce){#qc-wheel canvas,#qc-wheel .qc-cancel,#qc-wheel .qc-dot,#qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:none}}
+      #qc-wheel .qc-cap{margin-top:10px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.8);backdrop-filter:blur(14px) saturate(1.3);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 8px 24px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
+      #qc-wheel .qc-cap i{width:14px;height:14px;border-radius:5px;box-shadow:0 0 0 1px rgba(255,255,255,.22)}
+      #qc-wheel .qc-cap svg{width:10px;height:10px;color:var(--tx3);fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+      #qc-wheel .qc-cap b{font-weight:500;font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px;letter-spacing:.02em;text-align:left}
+      #qc-wheel .qc-cap u{width:1px;height:12px;margin:0 5px;background:rgba(255,255,255,.14)}
+      #qc-wheel .qc-cap b{margin-left:5px}
+      #qc-wheel .qc-cap em{margin-left:3px}
+      #qc-wheel .qc-cap span{text-align:right}
+      #qc-wheel .qc-cap em{font-style:normal;color:var(--tx3);font-size:11px}
+    `;
+    document.head.appendChild(st);
+    root = document.createElement('div'); root.id = 'qc-wheel';
+    canvas = document.createElement('canvas');
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = canvas.height = Math.round(SIZE * dpr);
+    cap = document.createElement('div'); cap.className = 'qc-cap';
+    cancelPill = document.createElement('div'); cancelPill.className = 'qc-cancel';
+    cancelPill.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>Cancel<em>Esc</em>';
+    dotEl = document.createElement('div'); dotEl.className = 'qc-dot';
+    root.appendChild(canvas); root.appendChild(cap); root.appendChild(dotEl); root.appendChild(cancelPill);
+    document.body.appendChild(root);
+  }
+  function draw() {
+    const g = canvas.getContext('2d'), W = canvas.width, k = W / SIZE, c = W / 2, r = R * k;
+    g.clearRect(0, 0, W, W);
+    g.save(); g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.clip();
+    if (g.createConicGradient) {
+      const cg = g.createConicGradient(0, c, c);
+      for (let i = 0; i <= 6; i++) cg.addColorStop(i / 6, hsv2hex(i / 6 % 1, 1, 1));
+      g.fillStyle = cg; g.fillRect(0, 0, W, W);
+    } else {
+      for (let a = 0; a < 360; a++) { g.beginPath(); g.moveTo(c, c); g.arc(c, c, r, (a - 0.6) * Math.PI / 180, (a + 0.6) * Math.PI / 180); g.fillStyle = hsv2hex(a / 360, 1, 1); g.fill(); }
+    }
+    const hr = HOLE * k;
+    const wr = (HOLE + WHITE) * k;
+    const rg = g.createRadialGradient(c, c, wr, c, c, r);                // white from the hole out to a few pixels past its edge, then the colour grows to the pure one at the rim
+    rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, W, W);
+    g.fillStyle = `rgba(0,0,0,${1 - v})`; g.fillRect(0, 0, W, W);
+    g.restore();
+    // the middle is a hole, with nothing in it. The colour does not stop at its edge: the pointer can go on into it, to the very
+    // middle, which is white; the object shows the colour.
+    const cr = HOLE * k;
+    g.save(); g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(c, c, cr, 0, Math.PI * 2); g.fill(); g.restore();
+    capHex = '';
+    updateCap();
+  }
+  // the readout under the wheel: rebuilt only when the colour or the brightness has changed
+  let capHex = '', capV = -1;
+  function updateCap() {
+    const now = hsv2hex(h, s, v);
+    if (now === capHex && v === capV) return;
+    capHex = now; capV = v;
+    cap.innerHTML = `<i style="background:${origHex}" title="As it was"></i><i style="background:${now}"></i><b>${now.toUpperCase()}</b><u></u><span>${Math.round(v * 100)}%</span><em>Brightness</em>`;
+  }
+  function apply() {
+    const hex = hsv2hex(h, s, v);
+    for (const m of mats) _matApplyColorHex(m, hex);
+  }
+  // The dot is an element, so it can leave the wheel: it sits at the colour and stops at the rim; far enough out it jumps to the pointer,
+  // turns black and Cancel shows.
+  function placeDot(d, dx, dy) {
+    if (!dotEl) return;
+    const wr = HOLE + WHITE;
+    if (!moved || d <= HOLE) { dotEl.style.display = 'none'; return; }
+    const ux = dx / d, uy = dy / d;
+    const rad = d <= R ? wr + Math.max(0, Math.min(1, (d - wr) / (R - wr))) * (R - wr) : d <= CANCEL ? R : d;      // (it stops at the rim; past the cancel line it jumps to the pointer)
+    const k = d > CANCEL ? 0 : 1;
+    const n = parseInt(hsv2hex(h, s, v).slice(1), 16), ch = (sh) => Math.round(((n >> sh) & 255) * k);
+    const X = SIZE / 2 + ux * rad, Y = SIZE / 2 + uy * rad;
+    dotEl.style.display = 'block'; dotEl.style.background = `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+    for (const el of [dotEl, cancelPill]) { el.style.setProperty('--x', X + 'px'); el.style.setProperty('--y', Y + 'px'); }
+  }
+  function aim() {
+    if (!moved) return;                              // the pointer has not gone anywhere yet: it is still the colour it was
+    const dx = px - ox, dy = py - oy, d = Math.hypot(dx, dy);
+    const out = d > CANCEL;
+    if (out !== cancelling) {                         // (gone far out: the colour goes back and a Cancel pill shows; letting go there keeps nothing)
+      cancelling = out; root.classList.toggle('cancelling', out);
+      for (const el of [dotEl, cancelPill]) { el.classList.add('glide'); }
+      clearTimeout(glideT); glideT = setTimeout(() => { dotEl.classList.remove('glide'); cancelPill.classList.remove('glide'); }, 280);
+      if (out) requestAnimationFrame(() => { if (!open || !cancelling) return; mats.forEach((m, i) => _applyMatSnapshot(m, snaps[i])); try { requestRender(); } catch (_) {} });      // (after the first frame of the glide: the model's work does not hold the dot back)
+    }
+    placeDot(d, dx, dy);
+    if (cancelling) return;
+    if (d > 1) h = ((Math.atan2(dy, dx) / (Math.PI * 2)) + 1) % 1;       // (at the very middle the hue stays: it is white)
+    s = Math.max(0, Math.min(1, (d - HOLE - WHITE) / (R - HOLE - WHITE)));     // (white from a few pixels past the edge of the hole inwards: easy to hit)
+    apply();
+    updateCap(); try { requestRender(); } catch (_) {}      // (the wheel itself is drawn again only for brightness: nothing on it moves with the pointer)
+  }
+  let aimQ = 0;
+  const aimSoon = () => { if (aimQ) return; aimQ = requestAnimationFrame(() => { aimQ = 0; if (!open) return; try { aim(); } catch (err) { console.warn('[colour wheel]', err); close(false); } }); };      // (once a frame, however fast the mouse reports)
+  function show(byTap) {
+    mats = targets();
+    if (!mats.length) { try { toast('Colour wheel', 'Select a part first: the wheel colours the selection.', 'info', 2500); } catch (_) {} return false; }
+    build();
+    snaps = mats.map(m => _snapshotMat(m));
+    origHex = '#' + mats[0].color.getHexString();
+    orig = hex2hsv(origHex); h = orig.h; s = orig.s; v = 1;        // (the wheel starts at full brightness: the middle is white, the rim is the pure colour; scroll to darken)
+    ox = px = lastX; oy = py = lastY; moved = false; cancelling = false; root.classList.remove('cancelling'); dotEl.style.display = 'none'; sticky = !!byTap; startedAt = performance.now(); open = true;
+    const x = Math.max(SIZE / 2 + 8, Math.min(window.innerWidth - SIZE / 2 - 8, ox)), y = Math.max(SIZE / 2 + 8, Math.min(window.innerHeight - SIZE / 2 - 60, oy));
+    root.style.left = (x - SIZE / 2) + 'px'; root.style.top = (y - SIZE / 2) + 'px';
+    draw();
+    root.classList.remove('show'); revealed = false; clearTimeout(holdT);
+    const reveal = () => { if (!open) return; revealed = true; void root.offsetWidth; root.classList.add('show'); };       // (the class goes on after a reflow, so the growing plays from the start)
+    reveal();                                                              // (it shows the moment the key goes down; let go without moving and nothing has changed)
+    return true;
+  }
+  function close(keep, byClick) {
+    if (!open) return;
+    if (cancelling) keep = false;
+    open = false; clearTimeout(holdT); revealed = false;
+    root.classList.remove('show', 'cancelling'); cancelling = false;
+    if (keep) {
+      const entries = [];
+      mats.forEach((m, i) => { const after = _snapshotMat(m); if (_matSnapDiffers(snaps[i], after)) entries.push({ type: 'materialEdit', matRef: m, before: snaps[i], after }); });
+      entries.forEach((op, i) => { if (i) op.auto = true; try { pushUndo(op); } catch (_) {} });     // (one Ctrl+Z takes back all of them)
+      if (entries.length) _matAfterOutsideChange(mats);
+    } else {
+      mats.forEach((m, i) => _applyMatSnapshot(m, snaps[i]));
+      try { requestRender(); } catch (_) {}
+    }
+    if (byClick) { const swallow = (e) => { e.stopPropagation(); e.preventDefault(); window.removeEventListener('click', swallow, true); }; window.addEventListener('click', swallow, true); setTimeout(() => window.removeEventListener('click', swallow, true), 400); }
+    mats = []; snaps = [];
+  }
+  const isC = (e) => e.key === 'c' || e.key === 'C' || (!/^[a-z]$/i.test(e.key || '') && e.code === 'KeyC');
+  const overViewport = () => { const e = document.elementFromPoint(lastX, lastY); return !!(e && e.closest && e.closest('#viewport')); };
+  window.addEventListener('pointermove', (e) => {
+    lastX = e.clientX; lastY = e.clientY; lastButtons = e.buttons;
+    if (!open) return;
+    px = e.clientX; py = e.clientY;
+    if (!revealed) return;
+    if (Math.hypot(px - ox, py - oy) >= MOVE) moved = true;
+    aimSoon();
+  }, true);
+  window.addEventListener('pointerup', (e) => { lastButtons = e.buttons; }, true);
+  window.addEventListener('keydown', (e) => {
+    if (e.isComposing) return;
+    if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); close(false); return; }      // (Esc is the wheel's alone: it must not also clear the selection)
+    if (isC(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      if (open) { e.preventDefault(); e.stopPropagation(); if (sticky && !e.repeat) close(true); return; }
+      if (e.repeat || lastButtons || _typingTarget(e) || _modalOpen() || !overViewport()) return;
+      e.preventDefault(); e.stopPropagation();
+      show(false);
+      return;
+    }
+    if (open && !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) close(false);
+  }, true);
+  window.addEventListener('keyup', (e) => {
+    if (!open || !isC(e)) return;
+    e.preventDefault(); e.stopPropagation();
+    if (sticky) return;
+    if (!revealed) { close(false); return; }
+    close(true);
+  }, true);
+  window.addEventListener('pointerdown', (e) => {
+    lastButtons = e.buttons;
+    if (!open || !revealed) return;
+    e.preventDefault(); e.stopPropagation();
+    close(e.button === 0, true);
+  }, true);
+  window.addEventListener('wheel', (e) => {
+    if (!open || !revealed) return;
+    e.preventDefault(); e.stopPropagation();
+    v = Math.max(0.02, Math.min(1, v + (e.deltaY < 0 ? 0.05 : -0.05)));
+    if (moved && !cancelling) apply();
+    draw(); try { requestRender(); } catch (_) {}
+  }, { capture: true, passive: false });
+  window.addEventListener('blur', () => close(false));
+  window.addEventListener('resize', () => close(false));
+  document.addEventListener('visibilitychange', () => { if (document.hidden) close(false); });
+  return { toggle: () => { if (open) close(true); else { if (!lastX && !lastY) { lastX = window.innerWidth / 2; lastY = window.innerHeight / 2; } show(true); } }, isOpen: () => open };
+})();
+try { _Actions.list.push({ id: 'quickColour', group: 'Edit', label: 'Quick colour wheel: hold C over the model, move, let go', kbd: 'C', words: 'paint colour hue wheel radial selected material change', run: () => _QuickColour.toggle() }); } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
+
+
 // The "…" at the end of the bottom toolbar: every command that acts on the
 // model, in one list that opens above the button (the search is separate).
 // What cannot run right now is listed too, dimmed.
@@ -38877,6 +40001,33 @@ function _openCommandsMenu(anchor) {
     { icon: 'copy-check',           label: 'Deduplicate geometry',                off: needAny, fn: click('btn-clean-dupes') },
     { icon: 'eraser',       label: 'Fix degenerate parts',                off: needAny, fn: click('btn-clean-degenerate') },
     { icon: 'folder-x',       label: 'Delete empty groups',                 off: needAny, fn: click('btn-clean-empty-groups') },
+    '---',
+    // the rest of the commands, in lists beside the menu (each does what its name and shortcut say elsewhere)
+    { icon: 'mouse-pointer-2', label: 'Select', sub: [
+      { icon: 'square-check',   label: 'Select all',           kbd: 'Ctrl+A', off: needAny, fn: act('selAll') },
+      { icon: 'arrow-left-right', label: 'Invert selection',   kbd: 'Ctrl+I', off: needAny, fn: act('selInvert') },
+      { icon: 'shapes',         label: 'Select similar',                      off: needSel, fn: act('selSimilar') },
+      { icon: 'palette',        label: 'Quick colour wheel',   kbd: 'C',      off: needSel, fn: act('quickColour') },
+    ] },
+    { icon: 'pencil', label: 'Edit', sub: [
+      { icon: 'copy',           label: 'Copy',                 kbd: 'Ctrl+C', off: needSel, fn: act('copy') },
+      { icon: 'clipboard-paste', label: 'Paste',               kbd: 'Ctrl+V', off: needAny, fn: act('paste') },
+      { icon: 'folder-minus',   label: 'Ungroup',              kbd: 'Ctrl+Shift+G', off: needSel, fn: act('ungroup') },
+      { icon: 'text-cursor-input', label: 'Batch rename…',     kbd: 'F2',     off: needAny, fn: act('batchRename') },
+      { icon: 'align-start-vertical', label: 'Align and spread parts…',       off: needSel, fn: act('alignParts') },
+    ] },
+    { icon: 'wrench', label: 'Repair', sub: [
+      { icon: 'wrench',         label: 'Repair mesh…',                        off: needAny, fn: act('repairMesh') },
+      { icon: 'scan-search',    label: 'Fix normals…',                        off: needAny, fn: act('normals') },
+      { icon: 'eye-off',        label: 'Remove hidden faces…',                off: needAny, fn: act('hiddenFaces') },
+      { icon: 'triangle',       label: 'Untriangulate',                       off: needSel, fn: act('untriangulate') },
+    ] },
+    { icon: 'camera', label: 'Share', sub: [
+      { icon: 'camera',         label: 'Screenshot…',                         off: needAny, fn: act('screenshot') },
+      { icon: 'film',           label: 'Turntable video…',                    off: needAny, fn: act('turntable') },
+      { icon: 'ruler',          label: 'Measure',              kbd: 'M',      off: needAny, fn: act('measure') },
+      { icon: 'save',           label: 'Save scene…',                         off: needAny, fn: act('savescene') },
+    ] },
   ];
   const folded = _foldedToolbarItems();
   if (folded.length) items.unshift(...folded, '---');
@@ -39301,6 +40452,38 @@ function _treeFoldScoped(scope, collapse) {
   if (typeof _treeToggleSays === 'function') _treeToggleSays();
 }
 // The menu on the tree toolbar's Collapse button.
+// The Edit mesh tool bar slides in from its edge and fades, and slides back out before it is hidden (a hidden element cannot be animated,
+// so it stays on screen until the exit has played)
+function _elBarShow(bar, on) {
+  if (!bar) return;
+  clearTimeout(bar._outT);
+  if (on) {
+    if (!bar.hidden && !bar.classList.contains('is-out')) return;
+    if (bar.hidden) { bar.classList.add('is-out'); bar.hidden = false; void bar.offsetWidth; }
+    bar.classList.remove('is-out');
+  } else {
+    if (bar.hidden) return;
+    bar.classList.add('is-out');
+    bar._outT = setTimeout(() => { bar.hidden = true; bar.classList.remove('is-out'); }, matchMedia("(prefers-reduced-motion:reduce)").matches ? 0 : 240);
+  }
+}
+// The arrow beside Flatten: the usual flattens in one click (the dialog is for the rest)
+function _openFlattenMenu(anchor) {
+  if (!state.parts.length) { toast('No model loaded', '', 'info'); return; }
+  const noSelGroup = !(state.selectedGroupIds && state.selectedGroupIds.size);
+  const r = anchor.getBoundingClientRect();
+  const base = { scope: 'all', mode: 'total', keep: 1, preserveUserGroups: true, cleanEmpty: true, collapseAfter: false };
+  _ctxBuild([
+    { icon: 'list-tree', label: 'Flatten everything, keep my groups', fn: () => flattenTree({ ...base }) },
+    { icon: 'list-tree', label: 'Flatten everything, my groups too', fn: () => flattenTree({ ...base, preserveUserGroups: false }) },
+    '---',
+    { icon: 'git-merge', label: 'Merge groups with one child', fn: () => flattenTree({ ...base, mode: 'chains' }) },
+    { icon: 'arrow-down-to-line', label: 'Flatten the deepest level', fn: () => flattenTree({ ...base, mode: 'last' }) },
+    { icon: 'folder-tree', label: 'Flatten the selected groups', off: noSelGroup ? 'Select a group in the tree first' : false, fn: () => flattenTree({ ...base, scope: 'selected' }) },
+    '---',
+    { icon: 'sliders-horizontal', label: 'More options…', fn: () => flattenTree() },
+  ], r.left, r.bottom + 4);
+}
 function _openTreeFoldMenu(anchor) {
   if (!state.parts.length) { toast('No model loaded', '', 'info'); return; }
   const none = !(state.selected.size || state.selectedGroupIds?.size);
@@ -42157,7 +43340,23 @@ function _wireDeadTreeControls() {
   // we confirm first. World transforms are preserved via Object3D.attach,
   // which composes parent.matrixWorld into the child's local matrix before
   // reparenting.
-  $('tree-flatten')?.addEventListener('click', flattenTree);
+  $('tree-flatten')?.addEventListener('click', () => flattenTree());
+  // A click (or a right-click) on Collapse, Rename or Flatten opens its menu of quick choices. The command search and the keys run the
+  // thing itself: they press the button from code, and that press (not a real click) goes through to what the button always did.
+  let _toolMenuFrom = null;
+  for (const [id, open] of [['tree-collapse-toggle', () => _openTreeFoldMenu($('tree-collapse-toggle'))], ['tree-flatten', () => _openFlattenMenu($('tree-flatten'))], ['tree-batch-rename', () => _openBatchRenameMenu($('tree-batch-rename'))]]) {
+    const show = () => { _toolMenuFrom = id; open(); };
+    $(id)?.addEventListener('click', (e) => { if (!e.isTrusted) return; e.preventDefault(); e.stopImmediatePropagation(); show(); }, true);
+    $(id)?.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); show(); });
+    // as in a menu bar: with one of the three open, moving onto another opens that one at once
+    $(id)?.addEventListener('pointerenter', (e) => {
+      if (e.pointerType === 'touch' || !_toolMenuFrom || _toolMenuFrom === id) return;
+      const m = $('ctx-menu'); if (!m || m.style.display !== 'block') { _toolMenuFrom = null; return; }
+      show();
+    });
+  }
+  // (a press anywhere but on those buttons ends the run: the menu is closed by it)
+  document.addEventListener('pointerdown', (e) => { if (!e.target.closest?.('#tree-collapse-toggle,#tree-flatten,#tree-batch-rename,#ctx-menu')) _toolMenuFrom = null; }, true);
 }
 
 // Compute the depth of an Object3D relative to state.partsRoot. Direct
@@ -42567,7 +43766,7 @@ function _removeEmptyContainer(obj, snapshots) {
   return true;
 }
 
-async function flattenTree() {
+async function flattenTree(preset) {
   if (!state.parts.length) { toast('No model loaded', '', 'info'); return; }
 
   const groupCount =
@@ -42595,7 +43794,7 @@ async function flattenTree() {
     const ug = (state.userGroups || []).find(g => g.id === gid);
     return ug ? (ug.name || ('Group ' + gid)) : ('Group ' + gid);
   });
-  const opts = await _FlattenDialog.open({
+  const opts = preset || await _FlattenDialog.open({
     selectedGroupCount: selectedIds.length,
     currentMaxDepth,
     selectedNames,
@@ -43652,7 +44851,7 @@ const _BatchRenameDialog = (() => {
       <div class="brn-cols">
         <div class="brn-left">
           <div class="brn-tabs">
-            <button class="brn-tab active" data-pane="find">Find &amp; replace</button>
+            <button class="brn-tab active" data-pane="find">Replace</button>
             <button class="brn-tab" data-pane="quick">Quick</button>
             <button class="brn-tab" data-pane="pattern">Pattern</button>
             <button class="brn-tab" data-pane="presets">Presets</button>
@@ -44220,7 +45419,7 @@ const _BatchRenameDialog = (() => {
   }
 
   return {
-    async open(/* anchorEl ignored — _DraggablePopup persists/restores position */) {
+    async open(/* anchorEl ignored — _DraggablePopup persists/restores position */ _anchor, preset) {
       _ensure();
       // Default scope: 'selection' if anything is selected in the tree, else
       // 'whole-tree' so the popup is useful out of the box — typing in Find
@@ -44244,6 +45443,7 @@ const _BatchRenameDialog = (() => {
       _refreshPreview();
       _lucide?.();
       bg.classList.add('show');
+      if (preset) { try { _applyPresetToUI(preset); } catch (_) {} }      // (opened from the quick menu: the rule is already filled in)
       setTimeout(() => E('_brn-find')?.focus(), 60);
       return new Promise(res => { STATE.resolve = res; });
     },
@@ -45710,6 +46910,36 @@ _UndoOps.register('materialEdit', {
   },
 });
 
+// 'uiSlider' — a slider of the scene's look (camera field of view, exposure, sun and ambient light, sun direction, fog and
+// environment strength). Each finished drag (or key press) is one step: Undo puts the slider and what it drives back.
+// The sliders' own listeners do the work, so undo sets the value and sends them an `input`.
+const _UNDO_SLIDERS = ['cam-fov', 'fog-int', 'hdri-int', 'light-exposure', 'light-sun', 'light-ambient', 'light-azi', 'light-ele'];
+function _uiSliderSet(id, v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.value = String(v);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+_UndoOps.register('uiSlider', {
+  undo(op) { _uiSliderSet(op.id, op.before); state.redo.push(op); _finalizeUndo(); },
+  redo(op) { _uiSliderSet(op.id, op.after); state.history.push(op); _finalizeUndo(); },
+});
+// (Listeners on the document, not on the sliders: some live in windows that are built when first opened.)
+{
+  const last = new Map();                                     // slider id -> its value when the gesture began
+  const mine = (e) => { const el = e.target; return el && el.id && _UNDO_SLIDERS.includes(el.id) && el.type === 'range' ? el : null; };
+  const rebase = (e) => { const el = mine(e); if (el) last.set(el.id, el.value); };       // (the value may have been set by code since: scene load, undo)
+  document.addEventListener('pointerdown', rebase, true);
+  document.addEventListener('focusin', rebase, true);
+  document.addEventListener('change', (e) => {
+    const el = mine(e); if (!el) return;
+    const before = last.get(el.id);
+    if (before === undefined || before === el.value) { last.set(el.id, el.value); return; }
+    try { pushUndo({ type: 'uiSlider', id: el.id, before, after: el.value }); } catch (_) {}
+    last.set(el.id, el.value);
+  }, true);
+}
+
 // Snapshot a THREE.Material's edit-relevant scalar / boolean / Color
 // properties. Sticks to fields the Material editor exposes — textures
 // are preserved by ref (not serialised), keeping the snapshot cheap.
@@ -45802,7 +47032,20 @@ try {
 } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
 
 // Toolbar wiring + F2 shortcut
-function _openBatchRenameDialog(anchor) { return _BatchRenameDialog.open(anchor); }
+function _openBatchRenameDialog(anchor, preset) { return _BatchRenameDialog.open(anchor, preset); }
+// The arrow beside Rename: the saved presets and the built-in ones in one list; one opens the dialog with its rule filled in (the preview shows what it would do)
+function _openBatchRenameMenu(anchor) {
+  if (!state.parts.length) { toast('No model loaded', '', 'info'); return; }
+  const r = anchor.getBoundingClientRect();
+  const mine = (_BatchRename.loadUserPresets?.() || []).map(p => ({ icon: 'bookmark', label: p.name, fn: () => _openBatchRenameDialog(anchor, p) }));
+  const built = (_BatchRename.BUILTIN_PRESETS || []).map(p => ({ icon: 'text-cursor-input', label: p.name, fn: () => _openBatchRenameDialog(anchor, p) }));
+  _ctxBuild([
+    { icon: 'text-cursor-input', label: 'Batch rename…', kbd: 'F2', fn: () => _openBatchRenameDialog(anchor) },
+    '---',
+    ...(mine.length ? [...mine, '---'] : []),
+    ...built,
+  ], r.left, r.bottom + 4);
+}
 
 const _origWireUI_batchRename = wireUI;
 wireUI = function() {
@@ -47112,88 +48355,183 @@ setTimeout(() => _dndDecorateTree(), 0);
 // window._openColorPickerForCallback: the picker hands every colour to the
 // caller's callbacks (onPreview / onCommit / onCancel) and changes nothing
 // itself. Undo is the caller's too (the material editor records its own).
+//
+// The picker: a square (saturation and value over a hue bar) or a wheel (hue round it, saturation out from the middle, value
+// on a bar), and the colour as numbers in the standard that is wanted: HEX, RGB, HSV or HSL (every one can be typed;
+// the arrow keys step it). A pipette takes a colour from anywhere on the screen, Copy puts the colour on the clipboard in the
+// shown standard, and the colours last used and the ones the scene has are one click away. While a colour is dragged the picker
+// steps aside, so the model can be seen. Ctrl+Z / Ctrl+Y go through the picker's own steps and keep it open.
 (function () {
-  // ── HSV ↔ RGB ────────────────────────────────────────────────────────────
+  // ── colour maths (all in sRGB 0..1) ─────────────────────────────────────────
+  const clamp01 = (x) => (x === x ? Math.max(0, Math.min(1, x)) : 0);
   function hsvToRgb(h, s, v) {
-    const i = Math.floor(h * 6);
-    const f = h * 6 - i;
-    const p = v * (1 - s);
-    const q = v * (1 - f * s);
-    const t = v * (1 - (1 - f) * s);
-    let r, g, b;
+    h = ((h % 1) + 1) % 1;
+    const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
     switch (i % 6) {
-      case 0: r=v; g=t; b=p; break;
-      case 1: r=q; g=v; b=p; break;
-      case 2: r=p; g=v; b=t; break;
-      case 3: r=p; g=q; b=v; break;
-      case 4: r=t; g=p; b=v; break;
-      default: r=v; g=p; b=q;
+      case 0: return { r: v, g: t, b: p };
+      case 1: return { r: q, g: v, b: p };
+      case 2: return { r: p, g: v, b: t };
+      case 3: return { r: p, g: q, b: v };
+      case 4: return { r: t, g: p, b: v };
+      default: return { r: v, g: p, b: q };
     }
-    return { r, g, b };
   }
   function rgbToHsv(r, g, b) {
-    const max = Math.max(r, g, b), min = Math.min(r, g, b);
-    const v = max;
-    const d = max - min;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
     const s = max === 0 ? 0 : d / max;
-    let h;
-    if (d === 0) h = 0;
-    else if (max === r) h = ((g - b) / d) % 6;
-    else if (max === g) h = (b - r) / d + 2;
-    else                h = (r - g) / d + 4;
+    let h = 0;
+    if (d !== 0) { if (max === r) h = ((g - b) / d) % 6; else if (max === g) h = (b - r) / d + 2; else h = (r - g) / d + 4; }
     h /= 6; if (h < 0) h += 1;
-    return { h, s, v };
+    return { h, s, v: max };
+  }
+  function rgbToHsl(r, g, b) {
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min, l = (max + min) / 2;
+    let h = 0, s = 0;
+    if (d) { s = l > 0.5 ? d / (2 - max - min) : d / (max + min); h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; }
+    return { h, s, l };
+  }
+  function hslToRgb(h, s, l) {
+    if (!s) return { r: l, g: l, b: l };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    const f = (t) => { t = ((t % 1) + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+    return { r: f(h + 1 / 3), g: f(h), b: f(h - 1 / 3) };
   }
   function hexToRgb(hex) {
-    if (typeof hex === 'string') {
-      hex = hex.replace('#', '');
-      if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
-      const n = parseInt(hex, 16);
-      return { r: ((n >> 16) & 0xff) / 255, g: ((n >> 8) & 0xff) / 255, b: (n & 0xff) / 255 };
-    }
-    return { r: ((hex >> 16) & 0xff) / 255, g: ((hex >> 8) & 0xff) / 255, b: (hex & 0xff) / 255 };
+    hex = String(hex || '').replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const n = parseInt(hex, 16) || 0;
+    return { r: ((n >> 16) & 0xff) / 255, g: ((n >> 8) & 0xff) / 255, b: (n & 0xff) / 255 };
   }
-  function rgbToHex({r, g, b}) {
-    const to2 = v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0');
+  function rgbToHex({ r, g, b }) {
+    const to2 = (v) => Math.round(clamp01(v) * 255).toString(16).padStart(2, '0');
     return '#' + to2(r) + to2(g) + to2(b);
   }
+  const isHex = (x) => typeof x === 'string' && /^#[0-9a-f]{6}$/i.test(x);
+  function parseHex(v) {
+    const raw = String(v || '').trim().replace(/^#/, '');
+    if (/^[0-9a-f]{6}$/i.test(raw)) return '#' + raw.toLowerCase();
+    if (/^[0-9a-f]{3}$/i.test(raw)) return '#' + raw.split('').map(c => c + c).join('').toLowerCase();
+    return null;
+  }
 
-  // ── Picker state ────────────────────────────────────────────────────────
-  let popEl = null, svEl, svCursor, hueEl, hueCursor, hexInput, presetsEl;
-  let h = 0, s = 1, v = 1;
-  let session = null;          // { callbacks: { onPreview, onCommit, onCancel }, anchor }
+  // The standards: what each shows (label, largest value, decimals, step), how to read a colour into it and back, and the text Copy gives.
+  const R0 = (a) => a.map(x => Math.round(x));
+  const SPEC = {
+    rgb:   { f: [['R', 255, 0, 1], ['G', 255, 0, 1], ['B', 255, 0, 1]],
+             from: (c) => [c.r * 255, c.g * 255, c.b * 255], to: (a) => ({ r: a[0] / 255, g: a[1] / 255, b: a[2] / 255 }),
+             css: (a) => `rgb(${R0(a).join(', ')})` },
+    hsv:   { f: [['H', 360, 0, 1], ['S', 100, 0, 1], ['V', 100, 0, 1]],
+             from: (c) => { const x = rgbToHsv(c.r, c.g, c.b); return [x.h * 360, x.s * 100, x.v * 100]; }, to: (a) => hsvToRgb(a[0] / 360, a[1] / 100, a[2] / 100),
+             css: (a) => `hsv(${R0(a)[0]}, ${R0(a)[1]}%, ${R0(a)[2]}%)` },
+    hsl:   { f: [['H', 360, 0, 1], ['S', 100, 0, 1], ['L', 100, 0, 1]],
+             from: (c) => { const x = rgbToHsl(c.r, c.g, c.b); return [x.h * 360, x.s * 100, x.l * 100]; }, to: (a) => hslToRgb(a[0] / 360, a[1] / 100, a[2] / 100),
+             css: (a) => `hsl(${R0(a)[0]}, ${R0(a)[1]}%, ${R0(a)[2]}%)` },
+  };
+  const MODELS = [['hex', 'HEX'], ['rgb', 'RGB'], ['hsv', 'HSV'], ['hsl', 'HSL']];
+  const PRESETS = ['#e6edf3', '#8b95a7', '#5a6275', '#1d2330', '#000000', '#ff6b6b', '#fbbf24', '#34c759', '#6b8dff', '#a78bfa', '#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
 
-  const PRESETS = ['#e6edf3','#8b95a7','#5a6275','#1d2330','#000000','#ff6b6b','#fbbf24','#34c759','#6b8dff','#a78bfa','#f59e0b','#10b981','#ef4444','#3b82f6'];
+  const pref = (k, d) => { try { return localStorage.getItem(k) || d; } catch (_) { return d; } };
+  const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
+  const recent = () => { try { return JSON.parse(localStorage.getItem('stepopt-recent-colours') || '[]').filter(isHex).slice(0, 14); } catch (_) { return []; } };
+  function pushRecent(hex) {
+    if (!isHex(hex)) return;
+    const l = [hex.toLowerCase(), ...recent().filter(x => x.toLowerCase() !== hex.toLowerCase())].slice(0, 14);
+    try { localStorage.setItem('stepopt-recent-colours', JSON.stringify(l)); } catch (_) {}
+  }
+  function sceneColours() {
+    const out = [];
+    try {
+      for (const i of _collectLiveMaterials().sort((a, b) => (b.count || 0) - (a.count || 0))) {
+        const m = i.mat;
+        if (m && m.color) { const x = '#' + m.color.getHexString(); if (!out.includes(x)) out.push(x); }
+        if (out.length >= 14) break;
+      }
+    } catch (_) {}
+    return out;
+  }
+
+  // ── state ────────────────────────────────────────────────────────────────
+  let popEl = null, els = {};
+  let h = 0, s = 1, v = 1;                 // the colour (HSV, h 0..1)
+  let seedHex = '#000000';
+  let model = 'hex', mode = 'square';
+  let session = null;                      // { callbacks, anchor, hist, redo }
+  const WHEEL = 168;                       // the wheel's size, px
+
+  const IC_EYE = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z"/></svg>';
+  const IC_PART = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M22 12h-4M6 12H2M12 6V2M12 22v-4"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>';
+  const IC_COPY = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+  const IC_OK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+  const rgbNow = () => hsvToRgb(h, s, v);
+  const hexNow = () => rgbToHex(rgbNow());
 
   function _buildPopover() {
     if (popEl) return;
     const css = `
-      .cp-pop{position:fixed;z-index:400;width:240px;background:var(--surface-pop,#161616);border:1px solid var(--bd2);border-radius:var(--r-lg);box-shadow:0 14px 36px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03) inset;padding:12px;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 140ms var(--ease-out)}
-      .cp-pop.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-      .cp-sv{position:relative;width:100%;height:140px;border-radius:var(--r-sm);cursor:crosshair;overflow:hidden;background:#f00;touch-action:none;user-select:none}
-      .cp-sv::before{content:'';position:absolute;inset:0;background:linear-gradient(to right,#fff,rgba(255,255,255,0))}
-      .cp-sv::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
-      .cp-sv-cursor{position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 1px 3px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none;z-index:2}
-      .cp-hue{position:relative;width:100%;height:12px;margin-top:10px;border-radius:var(--r-sm);cursor:pointer;background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%);touch-action:none;user-select:none}
-      .cp-hue-cursor{position:absolute;top:-2px;width:6px;height:16px;border-radius:4px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.7),0 1px 3px rgba(0,0,0,.5);transform:translateX(-50%);pointer-events:none}
-      .cp-row{display:flex;gap:var(--space-md);align-items:center;margin-top:10px}
-      .cp-hex{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:6px;color:var(--tx);font:500 12px var(--font-sans);padding:5px 7px;outline:none;text-transform:uppercase}
-      .cp-hex:focus{border-color:var(--ac);background:var(--ac-tint-08)}
-      .cp-preview{width:24px;height:24px;border-radius:6px;border:1px solid rgba(255,255,255,.1);box-shadow:0 1px 3px rgba(0,0,0,.4);flex-shrink:0}
-      .cp-presets{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--space-xs);margin-top:10px}
-      .cp-preset{width:100%;aspect-ratio:1;border-radius:var(--r-xs);border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:transform 100ms var(--ease-out),border-color 100ms var(--ease-out)}
-      .cp-preset:hover{transform:scale(1.12);border-color:var(--ac)}
-      .cp-actions{display:flex;gap:var(--space-sm);margin-top:12px;justify-content:flex-end}
-      /* while a colour is dragged only the area (or the slider) in hand stays; the rest of the picker and the settings window step aside */
+      .cp-pop{position:fixed;z-index:400;width:300px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:none;box-sizing:border-box;padding:12px;border-radius:16px;background:color-mix(in srgb,var(--bg2,#1a1a1a) 92%,#000);border:1px solid var(--bd2);box-shadow:0 20px 56px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.03) inset;color:var(--tx);font:12px var(--font-sans);opacity:0;transform:translateY(6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 170ms var(--ease-out),background 120ms linear,border-color 120ms linear}
+      .cp-pop::-webkit-scrollbar{display:none}
+      .cp-pop.show{opacity:1;transform:none;pointer-events:auto}
+      .cp-pop *{box-sizing:border-box}
+      .cp-top{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+      .cp-spacer{flex:1}
+      .cp-seg{display:flex;gap:2px;padding:2px;border-radius:10px;background:rgba(255,255,255,.05)}
+      .cp-seg button{flex:1;min-width:0;border:0;background:transparent;color:var(--tx3);font:inherit;font-size:11px;letter-spacing:.02em;padding:5px 9px;border-radius:8px;cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out)}
+      .cp-seg button:hover{color:var(--tx)}
+      .cp-seg button.on{background:rgba(255,255,255,.1);color:var(--tx)}
+      .cp-ico{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:9px;background:rgba(255,255,255,.05);color:var(--tx2);cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out)}
+      .cp-ico:hover{background:rgba(255,255,255,.1);color:var(--tx)}
+      .cp-ico[hidden]{display:none}
+      .cp-area{position:relative}
+      .cp-area[data-mode="square"] .cp-wheel-wrap{display:none}
+      .cp-area[data-mode="wheel"] .cp-sv-wrap{display:none}
+      /* the square is clipped to its rounded shape (clip-path, not overflow alone: the two gradient layers left a dark rim at the corners) */
+      .cp-sv{position:relative;width:100%;height:150px;border-radius:12px;cursor:crosshair;overflow:hidden;clip-path:inset(0 round 12px);isolation:isolate;background:#f00;touch-action:none;user-select:none}
+      .cp-sv::before{content:'';position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(to right,#fff,rgba(255,255,255,0))}
+      .cp-sv::after{content:'';position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
+      .cp-cur{position:absolute;width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none;z-index:2}
+      .cp-bar{position:relative;width:100%;height:14px;margin-top:10px;border-radius:7px;cursor:pointer;touch-action:none;user-select:none}
+      .cp-hue{background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%)}
+      .cp-bar-cur{position:absolute;top:50%;width:18px;height:18px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none}
+      .cp-wheel-wrap{display:flex;flex-direction:column;align-items:center}
+      .cp-wheel-box{position:relative;width:${WHEEL}px;height:${WHEEL}px;cursor:crosshair;touch-action:none;user-select:none;border-radius:50%}
+      .cp-wheel-box canvas{display:block;width:100%;height:100%;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.06)}
+      .cp-wheel-wrap .cp-bar{width:100%}
+      .cp-compare{display:flex;height:40px;margin-top:12px;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.1)}
+      .cp-compare span{flex:1;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 14px;font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
+      .cp-compare b{font-weight:400;font-size:10px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+      .cp-compare i{font-style:normal;letter-spacing:.02em}
+      .cp-compare .cp-old{cursor:pointer;transition:filter 120ms var(--ease-out)}
+      .cp-compare .cp-old:hover{filter:brightness(1.12)}
+      .cp-models{margin-top:12px}
+      .cp-fields{display:grid;gap:6px;margin-top:8px}
+      .cp-fields.n3{grid-template-columns:repeat(3,1fr)}
+      .cp-fields.n4{grid-template-columns:repeat(4,1fr)}
+      .cp-f{display:flex;flex-direction:column;gap:3px;min-width:0}
+      .cp-f>span{font-size:10px;color:var(--tx3);letter-spacing:.04em;padding-left:2px}
+      .cp-f input{width:100%;min-width:0;height:28px;padding:0 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);border-radius:8px;color:var(--tx);font:inherit;font-size:12px;font-variant-numeric:tabular-nums;outline:none;transition:border-color 120ms var(--ease-out),background 120ms var(--ease-out)}
+      .cp-f input:hover{border-color:rgba(255,255,255,.14)}
+      .cp-f input:focus{border-color:var(--ac);background:var(--ac-tint-08,rgba(13,153,255,.08))}
+      .cp-f input.bad{border-color:var(--er,#e5484d)}
+      .cp-f-hex input{text-transform:uppercase;letter-spacing:.04em}
+      .cp-sw-h{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 0;padding:4px 2px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:10px;color:var(--tx3);letter-spacing:.04em;text-transform:uppercase;cursor:pointer;text-align:left;transition:color 120ms var(--ease-out)}
+      .cp-sw-h:hover{color:var(--tx)}
+      .cp-sw-h svg{flex:0 0 10px;width:10px;height:10px;transition:transform 140ms var(--ease-out)}
+      .cp-sw-h em{margin-left:auto;font-style:normal;letter-spacing:0;text-transform:none;opacity:.7}
+      .cp-sw-block.cp-fold .cp-sw-h svg{transform:rotate(-90deg)}
+      .cp-sw-block.cp-fold .cp-sw-row{display:none}
+      .cp-sw-row{padding-top:6px}
+      .cp-sw-row{display:flex;flex-wrap:wrap;gap:6px}
+      .cp-sw{width:18px;height:18px;padding:0;border-radius:6px;border:1px solid rgba(255,255,255,.12);cursor:pointer;transition:transform 100ms var(--ease-out),border-color 100ms var(--ease-out)}
+      .cp-sw:hover{transform:scale(1.15);border-color:var(--ac)}
+      .cp-hint{margin-top:12px;font-size:10px;color:var(--tx3);text-align:center}
       html.cp-dragging .modal-bg{opacity:0!important;pointer-events:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;transition:opacity 60ms linear!important}
-      .cp-pop.cp-drag-sv,.cp-pop.cp-drag-hue{background:transparent;border-color:transparent;box-shadow:none;transition:none}
-      .cp-pop.cp-drag-sv .cp-hue,.cp-pop.cp-drag-sv .cp-row,.cp-pop.cp-drag-sv .cp-presets,
-      .cp-pop.cp-drag-hue .cp-sv,.cp-pop.cp-drag-hue .cp-row,.cp-pop.cp-drag-hue .cp-presets{visibility:hidden}
-      .cp-pop.cp-drag-sv .cp-sv,.cp-pop.cp-drag-hue .cp-hue{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 8px 28px rgba(0,0,0,.5)}
-      .cp-btn{padding:6px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.06);border-radius:6px;color:var(--tx2);font-size:var(--fs-sm);font-weight:var(--fw-medium);cursor:pointer;transition:background 120ms var(--ease-out),color 120ms var(--ease-out),border-color 120ms var(--ease-out)}
-      .cp-btn:hover{background:rgba(255,255,255,.1);color:var(--tx)}
-      .cp-btn.primary{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:#fff;border-color:transparent}
-      .cp-btn.primary:hover{filter:brightness(1.08)}
+      /* while a colour is dragged only the control in hand stays, so the model and the colour can be seen */
+      .cp-pop.cp-drag{background:transparent;border-color:transparent;box-shadow:none}
+      .cp-pop.cp-drag *{visibility:hidden}
+      .cp-pop.cp-drag .cp-hot,.cp-pop.cp-drag .cp-hot *,.cp-pop.cp-drag .cp-compare,.cp-pop.cp-drag .cp-compare *{visibility:visible}
+      .cp-pop.cp-drag .cp-compare{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 10px 30px rgba(0,0,0,.5)}
+      .cp-pop.cp-drag .cp-hot{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 10px 30px rgba(0,0,0,.5)}
       .mat-swatch{cursor:pointer}
       .mat-swatch:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px var(--ac-tint-45)!important}
     `;
@@ -47204,103 +48542,249 @@ setTimeout(() => _dndDecorateTree(), 0);
     popEl = document.createElement('div');
     popEl.className = 'cp-pop';
     popEl.innerHTML = `
-      <div class="cp-sv"><div class="cp-sv-cursor"></div></div>
-      <div class="cp-hue"><div class="cp-hue-cursor"></div></div>
-      <div class="cp-row">
-        <div class="cp-preview"></div>
-        <input type="text" class="cp-hex" maxlength="7" spellcheck="false">
+      <div class="cp-top">
+        <div class="cp-seg cp-modes"><button type="button" data-mode="square">Square</button><button type="button" data-mode="wheel">Wheel</button></div>
+        <span class="cp-spacer"></span>
+        <button type="button" class="cp-ico" data-act="model" title="Take the colour of a part: click it in the view" aria-label="Take the colour of a part in the view">${IC_PART}</button>
+        <button type="button" class="cp-ico" data-act="eye" title="Pick a colour from anywhere on the screen" aria-label="Pick a colour from the screen">${IC_EYE}</button>
+        <button type="button" class="cp-ico" data-act="copy" title="Copy the colour" aria-label="Copy the colour">${IC_COPY}</button>
       </div>
-      <div class="cp-presets"></div>`;
+      <div class="cp-area" data-mode="square">
+        <div class="cp-sv-wrap">
+          <div class="cp-sv"><div class="cp-cur"></div></div>
+          <div class="cp-bar cp-hue"><div class="cp-bar-cur"></div></div>
+        </div>
+        <div class="cp-wheel-wrap">
+          <div class="cp-wheel-box"><canvas></canvas><div class="cp-cur"></div></div>
+          <div class="cp-bar cp-val"><div class="cp-bar-cur"></div></div>
+        </div>
+      </div>
+      <div class="cp-compare"><span class="cp-old" title="The colour it was: click to go back to it"><b>Was</b><i></i></span><span class="cp-new"><b>New</b><i></i></span></div>
+      <div class="cp-seg cp-models">${MODELS.map(([k, l]) => `<button type="button" data-model="${k}">${l}</button>`).join('')}</div>
+      <div class="cp-fields"></div>
+      <div class="cp-sw-block" data-row="recent"><button type="button" class="cp-sw-h" data-fold="recent" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>Recent<em></em></button><div class="cp-sw-row"></div></div>
+      <div class="cp-sw-block" data-row="scene"><button type="button" class="cp-sw-h" data-fold="scene" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>In this scene<em></em></button><div class="cp-sw-row"></div></div>
+      <div class="cp-sw-block" data-row="presets"><button type="button" class="cp-sw-h" data-fold="presets" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>Presets<em></em></button><div class="cp-sw-row"></div></div>
+      <div class="cp-hint">Enter applies · Esc cancels · Ctrl+Z steps back</div>`;
     document.body.appendChild(popEl);
-    svEl       = popEl.querySelector('.cp-sv');
-    svCursor   = popEl.querySelector('.cp-sv-cursor');
-    hueEl      = popEl.querySelector('.cp-hue');
-    hueCursor  = popEl.querySelector('.cp-hue-cursor');
-    hexInput   = popEl.querySelector('.cp-hex');
-    presetsEl  = popEl.querySelector('.cp-presets');
+    const q = (sel) => popEl.querySelector(sel);
+    els = {
+      area: q('.cp-area'), sv: q('.cp-sv'), svCur: q('.cp-sv .cp-cur'), hue: q('.cp-hue'), hueCur: q('.cp-hue .cp-bar-cur'),
+      wbox: q('.cp-wheel-box'), canvas: q('.cp-wheel-box canvas'), wCur: q('.cp-wheel-box .cp-cur'), val: q('.cp-val'), valCur: q('.cp-val .cp-bar-cur'),
+      oldS: q('.cp-old'), newS: q('.cp-new'), fields: q('.cp-fields'), eye: q('[data-act="eye"]'), copy: q('[data-act="copy"]'),
+    };
+    els.eye.hidden = !('EyeDropper' in window);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    els.canvas.width = els.canvas.height = Math.round(WHEEL * dpr);
 
-    presetsEl.innerHTML = PRESETS.map(c =>
-      `<div class="cp-preset" data-c="${c}" style="background:${c}"></div>`).join('');
+    // dragging: one routine for the four controls. `fn(e)` turns a pointer position into the colour.
+    const drag = (el, fn, hot) => {
+      el.addEventListener('pointerdown', (e) => {
+        if (e.button) return;
+        el.setPointerCapture(e.pointerId);
+        _histPush();
+        fn(e);
+        popEl.classList.add('cp-drag'); document.documentElement.classList.add('cp-dragging'); hot.classList.add('cp-hot');
+        const move = (ev) => fn(ev);
+        const up = () => {
+          popEl.classList.remove('cp-drag'); document.documentElement.classList.remove('cp-dragging'); hot.classList.remove('cp-hot');
+          el.removeEventListener('pointermove', move);
+          for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) el.removeEventListener(t, up);
+        };
+        el.addEventListener('pointermove', move);
+        for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) el.addEventListener(t, up);
+      });
+    };
+    drag(els.sv, (e) => { const r = els.sv.getBoundingClientRect(); s = clamp01((e.clientX - r.left) / r.width); v = 1 - clamp01((e.clientY - r.top) / r.height); _sync(); }, els.sv);
+    drag(els.hue, (e) => { const r = els.hue.getBoundingClientRect(); h = clamp01((e.clientX - r.left) / r.width); if (h >= 1) h = 0.9999; _sync(); }, els.hue);
+    drag(els.val, (e) => { const r = els.val.getBoundingClientRect(); v = clamp01((e.clientX - r.left) / r.width); _sync(); }, els.val);
+    drag(els.wbox, (e) => {
+      const r = els.wbox.getBoundingClientRect(), R = r.width / 2;
+      const dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R);
+      h = ((Math.atan2(dy, dx) / (Math.PI * 2)) + 1) % 1; s = clamp01(Math.hypot(dx, dy) / R);
+      _sync();
+    }, els.wbox);
 
-    // Drag SV area
-    function onSvPointer(e) {
-      const r = svEl.getBoundingClientRect();
-      const x = Math.max(0, Math.min(r.width,  e.clientX - r.left));
-      const y = Math.max(0, Math.min(r.height, e.clientY - r.top));
-      s = x / r.width;
-      v = 1 - y / r.height;
-      _syncFromHsv();
-    }
-    // A drag can end without a pointerup (the pointer is cancelled, or the
-    // capture is lost): the listeners come off for those too, or each such
-    // drag would leave a pointermove listener behind.
-    const DRAG_END = ['pointerup', 'pointercancel', 'lostpointercapture'];
-    const dragOn = (cls) => { popEl.classList.add(cls); document.documentElement.classList.add('cp-dragging'); };
-    const dragOff = (cls) => { popEl.classList.remove(cls); document.documentElement.classList.remove('cp-dragging'); };
-    svEl.addEventListener('pointerdown', e => {
-      svEl.setPointerCapture(e.pointerId);
-      onSvPointer(e);
-      dragOn('cp-drag-sv');
-      const move = ev => onSvPointer(ev);
-      const up = () => { dragOff('cp-drag-sv'); svEl.removeEventListener('pointermove', move); for (const t of DRAG_END) svEl.removeEventListener(t, up); };
-      svEl.addEventListener('pointermove', move);
-      for (const t of DRAG_END) svEl.addEventListener(t, up);
+    popEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.fold) { _fold(b.dataset.fold); return; }
+      if (b.dataset.mode) { mode = b.dataset.mode; setPref('stepopt-cp-mode', mode); _layout(); _sync(); return; }
+      if (b.dataset.model) { model = b.dataset.model; setPref('stepopt-cp-model', model); _buildFields(); _sync(); return; }
+      if (b.dataset.act === 'copy') { _copy(b); return; }
+      if (b.dataset.act === 'eye') { _eyedrop(); return; }
+      if (b.dataset.act === 'model') { _pickFromModel(); return; }
+      if (b.classList.contains('cp-sw')) { _histPush(); _setHex(b.dataset.c); return; }
     });
-    function onHuePointer(e) {
-      const r = hueEl.getBoundingClientRect();
-      const x = Math.max(0, Math.min(r.width, e.clientX - r.left));
-      h = x / r.width;
-      _syncFromHsv();
-    }
-    hueEl.addEventListener('pointerdown', e => {
-      hueEl.setPointerCapture(e.pointerId);
-      onHuePointer(e);
-      dragOn('cp-drag-hue');
-      const move = ev => onHuePointer(ev);
-      const up = () => { dragOff('cp-drag-hue'); hueEl.removeEventListener('pointermove', move); for (const t of DRAG_END) hueEl.removeEventListener(t, up); };
-      hueEl.addEventListener('pointermove', move);
-      for (const t of DRAG_END) hueEl.addEventListener(t, up);
+    els.oldS.addEventListener('click', () => { _histPush(); _setHex(seedHex); });
+    // numbers: typing sets the colour as it goes; the arrow keys step (Shift: ten at a time)
+    els.fields.addEventListener('input', (e) => { if (e.target.matches('input')) _fieldsChanged(e.target); });
+    els.fields.addEventListener('focusin', (e) => { if (e.target.matches('input')) e.target._cpDirty = false; e.target.select && e.target.select(); });
+    els.fields.addEventListener('keydown', (e) => {
+      const t = e.target;
+      if (!t.matches || !t.matches('input[data-i]') || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      e.preventDefault(); e.stopPropagation();
+      const spec = SPEC[model].f[+t.dataset.i], step = spec[3] * (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
+      _histPush();
+      t.value = String(+(Math.max(0, Math.min(spec[1], (parseFloat(t.value) || 0) + step))).toFixed(spec[2]));
+      _fieldsChanged(t, true);
     });
-    hexInput.addEventListener('input', () => {
-      const val = hexInput.value.trim();
-      if (/^#?[0-9a-f]{6}$/i.test(val)) {
-        const rgb = hexToRgb(val);
-        const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-        h = hsv.h; s = hsv.s; v = hsv.v;
-        _syncFromHsv({ skipHexUpdate: true });
-      }
-    });
-    presetsEl.addEventListener('click', e => {
-      const sw = e.target.closest('.cp-preset');
-      if (!sw) return;
-      const rgb = hexToRgb(sw.dataset.c);
-      const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
-      h = hsv.h; s = hsv.s; v = hsv.v;
-      _syncFromHsv();
-    });
-    // Outside-click commits — auto-apply UX, no Apply/Cancel buttons.
-    popEl.addEventListener('click', e => e.stopPropagation());
+    popEl.addEventListener('wheel', () => {}, { passive: true });
   }
 
-  function _syncFromHsv(opts = {}) {
-    const rgb = hsvToRgb(h, s, v);
-    const hex = rgbToHex(rgb);
-    // SV background follows the current hue
-    const hueRgb = hsvToRgb(h, 1, 1);
-    svEl.style.background = `rgb(${(hueRgb.r*255)|0},${(hueRgb.g*255)|0},${(hueRgb.b*255)|0})`;
-    // SV cursor position
-    svCursor.style.left = (s * 100) + '%';
-    svCursor.style.top  = ((1 - v) * 100) + '%';
-    // Hue cursor position
-    hueCursor.style.left = (h * 100) + '%';
-    // Preview swatch + hex input
-    const prev = popEl.querySelector('.cp-preview');
-    if (prev) prev.style.background = hex;
-    if (!opts.skipHexUpdate) hexInput.value = hex.toUpperCase();
-    // Live preview: the caller applies it.
-    if (session?.callbacks) {
-      try { session.callbacks.onPreview?.(hex); } catch (_) {}
+  // ── what is shown follows the colour ─────────────────────────────────────
+  function _layout() {
+    els.area.dataset.mode = mode;
+    for (const b of popEl.querySelectorAll('[data-mode]')) b.classList.toggle('on', b.dataset.mode === mode);
+    for (const b of popEl.querySelectorAll('[data-model]')) b.classList.toggle('on', b.dataset.model === model);
+  }
+  function _buildFields() {
+    for (const b of popEl.querySelectorAll('[data-model]')) b.classList.toggle('on', b.dataset.model === model);
+    if (model === 'hex') {
+      els.fields.className = 'cp-fields';
+      els.fields.innerHTML = '<label class="cp-f cp-f-hex"><span>HEX</span><input type="text" data-hex maxlength="7" spellcheck="false" autocomplete="off"></label>';
+    } else {
+      const f = SPEC[model].f;
+      els.fields.className = 'cp-fields n' + f.length;
+      els.fields.innerHTML = f.map(([l], i) => `<label class="cp-f"><span>${l}</span><input type="text" inputmode="decimal" data-i="${i}" spellcheck="false" autocomplete="off"></label>`).join('');
     }
+  }
+  function _drawWheel() {
+    const c = els.canvas, g = c.getContext('2d'), W = c.width, R = W / 2;
+    g.clearRect(0, 0, W, W);
+    g.save(); g.beginPath(); g.arc(R, R, R, 0, Math.PI * 2); g.clip();
+    if (g.createConicGradient) {
+      const cg = g.createConicGradient(0, R, R);
+      for (let i = 0; i <= 6; i++) { const rgb = hsvToRgb(i / 6 % 1, 1, 1); cg.addColorStop(i / 6, rgbToHex(rgb)); }
+      g.fillStyle = cg; g.fillRect(0, 0, W, W);
+    } else {
+      for (let a = 0; a < 360; a++) { g.beginPath(); g.moveTo(R, R); g.arc(R, R, R, (a - 0.6) * Math.PI / 180, (a + 0.6) * Math.PI / 180); g.fillStyle = rgbToHex(hsvToRgb(a / 360, 1, 1)); g.fill(); }
+    }
+    const rg = g.createRadialGradient(R, R, 0, R, R, R);
+    rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, W, W);
+    g.fillStyle = `rgba(0,0,0,${1 - v})`; g.fillRect(0, 0, W, W);
+    g.restore();
+  }
+  function _sync(opts = {}) {
+    const rgb = rgbNow(), hex = rgbToHex(rgb);
+    const hueRgb = rgbToHex(hsvToRgb(h, 1, 1));
+    if (mode === 'square') {
+      els.sv.style.background = hueRgb;
+      els.svCur.style.left = (s * 100) + '%'; els.svCur.style.top = ((1 - v) * 100) + '%';
+      els.hueCur.style.left = (h * 100) + '%'; els.hueCur.style.background = hueRgb;
+    } else {
+      _drawWheel();
+      const ang = h * Math.PI * 2, rr = 50 * s;
+      els.wCur.style.left = (50 + Math.cos(ang) * rr) + '%'; els.wCur.style.top = (50 + Math.sin(ang) * rr) + '%';
+      els.val.style.background = `linear-gradient(to right,#000,${rgbToHex(hsvToRgb(h, s, 1))})`;
+      els.valCur.style.left = (v * 100) + '%'; els.valCur.style.background = hex;
+    }
+    // each half is its colour, and its text is the one of the two (dark or light) that reads on it
+    const ink = (x) => { const c = hexToRgb(x); return (c.r * 299 + c.g * 587 + c.b * 114) / 1000 > 0.58 ? '#111' : '#fff'; };
+    els.oldS.style.background = seedHex; els.oldS.style.color = ink(seedHex); els.oldS.querySelector('i').textContent = seedHex.toUpperCase();
+    els.newS.style.background = hex;     els.newS.style.color = ink(hex);     els.newS.querySelector('i').textContent = hex.toUpperCase();
+    // the numbers (not the one being typed in)
+    const skip = opts.skip || null;
+    if (model === 'hex') {
+      const i = els.fields.querySelector('input[data-hex]');
+      if (i && i !== skip) { i.value = hex.slice(1).toUpperCase(); i.classList.remove('bad'); }
+    } else {
+      const vals = SPEC[model].from(rgb), ins = els.fields.querySelectorAll('input[data-i]');
+      ins.forEach((i) => { if (i === skip) return; const d = SPEC[model].f[+i.dataset.i][2]; i.value = String(+vals[+i.dataset.i].toFixed(d)); i.classList.remove('bad'); });
+    }
+    if (session && session.callbacks) { try { session.callbacks.onPreview?.(hex); } catch (_) {} }
+  }
+  function _setRgb(rgb) {
+    const x = rgbToHsv(clamp01(rgb.r), clamp01(rgb.g), clamp01(rgb.b));
+    if (x.s > 1e-4 || x.v > 1e-4) { if (x.s > 1e-4) h = x.h; s = x.s; v = x.v; } else { s = 0; v = 0; }     // (grey and black keep their hue)
+    _sync();
+  }
+  function _setHex(hex) { const x = parseHex(hex); if (x) _setRgb(hexToRgb(x)); }
+  function _fieldsChanged(input, fromKey) {
+    if (!input._cpDirty && !fromKey) { _histPush(); input._cpDirty = true; }
+    if (model === 'hex') {
+      const x = parseHex(input.value);
+      input.classList.toggle('bad', !x);
+      if (x) { const rgb = hexToRgb(x), c = rgbToHsv(rgb.r, rgb.g, rgb.b); if (c.s > 1e-4) h = c.h; s = c.s; v = c.v; _sync({ skip: fromKey ? null : input }); }
+      return;
+    }
+    const ins = [...els.fields.querySelectorAll('input[data-i]')], vals = ins.map(i => parseFloat(i.value.replace(',', '.')));
+    const ok = vals.every(Number.isFinite);
+    input.classList.toggle('bad', !Number.isFinite(parseFloat(input.value.replace(',', '.'))));
+    if (!ok) return;
+    const clipped = vals.map((x, i) => Math.max(0, Math.min(SPEC[model].f[i][1], x)));
+    const rgb = SPEC[model].to(clipped), c = rgbToHsv(clamp01(rgb.r), clamp01(rgb.g), clamp01(rgb.b));
+    if (c.s > 1e-4) h = c.h; s = c.s; v = c.v;
+    _sync({ skip: fromKey ? null : input });
+  }
+  const folded = (k) => pref('stepopt-cp-fold-' + k, k === 'presets' ? '1' : '0') === '1';
+  function _applyFold(k) {
+    const blk = popEl.querySelector('[data-row="' + k + '"]'), off = folded(k);
+    blk.classList.toggle('cp-fold', off);
+    blk.querySelector('.cp-sw-h').setAttribute('aria-expanded', off ? 'false' : 'true');
+  }
+  function _fold(k) { setPref('stepopt-cp-fold-' + k, folded(k) ? '0' : '1'); _applyFold(k); if (session) requestAnimationFrame(() => _position(session.anchor)); }
+  function _fillSwatches() {
+    const rows = { recent: recent(), scene: sceneColours(), presets: PRESETS };
+    for (const [k, list] of Object.entries(rows)) {
+      const blk = popEl.querySelector(`[data-row="${k}"]`), row = blk.querySelector('.cp-sw-row');
+      blk.hidden = !list.length;
+      blk.querySelector('.cp-sw-h em').textContent = list.length ? String(list.length) : '';
+      _applyFold(k);
+      row.innerHTML = list.map(c => `<button type="button" class="cp-sw" data-c="${c}" title="${c.toUpperCase()}" style="background:${c}"></button>`).join('');
+    }
+  }
+  function _copy(btn) {
+    const rgb = rgbNow();
+    const text = model === 'hex' ? hexNow().toUpperCase() : SPEC[model].css(SPEC[model].from(rgb));
+    const done = () => { btn.innerHTML = IC_OK; setTimeout(() => { btn.innerHTML = IC_COPY; }, 900); };
+    try { navigator.clipboard.writeText(text).then(done, done); } catch (_) { done(); }
+  }
+  async function _eyedrop() {
+    try {
+      const r = await new window.EyeDropper().open();
+      if (r && r.sRGBHex) { _histPush(); _setHex(r.sRGBHex); }
+    } catch (_) { /* cancelled */ }
+  }
+
+  // The colour of the material of the part under the pointer in the view (works in every browser).
+  let picking = false;
+  function _modelColourAt(e) {
+    try {
+      const c = $('canvas'), r = c.getBoundingClientRect();
+      pointer.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+      pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+      if (state.partsRoot) state.partsRoot.updateMatrixWorld(true);
+      const targets = [];
+      for (const q of state.parts) if (q && !q.deleted && q.visible && q.mesh) targets.push(q.mesh);
+      for (const g of state.instancedGroups) if (g.instanced) targets.push(g.instanced);
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObjects(targets, false)[0];
+      if (!hit) return null;
+      let m = hit.object.material;
+      if (Array.isArray(m)) m = m[hit.face && hit.face.materialIndex] || m[0];
+      return m && m.color ? '#' + m.color.getHexString() : null;
+    } catch (err) { console.warn('[colour picker] could not read the colour of the part:', err); return null; }
+  }
+  function _pickFromModel() {
+    if (picking || !popEl) return;
+    picking = true; document.documentElement.style.cursor = 'crosshair'; popEl.style.opacity = '.4';
+    const done = () => {
+      picking = false; document.documentElement.style.cursor = ''; if (popEl) popEl.style.opacity = '';
+      window.removeEventListener('pointerdown', down, true); window.removeEventListener('keydown', key, true);
+    };
+    const down = (e) => {
+      if (popEl.contains(e.target)) { done(); return; }
+      e.preventDefault(); e.stopPropagation();
+      const hex = _modelColourAt(e);
+      done();
+      const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); window.removeEventListener('click', swallow, true); };
+      window.addEventListener('click', swallow, true); setTimeout(() => window.removeEventListener('click', swallow, true), 400);
+      if (hex) { _histPush(); _setHex(hex); }
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(); } };
+    window.addEventListener('pointerdown', down, true); window.addEventListener('keydown', key, true);
   }
 
   function _position(anchor) {
@@ -47309,6 +48793,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     let left = ar.left - pr.width - 8;        // prefer left of anchor
     let top  = ar.top + ar.height / 2 - pr.height / 2;
     if (left < 8) left = ar.right + 8;        // fall back to right
+    if (left + pr.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - pr.width - 8);
     if (top + pr.height > window.innerHeight - 8) top = window.innerHeight - pr.height - 8;
     if (top < 8) top = 8;
     popEl.style.left = left + 'px';
@@ -47317,17 +48802,44 @@ setTimeout(() => _dndDecorateTree(), 0);
 
   function _onDocClick(e) {
     if (popEl && popEl.contains(e.target)) return;
-    // Clicking another swatch should re-open with new context, not close. The
-    // swatch handler runs after this in bubble phase and opens the picker
-    // again, which re-seeds session — let it through without canceling.
-    if (e.target.closest('#_mat-editor-popup .mat-swatch')) return;
-    // Auto-apply on outside click — change has been live-previewing the whole
-    // time, so commit is what the user expects. Esc still reverts.
+    // Clicking another swatch should re-open with new context, not close. The swatch handler runs after this in bubble
+    // phase and opens the picker again, which re-seeds session — let it through without canceling.
+    if (e.target.closest && e.target.closest('#_mat-editor-popup .mat-swatch, #mat-inspector [data-mi-colour]')) return;
+    // Auto-apply on outside click — change has been live-previewing the whole time, so commit is what the user expects. Esc still reverts.
     _commit();
+  }
+  // The picker has a small history of its own while it is open: each drag, typed colour, swatch or pipette is one step. Ctrl+Z /
+  // Ctrl+Y (and Ctrl+Shift+Z) walk through it and keep the picker open. They do not reach the app's own Undo, which would rebuild
+  // the material editor under the picker and close it.
+  function _histPush() {
+    if (!session) return;
+    const hs = session.hist || (session.hist = []);
+    const last = hs[hs.length - 1];
+    if (last && last.h === h && last.s === s && last.v === v) return;
+    hs.push({ h, s, v });
+    if (hs.length > 60) hs.shift();
+    session.redo = [];
+  }
+  function _histStep(back) {
+    if (!session) return;
+    const from = back ? (session.hist || []) : (session.redo || []);
+    const to = back ? (session.redo || (session.redo = [])) : (session.hist || (session.hist = []));
+    const st = from.pop();
+    if (!st) return;
+    to.push({ h, s, v });
+    h = st.h; s = st.s; v = st.v;
+    _sync();
   }
   function _onKeyDown(e) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _cancel(); }
     else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); _commit(); }
+    else if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const k = (e.key || '').toLowerCase();
+      if (k === 'z' || k === 'y') {
+        e.preventDefault(); e.stopPropagation();
+        _histStep(k === 'z' && !e.shiftKey);
+      }
+    }
   }
   function _onWindow() { if (session) _position(session.anchor); }
 
@@ -47336,39 +48848,41 @@ setTimeout(() => _dndDecorateTree(), 0);
     document.removeEventListener('keydown', _onKeyDown,    true);
     window.removeEventListener('resize',    _onWindow);
     window.removeEventListener('scroll',    _onWindow, true);
-    if (popEl) { popEl.classList.remove('show', 'cp-drag-sv', 'cp-drag-hue'); }
+    if (popEl) { popEl.classList.remove('show', 'cp-drag'); for (const e of popEl.querySelectorAll('.cp-hot')) e.classList.remove('cp-hot'); }
     document.documentElement.classList.remove('cp-dragging');
   }
-
   function _cancel() {
     if (!session) { _cleanup(); return; }
     try { session.callbacks?.onCancel?.(); } catch (_) {}
     session = null;
     _cleanup();
   }
-
   function _commit() {
     if (!session) { _cleanup(); return; }
-    const hex = rgbToHex(hsvToRgb(h, s, v));
+    const hex = hexNow();
     try { session.callbacks?.onCommit?.(hex); } catch (_) {}
+    pushRecent(hex);
     session = null;
     _cleanup();
   }
 
-  // The opener — used by the material editor swatches to route the picker's
-  // output into mat.color / mat.emissive / etc.
+  // The opener — used by the material editor swatches to route the picker's output into mat.color / mat.emissive / etc.
   // Puts the picker away without calling anyone back: for when what it was picking for is rebuilt or gone (the colour it
   // previewed is already on the material), so that nothing is ever written to a material the editor has let go of.
   window._closeColorPicker = function () { session = null; _cleanup(); };
-  window._openColorPickerForCallback = function (anchor, seedHex, callbacks) {
+  window._openColorPickerForCallback = function (anchor, seedHexIn, callbacks) {
     _buildPopover();
     session = { callbacks: callbacks || {}, anchor };
-    const rgb = hexToRgb(seedHex);
-    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    seedHex = parseHex(seedHexIn) || '#000000';
+    const rgb = hexToRgb(seedHex), hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
     h = hsv.h; s = hsv.s; v = hsv.v;
+    mode = pref('stepopt-cp-mode', 'square') === 'wheel' ? 'wheel' : 'square';
+    const m = pref('stepopt-cp-model', 'hex'); model = (m === 'hex' || SPEC[m]) ? m : 'hex';
+    _layout(); _buildFields(); _fillSwatches();
     popEl.classList.add('show');
     requestAnimationFrame(() => _position(anchor));
-    _syncFromHsv();
+    // the first look must not call the caller back with a colour: it is the one it already has
+    const cb = session.callbacks; session.callbacks = null; _sync(); session.callbacks = cb;
     setTimeout(() => {
       document.addEventListener('click',   _onDocClick,   true);
       document.addEventListener('keydown', _onKeyDown,    true);
@@ -49152,6 +50666,8 @@ setTimeout(() => _dndDecorateTree(), 0);
   document.getElementById('decimate-preview')?.addEventListener('click', _previewDecimate);
   // The line under the budget field: worked out again only when the budget or
   // the scene has changed.
+  // "2,731,301 → 149,996 tris" as a figure (the result large, the start muted), with an optional small line under it
+  const _planFigure = (from, to, sub) => `<span class="plan-nums"><span class="plan-from">${fmtNum(from)}</span><i class="plan-arrow">→</i><b class="plan-to">${fmtNum(to)}</b><span class="plan-unit">tris</span></span>${sub ? `<span class="plan-sub">${sub}</span>` : ''}`;
   let _budgetInfoKey = '';
   function _updateBudgetInfo() {
     const info = document.getElementById('budget-info'), link = document.getElementById('budget-preview');
@@ -49160,16 +50676,16 @@ setTimeout(() => _dndDecorateTree(), 0);
     const key = target + '|' + cur + '|' + state.parts.length;
     if (key === _budgetInfoKey) return;
     _budgetInfoKey = key;
-    let text = '', can = false;
+    let text = '', html = '', can = false;
     if (!cur) text = '';
     else if (!(target > 0)) text = 'Type a budget, for example 150k';
     else if (target >= cur) text = `The scene already has ${fmtNum(cur)} triangles`;
     else {
       const plan = _budgetPlan(target);
-      text = `${fmtNum(cur)} → about ${fmtNum(plan.est)} triangles · ${fmtNum(plan.jobs.length)} of ${fmtNum(plan.units.length)} meshes reduced`;
+      html = _planFigure(cur, plan.est, `${fmtNum(plan.jobs.length)} of ${fmtNum(plan.units.length)} meshes reduced`);
       can = plan.jobs.length > 0;
     }
-    info.textContent = text;
+    if (html) info.innerHTML = html; else info.textContent = text;
     if (link) link.hidden = !can;
   }
   setInterval(_updateBudgetInfo, 400);
@@ -50884,7 +52400,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     if (!info || !sel) return;
     let tris = 0, n = 0;
     for (const id of (state.selected || [])) { const p = getPart(id); if (p && !p.deleted && p.mesh) { tris += p.triCount || 0; n++; } }
-    let text = '';
+    let text = '', html = '';
     if (n > 0) {
       let after;
       if (sel.value === 'tol') after = null;
@@ -50893,9 +52409,11 @@ setTimeout(() => _dndDecorateTree(), 0);
         after = want > 0 ? Math.min(want, tris) : null;
       } else after = Math.round(tris * (1 - parseFloat(sel.value)));
       text = sel.value === 'tol' ? `${fmtNum(tris)} triangles selected; as many as possible go`
-        : after == null ? `${fmtNum(tris)} triangles selected` : `${fmtNum(tris)} → about ${fmtNum(after)} triangles`;
+        : after == null ? `${fmtNum(tris)} triangles selected` : '';
+      html = (after != null && sel.value !== 'tol') ? _planFigure(tris, after, `${fmtNum(n)} ${n === 1 ? 'part' : 'parts'} selected`) : '';
     }
-    if (info.textContent !== text) info.textContent = text;
+    if (html) { if (info.dataset.h !== html) { info.dataset.h = html; info.innerHTML = html; } }
+    else { info.dataset.h = ''; if (info.textContent !== text) info.textContent = text; }
     const link = document.getElementById('decimate-preview');
     if (link) link.hidden = !(n > 0);
   }
@@ -50908,7 +52426,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const $id = (id) => document.getElementById(id);
     const sec = (n) => document.querySelector(`.section-cmd[data-cmd="${n}"]`);
     let _mr = null;
-    const lib = async () => _mr || (_mr = await import('./meshrepair.js?v=2'));
+    const lib = async () => _mr || (_mr = await import('./meshrepair.js?v=4'));
     const parseNum = (el, d) => { const v = parseFloat(String(el && el.value).replace(',', '.')); return isFinite(v) ? v : d; };
 
     // A row of choices (.cmd-seg) that sets one field of `o`.
@@ -51066,6 +52584,182 @@ setTimeout(() => _dndDecorateTree(), 0);
       $id('rp-run')?.addEventListener('click', run);
       root.addEventListener('cmd-open', () => { msg = ''; show(); });
       let seen = -1; setInterval(() => { if (document.hidden || root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
+      show();
+    })();
+
+    // ─────────────────────────────────────────── Fix normals
+    // Reverse (every face of the parts turned round), Align (neighbours made to agree, closed shapes turned outward: the
+    // arithmetic is `orient` of meshrepair.js) and Highlight (back faces painted red: `_backFaceTint`, a view setting only).
+    (function _normals() {
+      const root = sec('normals'); if (!root) return;
+      const o = { scope: 'sel', outward: true };
+      const info = $id('nm-info');
+      const hl = $id('nm-hl');
+      const paintScope = seg(root, 'nm-scope', o, 'scope', 'scope', false, () => { msg = ''; show(); });
+      const isHl = () => _backFaceTint.value > 0.5;
+      const setHl = (on) => { _backFaceTint.value = (on === undefined ? !isHl() : !!on) ? 1 : 0; if (hl) hl.checked = isHl(); requestRender(); };
+      hl?.addEventListener('change', () => setHl(hl.checked));
+      $id('nm-out')?.addEventListener('change', (e) => { o.outward = e.target.checked; });
+      let msg = '', busy = false;
+      function show() {
+        paintScope();
+        if (hl) hl.checked = isHl();
+        if (!info) return;
+        if (msg) { info.textContent = msg; info.classList.add('is-result'); return; }
+        info.classList.remove('is-result');
+        const n = meshParts(o.scope).length;
+        info.textContent = o.scope === 'sel' && !state.selected.size ? 'Select the parts to change, or work on the whole scene.' : n ? `${shortCount(n)} ${n === 1 ? 'part' : 'parts'} will be changed. Turn on Highlight to see which faces point away.` : 'There is nothing here to change.';
+      }
+      const reversed = (g) => {
+        const out = g.clone(), idx = out.index;
+        if (idx) { const a = idx.array; for (let i = 0; i + 2 < a.length; i += 3) { const t = a[i + 1]; a[i + 1] = a[i + 2]; a[i + 2] = t; } }
+        else for (const k in out.attributes) {
+          const at = out.attributes[k]; if (at.isInterleavedBufferAttribute) continue;
+          const s = at.itemSize, a = at.array;
+          for (let i = 0; i + 2 < at.count; i += 3) for (let c = 0; c < s; c++) { const x = a[(i + 1) * s + c]; a[(i + 1) * s + c] = a[(i + 2) * s + c]; a[(i + 2) * s + c] = x; }
+        }
+        const n = out.attributes.normal;
+        if (n && !n.isInterleavedBufferAttribute) for (let i = 0; i < n.array.length; i++) n.array[i] = -n.array[i];
+        out.computeBoundingBox(); out.computeBoundingSphere();
+        return out;
+      };
+      // Turn the faces of one geometry to agree. Returns { out, flipped } or null when nothing needed turning.
+      async function aligned(g, M, U) {
+        const src = { position: arr3(g.attributes.position), uv: g.attributes.uv ? arr3(g.attributes.uv) : null, normal: g.attributes.normal ? arr3(g.attributes.normal) : null,
+          index: g.index ? g.index.array : null, groups: g.groups && g.groups.length ? g.groups : null };
+        const ropts = { weld: true, degenerate: false, orient: true, outward: o.outward, tol: 0 };
+        let r = null;
+        if (_MeshWorkers.available()) {
+          const copy = (a) => (a ? a.slice() : a);
+          const reply = await _MeshWorkers.run(() => {
+            const s2 = { position: copy(src.position), uv: copy(src.uv), normal: copy(src.normal), index: copy(src.index), groups: src.groups ? src.groups.map(x => ({ start: x.start, count: x.count, materialIndex: x.materialIndex })) : null };
+            const transfer = [s2.position.buffer]; if (s2.uv) transfer.push(s2.uv.buffer); if (s2.normal) transfer.push(s2.normal.buffer); if (s2.index) transfer.push(s2.index.buffer);
+            return { msg: { op: 'repair', src: s2, opts: ropts }, transfer };
+          });
+          if (reply && reply.ok) r = reply.res;
+        }
+        if (!r) r = M.repairMesh(src, ropts);
+        if (!r.stats.flipped || !r.index.length) return null;
+        let out = new THREE.BufferGeometry();
+        out.setAttribute('position', new THREE.BufferAttribute(r.position, 3));
+        if (r.uv) out.setAttribute('uv', new THREE.BufferAttribute(r.uv, 2));
+        out.setIndex(new THREE.BufferAttribute(r.stats.vertsAfter > 65535 ? r.index : Uint16Array.from(r.index), 1));
+        for (const gr of r.groups) out.addGroup(gr.start, gr.count, gr.materialIndex);
+        // the old normals no longer match the turned faces: work them out again, sharp where faces meet at a steep angle
+        if (U && r.groups.length < 2) { try { out = U.mergeVertices(U.toCreasedNormals(out, 30 * Math.PI / 180)); } catch (_) { out.computeVertexNormals(); } }
+        else out.computeVertexNormals();
+        out.computeBoundingBox(); out.computeBoundingSphere();
+        return { out, flipped: r.stats.flipped };
+      }
+      async function work(label, kind) {
+        if (busy) return;
+        const targets = meshParts(o.scope);
+        if (!targets.length) { toast(label, o.scope === 'sel' ? 'Select the parts first' : 'There is nothing to change', 'info', 3000); return; }
+        busy = true;
+        const btns = [$id('nm-flip'), $id('nm-align'), $id('nm-primary')]; for (const b of btns) if (b) b.disabled = true;
+        const done = new Map(), undoItems = [], failed = [];
+        let parts = 0, faces = 0, last = performance.now();
+        setLoader(true, label + '…', `${shortCount(targets.length)} ${targets.length === 1 ? 'part' : 'parts'}`);
+        try {
+          const M = kind === 'align' ? await lib() : null;
+          let U = null;
+          if (kind === 'align') { try { U = await import('three/addons/utils/BufferGeometryUtils.js'); } catch (_) {} }
+          for (let i = 0; i < targets.length; i++) {
+            const p = targets[i], g = p.mesh.geometry;
+            let res = done.get(g);
+            if (res === undefined) {
+              res = null;
+              try {
+                if (kind === 'flip') { const out = reversed(g); res = { out, hash: newHash('nm', out), flipped: (g.index ? g.index.count : g.attributes.position.count) / 3 }; }
+                else { const a = await aligned(g, M, U); if (a) res = { out: a.out, hash: newHash('nm', a.out), flipped: a.flipped }; }
+              } catch (e) { failed.push(p.name + ' (' + (e.message || e) + ')'); }
+              done.set(g, res);
+            }
+            if (res) { undoItems.push(swapGeometry(p, res.out, res.hash)); parts++; faces += res.flipped; }
+            if (performance.now() - last > 60) { setLoaderProgress(Math.round((i + 1) / targets.length * 100)); await _nextFrame(); last = performance.now(); }
+          }
+        } finally { setLoader(false); busy = false; for (const b of btns) if (b) b.disabled = false; }
+        refreshAfter(label, undoItems);
+        msg = parts
+          ? (kind === 'flip' ? `${shortCount(parts)} ${parts === 1 ? 'part' : 'parts'} reversed.` : `${shortCount(faces)} ${faces === 1 ? 'face' : 'faces'} turned on ${shortCount(parts)} ${parts === 1 ? 'part' : 'parts'}.`)
+          : 'Every face already points the right way.';
+        if (failed.length) { msg += ` ${failed.length} could not be changed (see the log).`; console.warn('[normals] failed:', failed); }
+        toast(label, msg, parts ? 'success' : 'info', 5000);
+        show();
+      }
+      // Look only: which parts have faces that disagree, pieces that are inside out, or shading normals against their faces.
+      async function find() {
+        if (busy) return;
+        const targets = meshParts(o.scope);
+        if (!targets.length) { toast('Find problems', o.scope === 'sel' ? 'Select the parts first' : 'There is nothing to look at', 'info', 3000); return; }
+        busy = true;
+        const btns = [$id('nm-flip'), $id('nm-align'), $id('nm-primary'), $id('nm-find')]; for (const b of btns) if (b) b.disabled = true;
+        const done = new Map(), bad = [], failed = [];
+        const t = { parts: targets.length, inside: 0, mixed: 0, mixedFaces: 0, shading: 0, nonManifold: 0, open: 0, skipped: 0 };
+        let last = performance.now();
+        setLoader(true, 'Looking at the normals…', `${shortCount(targets.length)} ${targets.length === 1 ? 'part' : 'parts'}`);
+        try {
+          const M = await lib();
+          for (let i = 0; i < targets.length; i++) {
+            const p = targets[i], g = p.mesh.geometry;
+            let a = done.get(g);
+            if (a === undefined) {
+              a = null;
+              try {
+                const src = { position: arr3(g.attributes.position), normal: g.attributes.normal ? arr3(g.attributes.normal) : null, index: g.index ? g.index.array : null };
+                if (_MeshWorkers.available()) {
+                  const copy = (x) => (x ? x.slice() : x);
+                  const reply = await _MeshWorkers.run(() => {
+                    const s2 = { position: copy(src.position), normal: copy(src.normal), index: copy(src.index) };
+                    const transfer = [s2.position.buffer]; if (s2.normal) transfer.push(s2.normal.buffer); if (s2.index) transfer.push(s2.index.buffer);
+                    return { msg: { op: 'normals', src: s2, opts: {} }, transfer };
+                  });
+                  if (reply && reply.ok) a = reply.res;
+                }
+                if (!a) a = M.analyseNormals(src);
+              } catch (e) { failed.push(p.name + ' (' + (e.message || e) + ')'); }
+              done.set(g, a);
+            }
+            if (a) {
+              if (a.skipped) t.skipped++;
+              if (a.insideOut) t.inside++;
+              if (a.mixed) { t.mixed++; t.mixedFaces += a.mixedFaces; }
+              if (a.shadingFlipped > a.tris * 0.5) t.shading++;
+              if (a.nonManifold) t.nonManifold++;
+              if (a.open) t.open++;
+              if (a.bad) bad.push(p.partId);
+            }
+            if (performance.now() - last > 60) { setLoaderProgress(Math.round((i + 1) / targets.length * 100)); await _nextFrame(); last = performance.now(); }
+          }
+        } finally { setLoader(false); busy = false; for (const b of btns) if (b) b.disabled = false; }
+        const n = (k, w1, wn) => `${shortCount(k)} ${k === 1 ? w1 : wn}`;
+        const bits = [];
+        if (t.inside) bits.push(`${n(t.inside, 'part is', 'parts are')} inside out`);
+        if (t.mixed) bits.push(`${n(t.mixedFaces, 'face points', 'faces point')} against ${t.mixed === 1 ? 'its' : 'their'} neighbours on ${n(t.mixed, 'part', 'parts')}`);
+        if (t.shading) bits.push(`${n(t.shading, 'part has', 'parts have')} shading normals against the faces (Recompute normals fixes that)`);
+        if (t.nonManifold) bits.push(`${n(t.nonManifold, 'part has', 'parts have')} edges shared by three or more faces (the direction there cannot be told)`);
+        if (t.skipped) bits.push(`${n(t.skipped, 'very large part was', 'very large parts were')} not looked at`);
+        if (bad.length) { state.selected.clear(); for (const id of bad) state.selected.add(id); try { applySelectionColors(); refreshPropertiesPanel(); updateGizmo(); rebuildTree(); } catch (_) {} requestRender(); }
+        msg = bad.length ? `${n(bad.length, 'part has', 'parts have')} a problem and ${bad.length === 1 ? 'is' : 'are'} selected: ${bits.join('; ')}.`
+          : (bits.length ? bits.join('; ') + '.' : `${n(t.parts, 'part', 'parts')} looked at: every face points the right way.`);
+        if (failed.length) { msg += ` ${failed.length} could not be looked at (see the log).`; console.warn('[normals] failed:', failed); }
+        toast('Find problems', msg, bad.length ? 'warn' : 'success', 7000);
+        show();
+      }
+      $id('nm-find')?.addEventListener('click', find);
+      const flip = () => work('Reverse normals', 'flip'), align = () => work('Align normals', 'align');
+      $id('nm-flip')?.addEventListener('click', flip);
+      $id('nm-align')?.addEventListener('click', align);
+      $id('nm-primary')?.addEventListener('click', align);       // Enter and the footer button
+      root.addEventListener('cmd-open', () => { msg = ''; show(); });
+      let seen = -1; setInterval(() => { if (document.hidden || root.hidden) return; const n = state.selected.size; if (n !== seen) { seen = n; msg = ''; show(); } }, 400);
+      // For the search: the same actions without the card, on the selected parts (or the whole scene when nothing is selected).
+      window.__moNormals = {
+        reverse: () => { o.scope = state.selected.size ? 'sel' : 'all'; return flip(); },
+        align: () => { o.scope = state.selected.size ? 'sel' : 'all'; return align(); },
+        find: () => { o.scope = state.selected.size ? 'sel' : 'all'; return find(); },
+        highlight: setHl, isHighlighting: isHl,
+      };
       show();
     })();
 
@@ -51576,6 +53270,7 @@ setTimeout(() => _dndDecorateTree(), 0);
 
   const ver = $id('wl-ver');
   if (ver) ver.textContent = ($id('brand-menu-ver')?.textContent || '').trim();
+  { const sv = $id('side-ver'); if (sv) sv.textContent = ($id('brand-menu-ver')?.textContent || '').trim(); }      // (the same version, small, at the bottom of the right sidebar)
 
   $id('welcome-import')?.addEventListener('click', () => {
     if (!state.parts.some(p => !p.deleted)) { run('open'); return; }   // nothing to import into yet
@@ -51688,6 +53383,10 @@ setTimeout(() => _dndDecorateTree(), 0);
   const _undoOne = undoLast, _redoOne = redoLast;
   undoLast = function () {
     if (_Tasks.busy()) { try { toast('Undo', 'Wait until the running step has finished', 'info', 2000); } catch (_) {} return; }
+    // The material editor records its edits as one history step when it closes or moves to another material. While it is open
+    // an edit (a colour from the picker, a slider) is not in the history yet, and Undo would go past it to an older action.
+    // The pending edit is recorded first, and then it is what is undone.
+    try { const st = (typeof _matEditorState !== 'undefined') ? _matEditorState : null; if (st && st.flush) st.flush(true); } catch (_) {}
     for (let guard = 0; guard < 24; guard++) {
       const top = state.history[state.history.length - 1];
       _undoOne.apply(this, arguments);
@@ -52555,7 +54254,7 @@ const _Elements = (() => {
   let toldAt = 0;
   function needPart() {      // nothing is selected: say how to get going (not on every click)
     if (state.selected.size) return false;
-    if (performance.now() - toldAt > 2500) { toldAt = performance.now(); toast('Select a part first', 'Press 4 for Model mode, click the part to work on, then press 1, 2 or 3 again', 'info', 4200); }
+    if (performance.now() - toldAt > 2500) { toldAt = performance.now(); toast('Select a part first', '', 'info', 2200); }
     return true;
   }
   function pick(ev, asLoop) {
@@ -53410,7 +55109,7 @@ const _Elements = (() => {
     }
     syncToolButton();
     { const k = active + '|' + mode + '|' + tool + '|' + (total() > 0); if (k !== tipsKey) { tipsKey = k; try { _updateVpHint(); } catch (_) {} } }      // (the tips at the bottom right follow the mode and the tool)
-    const bar = $q('el-bar'); if (bar) bar.hidden = !active;
+    _elBarShow($q('el-bar'), active);
     // Weld has a number of its own, so it is a floating card (Edit mesh's own card, which is drawn only for this): the bar's Weld button
     // opens and closes it, and it goes when the mode is one Weld does not work on
     const canWeld = mode === 'points' || mode === 'edges';
@@ -53577,13 +55276,16 @@ const _Elements = (() => {
     // width times the tangent of the angle between the view and the surface's normal, and a dot only that far in front is cut by it
     // where the surface rises. So it is lifted by that much, and a point on a surface seen edge-on is lifted most.
     const facing = T.dot(wn, view), c = T.abs(facing);
-    const tanT = T.min(T.sqrt(T.max(T.float(1).sub(c.mul(c)), 0.0)).div(T.max(c, 0.08)), 12.0);
+    const tanT = T.min(T.sqrt(T.max(T.float(1).sub(c.mul(c)), 0.0)).div(T.max(c, 0.08)), 4.0);
     // (a sprite is `scale` times its depth wide. A point whose surface looks away from the camera is not lifted: the lift grows
     // with the distance, and from far away it carried the points of a thin part's far side through to the near one.)
-    const lift = d.mul(scale * 0.5 * 1.3).mul(tanT).mul(T.smoothstep(-0.45, -0.15, facing));
+    const lift = d.mul(scale * 0.5 * 0.5).mul(tanT).mul(T.smoothstep(-0.45, -0.15, facing));
     const pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL * 2)).add(lift);
     mat.positionNode = wp.add(view.mul(pull));
-    mat.colorNode = T.vec4(T.vec3(rgb[0], rgb[1], rgb[2]), T.smoothstep(0.36, 0.5, T.uv().sub(0.5).length()).oneMinus());      // a disc with a soft edge
+    // A point on the far side of a thin part (its surface looks away from the camera) is not drawn at all: the pull toward the
+    // camera above is larger than a thin plate is thick, so it would show through. Points on the rim (surface edge-on) stay.
+    const seen = T.smoothstep(-0.2, 0.0, facing);
+    mat.colorNode = T.vec4(T.vec3(rgb[0], rgb[1], rgb[2]), T.smoothstep(0.36, 0.5, T.uv().sub(0.5).length()).oneMinus().mul(seen));      // a disc with a soft edge
     mat.scaleNode = T.float(scale);
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = order; sprite.frustumCulled = false; sprite.count = 0; sprite.visible = false; sprite.raycast = () => {};
