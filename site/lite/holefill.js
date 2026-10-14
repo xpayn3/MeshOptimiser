@@ -243,6 +243,8 @@ export function fillFlatHoles(positions, index, opts = {}) {
   const loops = [];                                     // { r, hes:[half-edge…], size }
   const bigLoops = [];                                  // openings over the size limit (kept for a floating wall that sits in one: step 9)
   const loopOfHe = new Int32Array(T * 3).fill(-1);      // owner-side half-edge → loop
+  const outlines = [];                                  // the outline of each region: { r, f: { hes, size, area2 }, nBoundary }
+  const ringPending = [];                               // openings over the size limit that might be a ring groove (see below)
   const rimHes = [];
   const onRim = new Uint8Array(T * 3);                  // 1 = boundary half-edge of the region in hand, 2 = already walked
   for (let r = 0; r < R; r++) {
@@ -329,9 +331,10 @@ export function fillFlatHoles(positions, index, opts = {}) {
     }
     // counter-clockwise about the normal: the face's own outline (the largest
     // one, should a face ever report two)
-    let outline = 0;
-    for (const f of found) if (f.area2 > 0 && f.size > outline) outline = f.size;
+    let outline = 0, outlineF = null;
+    for (const f of found) if (f.area2 > 0 && f.size > outline) { outline = f.size; outlineF = f; }
     if (!(outline > 0)) continue;
+    outlines.push({ r, f: outlineF, nBoundary });
     for (const f of found) {
       if (!(f.area2 < 0)) continue;                     // clockwise loops are the openings
       const wide = f.size > outline * maxFaceRatio && f.size > diag * maxPartRatio;
@@ -340,17 +343,87 @@ export function fillFlatHoles(positions, index, opts = {}) {
         if (opts.floating === true) bigLoops.push({ r, hes: f.hes, size: f.size, basis: [ux, uy, uz, vx, vy, vz] });
         // The far end of a countersink or a flared hole is wider than the limit, though the hole is not: such an opening is kept as a
         // boundary (and is closed with the hole when the hole is taken), never as the start of one.
+        let bigId = -1;
         if (f.size <= maxSize * bigFactor && !wide) {
-          const id = loops.length;
+          const id = bigId = loops.length;
           loops.push({ r, hes: f.hes, size: f.size, basis: [ux, uy, uz, vx, vy, vz], state: 0, big: true });
           for (const hh of f.hes) loopOfHe[hh] = id;
         }
+        // a ring groove round a flush island may still be a narrow feature: judged by its width after all the regions are known
+        if (!wide && opts.rings !== false) ringPending.push({ r, hes: f.hes, size: f.size, area2: f.area2, basis: [ux, uy, uz, vx, vy, vz], bigId });
         continue;
       }
       if (wide) { result.skipped.partOfShape++; continue; }
       const id = loops.length;
       loops.push({ r, hes: f.hes, size: f.size, basis: [ux, uy, uz, vx, vy, vz], state: 0 });
       for (const hh of f.hes) loopOfHe[hh] = id;
+    }
+  }
+  // A ring groove (an O-ring seat, an engraved circle, a recessed ring) round an island that is flush with the face: its outer loop is
+  // wide, but the feature is not, it is as wide as the groove. When the opening encloses exactly one island, a region in the same
+  // plane, and the groove's mean width is within the limit, it is a candidate like any hole and goes with its island in one piece (the
+  // island's triangles are taken out with it and the cap covers it). What the island carries is checked by the flood below.
+  if (ringPending.length && ringPending.length * outlines.length <= 4e7) {          // (a bound on the work: openings x outlines)
+    const perimeter = (hes) => {
+      let sum = 0;
+      for (let i = 0; i < hes.length; i++) {
+        const a = I[hes[i]], b = I[hes[(i + 1) % hes.length]];
+        sum += Math.hypot(P[a * 3] - P[b * 3], P[a * 3 + 1] - P[b * 3 + 1], P[a * 3 + 2] - P[b * 3 + 2]);
+      }
+      return sum;
+    };
+    // box of each outline, to throw out most of the pairs cheaply
+    for (const o of outlines) {
+      let lx = Infinity, ly = Infinity, lz = Infinity, hx = -Infinity, hy = -Infinity, hz = -Infinity;
+      for (const h of o.f.hes) {
+        const v = I[h], x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
+        if (x < lx) lx = x; if (x > hx) hx = x; if (y < ly) ly = y; if (y > hy) hy = y; if (z < lz) lz = z; if (z > hz) hz = z;
+      }
+      o.box = [lx, ly, lz, hx, hy, hz];
+    }
+    const eps = distTol * 4;
+    for (const rp of ringPending) {
+      const [ux, uy, uz, vx, vy, vz] = rp.basis;
+      let lx = Infinity, ly = Infinity, lz = Infinity, hx = -Infinity, hy = -Infinity, hz = -Infinity;
+      const n = rp.hes.length, xs = new Float64Array(n), ys = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        const v = I[rp.hes[i]], x = P[v * 3], y = P[v * 3 + 1], z = P[v * 3 + 2];
+        if (x < lx) lx = x; if (x > hx) hx = x; if (y < ly) ly = y; if (y > hy) hy = y; if (z < lz) lz = z; if (z > hz) hz = z;
+        xs[i] = x * ux + y * uy + z * uz; ys[i] = x * vx + y * vy + z * vz;
+      }
+      const inside = (px, py) => {
+        let c = false;
+        for (let i = 0, j = n - 1; i < n; j = i++) {
+          if ((ys[i] > py) !== (ys[j] > py) && px < (xs[j] - xs[i]) * (py - ys[i]) / (ys[j] - ys[i]) + xs[i]) c = !c;
+        }
+        return c;
+      };
+      const s0 = rSeed[rp.r], v0 = I[rp.hes[0]];
+      const d0 = nx[s0] * P[v0 * 3] + ny[s0] * P[v0 * 3 + 1] + nz[s0] * P[v0 * 3 + 2];
+      let island = null, count = 0;
+      for (const o of outlines) {
+        if (o.r === rp.r || o.f.area2 >= -rp.area2 * 0.999) continue;                // (it is the face itself, or larger than the opening)
+        const b = o.box;
+        if (b[0] < lx - eps || b[1] < ly - eps || b[2] < lz - eps || b[3] > hx + eps || b[4] > hy + eps || b[5] > hz + eps) continue;
+        const s1 = rSeed[o.r];
+        if (nx[s1] * nx[s0] + ny[s1] * ny[s0] + nz[s1] * nz[s0] < cosTol) continue;   // (same way up and the same plane)
+        const w = I[o.f.hes[0]];
+        if (Math.abs(nx[s0] * P[w * 3] + ny[s0] * P[w * 3 + 1] + nz[s0] * P[w * 3 + 2] - d0) > eps) continue;
+        const m = I[o.f.hes[o.f.hes.length >> 1]];
+        if (!inside(P[w * 3] * ux + P[w * 3 + 1] * uy + P[w * 3 + 2] * uz, P[w * 3] * vx + P[w * 3 + 1] * vy + P[w * 3 + 2] * vz)) continue;
+        if (!inside(P[m * 3] * ux + P[m * 3 + 1] * uy + P[m * 3 + 2] * uz, P[m * 3] * vx + P[m * 3 + 1] * vy + P[m * 3 + 2] * vz)) continue;
+        count++; island = o;
+        if (count > 1) break;
+      }
+      if (count !== 1) continue;
+      const per = (perimeter(rp.hes) + perimeter(island.f.hes)) / 2;
+      const width = per > 0 ? (-rp.area2 - island.f.area2) / 2 / per : Infinity;       // mean width of the groove
+      if (!(width > 0) || width > maxSize) continue;
+      result.skipped.tooLarge--;
+      if (rp.bigId >= 0) { const L = loops[rp.bigId]; L.big = false; L.sortSize = L.size; L.size = Math.max(width, 0); L.island = island.r; continue; }
+      const id = loops.length;
+      loops.push({ r: rp.r, hes: rp.hes, size: width, sortSize: rp.size, basis: rp.basis, state: 0, island: island.r });
+      for (const hh of rp.hes) loopOfHe[hh] = id;
     }
   }
   const removed = new Uint8Array(T);
@@ -369,7 +442,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
   const stamp = new Int32Array(T);                      // 0 = unvisited, else visit id
   const limit = maxSize * depthFactor;
   let visit = 0;
-  const bySize = loops.map((_, i) => i).filter(i => !loops[i].big).sort((a, b) => loops[b].size - loops[a].size);
+  const bySize = loops.map((_, i) => i).filter(i => !loops[i].big).sort((a, b) => (loops[b].sortSize || loops[b].size) - (loops[a].sortSize || loops[a].size));
   for (const L of bySize) {
     if (loops[L].state) continue;
     visit++;
@@ -387,6 +460,12 @@ export function fillFlatHoles(positions, index, opts = {}) {
       }
     };
     seed(L);
+    // a ring groove goes with its island: the island's triangles are part of what the cap covers, and what lies behind its own openings
+    // is followed from there
+    if (loops[L].island !== undefined) {
+      const ir = loops[L].island;
+      for (let k = rStart[ir]; k < rEnd[ir]; k++) { const u = order[k]; if (stamp[u] !== visit) { stamp[u] = visit; S.push(u); } }
+    }
     let q = 0;
     const pending = [];
     for (;;) {
@@ -449,7 +528,19 @@ export function fillFlatHoles(positions, index, opts = {}) {
         const s = rSeed[lp.r];
         const v = I[lp.hes[0]];
         const side = nx[s] * (cx - P[v * 3]) + ny[s] * (cy - P[v * 3 + 1]) + nz[s] * (cz - P[v * 3 + 2]);
-        if (!(side < -distTol * 4)) { reason = 'raised'; break; }
+        if (!(side < -distTol * 4)) {
+          // The middle of a shallow groove with flush parts in it (a fillet, a ring left standing at the face's level) lies on the
+          // face's plane, so the middle says nothing. What decides then is the reach: nothing rises above the plane, and it sinks below.
+          let dLo = 0, dHi = 0;
+          for (const t of S) {
+            for (let c = 0; c < 3; c++) {
+              const w = I[t * 3 + c];
+              const d = nx[s] * (P[w * 3] - P[v * 3]) + ny[s] * (P[w * 3 + 1] - P[v * 3 + 1]) + nz[s] * (P[w * 3 + 2] - P[v * 3 + 2]);
+              if (d < dLo) dLo = d; if (d > dHi) dHi = d;
+            }
+          }
+          if (!(dHi <= distTol * 8 && dLo < -distTol * 8)) { reason = 'raised'; break; }
+        }
       }
       // A sheet with one face wound the wrong way round: the wall of a hole through it lies below one face and "above" the other, but it
       // lies between the two parallel faces all the same, and that is a hole.
@@ -549,7 +640,7 @@ export function fillFlatHoles(positions, index, opts = {}) {
       // is a collar standing on one face (raised, seen from there) and a
       // plain hole on the other, and it must not be written off because the
       // collar's side happened to come first.
-      if ((reason === 'leaking' || reason === 'tooDeep') && opts.seal === true && !loops[L].big && trySeal(L)) continue;
+      if ((reason === 'leaking' || reason === 'tooDeep') && opts.seal === true && !loops[L].big && loops[L].island === undefined && trySeal(L)) continue;
       loops[L].state = 2;
       result.skipped[reason] = (result.skipped[reason] || 0) + 1;
       if (opts.debug) (result.skippedList = result.skippedList || []).push({ reason, size: loops[L].size, tris: S.length, caps: capLoops.length, ext: [bx1 - bx0, by1 - by0, bz1 - bz0] });

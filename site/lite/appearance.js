@@ -26,6 +26,8 @@
   };
   var FONTS = {
     inter:  { label: 'Inter',  stack: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
+    geist:  { label: 'Geist',  stack: "'Geist','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
+    grotesk: { label: 'Space Grotesk', stack: "'Space Grotesk','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
     system: { label: 'System', stack: "system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" },
     mono:   { label: 'Mono',   stack: "ui-monospace,'Cascadia Mono','SF Mono',Menlo,Consolas,monospace" },
     serif:  { label: 'Serif',  stack: "'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif" }

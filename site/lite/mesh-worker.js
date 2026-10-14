@@ -8,6 +8,10 @@
 //   { op: 'simplify', positions, index, groups, keep, url, attrs } → index ranges per material group,
 //                                                                  and the error estimate (see simplify-core.js)
 //   { op: 'simplify', …, tol } instead of keep: as far as no point moves more than `tol` (in the mesh's units)
+//   { op: 'simplify', …, smart: true, threeUrl, normals } (Quick remesh), after Blender's way of reducing: the flat faces are dissolved
+//                                                         (Planar) and cut with the fewest, even triangles before the simplifier
+//                                                         (Collapse) runs, so its budget goes to the curved surface, and again after
+//                                                         it (Beautify), so a flat face it reduced is not left as a fan
 //
 //   { op: 'repair',   src: { position, uv?, normal?, index?, groups? }, opts } → what repairMesh returns (meshrepair.js)
 //   { op: 'ngons',    positions, index, angle, poly }       → the outlines of the polygons (wirelines.js)
@@ -17,13 +21,14 @@
 //
 // Every reply carries the request's id and ok: true / false.
 
-import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=23';
+import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=27';
 import { reduceIndex } from './simplify-core.js?v=3';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=2';
 import { repairMesh } from './meshrepair.js?v=2';
 import { findRepeats } from './repeats.js?v=1';
 import { buildTopology, pairQuads, buildPolygons, outlineLines } from './meshedit.js?v=5';
 import { untriangulate, evenTriangles } from './untriangulate.js?v=10';
+import { unsubdivide } from './unsubdivide.js?v=1';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
 // then in the middle of one. (Three more passes at most; each is a fraction of the first.)
 function untriangulatePasses(positions, index, opts) {
@@ -39,6 +44,24 @@ function untriangulatePasses(positions, index, opts) {
     r = r2;
   }
   return r;
+}
+
+// What Quick remesh asks of Untriangulate (Blender's Planar decimate and Beautify): faces that are flat to a degree and shade the same
+// way are joined and cut again with the fewest triangles, flipped to be as even as their points allow. Before the simplifier, at the
+// levels that take away half or more, points on faces that are flat to 3 degrees and on straight runs go too (a limited dissolve).
+function smartOpts(m, triangulate, before) {
+  const dissolve = before && m.keep <= 0.5;
+  return { angleDeg: 1, normals: m.normals || null, triangulate, normalTol: 5, flip: true, tolerance: 0, straight: dissolve, limitDeg: dissolve ? 3 : 0 };
+}
+
+function bboxDiag(P) {
+  let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < P.length; i += 3) {
+    if (P[i] < x0) x0 = P[i]; if (P[i] > x1) x1 = P[i];
+    if (P[i + 1] < y0) y0 = P[i + 1]; if (P[i + 1] > y1) y1 = P[i + 1];
+    if (P[i + 2] < z0) z0 = P[i + 2]; if (P[i + 2] > z1) z1 = P[i + 2];
+  }
+  return Math.hypot(x1 - x0, y1 - y0, z1 - z0);
 }
 
 let simplifier = null;          // meshoptimizer's simplifier, loaded on first use
@@ -107,11 +130,38 @@ self.onmessage = async (e) => {
         }
         const target = Math.max(3, Math.floor((sub.length / 3) * m.keep) * 3);
         let idx;
-        if (sub.length <= target) idx = sub.slice();
+        // Smart: the first cleanup moves nothing (or, at the stronger levels, only what a limited dissolve may: points on faces that
+        // are flat to a few degrees), and the second moves nothing, so the share asked for is still measured against the part as it
+        // was. Anything that goes wrong in them leaves the plain path to do the work.
+        let work = sub;
+        if (m.smart) {
+          try {
+            const c = untriangulatePasses(m.positions, sub, smartOpts(m, await getTriangulator(m.threeUrl), true));
+            if (c && c.index.length < sub.length) work = c.index;
+          } catch (_) { work = sub; }
+          // Un-Subdivide (Blender's): every second line of a ring grid goes (a cylinder, a bellows), as often as the level asks for and
+          // the shape allows. A pass that would take it far under the level is not made.
+          try {
+            const tolFrac = m.keep <= 0.1 ? 0.015 : m.keep <= 0.25 ? 0.008 : m.keep <= 0.5 ? 0.004 : 0.002;
+            const dg = bboxDiag(m.positions);
+            for (let pass = 0; pass < 4 && work.length > target * 1.15; pass++) {
+              const u = unsubdivide(m.positions, work, { tol: dg * tolFrac });
+              if (!u || u.index.length >= work.length || u.index.length < target * 0.6) break;
+              work = u.index;
+            }
+          } catch (_) { /* the passes made so far stand */ }
+        }
+        if (work.length <= target) idx = work.slice();
         else {
-          const r = reduceIndex(S, sub, m.positions, target, m.attrs || null, m.sharp > 0 ? { sharp: m.sharp } : null);
+          const r = reduceIndex(S, work, m.positions, target, m.attrs || null, m.sharp > 0 ? { sharp: m.sharp } : null);
           idx = r.idx.slice();                     // off the WASM heap, into a buffer of its own
           err = Math.max(err, r.err);
+          if (m.smart) {
+            try {
+              const c2 = untriangulatePasses(m.positions, idx, smartOpts(m, await getTriangulator(m.threeUrl), false));
+              if (c2 && c2.index.length <= idx.length) idx = Uint32Array.from(c2.index);
+            } catch (_) { /* the simplifier's own result stands */ }
+          }
         }
         parts.push({ idx, materialIndex: g.materialIndex });
         transfer.push(idx.buffer);

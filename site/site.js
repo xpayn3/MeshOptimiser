@@ -95,15 +95,20 @@
   });
   $$('[data-strip]').forEach((strip) => {
     const figs = [...strip.children];
-    const rests = () => figs.map(fig => restOf(strip, fig));
+    // the resting places are measured once (reading offsets on every scroll event forces a layout each time) and again when the size changes
+    let measured = null;
+    const rests = () => measured || (measured = figs.map(fig => restOf(strip, fig)));
+    window.addEventListener('resize', () => { measured = null; });
+    strip.addEventListener('load', () => { measured = null; }, true);
     const nearest = (list, x) => list.reduce((at, rest, i) => (Math.abs(rest - x) < Math.abs(list[at] - x) ? i : at), 0);
 
     // the dots under it: one per picture, the lit one is the picture in the middle
     const row = strip.nextElementSibling && strip.nextElementSibling.classList.contains('dots') ? strip.nextElementSibling : null;
     if (row) {
       const marks = figs.map(() => row.appendChild(el('i')));
-      const sync = () => { const now = nearest(rests(), strip.scrollLeft); marks.forEach((mark, i) => mark.classList.toggle('is-active', i === now)); };
-      strip.addEventListener('scroll', sync, { passive: true });
+      let lit = -1, queued = false;
+      const sync = () => { queued = false; const now = nearest(rests(), strip.scrollLeft); if (now === lit) return; lit = now; marks.forEach((mark, i) => mark.classList.toggle('is-active', i === now)); };
+      strip.addEventListener('scroll', () => { if (!queued) { queued = true; requestAnimationFrame(sync); } }, { passive: true });
       sync();
     }
 

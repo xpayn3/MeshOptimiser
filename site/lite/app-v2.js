@@ -1,6 +1,6 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
-import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=23';
+import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=27';
 import { findFloating } from './floating.js?v=1';
 import * as MEDIT from './meshedit.js?v=5';
 import { dissolvePoints } from './dissolve.js?v=3';
@@ -982,6 +982,7 @@ const _Tasks = (() => {
   return {
     set(id, patch) { const t = m.get(id) || { id, t0: Date.now(), label: '', detail: '', pct: null, cancel: null }; Object.assign(t, patch); m.set(id, t); publish(); },
     end(id) { if (m.delete(id)) publish(); },
+    busy() { return m.size > 0; },
     cancel(id) { const t = m.get(id); if (t && t.cancel) { try { t.cancel(); } catch (e) { console.warn('[tasks] cancel:', e); } } },
   };
 })();
@@ -1089,7 +1090,7 @@ function _ldRender() {
 function setLoaderSteps(list) {
   _LD.steps = list && list.length ? list.slice() : null;
   _LD.idx = _LD.steps ? 0 : -1; _LD.t = [performance.now()]; _LD.dur = []; _LD.note = ''; _LD.failed = false;
-  for (const id of ['loader-details', 'wl-details']) { const d = document.getElementById(id); if (d) d.open = !_LD.steps; }
+  for (const id of ['loader-details', 'wl-details']) { const d = document.getElementById(id); if (d) d.open = id === 'wl-details' ? false : !_LD.steps; }      // (the start screen's card keeps the log folded: it opens on a failure, or when asked)
   _ldRender();
   if (_LD.steps) setLoaderProgress(3);
 }
@@ -1114,6 +1115,15 @@ function _stepFromLog(line) {
   if (!_LD.steps) return;
   const txt = String(line).replace(/^[\s·.→✓]+/, '').trim();
   if (!txt) return;
+  // The long read has no real progress to report. When the converter gives a guess ("25s elapsed, about 55s expected"), say
+  // how far along that guess is and move the bar through the step; it stops short of the end until the step really is done.
+  const guess = /(\d+)s elapsed, about (\d+)s expected/.exec(txt);
+  if (guess && _LD.idx >= 0) {
+    const el = +guess[1], ex = +guess[2];
+    setLoaderProgress(Math.max(3, (_LD.idx + Math.min(0.95, el / ex)) / _LD.steps.length * 100));
+    loaderStep(_LD.idx, el <= ex ? el + 's of about ' + ex + 's' : el + 's, longer than the estimate of about ' + ex + 's, still working');
+    return;
+  }
   for (const [re, k] of _STEP_PHASES) if (re.test(txt)) { loaderStep(k, txt); return; }
   loaderStep(_LD.idx, txt);
 }
@@ -1454,7 +1464,7 @@ const _MeshWorkers = (() => {
       const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
       workers = [];
       for (let i = 0; i < n; i++) {
-        const w = new Worker(new URL('./mesh-worker.js?v=34', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./mesh-worker.js?v=40', import.meta.url), { type: 'module' });
         w.onmessage = (e) => {
           const p = pending.get(e.data && e.data.id);
           if (!p) return;
@@ -1477,6 +1487,7 @@ const _MeshWorkers = (() => {
     if (!w || broken) return { ok: false, error: 'no workers' };
     let job;
     try { job = build(); } catch (e) { release(w); return { ok: false, error: String((e && e.message) || e) }; }
+    if (!job) { release(w); return { ok: false, cancelled: true }; }          // (build() gives nothing when the job is not wanted any more)
     const id = ++seq;
     job.msg.id = id;
     return new Promise((resolve) => {
@@ -2239,7 +2250,7 @@ const _ImportSettings = (() => {
   const _num = (id, lo, hi, dflt) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : dflt; };
   const _setNum = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(+(+v).toFixed(4)); };
   function _presetFor(sag, angle) { for (const k in _PRESETS) if (Math.abs(_PRESETS[k][0] - sag) < 1e-9 && Math.abs(_PRESETS[k][1] - angle) < 1e-9) return k; return 'custom'; }
-  const DEFAULTS_MESH = { append: false, fit: true };
+  const DEFAULTS_MESH = { append: false, fit: true, keepUv: true };
 
   function _ext(name) { const m = /\.([^.]+)$/.exec(name || ''); return m ? m[1].toLowerCase() : ''; }
   function _skipModal(ext) {
@@ -2301,6 +2312,7 @@ const _ImportSettings = (() => {
     }
     document.getElementById('imp-append').checked = !!opts.append;
     document.getElementById('imp-fit').checked    = !!opts.fit;
+    document.getElementById('imp-keep-uv').checked = opts.keepUv !== false;
     document.getElementById('imp-skip-next').checked = false;
     _syncSeg();
   }
@@ -2368,6 +2380,7 @@ const _ImportSettings = (() => {
       append: document.getElementById('imp-append').checked,
       fit:    document.getElementById('imp-fit').checked,
     };
+    if (!isStep) out.keepUv = document.getElementById('imp-keep-uv').checked;
     if (isStep) {
       out.quality   = document.getElementById('imp-step-quality').value;
       out.sag       = _num('imp-step-sag', 0.001, 100, 0.5);
@@ -2532,6 +2545,7 @@ async function _handleSelectedFile(file) {
   if (opts.append) state._importMode = true;
   // Stash fit-to-view choice on a parallel flag the post-load hooks check.
   state._importFitOnLoad = !!opts.fit;
+  state._importKeepUv = opts.keepUv !== false;      // (texture coordinates stay unless the dialog's switch was turned off)
 
   // If the welcome was open and we hid it for the modal, restore it briefly
   // and switch it to its loading pane so the user sees progress in-place
@@ -2857,6 +2871,16 @@ async function _dropOpen(file) {
 
 // `startIn` is a handle whose folder the picker should open in; without one
 // the browser returns to the folder last used under this id.
+// A scene that was just saved leads Recent, the way a file that was just opened does. It opens again from the handle of the file it was
+// written to; where the browser could only download it (no file picker) the saved model is kept here instead, so the card still opens.
+async function _rememberSaved(name, blob, handle) {
+  const file = { name, size: blob.size };
+  if (handle) await _rememberHandle(file, handle);
+  else await _cacheConvertedGlb(name, blob.size, blob);
+  _Welcome?.pushSaved(file);
+  try { _Welcome?.render?.(); } catch (_) {}
+}
+window.__moRememberSaved = _rememberSaved;          // (tests/e2e-save-recent.mjs)
 async function _openWithPicker(startIn) {
   if (!window.showOpenFilePicker) {
     document.getElementById('file-input')?.click();
@@ -3116,6 +3140,11 @@ async function _openRecentByKey(key) {
       }
     } catch (e) { console.warn('[STEP] recent open failed:', e); }
   }
+  // A scene that was saved by download has no handle: its kept copy opens at once.
+  if (!handle) {
+    const kept = await _cachedConvertedGlb(recName, recSize);
+    if (kept) { _handleSelectedFile(new File([kept], recName, { type: 'model/gltf-binary' })); return; }
+  }
   // Go through the picker, not the plain file input: the pick is then stored,
   // so this entry opens directly next time.
   toast('Re-pick the file', 'Browser security needs a fresh pick for this file', 'info', 4000);
@@ -3281,6 +3310,64 @@ const _Settings = (() => {
   }
   const _group = (title) => `<div class="set-group-title">${title}</div>`;
 
+  // ── Settings › Performance › Memory ──────────────────────────────────────────
+  // What the page holds: the browser's script heap (Chromium only), the geometry of the open scenes (the same bytes sit on the
+  // graphics card), and what the undo / redo entries keep alive that the scene itself no longer uses.
+  const _fmtBytes = (n) => n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB' : n >= 1048576 ? (n / 1048576).toFixed(n >= 1.0e8 ? 0 : 1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n + ' B';
+  function _geomBytes(g) {
+    let n = 0;
+    for (const k in g.attributes) { const a = g.attributes[k]; if (a && a.array) n += a.array.byteLength; }
+    if (g.index && g.index.array) n += g.index.array.byteLength;
+    return n;
+  }
+  function _memStats() {
+    const live = new Set();
+    let geom = 0;
+    const add = (g) => { if (g && g.isBufferGeometry && !live.has(g)) { live.add(g); geom += _geomBytes(g); } };
+    for (const g of state.geomByHash.values()) add(g);
+    for (const p of state.parts) if (p.mesh) add(p.mesh.geometry);
+    // what only the undo / redo entries hold: geometry that is no longer in the scene, and any typed arrays they carry
+    const seen = new WeakSet(), bufs = new WeakSet();
+    let held = 0;
+    const scan = (v, depth) => {
+      if (v == null || depth > 6) return;
+      if (typeof v !== 'object') return;
+      if (seen.has(v)) return;
+      seen.add(v);
+      if (v.isBufferGeometry) { if (!live.has(v)) held += _geomBytes(v); return; }
+      if (ArrayBuffer.isView(v)) { if (!bufs.has(v.buffer)) { bufs.add(v.buffer); held += v.byteLength; } return; }
+      if (v instanceof ArrayBuffer) { if (!bufs.has(v)) { bufs.add(v); held += v.byteLength; } return; }
+      if (v instanceof Node || v.isMaterial || v.isTexture || v.isMatrix4 || v.isVector3 || v.isBox3 || v.isColor || v.isQuaternion) return;
+      if (v.isObject3D) { if (v.geometry) scan(v.geometry, depth + 1); for (const c of v.children || []) scan(c, depth + 1); return; }
+      if (v instanceof Map) { for (const [, x] of v) scan(x, depth + 1); return; }
+      if (v instanceof Set || Array.isArray(v)) { for (const x of v) scan(x, depth + 1); return; }
+      for (const k of Object.keys(v)) scan(v[k], depth + 1);
+    };
+    scan(state.history, 0); scan(state.redo, 0);
+    const pm = performance && performance.memory;
+    return {
+      heap: pm ? pm.usedJSHeapSize : 0, heapMax: pm ? pm.jsHeapSizeLimit : 0,
+      geom, held, steps: state.history.length, redo: state.redo.length, max: _UNDO_MAX,
+      parts: state.parts.reduce((n, p) => n + (p.deleted ? 0 : 1), 0),
+    };
+  }
+  function _memRefresh() {
+    if (!$s('set-mem-heap')) return;
+    let m;
+    try { m = _memStats(); } catch (e) { console.warn('[memory]', e); return; }
+    const set = (id, t) => { const el = $s(id); if (el) el.textContent = t; };
+    const bar = (id, f) => { const el = $s(id); if (el) el.style.width = (Math.max(0, Math.min(1, f || 0)) * 100).toFixed(1) + '%'; };
+    set('set-mem-heap', m.heap ? `${_fmtBytes(m.heap)} of ${_fmtBytes(m.heapMax)}` : 'Not reported by this browser');
+    bar('set-mem-heap-bar', m.heapMax ? m.heap / m.heapMax : 0);
+    const tot = Math.max(1, m.geom + m.held);
+    set('set-mem-geom', `${_fmtBytes(m.geom)} · ${m.parts.toLocaleString()} parts`);
+    set('set-mem-held', _fmtBytes(m.held));
+    bar('set-mem-geom-bar', m.geom / tot); bar('set-mem-held-bar', m.held / tot);
+    set('set-mem-undo', `${m.steps} of ${m.max} steps`);
+    bar('set-mem-undo-bar', m.steps / m.max);
+    set('set-mem-redo', m.redo ? `${m.redo} to redo` : 'Nothing to redo');
+  }
+
   // Build the window once: the frame, then the existing controls moved in.
   function _assemble() {
     if (assembled) return;
@@ -3352,6 +3439,12 @@ const _Settings = (() => {
       _toggleRow('set-dyn-res', 'Lower the resolution if it stutters', (() => { try { return _MotionPerf.dynRes(); } catch (_) { return false; } })(), 'On a scene too heavy to move smoothly, the picture is drawn a little coarser while it moves and sharp again when it stops. A scene that moves freely is left alone.'));
     $s('set-cull-small')?.addEventListener('change', e => { try { _MotionPerf.setCullSmall(e.target.checked); } catch (_) {} });
     $s('set-dyn-res')?.addEventListener('change', e => { try { _MotionPerf.setDynRes(e.target.checked); } catch (_) {} });
+    $s('set-pane-perf').insertAdjacentHTML('beforeend', _group('Memory') +
+      `<div class="set-row set-stack"><span>Page memory<span class="set-help">What this tab's scripts hold, out of the most the browser allows. Only Chrome and Edge report it.</span></span><div class="mem-g"><div class="mem-bar"><i id="set-mem-heap-bar" class="mem-a"></i></div><div class="mem-key"><span id="set-mem-heap">…</span></div></div></div>` +
+      `<div class="set-row set-stack"><span>Models and history<span class="set-help">The geometry of everything open (the same amount sits on the graphics card), and the old versions of parts that only the undo history keeps.</span></span><div class="mem-g"><div class="mem-bar"><i id="set-mem-geom-bar" class="mem-a"></i><i id="set-mem-held-bar" class="mem-b"></i></div><div class="mem-key"><span><i class="mem-a"></i>Models <b id="set-mem-geom">…</b></span><span><i class="mem-b"></i>Kept by undo <b id="set-mem-held">…</b></span></div></div></div>` +
+      `<div class="set-row set-stack"><span>Undo history<span class="set-help">Steps Ctrl+Z can go back, out of the limit set under General.</span></span><div class="mem-g"><div class="mem-bar"><i id="set-mem-undo-bar" class="mem-a"></i></div><div class="mem-key"><span id="set-mem-undo">…</span><span id="set-mem-redo">…</span></div></div></div>` +
+      `<div class="set-row set-action"><span>Refresh<span class="set-help">The numbers are read when this section opens, not live.</span></span><button class="btn" id="set-mem-refresh">Refresh</button></div>`);
+    $s('set-mem-refresh')?.addEventListener('click', _memRefresh);
     const before = (id, title) => { const row = $s(id)?.closest('.toggle, .field'); if (row) row.insertAdjacentHTML('beforebegin', _group(title)); };
     $s('set-viewport-extra').insertAdjacentHTML('beforebegin', _group('Overlays'));
     before('toggle-fog', 'Environment');
@@ -3543,6 +3636,21 @@ const _Settings = (() => {
       ['Browser', (navigator.userAgentData && navigator.userAgentData.platform ? navigator.userAgentData.platform + ' · ' : '') + _browserName()],
     ];
   };
+  // Everything the app is built on, shown in Settings, About. The same list is on the website (Credits) and in the README; licence files are in vendor/.
+  const _CREDITS = [
+    ['three.js', 'the three.js authors', 'MIT', 'https://threejs.org', 'The 3D view.'],
+    ['three-mesh-bvh', 'Garrett Johnson', 'MIT', 'https://github.com/gkjohnson/three-mesh-bvh', 'Fast picking on big meshes.'],
+    ['meshoptimizer', 'Arseny Kapoulkine', 'MIT', 'https://github.com/zeux/meshoptimizer', 'The simplifier behind Decimate and Smart Fit, and Meshopt compression.'],
+    ['Draco', 'Google', 'Apache 2.0', 'https://github.com/google/draco', 'Reads and writes Draco-compressed GLB.'],
+    ['Open Asset Import Library (assimpjs)', 'the assimp team and Viktor Kovacs', 'BSD 3-Clause; MIT', 'https://github.com/assimp/assimp', 'Opens other 3D formats.'],
+    ['CadQuery OCP', 'the CadQuery contributors', 'Apache 2.0', 'https://github.com/CadQuery/OCP', 'Reads STEP files.'],
+    ['Open CASCADE Technology', 'Open Cascade SAS', 'LGPL 2.1 with exception', 'https://dev.opencascade.org', 'The geometry kernel under OCP.'],
+    ['trimesh', 'Michael Dawson-Haggerty', 'MIT', 'https://github.com/mikedh/trimesh', 'Meshes and GLB writing in the converter.'],
+    ['NumPy', 'the NumPy developers', 'BSD 3-Clause', 'https://numpy.org', 'The numbers underneath.'],
+    ['Inter', 'Rasmus Andersson and the Inter Project Authors', 'SIL OFL 1.1', 'https://rsms.me/inter/', 'The typeface.'],
+    ['Lucide', 'the Lucide contributors', 'ISC', 'https://lucide.dev', 'The icons.'],
+    ['Gearbox Assy', 'Khronos glTF-Sample-Models; converted by Okino Computer Graphics', 'See the repository', 'https://github.com/KhronosGroup/glTF-Sample-Models/tree/main/2.0/GearboxAssy', 'The sample assembly.'],
+  ];
   function _fillAbout() {
     const dst = $s('set-pane-about'); if (!dst) return;
     const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -3553,6 +3661,9 @@ const _Settings = (() => {
       `<div class="set-row set-action"><span>Help &amp; docs<span class="set-help">How every tool works, with pictures. Works offline (F1).</span></span><button class="btn" id="set-about-help">Open</button></div>` +
       `<div class="set-row set-action"><span>Keyboard shortcuts<span class="set-help">Every key and mouse gesture (?).</span></span><button class="btn" id="set-about-keys">Open</button></div>` +
       `<div class="set-row set-action"><span>Something wrong?<span class="set-help">Opens the report page with your version and system already filled in.</span></span><span style="display:flex;gap:8px"><button class="btn" id="set-about-copy">Copy details</button><button class="btn" id="set-about-report">Report a problem</button></span></div>` +
+      _group('Credits') +
+      `<div class="set-row"><span class="set-help" style="margin:0">MeshOptimiser is built on open source. Thank you to everyone who made these.</span></div>` +
+      _CREDITS.map(([name, by, lic, url, what]) => `<div class="set-row"><span><a href="${url}" target="_blank" rel="noopener">${esc(name)}</a><span class="set-help">${esc(what)} By ${esc(by)}.</span></span><span class="set-val" title="${esc(lic)}">${esc(lic)}</span></div>`).join('') +
       _group('Project') +
       `<div class="set-row set-action"><span>Website<span class="set-help">Downloads, the full docs and the screenshots.</span></span><a class="btn" href="https://lukagrcar.com/apps/meshoptimiser/" target="_blank" rel="noopener">Open</a></div>` +
       `<div class="set-row set-action"><span>Source code<span class="set-help">Free and open source, under the MIT licence.</span></span><a class="btn" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener">GitHub</a></div>`;
@@ -3778,12 +3889,80 @@ const _Settings = (() => {
     if ($s('settings-search')?.value) _search($s('settings-search').value);
   }
 
+  // ── Groups as cards ──────────────────────────────────────────────────────────
+  // Every pane is filled as a flat run of rows with small group titles. Here each titled group becomes a card with a header
+  // (title, how many settings, a fold arrow; a folded card stays folded next time), and a pane with three or more groups gets a
+  // row of jump chips under its title. Elements are moved, not copied, so every id and listener stays. It runs again by itself
+  // whenever a pane is refilled.
+  const _fold = (() => {
+    let o = {}; try { o = JSON.parse(localStorage.getItem('mo-set-fold')) || {}; } catch (_) {}
+    return { get: (k) => !!o[k], set(k, v) { if (v) o[k] = 1; else delete o[k]; try { localStorage.setItem('mo-set-fold', JSON.stringify(o)); } catch (_) {} } };
+  })();
+  let _structuring = false, _structWired = false;
+  function _structure() {
+    if (_structuring) return;
+    _structuring = true;
+    try {
+      for (const b of document.querySelectorAll('#set-main .set-pane-b')) {
+        if (!b.querySelector(':scope > .set-group-title')) continue;
+        const pane = b.closest('.set-pane'), pid = pane.dataset.pane;
+        pane.querySelector(':scope > .set-jump')?.remove();
+        let card = null; const titled = [];
+        for (const kid of [...b.children]) {
+          if (kid.classList.contains('set-group-title')) {
+            const title = kid.textContent.trim(), key = pid + '/' + title;
+            card = document.createElement('div');
+            card.className = 'set-card'; card.dataset.key = key;
+            card.innerHTML = '<button type="button" class="set-card-h" aria-expanded="true"><span class="set-card-t"></span><span class="set-card-n"></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+            card.querySelector('.set-card-t').textContent = title;
+            if (_fold.get(key)) { card.classList.add('is-fold'); card.firstChild.setAttribute('aria-expanded', 'false'); }
+            b.appendChild(card); titled.push(card); kid.remove();
+          } else {
+            if (!card) { card = document.createElement('div'); card.className = 'set-card set-card-plain'; b.appendChild(card); }
+            card.appendChild(kid);
+          }
+        }
+        for (const c of titled) { const n = c.querySelectorAll('.toggle, .field, .set-row').length; c.querySelector('.set-card-n').textContent = n > 1 ? String(n) : ''; }
+        if (titled.length >= 3) {
+          const j = document.createElement('div'); j.className = 'set-jump';
+          titled.forEach((c, i) => { const a = document.createElement('button'); a.type = 'button'; a.className = 'set-jump-c'; a.dataset.i = String(i); a.textContent = c.querySelector('.set-card-t').textContent; j.appendChild(a); });
+          pane.insertBefore(j, b);
+        }
+      }
+    } finally { _structuring = false; }
+  }
+  function _structureWire() {
+    if (_structWired) return;
+    const main = $s('set-main'); if (!main) return;
+    _structWired = true;
+    const later = () => queueMicrotask(_structure);
+    const mo = new MutationObserver(later);
+    for (const b of main.querySelectorAll('.set-pane-b')) mo.observe(b, { childList: true });
+    main.addEventListener('click', (e) => {
+      const h = e.target.closest('.set-card-h');
+      if (h) {
+        const card = h.parentElement, fold = !card.classList.contains('is-fold');
+        card.classList.toggle('is-fold', fold); h.setAttribute('aria-expanded', String(!fold)); _fold.set(card.dataset.key, fold);
+        return;
+      }
+      const chip = e.target.closest('.set-jump-c');
+      if (chip) {
+        const cards = [...chip.closest('.set-pane').querySelectorAll('.set-card:not(.set-card-plain)')], card = cards[+chip.dataset.i];
+        if (!card) return;
+        if (card.classList.contains('is-fold')) { card.classList.remove('is-fold'); card.firstChild.setAttribute('aria-expanded', 'true'); _fold.set(card.dataset.key, false); }
+        card.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      }
+    });
+  }
+
   function _select(id) {
     if (!PANES.some(p => p[0] === id)) id = 'general';
     current = id;
     for (const el of document.querySelectorAll('#set-nav .set-nav-item[data-pane]')) el.classList.toggle('active', el.dataset.pane === id);
     for (const el of document.querySelectorAll('#set-main .set-pane')) el.classList.toggle('active', el.dataset.pane === id);
     const main = $s('set-main'); if (main) main.scrollTop = 0;
+    _structureWire(); _structure();
+    if (id === 'perf') _memRefresh();
   }
   // Search: every section at once, only the rows whose text matches.
   function _search(q) {
@@ -3926,6 +4105,7 @@ const _Welcome = (() => {
     const converted = new Set();
     let backfilled = false;
     for (const r of list) {
+      if (!/\.(step|stp|iges|igs|brep|brp)$/i.test(r.name)) continue;      // (a saved scene's kept copy is not a conversion)
       const blob = await _cachedConvertedGlb(r.name, r.size);
       if (!blob) continue;
       converted.add(r.name + '|' + r.size);
@@ -3961,7 +4141,7 @@ const _Welcome = (() => {
         <div class="wr-thumb">${pic}${lead ? '<span class="wr-tag">Continue</span>' : ''}</div>
         <div class="wr-meta">
           <div class="wr-name">${stem}</div>
-          <div class="wr-sub">${kind ? `<span>${kind}</span>` : ''}${size ? `<span>${size}</span>` : ''}${conv ? '<span>converted</span>' : ''}<span class="wr-age">${_fmtAge(r.ts)}</span></div>
+          <div class="wr-sub">${r.saved ? '<span>Scene</span>' : kind ? `<span>${kind}</span>` : ''}${size ? `<span>${size}</span>` : ''}${conv ? '<span>converted</span>' : ''}<span class="wr-age">${_fmtAge(r.ts)}</span></div>
         </div>
         <button class="wr-del" data-act="delete" aria-label="Remove ${safeName} from recent files"><i data-lucide="x"></i></button>
       </div>`;
@@ -4161,7 +4341,25 @@ const _Welcome = (() => {
     if (bg) bg.classList.remove('show');
     _setMode('pick'); // reset so next show starts on the picker
   }
-  return { show, hide, pushRecent, markConverted, enterLoading, enterPick, recents: _load, render: _renderRecents };
+  // A scene that was just saved: its card replaces the one of the file it was opened from (the same name with another extension: the
+  // STEP that was converted, an earlier save as GLB), so the list does not show one model twice. The new card keeps the picture of the
+  // card it replaces, and says "Scene".
+  function pushSaved(file) {
+    if (!file || !file.name) return null;
+    const stemOf = (n) => String(n).replace(/\.[^.\/]+$/, '');
+    const old = _load(), stem = stemOf(file.name);
+    const sib = old.filter(r => r.name !== file.name && stemOf(r.name) === stem);
+    const thumb = (old.find(r => r.name === file.name && r.thumb) || sib.find(r => r.thumb) || {}).thumb;
+    if (sib.length) {
+      _save(old.filter(r => !sib.includes(r)));
+      for (const r of sib) { try { _idbDelete(_recKey(r.name, r.size)); } catch (_) {} _dropConvertedGlb(r.name, r.size); }
+    }
+    const id = pushRecent(file);
+    const list = _load(), e = list.find(r => r.id === id);
+    if (e) { e.saved = true; if (thumb) e.thumb = thumb; _save(list); }
+    return id;
+  }
+  return { show, hide, pushRecent, pushSaved, markConverted, enterLoading, enterPick, recents: _load, render: _renderRecents };
 })();
 
 
@@ -4455,6 +4653,7 @@ const _Actions = (() => {
     { id:'recenter',     group:'Edit',       label:'Recentre model',             run: _click('btn-recenter') },
     { id:'alignParts',   group:'Edit',       label:'Align and spread parts…',    run: () => _CmdCards.open('arrange') },
     { id:'alignFloor',   group:'Edit',       label:'Align model to the floor…',  run: () => _CmdCards.open('align') },
+    { id:'pivotOrient',  group:'Edit',       label:'Change pivot orientation…',  run: () => _CmdCards.open('pivot') },
     { id:'alignFloorNow', group:'Edit',      label:'Align model to the floor (with the last choices)', run: _click('btn-align-floor') },
     { id:'group',        group:'Edit',       label:'Group selection',            kbd:'Ctrl+G', run: _click('btn-group-sel') },
     { id:'merge',        group:'Edit',       label:'Merge selection',            kbd:'Ctrl+M', run: _click('btn-merge-sel') },
@@ -4488,7 +4687,7 @@ const _Actions = (() => {
     { id:'selFasteners', group:'Selection',  label:'Select fasteners…',          run: () => _CmdCards.open('fasteners') },
     { id:'report',       group:'File',       label:'Optimisation report',        run: () => window._MOpt?.showReport() },
     { id:'ungroup',      group:'Edit',       label:'Ungroup',                    kbd:'Ctrl+Shift+G', run: () => { for (const gid of (state.selectedGroupIds ? [...state.selectedGroupIds] : [])) { const row = document.querySelector('#tree .tree-node[data-group-id="' + gid + '"]'); if (row) _treeUngroupRow(row); } } },
-    { id:'hideSel',      group:'Selection',  label:'Hide selected',              kbd:'H', run: () => { try { hideSelected(); } catch (_) {} } },
+    { id:'hideSel',      group:'Selection',  label:'Hide selected',              kbd:'H', run: () => { try { toggleHideSelected(); } catch (_) {} } },
     { id:'materials',    group:'App',        label:'Materials',                  kbd:'Shift+M', run: _click('tg-materials') },
     { id:'library',      group:'App',        label:'Library',                    kbd:'Shift+L', run: _click('tg-library') },
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
@@ -4764,13 +4963,13 @@ const _CmdK = (() => {
     solid: 'cube-solid', wire: 'cube-wire', xray: 'cube-xray', clay: 'sphere-clay', gzMove: 'move', gzRotate: 'rotate-cw', gzScale: 'scaling', gzOff: 'circle-slash', tgGrid: 'land-plot',
     selAll: 'square-check', selInvert: 'arrow-left-right', selClear: 'square-x', isolate: 'focus', showAll: 'eye', hideUnsel: 'eye-off', hideSel: 'eye-off', reveal: 'locate',
     undo: 'undo-2', redo: 'redo-2', delete: 'trash-2', copy: 'copy', paste: 'clipboard-paste', duplicate: 'copy-plus', recenter: 'axis-3d', group: 'folder-plus', ungroup: 'folder-minus',
-    merge: 'combine', repairMesh: 'wrench', hiddenFaces: 'scan-eye', mergeBy: 'layers', selRule: 'list-filter', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'circle-off', decimate: 'shrink', flatten: 'list-tree', measure: 'ruler', materials: 'palette',
+    pivotOrient: 'axis-3d', merge: 'combine', repairMesh: 'wrench', hiddenFaces: 'scan-eye', mergeBy: 'layers', selRule: 'list-filter', split: 'split', smartFit: 'wand-2', smartFitAll: 'box-select', fillHoles: 'circle-off', decimate: 'shrink', flatten: 'list-tree', measure: 'ruler', materials: 'palette',
     settings: 'settings', shortcuts: 'command', palette: 'search', console: 'terminal', welcome: 'home',
   };
   const GROUP_ICON = { File: 'file', View: 'eye', Selection: 'mouse-pointer-2', Edit: 'pencil', App: 'settings' };
   // Is a command usable now? null when it is, else the reason in a few words. A command that works on "the selection, or on every part
   // when nothing is selected" (Remove holes, Repair, Remesh...) needs only a model. The search greys the others out and says why.
-  const NEED_SEL = new Set(['frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'selSimilar', 'selColour', 'selClear']);
+  const NEED_SEL = new Set(['pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'selSimilar', 'selColour', 'selClear']);
   const NEED_MODEL = new Set(['fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
     'flagSliver', 'isolateSmall', 'deleteSmall', 'splitAll', 'split', 'fillHoles', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
@@ -6032,6 +6231,10 @@ const _RendererOwner = (() => {
     }
     // Dithering breaks up 8-bit quantization banding in the background gradient.
     try { if ('dithering' in r) r.dithering = true; } catch (_) {}
+    // The shadow system is on from the start (nothing casts or receives until Scene > Shadows is switched on, and then it costs only what
+    // the shadows cost): the lighting programs are built with it once. Switched on later, they were built without a shadow node and the
+    // shader did not compile.
+    try { if (r.shadowMap) { r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFShadowMap; } } catch (_) {}
   }
   // Attach a WebGPU device-lost handler. Fires exactly once when the GPU
   // device dies (driver hiccup, OS-level GPU reset, laptop hybrid switch,
@@ -6389,7 +6592,7 @@ function initScene() {
   // reload, renderer swap), where the ramp is short enough to feel instant.
   // (The sky light was 0.55 before the plain backgrounds got studio
   // reflections, which add fill of their own: see _ensureStudioReflections.)
-  const _hemiTarget = 0.4, _dirTarget = 1.05, _fillTarget = 0.4, _headTarget = 0.45;
+  const _hemiTarget = 0.5, _dirTarget = 1.05, _fillTarget = 0.4, _headTarget = 0.65;
   const hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0); scene.add(hemi);
   const dir  = new THREE.DirectionalLight(0xffffff, 0); dir.position.set(80, 60, 100); scene.add(dir);
   const fill = new THREE.DirectionalLight(0xb0c4ff, 0); fill.position.set(-80, -40, 60); scene.add(fill);
@@ -6851,6 +7054,15 @@ function _findSelectionUserGroup() {
 // pivot sits at the combined world bbox center; each selected mesh is
 // re-parented under the pivot so a translate/rotate moves them together.
 // _detachGizmo() restores them to partsRoot with their final world transform.
+// The part's box in the scene, from its own geometry only. Box3.setFromObject also takes in the mesh's children (the edge outlines
+// drawn on it), and those are stale or still being rebuilt just after a pivot turn or an undo, which put the gizmo off the part.
+function _partWorldBoxOwn(mesh) {
+  const g = mesh.geometry;
+  if (!g || !g.attributes || !g.attributes.position) return new THREE.Box3().setFromObject(mesh);
+  if (!g.boundingBox) g.computeBoundingBox();
+  mesh.updateWorldMatrix(true, false);
+  return g.boundingBox.clone().applyMatrix4(mesh.matrixWorld);
+}
 function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   if (!state.gizmo || !state.pivot) return;
   // Promote any selected-but-instanced parts so they CAN be moved by the
@@ -6919,7 +7131,7 @@ function _attachGizmoToParts(parts, centerOverride, quatOverride) {
     const box = new THREE.Box3();
     for (const p of parts) {
       p.mesh.updateWorldMatrix(true, false);
-      const b = new THREE.Box3().setFromObject(p.mesh);
+      const b = _partWorldBoxOwn(p.mesh);
       if (!b.isEmpty()) box.union(b);
     }
     let center;
@@ -6961,7 +7173,7 @@ function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   const box = new THREE.Box3();
   for (const p of parts) {
     p.mesh.updateWorldMatrix(true, false);
-    const b = new THREE.Box3().setFromObject(p.mesh);
+    const b = _partWorldBoxOwn(p.mesh);
     if (!b.isEmpty()) box.union(b);
   }
   let center;
@@ -7014,6 +7226,8 @@ function _attachGizmoToParts(parts, centerOverride, quatOverride) {
     }
     if (same) state.pivot.quaternion.copy(q0);
   }
+  // The orientation chosen from the gizmo list (Last selected, View, Spread) wins over the default, except for a tree group, which keeps its own.
+  if (!quatOverride) { try { const oq = _gizmoOrientQuat(parts); if (oq) state.pivot.quaternion.copy(oq); } catch (_) {} }
   state.pivot.updateMatrixWorld();
   // Track original parent for local-coordinate display (e.g. parts inside
   // user groups that have a non-origin world position).
@@ -7117,6 +7331,7 @@ function updateGizmo() {
     _updateGizmoQueued = false;
     try { _updateGizmoImpl(); }
     catch (e) { console.warn('[gizmo] update failed:', e); }
+    try { _gizmoCardSync(); } catch (_) {}
     try { requestRender(); } catch (_) {}
   });
 }
@@ -7179,11 +7394,141 @@ function _updateGizmoImpl() {
 // single part). Chosen from the list a gizmo button of the left toolbar opens when it is held or right-clicked, kept in this
 // browser. In Edit mesh the same list sets that gizmo's axes (World, Local, Normal: the card's own switch, _Elements.api.space).
 // Read from storage when asked (no module state: the scene is set up early). Scale is always along the part's own axes.
-function _gizmoSpaceGet() { try { return localStorage.getItem('stepopt-gizmo-space') === 'world' ? 'world' : 'local'; } catch (_) { return 'local'; } }
+const _GIZMO_ORIENTS = ['world', 'local', 'active', 'view', 'spread', 'custom'];
+const _GIZMO_ORIENT_LIST = ['world', 'local', 'active', 'view', 'spread'];      // (the ones the hold-list shows: Custom is typed in the Gizmo card)
+function _gizmoSpaceGet() { try { const v = localStorage.getItem('stepopt-gizmo-space'); return _GIZMO_ORIENTS.includes(v) ? v : 'local'; } catch (_) { return 'local'; } }
 function _gizmoSpaceSet(v) {
-  try { localStorage.setItem('stepopt-gizmo-space', v === 'world' ? 'world' : 'local'); } catch (_) {}
+  if (!_GIZMO_ORIENTS.includes(v)) v = 'local';
+  try { localStorage.setItem('stepopt-gizmo-space', v); } catch (_) {}
   try { if (state.gizmo) state.gizmo.setSpace(v === 'world' ? 'world' : 'local'); } catch (_) {}
+  try { _detachGizmo(); updateGizmo(); } catch (_) {}      // (detached first: a re-attach is what turns the pivot to the new axes)
   try { requestRender(); } catch (_) {}
+}
+// The world rotation the gizmo takes for the orientations that are not "the part's own": null means keep the default.
+//   active : the part picked last (with several parts, its axes rather than the first one's)
+//   view   : the camera's, so Move goes left/right and up/down on the screen
+//   spread : the axes the selected parts are spread along (the long way of the row, the plate or the ring of parts they form);
+//            needs three parts or more that are not all in one spot, else the default stays
+function _gizmoOrientQuat(parts, modeIn) {
+  const mode = modeIn || _gizmoSpaceGet();
+  if (mode === 'world' && modeIn) return new THREE.Quaternion();
+  if (mode === 'active') {
+    const last = parts[parts.length - 1];
+    if (!last?.mesh) return null;
+    last.mesh.updateWorldMatrix(true, false);
+    return last.mesh.getWorldQuaternion(new THREE.Quaternion());
+  }
+  if (mode === 'custom') {
+    const e = state._gizmoCustomEuler || [0, 0, 0], D = Math.PI / 180;
+    return new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * D, e[1] * D, e[2] * D, 'XYZ'));
+  }
+  if (mode === 'view') return camera ? camera.getWorldQuaternion(new THREE.Quaternion()) : null;
+  if (mode === 'spread') {
+    if (parts.length < 3) return null;
+    const pts = parts.map(p => { p.mesh.updateWorldMatrix(true, false); return new THREE.Box3().setFromObject(p.mesh).getCenter(new THREE.Vector3()); });
+    return _pcaQuat(pts, 0);
+  }
+  return null;
+}
+// The axes a cloud of points is spread along, longest first, as a world rotation (right-handed). `minRatio`: when the two longest
+// spreads are within that factor of each other the axes are not defined (a square, a ring, a round part): null.
+function _pcaQuat(pts, minRatio) {
+  const m = new THREE.Vector3(); pts.forEach(v => m.add(v)); m.divideScalar(pts.length);
+  const c = [[0,0,0],[0,0,0],[0,0,0]];
+  for (const v of pts) { const d = [v.x - m.x, v.y - m.y, v.z - m.z]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) c[i][j] += d[i] * d[j]; }
+  const V = [[1,0,0],[0,1,0],[0,0,1]];      // Jacobi eigen decomposition of the 3x3 covariance
+  for (let it = 0; it < 24; it++) {
+    let pi = 0, pj = 1, mx = Math.abs(c[0][1]);
+    if (Math.abs(c[0][2]) > mx) { pi = 0; pj = 2; mx = Math.abs(c[0][2]); }
+    if (Math.abs(c[1][2]) > mx) { pi = 1; pj = 2; mx = Math.abs(c[1][2]); }
+    if (mx < 1e-12) break;
+    const th = 0.5 * Math.atan2(2 * c[pi][pj], c[pj][pj] - c[pi][pi]);
+    const cs = Math.cos(th), sn = Math.sin(th);
+    for (let k = 0; k < 3; k++) { const a = c[k][pi], b = c[k][pj]; c[k][pi] = cs * a - sn * b; c[k][pj] = sn * a + cs * b; }
+    for (let k = 0; k < 3; k++) { const a = c[pi][k], b = c[pj][k]; c[pi][k] = cs * a - sn * b; c[pj][k] = sn * a + cs * b; }
+    for (let k = 0; k < 3; k++) { const a = V[k][pi], b = V[k][pj]; V[k][pi] = cs * a - sn * b; V[k][pj] = sn * a + cs * b; }
+  }
+  const ev = [0, 1, 2].sort((i, j) => c[j][j] - c[i][i]);       // longest spread first
+  if (c[ev[0]][ev[0]] < 1e-9) return null;
+  if (minRatio && c[ev[0]][ev[0]] < c[ev[1]][ev[1]] * minRatio) return null;
+  const ax = ev.map(i => new THREE.Vector3(V[0][i], V[1][i], V[2][i]).normalize());
+  ax[2].crossVectors(ax[0], ax[1]).normalize();
+  ax[1].crossVectors(ax[2], ax[0]).normalize();
+  return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(ax[0], ax[1], ax[2]));
+}
+// The way a part itself is turned, from its own shape: the flat faces it is built from. The biggest flat area gives one axis, the
+// biggest flat area square to it a second one; of the ways those can be named X, Y and Z, the one that turns the pivot least is
+// taken, so a part already on its faces is left alone and one that is tilted is straightened by the smallest turn. null for a
+// shape with no flat faces to follow (a ball, a very rough surface). Returns the world rotation the pivot should have.
+function _partObjectQuat(p) {
+  const g = p.mesh && p.mesh.geometry, pos = g && g.attributes && g.attributes.position;
+  if (!pos || pos.count < 3) return null;
+  const idx = g.index, triN = idx ? Math.floor(idx.count / 3) : Math.floor(pos.count / 3);
+  if (triN < 1) return null;
+  const step = Math.max(1, Math.floor(triN / 20000));
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), N = new THREE.Vector3(), E = new THREE.Vector3();
+  const tris = [];      // [nx, ny, nz, area] per sampled triangle, the normal's sign made the same for opposite faces
+  let total = 0;
+  for (let t = 0; t < triN; t += step) {
+    const i0 = idx ? idx.getX(t * 3) : t * 3, i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, i2 = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+    A.fromBufferAttribute(pos, i0); B.fromBufferAttribute(pos, i1); C.fromBufferAttribute(pos, i2);
+    N.subVectors(B, A); E.subVectors(C, A); N.cross(E);
+    const area = N.length() * 0.5;
+    if (!(area > 1e-18)) continue;
+    N.multiplyScalar(0.5 / area);
+    const ax = Math.abs(N.x), ay = Math.abs(N.y), az = Math.abs(N.z);
+    const big = ax >= ay && ax >= az ? N.x : ay >= az ? N.y : N.z;
+    if (big < 0) N.negate();
+    tris.push(N.x, N.y, N.z, area); total += area;
+  }
+  if (!tris.length || !(total > 0)) return null;
+  // the biggest group of faces that look the same way (normals within about 2°), then its mean direction
+  const dominant = (pool, from) => {
+    const bins = new Map();
+    for (let i = 0; i < tris.length; i += 4) {
+      if (pool && !pool(i)) continue;
+      const k = Math.round(tris[i] * 40) + ',' + Math.round(tris[i + 1] * 40) + ',' + Math.round(tris[i + 2] * 40);
+      bins.set(k, (bins.get(k) || 0) + tris[i + 3]);
+    }
+    let bestK = null, bestA = 0;
+    for (const [k, v] of bins) if (v > bestA) { bestA = v; bestK = k; }
+    if (!bestK) return null;
+    const [kx, ky, kz] = bestK.split(',').map(Number), c = new THREE.Vector3(kx / 40, ky / 40, kz / 40).normalize();
+    const m = new THREE.Vector3(); let w = 0;
+    for (let i = 0; i < tris.length; i += 4) {
+      if (pool && !pool(i)) continue;
+      const d = tris[i] * c.x + tris[i + 1] * c.y + tris[i + 2] * c.z;
+      if (Math.abs(d) > 0.9985) { const sg = d < 0 ? -1 : 1; m.x += sg * tris[i] * tris[i + 3]; m.y += sg * tris[i + 1] * tris[i + 3]; m.z += sg * tris[i + 2] * tris[i + 3]; w += tris[i + 3]; }
+    }
+    if (!(w > 0) || m.lengthSq() < 1e-12) return null;
+    return { n: m.normalize(), area: w };
+  };
+  const d1 = dominant(null);
+  if (!d1 || d1.area < total * 0.05) return null;
+  const n1 = d1.n;
+  const d2 = dominant((i) => Math.abs(tris[i] * n1.x + tris[i + 1] * n1.y + tris[i + 2] * n1.z) < 0.03);
+  let n2;
+  if (d2 && d2.area >= total * 0.02) n2 = d2.n.clone().addScaledVector(n1, -d2.n.dot(n1)).normalize();
+  else {
+    // no second flat direction: the axis of the part as it is now that is the most square to the first
+    const ax = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)].sort((u, v) => Math.abs(u.dot(n1)) - Math.abs(v.dot(n1)))[0];
+    n2 = ax.clone().addScaledVector(n1, -ax.dot(n1)).normalize();
+  }
+  const n3 = new THREE.Vector3().crossVectors(n1, n2).normalize();
+  const F = [n1, n2, n3];
+  // of the 24 right-handed ways to name those three X, Y, Z, the one nearest to the axes as they are now
+  let best = null, bestScore = -Infinity;
+  const perms = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+  for (const pm of perms) for (let sgn = 0; sgn < 8; sgn++) {
+    const b1 = F[pm[0]].clone().multiplyScalar(sgn & 1 ? -1 : 1), b2 = F[pm[1]].clone().multiplyScalar(sgn & 2 ? -1 : 1), b3 = F[pm[2]].clone().multiplyScalar(sgn & 4 ? -1 : 1);
+    if (new THREE.Vector3().crossVectors(b1, b2).dot(b3) < 0.5) continue;
+    const score = b1.x + b2.y + b3.z;
+    if (score > bestScore) { bestScore = score; best = [b1, b2, b3]; }
+  }
+  if (!best) return null;
+  const qLocal = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(best[0], best[1], best[2]));
+  const qw = new THREE.Quaternion(); p.mesh.updateWorldMatrix(true, false); p.mesh.getWorldQuaternion(qw);
+  return qw.multiply(qLocal);
 }
 function _wireGizmoSpacePop() {
   const btns = ['gz-translate', 'gz-rotate', 'gz-scale'].map(id => document.getElementById(id)).filter(Boolean);
@@ -7193,15 +7538,17 @@ function _wireGizmoSpacePop() {
   pop.setAttribute('role', 'menu'); pop.setAttribute('aria-label', 'Gizmo axes');
   btns[btns.length - 1].insertAdjacentElement('afterend', pop);
   // (the same three as the Edit mesh card's switch, with its pictures and words)
-  const ROWS = { world: ['globe', 'World'], local: ['box', 'Local'], normal: ['crosshair', 'Normal'] };
+  const ROWS = { world: ['globe', 'World'], local: ['box', 'Local'], normal: ['crosshair', 'Normal'], active: ['mouse-pointer-click', 'Last selected'], view: ['camera', 'View'], spread: ['scan-line', 'Spread'] };
+  const TIPS = { world: "The scene's X, Y and Z", local: "The part's own axes", active: 'The axes of the part picked last', view: "The screen's: left/right, up/down, in/out", spread: 'The axes the selected parts are spread along (three or more parts)' };
   const close = () => { pop.style.display = 'none'; };
   const open = (btn) => {
     let edit = false; try { edit = _Elements.isActive(); } catch (_) {}
     const cur = edit ? _Elements.api.space() : _gizmoSpaceGet();
     pop.innerHTML = '';
-    for (const v of (edit ? ['world', 'local', 'normal'] : ['world', 'local'])) {
+    for (const v of (edit ? ['world', 'local', 'normal'] : _GIZMO_ORIENT_LIST)) {
       const row = document.createElement('button');
       row.type = 'button'; row.className = 'vp-prim-pop-item em-pop-item' + (cur === v ? ' is-on' : '');
+      if (!edit && TIPS[v]) row.title = TIPS[v];
       row.setAttribute('role', 'menuitemradio'); row.setAttribute('aria-checked', String(cur === v));
       row.innerHTML = '<span class="em-ico prim-ico"><i data-lucide="' + ROWS[v][0] + '"></i></span><span class="em-pop-l">' + ROWS[v][1] + '</span>';
       row.addEventListener('click', () => { close(); if (edit) { try { _Elements.api.space(v); } catch (_) {} } else _gizmoSpaceSet(v); });
@@ -7214,7 +7561,7 @@ function _wireGizmoSpacePop() {
   document.addEventListener('mousedown', (e) => { if (pop.style.display !== 'none' && !pop.contains(e.target) && !btns.some(b => b.contains(e.target))) close(); });
   for (const btn of btns) {
     let holdT = 0, held = false;
-    btn.title = (btn.title ? btn.title + ' · ' : '') + 'hold for the axes: World or Local';
+    btn.title = (btn.title ? btn.title + ' · ' : '') + 'hold to align the gizmo: World, Local, Last selected, View or Spread';
     btn.addEventListener('mousedown', (e) => { if (e.button !== 0) return; held = false; clearTimeout(holdT); holdT = setTimeout(() => { held = true; open(btn); }, 380); });
     btn.addEventListener('mouseleave', () => clearTimeout(holdT));
     btn.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); clearTimeout(holdT); open(btn); });
@@ -7222,6 +7569,39 @@ function _wireGizmoSpacePop() {
     btn.addEventListener('click', (e) => { clearTimeout(holdT); if (held) { held = false; e.stopImmediatePropagation(); e.preventDefault(); } else close(); }, true);
   }
 }
+
+// ── The Gizmo card ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// A floating card under Transform that turns the gizmo's axes (its pivot orientation) for what is selected: one chip per way
+// of choosing them, and X / Y / Z fields (degrees, in the scene's axes) for any angle. Only the gizmo turns: the parts stay as they are.
+function _gizmoCardSync(force) {
+  const card = document.querySelector('.section-cmd[data-cmd="pivot"]');
+  if (!card || card.hidden) return;
+  // (the angles read the gizmo's own axes: the pivot's turn in the scene, in degrees)
+  if (!(state.pivot && state.gizmo && state.gizmo.object)) return;
+  const q = new THREE.Quaternion(); state.pivot.getWorldQuaternion(q);
+  const e = new THREE.Euler().setFromQuaternion(q, 'XYZ'), R = 180 / Math.PI;
+  ['x', 'y', 'z'].forEach(k => {
+    const inp = document.getElementById('pivot-' + k);
+    if (inp && (force || document.activeElement !== inp)) { const v = e[k] * R; inp.value = String(Math.round(Math.abs(v) < 5e-3 ? 0 : v * 100) / 100); }
+  });
+}
+function _wireGizmoCard() {
+  const card = document.querySelector('.section-cmd[data-cmd="pivot"]');
+  if (!card || card._wired) return;
+  card._wired = true;
+  const refresh = () => setTimeout(() => _gizmoCardSync(true), 60);
+  card.querySelectorAll('[data-orient]').forEach(b => b.addEventListener('click', () => { orientPivotsTo(b.dataset.orient); b.blur(); refresh(); }));
+  const apply = () => {
+    const v = ['x', 'y', 'z'].map(k => parseFloat(String(document.getElementById('pivot-' + k).value).replace(',', '.')));
+    if (v.some(n => !Number.isFinite(n))) { _gizmoCardSync(true); return; }
+    orientPivotsTo('custom', { euler: v });
+    refresh();
+  };
+  document.getElementById('btn-pivot-apply')?.addEventListener('click', apply);
+  // (the card opens from the palette: show where the pivot stands the moment it does)
+  new MutationObserver(() => { if (!card.hidden) setTimeout(() => _gizmoCardSync(true), 80); }).observe(card, { attributes: true, attributeFilter: ['hidden'] });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _wireGizmoCard); else _wireGizmoCard();
 
 function setGizmoMode(mode) {
   state.gizmoMode = mode;
@@ -7608,7 +7988,7 @@ let _hdriPmrem = null;
 // for it (_hemiTarget in initRenderer), so colours stay what they were while
 // dark parts get an edge, a sheen and a visible top and side.
 // HDRI mode replaces it with the chosen environment and puts it back on exit.
-const _STUDIO_REFL = 0.35;
+const _STUDIO_REFL = 0.5;
 let _studioRefl = null;            // { renderer, tex }: built once per renderer
 let _studioReflTries = 0;
 let _studioReflTimer = 0;
@@ -7956,6 +8336,7 @@ function _applyHdriSunPosition() {
   );
   state._lights.dir.target?.position?.set?.(0, 0, 0);
   state._lights.dir.target?.updateMatrixWorld?.();
+  if (state.shadowsEnabled) _shadowRefit();
 }
 
 function onResize() {
@@ -8765,6 +9146,30 @@ async function buildModelFromMeshes(meshes, hashes, ctrl, opts) {
   requestRender();
 }
 
+// A file this app saved keeps the look its parts were given (metalness, roughness, glow, see-through, maps): every other file is drawn
+// with the app's one look, whatever it says, but a scene that was saved here would lose what the user set if it were treated the
+// same. The material of the file is kept (and shared by the parts that have the same one) when it differs from that look; one that
+// matches it is left to getOrCreateMaterial, so a scene that was never edited loads as it always did.
+function _loadedMaterial(mat) {
+  if (!mat || Array.isArray(mat) || !mat.isMaterial || typeof mat.metalness !== 'number') return null;
+  // A file's BLEND comes in as transparent with no depth writes (GLTFLoader). The app draws its own materials with depth writes, as
+  // they were drawn before the file was saved. (A material with transmission is flagged transparent again by the renderer when its shader
+  // is built: that flag is the renderer's, and _opaqueForExport keeps it out of the file.)
+  if (mat.transparent && mat.opacity >= 1 && !mat.alphaMap && !mat.map) mat.transparent = false;
+  mat.depthWrite = true;
+  const eq = (a, b) => Math.abs((a ?? 0) - b) < 0.0005;
+  const plain = eq(mat.metalness, 0.15) && eq(mat.roughness, 0.55) && mat.opacity === 1 && !mat.transparent && !mat.map &&
+    !mat.normalMap && !mat.roughnessMap && !mat.metalnessMap && !mat.emissiveMap && !mat.alphaMap && !(mat.emissive && mat.emissive.getHex() !== 0) &&
+    !mat.isMeshPhysicalMaterial;
+  if (plain) return null;
+  const maps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'alphaMap', 'aoMap'].map(k => mat[k] ? mat[k].uuid : '').join('/');
+  const key = [mat.type, mat.color ? mat.color.getHex() : '', mat.metalness.toFixed(3), mat.roughness.toFixed(3), mat.emissive ? mat.emissive.getHex() : '',
+    mat.emissiveIntensity, mat.opacity, mat.transparent, maps].join('|');
+  if (!state.materialByLook) state.materialByLook = new Map();
+  let m = state.materialByLook.get(key);
+  if (!m) { m = mat; m.side = THREE.DoubleSide; state.materialByLook.set(key, m); }
+  return m;
+}
 function getOrCreateMaterial(color) {
   if (!state.shareMaterials) return new THREE.MeshStandardMaterial({ color: color.clone(), metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide });
   const key = color.getHex();
@@ -8779,24 +9184,28 @@ function getOrCreateMaterial(color) {
 // or vertex-color shading are introduced later. Audited consumers (every
 // `geom.attributes.<x>` access in this file):
 //   position, normal, index    → required everywhere
-//   uv                         → only kept if a texture map is bound
-//   uv2                        → only for aoMap / lightMap
+//   uv, uv1, uv2               → kept, whatever the material wears (a texture given to its material later, in the material editor, needs
+//                                them, and they are the author's data). Only the import dialog's "Keep texture coordinates" switch, when
+//                                turned off, lets them go: then uv stays only for a map in use (uv1 for aoMap / lightMap), as it used to.
 //   tangent                    → only with normalMap (tangent-space normals)
 //   color                      → only if material.vertexColors is true
 // `meshSplitter` and the merge path read uv/color when present and otherwise
 // no-op, so dropping them is a no-functional-change.
 function _attributeKeepSet(mat) {
-  const keep = new Set(['position', 'normal']);
+  const keepUv = state._importKeepUv !== false;
+  const keep = new Set(keepUv ? ['position', 'normal', 'uv', 'uv1', 'uv2'] : ['position', 'normal']);
   if (!mat) return keep;
   // Material may be an array (multi-material). Scan every entry.
   const mats = Array.isArray(mat) ? mat : [mat];
   for (const m of mats) {
     if (!m) continue;
-    const wantsUv = m.map || m.normalMap || m.bumpMap || m.alphaMap ||
-                    m.roughnessMap || m.metalnessMap || m.emissiveMap ||
-                    m.specularMap || m.displacementMap || m.clearcoatMap;
-    if (wantsUv) keep.add('uv');
-    if (m.aoMap || m.lightMap) keep.add('uv2');
+    if (!keepUv) {
+      const wantsUv = m.map || m.normalMap || m.bumpMap || m.alphaMap ||
+                      m.roughnessMap || m.metalnessMap || m.emissiveMap ||
+                      m.specularMap || m.displacementMap || m.clearcoatMap;
+      if (wantsUv) keep.add('uv');
+      if (m.aoMap || m.lightMap) { keep.add('uv1'); keep.add('uv2'); }
+    }
     if (m.normalMap) keep.add('tangent');
     if (m.vertexColors) keep.add('color');
   }
@@ -9119,10 +9528,14 @@ function _autoInstanceFromGLB() {
   for (const p of state.parts) {
     if (!p.mesh) continue;
     if (p.deleted) continue;
-    const key = p.hash + '|' + p.originalColor.getHex();
+    // (the material's own look is part of the key: a metal bolt and a matt one of the same colour stay apart, and the copies keep
+    // the look the file gave them, which a new material made from the colour alone would lose)
+    const mm = p.mesh.material, own = mm && !Array.isArray(mm) && mm.isMaterial ? mm : null;
+    const sig = own ? [own.type, own.metalness, own.roughness, own.emissive ? own.emissive.getHex() : '', own.emissiveIntensity, own.opacity, own.transparent, own.side, own.map ? own.map.uuid : ''].join(',') : 'arr';
+    const key = p.hash + '|' + p.originalColor.getHex() + '|' + sig;
     let g = groups.get(key);
     if (!g) {
-      g = { hash: p.hash, geom: p.mesh.geometry, color: p.originalColor.clone(), parts: [] };
+      g = { hash: p.hash, geom: p.mesh.geometry, color: p.originalColor.clone(), parts: [], material: own };
       groups.set(key, g);
     }
     g.parts.push(p);
@@ -9142,7 +9555,7 @@ function _autoInstanceFromGLB() {
     if (g.parts.length < _AUTO_INSTANCE_MIN) continue;
 
     const N = g.parts.length;
-    const mat = getOrCreateMaterial(g.color);
+    const mat = g.material || getOrCreateMaterial(g.color);
     const inst = new THREE.InstancedMesh(g.geom, mat, N);
     inst.name = '_glb_inst_' + groupCount;
     inst.frustumCulled = true;          // a single sphere bound covers all instances
@@ -9535,6 +9948,7 @@ function _refitGridSoon() {
   _gridRefitT = setTimeout(() => { _gridRefitT = 0; try { _applyGridCell(); } catch (_) {} }, 600);
 }
 function onModelLoaded(filename) {
+  try { if (state.shadowsEnabled) setTimeout(() => { try { _applyShadows(); requestRender(); } catch (_) {} }, 0); } catch (_) {}      // (the parts of the new model cast and receive the shadows, and the sun looks at it)
   onSceneActivated();
   setStatus(filename);
   // One way of counting for every read-out: the loaders add up memory per
@@ -13082,11 +13496,13 @@ function _applySunDirection() {
   const az = state.sunAzimuth * Math.PI / 180;
   const el = state.sunElevation * Math.PI / 180;
   const r  = Math.max(state.modelDiag, 100);
+  const t0 = state._lights.dir.target ? state._lights.dir.target.position : { x: 0, y: 0, z: 0 };      // (the sun looks at the middle of the model when there are shadows)
   state._lights.dir.position.set(
-    r * Math.cos(el) * Math.cos(az),
-    r * Math.cos(el) * Math.sin(az),
-    r * Math.sin(el),
+    t0.x + r * Math.cos(el) * Math.cos(az),
+    t0.y + r * Math.cos(el) * Math.sin(az),
+    t0.z + r * Math.sin(el),
   );
+  if (state.shadowsEnabled) _shadowRefit();
 }
 
 // =====================================================================
@@ -14276,7 +14692,7 @@ function _wireTransformPanel() {
   // mouse-move while dragging. Hook into it so the panel mirrors the live
   // mesh transform — otherwise a user dragging the gizmo sees stale values.
   if (state.gizmo && typeof state.gizmo.addEventListener === 'function') {
-    state.gizmo.addEventListener('objectChange', () => _transformPanelRefresh());
+    state.gizmo.addEventListener('objectChange', () => { _transformPanelRefresh(); try { _gizmoCardSync(); } catch (_) {} });
     // Also fire after a drag completes; some Three.js versions only emit
     // dragging-changed at end and skip the final objectChange.
     // On drag END (e.value === false), persist the new group origin so the
@@ -14527,25 +14943,189 @@ refreshPropertiesPanel = function() {
   return r;
 };
 
+// Shadows. The sun (the directional light) casts them on the parts. The floor is the plane of the grid, and what falls on it is the model's
+// shadow as a picture: the model seen from the sun (its outline, drawn white on black into a small texture), softened, and laid on the
+// floor along the sun's rays, so it falls away from the sun and follows the Sun gizmo; blurrier and fainter the higher the model stands
+// above the floor. (A floor that receives the sun's shadow and draws nothing else is what the renderer's shadow material should be; in
+// this build it does not compile, so the floor shadow is a picture.) The sun looks at the middle of the model and its shadow view is
+// fitted to the model, so the whole shadow map is spent on it; _shadowRefit does that, and is called when the switch is turned, when a
+// model is loaded and when the sun is turned.
+let _contactTimer = 0, _contactBusy = false, _contactAgain = false;
+function _contactShadowSoon(ms = 160) {
+  clearTimeout(_contactTimer);
+  _contactTimer = setTimeout(() => { _contactShadowUpdate().catch((e) => { try { console.warn('[shadow] the floor shadow failed:', e && e.message || e); } catch (_) {} }); }, ms);
+}
+function _shadowFloor() {
+  const f = state._shadowFloor;
+  if (!state.shadowsEnabled) { if (f) f.visible = false; return; }
+  _contactShadowSoon(0);
+}
+async function _contactShadowUpdate() {
+  if (!renderer || !scene || !state.partsRoot || !state._lights || !state._lights.dir) return;
+  if (!state.shadowsEnabled) { if (state._shadowFloor) state._shadowFloor.visible = false; return; }
+  if (_contactBusy) { _contactAgain = true; return; }
+  _contactBusy = true;
+  try {
+    const pl = state.gridPlane || 'xy';
+    const upv = { xy: [0, 0, 1], xz: [0, 1, 0], yz: [1, 0, 0] }[pl] || [0, 0, 1];
+    const up = new THREE.Vector3(...upv);
+    state.partsRoot.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(state.partsRoot);
+    if (box.isEmpty()) { if (state._shadowFloor) state._shadowFloor.visible = false; return; }
+    const centre = box.getCenter(new THREE.Vector3());
+    const R0 = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1e-9);
+    // the direction of the sun (from the model towards it), kept off the horizon so that the shadow does not run away to infinity
+    const dir = state._lights.dir;
+    const L = dir.position.clone().sub(dir.target.position);
+    if (L.lengthSq() < 1e-12) L.copy(up);
+    L.normalize();
+    if (L.dot(up) < 0.14) {
+      const horiz = L.clone().addScaledVector(up, -L.dot(up));
+      if (horiz.lengthSq() < 1e-9) horiz.set(upv[1] || upv[2] ? 1 : 0, upv[0] ? 1 : 0, 0);
+      horiz.normalize();
+      L.copy(horiz).multiplyScalar(Math.sqrt(1 - 0.14 * 0.14)).addScaledVector(up, 0.14);
+    }
+    const gap = Math.max(0, box.min.dot(up));                          // how high the model stands above the floor (the grid is at 0)
+    const N = 512, half = R0 * 1.08;
+    const rt = new THREE.RenderTarget(N, N, { depthBuffer: true, samples: 0 });
+    const cam = new THREE.OrthographicCamera(-half, half, half, -half, 0.001, R0 * 4 + 10);
+    cam.position.copy(centre).addScaledVector(L, R0 * 2);
+    const camUp = Math.abs(L.dot(up)) > 0.98 ? new THREE.Vector3(1, 0, 0) : up.clone();
+    cam.up.copy(camUp);
+    cam.lookAt(centre);
+    cam.updateMatrixWorld(true);
+    const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).normalize();
+    const camUpW = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1).normalize();
+    // only the model is drawn: the rest of the scene (grid, lights, gizmos, the floor itself) is put aside for this one picture
+    const saved = [];
+    let node = state.partsRoot;
+    while (node && node.parent) { for (const c of node.parent.children) if (c !== node && c.visible) { saved.push(c); c.visible = false; } node = node.parent; }
+    const glow = [];
+    state.partsRoot.traverse((o) => { if (o.userData && o.userData.selGlow && o.visible) { glow.push(o); o.visible = false; } });
+    const prevOverride = scene.overrideMaterial, prevBg = scene.background, prevFog = scene.fog, prevEnv = scene.environment;
+    const prevClear = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
+    scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, fog: false, toneMapped: false });
+    scene.background = null; scene.fog = null;
+    let pixels = null;
+    try {
+      renderer.setRenderTarget(rt);
+      renderer.setClearColor(0x000000, 1);
+      renderer.render(scene, cam);
+      pixels = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, N, N);
+    } finally {
+      try { renderer.setRenderTarget(null); } catch (_) {}
+      try { renderer.setClearColor(prevClear, prevAlpha); } catch (_) {}
+      try { scene.overrideMaterial.dispose(); } catch (_) {}
+      scene.overrideMaterial = prevOverride; scene.background = prevBg; scene.fog = prevFog; scene.environment = prevEnv;
+      for (const c of saved) c.visible = true;
+      for (const o of glow) o.visible = true;
+      try { rt.dispose(); } catch (_) {}
+    }
+    if (!pixels) return;
+    // the outline as a soft, dark, transparent picture
+    const c1 = document.createElement('canvas'); c1.width = c1.height = N;
+    const x1 = c1.getContext('2d'), img = x1.createImageData(N, N);
+    // (the rows of a read-back come bottom row first from WebGL and top row first from WebGPU; the canvas wants the top row first)
+    const flip = !(renderer.backend && renderer.backend.isWebGPUBackend);
+    for (let y = 0; y < N; y++) {
+      const sy = flip ? N - 1 - y : y;
+      for (let x = 0; x < N; x++) {
+        const a = pixels[(sy * N + x) * 4] / 255;                     // (white where the model is)
+        const o = (y * N + x) * 4;
+        img.data[o] = img.data[o + 1] = img.data[o + 2] = 0; img.data[o + 3] = Math.round(a * 255);
+      }
+    }
+    x1.putImageData(img, 0, 0);
+    const c2 = document.createElement('canvas'); c2.width = c2.height = N;
+    const x2 = c2.getContext('2d');
+    const blurPx = Math.max(4, Math.min(40, N * (0.014 + 0.12 * gap / (2 * R0))));       // (the higher it stands, the softer)
+    const strength = 0.5 * (1 - Math.min(0.6, gap / (R0 * 2.4)));                         // (and the fainter)
+    let blurred = false;
+    try { x2.filter = 'blur(' + blurPx.toFixed(1) + 'px)'; blurred = x2.filter !== 'none'; } catch (_) {}
+    x2.globalAlpha = strength;
+    x2.drawImage(c1, 0, 0);
+    x2.filter = 'none';
+    // where the corners of the picture fall on the floor: a ray from each, along the sun's direction, down to the plane of the floor
+    const lUp = L.dot(up);
+    const corner = (a, b) => {
+      const q = centre.clone().addScaledVector(right, a * half).addScaledVector(camUpW, b * half);
+      const t = q.dot(up) / lUp;
+      return q.addScaledVector(L, -t);
+    };
+    const P00 = corner(-1, -1), P10 = corner(1, -1), P11 = corner(1, 1), P01 = corner(-1, 1);
+    let f = state._shadowFloor;
+    if (!f) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12), 3));
+      g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]), 2));
+      g.setIndex([0, 1, 2, 0, 2, 3]);
+      f = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+      f.name = '__shadowFloor'; f.userData.noPick = true; f.renderOrder = -2; f.raycast = () => {}; f.castShadow = false; f.receiveShadow = false; f.frustumCulled = false;
+      scene.add(f);
+      state._shadowFloor = f;
+    }
+    const pa = f.geometry.attributes.position;
+    [P00, P10, P11, P01].forEach((P, k) => pa.setXYZ(k, P.x, P.y, P.z));
+    pa.needsUpdate = true;
+    f.geometry.computeBoundingSphere();
+    if (f.material.map) { try { f.material.map.dispose(); } catch (_) {} }
+    const tex = new THREE.CanvasTexture(c2);
+    tex.colorSpace = THREE.SRGBColorSpace; tex.needsUpdate = true;
+    f.material.map = tex; f.material.needsUpdate = true;
+    f.userData.corners = [P00, P10, P11, P01].map((P) => P.toArray());
+    f.userData.sunHoriz = L.clone().addScaledVector(up, -lUp).toArray();
+    f.userData.centre = centre.toArray();
+    f.position.set(0, 0, 0); f.quaternion.identity(); f.scale.set(1, 1, 1);
+    f.visible = !!state.shadowsEnabled;
+    f.updateMatrixWorld(true);
+    requestRender();
+  } finally {
+    _contactBusy = false;
+    if (_contactAgain) { _contactAgain = false; _contactShadowSoon(60); }
+  }
+}
+function _shadowRefit() {
+  const dir = state._lights && state._lights.dir;
+  if (!dir || !state.shadowsEnabled) return;
+  const box = new THREE.Box3();
+  if (state.partsRoot) { try { box.setFromObject(state.partsRoot); } catch (_) {} }
+  const c = new THREE.Vector3(), size = new THREE.Vector3();
+  if (box.isEmpty()) { c.set(0, 0, 0); size.set(1, 1, 1); } else { box.getCenter(c); box.getSize(size); }
+  const diag = Math.max(size.length(), 1e-6);
+  // the sun's direction as it is now (its position relative to what it looks at), brought to the middle of the model
+  const v = dir.position.clone().sub(dir.target.position);
+  if (v.lengthSq() < 1e-12) v.set(1, 1, 2);
+  v.normalize();
+  dir.target.position.copy(c);
+  dir.target.updateMatrixWorld?.();
+  dir.position.copy(c).addScaledVector(v, diag * 1.6);
+  dir.updateMatrixWorld?.();
+  const sh = dir.shadow;
+  if (!sh) return;
+  try { sh.mapSize.set(2048, 2048); } catch (_) {}
+  const cam = sh.camera;
+  if (cam) {
+    const half = diag * 0.75;                              // (the model's own size all round: its shadow on the floor can be long, but the part of it that matters is near)
+    cam.near = diag * 0.05; cam.far = diag * 3.4;
+    cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half;
+    cam.updateProjectionMatrix?.();
+  }
+  sh.bias = -0.0002;
+  sh.normalBias = diag * 0.0008;                           // (no stripes on the surfaces that face the sun slantwise)
+  sh.radius = 3;
+  _shadowFloor();
+}
 function _applyShadows() {
   if (!renderer || !state._lights?.dir) return;
   const on = !!state.shadowsEnabled;
-  try { if (renderer.shadowMap) renderer.shadowMap.enabled = on; } catch (_) {}
+  // (the renderer's shadow system is switched on for good, here and at start: lights and parts that do not cast or receive cost nothing, and the
+  // lighting programs are built once with it; switching it later left them with a missing shadow node and a shader that did not compile)
+  try { if (renderer.shadowMap) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap; } } catch (_) {}
   const dir = state._lights.dir;
   dir.castShadow = on;
-  if (on && dir.shadow) {
-    const diag = Math.max(state.modelDiag, 100);
-    dir.shadow.mapSize?.set?.(2048, 2048);
-    if (dir.shadow.camera) {
-      dir.shadow.camera.near = diag * 0.01;
-      dir.shadow.camera.far  = diag * 4;
-      const half = diag;
-      dir.shadow.camera.left = -half; dir.shadow.camera.right = half;
-      dir.shadow.camera.top = half;   dir.shadow.camera.bottom = -half;
-      dir.shadow.camera.updateProjectionMatrix?.();
-    }
-  }
   state.partsRoot?.traverse(o => { if (o.isMesh && !o.userData.selGlow) { o.castShadow = on; o.receiveShadow = on; } });
+  if (on) _shadowRefit(); else _shadowFloor();
+  try { state.partsRoot?.traverse(o => { if (o.isMesh && o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material]; for (const m of ms) m.needsUpdate = true; } }); } catch (_) {}
 }
 
 function _applyGridCell() {
@@ -16118,6 +16698,7 @@ function applySelectionColors() {
     try { _applySelectionColorsImpl(); state._selDrawnSig = _selVisSig(); _paintSplines(); try { _Elements.hush(); } catch (_) {} }
     catch (e) { console.warn('[selection] highlight rebuild failed:', e); try { requestRender(); } catch (_) {} }
     try { _updateVpHint(); } catch (_) {}
+    try { _syncSelBarToggles(); } catch (_) {}
   });
 }
 // Hard caps on highlight counts. With thousands of selected parts, the cost
@@ -16125,7 +16706,7 @@ function applySelectionColors() {
 // LineSegments allocation. Above the cap we still set the tree styling so the
 // user sees what's selected; the viewport just doesn't draw the cyan outline
 // for every single one.
-const MAX_SELECTION_HIGHLIGHTS = 1500;
+const MAX_SELECTION_HIGHLIGHTS = Infinity;       // (no cap on how many selected parts are outlined: every one gets its own outline, however many)
 const MAX_FLAGGED_HIGHLIGHTS   = 2500;
 
 // Edges cache keyed by source BufferGeometry. Was `geom.userData._edges`,
@@ -16329,7 +16910,7 @@ function _edgesWorkerGet() {
 // outline at once. Bounded by _EDGES_PREWARM_FLOATS so a huge assembly can't
 // fill memory with outlines nobody asked for.
 const _edgesPrewarm = [];
-const _EDGES_PREWARM_FLOATS = 30e6;      // about 120 MB of outline data
+const _EDGES_PREWARM_FLOATS = 60e6;      // about 240 MB of outline data
 let _edgesPrewarmFloats = 0;
 function _prewarmEdges() {
   _edgesPrewarm.length = 0;
@@ -16343,7 +16924,7 @@ function _prewarmEdges() {
     if (!pos || seen.has(g) || _edgesCache.has(g)) continue;
     seen.add(g);
     const tris = g.index ? g.index.count / 3 : pos.count / 3;
-    if (tris <= _EDGES_INLINE_TRIS) continue;
+    // (the small parts too: a click on thousands of them cannot build them all inline, and what is not ready is drawn as a box)
     if (pos.isInterleavedBufferAttribute || !(pos.array instanceof Float32Array) || pos.itemSize !== 3 || pos.normalized) continue;
     _edgesPrewarm.push({ g, tris });
   }
@@ -16446,7 +17027,9 @@ const _FLAG_EXTRAS_MAX = 400;       // (the see-through fill and the outline cos
 // (200,000 floats is only about 33,000 line segments, a few hundred small parts: a selection of the fasteners, or everything after a
 // Revert, was mostly boxes and stayed that way, since a part past the budget is never asked for its edges. 3,000,000 floats, 12 MB,
 // is baked in a few tens of milliseconds and holds a few thousand small parts; only a selection beyond that falls back to boxes.)
-const SELECTION_EDGE_VERT_BUDGET = 3000000;
+// No part of a big selection is turned into a box any more: the budget is only a ceiling against running out of memory (40,000,000 floats,
+// 160 MB, is the outlines of tens of thousands of parts; it was 3,000,000, and a selection of thousands of parts was mostly boxes).
+const SELECTION_EDGE_VERT_BUDGET = 40000000;
 
 // 12 line segments (24 verts × 3 floats = 72) for an AABB. Ordered as
 // [bottom 4 edges, 4 verticals, top 4 edges] so the result reads as a
@@ -18272,7 +18855,7 @@ function _updateFlaggedChip() {
 let _UNDO_MAX = Math.max(10, Math.min(1000, +_Prefs.get('undoMax') || 200));
 const _UNDO_MAX_HEAVY = 30;
 function _setUndoMax(n) { _UNDO_MAX = Math.max(10, Math.min(1000, +n || 200)); }
-const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'recenter', 'normals', 'merge', 'flatten', 'duplicate', 'paste-group', 'addPart', 'decimate', 'budget']);
+const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'recenter', 'normals', 'merge', 'flatten', 'duplicate', 'paste-group', 'paste-hier', 'addPart', 'decimate', 'budget']);
 // ── Geometry nobody can reach any more ───────────────────────────────────────
 // Decimate, Budget, Repair, Remesh … each put the geometry they make into state.geomByHash and keep the old one so that undo can put
 // it back. When the undo (or redo) entry that held it falls off the end, nothing frees it: on a large scene every superseded
@@ -18284,8 +18867,11 @@ const _UNDO_HEAVY = new Set(['delete', 'split', 'boxify', 'geomXform', 'recenter
 //    after it leaves the table (the same wait _drainDisposeQueue uses for the WebGPU backend).
 let _geomSweepTimer = 0, _geomSweepMaybe = new Set();
 function _geomSweepSoon() {
-  clearTimeout(_geomSweepTimer);
+  // (not a debounce: Remove holes, then Ctrl+Z, then Remove holes again, each of which asks for a sweep, would push it back for ever
+  // while every pass piles up another copy of the scene; the first request starts the clock and the others wait for the same sweep)
+  if (_geomSweepTimer) return;
   _geomSweepTimer = setTimeout(() => {
+    _geomSweepTimer = 0;
     const run = () => { try { _geomSweep(); } catch (e) { console.warn('[sweep]', e); } };
     if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 4000 }); else run();
   }, 3000);
@@ -18318,7 +18904,7 @@ function _geomSweepReachable() {
 function _geomSweep() {
   const table = state.geomByHash;
   if (!table || !table.size || state._geomSweepBusy) return;
-  const TOOL_MADE = /^(?!idx_)[a-z]+_\d+$/i;
+  const TOOL_MADE = /^(?!idx_)[a-z]+(?:_\d+)+$/i;
   const cand = [];
   for (const [h, g] of table) if (typeof h === 'string' && TOOL_MADE.test(h)) cand.push([h, g]);
   if (!cand.length) { _geomSweepMaybe.clear(); return; }
@@ -18330,6 +18916,7 @@ function _geomSweep() {
   if (!confirmed.length) return;
   const gone = [];
   for (const [h, g] of confirmed) { if (table.get(h) === g) { table.delete(h); gone.push(g); } _geomSweepMaybe.delete(h); }
+  if (_geomSweepMaybe.size) _geomSweepSoon();                        // (what became unreachable meanwhile has been seen once: look again)
   state._geomSweepBusy = true;
   (async () => {
     try {
@@ -18614,6 +19201,9 @@ const _Tabs = (() => {
     if (REG.spare || REG.pending || TOP.__moNoTabs || /[?&]selftest/.test(TOP.location.search)) return;
     try {
       if (state.parts.reduce((n, p) => n + (p.deleted ? 0 : 1), 0) > SPARE_MAX_PARTS) return;
+      // (nor beside a model of over a million triangles: the spare is a whole second copy of the app with a renderer of its own, which holds this
+      // page for seconds while it starts and takes graphics memory the model needs; a new tab then starts when it is asked for)
+      if (state.parts.reduce((n, p) => n + (p.deleted ? 0 : (p.triCount || 0)), 0) > 1000000) return;
       if (!_quietFor(2500)) { REG.warmTimer = TOP.setTimeout(warm, 2500); return; }
     } catch (_) {}
     REG.spare = { id: spawn({ spare: true }), ready: false };
@@ -19297,6 +19887,7 @@ const _Autosave = (() => {
     if (!ms || topNow() === lastTop) return;
     if (Date.now() - lastAt < Math.max(ms, lastCost * 20)) return;          // a slow copy is taken less often
     if (down || state.viewMode !== 'solid' || busyNow()) return;            // not mid-drag, not while the view is dressed, not while loading
+    if (!_quietFor(2500)) return;                                           // not while the person is working with the scene: the copy holds the page for as long as it takes to write the scene (seconds on a big one); the next check is in 15 s
     snap('timer');
   }
   if (!off) {
@@ -19611,7 +20202,7 @@ function _resolvePasteTarget() {
 // container (a user group's THREE.Group or a hier-group's captured obj3d);
 // when omitted, the clone goes under partsRoot as a sibling of the source.
 // Returns the new partInfo or null if the source can't be cloned.
-function _clonePart(srcId, target = null) {
+function _clonePart(srcId, target = null, opts = {}) {
   const src = getPart(srcId);
   if (!src || src.deleted) return null;
 
@@ -19634,7 +20225,7 @@ function _clonePart(srcId, target = null) {
   const mat = _ownMaterialOf(src.mesh || src.instancedMesh) || getOrCreateMaterial(src.originalColor);
   const mesh = new THREE.Mesh(geom, mat);
   const newId = _allocPartId();
-  const newName = _nextDuplicateName(src.name);
+  const newName = opts.keepName ? src.name : _nextDuplicateName(src.name);   // (a pasted group keeps its parts' names, as a copy of a folder does elsewhere)
   mesh.name = newName;
   mesh.userData.partId = newId;
 
@@ -19694,7 +20285,7 @@ function _clonePart(srcId, target = null) {
   //   no target  → insert as the source's next sibling in treeNodes
   if (target?.kind === 'user' && target.ug) {
     target.ug.partIds.add(newId);
-  } else if (state.treeNodes && Array.isArray(state.treeNodes)) {
+  } else if (!opts.skipTree && state.treeNodes && Array.isArray(state.treeNodes)) {   // (skipTree: the caller lays out the rows itself)
     if (target?.kind === 'hier' && target.node) {
       const gIdx = state.treeNodes.indexOf(target.node);
       const gDepth = target.node.depth;
@@ -19769,6 +20360,16 @@ function copyParts(ids) {
     if (ug && ug.partIds && ug.partIds.size === live.length
         && live.every(id => ug.partIds.has(id))) {
       state._clipboardGroup = { kind: 'user', name: ug.name, partIds: live.slice() };
+    } else if (!ug) {
+      // A group of the model's own tree (what a file's folders import as, often the one "main" group holding everything): the same
+      // rule, so it pastes as one new group and not as a copy beside each part inside the original.
+      const hn = (state.treeNodes || []).find(n => n.kind === 'group' && String(n.id) === String(gid));
+      if (hn) {
+        const inside = new Set(_treeGroupDescendants(hn.id));
+        if (inside.size === live.length && live.every(id => inside.has(id))) {
+          state._clipboardGroup = { kind: 'hier', name: hn.name || 'Group', nodeId: hn.id, partIds: live.slice() };
+        }
+      }
     }
   }
   const groupSuffix = state._clipboardGroup ? ` (group "${state._clipboardGroup.name}")` : '';
@@ -19783,6 +20384,13 @@ function pasteParts() {
   // user group of the same name (with " copy" suffix on collision) and
   // clone the parts into it. Each clone goes through _clonePart which
   // preserves world-space position, so layout matches the source group.
+  if (state._clipboardGroup && state._clipboardGroup.kind === 'hier') {
+    // A group of the model's own tree pastes the way every 3D app does it: the whole folder is copied with the folders inside it,
+    // in the same order, next to the original, under the same parent.
+    const done = _pasteHierGroup(state._clipboardGroup.nodeId);
+    if (done) return done;
+    return _pasteAsUserGroup(ids, state._clipboardGroup.name);       // (the group is gone: its parts still paste as one new group)
+  }
   if (state._clipboardGroup && state._clipboardGroup.kind === 'user') {
     return _pasteAsUserGroup(ids, state._clipboardGroup.name);
   }
@@ -19798,6 +20406,7 @@ function pasteParts() {
 // paste into a scene that still contains the source produces no collision.
 function _uniqueUserGroupName(base) {
   const taken = new Set((state.userGroups || []).map(g => g.name));
+  for (const n of (state.treeNodes || [])) if (n.kind === 'group') taken.add(n.name);   // (the model's own groups too: a copy of one is "X copy", never a second "X")
   if (!taken.has(base)) return base;
   let candidate = `${base} copy`;
   let n = 2;
@@ -19843,7 +20452,7 @@ function _pasteAsUserGroup(srcIds, baseName) {
   const newIds = [];
   const target = { kind: 'user', ug };
   for (const id of srcIds) {
-    const np = _clonePart(id, target);
+    const np = _clonePart(id, target, { keepName: true });
     if (np) { sourceIds.push(id); newIds.push(np.partId); }
   }
 
@@ -19879,6 +20488,63 @@ function _pasteAsUserGroup(srcIds, baseName) {
   updateGizmo();
   requestRender();
   toast(`Pasted "${groupName}"`, `${newIds.length} part${newIds.length === 1 ? '' : 's'}`, 'success');
+  return newIds;
+}
+
+// Paste a group of the model's own tree: a full copy of the folder, with the folders and parts inside it, in the same order, as the next
+// sibling of the original (same parent, same place in space). The root is named "Name copy"; what is inside keeps its names. Returns the
+// new part ids, or null when the group is gone. One undo ('paste-hier') takes the whole copy away.
+function _pasteHierGroup(srcNodeId, quiet = false) {
+  const nodes = state.treeNodes || [];
+  const sIdx = nodes.findIndex(n => n.kind === 'group' && n.id === srcNodeId);
+  if (sIdx < 0) return null;
+  const root = nodes[sIdx];
+  let end = sIdx + 1;
+  while (end < nodes.length && nodes[end].depth > root.depth) end++;
+  const subtree = nodes.slice(sIdx, end);
+
+  let lowest = 0;
+  for (const n of nodes) if (n.kind === 'group' && typeof n.id === 'number' && n.id < lowest) lowest = n.id;
+  const rootName = _uniqueUserGroupName(root.name || 'Group');
+  const made = new Map();            // old group id -> its new row
+  const newRows = [], srcIds = [], newIds = [];
+  let rootNew = null;
+  for (const n of subtree) {
+    if (n.kind === 'group') {
+      const isRoot = n === root;
+      const up = isRoot ? null : made.get(n.parentId);
+      const g = new THREE.Group();
+      g.name = isRoot ? rootName : (n.name || 'Group');
+      if (n.obj3d) { g.position.copy(n.obj3d.position); g.quaternion.copy(n.obj3d.quaternion); g.scale.copy(n.obj3d.scale); }
+      const parent3 = isRoot ? ((n.obj3d && n.obj3d.parent) || state.partsRoot) : ((up && up.obj3d) || state.partsRoot);
+      parent3.add(g);
+      parent3.updateMatrixWorld(true);
+      const row = { id: --lowest, kind: 'group', name: g.name, depth: n.depth, parentId: isRoot ? n.parentId : (up ? up.id : rootNew.id), partId: null, obj3d: g };
+      made.set(n.id, row); newRows.push(row);
+      if (isRoot) rootNew = row;
+    } else if (n.kind === 'part') {
+      const up = made.get(n.parentId) || rootNew;
+      const np = _clonePart(n.partId, { kind: 'hier', node: up }, { keepName: true, skipTree: true });
+      if (!np) continue;
+      srcIds.push(n.partId); newIds.push(np.partId);
+      newRows.push({ id: 'p_dup_' + np.partId, kind: 'part', name: np.name, depth: n.depth, parentId: up.id, partId: np.partId, instanceCount: 0, obj3d: np.mesh });
+    }
+  }
+  if (!newIds.length) {
+    if (rootNew && rootNew.obj3d.parent) rootNew.obj3d.parent.remove(rootNew.obj3d);
+    if (!quiet) toast('Nothing to paste', 'Source parts are gone', 'warn', 1800);
+    return [];
+  }
+  state.treeNodes.splice(end, 0, ...newRows);
+
+  pushUndo({ type: 'paste-hier', srcNodeId, sourceIds: srcIds, partIds: newIds, rows: newRows, rootObj: rootNew.obj3d, label: `Pasted "${rootName}"` });
+
+  state.selected = new Set(newIds);
+  state.selectedGroupIds = new Set([rootNew.id]);
+  $('del-sel-count').textContent = state.selected.size;
+  recomputeStats(); rebuildTree(); applySelectionColors();
+  refreshPropertiesPanel(); updateGizmo(); requestRender();
+  toast(`Pasted "${rootName}"`, `${newIds.length} part${newIds.length === 1 ? '' : 's'}`, 'success');
   return newIds;
 }
 
@@ -20593,12 +21259,45 @@ function _syncIsolatePill() {
   Object.defineProperty(state, '_isolated', {
     configurable: true, enumerable: true,
     get() { return _iso; },
-    set(v) { _iso = !!v; clearTimeout(_isoT); _isoT = setTimeout(() => { _syncIsolatePill(); try { _scenePropsSoon(); } catch (_) {} }, 0); },
+    set(v) { _iso = !!v; clearTimeout(_isoT); _isoT = setTimeout(() => { _syncIsolatePill(); try { _syncSelBarToggles(); } catch (_) {} try { _scenePropsSoon(); } catch (_) {} }, 0); },
   });
   const wire = () => document.getElementById('vp-explode-pill')?.addEventListener('click', () => { try { resetExplode(); } catch (_) {} });
   const wire0 = () => document.getElementById('vp-isolate-pill')?.addEventListener('click', () => { try { showAllParts(); requestRender(); } catch (_) {} });
   const wireAll = () => { wire(); wire0(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireAll, { once: true }); else wireAll();
+}
+
+// The Hide and Isolate buttons of the selection bar are switches: lit while the selection is hidden / while the view is isolated,
+// and the same click undoes it. Called whenever the selection, a part's visibility or the isolation changes.
+function _selBarHidden() {
+  if (!state.selected.size) return false;
+  let any = false;
+  for (const p of state.parts) { if (p.deleted || !state.selected.has(p.partId)) continue; any = true; if (p.visible) return false; }
+  return any;
+}
+function _syncSelBarToggles() {
+  const iso = document.getElementById('sel-isolate');
+  if (iso) {
+    const on = !!state._isolated;
+    iso.classList.toggle('is-on', on); iso.setAttribute('aria-pressed', on ? 'true' : 'false');
+    iso.title = on ? 'Show all parts: leave the isolation (Alt+H)' : 'Isolate: show only the selection (S)';
+    iso.setAttribute('aria-label', on ? 'Show all' : 'Isolate');
+  }
+  const hid = document.getElementById('sel-hide');
+  if (hid) {
+    const on = _selBarHidden();
+    hid.classList.toggle('is-on', on); hid.setAttribute('aria-pressed', on ? 'true' : 'false');
+    hid.title = on ? 'Show the selection again (H)' : 'Hide the selection (H)';
+    hid.setAttribute('aria-label', on ? 'Show' : 'Hide');
+  }
+}
+function toggleHideSelected() {
+  if (!state.selected.size) return;
+  if (_selBarHidden()) {
+    const pairs = state.parts.filter(p => !p.deleted && state.selected.has(p.partId)).map(p => [p, true]);
+    _applyVisibility(pairs); rebuildTree(); requestRender();
+  } else hideSelected();
+  _syncSelBarToggles();
 }
 
 function isolateSelected() {
@@ -21012,12 +21711,16 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
       // material (e.g., instanced mesh path where mat lives on instancedMesh).
       let mat;
       const srcMat = item.srcMat;
-      const matKey = ((srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) ? srcMat.uuid : 'plain') + '|' + item.color.getHexString();
+      // A part with a mesh of its own is written in the colour its material has now (what the viewport shows: a paint preset or the
+      // material editor changes the material, and the part's `originalColor` may not have followed). A copy drawn as one instanced mesh
+      // keeps the colour of its own instance, which the material does not carry.
+      const ownColour = !!(srcMat && !Array.isArray(srcMat) && srcMat.isMaterial && srcMat.color && item.part && item.part.mesh && !item.isClone);
+      const matKey = ((srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) ? srcMat.uuid : 'plain') + '|' + (ownColour ? 'own' : item.color.getHexString());
       mat = matCache.get(matKey);
       if (!mat) {
         if (srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) {
           mat = srcMat.clone();
-          if (mat.color) mat.color.copy(item.color);
+          if (mat.color && !ownColour) mat.color.copy(item.color);
         } else {
           mat = new THREE.MeshStandardMaterial({ color: item.color.clone(), metalness: 0.15, roughness: 0.55 });
         }
@@ -21072,6 +21775,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
   const validParts = [];
   let totalVerts = 0, totalIdxLen = 0;
   let hasNormals = true;
+  let anyUv = false;           // texture coordinates go into the merged mesh when any part has them (a part without gets 0, 0)
   for (const item of drawList) {
     const g = item.geom;
     const pos = g.attributes.position?.array;
@@ -21081,7 +21785,9 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
     const vCount = pos.length / 3;
     const iLen   = idx ? idx.length : vCount;
     if (!nrm) hasNormals = false;
-    validParts.push({ item, pos, nrm, idx, vCount, iLen });
+    const uvA = g.attributes.uv && !g.attributes.uv.isInterleavedBufferAttribute && g.attributes.uv.itemSize === 2 ? g.attributes.uv.array : null;
+    if (uvA) anyUv = true;
+    validParts.push({ item, pos, nrm, uvA, idx, vCount, iLen });
     totalVerts  += vCount;
     totalIdxLen += iLen;
   }
@@ -21090,13 +21796,14 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
   const positions = new Float32Array(totalVerts * 3);
   const colors    = new Float32Array(totalVerts * 3);
   const normals   = hasNormals ? new Float32Array(totalVerts * 3) : null;
+  const uvs       = anyUv ? new Float32Array(totalVerts * 2) : null;
   const indexCtor = totalVerts > 65535 ? Uint32Array : Uint16Array;
   const indices   = new indexCtor(totalIdxLen);
 
   let posOff = 0, idxOff = 0, vertBase = 0;
   const v3 = new THREE.Vector3();
   const n3 = new THREE.Vector3();
-  for (const { item, pos, nrm, idx, vCount, iLen } of validParts) {
+  for (const { item, pos, nrm, uvA, idx, vCount, iLen } of validParts) {
     const final = new THREE.Matrix4().multiplyMatrices(postMat, item.world);
     const normalMat = new THREE.Matrix3().getNormalMatrix(final);
     const cr = item.color.r, cg = item.color.g, cb = item.color.b;
@@ -21124,6 +21831,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
         nOff += 3;
       }
     }
+    if (uvs && uvA) uvs.set(uvA.subarray(0, vCount * 2), vertBase * 2);
     if (idx) {
       for (let i = 0; i < iLen; i++) indices[idxOff + i] = idx[i] + vertBase;
     } else {
@@ -21144,10 +21852,30 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
   merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   if (normals) merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  if (uvs) merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   merged.setIndex(new THREE.BufferAttribute(indices, 1));
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.6 });
   root.add(new THREE.Mesh(merged, mat));
   return { root, count };
+}
+
+// A material flagged "transparent" but fully opaque (no opacity under 1, no colour map that may carry alpha, no alpha map) is written
+// by GLTFExporter as alphaMode BLEND, and a program opening the file draws a BLEND material without writing depth: a body made of
+// overlapping shells comes out as patchwork. Such a material is written as opaque instead, on a copy (one copy per material, so
+// sharing is kept), and the scene's own materials are not touched.
+function _opaqueForExport(root) {
+  const copies = new Map();
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const fix = (m) => {
+      if (!m || !m.isMaterial || !m.transparent || m.opacity < 1 || m.alphaMap || m.map || m.alphaTest > 0) return m;
+      let c = copies.get(m);
+      if (!c) { c = m.clone(); c.transparent = false; copies.set(m, c); }
+      return c;
+    };
+    o.material = Array.isArray(o.material) ? o.material.map(fix) : fix(o.material);
+  });
+  return copies.size;
 }
 
 function downloadBlob(blob, name) {
@@ -23463,18 +24191,46 @@ function _exportObjStreaming(root, mtlBaseName) {
 const SCENE_STATE_KEY = '__stepOptimizerSceneState__';
 const SCENE_STATE_VERSION = 1;
 
+// The scene's own settings that live in controls of the page, saved by the id of the control and put back the way the user sets them
+// (the control gets its value and an input / change event, so everything it does is done): the unit the sizes are shown in, the grid, the
+// lights and the shadows, and the up axis and the scale of the scene (the file itself is written unscaled and Z up). (The other controls are the application's own preferences, which belong to the person and not to the scene.)
+const _SCENE_CONTROLS = ['scene-up-axis', 'scene-scale', 'display-units', 'grid-cell', 'light-exposure', 'light-sun', 'light-ambient', 'light-azi', 'light-ele', 'toggle-shadows'];
+function _collectSceneControls() {
+  const out = {};
+  for (const id of _SCENE_CONTROLS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    out[id] = el.type === 'checkbox' ? !!el.checked : String(el.value);
+  }
+  return out;
+}
+function _applySceneControls(c) {
+  if (!c || typeof c !== 'object') return;
+  for (const id of _SCENE_CONTROLS) {
+    if (!(id in c)) continue;
+    const el = document.getElementById(id);
+    if (!el) continue;
+    try {
+      if (el.type === 'checkbox') { if (el.checked === !!c[id]) continue; el.checked = !!c[id]; }
+      else { if (String(el.value) === String(c[id])) continue; el.value = String(c[id]); if (String(el.value) !== String(c[id])) continue; }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (_) {}
+  }
+}
 function _collectSceneState() {
   const partsPayload = [];
   for (const p of state.parts) {
     if (p.deleted) continue;
     // Only emit per-part rows that diverge from defaults — keeps the sidecar
     // small for big assemblies where nothing has been touched.
-    if (p.visible && !p.flagged) continue;
+    if (p.visible && !p.flagged && !p.locked) continue;
     partsPayload.push({
       idx: p.partId,
       name: p.name,
       visible: p.visible,
       flagged: p.flagged,
+      locked: !!p.locked,
     });
   }
   // Camera distance can be huge for unscaled CAD models, so store full doubles.
@@ -23508,6 +24264,8 @@ function _collectSceneState() {
       highlightSmall:  state.highlightSmall,
       perfMode:        state.perfMode,
     },
+    controls: _collectSceneControls(),
+    explode: state.explode && (state.explode.x || state.explode.y || state.explode.z) ? { x: state.explode.x, y: state.explode.y, z: state.explode.z, mode: state.explodeMode || 'scene' } : null,
     parts: partsPayload,
   };
 }
@@ -23737,6 +24495,10 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
       if (p.visible !== want) { flipped.push([p, p.visible]); p.visible = want; if (p.mesh) p.mesh.visible = want; }
     }
   }
+  // An exploded view is a view: the parts are written where they are when the model is together, and the amount goes in the saved state
+  // (it was written as it looked, so after opening it again the parts stayed apart and nothing could put them back).
+  const ex0 = state.explode ? { ...state.explode } : null, wasExploded = !!(ex0 && (ex0.x || ex0.y || ex0.z));
+  if (wasExploded) { state.explode = { x: 0, y: 0, z: 0 }; try { applyExplode(); } catch (_) {} }
   try {
     ({ root, count, meshByPart } = buildExportRoot({ visibleOnly: partial, merge: false, scale: 1, axis: 'z-up', origin: 'model', lines: true }));
   } catch (e) {
@@ -23746,6 +24508,7 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
     return false;
   } finally {
     for (const [p, was] of flipped) { p.visible = was; if (p.mesh) p.mesh.visible = was; }
+    if (wasExploded) { state.explode = ex0; try { applyExplode(); } catch (_) {} }
   }
   if (count === 0) { if (!quiet) setLoader(false); if (!quiet) toast('Nothing to save', 'No parts in scene', 'warn'); return false; }
   root.updateMatrixWorld(true);
@@ -23760,6 +24523,7 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
     if (!em) continue;
     if (!p.visible) em.userData.soHidden = true;
     if (p.flagged) em.userData.soFlagged = true;
+    if (p.locked) em.userData.soLocked = true;
   }
   // Stash the sidecar on a *named* child node so traversal on load can find it
   // unambiguously. The Three.js GLTFExporter wraps a Group root in an
@@ -23779,6 +24543,7 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
   const exportNodes = [...root.children];
   try {
     _normalizeNormalsInPlace(root);
+    try { _opaqueForExport(root); } catch (e) { console.warn('[export] opaque pass:', e); }
     const exp = new GLTFExporter();
     const _origWarn = console.warn;
     console.warn = function(...args) {
@@ -23808,6 +24573,7 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
       if (fileHandle) state._lastSaveSceneHandle = fileHandle;
       _Dirty.mark();
     }
+    try { await _rememberSaved(fname, blob, fileHandle); } catch (e) { console.warn('[scene-save] could not add it to Recent:', e); }
     if (!quiet) toast(ask.copy ? 'Copy saved' : 'Scene saved', `${fname} · ${fmtBytes(blob.size)}`, 'success', 4000);
     return true;
   } catch (e) {
@@ -23908,6 +24674,18 @@ function _applySceneState(s) {
       } catch (_) {}
     }
     try { _applyFog(); } catch (_) {}
+    _applySceneControls(s.controls);
+    // the explode amount, put back the way the Explode panel sets it (the parts were written together)
+    if (s.explode && state.parts.length) {
+      const e = s.explode, num = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(300, +v)) : 0);
+      state.explode = { x: num(e.x), y: num(e.y), z: num(e.z) };
+      if (e.mode === 'part' || e.mode === 'scene') state.explodeMode = e.mode;
+      const top = Math.max(state.explode.x, state.explode.y, state.explode.z);
+      if (top > 0) state._explodeLast = top;
+      const sc = state._explodeScrubbers;
+      if (sc) { sc.all?.setValue(top); for (const k of ['x', 'y', 'z']) sc[k]?.setValue(state.explode[k]); }
+      try { applyExplode(); state._explodePaint?.(); } catch (_) {}
+    }
     if (typeof v.perfMode === 'string') {
       state.perfMode = v.perfMode;
       const sel = $('perf-mode'); if (sel) sel.value = v.perfMode;
@@ -23920,7 +24698,8 @@ function _applySceneState(s) {
       for (const p of state.parts) {
         if (p._soHidden) { _setPartVisible(p, false); touched++; }
         if (p._soFlagged) { p.flagged = true; touched++; }
-        delete p._soHidden; delete p._soFlagged;
+        if (p._soLocked) { p.locked = true; touched++; }
+        delete p._soHidden; delete p._soFlagged; delete p._soLocked;
       }
       if (touched) {
         try { rebuildTree(); } catch (_) {}
@@ -25302,7 +26081,39 @@ function _wireClear() {
     return _beforeWire.apply(this, arguments);
   };
   // parts added, replaced or brought back while it is on get their lines
-  window._appHooks?.treePostBuildHooks.push(() => { if (state.viewMode === 'wire') _wireSoon(); });
+  window._appHooks?.treePostBuildHooks.push(() => { if (state.viewMode === 'wire') _wireSoon(); else _wireWarmSoon(); });
+}
+
+// The lines of every part are made AHEAD, a little at a time while the page is idle, so the first switch to Wireframe finds them
+// ready instead of making them then (the second switch was always instant). Only the index of the lines is made (a few MB in all) and
+// the line geometry that wraps it; nothing goes to the graphics card until the view is on. Big parts go to the workers, two at a time, so
+// other jobs are not kept waiting. A model with more triangles than the limit is left alone: its lines are made when the view is switched on.
+const _WIRE_WARM_MAX_TRIS = 8e6;
+let _wireWarmTimer = 0, _wireWarmTicks = 0;
+function _wireWarmSoon(ms = 1500) {
+  if (_wireWarmTimer || state.viewMode === 'wire') return;
+  _wireWarmTicks = 0;
+  _wireWarmTimer = setTimeout(_wireWarm, ms);
+}
+function _wireWarm() {
+  _wireWarmTimer = 0;
+  if (state.viewMode === 'wire') return;
+  if (document.hidden) { _wireWarmTimer = setTimeout(_wireWarm, 3000); return; }
+  let tris = 0;
+  for (const p of state.parts) if (p && !p.deleted) tris += p.triCount || 0;
+  if (!tris || tris > _WIRE_WARM_MAX_TRIS) return;
+  const deadline = performance.now() + 8;
+  let more = false;
+  _wireModeMemo = _Prefs.get('wireMode');
+  try {
+    for (const host of _wireHosts()) {
+      const g = host.geometry, cur = _wireGeoms.get(g);
+      if (cur && cur.key === _wireKeyFor(g)) continue;
+      if (_wireBusy.size >= 2 || performance.now() > deadline) { more = true; break; }
+      if (_wireGeomFor(g) === false) more = true;
+    }
+  } catch (_) {} finally { _wireModeMemo = null; }
+  if (more && ++_wireWarmTicks < 800) _wireWarmTimer = setTimeout(_wireWarm, 250);
 }
 
 // The way a horizontal strip of cards moves under a mouse, shared by the Shading card and the material strip in Properties:
@@ -25540,6 +26351,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       // build a corrected copy in the background. Doing the pass here is
       // free: applies in place to the same buffers we just built.
       _normalizeNormalsInPlace(root);
+      try { _opaqueForExport(root); } catch (e) { console.warn('[export] opaque pass:', e); }
       const exp = new GLTFExporter();
       const isBin = format === 'glb';
       // Filter the spammy "Creating normalized normal attribute" warning
@@ -25637,6 +26449,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
         let exported = false;
         // (Assimp is given a GLB, which only has triangles: with quads to write, the built-in writer below is used)
         if (!hasQuads) try {
+          try { _opaqueForExport(root); } catch (_) {}
           const glbBuf = await new Promise((ok, fail) =>
             new GLTFExporter().parse(root, ok, fail, { binary: true, forceIndices: true, onlyVisible: true })
           );
@@ -26635,19 +27448,13 @@ function wireUI() {
     _deleteSelection('Deleted selected');
   });
   // Selection bar, view row: the same actions as H / S / F / Ctrl+D.
-  $('sel-hide')?.addEventListener('click', () => { if (state.selected.size) hideSelected(); });
+  $('sel-hide')?.addEventListener('click', () => toggleHideSelected());
   $('sel-frame')?.addEventListener('click', () => { if (state.selected.size) frameSelected(); });
   $('sel-duplicate')?.addEventListener('click', () => { if (state.selected.size) duplicateParts([...state.selected]); });
   {
     // While the view is isolated the same button leaves it, as in the command search.
     const iso = $('sel-isolate');
-    const syncIso = () => {
-      if (!iso) return;
-      const on = !!state._isolated;
-      iso.classList.toggle('is-on', on);
-      iso.title = on ? 'Show all parts: leave the isolation (Alt+H)' : 'Isolate: show only the selection (S)';
-      iso.setAttribute('aria-label', on ? 'Show all' : 'Isolate');
-    };
+    const syncIso = _syncSelBarToggles;
     iso?.addEventListener('click', () => {
       if (state._isolated) showAllParts(); else if (state.selected.size) isolateSelected();
       syncIso();
@@ -27442,7 +28249,7 @@ function wireUI() {
     'B':            () => { try { window.__moQuickRemesh && window.__moQuickRemesh.toggle(); } catch (err) { console.warn('[quick remesh]', err); } },
     'L':            () => _CmdCards.open('draw'),
     'D':            () => _DynPlace.toggle(),
-    'H':            () => hideSelected(),
+    'H':            () => toggleHideSelected(),
     'Shift+H':      () => hideUnselected(),
     'Alt+H':        () => showAllParts(),
     'Ctrl+I':       () => $('sel-invert')?.click(),
@@ -27506,9 +28313,12 @@ function wireUI() {
     else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target?.closest?.('button, a, [role="button"], summary')) { if (_CmdCards.runTop()) e.preventDefault(); }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); $('sel-all').click(); }
     else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'c' || e.key === 'C')) {
-      // Only intercept when there's a part selection — otherwise let the
-      // browser handle Ctrl+C for any DOM text selection in the sidebar.
-      if (state.selected.size > 0) { e.preventDefault(); copyParts([...state.selected]); }
+      // Only intercept when there's a part selection and no text is selected on the page: text that is selected (in the console log, the
+      // properties, a report) is copied by the browser. (It used to take Ctrl+C whenever a part was selected, so nothing that was selected
+      // as text ever reached the clipboard.)
+      let textSelected = false;
+      try { const sel = window.getSelection && window.getSelection(); textSelected = !!(sel && !sel.isCollapsed && String(sel).trim()); } catch (_) {}
+      if (state.selected.size > 0 && !textSelected) { e.preventDefault(); copyParts([...state.selected]); }
     }
     else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'v' || e.key === 'V')) {
       if ((state._clipboardParts || []).length > 0) { e.preventDefault(); pasteParts(); }
@@ -32149,6 +32959,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   if (!importMode) {
     clearModel();
     state.materialByColor.clear(); state.geomByHash.clear(); state.instancedGroups = [];
+    state.materialByLook = new Map();
   }
   // Import mode: continue after the highest id in use (the list can be
   // shorter than that once parts have been removed from it). Replace mode:
@@ -32162,9 +32973,10 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   let _stripBytesSaved = 0;
   const meshList = [];
   // Files saved by this app carry each node's real name in its extras.
+  let savedHere = false;                               // (and their materials are the ones the user set: see _loadedMaterial)
   sceneRoot.traverse(o => {
     const real = o.userData && o.userData.soName;
-    if (typeof real === 'string' && real) { o.name = real; delete o.userData.soName; }
+    if (typeof real === 'string' && real) { savedHere = true; o.name = real; delete o.userData.soName; }
   });
   try { _registerSplines(sceneRoot, importMode); } catch (e) { console.warn('[spline] could not read the lines of this file:', e); }
   sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
@@ -32236,7 +33048,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     // one — otherwise each mesh leaks one MeshStandardMaterial / Phong /
     // Lambert (plus any embedded textures) until full page reload.
     const _origMat = m.material;
-    m.material = getOrCreateMaterial(color);
+    m.material = (savedHere && _loadedMaterial(_origMat)) || getOrCreateMaterial(color);
     if (_origMat && _origMat !== m.material) {
       if (Array.isArray(_origMat)) for (const mm of _origMat) mm?.dispose?.();
       else _origMat.dispose?.();
@@ -32244,6 +33056,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     m.userData.partId = partInfo.partId;
     if (m.userData.soHidden) { partInfo._soHidden = true; delete m.userData.soHidden; }
     if (m.userData.soFlagged) { partInfo._soFlagged = true; delete m.userData.soFlagged; }
+    if (m.userData.soLocked) { partInfo._soLocked = true; delete m.userData.soLocked; }
     if (!_strippedGeoms.has(geom.uuid)) {
       _strippedGeoms.add(geom.uuid);
       _stripBytesSaved += _stripUnusedAttributes(geom, _attributeKeepSet(m.material));
@@ -33084,6 +33897,7 @@ _UndoOps.register('geomXform', {
   redo(op) {
     if (op.tool === 'bake') bakeTransforms({ fromRedo: true });
     else if (op.tool === 'centerPivot') centerPivotsOnSelection({ fromRedo: true, ids: op.ids });
+    else if (op.tool === 'orientPivot') orientPivotsTo('custom', { fromRedo: true, targets: op.targets, ids: op.ids });
     state.history.push(op);
     _finalizeUndo();
   },
@@ -34022,6 +34836,82 @@ function centerPivotsOnSelection(opts = {}) {
   } else {
     toast('Pivot centred', `${centered} part${centered === 1 ? '' : 's'}${detail}`, 'success');
   }
+}
+
+// Turn the pivot of every selected part: its own X, Y and Z (what Local shows, what the Transform card's rotation is measured
+// from) are set to the chosen axes, and the vertices are turned the opposite way, so the part looks exactly as it did.
+//   world / active / view / spread : the same targets the gizmo's axes list offers; custom : X, Y, Z degrees in the scene's axes.
+// A part drawn with uneven scale is skipped (turning its axes would shear it). A buffer another part shares is copied first.
+// Undo restores the vertices and the transform (geomXform); a redo applies the stored target of each part again.
+function orientPivotsTo(mode, opts = {}) {
+  const fromRedo = !!opts.fromRedo;
+  const ids = (fromRedo && opts.ids) ? opts.ids : [...state.selected];
+  if (!ids.length) { toast('Nothing selected', 'Select one or more parts to turn their pivots', 'warn'); return; }
+  const parts = ids.map(id => getPart(id)).filter(p => p && !p.deleted && p.mesh && p.mesh.geometry?.attributes?.position);
+  if (!parts.length) { toast('Nothing to turn', 'The selection has no meshes (instanced parts cannot have their pivot turned)', 'info'); return; }
+  _detachGizmo();
+  { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z) && typeof resetExplode === 'function') resetExplode(); }
+
+  const targets = {};
+  if (fromRedo) { for (const p of parts) targets[p.partId] = new THREE.Quaternion().fromArray(opts.targets[p.partId]); }
+  else {
+    if (mode === 'object') {
+      for (const p of parts) { const oq = _partObjectQuat(p); if (oq) targets[p.partId] = oq; }
+    }
+    const q = mode === 'object' ? true : mode === 'custom'
+      ? (() => { const e = opts.euler || [0, 0, 0], D = Math.PI / 180; return new THREE.Quaternion().setFromEuler(new THREE.Euler(e[0] * D, e[1] * D, e[2] * D, 'XYZ')); })()
+      : _gizmoOrientQuat(parts, mode);
+    if (!q) { toast('Cannot align', mode === 'spread' ? 'Spread needs three or more parts that are not in one spot' : 'No axes for this choice', 'info'); try { updateGizmo(); } catch (_) {} return; }
+    if (mode !== 'object') for (const p of parts) targets[p.partId] = q.clone();
+    else if (!Object.keys(targets).length) { toast('No clear axes', 'These shapes have no flat faces to follow (curved or round parts)', 'info'); try { updateGizmo(); } catch (_) {} return; }
+  }
+
+  let undoBefore = null, undoTooBig = false;
+  if (!fromRedo) { undoBefore = _snapGeomXform(parts); undoTooBig = undoBefore === null; }
+  const geomUses = _geomUseCounts();
+  const qp = new THREE.Quaternion(), ql = new THREE.Quaternion(), dq = new THREE.Quaternion();
+  let turned = 0, skipped = 0, cloned = 0;
+  for (const p of parts) {
+    if (!targets[p.partId]) { skipped++; continue; }
+    const m = p.mesh, sc = m.scale;
+    const mx = Math.max(Math.abs(sc.x), Math.abs(sc.y), Math.abs(sc.z)) || 1;
+    if (Math.abs(sc.x - sc.y) > mx * 1e-4 || Math.abs(sc.y - sc.z) > mx * 1e-4) { skipped++; continue; }
+    if (m.parent) { m.parent.updateWorldMatrix(true, false); m.parent.getWorldQuaternion(qp); } else qp.identity();
+    ql.copy(qp).invert().multiply(targets[p.partId]);               // the part's new local rotation
+    dq.copy(ql).invert().multiply(m.quaternion);                    // what the vertices turn by: new⁻¹ · old
+    if (Math.abs(dq.w) > 1 - 1e-9) { skipped++; continue; }         // already on those axes
+    const shared = m.geometry;
+    const geom = _ownGeometryFor(p, geomUses, 'o');
+    if (geom !== shared) { cloned++; try { _disposeEdgesFor(shared); } catch (_) {} }
+    if (geom.boundsTree) geom.disposeBoundsTree?.();
+    geom.applyQuaternion(dq);
+    geom.computeBoundingBox(); geom.computeBoundingSphere();
+    m.quaternion.copy(ql);
+    m.updateMatrix(); m.updateMatrixWorld(true);
+    p._exactWorld = m.matrixWorld.clone();
+    p._origPos = null; p._origWorldPos = null; p._partCenter = null;
+    state._explodeBaselineDone = false;
+    _refreshPartBBox(p);
+    p._fp = null; p._fpKey = null;
+    _disposeEdgesFor(geom);
+    turned++;
+  }
+  if (turned > 0 && !fromRedo) {
+    const tg = {}; for (const p of parts) if (targets[p.partId]) tg[p.partId] = targets[p.partId].toArray();
+    if (undoBefore && undoBefore.length) pushUndo({ type: 'geomXform', tool: 'orientPivot', label: 'Turn pivot', before: undoBefore, targets: tg, ids: parts.filter(p => targets[p.partId]).map(p => p.partId) });
+    else if (undoTooBig) _dropUndoHistory('Turn pivot');
+  }
+  if (turned > 0) _buildBVHsForAllGeoms();
+  // The gizmo shows the pivot only in Local axes: with World (or one of the view-only choices) kept from the axes list the turn
+  // would be invisible, so it goes back to Local.
+  try { if (turned > 0 && _gizmoSpaceGet() !== 'local') _gizmoSpaceSet('local'); } catch (_) {}
+  applySelectionColors();
+  updateGizmo();
+  requestRender();
+  if (fromRedo) return;
+  const detail = (cloned ? ` (${cloned} given their own copy of shared geometry)` : '') + (skipped ? `, ${skipped} skipped (already on those axes, or unevenly scaled)` : '');
+  if (turned) toast('Pivot turned', `${turned} part${turned === 1 ? '' : 's'}${detail}`, 'success');
+  else toast('Nothing to do', skipped ? 'The pivots are already on those axes, or the parts are unevenly scaled' : '', 'info');
 }
 
 function wireAdvancedUI() {
@@ -35360,6 +36250,14 @@ function _openMaterialEditor(info) {
           try { oldTex?.dispose?.(); } catch (_) {}
           mat[propName] = newTex;
           _releaseTexUrl(oldTex, propName);
+          // A colour map is multiplied by the material's colour: under a dark one (the Rubber preset is #222428) white lettering comes out
+          // almost black. The colour goes to white while the map is on, and comes back if the map is taken off (and nobody changed it since).
+          if (propName === 'map' && mat.color && mat.color.getHex() !== 0xffffff) {
+            mat.userData = mat.userData || {};
+            mat.userData._colourBeforeMap = mat.color.getHex();
+            mat.color.setHex(0xffffff);
+            try { toast?.('Colour set to white', 'A colour map is multiplied by the colour, so a dark one hides it', 'info', 3500); } catch (_) {}
+          }
           mat.needsUpdate = true;
           _refreshAttach(propName);
           _texPop.classList.remove('show');
@@ -35378,6 +36276,10 @@ function _openMaterialEditor(info) {
       try { oldTex?.dispose?.(); } catch (_) {}
       mat[propName] = null;
       _releaseTexUrl(oldTex, propName);
+      if (propName === 'map' && mat.userData && mat.userData._colourBeforeMap != null) {
+        if (mat.color && mat.color.getHex() === 0xffffff) mat.color.setHex(mat.userData._colourBeforeMap);
+        delete mat.userData._colourBeforeMap;
+      }
       mat.needsUpdate = true;
       _refreshAttach(propName);
       _texPop.classList.remove('show');
@@ -35510,7 +36412,7 @@ function _reassignMaterial(src, dst) {
 }
 
 function _newMaterial(opts = {}) {
-  const m = new THREE.MeshStandardMaterial({
+  const m = new (opts.physical ? THREE.MeshPhysicalMaterial : THREE.MeshStandardMaterial)({
     color: opts.color ?? new THREE.Color(0x7a7f88),
     metalness: opts.metalness ?? 0.15,
     roughness: opts.roughness ?? 0.55,
@@ -35549,6 +36451,26 @@ const _MAT_PRESETS = [
   { name: 'Copper',            color: 0xc05a3a, metalness: 1.0,  roughness: 0.28 },
   { name: 'Bronze',            color: 0x8a5a32, metalness: 1.0,  roughness: 0.44 },
   { name: 'Iron — Cast',       color: 0x4d4f55, metalness: 1.0,  roughness: 0.62 },
+  // Car paint: a MeshPhysicalMaterial. "Pearl" and "flip-flop" are thin-film iridescence (the colour of the highlights moves with the angle
+  // of view, as the film's thickness and index are set); "flakes" are a tiny random normal map (it needs the part's UVs: a part with none
+  // shows no flakes and is not otherwise changed); the gloss is low roughness. There is no clear coat or sheen in these: with them on, the
+  // viewport draws the body of the part black (clearcoat / sheen in this build's physical shading: see tests/e2e-paint.mjs). All of it
+  // exports to GLB (iridescence, normal map).
+  { section: 'Car paint' },
+  { name: 'Metallic Silver',          physical: true, color: 0xc8ccd2, metalness: 0.75, roughness: 0.22,
+    flakes: { strength: 0.45, scale: 90 } },
+  { name: 'Pearl White',              physical: true, color: 0xf4f0e8, metalness: 0.20, roughness: 0.25,
+    iridescence: 0.6, iridescenceIOR: 1.6, iridescenceThicknessRange: [250, 550], flakes: { strength: 0.25, scale: 110 } },
+  { name: 'Candy Red',                physical: true, color: 0xb0101c, metalness: 0.40, roughness: 0.18,
+    flakes: { strength: 0.30, scale: 120 } },
+  { name: 'Flip-flop Violet / Green', physical: true, color: 0x3b1a7a, metalness: 0.65, roughness: 0.20,
+    iridescence: 1, iridescenceIOR: 2.0, iridescenceThicknessRange: [300, 700], flakes: { strength: 0.35, scale: 110 } },
+  { name: 'Flip-flop Blue / Gold',    physical: true, color: 0x0d3aa6, metalness: 0.65, roughness: 0.20,
+    iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [250, 600], flakes: { strength: 0.35, scale: 110 } },
+  { name: 'Glitter Gold',             physical: true, color: 0xf0b000, metalness: 0.70, roughness: 0.28,
+    flakes: { strength: 0.85, scale: 55 } },
+  { name: 'Black Pearl',              physical: true, color: 0x0a0c12, metalness: 0.55, roughness: 0.22,
+    iridescence: 0.5, iridescenceIOR: 1.5, iridescenceThicknessRange: [200, 480], flakes: { strength: 0.55, scale: 100 } },
   { section: 'Emissive' },
   { name: 'LED White',         color: 0xffffff, metalness: 0,    roughness: 0.5,  emissive: 0xffffff, emissiveIntensity: 1.4 },
   { name: 'LED Red',           color: 0xff3333, metalness: 0,    roughness: 0.5,  emissive: 0xff3333, emissiveIntensity: 1.4 },
@@ -35556,8 +36478,70 @@ const _MAT_PRESETS = [
   { name: 'Hazard Stripe',     color: 0xfbbf24, metalness: 0,    roughness: 0.55, emissive: 0xfbbf24, emissiveIntensity: 0.5 },
 ];
 
+window.__moMatPresets = _MAT_PRESETS;       // (tests/e2e-paint.mjs)
+// The metallic flakes of a car paint: a small normal map in which most of the surface is smooth and a part of it (about a fifth) is a
+// flake, tilted some way and some distance, in blocks of 2 x 2 texels so a flake is more than a pixel, repeated across a part's UV space.
+// (An earlier one gave every texel a random tilt, mostly a large one: the paint looked like sandpaper, and in a highlight it was noise.
+// A real flake paint is a smooth, glossy surface with glints in it.) The repeat is `scale` times 0.4, so that a flake is about a pixel on a
+// part that fills the view; the four corner texels are flat, because a part without UVs reads the corner (0, 0): it gets a flat normal
+// there, not a flake.
+function _flakeNormalTexture(strengthScale) {
+  const N = 128, c = document.createElement('canvas'); c.width = c.height = N;
+  const x = c.getContext('2d'), img = x.createImageData(N, N);
+  for (let i = 0; i < N * N; i++) {
+    const flake = Math.random() < 0.3;
+    const a = Math.random() * Math.PI * 2;
+    const t = flake ? 0.08 + Math.random() * 0.22 : Math.random() * 0.01;      // the tilt of a flake (gentle: the paint's own strength scales it), and the faint unevenness round it
+    const nx = Math.cos(a) * t, ny = Math.sin(a) * t, nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
+    img.data[i * 4] = Math.round((nx * 0.5 + 0.5) * 255); img.data[i * 4 + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+    img.data[i * 4 + 2] = Math.round((nz * 0.5 + 0.5) * 255); img.data[i * 4 + 3] = 255;
+  }
+  for (const [px, py] of [[0, 0], [N - 1, 0], [0, N - 1], [N - 1, N - 1]]) { const i = (py * N + px) * 4; img.data[i] = 128; img.data[i + 1] = 128; img.data[i + 2] = 255; }
+  x.putImageData(img, 0, 0);
+  // Each flake is made a soft blob (the cells are enlarged 4 times, smoothly, and blurred a little), not a hard block: at a gloss this high
+  // a normal that jumps from texel to texel makes a highlight flicker pixel by pixel, which is what the paint looked like.
+  const S4 = N * 4, big = document.createElement('canvas'); big.width = big.height = S4;
+  const bx = big.getContext('2d'); bx.imageSmoothingEnabled = true; bx.imageSmoothingQuality = 'high';
+  try { bx.filter = 'blur(2.5px)'; } catch (_) {}
+  // (drawn nine times round the edge so the blur wraps and the texture still tiles)
+  for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) bx.drawImage(c, ox * S4, oy * S4, S4, S4);
+  const tex = new THREE.Texture(big);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(strengthScale * 0.15, strengthScale * 0.15);
+  tex.anisotropy = 8;
+  tex.name = 'flakes';
+  tex.userData = { fileName: 'flakes' };
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// The parts that wear a material take its colour as their own (the export, the swatch in the tree and a duplicate read it from the part).
+function _syncPartColours(mat) {
+  if (!mat || !mat.color) return;
+  for (const p of state.parts) {
+    if (!p || p.deleted || !p.originalColor) continue;
+    const holder = p.mesh || p.instancedMesh;
+    const pm = holder ? _ownMaterialOf(holder) : null;
+    if (pm === mat || (Array.isArray(pm) && pm.includes(mat))) p.originalColor.copy(mat.color);
+  }
+}
+
 function _applyPresetTo(mat, preset) {
   if (!mat || !preset || preset.section) return;
+  if (mat.isMeshPhysicalMaterial) {
+    for (const k of ['clearcoat', 'clearcoatRoughness', 'sheen', 'sheenRoughness', 'iridescence', 'iridescenceIOR']) {
+      if (typeof preset[k] === 'number') mat[k] = preset[k]; else if (preset.physical) mat[k] = (k === 'sheenRoughness' ? 1 : k === 'iridescenceIOR' ? 1.3 : 0);
+    }
+    if (preset.sheenColor != null && mat.sheenColor) mat.sheenColor.setHex(preset.sheenColor);
+    if (Array.isArray(preset.iridescenceThicknessRange)) mat.iridescenceThicknessRange = preset.iridescenceThicknessRange.slice();
+    if (preset.flakes) {
+      const old = mat.normalMap;
+      mat.normalMap = _flakeNormalTexture(preset.flakes.scale);
+      mat.normalScale.set(preset.flakes.strength, preset.flakes.strength);
+      try { old?.dispose?.(); } catch (_) {}
+    }
+  }
   if (mat.color   && preset.color   != null) mat.color.setHex(preset.color);
   if (mat.emissive) mat.emissive.setHex(preset.emissive ?? 0x000000);
   if (typeof preset.emissiveIntensity === 'number') mat.emissiveIntensity = preset.emissiveIntensity;
@@ -35574,6 +36558,7 @@ function _applyPresetTo(mat, preset) {
   if (preset.name) mat.name = preset.name;
   mat.needsUpdate = true;
   _matPreviewCache.delete(mat);
+  try { _syncPartColours(mat); } catch (_) {}
 }
 
 function _renderPresetMenu() {
@@ -35594,7 +36579,7 @@ function _renderPresetMenu() {
     row.innerHTML = `
       <span class="mat-preset-swatch" style="background:${swatchHex}"></span>
       <span class="mat-preset-name">${escapeHtml(p.name)}</span>
-      <span class="mat-preset-hint">${p.metalness >= 0.5 ? 'metal' : (p.emissive ? 'emit' : 'dielectric')}</span>
+      <span class="mat-preset-hint">${p.physical ? 'paint' : p.metalness >= 0.5 ? 'metal' : (p.emissive ? 'emit' : 'dielectric')}</span>
     `;
     row.addEventListener('click', () => {
       menu.classList.remove('show');
@@ -35718,7 +36703,7 @@ function _wireMaterialActions() {
     // A new material is always the plain default one, whatever is picked in
     // the dock (Duplicate is the button that copies), and it is called
     // "Material" and the next free number.
-    const fresh = _newMaterial();
+    const fresh = _newMaterial({ physical: !!(preset && preset.physical) });
     {
       const used = new Set();
       const note = (m) => { const k = /^Material (\d+)$/.exec((m && m.name || '').trim()); if (k) used.add(+k[1]); };
@@ -39529,7 +40514,7 @@ function _wireSimilar() {
 function _wireExplode() {
   const explodePctFmt = (v) => ({ value: Math.round(v).toString(), unit: '%' });
   const explodeOpts = {
-    maxSteps: 60, stepToVal: (s) => s * 5, valToStep: (v) => Math.max(0, Math.min(60, Math.round(v / 5))),
+    maxSteps: 300, stepToVal: (s) => s, valToStep: (v) => Math.max(0, Math.min(300, Math.round(v))),      // (0 to 300 %, one percent a step)
     format: explodePctFmt, initialValue: 0, promptTitle: 'Explode amount', promptUnit: '%',
   };
   // The panel: one Amount slider moves every axis that is switched on (the X / Y / Z
@@ -40334,6 +41319,7 @@ async function _mergeSelectedCore() {
   const validParts = [];
   let totalVerts = 0, totalIdxLen = 0;
   let hasNormals = true;       // false if any part lacks normals
+  let anyUv = false;           // texture coordinates are carried into the merge when any part has them (a part without gets 0, 0)
   for (const id of ids) {
     const p = getPart(id);
     if (!p || p.deleted) continue;
@@ -40352,7 +41338,9 @@ async function _mergeSelectedCore() {
     const vCount = pos.length / 3;
     const iLen   = idx ? idx.length : vCount;
     if (!nrm) hasNormals = false;
-    validParts.push({ p, g, pos, nrm, idx, vCount, iLen });
+    const uvA = g.attributes.uv && !g.attributes.uv.isInterleavedBufferAttribute && g.attributes.uv.itemSize === 2 ? g.attributes.uv.array : null;
+    if (uvA) anyUv = true;
+    validParts.push({ p, g, pos, nrm, uvA, idx, vCount, iLen });
     totalVerts  += vCount;
     totalIdxLen += iLen;
   }
@@ -40361,6 +41349,7 @@ async function _mergeSelectedCore() {
   const positions = new Float32Array(totalVerts * 3);
   const colors    = new Float32Array(totalVerts * 3);
   const normals   = hasNormals ? new Float32Array(totalVerts * 3) : null;
+  const uvs       = anyUv ? new Float32Array(totalVerts * 2) : null;
   const indexCtor = totalVerts > 65535 ? Uint32Array : Uint16Array;
   const indices   = new indexCtor(totalIdxLen);
 
@@ -40408,7 +41397,7 @@ async function _mergeSelectedCore() {
     return out;
   };
 
-  for (const { p, pos, nrm, idx, vCount, iLen } of validParts) {
+  for (const { p, pos, nrm, uvA, idx, vCount, iLen } of validParts) {
     const world = _liveWorld(p);
     // Effective transform from part-local → partsRoot-local. Composes the
     // part's world matrix with partsRoot's inverse.
@@ -40440,6 +41429,7 @@ async function _mergeSelectedCore() {
         nOff += 3;
       }
     }
+    if (uvs && uvA) uvs.set(uvA.subarray(0, vCount * 2), vertBase * 2);
     if (idx) {
       for (let i = 0; i < iLen; i++) indices[idxOff + i] = idx[i] + vertBase;
     } else {
@@ -40455,6 +41445,7 @@ async function _mergeSelectedCore() {
   merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   if (normals) merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
   merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  if (uvs) merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   merged.setIndex(new THREE.BufferAttribute(indices, 1));
   // Normals are carried over only when every source has them. One without
   // would leave the whole merge with none (and unlit): work them out instead.
@@ -43369,6 +44360,38 @@ _UndoOps.register('paste-group', {
   },
 });
 
+// 'paste-hier': the copy of a group of the model's tree. Undo takes out the copied parts, the copied folders' rows and the root
+// container; redo makes the copy again (which pushes its own undo entry, so the redo stack is put back after it).
+_UndoOps.register('paste-hier', {
+  undo(op) {
+    const idSet = new Set(op.partIds);
+    for (const id of op.partIds) {
+      const p = getPart(id);
+      if (p && p.mesh) p.mesh.parent?.remove(p.mesh);
+      state.partById.delete(id);
+    }
+    state.parts = state.parts.filter(p => !idSet.has(p.partId));
+    const rows = new Set(op.rows);
+    state.treeNodes = (state.treeNodes || []).filter(n => !rows.has(n));
+    if (op.rootObj && op.rootObj.parent) op.rootObj.parent.remove(op.rootObj);
+    if (state.selected) for (const id of op.partIds) state.selected.delete(id);
+    if (state.selectedGroupIds) for (const r of op.rows) if (r.kind === 'group') state.selectedGroupIds.delete(r.id);
+    $('del-sel-count').textContent = state.selected.size;
+    state.redo.push(op);
+    recomputeStats();
+    _finalizeUndo({ rebuildTree: true });
+  },
+  redo(op) {
+    const keepRedo = state.redo.slice();
+    const newIds = _pasteHierGroup(op.srcNodeId, true);
+    state.redo.length = 0; state.redo.push(...keepRedo); _refreshUndoRedoButtons();
+    if (!newIds || !newIds.length) {
+      toast('Redo unavailable', 'Source parts are gone', 'warn', 1800);
+      return false;
+    }
+  },
+});
+
 // =====================================================================
 // Measurement tool — distance between two snapped points (MVP).
 // =====================================================================
@@ -44702,6 +45725,8 @@ function _applyMatSnapshot(mat, snap) {
   if (Array.isArray(snap.normalScale) && mat.normalScale && mat.normalScale.isVector2) {
     mat.normalScale.set(snap.normalScale[0], snap.normalScale[1]);
   }
+  // (a "transparent" flag at full opacity with nothing to be see-through by is a leftover: it would be written to a file as BLEND)
+  if (mat.transparent && mat.opacity >= 1 && !mat.alphaMap && !mat.map && !(mat.alphaTest > 0)) mat.transparent = false;
   mat.needsUpdate = true;
   requestRender?.();
 }
@@ -46713,16 +47738,37 @@ setTimeout(() => _dndDecorateTree(), 0);
 
   // ── Per-part decimation ──────────────────────────────────────────────────
   let _SimplifyModifier = null;
-  let _mergeVertices = null;
+  let _mergeVertices = null, _toCreased = null;
   async function _loadSimplifier() {
-    if (_SimplifyModifier && _mergeVertices) return _SimplifyModifier;
+    if (_SimplifyModifier && _mergeVertices && _toCreased) return _SimplifyModifier;
     const [mod, utils] = await Promise.all([
       import('three/addons/modifiers/SimplifyModifier.js'),
       import('three/addons/utils/BufferGeometryUtils.js'),
     ]);
     _SimplifyModifier = mod.SimplifyModifier;
     _mergeVertices = utils.mergeVertices;
+    _toCreased = utils.toCreasedNormals;
     return _SimplifyModifier;
+  }
+  // The mesh to reduce, with its points shared. A mesh without an index (an OBJ, an STL: three corners to every triangle) has to be
+  // welded first, and the weld joins only the corners that are alike in every attribute. When the normals are the flat ones of each
+  // face (an OBJ without normals: the app makes them face by face), nothing is alike and almost nothing is joined, so there is nothing
+  // to reduce: then the normals are left out of the weld (position and UV, colour decide), and `flat` says that the reduced mesh needs
+  // normals again: _creaseAfter gives it the app's usual shading, smooth where the faces meet at less than 30 degrees. (Needs
+  // _loadSimplifier to have run.)
+  function _weldForReduction(geom) {
+    if (geom.index) return { src: geom, flat: false };
+    const n = geom.attributes.position.count;
+    const all = _mergeVertices(geom.clone());
+    if (all.attributes.position.count <= n * 0.6) return { src: all, flat: false };
+    const g = new THREE.BufferGeometry();
+    for (const k of ['position', 'uv', 'color']) if (geom.attributes[k]) g.setAttribute(k, geom.attributes[k].clone());
+    for (const grp of geom.groups || []) g.addGroup(grp.start, grp.count, grp.materialIndex);
+    return { src: _mergeVertices(g), flat: true };
+  }
+  function _creaseAfter(out, flat) {
+    if (!out || !flat) return out;
+    try { const c = _toCreased(out, 30 * Math.PI / 180); try { out.dispose(); } catch (_) {} return c; } catch (_) { return out; }
   }
 
   // meshoptimizer's simplifier (WebAssembly). It works on the index buffer
@@ -46804,7 +47850,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   function _simplifyKeepingAttributes(S, geom, keep, tol) {
     // An index buffer is required; weld a non-indexed mesh first (this
     // keeps attributes and only joins vertices that match in all of them).
-    const src = geom.index ? geom : _mergeVertices(geom.clone());
+    const weld = _weldForReduction(geom), src = weld.src;
     const posAttr = src.attributes.position;
     const vCount = posAttr.count;
     let positions = posAttr.array;
@@ -46839,7 +47885,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       err = Math.max(err, r.err);
       outParts.push({ idx: r.idx, materialIndex: g.materialIndex });
     }
-    const out = _geomFromIndexParts(src, outParts);
+    let out = _creaseAfter(_geomFromIndexParts(src, outParts), weld.flat);
     if (out) _simpErr.set(out, err);
     if (out && tol > 0) { out._err = worst; _simpErr.set(out, Math.max(err, worst)); }
     return out;
@@ -47185,23 +48231,45 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (part.jobs.has(keep)) return part.jobs.get(keep);
       const job = (async () => {
         await sess.ready;
-        const geom = part.orig, posAttr = geom.attributes.position;
+        if (S !== sess) return part.orig;                  // (the pill closed while this waited for its turn)
+        // A mesh without an index (an OBJ, an STL, a mesh from some FBX files: three corners per triangle, nothing shared) is welded first,
+        // as Decimate does it: the simplifier works on shared points, and without them nothing was taken away. The part keeps its own
+        // geometry (`orig`) for Esc; the welded copy is only what the levels are worked out from.
+        if (!part.srcP) part.srcP = (async () => {
+          if (part.orig.index) return part.orig;
+          try { await _loadSimplifier(); const w = _weldForReduction(part.orig); part.flat = w.flat; return w.src; } catch (_) { return part.orig; }
+        })();
+        part.src = await part.srcP;
+        if (S !== sess) return part.orig;
+        const geom = part.src, posAttr = geom.attributes.position;
+        const threeUrl = _threeCoreUrl();
         let out = null, err = 0;
         try {
           const workerOk = sess.url && _MeshWorkers.available() && geom.index && geom.index.count >= 36 &&
             !posAttr.isInterleavedBufferAttribute && (posAttr.array instanceof Float32Array) && posAttr.itemSize === 3;
           if (workerOk) {
             const reply = await _MeshWorkers.run(() => {
+              if (S !== sess) return null;                 // (closed while queued: nothing is sent, no copy is made)
               const positions = posAttr.array.slice(), index = Uint32Array.from(geom.index.array);
               const groups = (geom.groups && geom.groups.length > 1)
                 ? geom.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
                 : [{ start: 0, count: index.length, materialIndex: 0 }];
               const ap = packAttributes(geom), attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights } : null;
-              return { msg: { op: 'simplify', positions, index, groups, keep, tol: 0, url: sess.url, attrs, sharp: (_sharpOpts() || {}).sharp || 0 }, transfer: attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer] };
+              // Smart (the default; window.__moQuickPlain = true switches it off): the flat faces are cleaned before and after the reduction
+              const smart = !window.__moQuickPlain && !!threeUrl;
+              let normals = null;
+              if (smart) {
+                const nrm = geom.attributes.normal;
+                if (nrm && nrm.count === posAttr.count && nrm.itemSize >= 3) { normals = new Float32Array(nrm.count * 3); for (let v = 0; v < nrm.count; v++) { normals[v * 3] = nrm.getX(v); normals[v * 3 + 1] = nrm.getY(v); normals[v * 3 + 2] = nrm.getZ(v); } }
+              }
+              const moved = attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer];
+              if (normals) moved.push(normals.buffer);
+              return { msg: { op: 'simplify', positions, index, groups, keep, tol: 0, url: sess.url, attrs, sharp: (_sharpOpts() || {}).sharp || 0, smart, threeUrl, normals }, transfer: moved };
             });
-            if (reply && reply.ok) { out = _geomFromIndexParts(geom, reply.parts); err = reply.err || 0; }
+            if (S !== sess) return part.orig;              // (closed while it was being worked out: the result is not built)
+            if (reply && reply.ok) { out = _creaseAfter(_geomFromIndexParts(geom, reply.parts), part.flat); err = reply.err || 0; }
           }
-          if (!out && sess.meshopt) out = _simplifyKeepingAttributes(sess.meshopt, geom, keep, 0);
+          if (!out && sess.meshopt) out = _simplifyKeepingAttributes(sess.meshopt, part.orig, keep, 0);
         } catch (e) { console.warn('[quick remesh]', part.p.name, e); out = null; }
         if (out && !(trisOf(out) >= 1 && trisOf(out) < part.tris0)) { try { out.dispose(); } catch (_) {} out = null; }      // (cannot be made lighter: it stays as it is)
         // A small or open part can be taken so far that most of its surface is gone (measured: a 100-triangle bolt left with a
@@ -47391,6 +48459,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     // the geometries that were worked out and are not worn go
     function dropUnused(sess, keepGeoms) {
       for (const part of sess.parts) for (const g of part.cache.values()) if (g !== part.orig && !keepGeoms.has(g)) { try { g.dispose(); } catch (_) {} }
+      for (const part of sess.parts) { part.src = null; part.srcP = null; }      // (the welded copy of a mesh without an index: not needed any more)
     }
 
     function cancel() {
@@ -48962,7 +50031,32 @@ setTimeout(() => _dndDecorateTree(), 0);
       const all = undoItems.map(u => u.partId);
       await run(all.filter(id => wasPoly.has(id)), false);
       if (adv.tidy) await run(all.filter(id => !wasPoly.has(id)), true);
-      for (const x of extra) { const u = undoItems.find(i => i.partId === x.partId); if (u) { u.after = x.after; tidied++; } }
+      const mids = new Set();                                         // what the fill made and the tidy then replaced: no undo step holds it
+      for (const x of extra) {
+        const u = undoItems.find(i => i.partId === x.partId);
+        if (u) { u.after = x.after; tidied++; }
+        if (x.before && x.before.geom && x.before.geom !== (u && u.before && u.before.geom)) mids.add(x.before);
+      }
+      if (mids.size) {
+        const live = new Set();
+        for (const q of state.parts) if (q.mesh && q.mesh.geometry) live.add(q.mesh.geometry);
+        const freed = [];
+        for (const m of mids) {
+          const g = m.geom;
+          if (!g || live.has(g) || freed.includes(g)) continue;
+          try { if (m.hash != null && state.geomByHash.get(m.hash) === g) state.geomByHash.delete(m.hash); } catch (_) {}
+          freed.push(g);
+        }
+        // (off the table at once; the graphics card lets go of the buffers two frames later, like everywhere else)
+        if (freed.length) (async () => {
+          await _nextFrame(); await _nextFrame();
+          for (const g of freed) {
+            try { _disposeEdgesFor(g); } catch (_) {}
+            try { if (g.boundsTree) g.disposeBoundsTree?.(); } catch (_) {}
+            try { _safeDispose(g); } catch (_) {}
+          }
+        })();
+      }
     }
     if (undoItems.length) pushUndo({ type: 'decimate', label: 'Remove holes', items: undoItems });
     try { recomputeStats(); } catch (_) {}
@@ -50567,6 +51661,7 @@ setTimeout(() => _dndDecorateTree(), 0);
 {
   const _undoOne = undoLast, _redoOne = redoLast;
   undoLast = function () {
+    if (_Tasks.busy()) { try { toast('Undo', 'Wait until the running step has finished', 'info', 2000); } catch (_) {} return; }
     for (let guard = 0; guard < 24; guard++) {
       const top = state.history[state.history.length - 1];
       _undoOne.apply(this, arguments);
@@ -50574,6 +51669,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
   };
   redoLast = function () {
+    if (_Tasks.busy()) { try { toast('Redo', 'Wait until the running step has finished', 'info', 2000); } catch (_) {} return; }
     _redoOne.apply(this, arguments);
     for (let guard = 0; guard < 24; guard++) {
       const nxt = state.redo && state.redo[state.redo.length - 1];

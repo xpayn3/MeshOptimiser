@@ -47,6 +47,9 @@
 <link rel="modulepreload" href="vendor/three-mesh-bvh/index.module.js">
 <style>
 @font-face{font-family:'Inter';src:url('vendor/inter/InterVariable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Geist';src:url('vendor/geist/Geist-Variable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Space Grotesk';src:url('vendor/space-grotesk/space-grotesk-latin-ext.woff2') format('woff2');font-weight:300 700;font-style:normal;font-display:swap;unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Space Grotesk';src:url('vendor/space-grotesk/space-grotesk-latin.woff2') format('woff2');font-weight:300 700;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
 
 :root{
   /* ── Design tokens ──────────────────────────────────────────────────────
@@ -1609,6 +1612,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .loader-cancel{margin-top:var(--space-2xl);text-align:right}
 .loader-cancel button{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);transition:var(--tr-bg-bd-fg-tf-base)}
 .loader-cancel button:hover{color:var(--er);border-color:var(--er-line)}
+@keyframes ld-in{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}      /* (the loading card's entrance: see .wl-modal.is-loading) */
 
 /* Status bar */
 #sb{display:flex;align-items:center;padding:0 var(--space-xl);font-size:var(--fs-xs);color:var(--tx3);gap:11px;font-variant-numeric:tabular-nums;line-height:var(--lh-none);position:relative;z-index:calc(var(--z-toolbar) + 1);box-shadow:none}
@@ -2483,7 +2487,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* View cube (top-right): a little larger, fully opaque, faces light up on hover. */
 #axis-gizmo{opacity:1;width:92px;height:92px;}
 #axis-gizmo .axg-face:hover{filter:brightness(1.12)}
-.vpc.bl:not(#sun-gizmo-wrap){top:4px;left:6px}      /* (the view cube: in the top left corner) */
+.vpc.bl:not(#sun-gizmo-wrap){top:4px;left:auto;right:6px}      /* (the view cube: in the top right corner) */
 /* Nothing drawn over the viewport is selectable text. */
 #vp-overlay,#vp-overlay *{user-select:none;-webkit-user-select:none}
 #vp-overlay input,#vp-overlay textarea{user-select:text;-webkit-user-select:text}
@@ -2787,8 +2791,8 @@ body.cmd-dragging .vp-cmd-host{transition:none}
 .vpc.tc>.vp-pill-menu{position:absolute;top:calc(100% + 4px);left:50%;translate:-50% 0}
 /* The camera pill sits at the top right, under the view cube (4px + 92px from the top), a little see-through until the pointer is on it.
    The mode pills (Isolated, Exploded, Measure, Snap) stay at the top centre, now on their own. */
-.vpc.cam-corner{top:8px;right:8px;flex-direction:column;align-items:flex-end;gap:0}      /* (the camera pill: in the top right corner) */
-.vpc.cam-corner>.vp-pill-menu{position:absolute;top:calc(100% + 4px);right:0;left:auto;translate:none;transform-origin:top right}
+.vpc.cam-corner{top:8px;left:8px;flex-direction:column;align-items:flex-start;gap:0}      /* (the camera pill: in the top left corner) */
+.vpc.cam-corner>.vp-pill-menu{position:absolute;top:calc(100% + 4px);left:0;right:auto;translate:none;transform-origin:top left}
 #vp-view-pill.vp-pill{background:var(--blk-20);opacity:.78;transition:opacity var(--dur-160) var(--ease-out),background var(--dur-base) var(--ease-out),transform var(--dur-base) var(--ease-out)}
 #vp-view-pill.vp-pill:hover,#vp-view-pill.vp-pill:focus-visible,#vp-view-pill.vp-pill[aria-expanded="true"]{opacity:1}
 /* Only an icon, in a vertical pill: the camera on top, the arrow below it. The icon grows a little under the pointer. The words stay
@@ -2811,7 +2815,7 @@ body.cmd-dragging .vp-cmd-host{transition:none}
    cube with the face that is looked at filled in (top, front, side). The words and the keys stay in the page for screen readers and are the
    buttons' tooltips. The one in use is a filled accent circle. */
 #vp-view-pill-menu.vp-pill-menu{min-width:0;width:auto;padding:var(--space-xs);gap:var(--space-2xs);align-items:center;border-radius:var(--r-pill);transform-origin:top center}
-.vpc.cam-corner>#vp-view-pill-menu.vp-pill-menu{top:calc(100% + 6px);right:0;left:auto;translate:none}
+.vpc.cam-corner>#vp-view-pill-menu.vp-pill-menu{top:calc(100% + 6px);left:0;right:auto;translate:none}
 #vp-view-pill-menu .vp-pill-item{width:30px;height:30px;padding:0;gap:0;justify-content:center;border-radius:50%;background:transparent;color:var(--tx3);transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
 #vp-view-pill-menu .vp-pill-item::before{display:none}
 #vp-view-pill-menu .vp-pill-item:hover,#vp-view-pill-menu .vp-pill-item:focus-visible{background:var(--s3);color:var(--tx)}
@@ -3102,6 +3106,24 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-pane-h{margin:0 0 var(--space-3);font-size:var(--fs-2xl);font-weight:var(--fw-regular);color:var(--tx-control-hover)}
 .set-pane-sub{margin:0 0 var(--space-xl);font-size:var(--fs-12);color:var(--tx3);line-height:var(--lh-relaxed)}
 .set-group-title{margin:18px 0 var(--space-2xs);font-size:var(--fs-11);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
+.set-card{margin:0 0 var(--space-xl);padding:0 var(--space-xl);border:1px solid var(--surface-line);border-radius:var(--r-lg);background:var(--s1)}
+.set-card-plain{margin-bottom:var(--space-xl)}
+.set-card-h{display:flex;align-items:center;gap:var(--space-md);width:100%;height:40px;padding:0;border:0;background:none;color:var(--tx-control-hover);font:inherit;font-size:var(--fs-13);text-align:left;cursor:pointer}
+.set-card-t{flex:1 1 auto;min-width:0}
+.set-card-n{font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
+.set-card-h svg{flex:0 0 12px;color:var(--tx3);transition:transform .18s}
+.set-card.is-fold .set-card-h svg{transform:rotate(-90deg)}
+.set-card-h:hover svg{color:var(--tx-control-hover)}
+.set-card-h:focus-visible{outline:2px solid var(--ac);outline-offset:2px;border-radius:var(--r-sm)}
+.set-card-h+*{border-top:0!important}
+.set-main:not(.searching) .set-card.is-fold>:not(.set-card-h){display:none}
+.set-main.searching .set-card{padding:0;border:0;background:none;margin:0}
+.set-main.searching .set-card-h,.set-main.searching .set-jump{display:none}
+.set-card-plain>:first-child{border-top:0}
+.set-jump{position:sticky;top:-18px;z-index:2;display:flex;flex-wrap:wrap;gap:var(--space-md);margin:0 -24px var(--space-xl);padding:10px 24px;background:var(--surface-pop);border-bottom:1px solid var(--surface-line)}
+.set-jump-c{height:24px;padding:0 var(--space-lg);border:1px solid var(--surface-line);border-radius:var(--r-pill);background:none;color:var(--tx2);font:inherit;font-size:var(--fs-12);cursor:pointer}
+.set-jump-c:hover{background:var(--s3);color:var(--tx-control-hover)}
+@media (prefers-reduced-motion:reduce){.set-card-h svg{transition:none}}
 .set-empty{padding:40px 0;text-align:center;color:var(--tx3);font-size:var(--fs-12)}
 /* one row style for everything in a section: label left, control right */
 .set-pane-b>.toggle,.set-pane-b>.field,.set-pane-b>div>.toggle,.set-pane-b>div>.field,.set-pane-b .pop-section>.toggle,.set-pane-b .pop-section>.field,.set-row{
@@ -3287,6 +3309,31 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    and the rest of the page stay usable (a tab can be switched to while this one converts). Only the card itself takes the mouse. */
 #welcome-modal:has(.wl-modal.is-loading){background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;pointer-events:none}
 #welcome-modal:has(.wl-modal.is-loading) .wl-modal{pointer-events:auto}
+/* The loading card, slim: no start-screen header (name, version), a narrow card, one line of text, a thin bar, the steps as a quiet list, the log
+   folded under Details, and Copy log / Cancel as plain text. */
+.wl-modal.is-loading{width:min(540px,calc(100vw - 48px));border-radius:var(--surface-win-r,10px);animation:ld-in var(--dur-base,180ms) var(--ease-out) both}
+@media (prefers-reduced-motion:reduce){.wl-modal.is-loading{animation:none}}
+.wl-modal.is-loading .wl-top{display:none}
+.wl-modal #welcome-load-pane{padding:32px 32px 20px}
+.wl-ld-head{display:flex;align-items:center;gap:var(--space-2xl)}
+.wl-ld-head .ml-cv{width:48px;height:48px}
+.wl-ld-text{flex:1;min-width:0}
+#wl-msg{color:var(--tx);font-weight:var(--fw-semibold);font-size:var(--fs-xl);line-height:1.3;margin-bottom:2px}
+#wl-sub{color:var(--tx3);font-size:var(--fs-12);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#wl-time{color:var(--tx3);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;align-self:flex-start;margin-top:2px}
+#welcome-load-pane .loader-bar{height:4px;border-radius:var(--r-pill,99px);margin-top:20px;background:var(--s3)}
+#welcome-load-pane .loader-bar-fill{border-radius:inherit}
+#welcome-load-pane .loader-bar-fill::after{opacity:.5}
+#welcome-load-pane .ld-steps{margin-top:16px;gap:var(--space-2xs)}
+#welcome-load-pane .ld-step{min-height:30px;padding:var(--space-2) 0;font-size:var(--fs-md);gap:var(--space-lg)}
+#welcome-load-pane .ld-step.is-active .ld-name{font-weight:var(--fw-medium)}
+#welcome-load-pane .ld-details{margin-top:var(--space-md)}
+#welcome-load-pane .ld-details>summary{font-size:var(--fs-12)}
+#welcome-load-pane .loader-log{height:160px;margin-top:var(--space-md);background:var(--blk-20);border-radius:var(--r-sm);font-size:11px;color:var(--tx3)}
+.wl-ld-foot{display:flex;justify-content:flex-end;gap:var(--space-2xs);margin-top:var(--space-2xl);padding-top:var(--space-lg);border-top:1px solid var(--surface-line,var(--hairline))}
+.wl-ld-foot button{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;height:30px;padding:0 var(--space-xl);border-radius:var(--r-sm);font-size:var(--fs-12);color:var(--tx3);cursor:pointer;transition:var(--tr-bg-fg)}
+.wl-ld-foot button:hover,.wl-ld-foot button:focus-visible{background:var(--s2,var(--bg3));color:var(--tx)}
+.wl-ld-foot #wl-cancel-btn:hover,.wl-ld-foot #wl-cancel-btn:focus-visible{color:var(--er)}
 .wl-top{flex:0 0 auto;display:flex;align-items:center;gap:var(--space-lg);height:56px;padding:0 var(--space-2xl) 0 24px}
 .wl-mark{display:grid;place-items:center;flex:0 0 auto}
 .wl-mark svg{width:var(--icon-lg);height:var(--icon-lg);stroke:var(--white);fill:var(--white);stroke-width:1.5}
@@ -3372,7 +3419,6 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .wl-foot{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);height:44px;padding:0 24px;border-top:1px solid var(--s3);font-size:var(--fs-sm);color:var(--tx3);white-space:nowrap;overflow:hidden}
 .wl-foot>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .wl-foot kbd{font:inherit;color:var(--tx2);background:var(--bg3);border-radius:var(--r-xs);padding:1px var(--space-5);margin-right:var(--space-sm)}
-#welcome-load-pane{padding:var(--space-sm) 24px 20px}
 @media (max-width:860px){.wl-start,.wl-recents{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:520px){.wl-nav .wl-link:first-child{display:none}.wl-tile kbd{display:none}}
 /* ── Save scene ─────────────────────────────────────────────────────────── */
@@ -3463,6 +3509,9 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #transform-panel .tform-row-label{font-weight:var(--fw-regular)}
 #transform-panel .tform-num{background:var(--blk-30)}
 #transform-panel .tform-num .tform-step{background:color-mix(in srgb,var(--surface-pop) 72%,var(--black))}
+.section-cmd[data-cmd="pivot"] .pv-chips{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin:var(--space-md) 0}
+.section-cmd[data-cmd="pivot"] .pv-chips .btn{justify-content:flex-start;gap:var(--space-md);padding:0 var(--space-lg)}
+.section-cmd[data-cmd="pivot"] .pv-head{margin:var(--space-lg) 0 var(--space-sm);font-size:var(--fs-11);color:var(--tx3)}
 /* ── Fasteners panel ───────────────────────────────────────────────────────
    The three kinds as switches under the main button, and what was found as a
    short list: a row per kind, its thread sizes on the right. A click on a
@@ -3855,21 +3904,21 @@ body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms var(
 .ex-l{flex:0 0 34px;font-size:var(--fs-sm);color:var(--tx3)}
 .ex-axes{display:flex;flex-wrap:wrap;gap:var(--space-xs);min-width:0}
 .ex-axis{display:inline-flex;align-items:center;gap:var(--space-sm)}
-.ex-dot{display:block;width:6px;height:6px;border-radius:50%;background:var(--tx3);flex:none}
+.ex-dot{display:block;width:7px;height:7px;border-radius:50%;background:var(--tx3);flex:none}
 .ex-dot.x{background:var(--ax-x)}.ex-dot.y{background:var(--ax-y)}.ex-dot.z{background:var(--ax-z)}
 .ex-axis:not(.is-on) .ex-dot{opacity:var(--op-4)}
 /* An axis that is on: a solid fill in its own colour (the dot turns white so it stays visible on the fill). */
 /* (the colour comes from the button's own data-axis: the x / y / z classes are only on the little dot inside it) */
-#explode-axes .ex-axis{--ax-c:var(--tx3);border-radius:var(--r-pill);box-sizing:border-box;height:24px;padding:0 var(--space-lg) 0 var(--space-md);gap:var(--space-5);font-size:var(--fs-12);line-height:var(--lh-none);transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
+#explode-axes .ex-axis{--ax-c:var(--tx3);border-radius:var(--r-pill);box-sizing:border-box;height:var(--ctl-h-sm);padding:0 var(--space-xl,14px) 0 var(--space-lg);gap:var(--space-sm);font-size:var(--fs-12);line-height:var(--lh-none);transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
 #explode-axes .ex-axis[data-axis="x"]{--ax-c:var(--ax-x)}#explode-axes .ex-axis[data-axis="y"]{--ax-c:var(--ax-y)}#explode-axes .ex-axis[data-axis="z"]{--ax-c:var(--ax-z)}
-#explode-axes .ex-axis.is-on,#explode-axes .ex-axis.is-on:hover,#explode-axes .ex-axis.is-on:focus-visible{color:#0a0a0a;font-weight:var(--fw-semibold);background:var(--ax-c);border-color:transparent;box-shadow:none}      /* (black letters on the colour) */
-#explode-axes .ex-axis.is-on .ex-dot{background:var(--blk-60)}
-#explode-axes .ex-axis:not(.is-on){color:var(--tx2);background:transparent;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ax-c) 55%,transparent)}
-#explode-axes .ex-axis:not(.is-on):hover{background:color-mix(in srgb,var(--ax-c) 16%,transparent)}
+#explode-axes .ex-axis.is-on,#explode-axes .ex-axis.is-on:hover,#explode-axes .ex-axis.is-on:focus-visible{color:var(--tx);background:var(--s4);box-shadow:none}      /* (neutral chip: only the dot carries the axis colour) */
+#explode-axes .ex-axis.is-on .ex-dot{opacity:1}
+#explode-axes .ex-axis:not(.is-on){color:var(--tx3);background:transparent;box-shadow:none}
+#explode-axes .ex-axis:not(.is-on):hover{color:var(--tx2);background:var(--s2,var(--s3))}
 .ex-mode{margin:0 0 var(--space-lg)}
 .ex-body.is-part #explode-axes,.ex-body.is-part .ex-l,.ex-body.is-part .ex-fine{display:none}
 .ex-fine{margin:var(--space-sm) 0 0;border-top:1px solid var(--surface-line)}
-.ex-body .ex-row .ex-reset{margin-left:auto!important;flex:0 0 24px!important;width:24px!important;min-width:0!important;height:24px!important;padding:0!important;display:inline-flex;align-items:center;justify-content:center}
+.ex-body .ex-row .ex-reset{margin-left:auto!important;flex:0 0 var(--ctl-h-sm)!important;width:var(--ctl-h-sm)!important;min-width:0!important;height:var(--ctl-h-sm)!important;padding:0!important;display:inline-flex;align-items:center;justify-content:center;border-radius:var(--r-pill)!important}
 .ex-body .ex-row .ex-reset svg{width:var(--icon-sm);height:var(--icon-sm)}
 .ex-row .ex-axes{flex-wrap:nowrap}
 .ex-fine>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;padding:9px 0 var(--space-2xs);font-size:var(--fs-12);color:var(--tx2);cursor:pointer;user-select:none}
@@ -3892,7 +3941,7 @@ body.dyn-placing,body.dyn-placing #canvas{cursor:grabbing!important}
 .shade-gh{display:flex;align-items:center;justify-content:space-between;margin:0 0 var(--space-sm);padding:0 var(--space-2xs);font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3);cursor:pointer;user-select:none}
 .shade-gh:hover{color:var(--tx)}
 .shade-group.active .shade-gh{color:var(--ac)}
-.shade-row{position:relative;display:flex;gap:var(--space-md);overflow-x:auto;overflow-y:hidden;margin:0 -12px;padding:var(--space-3) var(--space-xl) var(--space-xs);scroll-padding:0 12px;scroll-snap-type:x proximity;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-mask-image:linear-gradient(90deg,transparent 0,var(--black) var(--fade-l,0px),var(--black) calc(100% - var(--fade-r,0px)),transparent 100%);mask-image:linear-gradient(90deg,transparent 0,var(--black) var(--fade-l,0px),var(--black) calc(100% - var(--fade-r,0px)),transparent 100%)}
+.shade-row{position:relative;display:flex;gap:var(--space-md);overflow-x:auto;overflow-y:hidden;margin:0 -12px;padding:var(--space-3) var(--space-xl) var(--space-xs);scroll-padding:0 12px;scroll-snap-type:x proximity;scrollbar-width:none;overscroll-behavior-x:contain}
 .shade-row.can-l{--fade-l:22px}
 .shade-row.can-r{--fade-r:22px}
 .shade-row.is-dragging{cursor:grabbing;scroll-snap-type:none}
@@ -4079,6 +4128,14 @@ body.app-ready .sp-card{transform:scale(1.025)}
 @media (max-width:760px){.hp-body{grid-template-columns:1fr}.hp-nav{display:none}.hp-search{width:auto;flex:1}}
 /* a fact on a Settings row (About) */
 .set-val{max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx3);font-size:var(--fs-12);font-variant-numeric:tabular-nums;text-align:right}
+.mem-g{width:100%;display:flex;flex-direction:column;gap:var(--space-md)}
+.mem-bar{display:flex;height:8px;border-radius:var(--r-pill);background:var(--s4);overflow:hidden}
+.mem-bar i{display:block;height:100%;width:0;transition:width .25s}
+.mem-a{background:var(--ac)}.mem-b{background:var(--ac2)}
+.mem-key{display:flex;justify-content:space-between;gap:var(--space-lg);font-size:var(--fs-12);color:var(--tx3);font-variant-numeric:tabular-nums}
+.mem-key b{font-weight:var(--fw-regular);color:var(--tx2)}
+.mem-key i{display:inline-block;width:8px;height:8px;border-radius:var(--r-pill);margin-right:6px}
+@media (prefers-reduced-motion:reduce){.mem-bar i{transition:none}}
 
 /* ── Materials and Library popped out as floating windows (see _floatDocks in app-v2.js) ── */
 #vp-materials-pop.mat-dock.is-float,#vp-library-pop.is-float{position:fixed;left:var(--fx,80px);top:var(--fy,100px);right:auto;bottom:auto;width:var(--fw,780px);height:var(--fh,380px);max-height:none;
@@ -4384,7 +4441,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .em-pop-item.is-on:hover .em-pop-l{color:var(--tx-on-accent)}
 /* ── end of Edit mesh ── */
 </style>
-<script src="appearance.js?v=4"></script>
+<script src="appearance.js?v=5"></script>
 <script src="updater.js?v=1"></script>
 <style id="updates-css">
 /* Updates: the card in the corner, and Settings › Updates (updater.js). Tokens only. */
@@ -4438,15 +4495,11 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 #sidebar-right .section-h .sec-ico{width:var(--icon-md);height:var(--icon-md);margin-right:9px;flex:none;color:var(--tx3);transition:var(--tr-fg)}
 #sidebar-right .section-h > span:first-of-type{flex:1 1 auto;min-width:0}
 #sidebar-right .section-h:hover .sec-ico,#sidebar-right .section-h:not(.collapsed) .sec-ico{color:var(--tx2)}
-.sel-bar{padding:0 var(--space-2xs) var(--space-xs);margin:0;display:flex;flex-direction:column;gap:var(--space-lg)}
+.sel-bar{padding:0 var(--space-2xs) var(--space-2xl);margin:0;display:flex;flex-direction:column;gap:var(--space-lg)}
 .section-fixed:has(+ .sel-bar){margin-bottom:var(--space-2xs)}      /* (the buttons sit close under the Properties card) */
 /* The selection buttons stay at the top of the panel while it scrolls, and whatever scrolls up under them fades out (the fade shows only
    once they have reached the top: .is-stuck, set by _wireSelBarStick, so the View heading below them is never veiled at rest) */
-#sidebar-right > .sel-bar{position:sticky;top:0;z-index:6;background:var(--bg);padding-top:var(--space-md);margin-top:-6px}
-#sidebar-right > .sel-bar::after{content:'';position:absolute;left:0;right:0;top:100%;height:26px;pointer-events:none;opacity:0;transition:opacity var(--dur-180) ease;
-  background:linear-gradient(to bottom,var(--bg) 0%,color-mix(in srgb,var(--bg) 70%,transparent) 35%,transparent 100%)}
-#sidebar-right > .sel-bar.is-stuck::after{opacity:1}
-@media (prefers-reduced-motion:reduce){#sidebar-right > .sel-bar::after{transition:none}}
+#sidebar-right > .sel-bar{position:sticky;top:calc(-1 * var(--space-md));z-index:6;background:var(--bg);padding-top:var(--space-md);margin-top:-6px}
 /* The header line ("Selection", "N selected") is not shown: the buttons say it. Its elements stay because a script writes the number into them. */
 .sel-bar-h{display:none;align-items:center;justify-content:space-between;padding:0 var(--space-2xs) 1px;font-size:var(--fs-10,10px);letter-spacing:var(--tracking-caps);text-transform:uppercase;font-weight:var(--fw-regular);color:var(--tx3)}
 .sel-bar-n{font-size:var(--fs-11);font-weight:var(--fw-regular);color:var(--tx3);font-variant-numeric:tabular-nums}
@@ -4466,12 +4519,18 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 .sel-bar-grid .btn.is-on{color:var(--ac-text);border-color:var(--ac-line,var(--bd2))}
 .sel-bar-grid .btn.is-on svg{color:currentColor}
 .sel-bar-grid.is-edit{margin-top:0}
-.sel-bar:not(.has-sel) .is-edit .btn{opacity:var(--op-45)}
+.sel-bar-grid.is-icons{grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-xs)}
+.sel-bar-grid.is-icons .btn{height:var(--ctl-h);padding:0}
+.sel-bar-grid.is-icons .btn svg{width:var(--icon-md);height:var(--icon-md);stroke-width:2}
+.sel-bar-spare[hidden]{display:none}
+.sel-bar:not(.has-sel) .is-edit .btn,.sel-bar:not(.has-sel) .btn.is-edit{opacity:var(--op-45)}
 .sel-del-n{display:none}
 /* Buttons in the right sidebar are filled, with no hairline round them (the one that is switched on keeps its blue edge). */
 #sidebar-right .btn:not(.primary),#sidebar-right .btn:not(.primary):hover{border-color:transparent}
 #sidebar-right .sel-bar-grid .btn{background:var(--bg3);border-color:transparent}
 #sidebar-right .sel-bar-grid .btn:hover{background:var(--bg4);border-color:transparent}
+#sidebar-right .sel-bar-grid .btn.is-on,#sidebar-right .sel-bar-grid .btn.is-on:hover{background:color-mix(in srgb,var(--ac) 24%,var(--bg3));border-color:var(--ac);color:var(--ac-text)}      /* (a switch that is on: tinted fill + accent outline + accent icon) */
+#sidebar-right .sel-bar-grid .btn.is-on svg{color:currentColor}
 #sidebar-right .sel-bar-grid .btn.danger:hover{background:var(--er-soft);border-color:transparent}
 #sidebar-right .sel-bar-grid .btn.is-on{border-color:var(--ac-line,var(--bd2))}
 /* no extra space under the last line of a card or of its Advanced section (the help text's own bottom margin sat on top of the card's padding) */
@@ -4851,18 +4910,18 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.26.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.27.0</div>
         </div>
         <div class="brand-menu-about">Optimise, inspect and convert STEP / GLB / glTF models in the browser. Real-time WebGPU rendering, non-destructive editing and one-click export to GLB, FBX, USDZ, OBJ and more.</div>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-changelog">
-          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.26.0</span></div>
+          <div class="brand-menu-changelog-head"><span>What's new</span><span class="tag">v0.27.0</span></div>
           <ul>
-            <li>Box and Brush pick whole parts</li>
-            <li>One selection-tool button in the toolbar</li>
-            <li>Opening the same STEP again is instant</li>
-            <li>Big files open without freezing the page</li>
-            <li>Memory given back, one look for the controls</li>
+            <li>Shadows from the sun, on the parts and the floor</li>
+            <li>Quick remesh reduces like Blender</li>
+            <li>Scenes come back as saved, and lead Recent</li>
+            <li>Change pivot orientation, car paint presets</li>
+            <li>No more freezes: Undo, Remove holes, Ctrl+C</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -4990,6 +5049,7 @@ window.moSplash = function (msg, pct) {
         <span class="tform-num" data-for="tform-sz"><button class="tform-step" data-step="-" tabindex="-1" type="button">−</button><input type="number" class="tform-input" autocomplete="off" data-lpignore="true" data-1p-ignore data-form-type="other" id="tform-sz" data-axis="sz" step="0.1" placeholder="0"><span class="tform-unit">mm</span><button class="tform-step" data-step="+" tabindex="-1" type="button">+</button></span>
       </div>
     </div>
+
   </aside>
 
   <main id="viewport">
@@ -5027,7 +5087,7 @@ window.moSplash = function (msg, pct) {
            the tooltip. -->
       <div class="vpc el-bar" id="el-bar" hidden data-tip-side="left" role="toolbar" aria-label="Edit mesh">
         <div class="el-size" id="el-brush-row" hidden title="How wide the brush is on the screen (its radius, in pixels). Hold the middle button and drag in the view to change it"><i data-lucide="circle-dashed"></i><span class="el-size-l">Brush size</span><label class="size-field"><input type="text" inputmode="numeric" id="el-brush" value="20" aria-label="Brush size"><span>px</span></label></div>
-        <div class="el-row" id="el-space" role="group" aria-label="Gizmo axes">
+        <div class="el-row" id="el-space" role="group" aria-label="Pivot orientation">
           <button type="button" class="active" data-space="world" title="World: the gizmo's axes are the scene's X, Y and Z" aria-label="World axes"><i data-lucide="globe"></i><span>World</span></button>
           <button type="button" data-space="local" title="Local: the gizmo's axes are the part's own, as it is turned" aria-label="Local axes"><i data-lucide="box"></i><span>Local</span></button>
           <button type="button" data-space="normal" title="Normal: the gizmo's Z points along the picked pieces' average normal, so a face can be pulled straight out of itself" aria-label="Normal axes"><i data-lucide="crosshair"></i><span>Normal</span></button>
@@ -5047,7 +5107,7 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="el-ibtn" id="btn-el-extract" title="Extract (polygons): take the picked polygons out into a part of their own, in the same place and with the same material. One undo step" aria-label="Extract" disabled><i data-lucide="split"></i><span>Extract</span></button>
         </div>
       </div>
-      <div class="vpc tc">
+    <div class="vpc tc">
         <!-- Status pills (a mode that is on): always just right of the camera pill, in this order,
              out of the flow so the camera pill never moves when one comes or goes. -->
         <div id="vp-mode-pills">
@@ -5073,14 +5133,14 @@ window.moSplash = function (msg, pct) {
           </div>
         </div>
       </div>
-      <!-- The camera pill: top right, under the view cube -->
+      <!-- The camera pill: top left, opposite the view cube (top right) -->
       <div class="vpc cam-corner">
-        <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="menu" aria-expanded="false" data-tip-side="left" aria-label="Camera view: Cam" title="Camera view: Cam">
+        <button id="vp-view-pill" class="vp-pill" type="button" aria-haspopup="menu" aria-expanded="false" data-tip-side="right" aria-label="Camera view: Cam" title="Camera view: Cam">
           <i class="vp-pill-icon" data-lucide="video" aria-hidden="true"></i>
           <svg class="vp-pill-icon vp-pill-cubeico cubeico-top" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="8 1.5 14 5 8 8.5 2 5"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><svg class="vp-pill-icon vp-pill-cubeico cubeico-front" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="2 5 8 8.5 8 14.5 2 11"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><svg class="vp-pill-icon vp-pill-cubeico cubeico-side" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="8 8.5 14 5 14 11 8 14.5"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg>
           <span class="vp-pill-label">Cam</span>
         </button>
-        <div id="vp-view-pill-menu" class="vp-pill-menu" role="menu" data-tip-side="left">
+        <div id="vp-view-pill-menu" class="vp-pill-menu" role="menu" data-tip-side="right">
           <button class="vp-pill-item active" type="button" data-view="persp" role="menuitem" aria-label="Cam view"><i class="vp-pill-ico" data-lucide="video" aria-hidden="true"></i><span class="vp-pill-item-lbl">Cam</span><kbd class="vp-pill-item-kbd" data-kbd="1"></kbd></button>
           <button class="vp-pill-item" type="button" data-view="top" role="menuitem" aria-label="Top view"><svg class="vp-pill-cube" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="8 1.5 14 5 8 8.5 2 5"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><span class="vp-pill-item-lbl">Top</span><kbd class="vp-pill-item-kbd" data-kbd="2"></kbd></button>
           <button class="vp-pill-item" type="button" data-view="front" role="menuitem" aria-label="Front view"><svg class="vp-pill-cube" viewBox="0 0 16 16" aria-hidden="true"><polygon class="cube-face" points="2 5 8 8.5 8 14.5 2 11"/><polygon class="cube-edge" points="8 1.5 14 5 14 11 8 14.5 2 11 2 5"/><polyline class="cube-edge" points="2 5 8 8.5 14 5"/><line class="cube-edge" x1="8" y1="8.5" x2="8" y2="14.5"/></svg><span class="vp-pill-item-lbl">Front</span><kbd class="vp-pill-item-kbd" data-kbd="3"></kbd></button>
@@ -5486,6 +5546,27 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Align to floor</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
+    <div class="section section-cmd" data-cmd="pivot" hidden>
+      <div class="section-h"><span>Pivot orientation</span><button type="button" class="lc-icon-btn cmd-close" title="Done (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div class="cmd-lede">Turns the pivot of each selected part: its own X, Y and Z, which the gizmo follows. The parts stay where they are and look the same.</div>
+        <div class="pv-chips" id="pivot-chips">
+          <button type="button" class="btn" data-orient="object" title="Turn each pivot to the way its own part is turned: its biggest flat faces, by the smallest turn (curved shapes with no flat faces are left alone)"><i data-lucide="box-select"></i>Object</button>
+          <button type="button" class="btn" data-orient="world" title="Turn the pivot to the scene's X, Y and Z"><i data-lucide="globe"></i>World</button>
+          <button type="button" class="btn" data-orient="active" title="Turn every selected pivot to the axes of the part picked last"><i data-lucide="mouse-pointer-click"></i>Last selected</button>
+          <button type="button" class="btn" data-orient="view" title="Turn the pivot to the screen: X right, Y up, Z toward you"><i data-lucide="camera"></i>View</button>
+          <button type="button" class="btn" data-orient="spread" title="Turn the pivot to the axes the selected parts are spread along (three or more parts)"><i data-lucide="scan-line"></i>Spread</button>
+        </div>
+        <div class="pv-head"><span>Or type the angles</span></div>
+        <div class="cmd-num" title="The pivot's turn about the scene's X axis"><span>X</span><label class="size-field"><input type="text" inputmode="decimal" id="pivot-x" value="0"><span>°</span></label></div>
+        <div class="cmd-num" title="The pivot's turn about the scene's Y axis"><span>Y</span><label class="size-field"><input type="text" inputmode="decimal" id="pivot-y" value="0"><span>°</span></label></div>
+        <div class="cmd-num" title="The pivot's turn about the scene's Z axis"><span>Z</span><label class="size-field"><input type="text" inputmode="decimal" id="pivot-z" value="0"><span>°</span></label></div>
+        <button class="btn primary" id="btn-pivot-apply" data-cmd-primary title="Turn the pivots to these angles. One undo step."><i data-lucide="axis-3d"></i>Turn pivot</button>
+        <div class="field-help">The angles show where the pivot stands now, in the scene's axes. Ctrl+Z puts the pivot and the mesh back.</div>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Turn pivot</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
     <div class="section section-cmd" data-cmd="place" hidden>
       <div class="section-h"><span>Dynamic place</span><button type="button" class="lc-icon-btn cmd-close" title="Done (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
@@ -5849,24 +5930,22 @@ window.moSplash = function (msg, pct) {
 
     <div class="sel-bar" id="sel-bar" role="toolbar" aria-label="Selection">
       <div class="sel-bar-h"><span>Selection</span><span class="sel-bar-n"><span id="sel-bar-num">0</span> selected</span></div>
-      <div class="sel-bar-grid">
-        <button class="btn" id="sel-all" title="Select every visible part (Ctrl+A)"><i data-lucide="square-check"></i>All</button>
-        <button class="btn" id="sel-invert" title="Invert the current selection (Ctrl+I)"><i data-lucide="arrow-left-right"></i>Invert</button>
-        <button class="btn" id="sel-clear" title="Deselect everything (Esc)"><i data-lucide="x"></i>Clear</button>
-        <button class="btn" id="sel-similar" title="Select similar: add parts that share geometry with the current selection"><i data-lucide="copy"></i>Similar</button>
-        <button class="btn" id="btn-select-color" title="By colour: select every part that shares a colour with the current selection"><i data-lucide="palette"></i>Colour</button>
-        <button class="btn" id="btn-select-regex" title="By name: select every part whose name matches a regex"><i data-lucide="search"></i>Name</button>
+      <div class="sel-bar-grid is-icons">
+        <button class="btn" id="sel-all" title="Select every visible part (Ctrl+A)" aria-label="All"><i data-lucide="square-check"></i></button>
+        <button class="btn" id="sel-invert" title="Invert the current selection (Ctrl+I)" aria-label="Invert"><i data-lucide="arrow-left-right"></i></button>
+        <button class="btn" id="sel-similar" title="Select similar: add parts that share geometry with the current selection" aria-label="Similar"><i data-lucide="copy"></i></button>
+        <button class="btn is-edit" id="sel-hide" title="Hide the selection (H)" aria-label="Hide"><i data-lucide="eye-off"></i></button>
+        <button class="btn is-edit" id="sel-isolate" title="Isolate: show only the selection (S)" aria-label="Isolate"><i data-lucide="focus"></i></button>
+        <button class="btn danger is-edit" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)" aria-label="Delete"><i data-lucide="trash-2"></i><span class="sel-del-n"><span id="del-sel-count">0</span></span></button>
       </div>
-      <div class="sel-bar-grid is-edit is-quad">
-        <button class="btn" id="sel-hide" title="Hide the selection (H)" aria-label="Hide"><i data-lucide="eye-off"></i></button>
-        <button class="btn" id="sel-isolate" title="Isolate: show only the selection (S)" aria-label="Isolate"><i data-lucide="focus"></i></button>
-        <button class="btn" id="sel-frame" title="Frame: zoom to the selection (F)" aria-label="Frame"><i data-lucide="maximize"></i></button>
-        <button class="btn" id="sel-duplicate" title="Duplicate the selection in place (Ctrl+D)" aria-label="Duplicate"><i data-lucide="copy-plus"></i></button>
-      </div>
-      <div class="sel-bar-grid is-edit">
-        <button class="btn" id="btn-merge-sel" title="Merge selected parts into a single mesh — ideal for STL / 3D printing (Ctrl+M)"><i data-lucide="combine"></i>Merge</button>
-        <button class="btn" id="btn-group-sel" title="Parent selected parts under a new empty node so the gizmo moves them together (Ctrl+G)"><i data-lucide="folder-plus"></i>Group</button>
-        <button class="btn danger" id="btn-delete-sel" title="Delete the selected parts — can be undone (Del)"><i data-lucide="trash-2"></i>Delete<span class="sel-del-n"><span id="del-sel-count">0</span></span></button>
+      <div class="sel-bar-spare" hidden>
+        <button class="btn" id="sel-clear" title="Deselect everything (Esc)" aria-label="Clear"><i data-lucide="x"></i></button>
+        <button id="btn-select-color" type="button"></button>
+        <button id="btn-select-regex" type="button"></button>
+        <button id="sel-frame" type="button"></button>
+        <button id="sel-duplicate" type="button"></button>
+        <button id="btn-merge-sel" type="button"></button>
+        <button id="btn-group-sel" type="button"></button>
       </div>
     </div>
 
@@ -5939,7 +6018,8 @@ window.moSplash = function (msg, pct) {
             <option value="1000">1000</option>
           </select>
         </div>
-        <div class="toggle" style="margin-bottom:0"><span id="toggle-snap-grid-lbl">Snap gizmo to grid</span><label><input type="checkbox" id="toggle-snap-grid" aria-labelledby="toggle-snap-grid-lbl"><span class="switch"></span></label></div>
+        <div class="toggle"><span id="toggle-snap-grid-lbl">Snap gizmo to grid</span><label><input type="checkbox" id="toggle-snap-grid" aria-labelledby="toggle-snap-grid-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" style="margin-bottom:0" title="The sun casts shadows: the parts on each other, and on the floor of the grid"><span id="toggle-shadows-lbl">Shadows</span><label><input type="checkbox" id="toggle-shadows" aria-labelledby="toggle-shadows-lbl"><span class="switch"></span></label></div>
       </div>
     </div>
 
@@ -6349,6 +6429,12 @@ window.moSplash = function (msg, pct) {
       <!-- Mesh-format panel (FBX / OBJ / 3MF / STL) -->
       <div id="import-panel-mesh" class="imp-panel" style="display:none">
         <div class="imp-note" style="margin:0">Mesh formats load directly, with no slow conversion to tune. The options below apply to the resulting scene.</div>
+        <div class="imp-sec">
+          <div class="imp-h">Model</div>
+          <div class="imp-grp">
+            <div class="toggle imp-row"><span id="imp-keep-uv-lbl" class="imp-t"><b>Keep texture coordinates (UVs)</b><small>Needed to put a texture on a part later. Off saves a little memory</small></span><label><input type="checkbox" id="imp-keep-uv" aria-labelledby="imp-keep-uv-lbl" checked><span class="switch"></span></label></div>
+          </div>
+        </div>
       </div>
       </div>
       <div class="imp-col imp-col-b">
@@ -6631,7 +6717,6 @@ window.moSplash = function (msg, pct) {
         <div class="field"><label><span>Sun intensity <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-sun-val">1.20</span></span></span></label><input type="range" id="light-sun" min="0" max="3" step="0.05" value="1.2" style="width:100%"></div>
         <div class="field"><label><span>Sun azimuth <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-azi-val">45</span>°</span></span></label><input type="range" id="light-azi" min="0" max="360" step="1" value="45" style="width:100%"></div>
         <div class="field"><label><span>Sun elevation <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-ele-val">45</span>°</span></span></label><input type="range" id="light-ele" min="0" max="90" step="1" value="45" style="width:100%"></div>
-        <div class="toggle" style="margin-bottom:0"><span>Shadows</span><label><input type="checkbox" id="toggle-shadows"><span class="switch"></span></label></div>
       </div>
     </div>
 </div>
@@ -6742,20 +6827,20 @@ window.moSplash = function (msg, pct) {
       </div>
 
       <div id="welcome-load-pane" style="display:none">
-        <div style="display:flex;align-items:center;gap:var(--space-2xl);padding:6px 0 14px">
+        <div class="wl-ld-head">
           <canvas class="ml-cv" width="88" height="88" aria-hidden="true"></canvas>
-          <div style="flex:1;min-width:0">
-            <div id="wl-msg" style="font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx);margin-bottom:3px">Loading…</div>
-            <div id="wl-sub" style="color:var(--tx3);font-size:var(--fs-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+          <div class="wl-ld-text">
+            <div id="wl-msg">Loading…</div>
+            <div id="wl-sub"></div>
           </div>
-          <div id="wl-time" style="color:var(--tx3);font-size:var(--fs-sm);font-variant-numeric:tabular-nums;flex-shrink:0">0.0s</div>
+          <div id="wl-time">0.0s</div>
         </div>
-        <div class="loader-bar" style="margin-top:0"><div class="loader-bar-fill" id="wl-bar"></div></div>
+        <div class="loader-bar"><div class="loader-bar-fill" id="wl-bar"></div></div>
         <ol id="wl-steps" class="ld-steps" hidden></ol>
-        <details class="ld-details" id="wl-details" open><summary>Details</summary><div id="wl-log" class="loader-log" style="max-height:160px"></div></details>
-        <div style="display:flex;gap:var(--space-sm);justify-content:flex-end;margin-top:10px">
-          <button id="wl-copy-btn" class="btn" style="width:auto" title="Copy the log to clipboard">Copy log</button>
-          <button id="wl-cancel-btn" class="btn" style="width:auto" title="Abort the current load">Cancel</button>
+        <details class="ld-details" id="wl-details"><summary>Details</summary><div id="wl-log" class="loader-log"></div></details>
+        <div class="wl-ld-foot">
+          <button id="wl-copy-btn" title="Copy the log to clipboard">Copy log</button>
+          <button id="wl-cancel-btn" title="Abort the current load">Cancel</button>
         </div>
       </div>
     </div>
@@ -6853,6 +6938,14 @@ window.moSplash = function (msg, pct) {
     if (leftOf) {
       const lr = leftOf.getBoundingClientRect();
       el.style.left = Math.max(6, lr.left - tr.width - 8) + 'px';
+      el.style.top = Math.max(6, Math.min(window.innerHeight - tr.height - 6, r.top + r.height / 2 - tr.height / 2)) + 'px';
+      return;
+    }
+    // The same for a column at the left edge (the camera pill): the tip goes to its RIGHT.
+    const rightOf = anchor.closest('[data-tip-side="right"]');
+    if (rightOf) {
+      const rr = rightOf.getBoundingClientRect();
+      el.style.left = Math.min(window.innerWidth - tr.width - 6, rr.right + 8) + 'px';
       el.style.top = Math.max(6, Math.min(window.innerHeight - tr.height - 6, r.top + r.height / 2 - tr.height / 2)) + 'px';
       return;
     }
@@ -7140,7 +7233,7 @@ window.moSplash = function (msg, pct) {
      transcoder, glTF-Transform (for a Draco-compressed export) and the
      in-browser STEP reader. -->
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
-<script type="module" src="app-v2.js?v=20261013-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8"></script>
+<script type="module" src="app-v2.js?v=20261015q-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app-v2.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
