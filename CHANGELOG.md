@@ -4,6 +4,58 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.27.0
+
+Released 14 Oct 2026.
+
+v0.26.0 was about speed and picking. v0.27.0 is about how things look and how they are kept: shadows in the view, car paint that does not look like sandpaper, a Quick remesh that reduces the way a modeller would, scenes that come back as they were saved, and a long list of freezes and lost settings that are gone.
+
+**Shadows and reducing**
+
+- ![new][new] **Shadows in the viewport.** *Scene › Shadows* makes the sun cast shadows: the parts fall on each other, and the model casts a soft shadow on the floor, which is the plane of the grid. The floor shadow is the model's outline as seen from the sun, laid on the floor along the sun's rays, so it falls away from the sun and follows the Sun gizmo; it is blurrier and fainter the higher the model stands above the floor. The switch is part of a saved scene.
+- ![new][new] **Quick remesh (B) reduces the way a modeller does it in Blender.** The flat faces are joined and cut with the fewest triangles first (*Planar*), and at the strong levels the points on faces that are flat to a few degrees go; then every second line of a ring grid is taken away (*Un-Subdivide*: a cylinder or a bellows with 100 lines keeps 50, then 25, as quads that are twice as wide, with no fan); then the simplifier takes what is still over the level; then the flat faces are cut evenly again (*Beautify*). On the Front Axle 8x8 the Un-Subdivide step alone takes 21 % of the triangles of its parts away within a tolerance of 0.2 to 1.5 % of each part's size (35 to 44 % on the round ones).
+- ![fix][fix] **Quick remesh and Decimate reduce an OBJ.** An OBJ or an STL has no shared points, and an OBJ without normals gets the flat normal of each face, so nothing could be joined and nothing was taken away. The weld now leaves flat normals out and the reduced mesh gets the usual 30 degree shading back, with its UVs.
+- ![fix][fix] **Closing Quick remesh in the middle of its work no longer freezes the page.** With every part selected it queued a reduction of each part at several levels, and closing it left every waiting job to run. They give way now.
+- ![fix][fix] **Remove holes closes a ring groove round a flat island** (an O-ring seat, a circle cut into a cap): it was skipped as over the size limit because the limit was checked against the ring's outer diameter; the width of the groove is checked now, and the island goes with it. A shallow groove with flush parts in it is no longer taken for something standing on the face.
+- ![polish][polish] **The Exploded view sliders move one percent at a time, not five.**
+
+**Scenes that come back as they were**
+
+- ![fix][fix] **A saved scene appears in Recent.** Only opened files were listed. The saved file now leads the list, takes the place of the card it was opened from (the STEP of the same name) with its picture, says *Scene*, and opens from there after a reload.
+- ![fix][fix] **A saved scene keeps the look of its materials.** Metalness, roughness, glow, see-through and texture maps came back as 0.15 / 0.55: every file's materials were replaced by one made from the colour alone. A file saved by the app now keeps its own, also for the copies of a shape that repeat 32 times or more. A paint's colour is saved as the material has it, not as the part was first opened, so a Flip-flop Violet body no longer comes back grey.
+- ![fix][fix] **A saved scene keeps more of the scene.** The unit the sizes are shown in, the grid cell, the lights and the shadows, the scale and the up axis of the scene, locked parts and the explode amount did not come back; they do now. The parts of an exploded view were written where the view had put them, so after opening the file nothing could put them back together; they are written together and the amount is saved.
+
+**Selecting, moving and pasting**
+
+- ![new][new] **Change pivot orientation.** *Edit › Change pivot orientation…* turns the pivot of every selected part to World, Last selected, View or Spread, or to X, Y and Z degrees you type, and turns the vertices the other way so that the part looks exactly as it did. The gizmo's axes list has the same choices, and a Gizmo card under Transform sets any angle. One undo step.
+- ![new][new] **Hide and Isolate are switches.** The buttons of the selection bar are lit while they apply, and the same click (or *H*) undoes them.
+- ![new][new] **A group of the model's own tree pastes as one new group.** Copy a folder and paste it: the whole folder comes back as "Name copy" with the folders and parts inside it, next to the original; one undo takes it away.
+- ![fix][fix] **The gizmo no longer sits off the part after a pivot turn or an undo.** The box of a part counted the edge outlines drawn on it, which are stale at that moment.
+- ![polish][polish] **Every part of a big selection gets its own outline.** A selection of thousands of parts was mostly drawn as boxes.
+
+**Materials**
+
+- ![new][new] **Car paint presets.** Metallic Silver, Pearl White, Candy Red, two Flip-flops, Glitter Gold and Black Pearl: glossy paint with a faint shimmer of flakes; the pearls and flip-flops change colour with the angle (thin-film iridescence). They export to GLB. The flake map is smooth and large, not a hard grain: a first version put a random, steep normal on every texel, which looked like sandpaper and flickered in a highlight.
+- ![new][new] **Keep texture coordinates** is a switch of the import window for meshes: a texture given to a material later shows on a model that came without one. Merging parts and exporting keep the UVs too.
+- ![fix][fix] **White lettering under a dark colour.** A colour map is multiplied by the material's colour; the colour goes to white while a map is on and comes back when the map is taken off.
+- ![fix][fix] **A file written with a leftover "transparent" flag no longer opens as patchwork.** A fully opaque material flagged transparent was written as BLEND, which other programs draw without depth.
+
+**The look of the app**
+
+- ![polish][polish] **A slimmer loading card.** 540 px instead of the whole start window, no start-screen header, one line for the file name, a thin bar, the steps as a quiet list, the log folded under *Details*, and *Copy log* and *Cancel* as plain text. A STEP read shows its time against an estimate ("22s of about 55s") and the bar moves by it.
+- ![new][new] **Settings › Performance › Memory.** What the page holds: the script heap, the geometry of the open models, and what Undo keeps alive.
+- ![polish][polish] **Settings groups are cards** with a fold arrow and jump chips.
+- ![polish][polish] **Two more typefaces in Appearance:** Geist and Space Grotesk.
+- ![polish][polish] **A little more light in the studio**, so dark parts read better.
+
+**Memory, speed and freezes**
+
+- ![fix][fix] **Ctrl+C copies the text that is selected.** With any part selected (and parts stay selected after assigning or merging materials) the app took Ctrl+C for itself, so nothing selected as text ever reached the clipboard.
+- ![fix][fix] **Remove holes, Ctrl+Z, Remove holes… no longer runs the page out of memory.** The geometry that Decimate, Quick remesh, Untriangulate and the shading angle make was never freed (its names were not recognised, and the clean-up was put off by every quick action). It is freed once nothing in Undo or Redo holds it.
+- ![fix][fix] **Undo and Redo wait while a long step is running,** instead of undoing an earlier step underneath it.
+- ![fix][fix] **The recovery copy waits until you stop working,** and no spare copy of the app is started beside a model of over a million triangles.
+- ![perf][perf] **The Wireframe view is prepared in the background,** so the first switch to it is quicker.
+
 ## v0.26.0
 
 Released 13 Oct 2026.

@@ -65,8 +65,9 @@ except Exception:
 # GIL completely: it prints to the same console (inherited stdout) on its own
 # OS-level scheduling, regardless of what the main interpreter is busy with.
 class Heartbeat:
-    def __init__(self, label: str, every_s: float = 5.0):
-        self.label = label; self.every = every_s
+    def __init__(self, label: str, every_s: float = 5.0, expect_s: float = 0.0):
+        # expect_s: a guess at how long the step takes, printed beside the elapsed time (0 = no guess)
+        self.label = label; self.every = every_s; self.expect_s = expect_s
         self._proc = None; self._t0 = 0.0
     def __enter__(self):
         self._t0 = time.time()
@@ -92,6 +93,7 @@ class Heartbeat:
             "import os, sys, time\n"
             f"EVERY = {float(self.every)}\n"
             f"LABEL = {safe_label!r}\n"
+            f"EXPECT = {float(self.expect_s)}\n"
             f"PARENT = {os.getpid()}\n"
             "n = 0.0\n"
             "try:\n"
@@ -100,7 +102,9 @@ class Heartbeat:
             "        if os.name != 'nt' and os.getppid() != PARENT:\n"
             "            break\n"
             "        n += EVERY\n"
-            "        sys.stdout.write(f'  . ({LABEL}) still working... {n:.0f}s elapsed\\n')\n"
+            "        msg = f'  . ({LABEL}) still working... {n:.0f}s elapsed'\n"
+            "        if EXPECT > 0: msg += f', about {EXPECT:.0f}s expected'\n"
+            "        sys.stdout.write(msg + '\\n')\n"
             "        sys.stdout.flush()\n"
             "except KeyboardInterrupt:\n"
             "    pass\n"
@@ -373,6 +377,13 @@ def _load_xcaf_cache(path: Path):
     return doc, shape_tool, color_tool, free_labels
 
 
+def _expected_transfer_s(size_mb: float) -> float:
+    """A guess at the XCAF transfer (the long step) from the file size, for the progress line; OCCT reports no progress for it.
+    Measured once, on a 167 MB car: 48 s, so 0.29 s per MB. Other files and computers differ, so it is only ever shown as "about".
+    Small files are quick enough not to need one."""
+    return float(round(size_mb * 0.29)) if size_mb >= 30 else 0.0
+
+
 def parse_step_xcaf(path: Path):
     """Read STEP via XCAF — gets shapes + colors + names. Returns (doc, shape_tool, color_tool, free_labels)."""
     size_mb = path.stat().st_size / 1048576
@@ -424,7 +435,7 @@ def parse_step_xcaf(path: Path):
     if status != IFSelect_RetDone:
         raise RuntimeError(f"STEP read failed (status={status})")
     log("transferring document to XCAF tree...")
-    with Heartbeat("XCAF transfer"):
+    with Heartbeat("XCAF transfer", expect_s=_expected_transfer_s(size_mb)):
         ok = reader.Transfer(doc)
     if not ok:
         raise RuntimeError("STEPCAF Transfer failed")

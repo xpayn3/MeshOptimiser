@@ -520,5 +520,32 @@ function plateThrough(r = 5, n = N) {
   check('result is watertight', a.open === 0, a.open + ' open edges');
 }
 
+// 13. a ring groove round a flush island: judged by its width, not by the ring's diameter
+{
+  const plate = (ringR, innerR, islandHole) => {
+    const m = mesh();
+    const to = square(N, HALF, TH), bo = square(N, HALF, 0);
+    const Ro = ring(N, ringR, TH), Ri = ring(N, innerR, TH), Ro2 = ring(N, ringR, TH - 0.3), Ri2 = ring(N, innerR, TH - 0.3);
+    band(m, to, Ro, true); disc(m, bo, false); wall(m, to, bo, true);
+    wall(m, Ro, Ro2, false); band(m, Ro2, Ri2, true); wall(m, Ri, Ri2, true);
+    if (islandHole) { const Hi = ring(N, 2, TH), Hb = ring(N, 2, TH - 3); band(m, Ri, Hi, true); wall(m, Hi, Hb, false); disc(m, Hb, true); }
+    else disc(m, Ri, true);
+    return m.done();
+  };
+  console.log('ring groove Ø20, 1 mm wide, round a flush island (limit 12)');
+  const g = plate(10, 9, false);
+  check('input is watertight', watertight(g.positions, g.index) === 0);
+  const a = run(g, 12);
+  check('the groove is closed with its island', a.res.holes === 1, brief(a.res));
+  check('result is watertight', a.open === 0, a.open + ' open edges');
+  check('volume is the plain plate', Math.abs(a.vol - 100 * 100 * TH) < 1, 'vol ' + a.vol);
+  const wideRing = run(plate(10, 4, false), 12);
+  check('a groove wider than the limit (mean 6 mm round a Ø8 island, limit 4) stays', run(plate(10, 4, false), 4).res.holes === 0, brief(wideRing.res));
+  const off = run(g, 12, { rings: false });
+  check('left alone when rings are switched off', off.res.holes === 0);
+  const busy = run(plate(10, 9, true), 12);
+  check('an island with a hole of its own is left alone', busy.res.skipped.tooLarge >= 1 && busy.open === 0, brief(busy.res));
+}
+
 console.log(failed ? '\n' + failed + ' check(s) failed' : '\nall checks passed');
 process.exit(failed ? 1 : 0);

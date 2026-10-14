@@ -310,6 +310,14 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.27.0** — shadows, better paint, a smarter Quick remesh, and scenes that come back as they were saved.
+
+- ![new][new] **Shadows** — Scene › Shadows makes the sun cast shadows on the parts and a soft one on the floor, along the sun's rays. It is part of a saved scene.
+- ![new][new] **Quick remesh reduces like Blender** — flat faces joined (Planar), every second line of a ring grid taken away (Un-Subdivide), the simplifier for the rest, the flat faces cut evenly again (Beautify). Quick remesh and Decimate now work on an OBJ.
+- ![new][new] **Change pivot orientation** — turn the pivot of the selected parts to World, Last selected, View, Spread or typed angles without moving them; Hide and Isolate are switches; a folder of the tree pastes as one group.
+- ![new][new] **Car paint presets** with a faint flake shimmer, a **Keep texture coordinates** import switch, and **Settings › Performance › Memory**.
+- ![fix][fix] **Scenes come back as saved** — Recent lists a saved scene, and the materials, paint colour, unit, grid, lights, shadows, scale, up axis, locks and explode amount are kept. Ctrl+C copies selected text, and Undo, Remove holes and Quick remesh no longer freeze or run the page out of memory.
+
 **v0.26.0** — faster, lighter and easier to pick with: Box and Brush select whole parts, big files open without freezing the page, the same STEP opens instantly the second time, and the app gives memory back.
 
 - ![new][new] **Box and Brush select whole parts** — in Model mode the selection tool has Click, Box and Brush, as in Edit mesh, behind one button in the left toolbar. Shift adds, Alt turns the camera, the middle button sets the brush size.
