@@ -20489,7 +20489,7 @@ function deleteParts(ids, label='Deleted parts') {
     }
     for (const gid of drop) try { removeUserGroup(gid, { skipRebuild: true, skipUndo: true }); } catch (_) {}
   }
-  if (hidden.length) pushUndo({ type: 'delete', items: hidden, label });
+  if (hidden.length) pushUndo({ type: 'delete', items: hidden, label, wasExploded: !!(state.explode && (state.explode.x || state.explode.y || state.explode.z)) });
   state.selected.clear(); $('del-sel-count').textContent = 0;
   // Model center changes when parts disappear; per-part _origPos values are
   // still valid for survivors, so leave them alone.
@@ -21084,6 +21084,16 @@ _UndoOps.register('delete', {
       if (p.instancedMesh && it.prevMat) { const m = new THREE.Matrix4(); m.fromArray(it.prevMat); p.instancedMesh.setMatrixAt(p.instanceIndex, m); p.instancedMesh.instanceMatrix.needsUpdate = true; }
     }
     state.redo.push(op);
+    // The matrix saved with a deleted instance is where the view had it then. The view may have been put back (or moved) since: an
+    // instance comes back at rest, or where the view has it now.
+    try {
+      const ex = state.explode, exploded = !!(ex && (ex.x || ex.y || ex.z));
+      for (const it of op.items) {
+        const p = getPart(it.partId);
+        if (op.wasExploded && p && p.instancedMesh && p._instOrigMat) { p.instancedMesh.setMatrixAt(p.instanceIndex, p._instOrigMat); p.instancedMesh.instanceMatrix.needsUpdate = true; }
+      }
+      if (exploded) applyExplode();
+    } catch (e) { console.warn('[undo] delete: could not place the parts in the view:', e); }
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
   },
@@ -28734,9 +28744,10 @@ function wireUI() {
     else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (state.selected.size > 0 || state.selectedGroupIds?.size) { e.preventDefault(); _deleteSelection('Deleted selected'); }
     }
-    else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redoLast(); }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoLast(); }
+    // (a held key repeats: every repeat rebuilt the outlines, the tree and the gizmo, and the page stopped answering. One step a press.)
+    else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); if (!e.repeat) redoLast(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (!e.repeat) undoLast(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); if (!e.repeat) redoLast(); }
     else if (e.key === 'Escape') { if (!_CmdCards.closeTop()) clearSelection(); }       // Esc leaves a command first
     else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target?.closest?.('button, a, [role="button"], summary')) { if (_CmdCards.runTop()) e.preventDefault(); }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); $('sel-all').click(); }
@@ -41716,7 +41727,9 @@ function applyExplode() {
   // Set so we don't mark the same buffer dirty N times.
   const dirtyInstanced = new Set();
   for (const p of state.parts) {
-    if (p.deleted || !p._partCenter) continue;
+    // (a deleted part keeps moving with the view, so undoing the delete brings it back where the view has it; a deleted instance stays
+    // scaled to nothing, its matrix is put right when the delete is undone)
+    if ((p.deleted && !p.mesh) || !p._partCenter) continue;
     if (state.explodeMode === 'part') {
       if (!p._partAxis) p._partAxis = _computePartAxis(p);
       const dir = p._partAxis;
@@ -41815,7 +41828,7 @@ function resetExplode() {
   const parentInv = new THREE.Matrix4();
   const worldTarget = new THREE.Vector3();
   for (const p of state.parts) {
-    if (p.deleted) continue;
+    if (p.deleted && !p.mesh) continue;      // (a deleted mesh goes back with the rest: see applyExplode)
     if (p.mesh && p._origWorldPos) {
       worldTarget.copy(p._origWorldPos);
       const parent = p.mesh.parent;
@@ -53682,21 +53695,31 @@ setTimeout(() => _dndDecorateTree(), 0);
     // an edit (a colour from the picker, a slider) is not in the history yet, and Undo would go past it to an older action.
     // The pending edit is recorded first, and then it is what is undone.
     try { const st = (typeof _matEditorState !== 'undefined') ? _matEditorState : null; if (st && st.flush) st.flush(true); } catch (_) {}
+    _explodeSettle();
     for (let guard = 0; guard < 24; guard++) {
       const top = state.history[state.history.length - 1];
       _undoOne.apply(this, arguments);
       if (!(top && top.auto)) break;
     }
+    _explodeRestMoved();
   };
   redoLast = function () {
     if (_Tasks.busy()) { try { toast('Redo', 'Wait until the running step has finished', 'info', 2000); } catch (_) {} return; }
+    _explodeSettle();
     _redoOne.apply(this, arguments);
     for (let guard = 0; guard < 24; guard++) {
       const nxt = state.redo && state.redo[state.redo.length - 1];
       if (!(nxt && nxt.auto)) break;
       _redoOne.apply(this, arguments);
     }
+    _explodeRestMoved();
   };
+  // An exploded view is a view, not a step in the history: undo and redo write parts back to where they were at rest, so the view is
+  // put back together first (parts, sliders and pill), and the rest positions are measured again afterwards.
+  function _explodeSettle() {
+    try { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) resetExplode(); } catch (e) { console.warn('[undo] could not put the exploded view back:', e); }
+  }
+  function _explodeRestMoved() { try { invalidateExplodeBaseline(); } catch (_) {} }
 }
 
 // Regression suite: open the app with ?selftest (see tests/selftest.js).
