@@ -54,6 +54,8 @@ Two tools select for you in a cleverer way: [Select hidden parts](meshoptimiser:
 
 Right-click a part, in the viewport or in the tree, for a menu of things to do with the selection: frame it, isolate it, select similar parts, copy, duplicate or delete.
 
+Copy and Paste with several groups selected makes a copy of each group, as a whole folder next to its original, with its own pivot. A group inside another selected group is copied along with it. One Undo takes back one group.
+
 > A common mistake: dragging without `Ctrl` turns the view instead of drawing a selection box. Hold `Ctrl` first, then drag.
 
 Related: [hide-isolate](meshoptimiser://docs/hide-isolate), [parts-tree](meshoptimiser://docs/parts-tree), [search-and-commands](meshoptimiser://docs/search-and-commands)

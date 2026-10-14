@@ -310,6 +310,15 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.29.0** — groups align and copy as one piece, windows move like macOS, and everything is sharp to the pixel.
+
+- ![new][new] **Align parts and Spread work on groups** — a group is one item, measured by the box round all its parts; copy several groups at once and each comes out as a whole folder with its own pivot.
+- ![polish][polish] **A macOS feel** — a layered shadow on the window in front only, windows that spring open, menus that fade out, a minimize when a floating window closes.
+- ![polish][polish] **A tighter quick colour wheel** — it clears the view while it is open, draws back in when it closes, and picks without scanning every part.
+- ![polish][polish] **Sharp to the pixel** — edges and icon lines on whole device pixels, and better Heavy parts bars.
+- ![new][new] **Materials window keys** — Ctrl+C, Ctrl+D and Ctrl+V copy, duplicate and paste materials; the Shading angle moved to the Shading section.
+- ![fix][fix] Undo no longer brings back a ghost copy of a group, and copied shapes keep their parameters.
+
 **v0.28.0** — see what is wrong with your model, fix it in a tap, and keep the real edges of your CAD file.
 
 - ![new][new] **Model inspector** — one window for what the model is and what is broken in it: inside-out parts, wrong-way faces, holes, doubled and needle triangles, with a button that opens the right fix.

@@ -8,6 +8,8 @@ A few parts often hold a large share of a model’s triangles. The card **Heavy 
 
 Only parts with more than 10,000 triangles are listed. The heaviest is at the top, and the list holds at most 500 parts. Each row shows the part’s place in the list, its name, its triangle count (for example 12.4k) and a bar that compares it with the heaviest part. Hover over a row to see the full name, the exact count and the rank.
 
+The bar is a rounded pill, coloured by rank from red for the heaviest to green for the lightest, and it grows in from the left when the list is drawn. Ticked rows that touch join into one shape.
+
 The card is in the right sidebar, under Inspect. Beside its title is a small number: how many parts are over the limit. You can read it while the card is folded. It goes down as you delete or reduce parts, and it reads 0, dimmed, when no part is that big.
 
 ## Steps

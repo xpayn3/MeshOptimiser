@@ -38,7 +38,7 @@ The timing pulley is made for GT2 belts, with 10 to 80 teeth.
 ## Look at a part first
 
 1. Click a tile. A single click only picks the part. It does not add it.
-2. The right half shows the part. Drag it to turn it about any axis, so you can roll it over and see it from underneath. Use the mouse wheel to zoom. Double-click to go back to the first view.
+2. The right half shows the part. Drag it to turn it about any axis, so you can roll it over and see it from underneath. If you let go while it is moving it keeps turning a little and slows down. Use the mouse wheel to zoom. Double-click to go back to the first view.
 3. Under the name are its number of triangles and its size.
 4. Below that are the same rows as the **Shape parameters** of a placed part (see below). Change a number there and the view follows.
 

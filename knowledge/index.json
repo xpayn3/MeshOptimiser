@@ -69,7 +69,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
-  "chars": 7740
+  "chars": 8204
  },
  {
   "slug": "move-the-view",
@@ -85,7 +85,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Click, add with Shift, toggle with Ctrl, drag a box, or let the app select by shape, colour or name.",
-  "chars": 3699
+  "chars": 3926
  },
  {
   "slug": "hide-isolate",
@@ -165,7 +165,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "A list of the parts that hold the most triangles, heaviest first, with a count beside its title. Tick the ones you do not need and delete them in one step.",
-  "chars": 2955
+  "chars": 3151
  },
  {
   "slug": "smart-optimise",
@@ -309,7 +309,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Hold a key, move, let go. The selected parts take the colour as you go.",
-  "chars": 1540
+  "chars": 1851
  },
  {
   "slug": "workflow",
@@ -333,7 +333,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Open the materials dock to see every material in the scene, recolour all the parts that share one, assign a material with a button or by dragging it onto a part, and let the dock float as a window.",
-  "chars": 5112
+  "chars": 5688
  },
  {
   "slug": "move-rotate-scale",
@@ -341,7 +341,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Use the gizmo to move, turn and resize parts, drag a part over other surfaces with Dynamic place, type exact values in the transform card, and measure the distance between two points.",
-  "chars": 7694
+  "chars": 7727
  },
  {
   "slug": "edit-mesh",
@@ -365,7 +365,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Line the selected parts up along an axis, or space them evenly, with one press. Each press is one undo step.",
-  "chars": 3226
+  "chars": 3621
  },
  {
   "slug": "exploded-view",
@@ -381,7 +381,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Add standard parts to a scene from a drawer under the viewport: 112 bolts, nuts, pipes, profiles, machine parts, electronics and brackets. Look at a part and set its size before it goes in.",
-  "chars": 7394
+  "chars": 7469
  },
  {
   "slug": "draw-lines",

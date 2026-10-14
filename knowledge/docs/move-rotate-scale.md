@@ -58,7 +58,7 @@ Right-click a column heading to copy all three values or paste them onto another
 Dynamic place moves a part by dragging it over the model, instead of by its handles. The part rests on whatever surface is under the pointer and turns to face it, as when you drag a part out of the [library](meshoptimiser://docs/library) onto a model. It is handy for putting a bolt on a plate or a bracket on a wall.
 
 1. Select the part, or several parts.
-2. Press `D`, or click the fourth button on the tool strip (an arrow pointing down at a dot). The **Dynamic place** card opens over the viewport. The gizmo is hidden, and a thin blue box appears round the selection to show which box is being set down.
+2. Press `D`, or click **Dynamic place** on the tool strip (an arrow pointing down at a dot, beside the ruler and the pencil). The **Dynamic place** card opens over the viewport. The gizmo is hidden, and a thin blue box appears round the selection to show which box is being set down.
 3. Press on the selected part and drag. The part follows the pointer and rests on the surface under it. The underside of the box touches the surface and never sinks into it.
 4. Let go to drop it there.
 5. Press `Esc` or **Done** to close the card and get the gizmo back.

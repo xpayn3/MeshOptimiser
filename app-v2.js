@@ -3035,7 +3035,7 @@ function _confirmQuitDialog(o = {}) {
     card.style.cssText =
       'background:var(--bg1,#141414);border:1px solid var(--bg3,#252525);border-radius:10px;' +
       'padding:22px 24px;min-width:380px;max-width:480px;' +
-      'box-shadow:0 12px 40px rgba(0,0,0,.5);color:var(--tx,#ededed);' +
+      'box-shadow:0 4px 10px rgba(0,0,0,.5);color:var(--tx,#ededed);' +
       'font:13px/1.5 system-ui,-apple-system,Segoe UI,sans-serif';
     card.innerHTML =
       `<div style="font-size:15px;font-weight:var(--fw-semibold);margin-bottom:6px">${_t.title}</div>` +
@@ -7455,7 +7455,8 @@ function _detachGizmo() {
   // it back to partsRoot, preserving world transform so any drag the user
   // performed is committed in the group's own local matrix.
   if (state._pivotedGroup) {
-    if (state.partsRoot) state.partsRoot.attach(state._pivotedGroup);
+    // (a group that Undo took out of the scene while it was pivoted has no parent: sending it back would bring a ghost copy of it back)
+    if (state.partsRoot && state._pivotedGroup.parent) state.partsRoot.attach(state._pivotedGroup);
     // Refresh _exactWorld snapshots on the children so the highlight
     // rebuild on the next selection change reflects the new world poses.
     for (const p of (state._pivotedParts || [])) {
@@ -7483,7 +7484,7 @@ function _detachGizmo() {
     ? state._pivotedParts
     : (state._pivotedPart ? [state._pivotedPart] : []);
   for (const p of list) {
-    if (p && p.mesh && state.partsRoot) state.partsRoot.attach(p.mesh);
+    if (p && p.mesh && p.mesh.parent && state.partsRoot) state.partsRoot.attach(p.mesh);   // (no parent: Undo or Delete took it out while it was pivoted)
   }
   // Refresh _exactWorld snapshots on the parts that just round-tripped through
   // the pivot. Without this, the next applySelectionColors call (when explode
@@ -16706,6 +16707,21 @@ function _initGroupOrigins() {
 // user has moved it (called on gizmo drag-end and transform-panel position write).
 function _updateTreeGroupOrigin() {
   if (!state.selectedGroupIds?.size || !state.pivot) return;
+  // Several groups moved together (a paste of many groups leaves them all selected): there is no single target, and the stored origins of every
+  // one of them, and of the groups inside them, would stay where they were before the move, so each group's pivot jumped back to the old
+  // place when it was picked on its own later. They are dropped and worked out again from where the parts are now.
+  if (state.selectedGroupIds.size > 1) {
+    const all = state.treeNodes || [];
+    for (const gid of state.selectedGroupIds) {
+      const numId = parseInt(String(gid), 10);
+      if (!Number.isFinite(numId)) continue;
+      _groupOrigins.delete(numId);
+      const at = all.findIndex(n => n.id === numId);
+      for (let i = at + 1; at >= 0 && i < all.length && all[i].depth > all[at].depth; i++) if (all[i].kind === 'group') _groupOrigins.delete(all[i].id);
+    }
+    _tfParentCentroidForChild = null;
+    return;
+  }
   const gid = [...state.selectedGroupIds][0];
   const numId = parseInt(String(gid), 10);
   if (!Number.isFinite(numId)) return;
@@ -18495,7 +18511,13 @@ function _wireShadeAngle(rootEl, ids) {
   const host = rootEl.querySelector('#prop-shade');
   if (!host) return;
   const parts = _shadePartList(ids);
-  if (!parts.length) { host.remove(); return; }
+  // The row stands in the Shading section of the panel for good. It acts on the selected parts, so with none (or only lines) it is dimmed.
+  host.classList.toggle('is-off', !parts.length);
+  if (!parts.length) {
+    host.innerHTML = '<span>Shading angle</span><label class="size-field"><input type="text" value="—" disabled spellcheck="false" aria-label="Shading angle in degrees"><span>°</span></label>';
+    host.title = 'Select a part to set its shading angle: up to this angle between two faces the surface is shaded smooth.';
+    return;
+  }
   const idList = parts.map(p => p.partId);
   // A thin row: the name, and a number. The number is typed, or dragged sideways (the app's own number fields do that: Shift for tens, Alt for
   // fine steps). Nothing is worked out while it is dragged; the angle is applied when the drag ends or the typed number is accepted.
@@ -18835,15 +18857,10 @@ function refreshPropertiesPanel() {
       }
     }
   }
-  // The Shading angle of the selected parts (not for lines)
-  if (!_splOn && ids.length && _shadePartList(ids).length) {
-    try { _shadeCommit(); } catch (_) {}           // (a change that was still going when the selection changed is kept as it was)
-    const shadeHost = document.createElement('div');
-    shadeHost.className = 'prop-shade cmd-num'; shadeHost.id = 'prop-shade';
-    const matRow = el.querySelector('.prop-material-row');
-    if (matRow && matRow.parentNode) matRow.parentNode.insertBefore(shadeHost, matRow);       // (above the material strip)
-    else el.appendChild(shadeHost);
-    try { _wireShadeAngle(el, ids); } catch (e) { console.warn('[shading] panel:', e); }
+  // The Shading angle of the selected parts (not for lines) lives in the Shading section of the panel, no longer in this card
+  {
+    try { if (ids.length) _shadeCommit(); } catch (_) {}           // (a change that was still going when the selection changed is kept as it was)
+    try { _wireShadeAngle(document, !_splOn && ids.length ? ids : []); } catch (e) { console.warn('[shading] panel:', e); }
   }
   // Wire the material edit button — opens the same per-material editor used
   // from the materials panel. The "rename" action button + dblclick on the
@@ -20551,7 +20568,8 @@ function _clonePart(srcId, target = null, opts = {}) {
   if (!geom) return null;
   // (the material it is wearing: a preset or an edited one, not a fresh one in the old colour)
   const mat = _ownMaterialOf(src.mesh || src.instancedMesh) || getOrCreateMaterial(src.originalColor);
-  const mesh = new THREE.Mesh(geom, mat);
+  // (a shape gets a geometry of its own: changing its parameters swaps and frees its geometry, which its copy must not lose)
+  const mesh = new THREE.Mesh(src.isPrimitive ? _stampGeometry(geom.clone()) : geom, mat);
   const newId = _allocPartId();
   const newName = opts.keepName ? src.name : _nextDuplicateName(src.name);   // (a pasted group keeps its parts' names, as a copy of a folder does elsewhere)
   mesh.name = newName;
@@ -20592,6 +20610,15 @@ function _clonePart(srcId, target = null, opts = {}) {
     originalColor: src.originalColor.clone(),
     mesh, group: null, instanceIndex: -1, instancedMesh: null,
   };
+  // The copy's own box and world matrix, worked out from where it stands (the gizmo sits on the middle of that box: the source's box,
+  // taken over as it was, could be a stale one and put the pivot of the copy somewhere else).
+  newPart._exactWorld = mesh.matrixWorld.clone();
+  // A shape made with Add shape stays a shape in its copy: its kind and its parameters come along, so the parameter panel still works on it.
+  if (src.isPrimitive) {
+    newPart.isPrimitive = true; newPart.primitiveKind = src.primitiveKind; newPart.primParams = { ...src.primParams };
+    newPart.primBaseSize = src.primBaseSize; newPart.userExtras = { ...(src.userExtras || {}) };
+  }
+  { const ex = state.explode; if (!(ex && (ex.x || ex.y || ex.z))) { try { _refreshPartBBox(newPart); } catch (_) {} } }
 
   // Place in state.parts. For grouped targets we just append (the user-group
   // tree renderer buckets parts by ug.partIds, and the hier tree renderer
@@ -20681,13 +20708,14 @@ function copyParts(ids) {
   // is what happens when the user clicks a group row in the tree (the
   // click selects the group + all its parts).
   state._clipboardGroup = null;
+  state._clipboardGroups = null;
   const sel = state.selectedGroupIds;
   if (sel && sel.size === 1) {
     const gid = [...sel][0];
     const ug = (state.userGroups || []).find(g => String(g.id) === String(gid));
     if (ug && ug.partIds && ug.partIds.size === live.length
         && live.every(id => ug.partIds.has(id))) {
-      state._clipboardGroup = { kind: 'user', name: ug.name, partIds: live.slice() };
+      state._clipboardGroup = { kind: 'user', name: ug.name, groupId: ug.id, partIds: live.slice() };
     } else if (!ug) {
       // A group of the model's own tree (what a file's folders import as, often the one "main" group holding everything): the same
       // rule, so it pastes as one new group and not as a copy beside each part inside the original.
@@ -20698,6 +20726,31 @@ function copyParts(ids) {
           state._clipboardGroup = { kind: 'hier', name: hn.name || 'Group', nodeId: hn.id, partIds: live.slice() };
         }
       }
+    }
+  }
+  // Several groups selected: each whole group is copied as a folder of its own (next to its original), the way one group is, and not as a
+  // copy of every part beside that part inside the old group. A group inside another selected group goes with it.
+  if (sel && sel.size > 1) {
+    const liveSet = new Set(live), items = [], covered = new Set();
+    const nodes = state.treeNodes || [], byId = new Map(nodes.map(n => [String(n.id), n])), selKeys = new Set([...sel].map(String));
+    for (const gid of sel) {
+      const ug = (state.userGroups || []).find(g => String(g.id) === String(gid));
+      if (ug && ug.partIds) {
+        const ids = [...ug.partIds].filter(id => liveSet.has(id));
+        if (ids.length && ids.length === ug.partIds.size) { items.push({ kind: 'user', name: ug.name, groupId: ug.id, partIds: ids }); ids.forEach(id => covered.add(id)); }
+        continue;
+      }
+      const hn = byId.get(String(gid));
+      if (!hn || hn.kind !== 'group') continue;
+      let nested = false;
+      for (let up = byId.get(String(hn.parentId)); up && !nested; up = byId.get(String(up.parentId))) if (selKeys.has(String(up.id))) nested = true;
+      if (nested) continue;
+      const inside = _treeGroupDescendants(hn.id);
+      if (inside.length && inside.every(id => liveSet.has(id))) { items.push({ kind: 'hier', name: hn.name || 'Group', nodeId: hn.id, partIds: inside.slice() }); inside.forEach(id => covered.add(id)); }
+    }
+    if (items.length) {
+      state._clipboardGroups = items;
+      state._clipboardLoose = live.filter(id => !covered.has(id));
     }
   }
   const groupSuffix = state._clipboardGroup ? ` (group "${state._clipboardGroup.name}")` : '';
@@ -20712,6 +20765,22 @@ function pasteParts() {
   // user group of the same name (with " copy" suffix on collision) and
   // clone the parts into it. Each clone goes through _clonePart which
   // preserves world-space position, so layout matches the source group.
+  if (state._clipboardGroups && state._clipboardGroups.length) {
+    const all = [], gids = new Set();
+    for (const it of state._clipboardGroups) {
+      let made = it.kind === 'hier' ? _pasteHierGroup(it.nodeId, true) : null;
+      if (!made) made = _pasteAsUserGroup(it.partIds.filter(id => { const p = getPart(id); return p && !p.deleted; }), it.name, it.groupId);
+      if (made && made.length) { all.push(...made); for (const g of state.selectedGroupIds || []) gids.add(g); }
+    }
+    const loose = (state._clipboardLoose || []).filter(id => { const p = getPart(id); return p && !p.deleted; });
+    if (loose.length) { const d = duplicateParts(loose, 'Pasted', { target: _resolvePasteTarget() }); all.push(...d); }
+    if (all.length) {
+      state.selected = new Set(all); state.selectedGroupIds = gids;
+      $('del-sel-count').textContent = state.selected.size;
+      recomputeStats(); rebuildTree(); applySelectionColors(); refreshPropertiesPanel(); updateGizmo(); requestRender();
+    }
+    return all;
+  }
   if (state._clipboardGroup && state._clipboardGroup.kind === 'hier') {
     // A group of the model's own tree pastes the way every 3D app does it: the whole folder is copied with the folders inside it,
     // in the same order, next to the original, under the same parent.
@@ -20720,7 +20789,7 @@ function pasteParts() {
     return _pasteAsUserGroup(ids, state._clipboardGroup.name);       // (the group is gone: its parts still paste as one new group)
   }
   if (state._clipboardGroup && state._clipboardGroup.kind === 'user') {
-    return _pasteAsUserGroup(ids, state._clipboardGroup.name);
+    return _pasteAsUserGroup(ids, state._clipboardGroup.name, state._clipboardGroup.groupId);
   }
   const target = _resolvePasteTarget();
   let label = 'Pasted';
@@ -20749,7 +20818,7 @@ function _uniqueUserGroupName(base) {
 // container, clones each source part into it, and pushes a single
 // 'paste-group' undo so Ctrl+Z removes the whole thing atomically. Redo
 // is wired below alongside the existing 'duplicate' wrappers.
-function _pasteAsUserGroup(srcIds, baseName) {
+function _pasteAsUserGroup(srcIds, baseName, srcGroupId) {
   const groupName = _uniqueUserGroupName(baseName || 'Group copy');
 
   // 1. THREE.Group container under partsRoot.
@@ -20758,6 +20827,15 @@ function _pasteAsUserGroup(srcIds, baseName) {
   grp.userData.isUserGroup = true;
   state.partsRoot.add(grp);
   state.partsRoot.updateMatrixWorld(true);
+  // The copy takes the frame of the group it is a copy of (its place, turn and size), so its pivot is where the original's is and not at
+  // the scene's origin. The parts are placed by their world matrices, so they stay where they were.
+  { const sug = srcGroupId != null ? (state.userGroups || []).find(g => String(g.id) === String(srcGroupId)) : null;
+    if (sug && sug.ref) {
+      sug.ref.updateWorldMatrix(true, false);
+      grp.matrix.copy(state.partsRoot.matrixWorld).invert().multiply(sug.ref.matrixWorld);
+      grp.matrix.decompose(grp.position, grp.quaternion, grp.scale);
+      grp.updateMatrixWorld(true);
+    } }
 
   // 2. User-group record. _newGroupId is defined near addUserGroup; fall
   //    back to a timestamp if it's somehow not in scope.
@@ -20800,6 +20878,7 @@ function _pasteAsUserGroup(srcIds, baseName) {
     groupRecordId: ug.id,
     groupRef: grp,
     groupName,
+    srcGroupId,
     sourceIds,
     partIds: newIds,
     label: `Pasted "${groupName}"`,
@@ -20864,6 +20943,19 @@ function _pasteHierGroup(srcNodeId, quiet = false) {
     return [];
   }
   state.treeNodes.splice(end, 0, ...newRows);
+  // Each copied folder keeps the pivot of its original: where it stands, how it is turned and the scale typed for it. Without these the
+  // rows start afresh and their pivot is worked out as the middle of their parts.
+  try {
+    for (const [oldId, row] of made) {
+      const o = _groupOrigins.get(oldId), q = _groupRotations.get(oldId), sc = _groupScales.get(oldId);
+      // (the ids of copied folders are counted down from the lowest one in the tree: after an Undo the same ids come round again, so what an
+      // earlier, undone copy left under them must not be taken over by this one)
+      _groupOrigins.delete(row.id); _groupRotations.delete(row.id); _groupScales.delete(row.id);
+      if (o) _groupOrigins.set(row.id, o.clone());
+      if (q) _groupRotations.set(row.id, q.clone());
+      if (sc) _groupScales.set(row.id, sc.clone());
+    }
+  } catch (_) {}
 
   pushUndo({ type: 'paste-hier', srcNodeId, sourceIds: srcIds, partIds: newIds, rows: newRows, rootObj: rootNew.obj3d, label: `Pasted "${rootName}"` });
 
@@ -28648,6 +28740,12 @@ function wireUI() {
     else if (e.key === 'Escape') { if (!_CmdCards.closeTop()) clearSelection(); }       // Esc leaves a command first
     else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target?.closest?.('button, a, [role="button"], summary')) { if (_CmdCards.runTop()) e.preventDefault(); }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); $('sel-all').click(); }
+    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && /^[cvd]$/i.test(e.key) && _matKeysOwn(e.key.toLowerCase())) {
+      // The materials window was the last thing worked in and a material is picked: Ctrl+C / Ctrl+D copy and duplicate the material,
+      // Ctrl+V pastes a copied one (a new material), not the selected parts.
+      e.preventDefault();
+      if (e.key.toLowerCase() === 'c') _matCopied = true; else document.getElementById('mat-act-duplicate')?.click();
+    }
     else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (e.key === 'c' || e.key === 'C')) {
       // Only intercept when there's a part selection and no text is selected on the page: text that is selected (in the console log, the
       // properties, a report) is copied by the browser. (It used to take Ctrl+C whenever a part was selected, so nothing that was selected
@@ -30680,18 +30778,37 @@ function _libViewStart() {
       // sideways about the screen's up, vertically about the screen's right, so it
       // can be rolled over and seen from underneath too.
       const AX = new THREE.Vector3(), AY = new THREE.Vector3(), QD = new THREE.Quaternion();
-      box.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; from = { x: e.clientX, y: e.clientY }; try { box.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+      let spin = 0, vx = 0, vy = 0, lastT = 0;
+      const turn = (dx, dy) => { AY.set(0, 0, 1).applyQuaternion(v.q); AX.set(1, 0, 0).applyQuaternion(v.q); v.q.premultiply(QD.setFromAxisAngle(AY, -dx * 0.01)).premultiply(QD.setFromAxisAngle(AX, -dy * 0.01)).normalize(); };
+      const stopSpin = () => { if (spin) cancelAnimationFrame(spin); spin = 0; };
+      v.stopSpin = stopSpin;
+      box.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; stopSpin(); vx = vy = 0; lastT = performance.now(); from = { x: e.clientX, y: e.clientY }; try { box.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
       box.addEventListener('pointermove', (e) => {
         if (!from) return;
         const dx = e.clientX - from.x, dy = e.clientY - from.y; from.x = e.clientX; from.y = e.clientY;
-        AY.set(0, 0, 1).applyQuaternion(v.q); AX.set(1, 0, 0).applyQuaternion(v.q);
-        v.q.premultiply(QD.setFromAxisAngle(AY, -dx * 0.01)).premultiply(QD.setFromAxisAngle(AX, -dy * 0.01)).normalize();
+        const now = performance.now(), dt = Math.max(1, now - lastT); lastT = now;
+        vx = vx * 0.5 + (dx / dt * 16.7) * 0.5; vy = vy * 0.5 + (dy / dt * 16.7) * 0.5;      // pixels per frame, smoothed
+        turn(dx, dy);
         _libViewSoon();
       });
-      const up = () => { from = null; };
+      // let go while moving and it keeps turning a little, slowing down (runs only while it turns)
+      const up = () => {
+        if (!from) return; from = null;
+        if (performance.now() - lastT > 80 || (vx * vx + vy * vy) < 0.25 || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        let prev = performance.now();
+        const step = (t) => {
+          if (!_libOpen()) { spin = 0; return; }
+          const k = Math.min(3, (t - prev) / 16.7); prev = t;
+          turn(vx * k, vy * k);
+          const f = Math.pow(0.92, k); vx *= f; vy *= f;
+          _libViewDraw();
+          spin = (vx * vx + vy * vy) < 0.01 ? 0 : requestAnimationFrame(step);
+        };
+        spin = requestAnimationFrame(step);
+      };
       box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
       box.addEventListener('wheel', (e) => { e.preventDefault(); v.zoom = Math.max(0.5, Math.min(4, v.zoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12))); _libViewSoon(); }, { passive: false });
-      box.addEventListener('dblclick', () => { v.q = _libViewHome(); v.zoom = 1; _libViewSoon(); });
+      box.addEventListener('dblclick', () => { stopSpin(); v.q = _libViewHome(); v.zoom = 1; _libViewSoon(); });
       try { new ResizeObserver(() => _libViewSoon()).observe(box); } catch (_) {}
       return true;
     } catch (err) {
@@ -34391,41 +34508,86 @@ const _Arrange = (() => {
   let to = 'sel';
   const K = ['x', 'y', 'z'];
   const say = (s) => { const el = document.getElementById('arr-info'); if (el) el.textContent = s || ''; };
-  const plural = (n) => n + (n === 1 ? ' part' : ' parts');
+  const plural = (n, grp) => n + (grp ? (n === 1 ? ' item' : ' items') : (n === 1 ? ' part' : ' parts'));
+  // What is lined up is a list of units: a loose part, or a whole group that is selected (its parts move together, and it is measured by
+  // the box round all of them). A group inside another selected group goes with it. { parts: [part, ...], box, group }
   function gather() {
     _detachGizmo();      // selected parts sit outside partsRoot until released
     { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { try { resetExplode(); } catch (_) {} } }      // (the parts at rest are what is lined up)
-    const parts = []; let locked = 0, verts = 0;
-    for (const id of state.selected || []) {
-      const p = getPart(id);
-      if (!p || p.deleted || p.isSpline) continue;
-      if (p.locked) { locked++; continue; }
+    const nodes = state.treeNodes || [], byId = new Map(nodes.map(n => [String(n.id), n]));
+    const selG = state.selectedGroupIds ? [...state.selectedGroupIds] : [], selKeys = new Set(selG.map(String));
+    const units = [], covered = new Map();            // covered: part id -> its unit
+    for (const gid of selG) {
+      let ids = null;
+      const ug = (state.userGroups || []).find(g => String(g.id) === String(gid));
+      if (ug && ug.partIds) ids = [...ug.partIds];
+      else {
+        const hn = byId.get(String(gid));
+        if (hn && hn.kind === 'group') {
+          let nested = false;
+          for (let up = byId.get(String(hn.parentId)); up && !nested; up = byId.get(String(up.parentId))) if (selKeys.has(String(up.id))) nested = true;
+          if (!nested) ids = _treeGroupDescendants(hn.id);
+        }
+      }
+      ids = (ids || []).filter(id => !covered.has(id));
+      if (!ids.length) continue;
+      const u = { ids, parts: [], skip: false, done: false }; units.push(u);
+      for (const id of ids) covered.set(id, u);
+    }
+    let locked = 0, verts = 0;
+    const take = (p) => {                                    // a part that can be moved, or null
+      if (!p || p.deleted || p.isSpline) return null;
+      if (p.locked) { locked++; return null; }
       if (!p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} }
       const pos = p.mesh && p.mesh.geometry && p.mesh.geometry.attributes && p.mesh.geometry.attributes.position;
-      if (pos) { parts.push(p); verts += pos.count; }
+      if (!pos) return null;
+      verts += pos.count; return p;
+    };
+    for (const u of units) {
+      let nLocked = 0;
+      for (const id of u.ids) { const p = getPart(id); if (p && !p.deleted && p.locked) nLocked++; }
+      if (nLocked) { u.skip = true; locked += nLocked; continue; }   // (a group with a locked part stays as it is: it moves whole or not at all)
+      for (const id of u.ids) { const p = take(getPart(id)); if (p) u.parts.push(p); }
     }
+    const order = [];                                          // in the order of the selection; a group stands where its first part was picked
+    for (const id of state.selected || []) {
+      const u = covered.get(id);
+      if (u) { if (!u.done) { u.done = true; order.push(u); } continue; }
+      const p = take(getPart(id)); if (p) order.push({ parts: [p], loose: true });
+    }
+    for (const u of units) if (!u.done) { u.done = true; order.push(u); }
     const exact = verts <= _ALIGN_EXACT_VERTS, v = new THREE.Vector3();
-    const list = [];
-    for (const p of parts) {
+    const boxOf = (p) => {
       p.mesh.updateWorldMatrix(true, false);
       const g = p.mesh.geometry, W = p.mesh.matrixWorld, box = new THREE.Box3();
       if (exact) { const pos = g.attributes.position; for (let i = 0; i < pos.count; i++) box.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(W)); }
       else { if (!g.boundingBox) g.computeBoundingBox(); if (g.boundingBox && !g.boundingBox.isEmpty()) box.copy(g.boundingBox).applyMatrix4(W); }
-      if (!box.isEmpty()) list.push({ p, box });
+      return box;
+    };
+    const list = [];
+    for (const u of order) {
+      if (u.skip || !u.parts.length) continue;
+      const box = new THREE.Box3();
+      for (const p of u.parts) { const b = boxOf(p); if (!b.isEmpty()) box.union(b); }
+      if (!box.isEmpty()) list.push({ parts: u.parts, box, group: !u.loose });
     }
     return { list, locked };
   }
-  // moves: [{ p, d: [dx, dy, dz], size }]. Returns how many parts moved.
+  // moves: [{ parts, d: [dx, dy, dz], size }]. Returns how many units (parts or groups) moved.
   function move(moves, label) {
     let span = 0;
     for (const m of moves) span = Math.max(span, m.size || 0);
     const tol = Math.max(1e-9, span * 1e-7);
     const items = [];
+    let units = 0;
     for (const m of moves) {
       if (!(Math.abs(m.d[0]) > tol || Math.abs(m.d[1]) > tol || Math.abs(m.d[2]) > tol)) continue;
-      const before = Array.from(m.p.mesh.matrixWorld.elements), after = before.slice();
-      after[12] += m.d[0]; after[13] += m.d[1]; after[14] += m.d[2];
-      items.push({ partId: m.p.partId, before, after });
+      units++;
+      for (const p of m.parts) {
+        const before = Array.from(p.mesh.matrixWorld.elements), after = before.slice();
+        after[12] += m.d[0]; after[13] += m.d[1]; after[14] += m.d[2];
+        items.push({ partId: p.partId, before, after });
+      }
     }
     if (!items.length) return 0;
     _applyTransformOp(items, 'after');
@@ -34437,7 +34599,7 @@ const _Arrange = (() => {
     try { refreshPropertiesPanel(); } catch (_) {}
     try { refreshFlagged(); } catch (_) {}
     requestRender();
-    return items.length;
+    return units;
   }
   const lockedNote = (n) => n ? ' ' + plural(n) + ' locked and left alone.' : '';
   const at = (box, k, v) => v === 'min' ? box.min[k] : v === 'max' ? box.max[k] : (box.min[k] + box.max[k]) / 2;
@@ -34446,16 +34608,17 @@ const _Arrange = (() => {
   function align(axis, v) {
     const k = K.includes(axis) ? axis : 'x', i = K.indexOf(k);
     const { list, locked } = gather();
-    if (!list.length) { say(locked ? 'The selected parts are locked.' : 'Select the parts to line up first.'); return 0; }
-    if (to !== 'origin' && list.length < 2) { say('Select at least two parts, or line up on the Origin.'); return 0; }
+    if (!list.length) { say(locked ? 'The selected parts are locked.' : 'Select the parts or groups to line up first.'); return 0; }
+    if (to !== 'origin' && list.length < 2) { say('Select at least two parts or groups, or line up on the Origin.'); return 0; }
     let t = 0;
     if (to === 'key') t = at(list[list.length - 1].box, k, v);
     else if (to === 'sel') { const b = new THREE.Box3(); for (const it of list) b.union(it.box); t = at(b, k, v); }
     const size = sizeOf(list), moves = [];
-    for (const it of list) { const d = [0, 0, 0]; d[i] = t - at(it.box, k, v); moves.push({ p: it.p, d, size }); }
+    for (const it of list) { const d = [0, 0, 0]; d[i] = t - at(it.box, k, v); moves.push({ parts: it.parts, d, size }); }
     const what = v === 'min' ? 'low sides' : v === 'max' ? 'high sides' : 'middles';
     const n = move(moves, 'Align ' + what + ' on ' + k.toUpperCase());
-    say((n ? 'Moved ' + plural(n) + ': the ' + what + ' are in line on ' + k.toUpperCase() + '.' : 'Already in line on ' + k.toUpperCase() + '.') + lockedNote(locked));
+    const grp = list.some(it => it.group);
+    say((n ? 'Moved ' + plural(n, grp) + ': the ' + what + ' are in line on ' + k.toUpperCase() + '.' : 'Already in line on ' + k.toUpperCase() + '.') + lockedNote(locked));
     return n;
   }
 
@@ -34466,11 +34629,11 @@ const _Arrange = (() => {
     const gap = raw === '' ? NaN : parseFloat(raw);
     const fixedGap = v === 'gaps' && Number.isFinite(gap);
     const need = fixedGap ? 2 : 3;
-    if (list.length < need) { say(locked && !list.length ? 'The selected parts are locked.' : 'Select at least ' + (need === 2 ? 'two parts to spread.' : 'three parts to spread (two with a Gap typed in).')); return 0; }
+    if (list.length < need) { say(locked && !list.length ? 'The selected parts are locked.' : 'Select at least ' + (need === 2 ? 'two parts or groups to spread.' : 'three parts or groups to spread (two with a Gap typed in).')); return 0; }
     const mid = (it) => (it.box.min[k] + it.box.max[k]) / 2;
     list.sort((a, b) => mid(a) - mid(b));
     const size = sizeOf(list), n = list.length, moves = [];
-    const put = (it, delta) => { const d = [0, 0, 0]; d[i] = delta; moves.push({ p: it.p, d, size }); };
+    const put = (it, delta) => { const d = [0, 0, 0]; d[i] = delta; moves.push({ parts: it.parts, d, size }); };
     if (v === 'centers') {
       const a = mid(list[0]), step = (mid(list[n - 1]) - a) / (n - 1);
       for (let j = 1; j < n - 1; j++) put(list[j], a + step * j - mid(list[j]));
@@ -34481,7 +34644,8 @@ const _Arrange = (() => {
       for (let j = 1; j < n; j++) { put(list[j], cursor - list[j].box.min[k]); cursor += (list[j].box.max[k] - list[j].box.min[k]) + g; }
     }
     const moved = move(moves, 'Spread parts on ' + k.toUpperCase());
-    say((moved ? 'Moved ' + plural(moved) + ': ' + (v === 'centers' ? 'the middles are evenly apart' : 'the gaps are equal') + ' on ' + k.toUpperCase() + '.' : 'Already evenly spread on ' + k.toUpperCase() + '.') + lockedNote(locked));
+    const grp = list.some(it => it.group);
+    say((moved ? 'Moved ' + plural(moved, grp) + ': ' + (v === 'centers' ? 'the middles are evenly apart' : 'the gaps are equal') + ' on ' + k.toUpperCase() + '.' : 'Already evenly spread on ' + k.toUpperCase() + '.') + lockedNote(locked));
     return moved;
   }
 
@@ -34507,7 +34671,7 @@ const _Arrange = (() => {
     document.addEventListener('cmd-open', (e) => {
       if (!(e.target && e.target.dataset && e.target.dataset.cmd === 'arrange')) return;
       const n = state.selected ? state.selected.size : 0;
-      say(n ? plural(n) + ' selected.' : 'Select the parts to line up first.');
+      say(n ? plural(n) + ' selected.' : 'Select the parts or groups to line up first.');
       e.target.dataset.up = state.sceneUpAxis === 'y' ? 'y' : 'z';      // (which row's pictures stand upright: see .arr-set in the page)
     }, true);
   }
@@ -35454,6 +35618,11 @@ const _ViewModeButton = (() => {
       try { _lucide(); } catch (_) {}
       pop.style.top = btn.offsetTop + 'px';
       pop.style.display = 'block';
+      // The list opens upward when the button is in the lower half of the window (its last row on the button), so it never runs off the bottom.
+      try {
+        const br = btn.getBoundingClientRect();
+        if (br.top + br.height / 2 > innerHeight / 2) pop.style.top = Math.max(0, btn.offsetTop + btn.offsetHeight - pop.offsetHeight) + 'px';
+      } catch (_) {}
     };
     document.addEventListener('mousedown', (e) => { if (pop.style.display !== 'none' && !pop.contains(e.target) && !btn.contains(e.target)) close(); });
     btn.addEventListener('mousedown', (e) => { if (e.button !== 0) return; held = false; holding = false; clearTimeout(holdT); holdT = setTimeout(() => { open(); holding = true; }, 380); });
@@ -35983,6 +36152,8 @@ function _wireMatDock() {
     if (!infos.length) return;
     const act = b.dataset.mi;
     if (act === 'merge') { document.getElementById('mat-act-merge')?.click(); return; }
+    if (act === 'duplicate') { document.getElementById('mat-act-duplicate')?.click(); return; }
+    if (act === 'delete') { document.getElementById('mat-act-delete')?.click(); return; }
     if (act === 'edit') { try { _openMaterialEditor(infos[0]); } catch (err) { console.warn('[mat] editor:', err); } return; }
     if (act === 'select' || act === 'isolate') {
       const ids = [];
@@ -36041,6 +36212,8 @@ function _renderMatInspector() {
       `<button class="btn" data-mi="isolate" title="Show only the parts that use ${one ? 'this material' : 'these materials'}"${parts ? '' : ' disabled'}>Isolate</button>` +
       (!one ? `<button class="btn mi-merge-btn" data-mi="merge" title="Merge the picked materials into one: the first one picked is kept (Ctrl+M)">Merge ${nMat} materials</button>` : '') +
       (one ? `<button class="btn" data-mi="assign" title="Give this material to the ${nSel} selected part${nSel === 1 ? '' : 's'}"${nSel ? '' : ' disabled'}>Assign${nSel ? ' to ' + fmtNum(nSel) : ''}</button>` : '') +
+      (one ? `<button class="btn" data-mi="duplicate" title="Duplicate this material (Ctrl+D)">Duplicate</button>` : '') +
+      `<button class="btn mi-danger" data-mi="delete" title="Delete ${one ? 'this material' : 'these materials'}: its parts are left with none">Delete${one ? '' : ' ' + nMat}</button>` +
     `</div>`;
   if (infos.length > 1) {
     // What Merge makes: the first picked material takes every part of the others (see the Merge handler), so the result is that
@@ -37580,6 +37753,16 @@ function _removeMaterialFromSelection(mat) {
   try { refreshPropertiesPanel(); } catch (_) {}
   try { toast('Material removed', `${n} part${n === 1 ? '' : 's'} left with no material`, 'success', 2800); } catch (_) {}
   return n;
+}
+// Which window the keyboard belongs to: the materials window, once it is the last one pressed or typed in.
+let _matCopied = false, _matKeysActive = false;
+document.addEventListener('pointerdown', (e) => { _matKeysActive = !!e.target?.closest?.('#vp-materials-pop, .mat-presets-menu'); if (!_matKeysActive) _matCopied = false; }, true);
+function _matKeysOwn(k) {
+  if (!_matKeysActive || _matPanelSelected.size !== 1) return false;
+  if (!document.getElementById('vp-materials-pop')?.classList.contains('show')) return false;
+  const t = document.activeElement;
+  if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t?.isContentEditable) return false;
+  return k !== 'v' || _matCopied;
 }
 function _wireMaterialActions() {
   if (_matActionsWired) return;
@@ -39248,7 +39431,18 @@ rebuildTree = function() {
 // ─── Right-click context menu
 // Container chrome is set inline on #ctx-menu in index.html; row & separator
 // classes live in the stylesheet (search "Right-click context menu").
-function _ctxClose() { const m = $('ctx-menu'); if (m) { m.style.display = 'none'; m.classList.remove('is-commands'); } document.getElementById('vp-more')?.classList.remove('active'); }
+// A menu appears at once and goes with a quick fade (macOS): the fade is a copy of the menu's look that is left behind for 150 ms.
+function _fadeOutMenu(m) {
+  const was = m.style.display;
+  m.style.display = 'none';
+  if (was !== 'block' || !m.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  try {
+    const g = m.cloneNode(true); g.style.display = 'block'; g.style.pointerEvents = 'none';
+    m.parentNode.insertBefore(g, m.nextSibling);
+    g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out' }).onfinish = () => g.remove();
+  } catch (_) {}
+}
+function _ctxClose() { const m = $('ctx-menu'); if (m) { _fadeOutMenu(m); m.classList.remove('is-commands'); } document.getElementById('vp-more')?.classList.remove('active'); }
 // An item with `sub` (a list of items) opens that list beside its row while
 // the pointer is on it.
 function _ctxFill(box, items, m) {
@@ -39669,6 +39863,21 @@ const _Wand = (() => {
   document.addEventListener('visibilitychange', () => { if (document.hidden) close(false); });
   return { toggle: () => { if (open) close(false); else { if (!lastX && !lastY) { lastX = window.innerWidth / 2; lastY = window.innerHeight / 2; } show(true); } }, isOpen: () => open };
 })();
+// The transform gizmo put away (and its controls switched off) while a tool that works on the selection's look has the screen: its helper
+// reports itself hidden, as Dynamic place does. Counted, so two tools can ask at once.
+function _gizmoHold(on) {
+  state._gizmoHold = Math.max(0, (state._gizmoHold || 0) + (on ? 1 : -1));
+  const gh = state.gizmoHelper;
+  if (gh && !gh._holdGuard) {
+    const d = Object.getOwnPropertyDescriptor(gh, 'visible');
+    let get, set;
+    if (d && d.get) { get = () => d.get.call(gh); set = (x) => d.set.call(gh, x); } else { let v = gh.visible; get = () => v; set = (x) => { v = x; }; }
+    Object.defineProperty(gh, 'visible', { get: () => get() && !(state._gizmoHold > 0), set, configurable: true });
+    gh._holdGuard = true;
+  }
+  try { if (state.gizmo) state.gizmo.enabled = !(state._gizmoHold > 0) && !state.dynPlaceOn && !state.qrOpen; } catch (_) {}
+  try { requestRender(); } catch (_) {}
+}
 // ─── Quick colour wheel ──────────────────────────────────────────────────────────────────────────────────────────────────
 // Hold C over the model: the colour wheel opens at the pointer at once; let go without moving and nothing has changed. Nothing changes until the pointer moves. Then
 // the angle is the hue and the distance from the middle the saturation: the very middle is white (at full brightness), and the colour
@@ -39676,7 +39885,9 @@ const _Wand = (() => {
 // at once, as they are on screen, and it is written into their material. Let go of C (or click) to keep it, Esc to put it back.
 // One undo step. A material shared with parts that are not selected changes for them too, as it always does when a material is edited.
 const _QuickColour = (() => {
-  const SIZE = 212, R = SIZE / 2 - 14, MOVE = 4, HOLE = 20, WHITE = 5, CANCEL = R + 100;       // CANCEL: how far out the pointer goes to cancel (a Cancel pill shows; letting go there puts the colour back). MOVE: how far the pointer goes before the colour starts to follow it; HOLE: the round window in the middle
+  const SIZE = 212, R = SIZE / 2 - 22, MOVE = 4, HOLE = 20, WHITE = 5, CANCEL = R + 100;       // CANCEL: how far out the pointer goes to cancel (a Cancel pill shows; letting go there puts the colour back). MOVE: how far the pointer goes before the colour starts to follow it; HOLE: the round window in the middle
+  const DPR = () => Math.max(1, window.devicePixelRatio || 1);
+  const snap = (v) => Math.round(v * DPR()) / DPR();          // (a position on a whole device pixel: nothing is drawn between two, which is what makes an edge soft)
   let root = null, canvas = null, cap = null, open = false, sticky = false, startedAt = 0, moved = false, revealed = false, holdT = 0, cancelling = false, cancelPill = null, dotEl = null, glideT = 0;
   let ox = 0, oy = 0, px = 0, py = 0, lastX = 0, lastY = 0, lastButtons = 0;
   let h = 0, s = 0, v = 1, orig = null, mats = [], snaps = [], origHex = '#808080';
@@ -39712,25 +39923,31 @@ const _QuickColour = (() => {
     const st = document.createElement('style');
     st.textContent = `
       #qc-wheel{position:fixed;z-index:450;width:${SIZE}px;pointer-events:none;visibility:hidden;display:flex;flex-direction:column;align-items:center;font:12px var(--font-sans);color:var(--tx)}
-      /* it grows out of its middle, the ring opening outward as it does; it goes away at once */
-      #qc-wheel.show{visibility:visible}
-      #qc-wheel.show canvas{animation:qc-grow 280ms cubic-bezier(.2,.9,.3,1.04) both}
-      #qc-wheel.show .qc-cap{animation:qc-cap-in 200ms 110ms ease-out both}
+      /* it grows out of its middle, the ring opening outward as it does, and goes away the same way in reverse: it draws back into its middle */
+      /* the pointer is hidden while it is over the wheel (the dot stands in for it); out past the cancel line it shows again */
+      body.qc-nocursor,body.qc-nocursor *{cursor:none!important}
+      #qc-wheel.show,#qc-wheel.leaving{visibility:visible}
+      #qc-wheel.leaving canvas{animation:qc-shrink 110ms cubic-bezier(.4,0,.9,.4) both}
+      #qc-wheel.leaving .qc-cap{animation:qc-cap-out 70ms ease-in both}
+      @keyframes qc-shrink{from{transform:none;opacity:1;clip-path:circle(72% at 50% 50%)}65%{opacity:1}to{transform:scale(.3);opacity:0;clip-path:circle(10% at 50% 50%)}}
+      @keyframes qc-cap-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px)}}
+      #qc-wheel.show canvas{animation:qc-grow 160ms cubic-bezier(.2,.9,.3,1.04) both}
+      #qc-wheel.show .qc-cap{animation:qc-cap-in 120ms 60ms ease-out both}
       @keyframes qc-grow{from{transform:scale(.3);opacity:0;clip-path:circle(10% at 50% 50%)}35%{opacity:1}to{transform:none;opacity:1;clip-path:circle(72% at 50% 50%)}}
       @keyframes qc-cap-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
-      @media (prefers-reduced-motion:reduce){#qc-wheel.show canvas,#qc-wheel.show .qc-cap{animation:none}}
+      @media (prefers-reduced-motion:reduce){#qc-wheel.show canvas,#qc-wheel.show .qc-cap,#qc-wheel.leaving{animation:none;visibility:hidden}#qc-wheel.leaving canvas,#qc-wheel.leaving .qc-cap{animation:none}}
       #qc-wheel canvas{display:block;width:${SIZE}px;height:${SIZE}px;transition:opacity 140ms ease-out}
       #qc-wheel.cancelling canvas{opacity:.45}
-      #qc-wheel .qc-dot{position:absolute;left:0;top:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;box-sizing:border-box;border:2.5px solid #000;pointer-events:none;display:none;transform:translate3d(var(--x,0px),var(--y,0px),0);transition:background 180ms ease-out}
+      #qc-wheel .qc-dot{position:absolute;left:0;top:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;box-sizing:border-box;border:2px solid #000;pointer-events:none;display:none;transform:translate3d(var(--x,0px),var(--y,0px),0);transition:background 180ms ease-out}
       /* crossing the cancel line (either way) the dot and the pill glide to their new place; while the pointer drags them they follow it at once */
       #qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:background 180ms ease-out,opacity 140ms ease-out,transform 240ms cubic-bezier(.16,1,.3,1)}
-      #qc-wheel .qc-cancel{position:absolute;left:0;top:0;will-change:transform,opacity;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%) scale(.9);display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.94);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 6px 16px rgba(0,0,0,.35);white-space:nowrap;opacity:0;transition:opacity 140ms ease-out,transform 140ms ease-out}
+      #qc-wheel .qc-cancel{position:absolute;left:0;top:0;will-change:transform,opacity;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%) scale(.9);display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.94);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 3px 9px rgba(0,0,0,.35);white-space:nowrap;opacity:0;transition:opacity 140ms ease-out,transform 140ms ease-out}
       #qc-wheel .qc-cancel svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
       #qc-wheel .qc-cancel em{font-style:normal;color:var(--tx3);font-size:11px}
       #qc-wheel.cancelling .qc-cancel{opacity:1;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%)}
       @media (prefers-reduced-motion:reduce){#qc-wheel canvas,#qc-wheel .qc-cancel,#qc-wheel .qc-dot,#qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:none}}
-      #qc-wheel .qc-cap{margin-top:10px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.8);backdrop-filter:blur(14px) saturate(1.3);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 8px 24px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
-      #qc-wheel .qc-cap i{width:14px;height:14px;border-radius:5px;box-shadow:0 0 0 1px rgba(255,255,255,.22)}
+      #qc-wheel .qc-cap{margin-top:-8px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.8);backdrop-filter:blur(14px) saturate(1.3);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 4px 13px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
+      #qc-wheel .qc-cap i{width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.22)}
       #qc-wheel .qc-cap svg{width:10px;height:10px;color:var(--tx3);fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
       #qc-wheel .qc-cap b{font-weight:500;font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px;letter-spacing:.02em;text-align:left}
       #qc-wheel .qc-cap u{width:1px;height:12px;margin:0 5px;background:rgba(255,255,255,.14)}
@@ -39742,7 +39959,7 @@ const _QuickColour = (() => {
     document.head.appendChild(st);
     root = document.createElement('div'); root.id = 'qc-wheel';
     canvas = document.createElement('canvas');
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(3, DPR());
     canvas.width = canvas.height = Math.round(SIZE * dpr);
     cap = document.createElement('div'); cap.className = 'qc-cap';
     cancelPill = document.createElement('div'); cancelPill.className = 'qc-cancel';
@@ -39750,8 +39967,18 @@ const _QuickColour = (() => {
     dotEl = document.createElement('div'); dotEl.className = 'qc-dot';
     root.appendChild(canvas); root.appendChild(cap); root.appendChild(dotEl); root.appendChild(cancelPill);
     document.body.appendChild(root);
+    { const w = Math.ceil(cancelPill.offsetWidth); cancelPill.style.boxSizing = 'border-box'; cancelPill.style.width = (w + (w % 2)) + 'px'; }
   }
+  // The wheel is painted once, at full brightness; brightness is a filter on the canvas (the graphics card darkens it, nothing is redrawn).
+  let painted = false;
   function draw() {
+    canvas.style.filter = v < 1 ? 'brightness(' + v.toFixed(3) + ')' : '';
+    if (!painted) paint();
+    capHex = '';
+    updateCap();
+  }
+  function paint() {
+    painted = true;
     const g = canvas.getContext('2d'), W = canvas.width, k = W / SIZE, c = W / 2, r = R * k;
     g.clearRect(0, 0, W, W);
     g.save(); g.beginPath(); g.arc(c, c, r, 0, Math.PI * 2); g.clip();
@@ -39767,40 +39994,78 @@ const _QuickColour = (() => {
     const rg = g.createRadialGradient(c, c, wr, c, c, r);                // white from the hole out to a few pixels past its edge, then the colour grows to the pure one at the rim
     rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = rg; g.fillRect(0, 0, W, W);
-    g.fillStyle = `rgba(0,0,0,${1 - v})`; g.fillRect(0, 0, W, W);
     g.restore();
     // the middle is a hole, with nothing in it. The colour does not stop at its edge: the pointer can go on into it, to the very
     // middle, which is white; the object shows the colour.
     const cr = HOLE * k;
     g.save(); g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(c, c, cr, 0, Math.PI * 2); g.fill(); g.restore();
-    capHex = '';
-    updateCap();
   }
   // the readout under the wheel: rebuilt only when the colour or the brightness has changed
-  let capHex = '', capV = -1;
+  let capHex = '', capV = -1, capEls = null, capOrig = '', capLen = -1;
   function updateCap() {
     const now = hsv2hex(h, s, v);
     if (now === capHex && v === capV) return;
     capHex = now; capV = v;
-    cap.innerHTML = `<i style="background:${origHex}" title="As it was"></i><i style="background:${now}"></i><b>${now.toUpperCase()}</b><u></u><span>${Math.round(v * 100)}%</span><em>Brightness</em>`;
+    if (!capEls) {                                      // (built once; after that only the colours and the two numbers change)
+      cap.innerHTML = '<i title="As it was"></i><i></i><b></b><u></u><span></span><em>Brightness</em>';
+      const sw = cap.querySelectorAll('i');
+      capEls = { was: sw[0], now: sw[1], hex: cap.querySelector('b'), pct: cap.querySelector('span') };
+      capOrig = '';
+    }
+    if (capOrig !== origHex) { capEls.was.style.background = origHex; capOrig = origHex; }
+    capEls.now.style.background = now;
+    capEls.hex.textContent = now.toUpperCase();
+    capEls.pct.textContent = Math.round(v * 100) + '%';
+    if (capEls.pct.textContent.length !== capLen) {          // (the width is a whole, even number of pixels: the readout is centred under the wheel)
+      capLen = capEls.pct.textContent.length;
+      cap.style.width = ''; cap.style.boxSizing = 'border-box';
+      const w = Math.ceil(cap.offsetWidth); cap.style.width = (w + (w % 2)) + 'px';
+    }
   }
+  // While the pointer moves only the colour of each material is set: that is all the picture needs. _matApplyColorHex also looks through the
+  // whole parts list for the parts that wear the material (to keep their stored colour, the name and the colour index in step); done every
+  // frame for every selected material that was materials x parts of work, so it is done once, when the colour is kept (see close).
   function apply() {
     const hex = hsv2hex(h, s, v);
-    for (const m of mats) _matApplyColorHex(m, hex);
+    for (const m of mats) m.color.set(hex);
   }
   // The dot is an element, so it can leave the wheel: it sits at the colour and stops at the rim; far enough out it jumps to the pointer,
   // turns black and Cancel shows.
+  const dotU = { x: 1, y: 0 };                           // (the way the pointer lies from the middle, kept for when it is exactly in the middle)
   function placeDot(d, dx, dy) {
     if (!dotEl) return;
     const wr = HOLE + WHITE;
-    if (!moved || d <= HOLE) { dotEl.style.display = 'none'; return; }
-    const ux = dx / d, uy = dy / d;
+    if (!moved) { dotEl.style.display = 'none'; return; }
+    // Inside the hole the dot is held on the hole's edge, on the side the pointer is; it steps out onto the wheel as the pointer does.
+    if (d > 0.5) { dotU.x = dx / d; dotU.y = dy / d; }
+    const ux = dotU.x, uy = dotU.y;
     const rad = d <= R ? wr + Math.max(0, Math.min(1, (d - wr) / (R - wr))) * (R - wr) : d <= CANCEL ? R : d;      // (it stops at the rim; past the cancel line it jumps to the pointer)
     const k = d > CANCEL ? 0 : 1;
     const n = parseInt(hsv2hex(h, s, v).slice(1), 16), ch = (sh) => Math.round(((n >> sh) & 255) * k);
-    const X = SIZE / 2 + ux * rad, Y = SIZE / 2 + uy * rad;
-    dotEl.style.display = 'block'; dotEl.style.background = `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+    const X = snap(SIZE / 2 + ux * rad), Y = snap(SIZE / 2 + uy * rad);
+    const dr = ch(16), dg = ch(8), db = ch(0);
+    dotEl.style.display = 'block'; dotEl.style.background = `rgb(${dr},${dg},${db})`;
+    dotEl.style.borderColor = (dr * 0.299 + dg * 0.587 + db * 0.114) > 140 ? '#000' : '#fff';      // (the stroke inverts with the colour under it: a dark dot on the darkened wheel keeps a light ring)
     for (const el of [dotEl, cancelPill]) { el.style.setProperty('--x', X + 'px'); el.style.setProperty('--y', Y + 'px'); }
+  }
+  // While the wheel is open the selection wears no outline or glow (they lie over the very colour that is being picked) and the gizmo is put
+  // away; both come back, drawn again for the colour as it ends up, when it closes.
+  let hushed = [], looked = false;
+  function lookAway(on) {
+    if (on === looked) return;
+    looked = on;
+    if (on) {
+      hushed = [];
+      const put = (o) => { if (o && o.visible) { o.visible = false; hushed.push(o); } };
+      for (const o of state.activeHighlights || []) put(o);
+      for (const id of state.selected || []) { const p = getPart(id); if (p && p.mesh) for (const ch of p.mesh.children) if (!(ch.userData && ch.userData.wireLine) && (ch.isLineSegments || (ch.userData && ch.userData.selGlow))) put(ch); }
+      _gizmoHold(true);
+    } else {
+      for (const o of hushed) { try { o.visible = true; } catch (_) {} }
+      hushed = []; state._selChildKey = '';
+      _gizmoHold(false);
+      try { applySelectionColors(); } catch (_) {}
+    }
   }
   function aim() {
     if (!moved) return;                              // the pointer has not gone anywhere yet: it is still the colour it was
@@ -39813,6 +40078,7 @@ const _QuickColour = (() => {
       if (out) requestAnimationFrame(() => { if (!open || !cancelling) return; mats.forEach((m, i) => _applyMatSnapshot(m, snaps[i])); try { requestRender(); } catch (_) {} });      // (after the first frame of the glide: the model's work does not hold the dot back)
     }
     placeDot(d, dx, dy);
+    document.body.classList.toggle('qc-nocursor', !out);
     if (cancelling) return;
     if (d > 1) h = ((Math.atan2(dy, dx) / (Math.PI * 2)) + 1) % 1;       // (at the very middle the hue stays: it is white)
     s = Math.max(0, Math.min(1, (d - HOLE - WHITE) / (R - HOLE - WHITE)));     // (white from a few pixels past the edge of the hole inwards: easy to hit)
@@ -39830,23 +40096,30 @@ const _QuickColour = (() => {
     orig = hex2hsv(origHex); h = orig.h; s = orig.s; v = 1;        // (the wheel starts at full brightness: the middle is white, the rim is the pure colour; scroll to darken)
     ox = px = lastX; oy = py = lastY; moved = false; cancelling = false; root.classList.remove('cancelling'); dotEl.style.display = 'none'; sticky = !!byTap; startedAt = performance.now(); open = true;
     const x = Math.max(SIZE / 2 + 8, Math.min(window.innerWidth - SIZE / 2 - 8, ox)), y = Math.max(SIZE / 2 + 8, Math.min(window.innerHeight - SIZE / 2 - 60, oy));
-    root.style.left = (x - SIZE / 2) + 'px'; root.style.top = (y - SIZE / 2) + 'px';
+    root.style.left = snap(x - SIZE / 2) + 'px'; root.style.top = snap(y - SIZE / 2) + 'px';
     draw();
-    root.classList.remove('show'); revealed = false; clearTimeout(holdT);
+    document.body.classList.add('qc-nocursor');
+    lookAway(true);
+    clearTimeout(leaveT); root.classList.remove('show', 'leaving'); revealed = false; clearTimeout(holdT);
     const reveal = () => { if (!open) return; revealed = true; void root.offsetWidth; root.classList.add('show'); };       // (the class goes on after a reflow, so the growing plays from the start)
     reveal();                                                              // (it shows the moment the key goes down; let go without moving and nothing has changed)
     return true;
   }
+  let leaveT = 0;
   function close(keep, byClick) {
     if (!open) return;
     if (cancelling) keep = false;
     open = false; clearTimeout(holdT); revealed = false;
-    root.classList.remove('show', 'cancelling'); cancelling = false;
+    document.body.classList.remove('qc-nocursor');
+    lookAway(false);
+    { const was = root.classList.contains('show'); root.classList.remove('show', 'cancelling'); cancelling = false;
+      if (was) { root.classList.add('leaving'); clearTimeout(leaveT); leaveT = setTimeout(() => root.classList.remove('leaving'), 120); } }      // (it draws back in: the way it grew, reversed)
     if (keep) {
+      if (moved) { const hex = hsv2hex(h, s, v); for (const m of mats) _matApplyColorHex(m, hex); }      // (the bookkeeping that apply() leaves out, once)
       const entries = [];
       mats.forEach((m, i) => { const after = _snapshotMat(m); if (_matSnapDiffers(snaps[i], after)) entries.push({ type: 'materialEdit', matRef: m, before: snaps[i], after }); });
       entries.forEach((op, i) => { if (i) op.auto = true; try { pushUndo(op); } catch (_) {} });     // (one Ctrl+Z takes back all of them)
-      if (entries.length) _matAfterOutsideChange(mats);
+      if (entries.length) { _matAfterOutsideChange(mats); try { refreshPropertiesPanel(); } catch (_) {} }      // (the material in the sidebar: its swatch, its name and its colour follow the pick)
     } else {
       mats.forEach((m, i) => _applyMatSnapshot(m, snaps[i]));
       try { requestRender(); } catch (_) {}
@@ -39895,7 +40168,9 @@ const _QuickColour = (() => {
     e.preventDefault(); e.stopPropagation();
     v = Math.max(0.02, Math.min(1, v + (e.deltaY < 0 ? 0.05 : -0.05)));
     if (moved && !cancelling) apply();
-    draw(); try { requestRender(); } catch (_) {}
+    draw();
+    if (moved) { const dx = px - ox, dy = py - oy; placeDot(Math.hypot(dx, dy), dx, dy); }      // (the dot wears the colour too: it follows the brightness without the pointer moving)
+    try { requestRender(); } catch (_) {}
   }, { capture: true, passive: false });
   window.addEventListener('blur', () => close(false));
   window.addEventListener('resize', () => close(false));
@@ -43346,7 +43621,10 @@ function _wireDeadTreeControls() {
   let _toolMenuFrom = null;
   for (const [id, open] of [['tree-collapse-toggle', () => _openTreeFoldMenu($('tree-collapse-toggle'))], ['tree-flatten', () => _openFlattenMenu($('tree-flatten'))], ['tree-batch-rename', () => _openBatchRenameMenu($('tree-batch-rename'))]]) {
     const show = () => { _toolMenuFrom = id; open(); };
-    $(id)?.addEventListener('click', (e) => { if (!e.isTrusted) return; e.preventDefault(); e.stopImmediatePropagation(); show(); }, true);
+    // a second press on the button whose menu is open closes it (the press itself closes the menu before the click, so it is noted on the press)
+    let wasOpen = false;
+    $(id)?.addEventListener('pointerdown', () => { const m = $('ctx-menu'); wasOpen = _toolMenuFrom === id && !!m && m.style.display === 'block'; }, true);
+    $(id)?.addEventListener('click', (e) => { if (!e.isTrusted) return; e.preventDefault(); e.stopImmediatePropagation(); if (wasOpen) { wasOpen = false; _toolMenuFrom = null; _ctxClose(); return; } show(); }, true);
     $(id)?.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); show(); });
     // as in a menu bar: with one of the three open, moving onto another opens that one at once
     $(id)?.addEventListener('pointerenter', (e) => {
@@ -45577,7 +45855,7 @@ _UndoOps.register('paste-group', {
     // pushes its own undo entry, so we don't pushUndo here — the op's
     // redo position is taken by the new entry.
     const keepRedo = state.redo.slice();
-    const newIds = _pasteAsUserGroup(op.sourceIds, op.groupName);
+    const newIds = _pasteAsUserGroup(op.sourceIds, op.groupName, op.srcGroupId);
     state.redo.length = 0; state.redo.push(...keepRedo); _refreshUndoRedoButtons();
     if (!newIds.length) {
       toast('Redo unavailable', 'Source parts are gone', 'warn', 1800);
@@ -45600,6 +45878,7 @@ _UndoOps.register('paste-hier', {
     const rows = new Set(op.rows);
     state.treeNodes = (state.treeNodes || []).filter(n => !rows.has(n));
     if (op.rootObj && op.rootObj.parent) op.rootObj.parent.remove(op.rootObj);
+    for (const r of op.rows) if (r.kind === 'group') { _groupOrigins.delete(r.id); _groupRotations.delete(r.id); _groupScales.delete(r.id); }   // (see _pasteHierGroup: the ids are used again)
     if (state.selected) for (const id of op.partIds) state.selected.delete(id);
     if (state.selectedGroupIds) for (const r of op.rows) if (r.kind === 'group') state.selectedGroupIds.delete(r.id);
     $('del-sel-count').textContent = state.selected.size;
@@ -48469,7 +48748,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   function _buildPopover() {
     if (popEl) return;
     const css = `
-      .cp-pop{position:fixed;z-index:400;width:300px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:none;box-sizing:border-box;padding:12px;border-radius:16px;background:color-mix(in srgb,var(--bg2,#1a1a1a) 92%,#000);border:1px solid var(--bd2);box-shadow:0 20px 56px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.03) inset;color:var(--tx);font:12px var(--font-sans);opacity:0;transform:translateY(6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 170ms var(--ease-out),background 120ms linear,border-color 120ms linear}
+      .cp-pop{position:fixed;z-index:400;width:300px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:none;box-sizing:border-box;padding:12px;border-radius:16px;background:color-mix(in srgb,var(--bg2,#1a1a1a) 92%,#000);border:1px solid var(--bd2);box-shadow:0 5px 13px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.03) inset;color:var(--tx);font:12px var(--font-sans);opacity:0;transform:translateY(6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 170ms var(--ease-out),background 120ms linear,border-color 120ms linear}
       .cp-pop::-webkit-scrollbar{display:none}
       .cp-pop.show{opacity:1;transform:none;pointer-events:auto}
       .cp-pop *{box-sizing:border-box}
@@ -48530,8 +48809,8 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-pop.cp-drag{background:transparent;border-color:transparent;box-shadow:none}
       .cp-pop.cp-drag *{visibility:hidden}
       .cp-pop.cp-drag .cp-hot,.cp-pop.cp-drag .cp-hot *,.cp-pop.cp-drag .cp-compare,.cp-pop.cp-drag .cp-compare *{visibility:visible}
-      .cp-pop.cp-drag .cp-compare{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 10px 30px rgba(0,0,0,.5)}
-      .cp-pop.cp-drag .cp-hot{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 10px 30px rgba(0,0,0,.5)}
+      .cp-pop.cp-drag .cp-compare{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 6px 17px rgba(0,0,0,.5)}
+      .cp-pop.cp-drag .cp-hot{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 6px 17px rgba(0,0,0,.5)}
       .mat-swatch{cursor:pointer}
       .mat-swatch:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px var(--ac-tint-45)!important}
     `;
@@ -49728,7 +50007,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const st = document.createElement('style');
       st.id = 'qr-style';
       st.textContent = `
-.qr{position:fixed;z-index:9000;width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 22px 56px rgba(0,0,0,.55),0 3px 10px rgba(0,0,0,.35);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
+.qr{position:fixed;z-index:9000;width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 5px 13px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.35);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
 .qr.is-in{opacity:1;transform:none}
 .qr.is-out{opacity:0;transform:scale(.92);transition:opacity 110ms ease,transform 110ms ease}
 .qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:var(--r-sm,6px);background:var(--ac,#0d99ff);box-shadow:0 4px 14px rgba(13,153,255,.35);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
@@ -49737,7 +50016,7 @@ setTimeout(() => _dndDecorateTree(), 0);
 .qr-i.is-near{color:var(--tx2,#bdbdbd)}
 .qr-i.is-hot{color:#fff;transform:scale(1.06)}
 .qr.is-first .qr-i.is-hot{color:var(--tx,#eee)}
-.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:var(--r-lg,10px);background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 12px 32px rgba(0,0,0,.45);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3,#8a8a8a);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:var(--r-lg,10px);background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 4px 10px rgba(0,0,0,.45);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3,#8a8a8a);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
 .qr.is-left .qr-tip{left:auto;right:calc(100% + 10px)}
 .qr-tip b{font-weight:var(--fw-regular,400);color:var(--tx,#eee)}
 .qr-tip i{width:6px;height:6px;border-radius:50%;background:var(--ac,#0d99ff);opacity:0;transition:opacity 120ms ease}
@@ -49940,13 +50219,29 @@ setTimeout(() => _dndDecorateTree(), 0);
 
     // While the pill is open the selection wears no highlight (its outline and glow lie over the very surface that is being judged,
     // and were made for the mesh as it was). What was put away is shown again, and drawn again for the mesh as it ends up, on closing.
+    // The transform gizmo is put away while the pill is open (it would sit over the surface being judged, and a drag here is not a move): its
+    // helper reports itself hidden, as Dynamic place does, and the controls are switched off. Both come back on closing.
+    function gizmoAway(on) {
+      const gh = state.gizmoHelper;
+      state.qrOpen = on;
+      if (gh && !gh._qrGuard) {
+        const d = Object.getOwnPropertyDescriptor(gh, 'visible');
+        let get, set;
+        if (d && d.get) { get = () => d.get.call(gh); set = (x) => d.set.call(gh, x); } else { let v = gh.visible; get = () => v; set = (x) => { v = x; }; }
+        Object.defineProperty(gh, 'visible', { get: () => get() && !state.qrOpen, set, configurable: true });
+        gh._qrGuard = true;
+      }
+      try { if (state.gizmo) state.gizmo.enabled = !on && !state.dynPlaceOn; } catch (_) {}
+      try { requestRender(); } catch (_) {}
+    }
     function hush(sess) {
       sess.hidden = [];
+      gizmoAway(true);
       const put = (o) => { if (o && o.visible) { o.visible = false; sess.hidden.push(o); } };
       for (const o of state.activeHighlights || []) put(o);
       for (const part of sess.parts) if (part.p.mesh) for (const ch of part.p.mesh.children) if (!(ch.userData && ch.userData.wireLine) && (ch.isLineSegments || (ch.userData && ch.userData.selGlow))) put(ch);
     }
-    function unhush(sess) { for (const o of sess.hidden || []) { try { o.visible = true; } catch (_) {} } sess.hidden = []; state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} }
+    function unhush(sess) { gizmoAway(false); for (const o of sess.hidden || []) { try { o.visible = true; } catch (_) {} } sess.hidden = []; state._selChildKey = ''; try { applySelectionColors(); } catch (_) {} }
     function open() {
       if (S) return;
       try { if (_Elements.isActive()) { toast('Quick remesh', 'Leave Edit mesh first (4)', 'info', 2400); return; } } catch (_) {}
@@ -53491,6 +53786,30 @@ if (new URLSearchParams(location.search).has('selftest')) {
     const pop = document.createElement('button');
     pop.type = 'button'; pop.className = 'lc-icon-btn dock-pop';
     closeBtn.parentNode.insertBefore(pop, closeBtn);
+    // Closing a floating window plays the Windows minimize: it shrinks toward the middle of the bottom toolbar and fades, then the close goes
+    // through as it always did. (Opening has the reverse, dockPopIn in the stylesheet. None of it with reduced motion.)
+    let leaving = false, through = false;
+    closeBtn.addEventListener('click', (e) => {
+      if (through) return;
+      if (leaving || !dock.classList.contains('is-float') || !dock.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const a = dock.getBoundingClientRect();
+      if (!a.width || !a.height) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      leaving = true;
+      const dx = innerWidth / 2 - (a.left + a.width / 2), dy = innerHeight - 24 - (a.top + a.height / 2);
+      dock.animate([{ transform: 'none', opacity: 1 }, { transform: 'translate(' + dx + 'px, ' + dy + 'px) scale(.12)', opacity: 0 }],
+        { duration: 220, easing: 'cubic-bezier(.4,0,.8,.4)', fill: 'forwards' }).onfinish = () => {
+        leaving = false;
+        through = true; try { closeBtn.click(); } finally { through = false; }   // (now it goes through)
+        // The dock's own hide is a transition (slide, visibility after .2s): keep the faded end state until it has
+        // finished, or the window shows again for a moment. Opening it again lets go at once.
+        const let_go = () => { clearTimeout(t); mo.disconnect(); dock.getAnimations().forEach(an => an.cancel()); };
+        const mo = new MutationObserver(() => { if (dock.classList.contains('show')) let_go(); });
+        const t = setTimeout(let_go, 450);
+        if (dock.classList.contains('show')) { let_go(); return; }           // the close did not go through
+        mo.observe(dock, { attributes: true, attributeFilter: ['class'] });
+      };
+    }, true);
     const grip = document.createElement('div');
     grip.className = 'dock-resize'; grip.dataset.dir = 'se';
     dock.appendChild(grip);
@@ -55690,3 +56009,37 @@ const _Elements = (() => {
 })();
 window.__moElements = _Elements.api;
 // ▲ Edit mesh
+
+// ── Icon lines on whole device pixels ───────────────────────────────────────────────────────────────────────────────
+// --icon-stroke is the thickness of an icon's line (see the stylesheet): one device pixel on an ordinary screen, the width of two on a screen
+// of 2x or more (1 CSS pixel on both). It follows the screen when the window is moved to another or the page is zoomed.
+(function _iconStroke() {
+  const set = () => {
+    const dpr = window.devicePixelRatio || 1, dev = dpr >= 1.75 ? Math.round(dpr) : 1;
+    document.documentElement.style.setProperty('--icon-stroke', (dev / dpr) + 'px');
+  };
+  set();
+  window.addEventListener('resize', set);
+})();
+
+// ── Status bar on whole pixels ──────────────────────────────────────────────────────────────────────────────────────
+// The numbers in the bar (vertices, memory, fps, the console button) are as wide as their text, which is rarely a whole number of pixels
+// (91.23 px), and everything after them started on the fraction: the background swatch, the console button and its icon were soft. Each
+// item is given the next whole pixel as its minimum width, again whenever its text changes (one pass a frame at most; the mutation watch
+// looks at the text only, so setting a width does not start it again).
+(function _statusBarWhole() {
+  const sb = document.getElementById('sb');
+  if (!sb) return;
+  let queued = false;
+  const fix = () => {
+    queued = false;
+    const els = [...sb.querySelectorAll('.item, button, button > span')].filter(e => e.offsetParent !== null);
+    for (const e of els) e.style.minWidth = '';
+    const widths = els.map(e => e.getBoundingClientRect().width);
+    els.forEach((e, i) => { if (widths[i] % 1) e.style.minWidth = Math.ceil(widths[i]) + 'px'; });
+  };
+  const soon = () => { if (!queued) { queued = true; requestAnimationFrame(fix); } };
+  new MutationObserver(soon).observe(sb, { childList: true, characterData: true, subtree: true });
+  window.addEventListener('resize', soon);
+  soon();
+})();

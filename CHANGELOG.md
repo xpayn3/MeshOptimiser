@@ -4,6 +4,58 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.29.0
+
+Released 14 Oct 2026.
+
+v0.28.0 was about trusting your model. v0.29.0 is about working with big assemblies, and a workspace that looks and moves like a finished app: groups now align, copy and keep their pivots as one piece, windows, menus and the colour wheel move the way they do on macOS, and every edge and every line of an icon sits on a whole pixel, so the picture is sharp.
+
+**Groups behave as one piece**
+
+- ![new][new] **Align parts and Spread work on groups.** A selected group is one item, measured by the box round all its parts, and it moves whole; a group inside another selected group goes with it, loose parts can be lined up beside groups, and a group with a locked part stays where it is. The panel says "items" when groups are in the selection.
+- ![fix][fix] **With several groups selected, Copy and Paste put a copy of every part next to its original inside the old group.** Each selected group is now copied as a whole folder, next to its original, the way one group already was. Each group has its own undo step.
+- ![fix][fix] **When a part or a group was copied, the pivot of the copy was not where the original's is.** A copied folder keeps its pivot, turn and typed scale, a copied user group keeps its place, and a copied part gets its box from where it stands.
+- ![fix][fix] **After copying big groups several times (with Undo in between), the pivot of some copies jumped when they were selected later.** Folder ids come round again after an Undo and a new copy picked up the record an undone one had left; a copy now starts clean and Undo clears its records.
+- ![fix][fix] **After moving several groups at once, each kept its old pivot and jumped back to it when picked alone.** The gizmo stored a new origin only when exactly one group was selected; with several, the stored origins are now worked out again from the parts.
+- ![fix][fix] **After copying big groups, undoing, redoing and clicking around, a copy appeared in the middle of the scene: drawn, but not in the tree and not pickable.** Undo took the copy out of the scene while the gizmo still held it, and the next click put it back. A removed object is no longer put back.
+- ![fix][fix] **A copy of a shape made with Add shape was a plain mesh with no parameter panel.** It stays a shape, with its own kind and parameters and its own geometry, so changing one does not touch the other.
+
+**Windows, menus and motion**
+
+- ![polish][polish] **Windows have a macOS shadow.** A close shadow and a longer one under it, almost all of it below; only the window in front has it, a window behind has none, and the thin outline round windows is gone.
+- ![polish][polish] **Windows and dialogs spring open; menus fade out.** A dialog or a floating window opens with a small overshoot and settles; a menu appears at once and fades away in 150 ms (the pill menus, the export menu and the right-click menu). Nothing animates with reduced motion.
+- ![polish][polish] **Closing a floating Materials or Library window plays a minimize:** it shrinks toward the middle of the bottom toolbar and fades. Opening it again grows it back from there.
+- ![polish][polish] **The view menu opens upward when its button is in the lower half of the window,** so it never runs off the bottom.
+- ![polish][polish] **A second click on Collapse, Rename or Flatten closes the menu that the first one opened** (the press closed it and the click opened it again).
+- ![polish][polish] **The tool pill: Select is the blue one, the gizmo tools (Move, Rotate, Scale, Dynamic place) show grey when on.** Dynamic place sits beside Measure and Draw lines.
+- ![polish][polish] **The Shading angle has moved to the Shading section,** under Outlines. It still acts on the selected parts, and is dimmed when none is selected. The Properties card is one row shorter.
+- ![polish][polish] **The grab handle under the selection buttons shows only while they are stuck at the top of the panel.**
+
+**Quick colour wheel**
+
+- ![polish][polish] **A tighter wheel.** The outer ring is a little smaller, the dot is held on the edge of the centre hole while the pointer is inside it, the colour swatches in the readout are circles, the readout sits closer to the ring, and the pointer is hidden while it is over the wheel. It opens and closes faster, and closing draws the wheel back into its middle, the way it grew.
+- ![polish][polish] **The wheel clears the view while it is open:** the selection's outline and glow and the gizmo are put away, and come back, drawn for the new colour, when it closes. The dot's outline turns light on dark colours, and the dot follows the brightness as you scroll.
+- ![perf][perf] **Picking a colour no longer scans every part on every frame.** Only the colour of each material is set while the pointer moves; the stored colours, names and indexes are brought up to date once, when the colour is kept. Brightness is a filter on the picture, not a redraw.
+- ![fix][fix] **After a pick, the material in the sidebar kept its old name and swatch.** It shows the new colour name and swatch as soon as the colour is kept.
+- ![fix][fix] **The move gizmo stayed on screen while a level was picked with B (Quick remesh).** It is put away while the picker is open.
+
+**Sharp to the pixel**
+
+- ![polish][polish] **Edges and lines sit on whole device pixels.** Every box that draws something was measured in a browser: the wheel, the dot and the readout, the top bar (its buttons were on half pixels), the tree rows (26 px), the tree toolbar and the selection buttons (whole widths and gaps), the Properties rows (a whole line height), the status bar numbers and buttons (whole widths), the Lock badge and the instance icon. Of 63 groups of elements that were off the grid, none is left at 100 % and two text-width boxes are 0.03 px off at 2x.
+- ![polish][polish] **Icon lines are one device pixel thick.** An icon is drawn on a 24 unit grid and was scaled, so a 14 px icon had a line 1.17 px thick and a 16 px one 1.33 px: soft on every screen. The line does not scale now, and is one device pixel (one CSS pixel on a 2x screen). Icons look a little lighter.
+- ![polish][polish] **A press dims a button instead of shrinking it.** Toolbar, tree and dialog buttons scaled to 92 % when pressed, and the icon went soft while it moved.
+
+**The Properties panel and Heavy parts**
+
+- ![polish][polish] **Heavy parts: better bars.** Thicker rounded bars on a dark inset track, shaded from a darker start to a lighter end, that grow in from the left when the list is drawn (the heaviest first). The rows touch, rows selected next to each other join into one shape, the text and the bar are centred in the row, and the tick no longer jumps when it is turned on.
+- ![polish][polish] **The blocks at the bottom of the Properties card are an even 12 px apart:** the tags, the material card, the selection buttons and the Shading heading.
+- ![fix][fix] **The name row of the Properties card changed height when the Lock badge was there, and everything below it moved.** The row is one fixed height, and the badge one fixed size, whatever the name, the badge or the notes in it.
+
+**Materials and Library**
+
+- ![new][new] **Materials window: copy, duplicate, paste and delete.** With the materials window the last one worked in and a material picked, Ctrl+C and Ctrl+D copy and duplicate the material and Ctrl+V pastes a copied one as a new material, not the selected parts. The inspector has Duplicate and Delete buttons.
+- ![polish][polish] **A part in the Library view keeps turning a little after you let go,** slowing down (it runs only while it turns). The Library inspector stacks its parts in a narrow dock. The material card and strip reach the edges of the Properties card, and the pop-out and close buttons of a window sit together.
+
 ## v0.28.0
 
 Released 14 Oct 2026.

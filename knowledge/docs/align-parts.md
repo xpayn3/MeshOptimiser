@@ -6,6 +6,10 @@ Align parts moves the selected parts so they line up on one side or on the middl
 
 To stand the whole model on the floor, use [Align to floor](meshoptimiser://docs/align-to-floor) instead.
 
+## Groups
+
+Select a group in the tree, or several, and each group is lined up as one item. It is measured by the box round all its parts and it moves whole, so its parts keep their places against each other. A group inside another selected group goes along with it. You can mix groups and loose parts. A group with a locked part stays where it is, and the card says how many parts were locked.
+
 ## Open the card
 
 - Press `Ctrl + K` and choose **Align and spread parts…**.

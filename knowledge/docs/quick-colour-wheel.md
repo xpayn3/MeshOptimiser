@@ -10,6 +10,8 @@ Select one or more parts, point at the model, and hold `C`. A colour wheel opens
 
 The selected parts change as you move, so you see the result on the model and not on a swatch. A small strip under the wheel shows the colour it was, the colour it is now, its hex code and the brightness.
 
+While the wheel is open the pointer is hidden over it, and a dot shows where the colour is. The selection outline and the move gizmo are put away so that they do not cover the colour, and they come back when you let go. Inside the middle hole the dot stays on the edge of the hole, on the side the pointer is.
+
 ## Keep it or cancel it
 
 - Let go of `C`, or click, to keep the colour. It is one step in the undo list.

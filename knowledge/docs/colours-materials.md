@@ -21,6 +21,7 @@ The button **Pop out as a floating window** in the head of the dock turns it int
 
 - A floating dock does not push the toolbar up and does not close the other dock. Materials and [the library](meshoptimiser://docs/library) can both float, so the two can be open side by side.
 - Where you left the window, and whether it floats, is remembered in this browser.
+- Closing a floating window shrinks it toward the bottom toolbar, and opening it grows it back from there.
 - With several windows open, the one you pressed or typed in last stands in front.
 
 ## See where a material is used
@@ -59,11 +60,13 @@ The buttons at the right of the dock’s header:
 
 - **New material**: The `+` button. Makes a new material. If parts are selected, they get it.
 - **New material from a preset**: Hold the `+` down, or right-click it, and a list of ready-made looks opens. You can press, slide to a preset and let go in one move. The arrow beside the `+` opens the same list with one click. A preset makes a new material, assigned to the selected parts if there are any, in one undo step.
-- **Duplicate**: Copies the picked material.
+- **Duplicate**: Copies the picked material. The button is in the inspector at the right of the dock, and `Ctrl + D` does the same.
 - **Merge**: Turns several picked materials into one. Hold `Ctrl` and click to pick several.
-- **Delete**: Deletes the picked materials.
+- **Delete**: Deletes the picked materials. The button is in the inspector at the right of the dock. The parts that used them are left with no material.
 
 To merge two materials with the mouse, hold `Shift` and drag one onto the other. The dragged material stays and takes the other one over. A tip that starts with “Merge into” shows before you let go. Without `Shift`, a drop on another material does nothing.
+
+While the materials window is the last one you worked in and a material is picked, `Ctrl + C` and `Ctrl + D` copy and duplicate the material, and `Ctrl + V` pastes a copied material as a new one. In that case the keys belong to the materials window and do not copy parts.
 
 A right-click on a material gives the same commands, and one to copy its colour code. The material card in **Properties** has the same menu.
 
