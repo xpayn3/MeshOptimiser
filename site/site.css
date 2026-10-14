@@ -642,10 +642,15 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 @media (max-width: 760px) {
   .bar-in { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
   .bar-get { display: none; }                      /* no Download in the top bar on a phone: the page has its own Download buttons */
-  .bar-menu { display: grid; place-content: center; gap: 6px; width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); cursor: pointer; -webkit-tap-highlight-color: transparent; }
-  .bar-menu span { display: block; width: 16px; height: 1.5px; border-radius: 1px; background: var(--tx); transition: translate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), rotate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
-  .bar-menu[aria-expanded='true'] span:first-child { translate: 0 3.75px; rotate: 45deg; }
-  .bar-menu[aria-expanded='true'] span:last-child { translate: 0 -3.75px; rotate: -45deg; }
+  .bar-menu { display: grid; place-content: center; gap: 8px; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .bar-menu span { display: block; width: 20px; height: 2px; border-radius: 1px; background: var(--tx); transition: translate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), rotate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .bar-menu[aria-expanded='true'] span:first-child { translate: 0 5px; rotate: 45deg; }
+  .bar-menu[aria-expanded='true'] span:last-child { translate: 0 -5px; rotate: -45deg; }
+  /* the name and the mark are larger on a phone too, and the bar a little taller to hold them (whole pixels) */
+  :root { --bar-h: 68px; }
+  .brand { font-size: 18px; gap: 12px; }
+  .bar .brand img { width: 40px; height: 40px; border-radius: 12px; }
+  .bar .brand { padding: 6px 16px 6px 6px; margin-left: -6px; }
   .nav { position: fixed; left: 12px; right: 12px; top: calc(var(--bar-h) + 8px); z-index: 21; flex-direction: column; align-items: stretch; gap: 2px; margin: 0; padding: 8px; border-radius: 20px; background: color-mix(in srgb, var(--surface) 94%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5); box-shadow: inset 0 0 0 1px var(--line-strong), 0 24px 60px rgba(0, 0, 0, 0.55); opacity: 0; visibility: hidden; transform: translateY(-8px) scale(0.98); transform-origin: top right; transition: opacity 0.18s ease, transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.26s; }
   .nav.is-open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
   .nav a { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-radius: 13px; font-size: 17px; letter-spacing: -0.01em; }
@@ -817,7 +822,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .wand-band .lead.wand-lead { margin-left: auto; margin-right: auto; max-width: 56ch; text-align: center; }
 .wand-lead { margin-top: 0; }
 .wand-demo { position: relative; margin-top: clamp(24px, 4vw, 48px); display: grid; justify-items: center; gap: 18px; user-select: none; -webkit-user-select: none; }
-.wand-stage { position: relative; width: min(100%, 720px); height: 400px; touch-action: none; cursor: default; outline: none; }
+.wand-stage { position: relative; width: min(100%, 720px); height: 400px; touch-action: pan-y; cursor: default; outline: none; }
 .wand-stage::before { content: ''; position: absolute; left: 50%; top: 50%; width: min(100%, 720px); aspect-ratio: 1; transform: translate(-50%, -50%); background: radial-gradient(closest-side, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.062) 12%, rgba(255, 255, 255, 0.046) 26%, rgba(255, 255, 255, 0.03) 42%, rgba(255, 255, 255, 0.016) 58%, rgba(255, 255, 255, 0.006) 78%, rgba(255, 255, 255, 0) 100%); pointer-events: none; z-index: 0; }
 .wand-out { min-height: 22px; max-width: 64ch; text-align: center; color: var(--tx-2); font-size: 15px; line-height: 1.5; }
 .wand-modes { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
@@ -871,7 +876,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 @keyframes wq-fan-in { from { opacity: 0; transform: scale(0.86); } }
 @keyframes wq-fade-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .wq-sub, .wq-subico, .wq-lab { animation: none; } .wq-pop, .wq-pop2, .wand-part { transition: none; } .wq-pop.is-on, .wq-pop2.is-on { transform: none; } .wq-item.is-hot { scale: 1; translate: -50% -50%; } }
-@media (max-width: 1000px) { .wand-demo { height: 480px; } }
+/* (a fixed height of 480px used to stand here for screens up to 1000px: the stage, the caption and the buttons need about 500px, so the grid squeezed the caption to one line and its text ran over the buttons) */
 
 /* ---- the library: the parts, to look at ---- */
 .lib-lead { margin-bottom: clamp(28px, 3.4vw, 48px); }
@@ -1047,6 +1052,8 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 @media (max-width: 760px) {
   .wand-stage { height: 360px; }
   .wand-tips { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 20px; }
+  .wand-band .wand-tips { gap: 32px 16px; }                          /* room between the two rows of tips, more than the slide-in of the second one */
+  .has-reveal [data-reveal] { transform: translate3d(0, 12px, 0); }  /* a shorter slide on a phone, so what is still arriving never lands on its neighbour */
 }
 
 @media (min-width: 761px) and (max-width: 1060px) { .tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -1248,10 +1255,10 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 @media (max-width: 640px) { .stars { grid-template-columns: minmax(0, 1fr); } }
 
 /* features page: a row of cards per group, scrolled sideways, running off the right edge */
-.fcar { margin-inline-end: calc((100vw - 100%) / -2 + 0px); }
-.fcar-track { display: flex; gap: 16px; list-style: none; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-right: var(--gutter); scroll-padding-inline: 0; }
+.fcar { --edge: calc((100vw - min(100vw, var(--max) + var(--gutter) * 2)) / 2 + var(--gutter)); margin-inline: calc(var(--edge) * -1); }      /* --edge: how far the text column is from the edge of the screen */          /* the row runs from one edge of the screen to the other: a card scrolled out of the way goes off the edge, not off the text column */
+.fcar-track { display: flex; gap: 16px; list-style: none; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-inline: var(--edge) var(--gutter); scroll-padding-inline: var(--edge) 0; }      /* (at rest the first card stands where the text does) */
 .fcar-track::-webkit-scrollbar { display: none; }
-.fcar-nav { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; padding-right: calc(var(--gutter) + (100vw - 100%) / 2); }
+.fcar-nav { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; padding-right: var(--edge); }
 .fcar-nav button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--tx); cursor: pointer; transition: opacity 0.2s ease, background-color 0.2s ease; }
 .fcar-nav button:hover:not(:disabled) { background: var(--line-strong); }
 .fcar-nav button:disabled { opacity: 0.35; cursor: default; }

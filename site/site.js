@@ -813,6 +813,9 @@
     stage.addEventListener('pointerenter', () => { over = true; });
     stage.addEventListener('pointerleave', (e) => { over = false; if (e.pointerType === 'mouse' && rested && open) { px = ox; py = oy; aim(); } });
     stage.addEventListener('contextmenu', (e) => { if (open || performance.now() - closedAt < 400) e.preventDefault(); });
+    // The stage lets a finger scroll the page (touch-action: pan-y), so a swipe that starts on it moves the page. Only a ring that was opened by a press held
+    // on it takes the finger over: the scroll has not started yet (the finger stayed still for the hold), so it can still be stopped here.
+    stage.addEventListener('touchmove', (e) => { if (hold && hold.fired && open && e.cancelable) e.preventDefault(); }, { passive: false });
     stage.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       const [x, y] = local(e); lastX = x; lastY = y;
