@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import updater                                                    # (PROTECTED and LAUNCHERS live there, once)
 
-SKIP_DIRS = {"tests", "tools", "docs", "dist", ".github", "__pycache__"} | {p.lower() for p in updater.PROTECTED}
+SKIP_DIRS = {"tests", "tools", "docs", "dist", "site", ".github", "__pycache__"} | {p.lower() for p in updater.PROTECTED}
 SKIP_FILES = {"claude.md", "changelog.md", "readme.md", "readme.txt", "license", "version.json", "update-manifest.json", "server.log", ".gitignore", ".gitattributes"} | set(updater.LAUNCHERS)
 SKIP_GLOBS = ("RELEASE_NOTES_", "test-converter.")
 
