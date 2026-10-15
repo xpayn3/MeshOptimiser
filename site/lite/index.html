@@ -5666,16 +5666,16 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.31.1</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.32.0</div>
         </div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span></div>
           <ul>
-            <li>Enter goes into Edit mesh and out of it</li>
-            <li>Edit mesh and Undo / Redo work together</li>
-            <li>No more viewport stalls after editing</li>
-            <li>Materials look the same everywhere</li>
-            <li>The colour picker can be moved</li>
+            <li>Notes: pins on the model, with replies</li>
+            <li>Every note, reply and edit shows who made it</li>
+            <li>Notes are saved in the scene file</li>
+            <li>Bring in the notes of another copy</li>
+            <li>A report page anyone can open</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -7309,6 +7309,7 @@ window.moSplash = function (msg, pct) {
         <div class="toggle" title="Off: only the selected parts are written. On: the whole scene."><span id="save-scene-all-lbl">Whole scene<span class="sv-note" id="save-scene-sel-note"></span></span><label><input type="checkbox" id="save-scene-all" aria-labelledby="save-scene-all-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle" title="Hidden parts are written too, and come back hidden when the scene is opened again"><span id="save-scene-hidden-lbl">Include hidden parts<span class="sv-note" id="save-scene-hid-note"></span></span><label><input type="checkbox" id="save-scene-hidden" aria-labelledby="save-scene-hidden-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle" title="The camera, the display settings, flags and measurements are stored in the file and restored when it is opened here again. Other apps ignore them."><span id="save-scene-view-lbl">Remember the view and settings</span><label><input type="checkbox" id="save-scene-view" aria-labelledby="save-scene-view-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="The notes people left on the model go in the file: who wrote what, the replies and every edit. Other apps ignore them." style="display:none"><span id="save-scene-notes-lbl">Include the notes</span><label><input type="checkbox" id="save-scene-notes" aria-labelledby="save-scene-notes-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle" title="Write the file without making it this scene's file: the scene keeps its unsaved mark, and the next Save goes where it went before."><span id="save-scene-copy-lbl">Save as a copy</span><label><input type="checkbox" id="save-scene-copy" aria-labelledby="save-scene-copy-lbl"><span class="switch"></span></label></div>
       </div>
     </div>
@@ -8049,6 +8050,8 @@ window.moSplash = function (msg, pct) {
      transcoder, glTF-Transform (for a Draco-compressed export) and the
      in-browser STEP reader. -->
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
+<script defer src="js/notes-core.js?v=1"></script>
+<script defer src="js/notes.js?v=1"></script>
 <script type="module" src="js/app.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script

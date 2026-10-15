@@ -861,6 +861,13 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .wq-lab.is-hot { visibility: visible; background: color-mix(in srgb, var(--ac) 40%, var(--bg3)); color: var(--wtx); }
 @keyframes wq-fan-in { from { opacity: 0; transform: scale(0.86); } }
 @keyframes wq-fade-in { from { opacity: 0; } }
+/* the hand that plays the demo while nobody is using it (site.js) */
+.wand-ghost { position: absolute; left: 0; top: 0; z-index: 6; width: 0; height: 0; pointer-events: none; opacity: 0; transition: opacity 0.35s ease; will-change: transform; }
+.wand-ghost.is-on { opacity: 1; }
+.wand-ghost svg { position: absolute; left: 0; top: 0; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55)); }
+.wand-ghost-tap { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.75); opacity: 0; }
+.wand-ghost.is-tap .wand-ghost-tap { animation: wand-tap 0.45s cubic-bezier(0.23, 1, 0.32, 1); }
+@keyframes wand-tap { from { opacity: 0.9; transform: scale(0.4); } to { opacity: 0; transform: scale(1.6); } }
 @media (prefers-reduced-motion: reduce) { .wq-sub, .wq-subico, .wq-lab { animation: none; } .wq-pop, .wq-pop2, .wand-part { transition: none; } .wq-pop.is-on, .wq-pop2.is-on { transform: none; } .wq-item.is-hot { scale: 1; translate: -50% -50%; } }
 /* (a fixed height of 480px used to stand here for screens up to 1000px: the stage, the caption and the buttons need about 500px, so the grid squeezed the caption to one line and its text ran over the buttons) */
 

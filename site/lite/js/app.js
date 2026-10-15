@@ -4927,6 +4927,14 @@ const _Actions = (() => {
     { id:'materials',    group:'App',        label:'Materials',                  kbd:'Shift+M', run: _click('tg-materials') },
     { id:'library',      group:'App',        label:'Library',                    kbd:'Shift+L', run: _click('tg-library') },
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
+    { id:'noteAdd',      group:'View',       label:'Add a note: click a spot on the model', words:'note comment pin review leave', icon:'message-square', kbd:'N', run: () => { try { window.MONotesUI.togglePlace(); } catch (_) {} } },
+    { id:'noteSel',      group:'View',       label:'Add a note to the selected part', words:'note comment pin review', icon:'message-square', run: () => { try { window.MONotesUI.addForSelection(); } catch (_) {} } },
+    { id:'noteScene',    group:'View',       label:'Add a note about the whole scene', words:'note comment review', icon:'message-square', run: () => { try { window.MONotesUI.addForScene(); } catch (_) {} } },
+    { id:'noteList',     group:'View',       label:'Notes: open the list', words:'notes comments review pins', icon:'message-square', run: () => { try { window.MONotesUI.openList(); } catch (_) {} } },
+    { id:'notePins',     group:'View',       label:'Notes: show or hide the pins', words:'notes comments pins toggle', icon:'message-square', run: () => { try { window.MONotesUI.togglePins(); } catch (_) {} } },
+    { id:'noteNext',     group:'View',       label:'Notes: go to the next note', words:'notes comments next', icon:'message-square', run: () => { try { window.MONotesUI.next(); } catch (_) {} } },
+    { id:'noteImport',   group:'File',       label:'Notes: bring in the notes of another copy…', words:'notes comments import merge scene file review', icon:'message-square', run: () => { try { window.MONotesUI.importFromFile(); } catch (_) {} } },
+    { id:'noteReport',   group:'File',       label:'Notes: save a report page…', words:'notes comments export report html review', icon:'message-square', run: () => { try { window.MONotesUI.saveReport(); } catch (_) {} } },
     { id:'heat',         group:'View',       label:'Heatmap view',               kbd:'Alt+4', run: () => { try { setViewMode('heat'); } catch (_) {} } },
     { id:'clay',         group:'View',       label:'Clay view',                  kbd:'5', run: () => { try { setViewMode('clay'); } catch (_) {} } },
     { id:'cad',          group:'View',       label:'CAD view',                   kbd:'6', run: () => { try { setViewMode('cad'); } catch (_) {} } },
@@ -8928,6 +8936,7 @@ function tick() {
         _watchdogLastHealthyMs = performance.now();
       }
       try { updateAxisGizmo(); } catch (e) { _logTickErr('axis-gizmo', e); }
+      try { if (window.MONotesUI) window.MONotesUI.layout(); } catch (e) { _logTickErr('notes', e); }
       // A frame that failed is asked for again (up to the point the recovery steps above have had their turn), so a passing
       // failure does not leave a stale or blank picture until something else happens to redraw.
       const retryFrame = !!renderErr && state._renderErrCount <= 120;
@@ -10113,6 +10122,7 @@ function clearModel() {
     state.selectedGroupIds.clear();
   }
   try { _Anim.reset(); } catch (_) {}
+  try { if (window.MONotesUI) window.MONotesUI.reset(); } catch (_) {}      // (the notes were about the model that is going)
   state.parts = []; state.partById.clear(); state.selected.clear(); state.history = []; state.pendingFlagged.clear();
   state.treeNodes = []; state.treeCollapsed.clear();
   // Custom scene name is a per-model property; reset alongside everything else.
@@ -24930,7 +24940,10 @@ function _applySceneControls(c) {
     } catch (_) {}
   }
 }
-function _collectSceneState() {
+function _collectSceneState(o) {
+  const wantView = !o || o.view !== false, wantNotes = !o || o.notes !== false;
+  const notesPayload = wantNotes && window.MONotesUI && window.MONotesUI.count() > 0 ? window.MONotesUI.serialize() : undefined;
+  if (!wantView) return { v: SCENE_STATE_VERSION, app: 'step-optimizer', savedAt: new Date().toISOString(), sourceName: state._loadedFilename || null, notes: notesPayload };
   const partsPayload = [];
   for (const p of state.parts) {
     if (p.deleted) continue;
@@ -24977,6 +24990,7 @@ function _collectSceneState() {
       perfMode:        state.perfMode,
     },
     controls: _collectSceneControls(),
+    notes: notesPayload,
     explode: state.explode && (state.explode.x || state.explode.y || state.explode.z) ? { x: state.explode.x, y: state.explode.y, z: state.explode.z, mode: state.explodeMode || 'scene' } : null,
     parts: partsPayload,
   };
@@ -25057,14 +25071,16 @@ function _nameTokenKit({ input, chipsEl, clean, now, srcStem, refresh }) {
   return { has, toggleTok, paintToks };
 }
 
-const _saveSceneOpts = { hidden: true, view: true };     // these two stick for the session
+const _saveSceneOpts = { hidden: true, view: true, notes: true };     // these stick for the session
 function _openSaveSceneDialog(suggested) {
   return new Promise((resolve) => {
     const $i = (id) => document.getElementById(id);
     const bg = $i('save-scene-modal'), input = $i('save-scene-name'), okBtn = $i('save-scene-confirm');
     const cancelBtn = $i('save-scene-cancel'), closeBtn = $i('save-scene-close');
-    if (!bg || !input || !okBtn) { const v = window.prompt('Save scene as:', suggested); resolve(v === null ? null : { name: v, all: true, hidden: true, view: true, copy: false }); return; }
-    const all = $i('save-scene-all'), hid = $i('save-scene-hidden'), view = $i('save-scene-view'), copy = $i('save-scene-copy');
+    if (!bg || !input || !okBtn) { const v = window.prompt('Save scene as:', suggested); resolve(v === null ? null : { name: v, all: true, hidden: true, view: true, notes: true, copy: false }); return; }
+    const all = $i('save-scene-all'), hid = $i('save-scene-hidden'), view = $i('save-scene-view'), copy = $i('save-scene-copy'), notesCb = $i('save-scene-notes');
+    const nNotes = (window.MONotesUI && window.MONotesUI.count()) || 0;
+    if (notesCb) { const row = notesCb.closest('.toggle'); if (row) row.style.display = nNotes ? '' : 'none'; notesCb.checked = _saveSceneOpts.notes !== false; const lab = $i('save-scene-notes-lbl'); if (lab) lab.firstChild.textContent = nNotes === 1 ? 'Include the note' : 'Include the ' + nNotes + ' notes'; }
     const live = state.parts.filter(p => !p.deleted);
     const nSel = live.filter(p => state.selected.has(p.partId)).length, nHidden = live.filter(p => !p.visible).length;
     if (all) { all.checked = true; all.disabled = !nSel; all.closest('.toggle')?.classList.toggle('is-off', !nSel); }
@@ -25126,8 +25142,8 @@ function _openSaveSceneDialog(suggested) {
       bg.classList.remove('show');
       for (const [el, ev, fn] of wired) el?.removeEventListener(ev, fn);
       if (!ok) { resolve(null); return; }
-      _saveSceneOpts.hidden = !hid || hid.checked; _saveSceneOpts.view = !view || view.checked;
-      resolve({ name: input.value, all: !all || all.checked || !nSel, hidden: !hid || hid.checked, view: !view || view.checked, copy: !!(copy && copy.checked) });
+      _saveSceneOpts.hidden = !hid || hid.checked; _saveSceneOpts.view = !view || view.checked; if (nNotes) _saveSceneOpts.notes = !notesCb || notesCb.checked;
+      resolve({ name: input.value, all: !all || all.checked || !nSel, hidden: !hid || hid.checked, view: !view || view.checked, notes: !nNotes || !notesCb || notesCb.checked, copy: !!(copy && copy.checked) });
     }
   });
 }
@@ -25229,10 +25245,13 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
   // Hidden / flagged state rides on the part's own node too: matching by
   // name on reload breaks as soon as two parts share a name.
   root.traverse(o => { if (o !== root && o.name) o.userData.soName = o.name; });
+  // The notes of the scene go in the file when the dialog says so; a part a note is about carries the id the note knows it by.
+  const withNotes = ask.notes !== false && !!(window.MONotesUI && window.MONotesUI.count() > 0);
   for (const p of state.parts) {
     if (p.deleted) continue;
     const em = meshByPart && meshByPart.get(p.partId);
     if (!em) continue;
+    if (withNotes && p.uid) em.userData.soUid = p.uid;
     if (!p.visible) em.userData.soHidden = true;
     if (p.flagged) em.userData.soFlagged = true;
     if (p.locked) em.userData.soLocked = true;
@@ -25248,8 +25267,8 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
   // default, which silently dropped the whole saved state (camera, view
   // settings, hidden parts, measurements). It is an empty Object3D, so
   // there is nothing to draw either way.
-  marker.userData[SCENE_STATE_KEY] = _collectSceneState();
-  if (ask.view) root.add(marker);
+  marker.userData[SCENE_STATE_KEY] = _collectSceneState({ view: !!ask.view, notes: withNotes });
+  if (ask.view || withNotes) root.add(marker);
   // Export the root's children rather than the root itself, otherwise every
   // save / reopen cycle nests the whole scene inside one more "Group".
   const exportNodes = [...root.children];
@@ -25432,7 +25451,9 @@ function _applySceneState(s) {
       controls.update();
     }
     requestRender();
-    toast('Scene restored', 'Camera and view settings restored from the saved scene', 'success', 4000);
+    if (s.view) toast('Scene restored', 'Camera and view settings restored from the saved scene', 'success', 4000);
+    // the notes people left in the file
+    if (s.notes && window.MONotesUI) { try { window.MONotesUI.load(s.notes); } catch (e) { console.warn('[notes] could not read the notes of this file:', e); } }
   } catch (e) {
     console.warn('[scene-load] apply failed:', e);
   }
@@ -28967,6 +28988,7 @@ function wireUI() {
     'Ctrl+M':       () => $('btn-merge-sel')?.click(),
     'Ctrl+B':       () => (_CmdCards.isOpen('smartfit') ? _CmdCards.close('smartfit') : _CmdCards.open('smartfit')),
     'Ctrl+E':       () => _openExportDialog(),
+    'N':            () => { try { window.MONotesUI.togglePlace(); } catch (_) {} },
     'Shift+C':      () => _CmdK.show(),
     'Shift+M':      () => $('tg-materials')?.click(),
     'Shift+L':      () => $('tg-library')?.click(),
@@ -33801,6 +33823,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (m.userData.soHidden) { partInfo._soHidden = true; delete m.userData.soHidden; }
     if (m.userData.soFlagged) { partInfo._soFlagged = true; delete m.userData.soFlagged; }
     if (m.userData.soLocked) { partInfo._soLocked = true; delete m.userData.soLocked; }
+    if (m.userData.soUid) { partInfo.uid = String(m.userData.soUid).slice(0, 60); delete m.userData.soUid; }      // (the id the notes know this part by)
     if (!_strippedGeoms.has(geom.uuid)) {
       _strippedGeoms.add(geom.uuid);
       _stripBytesSaved += _stripUnusedAttributes(geom, _attributeKeepSet(m.material));
@@ -34815,6 +34838,11 @@ function _swapNormals(op, key) {
 _UndoOps.register('normals', {
   undo(op) { _swapNormals(op, 'before'); state.redo.push(op); _finalizeUndo(); },
   redo(op) { _swapNormals(op, 'after'); state.history.push(op); _finalizeUndo(); },
+});
+// a change to the notes (add, reply, edit, resolve, delete, …) is one step, whoever wrote it
+_UndoOps.register('notes', {
+  undo(op) { if (window.MONotesUI) window.MONotesUI.undoOp(op, false); state.redo.push(op); _finalizeUndo(); },
+  redo(op) { if (window.MONotesUI) window.MONotesUI.undoOp(op, true); state.history.push(op); _finalizeUndo(); },
 });
 
 // Recompute smooth vertex normals on every unique geometry — fixes faceting.
@@ -48297,6 +48325,52 @@ wireUI = function() {
   // Boot-time init: scene may not exist yet at wireUI time, but
   // _ensureGroup() is lazy and re-runs on first commit if needed.
   setTimeout(() => _Measure.init(), 0);
+  // ── Notes: pins, conversations and the Notes card (js/notes.js; the data is js/notes-core.js) ──
+  // This is what the notes need to know about the scene: where a click lands on the model, where a part is, the camera, a small picture.
+  {
+    const uidOf = (p) => { if (p && !p.uid) p.uid = 'p_' + Math.random().toString(36).slice(2, 10); return p ? p.uid : ''; };
+    const rayHit = (ev) => {
+      const c = document.getElementById('canvas'); if (!c || !state.partsRoot) return null;
+      const r = c.getBoundingClientRect();
+      pointer.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+      state.partsRoot.updateMatrix(); state.partsRoot.updateMatrixWorld(true);
+      raycaster.setFromCamera(pointer, camera);
+      const targets = [], seen = new Set();
+      for (const p of state.parts) { if (p.deleted || !p.visible) continue; if (p.mesh && !seen.has(p.mesh.id)) { targets.push(p.mesh); seen.add(p.mesh.id); } }
+      for (const g of state.instancedGroups) targets.push(g.instanced);
+      const h = raycaster.intersectObjects(targets, false)[0]; if (!h) return null;
+      let part = null;
+      if (h.object.isInstancedMesh) { const grp = state.instancedGroups.find(g => g.instanced === h.object); const e = grp && grp.parts[h.instanceId]; part = e && e.partInfo; }
+      else part = getPart(h.object.userData.partId);
+      let local = null, localNormal = null;
+      if (part && part.mesh && !h.object.isInstancedMesh) { part.mesh.updateWorldMatrix(true, false); local = part.mesh.worldToLocal(h.point.clone()).toArray(); if (h.face) localNormal = h.face.normal.toArray(); }
+      return { part: part ? { uid: uidOf(part), name: part.name } : null, local, world: h.point.toArray(), localNormal };
+    };
+    const partAnchor = (p) => {
+      if (!p || !p.mesh) return null;
+      const g = p.mesh.geometry; if (!g) return null;
+      if (!g.boundingBox) g.computeBoundingBox();
+      const c = g.boundingBox.getCenter(new THREE.Vector3()); p.mesh.updateWorldMatrix(true, false);
+      return { part: { uid: uidOf(p), name: p.name }, local: c.toArray(), world: c.clone().applyMatrix4(p.mesh.matrixWorld).toArray() };
+    };
+    setTimeout(() => {
+      try {
+        if (!window.MONotesUI) return;
+        window.MONotesUI.init({
+          state, THREE, sceneKey: SCENE_STATE_KEY,
+          cam: () => camera, ctl: () => controls, canvas: () => document.getElementById('canvas'), viewport: () => document.getElementById('viewport'),
+          getPart, toast, requestRender: () => requestRender(),
+          prefs: { get: (k) => _Prefs.get(k), set: (k, v) => _Prefs.set(k, v) },
+          pushUndo: (op) => pushUndo(op),
+          showPart: (p) => { try { _setPartVisible(p, true); rebuildTree(); } catch (_) {} requestRender(); },
+          rayHit, partAnchor,
+          capture: async (w, h) => { try { return await _captureFrameAsBlob(w, h, { asCanvas: true }); } catch (e) { console.warn('[notes] picture:', e); return null; } },
+        });
+      } catch (e) { console.warn('[notes] could not start:', e); }
+    }, 0);
+    // for the self-test and for scripts: the state a scene file carries, taken and put back
+    window.__moAgent = Object.assign(window.__moAgent || {}, { sceneState: { collect: (o) => _collectSceneState(o), apply: (st) => _applySceneState(st) } });
+  }
   try {
     const wired = [tbBtn ? 'toolbar' : null, sideBtn ? 'sidebar' : null, clrBtn ? 'clear' : null, canvas ? 'canvas' : null].filter(Boolean).join(', ');
     Log?.info?.(`measure: listeners attached (${wired || 'NONE — buttons missing!'})`, { tag: 'measure' });
@@ -48685,11 +48759,11 @@ function _applyMatSnapshot(mat, snap) {
 // Persist measurements into Save Scene metadata so reopening a sidecar
 // restores the user's annotation work alongside camera + selection state.
 const _origCollectSceneState_measure = _collectSceneState;
-_collectSceneState = function() {
-  const s = _origCollectSceneState_measure();
+_collectSceneState = function(o) {
+  const s = _origCollectSceneState_measure(o);
   try {
     const list = _Measure.getSerialized();
-    if (list && list.length) s.measurements = list;
+    if (list && list.length && !(o && o.view === false)) s.measurements = list;
   } catch (_) { /* boot ordering safety: _Measure may not be ready yet */ }
   return s;
 };
