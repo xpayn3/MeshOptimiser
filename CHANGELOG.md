@@ -4,6 +4,23 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.32.0
+
+Released 15 Oct 2026.
+
+v0.31.1 tidied what v0.31.0 left. v0.32.0 adds notes: leave a note on a spot of the model, answer it, edit it, resolve it, and send the scene with all of it inside. Every change carries the name of the person who made it, and the file keeps what an edit replaced.
+
+**Notes**
+
+- ![new][new] **Notes on the model.** Press `N` and click a spot: a numbered pin stays on that part (it follows the part when it moves, is hidden or exploded), with a small picture of the view it was written from. A note can also be about the selected part or the whole scene. Each note has a tag (Info, Question, Issue, Idea), can be given to somebody, and is a conversation: anyone can reply, edit or delete any message, resolve the note or open it again.
+- ![new][new] **Every change carries a name.** Before the first note, reply or edit the app asks you to type your name (it is remembered, and you can change it in the Notes card). Every message shows who wrote it and when. An edited message says who edited it and keeps what it said before; a deleted message stays as a line saying who deleted it, and can be brought back; each note has a History that lists everything that happened to it. Nobody signs in: a name is what the person typed.
+- ![new][new] **Saved with the scene.** The notes go in the scene file (Save scene has *Include the notes*), together with when each person last saved, so *New to me* shows what somebody else has changed since. Opening the scene opens the notes. Export never writes notes, and other programs open the scene as an ordinary GLB.
+- ![new][new] **The Notes card** in the right-hand column: the list with filters (Open, All, Resolved, New to me, Mine, Deleted), search, sorting, pins on or off, *Mark read*, and a click that flies the camera back to the view of the note. Next and previous note in the pop-up, *Move the pin…*, *Use the view now as this note's view*, *Copy as text*, *Delete the note* (it can be brought back).
+- ![new][new] **Bring in notes from another copy.** When two people worked on their own copies of one scene, *Bring in notes…* takes the other saved scene and joins the notes: new notes are added, replies, edits and resolutions are put together, the later change wins where both changed the same thing, and nothing anyone wrote is lost.
+- ![new][new] **A report anyone can open.** *Report…* writes the notes as one HTML page with the pictures, every message, who edited what and the history; *Copy* puts them on the clipboard as text.
+- ![new][new] **Every change to the notes is one Undo step,** and the commands are in the search (add a note, a note on the selected part, a scene note, open the list, show or hide pins, next note, bring in notes, report).
+
+
 ## v0.31.1
 
 Released 15 Oct 2026.

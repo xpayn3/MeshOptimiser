@@ -6,7 +6,7 @@ Saving a scene keeps your work so you can open it again and carry on. Exporting 
 
 ## What a scene file is
 
-A scene file is a `.glb` file. It holds the model as it is now, after everything you deleted, reduced and recoloured. It also remembers things only MeshOptimiser uses: the camera, the view settings, which parts were hidden or flagged, and your measurements. Other programs can open the file as an ordinary GLB and ignore the rest.
+A scene file is a `.glb` file. It holds the model as it is now, after everything you deleted, reduced and recoloured. It also remembers things only MeshOptimiser uses: the camera, the view settings, which parts were hidden or flagged, your measurements and the [notes](meshoptimiser://docs/notes) people left on the model. Other programs can open the file as an ordinary GLB and ignore the rest.
 
 ## Save
 

@@ -308,6 +308,15 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.32.0** — notes: leave them on the model, answer, edit and resolve them, and send the scene with everything inside.
+
+- ![new][new] **Notes on the model.** Press `N`, click a spot, write. A numbered pin stays on the part; anyone can reply, edit, resolve or delete.
+- ![new][new] **Every change has a name.** You type your name once; every note, reply and edit shows who wrote it and when, an edit keeps what it replaced, and each note has a history.
+- ![new][new] **Saved with the scene.** The notes go in the scene file and come back when it is opened; exports never contain them.
+- ![new][new] **Bring in the notes of another copy** of the scene: they are joined, and nobody's words are lost.
+- ![new][new] **A report page** with the pictures, who said what and the history, that anyone can open in a browser.
+
+
 **v0.31.1** — Enter goes into Edit mesh, Edit mesh and Undo work together, and the viewport no longer stalls after editing.
 
 - ![new][new] **Enter goes into Edit mesh and out of it,** with a part selected, in the mode you used last.

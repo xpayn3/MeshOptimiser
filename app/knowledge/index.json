@@ -429,7 +429,7 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "Save your work as a scene file so you can carry on later. What a scene file is, how to name it with the file-name buttons, and how it differs from an export.",
-  "chars": 4482
+  "chars": 4547
  },
  {
   "slug": "crash-recovery",
@@ -472,6 +472,14 @@
   "chars": 4037
  },
  {
+  "slug": "notes",
+  "title": "Notes: leave comments on a model and send them with it",
+  "group": "save",
+  "groupTitle": "Save and export",
+  "summary": "Put a numbered pin on the model, write what you want to say, and save the scene. Whoever opens it sees every note, can answer, edit and resolve, and the file shows who did what.",
+  "chars": 5436
+ },
+ {
   "slug": "make-model-safe-to-send",
   "title": "How to make a CAD model safe to send to a customer",
   "group": "jobs",
@@ -485,7 +493,7 @@
   "group": "reference",
   "groupTitle": "Reference",
   "summary": "Every keyboard shortcut and mouse action in MeshOptimiser v0.24.0, grouped by what it does.",
-  "chars": 8043
+  "chars": 8100
  },
  {
   "slug": "file-formats",

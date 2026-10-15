@@ -39,6 +39,7 @@ Inside the app, press `?` for the same list with a search field and a picture of
 - `Shift + U`: Triangulate the selection
 - `B`: Quick remesh: pick how many triangles stay, under the pointer
 - `M`: Measure
+- `N`: Add a note: click a spot on the model, then write
 - `L`: Draw lines and shapes
 - `Enter`: Run the open command card
 - `Esc`: Put the open command card away. A second press clears the selection.
