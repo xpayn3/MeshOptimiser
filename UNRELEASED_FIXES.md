@@ -11,4 +11,7 @@ Last release in the changelog: **v0.31.0**.
 
 ## Fixed
 
-(nothing yet)
+- The buttons at the bottom of the Claude connected dropdown (Claude mode, Copy command, Console, More…) ran out of the panel. Claude mode now has a row of its own and the other three sit under it.
+- The sidebar button in the top bar drew its icon larger than the Menu and Export icons, so its lines looked thicker. Icon-only buttons in the top bar now draw at the same size.
+- The start screen cards (New scene, Open file, Import) now show their shortcut only on hover or keyboard focus.
+- No tooltip over search and filter fields (the parts search, the library and materials filters, Settings, Help and Shortcuts search).

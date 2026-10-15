@@ -4,6 +4,15 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## Unreleased
+
+**Polish**
+
+- ![fix][fix] **The Claude connected dropdown fits its panel.** The buttons at its foot (Claude mode, Copy command, Console, More…) ran out of the panel. *Claude mode* now has a row of its own and the other three sit under it.
+- ![polish][polish] **Icon-only buttons in the top bar draw at one size.** The sidebar button drew its icon larger than Menu and Export, so its lines looked thicker; the sidebar, screenshot and turntable buttons now match.
+- ![polish][polish] **The start screen cards show their shortcut on hover.** New scene, Open file and Import show the key only while the pointer is over the card or it has the keyboard focus.
+- ![polish][polish] **No tooltip over search and filter fields.** The parts search, the library and materials filters and the search boxes of Settings, Help and Shortcuts say what they are in their placeholder.
+
 ## v0.31.0
 
 Released 15 Oct 2026.

@@ -189,7 +189,15 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Find every part that cannot be seen from outside the model, such as screws inside a housing, and delete them in one step.",
-  "chars": 3196
+  "chars": 3261
+ },
+ {
+  "slug": "remove-hidden-faces",
+  "title": "Remove hidden faces",
+  "group": "lighter",
+  "groupTitle": "Make it lighter",
+  "summary": "Delete the faces that can never be seen from outside, such as the inside of a housing or the faces where two parts press together.",
+  "chars": 4076
  },
  {
   "slug": "fasteners",

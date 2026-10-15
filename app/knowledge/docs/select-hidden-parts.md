@@ -42,4 +42,4 @@ Selecting changes nothing. The delete is one undo step: `Ctrl + Z`.
 
 [Smart optimise](meshoptimiser://docs/smart-optimise) runs this command as one of its steps, **Remove parts hidden inside**, with its usual settings.
 
-Related: [delete-small-parts](meshoptimiser://docs/delete-small-parts), [fasteners](meshoptimiser://docs/fasteners), [smart-optimise](meshoptimiser://docs/smart-optimise), [hide-isolate](meshoptimiser://docs/hide-isolate), [workflow](meshoptimiser://docs/workflow)
+Related: [remove-hidden-faces](meshoptimiser://docs/remove-hidden-faces), [delete-small-parts](meshoptimiser://docs/delete-small-parts), [fasteners](meshoptimiser://docs/fasteners), [smart-optimise](meshoptimiser://docs/smart-optimise), [hide-isolate](meshoptimiser://docs/hide-isolate), [workflow](meshoptimiser://docs/workflow)
