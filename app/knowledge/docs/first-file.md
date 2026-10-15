@@ -61,7 +61,7 @@ Tessellation is the step that covers the exact CAD surfaces with triangles. You 
 
 ## Where the converted file goes
 
-The converter writes the GLB into the folder `inbox`, inside the app folder. The copy of your STEP file that was made for the conversion is removed when it finishes. To keep a GLB somewhere you choose, with a name you choose, use [Save a scene](meshoptimiser://docs/save-scene) or [Export](meshoptimiser://docs/export).
+The converter writes the GLB into the folder `inbox`, inside `app`. The copy of your STEP file that was made for the conversion is removed when it finishes. To keep a GLB somewhere you choose, with a name you choose, use [Save a scene](meshoptimiser://docs/save-scene) or [Export](meshoptimiser://docs/export).
 
 ## More than one file
 

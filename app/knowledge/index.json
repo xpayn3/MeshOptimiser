@@ -13,7 +13,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "A plain-language glossary: STEP, mesh, triangle, GLB, instancing, decimation, WebGPU, virtual environment and the other terms these pages use.",
-  "chars": 6837
+  "chars": 6839
  },
  {
   "slug": "first-file",
@@ -21,7 +21,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "Drop a file on the window. What the import settings mean, what conversion does, how to follow its progress, and where the result is kept.",
-  "chars": 6564
+  "chars": 6555
  },
  {
   "slug": "cad-files-step-first",
@@ -101,7 +101,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Search, rename, group and reorder the parts of a model, rename many at once, and flatten a hierarchy that is deeper than you need.",
-  "chars": 7169
+  "chars": 7610
  },
  {
   "slug": "organise-the-tree",
@@ -341,7 +341,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Use the gizmo to move, turn and resize parts, drag a part over other surfaces with Dynamic place, type exact values in the transform card, and measure the distance between two points.",
-  "chars": 7727
+  "chars": 8059
  },
  {
   "slug": "edit-mesh",
@@ -437,7 +437,7 @@
   "group": "save",
   "groupTitle": "Save and export",
   "summary": "Write the model to GLB, glTF, FBX, USDZ, OBJ, STL, PLY or a parts list, name the file, and set the scale, up axis and origin the next program needs.",
-  "chars": 8305
+  "chars": 9009
  },
  {
   "slug": "choose-format",

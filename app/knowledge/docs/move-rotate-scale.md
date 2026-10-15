@@ -85,9 +85,11 @@ The whole drag is one undo step. Choosing a gizmo with `E`, `R` or `T` also ends
 - `Ctrl + C`: Copy the selection
 - `Ctrl + V`: Paste
 
-## Lock a part
+## Lock a part or a group
 
-Right-click a part in the tree and choose **Lock**. A locked part cannot be moved, and delete skips it. Choose **Unlock** in the same menu to release it.
+Right-click a part in the tree and choose **Lock**, or press **Lock** beside its name in Properties. A locked part cannot be moved, and delete skips it. It has a red lock where its icon was. Choose **Unlock** to release it.
+
+Right-click a group and choose **Lock everything inside**, or press **Lock** in the group’s Properties, to lock every part in it. The group shows the red lock while all of its parts are locked; if only some are, it stays a folder and reads **Lock**.
 
 ## Measure
 

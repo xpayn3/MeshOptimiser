@@ -58,7 +58,7 @@ You do not need to learn these before you start. Come back to this page when a w
 ## The technical side
 
 - **Python**: A programming language. The converter and the small local server are written in it, so Python has to be installed.
-- **Virtual environment (.venv)**: A private folder of Python add-ons that belongs to this app only. The launcher creates it inside the app folder the first time, so nothing else on your computer is changed.
+- **Virtual environment (.venv)**: A private folder of Python add-ons that belongs to this app only. The launcher creates it inside the `app` folder the first time, so nothing else on your computer is changed.
 - **Terminal**: A window where you type commands. On Windows it is called Command Prompt or PowerShell, on macOS it is called Terminal.
 - **Local server**: A small program on your own computer that hands the app’s pages to your browser. Its address is normally `http://localhost:4242`. Localhost means this computer.
 - **PATH**: The list of folders where your computer looks for programs. Python has to be on it for the launcher to find it.

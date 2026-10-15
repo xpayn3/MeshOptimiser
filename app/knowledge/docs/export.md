@@ -17,9 +17,8 @@ The list of formats is at the left, in groups: 3D formats, 3D printing, point cl
 - **Format and Compare**: The name of the format and a line about it. **Compare** opens a sheet that shows what each format keeps.
 - **What will be written**: Three figures that follow your options: how many parts, how many triangles and about how big the file will be. For a parts list: rows, columns and size.
 - **File name**: The name the file gets, with the ending for the format. The buttons under it build the name (see below).
-- **Size and position**: Unit scale, up axis and origin.
-- **Parts**: Which parts go in the file, and how they are arranged.
-- **Format options**: Only the ones that fit the format.
+- **Visible parts only, Selected parts only**: Which parts go in the file.
+- **Advanced**: Shut until you open it, and it stays as you left it. Under it: size and position (unit scale, up axis, origin and pivot points), how the parts are arranged (merge, flatten), the options that fit the format, and a check of the size against a target.
 - **Bottom line**: Says what the file will be called, for example “Saves as rd-fine.glb”. For OBJ it adds that a `.mtl` file with the colours comes with it. If no part matches your options, it says so and the export button is dimmed.
 
 The choices you make for scale, axis, origin and the parts switches are kept for the next export. The file name and **Selected parts only** are not.
@@ -52,10 +51,13 @@ The ending is added for you, so leave it out. Characters a file name cannot have
 
 ## Size and position
 
+These four are under **Advanced**.
+
 - **Unit scale**: Multiplies every size in the file. **1.0 (no change)** keeps the model as it is. CAD models are usually in millimetres. If the next program works in metres, choose **× 0.001 (mm → m)**. The list also has cm to m, m to mm, m to cm, inches to mm, mm to inches, and **Custom…**.
 - **Custom scale**: The multiplier, when **Unit scale** is on **Custom…**.
 - **Up axis**: **Keep as in the scene** writes the model the way it stands. **Turn Z-up into Y-up** turns the model so Y is up, which is what glTF, OBJ and Maya expect. A model that already stands Y up, such as one that came from Cinema 4D or from a glTF, must be kept as it is. Turning it lays it on its side.
 - **Origin**: **Keep model origin** leaves the model where it is. **Recentre to bbox centre** puts the middle of the model at 0,0,0. **Centre XY, drop to floor (Z=0)** centres it and stands it on the floor.
+- **Pivot points**: **At the centre of each part** (the default) writes every part around its own centre, with its position on the object, so that in Cinema 4D, Blender and Maya the axis of each part is at the part. A part from a STEP file has its origin at 0,0,0 with its shape out where it sits in the model, so without this every axis would be at 0,0,0. **As in the scene** keeps what the part has. It is shown for GLB, glTF, FBX and USDZ. An FBX object also carries the rotation and the scale of its part.
 
 The up axis and the scale you set in **Settings**, **Scene** only change how the scene is shown on screen. They do not go into the file. The two choices in this window decide what the file says.
 

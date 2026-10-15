@@ -4,6 +4,45 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.31.0
+
+Released 15 Oct 2026.
+
+v0.30.0 added two alpha features. v0.31.0 is a polish of the interface, and a tidier folder. The icons, the toolbars, the menus and the dropdowns were gone over and now share one look, one speed and one set of tokens; the Export window shows only what most exports need; groups can be locked; Export can put each part's pivot at the part, so Cinema 4D, Blender and Maya show every axis where its part is; and the folder you download is organised like an installed program, with a short top level and the program inside `app`. Because the files moved, an installed copy is offered the full download once.
+
+**A tidier folder**
+
+- ![refactor][refactor] **The download is organised like an installed program.** The top of the folder holds only what you start and read: `start.bat`, `start_hidden.vbs`, `start.command`, `start.ico`, `Install MeshOptimiser.bat`, `README.md` and `LICENSE`, and one folder, `app`. The program (the page, `serve.py`, `vendor`, `assets`, the Python environment, your `inbox` and `exports`) is inside `app`, and its scripts are in `app\js` (`app-v2.js` is `app.js`). Why: the top level had grown past fifty files and folders, and it was hard to see what to double-click. The launchers keep their names, so shortcuts and instructions keep working. The download is named `MeshOptimiser-v0.31.0.zip` and unpacks into one folder with that name; the notes of past releases and the development files (tests, tools, docs) are no longer in it.
+- ![refactor][refactor] **Moving from an older version is one full download.** The launcher level is 3, so an installed copy is offered the full download instead of the in-place update. The installer moves your `inbox` and `exports` into `app`, keeps the old loose files in `app\.update\backup-old-layout`, and removes the old Python environment (a moved environment does not work); the first start builds a new one.
+- ![polish][polish] **The launcher window draws the name out of a wire mesh,** then shows the version, and every step has a bar that runs while it works. It uses only characters every console font has, so it looks the same in Windows Terminal and in the old console.
+
+**Export**
+
+- ![new][new] **Pivot points.** A part from a STEP file has its origin at 0, 0, 0 with its shape out at its place in the model, so every axis in a file opened in Cinema 4D sat at 0, 0, 0. Export (GLB, glTF, FBX and USDZ) now writes each part around its own centre, with its position on the object; *As in the scene* keeps what the part has. Lines are written the same way.
+- ![fix][fix] **FBX objects carry rotation and scale.** The FBX writers put the parts' vertices in place under objects with no rotation, so the axis of a part that is turned in the scene pointed along the world axes. They now write position, rotation and scale on each object, and the turn into Y-up and the unit scale go into the vertices, so a part that is not turned has no rotation in the file. A part with shear or a mirrored part is baked as before. Checked in Cinema 4D 2026 and in three.js, binary and ASCII.
+- ![polish][polish] **The Export window shows what most exports need.** The format, the file name with its pieces under it, and *Visible parts only* and *Selected parts only* are in front; the rest (size and position, merge and flatten, format options, check the size) is under *Advanced*, shut until you open it, and it stays as you leave it. The *Where is it going?* buttons are gone: choose the format and its options yourself. The ✕ stays in the corner while you scroll, and the options no longer move sideways when the scroll bar appears.
+
+**Locking**
+
+- ![new][new] **Groups can be locked.** *Lock* in Properties, or *Lock everything inside* on the right-click menu of a group, locks every part in it. A group whose parts are all locked counts as locked and shows a red lock instead of its folder; with only some locked it stays a folder. There is nothing of its own to save.
+- ![polish][polish] **A locked part looks like one.** It has a red lock where its type icon is, in the part tree and in Properties; the *Locked* label is a small flat button like the others instead of an amber pill with an emoji.
+
+**Menus and dropdowns**
+
+- ![polish][polish] **One look and one speed.** Right-click menus and dropdowns each have one set of tokens (`--ctx-*` and `--dd-*`: padding, text size, row height, corner, the colour of a row and of the row under the pointer), and every menu and dropdown opens the same way, with the dropdown's own fade and short drop (`--menu-in`, 120 ms) and closes at once. This covers the list of a select, the right-click menus and their submenus, the File and menu-button menus, the view and camera menus, the shape and mode pickers, the popovers for materials, textures and colours, the shortcuts profile menu and the Claude popover.
+- ![polish][polish] **The right-click menus of the part tree are shorter.** The menu of a part has 14 entries (was 32) and that of a group 11 (was 21); what is used least is one level in (Visibility, Select, Mesh, Fit, Tree for a part; Group, Order, Expand and collapse for a group).
+- ![fix][fix] **Right-click menus flickered when they closed,** because a copy was left behind to fade out and took the opening animation too, and the tool menus above the tree played a second, scripted opening. Both are gone.
+- ![fix][fix] **A toolbar button's tooltip no longer shows over a menu that is open.** Tips for the rows inside a menu still show.
+- ![fix][fix] **The list beside a row of a right-click menu no longer lies 4 px over the menu it came from;** it stands beside it with a small gap.
+
+**Icons and looks**
+
+- ![polish][polish] **Sharper, brighter icons.** The floating toolbars have 18 px icons with a line of 1.5 device pixels (were 16 px and 1), the other icon buttons 16 px, all from tokens (`--icon-btn`, `--icon-btn-float`, `--icon-line`); the dividers in the floating toolbars are three times as visible, and their icons a notch under white.
+- ![fix][fix] **The + and − in the circles of the part tree are in the middle.** The character sat about 2 px low; the circle is 13 px across now and the sign is drawn on its middle pixel, a true cross, and the line from the group above meets the middle of the circle.
+- ![polish][polish] **A group is one closed folder** in the part tree and in Properties, which used to differ.
+- ![fix][fix] **The cards of the right panel sit on whole pixels.** Their text had line heights of 1.2 to 1.55 times the font, which moved everything under them by fractions of a pixel.
+- ![polish][polish] **Shorter words.** The tooltips of the tool row above the tree are the name of the tool, and the Smart optimise card says *Every clean-up in one run.*
+
 ## v0.30.0
 
 Released 15 Oct 2026.

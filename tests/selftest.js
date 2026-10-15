@@ -57,7 +57,14 @@
     const b = r.getBoundingClientRect();
     r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: b.left + 40, clientY: b.top + 8, button: 2 }));
     await T.sleep(200);
-    const it = [...document.querySelectorAll('#ctx-menu .ctx-menu-row')].find(x => x.textContent.trim().startsWith(label));
+    const has = (x) => x.textContent.trim().startsWith(label);
+    let it = [...document.querySelectorAll('#ctx-menu > .ctx-menu-row')].find(has);
+    // what is used least is one level in (Group, Select, Mesh...): open each list in turn and look there
+    if (!it) for (const sub of [...document.querySelectorAll('#ctx-menu > .ctx-menu-row.has-sub')]) {
+      sub.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true })); await T.sleep(80);
+      it = [...document.querySelectorAll('#ctx-menu .ctx-sub .ctx-menu-row')].find(has);
+      if (it) break;
+    }
     if (!it) throw new Error('no "' + label + '" in the context menu of ' + name);
     it.click();
     await T.sleep(350);

@@ -100,7 +100,7 @@ Click a row in the tree, and the arrow keys work in it until you click somewhere
 
 ## The right-click menu
 
-The menu opens where you clicked. Right-click a part row for frame, isolate, hide, select similar, group, merge, Split, Remove holes, lock, Smart fit, copy, duplicate and delete. Right-click a group row to select its parts, frame it, rename it, ungroup it or delete it with its contents.
+The menu opens where you clicked. Right-click a part row for frame, isolate, animate, toggle visibility, group, lock, copy, duplicate and delete; the ones used less are one level in: **Visibility** (hide unselected, show all), **Select** (similar shape, all instances, the original, same colour, make unique), **Mesh** (merge, split, remove holes), **Fit** (Smart fit and the boxes) and **Tree** (expand and collapse all). Right-click a group row to select its parts, frame it, rename it, show or hide it, lock everything in it or animate it, with **Group** (ungroup, remove keeping the contents, flatten, delete empty groups), **Order** (sort and move) and **Expand and collapse** one level in, and delete it with its contents.
 
 A locked part cannot be moved, and delete skips it. Use the same menu entry to unlock it.
 

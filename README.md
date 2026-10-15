@@ -308,6 +308,14 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.31.0** — a polish of the interface, and a tidier folder: icons, toolbars, menus and dropdowns share one look and one speed, groups can be locked, Export puts each part's pivot at the part, and the download is organised like an installed program, with the program inside `app`.
+
+- ![refactor][refactor] **A tidier folder.** The top of the download holds only what you start and read (`start.bat`, `start_hidden.vbs`, `start.command`, `Install MeshOptimiser.bat`, README, LICENSE) and one folder, `app`, with the program in it. The top level had grown past fifty files and it was hard to see what to double-click. An installed copy is offered the full download once.
+- ![new][new] **Pivot points in Export**, so Cinema 4D, Blender and Maya show every axis where its part is, and FBX objects carry rotation and scale.
+- ![new][new] **Groups can be locked** in one click; a locked part or group has a red lock where its icon is.
+- ![polish][polish] **Menus and dropdowns share one look and one opening;** the right-click menus of the part tree are about half as long.
+- ![polish][polish] **Sharper icons, an Export window with the rest under Advanced,** and a launcher window that draws the name out of a wire mesh.
+
 **v0.30.0** — two alpha features: follow Claude as a feed with your model beside it, and make parts spin, swing, shake and travel.
 
 - ![new][new] **Claude mode (alpha)** — the app steps out of the way and a feed shows what Claude says, every call it makes and every picture it takes, with your model beside it. Open a model there, see "Ready for Claude", undo, start a ready-made job.
