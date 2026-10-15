@@ -22,7 +22,7 @@ stored = { uiFont: 'mono' }; reset(); A.apply(); ok(/ui-monospace/.test(props['-
 stored = { uiTextScale: 1.2 }; reset(); A.apply(); ok(props['--fs-12'] === '14px' && props['--fs-md'] === '16px', 'text scale ' + props['--fs-12'] + ' ' + props['--fs-md']);
 stored = { uiDensity: 0.88 }; reset(); A.apply(); ok(props['--btn-h-md'] === '28px' && props['--btn-h-sm'] === '23px', 'density ' + props['--btn-h-md']);
 // shape, motion
-stored = { uiRadius: 'round' }; reset(); A.apply(); ok(props['--r-sm'] === '9.6px' && props['--r-lg'] === '14px', 'round ' + props['--r-sm'] + ' ' + props['--r-lg']);
+stored = { uiRadius: 'round' }; reset(); A.apply(); ok(!props['--r-sm'] && !props['--r-lg'], 'a saved "round" is the default now: no tokens set');
 stored = { uiRadius: 'sharp' }; reset(); A.apply(); ok(props['--r-lg'] === '2.5px', 'sharp ' + props['--r-lg']);
 stored = { uiMotion: false }; reset(); A.apply(); ok(classes.has('no-motion'), 'no-motion class');
 stored = { uiMotion: true }; reset(); A.apply(); ok(!classes.has('no-motion'), 'motion on');

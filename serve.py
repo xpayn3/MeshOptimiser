@@ -786,6 +786,8 @@ MCP_TOOLS = [
                           "frame": {"type": "string", "enum": ["view", "model", "selection"], "description": "view (default): the viewport exactly as it is. model: every visible part fills the picture. selection: the selected parts fill it."}})},
 ]
 
+MCP_TOOLS.append({"name": "say", "description": "Write a short message to the user in the app's Claude feed (Claude mode shows every call, result and picture as a feed, and this is your voice in it): what you are about to do and why, what you found, a question. One to three sentences. Changes nothing in the model. Use it before a step that changes something and after one that was a surprise.",
+                  "inputSchema": _obj({"text": {"type": "string", "description": "What to tell the user."}}, ["text"])})
 _IDS = {"type": "array", "items": {"type": "integer"}, "description": "From list_parts."}
 _NAME = {"type": "string", "description": "Parts whose name contains this."}
 _WHICH = "Parts: ids, name_contains, or the selection."
@@ -879,8 +881,37 @@ MCP_TOOLS += [
          "file_name": {"type": "string", "description": "A name without the extension."},
          "compression": {"type": "string", "enum": ["none", "draco", "meshopt"], "description": "For a GLB: none, draco (the safe choice, every viewer), or meshopt (usually smaller and faster to open; the viewer must read EXT_meshopt_compression: three.js, Babylon.js and model-viewer do). Overrides the preset."},
          "faster_to_draw": {"type": "boolean", "description": "For a GLB without compression: reorder the triangles and vertices for the graphics card. The shape does not change; any viewer opens it. Meshopt already does this."}})},
-    {"name": "turntable_video", "description": "Render a video of the model turning once (WebM) into the exports folder and return its path.",
+    {"name": "turntable_video", "description": "Render a video of the model turning once (WebM) into the exports folder and return its path. The animations set with animate_parts (or in the Animate window) play in it, each frame at its own time.",
      "inputSchema": _obj({"seconds": {"type": "integer", "description": "4 to 12 (default 6)."}, "width": {"type": "integer", "description": "Default 1280."}, "height": {"type": "integer", "description": "Default 720."}, "fps": {"type": "integer", "description": "24, 30 or 60 (default 30)."}})},
+    {"name": "animate_parts", "description": "Choose which parts or groups MOVE in the video (and in the app), and how. Each gets animation layers that run until removed; turntable_video plays them (set animations false there to leave them out). Kinds: spin (turns a minute round an axis, with loop mode, repeats, delay and loop points), swing (to and fro by an angle), noise (a smooth random shake of the position and the turn) and path (a trip along a circle, figure of eight, square, wave or line). A part moves about the middle of its own geometry in its own axes; a group moves every part inside it together. A part or group has at most one layer of each kind, and the layers add up. Nothing in the model is changed: exports and saved scenes see the parts where they started. Use action list to see what is animated, remove for some parts, clear for everything. Look at the model first (list_parts, list_groups): pick the parts that really move (a fan, a pulley, a wheel), not the whole assembly.",
+     "inputSchema": _obj({
+         "action": {"type": "string", "enum": ["add", "remove", "list", "clear"], "description": "Default add."},
+         "ids": {"type": "array", "items": {"type": "integer"}, "description": "Part ids from list_parts."},
+         "name_contains": {"type": "string", "description": "Every part whose name contains this text."},
+         "group_contains": {"type": "array", "items": {"type": "string"}, "description": "Groups (from list_groups) whose name contains one of these; every part inside moves together. With none of ids, name_contains and group_contains, the parts that are selected in the app."},
+         "type": {"type": "string", "enum": ["spin", "swing", "noise", "path"], "description": "Default spin. With remove: only this kind (default every kind)."},
+         "axis": {"type": "string", "enum": ["X", "Y", "Z"], "description": "Spin and swing: the part's own axis (the gizmo's), default Z."},
+         "direction": {"type": "string", "enum": ["clockwise", "counter"], "description": "Spin: seen from the tip of the axis (default clockwise)."},
+         "rpm": {"type": "number", "description": "Spin: turns a minute, 1 to 600 (default 60)."},
+         "angle_degrees": {"type": "number", "description": "Swing: degrees each way, 1 to 180 (default 45)."},
+         "seconds": {"type": "number", "description": "Swing: seconds for there and back (0.2 to 60, default 2). Path: seconds for one round (default 6)."},
+         "noise_type": {"type": "string", "enum": ["wave", "random", "steps"], "description": "Noise: wave (a mix of sines, default), random (smooth random values) or steps (random values held until the next)."},
+         "shift_percent": {"type": "number", "description": "Noise: the amplitude of the shift, in % of the part's size, 0 to 50 (default 5)."},
+         "turn_degrees": {"type": "number", "description": "Noise: the amplitude of the turn, 0 to 90 degrees (default 10)."},
+         "shift_axes": {"type": "string", "description": "Noise: the axes that shift, any of x, y, z (default xyz; an empty string for none)."},
+         "turn_axes": {"type": "string", "description": "Noise: the axes that turn, any of x, y, z (default xyz)."},
+         "speed": {"type": "number", "description": "Noise: the frequency, 0.1 to 5 times (default 1)."},
+         "detail": {"type": "integer", "description": "Noise: layers of finer noise added, 1 to 4 (default 1)."},
+         "roughness_percent": {"type": "number", "description": "Noise: how strong each finer layer is, 0 to 100 (default 50)."},
+         "seed": {"type": "integer", "description": "Noise: 1 to 99, a different shake for each."},
+         "shape": {"type": "string", "enum": ["circle", "figure8", "square", "wave", "line"], "description": "Path (default circle). Wave and line go there and back."},
+         "plane": {"type": "string", "enum": ["XY", "XZ", "YZ"], "description": "Path: the plane it is in, in the part's own axes (default XY)."},
+         "size_percent": {"type": "number", "description": "Path: its size in % of the part's size, 5 to 200 (default 50)."},
+         "loop_mode": {"type": "string", "enum": ["loop", "pingpong", "once"], "description": "Spin and path (default loop)."},
+         "repeats": {"type": "integer", "description": "Spin and path: how many cycles, 0 for ever (default)."},
+         "delay_seconds": {"type": "number", "description": "Spin and path: wait before it starts, 0 to 10."},
+         "loop_from_percent": {"type": "number", "description": "Spin and path: where in the cycle it starts, 0 to 100 (default 0)."},
+         "loop_to_percent": {"type": "number", "description": "Spin and path: where in the cycle it ends, 0 to 100 (default 100). A spin from 0 to 25 with ping-pong swings a quarter turn."}})},
     {"name": "open_file", "description": "Open a model file from this computer in the app (STEP, IGES, BREP, GLB, glTF, FBX, OBJ, 3MF, STL). It opens in a new scene tab if something is already open.",
      "inputSchema": _obj({"path": {"type": "string", "description": "The full path of the file."}}, ["path"])},
 ]
@@ -933,7 +964,7 @@ EXPORT_DIR = Path(__file__).resolve().parent / "exports"
 # MCP lets a server say more than "here are my tools": each tool can say whether it only reads or changes things (Claude's
 # client uses that to decide what to ask), the server can offer documents to read (resources) and jobs to start (prompts), and
 # it sends a short brief when the connection opens (instructions). The app still asks the user before it changes anything.
-_READ_ONLY = {"scene_summary", "list_parts", "get_selection", "screenshot", "measure_parts", "list_groups", "search_docs", "read_doc", "check_model", "optimisation_report", "estimate_export_size", "list_materials", "list_recipes", "list_library", "list_folder"}
+_READ_ONLY = {"say", "scene_summary", "list_parts", "get_selection", "screenshot", "measure_parts", "list_groups", "search_docs", "read_doc", "check_model", "optimisation_report", "estimate_export_size", "list_materials", "list_recipes", "list_library", "list_folder"}
 _CHANGES_MODEL = {"delete_parts", "remove_small_parts", "merge_parts", "merge_by_colour", "decimate", "fit_to_budget", "fill_holes",
                   "remove_hidden_faces", "repair_mesh", "clean_up", "split_parts", "duplicate_parts", "group_parts", "ungroup",
                   "rename_parts", "transform_parts", "recenter_model", "align_to_floor", "smart_optimise", "smart_fit", "untriangulate", "run_recipe", "add_library_part", "optimise_to_target"}
@@ -946,8 +977,8 @@ _TITLES = {"scene_summary": "What is open", "list_parts": "List parts", "get_sel
            "decimate": "Reduce triangles", "fit_to_budget": "Fit to a triangle budget", "fill_holes": "Remove holes", "remove_hidden_faces": "Remove hidden faces",
            "repair_mesh": "Repair meshes", "clean_up": "Clean up", "split_parts": "Split into pieces", "duplicate_parts": "Duplicate parts", "group_parts": "Group parts",
            "ungroup": "Ungroup", "rename_parts": "Rename parts", "transform_parts": "Move, turn, scale", "recenter_model": "Recentre the model",
-           "align_to_floor": "Stand on the floor", "export_model": "Export the model", "turntable_video": "Turntable video", "render_image": "Render a picture", "open_file": "Open a file", "select_similar": "Select similar parts", "select_by_colour": "Select by colour", "list_materials": "List materials", "select_by_material": "Select by material", "check_model": "Check the model", "optimisation_report": "Optimisation report", "estimate_export_size": "Estimate the export size", "list_recipes": "List recipes", "run_recipe": "Run a recipe", "list_library": "List the library", "add_library_part": "Add a library part", "save_scene": "Save the scene", "smart_optimise": "Smart optimise", "optimise_to_target": "Optimise to a size", "compare_images": "Before and after picture", "list_folder": "List a folder", "batch_optimise": "Optimise a folder", "find_hidden_parts": "Find hidden parts", "smart_fit": "Replace with simple shapes",
-           "untriangulate": "Untriangulate flat faces", "search_docs": "Search the app's help", "read_doc": "Read a help article or playbook"}
+           "align_to_floor": "Stand on the floor", "export_model": "Export the model", "turntable_video": "Turntable video", "animate_parts": "Animate parts", "render_image": "Render a picture", "open_file": "Open a file", "select_similar": "Select similar parts", "select_by_colour": "Select by colour", "list_materials": "List materials", "select_by_material": "Select by material", "check_model": "Check the model", "optimisation_report": "Optimisation report", "estimate_export_size": "Estimate the export size", "list_recipes": "List recipes", "run_recipe": "Run a recipe", "list_library": "List the library", "add_library_part": "Add a library part", "save_scene": "Save the scene", "smart_optimise": "Smart optimise", "optimise_to_target": "Optimise to a size", "compare_images": "Before and after picture", "list_folder": "List a folder", "batch_optimise": "Optimise a folder", "find_hidden_parts": "Find hidden parts", "smart_fit": "Replace with simple shapes",
+           "untriangulate": "Untriangulate flat faces", "say": "Write to the feed", "search_docs": "Search the app's help", "read_doc": "Read a help article or playbook"}
 for _t in MCP_TOOLS:
     _t["annotations"] = {"title": _TITLES.get(_t["name"], _t["name"].replace("_", " ")), "readOnlyHint": _t["name"] in _READ_ONLY,
                          "destructiveHint": _t["name"] in _CHANGES_MODEL, "idempotentHint": _t["name"] in _READ_ONLY, "openWorldHint": False}
@@ -958,7 +989,7 @@ MCP_INSTRUCTIONS = (
     "screenshot) before you change anything. The app's own help articles are available through search_docs and read_doc: use them for any tool or symptom you have "
     "not handled before instead of guessing. Rules: ask what the model is for and the triangle budget; the cheapest and most reversible step first; delete before you "
     "reduce; say what you are about to change and why; give the before and after numbers; hide before you delete; every change is one undo step (the undo tool). "
-    "The app asks the user to allow each change to the model; if they say no, stop and ask what they want instead. Prompts optimise_for_web, remove_fasteners and review_scene start common jobs. To reach a size or a place in one call use optimise_to_target; ask what a step would save with dry_run before asking the user to allow it; compare_images shows before and after; batch_optimise does a folder. Long jobs show progress and the user can stop them.")
+    "The app asks the user to allow each change to the model; if they say no, stop and ask what they want instead. Prompts optimise_for_web, remove_fasteners and review_scene start common jobs. To reach a size or a place in one call use optimise_to_target; ask what a step would save with dry_run before asking the user to allow it; compare_images shows before and after; batch_optimise does a folder. Long jobs show progress and the user can stop them. The user may be in Claude mode, which has no viewport: they read a feed of your calls, results and pictures. Use say to tell them what you are about to do and what you found, and take a screenshot after each change that they should see.")
 
 # What an agent knows about optimising: the playbooks (written by hand, knowledge/playbooks) and the app's help articles (built from the
 # website's docs by tools/build-knowledge.mjs, knowledge/docs). Served as resources, and searched and read by the search_docs and

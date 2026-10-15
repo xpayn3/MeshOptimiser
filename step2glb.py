@@ -2090,9 +2090,12 @@ def _plain_bodies(shape) -> list:
     while exp.More():
         bodies.append({"shape": exp.Current(), "color": None, "name": f"solid_{idx:05d}"})
         idx += 1; exp.Next()
-    if bodies or CFG.fmt == "step":
+    if bodies or (CFG.fmt == "step" and not CFG.surfaces):
         log(f"found {len(bodies)} solids", "ok")
         return bodies
+    if CFG.fmt == "step":
+        # A STEP with no solid: faceted breps (a mesh exported from 3ds Max or CAD Exchanger) are read as closed shells, not solids.
+        log("found 0 solids, looking for shells (faceted breps, surface bodies)", "warn")
     from OCP.TopoDS import TopoDS_Compound
     exp = TopExp_Explorer(shape, TopAbs_SHELL); idx = 0
     while exp.More():
@@ -2101,7 +2104,7 @@ def _plain_bodies(shape) -> list:
     comp = TopoDS_Compound(); builder = BRep_Builder(); builder.MakeCompound(comp)
     loose = 0
     exp = TopExp_Explorer(shape, TopAbs_FACE, TopAbs_SHELL)
-    while exp.More():
+    while exp.More() and CFG.fmt != "step":       # (a STEP that holds only loose faces still has nothing to write)
         builder.Add(comp, exp.Current()); loose += 1; exp.Next()
     if loose:
         bodies.append({"shape": comp, "color": None, "name": "surfaces"})

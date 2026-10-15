@@ -4,6 +4,64 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.30.0
+
+Released 15 Oct 2026.
+
+v0.29.0 was about big assemblies. v0.30.0 brings two alpha features, both early and both about watching and showing: **Claude mode**, a feed that lets you follow Claude with your model beside it, and **Animate**, which makes parts spin, swing, shake and travel. There are also instance commands, three choices for what Claude may do, a Settings window that looks like one, a rounder look, and a lighter app to drag around.
+
+**Claude mode (alpha)**
+
+- ![new][new] **Claude mode.** The app steps out of the way and a feed shows what Claude does: what it says, every call it makes with what came back, and every picture it takes, newest at the bottom like a chat. Your model sits beside it as a rounded card you can show or hide, with the file, parts, triangles and vertices in the corner. Open it from the start screen, the Claude badge, the command search, or with `?claude` on the address, and the normal app never flashes first. It is an early version, so expect rough edges.
+- ![new][new] **The first card of a session is your model.** It shows the picture, the name, type and size, the parts, triangles and vertices, how long it took to open, and a green *Ready for Claude*. The numbers roll up as it lands and the model fades in.
+- ![new][new] **Open a model in Claude mode.** The folder button lists *Open file…* and your recent files with a picture, size and age each, the latest marked *Continue*; you can also drop a file on the feed. A model opens in the same view and replaces the one that is open, with no scene tab laid over it.
+- ![new][new] **Loading you can follow.** A card floats above the controls with what the app is doing, the step, the percent, the time and a Cancel button. Nothing in the feed moves when it appears.
+- ![new][new] **Controls in the feed.** Three buttons copy the command of a ready-made job (Optimise for web, Remove fasteners, Review scene); switches for *Connected* and *Ask before edits*; Undo and Redo; a button that copies the connection command; and Stop while a long job runs. Exit asks first.
+- ![new][new] **Claude can write to the feed.** The new tool `say` puts a short message in front of you: what Claude is about to do and what it found. Claude now has 67 tools.
+- ![new][new] **Claude's permissions are three choices per kind of change** (Settings › Claude): *Allow*, *Ask first* or *Block*, as a small icon switch. The old switches keep working until you choose.
+
+**Animate (alpha)**
+
+- ![new][new] **Animate.** A new window makes a part or a group spin, swing, shake (noise) or travel along a path (circle, figure of eight, rounded square, wave or line). Spin and path loop, with loop points on a small timeline. A part can carry one layer of each kind, added together; a group moves all its parts about its middle. A playbar plays, pauses, rewinds and scrubs one cycle at 0.25× to 4×, and a pill in the view says *Animate mode*, *Playing* or *Paused*.
+- ![new][new] **Animations are a view, not an edit.** They keep running when the window closes; saving a scene and exporting put every part back first; a gizmo press on something animated takes its animation away; the turntable video plays them, each frame at its own time. Open Animate from a right-click on a part, a group or the view, or with Ctrl+K.
+- ![new][new] **Claude can say what moves.** The new tool `animate_parts` adds, removes, lists or clears animations by part, name or group.
+
+**Instances**
+
+- ![new][new] **Select all instances, Select the original and Make unique.** Pick every part that shares the exact same geometry, jump to the first of them, or give the selected shared parts a mesh of their own so editing one leaves its copies alone (one undo step). They are in the command search, the … menu and the right-click menus of the tree and the view.
+- ![fix][fix] **The × count and the *original* mark on instances were wrong after Make unique or deleting copies.** The count is live now, and the first of its kind keeps the part icon.
+
+**Settings, dialogs and looks**
+
+- ![polish][polish] **Settings looks like a settings window should.** Wider, with the search at the top of the section list, no header and footer bars, bigger rows with a quiet line of help, and group titles in plain type.
+- ![polish][polish] **Advanced flatten shows each choice as a small before and after tree,** with a legend, whole cards you can click and shorter help. It is at the top of the Flatten menu, and *Selected groups only* follows the selection while the window is open.
+- ![polish][polish] **One title bar for Batch rename, Advanced flatten, Animate, Materials and Library.** Windows, trees and menus open, close and drag more smoothly.
+- ![polish][polish] **Rounder corners by default.** Appearance › Corners is now Sharp or Default; a saved Round is Default.
+- ![polish][polish] **The Export window lists the formats by name,** and the Export button floats at the bottom right and folds into a round button while you scroll the options.
+- ![polish][polish] **The keyboard shortcuts window is in colour:** an icon on each command, a colour for each group, and the keys of the on-screen keyboard tinted by category.
+- ![polish][polish] **The start screen puts New scene first,** a converted file is a badge on its card, and the start screen shows a Scania V8 engine drawn in lines (1,295 parts; `tools/build-splash-glb.mjs` bakes one from any GLB).
+- ![polish][polish] **The quit dialog has a warning, keeps Don't save apart from Cancel and Save, and focuses Save.**
+- ![polish][polish] **The quick colour wheel opens with the part's colour under the pointer.** Move to choose and click the ring to keep it; letting go of C, Esc or a click outside puts the old colour back.
+- ![polish][polish] **The seven tree toolbar buttons share the row,** the button of an open menu stays lit and a second press closes its menu. Command-panel buttons turn blue while their card is open, scrubbing a number shows a visible fill, one tick mark is used everywhere, and the view toggles in the Library and Materials windows have a sliding thumb with a clearly lighter selected button.
+- ![polish][polish] **The File menu no longer lists Scene settings and Help & docs.** Both are in the command search; Ctrl+; and F1 still open them.
+
+**Faster**
+
+- ![perf][perf] **Dragging and resizing a floating window, the Materials and Library docks and the console happens once per frame,** and the sizes are saved once, when you let go.
+- ![perf][perf] **Background checks pause while the tab is hidden,** and the thumbnails in the Materials list are drawn as they scroll into view.
+- ![perf][perf] **Backdrop blur is gone from the dialogs, pills, the gizmo HUD and tooltips.** Batch rename draws the first 300 rows of its preview and says how many more it renames by the same rule.
+
+**Fixes**
+
+- ![fix][fix] **A STEP made of faceted breps (a mesh exported from 3ds Max or CAD Exchanger) failed with "no solid bodies found in this STEP" after ten minutes.** The plain reader now meshes the closed shells, so it opens: the 413 MB Mercedes-Benz Arocs, with 645,108 bodies.
+- ![fix][fix] **Undo and redo on an exploded view left the parts, the sliders and the pill out of step, and holding Ctrl+Z froze the page.** Undo and redo put an exploded view back together first, and a held Ctrl+Z or Ctrl+Y does one step per press.
+- ![fix][fix] **Exploding, deleting a part, putting the view back and undoing the delete brought the part back exploded, with the amount at zero.** A deleted part now moves with the exploded view.
+- ![fix][fix] **Dragging a material ball showed the system's copy arrow, which could not be hidden.** The ball itself follows the pointer now, and drops on the view, on the Properties material card, or with Shift on another material to merge.
+- ![fix][fix] **Delete and Backspace deleted parts in the view while I was working in the Materials window.** They delete the picked materials there now.
+- ![fix][fix] **The Model mode button, and keys 1, 2 and 3, did nothing useful with nothing selected.** The button is greyed and the keys say "Select a part first." Edit mesh is off while the Animate window is open.
+- ![fix][fix] **The grid lines in the view were two or three pixels of mush from far away.** They are one crisp pixel now, axis lines included.
+- ![fix][fix] **Opening Advanced flatten decided "Selected groups only" once.** It now follows what is selected.
+
 ## v0.29.0
 
 Released 14 Oct 2026.

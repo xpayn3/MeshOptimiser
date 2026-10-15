@@ -37,6 +37,9 @@ The card **Selection & actions** in the right sidebar has buttons for the common
 - **Invert**: Selects what was not selected, and the other way round. `Ctrl + I`.
 - **Clear**: Selects nothing. `Esc`.
 - **Select similar**: Adds every part that has the same shape as the selection. Select one bolt, press it, and all the bolts like it are selected.
+- **Select all instances**: Adds every part that shares the exact same geometry as the selection: copies of one part, not just parts that look alike. Stricter than Select similar. It is in the command search, the … menu and the right-click menus.
+- **Select the original**: Selects the first part of a shape that has copies, frames it, and shows it in the tree.
+- **Make unique**: Gives each selected shared part a mesh of its own, so changing, reducing or deleting detail on it leaves the other copies alone. One undo step.
 - **By colour**: Selects every part that shares a colour with the selection.
 - **By name**: Asks for a pattern and selects every part whose name matches it. Typing `screw` selects every part with screw in its name, in capitals or not. The pattern is a regular expression, a compact way to describe text, so some characters such as `.` and `*` have a special meaning.
 

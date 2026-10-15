@@ -85,7 +85,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Click, add with Shift, toggle with Ctrl, drag a box, or let the app select by shape, colour or name.",
-  "chars": 3926
+  "chars": 4451
  },
  {
   "slug": "hide-isolate",
@@ -374,6 +374,14 @@
   "groupTitle": "Look and arrange",
   "summary": "Push the parts of an assembly apart with one slider, choose the directions, and put them back with one click.",
   "chars": 2023
+ },
+ {
+  "slug": "animate",
+  "title": "Animate (alpha)",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Make parts or groups spin, swing, shake or travel along a path, and play it in the turntable video.",
+  "chars": 2858
  },
  {
   "slug": "library",

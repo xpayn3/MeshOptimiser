@@ -310,6 +310,14 @@ Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.comma
 
 ## 🗒 What's New
 
+**v0.30.0** — two alpha features: follow Claude as a feed with your model beside it, and make parts spin, swing, shake and travel.
+
+- ![new][new] **Claude mode (alpha)** — the app steps out of the way and a feed shows what Claude says, every call it makes and every picture it takes, with your model beside it. Open a model there, see "Ready for Claude", undo, start a ready-made job.
+- ![new][new] **Animate (alpha)** — spin, swing, noise and path animations for parts and groups, with a playbar; a view, not an edit, and the turntable video plays it.
+- ![new][new] **Select all instances, Select the original, Make unique** — and three choices (Allow, Ask first, Block) for each kind of change Claude may make.
+- ![polish][polish] **A Settings window that looks like one**, Advanced flatten with before and after drawings, one title bar for floating windows, rounder corners, and lighter dragging.
+- ![fix][fix] STEP files made of faceted breps open, undo on an exploded view puts it back together, and a deleted part follows the exploded view.
+
 **v0.29.0** — groups align and copy as one piece, windows move like macOS, and everything is sharp to the pixel.
 
 - ![new][new] **Align parts and Spread work on groups** — a group is one item, measured by the box round all its parts; copy several groups at once and each comes out as a whole folder with its own pivot.

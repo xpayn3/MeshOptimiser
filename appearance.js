@@ -34,12 +34,13 @@
   };
   var TEXT_SCALES = [['Small', 0.92], ['Default', 1], ['Large', 1.1], ['Larger', 1.2]];
   var DENSITIES = [['Compact', 0.88], ['Default', 1], ['Roomy', 1.12]];
-  var RADII = [['Sharp', 'sharp', 0.25], ['Default', 'default', 1], ['Round', 'round', 1.6]];
+  // The default corners are the rounded ones: the values in the stylesheet (RD). Sharp is the same corners at 0.18 of their size. A choice saved earlier as 'round' is the default now: it is not found in this list, and the default is used.
+  var RADII = [['Sharp', 'sharp', 0.18], ['Default', 'default', 1]];
 
   // The scale tokens and their stylesheet values (px).
   var FS = { '--fs-9': 9, '--fs-10': 10, '--fs-11': 11, '--fs-12': 12, '--fs-13': 13, '--fs-2xs': 10, '--fs-xs': 11, '--fs-sm': 12, '--fs-md': 13, '--fs-lg': 13, '--fs-xl': 14, '--fs-2xl': 16, '--btn-fs-sm': 12, '--btn-fs-md': 12, '--btn-fs-lg': 13 };
   var HT = { '--btn-h-sm': 26, '--btn-h-md': 32, '--btn-h-lg': 40 };
-  var RD = { '--r-2xs': 2, '--r-xs': 4, '--r-sm': 6, '--r-md': 6, '--r-lg': 10, '--r-xl': 10, '--btn-r-sm': 6, '--btn-r-md': 6, '--btn-r-lg': 6, '--surface-pop-r': 10, '--surface-win-r': 10 };
+  var RD = { '--r-2xs': 3.2, '--r-xs': 6.4, '--r-sm': 9.6, '--r-md': 9.6, '--r-lg': 14, '--r-xl': 14, '--btn-r-sm': 9.6, '--btn-r-md': 9.6, '--btn-r-lg': 9.6, '--surface-pop-r': 14, '--surface-win-r': 14 };
   var AC_TINTS = [4, 8, 12, 14, 15, 18, 20, 25, 35, 40, 45, 55];
 
   var set = function (name, value) { if (value == null) root.style.removeProperty(name); else root.style.setProperty(name, value); };
