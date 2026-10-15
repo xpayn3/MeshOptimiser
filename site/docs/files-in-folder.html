@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=389" />
+  <link rel="stylesheet" href="../site.css?v=391" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -147,37 +147,42 @@
         <h1>Files in the folder</h1>
         <p class="lead">What the files and folders inside the MeshOptimiser folder are for, which ones you use, and which ones to leave alone.</p>
         <div class="kb-body">
-          <p>You only ever need to double-click one file: the launcher for your system. The rest is the app itself.</p>
-          <h2 id="the-ones-you-use">The ones you use</h2>
+          <p>You only ever need to double-click one file: the launcher for your system. The rest is the app itself, and almost all of it is inside the folder <code>app</code>, so the top of the folder stays short.</p>
+          <h2 id="at-the-top-of-the-folder">At the top of the folder</h2>
           <dl class="table">
             <div><dt><code>start.bat</code></dt><dd>The launcher for Windows. Double-click it to start the app.</dd></div>
             <div><dt><code>start.command</code></dt><dd>The launcher for macOS.</dd></div>
             <div><dt><code>start_hidden.vbs</code></dt><dd>Windows: starts the app like <code>start.bat</code>, without showing the launcher window.</dd></div>
-            <div><dt><code>step2glb.bat</code>, <code>step2glb.command</code></dt><dd>Convert a STEP file that you drag onto them, without opening the viewer.</dd></div>
-            <div><dt><code>test-converter.bat</code>, <code>test-converter.command</code></dt><dd>Run the converter on a STEP file that you drag onto them and show everything it prints. Useful when a conversion fails and you want to see why.</dd></div>
-            <div><dt><code>README.txt</code></dt><dd>A short quick start, in plain text.</dd></div>
+            <div><dt><code>start.ico</code></dt><dd>The icon for a shortcut. See <a href="../docs/desktop-shortcut.html">Add a shortcut or an icon</a>.</dd></div>
+            <div><dt><code>Install MeshOptimiser.bat</code></dt><dd>The installer for Windows. See <a href="../docs/install-windows.html">Install on Windows</a>.</dd></div>
+            <div><dt><code>README.txt</code>, <code>README.md</code>, <code>LICENSE</code></dt><dd>A short quick start in plain text, the project’s description, and the licence.</dd></div>
+            <div><dt><code>app</code></dt><dd>Everything else: the program and what it creates. The launchers at the top start the ones inside it.</dd></div>
           </dl>
-          <h2 id="folders-the-app-creates">Folders the app creates</h2>
+          <h2 id="inside-app-the-ones-you-can-use">Inside app: the ones you can use</h2>
+          <dl class="table">
+            <div><dt><code>step2glb.bat</code>, <code>step2glb.command</code></dt><dd>Convert a STEP file that you drag onto them, without opening the viewer.</dd></div>
+          </dl>
+          <h2 id="folders-the-app-creates-inside-app">Folders the app creates (inside app)</h2>
           <dl class="table">
             <div><dt><code>.venv</code></dt><dd>The app’s own Python environment, created on the first run. It can take up to about 2 GB. It is safe to delete: the launcher builds it again, which takes a few minutes. On macOS the folder is hidden in Finder, because its name starts with a dot.</dd></div>
             <div><dt><code>inbox</code></dt><dd>Where STEP files are converted. The finished GLB files stay here.</dd></div>
           </dl>
           <aside class="kb-note"><p>The <code>inbox</code> folder is not emptied automatically, so it grows with every conversion. With the app closed, you can delete the files in it that you no longer need.</p></aside>
-          <h2 id="the-app-itself">The app itself</h2>
+          <h2 id="the-app-itself-inside-app">The app itself (inside app)</h2>
           <dl class="table">
             <div><dt><code>serve.py</code></dt><dd>The small local server. It hands the app’s pages to your browser and starts the converter when you drop a STEP file.</dd></div>
             <div><dt><code>step2glb.py</code></dt><dd>The converter from STEP to GLB.</dd></div>
-            <div><dt><code>index.html</code>, <code>app-v2.js</code></dt><dd>The viewer: the page and its program.</dd></div>
-            <div><dt><code>holefill.js</code></dt><dd>The hole filler behind Remove holes.</dd></div>
-            <div><dt><code>mesh-worker.js</code></dt><dd>A background worker for Remove holes and Decimate, so the window stays usable while they run.</dd></div>
-            <div><dt><code>cloner.js</code></dt><dd>A cloner that makes linear, grid and radial arrays of a part.</dd></div>
+            <div><dt><code>index.html</code></dt><dd>The viewer’s page.</dd></div>
+            <div><dt><code>js</code></dt><dd>The viewer’s scripts. <code>app.js</code> is the program; the others are parts of it, such as <code>holefill.js</code> (the hole filler behind Remove holes), <code>mesh-worker.js</code> (a background worker so the window stays usable while Remove holes and Decimate run) and <code>cloner.js</code> (linear, grid and radial arrays of a part).</dd></div>
             <div><dt><code>vendor</code></dt><dd>The libraries the viewer needs, bundled so that it starts without the internet.</dd></div>
             <div><dt><code>assets</code></dt><dd>The app’s icons, pictures and help clips.</dd></div>
+            <div><dt><code>knowledge</code></dt><dd>The help articles and playbooks that Claude reads when it connects.</dd></div>
             <div><dt><code>manifest.webmanifest</code></dt><dd>What lets Chrome and Edge install the page as an app.</dd></div>
             <div><dt><code>requirements.txt</code></dt><dd>The list of Python add-ons the launcher installs: cadquery-ocp, trimesh and numpy.</dd></div>
-            <div><dt><code>tests</code></dt><dd>The self-tests. See <a href="../docs/self-test.html">Self-test</a>.</dd></div>
-            <div><dt><code>docs</code>, <code>README.md</code>, <code>CHANGELOG.md</code></dt><dd>Screenshots, the project’s description, and the list of changes in every version.</dd></div>
+            <div><dt><code>version.json</code>, <code>updater.py</code></dt><dd>The version you have, and the program that applies updates.</dd></div>
+            <div><dt><code>ui.ps1</code></dt><dd>Draws the launcher window on Windows.</dd></div>
           </dl>
+          <p>The download does not hold the project’s tests, tools, docs or changelog. They are in the repository, and the changelog is on this site.</p>
           <aside class="kb-note"><p>Do not open <code>index.html</code> by double-clicking it. The page then says it needs a local server. Always start with the launcher.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/first-start.html">Start it the first time</a></li>
@@ -218,7 +223,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.30.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.31.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

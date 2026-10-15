@@ -1,8 +1,8 @@
 // ════════════════════════════════════════════════════════════════════════════
 // Cloner — C4D-style live cloner
 //
-// Loads as a non-module side-effect script AFTER app-v2.js. Boots when
-// window._appFns + window._appHooks are present (app-v2.js wires both up
+// Loads as a non-module side-effect script AFTER app.js. Boots when
+// window._appFns + window._appHooks are present (app.js wires both up
 // during its top-level pass; we poll briefly to cover the boot ordering).
 //
 // A cloner is a partInfo entry (state.parts) with isCloner=true. It owns a

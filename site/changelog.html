@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.30.0." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.31.0." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.30.0." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.31.0." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-hero.webp" />
   <meta property="og:url" content="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:type" content="website" />
@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=389" />
+  <link rel="stylesheet" href="site.css?v=391" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -52,9 +52,31 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.31.0">
+          <div class="log-head">
+            <strong>v0.31.0<b class="rel-code">Bled</b></strong><em>Latest</em><span>15 Oct 2026 · 13:35</span><span>6 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>A polish of the interface, and a tidier folder. Icons, menus and dropdowns share one look, groups can be locked, Export keeps the rest under Advanced and puts each part’s axis at the part, and the download is organised like an installed program.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>A polish of the interface. The toolbar icons are sharper, their dividers easy to see, and the + and − of the part tree sit in the middle of their circles. Every menu and dropdown looks the same and opens the same way, and closes at once.</span></li>
+              <li><b class="is-new">New</b><span>The right-click menus of the part tree are about half as long. What you use least is one level in: Visibility, Select, Mesh, Fit and Tree for a part; Group, Order and Expand and collapse for a group.</span></li>
+              <li><b class="is-new">New</b><span>Pivot points in Export. A part from a STEP file has its origin at 0, 0, 0, so in Cinema 4D every axis sat there. GLB, glTF, FBX and USDZ now write each part around its own centre, so the axis is at the part. FBX objects carry the rotation and scale of their part too.</span></li>
+              <li><b class="is-new">New</b><span>Groups can be locked. Lock in Properties, or “Lock everything inside” on the right-click menu of a group, locks every part in it. A locked part or group shows a red lock where its icon is.</span></li>
+              <li><b class="is-new">New</b><span>The Export window shows the format, the file name and “Visible parts only” up front. The rest is under Advanced, and it stays open or shut as you left it.</span></li>
+              <li><b class="is-new">New</b><span>A tidier folder, and why. The top of the download had grown past fifty files, so it was hard to see what to double-click. It is organised like an installed program now: the launchers, the README and the licence, and one folder, app, with the program inside. The launchers keep their names, so shortcuts keep working.</span></li>
+              <li><b class="is-new">New</b><span>Moving from an older version is one full download. The installer moves your inbox and exports into app, keeps the old loose files in a backup folder, and the first start builds the Python environment again.</span></li>
+              <li><b class="is-polish">Polish</b><span>The launcher window draws the name out of a wire mesh and shows a bar for each step.</span></li>
+              <li><b class="is-polish">Polish</b><span>A tooltip no longer shows over a menu that is open, and the list beside a menu row stands next to it instead of over it.</span></li>
+              <li><b class="is-fix">Fix</b><span>Exporting to FBX and opening it in Cinema 4D put every part’s axis at 0, 0, 0. It is now at the part.</span></li>
+              <li><b class="is-fix">Fix</b><span>Right-click menus no longer flicker when they close.</span></li>
+              <li><b class="is-fix">Fix</b><span>The cards of the right panel sit on whole pixels, so their text and rows are no longer soft.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.30.0">
           <div class="log-head">
-            <strong>v0.30.0<b class="rel-code">Kobarid</b></strong><em>Latest</em><span>15 Oct 2026 · 03:03</span><span>9 fixes</span>
+            <strong>v0.30.0<b class="rel-code">Kobarid</b></strong><span>15 Oct 2026 · 03:03</span><span>9 fixes</span>
           </div>
           <div class="log-body">
             <p>Two alpha features: Claude mode, to follow Claude as a feed with your model beside it, and Animate, to make parts spin, swing, shake and travel. Also instance commands, three-way permissions for Claude, a redesigned Settings and a rounder look.</p>
@@ -639,7 +661,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.30.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.31.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

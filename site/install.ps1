@@ -2,6 +2,9 @@
 #   Install MeshOptimiser.bat   (or: irm https://lukagrcar.com/apps/meshoptimiser/install.ps1 | iex)
 # Downloads the current release, puts it in %LOCALAPPDATA%\MeshOptimiser, adds MeshOptimiser to the Desktop and the Start menu,
 # and starts it. Running it again updates the files and keeps the Python environment (.venv), the inbox and the exports.
+# The install folder holds thin launchers and an app\ folder with the program (and its .venv, inbox and exports). An install from
+# before that layout (everything loose in the folder) is moved over: inbox and exports go into app\, the old loose files go to
+# .update\backup-old-layout\ (nothing is deleted but the old .venv, which cannot be moved: start.bat builds a new one in app\).
 # Options (when run as a file):  -InstallDir <folder>   -Zip <a release zip already on this PC>   -NoLaunch   -NoShortcuts
 param(
   [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'MeshOptimiser'),
@@ -14,7 +17,9 @@ $ProgressPreference = 'SilentlyContinue'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 $Feed = 'https://lukagrcar.com/apps/meshoptimiser/latest.json'
 $Repo = 'xpayn3/MeshOptimiser'
-$Skip = @('.venv', 'inbox', 'exports', '__pycache__')      # belong to this PC: an update leaves them alone
+$Skip = @('.venv', 'inbox', 'exports', '__pycache__', '.update', 'server.log', '.show-console')      # belong to this PC: an update leaves them alone (in app\ too)
+$NotShipped = @('tests', 'tools', 'docs', 'site', 'dist', '_archive', '.github', '.claude', 'CHANGELOG.md', 'UNRELEASED_FIXES.md', '.gitignore', '.gitattributes')      # in a source archive, not in the release zip
+$Launchers = @('start.bat', 'start_hidden.vbs', 'start.command', 'start.ico', 'Install MeshOptimiser.bat', 'README.md', 'README.txt', 'LICENSE')      # the files of the install folder itself
 
 # ── the window: colour codes (the console is switched to understand them), a title, no blinking cursor ──
 $esc = [char]27
@@ -85,29 +90,35 @@ try {
   # 2. download, with a bar
   Step 2 'Downloading'
   if (-not $zipPath) {
-    $url = "https://github.com/$Repo/archive/refs/tags/v$version.zip"
     $zipPath = Join-Path $tmp 'app.zip'
-    try {
-      Add-Type -AssemblyName System.Net.Http
-      $cli = New-Object System.Net.Http.HttpClient
-      $resp = $cli.GetAsync($url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
-      [void]$resp.EnsureSuccessStatusCode()
-      $total = $resp.Content.Headers.ContentLength
-      $in = $resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
-      $out = [IO.File]::Create($zipPath)
-      $buf = New-Object byte[] 262144; $got = 0; $t0 = Get-Date; $last = [datetime]::MinValue
-      while (($r = $in.Read($buf, 0, $buf.Length)) -gt 0) {
-        $out.Write($buf, 0, $r); $got += $r
-        if (((Get-Date) - $last).TotalMilliseconds -gt 80) {
-          $last = Get-Date
-          $sec = [Math]::Max(0.2, ((Get-Date) - $t0).TotalSeconds)
-          $tail = ('{0:N1}' -f ($got / 1MB)) + $(if ($total) { ' / ' + ('{0:N1}' -f ($total / 1MB)) } else { '' }) + (' MB   {0:N1} MB/s' -f (($got / 1MB) / $sec))
-          Bar $(if ($total) { $got / $total } else { 0 }) $tail
+    # the release zip first (the program and nothing else); the source archive of the tag when there is none
+    $urls = @("https://github.com/$Repo/releases/download/v$version/MeshOptimiser-v$version.zip", "https://github.com/$Repo/archive/refs/tags/v$version.zip")
+    $fetched = $false
+    foreach ($url in $urls) {
+      try {
+        Add-Type -AssemblyName System.Net.Http
+        $cli = New-Object System.Net.Http.HttpClient
+        $resp = $cli.GetAsync($url, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        [void]$resp.EnsureSuccessStatusCode()
+        $total = $resp.Content.Headers.ContentLength
+        $in = $resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        $out = [IO.File]::Create($zipPath)
+        $buf = New-Object byte[] 262144; $got = 0; $t0 = Get-Date; $last = [datetime]::MinValue
+        while (($r = $in.Read($buf, 0, $buf.Length)) -gt 0) {
+          $out.Write($buf, 0, $r); $got += $r
+          if (((Get-Date) - $last).TotalMilliseconds -gt 80) {
+            $last = Get-Date
+            $sec = [Math]::Max(0.2, ((Get-Date) - $t0).TotalSeconds)
+            $tail = ('{0:N1}' -f ($got / 1MB)) + $(if ($total) { ' / ' + ('{0:N1}' -f ($total / 1MB)) } else { '' }) + (' MB   {0:N1} MB/s' -f (($got / 1MB) / $sec))
+            Bar $(if ($total) { $got / $total } else { 0 }) $tail
+          }
         }
-      }
-      $out.Close(); $in.Close(); $cli.Dispose()
-      Done-Bar (('{0:N1}' -f ($got / 1MB)) + ' MB')
-    } catch { Line ''; Fail "The download failed. Check your internet connection and try again." }
+        $out.Close(); $in.Close(); $cli.Dispose()
+        Done-Bar (('{0:N1}' -f ($got / 1MB)) + ' MB')
+        $fetched = $true; break
+      } catch { try { $out.Close() } catch {}; try { $cli.Dispose() } catch {} }
+    }
+    if (-not $fetched) { Line ''; Fail "The download failed. Check your internet connection and try again." }
   } else { Note 'Skipped.' }
 
   # 3. unpack straight into place, with a bar (the folder named in the zip is dropped; the PC's own folders are left alone)
@@ -117,17 +128,54 @@ try {
   try {
     $norm = { param($e) $e.FullName.Replace('\', '/') }      # (some zip tools write backslashes)
     $entries = @($arc.Entries | Where-Object { (& $norm $_) -notmatch '/$' })
-    $first = & $norm ($arc.Entries | Select-Object -First 1)
-    $prefix = if ($first -match '^([^/]+)/') { $Matches[1] + '/' } else { '' }
-    if (-not ($entries | Where-Object { (& $norm $_) -eq ($prefix + 'start.bat') })) { Line ''; Fail 'The download does not look like MeshOptimiser (no start.bat inside).' }
+    $names = @($entries | ForEach-Object { & $norm $_ })
+    # one folder around everything (a source archive: MeshOptimiser-0.30.0/...) is dropped; files at the root of the zip are taken as they are
+    $tops = @($names | ForEach-Object { ($_ -split '/')[0] } | Select-Object -Unique)
+    $prefix = if ($tops.Count -eq 1 -and $names[0] -match '/') { $tops[0] + '/' } else { '' }
+    if (($names -notcontains ($prefix + 'start.bat')) -or ($names -notcontains ($prefix + 'app/serve.py'))) { Line ''; Fail 'The download does not look like MeshOptimiser (no start.bat or app\serve.py inside).' }
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+
+    # an install from before the app\ folder: everything loose in the folder. Move what belongs to this PC, put the rest aside.
+    $oldLayout = (Test-Path (Join-Path $InstallDir 'serve.py')) -and -not (Test-Path (Join-Path $InstallDir 'app\serve.py'))
+    if ($oldLayout) {
+      Line ''; Note 'An older install was found: moving it into the new layout.'
+      $appDir = Join-Path $InstallDir 'app'
+      New-Item -ItemType Directory -Path $appDir -Force | Out-Null
+      foreach ($keep in @('inbox', 'exports', '.show-console')) {
+        $from = Join-Path $InstallDir $keep; $to = Join-Path $appDir $keep
+        if (-not (Test-Path $from)) { continue }
+        try {
+          if ((Test-Path $to) -and (Get-Item $from).PSIsContainer) {
+            Get-ChildItem $from -Force | ForEach-Object { if (-not (Test-Path (Join-Path $to $_.Name))) { Move-Item -LiteralPath $_.FullName -Destination $to } }
+            Remove-Item $from -Force -ErrorAction SilentlyContinue
+          } elseif (-not (Test-Path $to)) { Move-Item -LiteralPath $from -Destination $to }
+        } catch { Line ''; Fail "Could not move $keep into app\ ($($_.Exception.Message)). Close MeshOptimiser and run this again." }
+      }
+      # a Python environment cannot be moved (its paths are written into it): the old one goes, start.bat builds a new one in app\
+      $venv = Join-Path $InstallDir '.venv'
+      if (Test-Path $venv) {
+        try { Remove-Item -LiteralPath $venv -Recurse -Force } catch { Line ''; Fail 'Could not remove the old Python environment (.venv). Close MeshOptimiser and run this again.' }
+      }
+      # the loose files of the old layout are kept in .update\backup-old-layout (the launchers are replaced by the new ones)
+      $bk = Join-Path $InstallDir '.update\backup-old-layout'
+      if (Test-Path $bk) { $bk = $bk + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss') }
+      New-Item -ItemType Directory -Path $bk -Force | Out-Null
+      $stay = @('app', '.update') + $Launchers
+      $moved = 0
+      foreach ($it in @(Get-ChildItem $InstallDir -Force | Where-Object { $stay -notcontains $_.Name })) {
+        try { Move-Item -LiteralPath $it.FullName -Destination $bk; $moved++ } catch { Line ''; Fail "Could not move $($it.Name) aside ($($_.Exception.Message)). Close MeshOptimiser and run this again." }
+      }
+      Good "$moved old items put in .update\backup-old-layout"
+      Note 'The Python environment is rebuilt in app\ on the first start (a few minutes, online).'
+    }
     $i = 0; $last = [datetime]::MinValue; $root = [IO.Path]::GetFullPath($InstallDir)
     foreach ($e in $entries) {
       $i++
       $nm = & $norm $e
       $rel = if ($prefix -and $nm.StartsWith($prefix)) { $nm.Substring($prefix.Length) } else { $nm }
-      $top = ($rel -split '/')[0]
-      if ($Skip -contains $top) { continue }
+      $parts = $rel -split '/'
+      if (($NotShipped -contains $parts[0]) -or ($Skip -contains $parts[0])) { continue }
+      if ($parts[0] -eq 'app' -and $parts.Count -gt 2 -and ($Skip -contains $parts[1])) { continue }
       $dest = [IO.Path]::GetFullPath((Join-Path $InstallDir $rel))
       if (-not $dest.StartsWith($root)) { continue }      # nothing may land outside the install folder
       New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($dest)) -Force | Out-Null

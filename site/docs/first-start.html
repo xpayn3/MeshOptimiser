@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=389" />
+  <link rel="stylesheet" href="../site.css?v=391" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -150,19 +150,19 @@
           <p>The first start takes about three minutes, because the launcher downloads and sets up what the converter needs. Every start after that takes a second or two.</p>
           <h2 id="on-windows">On Windows</h2>
           <ol class="kb-steps">
-            <li>Open the app folder and double-click <code>start.bat</code>.</li>
-            <li>A black window with white text opens. This is the launcher. Leave it open.</li>
-            <li>It works through four numbered steps. <code>[1/4] Checking Python...</code> looks for Python and prints the version it found.</li>
-            <li><code>[2/4] Checking local Python environment...</code> creates the folder <code>.venv</code> (about 30 seconds) and installs the add-ons (one to three minutes). You need an internet connection for this step.</li>
-            <li><code>[3/4] Starting the local server...</code> starts the small server that the app runs on, and prints its address, normally <code>http://localhost:4242</code>.</li>
+            <li>Open the folder and double-click <code>start.bat</code>.</li>
+            <li>A black window opens and draws the name MeshOptimiser out of a wire mesh, with the version under it. This is the launcher. Leave it open.</li>
+            <li>It works through a few steps, and each has a small bar that runs while it works. The first finds Python and shows the version it found, for example <code>Python 3.12.10</code>.</li>
+            <li>The next creates the folder <code>.venv</code> inside <code>app</code> (about 30 seconds) and installs the add-ons (one to three minutes). You need an internet connection for this step.</li>
+            <li>The last starts the small server that the app runs on, and prints its address, normally <code>http://localhost:4242</code>.</li>
             <li>The app opens in a window of its own and shows the start screen.</li>
           </ol>
           <aside class="kb-note"><p>If the launcher finds no Python, it offers to install Python 3.12 for you. Press <kbd>Y</kbd> to accept. See <a href="../docs/requirements.html">What you need</a>.</p></aside>
           <h2 id="on-macos">On macOS</h2>
           <ol class="kb-steps">
-            <li>Open the app folder and double-click <code>start.command</code>.</li>
+            <li>Open the folder and double-click <code>start.command</code>.</li>
             <li>If macOS refuses with “Operation not permitted”, right-click <code>start.command</code> and choose “Open”. macOS blocks a double-click on a freshly unzipped script the first time.</li>
-            <li>A Terminal window opens. It creates the folder <code>.venv</code>, installs the add-ons, and prints <code>Starting server...</code>.</li>
+            <li>A Terminal window opens. It creates the folder <code>.venv</code> inside <code>app</code>, installs the add-ons, and prints <code>Starting server...</code>.</li>
             <li>The app opens and shows the start screen.</li>
           </ol>
           <h2 id="what-you-see">What you see</h2>
@@ -216,7 +216,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.30.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.31.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=389" />
+  <link rel="stylesheet" href="../site.css?v=391" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -162,9 +162,8 @@
             <div><dt>Format and Compare</dt><dd>The name of the format and a line about it. <span class="ui">Compare</span> opens a sheet that shows what each format keeps.</dd></div>
             <div><dt>What will be written</dt><dd>Three figures that follow your options: how many parts, how many triangles and about how big the file will be. For a parts list: rows, columns and size.</dd></div>
             <div><dt>File name</dt><dd>The name the file gets, with the ending for the format. The buttons under it build the name (see below).</dd></div>
-            <div><dt>Size and position</dt><dd>Unit scale, up axis and origin.</dd></div>
-            <div><dt>Parts</dt><dd>Which parts go in the file, and how they are arranged.</dd></div>
-            <div><dt>Format options</dt><dd>Only the ones that fit the format.</dd></div>
+            <div><dt>Visible parts only, Selected parts only</dt><dd>Which parts go in the file.</dd></div>
+            <div><dt>Advanced</dt><dd>Shut until you open it, and it stays as you left it. Under it: size and position (unit scale, up axis, origin and pivot points), how the parts are arranged (merge, flatten), the options that fit the format, and a check of the size against a target.</dd></div>
             <div><dt>Bottom line</dt><dd>Says what the file will be called, for example “Saves as rd-fine.glb”. For OBJ it adds that a <code>.mtl</code> file with the colours comes with it. If no part matches your options, it says so and the export button is dimmed.</dd></div>
           </dl>
           <p>The choices you make for scale, axis, origin and the parts switches are kept for the next export. The file name and <span class="ui">Selected parts only</span> are not.</p>
@@ -192,11 +191,13 @@
           </dl>
           <p>The ending is added for you, so leave it out. Characters a file name cannot have are replaced with <code>_</code>. When the name is empty, the scene’s own name is used.</p>
           <h2 id="size-and-position">Size and position</h2>
+          <p>These four are under <span class="ui">Advanced</span>.</p>
           <dl class="table">
             <div><dt>Unit scale</dt><dd>Multiplies every size in the file. <span class="ui">1.0 (no change)</span> keeps the model as it is. CAD models are usually in millimetres. If the next program works in metres, choose <span class="ui">× 0.001 (mm → m)</span>. The list also has cm to m, m to mm, m to cm, inches to mm, mm to inches, and <span class="ui">Custom…</span>.</dd></div>
             <div><dt>Custom scale</dt><dd>The multiplier, when <span class="ui">Unit scale</span> is on <span class="ui">Custom…</span>.</dd></div>
             <div><dt>Up axis</dt><dd><span class="ui">Keep as in the scene</span> writes the model the way it stands. <span class="ui">Turn Z-up into Y-up</span> turns the model so Y is up, which is what glTF, OBJ and Maya expect. A model that already stands Y up, such as one that came from Cinema 4D or from a glTF, must be kept as it is. Turning it lays it on its side.</dd></div>
             <div><dt>Origin</dt><dd><span class="ui">Keep model origin</span> leaves the model where it is. <span class="ui">Recentre to bbox centre</span> puts the middle of the model at 0,0,0. <span class="ui">Centre XY, drop to floor (Z=0)</span> centres it and stands it on the floor.</dd></div>
+            <div><dt>Pivot points</dt><dd><span class="ui">At the centre of each part</span> (the default) writes every part around its own centre, with its position on the object, so that in Cinema 4D, Blender and Maya the axis of each part is at the part. A part from a STEP file has its origin at 0,0,0 with its shape out where it sits in the model, so without this every axis would be at 0,0,0. <span class="ui">As in the scene</span> keeps what the part has. It is shown for GLB, glTF, FBX and USDZ. An FBX object also carries the rotation and the scale of its part.</dd></div>
           </dl>
           <p>The up axis and the scale you set in <span class="ui">Settings</span>, <span class="ui">Scene</span> only change how the scene is shown on screen. They do not go into the file. The two choices in this window decide what the file says.</p>
           <h2 id="parts">Parts</h2>
@@ -267,7 +268,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.30.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.31.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

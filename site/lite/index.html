@@ -8,7 +8,7 @@
 <title>MeshOptimiser online</title>
 <!-- Installable: the browser's "Install" / "Open in app" gives it a window of its own, without the address bar. -->
 <script>try{if(JSON.parse(localStorage.getItem('stepopt-prefs')||'{}').splashOnStart===false)document.documentElement.classList.add('no-splash')}catch(e){}</script>
-<script>/* Claude mode from the first paint: with ?claude (or when it was left on) neither the splash nor the app shows, only the dark page, until the feed takes over (app-v2.js, setMode) */try{if(window.top===window&&!window.__MESHOPT_DEMO){var h=document.documentElement,v=localStorage.getItem('stepopt-claude-view');if(/[?&]claude\b/.test(location.search)||(v&&v!=='off')){h.classList.add('claude-boot','no-splash');setTimeout(function(){h.classList.remove('claude-boot')},6000)}}}catch(e){}</script>
+<script>/* Claude mode from the first paint: with ?claude (or when it was left on) neither the splash nor the app shows, only the dark page, until the feed takes over (app.js, setMode) */try{if(window.top===window&&!window.__MESHOPT_DEMO){var h=document.documentElement,v=localStorage.getItem('stepopt-claude-view');if(/[?&]claude\b/.test(location.search)||(v&&v!=='off')){h.classList.add('claude-boot','no-splash');setTimeout(function(){h.classList.remove('claude-boot')},6000)}}}catch(e){}</script>
 <meta name="theme-color" content="#101010">
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -24,9 +24,9 @@
   }
 }
 </script>
-<!-- three.js and what app-v2.js imports from it, fetched at once. Without this the browser finds them one step at a time: app-v2.js
+<!-- three.js and what app.js imports from it, fetched at once. Without this the browser finds them one step at a time: app.js
      first, then three.webgpu.js, then the three.core.js that one imports, then each loader with what it imports in turn. These are
-     the files of the import map below, spelled the same way (their address is what the module uses; app-v2.js itself and the
+     the files of the import map below, spelled the same way (their address is what the module uses; app.js itself and the
      small ?v= modules are not listed, because their version tags change by hand and a tag that differs would download them twice). -->
 <link rel="modulepreload" href="vendor/three/build/three.core.js">
 <link rel="modulepreload" href="vendor/three/build/three.webgpu.js">
@@ -119,6 +119,7 @@
   --icon-asm:#f59e0b;
   --icon-part:#10b981;
   --icon-inst:#a78bfa;
+  --icon-lock:var(--er);                /* a locked part: red, the danger colour */
 
   /* Dropdown arrow — embedded SVG. Its stroke must be a literal hex (a
      data: URL cannot reference var(...)): change it here when rebranding. */
@@ -155,6 +156,9 @@
   --bd-search-focus:var(--bd2);   /* what a search bar does on focus: a lighter edge, no accent and no ring */
   /* icon sizes: use these for the box of an icon (svg, i, [data-lucide]) */
   --icon-xs:12px; --icon-sm:14px; --icon-md:16px; --icon-lg:18px; --icon-xl:20px;
+  /* Icon buttons, one set of tokens: the size of the picture in a button, in a floating toolbar over the viewport, the colour at rest in each, and the line (--icon-line, below). */
+  --icon-btn:var(--icon-md); --icon-btn-float:var(--icon-lg); --icon-fg:var(--tx2); --icon-fg-float:color-mix(in srgb,var(--tx) 55%,var(--tx2));   /* (a notch under the text colour: hover is the text colour itself) */
+  --bar-sep:color-mix(in srgb,var(--tx) 24%,transparent);   /* the dividers in the floating toolbars */
   /* corner radii beyond the three sizes above; font sizes beyond --fs-2xl; colours that repeat */
   --r-3xs:1px; --r-2xl:12px; --r-3xl:16px; --fs-3xl:18px; --fs-4xl:20px; --fs-5xl:22px;
   /* spacing steps that were missing, durations and easings that repeat, opacity, line-height, letter-spacing, layers */
@@ -243,6 +247,7 @@
 
   /* Easings — built-in `ease`/`ease-out` are too weak. */
   --ease-out:cubic-bezier(.23,1,.32,1);          /* punchy ease-out for UI exits/entrances */
+  --menu-in:menu-in var(--dur-fast) var(--ease-out);   /* how EVERY menu and dropdown opens (the dropdown's own fade and short drop); they close at once. Change it here. */
   --ease-ios:cubic-bezier(.32,.72,0,1);          /* iOS-feel curve (drawers, switches) */
 
   /* Z-index scale */
@@ -345,11 +350,11 @@ body.resizing *{cursor:col-resize !important}
    popover with About / GitHub / version / shortcuts. */
 .brand-btn{all:unset;place-items:center;cursor:pointer}
 /* Brand menu — a popover under the brand button that grows out of its corner. */
-.brand-menu{position:absolute;top:calc(100% + 8px);right:8px;width:300px;padding:var(--space-md);z-index:var(--z-toolbar);opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity var(--dur-160) var(--ease-out),transform var(--dur-160) var(--ease-out);border-color:var(--s5);}
+.brand-menu{position:absolute;top:calc(100% + 8px);right:8px;width:300px;padding:var(--space-md);z-index:var(--z-toolbar);visibility:hidden;pointer-events:none;border-color:var(--s5);}
 /* Left-anchored variant — brand button lives at the start of the top bar so
    the dropdown opens from its left edge instead of off the right of the row. */
 .brand-left .brand-menu{right:auto;transform-origin:top left;left:0;}
-.brand-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+.brand-menu.show{visibility:visible;pointer-events:auto;animation:var(--menu-in)}
 .brand-menu-head{display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-lg) var(--space-lg) var(--space-xl)}
 .brand-menu-mark{width:34px;height:34px;border-radius:var(--r-lg);display:grid;place-items:center;flex:0 0 auto}
 .brand-menu-mark svg{width:var(--icon-lg);height:var(--icon-lg)}
@@ -365,7 +370,7 @@ body.resizing *{cursor:col-resize !important}
 .brand-menu-changelog li{font-size:var(--fs-sm);line-height:var(--lh-snug);padding-left:var(--space-lg);position:relative;color:var(--wht-80);}
 .brand-menu-changelog li::before{content:"";position:absolute;left:2px;top:8px;width:3px;height:3px;border-radius:50%;background:var(--wht-50);}
 .brand-menu-sep{height:1px;margin:var(--space-md) var(--space-xs);background:var(--s6);}
-.brand-menu-item{all:unset;display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-md) var(--space-lg);border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-md);user-select:none;transition:background var(--dur-instant),color var(--dur-instant);width:calc(100% - 20px);color:var(--white);}
+.brand-menu-item{all:unset;display:flex;align-items:center;cursor:pointer;user-select:none}
 .brand-menu-item svg{width:var(--icon-sm);height:var(--icon-sm);fill:none;stroke-width:2;flex:0 0 auto}
 .brand-menu-item svg.brand-gh{stroke:none;fill:currentColor;color:var(--wht-80);}
 .brand-menu-item .lbl{flex:1 1 auto}
@@ -379,11 +384,8 @@ body.resizing *{cursor:col-resize !important}
    (WebGPU 932×315, WebGL ~square) crop to the same vertical mass. */
 .brand-menu-foot .tech-logos{display:inline-flex;align-items:center;gap:var(--space-md)}
 .brand-menu-foot .tech-logo{height:18px;width:auto;display:block;filter:brightness(0) invert(1);opacity:var(--op-85)}
-/* Brand menu — the row under the pointer, and the icons */
-.brand-menu-item:hover,.brand-menu-item:focus-visible{outline:none;background:var(--s6);box-shadow:none}
-.brand-menu-item svg{stroke:var(--wht-80)}
-.brand-menu-item:hover svg,.brand-menu-item:focus-visible svg{stroke:var(--white)}
-.brand-menu-item:hover svg.brand-gh,.brand-menu-item:focus-visible svg.brand-gh{color:var(--white)}
+/* Brand menu: the row and the row under the pointer are the right-click set (--ctx-*); the icons are the row's colour */
+.brand-menu-item svg{stroke:currentColor}
 /* Lucide placeholders: keep layout stable before lucide.createIcons() runs */
 i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-none);font-style:normal}
 .tbtn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);transition:background var(--dur-base) var(--ease-out),border-color var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out),filter var(--dur-base) var(--ease-out)}
@@ -472,7 +474,7 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 .tree-search{margin:var(--space-md) var(--space-xl) var(--space-sm);position:relative}
 .tree-search input{width:100%;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);font-size:var(--fs-12);outline:none}
 .tree-search input:focus{border-color:var(--bd-field-focus)}
-.tree-search svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);width:var(--icon-sm);height:var(--icon-sm);stroke:var(--tx3);fill:none;stroke-width:2}
+.tree-search svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);width:var(--icon-btn);height:var(--icon-btn);stroke:var(--tx3);fill:none;stroke-width:2}
 .tree-summary{padding:var(--space-sm) var(--space-2xl);font-size:var(--fs-11);color:var(--tx3);cursor:pointer;user-select:none}
 .tree-summary:hover{color:var(--tx2)}
 .tree-node{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-5) var(--space-xl) var(--space-5) var(--space-md);font-size:var(--fs-sm);cursor:pointer;user-select:none;border-left:2px solid transparent;white-space:nowrap;contain:layout style paint;overflow-anchor:none}
@@ -562,22 +564,22 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 .prop-bar-fill.heavy{background:var(--wn)}
 .prop-bar-fill.very-heavy{background:var(--er)}
 .prop-grid{display:grid;font-variant-numeric:tabular-nums;align-items:center}
-.prop-grid .prop-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--tx3)}
-.prop-grid .prop-icon svg{width:var(--icon-sm);height:var(--icon-sm)}
+.prop-grid .prop-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;color:var(--icon-fg)}
+.prop-grid .prop-icon svg{width:var(--icon-btn);height:var(--icon-btn)}
 .prop-grid .prop-value{font-weight:var(--fw-regular);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* Primitive shape parameters block in the right-side props panel.
    C4D-style — selection-driven, sliders rebuild geometry on the fly. */
 .prim-section{margin-top:var(--space-2xl);padding:var(--space-lg) 0 0 0;border-top:1px solid var(--s2)}
 .prim-section .prop-section-title{display:flex;align-items:center;justify-content:space-between;font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);margin-bottom:var(--space-md)}
-.prim-section .prop-section-title > span svg{width:var(--icon-sm);height:var(--icon-sm);stroke:currentColor;fill:none;stroke-width:2;margin-right:var(--space-sm);vertical-align:-2px}
+.prim-section .prop-section-title > span svg{width:var(--icon-btn);height:var(--icon-btn);stroke:currentColor;fill:none;stroke-width:2;margin-right:var(--space-sm);vertical-align:-2px}
 .prim-section .prim-reset{background:transparent;border:1px solid var(--bd);border-radius:var(--r-sm);padding:var(--space-3) var(--space-sm);color:var(--tx3);cursor:pointer;display:grid;place-items:center;transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast)}
 .prim-section .prim-reset:hover{background:var(--bg2);color:var(--tx);border-color:var(--bd2)}
 .prim-section .prim-reset svg{width:var(--icon-xs);height:var(--icon-xs);stroke:currentColor;fill:none;stroke-width:2}
 .prim-section .prim-bake{display:flex;align-items:center;justify-content:center;gap:var(--space-sm);width:100%;height:var(--ctl-h,28px);margin-top:var(--space-lg);background:transparent;border:1px solid var(--bd);border-radius:var(--r-sm);color:var(--tx2);font:inherit;font-size:var(--fs-11);cursor:pointer;transition:background var(--dur-fast),color var(--dur-fast),border-color var(--dur-fast)}
 .prim-section .prim-bake:hover:not(:disabled){background:var(--bg2);color:var(--tx);border-color:var(--bd2)}
 .prim-section .prim-bake:disabled{opacity:var(--op-45);cursor:default}
-.prim-section .prim-bake svg{width:var(--icon-sm);height:var(--icon-sm);stroke:currentColor;fill:none;stroke-width:2}
+.prim-section .prim-bake svg{width:var(--icon-btn);height:var(--icon-btn);stroke:currentColor;fill:none;stroke-width:2}
 .prim-axis-group{grid-column:2;grid-row:1;justify-self:end;display:inline-flex;background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm);padding:1px;gap:1px}
 .prim-axis-btn{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:18px;padding:0 var(--space-sm);background:transparent;border:0;border-radius:var(--r-xs);color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-wide);cursor:pointer;transition:var(--tr-bg-fg)}
 .prim-axis-btn:hover{color:var(--tx2);background:var(--s2)}
@@ -608,8 +610,16 @@ input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin
    Color coding mirrors how C4D / Maya / 3ds Max signal node types — assemblies
    warm/orange so subassembly trees pop visually, leaves cool/green so the
    eye finds the actual geometry quickly. */
-.tree-expand{width:var(--icon-sm);height:var(--icon-sm);display:inline-grid;place-items:center;border:1px solid var(--bd2);font-size:var(--fs-11);line-height:var(--lh-none);cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:var(--font-sans);font-weight:var(--fw-semibold);user-select:none;transition:border-color var(--dur-100),color var(--dur-100),background var(--dur-100)}
-.tree-expand:hover{border-color:var(--ac);color:var(--ac-text);background:var(--ac-tint-08)}
+.tree-expand{position:relative;box-sizing:border-box;width:13px;height:13px;margin:0 1px 1px 0;display:inline-grid;place-items:center;border:1px solid var(--bd2);font-size:0;line-height:var(--lh-none);cursor:pointer;flex-shrink:0;background:var(--bg2);color:var(--tx2);font-family:var(--font-sans);font-weight:var(--fw-semibold);user-select:none;transition:border-color var(--dur-100),color var(--dur-100),background var(--dur-100)}
+.tree-expand:hover{border-color:var(--ac);background:var(--ac-tint-08)}   /* (the sign keeps its grey: --tx2, as the icons of the toolbars, never white or blue) */
+/* The box is 13px with a 1px border, so 11px inside: an odd number, with a middle pixel. The sign is drawn there, not typeset (a character sits where the
+   font puts it, low): two bars of 7 by 1 px, centred on that pixel, so the plus is a true cross in the middle of the circle. The margin of 1px on the right and
+   at the bottom keeps the 14px the box has always taken in the row. The text in the box (+ or −) is not shown; which of the two it is comes from the row:
+   a .collapsed row is a plus, an open one a minus. */
+.tree-expand::before,.tree-expand::after{content:"";position:absolute;background:currentColor}
+.tree-expand::before{left:calc(50% - 3.5px);top:calc(50% - .5px);width:7px;height:1px}
+.tree-expand::after{left:calc(50% - .5px);top:calc(50% - 3.5px);width:1px;height:7px}
+.tree-node:not(.collapsed)>.tree-expand::after{display:none}
 /* Spacer used in place of the +/- on leaf rows so all icons line up vertically */
 .tree-expand-spacer{width:var(--icon-sm);height:var(--icon-sm);flex-shrink:0}
 
@@ -709,7 +719,7 @@ input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin
 .field-help{font-size:var(--fs-11);color:var(--tx3);margin-top:var(--space-md);margin-bottom:var(--space-lg);line-height:var(--lh-note)}
 /* ── Sliders ──────────────────────────────────────────────────────────────────────────────────────────────────────────
    One look for every <input type=range> in the app. The tokens --sl-* (in :root) are the only thing to change: a thin track in a
-   taller hit strip, its filled part in the accent colour (drawn from --sl-pct, which _sliderFill in app-v2.js keeps up to date on
+   taller hit strip, its filled part in the accent colour (drawn from --sl-pct, which _sliderFill in app.js keeps up to date on
    every slider), a white thumb that grows under the pointer and takes a soft halo while it is held. The pointer stays the normal
    arrow (separate rules per engine: one unknown pseudo-element would void a list). */
 input[type=range]{-webkit-appearance:none;appearance:none;display:block;width:100%;height:var(--sl-hit);margin:0;padding:0;background:transparent;outline:none;cursor:default;--sl-pct:0%}
@@ -931,8 +941,8 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .vp-pill .vp-pill-icon svg{width:14px!important;height:14px!important;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block}
 .vp-pill:hover .vp-pill-icon,.vp-pill[aria-expanded="true"] .vp-pill-icon{opacity:1}
 
-.vp-pill-menu{display:flex;flex-direction:column;min-width:160px;opacity:0;transform:translateY(-4px) scale(.97);transform-origin:top center;pointer-events:none;transition:opacity var(--dur-160) var(--ease-out),transform var(--dur-160) var(--ease-out)}
-.vp-pill-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+.vp-pill-menu{display:flex;flex-direction:column;min-width:160px;visibility:hidden;pointer-events:none}
+.vp-pill-menu.show{visibility:visible;pointer-events:auto;animation:var(--menu-in)}
 .vp-pill-item{display:flex;align-items:center;border:0;text-align:left;cursor:pointer}
 .vp-pill-item-kbd{font-family:var(--font-sans);border-radius:var(--r-xs);line-height:var(--lh-none);flex-shrink:0;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .vp-stat{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx2);background:rgba(16,16,16,.72);border:1px solid var(--bd);border-radius:var(--r-sm);padding:var(--space-xs) var(--space-md);white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -973,7 +983,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 #vp-add-prim::after{content:"";position:absolute;right:3px;bottom:3px;width:0;height:0;border-left:4px solid transparent;border-top:4px solid currentColor;opacity:var(--op-55);pointer-events:none}
 #vp-add-prim:hover::after{opacity:var(--op-85)}
 .vp-prim-pop{position:absolute;left:40px;min-width:160px;z-index:var(--z-toolbar)}
-.vp-prim-pop-item{all:unset;display:flex;align-items:center;gap:var(--space-lg);cursor:pointer}
+.vp-prim-pop-item{all:unset;display:flex;align-items:center;cursor:pointer}
 .vp-prim-pop-item img{width:22px;height:22px;flex:0 0 auto}
 
 /* Measure tool */
@@ -1013,13 +1023,13 @@ body.msr-mode #canvas{cursor:crosshair}
 .tbtn .caret,.brand-caret{width:10px;height:10px;margin-left:var(--space-5);opacity:1;background:var(--select-arrow) center/10px 10px no-repeat}
 .brand-caret{margin-left:0}
 :is(.tbtn .caret>*,.brand-caret>*,#_a#_b){display:none}
-.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;z-index:80;opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top left;pointer-events:none;transition:opacity var(--dur-140) var(--ease-out),transform var(--dur-140) var(--ease-out)}
-.export-menu.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
-.export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);cursor:pointer;user-select:none}
+.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;z-index:80;visibility:hidden;pointer-events:none}
+.export-menu.show{visibility:visible;pointer-events:auto;animation:var(--menu-in)}
+.export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
 .export-menu-item .hint{color:var(--tx3);font-weight:var(--fw-regular)}
 
 /* The viewport settings popover is never shown now: its controls are moved
-   into the Settings window the first time that opens (app-v2.js, _Settings).
+   into the Settings window the first time that opens (app.js, _Settings).
    Until then they wait here, laid out but unseen. */
 #vp-settings-pop{position:absolute;top:0;right:44px;width:280px;padding:0;z-index:60;opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity var(--dur-160) var(--ease-out),transform var(--dur-160) var(--ease-out),visibility 0s linear var(--dur-160);max-height:calc(100vh - 100px);overflow-y:auto}
 
@@ -1072,8 +1082,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .mat-presets-menu .mat-preset-head{padding:var(--space-sm) var(--space-md) var(--space-xs);font-size:var(--fs-11);color:var(--tx3)}
 .mat-presets-menu{position:fixed;padding:var(--space-xs);z-index:var(--z-popover);display:none;max-height:280px;overflow-y:auto}
 .mat-presets-menu.show{display:block}
-.mat-presets-menu .mat-preset{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) var(--space-md);border-radius:var(--r-sm);cursor:pointer;font-size:var(--fs-sm);color:var(--tx2);transition:background var(--dur-100) ease,color var(--dur-100) ease}
-.mat-presets-menu .mat-preset:hover{background:var(--ac-soft);color:var(--tx)}
+.mat-presets-menu .mat-preset{display:flex;align-items:center;cursor:pointer}
 .mat-presets-menu .mat-preset .mat-preset-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid var(--s6)}
 .mat-presets-menu .mat-preset-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mat-presets-menu .mat-preset-hint{color:var(--tx3);font-size:var(--fs-10)}
@@ -1232,8 +1241,9 @@ body.msr-mode #canvas{cursor:crosshair}
 .cs-trigger{width:100%;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);font:inherit;outline:none;cursor:pointer;text-align:left;background-image:var(--select-arrow);background-repeat:no-repeat;background-position:right 9px center;transition:background-color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
 .cs-trigger:hover{background-color:var(--bg4);border-color:var(--bd2)}
 .cs-trigger:focus{border-color:var(--ac)}
-.cs-pop{position:fixed;z-index:var(--z-tooltip);min-width:160px;max-height:320px;overflow-y:auto;animation:cs-fade var(--dur-fast) var(--ease-out)}
-@keyframes cs-fade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.cs-pop{position:fixed;z-index:var(--z-tooltip);min-width:160px;max-height:320px;overflow-y:auto}
+@keyframes menu-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){:root{--menu-in:none}}
 .cs-opt{cursor:pointer;display:flex;align-items:center}
 .cs-opt .cs-logo{height:13px;width:auto;filter:brightness(0) invert(.85);flex-shrink:0}
 .cs-opt:hover .cs-logo{filter:brightness(0) invert(1)}
@@ -1571,10 +1581,9 @@ button.sc-row-keys:hover{background:var(--s5)}
 .sc-prof-btn:hover,.sc-prof.open .sc-prof-btn{background:var(--s5);color:var(--tx-control-hover)}
 .sc-prof-btn svg{width:var(--icon-sm);height:var(--icon-sm);color:var(--tx3)}
 .sc-prof-btn span{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sc-prof-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:5;width:250px;padding:var(--space-5);border-radius:var(--surface-pop-r,10px);background:var(--surface-pop);box-shadow:0 0 0 1px var(--s4),0 4px 10px var(--blk-50);opacity:0;transform:translateY(-4px);pointer-events:none;transition:opacity var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out)}
-.sc-prof.open .sc-prof-menu{opacity:1;transform:none;pointer-events:auto}
-.sc-prof-i{display:flex;align-items:center;gap:var(--space-lg);width:100%;height:var(--btn-h-md);padding:0 var(--space-md);border:0;border-radius:var(--r-sm);background:none;color:var(--tx-control);font:inherit;font-size:var(--fs-md);text-align:left;cursor:pointer}
-.sc-prof-i:hover:not(:disabled){background:var(--ac);color:var(--white,#fff)}
+.sc-prof-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:5;width:250px;visibility:hidden;pointer-events:none}
+.sc-prof.open .sc-prof-menu{visibility:visible;pointer-events:auto;animation:var(--menu-in)}
+.sc-prof-i{display:flex;align-items:center;border:0;font:inherit;text-align:left;cursor:pointer}
 .sc-prof-i:disabled{color:var(--tx-control-off);cursor:default}
 .sc-prof-i svg{width:var(--icon-sm);height:var(--icon-sm);flex:none;opacity:var(--op-8)}
 .sc-prof-i span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1636,7 +1645,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .spinner{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--bg3);border-top-color:var(--ac);animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* The loading mark: a low-poly sphere that turns while a wave of light climbs through its edges and vertices (a smooth surface being
-   meshed). It is drawn on a canvas by _MeshMark in app-v2.js, and only while a loader is on screen. */
+   meshed). It is drawn on a canvas by _MeshMark in app.js, and only while a loader is on screen. */
 .ml-cv{width:44px;height:44px;flex:none;display:block}
 .loader-text{flex:1;min-width:0}
 #loader-msg{color:var(--tx);font-weight:var(--fw-semibold);font-size:var(--fs-xl);margin-bottom:var(--space-2xs)}
@@ -1849,7 +1858,20 @@ button.sc-row-keys:hover{background:var(--s5)}
 #format-grid .fmt-icon,#format-grid .fmt-sub{display:none}
 #format-grid .fmt-card{min-height:34px}
 #format-grid .fmt-name{font-size:var(--fs-13)}
-#export-modal .exp-content{overflow-y:auto;min-height:0}
+#export-modal .exp-content{overflow-y:auto;min-height:0;scrollbar-gutter:stable}   /* (the room for the scroll bar is always there, so opening Advanced does not move the options sideways) */
+/* The close button belongs to the window, not to the scrolling options: it stays in the corner. */
+#export-modal .exp-win{position:relative}
+#export-modal .exp-x{position:absolute;top:14px;right:16px;z-index:3}
+#export-modal .exp-h-act{padding-right:38px}
+/* Advanced: size and position, structure, format options and the rest are one click away, shut by default. */
+.exp-adv{margin-top:var(--space-3xl)}
+.exp-adv>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:var(--space-lg) 0;border-top:1px solid var(--hairline);font-size:var(--fs-11);font-weight:var(--fw-medium);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
+.exp-adv>summary::-webkit-details-marker{display:none}
+.exp-adv>summary::after{content:"";width:6px;height:6px;margin-right:4px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform var(--dur-200) var(--ease-out)}
+.exp-adv[open]>summary::after{transform:translateY(1px) rotate(-135deg)}
+.exp-adv>summary:hover{color:var(--tx2)}
+.exp-adv>summary:focus-visible{outline:2px solid var(--ac-text);outline-offset:2px}
+.exp-adv>.exp-group-title:first-of-type{margin-top:var(--space-lg)}
 #export-modal .exp-content-b{flex:0 0 auto;overflow:visible}
 /* no footer bar: the Export button floats over the bottom right corner */
 #export-modal .exp-content-f{position:sticky;bottom:0;z-index:2;margin-top:auto;display:block;height:0;padding:0;border:0;background:none;overflow:visible}
@@ -2010,7 +2032,12 @@ button.sc-row-keys:hover{background:var(--s5)}
   --btn-h-sm:26px; --btn-h-md:32px; --btn-h-lg:40px;
   --btn-px-sm:9px; --btn-px-md:12px; --btn-px-lg:18px;
   --btn-fs-sm:12px; --btn-fs-md:12px; --btn-fs-lg:13px;
-  --btn-icon:14px; --btn-gap:6px;--menu-pad:8px;--menu-item-r:6px;--menu-item-h:28px;--menu-fs:12px;
+  --btn-icon:var(--icon-btn); --btn-gap:6px;--menu-pad:8px;--menu-item-r:6px;--menu-item-h:28px;--menu-fs:12px;
+  /* Two sets for what pops open from a list. RIGHT-CLICK menus (the right-click menu and its submenus, the File and menu-button menus): --ctx-*. DROPDOWNS (the list of a
+     select, the shape and mode pickers, the view and camera lists, presets, the profile list): --dd-*. Pad, text size, row height and the row's own padding, radius and gap, the colour
+     of a row and of the row under the pointer. Their surface (colour, corner, shadow) is the shared one, under "Floating surfaces". */
+  --ctx-pad:8px; --ctx-fs:12px; --ctx-item-h:28px; --ctx-item-px:var(--space-md); --ctx-item-r:6px; --ctx-gap:var(--space-md); --ctx-fg:var(--tx); --ctx-hover-bg:var(--ac); --ctx-hover-fg:var(--tx-on-accent);
+  --dd-pad:8px;  --dd-fs:12px;  --dd-item-h:28px;  --dd-item-px:var(--space-md);  --dd-item-r:6px;  --dd-gap:var(--space-md);  --dd-fg:var(--tx);  --dd-hover-bg:var(--ac);  --dd-hover-fg:var(--tx-on-accent);
 }
 /* md — the default */
 .tbtn,.btn,#sidebar-right .btn,.btn-sm,
@@ -2031,7 +2058,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .tbtn.icon-only,.tree-icon-btn,.vpb{width:var(--btn-h-md);height:var(--btn-h-md);flex:0 0 var(--btn-h-md);padding:0;border-radius:var(--btn-r-md)}
 .tbtn.icon-only svg,.tree-icon-btn svg,.vpb svg{width:var(--btn-icon);height:var(--btn-icon)}
 /* ── Dropdown ──────────────────────────────────────────────────────────
-   One component (app-v2.js, "Dropdowns"): every <select> becomes it. Its size
+   One component (app.js, "Dropdowns"): every <select> becomes it. Its size
    is four tokens; the defaults are a medium control, the size of a button.
    A place that needs another size sets the tokens on itself, and every
    dropdown inside follows: set the tokens, do not restyle .cs-trigger. */
@@ -2091,7 +2118,7 @@ a:focus-visible,[role="textbox"]:focus-visible,input:is([type=checkbox],[type=ra
    keyboard ring on it as soon as any key goes down, Shift included (which
    the viewport uses for snapping). Tapping a modifier is not keyboard
    navigation: the ring stays hidden until a real key (Tab, an arrow …) is
-   pressed. See _wireModifierRing in app-v2.js. */
+   pressed. See _wireModifierRing in app.js. */
 html.no-mod-ring :focus-visible{outline:none!important;box-shadow:none!important}
 
 /* ── Menus ───────────────────────────────────────────────────────────────
@@ -2099,23 +2126,31 @@ html.no-mod-ring :focus-visible{outline:none!important;box-shadow:none!important
    rounded panel, and a solid accent bar under the pointer with white text.
    Shortcuts are plain text at the right; in menus that pick a value, the
    current one carries a check mark in a column at the left. */
-.export-menu,.vp-pill-menu,.vp-prim-pop,.cs-pop,#ctx-menu{padding:var(--menu-pad);font-size:var(--menu-fs);
+.export-menu,.brand-menu,#ctx-menu{padding:var(--ctx-pad);font-size:var(--ctx-fs)}
+.cs-pop,.vp-prim-pop,.vp-pill-menu,.mat-presets-menu,.sc-prof-menu{padding:var(--dd-pad);font-size:var(--dd-fs)}
+.export-menu-item,.brand-menu-item,#ctx-menu .ctx-menu-row{
+  box-sizing:border-box;width:100%;min-height:var(--ctx-item-h);padding:0 var(--ctx-item-px);gap:var(--ctx-gap);
+  border-radius:var(--ctx-item-r);font-size:var(--ctx-fs);font-weight:var(--fw-medium);
+  color:var(--ctx-fg);background:transparent;box-shadow:none;transition:none;
 }
-.export-menu-item,.vp-pill-item,.vp-prim-pop-item,.cs-opt,#ctx-menu .ctx-menu-row{
-  box-sizing:border-box;width:100%;min-height:var(--menu-item-h);padding:0 var(--space-md);
-  border-radius:var(--menu-item-r);font-size:var(--menu-fs);font-weight:var(--fw-medium);
-  color:var(--tx);background:transparent;box-shadow:none;transition:none;
+.cs-opt,.vp-pill-item,.vp-prim-pop-item,.mat-presets-menu .mat-preset,.sc-prof-i{
+  box-sizing:border-box;width:100%;min-height:var(--dd-item-h);padding:0 var(--dd-item-px);gap:var(--dd-gap);
+  border-radius:var(--dd-item-r);font-size:var(--dd-fs);font-weight:var(--fw-medium);
+  color:var(--dd-fg);background:transparent;box-shadow:none;transition:none;
 }
-.export-menu-item:hover,.export-menu-item:focus-visible,
-.vp-pill-item:hover,.vp-pill-item.active:hover,
-.vp-prim-pop-item:hover,.cs-opt:hover,
+.export-menu-item:hover,.export-menu-item:focus-visible,.brand-menu-item:hover,.brand-menu-item:focus-visible,
 #ctx-menu .ctx-menu-row:hover{
-  background:var(--ac);color:var(--tx-on-accent);box-shadow:none;outline:none;
+  background:var(--ctx-hover-bg);color:var(--ctx-hover-fg);box-shadow:none;outline:none;
+}
+.vp-pill-item:hover,.vp-pill-item.active:hover,
+.vp-prim-pop-item:hover,.cs-opt:hover,.mat-presets-menu .mat-preset:hover,.sc-prof-i:hover:not(:disabled){
+  background:var(--dd-hover-bg);color:var(--dd-hover-fg);box-shadow:none;outline:none;
 }
 /* everything inside the highlighted row goes white with it */
 .export-menu-item:hover .hint,.export-menu-item:focus-visible .hint,
 .export-menu-item:hover .fmt,.export-menu-item:focus-visible .fmt,
 .export-menu-item:hover i,.export-menu-item:hover svg,.export-menu-item:focus-visible svg,
+.brand-menu-item:hover svg,.brand-menu-item:focus-visible svg,.brand-menu-item:hover .kbd-chip,
 .vp-pill-item:hover .vp-pill-item-kbd,
 #ctx-menu .ctx-menu-row:hover .ctx-menu-icon,#ctx-menu .ctx-menu-row:hover .kbd-chip,#ctx-menu .ctx-menu-row:hover .sc-plus{
   color:var(--tx-on-accent);stroke:currentColor;opacity:1;
@@ -2128,13 +2163,12 @@ html.no-mod-ring :focus-visible{outline:none!important;box-shadow:none!important
   background:transparent;border:0;padding:0;font-size:var(--fs-sm);font-weight:var(--fw-regular);
   letter-spacing:0;color:var(--tx2);
 }
-#ctx-menu .ctx-menu-row{gap:var(--space-md)}
 #ctx-menu .ctx-menu-row.danger:hover{background:var(--er);color:var(--white)}
 #ctx-menu .ctx-menu-row.danger:hover .ctx-menu-icon{color:var(--white)}
 /* shape picker: a picture in the row under the pointer goes white with it */
 .vp-prim-pop-item:hover img{filter:saturate(0) brightness(2.4)}
 /* value menus: check-mark column at the left */
-.cs-opt,.vp-pill-item{justify-content:flex-start;gap:var(--space-md)}
+.cs-opt,.vp-pill-item{justify-content:flex-start}
 .cs-opt::before,.vp-pill-item::before{content:'';flex:0 0 12px;width:12px;height:12px}
 /* the check is drawn, not typed, so it looks the same in every font */
 .cs-opt.cs-sel::before,.vp-pill-item.active::before{background:currentColor;
@@ -2183,13 +2217,13 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .vpc.tr{top:auto;right:auto;bottom:10px;left:50%;transform:translateX(-50%);flex-direction:row;align-items:center;background:transparent;box-shadow:none;padding:0;gap:var(--space-sm);}
 .vpc .vpb{
   width:30px;height:30px;flex:0 0 30px;background:transparent;border:0;border-radius:var(--r-sm);
-  backdrop-filter:none;color:var(--tx2);
+  backdrop-filter:none;color:var(--icon-fg-float);
 }
 .vpc .vpb:hover{background:var(--s4);border:0;color:var(--tx)}
 .vpc .vpb.active{background:var(--ac);border:0;color:var(--white)}
-.vpc .vpb svg{width:var(--icon-md);height:var(--icon-md)}
-.vpc.tl .vpb-sep{height:1px;width:18px;margin:var(--space-3) auto;background:var(--s5)}
-.vpc.tr .vpb-sep{width:1px;height:18px;margin:0 var(--space-3);background:var(--s5)}
+.vpc .vpb svg{width:var(--icon-btn-float);height:var(--icon-btn-float)}
+.vpc.tl .vpb-sep{height:1px;width:18px;margin:var(--space-3) auto;background:var(--bar-sep)}
+.vpc.tr .vpb-sep{width:1px;height:18px;margin:0 var(--space-3);background:var(--bar-sep)}
 /* (where the unseen holder of the viewport settings stands: see #vp-settings-pop) */
 .vpc.tr #vp-settings-pop{top:auto;bottom:44px;right:0;transform-origin:bottom right;max-height:min(520px,calc(100vh - 138px));}
 /* the shortcut tips sit clear of the bottom bar */
@@ -2250,7 +2284,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 #tb .spacer ~ *:not(#claude-pill):last-child,
 #tb #stat-renderer,#tb .stat-renderer{flex:0 0 calc(var(--side-r-w) - 18px);box-sizing:border-box;display:flex;justify-content:flex-end;min-width:0}
 /* The shape picker stands on the Add button in the bottom toolbar and opens
-   upwards like the toolbar's other popovers (app-v2.js lines it up with the
+   upwards like the toolbar's other popovers (app.js lines it up with the
    button). */
 .vpc.tr .vp-prim-pop{top:auto;bottom:46px;left:0;max-height:calc(100vh - 150px);overflow-y:auto;overscroll-behavior:contain}
 /* Shape picker and Add button: flat line icons, like the rest of the toolbar. */
@@ -2277,11 +2311,14 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* small surfaces */
 .export-menu,.vp-pill-menu,.vp-prim-pop,.cs-pop,#ctx-menu,
 #vp-settings-pop,#vp-materials-pop,.mat-presets-menu,.mat-tex-pop,.brn-token-pop,
-.brand-menu,.tip-pop{
+.brand-menu,.sc-prof-menu,.tip-pop{
   background:var(--surface-pop);border:0;border-radius:var(--surface-pop-r);
   box-shadow:var(--surface-shadow),var(--surface-ring);backdrop-filter:none;
 }
 .toast{background:var(--surface-pop);border:0;box-shadow:var(--surface-shadow),var(--surface-ring)}
+/* Opening: every menu and dropdown takes --menu-in, the dropdown's own. These are shown by being displayed or made when they open (the always-present
+   ones, .export-menu .vp-pill-menu .brand-menu .sc-prof-menu #claude-pop, take it on .show). Nothing else sets an animation on a menu. */
+.vp-prim-pop,.cs-pop,#ctx-menu,#ctx-menu .ctx-sub,.mat-presets-menu,.mat-tex-pop,.brn-token-pop,.cp-pop,#vp-add-pop,.rn-menu,#sb-bg-pop,#cf-pop,#vp-brep-pop{animation:var(--menu-in)}
 /* windows */
 .modal,.dlg-card,.dlg-popup .dlg-pop,#_mat-editor-popup .dlg-pop,.loader-card,#file-warn .card{
   background:var(--surface-pop);border:0;border-radius:var(--surface-win-r);
@@ -2307,7 +2344,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* App icon: the same box as every other top-bar button (it was a 24px chip
    inside 5px of padding, so it read as smaller than its neighbours). */
 .brand-mark,.brand-left .brand-mark{margin-left:0;width:var(--icon-xl);height:var(--icon-xl);margin:0;border-radius:0;background:none;box-shadow:none;transition:none;filter:none;}
-/* Only the tree rows near the viewport are in the document (app-v2.js, "Only
+/* Only the tree rows near the viewport are in the document (app.js, "Only
    the rows near the viewport are in the document"). Two spacers stand in for
    the rows above and below, so every row is exactly as tall as the script
    reckons (_TREE_ROW_H). */
@@ -2673,7 +2710,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 }
 /* A control the command search has just jumped to. */
 .cmdk-flash{outline:2px solid var(--ac);outline-offset:2px;border-radius:var(--r-sm)}
-/* The tree scrolls sideways (see "The tree scrolls sideways" in app-v2.js).
+/* The tree scrolls sideways (see "The tree scrolls sideways" in app.js).
    The indent is a fixed step per level and names are shown in full; a row
    that is wider than the panel is reached with the scrollbar under the tree
    (or Shift + wheel). The rows stay as wide as the panel: their contents are
@@ -2761,7 +2798,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* A row whose part has been deleted. (Separate from .is-hidden, which the
    collapse / expand code switches on and off.) */
 .tree-node.is-gone{display:none!important}
-/* Mask icons (see _ico in app-v2.js): the shape comes from --ti-m, the
+/* Mask icons (see _ico in app.js): the shape comes from --ti-m, the
    colour from the text colour. */
 .ti{display:inline-block;flex:0 0 auto;width:var(--icon-sm);height:var(--icon-sm);background:currentColor;
   -webkit-mask:var(--ti-m) center/contain no-repeat;mask:var(--ti-m) center/contain no-repeat}
@@ -2797,15 +2834,13 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
    per-component colours without !important. Order below = precedence. */
 /* 1. at rest */
 :is(.btn,.btn-sm,.tbtn,.cs-trigger,.mac-sel,.mac-input,.vp-pill,.wl-act,.fmt-card,.lc-pill,.lc-search,.mat-act,
-    .export-menu-item,.vp-pill-item,.vp-prim-pop-item,.cs-opt,.brand-menu-item,.ctx-menu-row,
     .scrub-value,.scrub-input,.prim-value,input:not([type="range"],[type="checkbox"],[type="radio"],[type="file"],[type="color"],.invalid),textarea,#_a#_b):not(.danger,.mat-act-danger,.primary,.dlg-btn-ok){color:var(--tx-control)}
 /* 2. under the pointer, focused or open */
 :is(.btn,.btn-sm,.tbtn,.cs-trigger,.mac-sel,.mac-input,.vp-pill,.wl-act,.fmt-card,.lc-pill,.mat-act,
     .scrub-value,.scrub-input,.prim-value,input:not([type="range"],[type="checkbox"],[type="radio"],[type="file"],[type="color"],.invalid),textarea,#_a#_b):not(.danger,.mat-act-danger,.primary,.dlg-btn-ok):is(:hover,:focus,:focus-visible,[aria-expanded="true"]){color:var(--tx-control-hover)}
 /* 3. pressed / current */
-:is(.tbtn.active,.lc-pill.active,.fmt-card.selected,.vp-pill-item.active,.cs-opt.cs-sel,.mat-act.active,.mat-view-btn.active,.export-wrap.open>.tbtn,#_a#_b):not(.danger){color:var(--tx-control-hover)}
-/* 4. the row under the pointer in a menu sits on the accent */
-:is(.export-menu-item,.vp-pill-item,.vp-prim-pop-item,.cs-opt,.ctx-menu-row,.brand-menu-item,#_a#_b):not(.danger):is(:hover,:focus-visible){color:var(--tx-on-accent)}
+:is(.tbtn.active,.lc-pill.active,.fmt-card.selected,.mat-act.active,.mat-view-btn.active,.export-wrap.open>.tbtn,#_a#_b):not(.danger){color:var(--tx-control-hover)}
+/* 4. (the rows of menus and dropdowns, at rest, under the pointer and current, are --ctx-* and --dd-*: see "Right-click menus" in :root) */
 /* 5. disabled */
 :is(.btn,.btn-sm,.tbtn,.cs-trigger,.mac-sel,.mac-input,.wl-act,.mat-act,.export-menu-item,input,textarea,#_a#_b):not(.danger):is(:disabled,[aria-disabled="true"]){color:var(--tx-control-off)}
 /* A few fields carry their colour in a style attribute; only !important
@@ -3055,7 +3090,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
   background:var(--bg2);border-radius:var(--btn-r-md,6px);color:var(--tx-control);font-size:var(--fs-12)}
 .doc-tab>svg,.doc-tab>i{width:var(--icon-sm);height:var(--icon-sm);flex:0 0 14px;stroke-width:1.8;color:var(--tx3)}
 /* Every tab is one width. A long name is cut in the middle: its first piece
-   gives way, its last few letters always show (_tabNameSet in app-v2.js). */
+   gives way, its last few letters always show (_tabNameSet in app.js). */
 .doc-tab-name{flex:1 1 auto;min-width:0;display:flex;overflow:hidden;white-space:pre;cursor:default}
 .doc-tab-name>.dtn-a{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .doc-tab-name>.dtn-b{flex:0 0 auto}
@@ -3713,7 +3748,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .smart-info{margin:0;line-height:var(--lh-body)}
 .smart-info:empty{display:none}
 /* ── Right sidebar: cards slide open and shut ──────────────────────────────
-   (_wireSectionSlide in app-v2.js plays it; the arrow turns with it.) While a
+   (_wireSectionSlide in app.js plays it; the arrow turns with it.) While a
    card is part-way, its body is shorter than what is in it. A body that is a
    column would squeeze its rows to fit and let them go at the end; they keep
    their size instead, and the body's edge uncovers them. */
@@ -3886,7 +3921,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
 .msr-row.sel .msr-kind{color:var(--wn)}
 
 /* The top bar follows a sidebar folding or opening on the grid's own curve
-   (app-v2.js, _alignDocTab sets the margins once, to where they end up). */
+   (app.js, _alignDocTab sets the margins once, to where they end up). */
 body.tb-slide:not(.resizing) :is(.doc-tabs,#btn-toggle-left){transition:margin-left 320ms var(--ease-std)}
 body.tb-slide:not(.resizing) #tb #stat-renderer{transition:flex-basis 320ms var(--ease-std)}
 
@@ -4332,7 +4367,7 @@ body.app-ready .sp-card{transform:scale(1.025)}
 .mem-key i{display:inline-block;width:8px;height:8px;border-radius:var(--r-pill);margin-right:6px}
 @media (prefers-reduced-motion:reduce){.mem-bar i{transition:none}}
 
-/* ── Materials and Library popped out as floating windows (see _floatDocks in app-v2.js) ── */
+/* ── Materials and Library popped out as floating windows (see _floatDocks in app.js) ── */
 #vp-materials-pop.mat-dock.is-float,#vp-library-pop.is-float{position:fixed;left:var(--fx,80px);top:var(--fy,100px);right:auto;bottom:auto;width:var(--fw,780px);height:var(--fh,380px);max-height:none;
   border:0;border-radius:var(--surface-win-r);box-shadow:var(--surface-shadow-win);transform:none;transition:none;z-index:var(--z-dock-float)}   /* (no border: the grab zones below lie on the very edge of the box, which clips them) */
 #vp-materials-pop.mat-dock.is-float:not(.show),#vp-library-pop.is-float:not(.show){pointer-events:none}
@@ -4359,7 +4394,7 @@ body.dock-resizing .is-float>.mat-dock-h{cursor:grabbing}
 .mat-ghost{position:fixed;left:0;top:0;z-index:100000;pointer-events:none;will-change:transform;border-radius:50%;object-fit:cover;box-shadow:0 6px 16px var(--blk-50);opacity:.95}
 body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
 #vp-materials-pop :is(.mat-cell,.mat-row).mat-drop-into{background:var(--ac-soft);border-color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac)}
-/* only the floating window in use keeps its hairline edge (see _winFocus in app-v2.js) */
+/* only the floating window in use keeps its hairline edge (see _winFocus in app.js) */
 #vp-materials-pop.mat-dock.is-float:not(.win-focus),#vp-library-pop.is-float:not(.win-focus){border-color:transparent;box-shadow:var(--surface-shadow-win-off)}
 .dlg-popup .dlg-pop:not(.win-focus),#_mat-editor-popup .dlg-pop:not(.win-focus){box-shadow:var(--surface-shadow-win-off)}
 /* the window rises into place when it opens or pops out, and the dock settles when it goes back (transform and opacity only) */
@@ -4375,8 +4410,6 @@ body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
   .dlg-card{transform:translateY(8px) scale(.94)}
   .dlg-popup .dlg-pop{transform:translateY(-8px) scale(.94)}
   .modal-bg.show .modal,.dlg-bg.show .dlg-card,.dlg-popup.show .dlg-pop{transition:transform .38s cubic-bezier(.34,1.5,.5,1),opacity .14s ease-out}
-  .vp-pill-menu,.export-menu{transition:opacity .15s ease-out,transform 0s linear .15s}
-  .vp-pill-menu.show,.export-menu.show{transition:none}
 }
 /* Whole pixels. These were measured in the browser (every box that draws something, at 100%): a box that starts or ends between two pixels
    has soft edges. Each rule below removes one cause: a centred item in an odd height, a share of a width that does not divide, a line height
@@ -4397,6 +4430,17 @@ body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
 #sidebar-left .tree-toolbar>.tree-icon-btn{flex:1 1 0;width:auto;min-width:0;height:30px}      /* (the seven share the whole row) */                 /* (sharing the width made them 28.43px: 28px each, whole, and the rest of the row stays empty) */
 #sidebar-right{line-height:18px}                                      /* (the line height was 1.4 times the font: 16.8px in the section heads, which made them 36.8px high and moved everything below by .8px; 18px whole, for all that has no line height of its own) */
 .tree-inst svg{width:10px;height:10px}                               /* (a 9px icon in a 14px box sat on a half pixel) */
+/* The cards of the right panel, whole pixels: their text took a line height of 1.2 to 1.55 times the font (14.4, 17.05, 18.6, 15.95, 21.7 px), and their heights
+   (and everything under them) followed. The tile pictures leave 2px round them instead of 4 %. */
+#sidebar-right :is(.prop-hero-num,#thr-count){line-height:24px}
+#sidebar-right .scrub-label{line-height:14px}
+#sidebar-right :is(.field-help,.plan-line,#sim-strict-help,#budget-info,.plan-sub,#budget-preview){line-height:17px}
+#sidebar-right #smart-info{line-height:16px}
+#sidebar-right :is(.cmd-lede,.plan-from,.plan-arrow,.plan-unit){line-height:18px}
+#sidebar-right #thr-info{line-height:17px}
+#sidebar-right b.plan-to{line-height:22px}
+#sidebar-right .size-field.budget-field{width:104px;box-sizing:border-box}      /* (it was as wide as its text, 103.81px, and the button took what was left: 124.19px) */
+.shade-thumb{inset:2px;width:calc(100% - 4px);height:calc(100% - 4px)}
 /* The Shading angle row now stands in the Shading section (under Outlines), not in the Properties card: no rules round it there, and it is dimmed with no selection */
 #shading-section .prop-shade{height:32px;margin:0;border-top:0;border-bottom:0}
 #shading-section .prop-shade.is-off{opacity:.45;pointer-events:none}
@@ -4460,17 +4504,29 @@ body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
    nor the badge can make the row taller or wider, and nothing below it moves. */
 #prop-body .prop-head{height:24px;min-height:24px;box-sizing:border-box;flex-wrap:nowrap;overflow:hidden}
 #prop-body .prop-head .prop-name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#prop-body .prop-head .prop-lock-badge{flex:none;box-sizing:border-box;width:68px;height:20px;margin-left:0!important;padding:0 6px!important;display:inline-flex;align-items:center;justify-content:center;line-height:1;white-space:nowrap;overflow:hidden}
+/* The Lock badge: a small flat button like the others (no amber, no emoji). Locked is the brighter of the two; both are one size, so the row never moves. */
+#prop-body .prop-head .prop-lock-badge{flex:none;box-sizing:border-box;width:76px;height:20px;margin-left:0;padding:0 var(--space-md);display:inline-flex;align-items:center;justify-content:center;gap:var(--space-xs);line-height:1;white-space:nowrap;overflow:hidden;border:0;border-radius:var(--r-sm);background:var(--s3);color:var(--tx3);font-size:var(--fs-11);cursor:pointer;user-select:none;transition:background var(--dur-100),color var(--dur-100)}
+#prop-body .prop-head .prop-lock-badge svg{width:var(--icon-xs);height:var(--icon-xs);flex:none}
+#prop-body .prop-head .prop-lock-badge:hover{background:var(--s4);color:var(--tx2)}
+#prop-body .prop-head .prop-lock-badge.is-locked{background:var(--s4);color:var(--tx)}
+#prop-body .prop-head .prop-lock-badge.is-locked:hover{background:var(--s5)}
+/* a locked part in the tree: a small drawn lock before its name */
+.prop-lock-note{display:inline-flex;align-items:center;gap:var(--space-xs);margin-left:var(--space-md);color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-normal);letter-spacing:normal;text-transform:none;vertical-align:middle}
+.prop-lock-note svg{width:var(--icon-xs);height:var(--icon-xs)}
+.tree-typeicon.locked,.tree-node .tree-typeicon.locked,.tree-node.selected .tree-typeicon.locked,.tree-node.ancestor-selected .tree-typeicon.locked,.prop-type-icon.locked{color:var(--icon-lock)}      /* (a locked part wears a lock instead of its type icon, in the tree and in Properties: red also on a selected row) */
+#prop-body .prop-head .prop-lock-badge.is-locked svg{color:var(--icon-lock)}
+.tree-lock{display:inline-grid;place-items:center;flex:none;margin-right:var(--space-xs);color:var(--icon-lock)}
+.tree-lock .ti{width:var(--icon-xs);height:var(--icon-xs)}
 #prop-body .prop-head .prop-head-note{flex:none}
 /* A press scaled the button to .92 (or .97): while that animates the icon is resampled, so it goes soft and sharp again with every click. The press
    is shown by dimming instead, and nothing is scaled. */
 .vpb:active,.tree-icon-btn:active,.lc-icon-btn:active,.dlg-x:active,.dlg-popup .dlg-x:active,.tbtn:active,.lc-pill:active,.vp-pill:active,.btn:active,.sel-bar-grid .btn:active,#draw-card .dr-grid button:active,#draw-card #dr-edit .btn:active{transform:none!important;opacity:.72}
-.sel-bar-grid.is-icons .btn svg{width:15px!important;height:15px!important}   /* (the rule above lost to the icon size set on every button svg) */
+.sel-bar-grid.is-icons .btn svg{width:var(--icon-btn)!important;height:var(--icon-btn)!important}   /* (the rule above lost to the icon size set on every button svg) */
 /* Icons: a line has the thickness of a whole device pixel. An icon is drawn on a 24 unit grid and scaled, so its line was 2 units x (14/24) = 1.17px
    at 14px and 1.33px at 16px: soft on every screen. The stroke does not scale now (vector-effect), and its width is one device pixel (two on a
-   screen of 2x and more): --icon-stroke, set from the screen's scale in app-v2.js (_iconStroke). */
-:root{--icon-stroke:1px}
-svg.lucide{stroke-width:var(--icon-stroke)!important}
+   screen of 2x and more): --icon-stroke, set from the screen's scale in app.js (_iconStroke). */
+:root{--icon-stroke:1px; --icon-line:calc(var(--icon-stroke) * 1.5)}   /* (the line of every icon: 1.5 device pixels; --icon-stroke is the whole device pixel) */
+svg.lucide{stroke-width:var(--icon-line)!important}
 svg.lucide *{vector-effect:non-scaling-stroke}
 /* the pictures that are not from the icon set follow the same rule: the mode cubes (Model, Points, Edges, Polygons) and the camera cubes */
 :is(.em-ico svg,.vp-pill-cube,.vp-pill-cubeico){stroke-width:var(--icon-stroke)!important}
@@ -4497,7 +4553,7 @@ svg.lucide *{vector-effect:non-scaling-stroke}
    with every section folded the window ends where they end (its height follows what is in it; the least height left a gap) */
 #_mat-editor-popup .mat-edit-section.collapsed .mat-edit-section-h{margin-bottom:0}
 #_mat-editor-popup .dlg-pop{min-height:0 !important}
-/* …and no taller than the room under its top, or than it was dragged to: past that its body scrolls (_matEditorFit in app-v2.js) */
+/* …and no taller than the room under its top, or than it was dragged to: past that its body scrolls (_matEditorFit in app.js) */
 #_mat-editor-popup .dlg-pop{max-height:var(--mat-max-h,calc(100vh - 24px))}
 /* the card's top: the title on the icon's centre line (the dialog title carries a bottom margin), and a smaller picture with the name beside it */
 #_mat-editor-popup .dlg-head-titles{display:flex;align-items:center;align-self:stretch}
@@ -4551,9 +4607,8 @@ svg.lucide *{vector-effect:non-scaling-stroke}
 @media (prefers-reduced-motion:reduce){#_mat-editor-popup .mat-edit-toggle input,#_mat-editor-popup .mat-edit-toggle input::after{transition:none}}
 /* ── end of the material editor look ── */
 
-/* ── Right-click menu in a rename box (_attachRenameMenu in app-v2.js) ── */
-.rn-menu{position:fixed;z-index:calc(var(--z-popover,1000) + 5);width:252px;padding:var(--space-sm) var(--space-xs) var(--space-xs);box-sizing:border-box;border-radius:var(--surface-pop-r);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);font-size:var(--fs-12);color:var(--tx2);transform-origin:var(--rn-ox,0) var(--rn-oy,0);animation:rnMenuIn var(--dur-base) var(--ease-pop)}
-@keyframes rnMenuIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+/* ── Right-click menu in a rename box (_attachRenameMenu in app.js) ── */
+.rn-menu{position:fixed;z-index:calc(var(--z-popover,1000) + 5);width:252px;padding:var(--space-sm) var(--space-xs) var(--space-xs);box-sizing:border-box;border-radius:var(--surface-pop-r);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);font-size:var(--fs-12);color:var(--tx2);transform-origin:var(--rn-ox,0) var(--rn-oy,0)}
 .rn-top{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2xs);padding:0 var(--space-2xs) var(--space-xs)}
 .rn-top5{grid-template-columns:repeat(5,1fr)}
 .rn-act{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:var(--space-xs);padding:var(--space-md) var(--space-2xs) var(--space-sm);border-radius:var(--r-lg);color:var(--tx);font-size:var(--fs-10);cursor:pointer;transition:background var(--dur-fast,var(--dur-fast)) var(--ease-out,ease-out)}
@@ -4571,7 +4626,6 @@ svg.lucide *{vector-effect:non-scaling-stroke}
 .rn-links{display:flex;flex-wrap:wrap;gap:var(--space-2xs) var(--space-xl);padding:0 var(--space-lg) var(--space-sm)}
 .rn-link{all:unset;color:var(--tx3);font-size:var(--fs-11);cursor:pointer;transition:color var(--dur-fast,var(--dur-fast)) var(--ease-out,ease-out)}
 .rn-link:hover{color:var(--tx)}
-@media (prefers-reduced-motion:reduce){.rn-menu{animation:none}}
 
 /* A field never shows the text-selection (I-beam) pointer: the ordinary arrow, also while it is being edited. Fields that are dragged to change a value keep their own drag cursor. */
 input,textarea,[contenteditable],[contenteditable="true"]{cursor:default}
@@ -4581,7 +4635,7 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 /* A field that has the focus gets no blue rectangle: it keeps its ordinary border (the value being edited is still highlighted). The rename box of the parts tree is the one exception: it has to be seen. */
 /* ── Floating windows are the lowest layer of what floats ───────────────────────────────────────────────────────────
    The popped-out Materials and Library windows sit just above the toolbar and the draggable dialogs (material editor,
-   screenshot, turntable, flatten, rename) at 100 and up, in the order they were last used (_winFocus in app-v2.js). The
+   screenshot, turntable, flatten, rename) at 100 and up, in the order they were last used (_winFocus in app.js). The
    modal windows (Settings, Export, Import, Help, the search: 200), toasts and the right-click menu are in front of them.
    The top bar is a layer of its own far below, so a menu that drops from it opened behind a floating window: while one
    of its menus is open, the bar comes in front of the floating windows (and stays under the modal windows). */
@@ -4597,7 +4651,7 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 /* …but a window that floats is a window: a popped-out Materials or Library window stands in front of the view's toolbars, tips
    and command cards when it is moved over them (Luka, 12 Oct: "toolbars in viewport are now sitting on top of our windows").
    A dock at the bottom stays under them, as above. Both numbers are under the dialogs' layer (100), which the floating docks
-   share while a dialog is open (_winFocus in app-v2.js). */
+   share while a dialog is open (_winFocus in app.js). */
 #vp-materials-pop.mat-dock.is-float,#vp-library-pop.is-float{z-index:var(--z-dock-float)}
 #vp-materials-pop.mat-dock.is-float.on-top,#vp-library-pop.is-float.on-top{z-index:var(--z-dock-float-top)}
 
@@ -4904,10 +4958,10 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 @keyframes el-bar-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.vpc.el-bar{transition:none}.vpc.el-bar:not(.is-out):not([hidden])>*{animation:none}}
 .el-bar .el-row{display:grid;grid-template-columns:30px;gap:var(--space-2xs)}
-.el-bar .vpb-sep{height:1px;width:18px;margin:var(--space-3) auto;background:var(--s5)}
-.el-bar .el-row>button,.el-ibtn{position:relative;width:30px;height:30px;display:grid;place-items:center;padding:0;background:transparent;border:0;border-radius:var(--r-sm);color:var(--tx2);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
+.el-bar .vpb-sep{height:1px;width:18px;margin:var(--space-3) auto;background:var(--bar-sep)}
+.el-bar .el-row>button,.el-ibtn{position:relative;width:30px;height:30px;display:grid;place-items:center;padding:0;background:transparent;border:0;border-radius:var(--r-sm);color:var(--icon-fg-float);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
 .el-bar .el-row>button>span,.el-ibtn>span{display:none}
-.el-bar .el-row [data-lucide],.el-bar .el-row .lucide,.el-bar .el-row svg{width:var(--icon-md);height:var(--icon-md);display:block;stroke-width:1.6}
+.el-bar .el-row [data-lucide],.el-bar .el-row .lucide,.el-bar .el-row svg{width:var(--icon-btn-float);height:var(--icon-btn-float);display:block}
 .el-bar .el-row>button:hover,.el-ibtn:hover:not(:disabled){color:var(--tx);background:var(--s4)}
 .el-bar .el-row>button.active,.el-bar .el-row>button.active:hover,.el-ibtn:has(>input:checked),.el-ibtn:has(>input:checked):hover{color:var(--tx-control-hover);background:var(--s6)}
 /* the two groups where one of three is on (how a pick is made, the gizmo's axes): one grey pill that slides to the button that is on (it moves with `top`, not a transform: an animated transform gets its own layer and the icons over it were drawn soft while it moved) */
@@ -4972,8 +5026,8 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .em-pop-item.is-on:hover .em-pop-l{color:var(--tx-on-accent)}
 /* ── end of Edit mesh ── */
 </style>
-<script src="appearance.js?v=7"></script>
-<script src="updater.js?v=1"></script>
+<script src="js/appearance.js?v=7"></script>
+<script src="js/updater.js?v=1"></script>
 <style id="updates-css">
 /* Updates: the card in the corner, and Settings › Updates (updater.js). Tokens only. */
 .up-card{position:fixed;right:16px;bottom:44px;z-index:calc(var(--z-overlay) + 1);width:340px;max-width:calc(100vw - 32px);padding:var(--space-2xl) var(--space-3xl);border-radius:var(--surface-pop-r);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);color:var(--tx2);font-size:var(--fs-12);line-height:var(--lh-body);opacity:0;transform:translateY(8px);transition:opacity var(--dur-200) ease,transform var(--dur-200) ease}
@@ -5076,8 +5130,7 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 .claude-pill:hover,.claude-pill[aria-expanded="true"]{background:var(--bg3);color:var(--tx)}
 /* the pill's dropdown */
 #claude-pop{position:fixed;z-index:900;width:304px;box-sizing:border-box;padding:var(--space-2xl);border-radius:var(--r-2xl);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);color:var(--tx-control);font-size:var(--fs-12);display:none;flex-direction:column;gap:var(--space-xl)}
-#claude-pop.show{display:flex;animation:clp-in var(--dur-140) var(--ease-out,ease-out)}
-@keyframes clp-in{from{opacity:0;transform:translateY(-4px)}}
+#claude-pop.show{display:flex;animation:var(--menu-in)}
 @media (prefers-reduced-motion:reduce){#claude-pop.show{animation:none}}
 .clp-head{display:flex;align-items:flex-start;gap:var(--space-md)}
 .clp-head .cl-dot{margin-top:var(--space-5);width:8px;height:8px;border-radius:50%;background:var(--tx3);flex:none}
@@ -5473,7 +5526,7 @@ body.cf-reveal #cf-stats{animation:cf-in .6s cubic-bezier(.22,.9,.3,1) .5s both}
   </div>
 </div>
 <script>
-// What the splash says while the app starts: a line and a share, from the places in the boot that know (app-v2.js, boot()).
+// What the splash says while the app starts: a line and a share, from the places in the boot that know (app.js, boot()).
 window.moSplash = function (msg, pct) {
   const st = document.getElementById('sp-status'), pr = document.getElementById('sp-prog');
   if (st && msg) st.textContent = msg + (pct != null ? ' ' + Math.round(pct) + '%' : '');
@@ -5607,16 +5660,16 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.30.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.31.0</div>
         </div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span></div>
           <ul>
-            <li>Claude mode (alpha): follow Claude as a feed</li>
-            <li>Animate (alpha): spin, swing, shake and travel</li>
-            <li>Select all instances, Select the original, Make unique</li>
-            <li>Allow, Ask first or Block for each kind of Claude change</li>
-            <li>A new Settings window and a rounder look</li>
+            <li>A polish of the interface: icons, menus, dropdowns</li>
+            <li>Lock a whole group; Pivot points in Export</li>
+            <li>A shorter right-click menu in the part tree</li>
+            <li>An Export window with the rest under Advanced</li>
+            <li>A tidier folder: the program is in app</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -5697,25 +5750,25 @@ window.moSplash = function (msg, pct) {
       <!-- Each button says what it does: an icon over one word. (Hide
            unselected and Show all used to be here too; they are in the
            right-click menu, the command search and on Alt+H / Shift+H.) -->
-      <button class="tree-icon-btn" id="tree-collapse-toggle" title="Collapse or expand: the whole tree, the selection, or from the selection down">
+      <button class="tree-icon-btn" id="tree-collapse-toggle" title="Collapse / expand" aria-label="Collapse or expand">
         <i data-lucide="chevrons-down-up"></i><span>Collapse</span>
       </button>
-      <button class="tree-icon-btn" id="tree-batch-rename" title="Rename: the batch dialog (F2) or a quick preset">
+      <button class="tree-icon-btn" id="tree-batch-rename" title="Rename (F2)" aria-label="Rename">
         <i data-lucide="text-cursor-input"></i><span>Rename</span>
       </button>
-      <button class="tree-icon-btn" id="tree-flatten" title="Flatten the hierarchy: quick options, or the full dialog">
+      <button class="tree-icon-btn" id="tree-flatten" title="Flatten hierarchy" aria-label="Flatten hierarchy">
         <i data-lucide="list-tree"></i><span>Flatten</span>
       </button>
-      <button class="tree-icon-btn" id="tg-transform" title="Toggle transform panel: position, rotation, size">
+      <button class="tree-icon-btn" id="tg-transform" title="Transform" aria-label="Transform panel">
         <i data-lucide="move-3d"></i><span>Transform</span>
       </button>
-      <button class="tree-icon-btn" id="btn-recenter" title="Recentre on origin: move the model (or only the selected parts, together) so its bbox centre sits at the world origin">
+      <button class="tree-icon-btn" id="btn-recenter" title="Recentre on origin" aria-label="Recentre on origin">
         <i data-lucide="axis-3d"></i><span>Recentre</span>
       </button>
-      <button class="tree-icon-btn" id="btn-center-pivot" title="Centre pivot: re-pivot a part's local origin to its bbox centre (visual position unchanged)">
+      <button class="tree-icon-btn" id="btn-center-pivot" title="Centre pivot" aria-label="Centre pivot">
         <i data-lucide="crosshair"></i><span>Centre pivot</span>
       </button>
-      <button class="tree-icon-btn" id="btn-bake-transforms" title="Bake gizmo transforms: commit pending gizmo edits permanently into vertex data">
+      <button class="tree-icon-btn" id="btn-bake-transforms" title="Bake transforms" aria-label="Bake transforms">
         <i data-lucide="check"></i><span>Bake transforms</span>
       </button>
     </div>
@@ -6822,7 +6875,7 @@ window.moSplash = function (msg, pct) {
     <div class="section" id="smart-section">
       <div class="section-h"><i class="sec-ico" data-lucide="wand-sparkles"></i><span>Smart optimise</span><span class="chev">▾</span></div>
       <div class="section-b small-card smart-card">
-        <div class="cmd-lede">Every clean-up in one run. One undo reverts it.</div>
+        <div class="cmd-lede">Every clean-up in one run.</div>
         <div class="cmd-seg" id="smart-level" role="group" aria-label="How far to go">
           <button type="button" class="active" data-level="auto" title="The app picks the level from how heavy the scene is">Auto</button>
           <button type="button" data-level="light" title="Only what cannot be seen: empty and broken parts, empty groups">Light</button>
@@ -7028,7 +7081,7 @@ window.moSplash = function (msg, pct) {
 <div class="lib-dock-body">
     <div id="lib-list"></div>
     <div class="mat-insp-grip" id="lib-insp-grip" title="Drag to resize · double-click to reset"></div>
-    <!-- The picked part: a view of it to turn, and its parameters before it is placed (app-v2.js: _libInspectorRender) -->
+    <!-- The picked part: a view of it to turn, and its parameters before it is placed (app.js: _libInspectorRender) -->
     <aside class="lib-inspector is-empty" id="lib-inspector" aria-label="The picked part">
       <div class="li-view" id="lib-view" title="Drag to turn · scroll to zoom · double-click for the first view"><canvas id="lib-preview"></canvas></div>
       <div class="li-side" id="lib-side"></div>
@@ -7259,6 +7312,7 @@ window.moSplash = function (msg, pct) {
 
 <div class="modal-bg" id="export-modal">
   <div class="exp-win" role="dialog" aria-label="Export">
+    <button class="x exp-x" id="export-close" title="Close (Esc)">✕</button>
     <!-- Left: format list -->
     <nav class="exp-sidebar">
       <div class="exp-side-h">Export</div>
@@ -7286,22 +7340,11 @@ window.moSplash = function (msg, pct) {
         </div>
         <div class="exp-h-act">
           <button id="export-compat-btn" title="Which format keeps what" class="btn-sm"><i data-lucide="columns-3"></i>Compare</button>
-          <button class="x" id="export-close" title="Close (Esc)">✕</button>
         </div>
       </div>
       <div class="exp-content-b">
         <!-- what is about to be written: follows the options below -->
         <div class="sv-sum" id="exp-sum"></div>
-
-        <div class="exp-group-title">Where is it going?</div>
-        <div class="sv-chips" id="exp-presets" style="margin:0 0 2px">
-          <button type="button" class="sv-chip" data-preset="web" title="GLB with Draco, metres, Y up">Web viewer</button>
-          <button type="button" class="sv-chip" data-preset="ar" title="USDZ, metres, Y up, on the floor">AR on iPhone</button>
-          <button type="button" class="sv-chip" data-preset="unreal" title="FBX, centimetres, Z up">Unreal Engine</button>
-          <button type="button" class="sv-chip" data-preset="unity" title="FBX, metres, Y up">Unity</button>
-          <button type="button" class="sv-chip" data-preset="print" title="STL, millimetres, one mesh, on the bed">3D print</button>
-        </div>
-        <div class="field-help" id="exp-preset-note" style="margin:6px 0 0"></div>
 
         <div class="exp-group-title">File name</div>
         <div class="exp-name">
@@ -7311,20 +7354,26 @@ window.moSplash = function (msg, pct) {
           </div>
           <!-- The same pieces as in Save scene. Each adds its piece once (pressing it again
                takes it off); the counts and the size are those of what is about to be written. -->
-          <div class="sv-chips" id="exp-chips">
-            <button type="button" class="sv-chip" data-tok="date" title="Today's date, like 2026-10-08">+ date</button>
-            <button type="button" class="sv-chip" data-tok="time" title="The time now, like 1432h">+ time</button>
-            <button type="button" class="sv-chip" data-tok="ver" title="A version number; press again to raise it (Shift takes it off)">+ version</button>
-            <button type="button" class="sv-chip" data-tok="tris" title="The triangle count of what is written, like 17k-tris">+ triangles</button>
-            <button type="button" class="sv-chip" data-tok="parts" title="The number of parts written, like 67-parts">+ parts</button>
-            <button type="button" class="sv-chip" data-tok="size" title="The approximate file size, like 370KB">+ size</button>
-            <button type="button" class="sv-chip" data-tok="saved" title="How much lighter than the file that was opened, like -42pct">+ saving</button>
-            <button type="button" class="sv-chip" data-tok="opt" title="Marks the file as the optimised one">+ optimised</button>
-            <button type="button" class="sv-chip" data-tok="sel" title="Marks the file as a part of the scene">+ selection</button>
-            <button type="button" class="sv-chip sv-chip-plain" data-tok="src" title="Start again from the name of the file that was opened">Source name</button>
-          </div>
+            <div class="sv-chips" id="exp-chips">
+              <button type="button" class="sv-chip" data-tok="date" title="Today's date, like 2026-10-08">+ date</button>
+              <button type="button" class="sv-chip" data-tok="time" title="The time now, like 1432h">+ time</button>
+              <button type="button" class="sv-chip" data-tok="ver" title="A version number; press again to raise it (Shift takes it off)">+ version</button>
+              <button type="button" class="sv-chip" data-tok="tris" title="The triangle count of what is written, like 17k-tris">+ triangles</button>
+              <button type="button" class="sv-chip" data-tok="parts" title="The number of parts written, like 67-parts">+ parts</button>
+              <button type="button" class="sv-chip" data-tok="size" title="The approximate file size, like 370KB">+ size</button>
+              <button type="button" class="sv-chip" data-tok="saved" title="How much lighter than the file that was opened, like -42pct">+ saving</button>
+              <button type="button" class="sv-chip" data-tok="opt" title="Marks the file as the optimised one">+ optimised</button>
+              <button type="button" class="sv-chip" data-tok="sel" title="Marks the file as a part of the scene">+ selection</button>
+              <button type="button" class="sv-chip sv-chip-plain" data-tok="src" title="Start again from the name of the file that was opened">Source name</button>
+            </div>
         </div>
 
+        <div class="exp-group-title">Parts</div>
+        <div class="toggle exp-row"><span class="exp-row-l" id="exp-visible-lbl"><b>Visible parts only</b><small>Leave out the parts that are hidden</small></span><label><input type="checkbox" id="exp-visible" aria-labelledby="exp-visible-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle exp-row" title="Export only the parts you've currently selected. Overrides 'Visible parts only' when both are set."><span class="exp-row-l" id="exp-selected-lbl"><b>Selected parts only</b><small>Only what is selected now, shown or not</small></span><label><input type="checkbox" id="exp-selected" aria-labelledby="exp-selected-lbl"><span class="switch"></span></label></div>
+
+        <details class="exp-adv" id="exp-adv">
+          <summary>Advanced</summary>
         <div class="exp-group-title" id="exp-geom-title">Size and position</div>
         <div class="field exp-row"><span class="exp-row-l" id="exp-scale-lbl"><b>Unit scale</b><small>Multiplies every size in the file</small></span>
           <select id="exp-scale" aria-labelledby="exp-scale-lbl" class="mac-sel">
@@ -7355,10 +7404,14 @@ window.moSplash = function (msg, pct) {
             <option value="floor">Centre XY, drop to floor (Z=0)</option>
           </select>
         </div>
+        <div class="field exp-row" id="exp-pivot-row"><span class="exp-row-l" id="exp-pivot-lbl"><b>Pivot points</b><small>Where each part's axis sits</small></span>
+          <select id="exp-pivot" aria-labelledby="exp-pivot-lbl" class="mac-sel">
+            <option value="part" selected>At the centre of each part</option>
+            <option value="origin">As in the scene (usually 0, 0, 0)</option>
+          </select>
+        </div>
 
-        <div class="exp-group-title">Parts</div>
-        <div class="toggle exp-row"><span class="exp-row-l" id="exp-visible-lbl"><b>Visible parts only</b><small>Leave out the parts that are hidden</small></span><label><input type="checkbox" id="exp-visible" aria-labelledby="exp-visible-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle exp-row" title="Export only the parts you've currently selected. Overrides 'Visible parts only' when both are set."><span class="exp-row-l" id="exp-selected-lbl"><b>Selected parts only</b><small>Only what is selected now, shown or not</small></span><label><input type="checkbox" id="exp-selected" aria-labelledby="exp-selected-lbl"><span class="switch"></span></label></div>
+        <div class="exp-group-title">Structure</div>
         <div class="toggle exp-row"><span class="exp-row-l" id="exp-merge-lbl"><b>Merge into one mesh</b><small>One object in the file; the group tree is lost</small></span><label><input type="checkbox" id="exp-merge" aria-labelledby="exp-merge-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-flat-row" title="Write every part at the top level, without the group folders. Handy for tools that stumble on nested groups."><span class="exp-row-l" id="exp-flat-lbl"><b>Flatten groups</b><small>Every part at the top level, no group folders</small></span><label><input type="checkbox" id="exp-flat" aria-labelledby="exp-flat-lbl"><span class="switch"></span></label></div>
 
@@ -7369,7 +7422,7 @@ window.moSplash = function (msg, pct) {
         <div class="toggle exp-row" id="exp-fbx-ascii-row" title="Write FBX 7.4 in ASCII format instead of binary."><span class="exp-row-l" id="exp-fbx-ascii-lbl"><b>ASCII FBX</b><small>Readable text · try it if binary fails</small></span><label><input type="checkbox" id="exp-fbx-ascii" aria-labelledby="exp-fbx-ascii-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-quads-row" title="Write the faces as quads and n-gons, not triangles: the polygons of an OBJ or FBX file as they came, the four-sided pairs of triangles found in anything else (as the Wireframe view shows them). Off: every face is a triangle."><span class="exp-row-l" id="exp-quads-lbl"><b>Keep quads</b><small>Four-sided faces stay one face · off: triangles only</small></span><label><input type="checkbox" id="exp-quads" aria-labelledby="exp-quads-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-stl-ascii-row"title="Write STL as readable text instead of binary. Much larger; only for tools that cannot read binary STL."><span class="exp-row-l" id="exp-stl-ascii-lbl"><b>ASCII STL</b><small>Readable text · much larger than binary</small></span><label><input type="checkbox" id="exp-stl-ascii" aria-labelledby="exp-stl-ascii-lbl"><span class="switch"></span></label></div>
-        <div class="exp-group-title" id="exp-target-title">Where it is going</div>
+        <div class="exp-group-title" id="exp-target-title">Check the size</div>
         <div class="field exp-row" id="exp-target-row"><span class="exp-row-l" id="exp-target-lbl"><b>Check against</b><small>Compares the scene with the published guidance for a place</small></span>
           <select id="exp-target" aria-labelledby="exp-target-lbl" class="mac-sel">
             <option value="none">Nothing in particular</option>
@@ -7380,6 +7433,7 @@ window.moSplash = function (msg, pct) {
           </select>
         </div>
         <div class="field-help" id="exp-target-meter" style="margin:-4px 0 0"></div>
+        </details>
         <div id="exp-source-note" style="display:none"></div>
       </div>
       <div class="exp-content-f">
@@ -7638,6 +7692,13 @@ window.moSplash = function (msg, pct) {
   let warmUntil = 0;
   const isWarm = () => (!!tipEl && tipEl.classList.contains('show')) || performance.now() < warmUntil;
 
+  // A tip never shows while a menu or dropdown is open: the menu is over the toolbars, and a tip beside a button lands on it.
+  const MENU_SEL = '#ctx-menu, .vp-prim-pop, .vp-pill-menu, .export-menu, .brand-menu, .cs-pop, .mat-presets-menu, .sc-prof-menu, #claude-pop';
+  function menuOpen() {
+    for (const m of document.querySelectorAll(MENU_SEL)) if (m.getClientRects().length && getComputedStyle(m).visibility !== 'hidden') return true;
+    return false;
+  }
+
   function ensureEl() {
     if (tipEl) return tipEl;
     tipEl = document.createElement('div');
@@ -7728,6 +7789,7 @@ window.moSplash = function (msg, pct) {
     // leave it stranded in space when the dialog/popup that replaced the
     // anchor paints over the (now empty) coordinates.
     if (!target || !document.contains(target)) { hide(); return; }
+    if (menuOpen() && !target.closest(MENU_SEL)) { hide(); return; }
     let raw = getText(target);
     if (!raw) return;
     // A key in the text is the one the app ships with; the shortcuts window may have given the command another (or none).
@@ -7979,14 +8041,14 @@ window.moSplash = function (msg, pct) {
      transcoder, glTF-Transform (for a Draco-compressed export) and the
      in-browser STEP reader. -->
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
-<script type="module" src="app-v2.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1"></script>
+<script type="module" src="js/app.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
-     app-v2.js sets up: `defer` makes it run after that module (a plain script
+     app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
-<script defer src="cloner.js?v=20261009-icons"></script>
-<script defer src="help.js?v=4"></script>
+<script defer src="js/cloner.js?v=20261009-icons"></script>
+<script defer src="js/help.js?v=4"></script>
 <script>
-  // Reveal the app when it says it has booted (app-v2.js: 'mo-boot-ready', after the renderer and the
+  // Reveal the app when it says it has booted (app.js: 'mo-boot-ready', after the renderer and the
   // scene are up and the icons are drawn), the splash has been up long enough not to flash, and the
   // font has arrived. A cap makes sure neither the splash nor a blank page can last: if the boot never
   // reports (an error, file://), the app is shown after a few seconds anyway.

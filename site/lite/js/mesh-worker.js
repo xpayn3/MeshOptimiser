@@ -1,6 +1,6 @@
 // mesh-worker.js — heavy per-mesh work off the main thread.
 //
-// The app keeps a small pool of these (see _MeshWorkers in app-v2.js) and
+// The app keeps a small pool of these (see _MeshWorkers in app.js) and
 // hands each one mesh at a time: plain typed arrays in, plain typed arrays
 // out. Nothing here touches three.js or the page.
 //

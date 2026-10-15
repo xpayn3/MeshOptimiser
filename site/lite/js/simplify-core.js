@@ -1,6 +1,6 @@
 // simplify-core.js — the one place that decides how a mesh is reduced.
 //
-// Shared by the page (app-v2.js) and the background workers (mesh-worker.js),
+// Shared by the page (app.js) and the background workers (mesh-worker.js),
 // so Decimate, Fit to budget and the worker path give the same result and
 // report the same number. Nothing here touches three.js beyond reading
 // BufferAttributes, and nothing touches the page.
