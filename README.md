@@ -308,6 +308,15 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.31.1** — Enter goes into Edit mesh, Edit mesh and Undo work together, and the viewport no longer stalls after editing.
+
+- ![new][new] **Enter goes into Edit mesh and out of it,** with a part selected, in the mode you used last.
+- ![fix][fix] **Edit mesh and Undo / Redo work together:** what was picked is picked again after Ctrl+Z and Ctrl+Y of a move.
+- ![fix][fix] **The viewport no longer stalls after editing:** the graphics card was refusing every frame for a mesh without normals; the app now sees it and puts it right.
+- ![fix][fix] **Materials look the same everywhere:** the list, the card in Properties, the inspector and the dots in the tree follow at once.
+- ![new][new] **The colour picker can be moved,** and Heavy parts, the console and a few buttons are tidier.
+
+
 **v0.31.0** — a polish of the interface, and a tidier folder: icons, toolbars, menus and dropdowns share one look and one speed, groups can be locked, Export puts each part's pivot at the part, and the download is organised like an installed program, with the program inside `app`.
 
 - ![refactor][refactor] **A tidier folder.** The top of the download holds only what you start and read (`start.bat`, `start_hidden.vbs`, `start.command`, `Install MeshOptimiser.bat`, README, LICENSE) and one folder, `app`, with the program in it. The top level had grown past fifty files and it was hard to see what to double-click. An installed copy is offered the full download once.

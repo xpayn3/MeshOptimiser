@@ -4,20 +4,35 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
-## Unreleased
+## v0.31.1
 
-**Polish**
+Released 15 Oct 2026.
+
+v0.31.0 was a polish of the interface. v0.31.1 goes over what it left: Enter takes you into Edit mesh and out of it, Edit mesh and Undo / Redo work together, and the viewport no longer stalls after editing. Every place that shows a material now says the same thing at once, and the colour picker can be moved.
+
+**Edit mesh**
 
 - ![new][new] **Enter goes into Edit mesh and out of it.** With a part selected, Enter opens Edit mesh in the mode you used last (points, edges or polygons); Enter again goes back to Model mode. A command card that is waiting for its Enter still gets it first, and with nothing selected Enter does nothing.
 - ![fix][fix] **Edit mesh and Undo / Redo work together.** What was picked is picked again after Ctrl+Z and after Ctrl+Y of a move (Redo used to leave nothing picked), by its numbers where the part still has the same triangles and polygons. A delete taken back picks what it deleted, as before; a delete done again picks nothing.
+
+**The viewport**
+
 - ![fix][fix] **The viewport no longer stalls after editing.** Every shape that goes to the graphics card now has a normal for each point; without them the card refused every frame ("Vertex buffer slot 1 … was not set", over and over) while the rest of the app went on working, and the page never noticed because the card reports it as an event, not as an error. The page now listens for those events: it gives any lit mesh missing its normals what it needs, then uploads the parts again, and only then asks you to reload.
+- ![fix][fix] **The log console covers the bottom toolbar.** The toolbar at the bottom of the view floated above the console; the console now stands over it (and under the floating windows).
+
+**Materials**
+
+- ![fix][fix] **Every place that shows a material says the same thing, at once.** The Materials list (grid and list), the material card in Properties, the inspector and the dots in the tree are brought level whenever a material, its colour or who wears it changes, by any route: a drop, Assign, the editor, a preset, a merge, undo. A check when a press, key or drop ends catches anything else.
+- ![fix][fix] **The colour dot in the tree is the material's colour.** It used to show a colour kept on the part, so a material dropped on a part, Assigned, undone or merged left the old colour. The dot now reads the material the part wears, and it changes in the same moment.
+
+**Heavy parts**
+
 - ![fix][fix] **The Heavy parts bars no longer grow again at every change.** The list was drawn again after every edit (each release of a moved face, point or edge), so the bars replayed their growing. A row that has not changed now stays as it is, and the bars grow only when the list first appears.
 - ![fix][fix] **Selecting a part in the view no longer ticks it in Heavy parts.** The ticks of the list are its own now: a row is ticked by clicking it there (which also selects the part). The list no longer scrolls to follow a selection made in the view.
-- ![fix][fix] **The colour dot in the tree is the material's colour.** It used to show a colour kept on the part, so a material dropped on a part, Assigned, undone or merged left the old colour. The dot now reads the material the part wears, and it changes in the same moment.
-- ![fix][fix] **Every place that shows a material says the same thing, at once.** The Materials list (grid and list), the material card in Properties, the inspector and the dots in the tree are brought level whenever a material, its colour or who wears it changes, by any route: a drop, Assign, the editor, a preset, a merge, undo. A check when a press, key or drop ends catches anything else.
-- ![fix][fix] **The log console covers the bottom toolbar.** The toolbar at the bottom of the view floated above the console; the console now stands over it (and under the floating windows).
+
+**Small things**
+
 - ![new][new] **The colour picker can be moved.** Drag the strip along its top (or the hint along its bottom) to put it where it does not cover what you are colouring. It stays there while it is open, is kept inside the window, and drags at the speed of the pointer: one style write per frame.
-- ![fix][fix] **The colour dot in the tree follows a material's colour.** Changing the colour of a material changed the parts in the 3D view but left the dot on their tree rows with the old colour until the tree was redrawn; the dots now change with it.
 - ![fix][fix] **The Claude connected dropdown fits its panel.** The buttons at its foot (Claude mode, Copy command, Console, More…) ran out of the panel. *Claude mode* now has a row of its own and the other three sit under it.
 - ![polish][polish] **Icon-only buttons in the top bar draw at one size.** The sidebar button drew its icon larger than Menu and Export, so its lines looked thicker; the sidebar, screenshot and turntable buttons now match.
 - ![polish][polish] **The start screen cards show their shortcut on hover.** New scene, Open file and Import show the key only while the pointer is over the card or it has the keyboard focus.

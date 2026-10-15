@@ -14,8 +14,10 @@ The mode button is at the top of the tool strip on the left edge of the view. It
 - `2`: Edges
 - `3`: Polygons
 - `4`: Model: leave Edit mesh
+- `Enter`: Go in with a part selected, and out again
 
 - Click the button once to go into the last piece mode you used, or back out again.
+- With a part selected, **Enter** does the same: it goes into the last piece mode you used, and **Enter** again goes back to **Model**. A command card that is waiting for its **Enter** gets it first, and with nothing selected it does nothing.
 - Hold the button to see the list of all four.
 - While Edit mesh is on, three more buttons appear under the mode button: **Points**, **Edges** and **Polygons**. The lit one is the kind of piece you are picking, and a click on another switches to it. The mode button itself shows the Model icon then, and a click on it goes back to Model.
 - The view modes (solid, wireframe, X-ray, heatmap) that these keys used to switch are now on `Alt + 1` to `Alt + 4`. See [View modes](meshoptimiser://docs/view-modes).
@@ -79,6 +81,6 @@ While Edit mesh is on, the faint list of tips at the bottom right of the view sh
 - The quads and n-gons of an OBJ or FBX file are remembered after the file is read, so the polygons of the file are known afterwards.
 - [Quick remesh](meshoptimiser://docs/remesh) does not run while Edit mesh is on. Go back to Model first.
 - Leaving Edit mesh in the middle of a drag finishes the move as one undo step.
-- Everything here is one undo step, and after an undo the pieces are picked again. See [Undo and redo](meshoptimiser://docs/undo-redo).
+- Everything here is one undo step. After an undo, or a redo of a move, the pieces are picked again; a delete that is done again picks nothing, because what it picked is gone. See [Undo and redo](meshoptimiser://docs/undo-redo).
 
 Related: [move-rotate-scale](meshoptimiser://docs/move-rotate-scale), [view-modes](meshoptimiser://docs/view-modes), [remesh](meshoptimiser://docs/remesh), [fill-holes](meshoptimiser://docs/fill-holes), [library](meshoptimiser://docs/library), [undo-redo](meshoptimiser://docs/undo-redo), [shortcuts](meshoptimiser://docs/shortcuts)

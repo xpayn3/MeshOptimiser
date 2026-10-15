@@ -45,7 +45,7 @@ What the search (`Ctrl + K` or `Shift + C`) looks through, and how closely a nam
 
 The look of the interface. It does not change the model or the 3D view. **Reset** at the bottom puts everything in this section back to the defaults.
 
-- **Accent**: The colour of buttons, selections and highlights. Choose one of nine colours, or the last swatch to pick any colour. That swatch opens the app’s own colour picker. While you drag in it, the Settings window steps aside so you see the colour on the real interface, and `Esc` goes back to the accent you had.
+- **Accent**: The colour of buttons, selections and highlights. Choose one of nine colours, or the last swatch to pick any colour. That swatch opens the app’s own colour picker. While you drag in it, the Settings window steps aside so you see the colour on the real interface, and `Esc` goes back to the accent you had. The picker can be moved wherever it is opened: drag the strip along its top, or the hint along its bottom.
 - **Surfaces**: The greys the interface is built from: **Graphite**, **Midnight**, **Warm** or **Black**.
 - **Font**: The typeface of the interface: **Inter**, **System**, **Mono** or **Serif**.
 - **Text size**: Everything written in the interface, from **Small** to **Larger**. Buttons and fields grow with it.
