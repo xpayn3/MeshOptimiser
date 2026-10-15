@@ -43,6 +43,24 @@
     const middle = fig.offsetLeft - strip.offsetLeft + fig.offsetWidth / 2 - strip.clientWidth / 2;
     return Math.max(0, Math.min(max, middle));
   };
+  // the kinds of tools on the Claude page: one list at a time (arrow keys move between the tabs)
+  $$('[data-tabs]').forEach((box) => {
+    const tabs = $$('[role="tab"]', box), panels = $$('[role="tabpanel"]', box);
+    const pick = (i, focus) => {
+      tabs.forEach((tab, k) => { tab.setAttribute('aria-selected', String(k === i)); tab.tabIndex = k === i ? 0 : -1; });
+      panels.forEach((p, k) => p.classList.toggle('is-on', k === i));
+      if (focus) tabs[i].focus();
+    };
+    tabs.forEach((tab, i) => {
+      tab.addEventListener('click', () => pick(i));
+      tab.addEventListener('keydown', (e) => {
+        const k = e.key;
+        const to = k === 'ArrowDown' || k === 'ArrowRight' ? (i + 1) % tabs.length : k === 'ArrowUp' || k === 'ArrowLeft' ? (i + tabs.length - 1) % tabs.length : k === 'Home' ? 0 : k === 'End' ? tabs.length - 1 : -1;
+        if (to < 0) return;
+        e.preventDefault(); pick(to, true);
+      });
+    });
+  });
   // the feature cards: the arrows move one card; an arrow is off at its end
   $$('[data-fcar]').forEach((car) => {
     const track = car.querySelector('.fcar-track'), prev = car.querySelector('[data-dir="-1"]'), next = car.querySelector('[data-dir="1"]');
@@ -209,9 +227,32 @@
     const when = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return;
       when.disconnect();
-      import('./chat3d.js?v=4').then((m) => m.start(cx3d, '')).catch(() => {});
+      import('./chat3d.js?v=10').then((m) => m.start(cx3d, '')).catch(() => {});
     }, { rootMargin: '600px 0px' });
     when.observe(cx3d.closest('[data-cx-grid]') || cx3d);
+  }
+
+  // the example session on claude.html plays itself, message by message, inside its own box (so it never runs over the next section).
+  // On a wide screen with motion allowed; elsewhere the whole conversation is simply there. Each message says which step the model is on.
+  const cxGrid = $('[data-cx-grid]');
+  if (cxGrid && window.matchMedia('(min-width: 1000px) and (hover: hover)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    cxGrid.classList.add('is-play');
+    const thread = $('.cx-thread', cxGrid), items = $$('.cx-thread > li', cxGrid);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const play = async () => {
+      for (let i = 0; i < items.length; i++) {
+        const li = items[i], you = li.classList.contains('cx-you'), step = +li.dataset.stage || 0;
+        li.classList.add('is-in');
+        thread.scrollTo({ top: thread.scrollHeight, behavior: 'smooth' });
+        if (step) { cxGrid.dataset.stage = String(step); cxGrid.dispatchEvent(new CustomEvent('cx:stage', { detail: step })); }
+        await wait(you ? 1200 : step === 1 ? 3400 : step === 2 ? 3800 : 1500);
+      }
+    };
+    const seen = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      seen.disconnect(); wait(500).then(play);
+    }, { threshold: 0.5 });
+    seen.observe(cxGrid);
   }
 
   // the live models of the features page (features3d.js): a real mesh, loaded when the section is near, on a wide screen with a mouse and with

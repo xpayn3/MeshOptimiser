@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=405" />
+  <link rel="stylesheet" href="site.css?v=419" />
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"}}</script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
@@ -48,15 +48,33 @@
   <main id="main">
     <section class="wrap page-head">
       <p class="kicker">Claude<b>·</b><span class="tag-new is-large">New</span></p>
-      <h1>Ask Claude to do the clean-up.</h1>
-      <p class="lead">Connect MeshOptimiser to Claude and describe the job. Claude uses the tools you click, on the scene you have open. It asks before it changes the model, and every change is one undo. It saves clicking, not judgement.</p>
+      <h1>Don’t click. Ask Claude.</h1>
+      <p class="lead">Describe the job in plain words. Claude runs the app’s own tools on the model you have open, asks before it changes anything, and every step is one undo.</p>
       <div class="actions">
         <a class="btn is-primary is-large live-step" href="#how"><span>How it works</span><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9M8.5 4l4 4-4 4"/></svg></a>
         <a class="btn is-large" href="docs/work-with-claude.html">Read the docs</a>
       </div>
     </section>
 
-    <section class="band is-first">
+    <section class="band is-first" id="how">
+      <div class="wrap">
+        <div class="band-head">
+          <p class="kicker">How it works</p>
+          <h2>Three steps, then just ask.</h2>
+        </div>
+        <ol class="steps">
+          <li><i>01</i><h3>Switch it on</h3><p>Settings › Claude › Let Claude connect. A pill in the top bar shows it is on.</p></li>
+          <li><i>02</i><h3>Add it to Claude</h3><p>One line, once, in a terminal on the same computer. Nothing is installed.</p></li>
+          <li><i>03</i><h3>Ask</h3><p>Describe the job. Claude tells you what it did.</p></li>
+        </ol>
+        <dl class="commands">
+          <div><dt>Add it to Claude</dt><dd><code>claude mcp add --transport http meshoptimiser http://localhost:4242/mcp</code><button type="button" class="copy" data-copy="claude mcp add --transport http meshoptimiser http://localhost:4242/mcp">Copy</button></dd></div>
+        </dl>
+        <p class="cl-fine">The command is for Claude Code. Another program that can add an HTTP MCP server takes the same address: <code>http://localhost:4242/mcp</code>. If the launcher printed a different port, use that number.</p>
+      </div>
+    </section>
+
+    <section class="band" id="demo">
       <div class="wrap">
       <div class="cx-grid" data-cx-grid>
         <figure class="cx-wrap">
@@ -78,29 +96,21 @@
         </figure>
         <aside class="cx-view" data-cx3d hidden aria-hidden="true">
           <canvas></canvas>
-          <div class="cx3d-hud"><b data-hud-tris>646,064</b><span>triangles</span><em data-hud-note>95 parts</em></div>
+          <div class="cx3d-hud">
+            <p class="hud-k">Scene</p>
+            <div class="hud-n"><b data-hud-tris>646,064</b><span>triangles</span></div>
+            <div class="hud-d"><s data-hud-orig>646,064</s><em data-hud-pct>0.0%</em></div>
+            <div class="hud-bar" aria-hidden="true"><i data-hud-bar></i><u data-hud-mark style="left:46.44%"></u></div>
+            <dl class="hud-rows">
+              <div><dt>Parts</dt><dd data-hud-parts>95</dd></div>
+              <div><dt>Hidden</dt><dd data-hud-hidden>0</dd></div>
+              <div><dt>Budget</dt><dd>300,000</dd></div>
+            </dl>
+          </div>
           <div class="cx3d-tool" data-hud-tool hidden></div>
-          <script type="application/json" data-cx3d-data>{"glb":"chat-gearbox.glb","parts":95,"tris":[646064,299984],"fasteners":["body_1","body_2_instance_0","mesh_33","body_2_instance_1","body_20_instance_0","body_20_instance_1","body_20_instance_2","body_21_instance_0","body_21_instance_1","body_21_instance_2","body_21_instance_3","body_21_instance_4","body_21_instance_5","body_23_instance_0","body_23_instance_1","body_26_instance_0","body_28_instance_0","body_29_instance_0","body_29_instance_1","body_29_instance_2","body_31_instance_0","body_31_instance_1","body_31_instance_2","body_21_instance_6","body_21_instance_7","body_21_instance_8","body_20_instance_3","body_20_instance_4","body_20_instance_5","body_21_instance_9","body_21_instance_10","body_21_instance_11","body_21_instance_12","body_21_instance_13","body_21_instance_14","body_23_instance_2","body_23_instance_3","body_26_instance_1","body_28_instance_1","body_29_instance_3","body_29_instance_4","body_29_instance_5","body_31_instance_3","body_31_instance_4","body_31_instance_5","body_21_instance_15","body_21_instance_16","body_21_instance_17"]}</script>
+          <script type="application/json" data-cx3d-data>{"glb":"chat-gearbox.glb","parts":95,"tris":[646064,299984],"target":300000,"fasteners":["body_1","body_2_instance_0","mesh_33","body_2_instance_1","body_20_instance_0","body_20_instance_1","body_20_instance_2","body_21_instance_0","body_21_instance_1","body_21_instance_2","body_21_instance_3","body_21_instance_4","body_21_instance_5","body_23_instance_0","body_23_instance_1","body_26_instance_0","body_28_instance_0","body_29_instance_0","body_29_instance_1","body_29_instance_2","body_31_instance_0","body_31_instance_1","body_31_instance_2","body_21_instance_6","body_21_instance_7","body_21_instance_8","body_20_instance_3","body_20_instance_4","body_20_instance_5","body_21_instance_9","body_21_instance_10","body_21_instance_11","body_21_instance_12","body_21_instance_13","body_21_instance_14","body_23_instance_2","body_23_instance_3","body_26_instance_1","body_28_instance_1","body_29_instance_3","body_29_instance_4","body_29_instance_5","body_31_instance_3","body_31_instance_4","body_31_instance_5","body_21_instance_15","body_21_instance_16","body_21_instance_17"]}</script>
         </aside>
       </div>
-      </div>
-    </section>
-
-    <section class="band" id="how">
-      <div class="wrap">
-        <div class="band-head">
-          <p class="kicker">How it works</p>
-          <h2>Three steps, then just ask.</h2>
-        </div>
-        <ol class="steps">
-          <li><i>01</i><h3>Switch it on</h3><p>Settings › Claude › Let Claude connect. A pill in the top bar shows it is on.</p></li>
-          <li><i>02</i><h3>Add it to Claude</h3><p>One line, once, in a terminal on the same computer. Nothing is installed.</p></li>
-          <li><i>03</i><h3>Ask</h3><p>Describe the job. Claude tells you what it did.</p></li>
-        </ol>
-        <dl class="commands">
-          <div><dt>Add it to Claude</dt><dd><code>claude mcp add --transport http meshoptimiser http://localhost:4242/mcp</code><button type="button" class="copy" data-copy="claude mcp add --transport http meshoptimiser http://localhost:4242/mcp">Copy</button></dd></div>
-        </dl>
-        <p class="cl-fine">The command is for Claude Code. Another program that can add an HTTP MCP server takes the same address: <code>http://localhost:4242/mcp</code>. If the launcher printed a different port, use that number.</p>
       </div>
     </section>
 
@@ -110,129 +120,46 @@
           <p class="kicker">What Claude can do</p>
           <h2>The app’s own tools, in Claude’s hands.</h2>
         </div>
-        <div class="cl-groups">
-          <article class="cl-group" style="--ico: #f5a524">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></i><div><h3>Look</h3><p>See the scene as you see it.</p></div></header>
-            <ul>
-              <li><code>scene_summary</code><span>The file, parts, triangles, size, view mode and explode state.</span></li>
-              <li><code>list_parts</code><span>Every part with its triangles, size and colour; sorted, filtered, paged.</span></li>
-              <li><code>get_selection</code><span>What is selected right now.</span></li>
-              <li><code>check_model</code><span>A health check: where the weight is, what is tiny, hidden or doubled, and what to do first.</span></li>
-              <li><code>optimisation_report</code><span>Opened against now: triangles, parts, draw calls, memory and file size.</span></li>
-              <li><code>estimate_export_size</code><span>What a GLB would weigh, against the limits for web, Shopify, AR and a phone.</span></li>
-              <li><code>list_materials</code><span>The materials, with colour and how many parts use each.</span></li>
-              <li><code>list_recipes</code><span>Your saved Smart optimise recipes.</span></li>
-              <li><code>say</code><span>A short message to you in the Claude mode feed: what Claude is about to do and what it found.</span></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #0d99ff">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14.622 17.897-10.68-2.913"/><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"/><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"/></svg></i><div><h3>Pictures and film</h3><p>Quick looks and clean pictures, saved on your computer.</p></div></header>
-            <ul>
-              <li><code>screenshot</code><span>A quick look at the viewport, so Claude can see what you see.</span></li>
-              <li><code>render_image</code><span>A clean picture up to 8192 px, from one or several angles, saved as PNG.</span></li>
-              <li><code>compare_images</code><span>Opened and now, side by side, with the numbers under each.</span></li>
-              <li><code>turntable_video</code><span>One slow turn round the model, saved as a video. Animations play in it.</span></li>
-              <li><code>animate_parts</code><span>Choose which parts or groups move, and how: spin, swing, noise or a path. They keep running until removed.</span></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #2fd180">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg></i><div><h3>Show you around</h3><p>Select, hide, turn and explode. Nothing is changed, so none of it asks.</p></div></header>
-            <ul>
-              <li><code>select_parts</code><span>Select by id or part of a name; add or remove.</span></li>
-              <li><code>select_all</code><span>Select every visible part, or invert the selection.</span></li>
-              <li><code>hide_parts</code><span>Hide parts.</span></li>
-              <li><code>isolate_parts</code><span>Show only these parts.</span></li>
-              <li><code>show_all</code><span>Bring everything back.</span></li>
-              <li><code>frame_selection</code><span>Fly to the selection.</span></li>
-              <li><code>set_camera_view</code><span>Perspective, top, front, side, or fit the model.</span></li>
-              <li><code>set_view_mode</code><span>Solid, wireframe, x-ray, heat, clay or CAD.</span></li>
-              <li><code>set_explode</code><span>Pull the parts apart along any axes, 0 to 300%.</span></li>
-              <li><code>set_grid</code><span>Show or hide the grid.</span></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #a78bfa">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/></svg></i><div><h3>Find things</h3><p>Questions with an answer.</p></div></header>
-            <ul>
-              <li><code>find_fasteners</code><span>Bolts, screws, nuts and washers by shape, counted per kind and thread size.</span></li>
-              <li><code>find_hidden_parts</code><span>Parts nobody can see from outside, selected for you to check.</span></li>
-              <li><code>find_stacked_copies</code><span>Parts drawn twice in the same place; the extra copies are selected.</span></li>
-              <li><code>measure_parts</code><span>The distance between two parts, and the gap between their boxes.</span></li>
-              <li><code>select_similar</code><span>The other copies of a shape: every washer of one kind.</span></li>
-              <li><code>select_by_colour</code><span>Every part with the colour of the chosen ones, or of a colour you give.</span></li>
-              <li><code>select_by_material</code><span>Every part that uses a material.</span></li>
-              <li><code>list_groups</code><span>The groups in the tree.</span></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #ff8a4c">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></i><div><h3>Make it lighter</h3><p>Each asks first and is one undo. Add dry run to try one without keeping it.</p></div></header>
-            <ul>
-              <li><code>optimise_to_target</code><span>The whole scene under a size, or ready for web, Shopify, AR or a phone, in one call.</span><em class="cl-asks">asks</em></li>
-              <li><code>smart_optimise</code><span>The app’s whole clean-up in one run and one undo: light, balanced or strong.</span><em class="cl-asks">asks</em></li>
-              <li><code>run_recipe</code><span>Your own saved settings: the same clean-up you ran last time, on this model.</span><em class="cl-asks">asks</em></li>
-              <li><code>decimate</code><span>Reduce the triangles of chosen parts, to a target or by a share.</span><em class="cl-asks">asks</em></li>
-              <li><code>fit_to_budget</code><span>Reduce the whole scene to a triangle budget.</span><em class="cl-asks">asks</em></li>
-              <li><code>fill_holes</code><span>Close bolt holes, slots and pockets up to a size.</span><em class="cl-asks">asks</em></li>
-              <li><code>remove_hidden_faces</code><span>Delete faces that can never be seen from outside.</span><em class="cl-asks">asks</em></li>
-              <li><code>repair_mesh</code><span>Join doubled vertices, remove empty triangles, turn faces the same way.</span><em class="cl-asks">asks</em></li>
-              <li><code>clean_up</code><span>Remove empty parts, share duplicate geometry, repair bad triangles.</span><em class="cl-asks">asks</em></li>
-              <li><code>merge_parts</code><span>Merge parts into one mesh.</span><em class="cl-asks">asks</em></li>
-              <li><code>merge_by_colour</code><span>One mesh per colour.</span><em class="cl-asks">asks</em></li>
-              <li><code>split_parts</code><span>Break a mesh into its separate pieces.</span><em class="cl-asks">asks</em></li>
-              <li><code>smart_fit</code><span>Replace a part with a box, a cylinder, a few boxes or blocks of the same size.</span><em class="cl-asks">asks</em></li>
-              <li><code>untriangulate</code><span>Fewer triangles on flat faces, with no change of shape.</span><em class="cl-asks">asks</em></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #2dd4bf">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg></i><div><h3>Whole folders</h3><p>Many files, one after another. Your scene is not touched.</p></div></header>
-            <ul>
-              <li><code>list_folder</code><span>The model files in a folder: name, path and size.</span></li>
-              <li><code>batch_optimise</code><span>Open, optimise and export every file in a folder. Can be stopped.</span><em class="cl-asks">asks</em></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #f472b6">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg></i><div><h3>Tidy and arrange</h3><p>Names, groups and positions.</p></div></header>
-            <ul>
-              <li><code>list_library</code><span>The app’s library of standard parts: bolts, nuts, pipes, profiles, gears and more.</span></li>
-              <li><code>add_library_part</code><span>Add a standard part to the scene.</span><em class="cl-asks">asks</em></li>
-              <li><code>rename_parts</code><span>Rename by id, or find and replace, prefix and suffix.</span><em class="cl-asks">asks</em></li>
-              <li><code>group_parts</code><span>Put parts in a group.</span><em class="cl-asks">asks</em></li>
-              <li><code>ungroup</code><span>Dissolve a group.</span><em class="cl-asks">asks</em></li>
-              <li><code>duplicate_parts</code><span>Copy parts.</span><em class="cl-asks">asks</em></li>
-              <li><code>transform_parts</code><span>Move, turn and scale parts.</span><em class="cl-asks">asks</em></li>
-              <li><code>recenter_model</code><span>Put the middle of the model at the origin.</span><em class="cl-asks">asks</em></li>
-              <li><code>align_to_floor</code><span>Stand the model on the floor.</span><em class="cl-asks">asks</em></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #f5a524">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></i><div><h3>Delete</h3><p>Always asks, even when you switch asking off for the rest.</p></div></header>
-            <ul>
-              <li><code>delete_parts</code><span>Delete chosen parts.</span><em class="cl-asks">asks</em></li>
-              <li><code>remove_small_parts</code><span>Delete every part under a size.</span><em class="cl-asks">asks</em></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #0d99ff">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2v5a1 1 0 001 1h5"/><path d="M14.692 22H18a2 2 0 002-2V8a2.4 2.4 0 00-.706-1.706l-3.588-3.588A2.4 2.4 0 0014 2H6a2 2 0 00-2 2v3.804"/><path d="M2.264 13.752 7 16.5l4.737-2.748"/><path d="M2.995 13.014A2 2 0 002 14.744v3.516a2 2 0 00.996 1.73l3 1.74a2 2 0 002.008 0l3-1.74A2 2 0 0012 18.26v-3.517a2 2 0 00-.995-1.73l-3-1.742a2 2 0 00-1.892-.064z"/><path d="M7 16.5V22"/></svg></i><div><h3>Files</h3><p>On your own computer; nothing is uploaded.</p></div></header>
-            <ul>
-              <li><code>open_file</code><span>Open a model from a path on this computer.</span></li>
-              <li><code>save_scene</code><span>Save the scene as a scene file, edits included, before a drastic step.</span></li>
-              <li><code>export_model</code><span>Save a GLB, glTF, FBX, USDZ, OBJ or STL, or use a preset for the web, AR, Unreal, Unity or printing.</span></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #2fd180">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></i><div><h3>Know-how</h3><p>The app’s own knowledge, on demand. Answered without the app being open.</p></div></header>
-            <ul>
-              <li><code>search_docs</code><span>Search the playbooks and the help articles by words or by a symptom.</span></li>
-              <li><code>read_doc</code><span>Read one article or playbook in full.</span></li>
-            </ul>
-          </article>
-          <article class="cl-group" style="--ico: #a78bfa">
-            <header><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></i><div><h3>Scenes and history</h3><p>The tabs and the undo history.</p></div></header>
-            <ul>
-              <li><code>scene_tabs</code><span>List the scene tabs, switch, open a new one.</span></li>
-              <li><code>undo</code><span>Take back the last steps.</span></li>
-              <li><code>redo</code><span>Do them again.</span></li>
-            </ul>
-          </article>
+        <div class="cl-explore" data-tabs>
+          <div class="cl-tabs" role="tablist" aria-label="Kinds of tools">
+            <button type="button" role="tab" id="cl-tab-0" aria-controls="cl-panel-0" aria-selected="true" tabindex="0" style="--ico: #f5a524"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></i><span>Look</span><em>9</em></button>            <button type="button" role="tab" id="cl-tab-1" aria-controls="cl-panel-1" aria-selected="false" tabindex="-1" style="--ico: #0d99ff"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14.622 17.897-10.68-2.913"/><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"/><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"/></svg></i><span>Pictures and film</span><em>5</em></button>            <button type="button" role="tab" id="cl-tab-2" aria-controls="cl-panel-2" aria-selected="false" tabindex="-1" style="--ico: #2fd180"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg></i><span>Show you around</span><em>10</em></button>            <button type="button" role="tab" id="cl-tab-3" aria-controls="cl-panel-3" aria-selected="false" tabindex="-1" style="--ico: #a78bfa"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/></svg></i><span>Find things</span><em>8</em></button>            <button type="button" role="tab" id="cl-tab-4" aria-controls="cl-panel-4" aria-selected="false" tabindex="-1" style="--ico: #ff8a4c"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></i><span>Make it lighter</span><em>14</em></button>            <button type="button" role="tab" id="cl-tab-5" aria-controls="cl-panel-5" aria-selected="false" tabindex="-1" style="--ico: #2dd4bf"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/></svg></i><span>Whole folders</span><em>2</em></button>            <button type="button" role="tab" id="cl-tab-6" aria-controls="cl-panel-6" aria-selected="false" tabindex="-1" style="--ico: #f472b6"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 21h8"/><path d="m15 5 4 4"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg></i><span>Tidy and arrange</span><em>9</em></button>            <button type="button" role="tab" id="cl-tab-7" aria-controls="cl-panel-7" aria-selected="false" tabindex="-1" style="--ico: #f5a524"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></i><span>Delete</span><em>2</em></button>            <button type="button" role="tab" id="cl-tab-8" aria-controls="cl-panel-8" aria-selected="false" tabindex="-1" style="--ico: #0d99ff"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2v5a1 1 0 001 1h5"/><path d="M14.692 22H18a2 2 0 002-2V8a2.4 2.4 0 00-.706-1.706l-3.588-3.588A2.4 2.4 0 0014 2H6a2 2 0 00-2 2v3.804"/><path d="M2.264 13.752 7 16.5l4.737-2.748"/><path d="M2.995 13.014A2 2 0 002 14.744v3.516a2 2 0 00.996 1.73l3 1.74a2 2 0 002.008 0l3-1.74A2 2 0 0012 18.26v-3.517a2 2 0 00-.995-1.73l-3-1.742a2 2 0 00-1.892-.064z"/><path d="M7 16.5V22"/></svg></i><span>Files</span><em>3</em></button>            <button type="button" role="tab" id="cl-tab-9" aria-controls="cl-panel-9" aria-selected="false" tabindex="-1" style="--ico: #2fd180"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></i><span>Know-how</span><em>2</em></button>            <button type="button" role="tab" id="cl-tab-10" aria-controls="cl-panel-10" aria-selected="false" tabindex="-1" style="--ico: #a78bfa"><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></i><span>Scenes and history</span><em>3</em></button>
+          </div>
+          <div class="cl-panels">
+            <div class="cl-panel is-on" role="tabpanel" id="cl-panel-0" aria-labelledby="cl-tab-0" style="--ico: #f5a524">
+              <p class="cl-panel-note">See the scene as you see it.</p>
+              <ul><li><code>scene_summary</code><span>The file, parts, triangles, size, view mode and explode state.</span></li><li><code>list_parts</code><span>Every part with its triangles, size and colour; sorted, filtered, paged.</span></li><li><code>get_selection</code><span>What is selected right now.</span></li><li><code>check_model</code><span>A health check: where the weight is, what is tiny, hidden or doubled, and what to do first.</span></li><li><code>optimisation_report</code><span>Opened against now: triangles, parts, draw calls, memory and file size.</span></li><li><code>estimate_export_size</code><span>What a GLB would weigh, against the limits for web, Shopify, AR and a phone.</span></li><li><code>list_materials</code><span>The materials, with colour and how many parts use each.</span></li><li><code>list_recipes</code><span>Your saved Smart optimise recipes.</span></li><li><code>say</code><span>A short message to you in the Claude mode feed: what Claude is about to do and what it found.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-1" aria-labelledby="cl-tab-1" style="--ico: #0d99ff">
+              <p class="cl-panel-note">Quick looks and clean pictures, saved on your computer.</p>
+              <ul><li><code>screenshot</code><span>A quick look at the viewport, so Claude can see what you see.</span></li><li><code>render_image</code><span>A clean picture up to 8192 px, from one or several angles, saved as PNG.</span></li><li><code>compare_images</code><span>Opened and now, side by side, with the numbers under each.</span></li><li><code>turntable_video</code><span>One slow turn round the model, saved as a video. Animations play in it.</span></li><li><code>animate_parts</code><span>Choose which parts or groups move, and how: spin, swing, noise or a path. They keep running until removed.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-2" aria-labelledby="cl-tab-2" style="--ico: #2fd180">
+              <p class="cl-panel-note">Select, hide, turn and explode. Nothing is changed, so none of it asks.</p>
+              <ul><li><code>select_parts</code><span>Select by id or part of a name; add or remove.</span></li><li><code>select_all</code><span>Select every visible part, or invert the selection.</span></li><li><code>hide_parts</code><span>Hide parts.</span></li><li><code>isolate_parts</code><span>Show only these parts.</span></li><li><code>show_all</code><span>Bring everything back.</span></li><li><code>frame_selection</code><span>Fly to the selection.</span></li><li><code>set_camera_view</code><span>Perspective, top, front, side, or fit the model.</span></li><li><code>set_view_mode</code><span>Solid, wireframe, x-ray, heat, clay or CAD.</span></li><li><code>set_explode</code><span>Pull the parts apart along any axes, 0 to 300%.</span></li><li><code>set_grid</code><span>Show or hide the grid.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-3" aria-labelledby="cl-tab-3" style="--ico: #a78bfa">
+              <p class="cl-panel-note">Questions with an answer.</p>
+              <ul><li><code>find_fasteners</code><span>Bolts, screws, nuts and washers by shape, counted per kind and thread size.</span></li><li><code>find_hidden_parts</code><span>Parts nobody can see from outside, selected for you to check.</span></li><li><code>find_stacked_copies</code><span>Parts drawn twice in the same place; the extra copies are selected.</span></li><li><code>measure_parts</code><span>The distance between two parts, and the gap between their boxes.</span></li><li><code>select_similar</code><span>The other copies of a shape: every washer of one kind.</span></li><li><code>select_by_colour</code><span>Every part with the colour of the chosen ones, or of a colour you give.</span></li><li><code>select_by_material</code><span>Every part that uses a material.</span></li><li><code>list_groups</code><span>The groups in the tree.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-4" aria-labelledby="cl-tab-4" style="--ico: #ff8a4c">
+              <p class="cl-panel-note">Each asks first and is one undo. Add dry run to try one without keeping it.</p>
+              <ul><li><code>optimise_to_target</code><em class="cl-asks">asks</em><span>The whole scene under a size, or ready for web, Shopify, AR or a phone, in one call.</span></li><li><code>smart_optimise</code><em class="cl-asks">asks</em><span>The app’s whole clean-up in one run and one undo: light, balanced or strong.</span></li><li><code>run_recipe</code><em class="cl-asks">asks</em><span>Your own saved settings: the same clean-up you ran last time, on this model.</span></li><li><code>decimate</code><em class="cl-asks">asks</em><span>Reduce the triangles of chosen parts, to a target or by a share.</span></li><li><code>fit_to_budget</code><em class="cl-asks">asks</em><span>Reduce the whole scene to a triangle budget.</span></li><li><code>fill_holes</code><em class="cl-asks">asks</em><span>Close bolt holes, slots and pockets up to a size.</span></li><li><code>remove_hidden_faces</code><em class="cl-asks">asks</em><span>Delete faces that can never be seen from outside.</span></li><li><code>repair_mesh</code><em class="cl-asks">asks</em><span>Join doubled vertices, remove empty triangles, turn faces the same way.</span></li><li><code>clean_up</code><em class="cl-asks">asks</em><span>Remove empty parts, share duplicate geometry, repair bad triangles.</span></li><li><code>merge_parts</code><em class="cl-asks">asks</em><span>Merge parts into one mesh.</span></li><li><code>merge_by_colour</code><em class="cl-asks">asks</em><span>One mesh per colour.</span></li><li><code>split_parts</code><em class="cl-asks">asks</em><span>Break a mesh into its separate pieces.</span></li><li><code>smart_fit</code><em class="cl-asks">asks</em><span>Replace a part with a box, a cylinder, a few boxes or blocks of the same size.</span></li><li><code>untriangulate</code><em class="cl-asks">asks</em><span>Fewer triangles on flat faces, with no change of shape.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-5" aria-labelledby="cl-tab-5" style="--ico: #2dd4bf">
+              <p class="cl-panel-note">Many files, one after another. Your scene is not touched.</p>
+              <ul><li><code>list_folder</code><span>The model files in a folder: name, path and size.</span></li><li><code>batch_optimise</code><em class="cl-asks">asks</em><span>Open, optimise and export every file in a folder. Can be stopped.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-6" aria-labelledby="cl-tab-6" style="--ico: #f472b6">
+              <p class="cl-panel-note">Names, groups and positions.</p>
+              <ul><li><code>list_library</code><span>The app’s library of standard parts: bolts, nuts, pipes, profiles, gears and more.</span></li><li><code>add_library_part</code><em class="cl-asks">asks</em><span>Add a standard part to the scene.</span></li><li><code>rename_parts</code><em class="cl-asks">asks</em><span>Rename by id, or find and replace, prefix and suffix.</span></li><li><code>group_parts</code><em class="cl-asks">asks</em><span>Put parts in a group.</span></li><li><code>ungroup</code><em class="cl-asks">asks</em><span>Dissolve a group.</span></li><li><code>duplicate_parts</code><em class="cl-asks">asks</em><span>Copy parts.</span></li><li><code>transform_parts</code><em class="cl-asks">asks</em><span>Move, turn and scale parts.</span></li><li><code>recenter_model</code><em class="cl-asks">asks</em><span>Put the middle of the model at the origin.</span></li><li><code>align_to_floor</code><em class="cl-asks">asks</em><span>Stand the model on the floor.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-7" aria-labelledby="cl-tab-7" style="--ico: #f5a524">
+              <p class="cl-panel-note">Always asks, even when you switch asking off for the rest.</p>
+              <ul><li><code>delete_parts</code><em class="cl-asks">asks</em><span>Delete chosen parts.</span></li><li><code>remove_small_parts</code><em class="cl-asks">asks</em><span>Delete every part under a size.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-8" aria-labelledby="cl-tab-8" style="--ico: #0d99ff">
+              <p class="cl-panel-note">On your own computer; nothing is uploaded.</p>
+              <ul><li><code>open_file</code><span>Open a model from a path on this computer.</span></li><li><code>save_scene</code><span>Save the scene as a scene file, edits included, before a drastic step.</span></li><li><code>export_model</code><span>Save a GLB, glTF, FBX, USDZ, OBJ or STL, or use a preset for the web, AR, Unreal, Unity or printing.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-9" aria-labelledby="cl-tab-9" style="--ico: #2fd180">
+              <p class="cl-panel-note">The app’s own knowledge, on demand. Answered without the app being open.</p>
+              <ul><li><code>search_docs</code><span>Search the playbooks and the help articles by words or by a symptom.</span></li><li><code>read_doc</code><span>Read one article or playbook in full.</span></li></ul>
+            </div>            <div class="cl-panel" role="tabpanel" id="cl-panel-10" aria-labelledby="cl-tab-10" style="--ico: #a78bfa">
+              <p class="cl-panel-note">The tabs and the undo history.</p>
+              <ul><li><code>scene_tabs</code><span>List the scene tabs, switch, open a new one.</span></li><li><code>undo</code><span>Take back the last steps.</span></li><li><code>redo</code><span>Do them again.</span></li></ul>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -532,6 +459,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="site.js?v=88" data-viewer="viewer/"></script>
+  <script defer src="site.js?v=95" data-viewer="viewer/"></script>
 </body>
 </html>

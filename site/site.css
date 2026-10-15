@@ -1608,3 +1608,89 @@ main { overflow-x: clip; }
 .kb-anim { margin: clamp(24px, 3vw, 36px) 0 0; }
 .kb-anim .clip-art { max-height: 340px; }
 .kb-rail .rail-tag { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--soon) 16%, transparent); color: var(--soon); font-size: 10.5px; font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.4; }
+/* Claude page: the opening is a headline, centred; the conversation is further down */
+.page-claude .page-head { text-align: center; padding-top: clamp(72px, 10vw, 148px); }
+.page-claude .page-head .kicker, .page-claude .page-head .actions { justify-content: center; }
+.page-claude .page-head h1 { max-width: 11ch; margin-left: auto; margin-right: auto; margin-top: 18px; font-size: clamp(48px, 8.4vw, 116px); line-height: 0.98; letter-spacing: -0.05em; }
+.page-claude .page-head .lead { max-width: 46ch; margin-left: auto; margin-right: auto; margin-top: clamp(18px, 2vw, 26px); }
+.page-claude .page-head + .band.is-first, .page-claude .soon-banner + .page-head + .band.is-first { margin-top: clamp(88px, 11vw, 168px); }
+
+/* Claude page, what Claude can do: tabs on the left, one list at a time on the right (all panels share one cell, so the height does not jump) */
+.cl-explore { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); gap: clamp(20px, 3vw, 44px); align-items: start; }
+.cl-tabs { display: grid; gap: 2px; position: sticky; top: calc(var(--bar-h) + 24px); }
+.cl-tabs button { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 12px 8px 8px; border: 0; border-radius: 12px; background: transparent; color: var(--tx-2); font: inherit; font-size: 15px; text-align: left; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; }
+.cl-tabs button:hover { color: var(--tx); background: var(--surface); }
+.cl-tabs button[aria-selected='true'] { color: var(--tx); background: var(--surface-2); }
+.cl-tabs .ico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--ico, var(--accent)); background: color-mix(in srgb, var(--ico, var(--accent)) 13%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ico, var(--accent)) 26%, transparent); }
+.cl-tabs .ico svg { width: 16px; height: 16px; }
+.cl-tabs em { color: var(--tx-3); font-size: 12px; font-style: normal; font-variant-numeric: tabular-nums; }
+.cl-panels { display: grid; }
+.cl-panel { grid-area: 1 / 1; visibility: hidden; opacity: 0; transition: opacity 0.2s ease; }
+.cl-panel.is-on { visibility: visible; opacity: 1; }
+.cl-panel-note { max-width: 60ch; margin-bottom: 18px; color: var(--tx-2); font-size: 16px; line-height: 1.5; }
+.cl-panel ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; list-style: none; }
+.cl-panel li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; align-content: start; padding: 14px 16px 16px; border-radius: 12px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+.cl-panel li code { background: none; padding: 0; color: var(--tx); font: 400 13px/1.4 var(--mono); overflow-wrap: anywhere; }
+.cl-panel li span { grid-column: 1 / -1; color: var(--tx-2); font-size: 14px; line-height: 1.45; }
+@media (max-width: 900px) {
+  .cl-explore { grid-template-columns: minmax(0, 1fr); }
+  .cl-tabs { position: static; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 calc(var(--gutter) * -1); padding: 0 var(--gutter); }
+  .cl-tabs::-webkit-scrollbar { display: none; }
+  .cl-tabs button { flex: none; grid-template-columns: 28px auto auto; padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--surface); }
+  .cl-tabs .ico { width: 28px; height: 28px; border-radius: 50%; }
+}
+@media (max-width: 640px) { .cl-panel ul { grid-template-columns: minmax(0, 1fr); } }
+/* picture strips: the title on the left, what it says on the right */
+@media (min-width: 761px) {
+  .strip figcaption { grid-template-columns: 2.4em minmax(0, 15em) minmax(0, 44ch); justify-content: start; max-width: none; gap: 6px clamp(18px, 3vw, 48px); align-items: baseline; }
+  .strip figcaption span { grid-column: 3; }
+}
+
+/* the example session on claude.html plays inside a box of its own: the conversation and the model are the same height, and the chat scrolls in its box */
+@media (min-width: 1000px) and (hover: hover) {
+  .cx-grid.is-play { align-items: stretch; }
+  .cx-grid.is-play .cx-wrap { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: clamp(540px, calc(100svh - var(--bar-h) - 72px), 700px); }
+  .cx-grid.is-play .cx { min-height: 0; }
+  .cx-grid.is-play .cx-thread { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.14) transparent; }
+  .cx-grid.is-play .cx-thread > li:not(.is-in) { display: none; }
+  .cx-grid.is-play .cx-thread > li.is-in { animation: cx-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  .cx-grid.is-play .cx-view { position: relative; top: auto; height: auto; }
+}
+@keyframes cx-in { from { opacity: 0; transform: translateY(14px); } }
+/* the example session: the site's own sans (no serif), and an even rhythm: the same space at the sides, between messages and above the composer */
+.cx { --cx-pad: clamp(20px, 3vw, 32px); }
+.cx-bar { height: 52px; font-size: 14px; letter-spacing: 0.01em; }
+.cx-thread { gap: 22px; padding: var(--cx-pad) var(--cx-pad) var(--cx-pad); }
+.cx-you { max-width: min(86%, 560px); }
+.cx-you p { padding: 12px 18px; border-radius: 18px; font-size: 15.5px; line-height: 1.5; }
+.cx-ai > p, .cx-ai > p.cx-result { font: 400 16px/1.6 var(--font); letter-spacing: -0.005em; }
+.cx-tools { gap: 6px; margin-top: 12px; }
+.cx-tools li { padding: 10px 14px; }
+.cx-ai > p.cx-result { margin-top: 12px; }
+.cx-composer { margin: 0 var(--cx-pad) var(--cx-pad); padding: 12px 12px 12px 20px; font: 400 15px/1.4 var(--font); }
+/* the model beside the example session stands on the page itself, not in a card */
+@media (min-width: 1000px) and (hover: hover) {
+  .cx-view { background: none; box-shadow: none; border-radius: 0; overflow: visible; }
+}
+
+/* the readout beside the example session: a technical panel, on black */
+.cx3d-hud { display: grid; gap: 10px; width: min(300px, 92%); max-width: none; padding: 16px 18px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09); font-family: var(--mono); }
+.cx3d-hud .hud-k { color: var(--tx-3); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; }
+.cx3d-hud .hud-n { display: flex; align-items: baseline; gap: 8px; }
+.cx3d-hud .hud-n b { font: 300 34px/1 var(--font); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.cx3d-hud .hud-n span { color: var(--tx-3); font-size: 12px; }
+.cx3d-hud .hud-d { display: flex; align-items: baseline; gap: 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.cx3d-hud .hud-d s { color: var(--tx-3); }
+.cx3d-hud .hud-d em { padding: 1px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); color: var(--tx-2); font-style: normal; }
+.cx3d-hud .hud-d em.is-down { background: color-mix(in srgb, var(--new) 16%, transparent); color: var(--new); }
+.cx3d-hud .hud-bar { position: relative; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.1); }
+.cx3d-hud .hud-bar i { position: absolute; inset: 0 auto 0 0; width: 100%; border-radius: 2px; background: var(--claude); }
+.cx3d-hud .hud-bar u { position: absolute; top: -3px; bottom: -3px; width: 1px; background: rgba(255, 255, 255, 0.55); }
+.cx3d-hud .hud-rows { display: grid; gap: 0; margin-top: 2px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.cx3d-hud .hud-rows > div { display: flex; justify-content: space-between; padding: 7px 0 0; font-size: 12px; }
+.cx3d-hud .hud-rows dt { color: var(--tx-3); }
+.cx3d-hud .hud-rows dd { color: var(--tx); font-variant-numeric: tabular-nums; }
+.cx3d-tool { background: color-mix(in srgb, var(--claude) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--claude) 45%, transparent); color: color-mix(in srgb, var(--claude) 70%, #fff); }
+
+/* the readout starts at the top edge of the conversation */
+.cx-view .cx3d-hud { top: 0; left: 0; }

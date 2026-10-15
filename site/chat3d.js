@@ -1,6 +1,6 @@
 // ========== MESHOPTIMISER SITE: THE PART NEXT TO THE CHAT ==========
 // The Gearbox Assy of the example session on claude.html, as a real mesh: the app's own export (95 parts, Draco, about 90,000
-// triangles so the page stays light) beside the conversation. As each message of the chat comes into view the part does what
+// triangles so the page stays light) beside the conversation. As each message of the chat appears the part does what
 // Claude just asked the app to do: find_fasteners lights the 48 bolts, nuts and washers, hide_parts takes them away, fit_to_budget
 // flashes the triangles and counts the scene down from 646,064 to 299,984. It draws only while something moves (a step, a resize),
 // never in a loop. Loaded by site.js on a desktop screen with motion allowed; anything that goes wrong leaves the chat on its own.
@@ -10,6 +10,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
+// Claude's own colours: the coral of its mark and a warm sand, on some parts of the model, and the coral for what a tool is working on
+const CORAL = new THREE.Color(0xd97757), SAND = new THREE.Color(0xe9dcc6);
+const hash = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 100; };
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -17,7 +20,8 @@ export async function start(root, base) {
   const data = JSON.parse(root.querySelector('[data-cx3d-data]').textContent);
   const fastener = new Set(data.fasteners);
   const canvas = root.querySelector('canvas');
-  const hudTris = root.querySelector('[data-hud-tris]'), hudNote = root.querySelector('[data-hud-note]'), hudTool = root.querySelector('[data-hud-tool]');
+  const hudTris = root.querySelector('[data-hud-tris]'), hudNote = null, hudTool = root.querySelector('[data-hud-tool]');
+  const hudPct = root.querySelector('[data-hud-pct]'), hudBar = root.querySelector('[data-hud-bar]'), hudParts = root.querySelector('[data-hud-parts]'), hudHidden = root.querySelector('[data-hud-hidden]');
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
@@ -38,12 +42,13 @@ export async function start(root, base) {
 
   // every part gets a material of its own (to tint, fade or hide it) and a wireframe twin that shares its geometry
   const parts = [];
-  const wireMat = new THREE.MeshBasicMaterial({ color: 0x9fd6ff, wireframe: true, transparent: true, opacity: 0, depthWrite: false });
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0xf3c4ad, wireframe: true, transparent: true, opacity: 0, depthWrite: false });
   const meshes = [];
   model.traverse((o) => { if (o.isMesh) meshes.push(o); });          // (collected first: a twin added while walking would be walked too)
   for (const o of meshes) {
     o.material = o.material.clone();
     o.material.envMapIntensity = 1;
+    if (!fastener.has(o.name) && o.material.color) { const k = hash(o.name); if (k < 24) o.material.color.copy(CORAL); else if (k < 38) o.material.color.copy(SAND); }
     const twin = new THREE.Mesh(o.geometry, wireMat);
     twin.matrixAutoUpdate = false; twin.visible = false;
     o.add(twin);
@@ -56,7 +61,7 @@ export async function start(root, base) {
 
   const camera = new THREE.PerspectiveCamera(32, 1, radius * 0.05, radius * 20);
   const view = { yaw: 0.65, pitch: 0.42 };
-  const accent = new THREE.Color(0x0d99ff);
+  const accent = CORAL;
 
   // ---- the state, and a tween between two states ----
   const cur = { hl: 0, hide: 0, wire: 0, count: data.tris[0], yaw: 0 };
@@ -74,7 +79,7 @@ export async function start(root, base) {
     if (Math.round(b.width) !== w || Math.round(b.height) !== h) {
       w = Math.round(b.width); h = Math.round(b.height);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setSize(w, h, false);
-      camera.aspect = w / h; camera.updateProjectionMatrix();
+      camera.aspect = w / h; camera.setViewOffset(w, h, 0, -Math.round(h * 0.12), w, h); camera.updateProjectionMatrix();   // (the model sits a little lower, clear of the readout)
     }
     for (const p of parts) {
       const m = p.mesh.material;
@@ -94,6 +99,11 @@ export async function start(root, base) {
     place();
     renderer.render(scene, camera);
     if (hudTris) hudTris.textContent = fmt(cur.count);
+    const gone = Math.round(fastener.size * cur.hide), saved = 1 - cur.count / data.tris[0];
+    if (hudPct) { hudPct.textContent = (saved > 0.0005 ? '−' : '') + (saved * 100).toFixed(1) + '%'; hudPct.classList.toggle('is-down', saved > 0.0005); }
+    if (hudBar) hudBar.style.width = (cur.count / data.tris[0] * 100).toFixed(2) + '%';
+    if (hudParts) hudParts.textContent = String(data.parts - gone);
+    if (hudHidden) hudHidden.textContent = String(gone);
   };
   const draw = () => { if (!queued) { queued = true; requestAnimationFrame(paint); } };
 
@@ -146,21 +156,10 @@ export async function start(root, base) {
     say('', NOTE[next]);
   };
 
-  // ---- the chat drives it: the last message whose top has risen past the reading line is the one that counts ----
-  const msgs = [...document.querySelectorAll('[data-stage]')];
-  let waiting = false;
-  const read = () => {
-    waiting = false;
-    const line = window.innerHeight * 0.62;
-    let now = 0;
-    for (const m of msgs) if (m.getBoundingClientRect().top < line) now = Math.max(now, +m.dataset.stage);
-    go(now);
-  };
-  const onScroll = () => { if (!waiting) { waiting = true; requestAnimationFrame(read); } };
-  window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onScroll, { passive: true });
-  read();
-
+  // ---- the example session drives it: site.js plays the chat message by message and says which step it is on ----
+  const grid = root.closest('[data-cx-grid]');
+  if (grid) grid.addEventListener('cx:stage', (e) => go(+e.detail || 0));
+  if (grid && +grid.dataset.stage) go(+grid.dataset.stage);          // (the chat may have got ahead while the model was loading)
   window.addEventListener('resize', draw, { passive: true });
   say('', NOTE[0]);
   root.hidden = false;
