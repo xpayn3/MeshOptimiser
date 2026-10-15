@@ -2057,6 +2057,8 @@ button.sc-row-keys:hover{background:var(--s5)}
 .tbtn svg,.btn svg,#sidebar-right .btn svg,.btn-sm svg,#vp-materials-pop .mat-actions .mat-act svg{width:var(--btn-icon);height:var(--btn-icon)}
 .tbtn.icon-only,.tree-icon-btn,.vpb{width:var(--btn-h-md);height:var(--btn-h-md);flex:0 0 var(--btn-h-md);padding:0;border-radius:var(--btn-r-md)}
 .tbtn.icon-only svg,.tree-icon-btn svg,.vpb svg{width:var(--btn-icon);height:var(--btn-icon)}
+/* the icon-only toolbar buttons (sidebar, screenshot, turntable) draw their icon at the size of the ones that carry a label, so the lines are the same weight */
+#tb .tbtn.icon-only svg{width:var(--icon-sm);height:var(--icon-sm)}
 /* ── Dropdown ──────────────────────────────────────────────────────────
    One component (app.js, "Dropdowns"): every <select> becomes it. Its size
    is four tokens; the defaults are a medium control, the size of a button.
@@ -3572,6 +3574,8 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .wl-tile.is-primary:hover,.wl-tile.is-primary:focus-visible{background:color-mix(in srgb,var(--ac) 88%,var(--white))}
 .wl-tile.is-primary>svg{stroke:var(--white)}
 .wl-tile.is-primary kbd,.wl-tile.is-primary .wl-tile-s{color:var(--wht-80)}
+/* the shortcut on a start card shows only while the pointer is over it, or the card has the keyboard focus */
+@media (hover:hover){.wl-tile kbd{opacity:0;transition:opacity var(--dur-base,.15s) var(--ease-out,ease)}.wl-tile:hover kbd,.wl-tile:focus-visible kbd{opacity:1}}
 .wl-shapes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:1fr 1fr;gap:var(--space-sm);height:92px}
 .wl-shape{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:var(--space-md);min-width:0;padding:0 var(--space-lg);border-radius:var(--r-lg);background:var(--bg2);color:var(--tx2);font-size:var(--fs-12);cursor:pointer;transition:var(--tr-bg-fg)}
 .wl-shape:hover,.wl-shape:focus-visible{background:var(--bg3);color:var(--tx)}
@@ -5161,10 +5165,10 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 .clp-sw{display:flex;flex-direction:column;padding-top:var(--space-xs);border-top:1px solid var(--surface-line)}
 .clp-row{padding:var(--space-7) 0;font-size:var(--fs-12)}
 .clp-row>span:first-child{flex:1 1 auto;min-width:0}
-.clp-foot{display:flex;gap:var(--space-sm);padding-top:var(--space-lg);border-top:1px solid var(--surface-line)}
-.clp-foot .btn{height:var(--btn-h-sm,28px);padding:0 var(--space-lg);font-size:var(--fs-12)}
+.clp-foot{display:flex;flex-wrap:wrap;gap:var(--space-sm);padding-top:var(--space-lg);border-top:1px solid var(--surface-line)}
+.clp-foot .btn{height:var(--btn-h-sm,28px);padding:0 var(--space-lg);font-size:var(--fs-12);white-space:nowrap}
+.clp-foot #clp-mode{flex:1 1 100%;justify-content:center;gap:var(--space-sm)}
 .clp-foot #clp-more{margin-left:auto}
-.clp-foot #clp-mode{margin-right:var(--space-sm)}
 /* Claude mode: the app's chrome is gone. A feed column on the left, the 3D view as a rounded card on the right (or the feed alone). */
 body.claude-mode #tb,body.claude-mode #sidebar-left,body.claude-mode #sidebar-right,body.claude-mode #sb,body.claude-mode .resize-handle,body.claude-mode #vp-overlay,body.claude-mode #gizmo-hud,body.claude-mode #draw-hint,body.claude-mode #toasts,body.claude-mode #log-console{display:none !important}
 body.claude-mode{background:var(--bg)}
@@ -7845,6 +7849,8 @@ window.moSplash = function (msg, pct) {
       }
       t.removeAttribute('title');
     }
+    // a search or filter field says what it is in its own placeholder: no tip over it
+    if (t.tagName === 'INPUT' && (t.type === 'search' || /search|filter|find/i.test(t.placeholder || '') || /(search|filter)$/i.test(t.id || ''))) return;
     if (!getText(t)) return;
     // (a floating card's controls never take the warm shortcut: every tip there waits its turn, so sliding over a card does not flash them)
     const inCard = !!t.closest('.vp-cmd-host');
