@@ -1536,6 +1536,9 @@ function _importMapUrl(name) {
 let _geomVersionSeq = 1 << 20;
 function _stampGeometry(g) {
   if (!g || !g.attributes) return g;
+  // A geometry that goes to the GPU for a lit material has its normals, one for each point: the pipeline is built for them, and a
+  // shape without them (or with another count) makes every frame after it fail while the page itself keeps working.
+  try { const pos = g.attributes.position, nm = g.attributes.normal; if (pos && (!nm || nm.count !== pos.count)) g.computeVertexNormals(); } catch (_) {}
   const v = ++_geomVersionSeq;
   const done = new Set();
   const bump = (a) => {
@@ -6457,6 +6460,7 @@ const _RendererOwner = (() => {
     try {
       const r = new THREE.WebGPURenderer({ ...opts, forceWebGL });
       await r.init();
+      try { _hookGpuErrors(r); } catch (_) {}
       const isGPU = !forceWebGL && r.backend && (r.backend.isWebGPUBackend || r.backend.constructor?.name?.includes('WebGPU'));
       return { instance: r, backendName: isGPU ? 'WebGPU' : 'WebGL2' };
     } catch (e) {
@@ -9101,6 +9105,49 @@ if (typeof document !== 'undefined') {
   const stop = () => { clearInterval(t); t = 0; };
   document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else go(); });
   go(); }
+
+// The GPU reports some mistakes to the page as events, not as an error thrown by render() ("Vertex buffer slot 1 required by the pipeline
+// was not set", "Invalid CommandBuffer"): the page went on drawing frames that were all thrown away, and the viewport stalled while the
+// rest of the app still worked. They are listened for here, and the usual cause is put right: a lit mesh without normals, then the
+// buffers of every part uploaded again.
+function _repairPartGeometries(reupload) {
+  let fixed = 0;
+  const root = state.partsRoot;
+  if (!root) return 0;
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const g = o.geometry, pos = g && g.attributes && g.attributes.position;
+    if (!pos) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    if (mats.some(m => m && m.isMeshStandardMaterial)) {
+      const nm = g.attributes.normal;
+      if (!nm || nm.count !== pos.count) { try { g.computeVertexNormals(); fixed++; } catch (_) {} }
+    }
+    if (reupload) { try { g.dispose(); } catch (_) {} }
+  });
+  return fixed;
+}
+function _hookGpuErrors(r) {
+  const dev = r && r.backend && r.backend.device;
+  if (!dev || typeof dev.addEventListener !== 'function') return;
+  let lastAct = 0, lastErr = 0, stage = 0;
+  dev.addEventListener('uncapturederror', (ev) => {
+    const msg = String((ev && ev.error && ev.error.message) || '');
+    // only the trouble that a mesh's own buffers cause (a window of size 0, a minimised page and the like are not this)
+    if (!/vertex buffer|vertex attribute|buffer slot|attribute|normal/i.test(msg) || /texture size|swapchain/i.test(msg)) return;
+    const now = performance.now();
+    if (now - lastErr > 5000) stage = 0;       // (quiet for a while: a new trouble)
+    lastErr = now;
+    if (now - lastAct < 700) return;           // (one answer at a time: the errors come once a frame)
+    lastAct = now;
+    stage++;
+    console.warn('[gpu] ' + msg.slice(0, 160) + ' (answer ' + stage + ')');
+    if (stage === 1) { const n = _repairPartGeometries(false); if (n) console.warn('[gpu] gave ' + n + ' mesh(es) their normals'); }
+    else if (stage === 2) { _repairPartGeometries(true); console.warn('[gpu] uploaded the parts again'); }
+    else if (stage === 3) { try { toast('Viewport stalled', 'The graphics card refused a frame; saving the scene and reloading the page puts it right', 'error', 9000); } catch (_) {} }
+    try { requestRender(); } catch (_) {}
+  });
+}
 
 // Layered renderer recovery. Called from the render-error escalation path.
 function _recoverRenderer(level) {
@@ -28974,7 +29021,11 @@ function wireUI() {
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (!e.repeat) undoLast(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); if (!e.repeat) redoLast(); }
     else if (e.key === 'Escape') { if (!_CmdCards.closeTop()) clearSelection(); }       // Esc leaves a command first
-    else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target?.closest?.('button, a, [role="button"], summary')) { if (_CmdCards.runTop()) e.preventDefault(); }
+    else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target?.closest?.('button, a, [role="button"], summary')) {
+      if (_CmdCards.runTop()) e.preventDefault();
+      // no command waiting for its Enter: Enter goes into Edit mesh with a part selected, and out of it again
+      else if (!e.repeat && !e.shiftKey && (state.selected.size > 0 || _Elements.api.mode() !== 'model')) { e.preventDefault(); try { _Elements.api.toggle(); } catch (err) { console.warn('[keys] edit mode', err); } }
+    }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); $('sel-all').click(); }
     else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && /^[cvd]$/i.test(e.key) && _matKeysOwn(e.key.toLowerCase())) {
       // The materials window was the last thing worked in and a material is picked: Ctrl+C / Ctrl+D copy and duplicate the material,
@@ -50693,11 +50744,15 @@ setTimeout(() => _dndDecorateTree(), 0);
   // ── Big offenders panel ──────────────────────────────────────────────────
   const HEAVY_TRIS = 10000;          // a part with more triangles than this is heavy
   const OFF_TOP_N = 500;             // the most rows drawn (the list scrolls, index.html)
+  // The ticks of the list are its own: a row is ticked by clicking it here, never by selecting the part in the view. (Ticking a row
+  // also selects the part, so it can be seen; the other way round does nothing here.)
+  const _offTick = new Set();
   function _refreshOffenders() {
     const list = document.getElementById('offenders-list');
     if (!list) return;
     const live = state.parts.filter(p => p && !p.deleted && p.triCount > 0);
     const heavy = live.filter(p => p.triCount > HEAVY_TRIS);
+    for (const id of [..._offTick]) { const q = getPart(id); if (!q || q.deleted) _offTick.delete(id); }
     // the count on the card's header, seen while the card is folded: the heavy parts, which are the rows of the list below
     const badge = document.getElementById('heavy-count');
     if (badge) {
@@ -50708,14 +50763,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     }
     const empty = document.querySelector('#offenders-body .off-empty');
     if (empty) empty.textContent = live.length ? 'No part has more than ' + fmtNum(HEAVY_TRIS) + ' triangles.' : 'Load a model to see heavy parts.';
-    if (live.length === 0 || heavy.length === 0) { list.innerHTML = ''; _offDeleteSync(); return; }
+    if (live.length === 0 || heavy.length === 0) { list.innerHTML = ''; list._offRows = []; _offDeleteSync(); return; }
     const byTri = heavy.sort((a, b) => b.triCount - a.triCount).slice(0, OFF_TOP_N);
     const maxTri = byTri[0].triCount || 1;
     const esc = s => String(s).replace(/[<>&"]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[ch]));
     const rows = byTri.map((p, i) => {
       const widthPct = Math.max(2, (p.triCount / maxTri) * 100);
       const col = '#' + _colorForRank(1 - i / Math.max(byTri.length - 1, 1)).getHexString();
-      const sel = state.selected.has(p.partId) ? ' selected' : '';
+      const sel = _offTick.has(p.partId) ? ' selected' : '';
       const safeName = esc(p.name);
       const triShort = p.triCount >= 1000 ? (p.triCount/1000).toFixed(1) + 'k' : p.triCount;
       return '<div class="off-row' + sel + '" role="checkbox" aria-checked="' + (sel ? 'true' : 'false') + '" data-part-id="' + p.partId + '" data-tip="' + safeName + ' · ' + p.triCount.toLocaleString() + ' tri · rank ' + (i+1) + '">'
@@ -50726,7 +50781,21 @@ setTimeout(() => _dndDecorateTree(), 0);
         + '<span class="off-bar"><span class="off-bar-fill" style="width:' + widthPct + '%;background:' + col + '"></span></span>'
         + '</div>';
     });
-    list.innerHTML = rows.join('');
+    // Brought up to date, not drawn again: a row that is the same stays as it is, so the bars do not grow again at every release of an
+    // edit. They grow only when the list first appears.
+    const prev = list._offRows || [], fresh = list.children.length === 0;
+    if (fresh || prev.length !== rows.length || list.children.length !== rows.length) {
+      list.classList.toggle('off-fresh', fresh);
+      clearTimeout(list._offT); if (fresh) list._offT = setTimeout(() => list.classList.remove('off-fresh'), 900);      // (the bars have grown by then: a row drawn later does not grow again)
+      list.innerHTML = rows.join('');
+    } else {
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i] === prev[i]) continue;
+        const old = list.children[i];
+        if (old) { old.insertAdjacentHTML('beforebegin', rows[i]); old.remove(); }
+      }
+    }
+    list._offRows = rows;
     _offDeleteSync();
   }
 
@@ -50748,6 +50817,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const ids = _offTicked();
     if (!ids.length) return;
     _offClicked = true;
+    for (const k of ids) _offTick.delete(k);
     try { deleteParts(ids, ids.length === 1 ? 'Deleted a heavy part' : 'Deleted ' + ids.length + ' heavy parts'); } catch (e) { console.warn('[heavy parts] delete failed:', e); }
     try { _refreshOffenders(); } catch (_) {}
   });
@@ -50765,25 +50835,17 @@ setTimeout(() => _dndDecorateTree(), 0);
   // (the tree, the viewport, a command). A part selected somewhere else is
   // scrolled into view in the list; one clicked in the list stays where it is.
   let _offClicked = false;
+  // Shows the ticks on the rows. (A selection made in the view is not a tick: nothing here follows it.)
   function _syncOffendersSel() {
     const list = document.getElementById('offenders-list');
     if (!list || !list.firstElementChild) return;
-    let first = null;
     for (const row of list.children) {
-      const on = state.selected.has(parseInt(row.dataset.partId, 10));
+      const on = _offTick.has(parseInt(row.dataset.partId, 10));
       if (row.classList.contains('selected') !== on) { row.classList.toggle('selected', on); row.setAttribute('aria-checked', on ? 'true' : 'false'); }
-      if (on && !first) first = row;
     }
     _offDeleteSync();
-    if (first && !_offClicked && list.clientHeight) {
-      const top = first.offsetTop - list.offsetTop, bot = top + first.offsetHeight;
-      if (top < list.scrollTop) list.scrollTop = top;
-      else if (bot > list.scrollTop + list.clientHeight) list.scrollTop = bot - list.clientHeight;
-    }
     _offClicked = false;
   }
-  // the properties panel is redrawn on every change of selection
-  window._appHooks?.propsRenderHooks.push(_syncOffendersSel);
 
   document.addEventListener('click', (e) => {
     const row = e.target.closest && e.target.closest('.off-row');
@@ -50797,9 +50859,11 @@ setTimeout(() => _dndDecorateTree(), 0);
     const anchor = e.shiftKey ? rows.findIndex(r => r.dataset.partId === _offLastId) : -1;
     try {
       if (anchor >= 0 && anchor !== at) {
-        for (let i = Math.min(anchor, at); i <= Math.max(anchor, at); i++) { const k = parseInt(rows[i].dataset.partId, 10); if (Number.isFinite(k) && !state.selected.has(k)) selectPart(k, 'add'); }
-      } else selectPart(id, 'toggle');
+        for (let i = Math.min(anchor, at); i <= Math.max(anchor, at); i++) { const k = parseInt(rows[i].dataset.partId, 10); if (Number.isFinite(k)) { _offTick.add(k); if (!state.selected.has(k)) selectPart(k, 'add'); } }
+      } else if (_offTick.has(id)) { _offTick.delete(id); if (state.selected.has(id)) selectPart(id, 'toggle'); }
+      else { _offTick.add(id); if (!state.selected.has(id)) selectPart(id, 'add'); }
     } catch (_) {}
+    _syncOffendersSel();
     _offLastId = row.dataset.partId;     // (the camera stays where it is: ticking a row only selects)
   });
   // Right-click a row: the camera goes to that part (the ticks are left as they are).
@@ -56555,6 +56619,26 @@ const _Elements = (() => {
     changed();
     return res;
   }
+  // The app's own Undo or Redo has run and the shape of a part is another one (a move taken back or done again). What was picked is
+  // picked again by its numbers where the part still has the same triangles and polygons: a move changes places, not the numbering.
+  // (Where the numbering is another one, a delete or a split, nothing is picked: the numbers would mean something else.)
+  function pickAgain(pre) {
+    if (!active || !pre || !pre.length || total() > 0) return;
+    let any = false;
+    for (const x of pre) {
+      const p = getPart(x.id);
+      if (!p || p.deleted || !p.mesh || !state.selected.has(x.id)) continue;
+      const e = entry(p, true); if (!e) continue;
+      const t = e.R.topo, was = x.R && x.R.topo;
+      if (!was || t.nTri !== was.nTri || e.R.pg.count !== x.R.pg.count) { drop(x.id); continue; }
+      const nV = t.vStart.length - 1, nE = t.edgeV.length / 2;
+      for (const i of x.points) if (i < nV) e.points.add(i);
+      for (const i of x.edges) if (i < nE) e.edges.add(i);
+      for (const i of x.faces) if (i < e.R.pg.count) e.faces.add(i);
+      e.dirty = true; any = true;
+    }
+    if (any) changed();
+  }
   // the app's own undo has run: if it took the last delete back, the pieces that were picked for it are picked again
   function afterAppUndo() {
     if (!active || !afterDelete || state.history.length !== afterDelete.at) return;
@@ -57368,8 +57452,8 @@ const _Elements = (() => {
     if (k === 'Backspace' && cmd && !ev.altKey) { stop(); dissolvePicked(); return; }                   // (Ctrl + Backspace: dissolve instead of delete)
     if (k === 'Escape' && (box || stroke)) { stop(); onLost(); return; }
     if (k === 'Escape' && total() > 0) { stop(); clearPicked(); return; }                 // first the picked pieces, then the mode
-    if (cmd && !ev.altKey && (k === 'z' || k === 'Z') && !ev.shiftKey) { if (undoPick()) stop(); else setTimeout(afterAppUndo, 80); return; }
-    if (cmd && !ev.altKey && (k === 'y' || k === 'Y' || ((k === 'z' || k === 'Z') && ev.shiftKey))) { if (redoPick()) stop(); return; }
+    if (cmd && !ev.altKey && (k === 'z' || k === 'Z') && !ev.shiftKey) { if (undoPick()) stop(); else { const pre = snap(); setTimeout(() => { afterAppUndo(); pickAgain(pre); }, 80); } return; }
+    if (cmd && !ev.altKey && (k === 'y' || k === 'Y' || ((k === 'z' || k === 'Z') && ev.shiftKey))) { if (redoPick()) stop(); else { const pre = snap(); setTimeout(() => pickAgain(pre), 80); } return; }
     if (cmd && !ev.shiftKey && !ev.altKey && (k === 'a' || k === 'A')) { stop(); selectAll(); return; }
     if (!cmd && !ev.altKey && (k === '1' || k === '2' || k === '3')) { stop(); setMode(MODES[+k - 1]); return; }
   }
@@ -57478,6 +57562,13 @@ const _Elements = (() => {
   // triangle (the part's own space), and does what a click there does; boxPick and brush take places on the screen.
   const api = {
     mode: (m) => { if (m) setMode(m); return current(); },
+    // Enter: in Edit mesh, out of it; with a part selected, into it, in the mode last used. Nothing to do with no part selected.
+    toggle: () => {
+      if (active) { setMode('model'); return 'model'; }
+      if (!(state.selected && state.selected.size)) return 'model';
+      setMode(MODES.includes(mode) ? mode : 'faces');
+      return current();
+    },
     tool: (t) => { if (t) setTool(t); return tool; },
     brushR: (v) => { if (v >= 4 && v <= 200) { brushR = Math.round(v); save(); } return brushR; },
     pickAt(partId, tri, point, o = {}) {
