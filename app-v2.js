@@ -57353,6 +57353,12 @@ window.__moElements = _Elements.api;
     try { const tb = window.top.document.body, sync = () => { const on = tb.classList.contains('claude-mode'); document.body.classList.toggle('claude-mode', on); window.__moNoTabs = on; }; sync(); new MutationObserver(sync).observe(tb, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
     return;
   }
+  if (window.__MESHOPT_DEMO) {       // the online version has no connection to Claude, so no Claude mode
+    window.__moClaudeMode = () => { try { toast('Claude mode needs the app on your computer', 'The online version has no connection to Claude.', 'info', 4500); } catch (_) {} };
+    window.__moClaudeFeed = () => {};
+    try { const wl = document.getElementById('welcome-claude'); if (wl) wl.hidden = true; } catch (_) {}
+    return;
+  }
   const KEY = 'stepopt-claude-view';
   let root = null, listEl = null, pickedIdx = -1, tick = 0, loadSig = '', pop = null, statEl = null, statTm = 0, mode = 'off', raf = 0, sticky = true;
   const els = new Map();

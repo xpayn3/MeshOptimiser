@@ -6,7 +6,7 @@
 <title>MeshOptimiser</title>
 <!-- Installable: the browser's "Install" / "Open in app" gives it a window of its own, without the address bar. -->
 <script>try{if(JSON.parse(localStorage.getItem('stepopt-prefs')||'{}').splashOnStart===false)document.documentElement.classList.add('no-splash')}catch(e){}</script>
-<script>/* Claude mode from the first paint: with ?claude (or when it was left on) neither the splash nor the app shows, only the dark page, until the feed takes over (app-v2.js, setMode) */try{if(window.top===window){var h=document.documentElement,v=localStorage.getItem('stepopt-claude-view');if(/[?&]claude\b/.test(location.search)||(v&&v!=='off')){h.classList.add('claude-boot','no-splash');setTimeout(function(){h.classList.remove('claude-boot')},6000)}}}catch(e){}</script>
+<script>/* Claude mode from the first paint: with ?claude (or when it was left on) neither the splash nor the app shows, only the dark page, until the feed takes over (app-v2.js, setMode) */try{if(window.top===window&&!window.__MESHOPT_DEMO){var h=document.documentElement,v=localStorage.getItem('stepopt-claude-view');if(/[?&]claude\b/.test(location.search)||(v&&v!=='off')){h.classList.add('claude-boot','no-splash');setTimeout(function(){h.classList.remove('claude-boot')},6000)}}}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#101010">
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
@@ -7978,7 +7978,7 @@ window.moSplash = function (msg, pct) {
      transcoder, glTF-Transform (for a Draco-compressed export) and the
      in-browser STEP reader. -->
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
-<script type="module" src="app-v2.js?v=20261016l-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1"></script>
+<script type="module" src="app-v2.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app-v2.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

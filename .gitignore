@@ -34,3 +34,6 @@ dist/
 *.bak
 *.bak-*
 _before-*.html
+
+# Local setting marker (Settings > General > Show a terminal window)
+.show-console
