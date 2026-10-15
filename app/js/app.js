@@ -1655,6 +1655,19 @@ function _treeSyncFlagged() {
   }
 }
 
+// The colour dot of the rows that are already there (a material's colour changed: the rows are not
+// rebuilt, so the dot would keep the old colour until the tree was drawn again).
+function _treeSyncColours() {
+  for (const row of _treeRows()) {
+    if (!row.dataset || !row.dataset.partId) continue;
+    const dot = row.querySelector('.tree-color');
+    const p = getPart(parseInt(row.dataset.partId, 10));
+    if (!dot || !p || !p.originalColor) continue;
+    const hex = '#' + p.originalColor.getHexString();
+    if (dot.dataset.hex !== hex) { dot.dataset.hex = hex; dot.style.background = hex; }
+  }
+}
+
 // Which group rows have something alive under them: Map<node, boolean>.
 // A cloner counts as alive (it is valid while empty) and keeps its ancestors
 // alive. The tree decides, never the scene graph.
@@ -37384,10 +37397,9 @@ function _openMaterialEditor(info) {
         // export, the swatch in the tree and a duplicate all read it from the part.
         for (const p of state.parts) {
           if (!p || p.deleted || !p.originalColor) continue;
-          const holder = p.mesh || p.instancedMesh;
-          const pm = holder ? _ownMaterialOf(holder) : null;
-          if (pm === mat || (Array.isArray(pm) && pm.includes(mat))) p.originalColor.copy(mat.color);
+          if (_partWearsMaterial(p, mat)) p.originalColor.copy(mat.color);
         }
+        try { _treeSyncColours(); } catch (_) {}
         _matFollowColorName(mat); _syncName(); _relistSoon();
       }
       mat.needsUpdate = true;
@@ -37962,15 +37974,26 @@ function _flakeNormalTexture(strengthScale) {
   return tex;
 }
 
+// Does a part wear this material on any of its meshes? (A part whose root is a group of meshes counts: its root has no material of its own.)
+function _partWearsMaterial(p, mat) {
+  const holder = p && (p.mesh || p.instancedMesh);
+  if (!holder) return false;
+  let found = false;
+  holder.traverse(o => {
+    if (found || !o.isMesh || o.userData.selGlow) return;
+    const pm = _ownMaterialOf(o);
+    if (pm === mat || (Array.isArray(pm) && pm.includes(mat))) found = true;
+  });
+  return found;
+}
 // The parts that wear a material take its colour as their own (the export, the swatch in the tree and a duplicate read it from the part).
 function _syncPartColours(mat) {
   if (!mat || !mat.color) return;
   for (const p of state.parts) {
     if (!p || p.deleted || !p.originalColor) continue;
-    const holder = p.mesh || p.instancedMesh;
-    const pm = holder ? _ownMaterialOf(holder) : null;
-    if (pm === mat || (Array.isArray(pm) && pm.includes(mat))) p.originalColor.copy(mat.color);
+    if (_partWearsMaterial(p, mat)) p.originalColor.copy(mat.color);
   }
+  try { _treeSyncColours(); } catch (_) {}
 }
 
 function _applyPresetTo(mat, preset) {

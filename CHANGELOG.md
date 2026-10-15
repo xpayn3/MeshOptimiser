@@ -8,6 +8,7 @@ Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &n
 
 **Polish**
 
+- ![fix][fix] **The colour dot in the tree follows a material's colour.** Changing the colour of a material changed the parts in the 3D view but left the dot on their tree rows with the old colour until the tree was redrawn; the dots now change with it.
 - ![fix][fix] **The Claude connected dropdown fits its panel.** The buttons at its foot (Claude mode, Copy command, Console, More…) ran out of the panel. *Claude mode* now has a row of its own and the other three sit under it.
 - ![polish][polish] **Icon-only buttons in the top bar draw at one size.** The sidebar button drew its icon larger than Menu and Export, so its lines looked thicker; the sidebar, screenshot and turntable buttons now match.
 - ![polish][polish] **The start screen cards show their shortcut on hover.** New scene, Open file and Import show the key only while the pointer is over the card or it has the keyboard focus.

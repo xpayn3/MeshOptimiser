@@ -15,3 +15,4 @@ Last release in the changelog: **v0.31.0**.
 - The sidebar button in the top bar drew its icon larger than the Menu and Export icons, so its lines looked thicker. Icon-only buttons in the top bar now draw at the same size.
 - The start screen cards (New scene, Open file, Import) now show their shortcut only on hover or keyboard focus.
 - No tooltip over search and filter fields (the parts search, the library and materials filters, Settings, Help and Shortcuts search).
+- Changing a material's colour did not change the colour dot of its parts in the tree until the tree was drawn again. The dots now follow at once.
