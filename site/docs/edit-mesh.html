@@ -160,9 +160,11 @@
             <div><dt><kbd>2</kbd></dt><dd>Edges</dd></div>
             <div><dt><kbd>3</kbd></dt><dd>Polygons</dd></div>
             <div><dt><kbd>4</kbd></dt><dd>Model: leave Edit mesh</dd></div>
+            <div><dt><kbd>Enter</kbd></dt><dd>Go in with a part selected, and out again</dd></div>
           </dl>
           <ul class="kb-points">
             <li>Click the button once to go into the last piece mode you used, or back out again.</li>
+            <li>With a part selected, <span class="ui">Enter</span> does the same: it goes into the last piece mode you used, and <span class="ui">Enter</span> again goes back to <span class="ui">Model</span>. A command card that is waiting for its <span class="ui">Enter</span> gets it first, and with nothing selected it does nothing.</li>
             <li>Hold the button to see the list of all four.</li>
             <li>While Edit mesh is on, three more buttons appear under the mode button: <span class="ui">Points</span>, <span class="ui">Edges</span> and <span class="ui">Polygons</span>. The lit one is the kind of piece you are picking, and a click on another switches to it. The mode button itself shows the Model icon then, and a click on it goes back to Model.</li>
             <li>The view modes (solid, wireframe, X-ray, heatmap) that these keys used to switch are now on <kbd>Alt</kbd><kbd>1</kbd> to <kbd>Alt</kbd><kbd>4</kbd>. See <a href="../docs/view-modes.html">View modes</a>.</li>
@@ -215,7 +217,7 @@
             <li>The quads and n-gons of an OBJ or FBX file are remembered after the file is read, so the polygons of the file are known afterwards.</li>
             <li><a href="../docs/remesh.html">Quick remesh</a> does not run while Edit mesh is on. Go back to Model first.</li>
             <li>Leaving Edit mesh in the middle of a drag finishes the move as one undo step.</li>
-            <li>Everything here is one undo step, and after an undo the pieces are picked again. See <a href="../docs/undo-redo.html">Undo and redo</a>.</li>
+            <li>Everything here is one undo step. After an undo, or a redo of a move, the pieces are picked again; a delete that is done again picks nothing, because what it picked is gone. See <a href="../docs/undo-redo.html">Undo and redo</a>.</li>
           </ul>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a></li>
@@ -266,7 +268,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.31.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.31.1</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">

@@ -36,10 +36,10 @@
   "description": "Open a CAD assembly, strip what nobody sees, export a light GLB. Free, and it never leaves your computer.",
   "applicationCategory": "DesignApplication",
   "operatingSystem": "Windows, macOS",
-  "softwareVersion": "0.31.0",
+  "softwareVersion": "0.31.1",
   "url": "https://xpayn3.github.io/MeshOptimiser/",
   "image": "https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg",
-  "downloadUrl": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.31.0/MeshOptimiser-v0.31.0.zip",
+  "downloadUrl": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.31.1/MeshOptimiser-v0.31.1.zip",
   "license": "https://opensource.org/licenses/MIT",
   "offers": {
     "@type": "Offer",
@@ -76,7 +76,7 @@
   </header>
   <main id="main">
     <section class="wrap hero">
-      <p class="kicker">v0.31.0<b>·</b>Beta<b>·</b>MIT<b>·</b>Windows and macOS</p>
+      <p class="kicker">v0.31.1<b>·</b>Beta<b>·</b>MIT<b>·</b>Windows and macOS</p>
       <h1>Heavy CAD, made light enough for a browser.</h1>
       <p class="lead">Open a CAD assembly, strip what nobody sees, export a light GLB. Free, and it never leaves your computer.</p>
       <div class="actions">
@@ -446,16 +446,16 @@
       <div class="wrap split">
         <div class="split-head">
           <p class="kicker">Latest release</p>
-          <h2>v0.31.0<b class="rel-code">Bled</b></h2>
+          <h2>v0.31.1</h2>
           <a class="more" href="changelog.html">Full changelog</a>
         </div>
         <div class="split-body">
-          <p>A polish of the interface, and a tidier folder. Icons, menus and dropdowns share one look, groups can be locked, Export keeps the rest under Advanced and puts each part’s axis at the part, and the download is organised like an installed program.</p>
+          <p>Enter goes into Edit mesh, Edit mesh and Undo work together, materials stay level everywhere, and the viewport no longer stalls.</p>
           <ul class="changes">
-            <li><b class="is-new">New</b><span>A polish of the interface. The toolbar icons are sharper, their dividers easy to see, and the + and − of the part tree sit in the middle of their circles. Every menu and dropdown looks the same and opens the same way, and closes at once.</span></li>
-            <li><b class="is-new">New</b><span>The right-click menus of the part tree are about half as long. What you use least is one level in: Visibility, Select, Mesh, Fit and Tree for a part; Group, Order and Expand and collapse for a group.</span></li>
-            <li><b class="is-new">New</b><span>Pivot points in Export. A part from a STEP file has its origin at 0, 0, 0, so in Cinema 4D every axis sat there. GLB, glTF, FBX and USDZ now write each part around its own centre, so the axis is at the part. FBX objects carry the rotation and scale of their part too.</span></li>
-            <li><b class="is-new">New</b><span>Groups can be locked. Lock in Properties, or “Lock everything inside” on the right-click menu of a group, locks every part in it. A locked part or group shows a red lock where its icon is.</span></li>
+            <li><b class="is-new">New</b><span>Enter goes into Edit mesh with a part selected, in the mode you used last, and Enter again goes back out.</span></li>
+            <li><b class="is-new">New</b><span>The colour picker can be moved. Drag the strip along its top, or the hint along its bottom, to put it where it does not cover what you are colouring.</span></li>
+            <li><b class="is-fix">Fix</b><span>Edit mesh and Undo / Redo work together. What was picked is picked again after Ctrl+Z and Ctrl+Y of a move, and a delete taken back picks what it deleted.</span></li>
+            <li><b class="is-fix">Fix</b><span>The viewport no longer stalls after editing. When the graphics card refuses a frame because a mesh has no normals, the app now repairs it and uploads the parts again by itself.</span></li>
           </ul>
         </div>
       </div>
@@ -475,7 +475,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.31.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.31.1</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
