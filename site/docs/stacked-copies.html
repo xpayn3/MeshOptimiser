@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=391" />
+  <link rel="stylesheet" href="../site.css?v=405" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -90,6 +90,7 @@
         <a href="../docs/smart-optimise.html">Smart optimise</a>
         <a href="../docs/delete-small-parts.html">Delete small parts</a>
         <a href="../docs/select-hidden-parts.html">Select hidden parts</a>
+        <a href="../docs/remove-hidden-faces.html">Remove hidden faces</a>
         <a href="../docs/fasteners.html">Fasteners</a>
         <a href="../docs/stacked-copies.html" aria-current="page">Stacked copies</a>
         <a href="../docs/fill-holes.html">Remove holes</a>
@@ -146,6 +147,9 @@
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#lighter">Make it lighter</a></p>
         <h1>Stacked copies</h1>
         <p class="lead">Find parts that sit exactly on top of an identical copy of themselves, drawn twice, and remove the extra ones.</p>
+        <figure class="star kb-anim"><svg role="img" aria-label="MeshOptimiser: Stacked copies" style="--tile-c:#fb923c" class="tile-art clip-art art-stack" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false"><g class="art-scaled" transform="translate(180 100) scale(1.3) translate(-180 -100)">
+        <path d="M123.7 36.5 L262.3 116.5 L236.3 131.5 L97.7 51.5 Z M97.7 51.5 V71.5 L236.3 151.5 V131.5 M236.3 151.5 L262.3 136.5 V116.5"/>
+        <g class="art-m-stack art-hot"><path d="M123.7 36.5 L262.3 116.5 L236.3 131.5 L97.7 51.5 Z M97.7 51.5 V71.5 L236.3 151.5 V131.5 M236.3 151.5 L262.3 136.5 V116.5"/></g></g></svg></figure>
         <div class="kb-body">
           <p>Some files hold the same part twice, in the same place. From a distance nothing looks wrong. But the two surfaces lie on each other, so the screen flickers where they meet, because the graphics card cannot tell which one is in front. And the triangles are stored and drawn twice. Stacked copies finds these parts and keeps one of each.</p>
           <p>Ten identical bolts in ten different places are not stacked copies. Only parts in the same place count.</p>
@@ -189,6 +193,12 @@
         <a href="../download.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download</a>
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
+        <h2>Latest</h2>
+        <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
+        <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
+        <a href="../docs/select-parts.html">Locked groups</a>
+        <a href="../docs/export.html">Pivot points in Export</a>
+        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>
@@ -204,7 +214,7 @@
               <p class="cmp-tag">In your browser</p>
               <h3>MeshOptimiser Web</h3>
               <p class="cmp-sub">Try the app in a tab. Nothing to install.</p>
-              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Open Web</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
+              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Launch</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
             </div>
             <div class="cmp-col">
               <p class="cmp-tag">On your machine</p>

@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=391" />
+  <link rel="stylesheet" href="../site.css?v=405" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -90,6 +90,7 @@
         <a href="../docs/smart-optimise.html">Smart optimise</a>
         <a href="../docs/delete-small-parts.html">Delete small parts</a>
         <a href="../docs/select-hidden-parts.html">Select hidden parts</a>
+        <a href="../docs/remove-hidden-faces.html">Remove hidden faces</a>
         <a href="../docs/fasteners.html">Fasteners</a>
         <a href="../docs/stacked-copies.html">Stacked copies</a>
         <a href="../docs/fill-holes.html" aria-current="page">Remove holes</a>
@@ -146,6 +147,9 @@
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#lighter">Make it lighter</a></p>
         <h1>Remove holes</h1>
         <p class="lead">Close bolt holes, slots, pockets and lettering in flat faces. Each closed hole removes the triangles of its walls.</p>
+        <figure class="star kb-anim"><svg role="img" aria-label="MeshOptimiser: Remove holes" style="--tile-c:#35c9c0" class="tile-art clip-art art-holes" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+        <path class="art-dim" d="M129.8 75 L91.7 97 M129.8 31 L129.8 75 M129.8 75 L268.3 155 M123.7 71.5 L97.7 86.5 M97.7 86.5 L97.7 56.5 M97.7 56.5 L123.7 41.5 M123.7 41.5 L123.7 71.5 M262.3 151.5 L123.7 71.5 M236.3 166.5 L97.7 86.5 M236.3 136.5 L97.7 56.5 M262.3 121.5 L123.7 41.5"/><path d="M268.3 155 L230.2 177 M230.2 177 L230.2 133 M230.2 133 L268.3 111 M268.3 111 L268.3 155 M91.7 97 L91.7 53 M91.7 53 L129.8 31 M230.2 177 L91.7 97 M230.2 133 L91.7 53 M268.3 111 L129.8 31 M262.3 151.5 L236.3 166.5 M236.3 166.5 L236.3 136.5 M236.3 136.5 L262.3 121.5 M262.3 121.5 L262.3 151.5"/>
+        <g><g class="art-hole" style="--i:0"><g transform="matrix(0.866 0.5 -0.866 0.5 134.3 55.6)"><circle r="8.5"/></g><g opacity="0.5" stroke-width="1"><g transform="matrix(0.866 0.5 -0.866 0.5 134.3 62.6)"><circle r="8.5"/></g><path d="M123.9 55.6 V62.6 M144.7 55.6 V62.6"/></g></g><g class="art-hole" style="--i:1"><g transform="matrix(0.866 0.5 -0.866 0.5 157.1 68.8)"><circle r="8.5"/></g><g opacity="0.5" stroke-width="1"><g transform="matrix(0.866 0.5 -0.866 0.5 157.1 75.8)"><circle r="8.5"/></g><path d="M146.7 68.8 V75.8 M167.5 68.8 V75.8"/></g></g><g class="art-hole" style="--i:2"><g transform="matrix(0.866 0.5 -0.866 0.5 180 82)"><circle r="8.5"/></g><g opacity="0.5" stroke-width="1"><g transform="matrix(0.866 0.5 -0.866 0.5 180 89)"><circle r="8.5"/></g><path d="M169.6 82 V89 M190.4 82 V89"/></g></g><g class="art-hole" style="--i:3"><g transform="matrix(0.866 0.5 -0.866 0.5 202.9 95.2)"><circle r="8.5"/></g><g opacity="0.5" stroke-width="1"><g transform="matrix(0.866 0.5 -0.866 0.5 202.9 102.2)"><circle r="8.5"/></g><path d="M192.5 95.2 V102.2 M213.3 95.2 V102.2"/></g></g><g class="art-hole" style="--i:4"><g transform="matrix(0.866 0.5 -0.866 0.5 225.7 108.4)"><circle r="8.5"/></g><g opacity="0.5" stroke-width="1"><g transform="matrix(0.866 0.5 -0.866 0.5 225.7 115.4)"><circle r="8.5"/></g><path d="M215.3 108.4 V115.4 M236.1 108.4 V115.4"/></g></g></g></svg></figure>
         <div class="kb-body">
           <p>A plate with forty bolt holes carries forty small cylinders of triangles that nobody notices from a distance. Remove holes closes holes in flat faces and leaves the rest of each part exactly as it was. The part keeps its outline and loses the triangles inside the holes.</p>
           <p>With the limit at 12 mm it closes bolt holes, slots and pockets up to that size, and leaves bosses and the bore of a washer or a nut alone.</p>
@@ -222,6 +226,12 @@
         <a href="../download.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download</a>
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
+        <h2>Latest</h2>
+        <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
+        <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
+        <a href="../docs/select-parts.html">Locked groups</a>
+        <a href="../docs/export.html">Pivot points in Export</a>
+        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>
@@ -237,7 +247,7 @@
               <p class="cmp-tag">In your browser</p>
               <h3>MeshOptimiser Web</h3>
               <p class="cmp-sub">Try the app in a tab. Nothing to install.</p>
-              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Open Web</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
+              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Launch</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
             </div>
             <div class="cmp-col">
               <p class="cmp-tag">On your machine</p>

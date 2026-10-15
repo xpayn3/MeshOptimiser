@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=391" />
+  <link rel="stylesheet" href="../site.css?v=405" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -90,6 +90,7 @@
         <a href="../docs/smart-optimise.html">Smart optimise</a>
         <a href="../docs/delete-small-parts.html" aria-current="page">Delete small parts</a>
         <a href="../docs/select-hidden-parts.html">Select hidden parts</a>
+        <a href="../docs/remove-hidden-faces.html">Remove hidden faces</a>
         <a href="../docs/fasteners.html">Fasteners</a>
         <a href="../docs/stacked-copies.html">Stacked copies</a>
         <a href="../docs/fill-holes.html">Remove holes</a>
@@ -146,6 +147,14 @@
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#lighter">Make it lighter</a></p>
         <h1>Delete small parts</h1>
         <p class="lead">Remove the screws, washers and clips that are too small to matter, with a slider and a preview of what will go.</p>
+        <figure class="star kb-anim"><svg role="img" aria-label="MeshOptimiser: Delete small parts" style="--tile-c:#f472b6" class="tile-art clip-art art-small" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false"><g class="art-scaled" transform="translate(180 100) scale(0.88) translate(-180 -100)">
+        <path class="art-solid" d="M154 21 L289.1 99 L289.1 145 L206 193 L70.9 115 L70.9 69 Z"/>
+        <path d="M154 21 L289.1 99 L206 147 L70.9 69 Z M289.1 99 V145 M206 147 V193 M70.9 69 V115 M289.1 145 L206 193 L70.9 115"/>
+        <path class="art-solid" d="M154 84 V66 A26 13 0 0 1 206 66 V84 A26 13 0 0 1 154 84 Z"/>
+        <path d="M154 84 V66 M206 84 V66 M154 84 A26 13 0 0 0 206 84"/>
+        <path d="M154 66 A26 13 0 1 0 206 66 A26 13 0 1 0 154 66 M165 66 A15 7.5 0 1 0 195 66 A15 7.5 0 1 0 165 66"/>
+        <path d="M173 66 A7 3.5 0 1 0 187 66 A7 3.5 0 1 0 173 66"/>
+        <g class="art-m-small art-hot" style="--i:0;fill: var(--card-bg, var(--surface))"><path d="M163.1 43.3 L153 44.8 L145.6 40.6 L148.3 34.8 L158.4 33.2 L165.8 37.4 Z M163.1 43.3 V49.3 L153 50.8 M153 44.8 V50.8 L145.6 46.6 M145.6 40.6 V46.6 L148.3 40.8 M148.3 34.8 V40.8 M151 39 A4.7 2.7 0 1 0 160.4 39 A4.7 2.7 0 1 0 151 39"/></g><g class="art-m-small art-hot" style="--i:1;fill: var(--card-bg, var(--surface))"><path d="M239.7 81.3 A8 4 0 1 0 255.7 81.3 A8 4 0 1 0 239.7 81.3 M239.7 81.3 V93.3 A8 4 0 0 0 255.7 93.3 V81.3"/></g><g class="art-m-small art-hot" style="--i:2;fill: var(--card-bg, var(--surface))"><path d="M104.7 61 A8 4 0 1 0 120.7 61 A8 4 0 1 0 104.7 61 M104.7 61 V73 A8 4 0 0 0 120.7 73 V61"/></g><g class="art-m-small art-hot" style="--i:3;fill: var(--card-bg, var(--surface))"><path d="M213.9 121.6 L203.8 123.1 L196.4 118.9 L199.1 113.1 L209.2 111.5 L216.6 115.7 Z M213.9 121.6 V127.6 L203.8 129.1 M203.8 123.1 V129.1 L196.4 124.9 M196.4 118.9 V124.9 L199.1 119.1 M199.1 113.1 V119.1 M201.8 117.3 A4.7 2.7 0 1 0 211.2 117.3 A4.7 2.7 0 1 0 201.8 117.3"/></g></g></svg></figure>
         <div class="kb-body">
           <p>A CAD assembly is mostly small things: screws, washers, clips, nuts. From a normal viewing distance nobody sees them, but there are hundreds of them and each one costs triangles. This card removes every part below a size you choose.</p>
           <h2 id="when-to-use-it">When to use it</h2>
@@ -195,6 +204,12 @@
         <a href="../download.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download</a>
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
+        <h2>Latest</h2>
+        <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
+        <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
+        <a href="../docs/select-parts.html">Locked groups</a>
+        <a href="../docs/export.html">Pivot points in Export</a>
+        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>
@@ -210,7 +225,7 @@
               <p class="cmp-tag">In your browser</p>
               <h3>MeshOptimiser Web</h3>
               <p class="cmp-sub">Try the app in a tab. Nothing to install.</p>
-              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Open Web</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
+              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Launch</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
             </div>
             <div class="cmp-col">
               <p class="cmp-tag">On your machine</p>

@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=391" />
+  <link rel="stylesheet" href="../site.css?v=405" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -90,6 +90,7 @@
         <a href="../docs/smart-optimise.html">Smart optimise</a>
         <a href="../docs/delete-small-parts.html">Delete small parts</a>
         <a href="../docs/select-hidden-parts.html">Select hidden parts</a>
+        <a href="../docs/remove-hidden-faces.html">Remove hidden faces</a>
         <a href="../docs/fasteners.html">Fasteners</a>
         <a href="../docs/stacked-copies.html">Stacked copies</a>
         <a href="../docs/fill-holes.html">Remove holes</a>
@@ -146,6 +147,10 @@
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#lighter">Make it lighter</a></p>
         <h1>Remesh: Untriangulate and Triangulate</h1>
         <p class="lead">Join the triangles of each flat face into one polygon and take away the vertices in its middle, or go back to even triangles. The shape stays as it is.</p>
+        <figure class="star kb-anim"><svg role="img" aria-label="MeshOptimiser: Remesh" style="--tile-c:#fbbf24" class="tile-art clip-art art-remesh" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false"><g class="art-scaled" transform="translate(180 100) scale(0.92) translate(-180 -100)">
+        <g class="art-fine art-dim"><path d=" M170.5 28.5 L80.4 80.5 M188.7 39 L98.6 91 M206.8 49.5 L116.8 101.5 M225 60 L135 112 M243.2 70.5 L153.2 122.5 M261.4 81 L171.3 133 M279.6 91.5 L189.5 143.5 M134.3 28.4 L279.8 112.4 M116.3 38.8 L261.8 122.8 M98.2 49.2 L243.7 133.2 M80.2 59.6 L225.7 143.6 M152.3 18 L152.5 38.9 M134.3 28.4 L134.4 49.3 M116.3 38.8 L116.4 59.7 M98.2 49.2 L98.4 70.1 M80.2 59.6 L80.4 80.5 M170.5 28.5 L170.6 49.4 M152.5 38.9 L152.6 59.8 M134.4 49.3 L134.6 70.2 M116.4 59.7 L116.6 80.6 M98.4 70.1 L98.6 91 M188.7 39 L188.8 59.9 M170.6 49.4 L170.8 70.3 M152.6 59.8 L152.8 80.7 M134.6 70.2 L134.8 91.1 M116.6 80.6 L116.8 101.5 M206.8 49.5 L207 70.4 M188.8 59.9 L189 80.8 M170.8 70.3 L171 91.2 M152.8 80.7 L153 101.6 M134.8 91.1 L135 112 M225 60 L225.2 80.9 M207 70.4 L207.2 91.3 M189 80.8 L189.2 101.7 M171 91.2 L171.2 112.1 M153 101.6 L153.2 122.5 M243.2 70.5 L243.4 91.4 M225.2 80.9 L225.4 101.8 M207.2 91.3 L207.4 112.2 M189.2 101.7 L189.4 122.6 M171.2 112.1 L171.3 133 M261.4 81 L261.6 101.9 M243.4 91.4 L243.6 112.3 M225.4 101.8 L225.6 122.7 M207.4 112.2 L207.5 133.1 M189.4 122.6 L189.5 143.5 M279.6 91.5 L279.8 112.4 M261.6 101.9 L261.8 122.8 M243.6 112.3 L243.7 133.2 M225.6 122.7 L225.7 143.6 M207.5 133.1 L207.7 154 M282.8 110.7 V132.7 M267.8 119.3 V141.3 M252.8 128 V150 M237.7 136.7 V158.7 M222.7 145.3 V167.3 M297.8 102 L282.8 132.7 M282.8 110.7 L267.8 141.3 M267.8 119.3 L252.8 150 M252.8 128 L237.7 158.7 M237.7 136.7 L222.7 167.3 M222.7 145.3 L207.7 176 M183.5 140 V162 M159.2 126 V148 M135 112 V134 M110.7 98 V120 M86.4 84 V106 M207.7 154 L183.5 162 M183.5 140 L159.2 148 M159.2 126 L135 134 M135 112 L110.7 120 M110.7 98 L86.4 106 M86.4 84 L62.2 92"/></g>
+        <path d="M152.3 18 L297.8 102 L207.7 154 L62.2 70 Z M297.8 102 V124 M207.7 154 V176 M62.2 70 V92 M297.8 124 L207.7 176 L62.2 92"/>
+        <path class="art-m-draw art-hot" pathLength="1" d="M152.3 18 L207.7 154 M297.8 102 L207.7 176 M207.7 154 L62.2 92 M152.3 18 L297.8 102 L207.7 154 L62.2 70 Z M297.8 102 V124 M207.7 154 V176 M62.2 70 V92 M297.8 124 L207.7 176 L62.2 92"/></g></svg></figure>
         <div class="kb-body">
           <p>Screens draw triangles, so every flat face of a part is cut into triangles, often more than it needs. A polygon, also called an n-gon, is a flat face with any number of corners: several triangles in one plane, joined into one face.</p>
           <p>Remesh has two actions in one panel, and a quick way to make a part lighter, <a href="../docs/remesh.html">Quick remesh</a>, further down. <span class="ui">Untriangulate</span> joins flat triangles into polygons and takes away the vertices in the middle of each flat face. <span class="ui">Triangulate</span> is the way back: the flat faces stop being polygons and show their triangles again.</p>
@@ -222,6 +227,12 @@
         <a href="../download.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>Download</a>
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
+        <h2>Latest</h2>
+        <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
+        <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
+        <a href="../docs/select-parts.html">Locked groups</a>
+        <a href="../docs/export.html">Pivot points in Export</a>
+        <a href="../docs/move-rotate-scale.html">Make unique</a>
         <h2>Popular</h2>
         <a href="../docs/shortcuts.html">Shortcuts</a>
         <a href="../docs/troubleshooting.html">Troubleshooting</a>
@@ -237,7 +248,7 @@
               <p class="cmp-tag">In your browser</p>
               <h3>MeshOptimiser Web</h3>
               <p class="cmp-sub">Try the app in a tab. Nothing to install.</p>
-              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Open Web</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
+              <div class="cmp-act"><a class="cmp-btn btn-lite" href="../lite/index.html" target="_blank" rel="noopener">Launch</a><a class="cmp-link" href="../docs/what-it-is.html">What is it</a></div>
             </div>
             <div class="cmp-col">
               <p class="cmp-tag">On your machine</p>

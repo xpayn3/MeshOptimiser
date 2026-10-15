@@ -93,27 +93,6 @@ i, em { font-style: normal; }
 @media (min-width: 761px) { .nav .nav-out { display: none; } }          /* on a wide screen GitHub is the button under the title on the home page; in the phone menu it stays a link */
 .nav a[aria-current] { color: var(--tx); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
 .bar-get { justify-self: end; display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 999px; font-size: 14px; }
-/* the Download buttons: flat, with a faint blue ambient light round them: two soft blobs that drift slowly (mouse only, not with reduced motion).
-   The light is one layer behind the button, larger than it, with the button's own area cut out so it never shows on the button. */
-.bar-get, .btn.is-primary[href*="download"], .btn.is-primary[download] { position: relative; isolation: isolate; }
-.bar-get::before, .btn.is-primary[href*="download"]::before, .btn.is-primary[download]::before {
-  content: ''; position: absolute; inset: -70px -80px -80px; z-index: -1; pointer-events: none; filter: blur(16px);
-  background: radial-gradient(closest-side, rgba(40, 90, 255, 0.32), transparent) 20% 52% / 46% 48% no-repeat, radial-gradient(closest-side, rgba(13, 153, 255, 0.28), transparent) 52% 58% / 40% 44% no-repeat, radial-gradient(closest-side, rgba(90, 215, 255, 0.24), transparent) 82% 52% / 44% 46% no-repeat;
-  -webkit-mask: linear-gradient(#000 0 0), linear-gradient(#000 0 0); -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0), linear-gradient(#000 0 0); mask-composite: exclude;
-  -webkit-mask-size: 100% 100%, calc(100% - 160px) calc(100% - 150px); mask-size: 100% 100%, calc(100% - 160px) calc(100% - 150px);
-  -webkit-mask-position: 0 0, 80px 70px; mask-position: 0 0, 80px 70px; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-}
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .bar-get::before, .btn.is-primary[href*="download"]::before, .btn.is-primary[download]::before { animation: blob-drift 9s ease-in-out infinite alternate, blob-hue 7s ease-in-out infinite alternate; }
-}
-/* the one in the top bar glows only while the page is at the top; once it scrolls, the light fades out slowly (site.js sets .is-scrolled) */
-.bar-get::before { transition: opacity 0.9s ease, visibility 0s; }
-.is-scrolled .bar-get::before { opacity: 0; visibility: hidden; transition: opacity 0.9s ease, visibility 0s 0.9s; }
-/* ...and then it comes back on hover */
-.is-scrolled .bar-get:hover::before, .is-scrolled .bar-get:focus-visible::before { opacity: 1; visibility: visible; transition: opacity 0.4s ease, visibility 0s; }
-@keyframes blob-drift { from { background-position: 20% 52%, 52% 58%, 82% 52%; } to { background-position: 76% 60%, 30% 48%, 22% 56%; } }
-@keyframes blob-hue { from { filter: blur(16px) hue-rotate(-24deg) saturate(1.1); } to { filter: blur(16px) hue-rotate(22deg) saturate(1.3); } }
 .bar-get svg { width: 16px; height: 16px; flex: none; }
 .bar-menu { display: none; }
 
@@ -1603,3 +1582,29 @@ main { overflow-x: clip; }
 /* a soft light on the page behind the axle, so the model stands out from the dark (the same kind of spotlight as behind the Quick wand) */
 .pop.is-axle .pop-pin::before { content: ''; position: absolute; left: 55%; top: 55%; width: min(96%, 1240px); height: min(92%, 840px); transform: translate(-50%, -50%); background: radial-gradient(closest-side, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.043) 12%, rgba(255, 255, 255, 0.032) 26%, rgba(255, 255, 255, 0.021) 42%, rgba(255, 255, 255, 0.011) 58%, rgba(255, 255, 255, 0.004) 78%, rgba(255, 255, 255, 0) 100%); pointer-events: none; }
 .pal-list .pal-r span .pal-g { margin-right: 8px; color: var(--tx-3); font-size: 12px; font-style: normal; white-space: nowrap; }
+
+/* home hero: centred */
+.hero { text-align: center; }
+.hero .kicker, .hero .actions { justify-content: center; }
+.hero h1 { max-width: 16ch; margin-left: auto; margin-right: auto; }
+.hero .lead { margin-left: auto; margin-right: auto; max-width: 52ch; }
+
+/* tile drawings: a touch lighter, nearer white */
+.tile-art { color: #9a9a9f; --art-dim: #5e5e63; }
+.hero + .band.is-first { margin-top: clamp(88px, 11vw, 168px); }
+.live .sv-lead { margin-bottom: clamp(32px, 4vw, 56px); }
+.live-stage { margin-top: 0; }
+.page-features .band, .page-features .foot { border-top: 0; }
+/* clean-up carousel: every "Read more" sits on the same line at the bottom of its card */
+.fcar-stars .star { display: flex; flex-direction: column; }
+.fcar-stars .star figcaption { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.fcar-stars .star figcaption .clip-more { margin-top: auto; padding-top: 10px; }
+/* clean-up carousel: "Read more" shows only while the pointer is over the card (always there on touch, and for keyboard focus) */
+@media (hover: hover) {
+  .fcar-stars .star figcaption .clip-more { opacity: 0; transform: translateY(4px); transition: opacity 0.2s ease, transform 0.2s ease, color 0.15s ease; }
+  .fcar-stars .star:hover figcaption .clip-more, .fcar-stars .star:focus-within figcaption .clip-more { opacity: 1; transform: none; }
+}
+/* docs: the drawing of a function, under the title */
+.kb-anim { margin: clamp(24px, 3vw, 36px) 0 0; }
+.kb-anim .clip-art { max-height: 340px; }
+.kb-rail .rail-tag { margin-left: auto; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--soon) 16%, transparent); color: var(--soon); font-size: 10.5px; font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.4; }
