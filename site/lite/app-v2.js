@@ -2108,21 +2108,26 @@ const Log = (() => {
     // resize via top grip
     const grip = document.getElementById('lc-grip');
     if (grip) {
-      let dragging = false, startY = 0, startH = 0;
+      let dragging = false, startY = 0, startH = 0, wantH = 0, raf = 0;
       grip.addEventListener('mousedown', e => {
-        dragging = true; startY = e.clientY; startH = panelEl.offsetHeight;
+        dragging = true; startY = e.clientY; startH = panelEl.offsetHeight; wantH = startH;
         document.body.style.userSelect = 'none'; e.preventDefault();
       });
+      // once per frame, and the height is stored once, on release (a storage write on every mouse move is a synchronous disk write)
       window.addEventListener('mousemove', e => {
         if (!dragging) return;
-        const newH = Math.max(120, Math.min(window.innerHeight * 0.9, startH + (startY - e.clientY)));
-        panelEl.style.height = newH + 'px';
-        try { localStorage.setItem('stepopt-console-h', String(newH)); } catch (_) {}
+        wantH = Math.round(Math.max(120, Math.min(window.innerHeight * 0.9, startH + (startY - e.clientY))));
+        if (!raf) raf = requestAnimationFrame(() => { raf = 0; panelEl.style.height = wantH + 'px'; });
       });
-      window.addEventListener('mouseup', () => {
+      const endDrag = () => {
         if (!dragging) return;
         dragging = false; document.body.style.userSelect = '';
-      });
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
+        panelEl.style.height = wantH + 'px';
+        try { localStorage.setItem('stepopt-console-h', String(wantH)); } catch (_) {}
+      };
+      window.addEventListener('mouseup', endDrag);
+      window.addEventListener('blur', endDrag);
     }
 
     // restore saved height
@@ -3028,30 +3033,26 @@ function _confirmQuitDialog(o = {}) {
   const _t = { title: 'Quit MeshOptimiser?', text: 'Save your scene before quitting? Unsaved changes will be lost.', discard: "Don't save", cancel: 'Cancel', save: true, ...o };
   return new Promise((resolve) => {
     const bg = document.createElement('div');
-    bg.style.cssText =
-      'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;' +
-      'display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+    bg.className = 'cq-bg';
     const card = document.createElement('div');
-    card.style.cssText =
-      'background:var(--bg1,#141414);border:1px solid var(--bg3,#252525);border-radius:10px;' +
-      'padding:22px 24px;min-width:380px;max-width:480px;' +
-      'box-shadow:0 4px 10px rgba(0,0,0,.5);color:var(--tx,#ededed);' +
-      'font:13px/1.5 system-ui,-apple-system,Segoe UI,sans-serif';
+    card.className = 'cq-card';
+    card.setAttribute('role', 'alertdialog');
+    card.setAttribute('aria-modal', 'true');
+    // What is lost goes on the left, apart from the two ways to carry on (Cancel, Save) on the right: the risky button is never
+    // the neighbour of the safe one.
     card.innerHTML =
-      `<div style="font-size:15px;font-weight:var(--fw-semibold);margin-bottom:6px">${_t.title}</div>` +
-      `<div style="color:var(--tx2,#9a9a9a);margin-bottom:20px">` +
-      _t.text +
-      `</div>` +
-      `<div style="display:flex;justify-content:flex-end;gap:8px">` +
-        `<button data-act="cancel" style="padding:7px 14px;border:1px solid var(--bg3,#252525);` +
-          `background:transparent;color:var(--tx,#ededed);border-radius:6px;cursor:pointer;font:inherit">${_t.cancel}</button>` +
-        `<button data-act="discard" style="padding:7px 14px;border:1px solid var(--bg3,#252525);` +
-          `background:transparent;color:var(--er,#ff6b6b);border-radius:6px;cursor:pointer;font:inherit">${_t.discard}</button>` +
-        (_t.save === false ? '' : `<button data-act="save" style="padding:7px 14px;border:1px solid var(--ac,#6b8dff);` +
-          `background:var(--ac,#6b8dff);color:#fff;border-radius:6px;cursor:pointer;font:inherit;font-weight:var(--fw-semibold)">Save</button>`) +
+      `<div class="cq-head"><span class="cq-ico"><i data-lucide="triangle-alert"></i></span><div class="cq-title">${_t.title}</div></div>` +
+      `<div class="cq-text">${_t.text}</div>` +
+      `<div class="cq-foot">` +
+        `<button type="button" class="cq-btn cq-danger" data-act="discard">${_t.discard}</button>` +
+        `<span class="cq-gap"></span>` +
+        `<button type="button" class="cq-btn" data-act="cancel">${_t.cancel}</button>` +
+        (_t.save === false ? '' : `<button type="button" class="cq-btn cq-primary" data-act="save">Save</button>`) +
       `</div>`;
     bg.appendChild(card);
     document.body.appendChild(bg);
+    try { _lucide(); } catch (_) {}
+    try { card.querySelector('[data-act="' + (_t.save === false ? 'cancel' : 'save') + '"]').focus(); } catch (_) {}
     const finish = (act) => {
       document.removeEventListener('keydown', onKey, true);
       bg.remove();
@@ -3327,6 +3328,17 @@ const _Settings = (() => {
       <label><input type="checkbox" id="${id}" ${checked ? 'checked' : ''}><span class="switch"></span></label>
     </div>`;
   }
+  // Three pills: Allow (just do it), Ask first (an Allow / Don't allow prompt), Block (turned off)
+  const _MODE_LABEL = { allow: 'Allow', ask: 'Ask first', block: 'Block' };
+  const _MODE_ICON = {   // (icons only, as in Claude's own tool permissions; the name is the tooltip and the screen-reader label)
+    allow: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.5"/></svg>',
+    ask: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v1M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-5.9-2.4L3.4 16a2 2 0 0 1 3.2-2.4L8 15"/></svg>',
+    block: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>',
+  };
+  function _modeRow(cat, label, help) {
+    let m = 'ask'; try { m = _ClaudeBridge.mode(cat); } catch (_) {}
+    return `<div class="set-row" data-claude-mode="${cat}"><span>${label}<span class="set-help">${help}</span></span><div class="mode-seg" role="radiogroup" aria-label="${label}">${['allow', 'ask', 'block'].map(k => `<button type="button" role="radio" aria-checked="${k === m}" aria-label="${_MODE_LABEL[k]}" title="${_MODE_LABEL[k]}" data-mode="${k}" class="${k === m ? 'on' : ''}">${_MODE_ICON[k]}</button>`).join('')}</div></div>`;
+  }
   const _group = (title) => `<div class="set-group-title">${title}</div>`;
 
   // ── Settings › Performance › Memory ──────────────────────────────────────────
@@ -3405,6 +3417,7 @@ const _Settings = (() => {
         ${PANES.map(([id, name, , sub]) => `<section class="set-pane" data-pane="${id}"><h4 class="set-pane-h">${name}</h4><p class="set-pane-sub">${sub}</p><div class="set-pane-b" id="set-pane-${id}"></div></section>`).join('')}
         <div class="set-empty" id="set-empty" hidden>Nothing matches.</div>
       </div>`;
+    { const sq = document.querySelector('.set-search'), nv = $s('set-nav'); if (sq && nv) nv.prepend(sq); }     // (search sits at the top of the sections, as in Claude's own settings)
     const into = (paneId, nodes) => { const dst = $s('set-pane-' + paneId); for (const n of nodes) dst.appendChild(n); };
     const kidsOf = (sec) => sec ? [...sec.children].filter(c => !c.classList.contains('pop-section-title')) : [];
     // the viewport popover's three sections
@@ -3744,13 +3757,10 @@ const _Settings = (() => {
       _toggleRow('set-claude-auto', 'Connect when the app opens', P('auto'), 'If it was on last time, it switches itself on again when you open the app. Off: you switch it on here each time.') +
       '<div class="set-row set-action"><span>Add the app to Claude<span class="set-help">Once, in a terminal on this computer: <code>' + _esc(cmd) + '</code></span></span><button class="btn" id="set-claude-copy" title="Copy the command">Copy command</button></div>' +
       _group('What Claude may do') +
-      _toggleRow('set-claude-geometry', 'Change the model', P('geometry'), 'Reduce triangles, remove holes, remove hidden faces, repair, clean up, merge, split and duplicate.') +
-      _toggleRow('set-claude-layout', 'Move, rename and group', P('layout'), 'Move, turn and scale parts, recentre the model, stand it on the floor, rename parts, make and dissolve groups.') +
-      _toggleRow('set-claude-delete', 'Delete parts', P('delete'), 'Delete chosen parts, or every part under a size.') +
-      _toggleRow('set-claude-files', 'Open files and save exports', P('files'), 'Open a file from this computer, save exports and turntable videos into the app’s exports folder.') +
-      _group('Asking first') +
-      _toggleRow('set-claude-ask', 'Ask before Claude edits', askOn, 'Anything that changes the model shows an Allow / Don’t allow prompt first. Looking, selecting, hiding, isolating, exploding and moving the camera never ask.') +
-      _toggleRow('set-claude-ask-delete', 'Always ask before deleting', P('askDelete'), 'Even with the switch above off, deleting still asks.') +
+      _modeRow('geometry', 'Change the model', 'Reduce triangles, remove holes, remove hidden faces, repair, clean up, merge, split and duplicate.') +
+      _modeRow('layout', 'Move, rename and group', 'Move, turn and scale parts, recentre the model, stand it on the floor, rename parts, make and dissolve groups.') +
+      _modeRow('delete', 'Delete parts', 'Delete chosen parts, or every part under a size.') +
+      _modeRow('files', 'Open files and save exports', 'Open a file from this computer, save exports and turntable videos into the app’s exports folder.') +
       _group('Showing it') +
       _toggleRow('set-claude-pill', 'Show the Claude pill in the top bar', P('pill'), 'A small pill says when Claude is listening, working or waiting for you. Click it to come here.') +
       _toggleRow('set-claude-toast', 'Show a note when Claude acts', P('toast'), 'A short message names what Claude is doing, so a change on screen is never a surprise.') +
@@ -3775,8 +3785,13 @@ const _Settings = (() => {
       '<div class="set-row set-action"><span>Restart the server<span class="set-help">Stops the app’s server (the one Claude talks to) and starts it again, a few seconds. Open scenes stay and the connection comes back by itself; a conversion that is running stops. Use it after updating the app, or when Reconnect does not help.</span></span><button class="btn" id="set-claude-restart">Restart…</button></div>';
     const on = (id, fn) => $s(id)?.addEventListener('change', (e) => { try { fn(e.target.checked); } catch (_) {} });
     on('set-claude', (v) => B.setEnabled(v));
-    on('set-claude-ask', (v) => B.setAsk(v));
-    for (const [id, k] of [['set-claude-auto', 'auto'], ['set-claude-geometry', 'geometry'], ['set-claude-layout', 'layout'], ['set-claude-delete', 'delete'], ['set-claude-files', 'files'], ['set-claude-ask-delete', 'askDelete'], ['set-claude-pill', 'pill'], ['set-claude-toast', 'toast']]) on(id, (v) => B.setPref(k, v));
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('.mode-seg [data-mode]'); if (!b) return;
+      const row = b.closest('[data-claude-mode]'); if (!row) return;
+      try { B.setMode(row.dataset.claudeMode, b.dataset.mode); } catch (_) { return; }
+      for (const x of row.querySelectorAll('[data-mode]')) { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); }
+    });
+    for (const [id, k] of [['set-claude-auto', 'auto'], ['set-claude-pill', 'pill'], ['set-claude-toast', 'toast']]) on(id, (v) => B.setPref(k, v));
     $s('set-claude-reconnect')?.addEventListener('click', async (e) => { const b = e.currentTarget; b.disabled = true; try { await B.reconnect(); } finally { b.disabled = false; } });
     $s('set-claude-restart')?.addEventListener('click', async (e) => {
       const b = e.currentTarget;
@@ -4168,10 +4183,10 @@ const _Welcome = (() => {
       // buttons. Click bubbling on the card still triggers the open handler.
       return `
       <div class="welcome-recent${lead ? ' is-resume' : ''}" data-idx="${i}" tabindex="0" role="button" aria-label="Open ${safeName}">
-        <div class="wr-thumb">${pic}${lead ? '<span class="wr-tag">Continue</span>' : ''}</div>
+        <div class="wr-thumb">${pic}${lead || conv ? `<span class="wr-tags">${lead ? '<span class="wr-tag">Continue</span>' : ''}${conv ? '<span class="wr-tag is-conv">Converted</span>' : ''}</span>` : ''}</div>
         <div class="wr-meta">
           <div class="wr-name">${stem}</div>
-          <div class="wr-sub">${r.saved ? '<span>Scene</span>' : kind ? `<span>${kind}</span>` : ''}${size ? `<span>${size}</span>` : ''}${conv ? '<span>converted</span>' : ''}<span class="wr-age">${_fmtAge(r.ts)}</span></div>
+          <div class="wr-sub">${r.saved ? '<span>Scene</span>' : kind ? `<span>${kind}</span>` : ''}${size ? `<span>${size}</span>` : ''}<span class="wr-age">${_fmtAge(r.ts)}</span></div>
         </div>
         <button class="wr-del" data-act="delete" aria-label="Remove ${safeName} from recent files"><i data-lucide="x"></i></button>
       </div>`;
@@ -4778,7 +4793,7 @@ const _UVView = (() => {
   const start = () => {
     clearInterval(timer);
     refresh();
-    timer = setInterval(() => { if (card.hidden) return; const s = sigOf(pickPart()); if (s !== lastSig) refresh(); }, 400);
+    timer = setInterval(() => { if (card.hidden || document.hidden) return; const s = sigOf(pickPart()); if (s !== lastSig) refresh(); }, 400);
   };
   const stop = () => { clearInterval(timer); timer = 0; token++; last = null; };
   card.addEventListener('cmd-open', start);
@@ -4789,6 +4804,7 @@ const _UVView = (() => {
 const _Actions = (() => {
   const _click = id => () => document.getElementById(id)?.click();
   const list = [
+    { id:'claudemode',   group:'File',       label:'Claude mode (alpha): follow Claude as a feed', run: () => { try { window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} } },
     { id:'newscene',     group:'File',       label:'New scene',                  kbd:'Alt+N', alt:'Ctrl+N', run: () => { try { newScene(); } catch (_) {} } },
     { id:'open',         group:'File',       label:'Open file…',                 kbd:'Ctrl+O', run: () => _openWithPicker() },
     { id:'import',       group:'File',       label:'Import…',                    kbd:'Ctrl+Shift+O', run: () => _importWithPicker() },
@@ -4819,6 +4835,7 @@ const _Actions = (() => {
     { id:'selAll',       group:'Selection',  label:'Select all',                 kbd:'Ctrl+A', run: _click('sel-all') },
     { id:'selInvert',    group:'Selection',  label:'Invert selection',           kbd:'Ctrl+I', run: _click('sel-invert') },
     { id:'selClear',     group:'Selection',  label:'Clear selection',            kbd:'Esc', run: _click('sel-clear') },
+    { id:'animate',      group:'Selection',  label:'Animate the selection…',     icon:'play', run: () => { try { _Anim.open(); } catch (_) {} } },
     { id:'isolate',      group:'Selection',  label:'Isolate selected',           kbd:'S', run: () => { try { isolateSelected(); } catch (_) {} } },
     { id:'showAll',      group:'Selection',  label:'Show all parts',             kbd:'Alt+H', run: () => { try { showAllParts(); } catch (_) {} } },
     { id:'hideUnsel',    group:'Selection',  label:'Hide unselected',            kbd:'Shift+H', run: () => { try { hideUnselected(); } catch (_) {} } },
@@ -4889,6 +4906,9 @@ const _Actions = (() => {
     { id:'viewportSettings', group:'View',   label:'Viewport settings',          run: _click('tg-settings') },
     { id:'addShape',     group:'Edit',       label:'Add shape',                  run: _click('vp-add-prim') },
     { id:'selSimilar',   group:'Selection',  label:'Select similar',             run: _click('sel-similar') },
+    { id:'selInstances', group:'Selection',  label:'Select all instances',       words: 'same geometry shared copies', run: () => selectInstances() },
+    { id:'selOriginal',  group:'Selection',  label:'Select the original of an instance', words: 'master source parent first copy', run: () => selectInstanceOriginal() },
+    { id:'makeUnique',   group:'Edit',       label:'Make unique',                words: 'instance shared geometry own copy detach', run: () => makeUnique() },
     { id:'selColour',    group:'Selection',  label:'Select by colour',           run: _click('btn-select-color') },
     { id:'selName',      group:'Selection',  label:'Select by name (regex)',     run: _click('btn-select-regex') },
     { id:'splitAll',     group:'Edit',       label:'Split every mesh',           run: _click('btn-split-all') },
@@ -5154,7 +5174,7 @@ const _CmdK = (() => {
   const GROUP_ICON = { File: 'file', View: 'eye', Selection: 'mouse-pointer-2', Edit: 'pencil', App: 'settings' };
   // Is a command usable now? null when it is, else the reason in a few words. A command that works on "the selection, or on every part
   // when nothing is selected" (Remove holes, Repair, Remesh...) needs only a model. The search greys the others out and says why.
-  const NEED_SEL = new Set(['quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'selSimilar', 'selColour', 'selClear']);
+  const NEED_SEL = new Set(['quickColour', 'normalsReverse', 'gzPlace', 'modePoints', 'modeEdges', 'modeFaces', 'flipFaces', 'pivotOrient', 'frameSel', 'isolate', 'hideSel', 'hideUnsel', 'reveal', 'delete', 'copy', 'duplicate', 'group', 'smartFit', 'decimate', 'transformReset', 'centerPivot', 'selSimilar', 'selInstances', 'selOriginal', 'makeUnique', 'selColour', 'selClear']);
   const NEED_MODEL = new Set(['selName', 'treeCollapse', 'quickRemesh', 'inspectModel', 'fit', 'export', 'savescene', 'dupscene', 'report', 'screenshot', 'turntable', 'selAll', 'selInvert', 'alignFloor', 'alignFloorNow', 'recenter', 'mergeColour', 'mergeBy',
     'selHidden', 'selRule', 'stackedCopies', 'selFasteners', 'smartFitAll', 'smartopt', 'budget', 'cleanEmpty', 'cleanDupes', 'cleanDegenerate', 'cleanGroups', 'recomputeNormals', 'flagSmall',
     'flagSliver', 'isolateSmall', 'deleteSmall', 'splitAll', 'split', 'fillHoles', 'floating', 'remesh', 'untriangulate', 'triangulate', 'repairMesh', 'normals', 'normalsFind', 'normalsReverse', 'normalsAlign', 'normalsHighlight', 'hiddenFaces', 'bakeTransforms', 'flatten', 'batchRename']);
@@ -5196,6 +5216,8 @@ const _CmdK = (() => {
     const g = String(a.group || '').toLowerCase();
     return _CATS.includes(g) ? g : 'app';
   };
+  // The Keyboard shortcuts window draws the same icon and colour for a command as the search does.
+  window.__moCmdMeta = { icon: (a) => a.icon || ICON[a.id] || GROUP_ICON[a.group] || 'panel-right', cat: _catOf };
   // With nothing typed: what is most likely wanted now — the tools for a
   // selection when there is one, otherwise the ways to get a model in.
   function _suggest() {
@@ -5481,6 +5503,9 @@ const _Shortcuts = (() => {
   // Per-category icon + display order. Anything in _Actions.list outside this
   // map still renders, sorted alphabetically after the known groups.
   const GROUP_ICONS = { File:'folder', Edit:'pencil', Selection:'mouse-pointer-2', View:'eye', Mouse:'mouse-pointer-click', Tree:'list-tree', Fields:'hash', Panels:'square-stack', App:'settings-2' };
+  // The colour of each group's icon in the list (the same --cat-* colours as the search results)
+  const GROUP_CAT = { File:'file', Edit:'edit', Selection:'selection', View:'view', Mouse:'controls', Tree:'part', Fields:'settings', Panels:'tool', App:'app' };
+  const metaOf = (a) => { const m = window.__moCmdMeta; try { if (m) return { icon: m.icon(a), cat: m.cat(a) }; } catch (_) {} return { icon: GROUP_ICONS[a.group] || 'square', cat: GROUP_CAT[a.group] || 'app' }; };
   const GROUP_ORDER = ['File', 'Edit', 'Selection', 'View', 'Mouse', 'Tree', 'Fields', 'Panels', 'App'];
   // Bindings that are not an action in the list: gestures, and keys a panel takes while it is open. Every key the
   // app binds is either an action above (kbd / alt) or one of these; tests/shortcuts.test.mjs checks the two agree.
@@ -5640,11 +5665,11 @@ const _Shortcuts = (() => {
     for (const a of _Actions.list) {
       const d = defaultsOf(a), binds = effective(a);
       out.push({ a, id: a.id, group: a.group, label: a.label, short: SHORT[a.id] || String(a.label).split(/[\s:…(]/)[0], binds, fixed: LOCKED.has(a.id),
-        changed: !!(curMap() && curMap()[a.id]), hadKey: d.length > 0 });
+        changed: !!(curMap() && curMap()[a.id]), hadKey: d.length > 0, ...metaOf(a) });
     }
     for (const x of EXTRA) {
       const key = x.group + '|' + x.label; if (seen.has(key)) continue; seen.add(key);
-      out.push({ a: null, id: 'x:' + key, group: x.group, label: x.label, short: x.short || '', binds: [x.kbd, x.alt].filter(Boolean).map(canon), fixed: true, changed: false, hadKey: true });
+      out.push({ a: null, id: 'x:' + key, group: x.group, label: x.label, short: x.short || '', binds: [x.kbd, x.alt].filter(Boolean).map(canon), fixed: true, changed: false, hadKey: true, icon: GROUP_ICONS[x.group] || 'square', cat: GROUP_CAT[x.group] || 'controls' });
     }
     return out;
   }
@@ -5709,6 +5734,8 @@ const _Shortcuts = (() => {
   }
   function _render() {
     const body = $('shortcuts-body'); if (!body) return;
+    const colour = _Prefs.get('searchIconColours') !== false;                  // (the same switch as the search results')
+    body.classList.toggle('sc-colour', colour); $('sc-kb')?.classList.toggle('sc-colour', colour);
     rebuild();
     const q = ($('shortcuts-search')?.value || '').trim().toLowerCase();
     rows = all.filter((en) => {
@@ -5728,7 +5755,7 @@ const _Shortcuts = (() => {
       const ordered = [...GROUP_ORDER.filter(g => groups[g]), ...Object.keys(groups).filter(g => !GROUP_ORDER.includes(g)).sort()];
       body.innerHTML = ordered.map(g => `
         <div class="sc-group">
-          <div class="sc-group-h"><i data-lucide="${GROUP_ICONS[g] || 'square'}" aria-hidden="true"></i><span>${_esc(g)}</span></div>
+          <div class="sc-group-h" data-cat="${GROUP_CAT[g] || 'app'}"><i data-lucide="${GROUP_ICONS[g] || 'square'}" aria-hidden="true"></i><span>${_esc(g)}</span></div>
           ${groups[g].map(rowHtml).join('')}
         </div>`).join('');
     }
@@ -5757,7 +5784,8 @@ const _Shortcuts = (() => {
     const acts = en.fixed ? '' :
       (en.changed ? `<button type="button" class="sc-act" data-act="reset" aria-label="Back to the default key"><i data-lucide="rotate-ccw" aria-hidden="true"></i></button>` : '') +
       (en.binds.length ? `<button type="button" class="sc-act" data-act="clear" aria-label="Remove the key"><i data-lucide="x" aria-hidden="true"></i></button>` : '');
-    return `<div class="sc-row${en.fixed ? ' is-fixed' : ''}${en.changed ? ' is-changed' : ''}${recording ? ' is-rec' : ''}" data-id="${_esc(en.id)}" data-mods="${_esc(en.binds.map(c => split(c).mods).join('|'))}">
+    return `<div class="sc-row${en.fixed ? ' is-fixed' : ''}${en.changed ? ' is-changed' : ''}${recording ? ' is-rec' : ''}" data-id="${_esc(en.id)}" data-mods="${_esc(en.binds.map(c => split(c).mods).join('|'))}" data-cat="${en.cat || 'app'}">
+      <i class="sc-row-icon" data-lucide="${_esc(en.icon || 'square')}" aria-hidden="true"></i>
       <span class="sc-row-label">${_esc(en.label)}</span>
       <${en.fixed ? 'span' : 'button type="button" data-act="rec"'} class="sc-row-keys">${keys}</${en.fixed ? 'span' : 'button'}>
       <span class="sc-acts">${acts}</span>${warn}
@@ -5777,6 +5805,7 @@ const _Shortcuts = (() => {
       const name = nameOf[code]; if (!name) continue;
       const its = index.get((layer ? layer + '+' : '') + name);
       el.classList.toggle('has', !!its);
+      if (its) el.dataset.cat = its[0].cat || 'app'; else delete el.dataset.cat;
       el.classList.toggle('is-down', down.has(code));
       el.classList.toggle('is-lit', !!litKey && name === litKey);
       el.classList.toggle('is-filter', !!keyFilter && name === keyFilter);
@@ -7254,6 +7283,7 @@ function _partWorldBoxOwn(mesh) {
 }
 function _attachGizmoToParts(parts, centerOverride, quatOverride) {
   if (!state.gizmo || !state.pivot) return;
+  if (state._animMode) return;                                  // (no gizmo while the Animate window is open)
   // Promote any selected-but-instanced parts so they CAN be moved by the
   // gizmo. Without this they'd silently be filtered out below and the user
   // would see "selection but no gizmo" on every instanced part — which on
@@ -7532,6 +7562,7 @@ function _updateGizmoImpl() {
   // carry no transform gizmo (a move made here would only be undone by the
   // next change of the explosion). It comes back when the parts are put back.
   { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) { _detachGizmo(); return; } }
+  if (state._animMode) { _detachGizmo(); return; }      // (the Animate window is open: no gizmo, the parts are looked at, not moved)
   try { if (_Draw.isActive()) { _detachGizmo(); return; } } catch (_) {}      // the Draw tool owns the left button
   try { if (_Elements.isActive()) { _detachGizmo(); _Elements.gizmo(); return; } } catch (_) {}  // …and so does Edit mesh: its own gizmo sits on the picked pieces
   const ids = [...state.selected];
@@ -9032,7 +9063,13 @@ if (typeof document !== 'undefined') {
     }, 250);
   });
 }
-setInterval(_renderWatchdog, 1500);
+// The watchdog looks every 1.5 s, but only while the page is on screen: in a hidden tab it did nothing but wake the page up. It is stopped
+// there and started again when the tab is shown.
+{ let t = 0;
+  const go = () => { if (!t && !document.hidden) t = setInterval(_renderWatchdog, 1500); };
+  const stop = () => { clearInterval(t); t = 0; };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else go(); });
+  go(); }
 
 // Layered renderer recovery. Called from the render-error escalation path.
 function _recoverRenderer(level) {
@@ -9997,6 +10034,7 @@ function clearModel() {
   if (state.selectedGroupIds && typeof state.selectedGroupIds.clear === 'function') {
     state.selectedGroupIds.clear();
   }
+  try { _Anim.reset(); } catch (_) {}
   state.parts = []; state.partById.clear(); state.selected.clear(); state.history = []; state.pendingFlagged.clear();
   state.treeNodes = []; state.treeCollapsed.clear();
   // Custom scene name is a per-model property; reset alongside everything else.
@@ -11072,8 +11110,11 @@ async function _renderTurntableVideo(o) {
       if (hasGrid) gridHelper.visible = false;
       if (state?._originMarker) state._originMarker.visible = false;
     }
+    const animated = o.animations !== false && _Anim.count() > 0;      // (the animations of the Animate window play in the video, each frame at its own time)
+    if (animated) _Anim.hold(true);
     for (let i = 0; i < total; i++) {
       if (_turntableRun.cancel) { const e = new Error('Cancelled'); e.name = 'AbortError'; throw e; }
+      if (animated) _Anim.seek(i / o.fps);
       const a = (o.dir || 1) * Math.PI * 2 * i / total;     // the last frame stops one step short, so the loop is seamless
       camera.position.copy(target).add(off0.clone().applyAxisAngle(axis, a));
       camera.lookAt(target);
@@ -11090,6 +11131,7 @@ async function _renderTurntableVideo(o) {
     await encoder.flush();
     if (encErr) throw encErr;
   } finally {
+    try { _Anim.hold(false); } catch (_) {}
     try { if (encoder.state !== 'closed') encoder.close(); } catch (_) {}
     try {
       camera.position.copy(saved.pos); camera.quaternion.copy(saved.quat); camera.zoom = saved.zoom; camera.far = saved.far;
@@ -11253,6 +11295,20 @@ const _ClaudeBridge = (() => {
   let pillSt = 'off', pillTxt = '';
   let lastAt = 0, count = 0, connectedAt = 0, outage = false, curCall = null; const activity = [];
   const stats = { done: 0, declined: 0, blocked: 0, failed: 0, tools: {} };
+  // The feed of Claude mode: every call (with what came back, pictures included) and every message Claude wrote with say.
+  const feed = []; let feedSeq = 0;
+  const feedAdd = (e) => {
+    e.id = ++feedSeq; e.at = Date.now(); e.rev = 1; feed.push(e);
+    while (feed.length > 200) feed.shift();
+    let n = 0; for (let i = feed.length - 1; i >= 0; i--) { const f = feed[i]; if (f.images && f.images.length && ++n > 40) { f.images = []; f.imgDropped = true; f.rev++; } }
+    return e;
+  };
+  const feedBlocks = (content) => {
+    const t = [], im = [];
+    for (const b of (Array.isArray(content) ? content : [])) { if (b && b.type === 'text') t.push(String(b.text)); else if (b && b.type === 'image' && b.data) im.push('data:' + (b.mimeType || 'image/png') + ';base64,' + b.data); }
+    return { text: t.join('\n'), images: im };
+  };
+  const feedPing = () => { try { window.__moClaudeFeed && window.__moClaudeFeed(); } catch (_) {} };
   // every request, and every change of the connection, is written to the app's console (status bar), tagged claude
   const L = (lvl, msg) => { try { Log[lvl](msg, { tag: 'claude' }); } catch (_) {} };
   const fmtMs = (ms) => ms < 1000 ? ms + ' ms' : (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + ' s';
@@ -12299,10 +12355,30 @@ const _ClaudeBridge = (() => {
       _turntableRun.busy = true; _turntableRun.cancel = false;
       try {
         const blob = await _renderTurntableVideo({ w: Math.min(2560, Math.max(320, a.width | 0 || 1920)), h: Math.min(1440, Math.max(180, a.height | 0 || 1080)),
-          fps: [24, 30, 60].includes(a.fps) ? a.fps : 30, seconds: Math.min(12, Math.max(2, a.seconds | 0 || 6)), dir: 1, viewMode: 'current', hideGrid: true, fit: true });
+          fps: [24, 30, 60].includes(a.fps) ? a.fps : 30, seconds: Math.min(12, Math.max(2, a.seconds | 0 || 6)), dir: 1, viewMode: 'current', hideGrid: true, fit: true, animations: a.animations !== false });
         const stem = ($q('sb-status')?.textContent || 'model').replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._-]+/g, '_') || 'model';
         return text({ file: await saveToServer(blob, stem + '_turntable.webm') });
       } finally { _turntableRun.busy = false; }
+    },
+    // Which parts or groups move in the video: the animations of the Animate window, set by name instead of by hand. They keep going in
+    // the app until removed, and turntable_video plays them. Nothing in the model is changed (the parts are put back for an export).
+    async animate_parts(a) {
+      const act = String(a.action || 'add').toLowerCase();
+      if (act === 'list') { const l = _Anim.api.list(); return text(l.length ? { animations: l } : 'Nothing is animated.'); }
+      if (act === 'clear') { const r = _Anim.api.clear(); return text('Every animation is removed (' + r.removed_from + ' object(s)). The parts are back where they started.'); }
+      const groups = [].concat(a.group_contains || []);
+      const hasPartSpec = !!((a.ids && a.ids.length) || String(a.name_contains || '').trim());
+      const ids = hasPartSpec ? resolveIds(a) : (groups.length ? [] : resolveIds(a));
+      if (!ids.length && !groups.length) throw new Error('Say which parts: ids, name_contains, group_contains, or select some in the app.');
+      if (act === 'remove') return text(_Anim.api.remove({ ids, groups, type: a.type }));
+      if (act !== 'add') throw new Error('action must be add, remove, list or clear.');
+      const r = _Anim.api.add({ ...a, ids, groups });
+      requestRender();
+      return text({ ...r, note: 'It runs in the app until it is removed, and turntable_video plays it. The Animate window lists it.' });
+    },
+    async say(a) {
+      const t = String(a.text || '').trim(); if (!t) throw new Error('Give text.');
+      return text('Shown to the user in the feed.');
     },
     async open_file(a) {
       const path = String(a.path || '').trim(); if (!path) throw new Error('Give path.');
@@ -12355,6 +12431,17 @@ const _ClaudeBridge = (() => {
   // Settings › Claude: what Claude may do at all (each switch is on until turned off), and a few habits
   const PREF = { ask: ASK_KEY, askDelete: 'stepopt-claude-ask-delete', toast: 'stepopt-claude-toast', pill: 'stepopt-claude-pill', auto: 'stepopt-claude-auto',
     geometry: 'stepopt-claude-allow-geometry', delete: 'stepopt-claude-allow-delete', layout: 'stepopt-claude-allow-layout', files: 'stepopt-claude-allow-files' };
+  // Each kind of change has three states: allow (just do it), ask (Allow / Don't allow prompt first), block (turned off).
+  // Until one is chosen it follows the older switches, so nothing changes for an existing setup.
+  const MODE_KEY = (c) => 'stepopt-claude-mode-' + c;
+  const MODES = ['allow', 'ask', 'block'];
+  const modeOf = (c) => {
+    try { const m = localStorage.getItem(MODE_KEY(c)); if (MODES.includes(m)) return m; } catch (_) {}
+    if (!prefOn(c)) return 'block';
+    return (askOn() || (c === 'delete' && prefOn('askDelete'))) ? 'ask' : 'allow';
+  };
+  const setMode = (c, m) => { try { localStorage.setItem(MODE_KEY(c), m); } catch (_) {} setPref(c, m !== 'block'); };
+  const CATS = ['geometry', 'layout', 'delete', 'files'];
   const prefOn = (k) => { try { return localStorage.getItem(PREF[k]) !== '0'; } catch (_) { return true; } };
   const setPref = (k, v) => { try { localStorage.setItem(PREF[k], v ? '1' : '0'); } catch (_) {} };
   const CAT = { delete_parts: 'delete', remove_small_parts: 'delete',
@@ -12373,10 +12460,13 @@ const _ClaudeBridge = (() => {
     const t = stats.tools[tool] || (stats.tools[tool] = { n: 0, ms: 0, max: 0, bad: 0 });
     t.n++; t.ms += ms; t.max = Math.max(t.max, ms); if (outcome !== 'done') t.bad++;
     activity.push({ tool, at: lastAt, outcome, ms, brief }); if (activity.length > 30) activity.shift();
+    const fe = curCall && curCall.entry;
+    if (fe) { fe.status = outcome; fe.ms = ms; fe.err = err || ''; if (curCall.content) { const r = feedBlocks(curCall.content); fe.text = r.text.slice(0, 20000); fe.images = r.images; } fe.rev++; }
     L(outcome === 'done' ? 'info' : 'warn', 'claude · ' + tool.replace(/_/g, ' ') + (brief ? ' (' + brief + ')' : '') + ' → ' + OUT[outcome] + (err ? ': ' + err : '') + ' · ' + fmtMs(ms));
     notify();
   };
   const notify = () => {
+    feedPing();
     try { const r = window.__moTabs; for (const id of Object.keys((r && r.wins) || {})) { try { r.wins[id].__moClaudeUI && r.wins[id].__moClaudeUI(); } catch (_) {} } } catch (_) {}
     try { window.__moClaudeUI && window.__moClaudeUI(); } catch (_) {}
   };
@@ -12427,6 +12517,9 @@ const _ClaudeBridge = (() => {
   async function handle(cmd) {
     lastTool = cmd.tool; setStatus();
     curCall = { t0: performance.now(), brief: briefArgs(cmd.args) };
+    if (cmd.tool === 'say') { const t = String((cmd.args || {}).text || '').trim().slice(0, 4000); if (t) feedAdd({ kind: 'note', text: t, status: 'done' }); }
+    else curCall.entry = feedAdd({ kind: 'call', tool: cmd.tool, args: cmd.args || {}, brief: curCall.brief, status: 'running', ms: 0, text: '', images: [] });
+    feedPing();
     const label = cmd.tool.replace(/_/g, ' ');
     setPill('busy', 'Claude · ' + label);
     try {
@@ -12435,12 +12528,12 @@ const _ClaudeBridge = (() => {
       const args = cmd.args || {};
       const cat = CAT[cmd.tool];
       const dry = !!args.dry_run && (DRY.has(cmd.tool) || cmd.tool === 'batch_optimise');
-      if (cat && !prefOn(cat)) { logAct(cmd.tool, 'blocked'); await post(cmd.id, { ok: false, error: 'This is turned off in Settings › Claude (' + cat + '). Nothing was changed. Ask the user to switch it on if they want it.' }); return; }
+      if (cat && modeOf(cat) === 'block') { logAct(cmd.tool, 'blocked'); await post(cmd.id, { ok: false, error: 'This is turned off in Settings › Claude (' + cat + '). Nothing was changed. Ask the user to switch it on if they want it.' }); return; }
       // nothing matches what Claude named: no point asking, the tool says so itself
       const needsIds = ['delete_parts', 'merge_parts', 'decimate', 'duplicate_parts', 'group_parts', 'transform_parts', 'smart_fit'].includes(cmd.tool)
         || (cmd.tool === 'split_parts' && !args.whole_scene) || (cmd.tool === 'rename_parts' && !(Array.isArray(args.renames) && args.renames.length));
       const noTargets = needsIds && (w.__moBridgeIds ? w.__moBridgeIds(args) : 1) === 0;
-      if (EDITS[cmd.tool] && !dry && !noTargets && (askOn() || (cat === 'delete' && prefOn('askDelete')))) {
+      if (EDITS[cmd.tool] && !dry && !noTargets && (cat ? modeOf(cat) === 'ask' : askOn())) {
         const n = w.__moBridgeIds ? w.__moBridgeIds(args) : 0;
         const [title, detail] = EDITS[cmd.tool](args, n);
         setPill('ask', 'Claude is asking…');
@@ -12448,11 +12541,12 @@ const _ClaudeBridge = (() => {
         setPill('busy', 'Claude · ' + label);
         if (!ok) { logAct(cmd.tool, 'declined'); await post(cmd.id, { ok: false, error: 'The user did not allow this. Nothing was changed.' }); return; }
       }
-      if (prefOn('toast') && !['scene_summary', 'list_parts', 'get_selection'].includes(cmd.tool)) toast('Claude', label, 'info', 1400);
+      if (prefOn('toast') && !['scene_summary', 'list_parts', 'get_selection', 'say'].includes(cmd.tool)) toast('Claude', label, 'info', 1400);
       let hb = 0, content;
       if (LONG.has(cmd.tool)) { job = { id: cmd.id, tool: cmd.tool, label, msg: '', prefix: '', nested: false, step: 0, total: 0, cancel: false, cancellable: CANCELLABLE.has(cmd.tool) }; hb = setInterval(() => beat(true), 1500); beat(true); notify(); }
       try { content = dry && cmd.tool !== 'batch_optimise' ? await w.__moDryRun(cmd.tool, args) : await fn(args); }
       finally { clearInterval(hb); job = null; notify(); }
+      if (curCall) curCall.content = content;
       logAct(cmd.tool, 'done');
       await post(cmd.id, { ok: true, content });
     } catch (e) {
@@ -12537,12 +12631,14 @@ const _ClaudeBridge = (() => {
     enabled: () => isHost ? on : !!(top() && top().enabled()),
     setEnabled,
     statusText: () => isHost ? statusText() : (top() ? top().statusText() : 'Off.'),
-    paintPill, askEnabled: askOn,
-    setAsk: (v) => { try { localStorage.setItem(ASK_KEY, v ? '1' : '0'); } catch (_) {} },
+    paintPill, askEnabled: () => CATS.some(c => modeOf(c) === 'ask'), mode: modeOf, setMode,
+    setAsk: (v) => { try { localStorage.setItem(ASK_KEY, v ? '1' : '0'); } catch (_) {} for (const c of CATS) if (modeOf(c) !== 'block') setMode(c, v ? 'ask' : 'allow'); },
     reconnect: () => reconnect(), restartServer: () => restartServer(),
+    feedAdd: (e) => { if (!isHost) { try { return top().feedAdd(e); } catch (_) { return null; } } const x = feedAdd(e); feedPing(); return x; },
+    feed: () => isHost ? feed : (top() ? top().feed() : []), clearFeed: () => { if (isHost) { feed.length = 0; feedPing(); } else { try { top().clearFeed(); } catch (_) {} } },
     progress: setProgress, stopped: () => !!(job && job.cancel), stop: () => { if (isHost) stopJob(); else { try { top().stop(); } catch (_) {} } },
     jobNote: (p, s, t) => { if (job) { job.prefix = p || ''; job.nested = true; if (s != null) job.step = s; if (t != null) job.total = t; } },
-    pref: prefOn, setPref: (k, v) => { setPref(k, v); if (k === 'pill') paintPill(); },
+    pref: (k) => k === 'askDelete' ? modeOf('delete') === 'ask' : prefOn(k), setPref: (k, v) => { if (k === 'askDelete') { if (modeOf('delete') !== 'block') setMode('delete', v ? 'ask' : 'allow'); return; } setPref(k, v); if (k === 'pill') paintPill(); },
     snapshot: () => isHost ? snapshot() : (top() ? top().snapshot() : { on: false, state: 'off', text: '', lastTool: '', lastAt: 0, count: 0, activity: [], url: location.origin + '/mcp' }),
   };
   if (isHost) window.__moBridge = api;
@@ -12568,8 +12664,8 @@ const _ClaudeBridge = (() => {
         (s.job ? '<div class="clp-job"><div class="clp-job-t"><span>' + esc(s.job.msg || s.job.label) + '</span>' + (s.job.cancellable ? '<button type="button" class="btn quiet" id="clp-stop"' + (s.job.cancel ? ' disabled' : '') + '>' + (s.job.cancel ? 'Stopping…' : 'Stop') + '</button>' : '') + '</div>' + (s.job.total ? '<i class="clp-job-bar"><b style="width:' + Math.max(3, Math.min(100, Math.round((s.job.step || 0) / s.job.total * 100))) + '%"></b></i>' : '') + '</div>' : '') +
         '<div class="clp-stats">' + [['Requests', s.stats.count], ['Done', s.stats.done], ['Said no', s.stats.declined + s.stats.blocked], ['Failed', s.stats.failed]].map(([k, v]) => '<div><b>' + v + '</b><span>' + k + '</span></div>').join('') + '</div>' +
         (s.activity.length ? '<div class="clp-log">' + s.activity.slice(0, 3).map(a => '<div><span class="clp-tool">' + esc(a.tool.replace(/_/g, ' ')) + '</span><span class="clp-out is-' + a.outcome + '">' + (OUTL[a.outcome] || a.outcome) + '</span><span class="clp-ms">' + (a.ms < 1000 ? a.ms + ' ms' : (a.ms / 1000).toFixed(1) + ' s') + '</span></div>').join('') + '</div>' : '') +
-        '<div class="clp-sw">' + row('clp-on', 'Let Claude connect', s.on) + row('clp-ask', 'Ask before Claude edits', askOn()) + row('clp-askdel', 'Always ask before deleting', prefOn('askDelete')) + '</div>' +
-        '<div class="clp-foot"><button type="button" class="btn quiet" id="clp-copy" title="Copy the command that adds this app to Claude">Copy command</button><button type="button" class="btn quiet" id="clp-console" title="Open the console, where every request is written">Console</button><button type="button" class="btn" id="clp-more" title="Every setting for Claude">More…</button></div>';
+        '<div class="clp-sw">' + row('clp-on', 'Let Claude connect', s.on) + row('clp-ask', 'Ask before Claude edits', CATS.some(c => modeOf(c) === 'ask')) + row('clp-askdel', 'Always ask before deleting', modeOf('delete') === 'ask') + '</div>' +
+        '<div class="clp-foot"><button type="button" class="btn quiet" id="clp-mode" title="Hide the viewport and follow Claude as a feed (alpha)">Claude mode<i class="cf-alpha">Alpha</i></button><button type="button" class="btn quiet" id="clp-copy" title="Copy the command that adds this app to Claude">Copy command</button><button type="button" class="btn quiet" id="clp-console" title="Open the console, where every request is written">Console</button><button type="button" class="btn" id="clp-more" title="Every setting for Claude">More…</button></div>';
     }
     function place() {
       const p = pill(); if (!p || !el) return;
@@ -12591,7 +12687,8 @@ const _ClaudeBridge = (() => {
       });
       el.addEventListener('click', async (e) => {
         const b = e.target.closest('button'); if (!b) return;
-        if (b.id === 'clp-more') { hide(); try { window.__openSettings && window.__openSettings('claude'); } catch (_) {} }
+        if (b.id === 'clp-mode') { hide(); try { window.__moClaudeMode('feed'); } catch (_) {} }
+        else if (b.id === 'clp-more') { hide(); try { window.__openSettings && window.__openSettings('claude'); } catch (_) {} }
         else if (b.id === 'clp-console') { hide(); try { document.getElementById('sb-console-btn')?.click(); } catch (_) {} }
         else if (b.id === 'clp-stop') { api.stop(); }
         else if (b.id === 'clp-reconnect') { b.disabled = true; try { await api.reconnect(); } finally { render(); } }
@@ -12997,10 +13094,10 @@ function _makeShaderGrid(opts = {}) {
   const fadeEnd    = opts.fadeEnd    ?? 2000;
   try {
     const tsl = THREE.TSL;
-    if (!THREE.MeshBasicNodeMaterial || !tsl?.uniform || !tsl?.fwidth || !tsl?.fract || !tsl?.log2 || !tsl?.pow || !tsl?.floor)
+    if (!THREE.MeshBasicNodeMaterial || !tsl?.uniform || !tsl?.fwidth || !tsl?.dFdx || !tsl?.dFdy || !tsl?.fract || !tsl?.log2 || !tsl?.pow || !tsl?.floor)
       throw new Error('TSL nodes unavailable');
 
-    const { positionLocal, fwidth, fract, uniform, smoothstep,
+    const { positionLocal, fwidth, dFdx, dFdy, fract, uniform, smoothstep,
             vec2, vec4, float, color, mix, abs, min, max, dot,
             log2, pow, floor,
             length: len, normalize,
@@ -13092,9 +13189,15 @@ function _makeShaderGrid(opts = {}) {
     // One-pixel anti-aliased lines. The pixel footprint is fwXY / cell —
     // NOT fwidth(xy / cell), whose derivative would spike wherever the level
     // changes from one pixel to the next.
+    // How many world units one pixel covers across a line of each family: the length of the screen-space gradient of that
+    // coordinate, not fwidth (the sum of the two derivatives), which is up to 1.4 times too wide on a diagonal and made every
+    // line two or three pixels of mush when the grid is seen from far away.
+    const fpX = len(vec2(dFdx(xy.x), dFdy(xy.x)));
+    const fpY = len(vec2(dFdx(xy.y), dFdy(xy.y)));
+    const fpXY = vec2(max(fpX, float(1e-9)), max(fpY, float(1e-9)));
     const lineOf = (cell) => {
       const c = xy.div(cell);
-      const d = abs(fract(c.sub(0.5)).sub(0.5)).div(fwXY.div(cell));
+      const d = abs(fract(c.sub(0.5)).sub(0.5)).div(fpXY.div(cell));
       return float(1).sub(min(min(d.x, d.y), float(1)));
     };
     const aL0 = lineOf(cell0);
@@ -13103,8 +13206,8 @@ function _makeShaderGrid(opts = {}) {
 
     // Origin axis lines (planeU=0 and planeV=0). Narrow, quiet — the
     // divisor scales the falloff width in pixels.
-    const aAxisX = float(1).sub(min(abs(xy.y).div(fwXY.y.mul(0.9)), float(1)));
-    const aAxisY = float(1).sub(min(abs(xy.x).div(fwXY.x.mul(0.9)), float(1)));
+    const aAxisX = float(1).sub(min(abs(xy.y).div(fpXY.y.mul(0.9)), float(1)));
+    const aAxisY = float(1).sub(min(abs(xy.x).div(fpXY.x.mul(0.9)), float(1)));
 
     // Distance fade — radial from the camera's projection onto the plane.
     const camOnPlane = vec2(dot(cameraPosition, uPlaneU), dot(cameraPosition, uPlaneV));
@@ -15854,7 +15957,7 @@ function rebuildTree() {
     const eye = p.visible
       ? _ico('eye')
       : _ico('eye-off');
-    const inst = _instBadge(p.group ? p.group.parts.length : 0);
+    const inst = _instBadge(_liveShareCount(p));
     node.innerHTML = `<span class="tree-label">${escapeHtml(p.name)}${inst}</span><span class="tree-meta">${fmtNum(p.triCount)} tri</span><span class="tree-iconcol"><span class="tree-vis">${eye}</span><span class="tree-color" style="background:${colorHex}"></span></span>`;
     frag.appendChild(node);
   }
@@ -16098,8 +16201,8 @@ function _rebuildTreeHierarchical(reuse = null) {
       // Two sources of instance count: (a) hashCount captured at hierarchy
       // build time, (b) p.group from the live _autoInstanceFromGLB pass.
       // Both should agree but (b) is the authoritative live one.
-      const instN = (p && p.group && p.group.parts) ? p.group.parts.length : (n.instanceCount || 0);
-      if (instN > 1) cls += ' is-inst';
+      const instN = p ? _liveShareCount(p) : (n.instanceCount || 0);
+      if (p ? _isInstanceCopy(p) : instN > 1) cls += ' is-inst';
       if (!gone && !hidden) shownParts++;
     }
     let row = oldG ? (isG ? oldG : oldP).get(n.id) : undefined;
@@ -16386,7 +16489,7 @@ function _fillTreeRow(row) {
   if (!p) return;
   const colorHex = '#' + p.originalColor.getHexString();
   const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10);margin-right:4px">🔒</span>` : '';
-  const instN = (p.group && p.group.parts) ? p.group.parts.length : (n.instanceCount || 0);
+  const instN = _isInstanceCopy(p) ? 2 : 0;       // (the icon: a copy gets the copy icon, the original and a part of its own the model icon; the ×N badge counts them all)
   // Instances get their own icon ("this is one of N copies").
   // tree-expand-spacer keeps leaf rows aligned with their parents' +/- boxes.
   row.classList.toggle('is-spline', !!p.isSpline);
@@ -16923,6 +17026,8 @@ function rebuildTreeSelectionOnly() {
 // handler still collapse into a single rebuild.
 let _selColorsQueued = false;
 function applySelectionColors() {
+  try { const m = document.getElementById('em-mode'); if (m) { const idle = !(state.selected && state.selected.size); m.classList.toggle('is-idle', idle); m.setAttribute('aria-disabled', idle ? 'true' : 'false'); } } catch (_) {}      // (the Model mode button is grey while nothing is selected)
+  try { const i = _flatSelInfo(); _FlattenDialog.syncSelection({ selectedGroupCount: i.selectedIds.length, selectedNames: i.selectedNames }); } catch (_) {}      // (Advanced flatten, when it is open, follows the selection)
   if (_selColorsQueued) return;
   _selColorsQueued = true;
   queueMicrotask(() => {
@@ -18626,14 +18731,15 @@ function refreshPropertiesPanel() {
     // Match the tree's typeicon vocabulary: green `box` for a singleton
     // part, purple `copy` for an instance — same icon + colour the user
     // already learned from the left sidebar.
-    const isInst = !!p.group;
+    const _shareN = _liveShareCount(p);
+    const isInst = _isInstanceCopy(p);
     const tCls   = p.isSpline ? 'spl' : isInst ? 'inst' : 'part';
     const tIcon  = p.isSpline ? 'spline' : isInst ? 'copy' : 'box';
     const _safeName = escapeHtml(p.name);
     const _lockBadge = p.locked
       ? `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Locked — click to unlock" style="margin-left:6px;font-size:var(--fs-10);padding:1px 6px;border-radius:var(--r-sm);background:var(--wn-soft);color:var(--wn);border:1px solid var(--wn-line);cursor:pointer;user-select:none">🔒 Locked</span>`
       : `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Click to lock this part" style="margin-left:6px;font-size:var(--fs-10);padding:1px 6px;border-radius:var(--r-sm);background:var(--s2);color:var(--tx3);border:1px solid var(--bd);cursor:pointer;user-select:none;opacity:.65">Lock</span>`;
-    nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instanced part (×' + p.group.parts.length + ')' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
+    nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instance (×' + _shareN + ')' : _shareN > 1 ? 'Original of ' + _shareN + ' instances' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
                `<span class="prop-name" title="${_safeName}">${_safeName}</span>${_lockBadge}`;
     const mat = _matOfPart(p);
     if (mat && !p.isPrimitive && !p.isSpline) {
@@ -18641,10 +18747,10 @@ function refreshPropertiesPanel() {
     }
     const tags = [];
     {
-      const _tn = (state.treeNodes || []).find(n => n.partId === p.partId);
-      const _instN = (p.group?.parts?.length) || (_tn?.instanceCount) || 0;
+      const _instN = _liveShareCount(p);
       if (_instN >= 2) tags.push(`<span class="tree-inst" data-prop-act="select-instances" data-part-id="${p.partId}" title="${_instN} occurrences share this geometry — click to select all"><i data-lucide="copy"></i>×${_instN}</span>`);
     }
+    if (_liveShareCount(p) > 1 && !_isInstanceCopy(p)) tags.push(`<span class="tree-badge" title="The first of its kind: the other parts with this geometry are its copies">original</span>`);
     if (p.flagged)  tags.push(`<span class="tree-badge warn">flagged</span>`);
     if (!p.visible) tags.push(`<span class="tree-badge muted">hidden</span>`);
     if (p.deleted)  tags.push(`<span class="tree-badge danger">deleted</span>`);
@@ -19655,6 +19761,7 @@ const _Tabs = (() => {
     let changed = false;
     for (const k of Object.keys(patch)) if (t[k] !== patch[k]) { t[k] = patch[k]; changed = true; }
     if (changed) renderAll();
+    try { TOP.__moClaudeFeed && TOP.__moClaudeFeed(); } catch (_) {}
   }
 
   // The strip in this copy's top bar. This copy is only ever on screen while
@@ -19739,7 +19846,7 @@ const _Tabs = (() => {
     pop.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + 'px';
     chip.classList.add('is-open');
     renderPop();
-    popTimer = setInterval(renderPop, 1000);
+    popTimer = setInterval(() => { if (!document.hidden) renderPop(); }, 1000);
     document.addEventListener('pointerdown', onPopOutside, true);
     document.addEventListener('keydown', onPopKey, true);
   }
@@ -20489,7 +20596,7 @@ function deleteParts(ids, label='Deleted parts') {
     }
     for (const gid of drop) try { removeUserGroup(gid, { skipRebuild: true, skipUndo: true }); } catch (_) {}
   }
-  if (hidden.length) pushUndo({ type: 'delete', items: hidden, label });
+  if (hidden.length) pushUndo({ type: 'delete', items: hidden, label, wasExploded: !!(state.explode && (state.explode.x || state.explode.y || state.explode.z)) });
   state.selected.clear(); $('del-sel-count').textContent = 0;
   // Model center changes when parts disappear; per-part _origPos values are
   // still valid for survivors, so leave them alone.
@@ -21084,6 +21191,16 @@ _UndoOps.register('delete', {
       if (p.instancedMesh && it.prevMat) { const m = new THREE.Matrix4(); m.fromArray(it.prevMat); p.instancedMesh.setMatrixAt(p.instanceIndex, m); p.instancedMesh.instanceMatrix.needsUpdate = true; }
     }
     state.redo.push(op);
+    // The matrix saved with a deleted instance is where the view had it then. The view may have been put back (or moved) since: an
+    // instance comes back at rest, or where the view has it now.
+    try {
+      const ex = state.explode, exploded = !!(ex && (ex.x || ex.y || ex.z));
+      for (const it of op.items) {
+        const p = getPart(it.partId);
+        if (op.wasExploded && p && p.instancedMesh && p._instOrigMat) { p.instancedMesh.setMatrixAt(p.instanceIndex, p._instOrigMat); p.instancedMesh.instanceMatrix.needsUpdate = true; }
+      }
+      if (exploded) applyExplode();
+    } catch (e) { console.warn('[undo] delete: could not place the parts in the view:', e); }
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
   },
@@ -24841,7 +24958,7 @@ function _openSaveSceneDialog(suggested) {
 }
 
 async function saveScene() {
-  return _withSolidView(_saveSceneImpl);
+  return _Anim.run(() => _withSolidView(_saveSceneImpl));      // (an animation is put back first, and goes on after)
 }
 // With toBlob the file is not written: the scene comes back as a GLB blob,
 // whole, with no dialog (Duplicate scene opens it in a new tab).
@@ -26723,7 +26840,7 @@ function _exportDefaultStem() {
   return (state.sceneName && state.sceneName.trim()) || stem || 'mesh_optimised';
 }
 async function doExport(opts) {
-  try { return await _withSolidView(() => _doExportImpl(opts)); }
+  try { return await _Anim.run(() => _withSolidView(() => _doExportImpl(opts))); }      // (an animation is put back first, and goes on after)
   catch (e) {
     // Anything thrown before the exporter's own try block (a merge that
     // can't allocate its buffers, for instance) must still take the
@@ -27098,6 +27215,16 @@ function wireUI() {
   // Touching any option by hand means it is no longer exactly the preset.
   document.querySelector('#export-modal .exp-content-b')?.addEventListener('change', () => { if (!_presetApplying) _markExportPreset(null); });
   document.getElementById('format-grid')?.addEventListener('click', () => { if (!_presetApplying) _markExportPreset(null); });
+  // a different format shows different options: start them from the top
+  document.getElementById('format-grid')?.addEventListener('click', (e) => { if (e.target.closest('.fmt-card')) document.querySelector('#export-modal .exp-content')?.scrollTo({ top: 0 }); });
+  // The Export button melts into a round button while the options scroll, and unfolds when the pointer is over it (or the list is back at the top).
+  { const sc = document.querySelector('#export-modal .exp-content'), btn = document.getElementById('export-confirm'); let t = 0;
+    if (sc && btn) {
+      sc.addEventListener('scroll', () => {
+        btn.classList.toggle('is-orb', sc.scrollTop > 6);
+      }, { passive: true });
+      new MutationObserver(() => { if (!document.getElementById('export-modal').classList.contains('show')) { clearTimeout(t); btn.classList.remove('is-orb'); } }).observe(document.getElementById('export-modal'), { attributes: true, attributeFilter: ['class'] });
+    } }
   _openExportDialog = () => {
     const b = $('btn-export');
     if (!b || b.disabled) return;                                    // nothing open to export
@@ -28734,9 +28861,10 @@ function wireUI() {
     else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (state.selected.size > 0 || state.selectedGroupIds?.size) { e.preventDefault(); _deleteSelection('Deleted selected'); }
     }
-    else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); redoLast(); }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoLast(); }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redoLast(); }
+    // (a held key repeats: every repeat rebuilt the outlines, the tree and the gizmo, and the page stopped answering. One step a press.)
+    else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); if (!e.repeat) redoLast(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (!e.repeat) undoLast(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); if (!e.repeat) redoLast(); }
     else if (e.key === 'Escape') { if (!_CmdCards.closeTop()) clearSelection(); }       // Esc leaves a command first
     else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target?.closest?.('button, a, [role="button"], summary')) { if (_CmdCards.runTop()) e.preventDefault(); }
     else if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); $('sel-all').click(); }
@@ -34301,6 +34429,110 @@ function _ownGeometryFor(p, uses, tag) {
   return fresh;
 }
 
+// ── Instances: select every copy, and make a part's geometry its own ─────────────────────────────────────────────────────
+const _partGeom = (p) => (p && !p.deleted) ? (p.mesh ? p.mesh.geometry : (p.instancedMesh ? p.instancedMesh.geometry : null)) : null;
+// How many live parts use this part's geometry right now (the icon and the ×N badge of the tree and of Properties read it, so they
+// follow Make unique, deleting copies and the like at once). One pass over the parts, kept for the current task only.
+let _shareCache = null, _firstCache = null;
+function _shareFill() {
+  if (_shareCache) return;
+  _shareCache = _geomUseCounts(); _firstCache = new Map();
+  for (const q of state.parts) { const g = _partGeom(q); if (g && !_firstCache.has(g)) _firstCache.set(g, q.partId); }
+  queueMicrotask(() => { _shareCache = null; _firstCache = null; });
+}
+function _liveShareCount(p) {
+  const g = _partGeom(p); if (!g) return 0;
+  _shareFill();
+  return _shareCache.get(g) || 0;
+}
+// A copy is a part that shares its geometry with an earlier part; the first one is the original and keeps the model icon (it carries the ×N badge).
+function _isInstanceCopy(p) {
+  const g = _partGeom(p); if (!g) return false;
+  _shareFill();
+  return (_shareCache.get(g) || 0) > 1 && _firstCache.get(g) !== p.partId;
+}
+// Select all instances: every part that shares its geometry with a selected part (the same buffer, so exactly the same shape; "Select similar" is the loose one).
+function selectInstances() {
+  if (state.selected.size === 0) return toast('Select at least one part first', '', 'warn');
+  const geoms = new Set();
+  for (const id of state.selected) { const g = _partGeom(getPart(id)); if (g) geoms.add(g); }
+  let added = 0;
+  for (const p of state.parts) {
+    if (p.deleted || state.selected.has(p.partId)) continue;
+    const g = _partGeom(p);
+    if (g && geoms.has(g)) { state.selected.add(p.partId); added++; }
+  }
+  if (!added) { toast('No other instances', 'Nothing else shares the geometry of the selected parts.', 'info', 2200); return; }
+  applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel();
+  if (typeof updateGizmo === 'function') updateGizmo();
+  $('del-sel-count').textContent = state.selected.size;
+  toast('Instances selected', added + ' more part' + (added === 1 ? '' : 's') + ' share the shape', 'success', 1800);
+}
+// Select the original: the first part (in file order) that has the same geometry stands for the original, the others are its copies.
+function selectInstanceOriginal() {
+  if (state.selected.size === 0) return toast('Select at least one part first', '', 'warn');
+  const first = new Map();                                  // geometry → the first live part that uses it
+  for (const p of state.parts) { const g = _partGeom(p); if (g && !first.has(g)) first.set(g, p); }
+  const out = new Set(); let copies = 0;
+  for (const id of state.selected) {
+    const p = getPart(id), g = _partGeom(p), o = g && first.get(g);
+    if (!o) continue;
+    out.add(o.partId); if (o.partId !== id) copies++;
+  }
+  if (!out.size) return;
+  if (!copies) { toast('Already the original', 'The selected part is the first of its kind.', 'info', 2000); return; }
+  state.selected = out; state.selectedGroupIds?.clear?.();
+  applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel();
+  if (typeof updateGizmo === 'function') updateGizmo();
+  $('del-sel-count').textContent = state.selected.size;
+  try { frameSelected(undefined, 2.6); } catch (_) {}      // (not so close: the original is seen with its copies round it)
+  try { revealSelectedInTree(); } catch (_) {}      // (the tree scrolls to it, opening the groups it is in, and pulses the row)
+  toast('Original selected', out.size + ' part' + (out.size === 1 ? '' : 's'), 'success', 1600);
+}
+// Make unique: each selected part that shares its geometry with another part gets a copy of its own, so editing, reducing or
+// deleting detail on it leaves the others as they were. An instance is first taken out of its InstancedMesh (as when it is moved).
+function makeUnique(ids) {
+  ids = (ids || [...state.selected]).filter(id => { const p = getPart(id); return p && !p.deleted; });
+  if (!ids.length) return toast('Select at least one part first', '', 'warn');
+  const uses = _geomUseCounts(), items = [];
+  try { _detachGizmo(); } catch (_) {}
+  for (const id of ids) {
+    const p = getPart(id), g0 = _partGeom(p);
+    if (!g0 || (uses.get(g0) || 0) <= 1) continue;
+    const hashBefore = p.hash;
+    if (p.instancedMesh && !_promoteInstanceToMesh(p)) continue;
+    if (!p.mesh) continue;
+    const geomAfter = _ownGeometryFor(p, uses, 'u');
+    items.push({ partId: id, geomBefore: g0, hashBefore, geomAfter, hashAfter: p.hash });
+    try { _cadEdgesGeomChanged(geomAfter); } catch (_) {}
+  }
+  if (!items.length) { toast('Already unique', 'Every selected part has a geometry of its own.', 'info', 2200); return; }
+  pushUndo({ type: 'makeUnique', label: 'Make unique', items });
+  _shareCache = null;
+  try { recomputeStats(); } catch (_) {}
+  rebuildTree(); applySelectionColors(); refreshPropertiesPanel();
+  if (typeof updateGizmo === 'function') updateGizmo();
+  requestRender();
+  toast('Made unique', items.length + ' part' + (items.length === 1 ? '' : 's') + ' now ' + (items.length === 1 ? 'has' : 'have') + ' a geometry of ' + (items.length === 1 ? 'its' : 'their') + ' own', 'success', 2200);
+}
+function _swapUniqueGeom(op, toAfter) {
+  _detachGizmo();
+  for (const it of op.items) {
+    const p = getPart(it.partId); if (!p || !p.mesh) continue;
+    p.mesh.geometry = _stampGeometry(toAfter ? it.geomAfter : it.geomBefore);
+    p.hash = toAfter ? it.hashAfter : it.hashBefore;
+    if (toAfter) state.geomByHash.set(it.hashAfter, it.geomAfter); else if (it.hashAfter !== it.hashBefore) state.geomByHash.delete(it.hashAfter);
+    try { _cadEdgesGeomChanged(p.mesh.geometry); } catch (_) {}
+  }
+  _shareCache = null;
+  try { recomputeStats(); } catch (_) {}
+  rebuildTree(); applySelectionColors(); refreshPropertiesPanel(); requestRender();
+}
+_UndoOps.register('makeUnique', {
+  undo(op) { _swapUniqueGeom(op, false); state.redo.push(op); _finalizeUndo(); },
+  redo(op) { _swapUniqueGeom(op, true); state.history.push(op); _finalizeUndo(); },
+});
+
 // Copy of everything the in-place tools overwrite on a set of parts. Returns
 // null when the copy would exceed the budget.
 function _snapGeomXform(parts) {
@@ -36098,6 +36330,34 @@ const _matThumb = (() => {
   return { render };
 })();
 
+// The picture of a material is drawn (a small render) the first time it is needed. The list used to draw all of them as it was built; now
+// each cell shows its colour at once and its picture is drawn when it scrolls into view, a few per frame.
+let _matLazyIO = null, _matLazyRaf = 0;
+const _matLazyQ = [];
+function _matLazyReset() { if (_matLazyIO) { _matLazyIO.disconnect(); _matLazyIO = null; } _matLazyQ.length = 0; }
+function _matLazyPump() {
+  _matLazyRaf = 0;
+  for (let n = 0; n < 6 && _matLazyQ.length; n++) {
+    const it = _matLazyQ.shift();
+    if (!it.el.isConnected) continue;
+    let url = null; try { url = _renderMaterialPreview(it.m); } catch (_) {}
+    if (!url) continue;
+    const img = document.createElement('img');
+    img.className = it.cls; img.src = url; img.alt = it.alt; img.draggable = false;
+    it.el.replaceWith(img);
+  }
+  if (_matLazyQ.length) _matLazyRaf = requestAnimationFrame(_matLazyPump);
+}
+function _matLazy(el, m, cls, alt) {
+  if (!el) return;
+  const it = { el, m, cls, alt };
+  if (!('IntersectionObserver' in window)) { _matLazyQ.push(it); if (!_matLazyRaf) _matLazyRaf = requestAnimationFrame(_matLazyPump); return; }
+  if (!_matLazyIO) _matLazyIO = new IntersectionObserver((es) => {
+    for (const e of es) if (e.isIntersecting) { _matLazyIO.unobserve(e.target); if (e.target._lz) _matLazyQ.push(e.target._lz); }
+    if (_matLazyQ.length && !_matLazyRaf) _matLazyRaf = requestAnimationFrame(_matLazyPump);
+  }, { rootMargin: '240px' });
+  el._lz = it; _matLazyIO.observe(el);
+}
 function _renderMaterialPreview(mat) {
   const cached = _matPreviewCache.get(mat);
   if (cached) return cached;
@@ -36145,6 +36405,23 @@ function _wireMatDock() {
   search.addEventListener('input', () => { clearTimeout(t); t = setTimeout(_populateMaterialsList, 90); });
   search.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') { search.value = ''; _populateMaterialsList(); search.blur(); } });
   sort.addEventListener('change', () => { try { localStorage.setItem('stepopt-mat-sort', sort.value); } catch (_) {} _populateMaterialsList(); });
+  // Delete or Backspace removes the picked materials while the work is in the Materials window (the last place pressed): it presses
+  // the Delete button, so Undo and the window's own rules apply. Taken before the app's own keys, or the same key would delete the
+  // selected parts in the view.
+  {
+    const dock = document.getElementById('vp-materials-pop');
+    let inDock = false;
+    window.addEventListener('pointerdown', (e) => { inDock = !!(dock && e.target && e.target.closest && e.target.closest('#vp-materials-pop')); }, true);
+    window.addEventListener('keydown', (e) => {
+      if (!inDock || !dock || !dock.classList.contains('show')) return;
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || _modalOpen() || _typingTarget(e)) return;
+      const del = document.getElementById('mat-act-delete');
+      if (!del || del.disabled || !_matPanelSelected.size) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      del.click();
+    }, true);
+  }
   insp.addEventListener('click', e => {
     const b = e.target.closest('[data-mi]');
     if (!b || b.disabled) return;
@@ -36409,6 +36686,7 @@ function _fillMaterialsList() {
     _renderMatInspector();
     return;
   }
+  _matLazyReset();
   list.innerHTML = '';
   list.className = (mode === 'list') ? 'mat-list-view' : 'mat-grid';
   if (mode === 'list') { _renderMatListRows(list, mats); return; }
@@ -36422,7 +36700,7 @@ function _fillMaterialsList() {
     const cell = document.createElement('div');
     cell.className = 'mat-cell';
     cell.draggable = true;                              // (onto the view: see _matDragAssign)
-    const previewUrl = _renderMaterialPreview(m);
+    const previewUrl = _matPreviewCache.get(m) || null;      // (a picture already drawn; else the colour now and the picture when it is in view)
     const thumb = previewUrl
       ? `<img class="mat-thumb-img" src="${previewUrl}" alt="${escapeHtml(name)}" draggable="false">`
       : `<div class="mat-thumb-fallback" style="width:100%;height:100%;background:${hex}"></div>`;
@@ -36437,6 +36715,7 @@ function _fillMaterialsList() {
     // Stash the material on the cell so the editor can find this cell to
     // refresh just one thumbnail when the user edits sliders, without
     // rebuilding the whole grid.
+    if (!previewUrl) _matLazy(cell.querySelector('.mat-thumb-fallback'), m, 'mat-thumb-img', name);
     cell._mat = m;
     cell._info = info;
     if (_matPanelSelected.has(m)) cell.classList.add('selected');
@@ -36500,7 +36779,7 @@ function _renderMatListRows(list, mats) {
     const m = info.mat;
     const hex = '#' + (m.color?.getHexString?.() || 'cccccc');
     const name = (m.name && m.name.trim()) || ('mat_' + hex.slice(1));
-    const previewUrl = _renderMaterialPreview(m);
+    const previewUrl = _matPreviewCache.get(m) || null;
     const row = document.createElement('div');
     row.className = 'mat-row';
     row.draggable = true;
@@ -36517,6 +36796,7 @@ function _renderMatListRows(list, mats) {
       </span>
       <button class="mat-row-edit" title="Edit material"><i data-lucide="sliders-horizontal"></i></button>
     `;
+    if (!previewUrl) _matLazy(row.querySelector('.mat-row-thumb'), m, 'mat-row-thumb', '');
     if (_matPanelSelected.has(m)) row.classList.add('selected');
     row.addEventListener('click', (e) => {
       if (e.target.closest('.mat-row-edit')) return;
@@ -39410,7 +39690,7 @@ rebuildTree = function() {
     const eye = p.visible
       ? `<i data-lucide="eye"></i>`
       : `<i data-lucide="eye-off"></i>`;
-    const inst = _instBadge(p.group ? p.group.parts.length : 0);
+    const inst = _instBadge(_liveShareCount(p));
     const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10)">🔒</span>` : '';
     const triFrac = Math.log10(p.triCount + 1) / logMax;
     const barHue = 240 - triFrac * 240;   // blue → red
@@ -39439,10 +39719,11 @@ function _fadeOutMenu(m) {
   try {
     const g = m.cloneNode(true); g.style.display = 'block'; g.style.pointerEvents = 'none';
     m.parentNode.insertBefore(g, m.nextSibling);
-    g.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out' }).onfinish = () => g.remove();
+    g.style.transformOrigin = m.style.transformOrigin || '0 0';
+    g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-6px) scale(.97)' }], { duration: 140, easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = () => g.remove();
   } catch (_) {}
 }
-function _ctxClose() { const m = $('ctx-menu'); if (m) { _fadeOutMenu(m); m.classList.remove('is-commands'); } document.getElementById('vp-more')?.classList.remove('active'); }
+function _ctxClose() { const m = $('ctx-menu'); if (m) { _fadeOutMenu(m); m.classList.remove('is-commands'); } document.getElementById('vp-more')?.classList.remove('active'); document.querySelectorAll('.tree-toolbar .tree-icon-btn.is-open').forEach(b => b.classList.remove('is-open')); }
 // An item with `sub` (a list of items) opens that list beside its row while
 // the pointer is on it.
 function _ctxFill(box, items, m) {
@@ -39851,7 +40132,10 @@ const _Wand = (() => {
     lastButtons = e.buttons;
     if (!open) return;
     e.preventDefault(); e.stopPropagation();
-    close(e.button === 0, true);
+    // a click on the ring keeps the colour under the pointer; a click in the middle window or outside the wheel puts the colour back
+    const d = Math.hypot(e.clientX - ox, e.clientY - oy);
+    if (e.button === 0 && d > HOLE && d <= R + 6) { px = e.clientX; py = e.clientY; moved = true; try { aim(); } catch (_) {} close(true, true); }
+    else close(false, true);
   }, true);
   // the right button also opens the app's own menu: not on top of, or just after, the ring
   window.addEventListener('contextmenu', (e) => {
@@ -39879,17 +40163,17 @@ function _gizmoHold(on) {
   try { requestRender(); } catch (_) {}
 }
 // ─── Quick colour wheel ──────────────────────────────────────────────────────────────────────────────────────────────────
-// Hold C over the model: the colour wheel opens at the pointer at once; let go without moving and nothing has changed. Nothing changes until the pointer moves. Then
+// Hold C over the model: the colour wheel opens at the pointer at once; let go of C and nothing has changed: the colour is set only by clicking on the wheel. Nothing changes until the pointer moves. Then
 // the angle is the hue and the distance from the middle the saturation: the very middle is white (at full brightness), and the colour
 // follows the pointer all the way, with no dead spot. Scroll for brightness. The selected parts take the colour
-// at once, as they are on screen, and it is written into their material. Let go of C (or click) to keep it, Esc to put it back.
+// at once, as they are on screen, and it is written into their material. Click on the wheel to keep it; letting go of C (or Esc, or a click outside the wheel) puts it back.
 // One undo step. A material shared with parts that are not selected changes for them too, as it always does when a material is edited.
 const _QuickColour = (() => {
-  const SIZE = 212, R = SIZE / 2 - 22, MOVE = 4, HOLE = 20, WHITE = 5, CANCEL = R + 100;       // CANCEL: how far out the pointer goes to cancel (a Cancel pill shows; letting go there puts the colour back). MOVE: how far the pointer goes before the colour starts to follow it; HOLE: the round window in the middle
+  const SIZE = 212, R = SIZE / 2 - 22, MOVE = 4, HOLE = 20, WHITE = 5, CANCEL = Infinity;       // CANCEL: how far out the pointer goes to cancel (a Cancel pill shows; letting go there puts the colour back). MOVE: how far the pointer goes before the colour starts to follow it; HOLE: the round window in the middle
   const DPR = () => Math.max(1, window.devicePixelRatio || 1);
   const snap = (v) => Math.round(v * DPR()) / DPR();          // (a position on a whole device pixel: nothing is drawn between two, which is what makes an edge soft)
   let root = null, canvas = null, cap = null, open = false, sticky = false, startedAt = 0, moved = false, revealed = false, holdT = 0, cancelling = false, cancelPill = null, dotEl = null, glideT = 0;
-  let ox = 0, oy = 0, px = 0, py = 0, lastX = 0, lastY = 0, lastButtons = 0;
+  let ox = 0, oy = 0, px = 0, py = 0, sx = 0, sy = 0, lastX = 0, lastY = 0, lastButtons = 0;      // (ox, oy: the middle of the wheel; sx, sy: where the pointer was when it opened)
   let h = 0, s = 0, v = 1, orig = null, mats = [], snaps = [], origHex = '#808080';
   const hsv2hex = (hh, ss, vv) => {
     const i = Math.floor(((hh % 1) + 1) % 1 * 6), f = ((hh % 1) + 1) % 1 * 6 - i, p = vv * (1 - ss), q = vv * (1 - f * ss), t = vv * (1 - (1 - f) * ss);
@@ -39946,7 +40230,7 @@ const _QuickColour = (() => {
       #qc-wheel .qc-cancel em{font-style:normal;color:var(--tx3);font-size:11px}
       #qc-wheel.cancelling .qc-cancel{opacity:1;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%)}
       @media (prefers-reduced-motion:reduce){#qc-wheel canvas,#qc-wheel .qc-cancel,#qc-wheel .qc-dot,#qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:none}}
-      #qc-wheel .qc-cap{margin-top:-8px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.8);backdrop-filter:blur(14px) saturate(1.3);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 4px 13px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
+      #qc-wheel .qc-cap{margin-top:-8px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.9);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 4px 13px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
       #qc-wheel .qc-cap i{width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.22)}
       #qc-wheel .qc-cap svg{width:10px;height:10px;color:var(--tx3);fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
       #qc-wheel .qc-cap b{font-weight:500;font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px;letter-spacing:.02em;text-align:left}
@@ -40032,10 +40316,10 @@ const _QuickColour = (() => {
   // The dot is an element, so it can leave the wheel: it sits at the colour and stops at the rim; far enough out it jumps to the pointer,
   // turns black and Cancel shows.
   const dotU = { x: 1, y: 0 };                           // (the way the pointer lies from the middle, kept for when it is exactly in the middle)
-  function placeDot(d, dx, dy) {
+  function placeDot(d, dx, dy, atOrigin) {
     if (!dotEl) return;
     const wr = HOLE + WHITE;
-    if (!moved) { dotEl.style.display = 'none'; return; }
+    if (!moved && !atOrigin) { dotEl.style.display = 'none'; return; }
     // Inside the hole the dot is held on the hole's edge, on the side the pointer is; it steps out onto the wheel as the pointer does.
     if (d > 0.5) { dotU.x = dx / d; dotU.y = dy / d; }
     const ux = dotU.x, uy = dotU.y;
@@ -40093,11 +40377,15 @@ const _QuickColour = (() => {
     build();
     snaps = mats.map(m => _snapshotMat(m));
     origHex = '#' + mats[0].color.getHexString();
-    orig = hex2hsv(origHex); h = orig.h; s = orig.s; v = 1;        // (the wheel starts at full brightness: the middle is white, the rim is the pure colour; scroll to darken)
-    ox = px = lastX; oy = py = lastY; moved = false; cancelling = false; root.classList.remove('cancelling'); dotEl.style.display = 'none'; sticky = !!byTap; startedAt = performance.now(); open = true;
+    orig = hex2hsv(origHex); h = orig.h; s = orig.s; v = Math.max(0.02, Math.min(1, orig.v == null ? 1 : orig.v));        // (the wheel opens at the brightness of the colour the part has now, and the dot sits on that colour; scroll for brightness)
+    px = sx = lastX; py = sy = lastY; { const wr = HOLE + WHITE, d0 = wr + s * (R - wr), a = h * Math.PI * 2; ox = lastX - Math.cos(a) * d0; oy = lastY - Math.sin(a) * d0; }      // (the wheel opens so that the colour the part has now lies under the pointer; moving the pointer picks from there)
+    moved = false; cancelling = false; root.classList.remove('cancelling'); sticky = !!byTap; startedAt = performance.now(); open = true;
     const x = Math.max(SIZE / 2 + 8, Math.min(window.innerWidth - SIZE / 2 - 8, ox)), y = Math.max(SIZE / 2 + 8, Math.min(window.innerHeight - SIZE / 2 - 60, oy));
+    ox = x; oy = y; { const wr = HOLE + WHITE, d0 = wr + s * (R - wr), a = h * Math.PI * 2; px = Math.max(0, Math.min(window.innerWidth, x + Math.cos(a) * d0)); py = Math.max(0, Math.min(window.innerHeight, y + Math.sin(a) * d0)); }      // (kept on screen: near an edge the dot is not quite under the pointer)
     root.style.left = snap(x - SIZE / 2) + 'px'; root.style.top = snap(y - SIZE / 2) + 'px';
     draw();
+    { const wr = HOLE + WHITE, d0 = wr + s * (R - wr), a = h * Math.PI * 2; dotU.x = Math.cos(a); dotU.y = Math.sin(a); try { placeDot(d0, dotU.x * d0, dotU.y * d0, true); } catch (_) {} }      // (the dot waits on the colour the part has: moving the pointer picks a new one)
+    try { updateCap(); } catch (_) {}
     document.body.classList.add('qc-nocursor');
     lookAway(true);
     clearTimeout(leaveT); root.classList.remove('show', 'leaving'); revealed = false; clearTimeout(holdT);
@@ -40134,7 +40422,7 @@ const _QuickColour = (() => {
     if (!open) return;
     px = e.clientX; py = e.clientY;
     if (!revealed) return;
-    if (Math.hypot(px - ox, py - oy) >= MOVE) moved = true;
+    if (Math.hypot(px - sx, py - sy) >= MOVE) moved = true;
     aimSoon();
   }, true);
   window.addEventListener('pointerup', (e) => { lastButtons = e.buttons; }, true);
@@ -40142,7 +40430,7 @@ const _QuickColour = (() => {
     if (e.isComposing) return;
     if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); close(false); return; }      // (Esc is the wheel's alone: it must not also clear the selection)
     if (isC(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-      if (open) { e.preventDefault(); e.stopPropagation(); if (sticky && !e.repeat) close(true); return; }
+      if (open) { e.preventDefault(); e.stopPropagation(); if (!e.repeat) close(false); return; }
       if (e.repeat || lastButtons || _typingTarget(e) || _modalOpen() || !overViewport()) return;
       e.preventDefault(); e.stopPropagation();
       show(false);
@@ -40154,8 +40442,7 @@ const _QuickColour = (() => {
     if (!open || !isC(e)) return;
     e.preventDefault(); e.stopPropagation();
     if (sticky) return;
-    if (!revealed) { close(false); return; }
-    close(true);
+    close(false);          // (letting go of the key cancels; the colour is set by a click on the wheel)
   }, true);
   window.addEventListener('pointerdown', (e) => {
     lastButtons = e.buttons;
@@ -40177,7 +40464,7 @@ const _QuickColour = (() => {
   document.addEventListener('visibilitychange', () => { if (document.hidden) close(false); });
   return { toggle: () => { if (open) close(true); else { if (!lastX && !lastY) { lastX = window.innerWidth / 2; lastY = window.innerHeight / 2; } show(true); } }, isOpen: () => open };
 })();
-try { _Actions.list.push({ id: 'quickColour', group: 'Edit', label: 'Quick colour wheel: hold C over the model, move, let go', kbd: 'C', words: 'paint colour hue wheel radial selected material change', run: () => _QuickColour.toggle() }); } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
+try { _Actions.list.push({ id: 'quickColour', group: 'Edit', label: 'Quick colour wheel: hold C over the model, click a colour', kbd: 'C', words: 'paint colour hue wheel radial selected material change', run: () => _QuickColour.toggle() }); } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
 
 
 // The "…" at the end of the bottom toolbar: every command that acts on the
@@ -40282,6 +40569,9 @@ function _openCommandsMenu(anchor) {
       { icon: 'square-check',   label: 'Select all',           kbd: 'Ctrl+A', off: needAny, fn: act('selAll') },
       { icon: 'arrow-left-right', label: 'Invert selection',   kbd: 'Ctrl+I', off: needAny, fn: act('selInvert') },
       { icon: 'shapes',         label: 'Select similar',                      off: needSel, fn: act('selSimilar') },
+      { icon: 'copy-check',     label: 'Select all instances',                off: needSel, fn: act('selInstances') },
+      { icon: 'copy-check',     label: 'Select the original',                 off: needSel, fn: act('selOriginal') },
+      { icon: 'unlink',         label: 'Make unique',                         off: needSel, fn: act('makeUnique') },
       { icon: 'palette',        label: 'Quick colour wheel',   kbd: 'C',      off: needSel, fn: act('quickColour') },
     ] },
     { icon: 'pencil', label: 'Edit', sub: [
@@ -40329,7 +40619,8 @@ _Popover.dismiss((e) => { if (e && e.type === 'click' && e.target.closest?.('#ct
 document.addEventListener('pointerdown', (e) => {
   const m = document.getElementById('ctx-menu');
   if (!m || m.style.display !== 'block') return;
-  if (e.target.closest?.('#ctx-menu, #vp-more')) return;
+  // (the tree's Collapse / Rename / Flatten buttons note on their own press whether their menu is open, so a second press can close it: closing it here first hid that)
+  if (e.target.closest?.('#ctx-menu, #vp-more, #tree-collapse-toggle, #tree-flatten, #tree-batch-rename')) return;
   _ctxClose();
 }, true);
 // ── Tree helpers used by the context menu ─────────────────────────────────
@@ -40749,14 +41040,14 @@ function _openFlattenMenu(anchor) {
   const r = anchor.getBoundingClientRect();
   const base = { scope: 'all', mode: 'total', keep: 1, preserveUserGroups: true, cleanEmpty: true, collapseAfter: false };
   _ctxBuild([
+    { icon: 'sliders-horizontal', label: 'Advanced flatten…', fn: () => flattenTree() },      // (the full window first, as Batch rename… is in its menu)
+    '---',
     { icon: 'list-tree', label: 'Flatten everything, keep my groups', fn: () => flattenTree({ ...base }) },
     { icon: 'list-tree', label: 'Flatten everything, my groups too', fn: () => flattenTree({ ...base, preserveUserGroups: false }) },
     '---',
     { icon: 'git-merge', label: 'Merge groups with one child', fn: () => flattenTree({ ...base, mode: 'chains' }) },
     { icon: 'arrow-down-to-line', label: 'Flatten the deepest level', fn: () => flattenTree({ ...base, mode: 'last' }) },
     { icon: 'folder-tree', label: 'Flatten the selected groups', off: noSelGroup ? 'Select a group in the tree first' : false, fn: () => flattenTree({ ...base, scope: 'selected' }) },
-    '---',
-    { icon: 'sliders-horizontal', label: 'More options…', fn: () => flattenTree() },
   ], r.left, r.bottom + 4);
 }
 function _openTreeFoldMenu(anchor) {
@@ -40929,6 +41220,7 @@ document.addEventListener('contextmenu', e => {
       { icon: 'arrow-up-z-a',   label: 'Sort inside Z to A',         fn: () => _treeSortGroup(node, -1) },
       { icon: 'arrow-up',       label: 'Move group up',              fn: () => _treeMoveGroup(node, -1) },
       { icon: 'arrow-down',     label: 'Move group down',            fn: () => _treeMoveGroup(node, 1) },
+      { icon: 'play',           label: 'Animate…',                   fn: () => _Anim.open() },
       { icon: 'brush-cleaning', label: 'Delete empty groups',        fn: _treeDeleteEmptyGroups },
       '---',
       { icon: 'trash-2',        label: 'Delete group + contents',    danger: true, fn: () => _treeDeleteGroup(node) },
@@ -40968,11 +41260,15 @@ document.addEventListener('contextmenu', e => {
   const items = [
     { icon: 'crosshair',      label: `Frame selected${selSize > 1 ? ` (${selSize})` : ''}`, fn: frameSelected },
     { icon: 'focus',          label: 'Isolate',                fn: isolateSelected },
+    { icon: 'play',           label: 'Animate…',               fn: () => _Anim.open() },
     { icon: 'eye',            label: 'Toggle visibility',      fn: () => { _applyVisibility([[p, !p.visible]]); rebuildTree(); requestRender(); } },
     { icon: 'eye-off',        label: 'Hide unselected',        fn: hideUnselected },
     { icon: 'eye',    label: 'Show all',               fn: showAllParts },
     '---',
     { icon: 'shapes',         label: 'Select similar shape',   fn: selectSimilar },
+    { icon: 'copy-check',     label: 'Select all instances',   fn: selectInstances },
+    { icon: 'crown',          label: 'Select the original',    fn: selectInstanceOriginal },
+    { icon: 'unlink',         label: 'Make unique',            fn: () => makeUnique() },
     { icon: 'palette',        label: 'Select same colour',      fn: selectByColor },
     '---',
     { icon: 'folder-plus',    label: `Group selected${selSize > 1 ? ` (${selSize})` : ''}`, kbd: 'Ctrl+G', fn: _treeGroupSelected },
@@ -41018,6 +41314,794 @@ function hideUnselected() {
   rebuildTree();
   // Visibility change is visible in the viewport — no toast.
 }
+
+
+// ============== ANIMATE ==============
+//
+// Animate parts and groups. An animation belongs to the part or group, not to the window or to the selection: it keeps going when the
+// window is closed and the part is deselected, until it is removed (which puts everything back where it started) or the scene is closed.
+// A part or group can have one layer of each kind, and the layers add up:
+//   Spin   a turn round one axis (turns a minute; loop points choose how much of the turn is used)
+//   Swing  a turn to and fro about one axis (an angle and a time)
+//   Noise  a smooth random shake of the position and the turn (an amount, a speed, a seed)
+//   Path   a trip along a spline (a circle, a figure of eight, a square, a wave or a line)
+// Spin and Path also loop: Loop, Ping-pong or Once, a number of repeats (0 is for ever), a delay, and loop points (the part of the
+// cycle that is used, in %). A part moves about the middle of its own geometry in its own axes; a group moves every part in it about
+// the middle of the whole, in the group's axes. Poses are worked out from where the part started (never added up frame after frame), so
+// they cannot drift. The loop runs only while something is animated. The poses are a view: an export or a scene save puts everything
+// back first and starts it again after; pressing a gizmo handle on something animated removes its animation first. To add a kind: an
+// entry in TYPES, its controls in the window (data-for), a case in `layerPose`, and a line in `summary`.
+const _Anim = (() => {
+  const KEY = 'mo-anim2';
+  const TYPES = { spin: ['Spin', 'rotate-cw'], swing: ['Swing', 'arrow-left-right'], noise: ['Noise', 'audio-waveform'], path: ['Path', 'spline'] };
+  const DEFAULTS = {
+    type: 'spin',
+    spin: { axis: 'Z', dir: -1, rpm: 60 },                           // dir -1 is clockwise seen from the tip of the axis (the arrow of the gizmo)
+    swing: { axis: 'Z', amp: 45, period: 2 },                        // degrees each way, seconds for there and back
+    noise: { type: 'wave', pos: 5, rot: 10, speed: 1, seed: 1, detail: 1, rough: 50, sx: 'xyz', rx: 'xyz' },   // wave / random / steps; % of the object's size, degrees, times, a number, layers of finer noise, how strong they are in %, the axes that shift and turn
+    path: { shape: 'circle', plane: 'XY', size: 50, period: 6 },     // % of the object's size, seconds for one round
+    loop: { mode: 'loop', repeat: 0, delay: 0, from: 0, to: 100 },   // loop points in % of the cycle
+  };
+  const LIMITS = { rpm: [1, 600], amp: [1, 180], period: [0.2, 60], pos: [0, 50], rot: [0, 90], speed: [0.1, 5], seed: [1, 99], detail: [1, 4], rough: [0, 100], size: [5, 200], repeat: [0, 999], delay: [0, 10], from: [0, 100], to: [0, 100] };
+  const cfg = JSON.parse(JSON.stringify(DEFAULTS));
+  const clampKey = (k, v) => { const L = LIMITS[k]; v = +v; if (!Number.isFinite(v)) return null; return L ? Math.max(L[0], Math.min(L[1], v)) : v; };
+  try {
+    const o = JSON.parse(localStorage.getItem(KEY) || 'null');
+    if (o && typeof o === 'object') {
+      if (TYPES[o.type]) cfg.type = o.type;
+      for (const g of ['spin', 'swing', 'noise', 'path', 'loop']) for (const k of Object.keys(DEFAULTS[g])) {
+        const v = o[g] && o[g][k]; if (v == null) continue;
+        cfg[g][k] = typeof DEFAULTS[g][k] === 'number' ? (clampKey(k, v) ?? DEFAULTS[g][k]) : String(v);
+      }
+      if (![1, -1].includes(cfg.spin.dir)) cfg.spin.dir = -1;
+      if (!['wave', 'random', 'steps'].includes(cfg.noise.type)) cfg.noise.type = 'wave';
+      for (const k of ['sx', 'rx']) cfg.noise[k] = ['x', 'y', 'z'].filter(c => String(cfg.noise[k]).toLowerCase().includes(c)).join('');
+      cfg.noise.detail = Math.round(cfg.noise.detail); cfg.noise.seed = Math.round(cfg.noise.seed);
+    }
+  } catch (_) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (_) {} };
+
+  const AX = { X: new THREE.Vector3(1, 0, 0), Y: new THREE.Vector3(0, 1, 0), Z: new THREE.Vector3(0, 0, 1) };
+  const D2R = Math.PI / 180;
+  // key ('p:<part id>' or 'g:<group id>') → { key, kind, label, layers: [{ type, p, loop, t }], rests: Map(part id → place in partsRoot's space), … }
+  //   a part:  partId, c = the middle of its geometry (its own space), size = its diagonal
+  //   a group: gid, members = part ids, C = the middle of the whole in partsRoot's space, Q = the group's axes there, size
+  const items = new Map();
+  let raf = 0, last = 0, suspended = false, paused = false, dismissed = false, clock = 0, rate = 1, ver = 0, popup = null, poll = 0, sig = '', listSig = '', headLay = null, headRaf = 0;
+  const M1 = new THREE.Matrix4(), M2 = new THREE.Matrix4(), M3 = new THREE.Matrix4(), M4 = new THREE.Matrix4(), M5 = new THREE.Matrix4();
+  const Q1 = new THREE.Quaternion(), V1 = new THREE.Vector3(), E1 = new THREE.Euler();
+
+  // A part that is drawn as its own mesh. An instanced part (most parts of a converted assembly) has none until it is promoted, as the gizmo does.
+  const live = (id) => { const p = getPart(id); return p && !p.deleted && p.mesh ? p : null; };
+  const exists = (id) => { const p = getPart(id); return p && !p.deleted && (p.mesh || p.instancedMesh) ? p : null; };
+  const promote = (p) => { if (p && !p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} } return p && p.mesh ? p : null; };
+
+  // What one pass over the animated objects needs again and again (a frame of the animation, a seek, a refresh), worked out once: partsRoot's
+  // world matrix, the inverse of its rotation (for the exploded offsets), whether the view is exploded, and the inverse of each parent's matrix.
+  const FR = { R: new THREE.Matrix4(), rot3: new THREE.Matrix3(), exploded: false, parents: new Map() };
+  const IDENT = new THREE.Matrix4();
+  const beginFrame = () => {
+    if (state.partsRoot) state.partsRoot.updateWorldMatrix(true, false);
+    FR.R.copy(state.partsRoot ? state.partsRoot.matrixWorld : IDENT);
+    FR.rot3.setFromMatrix4(FR.R).invert();
+    const e = state.explode; FR.exploded = !!(e && (e.x || e.y || e.z));
+    FR.parents.clear();
+  };
+  const parentInv = (par) => {
+    let m = FR.parents.get(par);
+    if (!m) { par.updateWorldMatrix(true, false); m = new THREE.Matrix4().copy(par.matrixWorld).invert(); FR.parents.set(par, m); }
+    return m;
+  };
+  // The exploded view moves each part away by p._exOff (a vector in the world); an animation works from where the part is in the assembled
+  // model, and the offset is added on top, so the two go together (the offset is in partsRoot's space here).
+  const OFF = new THREE.Vector3(), RE = new THREE.Matrix4();
+  const exOff = (id, out) => {
+    const p = getPart(id);
+    if (!FR.exploded || !p || !p._exOff) return out.set(0, 0, 0);
+    return out.copy(p._exOff).applyMatrix3(FR.rot3);
+  };
+  // the part's place in the assembled model, as seen from partsRoot (a change of the scene's scale or turn does not spoil it)
+  const restOf = (mesh, id) => {
+    mesh.updateWorldMatrix(true, false);
+    const m = new THREE.Matrix4().copy(FR.R).invert().multiply(mesh.matrixWorld);
+    if (id != null && FR.exploded) { exOff(id, OFF); m.premultiply(M1.makeTranslation(-OFF.x, -OFF.y, -OFF.z)); }
+    return m;
+  };
+  // …and with the exploded view's offset on it, as it is now (the rest itself when the view is not exploded: nothing is made)
+  const restE = (id, rec) => {
+    const r = rec.rests.get(id);
+    if (!FR.exploded) return r;
+    exOff(id, OFF); return RE.makeTranslation(OFF.x, OFF.y, OFF.z).multiply(r);
+  };
+  // Put a mesh at `rootMat` (a matrix in partsRoot's space), whatever it is parented to now (the gizmo's pivot, a group, partsRoot).
+  const place = (mesh, rootMat) => {
+    (mesh.parent ? M3.copy(parentInv(mesh.parent)) : M3.identity()).multiply(FR.R).multiply(rootMat).decompose(mesh.position, mesh.quaternion, mesh.scale);
+    mesh.updateMatrixWorld(true);
+  };
+  const centreOf = (mesh) => {
+    const g = mesh.geometry; if (!g) return { c: new THREE.Vector3(), size: 1 };
+    if (!g.boundingBox) { try { g.computeBoundingBox(); } catch (_) {} }
+    const b = g.boundingBox;
+    return b && !b.isEmpty() ? { c: b.getCenter(new THREE.Vector3()), size: Math.max(1e-6, b.getSize(new THREE.Vector3()).length()) } : { c: new THREE.Vector3(), size: 1 };
+  };
+
+  // ---- the motions: a layer gives a shift (pos) and a turn (quat), in the object's own axes ----
+  const smooth = (t, ch, seed) => { const s = seed * 12.9898 + ch * 78.233; return Math.sin(t + s) * 0.55 + Math.sin(t * 2.31 + s * 1.7) * 0.30 + Math.sin(t * 4.13 + s * 2.9) * 0.15; };
+  // three kinds of noise, each a number between −1 and 1 for a time, a channel and a seed: a mix of sines, smooth random values (value noise)
+  // and random values held until the next (steps). Detail adds finer layers of the same noise, each as strong as roughness says.
+  const nHash = (n, ch, seed) => { const x = Math.sin(n * 127.1 + ch * 74.7 + seed * 311.7) * 43758.5453; return (x - Math.floor(x)) * 2 - 1; };
+  const nValue = (t, ch, seed) => { const i = Math.floor(t), f = t - i, u = f * f * (3 - 2 * f); return nHash(i, ch, seed) * (1 - u) + nHash(i + 1, ch, seed) * u; };
+  const nSteps = (t, ch, seed) => nHash(Math.floor(t), ch, seed);
+  const NOISE = { wave: smooth, random: nValue, steps: nSteps };
+  const fbm = (fn, t, ch, seed, oct, rough) => { let a = 1, f = 1, sum = 0, norm = 0; for (let k = 0; k < oct; k++) { sum += a * fn(t * f + k * 17.31, ch, seed); norm += a; a *= rough; f *= 2.03; } return norm ? sum / norm : 0; };
+  const SHAPES = {
+    circle:  { closed: true,  pts: Array.from({ length: 8 }, (_, i) => [Math.cos(i / 8 * 2 * Math.PI), Math.sin(i / 8 * 2 * Math.PI)]) },
+    figure8: { closed: true,  pts: Array.from({ length: 12 }, (_, i) => [Math.sin(i / 12 * 2 * Math.PI), Math.sin(2 * i / 12 * 2 * Math.PI) * 0.6]) },
+    square:  { closed: true,  pts: [[-1, -1], [1, -1], [1, 1], [-1, 1]] },
+    wave:    { closed: false, pts: [[-1, 0], [-0.5, 0.6], [0, 0], [0.5, -0.6], [1, 0]] },
+    line:    { closed: false, pts: [[-1, 0], [1, 0]] },
+  };
+  const curveOf = (lay) => {
+    const key = lay.p.shape + lay.p.plane;
+    if (lay._ck === key) return lay._curve;
+    const sh = SHAPES[lay.p.shape] || SHAPES.circle, pl = lay.p.plane;
+    const pts = sh.pts.map(([a, b]) => pl === 'XZ' ? new THREE.Vector3(a, 0, b) : pl === 'YZ' ? new THREE.Vector3(0, a, b) : new THREE.Vector3(a, b, 0));
+    lay._curve = new THREE.CatmullRomCurve3(pts, sh.closed, 'catmullrom', 0.5); lay._ck = key;
+    return lay._curve;
+  };
+  // Where the cycle is now, 0..1, after the delay, the repeats, the loop mode and the loop points.
+  const phase = (lay, openShape) => {
+    const L = lay.loop, e = lay.t - L.delay;
+    const from = Math.min(L.from, L.to) / 100, to = Math.max(L.from, L.to) / 100;
+    if (e <= 0) return from;
+    const period = lay.type === 'spin' ? 60 / lay.p.rpm : lay.p.period;
+    const mode = openShape && L.mode === 'loop' ? 'pingpong' : L.mode;
+    const cyc = e / period, done = L.repeat > 0 && cyc >= L.repeat;
+    let u;
+    if (mode === 'once') u = Math.min(cyc, 1);
+    else if (mode === 'pingpong') { const f = done ? 0 : cyc % 1; u = 1 - Math.abs(1 - 2 * f); }
+    else u = done ? 1 : cyc % 1;
+    return from + (to - from) * u;
+  };
+  const layerPose = (lay, size, out) => {
+    out.pos.set(0, 0, 0); out.quat.identity();
+    const p = lay.p;
+    switch (lay.type) {
+      case 'spin': {
+        const axis = lay.axisVec || AX[p.axis];
+        out.quat.setFromAxisAngle(axis, p.dir * 2 * Math.PI * phase(lay, false));
+        break;
+      }
+      case 'swing':
+        out.quat.setFromAxisAngle(AX[p.axis], p.amp * D2R * Math.sin(lay.t * 2 * Math.PI / p.period));
+        break;
+      case 'noise': {
+        const fn = NOISE[p.type] || smooth;
+        const t = fn === smooth ? lay.t * p.speed * Math.PI : lay.t * p.speed * 1.5;      // (a speed of 1 is about half a shake a second, or a new random value every two thirds of a second)
+        const sh = p.pos / 100 * size, rt = p.rot * D2R, oct = Math.max(1, Math.min(4, Math.round(p.detail || 1))), rg = (p.rough == null ? 50 : p.rough) / 100;
+        const n = (ch) => fbm(fn, t, ch, p.seed, oct, rg), sx = p.sx == null ? 'xyz' : p.sx, rx = p.rx == null ? 'xyz' : p.rx;
+        out.pos.set(sx.includes('x') ? n(0) * sh : 0, sx.includes('y') ? n(1) * sh : 0, sx.includes('z') ? n(2) * sh : 0);
+        E1.set(rx.includes('x') ? n(3) * rt : 0, rx.includes('y') ? n(4) * rt : 0, rx.includes('z') ? n(5) * rt : 0, 'XYZ');
+        out.quat.setFromEuler(E1);
+        break;
+      }
+      case 'path': {
+        const sh = SHAPES[p.shape] || SHAPES.circle;
+        curveOf(lay).getPointAt(Math.min(1, Math.max(0, phase(lay, !sh.closed))), V1);
+        out.pos.copy(V1).multiplyScalar(p.size / 100 * size * 0.5);
+        break;
+      }
+    }
+  };
+  const POSE = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+  // The layers of an animated object, added up, as one matrix about the middle (in the object's own axes).
+  const deltaOf = (rec, out) => {
+    out.identity();
+    for (const lay of rec.layers) {
+      layerPose(lay, rec.size, POSE);
+      M1.makeTranslation(POSE.pos.x, POSE.pos.y, POSE.pos.z);
+      out.multiply(M1).multiply(M2.makeRotationFromQuaternion(POSE.quat));
+    }
+    return out;
+  };
+  const DELTA = new THREE.Matrix4(), F4 = new THREE.Matrix4(), G4 = new THREE.Matrix4(), RG = new THREE.Matrix4(), W4 = new THREE.Matrix4(), T4 = new THREE.Matrix4(), N4 = new THREE.Matrix4();
+  const stats = { ms: 0, parts: 0 };                 // the time of the last frame's work, and how many parts it moved
+  function applyRec(rec) {
+    deltaOf(rec, DELTA);
+    if (rec.kind === 'part') {
+      const p = live(rec.partId); if (!p) return 0;
+      // rest · T(c) · delta · T(−c): the turn is about the middle of the part's own geometry
+      T4.makeTranslation(rec.c.x, rec.c.y, rec.c.z); N4.makeTranslation(-rec.c.x, -rec.c.y, -rec.c.z);
+      M5.copy(restE(rec.partId, rec)).multiply(T4).multiply(DELTA).multiply(N4);
+      place(p.mesh, M5);
+      return 1;
+    }
+    // a group: T(C) · F · delta · F⁻¹ · T(−C), then each part from where it started
+    F4.makeRotationFromQuaternion(rec.Q);
+    G4.makeTranslation(rec.C.x, rec.C.y, rec.C.z).multiply(F4).multiply(DELTA);
+    F4.invert(); G4.multiply(F4).multiply(T4.makeTranslation(-rec.C.x, -rec.C.y, -rec.C.z));
+    RG.multiplyMatrices(FR.R, G4);
+    let n = 0;
+    for (const id of rec.members) {
+      const p = live(id); if (!p) continue;
+      const m = p.mesh;
+      W4.multiplyMatrices(RG, restE(id, rec));
+      (m.parent ? M3.copy(parentInv(m.parent)) : M3.identity()).multiply(W4).decompose(m.position, m.quaternion, m.scale);
+      m.updateMatrixWorld(true);
+      n++;
+    }
+    return n;
+  }
+  // one pass over some objects (all of them, or the one that changed); an object that has nothing left to move is dropped
+  function applyAll(recs) {
+    beginFrame();
+    let n = 0;
+    for (const rec of (recs || items.values())) { const k = applyRec(rec); if (!k) items.delete(rec.key); n += k; }
+    return n;
+  }
+  const apply = (rec) => { beginFrame(); return applyRec(rec) > 0; };
+  function tick(now) {
+    raf = 0;
+    if (suspended || held || paused || !items.size) return;
+    const t0 = performance.now();
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000)) * rate; last = now;
+    clock += dt;
+    for (const rec of items.values()) for (const lay of rec.layers) lay.t += dt;
+    stats.parts = applyAll();
+    requestRender();
+    stats.ms = stats.ms ? stats.ms * 0.8 + (performance.now() - t0) * 0.2 : performance.now() - t0;
+    if (items.size) raf = requestAnimationFrame(tick); else sync();
+  }
+  function loop() { if (!raf && items.size && !suspended && !held && !paused) { last = performance.now(); raf = requestAnimationFrame(tick); } updateTag(); }
+  // The pill of the animation, with the other status pills of the view (Isolated, Exploded, Measure: #vp-mode-pills, right of the camera
+  // pill, the same size). "Animate mode" while the Animate window is open, and while something is animated "Playing" or "Paused" with a
+  // pause / play button and an X. Pause keeps the poses and the animations; the X leaves: everything is paused and the controls go away.
+  // A click on the pill itself brings the Animate window back.
+  function updateTag() {
+    let el = document.getElementById('vp-animate-pill');
+    if (!el) return;
+    const mode = !!state._animMode, running = items.size > 0 && !dismissed && !suspended && !held;
+    el.hidden = !(mode || running);
+    if (el.hidden) return;
+    if (!el._wired) {
+      el._wired = true;
+      el.innerHTML = '<span class="anim-pill-dot" aria-hidden="true"></span><span class="vp-pill-label"></span>' +
+        '<span class="anim-pill-btn" role="button" tabindex="0" data-a="toggle"></span>' +
+        '<span class="anim-pill-btn" role="button" tabindex="0" data-a="exit" title="Exit: pause everything and close these buttons (play it again in the Animate window)" aria-label="Exit"><i data-lucide="x" aria-hidden="true"></i></span>';
+      const act = (e) => {
+        const b = e.target.closest('[data-a]');
+        if (!b) { open(); return; }                       // the pill itself: the window comes back
+        e.stopPropagation();
+        if (b.dataset.a === 'exit') exit(); else if (paused) play(); else pause();
+      };
+      el.addEventListener('click', act);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(e); } });
+      try { _lucide(); } catch (_) {}
+    }
+    el.classList.toggle('is-paused', paused);
+    el.classList.toggle('has-play', running);
+    const label = [mode ? 'Animate mode' : '', running ? (paused ? 'Paused' : 'Playing') : ''].filter(Boolean).join(' · ');
+    const lab = el.querySelector('.vp-pill-label'); if (lab && lab.textContent !== label) lab.textContent = label;
+    for (const x of el.querySelectorAll('.anim-pill-dot,.anim-pill-btn')) x.hidden = !running;
+    const tb = el.querySelector('[data-a="toggle"]'), st = paused ? 'play' : 'pause';
+    if (tb && tb.dataset.s !== st) {
+      tb.dataset.s = st; tb.innerHTML = `<i data-lucide="${st}" aria-hidden="true"></i>`;
+      tb.title = paused ? 'Play every animation' : 'Pause every animation where it is'; tb.setAttribute('aria-label', paused ? 'Play' : 'Pause');
+      try { _lucide(); } catch (_) {}
+    }
+    el.title = 'Open the Animate window';
+  }
+  function exit() { paused = true; dismissed = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } updateTag(); sync(); }
+  // The playhead of the timeline: where the animation of the selection is in its cycle (only while the window is open and it runs).
+  function headTick() {
+    headRaf = 0;
+    if (!popup || !popup.el.classList.contains('show')) return;
+    updatePlaybar();
+    const head = popup.body.querySelector('#anim-tl-head');
+    if (head) {
+      const lay = headLay;
+      if (lay && (lay.type === 'spin' || lay.type === 'path')) {
+        head.hidden = false;
+        head.style.left = (phase(lay, lay.type === 'path' && !(SHAPES[lay.p.shape] || SHAPES.circle).closed) * 100) + '%';
+      } else head.hidden = true;
+    }
+    if (!paused && !suspended && items.size) headRaf = requestAnimationFrame(headTick);
+  }
+  // ---- the playbar: rewind, play / pause, a scrubber over one cycle of the longest animation, the time ----
+  const cycleOf = (l) => l.type === 'spin' ? 60 / Math.max(1, l.p.rpm) : l.type === 'noise' ? 10 : Math.max(0.2, l.p.period);
+  let cycVer = -1, cycLen = 1;
+  const cycleLength = () => { if (cycVer === ver) return cycLen; let m = 0; for (const r of items.values()) for (const l of r.layers) m = Math.max(m, cycleOf(l) + (l.loop ? l.loop.delay || 0 : 0)); cycVer = ver; cycLen = Math.min(60, Math.max(1, m)); return cycLen; };
+  const fmtClock = (t) => { t = Math.max(0, t); const m = Math.floor(t / 60); return m + ':' + (t - m * 60).toFixed(1).padStart(4, '0'); };
+  // Every animation goes to time `sec` (a new start of the playbar, or the place the scrubber is dragged to).
+  function seekTo(sec) {
+    clock = Math.max(0, sec);
+    for (const rec of items.values()) for (const lay of rec.layers) lay.t = clock;
+    applyAll();
+    try { requestRender(); } catch (_) {}
+    updatePlaybar();
+  }
+  function rewind() { seekTo(0); }
+  const PB = { frac: '', time: '', aria: '', len: '', off: null, st: '', rate: '' };
+  function updatePlaybar() {
+    if (!popup) return;
+    const pb = popup.el.querySelector('#anim-pb'); if (!pb) return;
+    const any = items.size > 0, len = cycleLength(), frac = any ? (clock % len) / len : 0;
+    if (PB.off !== !any) { PB.off = !any; pb.classList.toggle('is-off', !any); }
+    const f = (frac * 100).toFixed(2); if (f !== PB.frac) { PB.frac = f; pb.style.setProperty('--pb', f + '%'); }
+    const tv = any ? fmtClock(clock) : '0:00.0'; if (tv !== PB.time) { PB.time = tv; const t = pb.querySelector('#anim-pb-time'); if (t) t.textContent = tv; }
+    const av = any ? Math.round(frac * 100) + '|' + fmtClock(clock % len) + ' of ' + fmtClock(len) : 'nothing animated';
+    if (av !== PB.aria) { PB.aria = av; const sc = pb.querySelector('#anim-pb-scrub'); if (sc) { sc.setAttribute('aria-valuenow', Math.round(frac * 100)); sc.setAttribute('aria-valuetext', any ? fmtClock(clock % len) + ' of ' + fmtClock(len) : 'nothing animated'); } }
+    const st = !any ? 'off' : paused ? 'play' : 'pause';
+    if (st !== PB.st) {
+      PB.st = st;
+      const pl = pb.querySelector('#anim-pb-play');
+      if (pl) {
+        pl.disabled = !any;
+        pl.innerHTML = `<i data-lucide="${paused || !any ? 'play' : 'pause'}"></i>`;
+        pl.setAttribute('aria-label', paused || !any ? 'Play' : 'Pause'); pl.title = !any ? 'Nothing is animated yet' : paused ? 'Play every animation (Space)' : 'Pause every animation where it is (Space)';
+        try { _lucide(); } catch (_) {}
+      }
+      for (const b of pb.querySelectorAll('#anim-pb-rew,#anim-pb-rate')) b.disabled = !any;
+    }
+    const lv = any ? fmtClock(len) : ''; if (lv !== PB.len) { PB.len = lv; const le = pb.querySelector('#anim-pb-len'); if (le) le.textContent = lv; }
+    const rv = (rate === 1 ? '1' : String(rate)) + '×'; if (rv !== PB.rate) { PB.rate = rv; const rb = pb.querySelector('#anim-pb-rate'); if (rb) { rb.textContent = rv; rb.title = 'Playback speed: ' + rv + ' (click for the next)'; } }
+  }
+  function pause() { paused = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } updateTag(); sync(); }
+  function play() { if (!items.size) return; paused = false; dismissed = false; loop(); sync(); }
+
+  // ---- what the selection is: the groups that are selected, else the parts ----
+  function groupInfo(gid) {
+    const numId = parseInt(gid, 10);
+    let members = null, frame = null, label = '';
+    if (!Number.isNaN(numId) && state.treeNodes) {
+      const hn = state.treeNodes.find(n => n.kind === 'group' && n.id === numId);
+      if (hn) { members = _treeGroupDescendants(numId); frame = hn.obj3d || null; label = hn.name || 'Group'; }
+    }
+    if (!members) {
+      const ug = (state.userGroups || []).find(g => String(g.id) === String(gid));
+      if (ug && ug.ref) { members = [...ug.partIds]; frame = ug.ref; label = ug.name || 'Group'; }
+    }
+    if (!members) return null;
+    return { key: 'g:' + gid, kind: 'group', gid, members, frame, label };
+  }
+  function targets() {
+    const gids = state.selectedGroupIds ? [...state.selectedGroupIds] : [];
+    if (gids.length) {
+      // (a group counts only while what is selected still is that group: a selection made some other way can leave an old group id behind)
+      const gts = gids.map(groupInfo).filter(t => t && t.members.some(exists) && t.members.every(id => state.selected.has(id) || !exists(id)));
+      if (gts.length) return gts;
+    }
+    return [...(state.selected || [])].map(exists).filter(Boolean).map(p => ({ key: 'p:' + p.partId, kind: 'part', partId: p.partId, p, label: p.name || ('Part ' + p.partId) }));
+  }
+
+  // Make the record of an object that is not animated yet (its start pose is taken now).
+  function makeRec(t) {
+    beginFrame();
+    if (t.kind === 'part') {
+      if (!promote(t.p)) return null;
+      const { c, size } = centreOf(t.p.mesh);
+      return { key: t.key, kind: 'part', label: t.label, partId: t.partId, layers: [], c, size, rests: new Map([[t.partId, restOf(t.p.mesh, t.partId)]]) };
+    }
+    for (const id of t.members) promote(exists(id));
+    const parts = t.members.map(live).filter(p => p && !p.locked);
+    if (!parts.length) return null;
+    const box = new THREE.Box3();
+    for (const p of parts) { const b = _partWorldBoxOwn(p.mesh); if (!b.isEmpty()) box.union(b); }
+    const inv = new THREE.Matrix4().copy(FR.R).invert();
+    const C = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3()).applyMatrix4(inv);
+    const size = box.isEmpty() ? 1 : Math.max(1e-6, box.getSize(new THREE.Vector3()).length());
+    const Q = new THREE.Quaternion();
+    if (t.frame) { t.frame.updateWorldMatrix(true, false); t.frame.getWorldQuaternion(Q); if (state.partsRoot) { const pq = new THREE.Quaternion(); state.partsRoot.getWorldQuaternion(pq); Q.premultiply(pq.invert()); } }
+    return { key: t.key, kind: 'group', label: t.label, gid: t.gid, layers: [], members: parts.map(p => p.partId), C, Q, size, rests: new Map(parts.map(p => [p.partId, restOf(p.mesh, p.partId)])) };
+  }
+  // Give each of the objects a layer of this kind (it replaces one of that kind it already has). → how many, how many were locked
+  function addTo(ts, type, p, loopSet) {
+    let n = 0, locked = 0;
+    if (!items.size) clock = 0;
+    for (const t of ts) {
+      let rec = items.get(t.key);
+      if (!rec) {
+        if (t.kind === 'part' && t.p.locked) { locked++; continue; }
+        rec = makeRec(t);
+        if (!rec) { locked++; continue; }
+        items.set(t.key, rec);
+      }
+      const lay = { type, p: { ...p }, loop: { ...loopSet }, t: clock };      // (a new layer starts at the time the others are at)
+      const i = rec.layers.findIndex(l => l.type === type);
+      if (i >= 0) { lay.t = rec.layers[i].t; rec.layers[i] = lay; } else rec.layers.push(lay);
+      n++;
+    }
+    if (n) { paused = false; dismissed = false; ver++; }
+    loop(); sync();
+    return { n, locked };
+  }
+  // The "Add" button: the kind and the settings that are in the window, on what is selected.
+  function addLayer() {
+    const ts = targets();
+    if (!ts.length) { toast('Animate', 'Select a part or a group to animate first', 'warn', 3000); return; }
+    const r = addTo(ts, cfg.type, cfg[cfg.type], cfg.loop);
+    if (!r.n && r.locked) toast('Animate', 'Those parts are locked: unlock them to animate', 'warn', 3000);
+  }
+  // A setting that is changed in the window changes the layer of that kind on what is selected.
+  function retune() {
+    for (const t of targets()) {
+      const rec = items.get(t.key); const lay = rec && rec.layers.find(l => l.type === cfg.type);
+      if (lay) { lay.p = { ...cfg[cfg.type] }; lay.loop = { ...cfg.loop }; ver++; }
+    }
+  }
+  function dropRec(rec) { for (const id of rec.rests.keys()) { const p = live(id); if (p) place(p.mesh, restE(id, rec)); } }
+  function dropAll(recs) { beginFrame(); for (const rec of recs) dropRec(rec); }
+  // Take a kind of layer (or everything) off the given keys; an object with no layer left goes back to where it started.
+  function remove(keys, type) {
+    for (const key of (keys || targets().map(t => t.key))) {
+      const rec = items.get(key); if (!rec) continue;
+      if (type) rec.layers = rec.layers.filter(l => l.type !== type);
+      else rec.layers = [];
+      ver++;
+      if (!rec.layers.length) { items.delete(key); beginFrame(); dropRec(rec); }
+      else apply(rec);
+    }
+    try { requestRender(); } catch (_) {}
+    sync();
+  }
+  // While a video is being made the animation is not run by the clock: each frame is put at its own time (seek), and the times that
+  // were running are given back after.
+  let held = null;
+  function hold(on) {
+    if (on) {
+      if (held) return;
+      held = new Map(); for (const rec of items.values()) for (const lay of rec.layers) held.set(lay, lay.t);
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      updateTag();
+    } else if (held) {
+      for (const [lay, t] of held) lay.t = t;
+      applyAll();
+      held = null; requestRender(); loop();
+    }
+  }
+  function seek(sec) {
+    for (const rec of items.values()) for (const lay of rec.layers) lay.t = sec;
+    applyAll();
+    try { state.partsRoot && state.partsRoot.updateMatrixWorld(true); } catch (_) {}
+  }
+  const heldNow = () => !!held;
+  // The exploded view has moved the parts: the animated ones are put where their animation says (with the new offsets).
+  function refresh() { if (!items.size || suspended || held) return; applyAll(); try { requestRender(); } catch (_) {} }
+  // An export or a scene save sees everything where it started, and the motion goes on after it.
+  function suspend() {
+    if (suspended) return;
+    suspended = true;
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    dropAll(items.values());
+    try { requestRender(); } catch (_) {}
+    updateTag();
+  }
+  function resume() { if (!suspended) return; suspended = false; applyAll(); try { requestRender(); } catch (_) {} loop(); }
+  function reset() { items.clear(); ver++; clock = 0; suspended = false; paused = false; dismissed = false; if (raf) { cancelAnimationFrame(raf); raf = 0; } sync(); }
+  const run = async (fn) => { suspend(); try { return await fn(); } finally { resume(); } };
+
+  // A press on a gizmo handle starts a drag of the selection: whatever is animated in it is put back first, so the drag starts from there.
+  window.addEventListener('pointerdown', () => {
+    if (!items.size || !state.gizmo || !state.gizmo.axis) return;
+    const keys = targets().map(t => t.key).filter(k => items.has(k));
+    if (keys.length) remove(keys);
+  }, true);
+
+  // ---- the window ----
+  const f1 = (v) => String(Math.round(v * 10) / 10);
+  function summary(lay) {
+    const p = lay.p, L = lay.loop;
+    const loopTxt = () => {
+      const bits = [];
+      if (L.mode !== 'loop') bits.push(L.mode === 'pingpong' ? 'ping-pong' : 'once');
+      if (L.repeat > 0) bits.push('×' + L.repeat);
+      if (L.delay > 0) bits.push('delay ' + f1(L.delay) + ' s');
+      if (L.from !== 0 || L.to !== 100) bits.push(`points ${Math.round(L.from)}–${Math.round(L.to)}%`);
+      return bits.length ? ' · ' + bits.join(' · ') : '';
+    };
+    switch (lay.type) {
+      case 'spin':  return `Spin · ${p.axis} · ${p.dir < 0 ? 'clockwise' : 'counter-clockwise'} · ${p.rpm} rpm${loopTxt()}`;
+      case 'swing': return `Swing · ${p.axis} · ±${p.amp}° · ${f1(p.period)} s`;
+      case 'noise': return `Noise · ${p.type === 'random' ? 'random' : p.type === 'steps' ? 'steps' : 'wave'} · shift ${p.pos}% ${(p.sx == null ? 'xyz' : p.sx).toUpperCase() || '–'} · turn ${p.rot}° ${(p.rx == null ? 'xyz' : p.rx).toUpperCase() || '–'} · ${f1(p.speed)}× · detail ${p.detail || 1} · seed ${p.seed}`;
+      case 'path':  return `Path · ${p.shape === 'figure8' ? 'figure 8' : p.shape} · ${p.plane} · ${p.size}% · ${f1(p.period)} s${loopTxt()}`;
+    }
+    return lay.type;
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const getP = (path) => { const [g, k] = path.split('.'); return cfg[g][k]; };
+  const setP = (path, v) => { const [g, k] = path.split('.'); cfg[g][k] = v; };
+  const fmtVal = (path, v, unit) => (path === 'loop.repeat' && !v) ? '∞' : (Number.isInteger(+v) ? String(v) : f1(+v)) + (unit || '');
+
+  function sync(force) {
+    updateTag();
+    if (!popup) return;
+    const q = (s) => popup.body.querySelector(s);
+    popup.body.dataset.type = cfg.type;
+    for (const b of popup.body.querySelectorAll('[data-type]')) if (b.tagName === 'BUTTON') b.classList.toggle('active', b.dataset.type === cfg.type);
+    for (const el of popup.body.querySelectorAll('[data-for]')) el.hidden = !el.dataset.for.split(' ').includes(cfg.type);
+    for (const b of popup.body.querySelectorAll('[data-set]')) b.classList.toggle('active', String(getP(b.dataset.set)) === b.dataset.val);
+    for (const b of popup.body.querySelectorAll('[data-tog]')) { const on = String(getP(b.dataset.tog)).includes(b.dataset.val); b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); }
+    for (const el of popup.body.querySelectorAll('[data-p]')) {
+      const v = getP(el.dataset.p);
+      if (el.value !== String(v) && document.activeElement !== el) el.value = v;
+      const lab = popup.body.querySelector(`[data-v="${el.dataset.p}"]`); if (lab) lab.textContent = fmtVal(el.dataset.p, v, lab.dataset.u || '');
+    }
+    // what the selection is, and its layers
+    const ts = targets(), recs = ts.map(t => items.get(t.key));
+    const on = recs.filter(Boolean).length, withType = recs.filter(r => r && r.layers.some(l => l.type === cfg.type)).length;
+    const names = ts.length === 1 ? esc(ts[0].label) : ts.length ? `${ts.length} ${ts[0].kind === 'group' ? 'groups' : 'parts'}` : '';
+    const layerTypes = Object.keys(TYPES).filter(k => recs.some(r => r && r.layers.some(l => l.type === k)));
+    const selEl = q('#anim-sel');
+    if (selEl) {
+      const html = !ts.length ? '<span class="anim-none">Select a part or a group to animate it.</span>'
+        : `<div class="anim-sel-n"><i data-lucide="${ts[0].kind === 'group' ? 'folder' : 'box'}"></i><b>${names}</b><span>${on ? (on === ts.length ? 'animated' : on + ' animated') : 'not animated'}</span></div>` +
+          (layerTypes.length ? `<div class="anim-lays">${layerTypes.map(k => {
+            const have = recs.filter(r => r && r.layers.some(l => l.type === k)), lay = have[0].layers.find(l => l.type === k);
+            return `<div class="anim-lay${k === cfg.type ? ' active' : ''}"><button type="button" class="anim-lay-b" data-layer="${k}" title="Edit this animation"><i data-lucide="${TYPES[k][1]}"></i><span class="anim-lay-t"><b>${TYPES[k][0]}</b><em>${esc(summary(lay).replace(/^[A-Za-z]+ · /, ''))}</em></span>${recs.length > 1 ? `<span class="anim-lay-n">${have.length}/${recs.length}</span>` : ''}</button><button type="button" class="anim-lay-x" data-rmlayer="${k}" aria-label="Remove ${TYPES[k][0]}" title="Remove it"><i data-lucide="x"></i></button></div>`;
+          }).join('')}</div>` : '');
+      if (selEl.dataset.h !== html) { selEl.dataset.h = html; selEl.innerHTML = html; try { _lucide(); } catch (_) {} }
+    }
+    updatePlaybar();
+    const add = popup.el.querySelector('#anim-add'), rmAll = popup.el.querySelector('#anim-remove');
+    if (add) { add.textContent = withType ? `Apply ${TYPES[cfg.type][0]} again` : `Add ${TYPES[cfg.type][0]}`; add.disabled = !ts.length; add.title = withType ? 'Restart this animation on the selection' : ''; }
+    if (rmAll) rmAll.disabled = !on;
+    // the loop points on the timeline, and the playhead on the layer of this kind that the selection has
+    const tr = q('#anim-tl-track');
+    if (tr) {
+      const lo = Math.min(cfg.loop.from, cfg.loop.to), hi = Math.max(cfg.loop.from, cfg.loop.to);
+      tr.style.setProperty('--f', lo + '%'); tr.style.setProperty('--t', hi + '%');
+      const fe = q('#anim-tl-f'), te = q('#anim-tl-t'); if (fe) fe.textContent = Math.round(lo) + '%'; if (te) te.textContent = Math.round(hi) + '%';
+      for (const h of tr.querySelectorAll('.anim-tl-h')) { const v = Math.round(h.dataset.h === 'from' ? lo : hi); h.style.left = v + '%'; h.setAttribute('aria-valuenow', v); }
+      const rec = recs.find(r => r && r.layers.some(l => l.type === cfg.type));
+      headLay = rec ? rec.layers.find(l => l.type === cfg.type) : null;
+      if (!headRaf) headRaf = requestAnimationFrame(headTick);
+    }
+    // every animated object in the scene, with all its properties
+    const listSigNow = ver + '#' + ts.map(t => t.key).join(',') + (paused ? '|paused' : '') + '|' + items.size;
+    if (force || listSigNow !== listSig) {
+      listSig = listSigNow;
+      const box = q('#anim-list'), cnt = q('#anim-count');
+      if (cnt) cnt.textContent = items.size ? String(items.size) + (paused ? ' · paused' : '') : '';
+      if (box) {
+        const selKeys = new Set(ts.map(t => t.key));
+        box.innerHTML = items.size ? [...items.values()].map(r => `
+          <div class="anim-item${selKeys.has(r.key) ? ' is-sel' : ''}" data-key="${esc(r.key)}">
+            <button type="button" class="anim-item-b" data-pick="${esc(r.key)}" title="Select it">
+              <span class="anim-item-n"><i data-lucide="${r.kind === 'group' ? 'folder' : 'box'}"></i>${esc(r.label)}${r.kind === 'group' ? `<em>${r.members.length} parts</em>` : ''}</span>
+              ${r.layers.map(l => `<span class="anim-ln"><i data-lucide="${TYPES[l.type][1]}"></i>${esc(summary(l).replace(/^[A-Za-z]+ · /, ''))}<b>${TYPES[l.type][0]}</b></span>`).join('')}
+            </button>
+            <button type="button" class="anim-x" data-rmkey="${esc(r.key)}" aria-label="Remove its animation"><i data-lucide="trash-2"></i></button>
+          </div>`).join('') : '<div class="anim-none">Nothing is animated in this scene.</div>';
+        try { _lucide(); } catch (_) {}
+      }
+    }
+  }
+  // The window follows the selection: an object that has animation shows its settings.
+  // a number for the selection that is cheap to work out (no list is made), to see that it has changed
+  const selKey = () => { let h = (state.selected ? state.selected.size : 0) * 7919; if (state.selected) for (const id of state.selected) h = (h * 31 + id) | 0; const g = state.selectedGroupIds; let k = ''; if (g && g.size) for (const x of g) k += x + ','; return h + '|' + k; };
+  function follow() {
+    const key = selKey();
+    if (key !== sig) {
+      sig = key;
+      for (const t of targets()) { const r = items.get(t.key); if (r && r.layers.length) { load(r.layers.find(l => l.type === cfg.type) || r.layers[0]); break; } }
+      sync();
+    }
+  }
+  function load(lay) { cfg.type = lay.type; cfg[lay.type] = { ...lay.p }; cfg.loop = { ...lay.loop }; }
+  function pick(key) {                                  // select what a row of the list is about
+    const rec = items.get(key); if (!rec) return;
+    if (rec.kind === 'part') { try { selectPart(rec.partId, 'single'); } catch (_) {} }
+    else {
+      // The row of a group in the tree may not be drawn (folded away, or out of view), so the selection is made here, as a click on the row does it.
+      const gid = String(rec.gid), gi = groupInfo(gid), ids = gi ? gi.members : rec.members;
+      state.selected.clear();
+      for (const id of ids) { const p = getPart(id); if (p && !p.deleted) state.selected.add(id); }
+      state.selectedGroupIds.clear(); state.selectedGroupIds.add(gid);
+      try { applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo(); } catch (_) {}
+      try { const c = document.getElementById('del-sel-count'); if (c) c.textContent = state.selected.size; } catch (_) {}
+      try { revealSelectedInTree(); } catch (_) {}
+      requestRender();
+    }
+    sig = ''; follow();
+  }
+  function build() {
+    if (popup) return popup;
+    const seg = (set, list) => `<div class="cmd-seg">${list.map(([v, label, icon]) => `<button type="button" data-set="${set}" data-val="${v}">${icon ? `<i data-lucide="${icon}"></i>` : ''}${label}</button>`).join('')}</div>`;
+    const rng = (path, label, min, max, step, unit) => `<div class="anim-row"><span class="anim-l">${label}</span><div class="anim-speed"><input type="range" data-p="${path}" min="${min}" max="${max}" step="${step}" value="${getP(path)}" aria-label="${label}"><span class="anim-v" data-v="${path}" data-u="${unit || ''}"></span></div></div>`;
+    const tog = (path) => `<div class="anim-togs">${['x', 'y', 'z'].map(c => `<button type="button" class="anim-tog" data-tog="${path}" data-val="${c}">${c.toUpperCase()}</button>`).join('')}</div>`;
+    const axisRow = (g) => `<div class="anim-row"><span class="anim-l">Axis</span>${seg(g + '.axis', [['X', 'X'], ['Y', 'Y'], ['Z', 'Z']])}</div>`;
+    const bodyHtml = `
+      <div class="anim-sel" id="anim-sel"></div>
+      <div class="anim-types" role="tablist" aria-label="Kind of animation">${Object.entries(TYPES).map(([k, [label, icon]]) => `<button type="button" role="tab" data-type="${k}"><i data-lucide="${icon}"></i><span>${label}</span></button>`).join('')}</div>
+      <div class="anim-card">
+        <div class="anim-props" data-for="spin">${axisRow('spin')}
+          <div class="anim-row"><span class="anim-l">Direction</span>${seg('spin.dir', [['-1', 'Clockwise', 'rotate-cw'], ['1', 'Counter', 'rotate-ccw']])}</div>
+          ${rng('spin.rpm', 'Speed', 1, 600, 1, ' rpm')}</div>
+        <div class="anim-props" data-for="swing">${axisRow('swing')}
+          ${rng('swing.amp', 'Angle', 1, 180, 1, '°')}${rng('swing.period', 'Time', 0.2, 20, 0.1, ' s')}</div>
+        <div class="anim-props" data-for="noise">
+          <div class="anim-row"><span class="anim-l">Type</span><select class="mac-sel" data-p="noise.type" aria-label="Kind of noise"><option value="wave">Wave</option><option value="random">Smooth random</option><option value="steps">Steps</option></select></div>
+          <div class="anim-sub">Amplitude</div>
+          ${rng('noise.pos', 'Position', 0, 50, 1, '%')}<div class="anim-row"><span class="anim-l">Axes</span>${tog('noise.sx')}</div>
+          ${rng('noise.rot', 'Rotation', 0, 90, 1, '°')}<div class="anim-row"><span class="anim-l">Axes</span>${tog('noise.rx')}</div>
+          <div class="anim-sub">Character</div>
+          ${rng('noise.speed', 'Frequency', 0.1, 5, 0.1, '×')}${rng('noise.detail', 'Detail', 1, 4, 1, '')}${rng('noise.rough', 'Roughness', 0, 100, 1, '%')}
+          <div class="anim-row"><span class="anim-l">Seed</span><div class="anim-speed"><input type="range" data-p="noise.seed" min="1" max="99" step="1" value="${getP('noise.seed')}" aria-label="Seed"><span class="anim-v" data-v="noise.seed" data-u=""></span><button type="button" class="anim-dice" data-act="reseed" aria-label="New random seed" title="New random seed"><i data-lucide="dices"></i></button></div></div></div>
+        <div class="anim-props" data-for="path">
+          <div class="anim-row"><span class="anim-l">Shape</span><select class="mac-sel" data-p="path.shape" aria-label="Shape of the path"><option value="circle">Circle</option><option value="figure8">Figure of eight</option><option value="square">Rounded square</option><option value="wave">Wave</option><option value="line">Line</option></select></div>
+          <div class="anim-row"><span class="anim-l">Plane</span>${seg('path.plane', [['XY', 'XY'], ['XZ', 'XZ'], ['YZ', 'YZ']])}</div>
+          ${rng('path.size', 'Size', 5, 200, 1, '%')}${rng('path.period', 'Time', 0.5, 60, 0.5, ' s')}</div>
+      </div>
+      <div class="anim-card" data-for="spin path">
+        <div class="anim-row"><span class="anim-l">Loop</span>${seg('loop.mode', [['loop', 'Loop'], ['pingpong', 'Ping-pong'], ['once', 'Once']])}</div>
+        <div class="anim-tl">
+          <div class="anim-tl-track" id="anim-tl-track">
+            <div class="anim-tl-range"></div>
+            <div class="anim-tl-head" id="anim-tl-head" hidden></div>
+            <button type="button" class="anim-tl-h" data-h="from" role="slider" aria-label="Loop starts at" aria-valuemin="0" aria-valuemax="100"></button>
+            <button type="button" class="anim-tl-h" data-h="to" role="slider" aria-label="Loop ends at" aria-valuemin="0" aria-valuemax="100"></button>
+          </div>
+          <div class="anim-tl-lab"><span id="anim-tl-f">0%</span><span>Loop points</span><span id="anim-tl-t">100%</span></div>
+        </div>
+      </div>
+      <div class="anim-h">In the scene <span id="anim-count" class="anim-badge"></span></div>
+      <div class="anim-list" id="anim-list"></div>`;
+    const footHtml = `<button class="cq-btn cq-danger" id="anim-remove" type="button">Remove all</button><span class="cq-gap"></span><button class="cq-btn cq-primary" id="anim-add" type="button">Add</button>`;
+    const fresh = !localStorage.getItem('_dlg-pos:_anim-dialog');
+    popup = _DraggablePopup.create({ id: '_anim-dialog', title: 'Animate', subtitle: '', iconName: '', width: 360, height: 700, minWidth: 320, minHeight: 420, bodyHtml, footHtml, bodyScroll: true,
+      onClose: () => { clearInterval(poll); poll = 0; state._animMode = false; document.body.classList.remove('anim-mode'); updateTag(); try { updateGizmo(); } catch (_) {} } });
+    popup.foot.classList.add('anim-foot');
+    popup.titleEl.insertAdjacentHTML('afterend', '<span class="anim-alpha" title="Alpha: Animate is a very early feature. It can change, and it can have rough edges.">Alpha</span>');
+    // the playbar, always in view under the title bar
+    const bar = document.createElement('div');
+    bar.id = 'anim-pb'; bar.className = 'anim-pb is-off';
+    bar.innerHTML = `
+      <div class="anim-pb-tr">
+        <button type="button" class="anim-pb-b" id="anim-pb-rew" aria-label="Back to the start" title="Back to the start"><i data-lucide="skip-back"></i></button>
+        <button type="button" class="anim-pb-play" id="anim-pb-play" aria-label="Play"><i data-lucide="play"></i></button>
+      </div>
+      <div class="anim-pb-tc" title="Time"><span id="anim-pb-time">0:00.0</span></div>
+      <div class="anim-pb-scrub" id="anim-pb-scrub" role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100"><div class="anim-pb-track"><div class="anim-pb-fill"></div></div><div class="anim-pb-knob"></div></div>
+      <span class="anim-pb-len" id="anim-pb-len" title="Length of the cycle"></span>
+      <button type="button" class="anim-pb-rate" id="anim-pb-rate" aria-label="Playback speed">1×</button>`;
+    popup.el.querySelector('.dlg-head').after(bar);
+    bar.addEventListener('click', (e) => {
+      if (e.target.closest('#anim-pb-rew')) { rewind(); return; }
+      if (e.target.closest('#anim-pb-rate')) { const R = [0.25, 0.5, 1, 2, 4]; rate = R[(R.indexOf(rate) + 1) % R.length]; updatePlaybar(); return; }
+      if (e.target.closest('#anim-pb-play')) { if (paused) play(); else pause(); }
+    });
+    // the scrubber: dragging pauses and puts everything at that time of the cycle; letting go plays on if it was playing
+    const sc = bar.querySelector('#anim-pb-scrub');
+    let scrub = null;
+    const at = (e) => { const r = sc.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width))) * cycleLength(); };
+    sc.addEventListener('pointerdown', (e) => { if (!items.size) return; scrub = { was: !paused }; if (scrub.was) { paused = true; if (raf) { cancelAnimationFrame(raf); raf = 0; } updateTag(); } try { sc.setPointerCapture(e.pointerId); } catch (_) {} seekTo(at(e)); e.preventDefault(); });
+    sc.addEventListener('pointermove', (e) => { if (scrub) seekTo(at(e)); });
+    for (const t of ['pointerup', 'pointercancel']) sc.addEventListener(t, () => { if (!scrub) return; const was = scrub.was; scrub = null; if (was) play(); });
+    sc.addEventListener('keydown', (e) => {
+      if (!items.size) return;
+      const d = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+      if (!d) return;
+      e.preventDefault(); seekTo(Math.max(0, clock + d * (e.shiftKey ? 5 : 0.5)));
+    });
+    popup.el.addEventListener('keydown', (e) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.target.closest('input,select,textarea,button,[role="slider"],[contenteditable]')) return;
+      if (e.key === ' ' && items.size) { e.preventDefault(); if (paused) play(); else pause(); }
+      else if (e.key === 'Home' && items.size) { e.preventDefault(); rewind(); }
+    });
+    if (fresh) { popup.card.style.left = Math.max(8, window.innerWidth - 360 - 24) + 'px'; popup.card.style.top = '64px'; }
+    const body = popup.body;
+    body.addEventListener('click', (e) => {
+      const tg = e.target.closest('[data-tog]'), rs = e.target.closest('[data-act="reseed"]');
+      if (tg) { const cur = String(getP(tg.dataset.tog)), v = tg.dataset.val; setP(tg.dataset.tog, ['x', 'y', 'z'].filter(c => c === v ? !cur.includes(c) : cur.includes(c)).join('')); save(); retune(); sync(); return; }
+      if (rs) { cfg.noise.seed = 1 + Math.floor(Math.random() * 99); save(); retune(); sync(); return; }
+      const ty = e.target.closest('button[data-type]'), st = e.target.closest('[data-set]'), ly = e.target.closest('[data-layer]'), rl = e.target.closest('[data-rmlayer]'),
+        pk = e.target.closest('[data-pick]'), rk = e.target.closest('[data-rmkey]');
+      if (ty) { cfg.type = ty.dataset.type; save(); sync(); return; }
+      if (ly) { const rec = targets().map(t => items.get(t.key)).find(r => r && r.layers.some(l => l.type === ly.dataset.layer)); if (rec) load(rec.layers.find(l => l.type === ly.dataset.layer)); save(); sync(); return; }
+      if (rl) { remove(targets().map(t => t.key), rl.dataset.rmlayer); return; }
+      if (rk) { remove([rk.dataset.rmkey]); return; }
+      if (pk) { pick(pk.dataset.pick); return; }
+      if (st) { const v = st.dataset.val; setP(st.dataset.set, st.dataset.set === 'spin.dir' ? +v : v); save(); retune(); sync(); }
+    });
+    body.addEventListener('input', (e) => {
+      const el = e.target.closest('[data-p]'); if (!el) return;
+      const path = el.dataset.p, k = path.split('.')[1];
+      if (el.type === 'range' || el.type === 'number') { const v = clampKey(k, el.value); if (v == null) return; setP(path, v); }
+      else setP(path, el.value);
+      if (path === 'loop.from' && cfg.loop.from > cfg.loop.to) cfg.loop.to = cfg.loop.from;
+      if (path === 'loop.to' && cfg.loop.to < cfg.loop.from) cfg.loop.from = cfg.loop.to;
+      save(); retune(); sync();
+    });
+    // the loop points: two handles on the timeline
+    const tl = body.querySelector('#anim-tl-track');
+    let dragH = null;
+    const setPoint = (which, v) => {
+      v = Math.round(Math.max(0, Math.min(100, v)));
+      if (which === 'from') cfg.loop.from = Math.min(v, cfg.loop.to); else cfg.loop.to = Math.max(v, cfg.loop.from);
+      save(); retune(); sync();
+    };
+    tl.addEventListener('pointerdown', (e) => { const h = e.target.closest('.anim-tl-h'); if (!h) return; dragH = h.dataset.h; try { h.setPointerCapture(e.pointerId); } catch (_) {} h.focus(); e.preventDefault(); });
+    tl.addEventListener('pointermove', (e) => { if (!dragH) return; const r = tl.getBoundingClientRect(); setPoint(dragH, (e.clientX - r.left) / Math.max(1, r.width) * 100); });
+    for (const t of ['pointerup', 'pointercancel']) tl.addEventListener(t, () => { dragH = null; });
+    tl.addEventListener('keydown', (e) => {
+      const h = e.target.closest('.anim-tl-h'); if (!h) return;
+      const d = e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -1 : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? 1 : 0;
+      if (!d) return;
+      e.preventDefault(); setPoint(h.dataset.h, cfg.loop[h.dataset.h] + d * (e.shiftKey ? 10 : 1));
+    });
+    popup.el.querySelector('#anim-add').addEventListener('click', () => addLayer());
+    popup.el.querySelector('#anim-remove').addEventListener('click', () => remove());
+    return popup;
+  }
+  function open() {
+    const p = build();
+    sig = ''; listSig = '';
+    try { _Elements.api.mode('model'); } catch (_) {}      // (Edit mesh goes off while the window is open, and its buttons are hidden: .anim-mode)
+    state._animMode = true; document.body.classList.add('anim-mode'); updateTag(); try { updateGizmo(); } catch (_) {}      // no gizmo while the window is open
+    p.show(); follow(); sync(true);      // (follow brings the window up to date when the selection is not the one it knew)
+    try { _lucide(); } catch (_) {}
+    if (!poll) poll = setInterval(() => { if (!popup || !popup.el.classList.contains('show')) { clearInterval(poll); poll = 0; return; } follow(); }, 200);
+  }
+  // ---- for Claude (the animate_parts tool): which parts or groups move in the video, and how ----
+  const num = (v, k, d) => { const x = clampKey(k, v); return x == null ? d : x; };
+  const pickEnum = (v, list, d) => { const x = String(v == null ? '' : v).toLowerCase(); return list.find(e => e.toLowerCase() === x) || d; };
+  function fromArgs(a) {
+    const type = pickEnum(a.type, Object.keys(TYPES), 'spin');
+    const D = DEFAULTS, p = { ...D[type] };
+    if (type === 'spin' || type === 'swing') p.axis = pickEnum(a.axis, ['X', 'Y', 'Z'], D[type].axis).toUpperCase();
+    if (type === 'spin') { p.dir = /^(counter|ccw|anti)/i.test(String(a.direction || '')) ? 1 : /^(clock|cw)/i.test(String(a.direction || '')) ? -1 : D.spin.dir; p.rpm = num(a.rpm, 'rpm', D.spin.rpm); }
+    if (type === 'swing') { p.amp = num(a.angle_degrees, 'amp', D.swing.amp); p.period = num(a.seconds, 'period', D.swing.period); }
+    if (type === 'noise') {
+      p.type = pickEnum(a.noise_type, ['wave', 'random', 'steps'], D.noise.type);
+      p.pos = num(a.shift_percent, 'pos', D.noise.pos); p.rot = num(a.turn_degrees, 'rot', D.noise.rot); p.speed = num(a.speed, 'speed', D.noise.speed);
+      p.seed = Math.round(num(a.seed, 'seed', D.noise.seed)); p.detail = Math.round(num(a.detail, 'detail', D.noise.detail)); p.rough = num(a.roughness_percent, 'rough', D.noise.rough);
+      const axes = (v, d) => v == null ? d : ['x', 'y', 'z'].filter(c => String(v).toLowerCase().includes(c)).join('');
+      p.sx = axes(a.shift_axes, D.noise.sx); p.rx = axes(a.turn_axes, D.noise.rx);
+    }
+    if (type === 'path') { p.shape = pickEnum(a.shape, Object.keys(SHAPES), D.path.shape); p.plane = pickEnum(a.plane, ['XY', 'XZ', 'YZ'], D.path.plane).toUpperCase(); p.size = num(a.size_percent, 'size', D.path.size); p.period = num(a.seconds, 'period', D.path.period); }
+    const L = { ...D.loop };
+    L.mode = pickEnum(a.loop_mode, ['loop', 'pingpong', 'once'], L.mode);
+    L.repeat = Math.round(num(a.repeats, 'repeat', L.repeat)); L.delay = num(a.delay_seconds, 'delay', L.delay);
+    L.from = num(a.loop_from_percent, 'from', L.from); L.to = num(a.loop_to_percent, 'to', L.to);
+    return { type, p, loop: L };
+  }
+  // The parts (by id) and groups (by a piece of the name) a call means.
+  function namedTargets(ids, groupNames) {
+    const out = [];
+    for (const id of ids || []) { const p = exists(id); if (p) out.push({ key: 'p:' + p.partId, kind: 'part', partId: p.partId, p, label: p.name || ('Part ' + p.partId) }); }
+    for (const q of (groupNames || []).map(x => String(x).trim().toLowerCase()).filter(Boolean)) {
+      for (const n of (state.treeNodes || [])) if (n.kind === 'group' && String(n.name || '').toLowerCase().includes(q)) { const g = groupInfo(String(n.id)); if (g && !out.some(o => o.key === g.key)) out.push(g); }
+      for (const ug of (state.userGroups || [])) if (ug && ug.ref && String(ug.name || '').toLowerCase().includes(q)) { const g = groupInfo(String(ug.id)); if (g && !out.some(o => o.key === g.key)) out.push(g); }
+    }
+    return out;
+  }
+  const api = {
+    add(args) {
+      const ts = namedTargets(args.ids, args.groups);
+      if (!ts.length) throw new Error('Nothing to animate: give ids or groups that exist.');
+      const { type, p, loop: L } = fromArgs(args);
+      const r = addTo(ts, type, p, L);
+      return { animated: r.n, locked: r.locked, type, settings: p, loop: ['spin', 'path'].includes(type) ? L : undefined };
+    },
+    remove(args) {
+      const ts = namedTargets(args.ids, args.groups);
+      const keys = ts.map(t => t.key).filter(k => items.has(k));
+      const type = args.type && TYPES[String(args.type).toLowerCase()] ? String(args.type).toLowerCase() : undefined;
+      remove(keys, type);
+      return { removed_from: keys.length };
+    },
+    clear() { const n = items.size; remove([...items.keys()]); return { removed_from: n }; },
+    stats() { return { animated: items.size, parts_moved_per_frame: stats.parts, ms_per_frame: Math.round(stats.ms * 100) / 100, playing: items.size > 0 && !paused, speed: rate }; },
+    list() {
+      return [...items.values()].map(r => ({
+        kind: r.kind === 'group' ? 'group' : 'part', name: r.label, id: r.kind === 'part' ? r.partId : undefined, parts: r.kind === 'group' ? r.members.length : undefined,
+        layers: r.layers.map(l => ({ type: l.type, ...l.p, ...(['spin', 'path'].includes(l.type) ? { loop: l.loop } : {}), summary: summary(l) })),
+      }));
+    },
+  };
+  window.__moAnimStats = () => api.stats();      // (tests/e2e-animate.mjs)
+  return { open, suspend, resume, reset, run, remove, hold, seek, pause, play, exit, rewind, refresh, api, count: () => items.size, isPlaying: () => items.size > 0 && !paused };
+})();
 
 // ============== LOOSE-PARTS SPLITTER ==============
 //
@@ -41716,7 +42800,9 @@ function applyExplode() {
   // Set so we don't mark the same buffer dirty N times.
   const dirtyInstanced = new Set();
   for (const p of state.parts) {
-    if (p.deleted || !p._partCenter) continue;
+    // (a deleted part keeps moving with the view, so undoing the delete brings it back where the view has it; a deleted instance stays
+    // scaled to nothing, its matrix is put right when the delete is undone)
+    if ((p.deleted && !p.mesh) || !p._partCenter) continue;
     if (state.explodeMode === 'part') {
       if (!p._partAxis) p._partAxis = _computePartAxis(p);
       const dir = p._partAxis;
@@ -41798,6 +42884,7 @@ function applyExplode() {
   updateGizmo();      // (it leaves the gizmo off while exploded)
   try { _syncExplodePill(); } catch (_) {}
   try { state._explodePaint?.(); } catch (_) {}
+  try { _Anim.refresh(); } catch (_) {}      // (the animated parts keep their animation, with the new offsets)
   requestRender();
 }
 
@@ -41815,7 +42902,7 @@ function resetExplode() {
   const parentInv = new THREE.Matrix4();
   const worldTarget = new THREE.Vector3();
   for (const p of state.parts) {
-    if (p.deleted) continue;
+    if (p.deleted && !p.mesh) continue;      // (a deleted mesh goes back with the rest: see applyExplode)
     if (p.mesh && p._origWorldPos) {
       worldTarget.copy(p._origWorldPos);
       const parent = p.mesh.parent;
@@ -41862,6 +42949,7 @@ function resetExplode() {
   // Re-pivot gizmo at the new (rest) centroid if it was on before.
   updateGizmo();      // (and gives it back to what is selected)
   try { _syncExplodePill(); } catch (_) {}
+  try { _Anim.refresh(); } catch (_) {}
   requestRender();
 }
 
@@ -42089,7 +43177,7 @@ function _wireExplode() {
 
 // Frame the camera onto the bbox of the current selection.
 // Falls back to fitToView() when nothing is selected. `only`: one part id to frame instead of the selection.
-function frameSelected(only) {
+function frameSelected(only, margin) {
   const lineBox = typeof only !== 'number' && !(state.selected && state.selected.size) ? _selectedSplineBox() : null;     // a selected line, when no part is
   if (!state.parts.length && !lineBox) return;
   const ids = typeof only === 'number' ? [only] : state.selected;     // (menus pass it as a callback: anything but a part id is ignored)
@@ -42113,7 +43201,7 @@ function frameSelected(only) {
   // Far enough that the whole box is in the picture and no further: each of its eight corners, seen from the way the camera
   // looks now, has to fit the view's height and width (with a small margin all round). A long thin part seen side-on fills
   // the width, a small part in a big assembly fills the view, and nothing is framed from the size of its longest side alone.
-  const MARGIN = 1.12;
+  const MARGIN = typeof margin === 'number' && margin >= 1 ? margin : 1.12;      // (a looser one for when the part should be seen among the rest)
   const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
   if (dir.lengthSq() < 1e-6) dir.set(0.7, -0.9, 0.5);
   dir.normalize();
@@ -42427,11 +43515,15 @@ if (typeof document !== 'undefined') {
       if (state.selected.size > 0) {
         items.push({ icon: 'crosshair',       label: `Frame selected (${state.selected.size})`, fn: frameSelected });
         items.push({ icon: 'locate',  label: 'Reveal in tree',     kbd: 'Shift+S', fn: revealSelectedInTree });
+        items.push({ icon: 'play', label: 'Animate…', fn: () => _Anim.open() });
         items.push(state._isolated
           ? { icon: 'eye',   label: 'Show all parts',     kbd: 'Alt+H', fn: showAllParts }
           : { icon: 'focus', label: 'Isolate selected',   fn: isolateSelected });
         items.push('---');
         items.push({ icon: 'shapes',          label: 'Select similar shape', fn: selectSimilar });
+        items.push({ icon: 'copy-check',      label: 'Select all instances', fn: selectInstances });
+        items.push({ icon: 'crown',           label: 'Select the original',  fn: selectInstanceOriginal });
+        items.push({ icon: 'unlink',          label: 'Make unique',          fn: () => makeUnique() });
         items.push({ icon: 'palette',         label: 'Select same colour',  fn: selectByColor });
         items.push('---');
         items.push({ icon: 'copy',            label: 'Copy',               kbd: 'Ctrl+C', fn: () => copyParts([...state.selected]) });
@@ -43428,7 +44520,7 @@ rebuildTree = function() {
     const eye = p.visible
       ? `<i data-lucide="eye"></i>`
       : `<i data-lucide="eye-off"></i>`;
-    const inst = _instBadge(p.group ? p.group.parts.length : 0);
+    const inst = _instBadge(_liveShareCount(p));
     const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10)">🔒</span>` : '';
     const triFrac = Math.log10(p.triCount + 1) / logMax;
     const barHue = 240 - triFrac * 240;
@@ -43620,7 +44712,17 @@ function _wireDeadTreeControls() {
   // thing itself: they press the button from code, and that press (not a real click) goes through to what the button always did.
   let _toolMenuFrom = null;
   for (const [id, open] of [['tree-collapse-toggle', () => _openTreeFoldMenu($('tree-collapse-toggle'))], ['tree-flatten', () => _openFlattenMenu($('tree-flatten'))], ['tree-batch-rename', () => _openBatchRenameMenu($('tree-batch-rename'))]]) {
-    const show = () => { _toolMenuFrom = id; open(); };
+    const show = () => {
+      const m0 = $('ctx-menu'), wasShown = !!m0 && m0.style.display === 'block';
+      _toolMenuFrom = id; open();
+      document.querySelectorAll('.tree-toolbar .tree-icon-btn.is-open').forEach(b => b.classList.remove('is-open'));
+      $(id)?.classList.add('is-open');                                  // (the button stays lit while its menu is open)
+      const m = $('ctx-menu');
+      if (m && m.style.display === 'block' && !wasShown && m.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        m.style.transformOrigin = '0 0';
+        try { m.getAnimations().forEach(a => a.cancel()); m.animate([{ opacity: 0, transform: 'translateY(-6px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 160, easing: 'cubic-bezier(.2,.9,.3,1)' }); } catch (_) {}
+      }
+    };
     // a second press on the button whose menu is open closes it (the press itself closes the menu before the click, so it is noted on the press)
     let wasOpen = false;
     $(id)?.addEventListener('pointerdown', () => { const m = $('ctx-menu'); wasOpen = _toolMenuFrom === id && !!m && m.style.display === 'block'; }, true);
@@ -43655,6 +44757,17 @@ function _depthFromPartsRoot(obj) {
 // What to dissolve is decided from the tree (_flattenPlanFromTree); flattenTree
 // then mirrors each decision in the scene graph.
 
+// The groups selected in the tree now, and their names (Advanced flatten reads it when it opens and again whenever the selection changes).
+function _flatSelInfo() {
+  const selectedIds = state.selectedGroupIds ? Array.from(state.selectedGroupIds) : [];
+  const selectedNames = selectedIds.map(gid => {
+    const node = (state.treeNodes || []).find(n => n.kind === 'group' && n.id === gid);
+    if (node) return node.name || ('Group ' + gid);
+    const ug = (state.userGroups || []).find(g => g.id === gid);
+    return ug ? (ug.name || ('Group ' + gid)) : ('Group ' + gid);
+  });
+  return { selectedIds, selectedNames };
+}
 const _FlattenDialog = (() => {
   let bg;
   const STATE = { resolve: null };
@@ -43669,6 +44782,31 @@ const _FlattenDialog = (() => {
     if (f) f(result);
   }
 
+  // A small drawing for each option: a few rows of a tree (a bar is a group, a short line a part, a dashed outline a group that is dissolved),
+  // before and after. [depth, kind, dim?] per row; the arrow is the hand-drawn kind.
+  const _ILL = {
+    all:    { one: [[0,'g'],[1,'g'],[2,'p'],[2,'p'],[1,'g'],[2,'p'],[1,'p']] },
+    sel:    { one: [[0,'g','dim'],[1,'g'],[2,'p'],[2,'p'],[1,'g','dim'],[2,'p','dim'],[1,'p','dim']] },
+    total:  { b: [[0,'g'],[1,'x'],[2,'p'],[2,'x'],[3,'p'],[1,'x'],[2,'p']], a: [[0,'g'],[1,'p'],[1,'p'],[1,'p']] },
+    keep:   { b: [[0,'g'],[1,'g'],[2,'x'],[3,'p'],[3,'p'],[1,'g'],[2,'p']], a: [[0,'g'],[1,'g'],[2,'p'],[2,'p'],[1,'g'],[2,'p']] },
+    last:   { b: [[0,'g'],[1,'x'],[2,'p'],[2,'p'],[1,'g'],[2,'x'],[3,'p']], a: [[0,'g'],[1,'p'],[1,'p'],[1,'g'],[2,'p']] },
+    chains: { b: [[0,'x'],[1,'x'],[2,'x'],[3,'p'],[0,'g'],[1,'p'],[1,'p']], a: [[0,'p'],[0,'g'],[1,'p'],[1,'p']] },
+    ungroup:{ b: [[0,'x'],[1,'p'],[1,'p'],[1,'g'],[2,'p']], a: [[0,'p'],[0,'p'],[0,'g'],[1,'p']] },
+  };
+  function _flatIll(kind) {
+    const RH = 9, IND = 7, TW = 46, GAP = 30, spec = _ILL[kind];
+    const tree = (rows, x0) => rows.map(([d, t, dim], i) => {
+      const x = x0 + 2 + d * IND, y = 4 + i * RH, c = dim ? ' dim' : '';
+      return t === 'p' ? '<rect class="p' + c + '" x="' + (x + 1) + '" y="' + (y + 2) + '" width="13" height="3.2" rx="1.6"/>'
+        : '<rect class="' + t + c + '" x="' + x + '" y="' + (y + 0.5) + '" width="22" height="6" rx="2"/>';
+    }).join('');
+    if (spec.one) { const H = spec.one.length * RH + 8, W = TW + 8; return '<svg class="flat-svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' + tree(spec.one, 4) + '</svg>'; }
+    const H = Math.max(spec.b.length, spec.a.length) * RH + 8, W = TW * 2 + GAP + 8, ay = H / 2;
+    return '<svg class="flat-svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" aria-hidden="true">' + tree(spec.b, 2)
+      + '<path class="arr" d="M' + (TW + 7) + ' ' + (ay + 1) + 'c5 -2 9 1.5 14 -.5s5 -1 7 .2M' + (TW + 24.5) + ' ' + (ay - 3.5) + 'l4.5 3.8l-4.8 3.4"/>'
+      + tree(spec.a, TW + GAP + 2) + '</svg>';
+  }
+
   function _ensure() {
     if (bg) return;
 
@@ -43677,11 +44815,13 @@ const _FlattenDialog = (() => {
         <div class="flat-section-title">Scope</div>
         <div class="flat-opts" id="_flat-scope">
           <label class="flat-opt"><input type="radio" name="flat-scope" value="all" checked>
+            <span class="flat-ill">${_flatIll('all')}</span>
             <div class="flat-opt-text">
               <div class="flat-opt-label">Whole tree</div>
-              <div class="flat-opt-help">Operate on every container under the model root.</div>
+              <div class="flat-opt-help">Every group in the model.</div>
             </div></label>
           <label class="flat-opt"><input type="radio" name="flat-scope" value="selected">
+            <span class="flat-ill">${_flatIll('sel')}</span>
             <div class="flat-opt-text">
               <div class="flat-opt-label">Selected groups only</div>
               <div class="flat-opt-help" id="_flat-sel-help">Apply only inside the groups currently selected in the tree.</div>
@@ -43691,32 +44831,38 @@ const _FlattenDialog = (() => {
 
       <div class="flat-section">
         <div class="flat-section-title">Action</div>
+        <div class="flat-legend"><span><i class="flat-key g"></i>group</span><span><i class="flat-key p"></i>part</span><span><i class="flat-key x"></i>group that is dissolved</span></div>
         <div class="flat-opts" id="_flat-mode">
           <label class="flat-opt active"><input type="radio" name="flat-mode" value="total" checked>
+            <span class="flat-ill">${_flatIll('total')}</span>
             <div class="flat-opt-text">
               <div class="flat-opt-label">Total flatten</div>
-              <div class="flat-opt-help">Dissolve every group inside the scope. All parts become direct children of the scope root.</div>
+              <div class="flat-opt-help">Dissolve every group. All parts end up directly under the top.</div>
             </div></label>
           <label class="flat-opt"><input type="radio" name="flat-mode" value="keep">
+            <span class="flat-ill">${_flatIll('keep')}</span>
             <div class="flat-opt-text">
               <div class="flat-opt-label">Keep top N levels</div>
-              <div class="flat-opt-help">Keep N nesting levels from the scope root, dissolve everything deeper.</div>
+              <div class="flat-opt-help">Keep the first N levels of groups and dissolve everything deeper.</div>
               <div class="flat-row"><label>Levels to keep</label><input type="number" id="_flat-keep" value="1" min="1" max="32" step="1"></div>
             </div></label>
           <label class="flat-opt"><input type="radio" name="flat-mode" value="last">
+            <span class="flat-ill">${_flatIll('last')}</span>
             <div class="flat-opt-text">
               <div class="flat-opt-label">Flatten last level only</div>
-              <div class="flat-opt-help">Only dissolve the deepest groups (the ones whose children are all parts). Keeps the upper assembly hierarchy intact.</div>
+              <div class="flat-opt-help">Dissolve only the innermost groups, the ones that hold nothing but parts. The structure above stays.</div>
             </div></label>
           <label class="flat-opt"><input type="radio" name="flat-mode" value="chains">
+            <span class="flat-ill">${_flatIll('chains')}</span>
             <div class="flat-opt-text">
               <div class="flat-opt-label">Collapse single-child chains</div>
-              <div class="flat-opt-help">Removes pass-through wrappers like <code>a / b / c / leaf</code> → <code>leaf</code>. Common cleanup for STEP files with redundant assembly nesting.</div>
+              <div class="flat-opt-help">Remove wrapper groups that hold a single item: <code>a / b / c / leaf</code> → <code>leaf</code>. A common clean-up for STEP files.</div>
             </div></label>
           <label class="flat-opt"><input type="radio" name="flat-mode" value="ungroup">
+            <span class="flat-ill">${_flatIll('ungroup')}</span>
             <div class="flat-opt-text">
               <div class="flat-opt-label">Ungroup (dissolve scope itself)</div>
-              <div class="flat-opt-help">Remove the scope group(s), promoting their children one level up. No-op when scope is whole tree.</div>
+              <div class="flat-opt-help">Remove the selected group itself; what it held moves up one level. Does nothing for the whole tree.</div>
             </div></label>
         </div>
       </div>
@@ -43743,7 +44889,7 @@ const _FlattenDialog = (() => {
     const popup = _DraggablePopup.create({
       id: '_flat-dialog',
       title: 'Advanced flatten',
-      subtitle: 'Reduce hierarchy depth · Ctrl+Z reverts',
+      subtitle: '',
       iconName: 'layers',
       width: 580, height: 720,
       minWidth: 460, minHeight: 480,
@@ -43781,6 +44927,26 @@ const _FlattenDialog = (() => {
     syncActive();
   }
 
+  // Show the Selected groups option for the groups selected now. `choose`: pick it when it is newly possible.
+  function _applyScope({ selectedGroupCount: n = 0, selectedNames = [] }, choose) {
+    const help = bg.querySelector('#_flat-sel-help');
+    const selOpt = bg.querySelector('input[name="flat-scope"][value="selected"]');
+    const allOpt = bg.querySelector('input[name="flat-scope"][value="all"]');
+    const card = selOpt.closest('.flat-opt');
+    if (n > 0) {
+      const preview = selectedNames.slice(0, 3).map(x => `“${escapeHtml(x)}”`).join(', ');
+      const more = selectedNames.length > 3 ? ` + ${selectedNames.length - 3} more` : '';
+      help.innerHTML = `Apply only inside <strong>${n}</strong> selected group${n === 1 ? '' : 's'}: ${preview}${more}.`;
+      selOpt.disabled = false; card.style.opacity = '1';
+      if (choose) { selOpt.checked = true; allOpt.checked = false; }
+    } else {
+      help.textContent = 'Click a group row in the tree (or shift-click multiple) to enable scoping.';
+      selOpt.disabled = true; card.style.opacity = '.5';
+      allOpt.checked = true; selOpt.checked = false;
+    }
+    bg.querySelectorAll('input[name="flat-scope"]').forEach(r => r.dispatchEvent(new Event('change', { bubbles: true })));
+  }
+
   function _collect() {
     const mode = bg.querySelector('input[name="flat-mode"]:checked')?.value || 'total';
     const scope = bg.querySelector('input[name="flat-scope"]:checked')?.value || 'all';
@@ -43794,6 +44960,14 @@ const _FlattenDialog = (() => {
   }
 
   return {
+    // The Selected groups option follows the selection: with the window open, click a group in the tree and it is there (and chosen); clear
+    // the selection and it is greyed out again. A choice the person made by hand is kept while it stays possible.
+    syncSelection(info) {
+      if (!bg || !bg.classList.contains('show')) return;
+      const selOpt = bg.querySelector('input[name="flat-scope"][value="selected"]');
+      if (!selOpt) return;
+      _applyScope(info, selOpt.disabled);
+    },
     async open({ selectedGroupCount = 0, currentMaxDepth = 0, selectedNames = [], onlyUserGroups = false } = {}) {
       _ensure();
       // "Preserve user groups" protects groups you made from a flatten of an
@@ -43801,22 +44975,7 @@ const _FlattenDialog = (() => {
       // leaving it on would make every mode do nothing.
       const preserveBox = bg.querySelector('#_flat-preserve-ug');
       if (preserveBox) preserveBox.checked = !onlyUserGroups;
-      const help = bg.querySelector('#_flat-sel-help');
-      const selOpt = bg.querySelector('input[name="flat-scope"][value="selected"]');
-      if (selectedGroupCount > 0) {
-        const preview = selectedNames.slice(0, 3).map(n => `“${escapeHtml(n)}”`).join(', ');
-        const more = selectedNames.length > 3 ? ` + ${selectedNames.length - 3} more` : '';
-        help.innerHTML = `Apply only inside <strong>${selectedGroupCount}</strong> selected group${selectedGroupCount === 1 ? '' : 's'}: ${preview}${more}.`;
-        selOpt.disabled = false;
-        selOpt.closest('.flat-opt').style.opacity = '1';
-        selOpt.checked = true;
-        bg.querySelector('input[name="flat-scope"][value="all"]').checked = false;
-      } else {
-        help.textContent = 'Click a group row in the tree (or shift-click multiple) to enable scoping.';
-        selOpt.disabled = true;
-        selOpt.closest('.flat-opt').style.opacity = '.5';
-        bg.querySelector('input[name="flat-scope"][value="all"]').checked = true;
-      }
+      _applyScope({ selectedGroupCount, selectedNames }, true);
       bg.querySelector('#_flat-info').textContent =
         `Tree nests ${currentMaxDepth} level${currentMaxDepth === 1 ? '' : 's'} deep. Ctrl+Z undoes any flatten.`;
       bg.querySelectorAll('input[name="flat-mode"]').forEach((r, i) => { r.checked = i === 0; });
@@ -44065,13 +45224,7 @@ async function flattenTree(preset) {
     if (_treeGroupObjsFT.has(o) && !_isUserGroupObj(o)) onlyUserGroups = false;
   });
 
-  const selectedIds = state.selectedGroupIds ? Array.from(state.selectedGroupIds) : [];
-  const selectedNames = selectedIds.map(gid => {
-    const node = (state.treeNodes || []).find(n => n.kind === 'group' && n.id === gid);
-    if (node) return node.name || ('Group ' + gid);
-    const ug = (state.userGroups || []).find(g => g.id === gid);
-    return ug ? (ug.name || ('Group ' + gid)) : ('Group ' + gid);
-  });
+  const { selectedIds, selectedNames } = _flatSelInfo();
   const opts = preset || await _FlattenDialog.open({
     selectedGroupCount: selectedIds.length,
     currentMaxDepth,
@@ -44987,32 +46140,42 @@ const _DraggablePopup = (() => {
     }
     xBtn.addEventListener('click', _hide);
 
-    // Drag from header (excluding close button).
-    let drag = null;
-    head.addEventListener('mousedown', e => {
-      if (e.target.closest('.dlg-x')) return;
+    // Drag from the header. The window moves by a transform (the compositor shifts one layer; nothing is laid out or repainted while
+    // the pointer moves, however long the list inside is) and is written to left / top once, on release. Pointer capture keeps the
+    // drag with the header even when the pointer is quicker than the window; updates are once per frame.
+    let drag = null, dragRaf = 0;
+    const dragEnd = () => {
+      if (!drag) return;
+      const d = drag; drag = null;
+      if (dragRaf) { cancelAnimationFrame(dragRaf); dragRaf = 0; }
+      card.style.left = (d.l + d.dx) + 'px';
+      card.style.top  = (d.t + d.dy) + 'px';
+      card.style.transform = '';                      // (transitions are still off here: the window's own spring would otherwise play from the dragged offset back to rest, and overshoot)
+      void card.offsetWidth;                          // (the new place is settled before the transition is given back)
+      card.style.transition = ''; card.style.willChange = ''; head.style.cursor = '';
+      try { head.releasePointerCapture(d.id); } catch (_) {}
+      _saveState(persistKey, card);
+    };
+    head.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || e.target.closest('.dlg-x') || drag) return;
       const r = card.getBoundingClientRect();
-      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
-      el.classList.add('dragging');
+      drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, l: card.offsetLeft, t: card.offsetTop, w: card.offsetWidth, h: card.offsetHeight, dx: 0, dy: 0 };
+      try { head.setPointerCapture(e.pointerId); } catch (_) {}
+      card.style.transition = 'none'; card.style.willChange = 'transform'; head.style.cursor = 'grabbing';      // (inline, on the card alone: no class on the root to restyle everything inside)
       e.preventDefault();
     });
-    window.addEventListener('mousemove', e => {
-      if (!drag) return;
+    head.addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
       const margin = 4;
-      const w = card.offsetWidth, h = card.offsetHeight;
-      let left = e.clientX - drag.dx;
-      let top  = e.clientY - drag.dy;
-      left = Math.max(margin, Math.min(left, window.innerWidth  - w - margin));
-      top  = Math.max(margin, Math.min(top,  window.innerHeight - h - margin));
-      card.style.left = left + 'px';
-      card.style.top  = top  + 'px';
+      const nl = Math.max(margin, Math.min(drag.l + (e.clientX - drag.sx), window.innerWidth  - drag.w - margin));
+      const nt = Math.max(margin, Math.min(drag.t + (e.clientY - drag.sy), window.innerHeight - drag.h - margin));
+      drag.dx = nl - drag.l; drag.dy = nt - drag.t;
+      if (!dragRaf) dragRaf = requestAnimationFrame(() => { dragRaf = 0; if (drag) card.style.transform = 'translate3d(' + drag.dx + 'px,' + drag.dy + 'px,0)'; });
     });
-    window.addEventListener('mouseup', () => {
-      if (!drag) return;
-      drag = null;
-      el.classList.remove('dragging');
-      _saveState(persistKey, card);
-    });
+    head.addEventListener('pointerup', dragEnd);
+    head.addEventListener('pointercancel', dragEnd);
+    head.addEventListener('lostpointercapture', dragEnd);
+    window.addEventListener('blur', dragEnd);
 
     // Resize via 8 handles.
     let rsz = null;
@@ -45029,8 +46192,14 @@ const _DraggablePopup = (() => {
         el.classList.add('resizing');
       });
     });
+    let rszRaf = 0, rszEv = null;
     window.addEventListener('mousemove', e => {
       if (!rsz) return;
+      rszEv = e;
+      if (rszRaf) return;
+      rszRaf = requestAnimationFrame(() => { rszRaf = 0; if (rsz && rszEv) _resizeTo(rszEv); });
+    });
+    const _resizeTo = (e) => {
       const dx = e.clientX - rsz.startX;
       const dy = e.clientY - rsz.startY;
       const margin = 4;
@@ -45051,9 +46220,10 @@ const _DraggablePopup = (() => {
       card.style.top    = T + 'px';
       card.style.width  = W + 'px';
       card.style.height = H + 'px';
-    });
+    };
     window.addEventListener('mouseup', () => {
       if (!rsz) return;
+      if (rszRaf) { cancelAnimationFrame(rszRaf); rszRaf = 0; if (rszEv) _resizeTo(rszEv); }
       rsz = null;
       el.classList.remove('resizing');
       _saveState(persistKey, card);
@@ -45478,7 +46648,10 @@ const _BatchRenameDialog = (() => {
       return escapeHtml(b.slice(0, i)) + (mid ? `<mark>${escapeHtml(mid)}</mark>` : '') + escapeHtml(b.slice(b.length - j));
     };
     const onlyChanged = !!E('_brn-changed')?.checked;
-    const shown = onlyChanged ? rows.filter(r => r.status !== 'unchanged' && r.status !== 'skipped') : rows;
+    const all = onlyChanged ? rows.filter(r => r.status !== 'unchanged' && r.status !== 'skipped') : rows;
+    // Only the first rows are drawn: a few hundred show what the rule does, and a table of thousands is what made the window heavy to move
+    // and to type in. The summary and Apply still count every row, and every one of them is renamed.
+    const LIMIT = 300, shown = all.length > LIMIT ? all.slice(0, LIMIT) : all;
     const html = shown.map(r => {
       const k = r.cand.kind === 'part' ? 'PART' : r.cand.kind === 'hier-group' ? 'GROUP' : 'UGRP';
       const reason = r.reason ? `<td class="reason">${escapeHtml(r.reason)}</td>` : '<td class="reason"></td>';
@@ -45490,7 +46663,7 @@ const _BatchRenameDialog = (() => {
         <td class="new">${changed ? marked(r.oldName, r.newName) : escapeHtml(r.newName)}</td>
         ${reason}
       </tr>`;
-    }).join('');
+    }).join('') + (all.length > LIMIT ? `<tr><td colspan="5" class="brn-empty">${(all.length - LIMIT).toLocaleString()} more row${all.length - LIMIT === 1 ? '' : 's'} not drawn here. They are renamed by the same rule.</td></tr>` : '');
     tbl.innerHTML = html || (rows.length
       ? `<tr><td colspan="5" class="brn-empty">Nothing changes yet.<br>Make a rule on the left and the new names show here.</td></tr>`
       : `<tr><td colspan="5" class="brn-empty">Nothing to rename in this scope.<br>Pick parts or groups in the tree, or change the scope on the left.</td></tr>`);
@@ -53603,6 +54776,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   };
   $id('welcome-shortcuts')?.addEventListener('click', () => aside('shortcuts-modal', () => run('shortcuts')));
   $id('welcome-help')?.addEventListener('click', () => aside('help-modal', () => run('help')));
+  $id('welcome-claude')?.addEventListener('click', () => { try { $id('welcome-close')?.click(); window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} });
   $id('welcome-settings')?.addEventListener('click', () => aside('settings-modal', () => _Settings.show('general')));
 
   // Start from a shape: an empty scene with one primitive in it.
@@ -53682,21 +54856,31 @@ setTimeout(() => _dndDecorateTree(), 0);
     // an edit (a colour from the picker, a slider) is not in the history yet, and Undo would go past it to an older action.
     // The pending edit is recorded first, and then it is what is undone.
     try { const st = (typeof _matEditorState !== 'undefined') ? _matEditorState : null; if (st && st.flush) st.flush(true); } catch (_) {}
+    _explodeSettle();
     for (let guard = 0; guard < 24; guard++) {
       const top = state.history[state.history.length - 1];
       _undoOne.apply(this, arguments);
       if (!(top && top.auto)) break;
     }
+    _explodeRestMoved();
   };
   redoLast = function () {
     if (_Tasks.busy()) { try { toast('Redo', 'Wait until the running step has finished', 'info', 2000); } catch (_) {} return; }
+    _explodeSettle();
     _redoOne.apply(this, arguments);
     for (let guard = 0; guard < 24; guard++) {
       const nxt = state.redo && state.redo[state.redo.length - 1];
       if (!(nxt && nxt.auto)) break;
       _redoOne.apply(this, arguments);
     }
+    _explodeRestMoved();
   };
+  // An exploded view is a view, not a step in the history: undo and redo write parts back to where they were at rest, so the view is
+  // put back together first (parts, sliders and pill), and the rest positions are measured again afterwards.
+  function _explodeSettle() {
+    try { const ex = state.explode; if (ex && (ex.x || ex.y || ex.z)) resetExplode(); } catch (e) { console.warn('[undo] could not put the exploded view back:', e); }
+  }
+  function _explodeRestMoved() { try { invalidateExplodeBaseline(); } catch (_) {} }
 }
 
 // Regression suite: open the app with ?selftest (see tests/selftest.js).
@@ -53717,7 +54901,16 @@ if (new URLSearchParams(location.search).has('selftest')) {
     let from = null, want = '', raf = 0;
     // The size is a variable on the root, so setting it restyles the whole
     // page: once per frame is enough, however many pointer moves arrive.
-    const apply = () => { raf = 0; if (want) root.style.setProperty(prop, want); };
+    // A dock's height is read by the dock and by the controls over the view (inside #viewport). Written on the root it was inherited
+    // by every element of the app, the tree and the sidebars included, on each frame. While dragging it is written on #viewport and as
+    // the dock's own height instead, and goes to the root once, on release. (Widths of the side panels are not heights: unchanged.)
+    const dockEl = vertical ? el.parentElement : null, vp = vertical ? document.getElementById('viewport') : null;
+    const scoped = !!(dockEl && vp);
+    const apply = () => {
+      raf = 0; if (!want) return;
+      if (scoped) { dockEl.style.height = 'min(' + want + ', 80vh)'; vp.style.setProperty(prop, want); }
+      else root.style.setProperty(prop, want);
+    };
     el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;
       from = { at: vertical ? e.clientY : e.clientX, v: read(), lo: lo(), hi: hi() };
@@ -53735,6 +54928,8 @@ if (new URLSearchParams(location.search).has('selftest')) {
       if (!from) return;
       if (raf) { cancelAnimationFrame(raf); apply(); }
       from = null;
+      if (scoped && want) { root.style.setProperty(prop, want); dockEl.style.height = ''; vp.style.removeProperty(prop); }      // (all three in one style pass)
+      want = '';
       el.classList.remove('dragging'); document.body.classList.remove('dock-resizing');
       try { localStorage.setItem(key, String(Math.round(read()))); } catch (_) {}
       window.dispatchEvent(new Event('resize'));
@@ -53859,24 +55054,44 @@ if (new URLSearchParams(location.search).has('selftest')) {
     head.addEventListener('pointerdown', (e) => {
       if (!st.on || e.button !== 0 || !e.isPrimary) return;
       if (e.target.closest('button, input, select, textarea, label, a, .cs-wrap, .lib-tabs, [contenteditable]')) return;
-      const g = geom(); mv = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: g.x, sy: g.y };
+      const g = geom(); mv = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: g.x, sy: g.y, dx: 0, dy: 0 };
       try { head.setPointerCapture(e.pointerId); } catch (_) {}
+      dock.style.willChange = 'transform';
       document.body.classList.add('dock-resizing');
     });
+    // While it moves, the window is shifted by a transform (one composited layer: nothing inside it is restyled, laid out or painted
+    // again), once per frame. --fx / --fy are written once, on release: they are inherited by everything in the window, and changing
+    // them on every pointer move restyled the whole of it each time.
+    let mvRaf = 0;
     head.addEventListener('pointermove', (e) => {
       if (!mv || e.pointerId !== mv.id) return;
       st.x = Math.round(mv.sx + e.clientX - mv.x); st.y = Math.round(mv.sy + e.clientY - mv.y);
-      const g = geom(); dock.style.setProperty('--fx', g.x + 'px'); dock.style.setProperty('--fy', g.y + 'px');
+      const g = geom(); mv.dx = g.x - mv.sx; mv.dy = g.y - mv.sy;
+      if (!mvRaf) mvRaf = requestAnimationFrame(() => { mvRaf = 0; if (mv) dock.style.transform = 'translate3d(' + mv.dx + 'px,' + mv.dy + 'px,0)'; });
     });
-    const endMove = (e) => { if (!mv || (e && e.pointerId !== mv.id)) return; mv = null; document.body.classList.remove('dock-resizing'); const g = geom(); st.x = g.x; st.y = g.y; keep(); };
+    const endMove = (e) => {
+      if (!mv || (e && e.pointerId !== mv.id)) return;
+      if (mvRaf) { cancelAnimationFrame(mvRaf); mvRaf = 0; }
+      mv = null; document.body.classList.remove('dock-resizing');
+      const g = geom(); st.x = g.x; st.y = g.y;
+      dock.style.setProperty('--fx', g.x + 'px'); dock.style.setProperty('--fy', g.y + 'px');      // (the new place and the end of the transform land in one style pass: nothing jumps)
+      dock.style.transform = ''; dock.style.willChange = '';
+      keep();
+    };
+    head.addEventListener('lostpointercapture', endMove); window.addEventListener('blur', () => endMove());
     head.addEventListener('pointerup', endMove); head.addEventListener('pointercancel', endMove);
     // resize: any edge, any corner. The side that is not being dragged stays where it is.
     let rz = null;
+    let rzRaf = 0;
     const endRz = (e) => {
       if (!rz || (e && e.pointerId !== rz.id)) return;
+      if (rzRaf) { cancelAnimationFrame(rzRaf); rzRaf = 0; }
       rz.el.classList.remove('dragging'); rz = null;
       document.body.classList.remove('dock-resizing');
-      const g = geom(); st.x = g.x; st.y = g.y; st.w = g.w; st.h = g.h; keep();
+      const g = geom(); st.x = g.x; st.y = g.y; st.w = g.w; st.h = g.h;
+      for (const [k, v] of Object.entries({ '--fx': g.x, '--fy': g.y, '--fw': g.w, '--fh': g.h })) dock.style.setProperty(k, v + 'px');      // (the variables once, on release)
+      for (const k of ['left', 'top', 'width', 'height']) dock.style[k] = '';
+      keep();
       window.dispatchEvent(new Event('resize'));
     };
     for (const el of [grip, ...edges]) {
@@ -53898,11 +55113,10 @@ if (new URLSearchParams(location.search).has('selftest')) {
         if (dir.includes('s')) h = clamp(g0.h + dy, cfg.min[1], maxH);
         if (dir.includes('n')) { h = clamp(g0.h - dy, cfg.min[1], Math.max(cfg.min[1], Math.min(maxH, g0.y + g0.h))); y = g0.y + g0.h - h; }
         st.x = Math.round(x); st.y = Math.round(y); st.w = Math.round(w); st.h = Math.round(h);
-        const g = geom();
-        dock.style.setProperty('--fx', g.x + 'px'); dock.style.setProperty('--fy', g.y + 'px');
-        dock.style.setProperty('--fw', g.w + 'px'); dock.style.setProperty('--fh', g.h + 'px');
+        // while dragging: the window's own box (inline, not inherited), once per frame; the variables are written on release
+        if (!rzRaf) rzRaf = requestAnimationFrame(() => { rzRaf = 0; if (!rz) return; const g = geom(); dock.style.left = g.x + 'px'; dock.style.top = g.y + 'px'; dock.style.width = g.w + 'px'; dock.style.height = g.h + 'px'; });
       });
-      el.addEventListener('pointerup', endRz); el.addEventListener('pointercancel', endRz);
+      el.addEventListener('pointerup', endRz); el.addEventListener('pointercancel', endRz); el.addEventListener('lostpointercapture', endRz);
     }
     window.addEventListener('resize', () => { if (st.on && !mv && !rz) { const g = geom(); dock.style.setProperty('--fx', g.x + 'px'); dock.style.setProperty('--fy', g.y + 'px'); dock.style.setProperty('--fw', g.w + 'px'); dock.style.setProperty('--fh', g.h + 'px'); } });
     paint();
@@ -54066,12 +55280,63 @@ if (new URLSearchParams(location.search).has('selftest')) {
       const el = e.target && e.target.closest ? e.target.closest('.mat-cell, .mat-row') : null;
       if (!el || !el._mat || !e.dataTransfer) return;
       dragMat = el._mat;
-      e.dataTransfer.setData(TYPE, '1');
-      e.dataTransfer.effectAllowed = 'copyMove';         // (Shift makes a drag a "move": it has to be allowed for the merge below)
-      // what follows the pointer is the material's ball, not the whole tile
-      const pic = el.querySelector('.mat-thumb-img, .mat-row-thumb');
-      if (pic) { try { const r = pic.getBoundingClientRect(); e.dataTransfer.setDragImage(pic, r.width / 2, r.height / 2); } catch (_) {} }
+      // The browser's own drag draws the system pointer (a copy arrow), which a page cannot hide. So that drag is not started: the
+      // press is followed here, the material's ball goes with the pointer and the pointer itself is hidden.
+      e.preventDefault();
+      startPointerDrag(e, el.querySelector('.mat-thumb-img, .mat-thumb-fallback, .mat-row-thumb'));
     });
+    const startPointerDrag = (e0, pic) => {
+      const mat = dragMat; if (!mat) return;
+      let ghost = null, raf = 0, last = e0, overRow = null, ended = false;
+      const clearRow = () => { if (overRow) { overRow.classList.remove('mat-drop-over'); overRow = null; } };
+      if (pic) {
+        const r = pic.getBoundingClientRect();
+        ghost = pic.cloneNode(true); ghost.removeAttribute('id');
+        ghost.className = 'mat-ghost'; ghost.style.width = r.width + 'px'; ghost.style.height = r.height + 'px';
+        document.body.appendChild(ghost);
+      }
+      document.body.classList.add('mat-dragging');
+      const frame = () => {
+        raf = 0; if (ended) return;
+        const e = last;
+        if (ghost) ghost.style.transform = 'translate3d(' + Math.round(e.clientX - ghost.offsetWidth / 2) + 'px,' + Math.round(e.clientY - ghost.offsetHeight / 2) + 'px,0)';
+        const at = document.elementFromPoint(e.clientX, e.clientY);
+        const inView = !!(at && at.closest && at.closest('#viewport'));
+        if (inView) hotAt(e); else hotOff();
+        const cell = at && at.closest ? at.closest('#vp-materials-pop .mat-cell, #vp-materials-pop .mat-row') : null;
+        into(e.shiftKey && cell && cell._mat && cell._mat !== mat ? cell : null);
+        const row = at && at.closest ? at.closest('#sidebar-right .prop-material-row') : null;
+        if (row !== overRow) { clearRow(); if (row) { overRow = row; row.classList.add('mat-drop-over'); } }
+      };
+      const onMove = (e) => { last = e; if (!raf) raf = requestAnimationFrame(frame); };
+      const finish = (e, commit) => {
+        if (ended) return; ended = true;
+        window.removeEventListener('pointermove', onMove, true); window.removeEventListener('pointerup', onUp, true);
+        window.removeEventListener('keydown', onKey, true); window.removeEventListener('blur', onBlur);
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
+        const at = commit ? document.elementFromPoint(e.clientX, e.clientY) : null;
+        const cell = at && at.closest ? at.closest('#vp-materials-pop .mat-cell, #vp-materials-pop .mat-row') : null;
+        const merge = commit && e.shiftKey && cell && cell._mat && cell._mat !== mat ? cell._mat : null;
+        const row = at && at.closest ? at.closest('#sidebar-right .prop-material-row') : null;
+        const inView = !!(at && at.closest && at.closest('#viewport'));
+        if (ghost) ghost.remove();
+        document.body.classList.remove('mat-dragging');
+        clearRow(); into(null); hotOff(); dragMat = null;
+        { const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); window.removeEventListener('click', swallow, true); };      // (letting go over the cell it came from is not a click on it)
+          window.addEventListener('click', swallow, true); setTimeout(() => window.removeEventListener('click', swallow, true), 300); }
+        if (merge) mergeInto(merge, mat);
+        else if (row) {
+          if (!state.selected || !state.selected.size) toast('Assign', 'Select the parts first', 'info', 2600);
+          else { try { assign(mat, e); } catch (err) { console.warn('[materials] drop on the card failed:', err); } }
+        } else if (inView) { try { assign(mat, e); } catch (err) { console.warn('[materials] drop failed:', err); } }
+      };
+      const onUp = (e) => finish(e, true);
+      const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(last, false); } };
+      const onBlur = () => finish(last, false);
+      window.addEventListener('pointermove', onMove, true); window.addEventListener('pointerup', onUp, true);
+      window.addEventListener('keydown', onKey, true); window.addEventListener('blur', onBlur);
+      frame();
+    };
     dock.addEventListener('dragend', () => { dragMat = null; hotOff(); into(null); });
     // onto another material, Shift held: that one is merged into the dragged one. It is marked while the pointer is over it.
     let intoEl = null;
@@ -54106,6 +55371,9 @@ if (new URLSearchParams(location.search).has('selftest')) {
       if (!el) return;
       e.preventDefault();
       const dst = dragMat, src = el._mat; dragMat = null;      // (the dragged one stays; the one under it goes into it)
+      mergeInto(src, dst);
+    });
+    const mergeInto = (src, dst) => {
       try {
         const before = _matStateSnap();
         const moved = _reassignMaterial(src, dst);
@@ -54118,7 +55386,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
         try { _pushMaterialUndo('Merge materials', before, null); } catch (err) { console.warn('[mat-undo]', err); }
         toast('Merged materials', '2 → 1 (' + moved + ' part' + (moved === 1 ? '' : 's') + ' moved)', 'success');
       } catch (err) { console.warn('[materials] merge by drop failed:', err); }
-    });
+    };
     const isMat = (e) => !!dragMat && !!e.dataTransfer && [...(e.dataTransfer.types || [])].includes(TYPE);
     // …and onto the material card of the Properties panel: the same drop, onto the selected parts (the card is drawn again at every
     // change, so the listeners are on the sidebar)
@@ -54366,7 +55634,7 @@ const _Elements = (() => {
   const OCCLUDE_MAX = 25000;             // pieces a box may test one by one for something standing in front of them
   // the mode button's pictures: a cube with its corners, one edge, one side, or all of it
   const CUBE = '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>';
-  const SVG = (inner) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round">' + inner + '</svg>';
+  const SVG = (inner) => '<svg viewBox="2.4 2.4 19.2 19.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round">' + inner + '</svg>';
   const ICON = {
     points: SVG('<g class="em-c" opacity=".5">' + CUBE + '</g><g class="em-hf" fill="currentColor" stroke="none"><circle cx="12" cy="3" r="2"/><circle cx="20" cy="7.5" r="2"/><circle cx="20" cy="16.5" r="2"/><circle cx="12" cy="21" r="2"/><circle cx="4" cy="16.5" r="2"/><circle cx="4" cy="7.5" r="2"/><circle cx="12" cy="12" r="2"/></g>'),
     edges: SVG('<g class="em-c" opacity=".5">' + CUBE + '</g><path class="em-hs" d="M12 12v9" stroke-width="3.2"/>'),
@@ -55518,6 +56786,8 @@ const _Elements = (() => {
   function setMode(m) {
     if (m === 'model') { if (active) _CmdCards.close('elements'); else syncCard(); return; }
     if (!MODES.includes(m)) return;
+    if (state._animMode) return;      // (no Edit mesh while the Animate window is open)
+    if (!active && !(state.selected && state.selected.size)) { try { toast('Edit mesh', 'Select a part first.', 'info', 1800); } catch (_) {} return; }      // (nothing to edit: the button is grey and the keys 1 2 3 do nothing either)
     const was = mode; mode = m; save();
     // a library shape with parameters is not edited in place: its parameters would rebuild it (Bake geo first)
     try { const raw = [...state.selected].map(getPart).filter(p => p && !p.deleted && p.isPrimitive); if (raw.length) toast('Bake geo first', raw.length === 1 ? 'This shape still has shape parameters. Press Bake geo under them to make it editable.' : 'These shapes still have shape parameters. Press Bake geo under them to make them editable.', 'info', 3600); } catch (_) {}
@@ -55551,6 +56821,7 @@ const _Elements = (() => {
     const close = () => { pop.style.display = 'none'; };
     const open = () => {
       held = true;
+      if (!active && !(state.selected && state.selected.size)) return;      // (greyed out: no list of modes either)
       pop.innerHTML = '';
       for (const [m, kbd] of [['points', '1'], ['edges', '2'], ['faces', '3'], ['model', '']]) {
         const row = document.createElement('button');
@@ -56013,6 +57284,34 @@ window.__moElements = _Elements.api;
 // ── Icon lines on whole device pixels ───────────────────────────────────────────────────────────────────────────────
 // --icon-stroke is the thickness of an icon's line (see the stylesheet): one device pixel on an ordinary screen, the width of two on a screen
 // of 2x or more (1 CSS pixel on both). It follows the screen when the window is moved to another or the page is zoomed.
+// ── The toolbars over the view on whole pixels ──────────────────────────────────────────────────────────────────────────
+// A toolbar that is centred (top: 50% and translateY(-50%), left: 50% and translateX(-50%), margin: auto) lands on half a pixel whenever its
+// size and the view's are not both even, and every icon in it is then soft. After each change of layout (resize, a dock opening, a bar
+// growing) each toolbar is measured and moved by the fraction it is off by: translate (the Edit mesh bar already slides with it: transform).
+(function _vpcWhole() {
+  let raf = 0, tail = 0;
+  const one = (el) => {
+    const prop = el.classList.contains('el-bar') ? 'transform' : 'translate';
+    el.style[prop] = '';
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const dx = Math.round(r.left) - r.left, dy = Math.round(r.top) - r.top;
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+    el.style[prop] = prop === 'transform' ? 'translate(' + dx + 'px,' + dy + 'px)' : dx + 'px ' + dy + 'px';
+  };
+  const run = () => { raf = 0; for (const el of document.querySelectorAll('.vpc')) { try { one(el); } catch (_) {} } };
+  const soon = () => { if (!raf) raf = requestAnimationFrame(run); clearTimeout(tail); tail = setTimeout(run, 320); };      // (and once more when a slide has ended)
+  const go = () => {
+    const vp = document.getElementById('viewport'); if (!vp) return;
+    window.addEventListener('resize', soon);
+    if ('ResizeObserver' in window) { const ro = new ResizeObserver(soon); ro.observe(vp); for (const el of vp.querySelectorAll('.vpc')) ro.observe(el); }
+    new MutationObserver(soon).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    document.addEventListener('transitionend', (e) => { if (e.target.classList && e.target.classList.contains('vpc')) soon(); }, true);
+    soon();
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go, { once: true }); else go();
+})();
+
 (function _iconStroke() {
   const set = () => {
     const dpr = window.devicePixelRatio || 1, dev = dpr >= 1.75 ? Math.round(dpr) : 1;
@@ -56042,4 +57341,265 @@ window.__moElements = _Elements.api;
   new MutationObserver(soon).observe(sb, { childList: true, characterData: true, subtree: true });
   window.addEventListener('resize', soon);
   soon();
+})();
+
+// ── Claude mode ────────────────────────────────────────────────────────────
+// The viewport steps aside and a feed takes the window: what Claude said (say), every call it made with what came back, and every
+// picture, newest at the bottom like a chat. The 3D view is not removed: it stays laid out under the feed, so screenshot, render_image
+// and compare_images draw exactly as before. 'split' brings it back beside the feed. Open it from the Claude pill, or with ?claude.
+(() => {
+  if (window.top !== window) {
+    // a scene tab (a second copy of the app in an iframe): it shows the bare viewport too, whenever the window it sits in is in Claude mode
+    try { const tb = window.top.document.body, sync = () => { const on = tb.classList.contains('claude-mode'); document.body.classList.toggle('claude-mode', on); window.__moNoTabs = on; }; sync(); new MutationObserver(sync).observe(tb, { attributes: true, attributeFilter: ['class'] }); } catch (_) {}
+    return;
+  }
+  if (window.__MESHOPT_DEMO) {       // the online version has no connection to Claude, so no Claude mode
+    window.__moClaudeMode = () => { try { toast('Claude mode needs the app on your computer', 'The online version has no connection to Claude.', 'info', 4500); } catch (_) {} };
+    window.__moClaudeFeed = () => {};
+    try { const wl = document.getElementById('welcome-claude'); if (wl) wl.hidden = true; } catch (_) {}
+    return;
+  }
+  const KEY = 'stepopt-claude-view';
+  let root = null, listEl = null, pickedIdx = -1, tick = 0, loadSig = '', pop = null, statEl = null, statTm = 0, mode = 'off', raf = 0, sticky = true;
+  const els = new Map();
+  const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const dur = (ms) => ms < 1000 ? ms + ' ms' : (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + ' s';
+  const OUTL = { running: 'working…', done: 'done', declined: 'you said no', blocked: 'turned off in Settings', failed: 'failed' };
+  const B = () => window.__moBridge;
+  const pretty = (s) => { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (_) { return s; } };
+  const gist = (e) => {
+    if (e.status === 'running') return '';
+    if (e.err) return e.err;
+    const t = (e.text || '').trim(); if (!t) return e.images && e.images.length ? '' : 'No reply text.';
+    try { const j = JSON.parse(t); if (j && typeof j === 'object' && !Array.isArray(j)) return Object.entries(j).filter(([, v]) => v === null || typeof v !== 'object').slice(0, 6).map(([k, v]) => k.replace(/_/g, ' ') + ' ' + v).join(' · ').slice(0, 260) || t.slice(0, 200); } catch (_) {}
+    return t.length > 260 ? t.slice(0, 259) + '…' : t;
+  };
+  function card(e) {
+    if (e.kind === 'model') {
+      const n = (v) => Number(v).toLocaleString('en');
+      return '<div class="cf-model"><div class="cf-model-pic">' + (e.thumb ? '<img src="' + esc(e.thumb) + '" alt="" draggable="false">' : '<i>' + esc(e.kind2 || 'MODEL') + '</i>') + '</div><div class="cf-model-m"><div class="cf-who">Model opened<span>' + clock(e.at) + '</span></div><b>' + esc(e.name) + '</b><span class="cf-model-sub">' + esc([e.kind2, fmtB(e.size), e.secs > 0.3 ? 'loaded in ' + (e.secs < 10 ? e.secs.toFixed(1) : Math.round(e.secs)) + ' s' : ''].filter(Boolean).join(' · ')) + '</span><div class="cf-model-s"><span><b data-n="' + e.parts + '">' + n(e.parts) + '</b> parts</span><span><b data-n="' + e.tris + '">' + n(e.tris) + '</b> triangles</span><span><b data-n="' + e.verts + '">' + n(e.verts) + '</b> vertices</span></div><div class="cf-ready"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Ready for Claude</div></div></div>';
+    }
+    if (e.kind === 'note') return '<div class="cf-note"><div class="cf-who">Claude<span>' + clock(e.at) + '</span></div><p>' + esc(e.text) + '</p></div>';
+    const args = Object.keys(e.args || {}).length ? JSON.stringify(e.args, null, 2) : '';
+    const imgs = (e.images || []).map((s, i) => '<button type="button" class="cf-img" data-img="' + e.id + ':' + i + '"><img src="' + s + '" alt="Picture from ' + esc(e.tool.replace(/_/g, ' ')) + '"></button>').join('');
+    return '<div class="cf-call" data-status="' + e.status + '"><div class="cf-row"><i class="cf-dot"></i><b>' + esc(e.tool.replace(/_/g, ' ')) + '</b><span class="cf-brief">' + esc(e.brief || '') + '</span><span class="cf-meta">' + (e.status === 'done' ? '' : esc(OUTL[e.status] || e.status) + ' · ') + (e.status === 'running' ? '' : dur(e.ms) + ' · ') + clock(e.at) + '</span></div>' +
+      (e.status === 'running' ? '<div class="cf-live"></div>' : '') +
+      (gist(e) ? '<div class="cf-gist">' + esc(gist(e)) + '</div>' : '') +
+      (imgs ? '<div class="cf-imgs">' + imgs + '</div>' : '') + (e.imgDropped ? '<div class="cf-gist">Picture dropped to save memory.</div>' : '') +
+      ((args || e.text) ? '<details class="cf-more"><summary>Details</summary>' + (args ? '<div class="cf-k">Asked</div><pre>' + esc(args.slice(0, 4000)) + '</pre>' : '') + (e.text ? '<div class="cf-k">Answer</div><pre>' + esc(pretty(e.text).slice(0, 12000)) + '</pre>' : '') + '</details>' : '') + '</div>';
+  }
+  function paint() {
+    raf = 0; if (!root || mode === 'off') return;
+    const b = B(), s = b ? b.snapshot() : null, feed = b ? b.feed() : [];
+    const head = root.querySelector('.cf-state');
+    const sub = !s || !s.on ? 'Not connected' : s.stats.count + ' request' + (s.stats.count === 1 ? '' : 's') + (s.stats.failed ? ' · ' + s.stats.failed + ' failed' : '') + (s.stats.declined + s.stats.blocked ? ' · ' + (s.stats.declined + s.stats.blocked) + ' said no' : '');
+    head.dataset.state = s ? s.state : 'off';
+    head.querySelector('b').textContent = !s || !s.on ? 'Claude is not connected' : s.state === 'busy' ? 'Claude is working' : s.state === 'ask' ? 'Waiting for your answer' : 'Listening for Claude';
+    head.querySelector('span').textContent = sub;
+    try { tl().scene_summary().then((c) => { const j = JSON.parse(c[0].text); if (root && j.file && j.parts) head.querySelector('span').textContent = j.file + ' · ready · ' + sub; }).catch(() => {}); } catch (_) {}
+    const split = mode === 'split'; const vb = root.querySelector('#cf-view'); vb.setAttribute('aria-pressed', split ? 'true' : 'false'); vb.title = split ? 'Hide viewport' : 'Show viewport'; vb.setAttribute('aria-label', vb.title);
+    paintLoad();
+    root.querySelector('#cf-conn').checked = !!(s && s.on);
+    if (b) root.querySelector('#cf-ask').checked = b.askEnabled();
+    const jb = root.querySelector('.cf-job'), jo = s && s.job;
+    jb.hidden = !jo;
+    if (jo) { jb.querySelector('.cf-job-t span').textContent = jo.msg || jo.label; const st = jb.querySelector('#cf-stop'); st.hidden = !jo.cancellable; st.disabled = !!jo.cancel; st.textContent = jo.cancel ? 'Stopping…' : 'Stop'; jb.querySelector('.cf-job-bar b').style.width = (jo.total ? Math.max(3, Math.min(100, Math.round((jo.step || 0) / jo.total * 100))) : 0) + '%'; }
+    const empty = root.querySelector('.cf-empty');
+    empty.hidden = feed.length > 0;
+    const esig = (s && s.on ? 1 : 0) + '|' + pickedIdx + '|' + recents().map(x => x.name + x.ts).join(',');
+    empty.classList.toggle('is-picking', pickedIdx >= 0);
+    if (!feed.length && empty.dataset.sig !== esig) { empty.dataset.sig = esig; empty.innerHTML = s && s.on ? '<div class="cf-empty-t"><b>Waiting for Claude</b><p>Ask Claude in its own window to look at the model. Everything it does shows up here: its messages, each call, and every picture.</p></div>' + recentsHTML() : '<div class="cf-empty-t"><b>Claude is not connected</b><p>Let it connect, then add this app to Claude with the command below.</p><div class="cf-cmd"><code>claude mcp add --transport http meshoptimiser ' + esc(location.origin) + '/mcp</code></div><button type="button" class="btn" id="cf-on">Let Claude connect</button></div>' + recentsHTML();}
+    const live = new Set();
+    let prev = null;
+    for (const e of feed) {
+      live.add(e.id);
+      let el = els.get(e.id);
+      if (!el || el.dataset.rev !== String(e.rev)) {
+        const n = document.createElement('div'); n.className = 'cf-item' + (!el && Date.now() - e.at < 2500 ? ' is-new' : '') + (e.kind === 'model' ? ' is-model' : ''); n.dataset.rev = String(e.rev); n.innerHTML = card(e);
+        if (el) { const open = el.querySelector('details') && el.querySelector('details').open; if (open && n.querySelector('details')) n.querySelector('details').open = true; el.replaceWith(n); } else listEl.appendChild(n);
+        els.set(e.id, n); el = n; if (e.kind === 'model' && n.classList.contains('is-new')) countUp(n);
+      }
+      if (prev && prev.nextSibling !== el) listEl.insertBefore(el, prev.nextSibling);
+      prev = el;
+      if (e.status === 'running') { const lv = el.querySelector('.cf-live'); if (lv && s && s.job) lv.textContent = s.job.msg || s.job.label; }
+    }
+    for (const [id, el] of els) if (!live.has(id)) { el.remove(); els.delete(id); }
+    if (sticky) listEl.scrollTop = listEl.scrollHeight;
+  }
+  // what the app is busy with (a model opening, in this scene or in a tab of its own): label, step, percent, time
+  const tl = () => { try { const t = window.__moTabs, w = t.wins[t.active]; return (w && w.__moBridgeTools) || window.__moBridgeTools; } catch (_) { return window.__moBridgeTools; } };       // the tools of the scene on screen
+  let lastKey = '', loadT0 = 0, annTm = 0;
+  // a model that has just opened (or is open when Claude mode starts) becomes the first card of the session
+  const announce = async () => {
+    annTm = 0;
+    const wasPicked = pickedIdx; pickedIdx = -1; if (wasPicked >= 0) ping();
+    try {
+      const j = JSON.parse((await tl().scene_summary())[0].text);
+      if (!j.parts || !j.file || j.file === 'Untitled scene') return;
+      const key = j.file + '|' + j.parts + '|' + j.triangles;
+      if (key === lastKey) return;
+      lastKey = key;
+      const base = j.file.replace(/\.[^.]+$/, '').toLowerCase(), f = recents().find(x => x.name.replace(/\.[^.]+$/, '').toLowerCase() === base) || null;
+      const ext = (/\.([a-z0-9]{2,5})$/i.exec(j.file) || [])[1] || '';
+      B().feedAdd({ kind: 'model', status: 'done', name: j.file.replace(/\.[^.]+$/, ''), kind2: f && f.saved ? 'Scene' : ext ? (/^gltf$/i.test(ext) ? 'glTF' : ext.toUpperCase()) : '', size: f ? f.size : 0, thumb: f ? f.thumb : '', parts: j.parts, tris: j.triangles, verts: j.vertices, secs: loadT0 ? (Date.now() - loadT0) / 1000 : 0 });
+      loadT0 = 0;
+      document.body.classList.add('cf-reveal'); setTimeout(() => document.body.classList.remove('cf-reveal'), 1200);
+    } catch (_) {}
+  };
+  const announceSoon = () => { if (!annTm) annTm = setTimeout(announce, 1200); };       // (a moment for the app to draw the picture of the card)
+  const tasks = () => { try { return (window.__moTabs.tabs || []).filter(t => !t.closed).flatMap(t => (t.tasks || []).map(k => ({ ...k, tabId: t.id }))); } catch (_) { return []; } };
+  const secs = (t0) => { const s = Math.max(0, (Date.now() - t0) / 1000); return s >= 60 ? Math.floor(s / 60) + 'm ' + String(Math.floor(s % 60)).padStart(2, '0') + 's' : s.toFixed(s < 10 ? 1 : 0) + ' s'; };
+  const paintLoad = () => {
+    const lo = root.querySelector('.cf-load'), ts = tasks().slice(0, 2);
+    lo.hidden = !ts.length;
+    if (!ts.length) { if (tick) { clearInterval(tick); tick = 0; } if (loadSig) announceSoon(); loadSig = ''; return; }
+    if (!loadT0) loadT0 = Math.min(...ts.map(k => k.t0 || Date.now()));
+    if (!tick) tick = setInterval(ping, 1000);
+    const sig = JSON.stringify(ts.map(k => [k.tabId, k.id, k.label, k.detail, k.pct == null ? null : Math.round(k.pct)]));
+    if (sig !== loadSig) {
+      loadSig = sig;
+      lo.innerHTML = ts.map((k, i) => '<div class="cf-ld"><div class="cf-ld-t"><b>' + esc(k.label || 'Working') + '</b><span>' + esc(k.detail || '') + '</span><em data-ld="' + i + '"></em>' + (k.cancel ? '<button type="button" class="cf-ld-x" data-tab="' + esc(k.tabId) + '" data-task="' + esc(k.id) + '">Cancel</button>' : '') + '</div><i class="cf-ld-bar' + (k.pct == null ? ' is-ind' : '') + '"><b style="width:' + (k.pct == null ? 35 : Math.max(3, Math.min(100, Math.round(k.pct)))) + '%"></b></i></div>').join('');
+    }
+    ts.forEach((k, i) => { const em = lo.querySelector('[data-ld="' + i + '"]'); if (em) em.textContent = secs(k.t0) + (k.pct == null ? '' : ' · ' + Math.round(k.pct) + '%'); });
+  };
+  // recent files, the same list as the welcome screen
+  const fmtB = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 1024 ? Math.round(n / 1024) + ' KB' : n > 0 ? n + ' B' : '';
+  const ageOf = (t) => { const d = Date.now() - t, m = 60000, h = 60 * m, dy = 24 * h; return d < m ? 'just now' : d < h ? Math.floor(d / m) + 'm ago' : d < dy ? Math.floor(d / h) + 'h ago' : d < 7 * dy ? Math.floor(d / dy) + 'd ago' : new Date(t).toLocaleDateString(); };
+  const recents = () => { try { return (_Welcome.recents() || []).slice(0, 8); } catch (_) { return []; } };
+  const recentsHTML = () => {
+    const l = recents();
+    return '<div class="cf-rec-list"><div class="cf-rec-h">Recent</div>' + (l.length ? l.map((f, i) => {
+      const ext = (/\.([a-z0-9]{2,5})$/i.exec(f.name) || [])[1] || '', stem = ext ? f.name.slice(0, -ext.length - 1) : f.name;
+      const kind = f.saved ? 'Scene' : /^gltf$/i.test(ext) ? 'glTF' : ext.toUpperCase();
+      return '<button type="button" class="cf-rec' + (pickedIdx === i ? ' is-picked' : pickedIdx >= 0 ? ' is-gone' : '') + '" data-rec="' + i + '"' + (pickedIdx >= 0 ? ' style="--d:' + Math.min(i, 6) * 40 + 'ms"' : '') + '><span class="cf-rec-pic">' + (f.thumb ? '<img src="' + esc(f.thumb) + '" alt="" draggable="false">' : '<i>' + esc(kind || 'FILE') + '</i>') + '</span><span class="cf-rec-m"><b>' + esc(stem) + '</b><span>' + [kind, fmtB(f.size), ageOf(f.ts)].filter(Boolean).join(' · ') + '</span></span>' + (pickedIdx === i ? '<em>Opening…</em>' : i === 0 ? '<em>Continue</em>' : '') + '</button>';
+    }).join('') : '<div class="cf-rec-none">Files you open are kept here.</div>') + '</div>';
+  };
+  // the few numbers shown over the bare viewport (split mode)
+  const stats = async () => {
+    statTm = 0; if (mode !== 'split' || !statEl) return;
+    try {
+      const j = JSON.parse((await tl().scene_summary())[0].text), n = (v) => Number(v).toLocaleString('en');
+      statEl.textContent = [j.file && j.file !== 'Untitled scene' ? j.file : null, n(j.parts) + ' parts', n(j.triangles) + ' tris', n(j.vertices) + ' verts'].filter(Boolean).join(' · ');
+    } catch (_) {}
+    statTm = setTimeout(stats, 1500);
+  };
+  // the numbers of the model card roll up from 0 once the card has landed (a timer sets the final value, for a tab that is not drawn)
+  const countUp = (node) => {
+    const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    node.querySelectorAll('[data-n]').forEach((b) => {
+      const to = +b.dataset.n; if (still || !to) return;
+      b.textContent = '0';
+      const t0 = performance.now() + 450, step = (t) => { const k = Math.max(0, Math.min(1, (t - t0) / 900)); b.textContent = Math.round(to * (1 - Math.pow(1 - k, 3))).toLocaleString('en'); if (k < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+      setTimeout(() => { b.textContent = to.toLocaleString('en'); }, 1700);
+    });
+  };
+  const ping = () => { if (!raf && mode !== 'off') raf = setTimeout(paint, 60); };       // (a timer, not a frame: a feed in a background tab keeps up too)
+  function lightbox(src) {
+    const d = document.createElement('div'); d.className = 'cf-lb'; d.innerHTML = '<img alt="">'; d.querySelector('img').src = src;
+    const done = () => { document.removeEventListener('keydown', key, true); d.remove(); };
+    const key = (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); done(); } };
+    d.addEventListener('click', done); document.addEventListener('keydown', key, true); document.body.appendChild(d);
+  }
+  // leaving Claude mode asks first (the same kind of dialog as Claude's own questions); Escape and the focused button both stay
+  function confirmExit() {
+    if (document.querySelector('.cf-exit-ask')) return;
+    const bg = document.createElement('div'); bg.className = 'cl-ask-bg cf-exit-ask';
+    bg.innerHTML = '<div class="cl-ask" role="alertdialog" aria-modal="true" aria-label="Exit Claude mode"><div class="cl-ask-h"><span class="cl-dot"></span>Exit Claude mode?</div><div class="cl-ask-t">The normal app comes back</div><div class="cl-ask-d">Claude stays connected and the model stays open. The feed is kept for when you come back.</div><div class="cl-ask-f"><button type="button" class="cl-no">Stay</button><button type="button" class="cl-yes">Exit</button></div></div>';
+    const done = (leave) => { document.removeEventListener('keydown', onKey, true); bg.remove(); if (leave) setMode('off'); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } };
+    bg.querySelector('.cl-yes').addEventListener('click', () => done(true));
+    bg.querySelector('.cl-no').addEventListener('click', () => done(false));
+    bg.addEventListener('pointerdown', (e) => { if (e.target === bg) done(false); });
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(bg);
+    bg.querySelector('.cl-no').focus();
+  }
+  function ensure() {
+    if (root) return;
+    root = document.createElement('section'); root.id = 'claude-feed'; root.setAttribute('aria-label', 'Claude feed');
+    root.innerHTML = '<header class="cf-head"><div class="cf-state" data-state="off"><i class="cl-dot"></i><div><b></b><span></span></div></div><span class="cf-alpha" title="Claude mode is an early version: it works, but expect rough edges">Alpha</span><div class="cf-btns"><button type="button" class="cf-ib" id="cf-open" title="Open a model" aria-label="Open a model" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h13a2 2 0 0 0 2-1.4l2-7A1 1 0 0 0 20 10H8a2 2 0 0 0-1.9 1.4L4 20zm0 0V6a2 2 0 0 1 2-2h3l2 2h5a2 2 0 0 1 2 2v2"/></svg></button><button type="button" class="cf-ib" aria-pressed="false" id="cf-view" title="Show viewport" aria-label="Show viewport"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button><button type="button" class="cf-ib" id="cf-set" title="Claude settings" aria-label="Claude settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button><button type="button" class="cf-ib" id="cf-clear" title="Clear the feed" aria-label="Clear the feed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button type="button" class="cf-ib" id="cf-exit" title="Exit Claude mode" aria-label="Exit Claude mode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></header><div class="cf-load" hidden></div><div class="cf-list" role="log" aria-live="polite" aria-label="What Claude did"><div class="cf-empty"></div></div><footer class="cf-foot"><div class="cf-job" hidden><div class="cf-job-t"><span></span><button type="button" class="btn" id="cf-stop">Stop</button></div><i class="cf-job-bar"><b style="width:0"></b></i></div><div class="cf-chips"><span>Start a job</span><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__optimise_for_web" title="Copies the command; paste it into Claude">Optimise for web</button><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__remove_fasteners" title="Copies the command; paste it into Claude">Remove fasteners</button><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__review_scene" title="Copies the command; paste it into Claude">Review scene</button></div><div class="cf-ctl"><div class="toggle"><span>Connected</span><label><input type="checkbox" id="cf-conn"><span class="switch"></span></label></div><div class="toggle"><span>Ask before edits</span><label><input type="checkbox" id="cf-ask"><span class="switch"></span></label></div><div class="cf-hist"><button type="button" class="cf-ib" id="cf-undo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button><button type="button" class="cf-ib" id="cf-redo" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button><button type="button" class="cf-ib" id="cf-copy" title="Copy the command that adds this app to Claude" aria-label="Copy the command that adds this app to Claude"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div></div></footer>';
+    document.body.appendChild(root);
+    pop = document.createElement('div'); pop.id = 'cf-pop'; pop.hidden = true; root.appendChild(pop);
+    statEl = document.createElement('div'); statEl.id = 'cf-stats'; statEl.setAttribute('aria-label', 'Model numbers'); document.body.appendChild(statEl);
+    listEl = root.querySelector('.cf-list');
+    try { const ft = root.querySelector('.cf-foot'), fit = () => root.style.setProperty('--cf-foot', ft.offsetHeight + 'px'); new ResizeObserver(fit).observe(ft); fit(); } catch (_) {}       // (the loading card floats just above the controls)
+    listEl.addEventListener('scroll', () => { sticky = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 60; });
+    root.addEventListener('dragover', (ev) => { if (ev.dataTransfer && [...ev.dataTransfer.types].includes('Files')) { ev.preventDefault(); root.classList.add('is-drop'); } });
+    root.addEventListener('dragleave', (ev) => { if (!root.contains(ev.relatedTarget)) root.classList.remove('is-drop'); });
+    root.addEventListener('drop', (ev) => {
+      root.classList.remove('is-drop');
+      const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if (!f) return;
+      ev.preventDefault();
+      const inp = document.getElementById('file-input'); if (!inp) return;
+      const dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    root.addEventListener('change', (ev) => {
+      const t = ev.target;
+      if (t.id === 'cf-conn') B().setEnabled(t.checked);
+      else if (t.id === 'cf-ask') B().setAsk(t.checked);
+      ping();
+    });
+    const closePop = () => { pop.hidden = true; root.querySelector('#cf-open').setAttribute('aria-expanded', 'false'); };
+    const openPop = () => { pop.innerHTML = '<button type="button" class="cf-rec cf-rec-file" id="cf-pick"><span class="cf-rec-pic"><i>+</i></span><span class="cf-rec-m"><b>Open file…</b><span>STEP, IGES, GLB, FBX, OBJ, STL and more</span></span></button>' + recentsHTML(); pop.hidden = false; root.querySelector('#cf-open').setAttribute('aria-expanded', 'true'); };
+    document.addEventListener('pointerdown', (ev) => { if (!pop.hidden && !pop.contains(ev.target) && !ev.target.closest('#cf-open')) closePop(); }, true);
+    document.addEventListener('keydown', (ev) => { if (!pop.hidden && ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closePop(); } }, true);
+    root.addEventListener('click', async (ev) => {
+      const rec = ev.target.closest && ev.target.closest('.cf-rec');
+      if (rec) {
+        closePop();
+        if (rec.id === 'cf-pick') { try { _openWithPicker(); } catch (_) {} return; }
+        if (rec.closest('.cf-empty')) {
+          pickedIdx = +rec.dataset.rec;
+          rec.parentElement.querySelectorAll('.cf-rec').forEach((x, k) => {
+            if (x === rec) { x.classList.add('is-picked'); const em = x.querySelector('em'); if (em) em.textContent = 'Opening…'; else x.insertAdjacentHTML('beforeend', '<em>Opening…</em>'); }
+            else { x.style.setProperty('--d', Math.min(k, 6) * 40 + 'ms'); x.classList.add('is-gone'); }
+          });
+          const em0 = root.querySelector('.cf-empty'); em0.classList.add('is-picking');
+          em0.dataset.sig = (B().snapshot().on ? 1 : 0) + '|' + pickedIdx + '|' + recents().map(x => x.name + x.ts).join(',');
+          setTimeout(() => { if (pickedIdx >= 0 && !loadSig) { pickedIdx = -1; ping(); } }, 12000);       // (the pick was cancelled: the list comes back)
+        }
+        const f = recents()[+rec.dataset.rec]; if (f) { try { _openRecentByKey(_recKey(f.name, f.size)); } catch (_) {} }
+        return;
+      }
+      if (ev.target.closest && ev.target.closest('#cf-open')) { if (pop.hidden) openPop(); else closePop(); return; }
+      const t = ev.target, img = t.closest && t.closest('.cf-img'), btn = t.closest && t.closest('button');
+      if (img) { const [id, i] = img.dataset.img.split(':'), e = B().feed().find(x => String(x.id) === id); if (e && e.images[+i]) lightbox(e.images[+i]); return; }
+      if (!btn) return;
+      const cp = async (text, what) => { try { await navigator.clipboard.writeText(text); toast('Copied', what, 'success', 2600); } catch (_) { toast(what, text, 'info', 9000); } };
+      if (btn.dataset.task) { try { const w = window.__moTabs.wins[btn.dataset.tab] || window; w.__moCancelTask(btn.dataset.task); } catch (_) {} return; }
+      if (btn.id === 'cf-open2') { try { _openWithPicker(); } catch (_) {} return; }
+      if (btn.dataset.copy) cp(btn.dataset.copy, 'Paste it into Claude to start the job');
+      else if (btn.id === 'cf-copy') cp('claude mcp add --transport http meshoptimiser ' + location.origin + '/mcp', 'Paste it into a terminal and press Enter');
+      else if (btn.id === 'cf-stop') B().stop();
+      else if (btn.id === 'cf-undo' || btn.id === 'cf-redo') { try { await tl()[btn.id === 'cf-undo' ? 'undo' : 'redo']({}); } catch (_) {} stats(); }
+      else if (btn.id === 'cf-exit') confirmExit();
+      else if (btn.id === 'cf-view') setMode(mode === 'split' ? 'feed' : 'split');
+      else if (btn.id === 'cf-set') { try { window.__openSettings && window.__openSettings('claude'); } catch (_) {} }
+      else if (btn.id === 'cf-clear') B().clearFeed();
+      else if (btn.id === 'cf-on') { B().setEnabled(true); ping(); }
+    });
+  }
+  function setMode(m) {
+    m = m === 'split' || m === 'feed' ? m : 'off';
+    if (m !== 'off') ensure();
+    mode = m;
+    document.body.classList.toggle('claude-mode', m !== 'off');
+    document.documentElement.classList.remove('claude-boot');
+    // Claude mode has one viewport: a model that is opened replaces the one in it, instead of opening a scene tab (a second copy of the app) over it
+    if (m !== 'off') { if (!('__moNoTabsWas' in window)) window.__moNoTabsWas = !!window.__moNoTabs; window.__moNoTabs = true; }
+    else if ('__moNoTabsWas' in window) { window.__moNoTabs = window.__moNoTabsWas; delete window.__moNoTabsWas; }
+    document.body.classList.toggle('claude-split', m === 'split');
+    try { localStorage.setItem(KEY, m); } catch (_) {}
+    clearTimeout(statTm); statTm = 0; if (m === 'split') stats();
+    if (m !== 'off') { try { if (!B().feed().length) announce(); } catch (_) {} }
+    if (m !== 'off') { sticky = true; ping(); }
+    try { window.dispatchEvent(new Event('resize')); } catch (_) {}
+  }
+  window.__moClaudeMode = setMode;
+  window.__moClaudeFeed = ping;
+  const q = new URLSearchParams(location.search);
+  if (q.has('claude') && !window.__MESHOPT_DEMO) { setMode('feed'); setTimeout(() => { try { B().setEnabled(true, true); } catch (_) {} }, 600); }
+  else { let m = 'off'; try { m = localStorage.getItem(KEY) || 'off'; } catch (_) {} if (m !== 'off') setMode(m); }
 })();

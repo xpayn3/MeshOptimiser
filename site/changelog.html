@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.29.0." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.30.0." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.29.0." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.30.0." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-hero.webp" />
   <meta property="og:url" content="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:type" content="website" />
@@ -52,9 +52,54 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.30.0">
+          <div class="log-head">
+            <strong>v0.30.0<b class="rel-code">Kobarid</b></strong><em>Latest</em><span>15 Oct 2026 · 03:03</span><span>9 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>Two alpha features: Claude mode, to follow Claude as a feed with your model beside it, and Animate, to make parts spin, swing, shake and travel. Also instance commands, three-way permissions for Claude, a redesigned Settings and a rounder look.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>Claude mode (alpha). Hide the app and follow Claude as a feed: what it says, every call it makes with what came back, and every picture it takes, with your model beside it as a rounded card you can show or hide. Open it from the start screen, the Claude badge, the command search, or with ?claude on the address. It is an early version, so expect rough edges.</span></li>
+              <li><b class="is-new">New</b><span>The first card of a Claude session is your model. It shows the picture, the name, type and size, the parts, triangles and vertices, how long it took to open, and a green “Ready for Claude”. The numbers roll up as it lands, and the model fades in.</span></li>
+              <li><b class="is-new">New</b><span>Open a model in Claude mode. The folder button opens “Open file…” and your recent files, with a picture, size and age each, and the latest marked Continue. You can drop a file on the feed. A model opens in the same view and replaces the one that is open, with no scene tab laid over it.</span></li>
+              <li><b class="is-new">New</b><span>Loading you can follow. A card floats above the controls with what the app is doing, the step, the percent, the time and a Cancel button. Nothing in the feed moves when it appears.</span></li>
+              <li><b class="is-new">New</b><span>Controls in the feed. Three buttons copy the command of a ready-made job (Optimise for web, Remove fasteners, Review scene), switches for Connected and Ask before edits, Undo and Redo, a button that copies the connection command, and a Stop button while a long job runs. Exit asks first.</span></li>
+              <li><b class="is-new">New</b><span>Claude can write to the feed. A new tool, say, puts a short message in front of you: what it is about to do and what it found. Claude now has 67 tools.</span></li>
+              <li><b class="is-new">New</b><span>Animate (alpha). A new window makes a part or a group spin, swing, shake (noise) or travel along a path: circle, figure of eight, rounded square, wave or line. Each has its own controls, spin and path loop with loop points on a small timeline, and a part can carry one layer of each kind, added together. A playbar plays, pauses, rewinds and scrubs one cycle at 0.25× to 4×. A pill in the view says Animate mode, Playing or Paused.</span></li>
+              <li><b class="is-new">New</b><span>Animations are a view, not an edit. They keep running when the window closes, saving a scene or exporting puts every part back first, and the turntable video plays them, each frame at its own time. Open Animate from a right-click on a part, a group or the view, or with Ctrl+K.</span></li>
+              <li><b class="is-new">New</b><span>Claude can say what moves. The new animate_parts tool adds, removes, lists or clears animations by part, name or group.</span></li>
+              <li><b class="is-new">New</b><span>Select all instances, Select the original and Make unique. Pick every part that shares the exact same geometry, jump to the first of them, or give the selected shared parts a mesh of their own so editing one leaves the copies alone (one undo step). They are in the command search, the “…” menu, and the right-click menus of the tree and the view.</span></li>
+              <li><b class="is-new">New</b><span>Claude’s permissions are three choices per kind of change: Allow, Ask first or Block, as a small icon switch in Settings › Claude. The old switches keep working until you choose.</span></li>
+              <li><b class="is-new">New</b><span>The start screen shows a Scania V8 engine, 1,295 parts, in line drawing, and there is a tool to bake one from any GLB (tools/build-splash-glb.mjs).</span></li>
+              <li><b class="is-polish">Polish</b><span>Claude’s quick colour wheel opens with the part’s colour under the pointer. Move to choose and click the ring to keep it. Letting go of C, Esc or a click outside puts the old colour back.</span></li>
+              <li><b class="is-polish">Polish</b><span>Settings looks like a settings window should: wider, with the search at the top of the section list, no header and footer bars, bigger rows with a quiet line of help, and group titles in plain type.</span></li>
+              <li><b class="is-polish">Polish</b><span>Advanced flatten shows each choice as a small before and after tree, with a legend, whole cards you can click and shorter help. It is at the top of the Flatten menu, and “Selected groups only” follows the selection while the window is open.</span></li>
+              <li><b class="is-polish">Polish</b><span>Batch rename, Advanced flatten, Animate, Materials and Library share one title bar. Windows and the tree and menus open, close and drag more smoothly.</span></li>
+              <li><b class="is-polish">Polish</b><span>Rounder corners by default. Appearance › Corners is now Sharp or Default, and a saved Round is Default.</span></li>
+              <li><b class="is-polish">Polish</b><span>The Export window lists the formats by name, and the Export button floats at the bottom right and folds into a round button while you scroll the options.</span></li>
+              <li><b class="is-polish">Polish</b><span>The keyboard shortcuts window is in colour: an icon on each command, a colour for each group, and the keys of the on-screen keyboard tinted by category. It follows the colour switch for search results.</span></li>
+              <li><b class="is-polish">Polish</b><span>The start screen puts New scene first. A converted file is a badge on its card. The quit dialog has a warning, keeps Don’t save apart from Cancel and Save, and focuses Save.</span></li>
+              <li><b class="is-polish">Polish</b><span>The seven tree toolbar buttons share the row, the button of an open menu stays lit, and a second press closes its menu. The command-panel buttons turn blue while their card is open. Scrubbing a number shows a visible fill. One tick mark is used everywhere.</span></li>
+              <li><b class="is-polish">Polish</b><span>The File menu no longer lists Scene settings and Help &amp; docs. Both are in the command search, Ctrl+; and F1 still open them, and the start screen has Help.</span></li>
+              <li><b class="is-polish">Polish</b><span>The view toggles in the Library and Materials windows have a sliding thumb, and the selected button is clearly lighter. Toolbars over the view sit on whole device pixels.</span></li>
+              <li><b class="is-fix">Fix</b><span>A STEP made of faceted breps (a mesh exported from 3ds Max or CAD Exchanger) failed with “no solid bodies found in this STEP” after ten minutes. The plain reader now meshes the closed shells, so it opens: the 413 MB Mercedes-Benz Arocs, with 645,108 bodies.</span></li>
+              <li><b class="is-fix">Fix</b><span>Undo and redo on an exploded view left the parts, the sliders and the pill out of step, and holding Ctrl+Z froze the page. They now put an exploded view back together first, and a held Ctrl+Z or Ctrl+Y does one step per press.</span></li>
+              <li><b class="is-fix">Fix</b><span>Exploding, deleting a part, putting the view back and undoing the delete brought the part back exploded, with the amount at zero. A deleted part now moves with the exploded view.</span></li>
+              <li><b class="is-fix">Fix</b><span>The × count and the “original” mark on instances were wrong after Make unique or deleting copies. The count is live now, and the first of its kind keeps the part icon.</span></li>
+              <li><b class="is-fix">Fix</b><span>Dragging a material ball showed the system’s copy arrow, which could not be hidden. The ball itself follows the pointer now, and drops on the view, on the Properties material card, or with Shift on another material to merge.</span></li>
+              <li><b class="is-fix">Fix</b><span>Delete and Backspace deleted parts in the view while I was working in the Materials window. They delete the picked materials there now.</span></li>
+              <li><b class="is-fix">Fix</b><span>The Model mode button, and keys 1, 2 and 3, did nothing useful with nothing selected. The button is greyed and the keys say “Select a part first.” Edit mesh is off while the Animate window is open.</span></li>
+              <li><b class="is-fix">Fix</b><span>The grid lines in the view were two or three pixels of mush from far away. They are one crisp pixel now, axis lines included.</span></li>
+              <li><b class="is-fix">Fix</b><span>Opening Advanced flatten decided “Selected groups only” once. It now follows what is selected.</span></li>
+              <li><b class="is-perf">Perf</b><span>Dragging and resizing a floating window, the Materials and Library docks and the console happens once per frame, and the sizes are saved once, when you let go.</span></li>
+              <li><b class="is-perf">Perf</b><span>Background checks pause while the tab is hidden, and the thumbnails in the Materials list are drawn as they scroll into view.</span></li>
+              <li><b class="is-perf">Perf</b><span>Backdrop blur is gone from the dialogs, pills, the gizmo HUD and tooltips, which makes drawing lighter. Batch rename draws the first 300 rows of its preview and says how many more it renames by the same rule.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.29.0">
           <div class="log-head">
-            <strong>v0.29.0<b class="rel-code">Bohinj</b></strong><em>Latest</em><span>14 Oct 2026 · 20:05</span><span>9 fixes</span>
+            <strong>v0.29.0<b class="rel-code">Bohinj</b></strong><span>14 Oct 2026 · 20:05</span><span>9 fixes</span>
           </div>
           <div class="log-body">
             <p>Big assemblies got easier to handle. Groups now line up, copy and keep their pivots as one piece, and the whole workspace looks and moves like a finished app: windows, menus and the colour wheel with a macOS feel, and every edge and icon line sharp to the pixel.</p>
@@ -594,7 +639,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.29.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.30.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
