@@ -1707,3 +1707,4 @@ main { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) { .cl-say[data-pool] li, .cl-say[data-pool] li.is-new { animation: none; } .cl-say[data-pool] li.is-out { animation: none; opacity: 0; } }
 
 .credit-i { display: inline-block; width: 13px; height: 13px; margin: -2px 7px 0 0; vertical-align: middle; }
+.wand-band .wand-tips kbd svg { flex: none; width: 15px; height: 15px; margin-right: 8px; color: var(--tx-2); }
