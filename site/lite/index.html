@@ -4466,15 +4466,16 @@ body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
 .off-row:hover .off-bar{background:rgba(255,255,255,.1)}
 .off-row:hover .off-bar-fill,.off-row.selected .off-bar-fill{filter:saturate(1.25) brightness(1.08)}
 @keyframes offGrow{from{clip-path:inset(0 100% 0 0 round 999px)}to{clip-path:inset(0 0 0 0 round 999px)}}
+/* the bars grow when the list first appears (a model opens), not each time it is brought up to date (every release of an edit) */
 @media (prefers-reduced-motion:no-preference){
-  .off-bar-fill{animation:offGrow 460ms var(--ease-out) both}
-  .off-row:nth-child(2) .off-bar-fill{animation-delay:40ms}
-  .off-row:nth-child(3) .off-bar-fill{animation-delay:80ms}
-  .off-row:nth-child(4) .off-bar-fill{animation-delay:120ms}
-  .off-row:nth-child(5) .off-bar-fill{animation-delay:160ms}
-  .off-row:nth-child(6) .off-bar-fill{animation-delay:200ms}
-  .off-row:nth-child(7) .off-bar-fill{animation-delay:240ms}
-  .off-row:nth-child(n+8) .off-bar-fill{animation-delay:280ms}
+  .off-list.off-fresh .off-bar-fill{animation:offGrow 460ms var(--ease-out) both}
+  .off-list.off-fresh .off-row:nth-child(2) .off-bar-fill{animation-delay:40ms}
+  .off-list.off-fresh .off-row:nth-child(3) .off-bar-fill{animation-delay:80ms}
+  .off-list.off-fresh .off-row:nth-child(4) .off-bar-fill{animation-delay:120ms}
+  .off-list.off-fresh .off-row:nth-child(5) .off-bar-fill{animation-delay:160ms}
+  .off-list.off-fresh .off-row:nth-child(6) .off-bar-fill{animation-delay:200ms}
+  .off-list.off-fresh .off-row:nth-child(7) .off-bar-fill{animation-delay:240ms}
+  .off-list.off-fresh .off-row:nth-child(n+8) .off-bar-fill{animation-delay:280ms}
 /* Heavy parts: the rows touch (no gap), and rows that are selected next to each other are one shape: rounded at the two ends of the run, straight where they
    meet, with the outline only round the whole. (The outline is a border, so it follows the rounded corners; every row has one, transparent, and the
    padding and the bar give back the pixel, so nothing moves.) */
