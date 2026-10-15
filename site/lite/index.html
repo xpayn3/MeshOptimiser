@@ -265,6 +265,7 @@
   --z-dock-float:98;
   --z-dock-float-top:99;
   --z-view-layer:96;                  /* the view's own toolbars, tips and command cards: under the floating windows */
+  --z-console:97;                    /* the log console: over the view's own toolbars (the bottom one too), under the floating windows */
   --z-view-pop:101;                   /* a toolbar with a picker open: above the floating windows */
   /* Marks and motion */
   --pin:#ffa820;                      /* the arrow that points to a selection that is out of view */
@@ -1943,7 +1944,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 #file-warn pre{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-md);padding:var(--space-xl) var(--space-2xl);font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx);line-height:1.8}
 
 /* Global Log Console */
-#log-console{position:fixed;bottom:22px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px -16px var(--blk-50);display:flex;flex-direction:column;z-index:var(--z-toolbar);font:12px/1.5 var(--font-sans)}
+#log-console{position:fixed;bottom:22px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px -16px var(--blk-50);display:flex;flex-direction:column;z-index:var(--z-console);font:12px/1.5 var(--font-sans)}
 .lc-grip{position:absolute;top:-3px;left:0;right:0;height:6px;cursor:ns-resize;z-index:1}
 .lc-grip:hover{background:var(--ac-tint-15)}
 .lc-h{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) var(--space-lg);border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:var(--font-sans)}

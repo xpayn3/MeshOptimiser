@@ -1657,13 +1657,28 @@ function _treeSyncFlagged() {
 
 // The colour dot of the rows that are already there (a material's colour changed: the rows are not
 // rebuilt, so the dot would keep the old colour until the tree was drawn again).
+// The colour a part shows in the tree is its material's colour: the material it wears now, not a copy of a colour kept on the part.
+// (A part of several meshes shows its first material; a part with no material of its own shows the colour it came with.)
+function _partColourHex(p) {
+  let m = null;
+  try {
+    const h = p.mesh || p.instancedMesh;
+    if (h) {
+      if (h.isMesh || h.isInstancedMesh) m = _ownMaterialOf(h);
+      else h.traverse(o => { if (!m && o.isMesh && !o.userData.selGlow) m = _ownMaterialOf(o); });
+    }
+    if (Array.isArray(m)) m = m[0];
+  } catch (_) { m = null; }
+  const c = (m && m.color && !_isNoneMat(m)) ? m.color : p.originalColor;
+  return '#' + c.getHexString();
+}
 function _treeSyncColours() {
   for (const row of _treeRows()) {
     if (!row.dataset || !row.dataset.partId) continue;
     const dot = row.querySelector('.tree-color');
     const p = getPart(parseInt(row.dataset.partId, 10));
     if (!dot || !p || !p.originalColor) continue;
-    const hex = '#' + p.originalColor.getHexString();
+    const hex = _partColourHex(p);
     if (dot.dataset.hex !== hex) { dot.dataset.hex = hex; dot.style.background = hex; }
   }
 }
@@ -15969,7 +15984,7 @@ function rebuildTree() {
     if (!p.visible) node.classList.add('hidden-vis');
     if (p.flagged) node.classList.add('flagged');
     node.dataset.partId = p.partId;
-    const colorHex = '#' + p.originalColor.getHexString();
+    const colorHex = _partColourHex(p);
     const eye = p.visible
       ? _ico('eye')
       : _ico('eye-off');
@@ -16504,7 +16519,7 @@ function _fillTreeRow(row) {
   }
   const p = getPart(n.partId);
   if (!p) return;
-  const colorHex = '#' + p.originalColor.getHexString();
+  const colorHex = _partColourHex(p);
   const instN = _isInstanceCopy(p) ? 2 : 0;       // (the icon: a copy gets the copy icon, the original and a part of its own the model icon; the ×N badge counts them all)
   // Instances get their own icon ("this is one of N copies").
   // tree-expand-spacer keeps leaf rows aligned with their parents' +/- boxes.
@@ -36281,7 +36296,19 @@ function _matHolder(p) { return p ? (p.mesh || p.instancedMesh || null) : null; 
 // assign / delete / merge actions work on the material the part really has, so they read it with _matOf and put a new one
 // back with _matSet (which, under Clay or CAD, changes what the part will wear again, not the view's material).
 function _matOf(h) { return h ? _ownMaterialOf(h) : null; }
+// A part that is given a material shows it in the tree at once (the dot reads the material), whoever gave it: a drop, Assign, undo,
+// a merge, a deleted material's default.
+let _matDotRaf = 0;
 function _matSet(h, m) {
+  _matSetRaw(h, m);
+  try {
+    const p = h && h.userData && h.userData.partId != null ? getPart(h.userData.partId) : null;
+    if (p && p.originalColor) {
+      if (!_matDotRaf) _matDotRaf = setTimeout(() => { _matDotRaf = 0; try { _treeSyncColours(); } catch (_) {} }, 0);   // (once for a whole drop of many parts)
+    }
+  } catch (_) {}
+}
+function _matSetRaw(h, m) {
   if (!h) return;
   const cur = h.material;
   if (_clayMat && cur === _clayMat) { if (h.isInstancedMesh) { const r = _clayInst.get(h); if (r) r.mat = m; } else _clayOwn.set(h, m); return; }
@@ -36764,7 +36791,66 @@ function _populateMaterialsList() {
   try { _wireMaterialActions(); } catch (e) { console.warn('[mat] wiring:', e); }
   const r = _fillMaterialsList();
   _refreshUsedBySelection();
+  // every change of a material draws the list, so the other places are brought level here, in the same breath (not a moment later)
+  _matResync(false, true);
   return r;
+}
+// The scene's materials are shown in many places: the Materials list (grid and list), the card in Properties, the material inspector,
+// the colour dots in the part tree, the editor. They must all say the same thing, every time, whoever changed the material (a drop, Assign,
+// the editor, a preset, a merge, undo, Claude). So there is one check: a line that says what the scene has (each material with its
+// colour, name, surface numbers and how many parts wear it, and which material each selected part wears). When the line is not
+// the one the places were last drawn for, they are all brought up to date at once. It runs when a press, a key or a drop has ended
+// and whenever one of the places is drawn, and costs nothing while nothing changes.
+let _matListSig = '', _matSyncLast = null;
+const _matSigIds = new WeakMap();
+const _matSigId = (m) => { let id = _matSigIds.get(m); if (id == null) { id = _matSigIds._n = (_matSigIds._n || 0) + 1; _matSigIds.set(m, id); } return id; };
+function _matSigOf(everything) {
+  let out = '';
+  for (const e of everything) {
+    const m = e.mat;
+    out += _matSigId(m) + ':' + e.count + ':' + (m.color ? m.color.getHex() : 0) + ':' + (m.name || '') + ':' + (m.roughness != null ? m.roughness : '') + ':' + (m.metalness != null ? m.metalness : '') + ':' + (m.opacity != null ? m.opacity : '') + ':' + (m.emissive ? m.emissive.getHex() : '') + '|';
+  }
+  return out;
+}
+// (the second line: which material each selected part wears. A new selection draws Properties by itself; it is a change of the
+// materials under the same selection that this check is for)
+function _matSyncSigs() {
+  let sel = '', ids = '';
+  for (const id of (state.selected || [])) {
+    const p = getPart(id); if (!p || p.deleted) continue;
+    let m = _matOf(_matHolder(p)); if (Array.isArray(m)) m = m[0];
+    sel += id + ','; ids += id + '=' + (m ? _matSigId(m) : 0) + ',';
+  }
+  return { all: _matSigOf(_collectLiveMaterials()), sel, ids };
+}
+const _matSeenColour = new WeakMap();
+function _matResync(force, listDrawn) {
+  try {
+    const sig = _matSyncSigs(), last = _matSyncLast;
+    _matSyncLast = sig;
+    const sameSel = last && last.sel === sig.sel;
+    const changed = !last || last.all !== sig.all || (sameSel && last.ids !== sig.ids);
+    if (!force && !changed) return;
+    // a material whose colour is not the one it had: the parts that wear it take it, and so the dots in the tree
+    for (const e of _collectLiveMaterials()) {
+      const hex = e.mat.color ? e.mat.color.getHex() : null;
+      const was = _matSeenColour.get(e.mat);
+      if (hex != null && was !== undefined && was !== hex) { try { _syncPartColours(e.mat); } catch (_) {} _matPreviewCache.delete(e.mat); }
+      if (hex != null) _matSeenColour.set(e.mat, hex);
+    }
+    try { _treeSyncColours(); } catch (_) {}
+    if (!listDrawn) { try { if (document.getElementById('vp-materials-pop')?.classList.contains('show')) _populateMaterialsList(); } catch (_) {} }
+    try { refreshPropertiesPanel?.(); } catch (_) {}
+    try { _renderMatInspector?.(); } catch (_) {}
+  } catch (_) {}
+}
+if (typeof window !== 'undefined') {
+  let _guardRaf = 0;
+  const soon = () => { if (_guardRaf) return; _guardRaf = setTimeout(() => { _guardRaf = 0; _matResync(); }, 0); };
+  window.addEventListener('pointerup', () => setTimeout(soon, 0), true);
+  window.addEventListener('keyup', soon, true);
+  window.addEventListener('drop', () => setTimeout(soon, 0), true);
+  window._matResync = _matResync;
 }
 function _fillMaterialsList() {
   const list = document.getElementById('mat-list');
@@ -36773,6 +36859,7 @@ function _fillMaterialsList() {
   _setMatViewMode(mode);
   _wireMatDock();
   const everything = _collectLiveMaterials();
+  _matListSig = _matSigOf(everything);
   const mats = _matDockFilterSort(everything);
   const countEl = document.getElementById('mat-dock-count');
   if (countEl) countEl.textContent = mats.length === everything.length ? String(everything.length) : mats.length + ' of ' + everything.length;
@@ -39793,7 +39880,7 @@ rebuildTree = function() {
     if (!p.visible) node.classList.add('hidden-vis');
     if (p.flagged) node.classList.add('flagged');
     node.dataset.partId = p.partId;
-    const colorHex = '#' + p.originalColor.getHexString();
+    const colorHex = _partColourHex(p);
     const eye = p.visible
       ? `<i data-lucide="eye"></i>`
       : `<i data-lucide="eye-off"></i>`;
@@ -44627,7 +44714,7 @@ rebuildTree = function() {
     if (!p.visible) node.classList.add('hidden-vis');
     if (p.flagged) node.classList.add('flagged');
     node.dataset.partId = p.partId;
-    const colorHex = '#' + p.originalColor.getHexString();
+    const colorHex = _partColourHex(p);
     const eye = p.visible
       ? `<i data-lucide="eye"></i>`
       : `<i data-lucide="eye-off"></i>`;
@@ -50089,6 +50176,9 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-pop.cp-drag .cp-hot,.cp-pop.cp-drag .cp-hot *,.cp-pop.cp-drag .cp-compare,.cp-pop.cp-drag .cp-compare *{visibility:visible}
       .cp-pop.cp-drag .cp-compare{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 6px 17px rgba(0,0,0,.5)}
       .cp-pop.cp-drag .cp-hot{box-shadow:0 0 0 1px rgba(255,255,255,.35),0 6px 17px rgba(0,0,0,.5)}
+      /* the strip along the top and the hint along the bottom move the picker: grab it there */
+      .cp-pop .cp-top,.cp-pop .cp-hint{cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}
+      .cp-pop.cp-moving .cp-top,.cp-pop.cp-moving .cp-hint{cursor:grabbing}
       .mat-swatch{cursor:pointer}
       .mat-swatch:hover{transform:scale(1.15);box-shadow:0 2px 6px rgba(0,0,0,.5),0 0 0 2px var(--ac-tint-45)!important}
     `;
@@ -50124,6 +50214,49 @@ setTimeout(() => _dndDecorateTree(), 0);
       <div class="cp-sw-block" data-row="presets"><button type="button" class="cp-sw-h" data-fold="presets" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>Presets<em></em></button><div class="cp-sw-row"></div></div>
       <div class="cp-hint">Enter applies · Esc cancels · Ctrl+Z steps back</div>`;
     document.body.appendChild(popEl);
+    // moving the picker: drag the strip along its top (or the hint along its bottom), not a control
+    popEl.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !session) return;
+      const grip = e.target.closest && e.target.closest('.cp-top, .cp-hint');
+      if (!grip || e.target.closest('button, input, select, a')) return;
+      e.preventDefault();
+      const r0 = popEl.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY, id = e.pointerId;
+      const maxL = Math.max(8, window.innerWidth - r0.width - 8), maxT = Math.max(8, window.innerHeight - r0.height - 8);
+      let raf = 0, nl_ = r0.left, nt_ = r0.top;
+      popEl.classList.add('cp-moving');
+      try { popEl.setPointerCapture(id); } catch (_) {}
+      // one write to the style per frame, however fast the pointer reports
+      const paint = () => {
+        raf = 0;
+        if (!session) return;
+        popEl.style.left = nl_ + 'px'; popEl.style.top = nt_ + 'px';
+        session.moved = { left: nl_, top: nt_ };
+      };
+      const move = (ev) => {
+        if (ev.pointerId !== id || !session) return;
+        nl_ = Math.min(Math.max(8, r0.left + ev.clientX - x0), maxL);
+        nt_ = Math.min(Math.max(8, r0.top + ev.clientY - y0), maxT);
+        if (!raf) raf = requestAnimationFrame(paint);
+      };
+      let done = false;
+      const up = () => {
+        if (done) return; done = true;
+        popEl.removeEventListener('pointermove', move);
+        popEl.removeEventListener('pointerup', up);
+        popEl.removeEventListener('pointercancel', up);
+        popEl.removeEventListener('lostpointercapture', up);
+        window.removeEventListener('blur', up);
+        if (raf) { cancelAnimationFrame(raf); paint(); }
+        try { popEl.releasePointerCapture(id); } catch (_) {}
+        popEl.classList.remove('cp-moving');
+        _movedAt = performance.now();
+      };
+      popEl.addEventListener('pointermove', move);
+      popEl.addEventListener('pointerup', up);
+      popEl.addEventListener('pointercancel', up);
+      popEl.addEventListener('lostpointercapture', up);
+      window.addEventListener('blur', up);
+    });
     const q = (sel) => popEl.querySelector(sel);
     els = {
       area: q('.cp-area'), sv: q('.cp-sv'), svCur: q('.cp-sv .cp-cur'), hue: q('.cp-hue'), hueCur: q('.cp-hue .cp-bar-cur'),
@@ -50347,6 +50480,12 @@ setTimeout(() => _dndDecorateTree(), 0);
   function _position(anchor) {
     const ar = anchor.getBoundingClientRect();
     const pr = popEl.getBoundingClientRect();
+    if (session && session.moved) {      // moved by hand: it stays where it was put (only kept inside the window)
+      const l = Math.min(Math.max(8, session.moved.left), Math.max(8, window.innerWidth - pr.width - 8));
+      const t = Math.min(Math.max(8, session.moved.top), Math.max(8, window.innerHeight - pr.height - 8));
+      popEl.style.left = l + 'px'; popEl.style.top = t + 'px';
+      return;
+    }
     let left = ar.left - pr.width - 8;        // prefer left of anchor
     let top  = ar.top + ar.height / 2 - pr.height / 2;
     if (left < 8) left = ar.right + 8;        // fall back to right
@@ -50357,8 +50496,10 @@ setTimeout(() => _dndDecorateTree(), 0);
     popEl.style.top  = top  + 'px';
   }
 
+  let _movedAt = 0;      // when the picker was last let go after being moved: the click that ends a drag is not an outside click
   function _onDocClick(e) {
     if (popEl && popEl.contains(e.target)) return;
+    if (performance.now() - _movedAt < 400) return;
     // Clicking another swatch should re-open with new context, not close. The swatch handler runs after this in bubble
     // phase and opens the picker again, which re-seeds session — let it through without canceling.
     if (e.target.closest && e.target.closest('#_mat-editor-popup .mat-swatch, #mat-inspector [data-mi-colour]')) return;
@@ -50405,7 +50546,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     document.removeEventListener('keydown', _onKeyDown,    true);
     window.removeEventListener('resize',    _onWindow);
     window.removeEventListener('scroll',    _onWindow, true);
-    if (popEl) { popEl.classList.remove('show', 'cp-drag'); for (const e of popEl.querySelectorAll('.cp-hot')) e.classList.remove('cp-hot'); }
+    if (popEl) { popEl.classList.remove('show', 'cp-drag', 'cp-moving'); for (const e of popEl.querySelectorAll('.cp-hot')) e.classList.remove('cp-hot'); }
     document.documentElement.classList.remove('cp-dragging');
   }
   function _cancel() {

@@ -57,12 +57,15 @@
       <ol class="log">
         <li id="v0.31.1">
           <div class="log-head">
-            <strong>v0.31.1</strong><em>Next</em><span>15 Oct 2026</span><span>2 fixes</span>
+            <strong>v0.31.1</strong><em>Next</em><span>15 Oct 2026</span><span>5 fixes</span>
           </div>
           <div class="log-body">
-            <p>A few small touches to the interface.</p>
+            <p>Materials stay level everywhere, the colour picker can be moved, and a few small touches.</p>
             <ul>
-              <li><b class="is-fix">Fix</b><span>Change the colour of a material and the colour dot of its parts in the part tree changes with it, also for a part made of several meshes. Before, some dots kept the old colour.</span></li>
+              <li><b class="is-new">New</b><span>The colour picker can be moved. Drag the strip along its top, or the hint along its bottom, to put it where it does not cover what you are colouring.</span></li>
+              <li><b class="is-fix">Fix</b><span>Every place that shows a material says the same thing at once: the Materials list, the card in Properties, the inspector and the dots in the part tree. Drop a material on a part, assign it, undo it or change its colour, and they all follow.</span></li>
+              <li><b class="is-fix">Fix</b><span>The colour dot in the part tree is the colour of the part’s material, not a copy kept on the part, so it can no longer show an old colour.</span></li>
+              <li><b class="is-fix">Fix</b><span>The log console covers the toolbar at the bottom of the view instead of sitting under it.</span></li>
               <li><b class="is-fix">Fix</b><span>The buttons at the bottom of the Claude connection menu fit inside it. Claude mode has a row of its own and the other three sit under it.</span></li>
               <li><b class="is-polish">Polish</b><span>The buttons in the top bar draw their icons at one size, so the sidebar button no longer looks heavier than Menu and Export.</span></li>
               <li><b class="is-polish">Polish</b><span>The cards on the start screen show their shortcut when you point at them.</span></li>
