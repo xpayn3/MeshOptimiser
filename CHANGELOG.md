@@ -8,6 +8,10 @@ Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &n
 
 **Polish**
 
+- ![fix][fix] **The colour dot in the tree is the material's colour.** It used to show a colour kept on the part, so a material dropped on a part, Assigned, undone or merged left the old colour. The dot now reads the material the part wears, and it changes in the same moment.
+- ![fix][fix] **Every place that shows a material says the same thing, at once.** The Materials list (grid and list), the material card in Properties, the inspector and the dots in the tree are brought level whenever a material, its colour or who wears it changes, by any route: a drop, Assign, the editor, a preset, a merge, undo. A check when a press, key or drop ends catches anything else.
+- ![fix][fix] **The log console covers the bottom toolbar.** The toolbar at the bottom of the view floated above the console; the console now stands over it (and under the floating windows).
+- ![new][new] **The colour picker can be moved.** Drag the strip along its top (or the hint along its bottom) to put it where it does not cover what you are colouring. It stays there while it is open, is kept inside the window, and drags at the speed of the pointer: one style write per frame.
 - ![fix][fix] **The colour dot in the tree follows a material's colour.** Changing the colour of a material changed the parts in the 3D view but left the dot on their tree rows with the old colour until the tree was redrawn; the dots now change with it.
 - ![fix][fix] **The Claude connected dropdown fits its panel.** The buttons at its foot (Claude mode, Copy command, Console, More…) ran out of the panel. *Claude mode* now has a row of its own and the other three sit under it.
 - ![polish][polish] **Icon-only buttons in the top bar draw at one size.** The sidebar button drew its icon larger than Menu and Export, so its lines looked thicker; the sidebar, screenshot and turntable buttons now match.
