@@ -2,7 +2,7 @@
 //
 // Quick remesh (B) in the real app, smart against plain: the same level on the same model, compared by the triangles that are left, how
 // many of them are slivers (the fans a plain reduction leaves on flat faces), and how far the surface area moved. Needs the app served on
-// http://localhost:4242 (python serve.py --no-browser --port 4242), Chrome installed and Node 22+.
+// http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';

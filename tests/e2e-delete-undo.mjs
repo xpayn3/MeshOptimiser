@@ -2,7 +2,7 @@
 //
 // Copies a group of the model's own tree (click its row, Ctrl+C) and pastes it (Ctrl+V): the result must be one new group, "<name> copy", with a
 // copy of every part in it, the way other 3D apps do it; the tree keeps its groups (no flat list); undo takes the copy away, redo brings it back.
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';

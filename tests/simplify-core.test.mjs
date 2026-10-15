@@ -1,8 +1,8 @@
 // node tests/simplify-core.test.mjs — checks simplify-core.js against the vendored meshoptimizer.
 // The reported error is an estimate; the test measures the real distance on a sphere and
 // requires the estimate to be in the right range (not far below what was measured).
-import { MeshoptSimplifier as S } from '../vendor/meshoptimizer/meshopt_simplifier.module.js';
-import { packAttributes, reduceIndex, analyseCreases, lockSharp } from '../simplify-core.js';
+import { MeshoptSimplifier as S } from '../app/vendor/meshoptimizer/meshopt_simplifier.module.js';
+import { packAttributes, reduceIndex, analyseCreases, lockSharp } from '../app/js/simplify-core.js';
 
 await S.ready;
 S.useExperimentalFeatures = true;

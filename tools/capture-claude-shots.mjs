@@ -13,7 +13,7 @@ const MODEL = process.argv[3] || 'inbox/GearboxAssy.glb';
 const APP = 4343, DBG = 9377, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-shots-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 fs.mkdirSync(OUT, { recursive: true });
-const srv = spawn('python', ['serve.py', '--no-browser', '--port', String(APP)], { cwd: path.resolve('.'), stdio: 'ignore' });
+const srv = spawn('python', ['app/serve.py', '--no-browser', '--port', String(APP)], { cwd: path.resolve('.'), stdio: 'ignore' });
 const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${DBG}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1920,1080', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0, rpcId = 0; const pending = new Map();
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });

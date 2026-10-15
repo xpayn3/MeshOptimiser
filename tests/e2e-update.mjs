@@ -25,14 +25,14 @@ process.on('exit', cleanup);
 // ── 1. two copies: the installed app (0.21.0) and the one the release is built from ──
 const SKIP = new Set(['.git', '.venv', 'inbox', 'exports', '__pycache__', '.update', 'dist', 'node_modules', '.claude', 'server.log', 'tests', 'docs']);
 const copy = (from, to) => { fs.mkdirSync(to, { recursive: true }); for (const e of fs.readdirSync(from, { withFileTypes: true })) { if (SKIP.has(e.name)) continue; const s = path.join(from, e.name), d = path.join(to, e.name); e.isDirectory() ? copy(s, d) : fs.copyFileSync(s, d); } };
-copy(SRC, A);
+copy(path.join(SRC, 'app'), A);
 fs.mkdirSync(path.join(A, 'inbox'), { recursive: true }); fs.writeFileSync(path.join(A, 'inbox', 'keep-me.glb'), 'MY MODEL');
 fs.writeFileSync(path.join(A, 'version.json'), JSON.stringify({ version: '0.21.0', launcher: 1 }));
-copy(A, B); fs.mkdirSync(path.join(B, 'tools'), { recursive: true }); fs.copyFileSync(path.join(SRC, 'tools', 'build-update.py'), path.join(B, 'tools', 'build-update.py'));
+copy(A, path.join(B, 'app')); fs.mkdirSync(path.join(B, 'tools'), { recursive: true }); fs.copyFileSync(path.join(SRC, 'tools', 'build-update.py'), path.join(B, 'tools', 'build-update.py'));
 fs.copyFileSync(path.join(SRC, '.gitignore'), path.join(B, '.gitignore'));
 // the new version: a marker file, a visible version, a changelog with notes
-fs.writeFileSync(path.join(B, 'e2e-marker.txt'), 'new version');
-let html = fs.readFileSync(path.join(B, 'index.html'), 'utf8'); html = html.replace('id="brand-menu-ver">v0.21.0<', 'id="brand-menu-ver">v0.22.0<'); fs.writeFileSync(path.join(B, 'index.html'), html);
+fs.writeFileSync(path.join(B, 'app', 'e2e-marker.txt'), 'new version');
+let html = fs.readFileSync(path.join(B, 'app', 'index.html'), 'utf8'); html = html.replace('id="brand-menu-ver">v0.21.0<', 'id="brand-menu-ver">v0.22.0<'); fs.writeFileSync(path.join(B, 'app', 'index.html'), html);
 fs.writeFileSync(path.join(B, 'CHANGELOG.md'), '# Changelog\n\n## v0.22.0\n\nReleased 20 Oct 2026.\n\n- ![new][new] **Test feature one.** Something.\n- ![fix][fix] **Test fix two.** Something else.\n');
 const git = (args) => spawnSync('git', args, { cwd: B, encoding: 'utf8' });
 git(['init', '-q']); git(['add', '-A']);

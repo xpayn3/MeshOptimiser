@@ -1,5 +1,5 @@
 // node tests/unsubdivide.test.mjs — checks unsubdivide.js on shapes built here.
-import { unsubdivide } from '../unsubdivide.js';
+import { unsubdivide } from '../app/js/unsubdivide.js';
 
 let failed = 0;
 const check = (name, cond, extra = '') => { console.log((cond ? '  ok   ' : '  FAIL ') + name + (cond ? '' : '  ' + extra)); if (!cond) failed++; };

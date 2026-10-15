@@ -11,7 +11,7 @@ import path from 'path';
 const src = process.argv[2];
 if (!src) { console.log('usage: node tools/build-knowledge.mjs <path to docs-content.js>'); process.exit(2); }
 const docs = createRequire(import.meta.url)(path.resolve(src));
-const OUT = path.resolve('knowledge/docs');
+const OUT = path.resolve('app/knowledge/docs');
 // what an agent needs: how to read, clean up, simplify, check and export a model. Not how to install the app.
 const SKIP_GROUPS = new Set(['install', 'claude']);
 const SKIP = new Set(['requirements', 'download', 'first-start', 'install-as-app', 'stop-restart-update', 'command-line', 'files-in-folder', 'self-test', 'help-window', 'settings-appearance']);
@@ -45,5 +45,5 @@ for (const a of docs.articles) {
   fs.writeFileSync(path.join(OUT, a.slug + '.md'), text);
   index.push({ slug: a.slug, title: a.title, group: a.group, groupTitle: group[a.group], summary: md(a.summary), chars: text.length });
 }
-fs.writeFileSync(path.resolve('knowledge/index.json'), JSON.stringify(index, null, 1));
-console.log(`Wrote ${index.length} articles (${index.reduce((n, a) => n + a.chars, 0)} characters) to knowledge/docs/`);
+fs.writeFileSync(path.resolve('app/knowledge/index.json'), JSON.stringify(index, null, 1));
+console.log(`Wrote ${index.length} articles (${index.reduce((n, a) => n + a.chars, 0)} characters) to app/knowledge/docs/`);

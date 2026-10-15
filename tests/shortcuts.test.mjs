@@ -6,7 +6,7 @@
 // and not listed, this fails, so the window cannot fall behind the app.
 import fs from 'fs';
 
-const src = fs.readFileSync(new URL('../app-v2.js', import.meta.url), 'utf8');
+const src = fs.readFileSync(new URL('../app/js/app.js', import.meta.url), 'utf8');
 let failed = 0;
 const ok = (cond, msg) => { if (!cond) { failed++; console.error('FAIL  ' + msg); } };
 

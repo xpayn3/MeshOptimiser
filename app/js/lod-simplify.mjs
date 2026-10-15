@@ -1,11 +1,11 @@
-// lod_simplify.mjs - the mesh simplifier of step2glb.py --lod, when gltfpack is not installed.
+// lod-simplify.mjs - the mesh simplifier of step2glb.py --lod, when gltfpack is not installed.
 //
 // It runs meshoptimizer's simplifier from the app's own bundled copy
 // (vendor/meshoptimizer/meshopt_simplifier.module.js, the file the browser
 // app uses for Decimate), so a LOD made here is simplified by the same code
 // the app uses. Node.js is the only thing it needs.
 //
-//   node lod_simplify.mjs <in.bin> <out.bin> <target-error>
+//   node lod-simplify.mjs <in.bin> <out.bin> <target-error>
 //
 // in.bin  (little endian): u32 meshCount, then per mesh
 //           u32 vertexCount, u32 indexCount, u32 targetIndexCount,
@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path';
 
 const [, , inPath, outPath, errArg] = process.argv;
 if (!inPath || !outPath) {
-  console.error('usage: node lod_simplify.mjs <in.bin> <out.bin> <target-error>');
+  console.error('usage: node lod-simplify.mjs <in.bin> <out.bin> <target-error>');
   process.exit(2);
 }
 const targetError = Number.isFinite(parseFloat(errArg)) ? parseFloat(errArg) : 0.01;
@@ -30,7 +30,7 @@ const targetError = Number.isFinite(parseFloat(errArg)) ? parseFloat(errArg) : 0
 // The module is an ES module in a .js file next to no package.json: older Node
 // versions refuse that, so its source is run directly (it defines one global).
 const here = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(here, 'vendor', 'meshoptimizer', 'meshopt_simplifier.module.js'), 'utf8')
+const src = readFileSync(join(here, '..', 'vendor', 'meshoptimizer', 'meshopt_simplifier.module.js'), 'utf8')
   .replace(/export\s*\{\s*MeshoptSimplifier\s*\}\s*;?\s*$/, '');
 const S = new Function(src + '\n;return MeshoptSimplifier;')();
 await S.ready;

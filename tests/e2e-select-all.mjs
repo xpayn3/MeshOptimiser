@@ -1,6 +1,6 @@
 // scratch: select all on a big model. node tests/e2e-select-all.mjs [model]
 // scratch: how long the page is blocked when the Wireframe view is switched on. node tests/e2e-wire-switch.mjs [model]
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';

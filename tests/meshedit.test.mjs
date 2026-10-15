@@ -1,7 +1,7 @@
 // node tests/meshedit.test.mjs — the points, edges and faces of a mesh (meshedit.js) on shapes built here:
 // a flat grid as a triangle soup, a cube, a grid with a square hole, a tube. Checks the welding, what a click picks,
 // the three kinds of loop, the face of a triangle, and which triangles go on a delete.
-import { buildTopology, pickElement, edgeLoop, pointLoop, edgeAtPoint, faceRegion, removalMask, pointPosition, counts, buildPolygons, pairQuads, outlineLines, pickPolygonElement, polygonLoop, nearestOutlineEdge, outlinePoints } from '../meshedit.js';
+import { buildTopology, pickElement, edgeLoop, pointLoop, edgeAtPoint, faceRegion, removalMask, pointPosition, counts, buildPolygons, pairQuads, outlineLines, pickPolygonElement, polygonLoop, nearestOutlineEdge, outlinePoints } from '../app/js/meshedit.js';
 
 let failed = 0, n = 0;
 const check = (name, ok, got) => { n++; if (!ok) { failed++; console.log('  FAIL  ' + name + (got !== undefined ? '   got: ' + JSON.stringify(got) : '')); } };

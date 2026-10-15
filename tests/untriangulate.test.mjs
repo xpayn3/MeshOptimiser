@@ -1,8 +1,8 @@
 // node tests/untriangulate.test.mjs — checks wirelines.js and untriangulate.js on shapes built here,
 // with THREE.ShapeUtils (the triangulator the app passes in).
-import { ShapeUtils, Vector2 } from '../vendor/three/build/three.core.js';
-import { analysePolygons, polygonEdges, wireIndex } from '../wirelines.js';
-import { untriangulate } from '../untriangulate.js';
+import { ShapeUtils, Vector2 } from '../app/vendor/three/build/three.core.js';
+import { analysePolygons, polygonEdges, wireIndex } from '../app/js/wirelines.js';
+import { untriangulate } from '../app/js/untriangulate.js';
 
 let fails = 0;
 const ok = (c, msg) => { if (!c) { fails++; console.log('FAIL', msg); } else console.log('ok  ', msg); };

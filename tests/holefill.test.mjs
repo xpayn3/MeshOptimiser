@@ -1,5 +1,5 @@
 // node tests/holefill.test.mjs — checks holefill.js on shapes built here.
-import { fillFlatHoles, applyHoleFill } from '../holefill.js';
+import { fillFlatHoles, applyHoleFill } from '../app/js/holefill.js';
 
 // ── tiny mesh builder: every face gets its own vertices, like CAD output ──
 function mesh() {

@@ -1,5 +1,5 @@
 // node tests/wirelines.test.mjs — checks wirelines.js.
-import { wireIndex } from '../wirelines.js';
+import { wireIndex } from '../app/js/wirelines.js';
 let fails = 0;
 const ok = (c, msg) => { if (!c) { fails++; console.log('FAIL', msg); } else console.log('ok  ', msg); };
 const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);

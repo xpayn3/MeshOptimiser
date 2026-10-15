@@ -3,7 +3,7 @@
 // Drives the Claude (MCP) tools of the real app in headless Chrome (software WebGL2): loads a model through the file input, then
 // calls every tool of window.__moBridgeTools (the same functions serve.py hands Claude's calls to; the Allow / Don't allow prompt
 // is the layer above them and is not part of this) and checks what each one did, including that the undo tool takes it back.
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 // Prints PASS / FAIL per check and every JavaScript error the page threw. Exit code 1 when anything failed.
 import { spawn } from 'child_process';
 import fs from 'fs';

@@ -295,7 +295,7 @@
       item.classList.toggle('is-new', isNew);
     }
   }
-  // the app menu's line (wired in app-v2.js next to Help): open Settings › Updates, and look if nothing is known yet
+  // the app menu's line (wired in app.js next to Help): open Settings › Updates, and look if nothing is known yet
   function openFromMenu() {
     try { window.__openSettings('updates'); } catch (_) {}
     if (available()) showCard('available'); else check({ manual: true });

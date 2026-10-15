@@ -2,7 +2,7 @@
 import { sampleSpline, polylineLength, pathFrames, profileTo2D, triangulatePolygon, sweep, extrude, lathe, loft,
   meshVolume, circle, rectangle, helix, bezierPieces, area2D,
   toBezier, insertPoint, removePoint, reverseSpline, smoothHandles, sharpPoint, isSharp, circleSpline, rectangleSpline,
-  polygonSpline, arcSpline, simplifyPolyline, sampleDetailed, roundedRectSpline, starSpline, filletCorners, mirrorSpline, INTERPOLATIONS } from '../splines.js';
+  polygonSpline, arcSpline, simplifyPolyline, sampleDetailed, roundedRectSpline, starSpline, filletCorners, mirrorSpline, INTERPOLATIONS } from '../app/js/splines.js';
 const V_sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 
 let fails = 0, checks = 0;

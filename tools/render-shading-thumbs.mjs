@@ -8,7 +8,7 @@
 //   node tools/render-shading-thumbs.mjs            all looks
 //   node tools/render-shading-thumbs.mjs steel      one look 
 //
-// The looks below mirror _CLAY_LOOKS and _CAD_LOOKS in app-v2.js: change one there, change it here, re-run.
+// The looks below mirror _CLAY_LOOKS and _CAD_LOOKS in app.js: change one there, change it here, re-run.
 // (ffmpeg is needed for the .webp; set FFMPEG if it is not on PATH. Without it the .png files stay.)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,11 +17,11 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = path.join(ROOT, 'assets', 'shading');
+const OUT = path.join(ROOT, 'app', 'assets', 'shading');
 const FFMPEG = process.env.FFMPEG || 'ffmpeg';
 const SS = 4, FINAL = 256, S = FINAL * SS;                       // the ray-march is S x S, the file FINAL x FINAL
 
-// ---- the looks (mirrors of app-v2.js) ----
+// ---- the looks (mirrors of app.js) ----
 const CLAY = {
   default:   { color: 0xc3c6cc, roughness: 0.42, metalness: 0.3 },
   clay:      { color: 0xb7b3ac, roughness: 0.82, metalness: 0 },

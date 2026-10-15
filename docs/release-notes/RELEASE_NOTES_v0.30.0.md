@@ -18,6 +18,6 @@ A Settings window that looks like one, Advanced flatten with before and after dr
 
 ## Fixed
 
-STEP files made of faceted breps open (the 413 MB Mercedes-Benz Arocs among them). Undo and redo on an exploded view put it back together, and a held Ctrl+Z no longer freezes the page. A deleted part follows the exploded view. Instance counts are live. Dragging a material shows the ball, not the system arrow, and Delete in the Materials window deletes materials. The Model mode button is greyed with nothing selected, grid lines are crisp from far away, and Advanced flatten follows the selection.
+STEP files made of faceted breps open (the 413 MB Mercedes-Benz Arocs among them). Undo and redo on an exploded view put it back together, and a held Ctrl+Z no longer freezes the page. A deleted part follows the exploded view. Instance counts are live. Dragging a material shows the ball, not the system arrow, and Delete in the Materials window deletes materials. The Model mode button is greyed with nothing selected, grid lines are crisp from far away, and Advanced flatten follows the selection. In the Materials window Ctrl+C and Ctrl+D act on the material you picked, not the parts. The Library preview stays in a narrow window and can be thrown, the material cards in the sidebar reach the edges of their strip, and Points mode no longer shows dots through a thin part.
 
 Full details are in the CHANGELOG.

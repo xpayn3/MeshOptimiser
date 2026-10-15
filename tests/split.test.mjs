@@ -1,6 +1,6 @@
 // node tests/split.test.mjs — split.js on shapes built here: pieces, edges, faces, small pieces, material groups, and speed.
-import * as THREE from '../vendor/three/build/three.core.js';
-import { partition, buildChildGeometries } from '../split.js';
+import * as THREE from '../app/vendor/three/build/three.core.js';
+import { partition, buildChildGeometries } from '../app/js/split.js';
 
 let fails = 0;
 const ok = (c, msg) => { if (!c) { fails++; console.log('FAIL', msg); } else console.log('ok  ', msg); };

@@ -1,7 +1,7 @@
 // node tests/meshtools.test.mjs — meshtools.js: Planarize, Straighten, Weld, Fill (what each works out, on shapes built here).
-import { ShapeUtils, Vector2 } from '../vendor/three/build/three.core.js';
-import { buildTopology, buildPolygons, pairQuads } from '../meshedit.js';
-import { planarize, straighten, weldPoints, collapseEdges, applyWeld, fillLoops } from '../meshtools.js';
+import { ShapeUtils, Vector2 } from '../app/vendor/three/build/three.core.js';
+import { buildTopology, buildPolygons, pairQuads } from '../app/js/meshedit.js';
+import { planarize, straighten, weldPoints, collapseEdges, applyWeld, fillLoops } from '../app/js/meshtools.js';
 
 let fails = 0;
 const ok = (c, msg) => { if (!c) { fails++; console.log('FAIL', msg); } else console.log('ok  ', msg); };

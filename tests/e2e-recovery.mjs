@@ -4,7 +4,7 @@
 // copy is written, undoing back to the saved state clears it, a second edit is copied again, the renderer is then killed (Page.crash, the
 // way a crashed tab ends) and the app is started again: it must say it closed unexpectedly, offer the scene back, and bring it back with
 // the edit in it, as a scene that is not saved. Also checks the new-scene defaults (unit, up axis).
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';

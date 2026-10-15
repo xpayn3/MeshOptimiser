@@ -7,7 +7,7 @@
 //      records whether the view was exploded so its undo can put an instance back at rest.
 import fs from 'fs';
 
-const src = fs.readFileSync(new URL('../app-v2.js', import.meta.url), 'utf8');
+const src = fs.readFileSync(new URL('../app/js/app.js', import.meta.url), 'utf8');
 let failed = 0;
 const ok = (cond, msg) => { if (!cond) { failed++; console.error('FAIL  ' + msg); } };
 const body = (re, name) => { const m = src.match(re); ok(m, 'could not find ' + name); return m ? m[0] : ''; };

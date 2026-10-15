@@ -1,7 +1,7 @@
 // node tests/normals-stress.test.mjs: Align / Reverse / the normals analysis against shapes that are known to be right,
 // then broken in every way a model can be (all inverted, a few faces reversed, half and half, nested shells, open shells,
 // non-manifold edges, junk input). Every result is checked by arithmetic, not by eye.
-import { repairMesh, analyseNormals } from '../meshrepair.js';
+import { repairMesh, analyseNormals } from '../app/js/meshrepair.js';
 
 let fails = 0, checks = 0;
 const ok = (c, msg) => { checks++; if (!c) { fails++; console.error('FAIL: ' + msg); } };

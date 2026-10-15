@@ -1,5 +1,5 @@
 // node tests/meshrepair.test.mjs: the arithmetic of Repair mesh and Remove hidden faces
-import { repairMesh, keepNearSeen, weldIds, parseCount, wildcardTest } from '../meshrepair.js';
+import { repairMesh, keepNearSeen, weldIds, parseCount, wildcardTest } from '../app/js/meshrepair.js';
 let fails = 0;
 const ok = (c, msg) => { if (!c) { fails++; console.error('FAIL: ' + msg); } };
 

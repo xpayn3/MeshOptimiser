@@ -1000,6 +1000,25 @@
     T.eq(a.Cylinder[0] - a.Cube[0], b.Cylinder[0] - b.Cube[0], 'Recenter changed the spacing between parts in the export');
   });
 
+  // A part from a STEP file has its origin at 0, 0, 0 and its shape out at its place in the model. Written as it is, every axis of the file
+  // (Cinema 4D, Blender, Maya) sat at 0, 0, 0. Pivot points: "At the centre of each part" (the default) puts it at the part.
+  test('export: pivots sit at the centre of each part, or as in the scene', async () => {
+    await T.fresh(['cube', 'cylinder']);
+    const part = state.parts.find(q => q.name === 'Cube');
+    const m0 = part.mesh.position.clone();
+    part.mesh.geometry.translate(500, 200, 100); part.mesh.geometry.computeBoundingBox(); part.mesh.updateMatrixWorld(true);
+    const sel = document.getElementById('exp-pivot');
+    T.assert(sel, 'the export has no Pivot points option');
+    try {
+      sel.value = 'part';
+      const at = T.gltfNodes(await T.gltf()).Cube;
+      T.eq(at.join(','), [m0.x + 500, m0.y + 200, m0.z + 100].map(Math.round).join(','), 'the node of the part is not at the centre of the part');
+      sel.value = 'origin';
+      const as = T.gltfNodes(await T.gltf()).Cube;
+      T.eq(as.join(','), [m0.x, m0.y, m0.z].map(Math.round).join(','), 'As in the scene did not keep the own origin of the part');
+    } finally { sel.value = 'part'; }
+  });
+
   // Up axis and Scene scale (Settings › Scene) are how the scene is shown and
   // measured. The file gets the model itself, and Export has its own Scale and
   // Axis. A part that was moved after the setting changed used to be written
@@ -1293,13 +1312,15 @@
     await T.undo(); T.eq(p.triCount, tris0, 'undo did not restore the triangle count'); T.eq(lowest(), TOP - D, 'undo did not bring the recess back');
     await T.redo(); T.eq(p.triCount, filled, 'redo did not fill it again');
     T.assert(p.mesh.geometry === first && ver(first) !== ver(g), 'redo put back a geometry the renderer cannot tell from the previous one');
-    // decimate swaps geometry the same way
-    const vBefore = ver(p.mesh.geometry), gBefore = p.mesh.geometry;
+    // decimate swaps geometry the same way (on the sphere: the filled plate is down to a handful of triangles, which Decimate leaves alone)
+    const sp = T.part('Sphere');
+    await T.pick(['Sphere']);
+    const vBefore = ver(sp.mesh.geometry), gBefore = sp.mesh.geometry;
     document.getElementById('decimate-strength').value = '0.5';
     document.getElementById('btn-decimate-sel').click();
-    for (let i = 0; i < 80 && p.mesh.geometry === gBefore; i++) await T.sleep(100);
-    T.assert(p.mesh.geometry !== gBefore, 'decimate did not replace the geometry');
-    T.assert(ver(p.mesh.geometry) !== vBefore, 'decimate swapped in a geometry with the same buffer versions');
+    for (let i = 0; i < 80 && sp.mesh.geometry === gBefore; i++) await T.sleep(100);
+    T.assert(sp.mesh.geometry !== gBefore, 'decimate did not replace the geometry');
+    T.assert(ver(sp.mesh.geometry) !== vBefore, 'decimate swapped in a geometry with the same buffer versions');
     size.value = '12';
   });
 

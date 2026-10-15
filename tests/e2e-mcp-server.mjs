@@ -14,7 +14,7 @@ const MODEL = process.argv[2] || 'inbox/Drive_Unit_DU-240.glb';
 const APP = 4343, DBG = 9366, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-srv-' + Date.now();
 const SHOTS = process.env.SHOTS || process.env.TEMP || '.';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const srv = spawn('python', ['serve.py', '--no-browser', '--port', String(APP)], { cwd: path.resolve('.'), stdio: ['ignore', 'ignore', process.env.SERVER_LOG ? fs.openSync(process.env.SERVER_LOG, 'w') : 'ignore'] });      // SERVER_LOG=<file>: what the server printed
+const srv = spawn('python', ['serve.py', '--no-browser', '--port', String(APP)], { cwd: path.resolve('app'), stdio: ['ignore', 'ignore', process.env.SERVER_LOG ? fs.openSync(process.env.SERVER_LOG, 'w') : 'ignore'] });      // SERVER_LOG=<file>: what the server printed
 const chrome = spawn(CH, ['--headless=new', '--no-sandbox', `--remote-debugging-port=${DBG}`, `--user-data-dir=${PROFILE}`, '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1500,950', 'about:blank'], { stdio: 'ignore' });
 let ws, id = 0; const pending = new Map(), errors = [], consoleErr = [];
 const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });

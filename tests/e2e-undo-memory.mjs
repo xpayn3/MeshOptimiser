@@ -2,7 +2,7 @@
 //
 // Remove holes, then Ctrl+Z, again and again, in the real app (headless Chrome): the geometry each pass makes must be freed once nothing
 // in the undo or redo history holds it (names like "unt_12_345" were never swept), and Ctrl+Z / Ctrl+Y must wait while a step is still
-// running. Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), Chrome installed and Node 22+.
+// running. Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';

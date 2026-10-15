@@ -1,7 +1,7 @@
 // node tests/uvtools.test.mjs — the UV check (uvtools.js) on shapes built here: one square, two islands side by side, islands
 // on top of each other, a map outside the 0–1 square, a mirrored island, a collapsed triangle, a stretched strip, an indexed cube
 // whose corners are split for their normals (it must still be one island per face, not one per triangle), and a big map's speed.
-import { analyseUV, hasUsableUV } from '../uvtools.js';
+import { analyseUV, hasUsableUV } from '../app/js/uvtools.js';
 
 let failed = 0, n = 0;
 const check = (name, ok, got) => { n++; if (!ok) { failed++; console.log('  FAIL  ' + name + (got !== undefined ? '   got: ' + JSON.stringify(got) : '')); } };

@@ -41,7 +41,7 @@ try:                                      # the converter's log has check marks;
 except Exception:
     pass
 
-APP = Path(__file__).resolve().parent.parent
+APP = Path(__file__).resolve().parent.parent / "app"
 STEP2GLB = APP / "step2glb.py"
 
 from OCP.BRep import BRep_Builder

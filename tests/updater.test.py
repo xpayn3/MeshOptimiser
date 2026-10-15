@@ -8,7 +8,7 @@ launcher files, a redirect to another host, a requirements install that fails, a
 import hashlib, http.server, io, json, os, shutil, sys, tempfile, threading, time, zipfile
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent.parent
+HERE = Path(__file__).resolve().parent.parent / "app"
 sys.path.insert(0, str(HERE))
 os.environ["MO_UPDATE_DEV"] = "1"
 import updater
@@ -34,7 +34,7 @@ def reset_app():
         if not APP.exists(): break
         time.sleep(0.15)
     APP.mkdir(parents=True, exist_ok=True)
-    for rel, data in {"index.html": b"<html>old</html>", "app-v2.js": b"old js", "serve.py": b"old serve", "requirements.txt": b"numpy\n",
+    for rel, data in {"index.html": b"<html>old</html>", "app.js": b"old js", "serve.py": b"old serve", "requirements.txt": b"numpy\n",
                       "vendor/three/three.js": b"three", "assets/a.png": b"png", "obsolete.js": b"gone soon",
                       "start.bat": b"launcher v1", "inbox/model.glb": b"MY MODEL", "exports/x.glb": b"EXPORT", ".venv/pyvenv.cfg": b"venv"}.items():
         p = APP / rel; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(data)
@@ -107,7 +107,7 @@ ok(updater.parse_version("banana") is None and updater.parse_version("1.2") is N
 # ── the check ───────────────────────────────────────────────────────────────
 print("check")
 reset_app()
-z1 = make_zip({"index.html": b"<html>new</html>", "app-v2.js": b"new js", "newfile.js": b"brand new", "vendor/three/three.js": b"three"})
+z1 = make_zip({"index.html": b"<html>new</html>", "app.js": b"new js", "newfile.js": b"brand new", "vendor/three/three.js": b"three"})
 serve_feed(stable=feed_for(z1))
 r = updater.check("stable")
 ok(r["available"] and r["latest"] == "0.22.0" and r["current"] == "0.21.0" and r["installable"] and r["notes"] == ["A", "B"], "a newer version is found, with its notes", r)
@@ -143,14 +143,14 @@ SERVED["/latest.json"] = (302, b"", {"Location": "http://example.com/steal.json"
 # ── a whole update ──────────────────────────────────────────────────────────
 print("install")
 reset_app(); before = tree()
-z1 = make_zip({"index.html": b"<html>new</html>", "app-v2.js": b"new js", "newfile.js": b"brand new", "vendor/three/three.js": b"three", "assets/b/c.png": b"deep"},
+z1 = make_zip({"index.html": b"<html>new</html>", "app.js": b"new js", "newfile.js": b"brand new", "vendor/three/three.js": b"three", "assets/b/c.png": b"deep"},
               extra_manifest={"delete": ["obsolete.js"]})
 SERVED["/app.zip"] = (200, z1, {}); serve_feed(stable=feed_for(z1))
 mt = (APP / "vendor/three/three.js").stat().st_mtime_ns
 st, done = run_install()
 ok(st["phase"] == "restarting" and done.get("to") == "0.22.0", "the update runs to the restart step", st)
 now = tree()
-ok(now["index.html"] == b"<html>new</html>" and now["app-v2.js"] == b"new js", "changed files are replaced")
+ok(now["index.html"] == b"<html>new</html>" and now["app.js"] == b"new js", "changed files are replaced")
 ok(now["newfile.js"] == b"brand new" and now["assets/b/c.png"] == b"deep", "new files are created, with their folders")
 ok("obsolete.js" not in now, "a file the release removes is removed")
 ok(now["serve.py"] == b"old serve" and now["assets/a.png"] == b"png", "files the release does not list are left alone")
@@ -213,10 +213,10 @@ for bad in ["assets/aux.png", "CON", "nul.txt", "a/COM1.js", "Lpt3.x/y.js"]:
     refuse_case("reserved name " + repr(bad), make_zip({bad: b"x"}), "reserved")
 # an archive swapped after it was checked: caught while writing, everything put back
 reset_app(); before = tree()
-zgood = make_zip({"index.html": b"<html>new</html>", "app-v2.js": b"new js"})
+zgood = make_zip({"index.html": b"<html>new</html>", "app.js": b"new js"})
 tmpz = APP.parent / "swap-test.zip"; tmpz.write_bytes(zgood)
 man = updater.verify_archive(tmpz, "0.22.0")
-tmpz.write_bytes(make_zip({"index.html": b"<html>new</html>", "app-v2.js": b"new js"}, tamper={"app-v2.js": b"EVIL js"}))
+tmpz.write_bytes(make_zip({"index.html": b"<html>new</html>", "app.js": b"new js"}, tamper={"app.js": b"EVIL js"}))
 raises(lambda: updater.apply_archive(tmpz, man), "changed after it was checked", "a file swapped after the check is caught as it is written")
 ok(tree() == before and not updater.PENDING.is_file(), "…and the files already replaced are put back")
 tmpz.unlink()
@@ -228,7 +228,7 @@ serve_feed(stable=feed_for(z1, more="https://lukagrcar.com/x")); ok(updater.chec
 reset_app()
 (APP / "blocked").write_bytes(b"i am a file where the update wants a folder")
 before = tree()
-zb = make_zip({"index.html": b"<html>new</html>", "app-v2.js": b"new js", "blocked/inner.js": b"cannot exist"})
+zb = make_zip({"index.html": b"<html>new</html>", "app.js": b"new js", "blocked/inner.js": b"cannot exist"})
 SERVED["/app.zip"] = (200, zb, {}); serve_feed(stable=feed_for(zb))
 st, _ = run_install()
 ok(st["phase"] == "error" and "put back" in st["error"].lower(), "a file that cannot be written stops the update", st)

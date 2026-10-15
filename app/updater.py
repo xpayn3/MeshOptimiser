@@ -35,9 +35,10 @@ MAX_UNPACKED = 600 * 1024 * 1024
 MAX_FILES = 20000
 # Never written, replaced or deleted by an update, whatever an archive says.
 PROTECTED = (".venv", ".git", ".update", ".claude", "inbox", "exports", "__pycache__", "node_modules", "server.log", "_archive")
+# (Paths here are relative to this folder, app/. The thin launchers one level up, in the install folder, are outside it and never touched.)
 # A running launcher is read by its shell line by line: replacing it under a running window breaks the window. A release that
 # changes them raises `launcher` in its feed entry, and the page then offers the full download instead of an in-place update.
-LAUNCHERS = ("start.bat", "start.command", "start.ico", "start_hidden.vbs", "step2glb.bat", "step2glb.command")
+LAUNCHERS = ("start.bat", "start.command", "start.ico", "start_hidden.vbs", "ui.ps1", "step2glb.bat", "step2glb.command")
 # The version file is written by this module, never copied from an archive (it carries the launcher level of THIS install).
 VERSION_FILE = ROOT / "version.json"
 PYTHON = sys.executable                       # serve.py points this at the project's own environment

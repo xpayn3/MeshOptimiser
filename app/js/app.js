@@ -1556,6 +1556,9 @@ function _stampGeometry(g) {
 // per icon from the library's own path data, so the drawing is identical.
 // Falls back to a placeholder until the library is loaded.
 const _icoCache = new Map();
+// The picture of a group (an assembly folder), in the part tree and in the Properties panel: one name, so the two cannot differ.
+const _GROUP_ICON = 'folder';
+
 function _ico(name) {
   let str = _icoCache.get(name);
   if (str !== undefined) return str;
@@ -16478,9 +16481,10 @@ function _fillTreeRow(row) {
     // place, so they are the source for what the row shows
     const collapsed = row.classList.contains('collapsed');
     const cloner = row.classList.contains('is-cloner');
+    const gLocked = !cloner && _groupLocked(n.id);      // (every part inside is locked: the folder is a red lock, as a locked part is)
     row.innerHTML = indent +
       `<span class="tree-expand" data-toggle="${n.id}">${collapsed ? '+' : '−'}</span>` +
-      `<span class="tree-typeicon ${cloner ? 'cln' : 'asm'}">${_ico(cloner ? 'copy' : 'archive')}</span>` +
+      `<span class="tree-typeicon ${gLocked ? 'locked' : cloner ? 'cln' : 'asm'}"${gLocked ? ' title="Locked: everything inside is locked"' : ''}>${_ico(gLocked ? 'lock' : cloner ? 'copy' : _GROUP_ICON)}</span>` +
       `<span class="tree-label">${escapeHtml(n.name)}</span>` +
       `<span class="tree-iconcol"><span class="tree-vis" data-act="vis">${_ico(row.classList.contains('hidden-vis') ? 'eye-off' : 'eye')}</span></span>`;
     return;
@@ -16488,15 +16492,15 @@ function _fillTreeRow(row) {
   const p = getPart(n.partId);
   if (!p) return;
   const colorHex = '#' + p.originalColor.getHexString();
-  const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10);margin-right:4px">🔒</span>` : '';
   const instN = _isInstanceCopy(p) ? 2 : 0;       // (the icon: a copy gets the copy icon, the original and a part of its own the model icon; the ×N badge counts them all)
   // Instances get their own icon ("this is one of N copies").
   // tree-expand-spacer keeps leaf rows aligned with their parents' +/- boxes.
   row.classList.toggle('is-spline', !!p.isSpline);
   row.innerHTML = indent +
     `<span class="tree-expand-spacer"></span>` +
-    `<span class="tree-typeicon ${p.isSpline ? 'spl' : instN > 1 ? 'inst' : 'part'}">${_ico(p.isSpline ? 'spline' : instN > 1 ? 'copy' : 'box')}</span>` +
-    `${lockIcon}<span class="tree-label">${escapeHtml(n.name || _stripFrameSuffix(p.name))}</span>` +
+    // a locked part has a lock where its type icon is: red, so it is seen at once
+    `<span class="tree-typeicon ${p.locked ? 'locked' : p.isSpline ? 'spl' : instN > 1 ? 'inst' : 'part'}"${p.locked ? ' title="Locked"' : ''}>${_ico(p.locked ? 'lock' : p.isSpline ? 'spline' : instN > 1 ? 'copy' : 'box')}</span>` +
+    `<span class="tree-label">${escapeHtml(n.name || _stripFrameSuffix(p.name))}</span>` +
     `<span class="tree-iconcol">` +
       `<span class="tree-vis">${_ico(p.visible ? 'eye' : 'eye-off')}</span>` +
       `<span class="tree-color" style="background:${colorHex}"></span>` +
@@ -16726,6 +16730,17 @@ function _instBadge(n) {
 // any depth. Walks forward from the group's index until depth drops back to
 // or below the group's depth — that's the boundary of the group's subtree
 // (treeNodes is in DFS order). Returns the list of partIds, no group ids.
+// Locking a group locks every part inside it. There is no state of its own: a group is locked while every part in it is, and the lock sets them all.
+// (A group of the tree is a number, one the user made is a string with its own list of parts.)
+function _groupPartIdsOf(gid) {
+  const ug = (state.userGroups || []).find(g => String(g.id) === String(gid));
+  if (ug) return (ug.partIds || []).filter(id => { const p = getPart(id); return p && !p.deleted; });
+  const n = parseInt(gid, 10);
+  return Number.isNaN(n) ? [] : _treeGroupDescendants(n);
+}
+function _groupLocked(gid) { const ids = _groupPartIdsOf(gid); return ids.length > 0 && ids.every(id => getPart(id)?.locked); }
+function _setGroupLocked(gid, next) { for (const id of _groupPartIdsOf(gid)) { const p = getPart(id); if (p) p.locked = next; } }
+
 function _treeGroupDescendants(groupId) {
   const all = state.treeNodes;
   if (!all || !all.length) return [];
@@ -18733,12 +18748,12 @@ function refreshPropertiesPanel() {
     // already learned from the left sidebar.
     const _shareN = _liveShareCount(p);
     const isInst = _isInstanceCopy(p);
-    const tCls   = p.isSpline ? 'spl' : isInst ? 'inst' : 'part';
-    const tIcon  = p.isSpline ? 'spline' : isInst ? 'copy' : 'box';
+    const tCls   = p.locked ? 'locked' : p.isSpline ? 'spl' : isInst ? 'inst' : 'part';
+    const tIcon  = p.locked ? 'lock' : p.isSpline ? 'spline' : isInst ? 'copy' : 'box';
     const _safeName = escapeHtml(p.name);
     const _lockBadge = p.locked
-      ? `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Locked — click to unlock" style="margin-left:6px;font-size:var(--fs-10);padding:1px 6px;border-radius:var(--r-sm);background:var(--wn-soft);color:var(--wn);border:1px solid var(--wn-line);cursor:pointer;user-select:none">🔒 Locked</span>`
-      : `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Click to lock this part" style="margin-left:6px;font-size:var(--fs-10);padding:1px 6px;border-radius:var(--r-sm);background:var(--s2);color:var(--tx3);border:1px solid var(--bd);cursor:pointer;user-select:none;opacity:.65">Lock</span>`;
+      ? `<span class="prop-lock-badge is-locked" data-lock-toggle="${p.partId}" title="Locked: click to unlock"><i data-lucide="lock"></i>Locked</span>`
+      : `<span class="prop-lock-badge" data-lock-toggle="${p.partId}" title="Lock this part"><i data-lucide="lock-open"></i>Lock</span>`;
     nameHtml = `<span class="prop-type-icon ${tCls}" title="${isInst ? 'Instance (×' + _shareN + ')' : _shareN > 1 ? 'Original of ' + _shareN + ' instances' : 'Single part'}"><i data-lucide="${tIcon}"></i></span>` +
                `<span class="prop-name" title="${_safeName}">${_safeName}</span>${_lockBadge}`;
     const mat = _matOfPart(p);
@@ -18887,16 +18902,21 @@ function refreshPropertiesPanel() {
       if (ug) return { name: ug.name || ('Group ' + gid) };
       return null;
     };
+    // Lock / Locked, as on a part: it locks (or unlocks) every part in the selected group or groups
+    const _gAllLocked = ids.length > 0 && ids.every(id => getPart(id)?.locked);
+    const _gLockBadge = _gAllLocked
+      ? `<span class="prop-lock-badge is-locked" data-lock-group="1" title="Locked: click to unlock everything inside"><i data-lucide="lock"></i>Locked</span>`
+      : `<span class="prop-lock-badge" data-lock-group="1" title="Lock everything inside"><i data-lucide="lock-open"></i>Lock</span>`;
     if (groupIds.length === 1) {
       const g = findGroup(groupIds[0]);
       const gname = g ? g.name : ('Group ' + groupIds[0]);
       const partN = ids.length;
       const sub = partN ? ` · ${partN} part${partN === 1 ? '' : 's'}` : '';
-      nameHtml = `<span class="prop-type-icon asm" title="Group${sub}"><i data-lucide="folder"></i></span>` +
-                 `<span class="prop-name" title="${escapeHtml(gname)}">${escapeHtml(gname)}</span>`;
+      nameHtml = `<span class="prop-type-icon ${_gAllLocked ? 'locked' : 'asm'}" title="${_gAllLocked ? 'Locked: everything inside is locked' : 'Group' + sub}"><i data-lucide="${_gAllLocked ? 'lock' : _GROUP_ICON}"></i></span>` +
+                 `<span class="prop-name" title="${escapeHtml(gname)}">${escapeHtml(gname)}</span>${_gLockBadge}`;
     } else {
-      nameHtml = `<span class="prop-type-icon asm" title="${groupIds.length} groups selected"><i data-lucide="folder"></i></span>` +
-                 `<span class="prop-name">${groupIds.length} groups selected</span>`;
+      nameHtml = `<span class="prop-type-icon ${_gAllLocked ? 'locked' : 'asm'}" title="${groupIds.length} groups selected"><i data-lucide="${_gAllLocked ? 'lock' : _GROUP_ICON}"></i></span>` +
+                 `<span class="prop-name">${groupIds.length} groups selected</span>${_gLockBadge}`;
     }
   }
 
@@ -22089,7 +22109,10 @@ function _exportDrawList(visibleOnly) {
   return out;
 }
 
-function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false, lines = false, quads = false }) {
+// `pivot`: 'part' writes every part around its own centre, with the part's position on its node, so a file opened in Cinema 4D, Blender, Maya or
+// Unreal has each part's axis at the part. (A part from a STEP file has its origin at 0, 0, 0 with the shape out at its place in the model, so
+// without this every axis lands at the scene origin.) 'origin' leaves the parts as they are in the scene.
+function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false, lines = false, quads = false, pivot = 'origin' }) {
   const root = new THREE.Group();
   let count = 0;
   const drawList = _exportDrawList(visibleOnly);
@@ -22128,6 +22151,9 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
   // expressed in model units.
   const offsetMat = new THREE.Matrix4().makeTranslation(-originOffset.x, -originOffset.y, -originOffset.z);
   const postMat = new THREE.Matrix4().multiplyMatrices(axisMat, scaleMat).multiply(offsetMat);
+  // The turn into Y-up and the unit scale on their own (no shift): the FBX writers put them into the vertices, so that a part that is not turned
+  // in the scene has no rotation on its object either (see _fbxLocalTRS).
+  root.userData.exportLin = new THREE.Matrix4().multiplyMatrices(axisMat, scaleMat);
 
   if (!merge) {
     // Hierarchy reconstruction. Three sources, in priority order:
@@ -22218,6 +22244,8 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
     // applyMatrix4 below modifies the MESH's matrix only, never the
     // geometry, so sharing is safe across all formats.
     const sharedGeom = new Map();   // source geometry → cloned BufferGeometry
+    const centredGeom = new Map();  // source geometry → the same, moved so that its bbox centre is the origin (pivot: 'part')
+    const pivotAtPart = pivot === 'part';
     const meshByPart = new Map();   // partId → exported mesh (Save scene tags these)
     const getSharedGeom = (hash, src) => {
       let geom = sharedGeom.get(hash);
@@ -22232,6 +22260,19 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
         sharedGeom.set(hash, geom);
       }
       return geom;
+    };
+
+    // The shared clone with its bbox centre moved to the origin. Parts that share a shape share its centre, so they share this too.
+    const getCentredGeom = (src, c) => {
+      let e = centredGeom.get(src);
+      if (!e) {
+        const base = getSharedGeom(src, src);
+        e = base.clone();
+        if (base._moPoly) e._moPoly = base._moPoly;
+        e.translate(-c.x, -c.y, -c.z);
+        centredGeom.set(src, e);
+      }
+      return e;
     };
 
     // One cloned material per (source material, colour) pair. Cloning per
@@ -22287,20 +22328,31 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
         geom = baked;
         m = new THREE.Mesh(geom, mat);
         m.name = item.name;
+        if (pivotAtPart) {                     // (the vertices are in place already: the pivot is where they are centred)
+          baked.computeBoundingBox();
+          const c = baked.boundingBox.getCenter(new THREE.Vector3());
+          baked.translate(-c.x, -c.y, -c.z);
+          m.position.copy(c);
+        }
       } else {
-        geom = getSharedGeom(g, g);
-        m = new THREE.Mesh(geom, mat);
-        m.name = item.name;
         // No shear — safe to live on mesh.matrix. Container groups are at
         // identity, so the baked world transform on the mesh produces the
         // correct world pose. Geometry remains shareable across instances.
-        m.applyMatrix4(final);
+        let pc = null;
+        if (pivotAtPart) {
+          if (!g.boundingBox) g.computeBoundingBox();
+          if (g.boundingBox && !g.boundingBox.isEmpty()) { pc = g.boundingBox.getCenter(new THREE.Vector3()); if (pc.lengthSq() === 0) pc = null; }
+        }
+        geom = pc ? getCentredGeom(g, pc) : getSharedGeom(g, g);
+        m = new THREE.Mesh(geom, mat);
+        m.name = item.name;
+        m.applyMatrix4(pc ? final.clone().multiply(new THREE.Matrix4().makeTranslation(pc.x, pc.y, pc.z)) : final);
       }
       (p ? getContainer(p) : root).add(m);
       if (p && !item.isClone) meshByPart.set(p.partId, m);
       count++;
     }
-    if (lines) { try { _appendSplinesToExport(root, postMat, settingsOut, visibleOnly); } catch (e) { console.warn('[export] lines:', e); } }
+    if (lines) { try { _appendSplinesToExport(root, postMat, settingsOut, visibleOnly, pivotAtPart); } catch (e) { console.warn('[export] lines:', e); } }
     return { root, count, meshByPart };
   }
 
@@ -23116,12 +23168,44 @@ function _exportPolysOf(src) {
 // Bake mesh.matrixWorld into a fresh typed-array of world-space positions
 // and (inverse-transposed) normals. Returns { positions, normals?, indices? }
 // where indices is a typed array if the source geometry was indexed.
-function _fbxBakeMeshGeom(meshObj) {
+// A part's pivot is the origin of its own mesh (Centre pivot moves it). In the file it is the Model's Lcl Translation, and the part's vertices are
+// written around it, which is how Blender, Maya, Unreal, Cinema 4D and the loaders in three.js and Assimp all read a pivot. `world` is where
+// the pivot is in the scene being written; `local` is the same point in the parent Model's space (the Lcl Translation; the groups are written
+// at identity, so the two are the same unless a group carries a transform).
+function _fbxPivotOf(meshObj) {
+  meshObj.updateWorldMatrix(true, false);
+  const world = new THREE.Vector3().setFromMatrixPosition(meshObj.matrixWorld);
+  const local = world.clone();
+  if (meshObj.parent) {
+    meshObj.parent.updateWorldMatrix(true, false);
+    local.applyMatrix4(new THREE.Matrix4().copy(meshObj.parent.matrixWorld).invert());
+  }
+  return { world, local };
+}
+
+// The part's own position, rotation and scale as the Lcl of its Model, so that the axis of a part that is turned in the scene is turned in the file
+// too. The vertices stay in the part's own frame, with only `lin` (the turn into Y-up and the unit scale, the same for every part) put into them;
+// the object carries what is left, `mesh.matrix * lin^-1`, which has no turn in it for a part that is not turned. FBX turns about X first, then Y,
+// then Z (R = Rz Ry Rx: 'ZYX' in three). Returns null where that cannot be written truthfully (shear, a mirrored part): those are baked.
+function _fbxLocalTRS(meshObj, lin) {
+  meshObj.updateMatrix();
+  const m = new THREE.Matrix4().copy(meshObj.matrix);
+  if (lin) m.multiply(new THREE.Matrix4().copy(lin).invert());
+  if (_matrixHasShear(m) || m.determinant() <= 0) return null;
+  const p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+  m.decompose(p, q, sc);
+  const e = new THREE.Euler().setFromQuaternion(q, 'ZYX'), D = 180 / Math.PI;
+  return { t: [p.x, p.y, p.z], r: [e.x * D, e.y * D, e.z * D], s: [sc.x, sc.y, sc.z] };
+}
+
+function _fbxBakeMeshGeom(meshObj, lin) {
   const g = meshObj.geometry;
   const posAttr = g.attributes.position;
   const norAttr = g.attributes.normal;
   const idxAttr = g.index;
-  const M = meshObj.matrixWorld;
+  const trs = _fbxLocalTRS(meshObj, lin);
+  const M = trs ? (lin || new THREE.Matrix4()) : meshObj.matrixWorld;      // (with a TRS the vertices only get the Y-up turn and the unit scale)
+  const pivot = trs ? { world: new THREE.Vector3(), local: new THREE.Vector3() } : _fbxPivotOf(meshObj);
   const N = new THREE.Matrix3().getNormalMatrix(M);
   const tmpV = new THREE.Vector3();
   const tmpN = new THREE.Vector3();
@@ -23132,11 +23216,13 @@ function _fbxBakeMeshGeom(meshObj) {
   const positions = new Float64Array(posAttr.count * 3);
   for (let i = 0; i < posAttr.count; i++) {
     tmpV.set(arr[i*stride], arr[i*stride+1], arr[i*stride+2]).applyMatrix4(M);
-    positions[i*3]   = tmpV.x;
-    positions[i*3+1] = tmpV.y;
-    positions[i*3+2] = tmpV.z;
+    positions[i*3]   = tmpV.x - pivot.world.x;
+    positions[i*3+1] = tmpV.y - pivot.world.y;
+    positions[i*3+2] = tmpV.z - pivot.world.z;
   }
   out.positions = positions;
+  out.pivotLocal = pivot.local;                // (the Model's Lcl Translation)
+  out.trs = trs;                               // (or all three of its Lcl, when the part can be written that way)
 
   // Build the indexed triangle list first — needed for the "ByPolygonVertex"
   // normal layout below. FBX wants the LAST index of every polygon to be
@@ -23263,7 +23349,7 @@ async function _exportFbxBinary(root, opts) {
   for (let i = 0; i < nodes.length; i++) {
     if (nodes[i].type !== 'Mesh') continue;
     meshIdxToGeomIdx.set(i, bakedGeoms.length);
-    bakedGeoms.push({ nodeIdx: i, baked: _fbxBakeMeshGeom(nodes[i].obj) });
+    bakedGeoms.push({ nodeIdx: i, baked: _fbxBakeMeshGeom(nodes[i].obj, root.userData.exportLin) });
     const { r, g, b } = _binResolveColor(nodes[i]);
     // One material per colour, shared by the meshes that wear it. (This used
     // to write one per mesh, on the belief that Cinema 4D could not build a
@@ -23712,7 +23798,8 @@ async function _exportFbxBinary(root, opts) {
     geomBlocks.push(geomNode);
   }
 
-  // Models. Mesh Models get identity Lcl (transform baked into vertices);
+  // Models. Mesh Models carry the part's pivot as their Lcl Translation (rotation
+  // and scale are baked into the vertices, which are written around the pivot);
   // Null Models get their decomposed local matrix (identity in practice
   // since buildExportRoot creates containers at identity).
   //
@@ -23740,7 +23827,12 @@ async function _exportFbxBinary(root, opts) {
     seenModelNames.set(safeName(o.name || (n.type === 'Mesh' ? `mesh_${ni}` : `group_${ni}`)), seenN + 1);
     const name = `${baseName}\x00\x01Model`;
     let tx=0,ty=0,tz=0,rx=0,ry=0,rz=0,sx=1,sy=1,sz=1;
-    if (n.type !== 'Mesh') {
+    if (n.type === 'Mesh') {
+      // The part's pivot: rotation and scale stay baked into the vertices, the position is the Model's.
+      const bk = bakedGeoms[meshIdxToGeomIdx.get(ni)]?.baked;
+      if (bk && bk.trs) { [tx, ty, tz] = bk.trs.t; [rx, ry, rz] = bk.trs.r; [sx, sy, sz] = bk.trs.s; }
+      else if (bk && bk.pivotLocal) { tx = bk.pivotLocal.x; ty = bk.pivotLocal.y; tz = bk.pivotLocal.z; }
+    } else {
       o.updateMatrix();
       o.matrix.decompose(tmpV3, tmpQ, tmpScale);
       tmpEuler.setFromQuaternion(tmpQ, 'XYZ');
@@ -24225,7 +24317,11 @@ GlobalSettings:  {
     // otherwise reconstruct from Lcl chains. Baking into vertices means
     // emitted Mesh Models carry identity Lcl — no decomposition risk.
     meshObj.updateWorldMatrix(true, false);
-    _bakeM.copy(meshObj.matrixWorld);
+    const _lin = root.userData.exportLin || null;
+    const _trs = _fbxLocalTRS(meshObj, _lin);   // (see there: position, rotation and scale on the Model, the vertices in the own frame of the part)
+    if (_trs) _bakeM.copy(_lin || new THREE.Matrix4()); else _bakeM.copy(meshObj.matrixWorld);
+    const _pv = _trs ? { world: new THREE.Vector3(), local: new THREE.Vector3() } : _fbxPivotOf(meshObj);   // else the vertices are written around the pivot, the Model carries its position
+    entry.pivotLocal = _pv.local; entry.trs = _trs;
 
     push(`\tGeometry: ${geomId}, "Geometry::geom_${gi}", "Mesh" {
 \t\tGeometryVersion: 124
@@ -24236,7 +24332,7 @@ GlobalSettings:  {
       for (let i = 0; i < posAttr.count; i++) {
         // Bake matrixWorld into the emitted position. Identity Lcl on the
         // Mesh Model (below) means the importer won't re-transform.
-        _bakeV.set(arr[i*stride], arr[i*stride+1], arr[i*stride+2]).applyMatrix4(_bakeM);
+        _bakeV.set(arr[i*stride], arr[i*stride+1], arr[i*stride+2]).applyMatrix4(_bakeM).sub(_pv.world);
         parts[i] = fmt(_bakeV.x) + ',' + fmt(_bakeV.y) + ',' + fmt(_bakeV.z);
       }
       push(parts.join(','));
@@ -24355,15 +24451,19 @@ GlobalSettings:  {
     const seenN = seenModelNames.get(rawName) || 0;
     seenModelNames.set(rawName, seenN + 1);
     const modelName = seenN > 0 ? `${rawName}.${String(seenN).padStart(3, '0')}` : rawName;
-    // Mesh nodes get identity Lcl because their world transform was baked
-    // into the emitted vertex stream. Group ('Null') nodes get the decomposed
+    // Mesh nodes carry only their pivot as Lcl Translation: rotation and scale
+    // were baked into the emitted vertex stream, around that pivot. Group ('Null') nodes get the decomposed
     // local matrix so their structural placement (if any) is preserved —
     // buildExportRoot creates them at identity so this is also (0,0,0)/etc.
     // in practice, but we honour any Lcl that may have ended up on them.
     let tx = 0, ty = 0, tz = 0;
     let rx = 0, ry = 0, rz = 0;
     let sx = 1, sy = 1, sz = 1;
-    if (n.type !== 'Mesh') {
+    if (n.type === 'Mesh') {
+      const ge = geoms[meshIdxToGeomIdx.get(ni)];
+      if (ge && ge.trs) { [tx, ty, tz] = ge.trs.t; [rx, ry, rz] = ge.trs.r; [sx, sy, sz] = ge.trs.s; }
+      else if (ge && ge.pivotLocal) { tx = ge.pivotLocal.x; ty = ge.pivotLocal.y; tz = ge.pivotLocal.z; }    // (the pivot: see _fbxPivotOf)
+    } else {
       o.updateMatrix();
       o.matrix.decompose(tmpV, tmpQ, tmpScale);
       tmpEuler.setFromQuaternion(tmpQ, 'XYZ');
@@ -26850,13 +26950,13 @@ async function doExport(opts) {
     toast('Export failed', e && e.message ? e.message : String(e), 'error', 6000);
   }
 }
-async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', draco=false, meshopt=false, reorder=false, flat=false, stlAscii=false, fileName='' }) {
+async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', pivot='part', draco=false, meshopt=false, reorder=false, flat=false, stlAscii=false, fileName='' }) {
   const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
   setLoader(true, 'Preparing export…', fmtLabel);
   await new Promise(r => setTimeout(r, 16));
   // OBJ and FBX can hold quads and n-gons: the polygons of the parts are written as they are (the "Keep quads" switch, on by default)
   const quadsOn = (format === 'obj' || format === 'fbx') && !merge && document.getElementById('exp-quads')?.checked !== false;
-  const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat, lines: (format === 'glb' || format === 'gltf') && !merge, quads: quadsOn });
+  const { root, count } = buildExportRoot({ visibleOnly, merge, scale, axis, origin, pivot, flat, lines: (format === 'glb' || format === 'gltf') && !merge, quads: quadsOn });
   if (count === 0) { setLoader(false); toast('Nothing to export', 'No visible parts', 'warn'); return; }
   let hasQuads = false;
   if (quadsOn) root.traverse(o => { if (o.isMesh && o.geometry && o.geometry._moPoly) hasQuads = true; });
@@ -27177,44 +27277,6 @@ function wireUI() {
     });
   }
   document.getElementById('format-grid')?.addEventListener('click', () => setTimeout(_updateExportTarget, 0));
-  // Where it is going: one press sets the format and the numbers that place
-  // wants. The scene is read as millimetres, as the unit-scale choices below
-  // are ("mm → m"), so the factors are mm → m (0.001) and mm → cm (0.1).
-  const _EXPORT_PRESETS = {
-    web:    { fmt: 'glb',  scale: '0.001', axis: 'y-up', origin: 'keep',  draco: true,  merge: false, target: 'web',  note: 'GLB with Draco, in metres, Y up. Opens in any web viewer.' },
-    ar:     { fmt: 'usdz', scale: '0.001', axis: 'y-up', origin: 'floor', draco: false, merge: false, target: 'arql', note: 'USDZ in metres, Y up, standing on the floor, for Apple AR Quick Look.' },
-    unreal: { fmt: 'fbx',  scale: '0.1',   axis: 'z-up', origin: 'keep',  draco: false, merge: false, target: 'none', note: 'FBX in centimetres, Z up: the units Unreal Engine works in.' },
-    unity:  { fmt: 'fbx',  scale: '0.001', axis: 'y-up', origin: 'keep',  draco: false, merge: false, target: 'none', note: 'FBX in metres, Y up, as Unity expects.' },
-    print:  { fmt: 'stl',  scale: '1',     axis: 'z-up', origin: 'floor', draco: false, merge: true,  target: 'none', note: 'Binary STL in millimetres, one mesh, standing on the bed (Z = 0).' },
-  };
-  let _presetApplying = false;
-  function _markExportPreset(key) {
-    document.querySelectorAll('#exp-presets .sv-chip').forEach(c => c.classList.toggle('is-on', c.dataset.preset === key));
-    const note = $('exp-preset-note');
-    if (note) note.textContent = key && _EXPORT_PRESETS[key] ? _EXPORT_PRESETS[key].note + ' Change anything below if you need to.' : '';
-  }
-  function _applyExportPreset(key) {
-    const p = _EXPORT_PRESETS[key];
-    if (!p) return;
-    _presetApplying = true;
-    const setSel = (id, v) => { const el = $(id); if (el && [...el.options].some(o => o.value === v)) { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); } };
-    const setCb = (id, v) => { const el = $(id); if (el && el.checked !== v) { el.checked = v; el.dispatchEvent(new Event('change', { bubbles: true })); } };
-    document.querySelector(`#format-grid .fmt-card[data-fmt="${p.fmt}"]`)?.click();
-    setSel('exp-scale', p.scale); setSel('exp-axis', p.axis); setSel('exp-origin', p.origin);
-    setCb('exp-merge', !!p.merge); setCb('exp-visible', true); setCb('exp-selected', false); setCb('exp-flat', false);
-    // The format card refreshes which rows exist on the next tick; the rows that depend on it come after.
-    setTimeout(() => {
-      setCb('exp-draco', !!p.draco); setCb('exp-fbx-ascii', false); setCb('exp-stl-ascii', false); setCb('exp-quads', true);
-      setSel('exp-target', p.target);
-      _refreshFormatToggles(); _updateExportTarget();
-      _markExportPreset(key);
-      _presetApplying = false;
-    }, 0);
-  }
-  document.querySelectorAll('#exp-presets .sv-chip').forEach(c => c.addEventListener('click', () => _applyExportPreset(c.dataset.preset)));
-  // Touching any option by hand means it is no longer exactly the preset.
-  document.querySelector('#export-modal .exp-content-b')?.addEventListener('change', () => { if (!_presetApplying) _markExportPreset(null); });
-  document.getElementById('format-grid')?.addEventListener('click', () => { if (!_presetApplying) _markExportPreset(null); });
   // a different format shows different options: start them from the top
   document.getElementById('format-grid')?.addEventListener('click', (e) => { if (e.target.closest('.fmt-card')) document.querySelector('#export-modal .exp-content')?.scrollTo({ top: 0 }); });
   // The Export button melts into a round button while the options scroll, and unfolds when the pointer is over it (or the list is back at the top).
@@ -27885,6 +27947,16 @@ function wireUI() {
   // state. Delegated on #prop-body since refreshPropertiesPanel rewrites its
   // innerHTML on every selection change.
   $('prop-body')?.addEventListener('click', e => {
+    const gBadge = e.target.closest('[data-lock-group]');
+    if (gBadge) {
+      e.stopPropagation();
+      const gids = state.selectedGroupIds ? [...state.selectedGroupIds] : [];
+      const all = gids.length > 0 && gids.every(g => _groupLocked(g));
+      for (const g of gids) _setGroupLocked(g, !all);
+      try { rebuildTree?.(); } catch (_) {}
+      try { refreshPropertiesPanel?.(); } catch (_) {}
+      return;
+    }
     const badge = e.target.closest('[data-lock-toggle]');
     if (!badge) return;
     e.stopPropagation();
@@ -28560,13 +28632,14 @@ function wireUI() {
     if (!isFinite(scale) || scale <= 0) scale = 1;
     const axis = $('exp-axis')?.value || 'z-up';
     const origin = $('exp-origin')?.value || 'model';
+    const pivot = $('exp-pivot')?.value || 'part';
     const flat = !!$('exp-flat')?.checked;
     const stlAscii = !!$('exp-stl-ascii')?.checked && fmt === 'stl';
     const fileName = $('exp-filename')?.value || '';
     // The choices that are the same from one export to the next are kept.
     // (Not "selected only": it depends on what is selected right now. Not the file name: it belongs to the scene.)
     _Prefs.set('exportOpts', {
-      scale: scaleSel, scaleCustom: $('exp-scale-custom')?.value || '1', axis, origin,
+      scale: scaleSel, scaleCustom: $('exp-scale-custom')?.value || '1', axis, origin, pivot,
       merge, visible: visibleOnly, flat,
     });
 
@@ -28634,7 +28707,7 @@ function wireUI() {
       }
     }
     try {
-      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, draco, meshopt, reorder, flat, stlAscii, fileName });
+      await doExport({ format: fmt, merge, visibleOnly: selectedOnly ? true : visibleOnly, scale, axis, origin, pivot, draco, meshopt, reorder, flat, stlAscii, fileName });
     } finally {
       if (snapshot.length) {
         for (const s of snapshot) {
@@ -28740,6 +28813,9 @@ function wireUI() {
     { const qr = $('exp-quads-row'), off = !!$('exp-merge')?.checked; if (qr) { qr.style.opacity = off ? '.42' : ''; qr.style.pointerEvents = off ? 'none' : ''; } }      // (one merged mesh is triangles)
     show($('exp-fmt-group'), fmt === 'glb' || fmt === 'fbx' || fmt === 'stl' || fmt === 'obj');
 
+    // Pivot points: only the formats that carry a position for each object (OBJ, STL and PLY have no objects to put one on), and not one merged mesh.
+    { const pr = rowOf('exp-pivot'); show(pr, ['glb', 'gltf', 'fbx', 'usdz'].includes(fmt)); if (pr) { const off = !!$('exp-merge')?.checked; pr.style.opacity = off ? '.42' : ''; pr.style.pointerEvents = off ? 'none' : ''; } }
+
     // Flatten groups: formats with no tree have nothing to flatten, and one merged mesh has no groups.
     const flatRow = $('exp-flat-row');
     show(flatRow, ['glb', 'gltf', 'fbx', 'usdz', 'obj'].includes(fmt));
@@ -28749,6 +28825,8 @@ function wireUI() {
     show($('exp-geom-title'), !isCsv);
     for (const id of ['exp-scale', 'exp-axis', 'exp-origin', 'exp-merge']) show(rowOf(id), !isCsv);
     show($('exp-scale-custom-row'), !isCsv && $('exp-scale')?.value === 'custom');
+    // Advanced is there only when a row in it is: the parts list has none of them.
+    { const adv = $('exp-adv'); if (adv) show(adv, [...adv.querySelectorAll('.exp-row')].some(r => r.style.display !== 'none')); }
     _refreshExpSummary();
   }
   document.querySelectorAll('#format-grid .fmt-card').forEach(c =>
@@ -28757,6 +28835,8 @@ function wireUI() {
   $('exp-draco')?.addEventListener('change', () => { if ($('exp-draco').checked && $('exp-meshopt')) { $('exp-meshopt').checked = false; _refreshFormatToggles(); } });      // one compression at a time
   $('exp-meshopt')?.addEventListener('change', () => { if ($('exp-meshopt').checked && $('exp-draco')) { $('exp-draco').checked = false; _refreshFormatToggles(); } });
   for (const id of ['exp-visible', 'exp-selected']) $(id)?.addEventListener('change', () => _refreshExpSummary());
+  // Advanced stays shut until it is opened, and then stays open.
+  { const adv = $('exp-adv'); if (adv) { try { adv.open = !!_Prefs.get('exportAdvOpen'); } catch (_) {} adv.addEventListener('toggle', () => { try { _Prefs.set('exportAdvOpen', adv.open); } catch (_) {} }); } }
   // Put back what was chosen last time.
   try {
     const o = _Prefs.get('exportOpts');
@@ -28768,7 +28848,7 @@ function wireUI() {
         if (ci) { ci.value = o.scaleCustom || '1'; ci.disabled = o.scale !== 'custom'; }
       }
       const setSel = (id, v) => { const el = $(id); if (el && v != null && [...el.options].some(op => op.value === v)) el.value = v; };
-      setSel('exp-axis', o.axis); setSel('exp-origin', o.origin);
+      setSel('exp-axis', o.axis); setSel('exp-origin', o.origin); setSel('exp-pivot', o.pivot);
       const setCb = (id, v) => { const el = $(id); if (el && typeof v === 'boolean') el.checked = v; };
       setCb('exp-merge', o.merge); setCb('exp-visible', o.visible); setCb('exp-flat', o.flat);
     }
@@ -31546,7 +31626,7 @@ const _Lines = { render() {}, wire() {} };
 
 
 // A line goes into a GLB / glTF (and into a saved scene) as a Line, baked into the same frame as the parts.
-function _appendSplinesToExport(root, postMat, settingsOut, visibleOnly) {
+function _appendSplinesToExport(root, postMat, settingsOut, visibleOnly, pivotAtPart = false) {
   for (const sp of (state.splines || [])) {
     if (sp.deleted || !sp.object || !sp.object.parent) continue;
     if (visibleOnly && sp.hidden) continue;
@@ -31556,6 +31636,10 @@ function _appendSplinesToExport(root, postMat, settingsOut, visibleOnly) {
     g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(postMat, world));
     const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: sp.base }));
     line.name = sp.name;
+    if (pivotAtPart) {                         // (like a part: the line is written around its centre, with its position on the node)
+      g.computeBoundingBox();
+      if (!g.boundingBox.isEmpty()) { const c = g.boundingBox.getCenter(new THREE.Vector3()); g.translate(-c.x, -c.y, -c.z); line.position.copy(c); }
+    }
     root.add(line);
   }
 }
@@ -33297,7 +33381,7 @@ function _renderPrimitiveSection(p) {
   const _lockedAttr = p.locked ? ' data-locked="1"' : '';
   const _lockedStyle = p.locked ? 'opacity:.45;pointer-events:none' : '';
   const _lockedHint  = p.locked
-    ? '<span style="font-size:var(--fs-10);color:var(--wn);font-weight:var(--fw-medium);margin-left:8px">🔒 Locked</span>'
+    ? '<span class="prop-lock-note"><i data-lucide="lock"></i>Locked</span>'
     : '';
   return `
     <div class="prop-section prim-section"${_lockedAttr}>
@@ -39691,7 +39775,7 @@ rebuildTree = function() {
       ? `<i data-lucide="eye"></i>`
       : `<i data-lucide="eye-off"></i>`;
     const inst = _instBadge(_liveShareCount(p));
-    const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10)">🔒</span>` : '';
+    const lockIcon = p.locked ? `<span class="tree-lock" title="Locked">${_ico('lock')}</span>` : '';
     const triFrac = Math.log10(p.triCount + 1) / logMax;
     const barHue = 240 - triFrac * 240;   // blue → red
     const barW = Math.max(2, triFrac * 40) | 0;
@@ -39711,19 +39795,10 @@ rebuildTree = function() {
 // ─── Right-click context menu
 // Container chrome is set inline on #ctx-menu in index.html; row & separator
 // classes live in the stylesheet (search "Right-click context menu").
-// A menu appears at once and goes with a quick fade (macOS): the fade is a copy of the menu's look that is left behind for 150 ms.
-function _fadeOutMenu(m) {
-  const was = m.style.display;
-  m.style.display = 'none';
-  if (was !== 'block' || !m.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  try {
-    const g = m.cloneNode(true); g.style.display = 'block'; g.style.pointerEvents = 'none';
-    m.parentNode.insertBefore(g, m.nextSibling);
-    g.style.transformOrigin = m.style.transformOrigin || '0 0';
-    g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-6px) scale(.97)' }], { duration: 140, easing: 'cubic-bezier(.4,0,1,1)' }).onfinish = () => g.remove();
-  } catch (_) {}
-}
-function _ctxClose() { const m = $('ctx-menu'); if (m) { _fadeOutMenu(m); m.classList.remove('is-commands'); } document.getElementById('vp-more')?.classList.remove('active'); document.querySelectorAll('.tree-toolbar .tree-icon-btn.is-open').forEach(b => b.classList.remove('is-open')); }
+// A menu goes at once, as the dropdown does. Its opening is --menu-in (index.html) and nothing else animates a menu: a copy left behind to fade out
+// (as this used to do) took the same opening rule and flickered.
+function _hideMenu(m) { m.style.display = 'none'; }
+function _ctxClose() { const m = $('ctx-menu'); if (m) { _hideMenu(m); m.classList.remove('is-commands'); } document.getElementById('vp-more')?.classList.remove('active'); document.querySelectorAll('.tree-toolbar .tree-icon-btn.is-open').forEach(b => b.classList.remove('is-open')); }
 // An item with `sub` (a list of items) opens that list beside its row while
 // the pointer is on it.
 function _ctxFill(box, items, m) {
@@ -39765,10 +39840,11 @@ function _ctxSub(m, row, items) {
   m.appendChild(sub);
   row.classList.add('is-open');
   _lucide();
-  // beside the row, on the side that has room; never past the window's edges
-  const mr = m.getBoundingClientRect(), rr = row.getBoundingClientRect(), w = sub.offsetWidth, h = sub.offsetHeight;
-  const right = mr.right - 4 + w <= window.innerWidth - 6;
-  sub.style.left = (right ? mr.width - 4 : 4 - w) + 'px';
+  // beside the menu, not over it (a gap of 4 px: the pointer crosses it without leaving the row, since only another row closes the list), on the side
+  // that has room; never past the window's edges
+  const mr = m.getBoundingClientRect(), rr = row.getBoundingClientRect(), w = sub.offsetWidth, h = sub.offsetHeight, G = 4;
+  const right = mr.right + G + w <= window.innerWidth - 6;
+  sub.style.left = (right ? mr.width + G : -(w + G)) + 'px';
   sub.style.top = Math.max(6 - mr.top, Math.min(rr.top - mr.top - 8, window.innerHeight - 6 - h - mr.top)) + 'px';
 }
 // What was right-clicked, noted before the handlers run: the menu opens beside it and not on it (a material, the material in the
@@ -41212,19 +41288,6 @@ document.addEventListener('contextmenu', e => {
       { icon: 'crosshair',      label: 'Frame group',                fn: () => { _treeSelectGroupParts(node, 'single'); frameSelected?.(); } },
       '---',
       { icon: 'pencil',         label: 'Rename group',               fn: () => _treeRenameRow(node) },
-      { icon: 'folder-minus',       label: 'Ungroup',                    fn: () => _treeUngroupRow(node) },
-      { icon: 'folder-output',      label: 'Remove group, keep contents', fn: () => _treeRemoveGroups(node) },
-      '---',
-      { icon: 'layers-2',       label: 'Flatten this group',         fn: () => _treeFlattenGroup(node) },
-      { icon: 'arrow-down-a-z', label: 'Sort inside A to Z',         fn: () => _treeSortGroup(node, 1) },
-      { icon: 'arrow-up-z-a',   label: 'Sort inside Z to A',         fn: () => _treeSortGroup(node, -1) },
-      { icon: 'arrow-up',       label: 'Move group up',              fn: () => _treeMoveGroup(node, -1) },
-      { icon: 'arrow-down',     label: 'Move group down',            fn: () => _treeMoveGroup(node, 1) },
-      { icon: 'play',           label: 'Animate…',                   fn: () => _Anim.open() },
-      { icon: 'brush-cleaning', label: 'Delete empty groups',        fn: _treeDeleteEmptyGroups },
-      '---',
-      { icon: 'trash-2',        label: 'Delete group + contents',    danger: true, fn: () => _treeDeleteGroup(node) },
-      '---',
       { icon: 'eye',            label: 'Toggle visibility',          fn: () => {
           const ugTV = (state.userGroups || []).find(g => String(g.id) === String(node.dataset.groupId));
           if (ugTV) {
@@ -41241,11 +41304,28 @@ document.addEventListener('contextmenu', e => {
           }
         }
       },
+      { icon: _groupLocked(node.dataset.groupId) ? 'unlock' : 'lock', label: _groupLocked(node.dataset.groupId) ? 'Unlock everything inside' : 'Lock everything inside', fn: () => { _setGroupLocked(node.dataset.groupId, !_groupLocked(node.dataset.groupId)); rebuildTree(); try { refreshPropertiesPanel?.(); } catch (_) {} } },
+      { icon: 'play',           label: 'Animate…',                   fn: () => _Anim.open() },
+      { icon: 'folder', label: 'Group', sub: [
+        { icon: 'folder-minus',       label: 'Ungroup',                    fn: () => _treeUngroupRow(node) },
+        { icon: 'folder-output',      label: 'Remove group, keep contents', fn: () => _treeRemoveGroups(node) },
+        { icon: 'layers-2',       label: 'Flatten this group',         fn: () => _treeFlattenGroup(node) },
+        { icon: 'brush-cleaning', label: 'Delete empty groups',        fn: _treeDeleteEmptyGroups },
+      ] },
+      { icon: 'arrow-down-a-z', label: 'Order', sub: [
+        { icon: 'arrow-down-a-z', label: 'Sort inside A to Z',         fn: () => _treeSortGroup(node, 1) },
+        { icon: 'arrow-up-z-a',   label: 'Sort inside Z to A',         fn: () => _treeSortGroup(node, -1) },
+        { icon: 'arrow-up',       label: 'Move group up',              fn: () => _treeMoveGroup(node, -1) },
+        { icon: 'arrow-down',     label: 'Move group down',            fn: () => _treeMoveGroup(node, 1) },
+      ] },
+      { icon: 'chevrons-up-down', label: 'Expand and collapse', sub: [
+        { icon: 'chevron-down',   label: 'Expand this branch',         fn: () => _treeFoldBranch(node, false) },
+        { icon: 'chevron-up',     label: 'Collapse this branch',       fn: () => _treeFoldBranch(node, true) },
+        { icon: 'chevrons-up-down', label: 'Expand all groups',          fn: _treeExpandAll },
+        { icon: 'chevrons-down-up',   label: 'Collapse all groups',        fn: _treeCollapseAll },
+      ] },
       '---',
-      { icon: 'chevron-down',   label: 'Expand this branch',         fn: () => _treeFoldBranch(node, false) },
-      { icon: 'chevron-up',     label: 'Collapse this branch',       fn: () => _treeFoldBranch(node, true) },
-      { icon: 'chevrons-up-down', label: 'Expand all groups',          fn: _treeExpandAll },
-      { icon: 'chevrons-down-up',   label: 'Collapse all groups',        fn: _treeCollapseAll },
+      { icon: 'trash-2',        label: 'Delete group + contents',    danger: true, fn: () => _treeDeleteGroup(node) },
     ];
     _ctxBuild(items, e.clientX, e.clientY);
     return;
@@ -41260,32 +41340,40 @@ document.addEventListener('contextmenu', e => {
   const items = [
     { icon: 'crosshair',      label: `Frame selected${selSize > 1 ? ` (${selSize})` : ''}`, fn: frameSelected },
     { icon: 'focus',          label: 'Isolate',                fn: isolateSelected },
-    { icon: 'play',           label: 'Animate…',               fn: () => _Anim.open() },
     { icon: 'eye',            label: 'Toggle visibility',      fn: () => { _applyVisibility([[p, !p.visible]]); rebuildTree(); requestRender(); } },
-    { icon: 'eye-off',        label: 'Hide unselected',        fn: hideUnselected },
-    { icon: 'eye',    label: 'Show all',               fn: showAllParts },
-    '---',
-    { icon: 'shapes',         label: 'Select similar shape',   fn: selectSimilar },
-    { icon: 'copy-check',     label: 'Select all instances',   fn: selectInstances },
-    { icon: 'crown',          label: 'Select the original',    fn: selectInstanceOriginal },
-    { icon: 'unlink',         label: 'Make unique',            fn: () => makeUnique() },
-    { icon: 'palette',        label: 'Select same colour',      fn: selectByColor },
+    { icon: 'eye-off', label: 'Visibility', sub: [
+      { icon: 'eye-off',        label: 'Hide unselected',        fn: hideUnselected },
+      { icon: 'eye',    label: 'Show all',               fn: showAllParts },
+    ] },
+    { icon: 'play',           label: 'Animate…',               fn: () => _Anim.open() },
+    { icon: 'mouse-pointer-2', label: 'Select', sub: [
+      { icon: 'shapes',         label: 'Select similar shape',   fn: selectSimilar },
+      { icon: 'copy-check',     label: 'Select all instances',   fn: selectInstances },
+      { icon: 'crown',          label: 'Select the original',    fn: selectInstanceOriginal },
+      { icon: 'palette',        label: 'Select same colour',      fn: selectByColor },
+      { icon: 'unlink',         label: 'Make unique',            fn: () => makeUnique() },
+    ] },
     '---',
     { icon: 'folder-plus',    label: `Group selected${selSize > 1 ? ` (${selSize})` : ''}`, kbd: 'Ctrl+G', fn: _treeGroupSelected },
-    { icon: 'combine',        label: 'Merge selected',         fn: () => mergeSelectedIntoOne?.() },
-    { icon: 'split',          label: 'Split…',                 kbd: 'X', fn: () => _CmdCards.open('split') },
-    { icon: 'circle-off',     label: 'Remove holes…',            kbd: 'P', fn: () => _CmdCards.open('fillholes') },
-    '---',
+    { icon: 'combine', label: 'Mesh', sub: [
+      { icon: 'combine',        label: 'Merge selected',         fn: () => mergeSelectedIntoOne?.() },
+      { icon: 'split',          label: 'Split…',                 kbd: 'X', fn: () => _CmdCards.open('split') },
+      { icon: 'circle-off',     label: 'Remove holes…',            kbd: 'P', fn: () => _CmdCards.open('fillholes') },
+    ] },
+    { icon: 'wand-2', label: 'Fit', sub: [
+      { icon: 'wand-2',         label: 'Smart fit selected',     fn: () => smartFitSelection('smart') },
+      { icon: 'box',         label: 'Force AABB box',         fn: () => smartFitSelection('aabb') },
+      { icon: 'rotate-3d',      label: 'Force OBB box',          fn: () => smartFitSelection('obb') },
+      { icon: 'cylinder',       label: 'Force cylinder',         fn: () => smartFitSelection('cyl') },
+      { icon: 'boxes',          label: 'A few boxes (keeps the outline)', fn: () => smartFitSelection('boxes') },
+      { icon: 'brick-wall',         label: 'Blocks (keeps the outline)', fn: () => smartFitSelection('blocks') },
+    ] },
     { icon: p.locked ? 'unlock' : 'lock', label: p.locked ? 'Unlock' : 'Lock', fn: () => { const next = !p.locked; for (const sid of state.selected) { const sp = getPart(sid); if (sp) sp.locked = next; } rebuildTree(); /* lock state visible in tree row — no toast */ } },
-    { icon: 'wand-2',         label: 'Smart fit selected',     fn: () => smartFitSelection('smart') },
-    { icon: 'box',         label: 'Force AABB box',         fn: () => smartFitSelection('aabb') },
-    { icon: 'rotate-3d',      label: 'Force OBB box',          fn: () => smartFitSelection('obb') },
-    { icon: 'cylinder',       label: 'Force cylinder',         fn: () => smartFitSelection('cyl') },
-    { icon: 'boxes',          label: 'A few boxes (keeps the outline)', fn: () => smartFitSelection('boxes') },
-    { icon: 'brick-wall',         label: 'Blocks (keeps the outline)', fn: () => smartFitSelection('blocks') },
     '---',
-    { icon: 'chevrons-up-down',  label: 'Expand all groups',      fn: _treeExpandAll },
-    { icon: 'chevrons-down-up',    label: 'Collapse all groups',    fn: _treeCollapseAll },
+    { icon: 'chevrons-up-down', label: 'Tree', sub: [
+      { icon: 'chevrons-up-down',  label: 'Expand all groups',      fn: _treeExpandAll },
+      { icon: 'chevrons-down-up',    label: 'Collapse all groups',    fn: _treeCollapseAll },
+    ] },
     '---',
     { icon: 'copy',           label: 'Copy',                   kbd: 'Ctrl+C', fn: () => copyParts([...state.selected]) },
     ...((state._clipboardParts || []).length ? [{ icon: 'clipboard-paste', label: 'Paste', kbd: 'Ctrl+V', fn: () => pasteParts() }] : []),
@@ -44521,7 +44609,7 @@ rebuildTree = function() {
       ? `<i data-lucide="eye"></i>`
       : `<i data-lucide="eye-off"></i>`;
     const inst = _instBadge(_liveShareCount(p));
-    const lockIcon = p.locked ? `<span title="Locked" style="opacity:.6;font-size:var(--fs-10)">🔒</span>` : '';
+    const lockIcon = p.locked ? `<span class="tree-lock" title="Locked">${_ico('lock')}</span>` : '';
     const triFrac = Math.log10(p.triCount + 1) / logMax;
     const barHue = 240 - triFrac * 240;
     const barW = Math.max(2, triFrac * 40) | 0;
@@ -44713,15 +44801,9 @@ function _wireDeadTreeControls() {
   let _toolMenuFrom = null;
   for (const [id, open] of [['tree-collapse-toggle', () => _openTreeFoldMenu($('tree-collapse-toggle'))], ['tree-flatten', () => _openFlattenMenu($('tree-flatten'))], ['tree-batch-rename', () => _openBatchRenameMenu($('tree-batch-rename'))]]) {
     const show = () => {
-      const m0 = $('ctx-menu'), wasShown = !!m0 && m0.style.display === 'block';
       _toolMenuFrom = id; open();
       document.querySelectorAll('.tree-toolbar .tree-icon-btn.is-open').forEach(b => b.classList.remove('is-open'));
       $(id)?.classList.add('is-open');                                  // (the button stays lit while its menu is open)
-      const m = $('ctx-menu');
-      if (m && m.style.display === 'block' && !wasShown && m.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        m.style.transformOrigin = '0 0';
-        try { m.getAnimations().forEach(a => a.cancel()); m.animate([{ opacity: 0, transform: 'translateY(-6px) scale(.97)' }, { opacity: 1, transform: 'none' }], { duration: 160, easing: 'cubic-bezier(.2,.9,.3,1)' }); } catch (_) {}
-      }
     };
     // a second press on the button whose menu is open closes it (the press itself closes the menu before the click, so it is noted on the press)
     let wasOpen = false;

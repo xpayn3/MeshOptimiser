@@ -1,5 +1,5 @@
 // node tests/meshcheck.test.mjs — checks meshcheck.js on meshes whose faults are known exactly.
-import { checkMesh } from '../meshcheck.js';
+import { checkMesh } from '../app/js/meshcheck.js';
 
 let pass = 0, fail = 0;
 const fails = [];

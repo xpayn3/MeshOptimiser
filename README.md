@@ -186,10 +186,12 @@ start.bat
 ./start.command
 ```
 
-> First run bootstraps `.venv`, pulls deps, opens the viewer.
+> First run bootstraps `app/.venv`, pulls deps, opens the viewer.
 > Subsequent runs are **~1 second**.
 
 ### 🧪 Direct CLI
+
+Run these from the `app` folder.
 
 ```bash
 python step2glb.py input.step
@@ -224,14 +226,14 @@ python step2glb.py --batch cad/ --out glb/        # every CAD file in a folder
   different formats (`part.step`, `part.iges`) get `part.glb` and
   `part_iges.glb`. The exit code is 1 if any file did not convert.
   `step2glb.command` passes `--batch` on as it is; on Windows run
-  `.venv\Scripts\python.exe step2glb.py --batch ...`, because `step2glb.bat`
+  `.venv\Scripts\python.exe step2glb.py --batch ...` (in `app\`), because `step2glb.bat`
   takes its first argument for a file.
 - **LODs.** `--lod 100,50,25` writes the model at those percentages of its
   triangles: the first to `<name>.glb`, the others to `<name>_lod1.glb`,
   `<name>_lod2.glb`. Every level has the same nodes, names, instances and
   metadata. It uses meshoptimizer: gltfpack if it is installed (the same as
   `--simplify`), otherwise the copy bundled in `vendor/meshoptimizer/` through
-  Node.js (`lod_simplify.mjs`; the browser app's Decimate uses that same
+  Node.js (`lod-simplify.mjs`; the browser app's Decimate uses that same
   file). With neither it stops and says so. `--lod-error E` (default 0.01, a
   fraction of each part's size) is the most a part may change; where reaching
   a percentage would exceed it, the level stays above it, and the log gives
@@ -260,31 +262,27 @@ python step2glb.py --batch cad/ --out glb/        # every CAD file in a folder
 ## 🗂 Layout
 
 ```text
-step2glb.py        STEP / IGES / BREP → GLB converter (OCCT + instancing, LOD, batch)
-lod_simplify.mjs   the LOD simplifier when gltfpack is absent (Node, bundled meshoptimizer)
-serve.py           local HTTP server + /api/convert endpoint
-index.html         WebGPU viewer shell
-app-v2.js          viewer logic (scene graph, picking, colour groups)
-holefill.js        hole filler (pure module, no dependencies)
-fasteners.js       fastener recogniser (pure module, no dependencies)
-mesh-worker.js     background worker for Remove holes and Decimate
-cloner.js          cloner (linear / grid / radial arrays)
-tests/
- ├── selftest.js         in-app regression suite (?selftest)
- ├── holefill.test.mjs   hole filler on synthetic shapes (node)
- ├── converter.test.py   converter end to end: STEP / IGES / BREP, --batch, --lod, metadata, /api/convert (python)
- └── fasteners.test.mjs  fastener recogniser on built bolts, nuts, washers and look-alikes (node)
-vendor/
- ├── three/            three.js r172: the WebGPU build and the add-ons in use
- ├── three-mesh-bvh/   pick acceleration
- ├── meshoptimizer/    simplifier (WASM, embedded)
- ├── lucide/           icon set
- ├── draco/            Draco encoder + decoder (WASM)
- ├── assimp/           Assimp.js (WASM)
- └── inter/            Inter variable font (SIL OFL)
-fbx_*.py           FBX inspection / diff utilities
-start.{bat,command}    one-click launchers
-step2glb.{bat,command} headless converters
+start.bat, start_hidden.vbs, start.command, start.ico   thin launchers: they hand over to app/
+Install MeshOptimiser.bat                               the Windows installer
+app/                      the program (everything below runs from here; .venv, inbox and exports live here too)
+ ├── start.bat, start.command, start_hidden.vbs, ui.ps1   the real launchers (ui.ps1 draws the start-up window)
+ ├── serve.py             local HTTP server + /api/convert endpoint
+ ├── updater.py           the in-app updater
+ ├── step2glb.py          STEP / IGES / BREP → GLB converter (OCCT + instancing, LOD, batch)
+ ├── install.ps1          the installer (also fetched from the website)
+ ├── index.html           WebGPU viewer shell
+ ├── js/
+ │    ├── app.js          viewer logic (scene graph, picking, colour groups)
+ │    ├── mesh-worker.js  background worker for Remove holes and Decimate
+ │    ├── lod-simplify.mjs  the LOD simplifier when gltfpack is absent (Node, bundled meshoptimizer)
+ │    └── holefill.js, fasteners.js, cloner.js, …   one module each (pure ones have no dependencies)
+ ├── vendor/              three.js r172 (WebGPU build and add-ons), three-mesh-bvh, meshoptimizer (WASM),
+ │                        lucide icons, Draco (WASM), Assimp.js (WASM), Inter (SIL OFL)
+ ├── assets/, knowledge/  pictures, help clips; the docs Claude reads over MCP
+ └── step2glb.{bat,command}   headless converters
+tests/                    node and python suites; selftest.js is the in-app suite (?selftest)
+tools/                    build scripts (help, knowledge base, update archive, release zip)
+docs/, site/, CHANGELOG.md   not part of the download
 ```
 
 ---
@@ -303,7 +301,7 @@ Right-click <code>start.command</code> → <b>Open</b>. Gatekeeper blocks double
 
 <details>
 <summary><b>📦 "ModuleNotFoundError: No module named 'OCP'"</b></summary><br>
-Delete <code>.venv/</code> and re-run <code>start.bat</code> / <code>start.command</code> to rebuild from scratch.
+Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.command</code> to rebuild from scratch.
 </details>
 
 ---

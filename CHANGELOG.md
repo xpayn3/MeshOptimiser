@@ -61,6 +61,10 @@ v0.29.0 was about big assemblies. v0.30.0 brings two alpha features, both early 
 - ![fix][fix] **The Model mode button, and keys 1, 2 and 3, did nothing useful with nothing selected.** The button is greyed and the keys say "Select a part first." Edit mesh is off while the Animate window is open.
 - ![fix][fix] **The grid lines in the view were two or three pixels of mush from far away.** They are one crisp pixel now, axis lines included.
 - ![fix][fix] **Opening Advanced flatten decided "Selected groups only" once.** It now follows what is selected.
+- ![fix][fix] **In the Materials window, Ctrl+C and Ctrl+D copied and duplicated the selected parts, not the material I had picked.** With the Materials window the last thing I clicked in and one material picked, Ctrl+D now duplicates the material, Ctrl+C then Ctrl+V pastes a copy of it, and the parts are left alone.
+- ![fix][fix] **In a narrow Library window the 3D preview of the part vanished.** Below 900 px it now stays, between the name and the parameters, and it can be thrown: let go while dragging and it keeps turning a little, then slows down.
+- ![fix][fix] **The material cards in the sidebar were cut off inside the well, not at its edge, and sat too far apart.** The strip now reaches the edges of the well (4 px between cards, 6 px round the first one), and Duplicate and Delete moved from the Materials window's header into its side panel with Edit, Select parts and Isolate.
+- ![fix][fix] **In Points mode the dots from the far side of a thin part showed through it, most when zoomed out.** A point whose surface looks away from the camera is no longer drawn, and the lift that keeps a dot from being cut by its own surface is smaller, so on a thin plate it no longer reaches through to the other side.
 
 ## v0.29.0
 

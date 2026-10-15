@@ -7,7 +7,7 @@
 //   { mesh: prepare(geometry), at(t) -> { m: Matrix4, sel: 0..1, alpha: 0..1 } }
 // sel blends the part's colour toward the accent (the app's selection colour), alpha < 1 draws it as
 // glass (no depth write, so what is behind it stays visible).
-import * as T from '../vendor/three/build/three.core.js';
+import * as T from '../app/vendor/three/build/three.core.js';
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 
 export { T };
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const OUT = path.resolve(HERE, '..', 'assets', 'help');
+export const OUT = path.resolve(HERE, '..', 'app', 'assets', 'help');
 export const FFMPEG = process.env.FFMPEG || 'ffmpeg';
 export let W = 592, H = 370, N = 150;
 export const SS = 2, FPS = 25;

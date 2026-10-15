@@ -2,7 +2,7 @@
 //
 // A saved scene leads Recent and opens from there after the page is loaded again, and the material a saved scene had (metalness,
 // roughness) comes back, also for the copies of a shape that are drawn as one instanced mesh. Needs the app served on
-// http://localhost:4242 (python serve.py --no-browser --port 4242), Chrome installed and Node 22+.
+// http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';

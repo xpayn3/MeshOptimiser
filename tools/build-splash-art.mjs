@@ -37,7 +37,7 @@ const svg = `<svg class="splash-clip" viewBox="-44 -44 88 88" width="132" height
       <g class="sp-dense"><path d="${['top', 'left', 'right'].map(k => dense(face[k])).join('')}"/></g>
     </svg>`;
 
-const file = new URL('../index.html', import.meta.url);
+const file = new URL('../app/index.html', import.meta.url);
 let html = fs.readFileSync(file, 'utf8');
 const wrapped = `<!-- splash-art -->\n    ${svg}\n    <!-- /splash-art -->`;
 if (html.includes('<!-- splash-art -->')) html = html.replace(/<!-- splash-art -->[\s\S]*?<!-- \/splash-art -->/, () => wrapped);

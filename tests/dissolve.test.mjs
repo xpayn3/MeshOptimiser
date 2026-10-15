@@ -1,9 +1,9 @@
 // node tests/dissolve.test.mjs — dissolve.js (a point taken out, the surface closed over it) on shapes built here, with
 // THREE.ShapeUtils as the triangulator, as the app passes it in.
-import { ShapeUtils, Vector2 } from '../vendor/three/build/three.core.js';
-import { buildTopology } from '../meshedit.js';
-import { analysePolygons } from '../wirelines.js';
-import { dissolvePoints, applyDissolve } from '../dissolve.js';
+import { ShapeUtils, Vector2 } from '../app/vendor/three/build/three.core.js';
+import { buildTopology } from '../app/js/meshedit.js';
+import { analysePolygons } from '../app/js/wirelines.js';
+import { dissolvePoints, applyDissolve } from '../app/js/dissolve.js';
 
 let fails = 0;
 const ok = (c, msg) => { if (!c) { fails++; console.log('FAIL', msg); } else console.log('ok  ', msg); };

@@ -1365,7 +1365,7 @@ def _normals_of(verts):
 # _NORMALS is, and written beside the GLB by write_brep_sidecar().
 _BREP: dict = {}
 
-# Face kinds, in the order of the codes the viewer reads (see _brepKinds in app-v2.js).
+# Face kinds, in the order of the codes the viewer reads (see _brepKinds in app.js).
 _FACE_KINDS = ("plane", "cylinder", "cone", "sphere", "torus", "bezier", "bspline", "revolution", "extrusion", "offset", "other")
 
 
@@ -1874,8 +1874,8 @@ def _assembled_bbox(roots: list, products: dict) -> tuple[np.ndarray, np.ndarray
 # for --simplify, so it is also used for the LOD files when it is installed.
 # Without it the same library runs from the app's own bundled copy
 # (vendor/meshoptimizer, a WebAssembly module) through Node.js and
-# lod_simplify.mjs: the browser app simplifies with that very file.
-LOD_HELPER = Path(__file__).resolve().with_name("lod_simplify.mjs")
+# lod-simplify.mjs: the browser app simplifies with that very file.
+LOD_HELPER = Path(__file__).resolve().parent / "js" / "lod-simplify.mjs"
 LOD_WASM = Path(__file__).resolve().parent / "vendor" / "meshoptimizer" / "meshopt_simplifier.module.js"
 
 

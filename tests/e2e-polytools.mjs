@@ -2,7 +2,7 @@
 //
 // Runs Repair mesh, Remove hidden faces, Merge by and Select by rule in the real app (headless Chrome, software WebGL2, no
 // window shown) and prints what each reports, the triangle counts before and after, and every JavaScript error.
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242) and Chrome installed.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242) and Chrome installed.
 import { spawn } from 'child_process';
 import fs from 'fs';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';

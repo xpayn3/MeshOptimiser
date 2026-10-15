@@ -16,7 +16,7 @@ Then, by hand (nothing here uploads anything):
 The feed is on the website and the archive on GitHub on purpose: both would have to be changed to push a bad file, and the
 archive is checked against the SHA-256 and size that only the feed holds.
 
-What ships: everything git knows about (tracked, or untracked and not ignored) except the tests and tools, the docs and
+What ships: everything git knows about in app/ (the folder the updater works in; the thin launchers and the README beside it are not part of an update) (tracked, or untracked and not ignored) except the tests and tools, the docs and
 release notes, the launchers (they cannot be replaced while running: if one changed, raise "launcher" in version.json and
 the app tells people to download the full version), version.json (the updater writes it) and the user's own folders.
 What the updater never touches is listed in updater.py (PROTECTED, LAUNCHERS).
@@ -25,8 +25,9 @@ from __future__ import annotations
 import argparse, hashlib, json, re, subprocess, sys, time, zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
+ROOT = Path(__file__).resolve().parent.parent           # the repository: CHANGELOG.md, tools/, tests/ ...
+APP = ROOT / "app"                                       # the program, and what the updater replaces: paths in the archive are relative to it
+sys.path.insert(0, str(APP))
 import updater                                                    # (PROTECTED and LAUNCHERS live there, once)
 
 SKIP_DIRS = {"tests", "tools", "docs", "dist", "site", ".github", "__pycache__"} | {p.lower() for p in updater.PROTECTED}
@@ -35,14 +36,14 @@ SKIP_GLOBS = ("RELEASE_NOTES_", "test-converter.")
 
 
 def files_to_ship() -> list[str]:
-    out = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "-z"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "-z"], cwd=APP, capture_output=True, text=True, check=True).stdout
     keep = []
     for rel in sorted(p for p in out.split("\0") if p):
         parts = rel.split("/")
         low = rel.lower()
         if parts[0].lower() in SKIP_DIRS or low in SKIP_FILES or rel.endswith((".pyc", ".pyo", ".tmp", ".part")): continue
         if len(parts) == 1 and parts[0].startswith(SKIP_GLOBS): continue
-        if not (ROOT / rel).is_file(): continue                   # (listed but deleted in the working tree)
+        if not (APP / rel).is_file(): continue                   # (listed but deleted in the working tree)
         keep.append(rel)
     return keep
 
@@ -90,15 +91,15 @@ def main() -> int:
 
     files = files_to_ship()
     if "serve.py" not in files or "index.html" not in files or "updater.py" not in files: raise SystemExit("The file list does not look like the app (serve.py, index.html or updater.py missing).")
-    req = ROOT / "requirements.txt"
+    req = APP / "requirements.txt"
     req_sha = sha256_file(req) if req.is_file() else ""
     manifest = {"schema": 1, "version": ver, "built": int(time.time()), "requirements_sha256": req_sha,
-                "files": [{"path": f, "sha256": sha256_file(ROOT / f), "size": (ROOT / f).stat().st_size} for f in files],
+                "files": [{"path": f, "sha256": sha256_file(APP / f), "size": (APP / f).stat().st_size} for f in files],
                 "delete": [d for d in a.delete]}
     zpath = out / f"meshoptimiser-app-{ver}.zip"
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         z.writestr("update-manifest.json", json.dumps(manifest, indent=1))
-        for f in files: z.write(ROOT / f, f)
+        for f in files: z.write(APP / f, f)
     # the archive must pass the same checks the app runs
     updater.verify_archive(zpath, ver)
 

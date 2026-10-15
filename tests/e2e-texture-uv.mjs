@@ -3,8 +3,8 @@
 // A model that came without textures (an OBJ with texture coordinates but no .mtl) has its UVs put away at import. Giving its material a
 // texture later must bring them back, or the texture shows nothing. Opens a small OBJ with UVs, checks the UVs are off the geometry, gives
 // the material a checker texture, checks they are back and that the cube is drawn with the texture's colours.
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), Chrome installed and Node 22+.
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';

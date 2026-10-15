@@ -3,7 +3,7 @@
 // The Animate feature in the real app (headless Chrome, software WebGL2): the animate_parts tool, the part and group animations, the
 // Playing tag and pausing, the Animate window, the poses going back, and the turntable video playing the animations.
 // is the layer above them and is not part of this) and checks what each one did, including that the undo tool takes it back.
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), or another port in APP_PORT, Chrome installed and Node 22+.
 // Prints PASS / FAIL per check and every JavaScript error the page threw. Exit code 1 when anything failed.
 import { spawn } from 'child_process';
 import fs from 'fs';

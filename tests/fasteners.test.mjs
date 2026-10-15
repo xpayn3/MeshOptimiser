@@ -1,5 +1,5 @@
 // node tests/fasteners.test.mjs — checks fasteners.js on shapes built here.
-import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from '../fasteners.js';
+import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from '../app/js/fasteners.js';
 
 // ── shape builder ──────────────────────────────────────────────────────────
 // A shape is a closed outline in (z, radius), swept round the axis. Each

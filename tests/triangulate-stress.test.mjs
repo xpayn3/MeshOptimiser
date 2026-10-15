@@ -2,10 +2,10 @@
 // plates with random square through-holes, built here: welded or with a vertex of its own for every face, smooth or flat normals.
 // After each step the solid must still be closed (every edge shared by two triangles), have the same volume (the shape does
 // not move), keep its winding, and, for Untriangulate, have fewer triangles; Triangulate must keep the count.
-import { ShapeUtils, Vector2 } from '../vendor/three/build/three.core.js';
-import { fillFlatHoles, applyHoleFill, flattenRimNormals } from '../holefill.js';
-import { untriangulate, evenTriangles } from '../untriangulate.js';
-import { findFloating } from '../floating.js';
+import { ShapeUtils, Vector2 } from '../app/vendor/three/build/three.core.js';
+import { fillFlatHoles, applyHoleFill, flattenRimNormals } from '../app/js/holefill.js';
+import { untriangulate, evenTriangles } from '../app/js/untriangulate.js';
+import { findFloating } from '../app/js/floating.js';
 
 let fails = 0, checks = 0;
 const ok = (c, msg) => { checks++; if (!c) { fails++; console.log('FAIL', msg); } };

@@ -1,5 +1,5 @@
 // node tests/repeats.test.mjs — checks repeats.js on shapes built here.
-import { findRepeats } from '../repeats.js';
+import { findRepeats } from '../app/js/repeats.js';
 
 let pass = 0, fail = 0;
 const ok = (c, name, extra = '') => { if (c) pass++; else { fail++; console.log('FAIL', name, extra); } };

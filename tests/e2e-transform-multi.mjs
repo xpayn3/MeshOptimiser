@@ -3,7 +3,7 @@
 // The Transform panel with several parts selected, in the real app in headless Chrome (software WebGL2, no window shown): the fields
 // are open, a field shows the number when every part has it and "mixed" only when they differ, a number typed in goes to each part
 // on its own and leaves its other numbers alone, one part selected afterwards reads the same number, and Undo takes it back.
-// Needs the app served on http://localhost:4242 (python serve.py --no-browser --port 4242), Chrome installed and Node 22+.
+// Needs the app served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed and Node 22+.
 import { spawn } from 'child_process';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const MODEL = process.argv[2] || 'inbox/GearboxAssy.glb';

@@ -3,7 +3,7 @@ const props = {}; const classes = new Set(); let stored = {};
 global.window = global;
 global.localStorage = { getItem: () => JSON.stringify(stored) };
 global.document = { documentElement: { style: { setProperty: (k, v) => { props[k] = v; }, removeProperty: (k) => { delete props[k]; } }, classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) } }, querySelector: () => ({ setAttribute: (a, v) => { props['meta:' + a] = v; } }) };
-require(require('path').join(__dirname, '..', 'appearance.js'));
+require(require('path').join(__dirname, '..', 'app', 'js', 'appearance.js'));
 const A = window.MOAppearance; let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.error('FAIL', m); } };
 const reset = () => { for (const k of Object.keys(props)) delete props[k]; classes.clear(); };
 // defaults: nothing is set, the stylesheet's own values stay

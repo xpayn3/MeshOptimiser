@@ -2,7 +2,7 @@
 //
 // Drives the real app in headless Chrome (software WebGL2, no window shown): loads a model through the file input, switches to
 // the CAD view, orbits, opens Settings › Appearance and About, the Help window, and prints every JavaScript error. Needs the app
-// served on http://localhost:4242 (python serve.py --no-browser --port 4242), Chrome installed (path below) and Node 22+.
+// served on http://localhost:4242 (python app/serve.py --no-browser --port 4242), Chrome installed (path below) and Node 22+.
 // It cannot show WebGPU-only behaviour: on this path the renderer is WebGL2.
 // Drives the real app in headless Chrome (software WebGL2): loads a model, switches views, screenshots, collects errors.
 import { spawn } from 'child_process';

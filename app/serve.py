@@ -11,7 +11,7 @@ import math
 import argparse, atexit, http.server, json, os, re, select, shutil, signal, subprocess
 import sys, threading, time, uuid, webbrowser, hashlib
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs, quote
+from urllib.parse import urlparse, parse_qs, quote, unquote
 import updater                     # updating the app's own files: see updater.py
 
 PORT = 4242
@@ -1299,6 +1299,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _refuse(self):
         return self._json({"error": "forbidden"}, 403)
 
+    # The self-test (?selftest) lives in tests/ beside this folder in the repository, not in the shipped package.
+    def translate_path(self, path):
+        p = urlparse(path).path
+        if p.startswith("/tests/") and not (ROOT / "tests").is_dir():
+            up = ROOT.parent / "tests"
+            rel = os.path.normpath(unquote(p[len("/tests/"):])).replace("\\", "/")
+            if up.is_dir() and not rel.startswith(".."):
+                return str(up / rel)
+        return super().translate_path(path)
+
     # No folder listings, and nothing from a dot-folder (.git, .venv): the app
     # asks for files by name and never for either.
     def list_directory(self, path):
@@ -1308,6 +1318,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self._trusted(): return self._refuse()
         u = urlparse(self.path)
+        # The page and its scripts are answered in full each time (never 304 on the file's date). An older file than the one
+        # the browser holds (a rolled-back update, another copy of the app on the same address) would be taken for unchanged.
+        if not u.path.startswith(("/vendor/", "/assets/")) and "If-Modified-Since" in self.headers:
+            del self.headers["If-Modified-Since"]
         if u.path == "/favicon.ico":
             self.send_response(204); self.end_headers(); return
         if any(seg.startswith(".") for seg in u.path.split("/") if seg):
