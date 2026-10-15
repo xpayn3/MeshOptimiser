@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=419" />
+  <link rel="stylesheet" href="site.css?v=425" />
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"}}</script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
@@ -159,6 +159,20 @@
             <p class="pop-note">54% fewer triangles, GLB 9× smaller.<br />Mercedes-Benz Arocs 8×8 axle. Not affiliated.</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="strip" data-strip>
+        <figure><a class="zoom" href="Images/apps/meshoptimiser-wand.webp" data-group="strip" data-caption="Quick wand: a ring of commands under the cursor. Here, Remove empty parts."><img src="Images/apps/meshoptimiser-wand.webp" alt="MeshOptimiser: Quick wand: a ring of commands under the cursor. Here, Remove empty parts." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption><i>01</i><strong>Quick wand</strong><span>A ring of commands under the cursor. Here, Remove empty parts.</span></figcaption></figure>
+        <figure><a class="zoom" href="Images/apps/meshoptimiser-small-parts.webp" data-group="strip" data-caption="Delete small parts: 102 parts under 2% of the model’s size, highlighted before they go."><img src="Images/apps/meshoptimiser-small-parts.webp" alt="MeshOptimiser: Delete small parts: 102 parts under 2% of the model’s size, highlighted before they go." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption><i>02</i><strong>Delete small parts</strong><span>102 parts under 2% of the model’s size, highlighted before they go.</span></figcaption></figure>
+        <figure><a class="zoom" href="Images/apps/meshoptimiser-heatmap-axle.webp" data-group="strip" data-caption="Heatmap: parts coloured by triangle count."><img src="Images/apps/meshoptimiser-heatmap-axle.webp" alt="MeshOptimiser: Heatmap: parts coloured by triangle count." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption><i>03</i><strong>Heatmap</strong><span>Parts coloured by triangle count.</span></figcaption></figure>
+        <figure><a class="zoom" href="Images/apps/meshoptimiser-fasteners-engine.webp" data-group="strip" data-caption="Fasteners: 376 found by shape, 354,399 triangles, 9.6% of the scene."><img src="Images/apps/meshoptimiser-fasteners-engine.webp" alt="MeshOptimiser: Fasteners: 376 found by shape, 354,399 triangles, 9.6% of the scene." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption><i>04</i><strong>Fasteners</strong><span>376 found by shape, 354,399 triangles, 9.6% of the scene.</span></figcaption></figure>
+        <figure><a class="zoom" href="Images/apps/meshoptimiser-exploded-165.webp" data-group="strip" data-caption="Exploded view: the axle pulled apart to 165%, with four parts picked out."><img src="Images/apps/meshoptimiser-exploded-165.webp" alt="MeshOptimiser: Exploded view: the axle pulled apart to 165%, with four parts picked out." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption><i>05</i><strong>Exploded view</strong><span>The axle pulled apart to 165%, with four parts picked out.</span></figcaption></figure>
+      </div>
+      <div class="dots" aria-hidden="true"></div>
+      <div class="wrap">
+        <p class="credit"><svg class="credit-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5"/><path d="M12 7.6v.01"/></svg>The truck axle in these pictures is a Mercedes-Benz Arocs 8×8 front axle. Trademarks belong to their owners; not affiliated.</p>
       </div>
     </section>
 
@@ -420,7 +434,7 @@
           </div>
         </div>
         <div class="cl-shot">
-          <ul class="cl-say">
+          <ul class="cl-say" data-pool="[&quot;Optimise this for the web, under 300,000 triangles, and tell me what you took out.&quot;,&quot;Check this model and tell me where the weight is.&quot;,&quot;Find all the bolts and hide them.&quot;,&quot;Get this under 300,000 triangles and tell me what you took out.&quot;,&quot;Show it exploded 50% and take a screenshot.&quot;,&quot;Which ten parts carry the most triangles?&quot;,&quot;Rename every part that starts with “body” to “Housing”.&quot;,&quot;Remove the hidden faces from the ten heaviest parts.&quot;,&quot;Find parts nobody can see from outside and show me before you delete them.&quot;,&quot;Make this safe to send to a customer.&quot;,&quot;What would removing the hidden parts save? Try it, but do not keep it.&quot;,&quot;Take this to the web limits and show me before and after.&quot;,&quot;Optimise every model in this folder for the web.&quot;,&quot;Render four clean pictures of this on white for a client.&quot;]">
             <li>Find all the bolts and hide them.</li>
             <li>Get this under 5 MB for the web.</li>
             <li>Show me before and after.</li>
@@ -428,20 +442,6 @@
         </div>
       </div>
     </section>
-    <section class="band">
-      <div class="strip" data-strip>
-        <figure><a class="zoom" href="Images/apps/meshoptimiser-wand.webp" data-group="strip" data-caption="Quick wand: a ring of commands under the cursor. Here, Remove empty parts."><img src="Images/apps/meshoptimiser-wand.webp" alt="MeshOptimiser: Quick wand: a ring of commands under the cursor. Here, Remove empty parts." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption>Quick wand: a ring of commands under the cursor. Here, Remove empty parts.</figcaption></figure>
-        <figure><a class="zoom" href="Images/apps/meshoptimiser-small-parts.webp" data-group="strip" data-caption="Delete small parts: 102 parts under 2% of the model’s size, highlighted before they go."><img src="Images/apps/meshoptimiser-small-parts.webp" alt="MeshOptimiser: Delete small parts: 102 parts under 2% of the model’s size, highlighted before they go." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption>Delete small parts: 102 parts under 2% of the model’s size, highlighted before they go.</figcaption></figure>
-        <figure><a class="zoom" href="Images/apps/meshoptimiser-heatmap-axle.webp" data-group="strip" data-caption="Heatmap: parts coloured by triangle count."><img src="Images/apps/meshoptimiser-heatmap-axle.webp" alt="MeshOptimiser: Heatmap: parts coloured by triangle count." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption>Heatmap: parts coloured by triangle count.</figcaption></figure>
-        <figure><a class="zoom" href="Images/apps/meshoptimiser-fasteners-engine.webp" data-group="strip" data-caption="Fasteners: 376 found by shape, 354,399 triangles, 9.6% of the scene."><img src="Images/apps/meshoptimiser-fasteners-engine.webp" alt="MeshOptimiser: Fasteners: 376 found by shape, 354,399 triangles, 9.6% of the scene." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption>Fasteners: 376 found by shape, 354,399 triangles, 9.6% of the scene.</figcaption></figure>
-        <figure><a class="zoom" href="Images/apps/meshoptimiser-exploded-165.webp" data-group="strip" data-caption="Exploded view: the axle pulled apart to 165%, with four parts picked out."><img src="Images/apps/meshoptimiser-exploded-165.webp" alt="MeshOptimiser: Exploded view: the axle pulled apart to 165%, with four parts picked out." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption>Exploded view: the axle pulled apart to 165%, with four parts picked out.</figcaption></figure>
-      </div>
-      <div class="dots" aria-hidden="true"></div>
-      <div class="wrap">
-        <p class="credit">The gearbox in these pictures is Gearbox Assy from Khronos’s <a href="https://github.com/KhronosGroup/glTF-Sample-Models/tree/main/2.0/GearboxAssy" rel="noopener">glTF-Sample-Models</a>, a JT CAD sample converted by Okino Computer Graphics. The bolts, nuts, washers and gears come from the app’s own library.</p>
-      </div>
-    </section>
-
     <section class="band">
       <div class="wrap split">
         <div class="split-head">
@@ -555,6 +555,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="site.js?v=95" data-viewer="viewer/"></script>
+  <script defer src="site.js?v=98" data-viewer="viewer/"></script>
 </body>
 </html>

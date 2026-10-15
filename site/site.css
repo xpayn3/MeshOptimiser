@@ -458,7 +458,7 @@ b.is-refactor { color: var(--refactor); }
 .features strong { font-size: 15px; }
 .features span { color: var(--tx-2); font-size: 15px; line-height: 1.5; }
 
-.credit { max-width: 72ch; margin-top: clamp(40px, 5vw, 72px); color: var(--tx-3); font-size: 14px; line-height: 1.6; }
+.credit { max-width: 44ch; margin-top: clamp(40px, 5vw, 72px); color: var(--tx-3); font-size: 12px; line-height: 1.55; }
 .credit a { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .credit a:hover { text-decoration-color: currentColor; }
 
@@ -1694,3 +1694,15 @@ main { overflow-x: clip; }
 
 /* the readout starts at the top edge of the conversation */
 .cx-view .cx3d-hud { top: 0; left: 0; }
+
+/* the bubbles under the Claude headline: they rise in one by one, then one at a time is swapped for a new request */
+.cl-say[data-pool] li { animation: cl-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.cl-say[data-pool] li:nth-child(2) { animation-delay: 0.12s; }
+.cl-say[data-pool] li:nth-child(3) { animation-delay: 0.24s; }
+.cl-say[data-pool] li.is-out { animation: cl-out 0.35s ease forwards; }
+.cl-say[data-pool] li.is-new { animation: cl-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes cl-in { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes cl-out { to { opacity: 0; transform: translateY(-8px) scale(0.97); } }
+@media (prefers-reduced-motion: reduce) { .cl-say[data-pool] li, .cl-say[data-pool] li.is-new { animation: none; } .cl-say[data-pool] li.is-out { animation: none; opacity: 0; } }
+
+.credit-i { display: inline-block; width: 13px; height: 13px; margin: -2px 7px 0 0; vertical-align: middle; }

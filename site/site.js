@@ -1017,4 +1017,38 @@
   // ---- docs: the index beside an article shows where you are ----
   const here = $('.kb-nav a[aria-current]');
   if (here) { const nav = here.parentElement; nav.scrollTop = Math.max(0, here.offsetTop - nav.clientHeight / 2); }
+  // ---- Claude band: every few seconds one bubble gives way to a new request (only while it is on screen) ----
+  const say = $('.cl-say[data-pool]');
+  if (say && !calm && 'IntersectionObserver' in window) {
+    let pool = [];
+    try { pool = JSON.parse(say.dataset.pool); } catch (e) { /* none */ }
+    let next = 0, timer = 0;
+    // the box keeps the height of its worst case (the three longest requests), so a swap never moves what is below it
+    const hold = () => {
+      if (!say.offsetWidth) return;
+      const worst = pool.slice().sort((x, y) => y.length - x.length).slice(0, 3);
+      const ghost = say.cloneNode(false);
+      ghost.removeAttribute('data-pool'); ghost.setAttribute('aria-hidden', 'true');
+      ghost.style.cssText = 'visibility:hidden;pointer-events:none;position:absolute;left:0;right:0;min-height:0;bottom:auto;top:0;margin:0';
+      worst.forEach(w => { const li = el('li', '', w); li.style.animation = 'none'; ghost.append(li); });
+      say.parentNode.append(ghost);
+      say.style.minHeight = ghost.getBoundingClientRect().height + 'px';
+      ghost.remove();
+    };
+    hold();
+    window.addEventListener('resize', () => { say.style.minHeight = ''; hold(); });
+    const shown = () => $$('li', say).map(li => li.textContent);
+    const swap = () => {
+      const items = $$('li', say);
+      const fresh = pool.filter(p => !shown().includes(p));
+      if (!items.length || !fresh.length) return;
+      const li = items[next++ % items.length];
+      li.classList.remove('is-new'); li.classList.add('is-out');
+      setTimeout(() => { li.textContent = fresh[Math.floor(Math.random() * fresh.length)]; li.classList.remove('is-out'); void li.offsetWidth; li.classList.add('is-new'); }, 360);
+    };
+    new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) { if (!timer) timer = setInterval(swap, 3600); }
+      else { clearInterval(timer); timer = 0; }
+    }).observe(say);
+  }
 })();
