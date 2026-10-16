@@ -41,7 +41,7 @@ export async function start(root, base) {
 
   const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/draco/gltf/');
   const loader = new GLTFLoader().setDRACOLoader(draco);
-  const gltf = await loader.loadAsync(base + data.glb + '?v=1');
+  const gltf = await loader.loadAsync(base + data.glb + '?v=3');
   draco.dispose();
   const model = gltf.scene;
   scene.add(model);

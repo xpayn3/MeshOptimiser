@@ -225,7 +225,7 @@ async function fast(el, base) {
   if (engine) { draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/draco/gltf/'); loader.setDRACOLoader(draco); }
   else loader.setMeshoptDecoder(MeshoptDecoder);
   const [gltf, table] = await Promise.all([
-    loader.loadAsync(base + (engine ? 'chat-scania.glb?v=2' : 'axle-web.glb?v=1')),
+    loader.loadAsync(base + (engine ? 'chat-scania.glb?v=3' : 'axle-web.glb?v=1')),
     engine ? Promise.resolve(null) : fetch(base + 'axle-offsets.json?v=1').then((r) => r.json()),
   ]);
   if (draco) draco.dispose();
