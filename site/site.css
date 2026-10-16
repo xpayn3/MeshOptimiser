@@ -1525,7 +1525,7 @@ main { overflow-x: clip; }
 /* ---- the opening: the axle on the page's own background, pulled apart by the scroll ----
    Only the model (hero3d.js draws it into .pop-3d, full width of the pinned screen); the poster stands in until it is drawn, on a phone, and
    without WebGL or with reduced motion. Small print under it says what the page shows and where the model comes from. */
-.pop.is-axle { height: 250vh; margin-top: clamp(56px, 8vw, 120px); }
+.pop.is-axle { height: 228vh; margin-top: clamp(56px, 8vw, 120px); }
 .pop.is-axle .pop-stage { position: relative; display: block; height: 100%; max-width: calc(var(--max) + var(--gutter) * 2); }
 .pop.is-axle .pop-poster { position: absolute; left: 0; right: 0; top: 0; bottom: 56px; width: 100%; height: calc(100% - 56px); object-fit: contain; pointer-events: none; }
 .pop.is-axle.is-3d .pop-poster { visibility: hidden; }
@@ -1551,7 +1551,7 @@ main { overflow-x: clip; }
 .pb em { font-style: normal; color: var(--tx-2); font-variant-numeric: tabular-nums; text-align: right; }
 .pop-note { margin: 0; max-width: 30ch; color: var(--tx-3); font-size: 9.5px; line-height: 1.5; }
 @media (max-width: 860px) {
-  .pop.is-axle { height: 230vh; }
+  .pop.is-axle { height: 212vh; }
   .pop.is-axle .pop-pin { position: sticky; top: var(--bar-h); height: max(calc(100svh - var(--bar-h)), 520px); display: block; }
   .pop.is-axle .pop-stage { position: relative; height: 100%; }
   .pop.is-axle .pop-poster { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: calc(100% - 40px); object-fit: contain; }
