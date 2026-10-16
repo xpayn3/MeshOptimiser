@@ -8,7 +8,8 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { studioEnvironment } from './axle-look.js?v=5';
+import { productStudio } from './axle-look.js?v=6';
+
 
 // Claude's own colours: the coral of its mark and a warm sand, on some parts of the model, and the coral for what a tool is working on
 const CORAL = new THREE.Color(0xd97757), SAND = new THREE.Color(0xe9dcc6);
@@ -27,15 +28,16 @@ export async function start(root, base) {
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
-  // the same studio and lights as the truck axle (axle-look.js, hero3d.js)
+  // a product-photography studio and lights (axle-look.js)
   renderer.toneMapping = THREE.NeutralToneMapping || THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
-  scene.environment = studioEnvironment(renderer);
-  scene.environmentIntensity = 1.3;
-  const head = new THREE.DirectionalLight(0xffffff, 0.3);
-  const keyL = new THREE.DirectionalLight(0xffffff, 1.1); keyL.position.set(80, 100, -60);
-  const fill = new THREE.DirectionalLight(0xb0c4ff, 0.18); fill.position.set(-80, 60, 40);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x303642, 0.3), keyL, fill, head, head.target);
+  renderer.toneMappingExposure = 0.95;
+  scene.environment = productStudio(renderer);
+  scene.environmentIntensity = 1.05;
+  const head = new THREE.DirectionalLight(0xffffff, 0.35);
+  const keyL = new THREE.DirectionalLight(0xfff4e8, 0.8); keyL.position.set(90, 120, 70);       // a warm key from above and the front
+  const fill = new THREE.DirectionalLight(0xb0c4ff, 0.22); fill.position.set(-90, 50, 50);       // a cool fill from the other side
+  const rim = new THREE.DirectionalLight(0xcfe0ff, 1.0); rim.position.set(-30, 70, -120);        // a rim from behind, so the edges of the dark parts show
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x303642, 0.4), keyL, fill, rim, head, head.target);
 
   const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/draco/gltf/');
   const loader = new GLTFLoader().setDRACOLoader(draco);
@@ -62,6 +64,19 @@ export async function start(root, base) {
   const box = new THREE.Box3().setFromObject(model);
   const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
   const radius = size.length() / 2;
+  // the stand it is photographed on: a soft pool of light on the floor and the contact shadow of the engine on it
+  const pool = (stops, w, h, y, blend) => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d'), gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    stops.forEach(([at, col]) => gr.addColorStop(at, col));
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, blending: blend, toneMapped: false }));
+    m.rotation.x = -Math.PI / 2; m.position.set(ctr.x, y, ctr.z); m.scale.set(w, h, 1); m.renderOrder = -1;
+    scene.add(m); return m;
+  };
+  pool([[0, 'rgba(255,255,255,0.055)'], [0.35, 'rgba(255,255,255,0.02)'], [0.7, 'rgba(255,255,255,0)'], [1, 'rgba(255,255,255,0)']], size.x * 2.2, size.z * 2.2, box.min.y - radius * 0.02, THREE.AdditiveBlending);
+  pool([[0, 'rgba(0,0,0,0.7)'], [0.45, 'rgba(0,0,0,0.38)'], [1, 'rgba(0,0,0,0)']], size.x * 1.45, size.z * 1.45, box.min.y - radius * 0.012, THREE.NormalBlending);
 
   const camera = new THREE.PerspectiveCamera(32, 1, radius * 0.05, radius * 20);
   const view = { yaw: 2.25, pitch: 0.36 };

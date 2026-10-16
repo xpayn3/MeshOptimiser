@@ -1794,7 +1794,7 @@ h1, h2 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto;
 /* The name next to the logo is in the same serif, everywhere (the bar and the foot of every page). */
 .brand span { font-family: var(--serif); font-weight: 300; font-size: 18px; letter-spacing: -0.005em; }
 /* the big figures (a result like -79%, the figures rows, the token and knowledge numbers) are in the same light serif */
-.sv-big b, .figures dt, .tokens dt, .kn-figures dt, .live-side strong { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto; }
+.sv-big b, .figures dt, .tokens dt, .kn-figures dt { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto; }
 .sv-big b { letter-spacing: -0.03em; }
 /* Titles that are headlines in their own right use the same serif on every page: caption titles of the screenshots and clips, and the h3 titles of
    steps, spotlights, plans and the comparison columns. (Small labels, buttons and numbers stay Inter.) */

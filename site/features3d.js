@@ -10,7 +10,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { studioEnvironment, kindOfMesh, settleKinds } from './axle-look.js?v=5';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { studioEnvironment, productStudio, kindOfMesh, settleKinds } from './axle-look.js?v=6';
 
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const ease = (t) => t * t * (3 - 2 * t);
@@ -215,25 +216,47 @@ async function wipe(el, base) {
 // ---------------------------------------------------------------------------------------------------------------------------------
 async function fast(el, base) {
   const stage = $('[data-stage]', el);
+  // data-model="engine": a Scania V8 engine in the file's own materials (chat-scania.glb, Draco); otherwise the truck axle in the site's look
+  const engine = el.dataset.model === 'engine';
+  const noun = el.dataset.noun || 'screws', whole = el.dataset.whole || 'the whole axle', partsNote = el.dataset.partsNote || '';
+  const names = engine ? new Set(JSON.parse($('[data-live-names]', el).textContent)) : null;
   const loader = new GLTFLoader();
-  loader.setMeshoptDecoder(MeshoptDecoder);
+  let draco = null;
+  if (engine) { draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/draco/gltf/'); loader.setDRACOLoader(draco); }
+  else loader.setMeshoptDecoder(MeshoptDecoder);
   const [gltf, table] = await Promise.all([
-    loader.loadAsync(base + 'axle-web.glb?v=1'),
-    fetch(base + 'axle-offsets.json?v=1').then((r) => r.json()),
+    loader.loadAsync(base + (engine ? 'chat-scania.glb?v=2' : 'axle-web.glb?v=1')),
+    engine ? Promise.resolve(null) : fetch(base + 'axle-offsets.json?v=1').then((r) => r.json()),
   ]);
+  if (draco) draco.dispose();
+  const isFast = (o) => { for (let q = o; q && q !== gltf.scene; q = q.parent) if (names.has(q.name)) return true; return false; };
   let queued = false, yaw = THREE.MathUtils.degToRad(52), pitch = THREE.MathUtils.degToRad(24);
   const { renderer, size, fit } = makeRenderer(stage, () => ask());
 
   const scene = new THREE.Scene();
   const root = new THREE.Group();
   scene.add(root);
-  scene.environment = studioEnvironment(renderer);
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0.3);
-  const keyL = new THREE.DirectionalLight(0xffffff, 1.1); keyL.position.set(80, 100, -60);
-  const fill = new THREE.DirectionalLight(0xb0c4ff, 0.18); fill.position.set(-80, 60, 40);
-  const head = new THREE.DirectionalLight(0xffffff, 0.3);
-  scene.add(hemi, keyL, fill, head, head.target);
-  const lights = [[scene, 'environmentIntensity', 1.3], [hemi, 'intensity', 0.3], [keyL, 'intensity', 1.1], [fill, 'intensity', 0.18], [head, 'intensity', 0.3]];
+  let hemi, keyL, fill, head, lights;
+  if (engine) {
+    // a product-photography studio (axle-look.js), as beside the chat on the Claude page
+    renderer.toneMappingExposure = 0.95;
+    scene.environment = productStudio(renderer);
+    hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0.4);
+    keyL = new THREE.DirectionalLight(0xfff4e8, 0.8); keyL.position.set(90, 120, 70);
+    fill = new THREE.DirectionalLight(0xb0c4ff, 0.22); fill.position.set(-90, 50, 50);
+    const rim = new THREE.DirectionalLight(0xcfe0ff, 1.0); rim.position.set(-30, 70, -120);
+    head = new THREE.DirectionalLight(0xffffff, 0.35);
+    scene.add(hemi, keyL, fill, rim, head, head.target);
+    lights = [[scene, 'environmentIntensity', 1.05], [hemi, 'intensity', 0.4], [keyL, 'intensity', 0.8], [fill, 'intensity', 0.22], [rim, 'intensity', 1.0], [head, 'intensity', 0.35]];
+  } else {
+    scene.environment = studioEnvironment(renderer);
+    hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0.3);
+    keyL = new THREE.DirectionalLight(0xffffff, 1.1); keyL.position.set(80, 100, -60);
+    fill = new THREE.DirectionalLight(0xb0c4ff, 0.18); fill.position.set(-80, 60, 40);
+    head = new THREE.DirectionalLight(0xffffff, 0.3);
+    scene.add(hemi, keyL, fill, head, head.target);
+    lights = [[scene, 'environmentIntensity', 1.3], [hemi, 'intensity', 0.3], [keyL, 'intensity', 1.1], [fill, 'intensity', 0.18], [head, 'intensity', 0.3]];
+  }
   const lineMat = new THREE.LineBasicMaterial({ color: 0x0b0c0e, transparent: true, opacity: 0.55 });
   // the screws, when they have been found: lit by themselves, the accent blue of the buttons
   const FOUND = new THREE.MeshBasicMaterial({ color: 0x5fe3d9, transparent: true, opacity: 1, side: THREE.DoubleSide });
@@ -247,18 +270,21 @@ async function fast(el, base) {
     const rest = mesh.matrixWorld.clone();
     const part = new THREE.Mesh(mesh.geometry, mesh.material);
     part.matrixAutoUpdate = false;
-    if (!edgesOf.has(mesh.geometry)) edgesOf.set(mesh.geometry, new THREE.EdgesGeometry(mesh.geometry, 38));
-    const lines = new THREE.LineSegments(edgesOf.get(mesh.geometry), lineMat);
-    part.add(lines);
+    let lines = { visible: false };                       // (the engine is drawn without outlines: its faces are smooth)
+    if (!engine) {
+      if (!edgesOf.has(mesh.geometry)) edgesOf.set(mesh.geometry, new THREE.EdgesGeometry(mesh.geometry, 38));
+      lines = new THREE.LineSegments(edgesOf.get(mesh.geometry), lineMat);
+      part.add(lines);
+    }
     root.add(part);
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     const bb = mesh.geometry.boundingBox, pts = [];
     for (let k = 0; k < 8; k++) { corner.set(k & 1 ? bb.max.x : bb.min.x, k & 2 ? bb.max.y : bb.min.y, k & 4 ? bb.max.z : bb.min.z).applyMatrix4(rest); pts.push(corner.clone()); }
     const g = mesh.geometry;
     const tris = (g.index ? g.index.count : g.attributes.position.count) / 3;
-    return { part, lines, rest, off: new THREE.Vector3(...(table.offsets[mesh.name] || [0, 0, 0])), pts, kind: kindOfMesh(mesh), tris };
+    return { part, lines, rest, off: engine ? new THREE.Vector3() : new THREE.Vector3(...(table.offsets[mesh.name] || [0, 0, 0])), pts, kind: engine ? (isFast(mesh) ? 'bolt' : 'steel') : kindOfMesh(mesh), tris, material: engine ? mesh.material : undefined };
   });
-  settleKinds(parts);
+  if (!engine) settleKinds(parts);
   for (const p of parts) p.part.material = p.material;
   gltf.scene.clear();
   const screws = parts.filter((p) => p.kind === 'bolt');
@@ -266,6 +292,13 @@ async function fast(el, base) {
 
   const box = new THREE.Box3();
   for (const p of parts) for (const q of p.pts) box.expandByPoint(q);
+  if (engine) {            // a fastener comes out away from the middle of the engine, along the longer way across
+    const mid = box.getCenter(new THREE.Vector3()), reach = box.min.distanceTo(box.max) * 0.07, c = new THREE.Vector3();
+    for (const p of screws) {
+      c.set(0, 0, 0); for (const q of p.pts) c.add(q); c.multiplyScalar(1 / p.pts.length).sub(mid); c.y *= 0.4;
+      p.off.copy(c.lengthSq() > 1e-9 ? c.normalize() : c.set(0, 1, 0)).multiplyScalar(reach / 1.4);
+    }
+  }
   const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 60);
   camera.up.set(0, 1, 0);
   const shift = new THREE.Matrix4(), tmp = new THREE.Vector3();
@@ -283,7 +316,7 @@ async function fast(el, base) {
       p.lines.visible = found < 0.001;
     }
     FOUND.opacity = 1 - o;
-    FOUND.color.setHex(0x6cc4ff).lerp(new THREE.Color(0x0d99ff), found * 0.5);
+    if (engine) FOUND.color.setHex(0xffc83d); else FOUND.color.setHex(0x6cc4ff).lerp(new THREE.Color(0x0d99ff), found * 0.5);
   };
   for (const p of parts) { p.part.matrix.copy(p.rest); p.part.matrixWorldNeedsUpdate = true; }
   apply();
@@ -308,19 +341,19 @@ async function fast(el, base) {
   const bar = document.createElement('div');
   bar.className = 'live-bar is-single';
   bar.innerHTML = '<div class="live-side"><small>Triangles</small><strong data-n="tris"></strong><span data-n="note"></span></div>'
-    + '<div class="live-side"><small>Parts</small><strong data-n="parts"></strong><span>screws are ' + screws.length + ' of them</span></div>';
+    + '<div class="live-side"><small>Parts</small><strong data-n="parts"></strong><span>' + (partsNote ? partsNote.replace('{n}', screws.length) : 'screws are ' + screws.length + ' of them') + '</span></div>';
   const go = document.createElement('div');
   go.className = 'live-go';
   go.innerHTML = '<button type="button" class="btn is-primary is-large live-step" data-step><span class="live-step-label"></span><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h9M8.5 4l4 4-4 4"/></svg></button>';
   stage.append(bar, go);
   const stepBtn = $('[data-step]', go), stepLabel = $('.live-step-label', go);
-  const labels = [`Find the ${screws.length} screws`, 'Take them out', 'Put them back'];
+  const labels = [`Find the ${screws.length} ${noun}`, 'Take them out', 'Put them back'];
   let phase = 0;
   const hud = () => {
     const now = total - screwTris * ease(out);
     $('[data-n="tris"]', bar).textContent = fmt(now);
-    $('[data-n="parts"]', bar).textContent = String(parts.length - Math.round(screws.length * ease(out)));
-    $('[data-n="note"]', bar).textContent = phase === 0 ? 'the whole axle' : out > 0.999 ? `${fmt(screwTris)} fewer, ${(screwTris / total * 100).toFixed(1)}%` : `${screws.length} screws, ${fmt(screwTris)} triangles`;
+    $('[data-n="parts"]', bar).textContent = fmt(parts.length - Math.round(screws.length * ease(out)));
+    $('[data-n="note"]', bar).textContent = phase === 0 ? whole : out > 0.999 ? `${fmt(screwTris)} fewer, ${(screwTris / total * 100).toFixed(1)}%` : `${screws.length} ${noun}, ${fmt(screwTris)} triangles`;
     stepLabel.textContent = labels[phase]; stepBtn.dataset.phase = String(phase);
   };
 

@@ -227,7 +227,7 @@
     const when = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return;
       when.disconnect();
-      import('./chat3d.js?v=14').then((m) => m.start(cx3d, '')).catch(() => {});
+      import('./chat3d.js?v=18').then((m) => m.start(cx3d, '')).catch(() => {});
     }, { rootMargin: '600px 0px' });
     when.observe(cx3d.closest('[data-cx-grid]') || cx3d);
   }
@@ -267,7 +267,7 @@
         for (const en of entries) {
           if (!en.isIntersecting) continue;
           near.unobserve(en.target);
-          import('./features3d.js?v=7').then((m) => m.start(en.target, '')).catch(() => {});
+          import('./features3d.js?v=9').then((m) => m.start(en.target, '')).catch(() => {});
         }
       }, { rootMargin: '500px 0px' });
       lives.forEach((el) => near.observe(el));
