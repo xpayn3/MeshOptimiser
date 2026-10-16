@@ -1555,7 +1555,7 @@ main { overflow-x: clip; }
   .pop-info-top { position: absolute; z-index: 1; top: 14px; right: var(--gutter); width: min(210px, 56%); gap: 10px; pointer-events: none; }
   .pop-info-top .pop-note { max-width: none; margin-top: -4px; text-align: right; }
 
-  .pop.is-axle .pop-copy { bottom: -4px; }
+  .pop.is-axle .pop-copy { bottom: 20px; }
   .pb { grid-template-columns: 50px minmax(0, 1fr) 44px; font-size: 10px; }
   .pb i { white-space: nowrap; }
   .pop-note { font-size: 9.5px; }
