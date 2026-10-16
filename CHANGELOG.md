@@ -4,6 +4,60 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.34.0
+
+Released 16 Oct 2026.
+
+v0.33.0 made notes into tasks. v0.34.0 lets Claude read and write them, puts a timeline under Animate with a new Oscillate motion for pistons, adds the axis tools of Cinema 4D, makes a selected group show its parts dimly, and brings Python inside the Windows download so a first start has less to install.
+
+**Animate: a timeline, and a motion for pistons**
+
+- ![new][new] **A timeline along the bottom.** Animate is now a drawer along the bottom of the view, set out like a video editor: a ruler, a row for every animated object and a bar for every motion. Drag the ruler or the playhead to scrub. A bar runs from its delay to its repeats: drag its end to change the repeats, drag the bar to change the delay. The small window it replaced is one click away (pop-out).
+- ![new][new] **Oscillate, for pistons, rockers and pumps.** A fifth kind of motion: a to-and-fro on all three axes of shift and of turn at once, one period, perfectly loopable. Waves: Sine, Piston (the real motion of a crank turning a rod, with the rod ratio to tune), Eased and Triangle. Each axis has its own amount; *Axis lag* turns X and Y into circles and ellipses, *Turn lag* runs the turn behind the shift. Claude sets it with `animate_parts`.
+- ![new][new] **Animation in the export.** *Include animation* in the Export window (GLB and glTF): every part that moves gets its motion as glTF keyframes, 30 a second, over the length of the timeline, including parts that follow another part.
+- ![new][new] **A video of the timeline.** The timeline can be rendered to a WebM over its own length, as the turntable is, without the view turning.
+- ![new][new] **An Animation card in the right sidebar** while something is animated: play and pause, back to the start and to the end, **play backwards**, three loop modes, speed, a scrubber with the time gone and the time left, and a miniature of the timeline (a bar for every clip, a playhead; press or drag on it to move there). It goes when nothing is animated, and nothing runs while it is paused.
+- ![fix][fix] **A part that follows another could come out sheared.** A part's motion is now an explicit rigid transform about the middle of it, so a part with an uneven scale or a mirror in its matrix, and whatever follows it, no longer bends.
+- ![fix][fix] **An empty "Animate" heading showed in the right sidebar when nothing was animated.** It hides with the card.
+
+**The axis of a part, as in Cinema 4D**
+
+- ![new][new] **Axis Center and the Axis card.** *Axis Center* (the old Centre pivot button, the search and the toolbar) now puts the axis in the middle of the part and resets its rotation to 0, 0, 0. The Axis card (search: Axis…) adds *Center axis to* the world origin, the middle of the selection, the last selected part or the middle of the view; *Center object to* the world origin, the last selected part or the view; *Align axis to* the world, its parent or the part's own flat faces; and *Reset Scale*. The shape stays exactly where it is, and each command is one undo step that puts back exactly what was there.
+- ![fix][fix] **Pressing an Axis command again and again piled up undo steps and nudged the mesh.** An axis that is already where the command puts it is left alone: no change, no undo step. Locked parts keep their axis, and if anything goes wrong every part is put back as it was.
+
+**Claude**
+
+- ![new][new] **Claude can read and write notes.** New tools `list_notes`, `get_note`, `show_note`, `add_note`, `reply_to_note`, `update_note` and `export_notes`. Claude writes under the name Claude, never signs a scene off, and every step is one undo step that shows in the note's history. Four more tools: `remove_floating_pieces`, `make_unique`, `select_instances` and `lock_parts`. Claude now has 78 tools, and its playbooks tell it to read the open notes before it changes a model.
+- ![polish][polish] **Claude mode says what a call did, in words.** "Selected 194 parts", "Deleted 194 parts · 23.5% fewer triangles", "Listed 500 of 579 parts, heaviest first" instead of the reply as code; what was asked reads "up to 500 · by triangles". The reply as it came is under Details.
+- ![polish][polish] **No floor grid in Claude mode.** It comes back, as the Grid switch had it, when the mode is left.
+- ![polish][polish] **Fewer pills.** Undo and redo no longer put a pill at the top (warnings and errors still do), and Claude's own "Claude · tool" pill is left out for the tools that only look, select or move the view. A long message now waits twice as long before it runs and glides at a third of the speed.
+
+**Windows download and installer**
+
+- ![new][new] **Python can come inside the Windows download.** With a `runtime` folder beside the app (built by `tools/build-runtime.py`, packed by `tools/build-package.py --with-runtime`: Python 3.12 and every package, about 150 MB zipped), `start.bat` starts the server at once: no Python to install and about 500 MB of packages to download less on the first start. Without it, or if it is incomplete, the first start sets up a `.venv` as before.
+- ![fix][fix] **On a PC where Windows Script Host is switched off, the installer ended with an error box and the Desktop shortcut would not start the app.** Where it is off, the shortcuts and the first start go through PowerShell (`start_hidden.ps1`) instead of the .vbs. A PC installed before this keeps its old shortcut: run the installer again there.
+
+**Selecting, notes and the search**
+
+- ![new][new] **Selecting a group shows its parts dimly; you light up the ones you pick.** Click a group row: the group is selected and its parts show only a dim highlight. Ctrl+click or Shift+click parts in the list (or in the view) lights them up as picked, and the group stays selected. A part you had already picked stays lit when its group is added or taken out.
+- ![polish][polish] **The Notes card has one toolbar.** *New note*, search and a ⋯ menu; the pins, order, deleted notes, sign-off, your name, bring in, take out and copy are in the menu. The sign-off line shows only when someone has signed.
+- ![new][new] **Recent cards show their notes.** A scene saved or opened with notes shows a badge with the number open (a tick when all are resolved) on its card.
+- ![polish][polish] **The search marks what opens a panel.** A command that opens a panel with options shows a small window icon, and long names are shorter ("Axis Center", "Align axis to the world", "Quick wand") with the old words still found.
+- ![perf][perf] **Dragging a command card is smooth.** The limits are worked out once when the drag starts and a move is one style write a frame; a rule that restyled every row of the tree at the start of a drag is gone.
+
+**Share, fonts and the look**
+
+- ![new][new] **Share to GrabCAD, Sketchfab and more.** The Export window has a *Share to…* menu: GrabCAD, Sketchfab, Printables, Thingiverse, Cults and MyMiniFactory. It picks the format each site takes (STL, or GLB for Sketchfab), writes the file with your export options and opens the site's upload page.
+- ![polish][polish] **The name in a serif, with the site.** MeshOptimiser, where it is shown as the name, is set in Fraunces Light, and the titles of the command cards with a picture too. The Serif choice in Settings › Appearance › Font is now Source Serif 4. Both fonts ship with the app, so they work offline. The pictures on the command cards are brighter.
+
+**Fixes**
+
+- ![fix][fix] **After Remove holes, stray edge lines could stay where the holes had been in CAD view.** The part's old outline lines come off the moment its shape changes, also for Remove floating pieces and for undoing either.
+- ![fix][fix] **Heavy jobs could be started on top of each other.** Remove holes, Reduce, Split, Merge, Flatten, Fit and Smart optimise now run one at a time: while one works, another says so and does nothing.
+- ![polish][polish] **The Remove holes result is one short line** ("365 holes filled in 64 parts · −83,333 triangles · 441 left alone"); the whole breakdown is its hover text and the log.
+- ![fix][fix] **The Materials and Library docks could sit on top of each other.** Docking a window back now closes the other dock if that one is docked and open.
+- ![fix][fix] **The Straighten icon looked like a divider.** It uses the diagonal-line icon.
+
 ## v0.33.0
 
 Released 16 Oct 2026.

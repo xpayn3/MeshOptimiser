@@ -25,12 +25,12 @@
     black:    { label: 'Black',    '--bg': '#000000', '--bg1': '#060606', '--bg2': '#0e0e0e', '--bg3': '#171717', '--bg4': '#212121', '--bd': '#1f1f1f', '--bd2': '#3a3a3a', '--surface-pop': '#0a0a0a', '--bg-checker': '#0c0c0c', '--surface-bar': 'rgba(0,0,0,.94)', '--glass-strong': 'rgba(6,6,6,.92)' }
   };
   var FONTS = {
-    inter:  { label: 'Inter',  stack: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
+    inter:  { label: 'Default',  stack: "'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
     geist:  { label: 'Geist',  stack: "'Geist','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
     grotesk: { label: 'Space Grotesk', stack: "'Space Grotesk','Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" },
     system: { label: 'System', stack: "system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" },
     mono:   { label: 'Mono',   stack: "ui-monospace,'Cascadia Mono','SF Mono',Menlo,Consolas,monospace" },
-    serif:  { label: 'Serif',  stack: "'Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif" }
+    serif:  { label: 'Serif',  stack: "'Source Serif 4','Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif" }
   };
   var TEXT_SCALES = [['Small', 0.92], ['Default', 1], ['Large', 1.1], ['Larger', 1.2]];
   var DENSITIES = [['Compact', 0.88], ['Default', 1], ['Roomy', 1.12]];

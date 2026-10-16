@@ -16,7 +16,7 @@ scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 batPath = scriptDir & "\start.bat"
 WshShell.CurrentDirectory = scriptDir
 ' Settings > General > "Show a terminal window" leaves a marker file here: then the window is shown, set up or not.
-If Not fso.FileExists(scriptDir & "\.venv\Scripts\python.exe") Or fso.FileExists(scriptDir & "\.show-console") Then
+If Not (fso.FileExists(scriptDir & "\.venv\Scripts\python.exe") Or fso.FileExists(scriptDir & "\runtime\python.exe")) Or fso.FileExists(scriptDir & "\.show-console") Then
   ' Args: command, windowStyle (1 = normal window), waitForReturn (False = fire-and-forget)
   WshShell.Run """" & batPath & """", 1, False
 Else

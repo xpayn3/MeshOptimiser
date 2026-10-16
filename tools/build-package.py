@@ -3,6 +3,7 @@
 
     python tools/build-package.py                  # into dist/, version from app/version.json
     python tools/build-package.py --out some/dir
+    python tools/build-package.py --with-runtime   # the Windows download with Python and every package inside: MeshOptimiser-v<version>-windows.zip
 
 The zip holds the install folder as it is meant to look: the thin launchers (start.bat, start_hidden.vbs, start.command,
 start.ico, Install MeshOptimiser.bat), README.md, README.txt, LICENSE and the app/ folder, with the files at the root of the
@@ -37,19 +38,25 @@ def files() -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default="dist")
+    ap.add_argument("--with-runtime", action="store_true", help="also pack app/runtime (built by tools/build-runtime.py): nothing to install on first start")
     a = ap.parse_args()
     ver = json.loads((ROOT / "app" / "version.json").read_text("utf-8"))["version"]
     names = files()
     for need in ("start.bat", "start_hidden.vbs", "start.command", "start.ico", "app/serve.py", "app/index.html", "app/js/app.js", "app/updater.py"):
         if need not in names: raise SystemExit(f"{need} is missing from the file list: this does not look like the app.")
     out = ROOT / a.out; out.mkdir(parents=True, exist_ok=True)
-    zpath = out / f"MeshOptimiser-v{ver}.zip"
+    rt = ROOT / "app" / "runtime"
+    if a.with_runtime:
+        if not (rt / "python.exe").is_file(): raise SystemExit("app/runtime is not there: run python tools/build-runtime.py first.")
+        names += sorted(p.relative_to(ROOT).as_posix() for p in rt.rglob("*") if p.is_file())
+    zpath = out / (f"MeshOptimiser-v{ver}-windows.zip" if a.with_runtime else f"MeshOptimiser-v{ver}.zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
         for rel in names:
+            lvl = 6 if rel.startswith("app/runtime/") else 9
             zi = zipfile.ZipInfo.from_file(ROOT / rel, rel)
             zi.compress_type = zipfile.ZIP_DEFLATED
             zi.external_attr = ((0o755 if rel.endswith(".command") else 0o644) << 16)      # (a Mac needs the execute bit on .command)
-            with open(ROOT / rel, "rb") as f: z.writestr(zi, f.read(), compresslevel=9)
+            with open(ROOT / rel, "rb") as f: z.writestr(zi, f.read(), compresslevel=lvl)
     print(f"{zpath.relative_to(ROOT)}  {zpath.stat().st_size / 1048576:.1f} MB, {len(names)} files, version {ver}")
     return 0
 

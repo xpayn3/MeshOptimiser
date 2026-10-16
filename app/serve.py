@@ -938,7 +938,7 @@ MCP_TOOLS += [
          "ids": {"type": "array", "items": {"type": "integer"}, "description": "Part ids from list_parts."},
          "name_contains": {"type": "string", "description": "Every part whose name contains this text."},
          "group_contains": {"type": "array", "items": {"type": "string"}, "description": "Groups (from list_groups) whose name contains one of these; every part inside moves together. With none of ids, name_contains and group_contains, the parts that are selected in the app."},
-         "type": {"type": "string", "enum": ["spin", "swing", "noise", "path"], "description": "Default spin. With remove: only this kind (default every kind)."},
+         "type": {"type": "string", "enum": ["spin", "swing", "noise", "path", "oscillate"], "description": "Default spin. With remove: only this kind (default every kind). oscillate is for pistons, rockers and pumps: a to-and-fro on any of the three axes of position and rotation at once."},
          "axis": {"type": "string", "enum": ["X", "Y", "Z"], "description": "Spin and swing: the part's own axis (the gizmo's), default Z."},
          "direction": {"type": "string", "enum": ["clockwise", "counter"], "description": "Spin: seen from the tip of the axis (default clockwise)."},
          "rpm": {"type": "number", "description": "Spin: turns a minute, 1 to 600 (default 60)."},
@@ -959,6 +959,7 @@ MCP_TOOLS += [
          "loop_mode": {"type": "string", "enum": ["loop", "pingpong", "once"], "description": "Spin and path (default loop)."},
          "repeats": {"type": "integer", "description": "Spin and path: how many cycles, 0 for ever (default)."},
          "delay_seconds": {"type": "number", "description": "Spin and path: wait before it starts, 0 to 10."},
+         "shift_xyz_percent": {"type": "array", "items": {"type": "number"}, "description": "Oscillate: how far it moves along X, Y and Z, each way, in % of the object size, e.g. [0, 0, 20] for a piston moving up and down Z. Default [0, 0, 20]."}, "turn_xyz_degrees": {"type": "array", "items": {"type": "number"}, "description": "Oscillate: how far it turns about X, Y and Z, each way, in degrees, e.g. [0, 0, 30] for a rocker. Default none."}, "wave": {"type": "string", "enum": ["sine", "piston", "eased", "triangle"], "description": "Oscillate: the wave (default sine). piston is the true motion of a crank and rod."}, "axis_lag_degrees": {"type": "number", "description": "Oscillate: how far each next axis runs behind the one before, 0 to 360 (90 makes a circle or ellipse of X and Y)."}, "turn_lag_degrees": {"type": "number", "description": "Oscillate: how far the turn runs behind the shift, 0 to 360."}, "rod_ratio": {"type": "number", "description": "Oscillate with the piston wave: rod length over crank length, 1.5 to 8 (default 3.5)."},
          "loop_from_percent": {"type": "number", "description": "Spin and path: where in the cycle it starts, 0 to 100 (default 0)."},
          "loop_to_percent": {"type": "number", "description": "Spin and path: where in the cycle it ends, 0 to 100 (default 100). A spin from 0 to 25 with ping-pong swings a quarter turn."}})},
     {"name": "open_file", "description": "Open a model file from this computer in the app (STEP, IGES, BREP, GLB, glTF, FBX, OBJ, 3MF, STL). It opens in a new scene tab if something is already open.",
@@ -990,6 +991,37 @@ MCP_TOOLS += [
          "timeout_seconds": {"type": "integer", "description": "How long to wait for one file to open (default 900; STEP conversion can be slow)."},
          "dry_run": {"type": "boolean", "description": "Only list what would be processed. Opens nothing."}})},
 ]
+_NOTE = {"description": "The note's number, as list_notes shows it (a text id also works).", "oneOf": [{"type": "integer"}, {"type": "string"}]}
+_TAG = {"type": "string", "enum": ["info", "question", "issue", "idea"]}
+_PRIORITY = {"type": "string", "enum": ["normal", "high", "urgent"]}
+_DUE = {"type": "string", "description": "A day, YYYY-MM-DD (an empty string clears it)."}
+MCP_TOOLS += [
+    {"name": "list_notes", "description": "The notes on the model: pins and conversations that people (and you) leave at a place in it, for review. Each note has a number, a title, a tag (info, question, issue, idea), a priority (normal, high, urgent), a due date, who it is assigned to, open or resolved, the part it is about and its messages with who wrote them. Read this first when the user mentions notes, comments, a review or feedback, and before you change anything they have flagged. Open notes by default. Changes nothing.",
+     "inputSchema": _obj({"status": {"type": "string", "enum": ["open", "resolved", "all", "deleted"], "description": "Default open."}, "tag": _TAG, "priority": _PRIORITY, "overdue": {"type": "boolean", "description": "Open notes whose due date has passed."},
+         "assignee": {"type": "string", "description": "A name, or none for notes nobody has."}, "part_contains": {"type": "string", "description": "Notes about a part whose name contains this."},
+         "search": {"type": "string", "description": "Words in the note's part name or messages."}, "limit": {"type": "integer", "description": "At most this many (default 30, 100 at most)."},
+         "with_messages": {"type": "boolean", "description": "Include the last messages of each note (default true)."}, "full": {"type": "boolean", "description": "Whole messages, not the first 500 characters, and every message."}})},
+    {"name": "get_note", "description": "One note in full: every message (with who edited what), and its history. Changes nothing.", "inputSchema": _obj({"note": _NOTE}, ["note"])},
+    {"name": "show_note", "description": "Open a note in the app and fly the camera to where it is (the view saved with it), so a screenshot shows what the note is about. Move the camera only; nothing is changed.", "inputSchema": _obj({"note": _NOTE}, ["note"])},
+    {"name": "add_note", "description": "Leave a note, written under the name Claude, on a part (ids, name_contains or the selection: its pin sits in the middle of the first part) or on the whole scene. Use it to flag what you found or did and what the user should decide: a part you did not dare to reduce, a fastener you kept, a question. The user sees the pin in their view. It is saved in the scene file with the model. The user is asked to allow it. One undo step.",
+     "inputSchema": _obj({"title": {"type": "string", "description": "A short title (one line). Without one, the first line of text is the title."}, "text": {"type": "string", "description": "The description, in plain words (at most 6000 characters)."}, "ids": _IDS, "name_contains": _NAME,
+         "whole_scene": {"type": "boolean", "description": "A note about the whole scene, with no pin."}, "tag": _TAG, "priority": _PRIORITY, "due": _DUE, "assignee": {"type": "string", "description": "A person's name, to hand the note to them."}})},
+    {"name": "reply_to_note", "description": "Reply in a note's conversation, as Claude. Answer the question that was asked; do not repeat what the thread already says. The user is asked to allow it. One undo step.", "inputSchema": _obj({"note": _NOTE, "text": {"type": "string"}}, ["note", "text"])},
+    {"name": "update_note", "description": "Change a note: mark it resolved (or open again), change its tag, assign it to someone (an empty name takes the assignment off), edit or delete one of YOUR OWN messages, delete the whole note or bring a deleted one back. Nothing is ever lost: an edit keeps the text it replaced and the history says who did what. Resolve a note only when the thing it asks for is done and the user would agree; leave other people's messages alone. The user is asked to allow it. One undo step.",
+     "inputSchema": _obj({"note": _NOTE, "title": {"type": "string"}, "description": {"type": "string", "description": "Replace the description (the first message)."}, "status": {"type": "string", "enum": ["open", "resolved"]}, "tag": _TAG, "priority": _PRIORITY, "due": _DUE, "assignee": {"type": "string"},
+         "edit_message": _obj({"message": {"description": "The message's position in the note (1 is the first) or its id.", "oneOf": [{"type": "integer"}, {"type": "string"}]}, "text": {"type": "string"}}, ["message", "text"]),
+         "delete_message": {"description": "A message to delete: its position or id.", "oneOf": [{"type": "integer"}, {"type": "string"}]}, "restore_message": {"description": "A deleted message to bring back.", "oneOf": [{"type": "integer"}, {"type": "string"}]},
+         "delete": {"type": "boolean"}, "restore": {"type": "boolean"}}, ["note"])},
+    {"name": "export_notes", "description": "The notes as text for a client or a hand-over: Markdown returned in the reply (and with save true written to the exports folder), format html for the one-page report with the pictures and who said what (opens in any browser), csv for a spreadsheet, json for the notes as data. Sign-off on a scene (approved, changes asked) is a person's decision: you can read it in list_notes and never give it. Changes nothing in the model.",
+     "inputSchema": _obj({"format": {"type": "string", "enum": ["markdown", "html", "csv", "json"], "description": "Default markdown. html: the one-page report. csv: a spreadsheet. json: the notes as data."}, "open_only": {"type": "boolean", "description": "Leave resolved notes out."}, "save": {"type": "boolean", "description": "Write a file (always true for html)."}, "file_name": {"type": "string", "description": "A name without the extension."}})},
+]
+MCP_TOOLS += [
+    {"name": "remove_floating_pieces", "description": "Delete loose pieces that float free of the body of a part (stray bits, left-over shells, specks inside a housing) up to a size. The user is asked to allow it. Acts on the chosen parts, or the visible scene if none are given. Reports the triangles before and after; one undo step.",
+     "inputSchema": _obj({"max_size": {"type": "number", "description": "The longest side, in the scene's units (usually mm), up to which a piece is removed."}, "max_triangles": {"type": "integer", "description": "Also only pieces with at most this many triangles (0 = no limit)."}, "ids": _IDS, "name_contains": _NAME}, ["max_size"])},
+    {"name": "make_unique", "description": "Give parts that share one mesh (instances: the same bolt used 200 times) a mesh of their own, so one can be edited without changing the others. The file gets bigger. The user is asked to allow it. " + _WHICH, "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME})},
+    {"name": "select_instances", "description": "Select every part that shares exact geometry with the chosen ones (the copies of one shape that the file stores once), or with original true the first part of each shared shape. Only selects.", "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "original": {"type": "boolean"}})},
+    {"name": "lock_parts", "description": "Lock parts so they cannot be moved or edited by hand (locked false lets them go). Use it to protect what the user said must not change. " + _WHICH, "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "locked": {"type": "boolean", "description": "Default true."}})},
+]
 _SHARP_TOOLS = {"decimate", "fit_to_budget", "smart_optimise", "optimise_to_target"}
 _DRY_TOOLS = {"delete_parts", "remove_small_parts", "merge_parts", "merge_by_colour", "decimate", "fit_to_budget", "fill_holes", "remove_hidden_faces", "repair_mesh",
               "clean_up", "duplicate_parts", "smart_optimise", "smart_fit", "untriangulate", "run_recipe", "optimise_to_target"}
@@ -1005,7 +1037,7 @@ MCP_TIMEOUT_MORE = {"optimise_to_target": 1800, "compare_images": 900, "batch_op
 MCP_TIMEOUT = {"decimate": 900, "fit_to_budget": 900, "fill_holes": 900, "merge_parts": 600, "export_model": 600,
                "turntable_video": 900, "open_file": 600, "find_fasteners": 300, "clean_up": 600, "remove_small_parts": 300,
                "split_parts": 600, "repair_mesh": 600, "remove_hidden_faces": 900, "duplicate_parts": 300, "merge_by_colour": 600,
-               "smart_optimise": 1800, "render_image": 900, "run_recipe": 1800, "save_scene": 600, "check_model": 300, "find_hidden_parts": 600, "smart_fit": 600, "untriangulate": 900}
+               "smart_optimise": 1800, "render_image": 900, "run_recipe": 1800, "save_scene": 600, "check_model": 300, "find_hidden_parts": 600, "smart_fit": 600, "untriangulate": 900, "remove_floating_pieces": 600, "make_unique": 300}
 MCP_TIMEOUT.update(MCP_TIMEOUT_MORE)
 OPEN_EXT = {".step", ".stp", ".iges", ".igs", ".brep", ".brp", ".glb", ".gltf", ".fbx", ".obj", ".3mf", ".stl"}
 EXPORT_DIR = Path(__file__).resolve().parent / "exports"
@@ -1013,9 +1045,9 @@ EXPORT_DIR = Path(__file__).resolve().parent / "exports"
 # MCP lets a server say more than "here are my tools": each tool can say whether it only reads or changes things (Claude's
 # client uses that to decide what to ask), the server can offer documents to read (resources) and jobs to start (prompts), and
 # it sends a short brief when the connection opens (instructions). The app still asks the user before it changes anything.
-_READ_ONLY = {"say", "scene_summary", "list_parts", "get_selection", "screenshot", "measure_parts", "list_groups", "search_docs", "read_doc", "check_model", "optimisation_report", "estimate_export_size", "list_materials", "list_recipes", "list_library", "list_folder"}
+_READ_ONLY = {"say", "scene_summary", "list_parts", "get_selection", "screenshot", "measure_parts", "list_groups", "search_docs", "read_doc", "check_model", "optimisation_report", "estimate_export_size", "list_materials", "list_recipes", "list_library", "list_folder", "list_notes", "get_note", "show_note", "export_notes"}
 _CHANGES_MODEL = {"delete_parts", "remove_small_parts", "merge_parts", "merge_by_colour", "decimate", "fit_to_budget", "fill_holes",
-                  "remove_hidden_faces", "repair_mesh", "clean_up", "split_parts", "duplicate_parts", "group_parts", "ungroup",
+                  "remove_hidden_faces", "repair_mesh", "clean_up", "split_parts", "duplicate_parts", "group_parts", "ungroup", "remove_floating_pieces", "make_unique",
                   "rename_parts", "transform_parts", "recenter_model", "align_to_floor", "smart_optimise", "smart_fit", "untriangulate", "run_recipe", "add_library_part", "optimise_to_target"}
 _TITLES = {"scene_summary": "What is open", "list_parts": "List parts", "get_selection": "What is selected", "select_parts": "Select parts",
            "select_all": "Select all or invert", "frame_selection": "Fly to the selection", "screenshot": "Take a screenshot", "hide_parts": "Hide parts",
@@ -1027,6 +1059,7 @@ _TITLES = {"scene_summary": "What is open", "list_parts": "List parts", "get_sel
            "repair_mesh": "Repair meshes", "clean_up": "Clean up", "split_parts": "Split into pieces", "duplicate_parts": "Duplicate parts", "group_parts": "Group parts",
            "ungroup": "Ungroup", "rename_parts": "Rename parts", "transform_parts": "Move, turn, scale", "recenter_model": "Recentre the model",
            "align_to_floor": "Stand on the floor", "export_model": "Export the model", "turntable_video": "Turntable video", "animate_parts": "Animate parts", "render_image": "Render a picture", "open_file": "Open a file", "select_similar": "Select similar parts", "select_by_colour": "Select by colour", "list_materials": "List materials", "select_by_material": "Select by material", "check_model": "Check the model", "optimisation_report": "Optimisation report", "estimate_export_size": "Estimate the export size", "list_recipes": "List recipes", "run_recipe": "Run a recipe", "list_library": "List the library", "add_library_part": "Add a library part", "save_scene": "Save the scene", "smart_optimise": "Smart optimise", "optimise_to_target": "Optimise to a size", "compare_images": "Before and after picture", "list_folder": "List a folder", "batch_optimise": "Optimise a folder", "find_hidden_parts": "Find hidden parts", "smart_fit": "Replace with simple shapes",
+           "remove_floating_pieces": "Remove floating pieces", "make_unique": "Make unique", "select_instances": "Select instances", "lock_parts": "Lock parts", "list_notes": "List the notes", "get_note": "Read a note", "show_note": "Show a note in the view", "add_note": "Leave a note", "reply_to_note": "Reply to a note", "update_note": "Change a note", "export_notes": "Export the notes",
            "untriangulate": "Untriangulate flat faces", "say": "Write to the feed", "search_docs": "Search the app's help", "read_doc": "Read a help article or playbook"}
 for _t in MCP_TOOLS:
     _t["annotations"] = {"title": _TITLES.get(_t["name"], _t["name"].replace("_", " ")), "readOnlyHint": _t["name"] in _READ_ONLY,
@@ -1038,7 +1071,7 @@ MCP_INSTRUCTIONS = (
     "screenshot) before you change anything. The app's own help articles are available through search_docs and read_doc: use them for any tool or symptom you have "
     "not handled before instead of guessing. Rules: ask what the model is for and the triangle budget; the cheapest and most reversible step first; delete before you "
     "reduce; say what you are about to change and why; give the before and after numbers; hide before you delete; every change is one undo step (the undo tool). "
-    "The app asks the user to allow each change to the model; if they say no, stop and ask what they want instead. Prompts optimise_for_web, remove_fasteners and review_scene start common jobs. To reach a size or a place in one call use optimise_to_target; ask what a step would save with dry_run before asking the user to allow it; compare_images shows before and after; batch_optimise does a folder. Long jobs show progress and the user can stop them. The user may be in Claude mode, which has no viewport: they read a feed of your calls, results and pictures. Use say to tell them what you are about to do and what you found, and take a screenshot after each change that they should see.")
+    "The app asks the user to allow each change to the model; if they say no, stop and ask what they want instead. Prompts optimise_for_web, remove_fasteners and review_scene start common jobs. To reach a size or a place in one call use optimise_to_target; ask what a step would save with dry_run before asking the user to allow it; compare_images shows before and after; batch_optimise does a folder. People review a model with notes (pins and conversations at a place in it, saved in the scene file): read them with list_notes before you start, answer them with reply_to_note, resolve one only when what it asks is done, and leave your own notes (add_note) on what you flagged or left alone. Do not rewrite what other people wrote. Long jobs show progress and the user can stop them. The user may be in Claude mode, which has no viewport: they read a feed of your calls, results and pictures. Use say to tell them what you are about to do and what you found, and take a screenshot after each change that they should see.")
 
 # What an agent knows about optimising: the playbooks (written by hand, knowledge/playbooks) and the app's help articles (built from the
 # website's docs by tools/build-knowledge.mjs, knowledge/docs). Served as resources, and searched and read by the search_docs and
@@ -1423,6 +1456,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if u.path == "/api/convert": return self._handle_convert()
         if u.path == "/api/quit":    return self._handle_quit()
         if u.path == "/api/reveal":  return self._handle_reveal()
+        if u.path == "/api/open-inbox": return self._handle_open_inbox()
         if u.path == "/api/locate":  return self._handle_locate()
         if u.path.startswith("/api/cancel/"):
             return self._handle_cancel(u.path.rsplit("/", 1)[-1])
@@ -1716,6 +1750,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not _cancel_job(job_id):
             return self._json({"error": "not found"}, 404)
         return self._json({"ok": True})
+
+    def _handle_open_inbox(self):
+        """Show the app's inbox folder (where converted models are kept) in the system file manager: a browser page cannot
+        open a folder of the computer, the server that runs on it can. {"dry": true} only says which folder it would be."""
+        body = self._read_json(1 << 12) or {}
+        try: INBOX.mkdir(exist_ok=True)
+        except Exception: pass
+        if not body.get("dry"):
+            try:
+                if sys.platform.startswith("win"): subprocess.Popen(["explorer", str(INBOX)])
+                elif sys.platform == "darwin": subprocess.Popen(["open", str(INBOX)])
+                else: subprocess.Popen(["xdg-open", str(INBOX)])
+            except Exception as e:
+                return self._json({"error": str(e)}, 500)
+        return self._json({"ok": True, "path": str(INBOX)})
 
     def _handle_reveal(self):
         """Show a file in the system file manager. The page only knows the name and size of the file it

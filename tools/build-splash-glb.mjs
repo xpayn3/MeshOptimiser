@@ -17,7 +17,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const file = process.argv[2];
 if (!file) { console.error('usage: node tools/build-splash-glb.mjs <model.glb> [parts] [segments]'); process.exit(1); }
 const K = +process.argv[3] || 48, BUDGET = +process.argv[4] || 22000;
-const ANGLE = 30;                                       // degrees between faces for an edge
+const ANGLE = 30;
+const SKIP = new RegExp(process.env.SKIP || 'chain', 'i');      // nodes (and what hangs under them) whose name matches are left out: the chain links glow far too much, small and crowded as they are                                       // degrees between faces for an edge
 
 // ---- read the GLB (no extensions: plain buffers) ----
 const raw = fs.readFileSync(file);
@@ -39,19 +40,20 @@ const read = (ai) => {
 
 // ---- walk the nodes, one world matrix each ----
 const meshes = [];                                      // { pos: Float32Array (world), idx }
-const walk = (ni, parent) => {
+const walk = (ni, parent, hidden = false) => {
   const n = gltf.nodes[ni], m = new THREE.Matrix4();
+  hidden = hidden || SKIP.test(n.name || '');
   if (n.matrix) m.fromArray(n.matrix);
   else m.compose(new THREE.Vector3(...(n.translation || [0, 0, 0])), new THREE.Quaternion(...(n.rotation || [0, 0, 0, 1])), new THREE.Vector3(...(n.scale || [1, 1, 1])));
   const w = parent.clone().multiply(m);
-  if (n.mesh != null) for (const p of gltf.meshes[n.mesh].primitives) {
+  if (n.mesh != null && !hidden) for (const p of gltf.meshes[n.mesh].primitives) {
     if ((p.mode ?? 4) !== 4 || p.attributes.POSITION == null) continue;
     const pos = read(p.attributes.POSITION), idx = p.indices != null ? read(p.indices) : null;
     const v = new THREE.Vector3();
     for (let i = 0; i < pos.length; i += 3) { v.set(pos[i], pos[i + 1], pos[i + 2]).applyMatrix4(w); pos[i] = v.x; pos[i + 1] = v.y; pos[i + 2] = v.z; }
     meshes.push({ pos, idx });
   }
-  for (const c of n.children || []) walk(c, w);
+  for (const c of n.children || []) walk(c, w, hidden);
 };
 const scene = gltf.scenes[gltf.scene ?? 0];
 for (const r of scene.nodes) walk(r, new THREE.Matrix4());

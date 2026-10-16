@@ -308,6 +308,15 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.34.0** — Animate gets a timeline and a motion for pistons, Claude works with notes, and the axis tools of Cinema 4D arrive.
+
+- ![new][new] **Animate along the bottom,** like a video editor: a ruler, a row for every animated object and a bar for every motion; drag to scrub, drag a bar's end to change its repeats. New **Oscillate** motion for pistons, rockers and pumps, animation in the export, and a video of the timeline.
+- ![new][new] **Axis Center and the Axis card:** centre the axis and reset its rotation, move it or the object to the origin, the selection or the view, align it, reset the scale. One undo step each.
+- ![new][new] **Claude reads and writes notes** (7 new tools, 78 in all), and says what each call did in words.
+- ![new][new] **A selected group shows its parts dimly;** Ctrl+click or Shift+click lights up the ones you pick.
+- ![new][new] **Python can come inside the Windows download:** nothing to install on the first start.
+
+
 **v0.33.0** — notes are tasks: a title, a description, parts, who it is for, a priority and a due date, with comments under them.
 
 - ![new][new] **A note is a task.** Press `N`, click a spot, fill the form: title, description, kind, who it is for, priority, due date. Comments go under it.

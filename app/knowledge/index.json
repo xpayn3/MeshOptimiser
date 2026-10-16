@@ -344,6 +344,14 @@
   "chars": 5688
  },
  {
+  "slug": "axis-center",
+  "title": "The axis of a part: Axis Center",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale, as in Cinema 4D.",
+  "chars": 1797
+ },
+ {
   "slug": "move-rotate-scale",
   "title": "Move, rotate, scale and measure",
   "group": "look",
@@ -388,8 +396,8 @@
   "title": "Animate (alpha)",
   "group": "look",
   "groupTitle": "Look and arrange",
-  "summary": "Make parts or groups spin, swing, shake or travel along a path, and play it in the turntable video.",
-  "chars": 2858
+  "summary": "Make parts or groups spin, swing, shake, travel along a path or oscillate like a piston, watch it on a timeline, and take it out as a video or inside a GLB.",
+  "chars": 4550
  },
  {
   "slug": "library",

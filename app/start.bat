@@ -29,6 +29,25 @@ if not defined SRC (
 echo    Working dir:   "%CD%"
 echo.
 
+REM --- The Python that comes with the download ---------------------
+REM The Windows zip holds a runtime folder: a Python with every package already in it. It needs no Python on this PC and no download.
+REM It is used when it starts and has what requirements.txt asks for (a quick import check); otherwise the steps below make a
+REM .venv and install the packages, as before.
+if not exist "runtime\python.exe" goto no_runtime
+"runtime\python.exe" -c "import OCP, trimesh, numpy" >nul 2>nul
+if errorlevel 1 goto no_runtime
+if not exist "runtime\MANIFEST.json" goto bundled_ok
+set "REQHASH="
+for /f "delims=" %%h in ('powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA256 requirements.txt).Hash.ToLower()" 2^>nul') do set "REQHASH=%%h"
+if not defined REQHASH goto bundled_ok
+findstr /c:"%REQHASH%" "runtime\MANIFEST.json" >nul 2>nul
+if errorlevel 1 goto no_runtime
+:bundled_ok
+set "PYRUN=%~dp0runtime\python.exe"
+call :say "Bundled Python ready"
+goto launch
+:no_runtime
+
 REM --- Step 1: a Python that can run this ----------------------
 REM MeshOptimiser needs Python 3.10, 3.11 or 3.12: the versions the CAD
 REM library it depends on is built for. Any other version is turned down here,
@@ -165,6 +184,9 @@ call .venv\Scripts\activate.bat
 call :say "Environment ready"
 
 :venv_done
+set "PYRUN=python"
+
+:launch
 
 REM --- Step 3: launch -----------------------------------------
 REM (serve.py prints the address itself: the port is not always the same one)
@@ -172,9 +194,9 @@ call :say "Starting the local server"
 echo.
 
 if not defined SRC (
-  python serve.py
+  "%PYRUN%" serve.py
 ) else (
-  python serve.py --open "%SRC%"
+  "%PYRUN%" serve.py --open "%SRC%"
 )
 
 set EXITCODE=%ERRORLEVEL%

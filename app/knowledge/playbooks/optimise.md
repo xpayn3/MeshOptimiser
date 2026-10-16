@@ -6,7 +6,7 @@ Read this first. Then read the playbook for the user's goal (`meshoptimiser://pl
 
 ## The rules that never change
 
-1. **Look before you change.** `scene_summary`, then `check_model` (where the weight is, what is tiny, thin, hidden, drawn twice, with advice), then `list_parts` sorted by triangles, then `screenshot`. Always.
+1. **Look before you change.** `scene_summary`, then `check_model` (where the weight is, what is tiny, thin, hidden, drawn twice, with advice), then `list_parts` sorted by triangles, then `screenshot`. Always. Also `list_notes`: if people have left notes on the model (pins and questions from a review), read the open ones first; they say what must stay and what to fix. Answer them with `reply_to_note`, and leave your own with `add_note` on what you flagged or kept.
 2. **Ask what the model is for** if the user has not said: a web viewer, AR on a phone, a game engine, 3D printing, a customer, a review. It decides the triangle budget and what may go. Ask for the number if there is one.
 3. **Delete before you reduce.** Removing a part that is not needed costs no quality. Reducing a mesh costs detail. And thinning a part you are about to delete is wasted work.
 4. **The least visible change first.** Order: what nobody sees, what nobody needs, what is too fine, and only then what is too heavy.

@@ -27,13 +27,21 @@ $vt = $false
 try {
   Add-Type -Namespace MO -Name K -MemberDefinition '[DllImport("kernel32.dll")] public static extern IntPtr GetStdHandle(int n); [DllImport("kernel32.dll")] public static extern bool GetConsoleMode(IntPtr h, out int m); [DllImport("kernel32.dll")] public static extern bool SetConsoleMode(IntPtr h, int m);' -ErrorAction Stop
   $h = [MO.K]::GetStdHandle(-11); $m = 0
-  if ([MO.K]::GetConsoleMode($h, [ref]$m)) { $vt = [MO.K]::SetConsoleMode($h, $m -bor 4) }
+  if ([Environment]::OSVersion.Version.Build -ge 15063 -and [MO.K]::GetConsoleMode($h, [ref]$m)) { $vt = [MO.K]::SetConsoleMode($h, $m -bor 4) }      # (the full colour codes need Windows 10 1703 or newer; the console of an older build prints parts of them as text)
 } catch {}
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
 try { $Host.UI.RawUI.WindowTitle = 'MeshOptimiser installer' } catch {}
 function C($rgb) { if ($vt) { "$esc[38;2;$rgb`m" } else { '' } }
 $R = if ($vt) { "$esc[0m" } else { '' }
 $ACC = C '13;153;255'; $OK = C '88;214;141'; $DIM = C '110;110;118'; $TXT = C '230;230;235'; $ERR = C '255;99;99'; $BAR0 = C '52;52;58'
+# Windows Script Host can be switched off (a work or locked-down PC): then wscript.exe cannot run start_hidden.vbs, and the shortcut and the first start use
+# app\start_hidden.ps1 instead, which does the same through PowerShell.
+function Test-Wsh {
+  foreach ($k in 'HKCU:\Software\Microsoft\Windows Script Host\Settings', 'HKLM:\Software\Microsoft\Windows Script Host\Settings') {
+    try { if ((Get-ItemProperty -Path $k -Name Enabled -ErrorAction Stop).Enabled -eq 0) { return $false } } catch {}
+  }
+  return [bool](Test-Path (Join-Path $env:WINDIR 'System32\wscript.exe'))
+}
 function Hide-Cursor { if ($vt) { [Console]::Write("$esc[?25l") } }
 function Show-Cursor { if ($vt) { [Console]::Write("$esc[?25h") } }
 function Out($s) { [Console]::Write($s) }
@@ -224,13 +232,14 @@ try {
   if (-not $NoShortcuts) {
     $sh = New-Object -ComObject WScript.Shell
     $vbs = Join-Path $InstallDir 'start_hidden.vbs'
+    $ps1 = Join-Path $InstallDir 'app\start_hidden.ps1'; $wsh = Test-Wsh; $psExe = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
     $ico = Join-Path $InstallDir 'start.ico'
     foreach ($pair in @(@('Desktop', [Environment]::GetFolderPath('Desktop')), @('Start menu', [Environment]::GetFolderPath('Programs')))) {
       $dir = $pair[1]
       if (-not $dir -or -not (Test-Path $dir)) { continue }
       $lnk = $sh.CreateShortcut((Join-Path $dir 'MeshOptimiser.lnk'))
-      $lnk.TargetPath = Join-Path $env:WINDIR 'System32\wscript.exe'
-      $lnk.Arguments = '"' + $vbs + '"'
+      if ($wsh) { $lnk.TargetPath = Join-Path $env:WINDIR 'System32\wscript.exe'; $lnk.Arguments = '"' + $vbs + '"' }
+      else { $lnk.TargetPath = $psExe; $lnk.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $ps1 + '"'; $lnk.WindowStyle = 7 }
       $lnk.WorkingDirectory = $InstallDir
       if (Test-Path $ico) { $lnk.IconLocation = $ico }
       $lnk.Description = 'MeshOptimiser'
@@ -245,7 +254,8 @@ try {
     Note 'Starting it now. The first start sets up Python and the CAD reader, which takes a few minutes'
     Note 'and shows its progress in a window. Every start after that takes a second or two, with no window.'
     # through start_hidden.vbs: with no .venv yet it shows the window (the setup is long and asks questions); once set up it shows none
-    Start-Process -FilePath (Join-Path $env:WINDIR 'System32\wscript.exe') -ArgumentList ('"' + (Join-Path $InstallDir 'start_hidden.vbs') + '"') -WorkingDirectory $InstallDir
+    if (Test-Wsh) { Start-Process -FilePath (Join-Path $env:WINDIR 'System32\wscript.exe') -ArgumentList ('"' + (Join-Path $InstallDir 'start_hidden.vbs') + '"') -WorkingDirectory $InstallDir }
+    else { Start-Process -FilePath (Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe') -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $InstallDir 'app\start_hidden.ps1') + '"') -WorkingDirectory $InstallDir -WindowStyle Hidden }
     Start-Sleep -Seconds 4
   } else { Note "Start it with $InstallDir\start.bat" }
   Line ''

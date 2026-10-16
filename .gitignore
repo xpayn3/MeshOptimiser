@@ -37,3 +37,6 @@ _before-*.html
 
 # Local setting marker (Settings > General > Show a terminal window)
 .show-console
+
+# The bundled Python for the Windows download (built by tools/build-runtime.py)
+runtime/

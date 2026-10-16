@@ -239,6 +239,23 @@ try {
   r = await call('add_library_part', { kind: 'hexbolt', count: 2 }); check('add_library_part adds two parts', r.ok && r.j.added === 2 && (await sum()).parts === pBefore + 2, r);
   await call('undo', { steps: 2 }); check('undo takes the library parts away', (await sum()).parts === pBefore, { pBefore, now: (await sum()).parts });
   check('add_library_part refuses an unknown kind', !(await call('add_library_part', { kind: 'zzz' })).ok);
+  // — notes: Claude writes under its own name, every step is one undo step, nothing of other people's is touched —
+  r = await call('list_notes'); check('list_notes: a count and a list', r.ok && typeof r.j.total === 'number' && Array.isArray(r.j.notes), r);
+  const nBefore = r.ok ? r.j.total : 0;
+  r = await call('add_note', { text: 'Kept this part as it is: ok?', ids: [id1], tag: 'question' }); check('add_note: a pin on a part, written by Claude', r.ok && r.j.started_by === 'Claude' && r.j.tag === 'question' && r.j.part_id === id1, r);
+  const noteNo = r.ok ? r.j.note : 0;
+  check('add_note refuses an empty text', !(await call('add_note', { text: '  ', ids: [id1] })).ok);
+  r = await call('reply_to_note', { note: noteNo, text: 'Waiting for your answer.' }); check('reply_to_note adds a message', r.ok && r.j.replies === 1, r);
+  r = await call('update_note', { note: noteNo, status: 'resolved', assignee: 'Luka' }); check('update_note resolves and assigns', r.ok && r.j.status === 'resolved' && r.j.assignee === 'Luka', r);
+  r = await call('get_note', { note: noteNo }); check('get_note: every message and the history', r.ok && r.j.messages.length === 2 && r.j.history.length >= 4, r);
+  r = await call('list_notes', { status: 'resolved' }); check('list_notes filters by status', r.ok && r.j.notes.some(n => n.note === noteNo), r);
+  r = await call('export_notes'); check('export_notes: Markdown with the name', r.ok && /Claude/.test(r.j.markdown) && r.j.stats.total === nBefore + 1, r);
+  check('update_note refuses a note that is not there', !(await call('update_note', { note: 9999, status: 'open' })).ok);
+  await call('undo', { steps: 3 }); r = await call('list_notes', { status: 'all' }); check('undo takes the note steps back', r.ok && r.j.total === nBefore + 1 && r.j.notes.find(n => n.note === noteNo).replies === 0, r);
+  await call('undo', { steps: 1 }); r = await call('list_notes', { status: 'all' }); check('undo removes the note', r.ok && r.j.total === nBefore, r);
+  r = await call('lock_parts', { ids: [id1] }); check('lock_parts locks', r.ok && r.j.locked === true, r);
+  r = await call('lock_parts', { ids: [id1], locked: false }); check('lock_parts unlocks', r.ok && r.j.locked === false, r);
+  r = await call('select_instances', { ids: [id1] }); check('select_instances selects', r.ok && r.j.selected_now >= 1, r);
   r = await call('save_scene', { file_name: 'mcp_test' }); check('save_scene writes a GLB scene file', r.ok && fs.existsSync(r.j.file.path) && fs.readFileSync(r.j.file.path).subarray(0, 4).toString() === 'glTF', r);
 
   // — z_dry runs, optimise to a target, before and after, folders —
