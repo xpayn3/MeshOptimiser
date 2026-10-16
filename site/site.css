@@ -1781,3 +1781,22 @@ h1, h2 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto;
 /* Titles that are headlines in their own right use the same serif on every page: caption titles of the screenshots and clips, and the h3 titles of
    steps, spotlights, plans and the comparison columns. (Small labels, buttons and numbers stay Inter.) */
 .clip figcaption strong, .star figcaption strong, .steps h3, .spot h3, .plan-head h3, .cmp-col h3 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto; }
+
+/* ---- a phone: room to breathe ----
+   The side margin goes from 20 to 28 px on every page (everything reads --gutter), and the opening gets more air: a calmer kicker line, a looser headline, a lead with a longer line height, and the buttons set apart from the text. */
+@media (max-width: 560px) {
+  :root { --gutter: 28px; }
+  .hero { padding-top: 56px; }
+  .hero .kicker, .page-head .kicker { gap: 6px 10px; font-size: 11px; letter-spacing: 0.08em; line-height: 1.5; }
+  .hero h1 { margin-top: 28px; font-size: clamp(40px, 11.4vw, 54px); line-height: 1.06; }
+  .hero .lead { margin-top: 28px; font-size: 18px; line-height: 1.62; }
+  .hero .actions { margin-top: 40px; gap: 12px; }
+  .hero + .band.is-first { margin-top: 72px; }
+  .page-head { padding-top: 40px; }
+  .page-head .lead { margin-top: 22px; line-height: 1.62; }
+  .page-head .actions { margin-top: 36px; }
+  .band-head h2, .band > h2, .compare h2, .cl-band h2 { font-size: clamp(40px, 11.4vw, 54px); line-height: 1.06; }
+  .page-head h1 { font-size: clamp(40px, 11.4vw, 54px); line-height: 1.06; }
+  .band-head { gap: 18px; }
+  .band-head .lead { line-height: 1.62; }
+}

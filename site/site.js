@@ -1092,7 +1092,7 @@
   // ---- tile drawings move only while their tile is on screen ----
   const tiles = $$('.tile, .clip, .star');
   if (tiles.length && 'IntersectionObserver' in window) {
-    const live = new IntersectionObserver(entries => entries.forEach(e => e.target.classList.toggle('is-live', e.isIntersecting)), { threshold: 0.2 });
+    const live = new IntersectionObserver(entries => entries.forEach(e => e.target.classList.toggle('is-live', e.isIntersecting)), { threshold: 0, rootMargin: '0px 60px' });
     tiles.forEach(t => live.observe(t));
   }
 
