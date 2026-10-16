@@ -972,9 +972,7 @@
     const visit = async (id, label) => {
       const i = slotOf(label); if (i < 0) throw CANCEL;
       const a = i * slice, [cx, cy] = centreOf(), ang = () => Math.atan2(gx - cx, -(gy - cy)) * 180 / Math.PI;
-      if (fanFor < 0 && Math.hypot(gx - cx, gy - cy) > R_OUT + 12) {
-        await swing(id, R_OUT + 30, a, 650);
-      } else if (Math.hypot(gx - cx, gy - cy) > 8) {
+      if (Math.hypot(gx - cx, gy - cy) > 8) {                           // (after a click in a fan the ring is closed but the cursor is still out at the fan: it goes home first)
         await swing(id, 0, ang(), fanFor >= 0 ? 420 : 340);
         await wait(id, 140);
       }
