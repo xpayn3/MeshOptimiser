@@ -855,7 +855,7 @@
     // the pointer: a click runs what is lit, or selects the part under it; a press held for a moment moves the ring to the pointer (like W held)
     const local = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
     stage.addEventListener('pointerenter', () => { over = true; });
-    stage.addEventListener('pointerleave', (e) => { over = false; if (e.pointerType === 'mouse' && rested && open) { px = ox; py = oy; aim(); } });
+    stage.addEventListener('pointerleave', (e) => { over = false; if (e.pointerType === 'mouse' && rested && open && !auto) { px = ox; py = oy; aim(); } });
     stage.addEventListener('contextmenu', (e) => { if (open || performance.now() - closedAt < 400) e.preventDefault(); });
     // The stage lets a finger scroll the page (touch-action: pan-y), so a swipe that starts on it moves the page. Only a ring that was opened by a press held
     // on it takes the finger over: the scroll has not started yet (the finger stayed still for the hold), so it can still be stopped here.
@@ -967,14 +967,18 @@
     };
     const tap = async (id) => { ghost.classList.remove('is-tap'); void ghost.offsetWidth; ghost.classList.add('is-tap'); await wait(id, 140); };
     const slotOf = (label) => slots.findIndex((s) => (s.leaf && s.leaf.label === label) || s.group === label);
-    // to a slice from outside the ring, straight in (out of a fan first, so that the fan closes)
+    // to a slice: from outside the ring straight in; from anywhere on it (a slice, a fan) back to the centre first and then out along the new
+    // direction, as a hand does (the ring reads the direction, not the distance, and a fan closes at the centre)
     const visit = async (id, label) => {
       const i = slotOf(label); if (i < 0) throw CANCEL;
       const a = i * slice, [cx, cy] = centreOf(), ang = () => Math.atan2(gx - cx, -(gy - cy)) * 180 / Math.PI;
-      if (fanFor >= 0) await swing(id, F_OUT + 26, ang(), 320);
-      else if (Math.hypot(gx - cx, gy - cy) <= R_OUT + 12) await swing(id, R_OUT + 30, ang(), 350);
-      await swing(id, R_OUT + 30, a, 650);
-      await swing(id, R_ICON, a, 450);
+      if (fanFor < 0 && Math.hypot(gx - cx, gy - cy) > R_OUT + 12) {
+        await swing(id, R_OUT + 30, a, 650);
+      } else if (Math.hypot(gx - cx, gy - cy) > 8) {
+        await swing(id, 0, ang(), fanFor >= 0 ? 420 : 340);
+        await wait(id, 140);
+      }
+      await swing(id, R_ICON, a, 520);
       return i;
     };
     const glance = async (id, label, ms) => { await visit(id, label); await wait(id, ms); };       // rests on a slice
@@ -1044,7 +1048,6 @@
     const stopAuto = () => { stopped = true; pause(); };
     if (!calm && 'IntersectionObserver' in window) {
       ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown', 'focusin'].forEach((type) => demo.addEventListener(type, stopAuto, { capture: true, passive: true }));
-      stage.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') stopAuto(); });
       document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else play(); });
       new IntersectionObserver((es) => {
         const e = es[es.length - 1];
