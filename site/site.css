@@ -1695,6 +1695,8 @@ main { overflow-x: clip; }
   .cl-tabs .ico { width: 28px; height: 28px; border-radius: 50%; }
 }
 @media (max-width: 640px) { .cl-panel ul { grid-template-columns: minmax(0, 1fr); } }
+/* on a phone the section is as tall as the panel that is open: the others do not hold the space (on a wide screen they do, so the page does not jump between tabs) */
+@media (max-width: 760px) { .cl-panel:not(.is-on) { display: none; } .cl-panel { grid-area: auto; } }
 /* picture strips: the title on the left, what it says on the right */
 @media (min-width: 761px) {
   .strip figcaption { grid-template-columns: 2.4em minmax(0, 15em) minmax(0, 44ch); justify-content: start; max-width: none; gap: 6px clamp(18px, 3vw, 48px); align-items: baseline; }
