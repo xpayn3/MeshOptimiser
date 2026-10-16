@@ -1016,10 +1016,10 @@
       const [cx, cy] = centreOf();
       putGhost(cx, cy); ghost.classList.add('is-on');
       await wait(id, 500); await intro(id); await wait(id, 400);
-      await glance(id, 'Fit view', 600);
-      await glance(id, 'Select all', 500);
+      await leaf(id, 'Fit view');
+      await leaf(id, 'Select all');
       await tour(id, 'View', [/Camera/, /Top/, /Wireframe/], 2);
-      await glance(id, 'Show all', 450);
+      await leaf(id, 'Show all');
       await tour(id, 'File', [/screenshot/i, /Save scene/], 1);
       await tour(id, 'Clean', [/Recentre/, /Align/, /Smart fit all/], 2);
       await swap(id, true);
