@@ -141,5 +141,28 @@ const T = (m) => '2026-10-15T10:' + String(m).padStart(2, '0') + ':00.000Z';
   ok(N.fromGlb(new ArrayBuffer(8), KEY) === null && N.fromGlb(new TextEncoder().encode('not a glb file at all, just text'), KEY) === null, 'a file that is not a GLB gives nothing');
 }
 
+// priority, replies to a message, reactions, sign-offs and mentions
+{
+  const notes = []; const n = N.create(notes, { by: 'Ana', text: 'first', now: T(0) });
+  ok(n.priority === 'normal', 'a note starts at normal priority');
+  N.setPriority(n, 'Bo', 'urgent', T(1));
+  ok(n.priority === 'urgent' && n.activity.some(a => a.type === 'priority' && /urgent/.test(N.activityLine(a))), 'priority is set, and the history says who');
+  const r = N.reply(n, 'Bo', 'answer', T(2), n.messages[0].id);
+  ok(r.to === n.messages[0].id, 'a reply can answer one message');
+  N.react(n, n.messages[0].id, 'Bo', 'like', T(3)); N.react(n, n.messages[0].id, 'Bo', 'dislike', T(4));
+  ok(!n.messages[0].react.like && n.messages[0].react.dislike.length === 1, 'a thumb down takes the thumb up away');
+  N.react(n, n.messages[0].id, 'Bo', 'dislike', T(5));
+  ok(!n.messages[0].react.dislike, 'pressed again, a reaction goes');
+  const rv = {}; N.setReview(rv, 'Ana', 'approved', '', T(6)); N.setReview(rv, 'Bo', 'changes', '', T(7));
+  ok(N.reviewSummary(rv).state === 'changes' && N.reviewSummary(rv).approved[0] === 'Ana', 'one asking for changes outweighs an approval');
+  const back = N.parse(JSON.parse(JSON.stringify(N.serialize(notes, {}, rv))));
+  ok(back.items[0].priority === 'urgent' && back.items[0].messages[1].to === n.messages[0].id && back.reviews.Ana.state === 'approved', 'priority, replies and sign-offs survive a file');
+  ok(N.parse({ items: [], reviews: { x: { state: 'hacked' } } }).reviews.x === undefined, 'a sign-off that is not one is dropped');
+  N.setReview(rv, 'Bo', 'changes', '', T(8));
+  ok(!rv.Bo, 'the same sign-off again takes it back');
+  ok(N.mentions('thanks @Ana Kovac, and @Bo!', ['Ana Kovac', 'Bo', 'Cy']).join() === 'Ana Kovac,Bo', 'who is mentioned with @');
+  ok(/Review: approved by Ana/.test(N.toMarkdown(notes, { reviews: rv })), 'the sign-offs are in the Markdown');
+}
+
 console.log(fails ? '\n' + fails + ' FAILED' : '\nall checks passed');
 process.exit(fails ? 1 : 0);

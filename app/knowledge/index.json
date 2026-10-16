@@ -473,11 +473,11 @@
  },
  {
   "slug": "notes",
-  "title": "Notes: leave comments on a model and send them with it",
+  "title": "Notes: tasks on the model, with comments, sent with the scene",
   "group": "save",
   "groupTitle": "Save and export",
-  "summary": "Put a numbered pin on the model, write what you want to say, and save the scene. Whoever opens it sees every note, can answer, edit and resolve, and the file shows who did what.",
-  "chars": 5436
+  "summary": "A note is a task about a place or a part: a title, what it is about, who it is for, how urgent and when, with comments under it. Save the scene and whoever opens it sees every note, answers it and signs off, and the file shows who did what.",
+  "chars": 8039
  },
  {
   "slug": "make-model-safe-to-send",

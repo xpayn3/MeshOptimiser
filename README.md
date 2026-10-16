@@ -308,6 +308,15 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.33.0** — notes are tasks: a title, a description, parts, who it is for, a priority and a due date, with comments under them.
+
+- ![new][new] **A note is a task.** Press `N`, click a spot, fill the form: title, description, kind, who it is for, priority, due date. Comments go under it.
+- ![new][new] **A shape for each kind** (circle, square, triangle, diamond) with the number inside; finished notes are green, late ones outlined in red.
+- ![new][new] **Many parts and screenshots:** a card for every part with Focus, up to six screenshots that each remember their view, and a sign-off (Approve or Changes) for the whole scene.
+- ![new][new] **CSV, JSON and BCF:** take the notes out as a spreadsheet, as JSON or for design tools, and bring them back in.
+- ![fix][fix] **Save writes over the scene's file again after a restart,** and a big STEP file with colours no longer stops the import.
+
+
 **v0.32.0** — notes: leave them on the model, answer, edit and resolve them, and send the scene with everything inside.
 
 - ![new][new] **Notes on the model.** Press `N`, click a spot, write. A numbered pin stays on the part; anyone can reply, edit, resolve or delete.

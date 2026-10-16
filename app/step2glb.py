@@ -510,15 +510,26 @@ def _nd_string(nd, key: str) -> str | None:
     return None
 
 
+def _find_attr(label, cls):
+    """The attribute of type `cls` on a label, or None. Walks the attributes instead of calling label.FindAttribute(), which can crash the process
+    on some labels of big assemblies (see get_label_name)."""
+    it = TDF_AttributeIterator(label)
+    while it.More():
+        a = it.Value()
+        if isinstance(a, cls):
+            return a
+        it.Next()
+    return None
+
+
 def _doc_has_product_meta(doc, shape_tool) -> bool:
     """True when some shape label of the document carries a product ID."""
     try:
         labels = TDF_LabelSequence()
         shape_tool.GetShapes(labels)
         for i in range(1, labels.Length() + 1):
-            nd = TDataStd_NamedData()
-            if labels.Value(i).FindAttribute(TDataStd_NamedData.GetID_s(), nd) \
-               and _nd_string(nd, "ProductID"):
+            nd = _find_attr(labels.Value(i), TDataStd_NamedData)
+            if nd is not None and _nd_string(nd, "ProductID"):
                 return True
     except Exception:
         pass
@@ -538,8 +549,8 @@ def read_product_meta(label: TDF_Label, doc) -> dict:
     if doc is None:
         return meta
     try:
-        nd = TDataStd_NamedData()
-        if label.FindAttribute(TDataStd_NamedData.GetID_s(), nd):
+        nd = _find_attr(label, TDataStd_NamedData)
+        if nd is not None:
             pid = _nd_string(nd, "ProductID")
             if pid: meta["partNumber"] = pid
             desc = _nd_string(nd, "Description")
@@ -560,8 +571,8 @@ def read_product_meta(label: TDF_Label, doc) -> dict:
             a = it.Value()
             tname = a.DynamicType().Name()
             if tname == "TDataStd_TreeNode" and a.ID().IsSame(mat_guid) and a.HasFather():
-                ma = XCAFDoc_Material()
-                if a.Father().Label().FindAttribute(XCAFDoc_Material.GetID_s(), ma):
+                ma = _find_attr(a.Father().Label(), XCAFDoc_Material)
+                if ma is not None:
                     m = {}
                     nm = ma.GetName().ToCString() if ma.GetName() is not None else ""
                     if nm: m["name"] = nm
@@ -703,11 +714,18 @@ def get_shape_color(shape, color_tool) -> tuple[float, float, float] | None:
 
 
 def get_label_name(label: TDF_Label) -> str | None:
-    """Read the TDataStd_Name attribute from a label."""
+    """Read the TDataStd_Name attribute from a label.
+
+    The label's attributes are walked with an iterator and not looked up by id: label.FindAttribute() on a label without a name attribute can
+    crash the whole process with an access violation (seen on coral.stp, an assembly label that holds only a shape, a tag source and a tree
+    node), and a native crash cannot be caught here."""
     try:
-        attr = TDataStd_Name()
-        if label.FindAttribute(TDataStd_Name.GetID_s(), attr):
-            return attr.Get().ToExtString()
+        it = TDF_AttributeIterator(label)
+        while it.More():
+            a = it.Value()
+            if isinstance(a, TDataStd_Name):
+                return a.Get().ToExtString()
+            it.Next()
     except Exception:
         pass
     return None

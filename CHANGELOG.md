@@ -4,6 +4,44 @@ All notable changes to MeshOptimiser. Newest on top.
 
 Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &nbsp;·&nbsp; ![perf][perf] performance &nbsp;·&nbsp; ![polish][polish] UX / visual refinement &nbsp;·&nbsp; ![refactor][refactor] internal cleanup &nbsp;·&nbsp; ![docs][docs] documentation
 
+## v0.33.0
+
+Released 16 Oct 2026.
+
+v0.32.0 added notes. v0.33.0 turns them into tasks: a note has a title, a description, the parts it is about, who it is for, a priority and a due date, with comments under it. The notes can be signed off, and they can leave the app as a spreadsheet, JSON or BCF for design tools.
+
+**Notes are tasks**
+
+- ![new][new] **A note is made with a form.** Press `N` and click a spot (or right-click the model: *Add a note here*, *Add a note to this part*). The form asks for a title, an optional description, the kind, who it is for, the priority and a due date, and has a camera for a screenshot. Comments go under the note afterwards.
+- ![new][new] **Each kind has its own shape.** A circle for Info, a rounded square for Question, a triangle for Issue and a diamond for Idea, with the number inside. A finished note is fully green with no outline; a late one has a red dashed outline. The pins button in the card chooses what a pin shows: the number, the title as a label on the model, the kind as an icon, only the shape, or the writer's letter.
+- ![new][new] **Priority and due dates.** High and urgent notes are marked on the pin and in the list; a late note says *Overdue*. The list can be ordered by priority or due date, and opening a scene says how many notes are late.
+- ![new][new] **A note can be about many parts, with no limit.** The Parts section has a card for every part. *Focus* selects the part and takes the camera to it; in edit mode a bin takes a part off and *Add selected* adds the parts selected in the viewport. A note made with several parts selected is about all of them, also when it is placed with a click or from the right-click menu.
+- ![new][new] **Screenshots, up to six, each with its own view.** The camera in the form and in edit mode takes a picture of the view; clicking a picture flies back to the view it was taken from. No picture is taken unless it is asked for.
+- ![new][new] **Comments** have a thumb up, a thumb down and reply, and a reply shows what it answers. Typing `@` offers the names on the notes, and a mention is highlighted; *Mine* in the card includes the notes that mention you.
+- ![new][new] **Edit is in the three dots.** *Edit* turns the dots into a pencil and the title, description, kind, assignee, priority, due date and parts into fields; the comments are out of the way meanwhile. Press the pencil to leave.
+- ![new][new] **Sign-off on the scene.** *Approve* or *Changes* in the card: one answer for everyone, shown with the names, saved with the scene and said when the scene is opened.
+- ![new][new] **Right-click a pin** for comment, edit, resolve, kind, priority, due date, assign to me, move, show only the parts with notes, copy and delete.
+
+**The window and the card**
+
+- ![new][new] **The note window** opens on the right of the view with a short form (the description and the number of comments), and one press opens the whole note. It drags by its title bar, resizes by its edges, remembers where and how big, scrolls inside itself when a note is tall, and has the shadow only while it is the window in use, like the other floating windows.
+- ![new][new] **The Notes card is a task list.** A tick marks a note done (with a green circle growing in), and each row shows the kind, the title, the part, the comments, a due chip and who it is for. Filters (Open, All, Done, New, Mine), search, order, *only the notes on the selected part*, arrows that go through the list and fly to each note, and a button that shows only the parts that have notes.
+- ![new][new] **Opening a scene with notes** says how many there are, how many are open or late, how many are new to you, and who wrote the last one.
+
+**Taking notes out and bringing them in**
+
+- ![new][new] **CSV, JSON and BCF.** The export button writes a report page, a spreadsheet (one row per note), JSON with every detail, or BCF 2.1 for design tools (a topic per note with its view, picture, comments, priority, due date and assignee). *Bring in notes* reads a scene, a JSON file or a BCF file; a BCF file of this app joins its own notes instead of copying them, and one from another tool comes in without a pin and keeps its view.
+
+**Saving**
+
+- ![fix][fix] **Save writes over the scene's file again after a restart.** A scene saved by this app opens ready to be saved over: Save with the same name replaces that file without asking where (the browser asks once for permission to write). A model from elsewhere is never offered for overwriting.
+
+**Fixes**
+
+- ![fix][fix] **A big STEP file with colours on could stop the import** with "step2glb.py exited with code 3221225477". If the colour reader crashes, the app now tries again with the plain reader, so the model still opens (without colours, names or hierarchy), and the log says so.
+- ![fix][fix] **The notes window and card were rough.** A pin slid away from the pointer on hover, the window jumped when clicked or followed the pin, the card would not fold, and the name box did not look like the rest of the app. The pin holds still, the window stays where it is put, the card folds, and the name box is the app's own dialog.
+- ![polish][polish] **The Claude connection card** has *Copy command*, *Console* and *More…* in one row, with *Claude mode* across the whole card under them.
+
 ## v0.32.0
 
 Released 15 Oct 2026.

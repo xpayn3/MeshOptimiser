@@ -493,6 +493,33 @@ def interactive_convert(src: Path) -> Path | None:
     return dst
 
 
+# ─── /api/reveal: find a file the page opened by its name and size
+def _find_user_file(name: str, size: int, exact_only: bool = False):
+    home = Path.home()
+    roots = [ROOT / "inbox", home / "Downloads", home / "Desktop", home / "Documents"]
+    try: roots += [p for p in home.glob("OneDrive*") if p.is_dir()]
+    except Exception: pass
+    roots.append(home)
+    seen, best = set(), None
+    deadline = time.time() + 4.0
+    for root in roots:
+        if not root.is_dir() or str(root) in seen: continue
+        seen.add(str(root))
+        base_depth = len(root.parts)
+        for dp, dns, fns in os.walk(root):
+            if time.time() > deadline: return None if exact_only else best
+            dns[:] = [d for d in dns if not d.startswith(".") and d not in ("node_modules", "AppData", "Library", "__pycache__")]
+            if len(Path(dp).parts) - base_depth >= (6 if root != home else 2):
+                dns[:] = []
+            for fn in fns:
+                if fn.lower() != name.lower(): continue
+                p = Path(dp) / fn
+                try: sz = p.stat().st_size
+                except OSError: continue
+                if size < 0 or sz == size: return p
+                best = best or p                      # same name, other size (saved over since): better than nothing
+    return None if exact_only else best
+
 # ─── /api/convert background job runner (for in-browser drag-and-drop)
 # ── Converted files are kept, so opening the same STEP again is instant ──────────────────────────────────────────────────
 # The key is the content of the file (not its name or where it came from) plus every setting that changes the result plus the
@@ -660,28 +687,50 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
         # Away from Windows the converter gets a session of its own, so that
         # Cancel can stop it together with its heartbeat helper (_kill_tree
         # signals the whole process group). On Windows taskkill /T does that.
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                text=True, encoding="utf-8", errors="replace",
-                                bufsize=1, cwd=ROOT,
-                                start_new_session=(os.name != "nt"))
-        _contain(proc)
-        with JOBS_LOCK:
-            PROCS[job_id] = proc
-            cancelled = JOBS[job_id].get("status") == "cancelled"
-        # Cancelled while the process was starting: /api/cancel found nothing
-        # to stop then, so it is stopped here.
-        if cancelled: _kill_tree(proc)
-        for line in proc.stdout:
-            line = line.rstrip()
+        def _run(cmd):
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, encoding="utf-8", errors="replace",
+                                    bufsize=1, cwd=ROOT,
+                                    start_new_session=(os.name != "nt"))
+            _contain(proc)
             with JOBS_LOCK:
-                job = JOBS[job_id]
-                job["log"].append(line)
-                dropped = len(job["log"]) - MAX_LOG_LINES
-                if dropped > 0:
-                    job["log"] = job["log"][dropped:]
-                    job["log_base"] = job.get("log_base", 0) + dropped
-                job["message"] = line
-        rc = proc.wait()
+                PROCS[job_id] = proc
+                cancelled = JOBS[job_id].get("status") == "cancelled"
+            # Cancelled while the process was starting: /api/cancel found nothing
+            # to stop then, so it is stopped here.
+            if cancelled: _kill_tree(proc)
+            for line in proc.stdout:
+                line = line.rstrip()
+                with JOBS_LOCK:
+                    job = JOBS[job_id]
+                    job["log"].append(line)
+                    dropped = len(job["log"]) - MAX_LOG_LINES
+                    if dropped > 0:
+                        job["log"] = job["log"][dropped:]
+                        job["log_base"] = job.get("log_base", 0) + dropped
+                    job["message"] = line
+            return proc.wait()
+        rc = _run(cmd)
+        # A native crash (access violation 0xC0000005, a signal away from
+        # Windows) inside OpenCascade's XCAF reader cannot be caught by the
+        # converter itself, and it takes the whole process down. The plain
+        # reader reads the same geometry without the XCAF document, so the
+        # model still opens (no colours, names or hierarchy).
+        crashed = rc < 0 or rc >= 0xC0000000
+        if crashed and colors != "off":
+            with JOBS_LOCK:
+                if JOBS[job_id].get("status") != "cancelled":
+                    JOBS[job_id]["log"].append(
+                        f"The colour reader crashed (code {rc}). Trying again with the plain reader: no colours, names or hierarchy.")
+                    JOBS[job_id]["message"] = "Colour reader crashed, retrying with the plain reader…"
+                    retry = True
+                else:
+                    retry = False
+            if retry:
+                strip = {"--force-colors", "--no-shuo", "--no-layers", "--no-materials",
+                         "--no-step-names", "--no-step-props"}
+                cmd = [a for a in cmd if a not in strip] + ["--no-colors"]
+                rc = _run(cmd)
         with JOBS_LOCK:
             PROCS.pop(job_id, None)
             cancelled = JOBS[job_id].get("status") == "cancelled"
@@ -1373,6 +1422,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if u.path == "/api/bridge/list": return self._handle_bridge_list()
         if u.path == "/api/convert": return self._handle_convert()
         if u.path == "/api/quit":    return self._handle_quit()
+        if u.path == "/api/reveal":  return self._handle_reveal()
+        if u.path == "/api/locate":  return self._handle_locate()
         if u.path.startswith("/api/cancel/"):
             return self._handle_cancel(u.path.rsplit("/", 1)[-1])
         return self._json({"error": "unknown endpoint"}, 404)
@@ -1665,6 +1716,46 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not _cancel_job(job_id):
             return self._json({"error": "not found"}, 404)
         return self._json({"ok": True})
+
+    def _handle_reveal(self):
+        """Show a file in the system file manager. The page only knows the name and size of the file it
+        opened (browsers never reveal the folder), so look for it in the usual places and select it."""
+        body = self._read_json(1 << 16) or {}
+        name = os.path.basename(str(body.get("name", "")))
+        try: size = int(body.get("size", -1))
+        except (TypeError, ValueError): size = -1
+        if not name or name.startswith("."):
+            return self._json({"error": "no file name"}, 400)
+        found = None
+        kept = str(body.get("path", "") or "")
+        if kept:                                      # the place found when the file was opened: still there?
+            try:
+                kp = Path(kept)
+                if kp.is_file() and kp.name.lower() == name.lower(): found = kp
+            except Exception: pass
+        found = found or _find_user_file(name, size)
+        if not found:
+            return self._json({"error": "not found"}, 404)
+        try:
+            if sys.platform.startswith("win"): subprocess.Popen(["explorer", "/select,", str(found)])
+            elif sys.platform == "darwin": subprocess.Popen(["open", "-R", str(found)])
+            else: subprocess.Popen(["xdg-open", str(found.parent)])
+        except Exception as e:
+            return self._json({"error": str(e)}, 500)
+        return self._json({"ok": True, "path": str(found)})
+
+    def _handle_locate(self):
+        """Where is the file the page has just opened? Asked once, at open, and remembered by the page."""
+        body = self._read_json(1 << 16) or {}
+        name = os.path.basename(str(body.get("name", "")))
+        try: size = int(body.get("size", -1))
+        except (TypeError, ValueError): size = -1
+        if not name or name.startswith("."):
+            return self._json({"error": "no file name"}, 400)
+        found = _find_user_file(name, size, exact_only=True)
+        if not found:
+            return self._json({"error": "not found"}, 404)
+        return self._json({"path": str(found)})
 
     def _handle_quit(self):
         """Graceful shutdown triggered by the in-app Quit menu item.

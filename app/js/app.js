@@ -2858,6 +2858,7 @@ function _dropConvertedGlb(name, size) { try { _idbDelete(_glbKey(name, size)).c
 // entry points at nothing.
 async function _rememberHandle(file, handle) {
   if (!file || !handle) return;
+  try { file.__moHandle = handle; } catch (_) {}          // (a scene saved by this app opens ready to be saved over: see _ingestSceneRoot)
   try { await _idbPut(_recKey(file.name, file.size), handle); } catch (_) {}
 }
 // A dropped file carries a handle too (Chromium). It has to be asked for
@@ -4932,6 +4933,10 @@ const _Actions = (() => {
     { id:'noteScene',    group:'View',       label:'Add a note about the whole scene', words:'note comment review', icon:'message-square', run: () => { try { window.MONotesUI.addForScene(); } catch (_) {} } },
     { id:'noteList',     group:'View',       label:'Notes: open the list', words:'notes comments review pins', icon:'message-square', run: () => { try { window.MONotesUI.openList(); } catch (_) {} } },
     { id:'notePins',     group:'View',       label:'Notes: show or hide the pins', words:'notes comments pins toggle', icon:'message-square', run: () => { try { window.MONotesUI.togglePins(); } catch (_) {} } },
+    { id:'noteIsolate',  group:'View',       label:'Notes: show only the parts that have notes', words:'notes isolate parts with notes focus review', icon:'message-square', run: () => { try { window.MONotesUI.isolateNoted(); } catch (_) {} } },
+    { id:'notePrev',     group:'View',       label:'Notes: go to the previous note', words:'notes comments previous back', icon:'message-square', run: () => { try { window.MONotesUI.prev(); } catch (_) {} } },
+    { id:'noteApprove',  group:'View',       label:'Notes: approve this scene', words:'notes review approve sign off ok', icon:'message-square', run: () => { try { window.MONotesUI.review('approved'); } catch (_) {} } },
+    { id:'noteChanges',  group:'View',       label:'Notes: ask for changes', words:'notes review changes request reject', icon:'message-square', run: () => { try { window.MONotesUI.review('changes'); } catch (_) {} } },
     { id:'noteNext',     group:'View',       label:'Notes: go to the next note', words:'notes comments next', icon:'message-square', run: () => { try { window.MONotesUI.next(); } catch (_) {} } },
     { id:'noteImport',   group:'File',       label:'Notes: bring in the notes of another copy…', words:'notes comments import merge scene file review', icon:'message-square', run: () => { try { window.MONotesUI.importFromFile(); } catch (_) {} } },
     { id:'noteReport',   group:'File',       label:'Notes: save a report page…', words:'notes comments export report html review', icon:'message-square', run: () => { try { window.MONotesUI.saveReport(); } catch (_) {} } },
@@ -10215,6 +10220,27 @@ window.__moResetScene = () => _newSceneHere();
 window.__moOpenFile = (file) => _handleSelectedFile(file);
 // For the tab strip (any tab's menu may ask about, or copy, this scene).
 window.__moHasParts = () => state.parts.some(p => !p.deleted);
+window.__moSourceInfo = () => state._sourceFile ? { name: state._sourceFile.name, size: state._sourceFile.size, path: state._sourceFile.__moPath || '' } : null;
+// Browsers never tell a page where a file lives, so the local server is asked once, when a file is opened, and the answer is kept
+// with the file (and in localStorage under name|size, so the same file found again later needs no search).
+const _SRC_KEY = 'mo-source-paths';
+function _srcPaths() { try { return JSON.parse(localStorage.getItem(_SRC_KEY) || '{}') || {}; } catch (_) { return {}; } }
+async function _locateSource(file) {
+  if (!file || !file.name || file.__moPath) return;
+  const key = _recKey(file.name, file.size), kept = _srcPaths()[key];
+  if (kept) file.__moPath = kept;                       // (checked again by the server when it is used)
+  try {
+    const r = await fetch('/api/locate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: file.name, size: file.size }) });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || !j.path) return;
+    file.__moPath = j.path;
+    const all = _srcPaths(); all[key] = j.path;
+    const ks = Object.keys(all); if (ks.length > 200) for (const k of ks.slice(0, ks.length - 200)) delete all[k];
+    try { localStorage.setItem(_SRC_KEY, JSON.stringify(all)); } catch (_) {}
+  } catch (_) {}
+}
+
 window.__moDuplicateScene = async () => {
   const blob = await _withSolidView(() => _saveSceneImpl(true));
   if (!blob) return;
@@ -19840,12 +19866,22 @@ const _Tabs = (() => {
     try { REG.wins[id].__moDuplicateScene(); } catch (e) { console.warn('[tabs] duplicate:', e); }
   }
 
+  // The page only knows the name and size of the file it opened; the local server looks for it and selects it in the file manager.
+  async function revealSource(src) {
+    if (!src) return;
+    try {
+      const r = await fetch('/api/reveal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(src) });
+      if (!r.ok) toast('Show in Explorer', 'Could not find ' + src.name + ' on this computer', 'warn', 3500);
+    } catch (_) { toast('Show in Explorer', 'Needs the app\'s local server', 'warn', 3500); }
+  }
+
   // Right-click on a tab.
   function menu(id, x, y) {
     const t = find(id);
     if (!t || t.closed) return;
-    let any = false;
+    let any = false, src = null;
     try { any = !!REG.wins[id].__moHasParts(); } catch (_) {}
+    try { src = REG.wins[id].__moSourceInfo(); } catch (_) {}
     const others = listed().some(o => o.id !== id);
     let recent = [];
     try { recent = _Welcome.recents().map(r => ({ label: escapeHtml(r.name), fn: () => _openRecentByKey(_recKey(r.name, r.size)) })); } catch (_) {}
@@ -19853,6 +19889,7 @@ const _Tabs = (() => {
       { label: 'Duplicate scene', off: any ? false : 'The scene is empty', fn: () => duplicate(id) },
       { label: 'Close all', kbd: 'Ctrl+Shift+F4', fn: () => closeAll() },
       { label: 'Close others', off: others ? false : 'No other scene is open', fn: () => closeOthers(id) },
+      { icon: 'folder-search', label: 'Show in Explorer', off: src ? false : 'This scene was not opened from a file', fn: () => revealSource(src) },
       '---',
       { icon: 'folder-open', label: 'Open…', kbd: 'Ctrl+O', fn: () => _openWithPicker() },
       { label: 'Open recent', off: recent.length ? false : 'No recent files yet', sub: recent },
@@ -25120,7 +25157,7 @@ function _openSaveSceneDialog(suggested) {
       const where = $i('save-scene-where');
       if (where) {
         where.classList.toggle('is-over', over);
-        where.innerHTML = over ? `Saves over <b>${escapeHtml(prev.name)}</b>, the file this scene was saved to last.`
+        where.innerHTML = over ? `Saves over <b>${escapeHtml(prev.name)}</b>, the file this scene was opened from or saved to last.`
           : typeof window.showSaveFilePicker === 'function' ? 'You will be asked where to put it' + (prev ? ', starting in the folder used last time.' : '.')
           : 'It goes to your Downloads folder.';
       }
@@ -33916,7 +33953,12 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   // the imported file (would clobber the live scene's camera / units / etc.).
   if (!importMode && format === 'glb') {
     const _savedState = _extractSceneState(sceneRoot);
-    if (_savedState) _applySceneState(_savedState);
+    if (_savedState) {
+      _applySceneState(_savedState);
+      // The scene came from a file this app saved, and the browser gave us a handle on it: Save writes over it without asking where (the first
+      // time after a restart it only asks for the permission again). A model from elsewhere is never offered for overwriting.
+      if (file && file.__moHandle) { state._lastSaveSceneHandle = file.__moHandle; state._lastSavedSceneName = String(file.name).replace(/\.glb$/i, ''); }
+    }
   }
   if (importMode) { try { recomputeStats(); } catch (_) {} onSceneActivated(); }
   else onModelLoaded(file.name);
@@ -33970,6 +34012,7 @@ async function _runLoad(file, formatLabel, parser) {
   const myLoadGen = (state._loadGen = (state._loadGen | 0) + 1);
   _cancelStepConversion('superseded');
   state._sourceFile = file;
+  if (!wasImport) _locateSource(file);
   state.sceneName = null;
   state.renderPaused = true;
   let loadedOk = false;
@@ -43755,6 +43798,7 @@ if (typeof document !== 'undefined') {
     // therefore killed the viewport and tree-empty menus on every click.
     // Each branch below is target-scoped, so we can safely run unconditionally.)
     if (e.target.closest && e.target.closest('#vw-clay, #vw-cad')) return;      // the Clay button has a menu of its own
+    if (e.target.closest && e.target.closest('.note-pin')) return;      // a note's pin has one too (notes.js)
     // A field has a menu of its own too (the number menu, or the browser's for a name): not the view's menu on top of it.
     if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], .rn-menu')) return;
     // If the right button was dragged before this contextmenu fired, the user
@@ -43789,6 +43833,10 @@ if (typeof document !== 'undefined') {
     if (e.target.closest('#viewport') || e.target.tagName === 'CANVAS') {
       e.preventDefault();
       const items = [];
+      { const _pt = { clientX: e.clientX, clientY: e.clientY };
+        items.push({ icon: 'message-square', label: 'Add a note here', kbd: 'N', off: state.parts.some(p => !p.deleted) ? false : 'The scene is empty', fn: () => { try { window.MONotesUI.addAt(_pt); } catch (_) {} } });
+        items.push({ icon: 'message-square', label: 'Add a note to this part', off: state.parts.some(p => !p.deleted) ? false : 'The scene is empty', fn: () => { try { window.MONotesUI.addToPartAt(_pt); } catch (_) {} } });
+        items.push('---'); }
       if (state.selected.size > 0) {
         items.push({ icon: 'crosshair',       label: `Frame selected (${state.selected.size})`, fn: frameSelected });
         items.push({ icon: 'locate',  label: 'Reveal in tree',     kbd: 'Shift+S', fn: revealSelectedInTree });
@@ -48363,7 +48411,10 @@ wireUI = function() {
           prefs: { get: (k) => _Prefs.get(k), set: (k, v) => _Prefs.set(k, v) },
           pushUndo: (op) => pushUndo(op),
           showPart: (p) => { try { _setPartVisible(p, true); rebuildTree(); } catch (_) {} requestRender(); },
-          rayHit, partAnchor,
+          rayHit, partAnchor, partRef: (p) => (p ? { uid: uidOf(p), name: p.name } : null), ctxMenu: (items, x, y) => _ctxBuild(items, x, y),
+          isolate: (ps) => { const ids = (ps || []).filter(p => p && !p.deleted).map(p => p.partId); if (!ids.length) return false; _isolateSet(new Set(ids)); state._isolated = true; try { _updateVpHint(); } catch (_) {} requestRender(); return true; },
+          showAll: () => { showAllParts(); }, isolated: () => !!state._isolated,
+          selectParts: (ps) => { state.selected.clear(); state.selectedGroupIds?.clear?.(); for (const p of ps) state.selected.add(p.partId); try { applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo(); } catch (_) {} try { frameSelected(); } catch (_) {} requestRender(); },
           capture: async (w, h) => { try { return await _captureFrameAsBlob(w, h, { asCanvas: true }); } catch (e) { console.warn('[notes] picture:', e); return null; } },
         });
       } catch (e) { console.warn('[notes] could not start:', e); }
@@ -55809,7 +55860,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
 // win-focus; the styles are in index.html). Press anywhere else and it goes. A window that has just opened is the one in use,
 // and the one in use is in front.
 (function _winFocus() {
-  const SEL = '#vp-materials-pop.is-float, #vp-library-pop.is-float, .dlg-popup .dlg-pop';
+  const SEL = '#vp-materials-pop.is-float, #vp-library-pop.is-float, .dlg-popup .dlg-pop, .note-pop';
   // a list or a picker that a window has opened is drawn outside it: pressing in one is still working in that window
   const KEEP = '.cs-pop, .cp-pop, #ctx-menu, .mat-presets-menu, .mat-tex-pop, .brn-token-pop';
   let cur = null;
@@ -55819,6 +55870,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
     cur = w;
     if (w) { w.classList.add('win-focus'); raise(w); }
   };
+  window.__moWinFocus = (w) => set(w);          // (the notes window, which is made while the page runs, hands itself over: notes.js)
   // …and it stands in front of the others, so a window that is switched on again never comes back behind another one. The two docks
   // hand the class on-top to each other (their place among the view's own layers is in the stylesheet); the dialogs are stacked in
   // the order they were last used.
