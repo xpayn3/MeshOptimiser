@@ -1808,6 +1808,8 @@ h1, h2 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto;
   .page-head .lead { margin-top: 22px; line-height: 1.62; }
   .page-head .actions { margin-top: 36px; }
   .sv-big { grid-template-columns: minmax(0, 1fr); row-gap: 6px; }
+  .cmp-col h3 { white-space: normal; font-size: 24px; line-height: 1.1; overflow-wrap: anywhere; }      /* (two columns on a phone: the names wrap instead of running into each other) */
+  .cmp-head { gap: 0 24px; }
   .band-head h2, .band > h2, .compare h2, .cl-band h2 { font-size: clamp(40px, 11.4vw, 54px); line-height: 1.06; }
   .page-head h1 { font-size: clamp(40px, 11.4vw, 54px); line-height: 1.06; }
   .band-head { gap: 18px; }
