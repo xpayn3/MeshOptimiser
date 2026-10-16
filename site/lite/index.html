@@ -5168,9 +5168,8 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 .clp-row{padding:var(--space-7) 0;font-size:var(--fs-12)}
 .clp-row>span:first-child{flex:1 1 auto;min-width:0}
 .clp-foot{display:flex;flex-wrap:wrap;gap:var(--space-sm);padding-top:var(--space-lg);border-top:1px solid var(--surface-line)}
-.clp-foot .btn{height:var(--btn-h-sm,28px);padding:0 var(--space-lg);font-size:var(--fs-12);white-space:nowrap}
-.clp-foot #clp-mode{flex:1 1 100%;justify-content:center;gap:var(--space-sm)}
-.clp-foot #clp-more{margin-left:auto}
+.clp-foot .btn{height:var(--btn-h-sm,28px);padding:0 var(--space-md);font-size:var(--fs-12);white-space:nowrap;flex:1 1 0;min-width:0;justify-content:center;overflow:hidden;text-overflow:ellipsis}
+.clp-foot #clp-mode{order:2;flex:1 1 100%;justify-content:center;gap:var(--space-sm)}      /* (the last row, the whole width) */
 /* Claude mode: the app's chrome is gone. A feed column on the left, the 3D view as a rounded card on the right (or the feed alone). */
 body.claude-mode #tb,body.claude-mode #sidebar-left,body.claude-mode #sidebar-right,body.claude-mode #sb,body.claude-mode .resize-handle,body.claude-mode #vp-overlay,body.claude-mode #gizmo-hud,body.claude-mode #draw-hint,body.claude-mode #toasts,body.claude-mode #log-console{display:none !important}
 body.claude-mode{background:var(--bg)}
@@ -5666,16 +5665,16 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.32.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.33.0</div>
         </div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span></div>
           <ul>
-            <li>Notes: pins on the model, with replies</li>
-            <li>Every note, reply and edit shows who made it</li>
-            <li>Notes are saved in the scene file</li>
-            <li>Bring in the notes of another copy</li>
-            <li>A report page anyone can open</li>
+            <li>Notes are tasks: title, description, parts, due date</li>
+            <li>Screenshots from up to six views</li>
+            <li>Sign off a scene: approve or ask for changes</li>
+            <li>Notes out as CSV, JSON or BCF</li>
+            <li>Save writes over the scene's file again</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -8050,9 +8049,10 @@ window.moSplash = function (msg, pct) {
      transcoder, glTF-Transform (for a Draco-compressed export) and the
      in-browser STEP reader. -->
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
-<script defer src="js/notes-core.js?v=1"></script>
-<script defer src="js/notes.js?v=1"></script>
-<script type="module" src="js/app.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs"></script>
+<script defer src="js/notes-core.js?v=9"></script>
+<script defer src="js/notes-exchange.js?v=2"></script>
+<script defer src="js/notes.js?v=62"></script>
+<script type="module" src="js/app.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

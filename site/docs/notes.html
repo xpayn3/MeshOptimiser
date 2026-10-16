@@ -7,13 +7,13 @@
   <meta name="theme-color" content="#131314" />
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
-  <title>Notes: leave comments on a model and send them with it — MeshOptimiser Docs</title>
-  <meta name="description" content="Put a numbered pin on the model, write what you want to say, and save the scene. Whoever opens it sees every note, can answer, edit and resolve, and the file s…" />
+  <title>Notes: tasks on the model, with comments, sent with the scene — MeshOptimiser Docs</title>
+  <meta name="description" content="A note is a task about a place or a part: a title, what it is about, who it is for, how urgent and when, with comments under it. Save the scene and whoever ope…" />
   <link rel="icon" type="image/svg+xml" href="../Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/docs/notes" />
   <meta property="og:site_name" content="MeshOptimiser" />
-  <meta property="og:title" content="Notes: leave comments on a model and send them with it — MeshOptimiser Docs" />
-  <meta property="og:description" content="Put a numbered pin on the model, write what you want to say, and save the scene. Whoever opens it sees every note, can answer, edit and resolve, and the file s…" />
+  <meta property="og:title" content="Notes: tasks on the model, with comments, sent with the scene — MeshOptimiser Docs" />
+  <meta property="og:description" content="A note is a task about a place or a part: a title, what it is about, who it is for, how urgent and when, with comments under it. Save the scene and whoever ope…" />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=428" />
+  <link rel="stylesheet" href="../site.css?v=429" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -131,7 +131,7 @@
         <a href="../docs/crash-recovery.html">Get your scene back after a crash</a>
         <a href="../docs/export.html">Export</a>
         <a href="../docs/choose-format.html">Which format should I choose</a>
-        <a href="../docs/notes.html" aria-current="page">Notes: leave comments on a model and send them with it</a>
+        <a href="../docs/notes.html" aria-current="page">Notes: tasks on the model, with comments, sent with the scene</a>
         <h2>Common jobs, start to finish</h2>
         <a href="../docs/convert-step-to-glb.html">How to convert a STEP file to GLB</a>
         <a href="../docs/remove-bolts-from-step-assembly.html">How to remove bolts and screws from a STEP assembly</a>
@@ -149,56 +149,60 @@
       </nav>
       <article class="kb-article">
         <p class="kicker"><a href="../docs.html">Docs</a><b>·</b><a href="../docs.html#save">Save and export</a></p>
-        <h1>Notes: leave comments on a model and send them with it</h1>
-        <p class="lead">Put a numbered pin on the model, write what you want to say, and save the scene. Whoever opens it sees every note, can answer, edit and resolve, and the file shows who did what.</p>
+        <h1>Notes: tasks on the model, with comments, sent with the scene</h1>
+        <p class="lead">A note is a task about a place or a part: a title, what it is about, who it is for, how urgent and when, with comments under it. Save the scene and whoever opens it sees every note, answers it and signs off, and the file shows who did what.</p>
         <div class="kb-body">
-          <p>A note is a conversation about a place in the model. You click a spot, write a few words, and a numbered pin stays there. Save the scene and send the file: the other person opens it in MeshOptimiser (or the free online version) and reads every note, answers it, and sends it back. Nothing is uploaded anywhere. The notes live in the scene file.</p>
-          <h2 id="leave-a-note">Leave a note</h2>
+          <p>A note is a task about a place in the model. It has a title, an optional description, the part or parts it is about, who it is for, a priority and a due date, and people write comments under it. Save the scene and send the file: the other person opens it in MeshOptimiser (or the free online version), reads every note, answers it and sends it back. Nothing is uploaded anywhere. The notes live in the scene file.</p>
+          <h2 id="make-a-note">Make a note</h2>
           <ol class="kb-steps">
-            <li>Press <kbd>N</kbd>, or choose <span class="ui">Add note</span> in the <span class="ui">Notes</span> card in the right-hand column. The first time, the app asks for your name: type the one others should see next to what you write.</li>
-            <li>Click the spot on the model. A small window opens with a picture of the view you are looking at.</li>
-            <li>Write the note and press <kbd>Enter</kbd>. (<kbd>Shift</kbd><kbd>Enter</kbd> starts a new line.) Pick a tag if you want: <span class="ui">Info</span>, <span class="ui">Question</span>, <span class="ui">Issue</span> or <span class="ui">Idea</span>.</li>
+            <li>Press <kbd>N</kbd>, or choose <span class="ui">New note</span> in the <span class="ui">Notes</span> card in the right-hand column, and click the spot on the model. Or right-click the model and choose <span class="ui">Add a note here</span> or <span class="ui">Add a note to this part</span>. The first time, the app asks for your name: type the one others should see next to what you write.</li>
+            <li>A form opens: a title, an optional description, the kind (<span class="ui">Info</span>, <span class="ui">Question</span>, <span class="ui">Issue</span> or <span class="ui">Idea</span>), who it is for, the priority and a due date. The camera button adds a screenshot of the view.</li>
+            <li>Press <span class="ui">Create note</span>, or <kbd>Enter</kbd> in the title. Comments go under it afterwards.</li>
           </ol>
           <p>Dragging still turns the view while you place a note; only a click puts the pin down. <kbd>Esc</kbd> cancels.</p>
           <dl class="table">
             <div><dt>On a spot</dt><dd>A pin on the surface. It stays on that part when the part moves, is hidden or the view is exploded.</dd></div>
-            <div><dt>On the selected part</dt><dd><span class="ui">On selected part</span> puts the note on the middle of the part you selected.</dd></div>
-            <div><dt>About the whole scene</dt><dd><span class="ui">Scene note</span> has no pin. It is for what applies to the model as a whole.</dd></div>
+            <div><dt>On the selected parts</dt><dd>The box button in the card makes a note about every selected part, with no limit. If several parts are selected and you place a note on one of them, the note takes all of them.</dd></div>
+            <div><dt>About the whole scene</dt><dd>The layers button has no pin. It is for what applies to the model as a whole.</dd></div>
           </dl>
-          <h2 id="read-and-answer">Read and answer</h2>
-          <p>Click a pin, or a row in the <span class="ui">Notes</span> card. The camera goes back to the view the note was written from, and the window shows the whole conversation.</p>
+          <h2 id="the-pin">The pin</h2>
+          <p>Each kind of note has its own shape, with its number inside: a circle for <span class="ui">Info</span>, a rounded square for <span class="ui">Question</span>, a triangle for <span class="ui">Issue</span> and a diamond for <span class="ui">Idea</span>. A finished note is green with no outline. A note that is late has a red dashed outline, a high priority an amber one and an urgent one a red one. The pins button in the card chooses what a pin shows: the number, the title as a label, the kind as an icon, only the shape, or the writer’s letter.</p>
+          <h2 id="open-a-note">Open a note</h2>
+          <p>Click a pin and a short window opens on the right of the view: the description and how many comments there are. The button in the title bar opens the whole note, and the card’s list opens it in full. Drag the window by its title bar, and pull an edge to change its size; both are remembered for the next one.</p>
           <ul class="kb-points">
-            <li><span class="ui">Reply</span> adds a message under the note.</li>
-            <li><span class="ui">Resolve</span> marks the note as done. It stays in the list, dimmed, and <span class="ui">Resolve</span> becomes <span class="ui">Resolved ✓</span>: click it again to open the note again.</li>
-            <li>The tag and <span class="ui">Not assigned</span> change who it is for and what kind of note it is. The people in the list are the people who wrote in this file.</li>
-            <li>The arrows at the top go to the next and the previous note.</li>
-            <li>If the part is hidden, the window says so and offers <span class="ui">hidden · show</span>. If the part has been deleted, the note says <span class="ui">part gone</span> and keeps its place.</li>
+            <li>The <span class="ui">Parts</span> section has a card for every part the note is about. <span class="ui">Focus</span> selects the part and takes the camera to it. A part that is hidden has an eye to show it.</li>
+            <li>The row under it has the arrows to the next and the previous note, the tick that marks the note done (a green circle grows in behind it; press it again to open the note again) and the three dots.</li>
+            <li>The comments are at the bottom, with a thumb up, a thumb down and reply on each. A reply shows what it answers.</li>
+            <li>An <span class="ui">@name</span> in a text is shown as a mention, and the field offers the names as you type <span class="ui">@</span>. <span class="ui">Mine</span> in the card includes the notes that mention you.</li>
           </ul>
+          <h2 id="edit-a-note">Edit a note</h2>
+          <p>Everything about the task is edited from the three dots: choose <span class="ui">Edit</span>, and the dots become a pencil. While you edit, the title and the description are fields, the controls for the kind, who it is for, the priority and the due date appear, every part card has a bin to take that part off, <span class="ui">Add selected</span> adds the parts selected in the viewport, and the camera adds a screenshot (up to six; each one remembers the view it was taken from and clicking it goes back there). Press the pencil to leave. The comments are out of the way while you edit.</p>
+          <p>The three dots also have <span class="ui">Show it in the view</span>, <span class="ui">Move the pin…</span>, <span class="ui">Save the view now with this note</span>, <span class="ui">History</span>, <span class="ui">Copy as text</span> and <span class="ui">Delete the note</span>. A deleted note leaves the list; choose the bin beside the search to find it and bring it back. Right-clicking a pin has the common ones: comment, edit, resolve, kind, priority, due date, assign to me, move, delete.</p>
           <h2 id="edit-delete-and-what-the-file-shows">Edit, delete, and what the file shows</h2>
           <p>Anyone who opens the scene can edit or delete any message, and the file keeps the record:</p>
           <ul class="kb-points">
             <li>An edited message says <span class="ui">Edited by …</span> and who. Click it to see what the message said before, with the name and time of each change.</li>
             <li>A deleted message stays as a line saying who deleted it and when. <span class="ui">Bring it back</span> puts the text back.</li>
-            <li><span class="ui">History</span> at the foot of each note lists everything that happened to it, in order: who started it, who answered, who resolved it, who moved the pin.</li>
+            <li><span class="ui">History</span> lists everything that happened to the note, in order: who started it, who renamed it, who answered, who set the priority, who resolved it.</li>
             <li>Every name is the one the person typed. Nobody signs in, so a name says who someone said they were; it is not proof.</li>
           </ul>
-          <p>The <span class="ui">⋯</span> menu has <span class="ui">Move the pin…</span>, <span class="ui">Use the view now as this note’s view</span>, <span class="ui">Copy as text</span> and <span class="ui">Delete the note</span>. A deleted note leaves the list; choose <span class="ui">Deleted</span> in the filter to find it and bring it back.</p>
           <h2 id="the-notes-card">The Notes card</h2>
           <dl class="table">
-            <div><dt>Your name</dt><dd>Shown at the top of the card. Click it to change it.</dd></div>
-            <div><dt>The eye</dt><dd>Hides or shows the pins in the view.</dd></div>
-            <div><dt>Open, All, Resolved, New to me, Mine, Deleted</dt><dd>The filter. <span class="ui">New to me</span> shows the notes somebody else has changed since you last saved this scene. <span class="ui">Mine</span> shows the notes you wrote, answered or were given.</dd></div>
-            <div><dt>Search</dt><dd>Looks in the text, the names, the part and the tag.</dd></div>
-            <div><dt>Mark … read</dt><dd>Clears the “new” marks. Saving the scene does the same for your name.</dd></div>
+            <div><dt>New note</dt><dd>Click a spot on the model to make a note. The two buttons beside it make one about the selected parts or about the whole scene.</dd></div>
+            <div><dt>Open, All, Done, New, Mine</dt><dd>The filter. <span class="ui">New</span> shows what somebody else changed since you last saved this scene.</dd></div>
+            <div><dt>Search, order, the box, the bin</dt><dd>Search looks in the title, the text, the names and the parts. The order can be by number, newest, priority, due date or part. The box keeps only the notes on the selected parts; the bin shows the deleted ones.</dd></div>
+            <div><dt>The arrows</dt><dd>Go through the list note by note and fly to each one. The target beside them shows only the parts that have notes; press it again to show everything.</dd></div>
+            <div><dt>A row</dt><dd>The tick marks it done. The shape and number show the kind, a dot shows a high or urgent priority, a red chip a late due date, and the avatar who it is for.</dd></div>
+            <div><dt>Sign-off</dt><dd><span class="ui">Approve</span> or <span class="ui">Changes</span> says what you think of the scene. Everyone has one answer, and the card shows who said what.</dd></div>
           </dl>
-          <p>A red dot on a pin, and a ring on its number in the list, mean the note has something new from somebody else.</p>
+          <p>A red dot on a pin means the note has something new from somebody else. Opening a scene with notes says how many there are, how many are open or late, how many are new to you and who wrote the last one.</p>
           <h2 id="save-open-and-send">Save, open and send</h2>
-          <p>Notes go in the scene file when you save it (<kbd>Ctrl</kbd><kbd>S</kbd>). The save window has <span class="ui">Include the notes</span> (it shows when there are notes). Open the file the usual way and the notes come with it; a message at the top says how many there are and how many are open. A scene is an ordinary GLB, so other programs open the model and ignore the notes.</p>
-          <p>When two people have worked on their own copies of one scene, <span class="ui">Bring in notes…</span> takes a saved scene file and joins its notes into the ones you have: new notes are added, replies, edits and resolutions are put together, and for something both changed the later change wins. Nobody’s words are lost: an edit keeps what it replaced. Run it again with the same file and nothing changes.</p>
-          <p><span class="ui">Report…</span> writes the notes as one HTML page with the pictures, every message, who edited what and the history. Anyone can open it in a browser, with no app. <span class="ui">Copy</span> puts the notes on the clipboard as text.</p>
+          <p>Notes go in the scene file when you save it (<kbd>Ctrl</kbd><kbd>S</kbd>). The save window has <span class="ui">Include the notes</span> (it shows when there are notes). Open the file the usual way and the notes come with it. A scene is an ordinary GLB, so other programs open the model and ignore the notes. After a restart, a scene this app saved is saved over without asking where.</p>
+          <p><span class="ui">Bring in notes</span> joins the notes of another copy into yours: new notes are added, comments, edits and resolutions are put together, and for something both changed the later change wins. Nobody’s words are lost. Run it again with the same file and nothing changes. It reads a saved scene, a JSON file and a BCF file.</p>
+          <p>The export button takes the notes out as a report page (HTML, with the pictures, every message and the history; anyone can open it with no app), a spreadsheet (CSV, one row per note, for Excel), JSON with every detail, or BCF 2.1 for design tools: one topic per note with its view, picture, comments, priority, due date and who it is for. A BCF file from another tool comes in as notes too, without a pin: its view is kept.</p>
           <aside class="kb-note"><p>Notes are in saved scenes only. <span class="ui">Export</span> (GLB, glTF, FBX, USDZ, …) never writes them, so a note meant for your team cannot reach a customer in an export. If you save a scene to send to somebody outside, leave <span class="ui">Include the notes</span> off. See <a href="../docs/make-model-safe-to-send.html">How to make a CAD model safe to send to a customer</a>.</p></aside>
           <h2 id="undo">Undo</h2>
-          <p>Every change to the notes is one step for <kbd>Ctrl</kbd><kbd>Z</kbd>: adding a note, a reply, an edit, a resolve, a delete. Undo takes back the last thing done, whoever it was, so check the name in <span class="ui">History</span> if you are working on somebody else’s file.</p>
+          <p>Every change to the notes is one step for <kbd>Ctrl</kbd><kbd>Z</kbd>: making a note, a comment, an edit, a resolve, a delete. Undo takes back the last thing done, whoever it was, so check the name in <span class="ui">History</span> if you are working on somebody else’s file.</p>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/save-scene.html">Save a scene</a></li>
             <li><a href="../docs/make-model-safe-to-send.html">How to make a CAD model safe to send to a customer</a></li>
@@ -245,7 +249,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.32.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.33.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
@@ -325,6 +329,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="../site.js?v=100" data-viewer="viewer/"></script>
+  <script defer src="../site.js?v=101" data-viewer="viewer/"></script>
 </body>
 </html>

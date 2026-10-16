@@ -936,9 +936,8 @@
     rest();
 
     // ---- a hand that plays the ring ----
-    // While the demo is on screen and nobody is using it, a cursor works the ring on its own: it fans out View and picks a mode, selects a part,
-    // reduces it and hides it, then starts over. A real pointer, finger or key stops it and clears the board; it comes back after a few quiet seconds.
-    // It drives the ring through the same aim() and close() the pointer does. Nothing runs while the demo is off screen, and not with reduced motion.
+    // While the demo is on screen, a cursor works the ring on its own, round after round (see cycle). It drives the ring through the same aim() and
+    // close() the pointer does.
     const ghost = el('div', 'wand-ghost');
     ghost.setAttribute('aria-hidden', 'true');
     ghost.innerHTML = '<span class="wand-ghost-tap"></span><svg viewBox="0 0 20 27" width="20" height="27"><path d="M1.5 1.5v21.2l5.2-4.9 3.6 7.8 3.6-1.6-3.5-7.6h7.1z" fill="#fff" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>';
@@ -953,24 +952,14 @@
       gx = x; gy = y; ghost.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px)';
       if (open && rested) { const [sx, sy] = origin(); px = x - sx; py = y - sy; aim(); }
     };
-    const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-    // across the page in a gentle arc (to a button)
-    const glide = async (id, x1, y1, ms) => {
-      const x0 = gx, y0 = gy, dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1, amp = Math.min(len, 240) * 0.1, t0 = performance.now();
-      for (;;) {
-        await frame(id);
-        const t = Math.min(1, (performance.now() - t0) / ms), e = ease(t), b = Math.sin(Math.PI * t) * amp;
-        putGhost(x0 + dx * e - dy / len * b, y0 + dy * e + dx / len * b);
-        if (t >= 1) return;
-      }
-    };
     // round the ring's centre, by radius and angle: outward keeps the fan open, and the angle follows once the pointer is on its way
+    const ease = (u) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2);
     const swing = async (id, r1, a1, ms) => {
       const [cx, cy] = centreOf(), r0 = Math.hypot(gx - cx, gy - cy);
       const a0 = r0 < 6 ? a1 : Math.atan2(gx - cx, -(gy - cy)) * 180 / Math.PI, da = ((a1 - a0) % 360 + 540) % 360 - 180, t0 = performance.now();
       for (;;) {
         await frame(id);
-        const t = Math.min(1, (performance.now() - t0) / ms), re = 1 - Math.pow(1 - t, 2), ta = Math.max(0, Math.min(1, (t - 0.25) / 0.75)), ae = ta * ta * (3 - 2 * ta);
+        const t = Math.min(1, (performance.now() - t0) / ms), re = 1 - Math.pow(1 - t, 2), ae = ease(Math.max(0, Math.min(1, (t - 0.2) / 0.8)));
         const [x, y] = pol(r0 + (r1 - r0) * re, a0 + da * ae);
         putGhost(cx + x, cy + y);
         if (t >= 1) return;
@@ -978,65 +967,90 @@
     };
     const tap = async (id) => { ghost.classList.remove('is-tap'); void ghost.offsetWidth; ghost.classList.add('is-tap'); await wait(id, 140); };
     const slotOf = (label) => slots.findIndex((s) => (s.leaf && s.leaf.label === label) || s.group === label);
-    // to a slice from outside the ring, straight in
+    // to a slice from outside the ring, straight in (out of a fan first, so that the fan closes)
     const visit = async (id, label) => {
       const i = slotOf(label); if (i < 0) throw CANCEL;
-      const a = i * slice, [cx, cy] = centreOf();
-      if (Math.hypot(gx - cx, gy - cy) <= R_OUT + 12) await swing(id, R_OUT + 30, Math.atan2(gx - cx, -(gy - cy)) * 180 / Math.PI, 350);
-      await swing(id, R_OUT + 30, a, 600);
+      const a = i * slice, [cx, cy] = centreOf(), ang = () => Math.atan2(gx - cx, -(gy - cy)) * 180 / Math.PI;
+      if (fanFor >= 0) await swing(id, F_OUT + 26, ang(), 320);
+      else if (Math.hypot(gx - cx, gy - cy) <= R_OUT + 12) await swing(id, R_OUT + 30, ang(), 350);
+      await swing(id, R_OUT + 30, a, 650);
       await swing(id, R_ICON, a, 450);
       return i;
     };
-    const pick = async (id, group, re) => {
+    const glance = async (id, label, ms) => { await visit(id, label); await wait(id, ms); };       // rests on a slice
+    const leaf = async (id, label) => { await visit(id, label); await wait(id, 450); await tap(id); close(true); await wait(id, 1000); };
+    // into a slice that holds a fan: along some of its commands, and a click on the one at `at`
+    const tour = async (id, group, res, at) => {
       const i = await visit(id, group);
-      await wait(id, 500);                                             // the fan opens
-      const sl = slots[i], j = sl.items ? sl.items.findIndex((it) => re.test(it.label)) : -1;
-      if (fanFor !== i || j < 0 || !sl.fan) return;
-      await swing(id, (F_IN + F_OUT) / 2, sl.fan.a0 + j * sl.fan.step + sl.fan.step / 2, 700);
-      await wait(id, 550); await tap(id); close(true);
-      await wait(id, 1500);                                            // time to read what it did
+      await wait(id, 450);                                             // the fan opens
+      const sl = slots[i]; if (fanFor !== i || !sl.fan) return;
+      for (let k = 0; k < res.length; k++) {
+        const j = sl.items.findIndex((it) => res[k].test(it.label)); if (j < 0) continue;
+        await swing(id, (F_IN + F_OUT) / 2, sl.fan.a0 + j * sl.fan.step + sl.fan.step / 2, k ? 340 : 520);
+        if (k === at) { await wait(id, 250); await tap(id); close(true); await wait(id, 1000); return; }   // (time to read what it did)
+        await wait(id, 260);
+      }
     };
-    const press = async (id, btn) => {
-      const d = demo.getBoundingClientRect(), r = btn.getBoundingClientRect();
-      await glide(id, r.left - d.left + r.width * 0.5, r.top - d.top + r.height * 0.55, 1000);
-      await wait(id, 300); await tap(id); btn.click(); await wait(id, 1100);
+    // the ring pops in from its centre, as it does in the app
+    const intro = async (id) => {
+      if (open) hide();
+      root.classList.add('is-intro'); rest();
+      await wait(id, 650); root.classList.remove('is-intro');
     };
-    const script = async (id) => {
-      const modeBtn = (m) => $('[data-wand-mode="' + m + '"]', demo), resetBtn = $('[data-wand-reset]', demo);
+    // the ring is put away, the scene changes (a part is selected, or not), and a ring for the new scene pops in: no button is pressed
+    const swap = async (id, on) => {
+      if (open) hide();
+      await wait(id, 350);
+      parts.forEach((q, i) => { q.on = on && i === 0 && !q.gone; });
+      paint(); say(on ? parts[0].name + ' is selected. The ring now works on it.' : 'Nothing is selected, so the ring works on the whole scene.');
+      await intro(id); await wait(id, 300);
+    };
+    // one round, about half a minute: round the whole ring with nothing selected (top, right, the fans to the lower right and the left), then a part is
+    // selected by itself and the ring that fits it is played the same way. The next round starts the same way, so it loops.
+    const cycle = async (id) => {
+      if (open) hide();
       reset();
       const [cx, cy] = centreOf();
       putGhost(cx + R_OUT + 70, cy + R_OUT + 50); ghost.classList.add('is-on');
-      await wait(id, 900);
-      await pick(id, 'View', /Wireframe/);
-      await pick(id, 'View', /X-ray/);
-      await pick(id, 'View', /Solid/);
-      await press(id, modeBtn('part'));
-      await pick(id, 'Reduce', /50/);
-      await pick(id, 'Reduce', /Smart fit/);
-      await visit(id, 'Hide'); await wait(id, 500); await tap(id); close(true); await wait(id, 1500);
-      await press(id, resetBtn);
-      await wait(id, 600);
+      await wait(id, 500); await intro(id); await wait(id, 400);
+      await glance(id, 'Fit view', 600);
+      await glance(id, 'Select all', 500);
+      await tour(id, 'View', [/Camera/, /Top/, /Wireframe/], 2);
+      await glance(id, 'Show all', 450);
+      await tour(id, 'File', [/screenshot/i, /Save scene/], 1);
+      await tour(id, 'Clean', [/Recentre/, /Align/, /Smart fit all/], 2);
+      await swap(id, true);
+      await tour(id, 'Reduce', [/25/, /50/], 1);
+      await tour(id, 'More', [/Frame/, /Group/, /Isolate/], 2);
+      await tour(id, 'More', [/Show all/], 0);
+      await leaf(id, 'Hide');
+      await swing(id, R_OUT + 90, 135, 900); ghost.classList.remove('is-on'); await wait(id, 900);
     };
-    // Like the search above: it starts once, when the demo comes into view, plays through, and any touch of it (a pointer over the ring, a click,
-    // a key, a finger) stops it for good and puts the board back. Nothing runs with reduced motion or without IntersectionObserver.
-    const stopAuto = () => {
-      stopped = true; runId++;
+    // It plays while the demo is on screen, round after round, and stops when it leaves the screen. Any touch of it (a pointer over the ring, a tap or
+    // click anywhere on it, a key) stops it for good and puts the board back. Nothing runs with reduced motion or without IntersectionObserver.
+    let vis = false;
+    const pause = () => {
+      runId++;
       if (!auto) return;
-      auto = false; ghost.classList.remove('is-on'); reset();
+      auto = false; ghost.classList.remove('is-on'); root.classList.remove('is-intro');
+      if (open) hide();
+      reset(); rest();
     };
+    const play = () => {
+      if (stopped || auto || !vis || document.hidden) return;
+      const id = ++runId; auto = true;
+      (async () => { for (;;) await cycle(id); })().catch((e) => { if (e !== CANCEL) { auto = false; ghost.classList.remove('is-on'); } });
+    };
+    const stopAuto = () => { stopped = true; pause(); };
     if (!calm && 'IntersectionObserver' in window) {
-      ['pointerdown', 'keydown', 'focusin'].forEach((type) => demo.addEventListener(type, stopAuto, { capture: true, passive: true }));
+      ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown', 'focusin'].forEach((type) => demo.addEventListener(type, stopAuto, { capture: true, passive: true }));
       stage.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') stopAuto(); });
-      const seen = new IntersectionObserver((es) => {
-        if (!es.some((e) => e.isIntersecting)) return;
-        seen.disconnect();
-        setTimeout(() => {
-          if (stopped || document.hidden) return;
-          const id = ++runId; auto = true;
-          script(id).then(() => { auto = false; ghost.classList.remove('is-on'); }, (e) => { if (e !== CANCEL) { auto = false; ghost.classList.remove('is-on'); } });
-        }, 900);
-      }, { threshold: 0.6 });
-      seen.observe(stage);
+      document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else play(); });
+      new IntersectionObserver((es) => {
+        const e = es[es.length - 1];
+        if (e.intersectionRatio >= 0.6) { vis = true; setTimeout(play, 700); }
+        else if (e.intersectionRatio < 0.2) { vis = false; pause(); }
+      }, { threshold: [0.2, 0.6] }).observe(stage);
     }
   });
 

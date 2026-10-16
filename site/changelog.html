@@ -8,12 +8,12 @@
   <meta name="color-scheme" content="dark" />
   <meta name="robots" content="noai, noimageai" />
   <title>Changelog — MeshOptimiser</title>
-  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.32.0." />
+  <meta name="description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.33.0." />
   <link rel="icon" type="image/svg+xml" href="Images/apps/meshoptimiser-icon.svg" />
   <link rel="canonical" href="https://xpayn3.github.io/MeshOptimiser/changelog" />
   <meta property="og:site_name" content="MeshOptimiser" />
   <meta property="og:title" content="Changelog — MeshOptimiser" />
-  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.32.0." />
+  <meta property="og:description" content="What changed in each version of MeshOptimiser, newest first. Latest: v0.33.0." />
   <meta property="og:image" content="https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -24,7 +24,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=428" />
+  <link rel="stylesheet" href="site.css?v=429" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -55,9 +55,33 @@
     </section>
     <section class="wrap">
       <ol class="log">
+        <li id="v0.33.0">
+          <div class="log-head">
+            <strong>v0.33.0<b class="rel-code">Ptuj</b></strong><em>Latest</em><span>16 Oct 2026 · 09:47</span><span>3 fixes</span>
+          </div>
+          <div class="log-body">
+            <p>Notes are tasks. A title, a description, the parts, who it is for, a priority and a due date, with comments under them, and the notes leave the app as a spreadsheet, JSON or BCF.</p>
+            <ul>
+              <li><b class="is-new">New</b><span>A note is made with a form. Press N and click a spot, or right-click the model: Add a note here, Add a note to this part. A title, an optional description, the kind, who it is for, the priority, a due date and a screenshot. Comments go under the note afterwards.</span></li>
+              <li><b class="is-new">New</b><span>Each kind has its own shape: a circle for Info, a rounded square for Question, a triangle for Issue, a diamond for Idea, with the number inside. A finished note is green, a late one has a red dashed outline, and a pin can show the title as a label on the model.</span></li>
+              <li><b class="is-new">New</b><span>Priority and due dates. High and urgent notes are marked on the pin and in the list, a late note says Overdue, the list can be ordered by priority or due date, and opening a scene says how many notes are late.</span></li>
+              <li><b class="is-new">New</b><span>A note can be about many parts, with no limit. The Parts section has a card for every part: Focus selects the part and takes the camera to it, and in edit mode a bin takes a part off and Add selected adds the parts selected in the viewport.</span></li>
+              <li><b class="is-new">New</b><span>Screenshots, up to six, each with its own view. Clicking a picture flies back to the view it was taken from, and no picture is taken unless it is asked for.</span></li>
+              <li><b class="is-new">New</b><span>Comments have a thumb up, a thumb down and reply, and a reply shows what it answers. Typing @ offers the names on the notes, and a mention is highlighted.</span></li>
+              <li><b class="is-new">New</b><span>Edit is in the three dots and turns them into a pencil: the title, description, kind, assignee, priority, due date and parts become fields, and the comments are out of the way until you press the pencil again.</span></li>
+              <li><b class="is-new">New</b><span>Sign-off on the scene. Approve or Changes in the card: one answer for everyone, shown with the names and saved with the scene.</span></li>
+              <li><b class="is-new">New</b><span>The note window opens on the right of the view, drags by its title bar, resizes by its edges, remembers where and how big, scrolls inside itself and has its shadow only while it is the window in use. Right-click a pin for comment, edit, resolve, kind, priority, due date, assign to me, move and delete.</span></li>
+              <li><b class="is-new">New</b><span>The Notes card is a task list: a tick marks a note done, with filters, search, order, only the notes on the selected part, arrows that go through the list and fly to each note, and a button that shows only the parts that have notes.</span></li>
+              <li><b class="is-new">New</b><span>CSV, JSON and BCF. The export button writes a report page, a spreadsheet, JSON with every detail, or BCF 2.1 for design tools. Bring in notes reads a scene, a JSON file or a BCF file; a BCF file from another tool comes in without a pin and keeps its view.</span></li>
+              <li><b class="is-fix">Fix</b><span>Save writes over the scene’s file again after a restart. A scene saved by this app opens ready to be saved over, and Save with the same name replaces that file without asking where. A model from elsewhere is never offered for overwriting.</span></li>
+              <li><b class="is-fix">Fix</b><span>A big STEP file with colours on could stop the import with “step2glb.py exited with code 3221225477”. The app now tries again with the plain reader, so the model still opens, and the log says so.</span></li>
+              <li><b class="is-fix">Fix</b><span>The notes window and card were rough: a pin slid away from the pointer on hover, the window jumped when clicked, the card would not fold, and the name box did not look like the rest of the app. All four are put right.</span></li>
+            </ul>
+          </div>
+        </li>
         <li id="v0.32.0">
           <div class="log-head">
-            <strong>v0.32.0<b class="rel-code">Idrija</b></strong><em>Latest</em><span>15 Oct 2026 · 22:19</span>
+            <strong>v0.32.0<b class="rel-code">Idrija</b></strong><span>15 Oct 2026 · 22:19</span>
           </div>
           <div class="log-body">
             <p>Notes. Leave them on the model, answer, edit and resolve them, and send the scene with everything inside.</p>
@@ -703,7 +727,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.32.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.33.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
@@ -783,6 +807,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="site.js?v=100" data-viewer="viewer/"></script>
+  <script defer src="site.js?v=101" data-viewer="viewer/"></script>
 </body>
 </html>
