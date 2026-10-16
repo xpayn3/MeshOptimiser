@@ -281,6 +281,11 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 :is(.clip, .star) .clip-art { display: block; width: 100%; height: auto; aspect-ratio: 592 / 370; padding: 8px; background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, var(--glow)), rgba(255, 255, 255, 0) 70%), radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--tile-c, var(--accent)) var(--fill-r), rgba(0, 0, 0, 0) calc(var(--fill-r) + 1.5px)), var(--surface); border-radius: var(--r); color: #77777c; --art-dim: #46464a; overflow: visible; transition: --fill-r 0.42s cubic-bezier(0.22, 0.8, 0.18, 1), --glow 0.3s ease, color 0.22s ease 0.05s; }
 /* (the fill and the glow are layers of the line above; a browser that cannot draw them still gets the grey card) */
 :is(.clip, .star) .clip-art { background-color: var(--surface); }
+/* on touch there is no hover: a plain grey card, no fill layers and no fill circle behind the claim tiles */
+@media not ((hover: hover) and (pointer: fine)) {
+  :is(.clip, .star) .clip-art { background: var(--surface); transition: none; }
+  .tile::before { display: none; }
+}
 :is(.clip, .star) .clip-art { stroke-width: 1.9px; }
 /* The same hover as the claim tiles: the picture fills with its colour from the point where the pointer comes in, and its lines go black. */
 @property --fill-r { syntax: '<length>'; inherits: false; initial-value: 0px; }
