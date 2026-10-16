@@ -1004,6 +1004,7 @@
     // the ring is put away, the scene changes (a part is selected, or not), and a ring for the new scene pops in: no button is pressed
     const swap = async (id, on) => {
       if (open) hide();
+      { const [cx, cy] = centreOf(); if (Math.hypot(gx - cx, gy - cy) > 8) await swing(id, 0, Math.atan2(gx - cx, -(gy - cy)) * 180 / Math.PI, 450); }      // (the cursor goes back to the centre: the new ring opens from under it)
       await wait(id, 350);
       parts.forEach((q, i) => { q.on = on && i === 0 && !q.gone; });
       paint(); say(on ? parts[0].name + ' is selected. The ring now works on it.' : 'Nothing is selected, so the ring works on the whole scene.');
