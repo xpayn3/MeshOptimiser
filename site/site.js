@@ -1047,6 +1047,11 @@
       (async () => { for (;;) await cycle(id); })().catch((e) => { if (e !== CANCEL) { auto = false; ghost.classList.remove('is-on'); } });
     };
     const stopAuto = () => { stopped = true; pause(); };
+    // the spotlight behind the ring fades in the first time the demo comes into view
+    if (!calm && 'IntersectionObserver' in window) {
+      stage.classList.add('has-spot');
+      const lit = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { stage.classList.add('is-lit'); lit.disconnect(); } }, { threshold: 0.3 }); lit.observe(stage);
+    }
     if (!calm && 'IntersectionObserver' in window) {
       ['pointerdown', 'touchstart', 'mousedown', 'click', 'keydown', 'focusin'].forEach((type) => demo.addEventListener(type, stopAuto, { capture: true, passive: true }));
       document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else play(); });
