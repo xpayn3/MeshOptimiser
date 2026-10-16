@@ -4288,9 +4288,10 @@ module.exports = {
         ['terms', [
           ['Model opened', 'The first card of a session: the picture of the model, its name, type and size, how many parts, triangles and vertices it has, how long it took to open, and a green {{Ready for Claude}}. Opening another model starts a new one.'],
           ['Claude’s messages', 'What Claude writes to you with the {{say}} tool: what it is about to do and what it found. They stand out in larger type.'],
-          ['Calls', 'Every request Claude makes: the tool, a short line of what it asked, how long it took and what came back. A running call shows its progress. A call you said no to, or that failed, is amber. {{Details}} shows exactly what was asked and the full answer.'],
+          ['Calls', 'Every request Claude makes: the tool, a short line of what it asked, how long it took and what came back, said in words (“Selected 194 parts”, “Deleted 194 parts · 23.5% fewer triangles”). A running call shows its progress. A call you said no to, or that failed, is amber. {{Details}} shows exactly what was asked and the full answer.'],
           ['Pictures', 'Screenshots and renders Claude takes, right under the call. Click one to see it large.'],
         ]],
+        ['p', 'The model stands on its own in the card: there is no floor grid while Claude mode is on, and it comes back as the {{Grid}} switch had it when you leave. Undo and redo put no pill at the top, and neither do the tools that only look, select or move the view; a longer message waits twice as long and glides slowly, so it can be read.'],
         ['p', 'The feed shows what Claude does, not what you type to it: you still talk to Claude in its own window, and the app only sees the requests that reach it. The feed keeps the last 200 entries and the pictures of the last 40, and is emptied when you reload the page.'],
         ['h', 'Open a model'],
         ['p', 'The folder button at the top opens a small panel with {{Open file…}} and your recent files, with a picture, type, size and age for each, the latest one marked {{Continue}}. The empty feed shows the same list. You can also drop a file on the feed.'],
