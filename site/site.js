@@ -1015,7 +1015,7 @@
       if (open) hide();
       reset();
       const [cx, cy] = centreOf();
-      putGhost(cx + R_OUT + 70, cy + R_OUT + 50); ghost.classList.add('is-on');
+      putGhost(cx, cy); ghost.classList.add('is-on');
       await wait(id, 500); await intro(id); await wait(id, 400);
       await glance(id, 'Fit view', 600);
       await glance(id, 'Select all', 500);
