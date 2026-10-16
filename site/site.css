@@ -1300,7 +1300,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 
 /* features page: a row of cards per group, scrolled sideways, running off the right edge */
 .fcar { --edge: calc((100vw - min(100vw, var(--max) + var(--gutter) * 2)) / 2 + var(--gutter)); margin-inline: calc(var(--edge) * -1); }      /* --edge: how far the text column is from the edge of the screen */          /* the row runs from one edge of the screen to the other: a card scrolled out of the way goes off the edge, not off the text column */
-.fcar-track { display: flex; gap: 16px; list-style: none; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-inline: var(--edge) var(--gutter); scroll-padding-inline: var(--edge) 0; }      /* (at rest the first card stands where the text does) */
+.fcar-track { display: flex; gap: 16px; list-style: none; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; padding-inline: var(--edge) var(--gutter); scroll-padding-inline: var(--edge) 0; }      /* (at rest the first card stands where the text does) */
 .fcar-track::-webkit-scrollbar { display: none; }
 .fcar-nav { display: flex; justify-content: flex-end; gap: 10px; margin-top: 26px; padding-right: var(--edge); }
 .fcar-nav button { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--tx); cursor: pointer; transition: opacity 0.2s ease, background-color 0.2s ease; }
