@@ -1529,6 +1529,10 @@ main { overflow-x: clip; }
 .pop.is-axle.is-3d .pop-poster { visibility: hidden; }
 .pop.is-axle .pop-3d { z-index: 0; }
 .pop.is-axle .pop-copy { z-index: 1; left: var(--gutter); bottom: clamp(64px, 8vw, 104px); width: min(32ch, 36%); opacity: 1; transform: none; }
+/* the headline arrives with the scroll, one row after another (--p is how far the model is pulled apart; each row has its own start --s) */
+.pop-copy h2 .pop-row { display: block; }
+.pop.is-axle .pop-row { --t: clamp(0, calc((var(--p) - var(--s)) * 10), 1); opacity: var(--t); transform: translateY(calc((1 - var(--t)) * 22px)); }
+@media (prefers-reduced-motion: reduce) { .pop.is-axle .pop-row { opacity: 1; transform: none; } }
 /* the corner at the top right: how far the model is pulled apart, a small graph of what was saved, and the small print */
 .pop-info { position: absolute; z-index: 1; top: clamp(20px, 3.4vw, 48px); right: var(--gutter); width: min(300px, 38%); display: grid; gap: 8px; justify-items: end; pointer-events: none; text-align: right; }
 .pop-info-top { display: grid; gap: 8px; justify-items: end; width: 100%; }
