@@ -2,7 +2,7 @@
 
 Fixes for the usual problems: Python not found, a blocked launcher on macOS, missing modules, a blank view and slow conversions.
 
-Find the heading that matches what you see. If nothing here helps, use [Report a problem](https://lukagrcar.com/apps/meshoptimiser/report.html). It asks for what I need and packs it into one file. Say which version you have, and add the log: **Copy log** on the progress card, or the copy button in the console. In **Settings**, **About**, the button **Copy details** copies the version, your browser and your graphics card in one go.
+Find the heading that matches what you see. If nothing here helps, use [Report a problem](https://xpayn3.github.io/MeshOptimiser/report.html). It asks for what I need and packs it into one file. Say which version you have, and add the log: **Copy log** on the progress card, or the copy button in the console. In **Settings**, **About**, the button **Copy details** copies the version, your browser and your graphics card in one go.
 
 ## “python is not on PATH” on Windows
 

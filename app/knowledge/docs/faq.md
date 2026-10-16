@@ -76,6 +76,6 @@ Press `F1`. The help window holds these same articles, with a search. See [The h
 
 ## Where do I report a bug or ask for a feature?
 
-On the [Report a problem](https://lukagrcar.com/apps/meshoptimiser/report.html) page. The app’s mark in the top bar has a link called **Report a problem** that opens it with your version and system already filled in. Say what you did, what you expected and what happened, and add the version number and the log. **Settings**, **About**, **Copy details** copies the version number, your browser and your graphics card for you.
+On the [Report a problem](https://xpayn3.github.io/MeshOptimiser/report.html) page. The app’s mark in the top bar has a link called **Report a problem** that opens it with your version and system already filled in. Say what you did, what you expected and what happened, and add the version number and the log. **Settings**, **About**, **Copy details** copies the version number, your browser and your graphics card for you.
 
 Related: [troubleshooting](meshoptimiser://docs/troubleshooting), [privacy-offline](meshoptimiser://docs/privacy-offline), [what-it-is](meshoptimiser://docs/what-it-is)

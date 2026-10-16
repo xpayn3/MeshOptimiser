@@ -12,7 +12,7 @@ Writes, into --out (default dist/):
 Then, by hand (nothing here uploads anything):
     1. attach the zip to the GitHub release  https://github.com/xpayn3/MeshOptimiser/releases/tag/v<version>
        (the URL the feed holds is that release's download address; change it with --url-base if it lives elsewhere)
-    2. put latest.json on the website at  https://lukagrcar.com/apps/meshoptimiser/latest.json
+    2. put latest.json on the website at  https://xpayn3.github.io/MeshOptimiser/latest.json
 The feed is on the website and the archive on GitHub on purpose: both would have to be changed to push a bad file, and the
 archive is checked against the SHA-256 and size that only the feed holds.
 
@@ -111,7 +111,7 @@ def main() -> int:
     base = (a.url_base or f"https://github.com/xpayn3/MeshOptimiser/releases/download/v{ver}/").rstrip("/") + "/"
     launcher = int(updater._read_version_file().get("launcher") or 0)
     feed[a.channel] = {
-        "version": ver, "date": date, "headline": a.headline, "notes": notes, "more": f"https://lukagrcar.com/apps/meshoptimiser/changelog.html",
+        "version": ver, "date": date, "headline": a.headline, "notes": notes, "more": f"https://xpayn3.github.io/MeshOptimiser/changelog.html",
         "archive": {"url": base + zpath.name, "sha256": sha256_file(zpath), "size": zpath.stat().st_size},
         "requirements_sha256": req_sha, "requirements_changed": bool(prev.get("requirements_sha256")) and prev.get("requirements_sha256") != req_sha,
         "launcher": launcher, "min_from": a.min_from,
@@ -120,7 +120,7 @@ def main() -> int:
     mb = zpath.stat().st_size / 1048576
     print(f"{zpath.relative_to(ROOT)}  {mb:.1f} MB, {len(files)} files, version {ver} ({a.channel})")
     print(f"{(out / 'latest.json').relative_to(ROOT)}  {len(notes)} notes; launcher level {launcher}; requirements {'CHANGED' if feed[a.channel]['requirements_changed'] else 'unchanged'}")
-    print(f"  upload the zip to {base}   and latest.json to https://lukagrcar.com/apps/meshoptimiser/latest.json")
+    print(f"  upload the zip to {base}   and latest.json to https://xpayn3.github.io/MeshOptimiser/latest.json")
     return 0
 
 

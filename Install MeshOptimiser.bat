@@ -4,6 +4,6 @@ REM One double-click: runs install.ps1 from the app folder beside this file when
 if exist "%~dp0app\install.ps1" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0app\install.ps1" %*
 ) else (
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://lukagrcar.com/apps/meshoptimiser/install.ps1 | iex"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://xpayn3.github.io/MeshOptimiser/install.ps1 | iex"
 )
 if errorlevel 1 pause

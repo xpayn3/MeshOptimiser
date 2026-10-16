@@ -1,7 +1,7 @@
 name: Website
 
 # Publishes the site/ folder to GitHub Pages whenever it changes on main.
-# The folder is generated from the portfolio repo (tools/build-app-site.js, standalone mode); edit it there, not here.
+# The folder is the site itself: edit its sources and run node tools/site/build-app-site.js (see CLAUDE.md, Website).
 
 on:
   push:

@@ -1,6 +1,6 @@
 /* Help: the knowledge base inside the app (F1, or Menu › Help & docs).
  *
- * The articles are the website's (lukagrcar.com/apps/meshoptimiser/docs), copied into help-content.js by
+ * The articles are the website's (xpayn3.github.io/MeshOptimiser/docs), copied into help-content.js by
  * tools/build-help.mjs and loaded the first time the window opens, so start-up pays nothing for them and Help
  * works offline. Pictures are the website's and are loaded from there; one that cannot load is left out.
  * The frame of the window is in index.html (#help-modal); this fills it.
@@ -160,7 +160,7 @@
       open(want);
       setTimeout(function () { if (!slugName) $('help-search').focus(); }, 40);
     }).catch(function () {
-      main.innerHTML = '<div class="hp-load">The help pages could not be loaded.<br><a href="https://lukagrcar.com/apps/meshoptimiser/docs.html" target="_blank" rel="noopener">Open them on the website</a></div>';
+      main.innerHTML = '<div class="hp-load">The help pages could not be loaded.<br><a href="https://xpayn3.github.io/MeshOptimiser/docs.html" target="_blank" rel="noopener">Open them on the website</a></div>';
     });
   }
   function hide() { var bg = $('help-modal'); if (bg) bg.classList.remove('show'); }

@@ -147,7 +147,7 @@
       else if (a === 'close') { hideCard(); if (ui.phase === 'error') { ui.phase = 'idle'; ui.error = ''; emit(); } }
       else if (a === 'cancel') cancel();
       else if (a === 'dismiss') { hideCard(); api('/api/update/dismiss', {}).catch(noop); }
-      else if (a === 'download') window.open('https://lukagrcar.com/apps/meshoptimiser/download.html', '_blank', 'noopener');
+      else if (a === 'download') window.open('https://xpayn3.github.io/MeshOptimiser/download.html', '_blank', 'noopener');
     });
     document.body.appendChild(card);
     return card;
@@ -230,10 +230,10 @@
     const working = busy();
     let h = `<div class="set-row up-status" data-state="${state}"><span><span class="up-state"><i class="set-nav-dot"></i><b>${esc(title)}</b></span><span class="set-help">${esc(detail)}</span></span>
       <span class="up-btns">${available() && L.installable && canAct ? `<button class="btn primary" data-up-act="update"${working ? ' disabled' : ''}>Update now</button>` : ''}${canAct ? `<button class="btn" data-up-act="check"${working ? ' disabled' : ''}>${ui.phase === 'checking' ? 'Checking…' : 'Check now'}</button>` : ''}</span></div>`;
-    if (available() && !L.installable) h += `<div class="set-row set-stack"><span class="set-help up-warn">${esc(L.reason)}</span><a class="btn" href="https://lukagrcar.com/apps/meshoptimiser/download.html" target="_blank" rel="noopener">Open the download page</a></div>`;
+    if (available() && !L.installable) h += `<div class="set-row set-stack"><span class="set-help up-warn">${esc(L.reason)}</span><a class="btn" href="https://xpayn3.github.io/MeshOptimiser/download.html" target="_blank" rel="noopener">Open the download page</a></div>`;
     if (available() && ((L.notes && L.notes.length) || L.headline)) {
       h += `<div class="set-row set-stack up-notes"><span>What is new in ${esc(L.latest)}${L.headline ? `<span class="set-help">${esc(L.headline)}</span>` : ''}</span>${L.notes && L.notes.length ? `<ul class="up-c-l">${L.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
-        <a class="up-link" href="${esc(L.more || 'https://lukagrcar.com/apps/meshoptimiser/changelog.html')}" target="_blank" rel="noopener">Full changelog</a></div>`;
+        <a class="up-link" href="${esc(L.more || 'https://xpayn3.github.io/MeshOptimiser/changelog.html')}" target="_blank" rel="noopener">Full changelog</a></div>`;
     }
     if (canAct) {
       h += group('Checking') +
@@ -247,9 +247,9 @@
         group('This version') +
         `<div class="set-row"><span>Installed</span><span class="set-val">${esc(current() || '—')}</span></div>` +
         (srv.backup ? `<div class="set-row set-action"><span>Earlier version<span class="set-help">${esc(srv.backup.version)} is kept from before the last update${srv.backup.at ? ' (' + esc(new Date(srv.backup.at * 1000).toLocaleDateString()) + ')' : ''}. Going back keeps your settings and files.</span></span><button class="btn${ui.armed === 'rollback' ? ' danger' : ''}" data-up-act="rollback"${working ? ' disabled' : ''}>${ui.armed === 'rollback' ? 'Press again to restore ' + esc(srv.backup.version) : 'Restore ' + esc(srv.backup.version)}</button></div>` : '') +
-        `<div class="set-row set-action"><span>Release notes<span class="set-help">Every version and what changed, on the website.</span></span><a class="btn" href="https://lukagrcar.com/apps/meshoptimiser/changelog.html" target="_blank" rel="noopener">Open</a></div>` +
+        `<div class="set-row set-action"><span>Release notes<span class="set-help">Every version and what changed, on the website.</span></span><a class="btn" href="https://xpayn3.github.io/MeshOptimiser/changelog.html" target="_blank" rel="noopener">Open</a></div>` +
         group('Privacy') +
-        `<div class="set-row"><span class="set-help" style="margin:0">A check downloads one small file from lukagrcar.com that lists the newest version. Nothing about you, this computer or your models is sent. The update itself comes from the project's GitHub releases and is checked against a fingerprint before any file is replaced; your scenes, settings, the inbox and exports folders and the Python environment are never touched.</span></div>` +
+        `<div class="set-row"><span class="set-help" style="margin:0">A check downloads one small file from the website, xpayn3.github.io, that lists the newest version. Nothing about you, this computer or your models is sent. The update itself comes from the project's GitHub releases and is checked against a fingerprint before any file is replaced; your scenes, settings, the inbox and exports folders and the Python environment are never touched.</span></div>` +
         `<div class="set-row set-action"><span>Updates<span class="set-help">Put these choices back to their defaults.</span></span><button class="btn" data-up-act="reset">Reset</button></div>`;
     }
     pane.innerHTML = h;

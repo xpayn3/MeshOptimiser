@@ -1,5 +1,5 @@
 # MeshOptimiser installer for Windows: one file, one double-click.
-#   Install MeshOptimiser.bat   (or: irm https://lukagrcar.com/apps/meshoptimiser/install.ps1 | iex)
+#   Install MeshOptimiser.bat   (or: irm https://xpayn3.github.io/MeshOptimiser/install.ps1 | iex)
 # Downloads the current release, puts it in %LOCALAPPDATA%\MeshOptimiser, adds MeshOptimiser to the Desktop and the Start menu,
 # and starts it. Running it again updates the files and keeps the Python environment (.venv), the inbox and the exports.
 # The install folder holds thin launchers and an app\ folder with the program (and its .venv, inbox and exports). An install from
@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
-$Feed = 'https://lukagrcar.com/apps/meshoptimiser/latest.json'
+$Feed = 'https://xpayn3.github.io/MeshOptimiser/latest.json'
 $Repo = 'xpayn3/MeshOptimiser'
 $Skip = @('.venv', 'inbox', 'exports', '__pycache__', '.update', 'server.log', '.show-console')      # belong to this PC: an update leaves them alone (in app\ too)
 $NotShipped = @('tests', 'tools', 'docs', 'site', 'dist', '_archive', '.github', '.claude', 'CHANGELOG.md', 'UNRELEASED_FIXES.md', '.gitignore', '.gitattributes')      # in a source archive, not in the release zip

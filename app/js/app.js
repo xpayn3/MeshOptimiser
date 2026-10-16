@@ -3727,7 +3727,7 @@ const _Settings = (() => {
     return ua.slice(0, 60);
   };
   // The details the report page asks for, and the hand-over to it
-  const _REPORT_URL = 'https://lukagrcar.com/apps/meshoptimiser/report.html';
+  const _REPORT_URL = 'https://xpayn3.github.io/MeshOptimiser/report.html';
   async function _detailsText() {
     const gpu = await _gpuInfo(), p = _Prefs.all();
     return ['MeshOptimiser details', ..._aboutFacts().map(([k, v]) => k + ': ' + v), 'GPU: ' + gpu,
@@ -3777,7 +3777,7 @@ const _Settings = (() => {
       `<div class="set-row"><span class="set-help" style="margin:0">MeshOptimiser is built on open source. Thank you to everyone who made these.</span></div>` +
       _CREDITS.map(([name, by, lic, url, what]) => `<div class="set-row"><span><a href="${url}" target="_blank" rel="noopener">${esc(name)}</a><span class="set-help">${esc(what)} By ${esc(by)}.</span></span><span class="set-val" title="${esc(lic)}">${esc(lic)}</span></div>`).join('') +
       _group('Project') +
-      `<div class="set-row set-action"><span>Website<span class="set-help">Downloads, the full docs and the screenshots.</span></span><a class="btn" href="https://lukagrcar.com/apps/meshoptimiser/" target="_blank" rel="noopener">Open</a></div>` +
+      `<div class="set-row set-action"><span>Website<span class="set-help">Downloads, the full docs and the screenshots.</span></span><a class="btn" href="https://xpayn3.github.io/MeshOptimiser/" target="_blank" rel="noopener">Open</a></div>` +
       `<div class="set-row set-action"><span>Source code<span class="set-help">Free and open source, under the MIT licence.</span></span><a class="btn" href="https://github.com/xpayn3/MeshOptimiser" target="_blank" rel="noopener">GitHub</a></div>`;
     if ($s('settings-search')?.value) _search($s('settings-search').value);
   }

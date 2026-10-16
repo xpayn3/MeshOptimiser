@@ -1,6 +1,6 @@
 // node tools/build-help.mjs [path to docs-content.js] — writes help-content.js, the articles of the Help window.
 //
-// The knowledge base is written once, for the website (lukagrcar.com/apps/meshoptimiser/docs, in the site's repo:
+// The knowledge base is written once, for the website (xpayn3.github.io/MeshOptimiser/docs, in the site's repo:
 // apps/meshoptimiser/docs-content.js). This copies it into the app so Help works without a connection. Pictures stay
 // on the website (the Help window loads them from there and hides one that cannot load). Run it again after the site's
 // articles change, and bump the ?v= on help-content.js in help.js.
@@ -15,8 +15,8 @@ if (!fs.existsSync(src)) { console.error('Cannot find ' + src + '\nPass the path
 const docs = createRequire(import.meta.url)(src);
 
 const data = {
-  site: 'https://lukagrcar.com/',
-  docs: 'https://lukagrcar.com/apps/meshoptimiser/docs.html',
+  site: 'https://xpayn3.github.io/MeshOptimiser/',
+  docs: 'https://xpayn3.github.io/MeshOptimiser/docs.html',
   groups: docs.groups.map(g => ({ id: g.id, title: g.title, blurb: g.blurb })),
   articles: docs.articles.map(a => ({ slug: a.slug, group: a.group, title: a.title, summary: a.summary, blocks: a.blocks })),
 };

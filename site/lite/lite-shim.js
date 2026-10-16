@@ -1,5 +1,5 @@
 /* ===================================================================
-   lite-shim.js — loaded first by the hosted demo (apps/meshoptimiser/lite/).
+   lite-shim.js — loaded first by the hosted demo (site/lite/).
 
    The app is a web page that talks to a small local server for three
    things: a heartbeat, STEP conversion, and the inbox/ folder. On the site

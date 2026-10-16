@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "stable": {
+  "version": "0.34.0",
+  "date": "2026-10-16",
+  "headline": "Animate gets a timeline and a motion for pistons, Claude works with notes, and the axis tools of Cinema 4D arrive.",
+  "notes": [
+   "Animate has a timeline along the bottom, with a new Oscillate motion for pistons and pumps.",
+   "Axis Center and the Axis card: centre the axis, reset its rotation, align it, one undo each.",
+   "Claude can read, answer and leave notes (78 tools in all).",
+   "A selected group shows its parts dimly; Ctrl+click or Shift+click lights up the ones you pick.",
+   "Animation can leave the app as a GLB, glTF or video.",
+   "Python can come inside the Windows download, so a first start has nothing to install."
+  ],
+  "more": "https://xpayn3.github.io/MeshOptimiser/changelog.html",
+  "archive": {
+   "url": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.34.0/meshoptimiser-app-0.34.0.zip",
+   "sha256": "e0989e35eb71ad15105d430905a5be69cfb36e5fb747d1899fa40291a9813c4e",
+   "size": 5987047
+  },
+  "requirements_sha256": "f1a93ffe65235c3537c454bcad32277ba82c666c35ece65e2fe598556d0f2f7d",
+  "requirements_changed": false,
+  "launcher": 4,
+  "min_from": ""
+ }
+}
