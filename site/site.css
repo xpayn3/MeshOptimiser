@@ -855,7 +855,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .wand-stage::before { content: ''; position: absolute; left: 50%; top: 50%; width: min(100%, 720px); aspect-ratio: 1; transform: translate(-50%, -50%); background: radial-gradient(closest-side, rgba(255, 255, 255, 0.075) 0%, rgba(255, 255, 255, 0.062) 12%, rgba(255, 255, 255, 0.046) 26%, rgba(255, 255, 255, 0.03) 42%, rgba(255, 255, 255, 0.016) 58%, rgba(255, 255, 255, 0.006) 78%, rgba(255, 255, 255, 0) 100%); pointer-events: none; z-index: 0; }
 .wand-stage.has-spot::before { opacity: 0; transition: opacity 1.6s cubic-bezier(0.2, 0.6, 0.2, 1); }
 .wand-stage.has-spot.is-lit::before { opacity: 1; }
-.wand-out { min-height: 22px; max-width: 64ch; text-align: center; color: var(--tx-2); font-size: 15px; line-height: 1.5; }
+.wand-out { text-wrap: balance; min-height: 22px; max-width: 64ch; text-align: center; color: var(--tx-2); font-size: 15px; line-height: 1.5; }
 .wand-modes { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .wand-modes button { height: 34px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--tx-2); font: 400 13px/1 var(--font); cursor: pointer; transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease; }
 .wand-modes button:hover { color: var(--tx); background: var(--surface-2); }
