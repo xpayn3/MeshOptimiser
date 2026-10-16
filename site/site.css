@@ -175,7 +175,7 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 @property --my { syntax: '<length>'; inherits: true; initial-value: 0px; }
 /* The fill is a big circle of the tile's colour that is only moved (translate) and scaled: the browser animates both on the graphics card, so the
    drawing under it can keep moving without the hover stuttering. --mx and --my are the point where the pointer came in or left (site.js). */
-.tile::before { content: ""; position: absolute; left: 0; top: 0; width: 1800px; height: 1800px; margin: -900px 0 0 -900px; z-index: -1; pointer-events: none; border-radius: 50%; background: var(--tile-c, var(--accent)); translate: var(--mx) var(--my); scale: 0; will-change: scale; transition: scale 0.7s cubic-bezier(0.45, 0.05, 0.25, 1); }
+.tile::before { display: none; content: ""; position: absolute; left: 0; top: 0; width: 1800px; height: 1800px; margin: -900px 0 0 -900px; z-index: -1; pointer-events: none; border-radius: 50%; background: var(--tile-c, var(--accent)); translate: var(--mx) var(--my); scale: 0; will-change: scale; transition: scale 0.7s cubic-bezier(0.45, 0.05, 0.25, 1); }
 .tile-label, .tile h2, .tile h2 span, .tile-line { transition: color 0.4s ease 0.1s; }
 .tile-art, .tile-art .art-hot, .tile-art .art-dim { transition: color 0.4s ease 0.1s, stroke 0.4s ease 0.1s; }
 @media (hover: hover) and (pointer: fine) {
@@ -278,20 +278,15 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 @media (max-width: 1020px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bento > .tile, .bento > .tile:nth-child(n+4) { grid-column: span 1; } .bento > .tile:last-child { grid-column: span 2; } .tile h2 { font-size: clamp(26px, 4.4vw, 40px); } }
 /* the clean-up tools: the same line drawings, one per card */
 .tile-art .art-solid { fill: var(--card-bg, var(--surface)); stroke: none; }
-:is(.clip, .star) .clip-art { display: block; width: 100%; height: auto; aspect-ratio: 592 / 370; padding: 8px; background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, var(--glow)), rgba(255, 255, 255, 0) 70%), radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--tile-c, var(--accent)) var(--fill-r), rgba(0, 0, 0, 0) calc(var(--fill-r) + 1.5px)), var(--surface); border-radius: var(--r); color: #77777c; --art-dim: #46464a; overflow: visible; transition: --fill-r 0.42s cubic-bezier(0.22, 0.8, 0.18, 1), --glow 0.3s ease, color 0.22s ease 0.05s; }
-/* (the fill and the glow are layers of the line above; a browser that cannot draw them still gets the grey card) */
-:is(.clip, .star) .clip-art { background-color: var(--surface); }
-/* on touch there is no hover: a plain grey card, no fill layers and no fill circle behind the claim tiles */
-@media not ((hover: hover) and (pointer: fine)) {
-  :is(.clip, .star) .clip-art { background: var(--surface); transition: none; }
-  .tile::before { display: none; }
-}
+:is(.clip, .star) .clip-art { display: block; width: 100%; height: auto; aspect-ratio: 592 / 370; padding: 8px; background: var(--surface); border-radius: var(--r); color: #77777c; --art-dim: #46464a; overflow: visible; transition: background 0.25s ease; }
 :is(.clip, .star) .clip-art { stroke-width: 1.9px; }
 /* The same hover as the claim tiles: the picture fills with its colour from the point where the pointer comes in, and its lines go black. */
 @property --fill-r { syntax: '<length>'; inherits: false; initial-value: 0px; }
 @property --glow { syntax: '<number>'; inherits: false; initial-value: 0; }
 :is(.clip, .star) .clip-art .art-hot, :is(.clip, .star) .clip-art .art-dim { transition: stroke 0.4s ease 0.1s; }
 @media (hover: hover) and (pointer: fine) {
+  :is(.clip, .star) .clip-art { background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, var(--glow)), rgba(255, 255, 255, 0) 70%), radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--tile-c, var(--accent)) var(--fill-r), rgba(0, 0, 0, 0) calc(var(--fill-r) + 1.5px)), var(--surface); transition: --fill-r 0.42s cubic-bezier(0.22, 0.8, 0.18, 1), --glow 0.3s ease, color 0.22s ease 0.05s; }
+  .tile::before { display: block; }
   :is(.clip, .star):hover .clip-art { --fill-r: 1100px; --glow: 0.09; --card-bg: var(--tile-c, var(--accent)); color: #101010; --art-dim: #101010; }
   :is(.clip, .star):hover .clip-art .art-hot, :is(.clip, .star):hover .clip-art .art-dim { stroke: #101010; }
   :is(.clip, .star):hover .clip-art text.art-t { fill: #101010; }
