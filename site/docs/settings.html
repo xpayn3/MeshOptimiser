@@ -21,10 +21,9 @@
   <meta property="og:url" content="https://xpayn3.github.io/MeshOptimiser/docs/settings" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../site.css?v=429" />
+  <link rel="preload" href="../fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="../fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="../site.css?v=453" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -61,26 +60,26 @@
         <a href="../docs/first-file.html">Open your first file</a>
         <a href="../docs/stop-restart-update.html">Stop, restart and update</a>
         <h2>Install and set up</h2>
-        <a href="../docs/install-windows.html">Install on Windows, step by step</a>
-        <a href="../docs/install-macos.html">Install on macOS, step by step</a>
+        <a href="../docs/install-windows.html" title="Install on Windows, step by step">Install on Windows</a>
+        <a href="../docs/install-macos.html" title="Install on macOS, step by step">Install on macOS</a>
         <a href="../docs/setup-first-session.html">Set it up after installing</a>
         <a href="../docs/install-gltfpack.html">Add gltfpack for smaller files</a>
         <a href="../docs/desktop-shortcut.html">Add a shortcut or an icon</a>
         <a href="../docs/move-or-remove.html">Move, copy or remove the app</a>
-        <a href="../docs/install-problems.html">Install problems, message by message</a>
-        <h2>Getting your model out of your CAD program</h2>
-        <a href="../docs/cad-files-step-first.html">Native CAD files: export a STEP file first</a>
-        <a href="../docs/step-from-inventor.html">How to export a STEP assembly from Autodesk Inventor</a>
-        <a href="../docs/step-from-onshape.html">How to export a STEP assembly from Onshape</a>
-        <a href="../docs/step-from-creo.html">How to export a STEP assembly from PTC Creo</a>
-        <a href="../docs/step-from-rhino.html">How to export a STEP file from Rhino</a>
+        <a href="../docs/install-problems.html" title="Install problems, message by message">Install problems</a>
+        <h2>From your CAD program</h2>
+        <a href="../docs/cad-files-step-first.html" title="Native CAD files: export a STEP file first">Native CAD files</a>
+        <a href="../docs/step-from-inventor.html" title="How to export a STEP assembly from Autodesk Inventor">Export from Inventor</a>
+        <a href="../docs/step-from-onshape.html" title="How to export a STEP assembly from Onshape">Export from Onshape</a>
+        <a href="../docs/step-from-creo.html" title="How to export a STEP assembly from PTC Creo">Export from Creo</a>
+        <a href="../docs/step-from-rhino.html" title="How to export a STEP file from Rhino">Export from Rhino</a>
         <h2>Find your way around</h2>
         <a href="../docs/the-window.html">The window</a>
         <a href="../docs/move-the-view.html">Move the view</a>
         <a href="../docs/select-parts.html">Select parts</a>
         <a href="../docs/hide-isolate.html">Hide, isolate, show all</a>
         <a href="../docs/parts-tree.html">The parts tree</a>
-        <a href="../docs/organise-the-tree.html">Organise the tree: groups, sorting and picking</a>
+        <a href="../docs/organise-the-tree.html" title="Organise the tree: groups, sorting and picking">Organise the tree</a>
         <a href="../docs/search-and-commands.html">Search and commands</a>
         <a href="../docs/quick-wand.html">Quick wand</a>
         <a href="../docs/undo-redo.html">Undo and redo</a>
@@ -98,23 +97,24 @@
         <a href="../docs/stacked-copies.html">Stacked copies</a>
         <a href="../docs/fill-holes.html">Remove holes</a>
         <a href="../docs/remove-floating-pieces.html">Remove floating pieces</a>
-        <a href="../docs/remesh.html">Remesh: Untriangulate and Triangulate</a>
+        <a href="../docs/remesh.html" title="Remesh: Untriangulate and Triangulate">Remesh</a>
         <a href="../docs/split.html">Split</a>
         <a href="../docs/smart-fit.html">Smart fit</a>
         <a href="../docs/decimate.html">Decimate</a>
         <a href="../docs/fit-to-budget.html">Fit to budget</a>
         <a href="../docs/cleanup.html">Quick fixes and tidying up</a>
-        <a href="../docs/model-inspector.html">Model inspector: what the model is, and what is wrong with it</a>
-        <a href="../docs/fix-normals.html">Fix normals: faces that point the wrong way</a>
+        <a href="../docs/model-inspector.html" title="Model inspector: what the model is, and what is wrong with it">Model inspector</a>
+        <a href="../docs/fix-normals.html" title="Fix normals: faces that point the wrong way">Fix normals</a>
         <a href="../docs/workflow.html">A sensible order to work in</a>
         <h2>Look and arrange</h2>
-        <a href="../docs/uv-layout.html">UV layout: how a texture sits on a part</a>
-        <a href="../docs/cad-edges.html">CAD faces and edges from a STEP file</a>
-        <a href="../docs/quick-colour-wheel.html">Quick colour wheel: colour a part without a dialog</a>
+        <a href="../docs/uv-layout.html" title="UV layout: how a texture sits on a part">UV layout</a>
+        <a href="../docs/cad-edges.html" title="CAD faces and edges from a STEP file">CAD faces and edges</a>
+        <a href="../docs/quick-colour-wheel.html" title="Quick colour wheel: colour a part without a dialog">Quick colour wheel</a>
         <a href="../docs/view-modes.html">View modes</a>
         <a href="../docs/colours-materials.html">Colours and materials</a>
+        <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
-        <a href="../docs/edit-mesh.html">Edit mesh: points, edges and polygons</a>
+        <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
         <a href="../docs/exploded-view.html">Exploded view</a>
@@ -128,14 +128,14 @@
         <a href="../docs/claude-mode.html">Claude mode (alpha)</a>
         <h2>Save and export</h2>
         <a href="../docs/save-scene.html">Save a scene</a>
-        <a href="../docs/crash-recovery.html">Get your scene back after a crash</a>
+        <a href="../docs/crash-recovery.html" title="Get your scene back after a crash">Crash recovery</a>
         <a href="../docs/export.html">Export</a>
-        <a href="../docs/choose-format.html">Which format should I choose</a>
-        <a href="../docs/notes.html">Notes: tasks on the model, with comments, sent with the scene</a>
-        <h2>Common jobs, start to finish</h2>
-        <a href="../docs/convert-step-to-glb.html">How to convert a STEP file to GLB</a>
-        <a href="../docs/remove-bolts-from-step-assembly.html">How to remove bolts and screws from a STEP assembly</a>
-        <a href="../docs/make-model-safe-to-send.html">How to make a CAD model safe to send to a customer</a>
+        <a href="../docs/choose-format.html" title="Which format should I choose">Which format to choose</a>
+        <a href="../docs/notes.html" title="Notes: tasks on the model, with comments, sent with the scene">Notes</a>
+        <h2>Common jobs</h2>
+        <a href="../docs/convert-step-to-glb.html" title="How to convert a STEP file to GLB">Convert STEP to GLB</a>
+        <a href="../docs/remove-bolts-from-step-assembly.html" title="How to remove bolts and screws from a STEP assembly">Remove bolts and screws</a>
+        <a href="../docs/make-model-safe-to-send.html" title="How to make a CAD model safe to send to a customer">Make a model safe to share</a>
         <h2>Reference</h2>
         <a href="../docs/shortcuts.html">Keyboard shortcuts</a>
         <a href="../docs/command-line.html">The command-line converter</a>
@@ -289,6 +289,7 @@
         <a href="../changelog.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Changelog</a>
         <a href="../report.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="10"/></svg>Report a problem</a>
         <h2>Latest</h2>
+        <a href="../docs/axis-center.html">The axis of a part</a>
         <a href="../docs/animate.html">Animate<em class="rail-tag">Alpha</em></a>
         <a href="../docs/claude-mode.html">Claude mode<em class="rail-tag">Alpha</em></a>
         <a href="../docs/select-parts.html">Locked groups</a>
@@ -315,7 +316,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.33.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="../download.html">Download v0.34.0</a><a class="cmp-link" href="../changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
@@ -395,6 +396,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="../site.js?v=101" data-viewer="viewer/"></script>
+  <script defer src="../site.js?v=105" data-viewer="viewer/"></script>
 </body>
 </html>

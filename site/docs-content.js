@@ -8,13 +8,13 @@ module.exports = {
   groups: [
     { id: 'start', title: 'Start here', blurb: 'What the app is, what it needs, and how to get from a download to your first model on screen.' },
     { id: 'install', title: 'Install and set up', blurb: 'Every step from the download to a computer that is ready to work: Windows and macOS, the first session, the optional extras, shortcuts, moving or removing the app, and a fix for each message the launcher can print.' },
-    { id: 'cad', title: 'Getting your model out of your CAD program', blurb: 'MeshOptimiser opens STEP files. How to save one from Inventor, Onshape, Creo and Rhino, with the options that matter.' },
+    { id: 'cad', title: 'Getting your model out of your CAD program', short: 'From your CAD program', blurb: 'MeshOptimiser opens STEP files. How to save one from Inventor, Onshape, Creo and Rhino, with the options that matter.' },
     { id: 'around', title: 'Find your way around', blurb: 'The window, the mouse, selecting, hiding, the parts tree, search, undo, tabs and settings.' },
     { id: 'lighter', title: 'Make it lighter', blurb: 'The tools that remove triangles and parts, one at a time, and a sensible order to use them in.' },
     { id: 'look', title: 'Look and arrange', blurb: 'View modes, materials, moving and measuring, editing the points, edges and polygons of a part, standing a model on the floor, and adding parts.' },
     { id: 'claude', title: 'Work with Claude', blurb: 'Connect the app to Claude, what Claude can do in it, and what stays in your hands.' },
     { id: 'save', title: 'Save and export', blurb: 'Keep your work as a scene, or write a file for another program.' },
-    { id: 'jobs', title: 'Common jobs, start to finish', blurb: 'Three jobs people come here to do: convert a STEP file to GLB, take the bolts out of an assembly, and make a model safe to send to a customer.' },
+    { id: 'jobs', title: 'Common jobs, start to finish', short: 'Common jobs', blurb: 'Three jobs people come here to do: convert a STEP file to GLB, take the bolts out of an assembly, and make a model safe to send to a customer.' },
     { id: 'reference', title: 'Reference', blurb: 'Every shortcut, every command-line option, the file formats and what is in the folder.' },
     { id: 'help', title: 'Help', blurb: 'What to do when something goes wrong, and answers to common questions.' },
   ],
@@ -380,6 +380,7 @@ module.exports = {
       slug: 'install-windows',
       group: 'install',
       title: 'Install on Windows, step by step',
+      short: 'Install on Windows',
       summary: 'One double-click installs MeshOptimiser on Windows 10 or 11: it downloads the app, adds a shortcut, checks for Chrome and starts it. The zip way, step by step, follows for those who prefer it.',
       blocks: [
         ['h', 'The quick way: one double-click'],
@@ -447,6 +448,7 @@ module.exports = {
       slug: 'install-macos',
       group: 'install',
       title: 'Install on macOS, step by step',
+      short: 'Install on macOS',
       summary: 'From the zip to a working app on a Mac: Python, the first run, the one-time macOS permission prompt, and what you should see at every step.',
       blocks: [
         ['p', 'This page walks through the whole install on a Mac. It takes about ten minutes, most of it the one-time setup on the first start. Nothing is installed system-wide apart from Python itself, if you do not have it yet. The app lives in one folder.'],
@@ -664,6 +666,7 @@ module.exports = {
       slug: 'install-problems',
       group: 'install',
       title: 'Install problems, message by message',
+      short: 'Install problems',
       summary: 'Every message the launcher can print when the setup stops, what it means, and exactly what to do about it. Windows and macOS.',
       blocks: [
         ['p', 'When the setup cannot go on, the launcher says why in plain words and stops. Find your message below. If none matches, run the launcher from a terminal so that the window stays open, and read the last lines. On Windows: open the app folder, click the address bar, type `cmd`, press [[Enter]], then type `start.bat`. On a Mac: open Terminal, type `cd ` and a space, drag the folder onto the window, press [[Enter]], then type `./start.command`.'],
@@ -714,6 +717,7 @@ module.exports = {
       slug: 'cad-files-step-first',
       group: 'cad',
       title: 'Native CAD files: export a STEP file first',
+      short: 'Native CAD files',
       summary: 'MeshOptimiser opens STEP, not SolidWorks, Inventor, Creo or CATIA files. Why, which STEP version to pick, and where to find the steps for your program.',
       blocks: [
         ['p', 'MeshOptimiser reads STEP files. It does not read the files your CAD program saves for itself, such as SolidWorks (`.sldprt`, `.sldasm`), Inventor (`.ipt`, `.iam`), Creo (`.prt`, `.asm`), Fusion (`.f3d`), Rhino (`.3dm`), CATIA or NX files. Those formats belong to the company that made the program, and reading them needs that company’s own software, which a free app cannot include.'],
@@ -751,6 +755,7 @@ module.exports = {
       slug: 'step-from-inventor',
       group: 'cad',
       title: 'How to export a STEP assembly from Autodesk Inventor',
+      short: 'Export from Inventor',
       summary: 'Save an Inventor assembly as one STEP file with Save Copy As, pick AP214, and learn what Shrinkwrap can do for a very large assembly.',
       blocks: [
         ['p', 'Inventor writes STEP with Save Copy As. When you save an assembly this way, the assembly and all the parts it refers to go into a single file, which is what MeshOptimiser wants.'],
@@ -783,6 +788,7 @@ module.exports = {
       slug: 'step-from-onshape',
       group: 'cad',
       title: 'How to export a STEP assembly from Onshape',
+      short: 'Export from Onshape',
       summary: 'Export an Onshape assembly or Part Studio as STEP by right-clicking its tab, and why STEP is a better start than Onshape’s own glTF export.',
       blocks: [
         ['p', 'Onshape works in the browser, and so does its export. You export from the tab at the bottom of the window.'],
@@ -814,6 +820,7 @@ module.exports = {
       slug: 'step-from-creo',
       group: 'cad',
       title: 'How to export a STEP assembly from PTC Creo',
+      short: 'Export from Creo',
       summary: 'Save a Creo assembly as one STEP file with Save a Copy, set the application protocol and keep Export assembly as on Single File.',
       blocks: [
         ['p', 'Creo exports STEP with Save a Copy. The settings live in a window called STEP Export Profile Settings.'],
@@ -853,6 +860,7 @@ module.exports = {
       slug: 'step-from-rhino',
       group: 'cad',
       title: 'How to export a STEP file from Rhino',
+      short: 'Export from Rhino',
       summary: 'Export selected Rhino objects as STEP with File, Export Selected: which protocol keeps colours, what happens to black objects, and what to do with meshes.',
       blocks: [
         ['p', 'Rhino models are made of surfaces and solids, and Rhino writes them to STEP with its Export command.'],
@@ -1195,6 +1203,7 @@ module.exports = {
       slug: 'organise-the-tree',
       group: 'around',
       title: 'Organise the tree: groups, sorting and picking',
+      short: 'Organise the tree',
       summary: 'Pick groups and parts together, take a group out of the tree without losing what is in it, flatten, sort and move groups.',
       blocks: [
         ['p', 'The parts tree can be tidied from the right-click menu of a group, and groups and parts can be picked together. Everything here is one undo step.'],
@@ -2055,6 +2064,7 @@ module.exports = {
       slug: 'remesh',
       group: 'lighter',
       title: 'Remesh: Untriangulate and Triangulate',
+      short: 'Remesh',
       summary: 'Join the triangles of each flat face into one polygon and take away the vertices in its middle, or go back to even triangles. The shape stays as it is.',
       blocks: [
         ['p', 'Screens draw triangles, so every flat face of a part is cut into triangles, often more than it needs. A polygon, also called an n-gon, is a flat face with any number of corners: several triangles in one plane, joined into one face.'],
@@ -2329,6 +2339,7 @@ module.exports = {
       slug: 'model-inspector',
       group: 'lighter',
       title: 'Model inspector: what the model is, and what is wrong with it',
+      short: 'Model inspector',
       summary: 'One window that shows what is in the model and finds the faults in it: faces turned the wrong way, holes, doubled triangles. Each fault has a button that fixes it.',
       blocks: [
         ['p', 'Before you clean a model up, it helps to know what you are looking at. The Model inspector tells you, and then it tells you what is wrong.'],
@@ -2365,6 +2376,7 @@ module.exports = {
       slug: 'fix-normals',
       group: 'lighter',
       title: 'Fix normals: faces that point the wrong way',
+      short: 'Fix normals',
       summary: 'Find faces that are turned the wrong way and turn them right, in one tap, without guessing.',
       blocks: [
         ['p', 'Every face of a model has a front and a back. The front is the side that faces outward, and it is the side that gets light. A face whose front points inward looks dark, or disappears when you look at it from outside. This is what people mean by flipped normals (the normal is the direction a face points).'],
@@ -2391,6 +2403,7 @@ module.exports = {
       slug: 'uv-layout',
       group: 'look',
       title: 'UV layout: how a texture sits on a part',
+      short: 'UV layout',
       summary: 'See how the picture on a part is laid out, and where it overlaps, runs outside its square or stretches.',
       blocks: [
         ['p', 'A texture is a flat picture wrapped round a part. The numbers that say which spot of the picture lands on which spot of the part are called the UVs. The UV layout card draws them, so you can see problems that are hard to see on the part itself.'],
@@ -2416,6 +2429,7 @@ module.exports = {
       slug: 'cad-edges',
       group: 'look',
       title: 'CAD faces and edges from a STEP file',
+      short: 'CAD faces and edges',
       summary: 'A STEP file knows its real faces and real edges. MeshOptimiser keeps them, so the outlines are the ones the designer drew.',
       blocks: [
         ['p', 'A mesh is made of triangles. The CAD file it came from is made of faces, each one a clean surface such as a plane, a cylinder or a sphere, and of edges, the lines where those faces meet. When the app converts a STEP file, it now keeps that information next to the mesh.'],
@@ -2437,6 +2451,7 @@ module.exports = {
       slug: 'quick-colour-wheel',
       group: 'look',
       title: 'Quick colour wheel: colour a part without a dialog',
+      short: 'Quick colour wheel',
       summary: 'Hold a key, move, let go. The selected parts take the colour as you go.',
       blocks: [
         ['p', 'Select one or more parts, point at the model, and hold [[C]]. A colour wheel opens at your pointer. Nothing changes until the pointer moves.'],
@@ -2629,6 +2644,30 @@ module.exports = {
       ],
     },
     {
+      slug: 'axis-center',
+      group: 'look',
+      title: 'The axis of a part: Axis Center',
+      summary: 'Centre the axis of a part, reset its rotation, move the axis or the object to the origin, the selection or the view, align it, and reset the scale, as in Cinema 4D.',
+      blocks: [
+        ['p', 'Every part has an axis: the origin and the X, Y and Z the gizmo shows in {{Local}} axes. These commands move or turn the axis, and the shape stays exactly where it is (the points are carried the opposite way). Each is one undo step that puts back exactly what was there.'],
+        ['h', 'Axis Center'],
+        ['p', 'Put the axis in the middle of the part and reset its rotation to 0, 0, 0. It is in the search as {{Axis Center}} and is the {{Centre pivot}} button of the parts tree toolbar. A part whose axis is already there is left alone: no change and no undo step.'],
+        ['h', 'The Axis card'],
+        ['p', 'Search for {{Axis…}} to open the card. It works on the selected parts.'],
+        ['terms', [
+          ['Center axis to', 'The axis goes to the world origin, the middle of the selection, the axis of the part picked last, or the middle of the view. {{Also reset its rotation}} turns it as well.'],
+          ['Center object to', 'The object moves so that its axis lands on the world origin, the part picked last or the middle of the view. The shape keeps its place around the axis.'],
+          ['Align axis to', 'Turn the axis to the world (0, 0, 0), to its parent, or to the part’s own biggest flat faces. Curved shapes with no flat faces are left alone.'],
+          ['Reset Scale', 'The scale goes back to 1, 1, 1 and is built into the mesh. The part looks the same. A mirrored part (a negative scale) is left alone.'],
+        ]],
+        ['h', 'What to know'],
+        ['list', [
+          'Locked parts keep their axis. Copies that share one mesh get a mesh of their own first.',
+        ]],
+        ['see', ['move-rotate-scale', 'parts-tree', 'exploded-view']],
+      ],
+    },
+    {
       slug: 'move-rotate-scale',
       group: 'look',
       title: 'Move, rotate, scale and measure',
@@ -2728,6 +2767,7 @@ module.exports = {
       slug: 'edit-mesh',
       group: 'look',
       title: 'Edit mesh: points, edges and polygons',
+      short: 'Edit mesh',
       summary: 'Pick and change the pieces a part is made of: its points, edges and polygons. Move, delete, dissolve, planarize, straighten, weld, fill and extract them, from a bar at the right of the view.',
       blocks: [
         ['p', 'Until now a click in the 3D view picked a whole part. Edit mesh lets you into the part. You pick its points, its edges or its polygons, and you can move them, take them out, join them or close a hole. If you have used Cinema 4D, it works the same way.'],
@@ -2927,7 +2967,7 @@ module.exports = {
       slug: 'animate',
       group: 'look',
       title: 'Animate (alpha)',
-      summary: 'Make parts or groups spin, swing, shake or travel along a path, and play it in the turntable video.',
+      summary: 'Make parts or groups spin, swing, shake, travel along a path or oscillate like a piston, watch it on a timeline, and take it out as a video or inside a GLB.',
       blocks: [
         ['p', 'Animate makes the parts you choose move: a fan that spins, a lever that swings, a part that shakes, a part that travels along a path. The motion is a view, not an edit: the model is not changed, and a saved scene or an export sees every part where it started.'],
         ['note', 'Animate is an alpha. It works, but it is new, so expect rough edges and changes.'],
@@ -2936,21 +2976,30 @@ module.exports = {
           'Right-click a part, a group in the tree, or the view with something selected, and choose {{Animate…}}.',
           'Or open the command search and choose {{Animate the selection…}}.',
         ]],
-        ['h', 'Four kinds of motion'],
+        ['h', 'Five kinds of motion'],
         ['terms', [
           ['Spin', 'Turns round an axis (X, Y or Z, clockwise or counter) at 1 to 600 turns a minute.'],
           ['Swing', 'Rocks to and fro round an axis by an angle of 1 to 180 degrees, in 0.2 to 20 seconds.'],
           ['Noise', 'A shake of the position and the turn: wave, smooth random or steps. Set how far it moves (up to 50 percent of the part) and turns (up to 90 degrees) on each axis, how fast, how fine and how rough, with a seed and a dice for a new one.'],
           ['Path', 'A trip along a circle, a figure of eight, a rounded square, a wave or a line, in the plane you choose, from 5 to 200 percent of the part’s size.'],
+          ['Oscillate', 'A to-and-fro on all three axes at once, for pistons, rockers and pumps. Pick a wave: {{Sine}}, {{Piston}} (the real motion of a crank turning a rod, with a rod ratio to tune), {{Eased}} or {{Triangle}}. Set how far it shifts (percent of the part’s size) and turns (degrees) on each axis, and the time of one to-and-fro. {{Axis lag}} makes each axis run behind the one before, which turns X and Y into a circle or an ellipse; {{Turn lag}} runs the turn behind the shift. It loops for ever, with no seam.'],
         ]],
         ['p', 'Spin and path also loop: {{Loop}}, {{Ping-pong}} or {{Once}}, with two handles on a small timeline for where in the cycle it starts and ends. A part or group can have one layer of each kind, and the layers add up. A group moves all its parts together, about the middle of the group.'],
         ['h', 'Play it'],
         ['p', 'Under the title bar a playbar has rewind, play and pause, the time, a scrubber over one cycle, and a speed button that steps through 0.25×, 0.5×, 1×, 2× and 4×. [[Space]] plays or pauses and [[Home]] rewinds while the window has focus. {{In the scene}} lists everything that is animated: click a row to select it, or the bin to take its animation away.'],
         ['p', 'While the window is open, a pill in the view says {{Animate mode}}, {{Playing}} or {{Paused}}, with play and exit buttons. Click it to bring the window back.'],
+        ['h', 'The timeline'],
+        ['p', 'Animate is a drawer along the bottom of the view, set out like a video editor: a ruler, one row for every animated object and a bar for every motion. Drag the ruler or the playhead to scrub. A bar runs from its delay to its repeats: drag its end to change the repeats and the bar itself to change the delay. {{Pop out}} turns the drawer back into the small window.'],
+        ['p', 'While something is animated, the right-hand column has an {{Animation}} card: play and pause, back to the start and to the end, play backwards, three loop modes, the speed, a scrubber with the time gone and the time left, and a miniature of the timeline. It goes when nothing is animated, and nothing runs while it is paused.'],
+        ['h', 'Take it out'],
+        ['list', [
+          'In the Export window, {{Include animation}} (GLB and glTF) writes the motion of every part that moves as glTF keyframes, 30 a second, over the length of the timeline.',
+          'The timeline can be rendered to a WebM video over its own length, without the view turning. The turntable video plays the animations too.',
+        ]],
         ['h', 'What to know'],
         ['list', [
           'Animations keep running after you close the window or change the selection, until you remove them or close the scene.',
-          'They are not saved in a scene, and an export or a saved scene puts every part back first.',
+          'They are saved with a scene and come back when it is opened (the parts are found again by name). An export puts every part back first, unless you include the animation.',
           'Pressing a gizmo handle on something that is animated takes its animation away first. No gizmo shows while the window is open, and Edit mesh is off.',
           'The exploded view works together with animations.',
           'The turntable video plays them, each frame at its own time.',
@@ -3212,6 +3261,7 @@ module.exports = {
       slug: 'crash-recovery',
       group: 'save',
       title: 'Get your scene back after a crash',
+      short: 'Crash recovery',
       summary: 'While a scene has changes that are not saved, a copy is kept inside your browser. If the app crashes, it offers the scene back the next time it starts.',
       blocks: [
         ['p', 'A crash, a browser that is killed or a power cut used to take the scene you were working on with it, because a scene is only a file once you save it. Now the app keeps a recovery copy while there is something to lose, and offers it back when the app comes up again.'],
@@ -3332,6 +3382,7 @@ module.exports = {
       slug: 'choose-format',
       group: 'save',
       title: 'Which format should I choose',
+      short: 'Which format to choose',
       summary: 'A short guide by purpose: the web, Cinema 4D, Blender, game engines, AR on an iPhone, 3D printing, or a parts list.',
       blocks: [
         ['p', 'If you are not sure, export GLB. It is one file, it is compact, and it keeps the parts tree, the materials and the colours. The app’s own format sheet calls it the best all-round choice.'],
@@ -3372,6 +3423,7 @@ module.exports = {
       slug: 'convert-step-to-glb',
       group: 'jobs',
       title: 'How to convert a STEP file to GLB',
+      short: 'Convert STEP to GLB',
       summary: 'Convert a STEP CAD file to a small GLB for the web, on your own computer and for free. The model is never uploaded. Drop it in, check it, export.',
       blocks: [
         ['p', 'A STEP file is how engineers share a design. A web page cannot show one. GLB is the format it can show: a compact 3D file that browsers, AR viewers and most 3D programs open. This page takes you from one to the other with MeshOptimiser, on your own computer. Nothing is uploaded, and there is nothing to pay.'],
@@ -3426,6 +3478,7 @@ module.exports = {
       slug: 'remove-bolts-from-step-assembly',
       group: 'jobs',
       title: 'How to remove bolts and screws from a STEP assembly',
+      short: 'Remove bolts and screws',
       summary: 'Take the bolts, screws, nuts and washers out of a CAD assembly before it goes on the web. Select one, select the rest, check, delete, and undo if needed.',
       blocks: [
         ['p', 'Fasteners are a large part of a CAD assembly. A model can hold hundreds of bolts, nuts and washers, and each carries thousands of triangles that nobody sees from a normal viewing distance. Taking them out makes the model much lighter. It also leaves your hardware out of the file you share.'],
@@ -3467,6 +3520,7 @@ module.exports = {
       slug: 'notes',
       group: 'save',
       title: 'Notes: tasks on the model, with comments, sent with the scene',
+      short: 'Notes',
       summary: 'A note is a task about a place or a part: a title, what it is about, who it is for, how urgent and when, with comments under it. Save the scene and whoever opens it sees every note, answers it and signs off, and the file shows who did what.',
       blocks: [
         ['p', 'A note is a task about a place in the model. It has a title, an optional description, the part or parts it is about, who it is for, a priority and a due date, and people write comments under it. Save the scene and send the file: the other person opens it in MeshOptimiser (or the free online version), reads every note, answers it and sends it back. Nothing is uploaded anywhere. The notes live in the scene file.'],
@@ -3527,6 +3581,7 @@ module.exports = {
       slug: 'make-model-safe-to-send',
       group: 'jobs',
       title: 'How to make a CAD model safe to send to a customer',
+      short: 'Make a model safe to share',
       summary: 'Show your product without handing over your design. Remove hidden parts and fasteners, simplify what is left, clean the names and export a small GLB.',
       blocks: [
         ['p', 'A customer, a dealer or a web visitor needs to see your product. They do not need the screws inside it, the board under the cover or the exact shape of every internal part. This page takes a STEP assembly and turns it into a small GLB that shows the outside and little else.'],
@@ -4128,6 +4183,7 @@ module.exports = {
       blocks: [
         ['p', 'Claude can work with the scene that is open in MeshOptimiser. You describe the job in plain words. Claude looks at the scene, selects, hides and explodes parts, and, with your permission, reduces triangles, repairs meshes, renames, moves and exports. It does this through the app, in your window, so you watch it happen.'],
         ['p', 'It uses the same tools you would click, so it saves clicking, not judgement: you still decide what loss is acceptable, and you should look at the result. If you already know which buttons to press, pressing them yourself is just as fast. It is most useful for repeated clean-up, a size to reach, or a folder of files. A general 3D program such as Blender can be driven by Claude in a similar way; MeshOptimiser opens STEP and IGES CAD files directly and has its own finders for bolts and for parts nobody can see.'],
+        ['p', 'Claude can also work with the notes people leave on the model. It reads the open ones first ({{list_notes}}, {{get_note}}), answers with {{reply_to_note}}, leaves its own ({{add_note}}) on what it flagged or kept, and resolves one only when what it asks is done ({{update_note}}). It writes under the name Claude, every step is one undo step that shows in the note’s history, and it never signs a scene off: approving or asking for changes is yours.'],
         ['h', 'Connect it'],
         ['steps', [
           'Start MeshOptimiser and open a model.',

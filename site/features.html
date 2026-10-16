@@ -21,10 +21,9 @@
   <meta property="og:url" content="https://xpayn3.github.io/MeshOptimiser/features" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=429" />
+  <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="site.css?v=453" />
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"}}</script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
@@ -217,8 +216,8 @@
         <div class="sv" data-reveal>
           <div class="sv-big">
             <p class="sv-sub">Gearbox, Meshopt</p>
-            <b>−79<small>%</small></b>
-            <span>file size</span>
+            <b>79<small>%</small></b>
+            <span>smaller file size</span>
             <em>4.95 MB → 1.03 MB</em>
           </div>
           <div class="sv-rows">
@@ -450,7 +449,7 @@
           <h2>Work with Claude</h2>
         </div>
         <ul class="tools">
-          <li><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg></i><div><strong>Just ask</strong><span>Say “find the bolts and hide them” or “get this under 5 MB”. Claude does it with the app’s 67 tools.</span></div></li>
+          <li><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg></i><div><strong>Just ask</strong><span>Say “find the bolts and hide them” or “get this under 5 MB”. Claude does it with the app’s 78 tools.</span></div></li>
           <li><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m16 9-5.5 5.5L8 12"/></svg></i><div><strong>You decide</strong><span>It asks before it changes anything. Deleting always asks. Every change is one undo.</span></div></li>
           <li><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg></i><div><strong>Try it first</strong><span>Sixteen steps can be tried first: done, shown, taken back.</span></div></li>
           <li><i class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></i><div><strong>One request, a whole job</strong><span>Under 5 MB, or ready for web, Shopify, AR or phone, with a before and after picture.</span></div></li>
@@ -489,7 +488,7 @@
             <div><h3>Pictures and film</h3><ul><li>Custom size to 16,384</li><li>Turntable video</li></ul></div>
             <div><h3>Search and commands</h3><ul><li>Command search</li><li>Typo-tolerant search</li><li>Calculator in the search</li><li>Quick wand</li><li>Numbers you can drag</li><li>Movable search</li><li>Resizable search</li></ul></div>
             <div><h3>Keyboard</h3><ul><li>Picture of the keyboard</li><li>Change any key</li><li>Key profiles</li></ul></div>
-            <div><h3>Work with Claude</h3><ul><li>Let Claude connect</li><li>MCP over local HTTP</li><li>67 tools</li><li>Four permission switches</li><li>One undo per change</li><li>Dry run</li><li>Optimise to a target</li><li>Before and after picture</li><li>Folder batch optimise</li><li>Clean renders to 8192 px</li><li>Turntable by Claude</li><li>Model health check</li><li>Run saved recipes</li><li>Search the app’s help</li><li>Six playbooks</li><li>Ready-made jobs</li><li>Claude mode (alpha)</li><li>Three-way permissions</li></ul></div>
+            <div><h3>Work with Claude</h3><ul><li>Let Claude connect</li><li>MCP over local HTTP</li><li>78 tools</li><li>Four permission switches</li><li>One undo per change</li><li>Dry run</li><li>Optimise to a target</li><li>Before and after picture</li><li>Folder batch optimise</li><li>Clean renders to 8192 px</li><li>Turntable by Claude</li><li>Model health check</li><li>Run saved recipes</li><li>Search the app’s help</li><li>Six playbooks</li><li>Ready-made jobs</li><li>Claude mode (alpha)</li><li>Three-way permissions</li></ul></div>
             <div><h3>Updates and recovery</h3><ul><li>Updates inside the app</li><li>Go back one version</li><li>Automatic rollback</li><li>Recovery copies</li><li>Safe mode</li></ul></div>
             <div><h3>Under the hood</h3><ul><li>WebGPU renderer</li><li>WebGL2 fallback</li><li>OpenCascade CAD kernel</li><li>Assembly tree from XCAF</li><li>Pose-independent instancing</li><li>Adaptive tessellation</li><li>meshoptimizer simplifier</li><li>Background mesh workers</li><li>BVH-accelerated picking</li><li>GPU-drawn outlines</li><li>Virtual scrolling tree</li><li>Lower resolution while moving</li><li>Auto quality</li><li>Reads compressed GLBs</li><li>Assimp in WebAssembly</li><li>glTF Transform on demand</li><li>Visibility from many directions</li><li>Fastener recognition by shape</li><li>Hole versus boss detection</li><li>Coplanar face joining</li><li>Regression self-tests</li><li>Open source, MIT</li></ul></div>
             <div><h3>Privacy and offline</h3><ul><li>Runs on your computer</li><li>Nothing uploaded</li><li>No account</li><li>Works offline</li><li>Original file never changed</li></ul></div>
@@ -512,7 +511,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.33.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.34.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
@@ -592,6 +591,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="site.js?v=101" data-viewer="viewer/"></script>
+  <script defer src="site.js?v=105" data-viewer="viewer/"></script>
 </body>
 </html>

@@ -21,10 +21,9 @@
   <meta property="og:url" content="https://xpayn3.github.io/MeshOptimiser/" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="site.css?v=429" />
+  <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="site.css?v=453" />
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"}}</script>
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
@@ -36,10 +35,10 @@
   "description": "Open a CAD assembly, strip what nobody sees, export a light GLB. Free, and it never leaves your computer.",
   "applicationCategory": "DesignApplication",
   "operatingSystem": "Windows, macOS",
-  "softwareVersion": "0.33.0",
+  "softwareVersion": "0.34.0",
   "url": "https://xpayn3.github.io/MeshOptimiser/",
   "image": "https://xpayn3.github.io/MeshOptimiser/Images/apps/meshoptimiser-share.jpg",
-  "downloadUrl": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.33.0/MeshOptimiser-v0.33.0.zip",
+  "downloadUrl": "https://github.com/xpayn3/MeshOptimiser/releases/download/v0.34.0/MeshOptimiser-v0.34.0.zip",
   "license": "https://opensource.org/licenses/MIT",
   "offers": {
     "@type": "Offer",
@@ -76,7 +75,7 @@
   </header>
   <main id="main">
     <section class="wrap hero">
-      <p class="kicker">v0.33.0<b>·</b>Beta<b>·</b>MIT<b>·</b>Windows and macOS</p>
+      <p class="kicker">v0.34.0<b>·</b>Beta<b>·</b>MIT<b>·</b>Windows and macOS</p>
       <h1>Heavy CAD, made light enough for a browser.</h1>
       <p class="lead">Open a CAD assembly, strip what nobody sees, export a light GLB. Free, and it never leaves your computer.</p>
       <div class="actions">
@@ -187,8 +186,8 @@
         <div class="sv" data-reveal>
           <div class="sv-big">
             <p class="sv-sub">Result</p>
-            <b>−50<small>%</small></b>
-            <span>triangles</span>
+            <b>50<small>%</small></b>
+            <span>fewer triangles</span>
             <em>646,064 → 322,988</em>
           </div>
           <div class="sv-rows">
@@ -446,16 +445,16 @@
       <div class="wrap split">
         <div class="split-head">
           <p class="kicker">Latest release</p>
-          <h2>v0.33.0<b class="rel-code">Ptuj</b></h2>
+          <h2>v0.34.0<b class="rel-code">Bled</b></h2>
           <a class="more" href="changelog.html">Full changelog</a>
         </div>
         <div class="split-body">
-          <p>Notes are tasks. A title, a description, the parts, who it is for, a priority and a due date, with comments under them, and the notes leave the app as a spreadsheet, JSON or BCF.</p>
+          <p>Animate gets a timeline along the bottom and a motion for pistons. Claude can read and write notes. The axis tools of Cinema 4D arrive, a selected group shows its parts softly, and the Windows download can carry Python inside.</p>
           <ul class="changes">
-            <li><b class="is-new">New</b><span>A note is made with a form. Press N and click a spot, or right-click the model: Add a note here, Add a note to this part. A title, an optional description, the kind, who it is for, the priority, a due date and a screenshot. Comments go under the note afterwards.</span></li>
-            <li><b class="is-new">New</b><span>Each kind has its own shape: a circle for Info, a rounded square for Question, a triangle for Issue, a diamond for Idea, with the number inside. A finished note is green, a late one has a red dashed outline, and a pin can show the title as a label on the model.</span></li>
-            <li><b class="is-new">New</b><span>Priority and due dates. High and urgent notes are marked on the pin and in the list, a late note says Overdue, the list can be ordered by priority or due date, and opening a scene says how many notes are late.</span></li>
-            <li><b class="is-new">New</b><span>A note can be about many parts, with no limit. The Parts section has a card for every part: Focus selects the part and takes the camera to it, and in edit mode a bin takes a part off and Add selected adds the parts selected in the viewport.</span></li>
+            <li><b class="is-new">New</b><span>A timeline along the bottom. Animate is a drawer set out like a video editor: a ruler, a row for every animated object and a bar for every motion. Drag the ruler or the playhead to scrub; drag the end of a bar to change its repeats and the bar to change its delay.</span></li>
+            <li><b class="is-new">New</b><span>Oscillate, for pistons, rockers and pumps. A to-and-fro on all three axes of shift and of turn at once, perfectly loopable. Waves: Sine, Piston (a crank turning a rod), Eased and Triangle, with lags that turn X and Y into circles and ellipses.</span></li>
+            <li><b class="is-new">New</b><span>Animation leaves the app. Include animation writes every moving part into a GLB or glTF as keyframes, and the timeline can be rendered to a WebM video. An Animation card in the right column plays, pauses, plays backwards and loops three ways.</span></li>
+            <li><b class="is-new">New</b><span>Axis Center and the Axis card. Centre the axis of a part and reset its rotation, move the axis or the object to the origin, the selection or the view, align the axis to the world, its parent or the part’s faces, reset the scale. One undo step each, and the shape never moves.</span></li>
           </ul>
         </div>
       </div>
@@ -475,7 +474,7 @@
               <p class="cmp-tag">On your machine</p>
               <h3>MeshOptimiser</h3>
               <p class="cmp-sub">The full app. Windows and macOS.</p>
-              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.33.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
+              <div class="cmp-act"><a class="cmp-btn" href="download.html">Download v0.34.0</a><a class="cmp-link" href="changelog.html">What is new</a></div>
             </div>
           </div>
           <div class="cmp-table" role="table">
@@ -555,6 +554,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="site.js?v=101" data-viewer="viewer/"></script>
+  <script defer src="site.js?v=105" data-viewer="viewer/"></script>
 </body>
 </html>

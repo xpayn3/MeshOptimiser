@@ -124,8 +124,9 @@ i, em { font-style: normal; }
 /* ---- type ---- */
 .kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: var(--tx-3); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
 .kicker b { color: var(--line-strong); font-weight: 400; }
-h1 { font-size: clamp(40px, 6.6vw, 88px); line-height: 1.0; letter-spacing: -0.045em; text-wrap: balance; }
-h2 { font-size: clamp(26px, 3.2vw, 42px); line-height: 1.1; letter-spacing: -0.03em; text-wrap: balance; }
+:root { --head-size: clamp(40px, 6.6vw, 88px); }      /* the size of an h1, and of the headline of a section */
+h1 { font-size: var(--head-size); line-height: 1.0; letter-spacing: -0.045em; text-wrap: balance; }
+h2 { font-size: clamp(30px, 3.6vw, 48px); line-height: 1.1; letter-spacing: -0.03em; text-wrap: balance; }
 h3 { font-size: 17px; line-height: 1.35; letter-spacing: -0.01em; }
 .lead { max-width: 62ch; color: var(--tx-2); font-size: clamp(17px, 1.5vw, 20px); line-height: 1.55; text-wrap: pretty; }
 p { text-wrap: pretty; }
@@ -160,14 +161,38 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 .why-points { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .why-points li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); gap: 16px; align-items: baseline; padding: 22px 0; border-bottom: 1px solid var(--line); }
 .why-points span { color: var(--tx-3); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; }
-.why-points p { margin: 0; color: var(--tx-1); font-size: clamp(18px, 2vw, 22px); }
+.why-points p { margin: 0; color: var(--tx-1); font-size: clamp(18px, 2vw, 22px); font-weight: 300; }
 
 /* the claims: big type on tiles, as on a product page */
 .bento { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: clamp(12px, 1.4vw, 18px); }
 .bento > .tile { grid-column: span 2; }
 .bento > .tile:nth-child(n+4) { grid-column: span 3; }
-.tile { display: flex; flex-direction: column; gap: 20px; min-height: clamp(250px, 23vw, 310px); padding: clamp(20px, 2vw, 30px); background: var(--surface); border: 1px solid var(--line); border-radius: clamp(20px, 2.2vw, 32px); transition: background 0.25s ease, border-color 0.25s ease; }
-.tile:hover { background: color-mix(in srgb, var(--tile-c, #ffffff) 13%, var(--surface)); border-color: var(--line-strong); }
+.tile { display: flex; flex-direction: column; gap: 20px; min-height: clamp(250px, 23vw, 310px); padding: clamp(20px, 2vw, 30px); background: var(--surface); border: 1px solid var(--line); border-radius: clamp(20px, 2.2vw, 32px); position: relative; overflow: hidden; isolation: isolate; transition: border-color 0.3s ease; }
+/* The hover. The tile is filled with its own colour, and the fill grows out from the point where the pointer came in (and shrinks back to the point
+   where it left): site.js sets --mx and --my. Nothing moves. Its text goes dark and every line of the drawing goes
+   black a moment after the fill reaches them. Only for a real pointer: on touch there is no hover. */
+@property --mx { syntax: '<length>'; inherits: true; initial-value: 0px; }
+@property --my { syntax: '<length>'; inherits: true; initial-value: 0px; }
+/* The fill is a big circle of the tile's colour that is only moved (translate) and scaled: the browser animates both on the graphics card, so the
+   drawing under it can keep moving without the hover stuttering. --mx and --my are the point where the pointer came in or left (site.js). */
+.tile::before { content: ""; position: absolute; left: 0; top: 0; width: 1800px; height: 1800px; margin: -900px 0 0 -900px; z-index: -1; pointer-events: none; border-radius: 50%; background: var(--tile-c, var(--accent)); translate: var(--mx) var(--my); scale: 0; will-change: scale; transition: scale 0.7s cubic-bezier(0.45, 0.05, 0.25, 1); }
+.tile-label, .tile h2, .tile h2 span, .tile-line { transition: color 0.4s ease 0.1s; }
+.tile-art, .tile-art .art-hot, .tile-art .art-dim { transition: color 0.4s ease 0.1s, stroke 0.4s ease 0.1s; }
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover { border-color: transparent; }
+  .tile:hover::before { scale: 1; }
+  .tile:hover .tile-label, .tile:hover h2, .tile:hover .tile-line { color: #101010; }
+  .tile:hover h2 span { color: rgba(16, 16, 16, 0.55); }
+  .tile:hover .tile-art { color: #101010; --art-dim: #101010; }
+  .tile:hover .tile-art .art-hot, .tile:hover .tile-art .art-dim { stroke: #101010; }
+  .tile:hover .tile-art text.art-t { fill: #101010; }
+  /* the parts that are coloured by an animation (a hit, a find, a glow) are black too: !important beats an animation */
+  .tile:hover .tile-art :is(path, circle, rect, ellipse, line, polyline, polygon):not(.art-solid):not(.art-fnd):not(.art-face):not(.art-hole) { stroke: #101010 !important; filter: none !important; }
+  .tile:hover .tile-art :is(.art-hole, .art-face) { fill: #101010 !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tile, .tile::before, .tile-label, .tile h2, .tile h2 span, .tile-line, .tile-art, .tile-art .art-hot, .tile-art .art-dim { transition: none; }
+}
 .tile-label { margin-top: 14px; margin-bottom: -12px; color: var(--tile-c, var(--accent)); font-size: 14px; font-weight: 500; letter-spacing: 0.01em; }
 .tile h2 { padding-top: 0; max-width: 15ch; font-size: clamp(24px, 2.6vw, 38px); font-weight: 500; line-height: 1.04; letter-spacing: -0.045em; color: var(--tx); text-wrap: balance; }
 .tile h2 span { color: var(--tx-3); }
@@ -253,9 +278,20 @@ figcaption { margin-top: 12px; color: var(--tx-3); font-size: 13px; line-height:
 @media (max-width: 1020px) { .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bento > .tile, .bento > .tile:nth-child(n+4) { grid-column: span 1; } .bento > .tile:last-child { grid-column: span 2; } .tile h2 { font-size: clamp(26px, 4.4vw, 40px); } }
 /* the clean-up tools: the same line drawings, one per card */
 .tile-art .art-solid { fill: var(--card-bg, var(--surface)); stroke: none; }
-:is(.clip, .star) .clip-art { display: block; width: 100%; height: auto; aspect-ratio: 592 / 370; padding: 8px; background: var(--surface); border-radius: var(--r); color: #77777c; --art-dim: #46464a; overflow: visible; transition: background 0.25s ease; }
+:is(.clip, .star) .clip-art { display: block; width: 100%; height: auto; aspect-ratio: 592 / 370; padding: 8px; background: radial-gradient(180px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, var(--glow)), rgba(255, 255, 255, 0) 70%), radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--tile-c, var(--accent)) var(--fill-r), rgba(0, 0, 0, 0) calc(var(--fill-r) + 1.5px)), var(--surface); border-radius: var(--r); color: #77777c; --art-dim: #46464a; overflow: visible; transition: --fill-r 0.42s cubic-bezier(0.22, 0.8, 0.18, 1), --glow 0.3s ease, color 0.22s ease 0.05s; }
 :is(.clip, .star) .clip-art { stroke-width: 1.9px; }
-:is(.clip, .star):hover .clip-art { --card-bg: color-mix(in srgb, var(--tile-c, #ffffff) 13%, var(--surface)); background: var(--card-bg); }
+/* The same hover as the claim tiles: the picture fills with its colour from the point where the pointer comes in, and its lines go black. */
+@property --fill-r { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --glow { syntax: '<number>'; inherits: false; initial-value: 0; }
+:is(.clip, .star) .clip-art .art-hot, :is(.clip, .star) .clip-art .art-dim { transition: stroke 0.4s ease 0.1s; }
+@media (hover: hover) and (pointer: fine) {
+  :is(.clip, .star):hover .clip-art { --fill-r: 1100px; --glow: 0.09; --card-bg: var(--tile-c, var(--accent)); color: #101010; --art-dim: #101010; }
+  :is(.clip, .star):hover .clip-art .art-hot, :is(.clip, .star):hover .clip-art .art-dim { stroke: #101010; }
+  :is(.clip, .star):hover .clip-art text.art-t { fill: #101010; }
+  :is(.clip, .star):hover .clip-art :is(path, circle, rect, ellipse, line, polyline, polygon):not(.art-solid):not(.art-fnd):not(.art-face):not(.art-hole) { stroke: #101010 !important; filter: none !important; }
+  :is(.clip, .star):hover .clip-art :is(.art-hole, .art-face) { fill: #101010 !important; }
+}
+@media (prefers-reduced-motion: reduce) { :is(.clip, .star) .clip-art, :is(.clip, .star) .clip-art .art-hot, :is(.clip, .star) .clip-art .art-dim { transition: none; } }
 .tile-art .art-hole, .tile-art .art-sa, .tile-art .art-sb, .tile-art .art-fnd { transform-box: fill-box; transform-origin: center; }
 .tile-art .art-fnd { transform-origin: 50% 85%; }
 .tile-art .art-hole { fill: var(--tile-c, #fff); fill-opacity: 0; }
@@ -494,7 +530,7 @@ b.is-refactor { color: var(--refactor); }
 .kb-group { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: clamp(20px, 4vw, 72px); align-items: start; scroll-margin-top: calc(var(--bar-h) + 84px); }
 .kb-group[hidden] { display: none; }
 .kb-group-head { position: sticky; top: calc(var(--bar-h) + 84px); display: grid; gap: 10px; }
-.kb-group-head h2 { font-size: clamp(24px, 2.6vw, 34px); }
+.kb-group-head h2 { font-size: clamp(28px, 3vw, 38px); }
 .kb-group-head p { max-width: 32ch; color: var(--tx-2); font-size: 15px; }
 .kb-list { display: grid; list-style: none; counter-reset: kb; }
 .kb-list li { counter-increment: kb; border-top: 1px solid var(--line); }
@@ -506,12 +542,13 @@ b.is-refactor { color: var(--refactor); }
 .kb-list a:hover strong { color: var(--accent-hover); }
 
 .kb-page { display: grid; grid-template-columns: 232px minmax(0, 1fr) 200px; gap: clamp(32px, 6vw, 104px); align-items: start; padding-top: clamp(40px, 5vw, 72px); }
-.kb-nav { position: sticky; top: calc(var(--bar-h) + 28px); display: grid; gap: 1px; max-height: calc(100vh - var(--bar-h) - 56px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding-bottom: 24px; }
+.kb-nav { position: sticky; top: calc(var(--bar-h) + 28px); display: grid; gap: 1px; align-content: start; max-height: calc(100vh - var(--bar-h) - 56px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 20px 10px 36px; margin: -20px -10px 0; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 36px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 22px, #000 calc(100% - 36px), transparent 100%); }
 .kb-nav::-webkit-scrollbar { display: none; }
-.kb-nav h2 { margin: 20px 0 6px; color: var(--tx-3); font-size: 11px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; }
-.kb-nav a { padding: 4px 0; color: var(--tx-2); font-size: 14px; line-height: 1.4; text-decoration: none; transition: color 0.15s ease; }
-.kb-nav a:hover { color: var(--tx); }
-.kb-nav a[aria-current] { color: var(--accent); }
+.kb-nav h2 { margin: 22px 0 6px; color: var(--tx-3); font-size: 11px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; }
+.kb-nav h2:first-of-type { margin-top: 14px; }
+.kb-nav a { display: block; margin: 0 -10px; padding: 6px 10px; border-radius: 8px; color: var(--tx-2); font-size: 14px; line-height: 1.35; text-decoration: none; transition: color 0.15s ease, background-color 0.15s ease; }
+.kb-nav a:hover { color: var(--tx); background: var(--surface); }
+.kb-nav a[aria-current] { color: var(--accent); background: var(--surface); }
 .kb-nav-home::before { content: '← '; }
 .kb-article { min-width: 0; max-width: 760px; }
 .kb-article .kicker a { text-decoration: none; }
@@ -520,7 +557,7 @@ b.is-refactor { color: var(--refactor); }
 .kb-body { display: grid; gap: 18px; margin-top: clamp(32px, 4vw, 52px); padding-top: clamp(28px, 3vw, 40px); border-top: 1px solid var(--line); font-size: 17px; line-height: 1.65; }
 .kb-body > * { min-width: 0; }
 .kb-body p, .kb-body li { color: var(--tx-2); }
-.kb-body h2 { margin-top: clamp(20px, 2.6vw, 36px); font-size: clamp(21px, 2vw, 26px); letter-spacing: -0.02em; scroll-margin-top: calc(var(--bar-h) + 24px); }
+.kb-body h2 { margin-top: clamp(20px, 2.6vw, 36px); font-size: clamp(24px, 2.3vw, 30px); letter-spacing: -0.02em; scroll-margin-top: calc(var(--bar-h) + 24px); }
 .kb-body h2:first-child { margin-top: 0; }
 .kb-body a:hover { text-decoration-color: currentColor; }
 .ui { color: var(--tx); }
@@ -592,7 +629,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 
 /* ---- the way to get it, at the foot of every page ---- */
 .get-in { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 32px; }
-.get h2 { font-size: clamp(30px, 4.4vw, 60px); letter-spacing: -0.035em; line-height: 1.02; }
+.get h2 { font-size: clamp(34px, 5vw, 68px); letter-spacing: -0.035em; line-height: 1.02; }
 .get p { max-width: 52ch; margin-top: 18px; color: var(--tx-2); font-size: 17px; }
 
 /* ---- footer ---- */
@@ -631,6 +668,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
   /* the name and the mark are larger on a phone too, and the bar a little taller to hold them (whole pixels) */
   :root { --bar-h: 68px; }
   .brand { font-size: 18px; gap: 12px; }
+  .brand span { font-size: 21px; }
   .bar .brand img { width: 40px; height: 40px; border-radius: 12px; }
   .bar .brand { padding: 6px 16px 6px 6px; margin-left: -6px; }
   .nav { position: fixed; left: 12px; right: 12px; top: calc(var(--bar-h) + 8px); z-index: 21; flex-direction: column; align-items: stretch; gap: 2px; margin: 0; padding: 8px; border-radius: 20px; background: color-mix(in srgb, var(--surface) 94%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5); box-shadow: inset 0 0 0 1px var(--line-strong), 0 24px 60px rgba(0, 0, 0, 0.55); opacity: 0; visibility: hidden; transform: translateY(-8px) scale(0.98); transform-origin: top right; transition: opacity 0.18s ease, transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.26s; }
@@ -679,7 +717,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .pop-parts { position: absolute; right: var(--gutter); top: clamp(16px, 5%, 56px); display: grid; gap: 7px; width: min(232px, 24%); margin: 0; padding: 0; list-style: none; pointer-events: none; }
 .pop-parts li { --at: calc(0.1 + var(--k) * 0.06); --t: clamp(0, calc((var(--p) - var(--at)) * 9), 1); display: grid; gap: 6px; padding: 9px 13px 10px; border: 1px solid var(--line); border-radius: 14px; background: rgba(25, 25, 26, 0.94); opacity: var(--t); transform: translate3d(calc((1 - var(--t)) * 36px), 0, 0); transition: border-color 0.25s ease, background 0.25s ease, translate 0.25s cubic-bezier(0.3, 1.4, 0.5, 1); }
 .pop-parts li.is-cur { translate: -10px 0; border-color: color-mix(in srgb, var(--accent) 65%, transparent); background: color-mix(in srgb, var(--accent) 9%, rgba(25, 25, 26, 0.94)); }
-.pop-copy h2 { margin-top: 14px; }
+.pop-copy h2 { margin-top: 14px; font-size: var(--head-size); line-height: 1.02; }      /* this section's headline is as big as an h1 */
 .pop-copy p:last-child { margin-top: 14px; color: var(--tx-2); font-size: 16px; }
 @media (max-width: 860px), (prefers-reduced-motion: reduce) {
   .pop { height: auto; }
@@ -1075,7 +1113,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 .cx-bar { display: flex; align-items: center; justify-content: center; height: 48px; padding: 0 18px; border-bottom: 1px solid var(--cx-line); color: var(--cx-mu); font-size: 14px; }
 .cx-thread { display: flex; flex-direction: column; gap: 26px; padding: clamp(20px, 4vw, 40px) clamp(18px, 4vw, 44px) clamp(24px, 3vw, 32px); list-style: none; }
 .cx-you { align-self: flex-end; max-width: min(88%, 600px); }
-.cx-you p { padding: 11px 16px; border-radius: 16px; background: var(--cx-user); color: var(--cx-tx); font-size: 16px; line-height: 1.5; }
+.cx-you p { padding: 11px 16px; border-radius: 16px; background: var(--cx-user); color: var(--cx-tx); font-size: 15.5px; line-height: 1.5; }
 .cx-ai { align-self: flex-start; width: 100%; max-width: 720px; }
 .cx-ai > p { color: var(--cx-tx); font: 400 17px/1.6 ui-serif, Georgia, Cambria, 'Times New Roman', serif; }
 .cx-tools { display: grid; gap: 6px; margin-top: 14px; list-style: none; }
@@ -1265,7 +1303,7 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 /* the last band: white, two columns, the online version beside the installed app */
 .band.compare { margin-top: var(--band); padding-block: clamp(72px, 9vw, 128px); border-top: 0; background: #fff; color: #1d1d1f; }
 main:has(.compare) + .foot { margin-top: 0; }
-.compare h2 { max-width: 14ch; margin-inline: auto; text-align: center; font-size: clamp(30px, 4.4vw, 56px); letter-spacing: -0.035em; line-height: 1.04; color: #1d1d1f; }
+.compare h2 { max-width: 14ch; margin-inline: auto; text-align: center; font-size: clamp(34px, 5vw, 64px); letter-spacing: -0.035em; line-height: 1.04; color: #1d1d1f; }
 .cmp { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 clamp(24px, 5vw, 80px); max-width: 900px; margin: clamp(48px, 6vw, 80px) auto 0; }
 .cmp-col { display: flex; flex-direction: column; align-items: center; text-align: center; }
 .cmp-tag { color: #bf4800; font-size: 12px; font-weight: 500; letter-spacing: 0.02em; }
@@ -1370,14 +1408,14 @@ main { overflow-x: clip; }
 .star figcaption { grid-template-columns: minmax(0, 1fr); }
 .star figcaption i { display: none; }
 .star figcaption span, .star figcaption .clip-more { grid-column: 1; }
-/* on hover a card takes a soft wash of its own colour on the dark ground (it does not turn white) */
-:is(.clip, .star):hover .clip-art { --card-bg: color-mix(in srgb, var(--tile-c, #ffffff) 13%, var(--surface)); background: var(--card-bg); }
+/* on hover the picture is filled with its colour (see the hover above); the parts that knock out what is behind them take the same colour */
 :is(.clip, .star):hover .clip-art .art-solid, :is(.clip, .star):hover .clip-art .art-fnd { fill: var(--card-bg); }
 /* the colours the drawings take from the card are registered so that they fade with it instead of switching */
 @property --art-dim { syntax: '<color>'; inherits: true; initial-value: #46464a; }
 @property --card-bg { syntax: '<color>'; inherits: true; initial-value: #19191a; }
-:is(.clip, .star) .clip-art { transition: background-color 0.35s ease, color 0.35s ease, stroke-width 0.35s ease, --art-dim 0.35s ease, --card-bg 0.35s ease; }
-:is(.clip, .star) .clip-art .art-hot { transition: filter 0.35s ease; }
+:is(.clip, .star) .clip-art { transition: --fill-r 0.7s cubic-bezier(0.45, 0.05, 0.25, 1), --glow 0.5s ease, color 0.4s ease 0.1s, stroke-width 0.35s ease, --art-dim 0.4s ease 0.1s, --card-bg 0.5s ease; }
+:is(.clip, .star) .clip-art .art-hot { transition: filter 0.4s ease, stroke 0.4s ease 0.1s; }
+:is(.clip, .star):hover .clip-art .art-hot { filter: none; }      /* (the coloured glow of the lines goes: they are black on the fill) */
 .tile-art .art-m-small { transform-box: fill-box; transform-origin: center; }
 @media (prefers-reduced-motion: no-preference) { .tile-art .art-m-small { animation: art-m-small var(--cycle) ease-in-out infinite; animation-delay: calc(var(--i) * 0.09s); } }
 .tile-art .art-m-bob { transform-box: fill-box; transform-origin: center; }
@@ -1423,7 +1461,7 @@ main { overflow-x: clip; }
 /* Pick how you run it: in the site's own dark look. It used to be a white band in the style of Apple's comparison pages
    (pill buttons, circled ticks, orange tags, "›" links). */
 .band.compare { background: transparent; color: var(--tx); border-top: 1px solid var(--line); padding-block: clamp(64px, 8vw, 112px); }
-.compare h2 { max-width: 22ch; margin-inline: 0; text-align: left; font-size: clamp(26px, 3.2vw, 42px); letter-spacing: -0.03em; line-height: 1.1; color: var(--tx); }
+.compare h2 { max-width: 22ch; margin-inline: 0; text-align: left; font-size: clamp(30px, 3.6vw, 48px); letter-spacing: -0.03em; line-height: 1.1; color: var(--tx); }
 .cmp { max-width: none; margin-top: clamp(32px, 4vw, 56px); }
 .cmp-col { align-items: flex-start; text-align: left; }
 .cmp-tag, .compare .cmp-tag { color: var(--tx-3); font-size: 12px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -1499,7 +1537,7 @@ main { overflow-x: clip; }
 .pop.is-armed.is-in .pb em { opacity: 1; transition: opacity 0.6s ease calc(0.6s + var(--i, 0) * 0.14s); }
 .pb.is-last s { background: var(--accent); }
 .pb em { font-style: normal; color: var(--tx-2); font-variant-numeric: tabular-nums; text-align: right; }
-.pop-note { margin: 0; max-width: 30ch; color: var(--tx-3); font-size: 10px; line-height: 1.5; }
+.pop-note { margin: 0; max-width: 30ch; color: var(--tx-3); font-size: 9.5px; line-height: 1.5; }
 @media (max-width: 860px) {
   .pop.is-axle { height: 230vh; }
   .pop.is-axle .pop-pin { position: sticky; top: var(--bar-h); height: max(calc(100svh - var(--bar-h)), 520px); display: block; }
@@ -1507,7 +1545,6 @@ main { overflow-x: clip; }
   .pop.is-axle .pop-poster { position: absolute; left: 0; right: 0; top: 0; width: 100%; height: calc(100% - 40px); object-fit: contain; }
   .pop.is-axle .pop-copy { display: block; width: auto; right: var(--gutter); bottom: 22px; }
   .pop.is-axle .pop-3d { inset: 0; height: 100%; }                  /* the model fills the screen: it is wider than a phone, so its sides are cropped */
-  .pop.is-axle .pop-copy h2 { font-size: clamp(24px, 7vw, 32px); }
   .pop-info { display: contents; }
   .pop-info-top { position: absolute; z-index: 1; top: 14px; right: var(--gutter); width: min(210px, 56%); gap: 10px; pointer-events: none; }
   .pop-note { position: absolute; z-index: 1; left: var(--gutter); right: var(--gutter); bottom: 12px; max-width: none; text-align: left; pointer-events: none; }
@@ -1718,3 +1755,29 @@ main { overflow-x: clip; }
 
 .credit-i { display: inline-block; width: 13px; height: 13px; margin: -2px 7px 0 0; vertical-align: middle; }
 .wand-band .wand-tips kbd svg { flex: none; width: 15px; height: 15px; margin-right: 8px; color: var(--tx-2); }
+
+/* Inter, the text face: hosted here (SIL Open Font License) and preloaded, so no page asks another server for a font. One variable file per script range, weights 300 to 500. */
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 300 500; font-display: swap; src: url('fonts/inter-latin-ext.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 300 500; font-display: swap; src: url('fonts/inter-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* Fraunces, the headline font: hosted here (SIL Open Font License) and preloaded by every page, so the headlines are drawn in it from the first paint.
+   One variable file per script range; the weights are 300 and 400. */
+@font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 300 400; font-display: swap; src: url('fonts/fraunces-latin-ext.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 300 400; font-display: swap; src: url('fonts/fraunces-latin.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+
+/* Headlines are Fraunces Light. The serif has a smaller x-height than Inter, so every headline size above is a step larger than it was.
+   (Small uppercase labels that are h2 keep Inter.) */
+:root { --serif: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif; }
+h1, h2 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto; }
+.hero h1, .page-head h1 { letter-spacing: -0.022em; }
+.tile h2 { font-weight: 300; letter-spacing: -0.025em; }
+.kb-rail h2, .kb-nav h2, .kb-see h2, .foot nav h2, .credit-group h2, .rp-card h2 { font-family: var(--font); }
+/* The name next to the logo is in the same serif, everywhere (the bar and the foot of every page). */
+.brand span { font-family: var(--serif); font-weight: 300; font-size: 18px; letter-spacing: -0.005em; }
+/* the big figures (a result like -79%, the figures rows, the token and knowledge numbers) are in the same light serif */
+.sv-big b, .figures dt, .tokens dt, .kn-figures dt, .live-side strong { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto; }
+.sv-big b { letter-spacing: -0.03em; }
+/* Titles that are headlines in their own right use the same serif on every page: caption titles of the screenshots and clips, and the h3 titles of
+   steps, spotlights, plans and the comparison columns. (Small labels, buttons and numbers stay Inter.) */
+.clip figcaption strong, .star figcaption strong, .steps h3, .spot h3, .plan-head h3, .cmp-col h3 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto; }

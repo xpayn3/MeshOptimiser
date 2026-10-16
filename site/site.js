@@ -1096,6 +1096,30 @@
     tiles.forEach(t => live.observe(t));
   }
 
+  // ---- the tiles' hover fills from the point where the pointer comes in, and goes back to where it leaves (the CSS reads --mx and --my) ----
+  // When the pointer slides from one tile into the next, the tile it left keeps shrinking toward the pointer while it crosses the gap, and the next
+  // tile opens from the point where it comes in: one circle that carries on from tile to tile.
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    const closing = new Map();      // a tile that was just left -> until when it follows the pointer
+    let following = false;
+    const refOf = new Map();      // the card -> the box the circle is measured on (a tile is its own; a clip or star card has its picture)
+    const put = (tile, e) => { const box = refOf.get(tile) || tile, r = box.getBoundingClientRect(); box.style.setProperty('--mx', (e.clientX - r.left).toFixed(0) + 'px'); box.style.setProperty('--my', (e.clientY - r.top).toFixed(0) + 'px'); };
+    const follow = (e) => {
+      const now = performance.now();
+      for (const [tile, until] of closing) { if (now > until) closing.delete(tile); else put(tile, e); }
+      if (!closing.size) { window.removeEventListener('pointermove', follow); following = false; }
+    };
+    [...$$('.bento > .tile'), ...$$('.clip, .star').filter(f => f.querySelector('.clip-art'))].forEach(tile => {
+      const art = tile.querySelector('.clip-art'); if (art) refOf.set(tile, art);
+      tile.addEventListener('pointerenter', e => { closing.delete(tile); put(tile, e); });
+      tile.addEventListener('pointerleave', e => {
+        put(tile, e);
+        closing.set(tile, performance.now() + 450);
+        if (!following) { following = true; window.addEventListener('pointermove', follow, { passive: true }); }
+      });
+    });
+  }
+
   // ---- commands that copy ----
   $$('.copy').forEach(button => button.addEventListener('click', () => {
     if (!navigator.clipboard) return;

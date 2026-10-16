@@ -6,6 +6,7 @@
 <script src="lite-shim.js?v=6"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MeshOptimiser online</title>
+<link rel="preload" href="vendor/fraunces/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin>
 <!-- Installable: the browser's "Install" / "Open in app" gives it a window of its own, without the address bar. -->
 <script>try{if(JSON.parse(localStorage.getItem('stepopt-prefs')||'{}').splashOnStart===false)document.documentElement.classList.add('no-splash')}catch(e){}</script>
 <script>/* Claude mode from the first paint: with ?claude (or when it was left on) neither the splash nor the app shows, only the dark page, until the feed takes over (app.js, setMode) */try{if(window.top===window&&!window.__MESHOPT_DEMO){var h=document.documentElement,v=localStorage.getItem('stepopt-claude-view');if(/[?&]claude\b/.test(location.search)||(v&&v!=='off')){h.classList.add('claude-boot','no-splash');setTimeout(function(){h.classList.remove('claude-boot')},6000)}}}catch(e){}</script>
@@ -48,6 +49,10 @@
 <link rel="modulepreload" href="vendor/three-mesh-bvh/index.module.js">
 <style>
 @font-face{font-family:'Inter';src:url('vendor/inter/InterVariable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:'Fraunces';src:url('vendor/fraunces/fraunces-latin-ext.woff2') format('woff2');font-weight:300 400;font-style:normal;font-display:swap;unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF}
+@font-face{font-family:'Fraunces';src:url('vendor/fraunces/fraunces-latin.woff2') format('woff2');font-weight:300 400;font-style:normal;font-display:swap;unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'Source Serif 4';src:url('vendor/source-serif/source-serif-latin-ext.woff2') format('woff2');font-weight:300 700;font-style:normal;font-display:swap;unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF}
+@font-face{font-family:'Source Serif 4';src:url('vendor/source-serif/source-serif-latin.woff2') format('woff2');font-weight:300 700;font-style:normal;font-display:swap;unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
 @font-face{font-family:'Geist';src:url('vendor/geist/Geist-Variable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 @font-face{font-family:'Space Grotesk';src:url('vendor/space-grotesk/space-grotesk-latin-ext.woff2') format('woff2');font-weight:300 700;font-style:normal;font-display:swap;unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
 @font-face{font-family:'Space Grotesk';src:url('vendor/space-grotesk/space-grotesk-latin.woff2') format('woff2');font-weight:300 700;font-style:normal;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
@@ -370,7 +375,7 @@ body.resizing *{cursor:col-resize !important}
 .brand-menu-changelog ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-3)}
 .brand-menu-changelog li{font-size:var(--fs-sm);line-height:var(--lh-snug);padding-left:var(--space-lg);position:relative;color:var(--wht-80);}
 .brand-menu-changelog li::before{content:"";position:absolute;left:2px;top:8px;width:3px;height:3px;border-radius:50%;background:var(--wht-50);}
-.brand-menu-sep{height:1px;margin:var(--space-md) var(--space-xs);background:var(--s6);}
+.brand-menu-sep{height:0;margin:var(--space-xs) 0;background:none}      /* (no line: the groups are told apart by space alone) */
 .brand-menu-item{all:unset;display:flex;align-items:center;cursor:pointer;user-select:none}
 .brand-menu-item svg{width:var(--icon-sm);height:var(--icon-sm);fill:none;stroke-width:2;flex:0 0 auto}
 .brand-menu-item svg.brand-gh{stroke:none;fill:currentColor;color:var(--wht-80);}
@@ -495,8 +500,10 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 .tree-vis svg{width:var(--icon-sm);height:var(--icon-sm);stroke:currentColor;fill:none;stroke-width:2}
 .tree-color{width:10px;height:10px;border-radius:var(--r-2xs);flex-shrink:0;border:1px solid var(--s5)}
 .tree-label{flex:0 0 auto;white-space:nowrap}
-.tree-badge{display:inline-block;padding:1px var(--space-5);font-size:var(--fs-2xs);background:var(--ac-tint-15);color:var(--ac-text);border-radius:var(--r-xs);margin-left:var(--space-xs)}
+.tree-badge{display:inline-block;padding:1px var(--space-5);font-size:var(--fs-2xs);text-transform:uppercase;letter-spacing:var(--tracking-wide);background:var(--ac-tint-15);color:var(--ac-text);border-radius:var(--r-xs);margin-left:var(--space-xs)}
 .tree-inst{display:inline-flex;align-items:center;gap:var(--space-3);padding:1px var(--space-5);font-size:var(--fs-2xs);background:rgba(167,139,250,.18);color:var(--ac2);border-radius:var(--r-xs);margin-left:var(--space-sm);font-variant-numeric:tabular-nums;cursor:pointer;transition:background var(--dur-100) var(--ease-out),color var(--dur-100) var(--ease-out),transform var(--dur-instant) var(--ease-out)}
+.tree-badge.has-ico{display:inline-flex;align-items:center;gap:var(--space-3)}
+.tree-badge svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2.2}
 .tree-inst:hover{background:rgba(167,139,250,.32);color:#d8c5ff}
 .tree-inst:active{transform:scale(.92)}
 .tree-inst svg{width:9px;height:9px;stroke:currentColor;fill:none;stroke-width:2.2}
@@ -1128,10 +1135,6 @@ body.msr-mode #canvas{cursor:crosshair}
    are an older variant; this block overrides gap+padding via source order
    exactly as the runtime injection did. */
 #_mat-editor-popup .dlg-pop{height:auto !important;max-height:calc(100vh - 24px)}
-#_mat-editor-popup .dlg-pop:has(.dlg-resize.nw:hover),
-#_mat-editor-popup .dlg-pop:has(.dlg-resize.ne:hover),
-#_mat-editor-popup .dlg-pop:has(.dlg-resize.sw:hover),
-#_mat-editor-popup .dlg-pop:has(.dlg-resize.se:hover){background:var(--bg1)}
 #_mat-editor-popup .dlg-head{padding:var(--space-lg) var(--space-xl)}
 #_mat-editor-popup .dlg-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx3)}
 #_mat-editor-popup .dlg-sub{display:none}
@@ -1265,7 +1268,7 @@ body.msr-mode #canvas{cursor:crosshair}
 #_flat-dialog .flat-opt input[type=radio]:checked{border-color:var(--ac);background:var(--ac)}
 #_flat-dialog .flat-opt input[type=radio]:checked::after{content:'';width:5px;height:5px;border-radius:50%;background:var(--white)}
 #_flat-dialog .dlg-sub,#_brn-dialog .dlg-sub{display:none}
-#_flat-dialog .dlg-head-icon,#_brn-dialog .dlg-head-icon{display:none}      /* (the title stands alone in the bar, as in Materials and Library) */
+#_flat-dialog .dlg-head-icon,#_brn-dialog .dlg-head-icon,#_mat-editor-popup .dlg-head-icon{display:none}      /* (the title stands alone in the bar, as in Materials and Library) */
 #_flat-dialog .flat-opt{position:relative;align-items:center;gap:var(--space-2xl)}
 #_flat-dialog .flat-opt input[type=radio]{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}      /* (the whole card is the choice; its tick is the badge at the right) */
 #_flat-dialog .flat-opt:has(input:focus-visible){outline:2px solid var(--ac);outline-offset:2px}
@@ -1316,7 +1319,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .dlg-popup.show .dlg-pop{transform:translateY(0) scale(1);opacity:1}
 .dlg-popup.dragging .dlg-pop,.dlg-popup.resizing .dlg-pop{transition:none}
 .dlg-popup .dlg-pop{contain:layout style}      /* (what happens inside the window cannot make the page lay out again) */
-.dlg-popup.dragging .dlg-pop{cursor:grabbing}
+.dlg-popup.dragging .dlg-pop{cursor:default}
 
 .dlg-popup .dlg-resize{position:absolute;z-index:2}
 .dlg-popup .dlg-resize.n{top:-3px;left:12px;right:12px;height:6px;cursor:ns-resize}
@@ -1328,13 +1331,9 @@ body.msr-mode #canvas{cursor:crosshair}
 .dlg-popup .dlg-resize.sw{bottom:-3px;left:-3px;width:16px;height:16px;cursor:nesw-resize}
 .dlg-popup .dlg-resize.se{bottom:-3px;right:-3px;width:16px;height:16px;cursor:nwse-resize}
 
-.dlg-popup .dlg-pop:has(.dlg-resize.nw:hover){background:radial-gradient(circle at 0% 0%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-.dlg-popup .dlg-pop:has(.dlg-resize.ne:hover){background:radial-gradient(circle at 100% 0%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-.dlg-popup .dlg-pop:has(.dlg-resize.sw:hover){background:radial-gradient(circle at 0% 100%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
-.dlg-popup .dlg-pop:has(.dlg-resize.se:hover){background:radial-gradient(circle at 100% 100%,var(--ac-tint-45),var(--ac-tint-12) 26px,transparent 56px),linear-gradient(180deg,var(--bg3),var(--bg))}
 
-.dlg-popup .dlg-head{display:flex;align-items:center;gap:var(--space-xl);padding:var(--space-xl) var(--space-2xl) var(--space-xl) var(--space-3xl);flex-shrink:0;position:relative;cursor:grab;user-select:none}
-.dlg-popup .dlg-head:active{cursor:grabbing}
+.dlg-popup .dlg-head{display:flex;align-items:center;gap:var(--space-xl);padding:var(--space-xl) var(--space-2xl) var(--space-xl) var(--space-3xl);flex-shrink:0;position:relative;cursor:default;user-select:none}
+.dlg-popup .dlg-head:active{cursor:default}
 .dlg-popup .dlg-head-icon{width:30px;height:30px;border-radius:var(--r-lg);display:grid;place-items:center;background:linear-gradient(180deg,var(--ac-tint-20),var(--ac-tint-12));color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-35),inset 0 1px 0 var(--s5),0 1px 2px var(--blk-30);flex-shrink:0}
 .dlg-popup .dlg-head-icon svg{width:var(--icon-md);height:var(--icon-md);stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .dlg-popup .dlg-head-titles{flex:1;min-width:0}
@@ -1577,6 +1576,9 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* profiles: one button in the title bar, its menu under it */
 .sc-modal .modal-h{gap:var(--space-xl)}
 .sc-modal .modal-h h3{margin-right:auto}
+/* the title in the website's serif, larger, and no line under the bar */
+.modal.sc-modal .modal-h{border-bottom:0;padding-left:47px}      /* (the title starts where the keyboard does) */
+.modal.sc-modal .modal-h h3{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:32px;line-height:1.1;letter-spacing:-.005em}
 .sc-prof{position:relative}
 .sc-prof-btn{display:inline-flex;align-items:center;gap:var(--space-md);height:var(--btn-h-sm);padding:0 var(--space-md) 0 var(--space-xl);border:0;border-radius:var(--r-sm);background:var(--s3);color:var(--tx-control);font:inherit;font-size:var(--fs-sm);cursor:pointer;transition:var(--tr-bg-fg)}
 .sc-prof-btn:hover,.sc-prof.open .sc-prof-btn{background:var(--s5);color:var(--tx-control-hover)}
@@ -1760,50 +1762,50 @@ button.sc-row-keys:hover{background:var(--s5)}
 .dlg-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-xl);transition:color var(--dur-fast),background var(--dur-fast)}
 .dlg-close:hover{color:var(--tx);background:var(--s3)}
 
-/* ── Save Screenshot dialog (:is(#scrshot-dlg,#turntable-dlg)) ───────────────────────────────
+/* ── Save Screenshot dialog (:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg)) ───────────────────────────────
    Migrated from the JS-injected _scrshot-dlg-style block. All rules are
-   scoped to :is(#scrshot-dlg,#turntable-dlg) so they can't leak into other popups. */
-:is(#scrshot-dlg,#turntable-dlg) .ss-body{padding:var(--space-2xl) var(--space-3xl);display:flex;flex-direction:column;gap:var(--space-2xl);overflow-y:auto}
-:is(#scrshot-dlg,#turntable-dlg) .ss-section-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;margin-bottom:var(--space-sm)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-sm)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:var(--space-md) var(--space-lg);border-radius:var(--r-md);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:var(--space-2xs);transition:background var(--dur-140) ease,border-color var(--dur-140) ease,transform var(--dur-fast) ease}
-:is(#scrshot-dlg,#turntable-dlg) .ss-preset:hover{background:var(--s2);border-color:var(--s5)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-preset.active{background:linear-gradient(180deg,var(--ac-tint-18),var(--ac-tint-08));border-color:var(--ac-tint-40);color:var(--tx)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-preset .lbl{font-size:var(--fs-12);font-weight:var(--fw-semibold);line-height:1.1}
-:is(#scrshot-dlg,#turntable-dlg) .ss-preset .sub{font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
-:is(#scrshot-dlg,#turntable-dlg) .ss-preset.active .sub{color:var(--ac-text)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-custom{display:flex;align-items:center;gap:var(--space-md)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:var(--space-7) var(--space-lg);border-radius:var(--r-sm);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
-:is(#scrshot-dlg,#turntable-dlg) .ss-custom input:focus{border-color:var(--ac-tint-55)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-custom .x{color:var(--tx3);font-size:var(--fs-lg);font-weight:var(--fw-medium)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-meta{display:flex;justify-content:space-between;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
-:is(#scrshot-dlg,#turntable-dlg) .ss-meta strong{color:var(--tx2);font-weight:var(--fw-medium)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-name{display:flex;flex-direction:column;gap:var(--space-sm)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:var(--space-md) var(--space-lg);border-radius:var(--r-sm);font-size:var(--fs-md);outline:none}
-:is(#scrshot-dlg,#turntable-dlg) .ss-name input:focus{border-color:var(--ac-tint-55)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-lg);background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm);cursor:pointer;user-select:none;transition:background var(--dur-fast) ease,border-color var(--dur-fast) ease}
-:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row:hover{background:var(--s3);border-color:var(--s5)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
-:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row .lbl{flex:1;font-size:var(--fs-12);color:var(--tx);font-weight:var(--fw-medium)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-overlay-row .hint{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-regular);margin-left:var(--space-xs)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-fields{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm) var(--space-xl);padding:var(--space-lg) var(--space-xl);background:var(--s1);border:1px solid var(--bd);border-top:0;border-radius:0 0 var(--r-sm) var(--r-sm);margin-top:-7px}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-fields.disabled{opacity:var(--op-45);pointer-events:none}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-check{display:flex;align-items:center;gap:var(--space-7);font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-check input{accent-color:var(--ac);width:12px;height:12px;cursor:pointer;margin:0}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos{display:flex;align-items:center;gap:var(--space-sm);grid-column:1 / -1;padding-top:var(--space-sm);margin-top:var(--space-2xs);border-top:1px solid var(--bd);font-size:var(--fs-11);color:var(--tx3)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--space-3);flex:1}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:var(--space-xs) var(--space-md);border-radius:var(--r-sm);font-size:var(--fs-11);cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);font-variant-numeric:tabular-nums}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos-btn:hover{background:var(--s3);color:var(--tx)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-stamp-pos-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-vmode{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-sm)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-vmode-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:var(--space-7) var(--space-md);border-radius:var(--r-sm);font-size:var(--fs-11);cursor:pointer;font-weight:var(--fw-medium);transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-vmode-btn:hover{background:var(--s3);color:var(--tx)}
-:is(#scrshot-dlg,#turntable-dlg) .ss-vmode-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
-:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-cancel,:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-save{padding:var(--space-7) var(--space-2xl);font-size:var(--fs-12);border-radius:var(--r-sm);border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:var(--fw-medium)}
-:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-cancel:hover{background:var(--s3)}
-:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-save{background:linear-gradient(180deg,var(--ac-tint-35),var(--ac-tint-18));border-color:var(--ac-tint-55);color:var(--tx-on-accent)}
-:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-save:hover{background:linear-gradient(180deg,var(--ac-tint-40),var(--ac-tint-25))}
-:is(#scrshot-dlg,#turntable-dlg) .dlg-foot .ss-save:disabled{opacity:var(--op-5);cursor:wait}
+   scoped to :is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) so they can't leak into other popups. */
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-body{padding:var(--space-2xl) var(--space-3xl);display:flex;flex-direction:column;gap:var(--space-2xl);overflow-y:auto}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-section-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);color:var(--tx2);letter-spacing:var(--tracking-wide);text-transform:uppercase;margin-bottom:var(--space-sm)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-presets{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-sm)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-preset{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:var(--space-md) var(--space-lg);border-radius:var(--r-md);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:var(--space-2xs);transition:background var(--dur-140) ease,border-color var(--dur-140) ease,transform var(--dur-fast) ease}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-preset:hover{background:var(--s2);border-color:var(--s5)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-preset.active{background:linear-gradient(180deg,var(--ac-tint-18),var(--ac-tint-08));border-color:var(--ac-tint-40);color:var(--tx)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-preset .lbl{font-size:var(--fs-12);font-weight:var(--fw-semibold);line-height:1.1}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-preset .sub{font-size:var(--fs-xs);color:var(--tx3);font-variant-numeric:tabular-nums}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-preset.active .sub{color:var(--ac-text)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-custom{display:flex;align-items:center;gap:var(--space-md)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-custom input{flex:1;background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:var(--space-7) var(--space-lg);border-radius:var(--r-sm);font-size:var(--fs-md);outline:none;font-variant-numeric:tabular-nums}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-custom input:focus{border-color:var(--ac-tint-55)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-custom .x{color:var(--tx3);font-size:var(--fs-lg);font-weight:var(--fw-medium)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-meta{display:flex;justify-content:space-between;font-size:var(--fs-11);color:var(--tx3);font-variant-numeric:tabular-nums}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-meta strong{color:var(--tx2);font-weight:var(--fw-medium)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-name{display:flex;flex-direction:column;gap:var(--space-sm)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-name input{background:var(--bg3);border:1px solid var(--bd);color:var(--tx);padding:var(--space-md) var(--space-lg);border-radius:var(--r-sm);font-size:var(--fs-md);outline:none}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-name input:focus{border-color:var(--ac-tint-55)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-overlay-row{display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-lg);background:var(--s1);border:1px solid var(--bd);border-radius:var(--r-sm);cursor:pointer;user-select:none;transition:background var(--dur-fast) ease,border-color var(--dur-fast) ease}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-overlay-row:hover{background:var(--s3);border-color:var(--s5)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-overlay-row input{accent-color:var(--ac);width:14px;height:14px;flex:0 0 auto;cursor:pointer;margin:0}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-overlay-row .lbl{flex:1;font-size:var(--fs-12);color:var(--tx);font-weight:var(--fw-medium)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-overlay-row .hint{font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-regular);margin-left:var(--space-xs)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-fields{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm) var(--space-xl);padding:var(--space-lg) var(--space-xl);background:var(--s1);border:1px solid var(--bd);border-top:0;border-radius:0 0 var(--r-sm) var(--r-sm);margin-top:-7px}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-fields.disabled{opacity:var(--op-45);pointer-events:none}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-check{display:flex;align-items:center;gap:var(--space-7);font-size:var(--fs-11);color:var(--tx2);cursor:pointer;user-select:none}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-check input{accent-color:var(--ac);width:12px;height:12px;cursor:pointer;margin:0}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-pos{display:flex;align-items:center;gap:var(--space-sm);grid-column:1 / -1;padding-top:var(--space-sm);margin-top:var(--space-2xs);border-top:1px solid var(--bd);font-size:var(--fs-11);color:var(--tx3)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-pos-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--space-3);flex:1}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-pos-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:var(--space-xs) var(--space-md);border-radius:var(--r-sm);font-size:var(--fs-11);cursor:pointer;transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast);font-variant-numeric:tabular-nums}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-pos-btn:hover{background:var(--s3);color:var(--tx)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-stamp-pos-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-vmode{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-sm)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-vmode-btn{background:var(--bg3);border:1px solid var(--bd);color:var(--tx2);padding:var(--space-7) var(--space-md);border-radius:var(--r-sm);font-size:var(--fs-11);cursor:pointer;font-weight:var(--fw-medium);transition:background var(--dur-fast),border-color var(--dur-fast),color var(--dur-fast)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-vmode-btn:hover{background:var(--s3);color:var(--tx)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .ss-vmode-btn.active{background:var(--ac-tint-25);border-color:var(--ac-tint-55);color:var(--ac-text)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .dlg-foot .ss-cancel,:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .dlg-foot .ss-save{padding:var(--space-7) var(--space-2xl);font-size:var(--fs-12);border-radius:var(--r-sm);border:1px solid var(--bd);background:var(--bg3);color:var(--tx);cursor:pointer;font-weight:var(--fw-medium)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .dlg-foot .ss-cancel:hover{background:var(--s3)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .dlg-foot .ss-save{background:linear-gradient(180deg,var(--ac-tint-35),var(--ac-tint-18));border-color:var(--ac-tint-55);color:var(--tx-on-accent)}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .dlg-foot .ss-save:hover{background:linear-gradient(180deg,var(--ac-tint-40),var(--ac-tint-25))}
+:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) .dlg-foot .ss-save:disabled{opacity:var(--op-5);cursor:wait}
 /* Export window — a format list on the left, that format's options on the right.
    Same language as Settings: an inset list, hairline rows with the label (and a
    line saying what it does) on the left and the control on the right. */
@@ -1892,6 +1894,15 @@ button.sc-row-keys:hover{background:var(--s5)}
 .exp-foot-note{min-width:0;font-size:var(--fs-12);color:var(--tx3);line-height:var(--lh-base)}
 .exp-foot-note.is-warn{color:var(--wn)}
 .exp-foot-act{display:flex;align-items:center;gap:var(--space-md);flex-shrink:0}
+.exp-share{position:relative}
+#export-modal #exp-share-btn{display:inline-grid;place-items:center;box-sizing:border-box;width:38px;min-width:38px;height:38px;min-height:0;padding:0;border-radius:50%}
+#export-modal #exp-share-btn svg,#export-modal #exp-share-btn i{width:16px;height:16px}
+#export-modal #exp-share-btn:active{transform:scale(.94)}
+.exp-share-menu{position:absolute;right:0;bottom:calc(100% + 6px);min-width:190px;padding:4px;background:var(--panel,#1c1c1c);border:1px solid var(--line,rgba(255,255,255,.12));border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:5}
+.exp-share-menu[hidden]{display:none}
+.exp-share-menu button{display:flex;justify-content:space-between;align-items:center;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer;text-align:left}
+.exp-share-menu button:hover,.exp-share-menu button:focus-visible{background:rgba(255,255,255,.08);outline:none}
+.exp-share-menu small{opacity:.55}
 #export-confirm{min-width:150px;font-size:var(--fs-12)}
 #export-modal #export-compat-btn{font-size:var(--fs-12)}
 #export-modal .sv-chip{font-size:var(--fs-11)}
@@ -2933,8 +2944,9 @@ body.mat-dock-open:has(#log-console.show) .vpc.tl:not(#vp-perf){top:calc(50% - m
 body.mat-dock-open .vp-cmd-host{bottom:calc(min(var(--mat-dock-h),80vh) + 12px);max-height:calc(100% - min(var(--mat-dock-h),80vh) - 24px)}
 .vp-cmd-host>.section-cmd{pointer-events:auto;margin:0;display:flex;flex-direction:column;min-height:0;max-height:100%;border:0;border-radius:var(--surface-pop-r);box-shadow:var(--surface-shadow),var(--surface-ring);overflow:hidden}
 .vp-cmd-host>.section-cmd[hidden]{display:none}
-body.cmd-dragging,body.cmd-dragging *{cursor:grabbing!important}
-body.cmd-dragging .vp-cmd-host{transition:none}
+/* (the grip holds the pointer while it is dragged, so its cursor is the one that shows: a rule on every element would restyle the whole page, thousands of tree rows, at the start of each drag) */
+body.cmd-dragging .vp-cmd-host .section-h,body.cmd-dragging .vp-cmd-host .cmd-hero{cursor:grabbing}
+body.cmd-dragging .vp-cmd-host{transition:none;will-change:translate}
 .vp-cmd-host .section-h,.vp-cmd-host .section-h:hover{cursor:grab;touch-action:none;color:var(--tx2);padding:var(--space-lg) var(--space-md) var(--space-md) var(--space-xl);flex:0 0 auto}
 .vp-cmd-host .section-b{padding:var(--space-2xs) var(--space-xl) var(--space-xl);overflow-y:auto;min-height:0;flex:1 1 auto}
 .vp-cmd-host .section-b>.btn{justify-content:flex-start;text-align:left}
@@ -3014,6 +3026,12 @@ body.cmd-dragging .vp-cmd-host{transition:none}
 :is(.vp-pill.vp-pill-mode,#_a#_b):hover{background:color-mix(in srgb,var(--ac) 40%,var(--blk-50));color:var(--tx-on-accent)}
 .vp-pill-mode .vp-pill-x{opacity:var(--op-6);width:12px;height:12px;margin-left:var(--space-2xs)}
 .vp-pill-mode:hover .vp-pill-x{opacity:1}
+/* The close button of the status pills (Isolated, Exploded, Measure, Animate, Notes): one circle, the same in each, with as much room above,
+   below and to its right as the pill is tall (so the circle sits evenly in the end of the pill) */
+.vp-pill.vp-pill-mode{--pill-x:22px;--pill-x-gap:calc((30px - var(--pill-x)) / 2)}      /* (30px: the height of the pill, set a little further down) */
+.vp-pill.vp-pill-mode .vp-pill-x{box-sizing:border-box;flex:0 0 var(--pill-x);width:var(--pill-x);height:var(--pill-x);margin:0 0 0 var(--space-2xs);padding:4px;border-radius:50%;stroke-width:2;transition:background var(--dur-fast) var(--ease-out),opacity var(--dur-fast) var(--ease-out)}
+.vp-pill.vp-pill-mode:hover .vp-pill-x{background:color-mix(in srgb,var(--pc-ink) 16%,transparent)}
+:is(.vp-pill.vp-pill-mode,#_a#_b#_c):has(.vp-pill-x),#vp-animate-pill#vp-animate-pill.has-play,#vp-notes-pill#vp-notes-pill.has-play{padding-right:var(--pill-x-gap)}
 /* Command panel above the bottom toolbar when there is no room beside it. */
 .vp-cmd-host.lifted{bottom:58px;max-height:calc(100% - 70px)}
 body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) + 58px);max-height:calc(100% - min(var(--mat-dock-h),80vh) - 70px)}
@@ -3391,6 +3409,19 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    surface reads against the page, and well below the old #1e1e1e. */
 .cp-pop,.vp-cmd-host>.section-cmd,.cs-pop,#file-menu,.vp-pill-menu,.brand-menu{background:var(--surface-pop)}
 .brand-menu{background-image:none}
+/* The About menu in the accent colour: a soft blue glow that drifts slowly behind it, only while it is open */
+.brand-menu{border-color:var(--ac-line);background-image:linear-gradient(180deg,var(--ac-tint-08),transparent 55%)}
+.brand-menu>*{position:relative}
+.brand-menu::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background-repeat:no-repeat;background-size:170% 170%;
+  background-image:radial-gradient(60% 45% at 18% 12%,var(--ac-tint-25),transparent 70%),radial-gradient(55% 40% at 88% 92%,color-mix(in srgb,var(--ac2) 22%,transparent),transparent 70%);background-position:0% 0%}
+.brand-menu.show::before{animation:brandGlow 12s ease-in-out infinite alternate}
+@keyframes brandGlow{0%{background-position:0% 0%}50%{background-position:60% 40%}100%{background-position:100% 100%}}
+.brand-menu .brand-menu-mark{background:linear-gradient(135deg,var(--ac),color-mix(in srgb,var(--ac2) 85%,var(--ac)));box-shadow:0 4px 14px -4px var(--ac-tint-55)}
+.brand-menu .brand-menu-mark svg{stroke:var(--white);fill:var(--white)}
+.brand-menu .brand-menu-ver{border-color:var(--ac-line);color:var(--ac-text);background:var(--ac-tint-15)}
+.brand-menu .brand-menu-changelog-head{color:var(--ac-text)}
+.brand-menu .brand-menu-sep{background:none}
+@media (prefers-reduced-motion:reduce){.brand-menu.show::before{animation:none}}
 
 /* Search: a popup standing on its button in the bottom toolbar. A search
    field, then suggestions (or results) with an icon, the name and the
@@ -3416,6 +3447,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .cmdk-section:empty{display:none}
 :is(.cmdk-item,#_a#_b){gap:var(--space-lg);padding:var(--space-sm) var(--space-md);border-radius:var(--r-sm);font-size:var(--fs-13);color:var(--tx-control)}
 .cmdk-item-icon{width:var(--icon-md);height:var(--icon-md);flex:0 0 15px;color:var(--tx2);stroke-width:1.8}
+.cmdk-item .cmdk-opens{flex:none;width:13px;height:13px;margin-left:6px;opacity:.45;align-self:center}.cmdk-item.active .cmdk-opens{opacity:.8}
 :is(.cmdk-item .cmdk-item-label,#_a#_b){flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:inherit}
 :is(.cmdk-item .cmdk-item-group,#_a#_b){min-width:0;flex:0 0 auto;font-size:var(--fs-11);color:var(--tx3)}
 :is(.cmdk-item.active,#_a#_b){background:var(--s4);color:var(--tx-control-hover)}
@@ -3608,6 +3640,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .welcome-recent .wr-tags{position:absolute;left:var(--space-md);top:var(--space-md);display:flex;gap:var(--space-sm)}
 .welcome-recent .wr-tags .wr-tag{position:static}
 .welcome-recent .wr-tag.is-conv{background:rgba(16,16,16,.72);color:var(--tx-control-hover)}
+.welcome-recent .wr-tag.is-notes{background:rgba(16,16,16,.72);color:var(--tx-control-hover);gap:var(--space-xs,4px)}.welcome-recent .wr-tag.is-notes svg{width:12px;height:12px}
 .welcome-recent.is-recovered:focus-visible{box-shadow:inset 0 0 0 1.5px var(--wn)}
 .welcome-recent .wr-meta{display:flex;flex-direction:column;gap:var(--space-3);min-width:0;padding:var(--space-md) var(--space-xl) var(--space-lg)}
 .welcome-recent .wr-name{font-size:var(--fs-md);line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -3687,6 +3720,9 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .align-head{--fld-h:var(--num-h);--fld-px:var(--num-px)}
 /* materials dock: the same height for its value pill */
 .mat-row-val .scrub-rhs{height:24px;padding:0 var(--space-lg)}
+/* every number field of the material rows is the same size (a unit such as the × of Intensity went inside it instead of making it wider), so the sliders all start at one place */
+.mat-row-val .scrub-head{flex:0 0 76px;width:76px}
+.mat-row-val .scrub-rhs{box-sizing:border-box;width:100%;justify-content:center}
 /* position, rotation and scale: the − and + stand over the ends of the field
    and show only while the pointer is on it, so the number has the whole
    width (−1091.000 used to be cut to −1091) */
@@ -3726,6 +3762,12 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #transform-panel .tform-row-label{font-weight:var(--fw-regular)}
 #transform-panel .tform-num{background:var(--blk-30)}
 #transform-panel .tform-num .tform-step{background:color-mix(in srgb,var(--surface-pop) 72%,var(--black))}
+.section-cmd[data-cmd="axis"] .ax-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:4px 0 var(--space-md)}
+.section-cmd[data-cmd="axis"] .ax-chips .btn{justify-content:center;gap:5px;padding:0 6px;height:26px;min-height:0;font-size:11.5px;overflow:hidden;white-space:nowrap}
+.section-cmd[data-cmd="axis"] .ax-chips .btn svg,.section-cmd[data-cmd="axis"] .ax-chips .btn i{display:none}
+.section-cmd[data-cmd="axis"] .cmd-lede{margin-bottom:6px}
+.section-cmd[data-cmd="axis"] .pv-head{margin:10px 0 4px}
+.section-cmd[data-cmd="axis"] .pv-head{margin:var(--space-lg) 0 var(--space-sm);font-size:var(--fs-11);color:var(--tx3)}
 .section-cmd[data-cmd="pivot"] .pv-chips{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin:var(--space-md) 0}
 .section-cmd[data-cmd="pivot"] .pv-chips .btn{justify-content:flex-start;gap:var(--space-md);padding:0 var(--space-lg)}
 .section-cmd[data-cmd="pivot"] .pv-head{margin:var(--space-lg) 0 var(--space-sm);font-size:var(--fs-11);color:var(--tx3)}
@@ -3763,9 +3805,11 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 @media (prefers-reduced-motion:reduce){#sidebar-right .section-h .chev{transition:none}}
 /* a count on a card's header, seen while the card is folded */
 .section-h>span:first-child{flex:0 0 auto}
-.section-h .sec-count{margin:0 auto 0 var(--space-md);min-width:18px;height:18px;padding:0 var(--space-sm);box-sizing:border-box;display:inline-grid;place-items:center;border-radius:var(--r-lg);background:var(--s3);color:var(--tx2);font-size:var(--fs-10,10px);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;line-height:var(--lh-none)}
+.section-h .sec-count{margin:0 auto 0 var(--space-md);min-width:18px;height:18px;padding:0 var(--space-sm);box-sizing:border-box;display:inline-grid;place-items:center;border-radius:var(--r-lg);background:var(--er);color:var(--bg);font-size:var(--fs-10,10px);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;line-height:var(--lh-none)}
 .section-h .sec-count[hidden]{display:none}
+.section-h .sec-count + .chev{margin-left:var(--space-md)}      /* (a space between a count and the fold arrow, on every card that has one) */
 .section-h .sec-count.is-zero{background:var(--s2);color:var(--tx3)}
+.section-h .sec-count#notes-count:not(.is-zero){background:#fbbf24;color:#1c1500}
 /* ── Heavy parts: tick rows ────────────────────────────────────────────────
    A click on a row ticks it (its rank gives way to the tick box), another
    click takes the tick off, and the button under the list deletes the ticked
@@ -3832,8 +3876,9 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
 .lib-inspector .li-side{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;gap:var(--space-lg)}
 .lib-inspector .li-top{flex:0 0 auto;display:flex;align-items:flex-start;gap:var(--space-md)}
 .lib-inspector .li-id{flex:1 1 auto;min-width:0}
-.lib-inspector .li-name{color:var(--tx);font-size:var(--fs-13);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.lib-inspector .li-facts{margin-top:var(--space-2xs);color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the name of the part, alone at the top, in the serif of the website */
+.lib-inspector .li-name{color:var(--tx);font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:24px;line-height:1.15;letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-inspector .li-facts{flex:0 0 auto;margin-top:calc(var(--space-sm) * -1);color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lib-inspector .li-fav.active{color:#e8b64c}
 .lib-inspector .li-fav.active svg{fill:currentColor}
 .lib-inspector .li-params{flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:none}
@@ -3893,6 +3938,8 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
 
 /* Measure is yellow everywhere: toolbar button, mode pill, picked card. Same
    weight trick as the other pills, so these outrank the generic rules. */
+:is(.vpc .vpb#notes-tool.active,.vpc:is(.tr,.tl) .vpb#notes-tool.active,#_a#_b){background:color-mix(in srgb,var(--wn) 18%,transparent);color:var(--wn);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--wn) 55%,transparent)}
+:is(.vpc .vpb#notes-tool.active,.vpc:is(.tr,.tl) .vpb#notes-tool.active,#_a#_b):hover{background:color-mix(in srgb,var(--wn) 28%,transparent);color:var(--wn)}
 :is(.vpc .vpb#msr-toggle.active,.vpc:is(.tr,.tl) .vpb#msr-toggle.active,#_a#_b){background:color-mix(in srgb,var(--wn) 18%,transparent);color:var(--wn);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--wn) 55%,transparent)}
 :is(.vpc .vpb#msr-toggle.active,.vpc:is(.tr,.tl) .vpb#msr-toggle.active,#_a#_b):hover{background:color-mix(in srgb,var(--wn) 28%,transparent);color:var(--wn)}
 /* Top-of-viewport pills (camera view, isolate, measure, snap) are cut from the
@@ -3917,7 +3964,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
 :is(.vp-pill.vp-pill-mode,#_a#_b):hover .vp-pill-x{opacity:1}
 /* each state has its own colour: isolated blue, exploded violet, measure amber, snap green */
 :is(#vp-explode-pill.vp-pill,#_a#_b#_c){--pc:#8b5cf6;--pc-ink:#fff}
-:is(#vp-measure-pill.vp-pill,#_a#_b#_c){--pc:#fbbf24;--pc-ink:#1c1500}
+:is(#vp-measure-pill.vp-pill,#vp-notes-pill.vp-pill,#_a#_b#_c){--pc:#fbbf24;--pc-ink:#1c1500}
 :is(#vp-snap-pill.vp-pill,#_a#_b#_c){--pc:#34d399;--pc-ink:#03221a}
 #vp-mode-pills{position:absolute;left:calc(100% + 6px);top:0;display:flex;align-items:center;gap:var(--space-sm);flex-wrap:nowrap;white-space:nowrap}
 .msr-row{cursor:pointer;transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
@@ -4240,7 +4287,7 @@ html,body{user-select:none;-webkit-user-select:none}
 :is(.mac-input,.dlg-input,.sc-search,.exp-num,.exp-name-box,
     #_brn-dialog .brn-f :is(input[type=text],input[type=number],select),
     #_flat-dialog .flat-row input[type=number],
-    :is(#scrshot-dlg,#turntable-dlg) :is(.ss-custom,.ss-name) input){
+    :is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-custom,.ss-name) input){
   box-sizing:border-box;height:var(--ctl-h);min-height:var(--ctl-h);padding:0 var(--ctl-px);
   background:var(--ctl-bg);border:1px solid var(--ctl-bd);border-radius:var(--ctl-r);
   font-size:var(--ctl-fs);line-height:var(--lh-none);box-shadow:none;outline:none;
@@ -4249,11 +4296,11 @@ html,body{user-select:none;-webkit-user-select:none}
 :is(.mac-input,.dlg-input,.sc-search,.exp-num,.exp-name-box,
     #_brn-dialog .brn-f :is(input[type=text],input[type=number],select),
     #_flat-dialog .flat-row input[type=number],
-    :is(#scrshot-dlg,#turntable-dlg) :is(.ss-custom,.ss-name) input):hover{border-color:var(--ctl-bd-hover);background:var(--ctl-bg)}
+    :is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-custom,.ss-name) input):hover{border-color:var(--ctl-bd-hover);background:var(--ctl-bg)}
 :is(.mac-input,.dlg-input,.sc-search,.exp-num,
     #_brn-dialog .brn-f :is(input[type=text],input[type=number],select),
     #_flat-dialog .flat-row input[type=number],
-    :is(#scrshot-dlg,#turntable-dlg) :is(.ss-custom,.ss-name) input):focus,.exp-name-box:focus-within{border-color:var(--ctl-bd-focus);background:var(--ctl-bg);box-shadow:none}
+    :is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg) :is(.ss-custom,.ss-name) input):focus,.exp-name-box:focus-within{border-color:var(--ctl-bd-focus);background:var(--ctl-bg);box-shadow:none}
 /* digits sit a little high in Inter: numbers get the same drop the number scrubbers use */
 :is(.exp-num,#_brn-dialog .brn-f input[type=number],#_flat-dialog .flat-row input[type=number]){padding-top:calc(var(--num-drop) * 2)}
 .exp-name-box{padding:0}
@@ -4282,26 +4329,37 @@ html.no-motion *,html.no-motion *::before,html.no-motion *::after{animation-dura
    Scania V8 engine (1,295 parts, 1.7 million triangles) as 3D lines: its parts fly together, then it turns slowly while a
    band of light sweeps up it (the script after the markup, from assets/splash-model.*; tools/build-splash-model.mjs bakes it).
    The card is always dark, whatever the theme: it is a picture. */
-.sp-card{position:relative;width:min(720px,92vw);border-radius:var(--r-3xl);overflow:hidden;background:var(--black);box-shadow:0 6px 15px var(--blk-70),0 0 0 1px color-mix(in srgb,var(--white) 9%,transparent);animation:sp-card-in .7s var(--ease-out) both;transition:transform .5s var(--ease-out)}
+.sp-card{position:relative;width:min(720px,92vw);border-radius:28px;padding:12px;overflow:hidden;background:#19191a;box-shadow:0 24px 60px rgba(0,0,0,.45),0 2px 8px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.07);animation:sp-card-in .7s var(--ease-out) both;transition:transform .5s var(--ease-out)}
 body.app-ready .sp-card{transform:scale(1.025)}
 @keyframes sp-card-in{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
-.sp-art{position:relative;aspect-ratio:2/1;overflow:hidden;
-  background:radial-gradient(70% 90% at 50% 46%,color-mix(in srgb,var(--ac) 46%,var(--black)) 0,color-mix(in srgb,var(--ac) 16%,var(--black)) 52%,var(--black) 100%)}
-.sp-art::before{content:'';position:absolute;inset:0;background:linear-gradient(to top,color-mix(in srgb,var(--ac) 30%,transparent) 0,transparent 38%);opacity:var(--op-5)}
-.sp-art::after{content:'';position:absolute;left:0;right:0;bottom:0;height:20%;background:linear-gradient(to top,var(--black),transparent);pointer-events:none}
+.sp-art{position:relative;aspect-ratio:2/1;overflow:hidden;border-radius:18px;background:#101010}
+.sp-art::after{content:'';position:absolute;left:0;right:0;bottom:0;height:20%;background:linear-gradient(to top,#101010,transparent);pointer-events:none}
 #sp-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-.sp-info{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1.1fr);gap:30px;align-items:center;padding:var(--space-sm) 30px 28px;font-size:var(--fs-11);line-height:1.75;color:color-mix(in srgb,var(--white) 55%,transparent);font-variant-numeric:tabular-nums}
+.sp-info{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:30px;align-items:end;padding:26px 20px 16px;font-size:var(--fs-11);line-height:1.75;color:#a3a3a8;font-variant-numeric:tabular-nums}
 .sp-id{display:flex;align-items:center;gap:var(--space-2xl)}
-.sp-logo{display:block;width:54px;height:54px;border-radius:var(--r-2xl);box-shadow:0 0 0 1px color-mix(in srgb,var(--white) 12%,transparent)}
 .sp-word{display:flex;flex-direction:column;line-height:1.1}
-.sp-word small{font-size:var(--fs-11);letter-spacing:.02em;color:color-mix(in srgb,var(--white) 50%,transparent);margin-top:var(--space-5)}
-.sp-word b{font-size:25px;font-weight:var(--fw-medium);letter-spacing:var(--tracking-tighter);color:var(--white)}
+/* the line over the name, as on the website's cards: small capitals in the quiet grey */
+.sp-word small{order:-1;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#6e6e72;margin:0 0 14px}
+.sp-word b{font-size:25px;font-weight:var(--fw-medium);letter-spacing:var(--tracking-tighter);color:#e6e6e8}
+/* the name MeshOptimiser, wherever it is shown as the name (splash, About card, welcome window), is in the website's serif */
+.sp-word b,.brand-menu-title,.wl-title{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;letter-spacing:-.005em}
+.sp-word b{font-size:46px;line-height:1}
+.brand-menu-title{font-size:calc(var(--fs-xl) + 3px)}
+.wl-title{font-size:calc(var(--fs-xl) + 9px);line-height:1.1}
+/* the titles of the command cards with a picture on top (Remove holes, Split, Select hidden, Fasteners, Smart fit) */
+.section-cmd.has-hero>.section-h>span:first-child{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:23px;line-height:1.1;letter-spacing:-.01em;color:var(--white)}
+.wl-title .wl-ver{font-family:'Inter',system-ui,sans-serif;font-weight:var(--fw-regular);letter-spacing:0}      /* (the version stays in the UI font) */
+.sp-strong .sp-name{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-size:1.25em;letter-spacing:0}      /* (the name in the line of the splash, in the same serif; the version stays in the UI font) */
 .sp-info b.sp-strong{font-weight:var(--fw-semibold);color:color-mix(in srgb,var(--white) 82%,transparent)}
 .sp-col{min-width:0}
+.sp-r{text-align:right}
+.sp-r div:nth-child(n+2){color:#6e6e72}
+#sp-status{color:#a3a3a8}
+.sp-r div{overflow:visible}
 .sp-col div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sp-bar{position:absolute;left:0;right:0;bottom:0;height:2px}
 .sp-bar i{display:block;height:100%;width:var(--p,4%);background:var(--ac);transition:width .45s var(--ease-out)}
-@media (max-width:600px){.sp-info{grid-template-columns:auto minmax(0,1fr);gap:var(--space-2xl) 18px;padding:var(--space-xs) var(--space-4xl) 22px}.sp-col.sp-r{grid-column:1 / -1}.sp-word b{font-size:var(--fs-5xl)}.sp-logo{width:46px;height:46px}}
+@media (max-width:600px){.sp-info{grid-template-columns:auto minmax(0,1fr);gap:var(--space-2xl) 18px;padding:var(--space-xs) var(--space-4xl) 22px}.sp-col.sp-r{grid-column:1 / -1}.sp-word b{font-size:var(--fs-5xl)}}
 @media (max-height:520px){.sp-art{aspect-ratio:3/1}}
 /* Help window (help.js): the articles on the left, the open article on the right */
 .hp-modal{width:min(1040px,96vw);height:min(720px,90vh);max-height:90vh;padding:0}
@@ -4377,10 +4435,10 @@ body.app-ready .sp-card{transform:scale(1.025)}
   border:0;border-radius:var(--surface-win-r);box-shadow:var(--surface-shadow-win);transform:none;transition:none;z-index:var(--z-dock-float)}   /* (no border: the grab zones below lie on the very edge of the box, which clips them) */
 #vp-materials-pop.mat-dock.is-float:not(.show),#vp-library-pop.is-float:not(.show){pointer-events:none}
 .is-float>.mat-dock-grip{display:none}
-.is-float>.mat-dock-h{cursor:grab}
+.is-float>.mat-dock-h{cursor:default}
 .is-float>.mat-dock-h :is(button,input,select,label,.cs-wrap,.lib-tabs){cursor:auto}
 .is-float>.mat-dock-h :is(button,label){cursor:pointer}
-body.dock-resizing .is-float>.mat-dock-h{cursor:grabbing}
+body.dock-resizing .is-float>.mat-dock-h{cursor:default}
 .dock-resize{display:none;position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;z-index:5;touch-action:none}
 #vp-materials-pop.mat-dock.is-float.on-top,#vp-library-pop.is-float.on-top{z-index:var(--z-dock-float-top)}
 .is-float>.dock-resize{display:block}
@@ -4562,7 +4620,14 @@ svg.lucide *{vector-effect:non-scaling-stroke}
 /* …and no taller than the room under its top, or than it was dragged to: past that its body scrolls (_matEditorFit in app.js) */
 #_mat-editor-popup .dlg-pop{max-height:var(--mat-max-h,calc(100vh - 24px))}
 /* the card's top: the title on the icon's centre line (the dialog title carries a bottom margin), and a smaller picture with the name beside it */
-#_mat-editor-popup .dlg-head-titles{display:flex;align-items:center;align-self:stretch}
+/* the material's own card has its name, large: the bar over it is a thin strip for moving the window and for the close button, no title and no room above the name */
+#_mat-editor-popup .dlg-head-titles{display:none}
+#_mat-editor-popup#_mat-editor-popup .dlg-head{position:absolute;top:0;left:0;right:0;z-index:6;height:58px;min-height:0;padding:0 var(--space-2xl) 0 var(--space-xl);justify-content:flex-end;align-items:center;background:transparent;border:0}      /* (it floats over the card: nothing is above the name, the strip still moves the window, the close button sits at its end) */
+#_mat-editor-popup#_mat-editor-popup .dlg-head{pointer-events:none}      /* (the strip over the name does not catch the pointer: a double-click on the name reaches the name; the section under it moves the window) */
+#_mat-editor-popup#_mat-editor-popup .dlg-head .dlg-x{pointer-events:auto}
+#_mat-editor-popup#_mat-editor-popup .dlg-body{padding-top:0;scrollbar-width:none}
+#_mat-editor-popup .dlg-body::-webkit-scrollbar{display:none;width:0;height:0}      /* (it still scrolls, with no bar) */
+#_mat-editor-popup#_mat-editor-popup .mat-edit-preview-wrap{padding-top:var(--space-2xl);position:sticky;top:0;z-index:5;background:var(--bg2,#161616);border-bottom:0;cursor:grab}      /* (the picture and the name stay at the top while the settings scroll under them, and the whole section moves the window) */
 #_mat-editor-popup .dlg-title{margin:0;line-height:var(--lh-none)}
 #_mat-editor-popup .mat-edit-preview-wrap{padding:var(--space-md) var(--space-xl);gap:var(--space-xl)}
 #_mat-editor-popup .mat-edit-preview-canvas{flex-basis:56px;width:56px;height:56px;border-radius:var(--r-sm)}
@@ -4572,7 +4637,8 @@ svg.lucide *{vector-effect:non-scaling-stroke}
    label and of the value that follows it, the same 8px each side */
 #_mat-editor-popup .mat-row{grid-template-columns:96px 22px minmax(0,1fr);column-gap:var(--space-md);min-height:30px;padding:2px 0}
 #_mat-editor-popup .mat-edit-preview-info{gap:1px}
-#_mat-editor-popup .mat-edit-preview-name{font-size:var(--fs-md);line-height:1.25}
+/* the name of the material: larger, in the serif of the website */
+#_mat-editor-popup .mat-edit-preview-name{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:24px;line-height:1.15;letter-spacing:-.005em}
 #_mat-editor-popup .mat-edit-preview-type,#_mat-editor-popup .mat-edit-preview-uses{font-size:var(--fs-11);line-height:1.3}
 #_mat-editor-popup .dlg-body[data-scroll="auto"]{overflow-x:hidden;overscroll-behavior:contain;scrollbar-gutter:auto}
 /* rows: no dashed rule between them (the line keeps its place, so nothing moves), calm labels */
@@ -4675,7 +4741,19 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
   --win-title-fs:var(--fs-xl);--win-title-fw:var(--fw-semibold);--win-title-ls:var(--tracking-tighter);--win-bar-btn:var(--btn-h-md);--win-bar-btn-r:var(--btn-r-sm)}
 #_brn-dialog.dlg-popup .dlg-head,#_flat-dialog.dlg-popup .dlg-head,#_anim-dialog.dlg-popup .dlg-head,#vp-materials-pop#vp-materials-pop .mat-dock-h,#vp-library-pop#vp-library-pop .mat-dock-h{box-sizing:border-box;height:var(--win-bar-h);min-height:var(--win-bar-h);flex:0 0 var(--win-bar-h);padding:0 var(--win-bar-px) 0 var(--win-bar-pl);gap:var(--win-bar-gap);align-items:center;border-bottom:1px solid var(--win-bar-line)}
 #_brn-dialog.dlg-popup .dlg-title,#_flat-dialog.dlg-popup .dlg-title,#_anim-dialog.dlg-popup .dlg-title,#vp-materials-pop#vp-materials-pop .mat-dock-h .lc-title,#vp-library-pop#vp-library-pop .mat-dock-h .lc-title{font-size:var(--win-title-fs);font-weight:var(--win-title-fw);color:var(--tx);letter-spacing:var(--win-title-ls);text-transform:none;line-height:var(--lh-compact);margin:0;padding:0}
-#_brn-dialog.dlg-popup .dlg-x,#_flat-dialog.dlg-popup .dlg-x,#_anim-dialog.dlg-popup .dlg-x,#vp-materials-pop#vp-materials-pop .mat-dock-h #mat-dock-close,#vp-materials-pop#vp-materials-pop .mat-dock-h #lib-dock-close,#vp-library-pop#vp-library-pop .mat-dock-h #mat-dock-close,#vp-library-pop#vp-library-pop .mat-dock-h #lib-dock-close{width:var(--win-bar-btn);height:var(--win-bar-btn);flex:0 0 var(--win-bar-btn);border-radius:var(--win-bar-btn-r);font-size:var(--icon-lg);line-height:1}
+#_brn-dialog.dlg-popup .dlg-x,#_flat-dialog.dlg-popup .dlg-x,#_anim-dialog.dlg-popup .dlg-x,#vp-materials-pop#vp-materials-pop .mat-dock-h #mat-dock-close,#vp-materials-pop#vp-materials-pop .mat-dock-h #lib-dock-close,#vp-library-pop#vp-library-pop .mat-dock-h #mat-dock-close,#vp-library-pop#vp-library-pop .mat-dock-h #lib-dock-close{width:var(--win-ico-btn);height:var(--win-ico-btn);flex:0 0 var(--win-ico-btn);border-radius:var(--win-ico-r);font-size:0;line-height:1}
+/* The buttons in the title bar of every floating window (close, dock, pop out, panel toggles) are one size, one radius, one icon size, one colour.
+   Tokens first, then every window's own buttons take them. */
+:root{--win-ico-btn:var(--btn-h-md);--win-ico-r:var(--btn-r-md,var(--btn-r-sm));--win-ico-svg:18px;--win-ico-fg:var(--tx2);--win-ico-fg-hover:var(--tx);--win-ico-bg-hover:var(--s3);--win-ico-gap:var(--space-xs);--win-bar-bg:var(--surface-pop)}
+:is(.dlg-popup .dlg-head .dlg-x,#vp-materials-pop #mat-dock-close,#vp-library-pop #lib-dock-close,#vp-materials-pop .dock-pop,#vp-library-pop .dock-pop,#vp-animate-pop .adk-h .adk-b,#vp-materials-pop .mat-dock-h #mat-dock-pop,#vp-library-pop .mat-dock-h #lib-dock-pop,#_a#_b){
+  box-sizing:border-box;display:grid;place-items:center;width:var(--win-ico-btn);height:var(--win-ico-btn);min-width:0;flex:0 0 var(--win-ico-btn);padding:0;border:0;border-radius:var(--win-ico-r);background:transparent;color:var(--win-ico-fg);font-size:0;line-height:1;cursor:pointer}
+:is(.dlg-popup .dlg-head .dlg-x,#vp-materials-pop #mat-dock-close,#vp-library-pop #lib-dock-close,#vp-materials-pop .dock-pop,#vp-library-pop .dock-pop,#vp-animate-pop .adk-h .adk-b,#_a#_b):hover{background:var(--win-ico-bg-hover);color:var(--win-ico-fg-hover);border:0}
+:is(.dlg-popup .dlg-head .dlg-x,#vp-materials-pop #mat-dock-close,#vp-library-pop #lib-dock-close,#vp-materials-pop .dock-pop,#vp-library-pop .dock-pop,#vp-animate-pop .adk-h .adk-b,#_a#_b) svg{width:var(--win-ico-svg);height:var(--win-ico-svg);stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* The title bar is the same shade in every floating window: the darker one of the popups. */
+:is(#_brn-dialog,#_flat-dialog,#_anim-dialog).dlg-popup .dlg-head,#vp-animate-pop#vp-animate-pop .adk-h,#vp-materials-pop#vp-materials-pop .mat-dock-h,#vp-library-pop#vp-library-pop .mat-dock-h{background:var(--win-bar-bg)}
+/* Icon buttons that sit together in a title bar are --win-ico-gap apart in every window, and the bar's own gap is --win-bar-gap. */
+#vp-animate-pop .adk-h{gap:var(--win-bar-gap)}
+:is(#_brn-dialog,#_flat-dialog,#_anim-dialog).dlg-popup .dlg-head > button:has(+ button),#vp-animate-pop .adk-h > .adk-b:has(+ .adk-b),#vp-materials-pop#vp-materials-pop .mat-dock-h .dock-pop,#vp-library-pop#vp-library-pop .mat-dock-h .dock-pop{margin-right:calc(var(--win-ico-gap) - var(--win-bar-gap))}
 #_brn-dialog.dlg-popup .dlg-head-titles,#_anim-dialog.dlg-popup .dlg-head-titles,#_flat-dialog.dlg-popup .dlg-head-titles{display:flex;align-items:center;align-self:stretch}
 /* Material cards are a grey shade of their own, like the cards of the right sidebar (.section: --bg2), with the next shade under the pointer */
 #vp-materials-pop#vp-materials-pop .mat-cell{background:var(--bg2);border-color:transparent;border-radius:var(--r-lg)}
@@ -4720,6 +4798,10 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 .cq-gap{flex:1 1 auto}
 .cq-btn{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;height:var(--btn-h-md);padding:0 var(--space-2xl);border-radius:var(--btn-r-md);background:var(--s3);color:var(--tx-control);font-size:var(--fs-12);font-weight:var(--fw-medium);cursor:pointer;white-space:nowrap;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .cq-btn:hover{background:var(--s5);color:var(--tx-control-hover)}
+/* the Animate window's foot: round icon buttons, like iOS */
+.anim-foot .cq-btn{width:40px;height:40px;padding:0;border-radius:50%}
+.anim-foot .cq-btn svg{width:18px;height:18px}
+.anim-foot .cq-btn:active{transform:scale(.92)}
 .cq-btn:focus-visible{outline:none;box-shadow:var(--ring-focus)}
 .cq-btn.cq-primary{background:var(--ac);color:var(--white)}
 .cq-btn.cq-primary:hover{background:var(--ac);filter:brightness(1.1)}
@@ -4728,7 +4810,9 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 @media (prefers-reduced-motion:reduce){.cq-card{animation:none}}
 /* The Animate pill, a status pill like Exploded and Measure: its colour, a dot that pulses while it plays, a pause / play button and an X */
 :is(#vp-animate-pill.vp-pill,#_a#_b#_c){--pc:#f472b6;--pc-ink:#2b0716}
-#vp-animate-pill.has-play{padding-right:var(--space-md)}
+#vp-animate-pill.has-play,#vp-notes-pill.has-play{padding-right:var(--space-md)}
+#vp-notes-pill[hidden],#vp-notes-pill [hidden]{display:none}
+#vp-notes-pill.is-paused .anim-pill-dot{animation:none;opacity:.55}
 body.anim-mode #vp-mode-bar{display:none}
 #vp-animate-pill[hidden],#vp-animate-pill [hidden]{display:none}
 .anim-pill-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:currentColor;animation:anim-pill-pulse 1.4s ease-in-out infinite}
@@ -4765,102 +4849,352 @@ body.anim-mode #vp-mode-bar{display:none}
 #_anim-dialog .anim-pb .anim-pb-rate:hover{background:var(--s5);color:var(--tx)}
 /* The Animate window, in the manner of the inspectors of Final Cut and iMovie: what is selected, the kinds as tiles, grouped rows with
    hairlines between them, a timeline for the loop points, and a quiet list of everything that moves */
-#_anim-dialog .dlg-body{display:flex;flex-direction:column;gap:var(--space-xl);padding:var(--space-xl) var(--space-2xl) var(--space-5xl);
-  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent)}      /* (what scrolls fades out into the footer instead of being cut off by it; the padding at the bottom keeps the last row clear of the fade) */
-#_anim-dialog [hidden]{display:none!important}
+:is(#_anim-dialog,#vp-animate-pop) .dlg-body{display:flex;flex-direction:column;padding:var(--space-xl) var(--space-xl) var(--space-5xl);gap:var(--space-lg)}      /* (what scrolls fades out into the footer instead of being cut off by it; the padding at the bottom keeps the last row clear of the fade) */
+:is(#_anim-dialog,#vp-animate-pop) [hidden]{display:none!important}
 /* the body scrolls: its sections keep their size instead of squeezing (and clipping their rows) when the window is shorter than they are */
-#_anim-dialog .dlg-body>*{flex:0 0 auto}
-#_anim-dialog .anim-h{display:flex;align-items:center;gap:var(--space-md);margin:var(--space-md) 0 calc(var(--space-sm) * -1);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--tx3)}
-#_anim-dialog .anim-badge{display:inline-grid;place-items:center;min-width:18px;height:16px;padding:0 var(--space-sm);border-radius:var(--r-pill);background:var(--s4);color:var(--tx2);font-size:var(--fs-10);letter-spacing:0;text-transform:none}
-#_anim-dialog .anim-badge:empty{display:none}
+:is(#_anim-dialog,#vp-animate-pop) .dlg-body>*{flex:0 0 auto}
+:is(#_anim-dialog,#vp-animate-pop) .anim-h{display:flex;align-items:center;gap:var(--space-md);margin:var(--space-md) 0 calc(var(--space-sm) * -1);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-badge{display:inline-grid;place-items:center;min-width:18px;height:16px;padding:0 var(--space-sm);border-radius:var(--r-pill);background:var(--s4);color:var(--tx2);font-size:var(--fs-10);letter-spacing:0;text-transform:none}
+:is(#_anim-dialog,#vp-animate-pop) .anim-badge:empty{display:none}
 /* the selection */
-#_anim-dialog .anim-sel{display:flex;flex-direction:column;gap:var(--space-lg);padding:var(--space-lg) var(--space-xl);border-radius:var(--r-lg);background:var(--s2)}
-#_anim-dialog .anim-sel:has(>.anim-none){background:transparent;padding:0}
-#_anim-dialog .anim-sel-n{display:flex;align-items:center;gap:var(--space-lg);min-width:0}
-#_anim-dialog .anim-sel-n>svg{flex:0 0 auto;box-sizing:content-box;width:var(--icon-md);height:var(--icon-md);padding:var(--space-md);border-radius:var(--r-lg);background:var(--s3);color:var(--tx2)}
-#_anim-dialog .anim-sel-n b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-tighter);color:var(--tx)}
-#_anim-dialog .anim-sel-n span{margin-left:auto;flex:0 0 auto;font-size:var(--fs-11);color:var(--tx3)}
-#_anim-dialog .anim-none{font-size:var(--fs-12);color:var(--tx3);line-height:1.5}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel{display:flex;flex-direction:column;gap:var(--space-lg);padding:var(--space-lg) var(--space-xl);border-radius:var(--r-lg);background:var(--s2)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel:has(>.anim-none){background:transparent;padding:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-n{display:flex;align-items:center;gap:var(--space-lg);min-width:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-n>svg{flex:0 0 auto;box-sizing:content-box;width:var(--icon-md);height:var(--icon-md);padding:var(--space-md);border-radius:var(--r-lg);background:var(--s3);color:var(--tx2)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-n b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-lg);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-tighter);color:var(--tx)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sel-n span{margin-left:auto;flex:0 0 auto;font-size:var(--fs-11);color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-none{font-size:var(--fs-12);color:var(--tx3);line-height:1.5}
 /* the Alpha tag next to the title: Animate is a very early feature */
-#_anim-dialog .anim-alpha{flex:0 0 auto;align-self:center;margin-left:var(--space-md);padding:1px var(--space-md);border-radius:var(--r-pill);background:color-mix(in srgb,var(--wn) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--wn) 45%,transparent);color:var(--wn);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wider);text-transform:uppercase;line-height:1.5;cursor:default}
+:is(#_anim-dialog,#vp-animate-pop) .anim-alpha{flex:0 0 auto;align-self:center;margin-left:var(--space-md);padding:1px var(--space-md);border-radius:var(--r-pill);background:color-mix(in srgb,var(--wn) 16%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--wn) 45%,transparent);color:var(--wn);font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wider);text-transform:uppercase;line-height:1.5;cursor:default}
 /* the layers of what is selected, each with its settings */
-#_anim-dialog .anim-lays{display:flex;flex-direction:column;gap:var(--space-sm);padding-top:var(--space-lg);border-top:1px solid var(--surface-line,var(--s3))}
-#_anim-dialog .anim-lay{display:flex;align-items:stretch;border-radius:var(--r-md);background:var(--s3);transition:background var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
-#_anim-dialog .anim-lay.active{background:var(--ac-tint-20);box-shadow:inset 0 0 0 1px var(--ac-tint-35)}
-#_anim-dialog .anim-lay-b{all:unset;box-sizing:border-box;flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-md) var(--space-lg);cursor:pointer;border-radius:var(--r-md)}
-#_anim-dialog .anim-lay-b:hover{background:color-mix(in srgb,var(--white) 5%,transparent)}
-#_anim-dialog .anim-lay-b:focus-visible,#_anim-dialog .anim-lay-x:focus-visible{box-shadow:var(--ring-focus)}
-#_anim-dialog .anim-lay-b>svg{flex:0 0 auto;width:var(--icon-sm);height:var(--icon-sm);color:var(--ac-text)}
-#_anim-dialog .anim-lay-t{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
-#_anim-dialog .anim-lay-t b{font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx)}
-#_anim-dialog .anim-lay-t em{font-style:normal;font-size:var(--fs-11);line-height:1.4;color:var(--tx2);overflow-wrap:anywhere}
-#_anim-dialog .anim-lay-n{flex:0 0 auto;font-size:var(--fs-10);color:var(--tx3);font-variant-numeric:tabular-nums}
-#_anim-dialog .anim-lay-x{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:30px;color:var(--tx3);cursor:pointer;border-radius:var(--r-md)}
-#_anim-dialog .anim-lay-x svg{width:var(--icon-sm);height:var(--icon-sm)}
-#_anim-dialog .anim-lay-x:hover{color:var(--er)}
-#_anim-dialog .anim-types{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-sm)}
-#_anim-dialog .anim-types button{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:var(--space-sm);padding:var(--space-lg) 0 var(--space-md);border-radius:var(--r-lg);background:var(--s2);color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-medium);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
-#_anim-dialog .anim-types button svg{width:var(--icon-lg,18px);height:var(--icon-lg,18px)}
-#_anim-dialog .anim-types button:hover{background:var(--s3);color:var(--tx2)}
-#_anim-dialog .anim-types button.active{background:var(--ac-tint-20);color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-35)}
-#_anim-dialog .anim-types button:focus-visible{box-shadow:var(--ring-focus)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lays{display:flex;flex-direction:column;gap:var(--space-sm);padding-top:var(--space-lg);border-top:1px solid var(--surface-line,var(--s3))}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay{display:flex;align-items:stretch;border-radius:var(--r-md);background:var(--s3);transition:background var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
+/* every kind has the colour its clips have on the timeline: the icon, and the card when it is the one that is open */
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay{--c:var(--ac)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=spin]{--c:#5aa2ff}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=swing]{--c:#b49aff}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=noise]{--c:#44d4a0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=path]{--c:#f08cc0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay[data-type=oscillate]{--c:#f5b95a}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay.active{background:color-mix(in srgb,var(--c) 20%,var(--s3));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c) 55%,transparent)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-b{all:unset;box-sizing:border-box;flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-md) var(--space-lg);cursor:pointer;border-radius:var(--r-md)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-b:hover{background:color-mix(in srgb,var(--white) 5%,transparent)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-b:focus-visible,#_anim-dialog .anim-lay-x:focus-visible{box-shadow:var(--ring-focus)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-b>svg{flex:0 0 auto;width:var(--icon-sm);height:var(--icon-sm);color:var(--c)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-t{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-t b{font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-t em{font-style:normal;font-size:var(--fs-11);line-height:1.4;color:var(--tx2);overflow-wrap:anywhere}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-n{flex:0 0 auto;font-size:var(--fs-10);color:var(--tx3);font-variant-numeric:tabular-nums}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-x{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:30px;color:var(--tx3);cursor:pointer;border-radius:var(--r-md)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-x svg{width:var(--icon-sm);height:var(--icon-sm)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-lay-x:hover{color:var(--er)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-types{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-xs,4px)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-types button span{font-size:var(--fs-11);overflow:hidden;text-overflow:ellipsis;max-width:100%}
+:is(#_anim-dialog,#vp-animate-pop) .anim-types button{all:unset;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;gap:var(--space-sm);padding:var(--space-lg) 0 var(--space-md);border-radius:var(--r-lg);background:var(--s2);color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-medium);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-types button svg{width:var(--icon-lg,18px);height:var(--icon-lg,18px)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-types button:hover{background:var(--s3);color:var(--tx2)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-types button.active{background:var(--ac-tint-20);color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-35)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-types button:focus-visible{box-shadow:var(--ring-focus)}
 /* a group of rows: one rounded card, hairlines between the rows */
-#_anim-dialog .anim-card{display:flex;flex-direction:column;border-radius:var(--r-lg);background:var(--s2);overflow:hidden}
-#_anim-dialog .anim-props{display:flex;flex-direction:column}
-#_anim-dialog .anim-card>.anim-row,#_anim-dialog .anim-props>.anim-row{border-top:1px solid var(--surface-line,var(--s3))}
-#_anim-dialog .anim-card>.anim-props:first-child>.anim-row:first-child,#_anim-dialog .anim-card>.anim-row:first-child{border-top:0}
-#_anim-dialog .anim-card>.anim-props[hidden]+.anim-props:not([hidden])>.anim-row:first-child{border-top:0}
-#_anim-dialog .anim-row{display:grid;grid-template-columns:72px minmax(0,1fr);align-items:center;gap:var(--space-lg);min-height:34px;padding:var(--space-xs) var(--space-xl)}
-#_anim-dialog .anim-l{font-size:var(--fs-11);color:var(--tx3)}
-#_anim-dialog .cmd-seg{background:var(--s3)}
-#_anim-dialog .cmd-seg>button{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-sm);padding:var(--space-sm) var(--space-sm);font-size:var(--fs-11)}
-#_anim-dialog .cmd-seg>button svg{width:var(--icon-xs);height:var(--icon-xs)}
-#_anim-dialog .anim-sub{padding:var(--space-lg) var(--space-xl) var(--space-xs);border-top:1px solid var(--surface-line,var(--s3));font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--tx3)}
-#_anim-dialog .anim-togs{display:flex;gap:var(--space-sm)}
-#_anim-dialog .anim-tog{all:unset;box-sizing:border-box;flex:1 1 0;display:grid;place-items:center;height:24px;border-radius:var(--r-sm);background:var(--s3);color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-medium);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
-#_anim-dialog .anim-tog:hover{background:var(--s4);color:var(--tx2)}
-#_anim-dialog .anim-tog.active{background:var(--ac-tint-20);color:var(--ac-text)}
-#_anim-dialog .anim-tog:focus-visible{box-shadow:var(--ring-focus)}
-#_anim-dialog .anim-dice{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-md);background:var(--s3);color:var(--tx2);cursor:pointer}
-#_anim-dialog .anim-dice:hover{background:var(--s5);color:var(--tx)}
-#_anim-dialog .anim-dice:focus-visible{box-shadow:var(--ring-focus)}
-#_anim-dialog .anim-dice svg{width:var(--icon-sm);height:var(--icon-sm)}
-#_anim-dialog .anim-speed{display:flex;align-items:center;gap:var(--space-lg)}
-#_anim-dialog .anim-speed input[type=range]{flex:1;min-width:0}
-#_anim-dialog .anim-v{flex:0 0 56px;text-align:right;font-size:var(--fs-11);color:var(--tx2);font-variant-numeric:tabular-nums}
-#_anim-dialog .mac-sel{width:100%}
+:is(#_anim-dialog,#vp-animate-pop) .anim-card{display:flex;flex-direction:column;border-radius:var(--r-lg);background:var(--s2);overflow:hidden}
+:is(#_anim-dialog,#vp-animate-pop) .anim-props{display:flex;flex-direction:column}
+:is(#_anim-dialog,#vp-animate-pop) .anim-card>.anim-row,#_anim-dialog .anim-props>.anim-row{border-top:1px solid var(--surface-line,var(--s3))}
+:is(#_anim-dialog,#vp-animate-pop) .anim-card>.anim-props:first-child>.anim-row:first-child,#_anim-dialog .anim-card>.anim-row:first-child{border-top:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-card>.anim-props[hidden]+.anim-props:not([hidden])>.anim-row:first-child{border-top:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-row{display:grid;grid-template-columns:72px minmax(0,1fr);align-items:center;gap:var(--space-lg);min-height:34px;padding:var(--space-xs) var(--space-xl)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-l{font-size:var(--fs-11);color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-follow{display:grid;grid-template-columns:72px minmax(0,1fr);align-items:center;gap:var(--space-lg);padding-top:var(--space-sm)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-edit-h{display:flex;align-items:center;gap:var(--space-md);font-size:var(--fs-lg);font-weight:var(--fw-medium);color:var(--tx);letter-spacing:var(--tracking-tight)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-edit-h svg{width:var(--icon-md);height:var(--icon-md);color:var(--tx3)}
+#vp-animate-pop .adk-insp .anim-foot{justify-content:flex-end}      /* (the dock's footer is the delete button alone, at the right) */
+/* The settings sit straight on the window: no grey card, no divider lines, even space between the rows. */
+:is(#_anim-dialog,#vp-animate-pop) .anim-card{background:none;border-radius:0;overflow:visible;gap:var(--space-xs);padding:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-card>.anim-row,#_anim-dialog .anim-props>.anim-row,:is(#_anim-dialog,#vp-animate-pop) .anim-card>.anim-props>.anim-row{border-top:0;padding:var(--space-xs) 0;min-height:34px}
+:is(#_anim-dialog,#vp-animate-pop) .anim-card+.anim-card{margin-top:var(--space-md)}      /* (the controls line up with the cards above: the body's own gutter, no extra) */
+:is(#_anim-dialog,#vp-animate-pop) .anim-row.anim-row-bare{grid-template-columns:minmax(0,1fr)}      /* (rows of buttons say what they are: no label, the name stays for screen readers) */
+:is(#_anim-dialog,#vp-animate-pop) .anim-row-bare>.anim-l{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+:is(#_anim-dialog,#vp-animate-pop) .cmd-seg{background:var(--s3)}
+:is(#_anim-dialog,#vp-animate-pop) .cmd-seg>button{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-sm);padding:var(--space-sm) var(--space-sm);font-size:var(--fs-11)}
+:is(#_anim-dialog,#vp-animate-pop) .cmd-seg>button svg{width:var(--icon-xs);height:var(--icon-xs)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-sub{padding:var(--space-lg) var(--space-xl) var(--space-xs);border-top:1px solid var(--surface-line,var(--s3));font-size:var(--fs-10);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-togs{display:flex;gap:var(--space-sm)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tog{all:unset;box-sizing:border-box;flex:1 1 0;display:grid;place-items:center;height:24px;border-radius:var(--r-sm);background:var(--s3);color:var(--tx3);font-size:var(--fs-11);font-weight:var(--fw-medium);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tog:hover{background:var(--s4);color:var(--tx2)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tog.active{background:var(--ac-tint-20);color:var(--ac-text)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tog:focus-visible{box-shadow:var(--ring-focus)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-dice{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:26px;height:26px;border-radius:var(--r-md);background:var(--s3);color:var(--tx2);cursor:pointer}
+:is(#_anim-dialog,#vp-animate-pop) .anim-dice:hover{background:var(--s5);color:var(--tx)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-dice:focus-visible{box-shadow:var(--ring-focus)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-dice svg{width:var(--icon-sm);height:var(--icon-sm)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-speed{display:flex;align-items:center;gap:var(--space-lg)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-speed input[type=range]{flex:1;min-width:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-xyz{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-lg)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-xyz-c{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-xs,4px);min-width:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-xyz-c input[type=range]{width:100%;min-width:0;margin:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-xyz-c .anim-l{text-align:center}
+:is(#_anim-dialog,#vp-animate-pop) .anim-xyz-c .anim-v{text-align:center;color:var(--tx3);font-variant-numeric:tabular-nums}
+:is(#_anim-dialog,#vp-animate-pop) .anim-v{flex:0 0 56px;text-align:right;font-size:var(--fs-11);color:var(--tx2);font-variant-numeric:tabular-nums}
+:is(#_anim-dialog,#vp-animate-pop) .mac-sel{width:100%}
 /* the timeline of the loop points: a ruler, the part of the cycle that is used, two handles, the playhead */
-#_anim-dialog .anim-tl{padding:var(--space-md) var(--space-xl) var(--space-lg);border-top:1px solid var(--surface-line,var(--s3))}
-#_anim-dialog .anim-tl-track{position:relative;height:34px;margin:var(--space-sm) 7px var(--space-sm);border-radius:var(--r-sm);background:
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl{padding:var(--space-sm) 0 var(--space-md);border-top:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl-track{position:relative;height:34px;margin:var(--space-sm) 7px var(--space-sm);border-radius:var(--r-sm);background:
   repeating-linear-gradient(90deg,var(--s5) 0 1px,transparent 1px 10%),var(--s3);--f:0%;--t:100%}
-#_anim-dialog .anim-tl-range{position:absolute;top:0;bottom:0;left:var(--f);width:calc(var(--t) - var(--f));border-radius:var(--r-sm);background:var(--ac-tint-35);box-shadow:inset 0 0 0 1px var(--ac)}
-#_anim-dialog .anim-tl-head{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;border-radius:1px;background:var(--white);box-shadow:0 0 0 1px var(--blk-40);pointer-events:none}
-#_anim-dialog .anim-tl-h{all:unset;box-sizing:border-box;position:absolute;top:-2px;bottom:-2px;width:14px;margin-left:-7px;display:grid;place-items:center;cursor:ew-resize;touch-action:none}
-#_anim-dialog .anim-tl-h::before{content:'';width:6px;height:18px;border-radius:3px;background:var(--white);box-shadow:0 1px 3px var(--blk-40)}
-#_anim-dialog .anim-tl-h[data-h="from"]{margin-left:-7px}
-#_anim-dialog .anim-tl-h:focus-visible::before{box-shadow:0 0 0 2px var(--ac)}
-#_anim-dialog .anim-tl-lab{display:flex;justify-content:space-between;font-size:var(--fs-10);color:var(--tx3);font-variant-numeric:tabular-nums}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl-range{position:absolute;top:0;bottom:0;left:var(--f);width:calc(var(--t) - var(--f));border-radius:var(--r-sm);background:var(--ac-tint-35);box-shadow:inset 0 0 0 1px var(--ac)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl-head{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;border-radius:1px;background:var(--white);box-shadow:0 0 0 1px var(--blk-40);pointer-events:none}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl-h{all:unset;box-sizing:border-box;position:absolute;top:-2px;bottom:-2px;width:14px;margin-left:-7px;display:grid;place-items:center;cursor:ew-resize;touch-action:none}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl-h::before{content:'';width:6px;height:18px;border-radius:3px;background:var(--white);box-shadow:0 1px 3px var(--blk-40)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl-h[data-h="from"]{margin-left:-7px}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl-h:focus-visible::before{box-shadow:0 0 0 2px var(--ac)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-tl-lab{display:flex;justify-content:space-between;font-size:var(--fs-10);color:var(--tx3);font-variant-numeric:tabular-nums}
 /* everything that moves */
-#_anim-dialog .anim-list{display:flex;flex-direction:column;gap:var(--space-sm)}
-#_anim-dialog .anim-item{display:flex;align-items:flex-start;gap:var(--space-xs);border-radius:var(--r-lg);background:var(--s2);transition:box-shadow var(--dur-fast) var(--ease-out)}
-#_anim-dialog .anim-item.is-sel{box-shadow:inset 0 0 0 1px var(--ac-tint-55)}
-#_anim-dialog .anim-item-b{all:unset;box-sizing:border-box;flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:var(--space-2xs);padding:var(--space-lg) var(--space-xl);cursor:pointer;border-radius:var(--r-lg)}
-#_anim-dialog .anim-item-b:hover{background:var(--s3)}
-#_anim-dialog .anim-item-b:focus-visible{box-shadow:var(--ring-focus)}
-#_anim-dialog .anim-item-n{display:flex;align-items:center;gap:var(--space-md);font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx);min-width:0}
-#_anim-dialog .anim-item-n svg{flex:0 0 auto;width:var(--icon-sm);height:var(--icon-sm);color:var(--tx3)}
-#_anim-dialog .anim-item-n em{font-style:normal;font-weight:var(--fw-regular,400);font-size:var(--fs-11);color:var(--tx3)}
-#_anim-dialog .anim-ln{display:flex;align-items:center;gap:var(--space-md);padding-left:22px;font-size:var(--fs-11);line-height:1.5;color:var(--tx2)}
-#_anim-dialog .anim-ln svg{flex:0 0 auto;width:var(--icon-xs);height:var(--icon-xs);color:var(--ac-text)}
-#_anim-dialog .anim-ln b{margin-left:auto;flex:0 0 auto;font-weight:var(--fw-medium);color:var(--tx3);font-size:var(--fs-10)}
-#_anim-dialog .anim-x{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:var(--btn-h-sm);height:var(--btn-h-sm);margin:var(--space-sm) var(--space-sm) 0 0;border-radius:var(--r-md);color:var(--tx3);cursor:pointer}
-#_anim-dialog .anim-x svg{width:var(--icon-sm);height:var(--icon-sm)}
-#_anim-dialog .anim-x:hover{background:color-mix(in srgb,var(--er) 14%,transparent);color:var(--er)}
-#_anim-dialog .anim-x:focus-visible{box-shadow:var(--ring-focus)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-list{display:flex;flex-direction:column;gap:var(--space-sm)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-item{display:flex;align-items:flex-start;gap:var(--space-xs);border-radius:var(--r-lg);background:var(--s2);transition:box-shadow var(--dur-fast) var(--ease-out)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-item.is-sel{box-shadow:inset 0 0 0 1px var(--ac-tint-55)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-item-b{all:unset;box-sizing:border-box;flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:var(--space-2xs);padding:var(--space-lg) var(--space-xl);cursor:pointer;border-radius:var(--r-lg)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-item-b:hover{background:var(--s3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-item-b:focus-visible{box-shadow:var(--ring-focus)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-item-n{display:flex;align-items:center;gap:var(--space-md);font-size:var(--fs-12);font-weight:var(--fw-semibold);color:var(--tx);min-width:0}
+:is(#_anim-dialog,#vp-animate-pop) .anim-item-n svg{flex:0 0 auto;width:var(--icon-sm);height:var(--icon-sm);color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-item-n em{font-style:normal;font-weight:var(--fw-regular,400);font-size:var(--fs-11);color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-ln{display:flex;align-items:center;gap:var(--space-md);padding-left:22px;font-size:var(--fs-11);line-height:1.5;color:var(--tx2)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-ln svg{flex:0 0 auto;width:var(--icon-xs);height:var(--icon-xs);color:var(--ac-text)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-ln b{margin-left:auto;flex:0 0 auto;font-weight:var(--fw-medium);color:var(--tx3);font-size:var(--fs-10)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-x{all:unset;box-sizing:border-box;flex:0 0 auto;display:grid;place-items:center;width:var(--btn-h-sm);height:var(--btn-h-sm);margin:var(--space-sm) var(--space-sm) 0 0;border-radius:var(--r-md);color:var(--tx3);cursor:pointer}
+:is(#_anim-dialog,#vp-animate-pop) .anim-x svg{width:var(--icon-sm);height:var(--icon-sm)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-x:hover{background:color-mix(in srgb,var(--er) 14%,transparent);color:var(--er)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-x:focus-visible{box-shadow:var(--ring-focus)}
 /* room under the last row, and the buttons set apart from what scrolls behind them */
-#_anim-dialog .dlg-foot.anim-foot{position:relative;display:flex;align-items:center;gap:var(--space-md);padding:var(--space-xl) var(--space-2xl);border-top:1px solid var(--surface-line,var(--s3))}
-#_anim-dialog .anim-foot .cq-btn{border-radius:var(--r-pill);padding:0 var(--space-3xl)}
-#_anim-dialog .cq-btn:disabled{opacity:var(--op-45);cursor:default;pointer-events:none}
+:is(#_anim-dialog,#vp-animate-pop) .dlg-foot.anim-foot{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;align-items:center;gap:var(--space-md);padding:var(--space-xl) var(--space-2xl);border:0;background:none;box-shadow:none;pointer-events:none}      /* (no bar: the two round buttons hover over the content, which scrolls on to the edge of the card) */
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn{pointer-events:auto;box-shadow:0 2px 10px var(--blk-40,rgba(0,0,0,.4))}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger{background:color-mix(in srgb,var(--er) 16%,#1f1f1f);color:var(--er)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger:hover:not(:disabled){background:color-mix(in srgb,var(--er) 26%,#1f1f1f)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger:disabled{background:#1f1f1f;color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn:disabled{opacity:1}      /* (a dimmed button stays solid: its colours are dimmed, not its opacity, so the list never shows through) */
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-primary:disabled{background:color-mix(in srgb,var(--ac) 30%,#1f1f1f);color:color-mix(in srgb,var(--white) 45%,#1f1f1f)}
+#_anim-dialog .dlg-body,#vp-animate-pop .adk-insp .dlg-body{padding-bottom:calc(40px + var(--space-xl) * 2)}      /* (room under the last card for the hovering buttons) */
+#vp-animate-pop .adk-insp{position:relative}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn{border-radius:50%;padding:0;width:40px;height:40px}
+:is(#_anim-dialog,#vp-animate-pop) .cq-btn:disabled{opacity:var(--op-45);cursor:default;pointer-events:none}
+/* ── Animate timeline: a drawer along the bottom of the viewport, like the materials dock ─────────────────────────────────────────
+   Transport and time in its head, the animated objects as rows with a bar for each motion, a ruler with the playhead, and the settings
+   of the motion on the right (the same ones the small Animate window has). Its pop-out button turns it into that small window. */
+:root{--anim-dock-h:300px;--adk-hw:210px;--adk-iw:340px}
+#vp-animate-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--anim-dock-h),80vh);
+  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:#1a1a1a;box-shadow:0 -8px 24px -16px var(--blk-50);outline:none;
+  z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform var(--dur-200) var(--ease-out),visibility 0s linear var(--dur-200);
+  font:12px/1.5 var(--font-sans);container:adkdock / inline-size}
+#vp-animate-pop.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
+body.anim-dock-open .vpc.tr{bottom:calc(min(var(--anim-dock-h),80vh) + 12px)}
+body.anim-dock-open .vpc.br{bottom:calc(min(var(--anim-dock-h),80vh) + 10px)}
+body.anim-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--anim-dock-h),80vh) / 2)}
+body.anim-dock-open .vp-cmd-host{bottom:calc(min(var(--anim-dock-h),80vh) + 12px);max-height:calc(100% - min(var(--anim-dock-h),80vh) - 24px)}
+body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--anim-dock-h),80vh) + 58px);max-height:calc(100% - min(var(--anim-dock-h),80vh) - 70px)}
+#vp-animate-pop .adk-h{box-sizing:border-box;display:flex;height:var(--win-bar-h);min-height:var(--win-bar-h);flex:0 0 var(--win-bar-h);padding:0 var(--win-bar-px) 0 var(--win-bar-pl);gap:var(--space-lg);align-items:center;border-bottom:1px solid var(--win-bar-line);min-width:0;background:var(--bg2)}
+#vp-animate-pop .adk-h .lc-title{font-size:var(--win-title-fs);font-weight:var(--win-title-fw);color:var(--tx);letter-spacing:var(--win-title-ls);text-transform:none;line-height:var(--lh-compact);margin:0;padding:0}
+#vp-animate-pop .adk-grip{position:absolute;top:0;left:0;right:0;height:5px;cursor:ns-resize;z-index:8}
+#vp-animate-pop .adk-grip:is(:hover,.dragging){background:var(--ac-tint-35)}
+#vp-animate-pop .anim-alpha{flex:0 0 auto;padding:1px var(--space-md);border-radius:var(--r-pill);background:color-mix(in srgb,var(--wn) 16%,transparent);color:var(--wn);font-size:var(--fs-10);letter-spacing:var(--tracking-wide)}
+.adk-tr{display:flex;align-items:center;gap:var(--space-2xs);flex:0 0 auto}
+.adk-sep{flex:0 0 1px;align-self:center;height:16px;background:var(--s4)}
+#vp-animate-pop .adk-b{all:unset;box-sizing:border-box;display:grid;place-items:center;flex:0 0 auto;width:var(--btn-h-sm);height:var(--btn-h-sm);border-radius:var(--btn-r-sm);color:var(--tx2);cursor:pointer;transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),transform var(--dur-100) var(--ease-out)}
+#vp-animate-pop .adk-b:hover{background:var(--s3);color:var(--tx)}
+#vp-animate-pop .adk-b:active{transform:scale(.92)}
+#vp-animate-pop .adk-b:focus-visible{box-shadow:var(--ring-focus)}
+#vp-animate-pop .adk-b.active{color:var(--ac-text);background:var(--ac-tint-20)}
+#vp-animate-pop #adk-tl.active,#vp-animate-pop #adk-tr2.active{background:transparent;color:var(--tx2)}      /* (the two panel toggles do not light up) */
+#vp-animate-pop #adk-tl.active:hover,#vp-animate-pop #adk-tr2.active:hover{background:var(--s3);color:var(--tx)}
+#vp-animate-pop .adk-b:disabled{opacity:var(--op-45);pointer-events:none}
+/* fold / unfold an object's clips in the timeline's list */
+#vp-animate-pop .adk-fold{all:unset;box-sizing:border-box;display:grid;place-items:center;flex:0 0 18px;width:18px;height:18px;margin-left:calc(var(--space-xs) * -1);border-radius:var(--r-sm);color:var(--tx3);cursor:pointer}
+#vp-animate-pop .adk-fold:hover{color:var(--tx);background:var(--s3)}
+#vp-animate-pop .adk-fold:focus-visible{box-shadow:var(--ring-focus)}
+#vp-animate-pop .adk-fold svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* The Animation card of the right sidebar: a scrubber with the time gone and the time left under it, and the buttons in a centred row */
+#anim-card[hidden],#anim-card-group[hidden]{display:none!important}
+#anim-card .section-b{display:flex;flex-direction:column;gap:var(--space-md)}
+#anim-card .ac-b,#anim-card .ac-play,#anim-card .ac-tl{--p:0%;--step:20%;position:relative;height:34px;border-radius:var(--r-sm);background:var(--s1);overflow:hidden;cursor:pointer;touch-action:none;user-select:none}
+/* the ruler marks are the scrubber's alone: the round buttons had them too, as lines across their faces */
+#anim-card .ac-tl{background-image:repeating-linear-gradient(90deg,transparent 0 calc(var(--step) - 1px),var(--wht-8,rgba(255,255,255,.07)) calc(var(--step) - 1px) var(--step))}
+#anim-card .ac-tl:focus-visible{box-shadow:var(--ring-focus);outline:none}
+#anim-card .ac-tl-played{position:absolute;inset:0 auto 0 0;width:var(--p);background:color-mix(in srgb,var(--ac) 14%,transparent);pointer-events:none}
+#anim-card .ac-clip{position:absolute;height:5px;border-radius:2px;background:var(--ac);pointer-events:none}
+#anim-card .ac-clip[data-type=spin]{background:#5aa2ff}
+#anim-card .ac-clip[data-type=swing]{background:#b49aff}
+#anim-card .ac-clip[data-type=noise]{background:#44d4a0}
+#anim-card .ac-clip[data-type=path]{background:#f08cc0}
+#anim-card .ac-clip[data-type=oscillate]{background:#f5b95a}
+#anim-card .ac-clip[data-muted]{opacity:.3}
+#anim-card .ac-key{position:absolute;width:7px;height:7px;margin-left:-3.5px;background:#7dd3fc;transform:rotate(45deg);border-radius:1px;pointer-events:none}
+#anim-card .ac-key[data-name=explode]{background:#f5b95a}
+#anim-card .ac-key[data-muted]{opacity:.3}
+#anim-card .ac-tl-head{position:absolute;top:0;bottom:0;left:var(--p);width:2px;margin-left:-1px;background:var(--white);box-shadow:0 0 0 1px var(--blk-40,rgba(0,0,0,.4));pointer-events:none}
+#anim-card .ac-tl-head::before{content:'';position:absolute;top:0;left:50%;width:9px;height:6px;margin-left:-4.5px;background:var(--white);clip-path:polygon(0 0,100% 0,50% 100%)}
+#anim-card .ac-times{display:flex;justify-content:space-between;margin-top:calc(var(--space-xs) * -1);color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums}
+#anim-card .ac-transport{display:flex;align-items:center;justify-content:center;gap:var(--space-xl)}
+#anim-card .ac-b{width:36px;height:36px;border-radius:50%}
+#anim-card .ac-play{width:46px;height:46px;border-radius:50%;background:var(--s4);color:var(--tx)}
+#anim-card .ac-b:hover,#anim-card .ac-play:hover{background:var(--s5)}
+#anim-card .ac-b.on{color:var(--ac-text)}
+#anim-card :is(.ac-b,.ac-play):focus-visible{box-shadow:var(--ring-focus)}
+#anim-card svg{width:var(--icon-md);height:var(--icon-md);stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#anim-card .ac-b svg{width:18px;height:18px}
+#anim-card :is(.ac-b,.ac-play){display:grid;place-items:center;padding:0;border:0;line-height:0}      /* (the icon in the middle of its circle) */
+#anim-card .ac-play svg{margin-left:2px}      /* (a triangle looks centred a little right of its box) */
+#anim-card .ac-play svg{width:20px;height:20px;fill:currentColor;stroke-width:1;stroke-linejoin:round}
+/* The blue plus with its arrow, in the top bar like Materials': it adds the chosen kind to the selection; the arrow lists the kinds */
+#vp-animate-pop .adk-split{display:inline-flex;align-items:stretch;height:var(--win-ico-btn);border-radius:var(--win-ico-r);overflow:hidden}
+#vp-animate-pop .adk-addb{all:unset;box-sizing:border-box;display:grid;place-items:center;width:var(--win-ico-btn);height:100%;background:var(--ac);color:var(--white);cursor:pointer;transition:filter var(--dur-fast) var(--ease-out)}
+#vp-animate-pop .adk-addb:hover{filter:brightness(1.1)}
+#vp-animate-pop .adk-addb:focus-visible{box-shadow:var(--ring-focus)}
+#vp-animate-pop .adk-addb:disabled{opacity:1;background:color-mix(in srgb,var(--ac) 30%,#1f1f1f);color:color-mix(in srgb,var(--white) 45%,#1f1f1f);pointer-events:none}
+#vp-animate-pop .adk-addb svg{width:var(--icon-md);height:var(--icon-md);stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+#vp-animate-pop .adk-addb.adk-addmore{position:relative;width:22px}
+#vp-animate-pop .adk-addb.adk-addmore::before{content:'';position:absolute;left:0;top:var(--space-md);bottom:var(--space-md);width:1px;background:var(--on-accent-line)}
+#vp-animate-pop .adk-addb.adk-addmore svg{width:var(--icon-sm);height:var(--icon-sm)}
+#vp-animate-pop .adk-addwrap .adk-menu.adk-addmenu{left:auto;right:0;top:calc(100% + 8px);bottom:auto;min-width:170px}
+#vp-animate-pop .adk-b svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linejoin:round}
+#vp-animate-pop .adk-play{color:var(--tx);background:var(--s3)}
+#vp-animate-pop .adk-play:hover{background:var(--s5)}
+#vp-animate-pop .adk-play{width:32px;height:32px;border-radius:50%}      /* (a plain round button: the icon is a small solid shape in the middle, not a chunky outlined one) */
+#vp-animate-pop .adk-play svg{width:14px;height:14px;fill:currentColor;stroke:currentColor;stroke-width:1;stroke-linejoin:round}
+#vp-animate-pop .adk-in{box-sizing:border-box;height:24px;padding:0 var(--space-md);border:0;border-radius:var(--r-sm);background:var(--blk-40);box-shadow:inset 0 1px 2px var(--blk-40);color:var(--tx);font:inherit;font-size:var(--fs-12);font-variant-numeric:tabular-nums;text-align:center;outline:none}
+#vp-animate-pop .adk-in:focus{box-shadow:0 0 0 1px var(--ac)}
+#vp-animate-pop .adk-time{width:74px}
+#vp-animate-pop .adk-len{flex:0 0 auto;color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap}
+#vp-animate-pop .adk-lab{display:inline-flex;align-items:center;gap:var(--space-md);color:var(--tx3);font-size:var(--fs-11);white-space:nowrap}
+#vp-animate-pop .adk-lab .adk-in{width:46px}
+#vp-animate-pop .adk-rate{width:auto;min-width:36px;padding:0 var(--space-md);font-size:var(--fs-11);font-variant-numeric:tabular-nums;background:var(--s3)}
+#vp-animate-pop .adk-zoom{display:inline-flex;align-items:center;gap:var(--space-sm);color:var(--tx3)}
+#vp-animate-pop .adk-zoom input[type=range]{width:90px}
+#vp-animate-pop .adk-zoom svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2}
+#vp-animate-pop.is-off .adk-time,#vp-animate-pop.is-off .adk-len{opacity:var(--op-45)}
+.adk-body{flex:1 1 auto;min-height:0;display:flex}
+.adk-scroll.alt-hand{cursor:grab}
+.adk-scroll.is-panning,.adk-scroll.is-panning *{cursor:grabbing!important;user-select:none}
+.adk-scroll{flex:1 1 auto;min-width:0;overflow:auto;position:relative;background:linear-gradient(90deg,#1b1b1b calc(var(--adk-hw) - 1px),var(--bd) calc(var(--adk-hw) - 1px) var(--adk-hw),#171717 var(--adk-hw));scrollbar-width:auto;scrollbar-color:auto;overscroll-behavior:contain}
+/* its scroll bars: no arrows, a track the colour of the timeline, a slim rounded thumb that lights up under the pointer */
+.adk-scroll::-webkit-scrollbar{width:12px;height:12px}
+.adk-scroll::-webkit-scrollbar-button{display:none;width:0;height:0}
+.adk-scroll::-webkit-scrollbar-track,.adk-scroll::-webkit-scrollbar-corner{background:#171717}
+.adk-scroll::-webkit-scrollbar-thumb{background:var(--s6);background-clip:padding-box;border:3px solid #171717;border-radius:8px;min-width:48px;min-height:32px}
+.adk-scroll::-webkit-scrollbar-thumb:hover{background:var(--tx3);background-clip:padding-box}
+.adk-scroll::-webkit-scrollbar-thumb:active{background:var(--tx2);background-clip:padding-box}
+.adk-inner{position:relative;min-height:100%;width:calc(var(--adk-hw) + var(--tw,800px));min-width:100%;--gs:80px;display:flex;flex-direction:column}
+#adk-rows{flex:1 1 auto;display:flex;flex-direction:column}
+#adk-rows>.adk-row{flex:0 0 auto}
+.adk-ruler{position:sticky;top:0;z-index:8;display:flex;height:28px;background:#1d1d1d;border-bottom:1px solid var(--bd)}
+.adk-rh{position:sticky;left:0;z-index:7;flex:0 0 var(--adk-hw);width:var(--adk-hw);box-sizing:border-box;display:flex;align-items:center;gap:var(--space-md);padding:0 var(--space-lg);min-width:0;background:#1b1b1b;border-right:1px solid var(--bd);color:var(--tx2);font-size:var(--fs-12)}
+.adk-ruler .adk-rh{background:#1d1d1d;color:var(--tx3);font-size:var(--fs-11);padding:0 var(--space-md)}
+.adk-ruler .adk-rh .adk-b{flex:0 0 auto}
+.adk-rl{position:relative;flex:0 0 var(--tw,800px);width:var(--tw,800px);overflow:hidden}
+.adk-ruler .adk-rl{cursor:ew-resize;touch-action:none;overflow:visible;clip-path:inset(0)}
+.adk-tk{position:absolute;bottom:0;width:1px;height:5px;background:var(--s6)}
+.adk-tk.M{height:10px;background:var(--tx3)}
+.adk-tlab{position:absolute;top:4px;margin-left:5px;font-size:10px;line-height:1;color:var(--tx3);font-variant-numeric:tabular-nums;pointer-events:none;white-space:nowrap}
+.adk-hd{position:absolute;top:0;left:0;width:11px;height:15px;margin-left:-5px;background:var(--ac);clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%);pointer-events:none;will-change:transform;z-index:2}
+.adk-ph{position:absolute;top:0;bottom:0;left:var(--adk-hw);width:1px;background:var(--ac);z-index:6;pointer-events:none;will-change:transform}
+.adk-row{display:flex;height:30px;border-bottom:1px solid var(--s2)}
+.adk-row .adk-rl{background:repeating-linear-gradient(90deg,var(--s2) 0 1px,transparent 1px var(--gs));box-shadow:inset -1px 0 0 var(--s4)}
+.adk-obj{background:#1c1c1c}
+.adk-obj .adk-rh{color:var(--tx);cursor:pointer}
+.adk-obj.is-sel{background:color-mix(in srgb,var(--ac) 12%,#1c1c1c)}
+.adk-obj.is-sel .adk-rh{box-shadow:inset 2px 0 0 var(--ac);background:color-mix(in srgb,var(--ac) 12%,#1c1c1c)}      /* (the object that is selected is lit across its row) */
+.adk-obj:not(.is-sel):hover .adk-rh{background:var(--s3)}
+.adk-lay .adk-rh{padding-left:calc(var(--space-lg) + 16px);cursor:pointer}
+.adk-lay.is-active .adk-rh{background:#222;color:var(--tx)}
+.adk-rh:hover{background:#222}
+.adk-ico{flex:0 0 auto;width:13px;height:13px;color:var(--tx3);stroke:currentColor;fill:none;stroke-width:2}
+.adk-n{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adk-rh em{flex:1 1 0;min-width:0;font-style:normal;color:var(--tx3);font-size:var(--fs-11);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adk-act{margin-left:auto;flex:0 0 auto;display:flex;gap:1px;opacity:0;transition:opacity var(--dur-fast) var(--ease-out)}
+.adk-row:hover .adk-act,.adk-row.is-sel .adk-act,.adk-act:focus-within{opacity:1}
+.adk-act .adk-b{width:22px;height:22px}
+.adk-act .adk-b svg{width:13px;height:13px}
+.adk-lay.is-muted .adk-act{opacity:1}
+.adk-bar{--c:var(--ac);--cyc:99999px;position:absolute;top:3px;bottom:3px;box-sizing:border-box;display:flex;align-items:center;min-width:6px;padding:0 9px;border-radius:3px;overflow:hidden;cursor:grab;touch-action:none;
+  background-color:color-mix(in srgb,var(--c) 46%,#1a1a1a);
+  background-image:repeating-linear-gradient(90deg,transparent 0 calc(var(--cyc) - 1px),color-mix(in srgb,var(--c) 40%,transparent) calc(var(--cyc) - 1px) var(--cyc));
+  transition:filter var(--dur-fast) var(--ease-out)}
+.adk-bar[data-type=spin]{--c:#5aa2ff}
+.adk-bar[data-type=swing]{--c:#b49aff}
+.adk-bar[data-type=noise]{--c:#44d4a0}
+.adk-bar[data-type=path]{--c:#f08cc0}
+.adk-bar[data-type=oscillate]{--c:#f5b95a}
+
+/* the selected clip (only the one whose settings are open, not every clip of the selected object) is solid: a stronger fill and white text, no outline */
+.adk-lay.is-active .adk-bar,.adk-bar.is-active{background-color:color-mix(in srgb,var(--c) 80%,#1a1a1a);color:#fff}
+.adk-bar.is-drag{cursor:grabbing}
+.adk-bt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-11);color:color-mix(in srgb,var(--c) 60%,#fff);pointer-events:none}
+.adk-be{position:absolute;top:0;bottom:0;right:0;width:8px;cursor:ew-resize}
+.adk-be:hover{background:color-mix(in srgb,var(--c) 45%,transparent)}
+.adk-lay.is-muted .adk-bar{opacity:.38;filter:grayscale(1)}
+/* keys (the diamonds), the trim edges of a clip, the snap line, the menu to add a key, the speed readout, the panel of a key */
+.adk-keys .adk-rl{cursor:copy}
+.adk-kspan{position:absolute;top:50%;height:2px;margin-top:-1px;border-radius:1px;background:var(--s6);cursor:grab}
+.adk-kspan:hover{background:var(--tx3)}
+.adk-kf{position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;box-sizing:border-box;transform:rotate(45deg);border-radius:2px;background:#2a2a2a;box-shadow:inset 0 0 0 1.5px var(--tx2);cursor:grab;z-index:2;touch-action:none}
+.adk-kf:hover{box-shadow:inset 0 0 0 1.5px var(--tx)}
+.adk-kf.is-hold{border-radius:50%}
+.adk-kf.is-sel{background:var(--ac);box-shadow:0 0 0 2px var(--ac-tint-35)}
+.adk-keys.is-muted .adk-kf,.adk-keys.is-muted .adk-kspan{opacity:.4}
+.adk-bl{position:absolute;top:0;bottom:0;left:0;width:8px;cursor:ew-resize}
+.adk-bl:hover{background:color-mix(in srgb,var(--c) 45%,transparent)}
+.adk-snap{position:absolute;top:0;bottom:0;left:var(--adk-hw);width:1px;z-index:6;pointer-events:none;background:var(--wn);opacity:.9;will-change:transform}
+.adk-scn-h .adk-rh{color:var(--tx3);font-size:var(--fs-11)}
+.adk-menuwrap{position:relative;flex:0 0 auto}
+.adk-menu{position:absolute;left:0;bottom:calc(100% + 8px);z-index:20;min-width:250px;padding:var(--space-sm);display:flex;flex-direction:column;gap:1px;border-radius:var(--r-lg);background:#242424;border:1px solid var(--s5);box-shadow:0 12px 32px var(--blk-50)}
+.adk-menu[hidden]{display:none}
+.adk-menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-md) var(--space-lg);border-radius:var(--r-md);color:var(--tx);cursor:pointer;font-size:var(--fs-12)}
+.adk-menu button:hover,.adk-menu button:focus-visible{background:var(--s4)}
+.adk-menu button svg{flex:0 0 auto;width:15px;height:15px;color:var(--tx3);stroke:currentColor;fill:none;stroke-width:2}
+.adk-menu button span{display:flex;flex-direction:column;min-width:0}
+.adk-menu button em{font-style:normal;color:var(--tx3);font-size:var(--fs-11)}
+#vp-animate-pop .adk-h{flex-wrap:nowrap}
+#vp-animate-pop .adk-fps{flex:0 0 auto;min-width:0;color:var(--tx3);font-size:var(--fs-11);font-variant-numeric:tabular-nums;white-space:nowrap}
+#vp-animate-pop .adk-fps.is-slow{color:var(--wn)}
+.adk-keypanel{display:flex;flex-direction:column;gap:var(--space-xl)}
+.adk-keypanel[hidden]{display:none}
+.dlg-body[data-kmode=key]>:not(.adk-keypanel){display:none!important}
+.adk-kp-h{display:flex;align-items:center;gap:var(--space-lg);min-width:0}
+.adk-kp-h>svg{flex:0 0 auto;width:15px;height:15px;color:var(--ac-text);stroke:currentColor;fill:none;stroke-width:2}
+.adk-kp-h b{font-weight:var(--fw-regular);font-size:var(--fs-lg);color:var(--tx);letter-spacing:var(--tracking-tighter)}
+.adk-kp-s{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx3);font-size:var(--fs-11)}
+.adk-keypanel .adk-num{width:80px;text-align:left;padding:0 var(--space-lg)}
+.adk-keypanel .adk-unit{color:var(--tx3);font-size:var(--fs-11);margin-right:auto}
+.adk-keypanel .adk-col{width:44px;height:26px;padding:0;border:0;border-radius:var(--r-sm);background:none;cursor:pointer}
+.adk-keypanel .adk-kbtn{width:100%;border-radius:var(--r-pill)}
+.adk-keypanel .anim-sub{font-size:var(--fs-10);letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--tx3)}
+.adk-keypanel .anim-card{display:flex;flex-direction:column;gap:var(--space-lg)}
+.adk-empty{display:flex;flex:1 1 auto;min-height:100%}
+.adk-empty-rh{align-self:stretch}
+.adk-empty-msg{flex:0 0 var(--tw,800px);display:grid;place-items:center;color:var(--tx3);font-size:var(--fs-12);letter-spacing:var(--tracking-wide);user-select:none}
+.adk-insp{flex:0 0 var(--adk-iw);width:var(--adk-iw);display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--bd);background:#1a1a1a}
+.adk-insp .dlg-body{flex:1 1 auto;min-height:0;overflow:auto}
+.adk-insp .dlg-foot{flex:0 0 auto}
+#vp-animate-pop.no-insp .adk-insp{display:none}
+#vp-animate-pop.no-left .adk-rh{padding:0;justify-content:center;gap:0}
+#vp-animate-pop.no-left .adk-rh :is(.adk-n,em,.adk-act,span){display:none}
+#vp-animate-pop.no-left .adk-lay .adk-rh{padding-left:0}
+#vp-animate-pop .adk-h .adk-b.active{background:transparent}
+/* the playbar under the timeline: transport and time on the left, keys and clips, then the readout, draft, length and zoom */
+.adk-main{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;container:adkbar / inline-size}
+.adk-main>.adk-scroll{flex:1 1 auto;min-height:0}
+.adk-pb{flex:0 0 auto;display:flex;align-items:center;gap:var(--space-lg);height:44px;padding:0 var(--space-xl);border-top:1px solid var(--bd);background:var(--bg2);min-width:0;overflow:hidden}
+@container adkbar (max-width:980px){#vp-animate-pop .adk-zoom{display:none}}
+@container adkbar (max-width:780px){#vp-animate-pop .adk-lab,#vp-animate-pop .adk-len{display:none}}
+@container adkbar (max-width:620px){#vp-animate-pop .adk-fps{display:none}}
+@container adkbar (max-width:540px){#vp-animate-pop :is(.adk-rate,#adk-dup,#adk-draft,#adk-fit){display:none}}
+@container adkbar (max-width:420px){#vp-animate-pop :is(#adk-loop,.adk-sep,#adk-key){display:none}.adk-pb{gap:var(--space-md);padding:0 var(--space-lg)}}
+@container adkbar (max-width:330px){#vp-animate-pop :is(#adk-prev,#adk-next,#adk-cut){display:none}}
+@container adkdock (max-width:860px){.adk-insp{--adk-iw:300px}}
+.adk-body{position:relative}
+@container adkdock (max-width:820px){
+  .adk-insp{display:none}
+  #vp-animate-pop.insp-force .adk-insp{display:flex;position:absolute;top:0;right:0;bottom:0;z-index:12;width:min(var(--adk-iw),92%);box-shadow:-14px 0 28px -12px var(--blk-50)}
+}
+@container adkdock (max-width:560px){#vp-animate-pop .anim-alpha{display:none}}
+@container adkdock (max-width:700px){#vp-animate-pop .anim-alpha{display:none}}
+@media (prefers-reduced-motion:reduce){#vp-animate-pop,.adk-act,.adk-bar{transition:none}}
 /* The new-material button, tidied: a plus and an arrow of one weight, the plus in a square, the arrow a little narrower, and the
    divider between them centred and level with the icons' middle */
 #vp-materials-pop#vp-materials-pop .mat-dock-h .mat-split .mat-act-new:first-child{width:var(--btn-h-sm);flex:0 0 var(--btn-h-sm);padding:0;display:inline-flex;align-items:center;justify-content:center}
@@ -4953,7 +5287,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .section-cmd[data-cmd="elements"] #el-weld-row[hidden]{display:none}
 /* Edit mesh's bar: one column at the right edge under the view cube, in the same dark pill as the toolbar on the left. The brush size,
    the weld distance and the count of what is picked do not fit in it: they stand out to its left, beside the button they go with. */
-.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:var(--space-2xs);padding:var(--space-xs);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:0 4px 10px var(--blk-40),var(--surface-ring)}
+.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:0;padding:var(--space-sm);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:0 4px 10px var(--blk-40),var(--surface-ring)}
 .vpc.el-bar[hidden]{display:none}
 .vpc.el-bar{transition:opacity 220ms var(--ease-out),translate 260ms cubic-bezier(.2,.9,.3,1)}
 .vpc.el-bar.is-out{opacity:0;translate:14px 0;pointer-events:none}
@@ -4963,8 +5297,8 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .vpc.el-bar:not(.is-out):not([hidden])>*:nth-child(n+4){animation-delay:120ms}
 @keyframes el-bar-in{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.vpc.el-bar{transition:none}.vpc.el-bar:not(.is-out):not([hidden])>*{animation:none}}
-.el-bar .el-row{display:grid;grid-template-columns:30px;gap:var(--space-2xs)}
-.el-bar .vpb-sep{height:1px;width:18px;margin:var(--space-3) auto;background:var(--bar-sep)}
+.el-bar .el-row{display:grid;grid-template-columns:30px;gap:var(--space-xs)}
+.el-bar .vpb-sep{flex:0 0 1px;height:1px;width:18px;margin:var(--space-md) auto;background:var(--bar-sep)}      /* (the same room above a divider as below it, and between the buttons of a group) */
 .el-bar .el-row>button,.el-ibtn{position:relative;width:30px;height:30px;display:grid;place-items:center;padding:0;background:transparent;border:0;border-radius:var(--r-sm);color:var(--icon-fg-float);cursor:pointer;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out)}
 .el-bar .el-row>button>span,.el-ibtn>span{display:none}
 .el-bar .el-row [data-lucide],.el-bar .el-row .lucide,.el-bar .el-row svg{width:var(--icon-btn-float);height:var(--icon-btn-float);display:block}
@@ -5032,7 +5366,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .em-pop-item.is-on:hover .em-pop-l{color:var(--tx-on-accent)}
 /* ── end of Edit mesh ── */
 </style>
-<script src="js/appearance.js?v=7"></script>
+<script src="js/appearance.js?v=7-ser1"></script>
 <script src="js/updater.js?v=1"></script>
 <style id="updates-css">
 /* Updates: the card in the corner, and Settings › Updates (updater.js). Tokens only. */
@@ -5175,15 +5509,16 @@ body.claude-mode #tb,body.claude-mode #sidebar-left,body.claude-mode #sidebar-ri
 body.claude-mode{background:var(--bg)}
 html.claude-boot{background:var(--bg)}
 html.claude-boot #app,html.claude-boot #splash{visibility:hidden !important}
-body.claude-mode #viewport{position:fixed;inset:0;border-radius:0;z-index:var(--z-sticky)}
+body.claude-mode #viewport{position:fixed;inset:0;border-radius:0;z-index:var(--z-sticky);opacity:0;pointer-events:none;transform:translateX(28px);transition:opacity .3s ease,transform .5s cubic-bezier(.22,.8,.18,1)}      /* (behind the feed, and unseen, when there is no viewport) */
 body.claude-split{--cf-w:min(440px,44vw)}
-body.claude-split #viewport{top:var(--space-lg);right:var(--space-lg);bottom:var(--space-lg);left:calc(var(--cf-w) + var(--space-sm));border-radius:var(--r-xl,16px);border:1px solid var(--bd);box-shadow:0 18px 48px -24px var(--blk-50)}
+body.claude-split #viewport{opacity:1;pointer-events:auto;transform:none;transition:opacity .5s ease .12s,transform .55s cubic-bezier(.22,.8,.18,1);top:var(--space-lg);right:var(--space-lg);bottom:var(--space-lg);left:calc(var(--cf-w) + var(--space-sm));border-radius:var(--r-xl,16px);border:1px solid var(--bd);box-shadow:0 18px 48px -24px var(--blk-50)}
 body.claude-mode .modal-bg{z-index:calc(var(--z-modal) + 1)}       /* Settings and the other windows open above the feed */
 #claude-feed{display:none;position:fixed;top:0;bottom:0;left:0;right:0;z-index:calc(var(--z-modal) - 1);flex-direction:column;background:var(--bg);color:var(--tx);font-size:var(--fs-13)}
-body.claude-mode #claude-feed{display:flex}
+body.claude-mode #claude-feed{display:flex;right:auto;width:100%;transition:width .55s cubic-bezier(.22,.8,.18,1)}
 body.claude-split #claude-feed{right:auto;width:var(--cf-w)}
-#cf-stats{display:none;position:fixed;top:calc(var(--space-lg) + var(--space-xl));right:calc(var(--space-lg) + var(--space-xl));z-index:calc(var(--z-modal) - 2);padding:var(--space-sm) var(--space-xl);border-radius:var(--r-pill);border:1px solid var(--bd);background:color-mix(in srgb,var(--bg1) 82%,transparent);backdrop-filter:blur(8px);color:var(--tx2);font-size:var(--fs-11);font-variant-numeric:tabular-nums;pointer-events:none}
-body.claude-split #cf-stats{display:block}
+#cf-stats{display:none;opacity:0;pointer-events:none;transition:opacity .35s ease;position:fixed;bottom:46px;left:calc((var(--cf-w,440px) + 6px + 100vw - 10px) / 2);translate:-50% 0;max-width:calc(100vw - var(--cf-w,440px) - 48px);z-index:calc(var(--z-modal) - 2);padding:var(--space-sm) var(--space-xl);border-radius:var(--r-pill);border:1px solid var(--bd);background:color-mix(in srgb,var(--bg1) 82%,transparent);backdrop-filter:blur(8px);color:var(--tx2);font-size:var(--fs-11);font-variant-numeric:tabular-nums;pointer-events:none}
+body.claude-mode #cf-stats{display:block}
+body.claude-split #cf-stats{opacity:1;pointer-events:auto;transition-delay:.25s}
 .cf-head{display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-xl) var(--space-xl) var(--space-md)}
 .cf-state{display:flex;align-items:center;gap:var(--space-lg);min-width:0;flex:1}
 .cf-state .cl-dot{width:8px;height:8px;border-radius:50%;background:var(--tx3);flex:none}
@@ -5194,6 +5529,17 @@ body.claude-split #cf-stats{display:block}
 .cf-state b{display:block;font-size:var(--fs-12);font-weight:var(--fw-medium);letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cf-state span{display:block;font-size:var(--fs-11);color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cf-btns{display:flex;gap:var(--space-2xs);flex:none}
+.cf-tools{display:flex;align-items:center;gap:var(--space-md);flex:none;grid-area:tools}
+/* the name of the mode, large, in the serif of the website, over the line that says what Claude is doing */
+.cf-head{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"title tools" "state state";align-items:center;gap:var(--space-md) var(--space-lg)}
+.cf-title{grid-area:title;margin:0;font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:clamp(34px,3.4vw,46px);line-height:1.05;letter-spacing:-.01em;color:var(--tx)}
+.cf-head>.cf-state{grid-area:state}
+.cf-tools .cf-alpha{margin-left:0}
+/* the tools are a floating pill at the top right of the window, in the same place with the viewport open and without it */
+.cf-tools{position:fixed;top:26px;right:26px;      /* (the viewport panel is 10px in from the window: this leaves 16px from its edges) */
+  z-index:5;padding:5px 6px 5px 14px;border-radius:var(--r-pill);background:transparent;transition:background-color .2s ease,box-shadow .2s ease}
+/* the pill itself is only there over the viewport; on the black feed the tools stand in the same place without it */
+body.claude-split .cf-tools{background-color:var(--bg)}      /* (the colour of the feed beside it) */
 .cf-ib{all:unset;box-sizing:border-box;display:grid;place-items:center;width:28px;height:28px;border-radius:var(--r-pill);color:var(--tx3);cursor:pointer;transition:var(--tr-bg-bd-fg-tf-base)}
 .cf-ib:hover{background:var(--bg3);color:var(--tx)}
 .cf-ib[aria-pressed="true"]{background:var(--bg3);color:var(--ac)}
@@ -5204,6 +5550,17 @@ body.claude-split #cf-stats{display:block}
 .cf-list>*,.cf-foot>*{width:100%;max-width:760px;margin-inline:auto}
 .cf-empty{margin-block:auto;text-align:center;color:var(--tx3);padding:var(--space-2xl) var(--space-xl)}
 .cf-empty[hidden]{display:none}
+/* the tips in the middle of the feed before anything has happened: large serif type, one at a time, fading to the next */
+.cf-tips{position:absolute;left:0;right:0;top:240px;bottom:calc(var(--cf-foot,120px) + 40px);display:grid;place-items:center;padding:0 var(--space-5xl);pointer-events:none;z-index:0}
+.cf-tips[hidden]{display:none}
+.cf-tip{max-width:920px;text-align:center;font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:clamp(30px,4vw,54px);line-height:1.15;letter-spacing:-.01em;color:color-mix(in srgb,var(--tx) 82%,transparent);opacity:0;transform:translateY(6px);transition:opacity .9s ease,transform .9s ease,font-size .5s cubic-bezier(.22,.8,.18,1)}
+.cf-tip.on{opacity:1;transform:none}
+/* with the viewport open the feed is a narrow column: the title and the tips are a size smaller */
+.cf-title{transition:font-size .5s cubic-bezier(.22,.8,.18,1)}
+body.claude-split .cf-title{font-size:30px}
+body.claude-split .cf-tip{font-size:clamp(22px,2.4vw,32px);line-height:1.2}
+body.claude-split .cf-tips{padding:0 var(--space-3xl)}
+@media (prefers-reduced-motion:reduce){.cf-tip{transition:none;transform:none}body.claude-mode #claude-feed,body.claude-mode #viewport,body.claude-split #viewport,#cf-stats,.cf-title{transition:none!important}}
 .cf-empty b{display:block;font-size:var(--fs-15,15px);font-weight:var(--fw-medium);color:var(--tx);margin-bottom:var(--space-md)}
 .cf-empty p{margin:0 0 var(--space-lg);line-height:var(--lh-base)}
 .cf-cmd code{display:inline-block;max-width:100%;overflow-x:auto;padding:var(--space-md) var(--space-lg);border:1px solid var(--bd);border-radius:var(--r-md,8px);background:var(--bg1);color:var(--tx2);font-size:var(--fs-11)}
@@ -5254,7 +5611,7 @@ body.claude-split iframe.mo-tab-frame{top:var(--space-lg) !important;right:var(-
 .cf-load{position:absolute;left:0;right:0;bottom:calc(var(--cf-foot,120px) + var(--space-md));z-index:3;padding:0 var(--space-xl);display:flex;flex-direction:column;gap:var(--space-sm);pointer-events:none}       /* floats above the controls: nothing in the feed moves when it comes or goes */
 .cf-load>*{width:100%;max-width:760px;margin-inline:auto;pointer-events:auto}
 .cf-load[hidden]{display:none}
-.cf-ld{display:flex;flex-direction:column;gap:var(--space-md);padding:var(--space-lg) var(--space-xl);border-radius:var(--r-xl,14px);border:1px solid color-mix(in srgb,var(--ac) 32%,var(--bd));background:color-mix(in srgb,var(--bg1) 86%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 18px 44px -18px var(--blk-50)}
+.cf-ld{display:flex;flex-direction:column;gap:var(--space-md);padding:var(--space-lg) var(--space-xl);border-radius:var(--r-xl,14px);border:1px solid var(--bd);background:color-mix(in srgb,var(--bg1) 86%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 18px 44px -18px var(--blk-50)}
 .cf-ld-t{display:flex;align-items:center;gap:var(--space-md);font-size:var(--fs-12);min-width:0}
 .cf-ld-t b{font-weight:var(--fw-medium);white-space:nowrap}
 .cf-ld-t span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tx3);font-size:var(--fs-11)}
@@ -5499,8 +5856,8 @@ body.cf-reveal #cf-stats{animation:cf-in .6s cubic-bezier(.22,.9,.3,1) .5s both}
 .tile-art.art-optimise *, .tile-art.art-optimise { animation-delay: -1.2s; }
 .tile-art.art-shrink *, .tile-art.art-shrink { animation-delay: -1.2s; }
 
-.cmd-hero { --tile-c: var(--ac); --card-bg: var(--surface-pop); }
-.cmd-hero .tile-art { display: block; flex: none; width: 100%; height: auto; aspect-ratio: 592 / 370; box-sizing: border-box; margin: 0; padding: 3% 0 9%; background: none; pointer-events: none; stroke-width: 1px; overflow: visible; transform: scale(0.95); transform-origin: 50% 46%; transition: opacity .26s ease; }
+.cmd-hero { --tile-c: var(--ac-text); --card-bg: var(--surface-pop); }      /* (the brighter accent: the thin lines of the picture are easily lost in the dark) */
+.cmd-hero .tile-art { display: block; flex: none; width: 100%; height: auto; aspect-ratio: 592 / 370; box-sizing: border-box; margin: 0; padding: 3% 0 9%; background: none; pointer-events: none; stroke-width: 1.7px; overflow: visible; transform: scale(0.95); transform-origin: 50% 46%; transition: opacity .26s ease; }
 .cmd-hero .tile-art, .cmd-hero .tile-art * { animation-play-state: running; }
 .section-cmd.adv-open > .cmd-hero .tile-art { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .cmd-hero .tile-art { transition: none; } }
@@ -5513,18 +5870,12 @@ body.cf-reveal #cf-stats{animation:cf-in .6s cubic-bezier(.22,.9,.3,1) .5s both}
     <div class="sp-art"><canvas id="sp-canvas"></canvas></div>
     <div class="sp-info">
       <div class="sp-id">
-        <img class="sp-logo" src="assets/icon.svg" alt="" width="54" height="54">
-        <div class="sp-word"><b>MeshOptimiser</b></div>
-      </div>
-      <div class="sp-col">
-        <div><b class="sp-strong" id="sp-ver">MeshOptimiser</b></div>
-        <div>© 2026 Luka Grčar</div>
-        <div>All rights reserved.</div>
+        <div class="sp-word"><b>MeshOptimiser</b><small><span id="sp-ver"></span> · WebGPU CAD inspector</small></div>
       </div>
       <div class="sp-col sp-r">
         <div id="sp-status">Starting…</div>
-        <div>&nbsp;</div>
         <div>Shown: a Scania V8 engine, 1,295 parts</div>
+        <div>© 2026 Luka Grčar · All rights reserved.</div>
       </div>
     </div>
     <div class="sp-bar"><i id="sp-prog"></i></div>
@@ -5546,19 +5897,21 @@ window.moSplash = function (msg, pct) {
   const calm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const gl = cv.getContext('webgl', { antialias: true, alpha: true, premultipliedAlpha: true, powerPreference: 'low-power' });
   if (!gl) return;
-  Promise.all([fetch('assets/splash-model.json?v=sc1').then(r => r.json()), fetch('assets/splash-model.bin?v=sc1').then(r => r.arrayBuffer())]).then(([meta, buf]) => {
+  Promise.all([fetch('assets/splash-model.json?v=sc2').then(r => r.json()), fetch('assets/splash-model.bin?v=sc2').then(r => r.arrayBuffer())]).then(([meta, buf]) => {
     const parts = meta.parts, N = parts.length, S = meta.segments, V = S * 2;
     const q = new Int16Array(buf), pos = new Float32Array(V * 3), pid = new Float32Array(V);
     const cx = meta.min[0] + meta.span[0] / 2, cy = meta.min[1] + meta.span[1] / 2, cz = meta.min[2] + meta.span[2] / 2;
     for (let i = 0; i < V * 3; i++) pos[i] = meta.min[i % 3] + ((q[i] + 32768) / 65535) * meta.span[i % 3] - [cx, cy, cz][i % 3];
     parts.forEach((p, k) => { for (let v = p.start * 2; v < (p.start + p.count) * 2; v++) pid[v] = k; });
-    const vs = 'attribute vec3 aPos;attribute float aPart;uniform mat4 uVP;uniform vec3 uOff[' + N + '];uniform float uA[' + N + '];uniform float uScan;' +
-      'varying float vA;varying float vD;varying float vG;' +
-      'void main(){int i=int(aPart+0.5);vec3 p=aPos+uOff[i];vec4 c=uVP*vec4(p,1.0);gl_Position=c;vA=uA[i];vD=c.w;' +
+    const cen = new Float32Array(N * 3);
+    parts.forEach((p, k) => { const n = p.count * 2; if (!n) return; let x = 0, y = 0, z = 0; for (let v = p.start * 2; v < p.start * 2 + n; v++) { x += pos[v * 3]; y += pos[v * 3 + 1]; z += pos[v * 3 + 2]; } cen[k * 3] = x / n; cen[k * 3 + 1] = y / n; cen[k * 3 + 2] = z / n; });
+    const vs = 'attribute vec3 aPos;attribute float aPart;uniform mat4 uVP;uniform vec3 uOff[' + N + '];uniform vec3 uCen[' + N + '];uniform float uA[' + N + '];uniform float uR[' + N + '];uniform float uF[' + N + '];uniform float uScan;' +
+      'varying float vA;varying float vD;varying float vG;varying float vF;' +
+      'void main(){int i=int(aPart+0.5);vec3 l=aPos-uCen[i];float sn=sin(uR[i]),cs=cos(uR[i]);l=vec3(cs*l.x-sn*l.y,sn*l.x+cs*l.y,l.z);vec3 p=uCen[i]+l+uOff[i];vec4 c=uVP*vec4(p,1.0);gl_Position=c;vA=uA[i];vF=uF[i];vD=c.w;' +
       'float d=(p.z-uScan)/' + (meta.span[2] * 0.07).toFixed(2) + ';vG=exp(-d*d);}';
-    const fs = 'precision mediump float;varying float vA;varying float vD;varying float vG;uniform vec2 uDepth;uniform vec3 uCol;' +
+    const fs = 'precision mediump float;varying float vA;varying float vD;varying float vG;varying float vF;uniform vec2 uDepth;uniform vec3 uCol;' +
       'void main(){float d=clamp((vD-uDepth.x)/(uDepth.y-uDepth.x),0.0,1.0);float a=vA*(0.95-0.72*d);' +
-      'vec3 c=mix(uCol,vec3(1.0),vG*0.85);a=min(1.0,a*(1.0+vG*1.7));gl_FragColor=vec4(c*a,a);}';
+      'vec3 c=mix(uCol,vec3(1.0),min(1.0,vG*0.85+vF*0.9));a=min(1.0,a*(1.0+vG*1.7+vF*2.2));gl_FragColor=vec4(c*a,a);}';
     const mk = (t, src) => { const sh = gl.createShader(t); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
     const pg = gl.createProgram();
     gl.attachShader(pg, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(pg, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pg);
@@ -5569,7 +5922,7 @@ window.moSplash = function (msg, pct) {
     const buf2 = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf2); gl.bufferData(gl.ARRAY_BUFFER, pid, gl.STATIC_DRAW);
     const aPart = gl.getAttribLocation(pg, 'aPart'); gl.enableVertexAttribArray(aPart); gl.vertexAttribPointer(aPart, 1, gl.FLOAT, false, 0, 0);
     const U = (n) => gl.getUniformLocation(pg, n);
-    const uVP = U('uVP'), uOff = U('uOff[0]'), uA = U('uA[0]'), uScan = U('uScan'), uDepth = U('uDepth'), uCol = U('uCol');
+    const uVP = U('uVP'), uOff = U('uOff[0]'), uA = U('uA[0]'), uScan = U('uScan'), uDepth = U('uDepth'), uCol = U('uCol'), uCen = U('uCen[0]'), uR = U('uR[0]'), uF = U('uF[0]');
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
     gl.uniform3f(uCol, 0.30, 0.71, 1.0);
 
@@ -5578,7 +5931,7 @@ window.moSplash = function (msg, pct) {
     let LIFT = 0.08, SHIFT = 0;                        // (where the model is placed in the picture: worked out in fit())
     const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
     const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
-    const basis = (az) => { const e = [Math.cos(EL) * Math.cos(az), Math.cos(EL) * Math.sin(az), Math.sin(EL)]; const r = norm(cross([0, 0, 1], e)); return { e, r, u: cross(e, r) }; };
+    const basis = (az, el = EL) => { const e = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)]; const r = norm(cross([0, 0, 1], e)); return { e, r, u: cross(e, r) }; };
     let W = 0, H = 0, asp = 2, dist = 300;
     const fit = () => {
       let d = 0;
@@ -5608,8 +5961,8 @@ window.moSplash = function (msg, pct) {
       if (w === W && h === H) return;
       W = w; H = h; cv.width = w; cv.height = h; asp = w / h; gl.viewport(0, 0, w, h); fit();
     };
-    const mat = (az, d) => {
-      const b = basis(az), eye = [b.e[0] * d, b.e[1] * d, b.e[2] * d];
+    const mat = (az, d, el) => {
+      const b = basis(az, el), eye = [b.e[0] * d, b.e[1] * d, b.e[2] * d];
       const f = 1 / TH, n = 10, fa = d * 4, nf = 1 / (n - fa);
       const P = [f / asp, 0, 0, 0, 0, f, 0, 0, -SHIFT, -LIFT, (fa + n) * nf, -1, 0, 0, 2 * fa * n * nf, 0];      // (LIFT: the picture is drawn a little above the middle, the bottom of the art fades out)
       const Vm = [b.r[0], b.u[0], b.e[0], 0, b.r[1], b.u[1], b.e[1], 0, b.r[2], b.u[2], b.e[2], 0,
@@ -5619,24 +5972,31 @@ window.moSplash = function (msg, pct) {
       return o;
     };
     const ease = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
-    const off = new Float32Array(N * 3), al = new Float32Array(N);
+    const off = new Float32Array(N * 3), al = new Float32Array(N), rot = new Float32Array(N), fl = new Float32Array(N);
+    // The parts fly in from the exploded view one after another, turning as they come; each flashes white when it lands. Then the engine
+    // turns, the camera swoops down and in, a band of light climbs it, and now and then the whole thing breathes apart and back together.
+    const FLY = 1.25;
     const draw = (t) => {
       size();
+      const pulse = t > 3.4 ? Math.max(0, Math.sin((t - 3.4) * 0.85)) : 0, breathe = pulse * pulse * (3 - 2 * pulse);      // (a slow swell, every 7.4 s)
       for (let i = 0; i < N; i++) {
-        const k = ease((t - 0.1 - (i / N) * 0.6) / 1.15), e = 7 * (1 - k);
+        const t0 = 0.1 + (i / N) * 0.75, k = ease((t - t0) / FLY), e = 7 * (1 - k) + 0.9 * breathe * k;
         off[i * 3] = parts[i].off[0] * e; off[i * 3 + 1] = parts[i].off[1] * e; off[i * 3 + 2] = parts[i].off[2] * e;
         al[i] = Math.min(1, k * 3) * 0.9;
+        rot[i] = (1 - k) * (i % 2 ? 2.4 : -2.4);
+        const since = t - t0 - FLY;
+        fl[i] = since > 0 ? Math.exp(-since * 4.5) : 0;
       }
-      const az = AZ0 + 0.5 * (1 - Math.exp(-t * 0.8)) + t * 0.025, d = dist * (1 + 0.28 * (1 - ease(t / 2)));
-      gl.uniformMatrix4fv(uVP, false, mat(az, d));
-      gl.uniform3fv(uOff, off); gl.uniform1fv(uA, al);
+      const lead = ease(t / 2.8), az = AZ0 + 1.0 * (1 - Math.exp(-t * 0.7)) + t * 0.05, el = EL + 0.42 * (1 - lead) - 0.03 * breathe, d = dist * (1 - 0.3 * (1 - lead) - 0.05 * breathe);      // (close in at the start, then it draws back to show the whole engine)
+      gl.uniformMatrix4fv(uVP, false, mat(az, d, el));
+      gl.uniform3fv(uOff, off); gl.uniform1fv(uA, al); gl.uniform3fv(uCen, cen); gl.uniform1fv(uR, rot); gl.uniform1fv(uF, fl);
       gl.uniform2f(uDepth, d - meta.span[2], d + meta.span[2]);
-      const sweep = t > 1.3 ? -meta.span[2] * 0.6 + ((t - 1.3) % 2.4) / 2.4 * meta.span[2] * 1.4 : -1e4;
+      const sweep = t > 1.0 ? -meta.span[2] * 0.6 + ((t - 1.0) % 2.2) / 2.2 * meta.span[2] * 1.4 : -1e4;
       gl.uniform1f(uScan, sweep);
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.LINES, 0, V);
     };
-    if (calm) { draw(99); return; }
+    if (calm) { draw(3.4 + 6 * Math.PI / 0.85); return; }      // (the still picture: assembled, and not in the middle of a swell)
     const t0 = performance.now();
     const loop = (now) => {
       if (!cv.isConnected) return;                       // the splash has been removed: nothing runs any more
@@ -5665,16 +6025,16 @@ window.moSplash = function (msg, pct) {
             <div class="brand-menu-title">MeshOptimiser</div>
             <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
-          <div class="brand-menu-ver" id="brand-menu-ver">v0.33.0</div>
+          <div class="brand-menu-ver" id="brand-menu-ver">v0.34.0</div>
         </div>
         <div class="brand-menu-changelog">
           <div class="brand-menu-changelog-head"><span>What's new</span></div>
           <ul>
-            <li>Notes are tasks: title, description, parts, due date</li>
-            <li>Screenshots from up to six views</li>
-            <li>Sign off a scene: approve or ask for changes</li>
-            <li>Notes out as CSV, JSON or BCF</li>
-            <li>Save writes over the scene's file again</li>
+            <li>Animate has a timeline, and a motion for pistons</li>
+            <li>Axis Center and the Axis card, like Cinema 4D</li>
+            <li>Claude can read and write notes</li>
+            <li>A selected group shows its parts dimly</li>
+            <li>Python can come inside the Windows download</li>
           </ul>
         </div>
         <div class="brand-menu-sep"></div>
@@ -5711,6 +6071,7 @@ window.moSplash = function (msg, pct) {
       <div id="file-menu" class="export-menu" role="menu" style="min-width:260px">
         <button class="export-menu-item" role="menuitem" data-file-cmd="new"><span class="fmt"><i data-lucide="file-plus" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>New scene</span><span class="hint">Alt+N</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="open"><span class="fmt"><i data-lucide="folder-open" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Open file…</span><span class="hint">Ctrl+O</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="inbox" title="Open the app's inbox folder in your file manager: the models it has converted are kept there"><span class="fmt"><i data-lucide="inbox" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Show inbox folder</span></button>
         <button class="export-menu-item" role="menuitem" data-file-cmd="import"><span class="fmt"><i data-lucide="file-input" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Import into scene…</span><span class="hint">Ctrl+Shift+O</span></button>
         <div class="export-menu-sep" role="separator"></div>
         <button class="export-menu-item" role="menuitem" data-file-cmd="save"><span class="fmt"><i data-lucide="save" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Save scene…</span><span class="hint">Ctrl+S</span></button>
@@ -5839,6 +6200,7 @@ window.moSplash = function (msg, pct) {
         <div class="vpb-sep"></div>
         <button class="vpb" id="msr-toggle" title="Measure (M) — click two points to measure · drag still orbits · Esc cancels"><i data-lucide="ruler"></i></button>
         <button class="vpb" id="tg-draw" data-cmd-toggle="draw" title="Draw lines (L)"><i data-lucide="pencil-line"></i></button>
+        <button class="vpb" id="notes-tool" aria-pressed="false" title="Enter notes mode"><i data-lucide="message-square"></i></button>
         <button class="vpb" id="gz-place" data-cmd-toggle="place" title="Dynamic place (D): pick the selected part up and drag it over other surfaces. It rests on them and turns to face them."><i data-lucide="arrow-down-to-dot"></i></button>
         <div class="vpb-sep"></div>
         <!-- How the model is drawn, as one button like the selection tool's: it shows the view in use, a click goes to the next, holding it (or a right-click) lists the four. -->
@@ -5868,7 +6230,7 @@ window.moSplash = function (msg, pct) {
         <div class="vpb-sep"></div>
         <div class="el-row">
           <button type="button" class="el-ibtn" id="btn-el-planar" title="Planarize (polygons): make the picked polygons flat. Their points move onto the best-fit plane of each polygon, a little. A polygon that would have to bend a long way (a curved face) is left. One undo step" aria-label="Planarize" disabled><i data-lucide="square"></i><span>Planarize</span></button>
-          <button type="button" class="el-ibtn" id="btn-el-straight" title="Straighten (edges): the points along a picked line of edges move onto the straight line between its two ends. One undo step" aria-label="Straighten" disabled><i data-lucide="minus"></i><span>Straighten</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-straight" title="Straighten (edges): the points along a picked line of edges move onto the straight line between its two ends. One undo step" aria-label="Straighten" disabled><i data-lucide="move-diagonal"></i><span>Straighten</span></button>
           <button type="button" class="el-ibtn" id="btn-el-weld-open" title="Weld (points or edges): opens the Weld card, where the picked points become one, or the ones that are close enough to each other" aria-label="Weld" aria-haspopup="dialog" disabled><i data-lucide="merge"></i></button>
           <button type="button" class="el-ibtn" id="btn-el-fill" title="Fill (edges): close a hole whose whole rim is picked (a double-click on an open edge picks the loop). The cap has points of its own, so it shades on its own. One undo step" aria-label="Fill" disabled><i data-lucide="circle-dot"></i><span>Fill</span></button>
           <button type="button" class="el-ibtn" id="btn-el-flip" title="Reverse normals: turn the picked polygons round, their front becomes their back. For faces that came in facing the wrong way (dark, or see-through from one side). One undo step" aria-label="Reverse normals" disabled><i data-lucide="flip-horizontal-2"></i><span>Reverse</span></button>
@@ -5899,6 +6261,8 @@ window.moSplash = function (msg, pct) {
             <span class="vp-pill-label">Measure</span>
             <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
           </button>
+          <!-- Notes mode: the notes are on (pins shown over notes, a note open, or placing one). Built by notes.js: a click opens the list, the eye shows or hides the pins, the X leaves. -->
+          <div id="vp-notes-pill" class="vp-pill vp-pill-mode has-play" role="group" aria-label="Notes" hidden></div>
           <!-- Animate: the window is open, or something is animated (Playing / Paused with a pause button and an X). A click on it opens the window. -->
           <div id="vp-animate-pill" class="vp-pill vp-pill-mode" role="group" aria-label="Animation" hidden></div>
           <!-- Snap is on (Shift is held and a gizmo is on a part): what a drag snaps to. -->
@@ -5935,6 +6299,7 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="tg-select-hidden" data-cmd-toggle="selhidden" title="Select hidden parts"><i data-lucide="ghost"></i></button>
         <button class="vpb" id="tg-fasteners" data-cmd-toggle="fasteners" title="Fasteners: select bolts, nuts and washers"><i data-lucide="bolt"></i></button>
         <div class="vpb-sep"></div>
+        <button class="vpb" id="tg-animate" title="Animate: timeline (Shift+A)"><i data-lucide="clapperboard"></i></button>
         <button class="vpb" id="tg-library" title="Library (Shift+L)"><i data-lucide="shapes"></i></button>
         <button class="vpb" id="tg-materials" title="Materials (Shift+M)"><i data-lucide="palette"></i></button>
         <button class="vpb" id="tg-settings" title="Viewport settings"><i data-lucide="sliders-horizontal"></i></button>
@@ -6371,6 +6736,39 @@ window.moSplash = function (msg, pct) {
         <div class="field-help">The angles show where the pivot stands now, in the scene's axes. Ctrl+Z puts the pivot and the mesh back.</div>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Turn pivot</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <div class="section section-cmd" data-cmd="axis" hidden>
+      <div class="section-h"><span>Axis</span><button type="button" class="lc-icon-btn cmd-close" title="Done (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div class="cmd-lede">Moves or turns the axis of the selected parts. The shapes stay put.</div>
+        <button class="btn primary" type="button" data-axis-act="centre" data-cmd-primary title="The axis goes to the middle of the part and its rotation is reset to 0, 0, 0 (the scene's axes)"><i data-lucide="crosshair"></i>Axis Center</button>
+        <div class="pv-head"><span>Center axis to</span></div>
+        <div class="ax-chips">
+          <button type="button" class="btn" data-axis-act="axis-origin" title="The axis goes to 0, 0, 0"><i data-lucide="axis-3d"></i>Origin</button>
+          <button type="button" class="btn" data-axis-act="axis-selection" title="The axis of every selected part goes to the middle of the selection"><i data-lucide="box-select"></i>Selection</button>
+          <button type="button" class="btn" data-axis-act="axis-active" title="The axis of the selected parts goes to the axis of the part picked last"><i data-lucide="mouse-pointer-click"></i>Last picked</button>
+          <button type="button" class="btn" data-axis-act="axis-view" title="The axis goes to the middle of the view (what the camera orbits)"><i data-lucide="camera"></i>View</button>
+        </div>
+        <div class="toggle" title="Also turn the axis: to the world for the first three, to the last selected part's axes for Last selected"><span id="axis-rot-lbl">Also reset its rotation</span><label><input type="checkbox" id="axis-reset-rot" aria-labelledby="axis-rot-lbl"><span class="switch"></span></label></div>
+        <div class="pv-head"><span>Center object to</span></div>
+        <div class="ax-chips">
+          <button type="button" class="btn" data-axis-act="obj-origin" title="The object moves so that its axis is on 0, 0, 0"><i data-lucide="axis-3d"></i>Origin</button>
+          <button type="button" class="btn" data-axis-act="obj-active" title="The objects move so that their axes are on the axis of the part picked last"><i data-lucide="mouse-pointer-click"></i>Last picked</button>
+          <button type="button" class="btn" data-axis-act="obj-view" title="The object moves so that its axis is at the middle of the view"><i data-lucide="camera"></i>View</button>
+        </div>
+        <div class="pv-head"><span>Align axis to</span></div>
+        <div class="ax-chips">
+          <button type="button" class="btn" data-axis-act="turn-world" title="Rotation 0, 0, 0: the scene's X, Y and Z"><i data-lucide="globe"></i>World</button>
+          <button type="button" class="btn" data-axis-act="turn-parent" title="The axes of its parent (the group or the scene)"><i data-lucide="folder"></i>Parent</button>
+          <button type="button" class="btn" data-axis-act="turn-object" title="The part's own biggest flat faces (curved shapes are left alone)"><i data-lucide="box-select"></i>Faces</button>
+        </div>
+        <div class="pv-head"><span>Scale</span></div>
+        <div class="ax-chips">
+          <button type="button" class="btn" data-axis-act="scale" title="The scale goes back to 1, 1, 1 and is built into the mesh. The part looks the same."><i data-lucide="scaling"></i>Reset Scale</button>
+        </div>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Axis Center</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="place" hidden>
@@ -6843,6 +7241,23 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
 
+    <div class="side-group" id="anim-card-group" hidden>Animate</div>
+    <div class="section" id="anim-card" hidden>
+      <div class="section-h"><i class="sec-ico" data-lucide="clapperboard"></i><span>Animation</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="ac-tl" id="ac-tl" role="slider" tabindex="0" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="ac-tl-played"></div><div class="ac-tl-bars" id="ac-tl-bars"></div><div class="ac-tl-head"></div>
+        </div>
+        <div class="ac-times"><span id="ac-elapsed">0:00.00</span><span id="ac-left">−0:05.00</span></div>
+        <div class="ac-transport">
+          <button type="button" class="ac-b" id="ac-back" title="Play backwards" aria-label="Play backwards" aria-pressed="false"><i data-lucide="rewind"></i></button>
+          <button type="button" class="ac-b" id="ac-rew" title="Back to the start" aria-label="Back to the start"><i data-lucide="skip-back"></i></button>
+          <button type="button" class="ac-play" id="ac-play" title="Play" aria-label="Play"><i data-lucide="play"></i></button>
+          <button type="button" class="ac-b" id="ac-end" title="Skip to the end" aria-label="Skip to the end"><i data-lucide="skip-forward"></i></button>
+          <button type="button" class="ac-b" id="ac-loop" title="Loop: start again at the end" aria-label="Loop"><i data-lucide="repeat"></i></button>
+        </div>
+      </div>
+    </div>
     <div class="side-group">Find</div>
 
     <div class="section">
@@ -7422,6 +7837,7 @@ window.moSplash = function (msg, pct) {
         <div class="toggle exp-row" id="exp-flat-row" title="Write every part at the top level, without the group folders. Handy for tools that stumble on nested groups."><span class="exp-row-l" id="exp-flat-lbl"><b>Flatten groups</b><small>Every part at the top level, no group folders</small></span><label><input type="checkbox" id="exp-flat" aria-labelledby="exp-flat-lbl"><span class="switch"></span></label></div>
 
         <div class="exp-group-title" id="exp-fmt-group">Format options</div>
+        <div class="toggle exp-row" id="exp-anim-row" style="display:none" title="Write the Animate timeline into the file as glTF animation: every part that moves gets its motion as keyframes (30 per second). Looks, camera and explode keys are not included."><span class="exp-row-l" id="exp-anim-lbl"><b>Include animation</b><small>The Animate timeline, as keyframes · GLB and glTF</small></span><label><input type="checkbox" id="exp-anim" aria-labelledby="exp-anim-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-draco-row" title="Compress vertex data with Draco — typically shrinks the file 5–20×. GLB only."><span class="exp-row-l" id="exp-draco-lbl"><b>Draco compression</b><small>Shrinks the file 5–20× · slower to write</small></span><label><input type="checkbox" id="exp-draco" aria-labelledby="exp-draco-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-meshopt-row" title="Compress the vertex data with Meshopt (EXT_meshopt_compression) and round positions, normals and UVs to a fixed number of bits. Quick to decode and streams well, but larger than Draco on disk (about a quarter of the plain size against Draco's fifth, measured on a CAD assembly; the gap narrows once the server compresses it with gzip or brotli). The viewer must read it: three.js, Babylon.js and model-viewer do, some others do not (Draco is the safer choice for those). GLB only."><span class="exp-row-l" id="exp-meshopt-lbl"><b>Meshopt compression</b><small>Quick to decode · larger than Draco · the viewer must read it</small></span><label><input type="checkbox" id="exp-meshopt" aria-labelledby="exp-meshopt-lbl"><span class="switch"></span></label></div>
         <div class="toggle exp-row" id="exp-reorder-row" title="Put the triangles and vertices in the order the graphics card likes, so the model draws faster. The shape and every attribute stay exactly as they are, and any viewer opens it. Meshopt compression does this too. GLB only."><span class="exp-row-l" id="exp-reorder-lbl"><b>Faster to draw</b><small>Reorders for the GPU · the shape does not change · any viewer</small></span><label><input type="checkbox" id="exp-reorder" aria-labelledby="exp-reorder-lbl"><span class="switch"></span></label></div>
@@ -7445,6 +7861,17 @@ window.moSplash = function (msg, pct) {
       <div class="exp-content-f">
         <span class="exp-foot-note" id="exp-foot-note"></span>
         <div class="exp-foot-act">
+          <div class="exp-share" id="exp-share">
+            <button class="tbtn" id="exp-share-btn" aria-haspopup="true" aria-expanded="false" aria-label="Share to…" title="Share to…: export in the right format, then open the site's upload page"><i data-lucide="share-2"></i></button>
+            <div class="exp-share-menu" id="exp-share-menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-site="grabcad"><span>GrabCAD</span><small>STL</small></button>
+              <button type="button" role="menuitem" data-site="sketchfab"><span>Sketchfab</span><small>GLB</small></button>
+              <button type="button" role="menuitem" data-site="printables"><span>Printables</span><small>STL</small></button>
+              <button type="button" role="menuitem" data-site="thingiverse"><span>Thingiverse</span><small>STL</small></button>
+              <button type="button" role="menuitem" data-site="cults3d"><span>Cults</span><small>STL</small></button>
+              <button type="button" role="menuitem" data-site="myminifactory"><span>MyMiniFactory</span><small>STL</small></button>
+            </div>
+          </div>
           <button class="tbtn primary" id="export-confirm" title="Export with these options"><i data-lucide="download"></i><span id="export-confirm-lbl">Export GLB</span></button>
         </div>
         <button id="export-cancel" style="display:none" aria-hidden="true"></button>
@@ -8051,8 +8478,8 @@ window.moSplash = function (msg, pct) {
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
-<script defer src="js/notes.js?v=62"></script>
-<script type="module" src="js/app.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9"></script>
+<script defer src="js/notes.js?v=90"></script>
+<script type="module" src="js/app.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
@@ -8065,7 +8492,7 @@ window.moSplash = function (msg, pct) {
   // reports (an error, file://), the app is shown after a few seconds anyway.
   (function () {
     const splash = !document.documentElement.classList.contains('no-splash');
-    { const sv = document.getElementById('sp-ver'), bv = document.getElementById('brand-menu-ver'); if (sv && bv) sv.textContent = 'MeshOptimiser ' + bv.textContent.trim(); }
+    { const sv = document.getElementById('sp-ver'), bv = document.getElementById('brand-menu-ver'); if (sv && bv) sv.textContent = bv.textContent.trim(); }
     // The first time in a browser session the picture gets time to assemble; after a reload the splash is a short one.
     let seen = false; try { seen = !!sessionStorage.getItem('mo-splash-seen'); sessionStorage.setItem('mo-splash-seen', '1'); } catch (_) {}
     const MIN = splash ? (seen ? 700 : 2200) : 0;  // ms from the start of the page the splash stays up

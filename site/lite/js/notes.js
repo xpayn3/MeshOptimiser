@@ -11,13 +11,14 @@
 
   const S = {
     host: null, items: [], seen: {}, thumbs: {}, since: '',          // since: when this person last looked, from the file (for "new")
-    pins: true, badge: 'number', placing: null, filter: 'open', sort: 'number', search: '',
+    pins: false, badge: 'number', placing: null, filter: 'open', sort: 'number', search: '',
     openId: null, draft: null, editing: null, replyTo: null, expanded: false, justDone: null, reviews: {}, onlySel: false, selKey: '', pop: null, layer: null, card: null, parts: new Map(),
   };
   const keepShots = (n) => { S.thumbs[n.id] = { shots: (n.shots || []).slice(), cams: (n.shotCams || []).slice() }; };
   const $ = (sel, root) => (root || document).querySelector(sel);
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
   const ICONS = {
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     note: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     check: '<path d="M20 6 9 17l-5-5"/>', plus: '<path d="M5 12h14"/><path d="M12 5v14"/>', x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
     pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
@@ -212,7 +213,7 @@
       { icon: 'message-square', label: 'Open', fn: () => openNote(id, { fly: false }) },
       { icon: 'message-square', label: 'Open the conversation', fn: () => openNote(id, { fly: false, expand: true }) },
       { icon: 'message-square', label: 'Comment…', fn: () => { openNote(id, { fly: false, expand: true }); setTimeout(() => { const ta = $('textarea', S.pop); if (ta) ta.focus(); }, 60); } },
-      { icon: 'pencil', label: 'Edit…', fn: () => { openNote(id, { fly: false, expand: true }); S.editProps = true; buildPop(); setTimeout(() => { const i = S.pop && S.pop.querySelector('.nt-rename'); if (i) { i.focus(); i.select(); } }, 40); } },
+      { icon: 'pencil', label: 'Edit…', fn: () => { openNote(id, { fly: false, expand: true }); S.editProps = true; buildPop(); setTimeout(() => { const i = S.pop && S.pop.querySelector('.nt-descin'); if (i) { i.focus(); } }, 40); } },
       '---',
       { icon: 'check', label: done ? 'Open it again' : 'Mark as resolved', fn: () => needName(() => change(done ? 'Reopen note' : 'Resolve note', () => C.setStatus(n, author(), done ? 'open' : 'resolved')), need) },
       { icon: 'palette', label: 'Tag', sub: C.TAGS.map(t => ({ icon: 'circle', label: t.label + (t.id === n.tag ? '  ✓' : ''), fn: () => needName(() => change('Tag note', () => C.setTag(n, author(), t.id)), need) })) },
@@ -257,13 +258,13 @@
   function placePop() {
     const pop = S.pop, vp = S.host.viewport(); if (!pop || !vp) return;
     const vr = vp.getBoundingClientRect(); const w = pop.offsetWidth, h = pop.offsetHeight;
-    let x = vr.width - w - 16, y = 64;
+    let x = vr.right - w - 16, y = vr.top + 64;
     if (S.popPos) { x = S.popPos.x; y = S.popPos.y; }
-    else {      // the right-hand side, below the bars and above the shortcut tips
+    else {      // the right-hand side of the model view, below the bars and above the shortcut tips
       const tips = $('.vp-tips:not(:empty)', vp), tr = tips && tips.getBoundingClientRect();
-      if (tr && tr.width && y + h > tr.top - vr.top - 8) y = Math.max(8, tr.top - vr.top - h - 8);
+      if (tr && tr.width && y + h > tr.top - 8) y = Math.max(8, tr.top - h - 8);
     }
-    x = Math.max(8, Math.min(x, vr.width - w - 8)); y = Math.max(8, Math.min(y, vr.height - h - 8));
+    x = Math.max(8, Math.min(x, innerWidth - w - 8)); y = Math.max(8, Math.min(y, innerHeight - h - 8));
     const lx = Math.round(x) + 'px', ly = Math.round(y) + 'px'; if (pop._lx !== lx) { pop._lx = lx; pop.style.left = lx; } if (pop._ly !== ly) { pop._ly = ly; pop.style.top = ly; }
   }
   // drag it by its top row; where it is left is where the next one opens
@@ -272,7 +273,7 @@
       if (!head) continue;
       head.addEventListener('pointerdown', (e) => {
         if (e.button !== 0 || e.target.closest('button, select, input, textarea')) return;
-        const vp = S.host.viewport(), vr = vp.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, ox = parseFloat(pop.style.left) || 0, oy = parseFloat(pop.style.top) || 0;
+        const vr = { width: innerWidth, height: innerHeight }, sx = e.clientX, sy = e.clientY, ox = parseFloat(pop.style.left) || 0, oy = parseFloat(pop.style.top) || 0;
         try { head.setPointerCapture(e.pointerId); } catch (_) {} pop.classList.add('dragging'); e.preventDefault();
         const mv = (ev) => {
           const x = Math.max(8, Math.min(ox + ev.clientX - sx, vr.width - pop.offsetWidth - 8)), y = Math.max(8, Math.min(oy + ev.clientY - sy, vr.height - pop.offsetHeight - 8));
@@ -294,7 +295,7 @@
       const h = el('div', 'nt-rz nt-rz-' + edge); h.setAttribute('aria-hidden', 'true'); pop.append(h);
       h.addEventListener('pointerdown', (e) => {
         if (e.button !== 0) return; e.preventDefault(); e.stopPropagation();
-        const vr = S.host.viewport().getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+        const vr = { width: innerWidth, height: innerHeight }, x0 = e.clientX, y0 = e.clientY;
         const L = parseFloat(pop.style.left) || 0, T = parseFloat(pop.style.top) || 0, W = pop.offsetWidth, H = pop.offsetHeight;
         try { h.setPointerCapture(e.pointerId); } catch (_) {} pop.classList.add('dragging');
         const mv = (ev) => {
@@ -316,7 +317,7 @@
   }
   // after a rebuild or a change of height: stay where it is, only keep it inside the view
   function clampPop() {
-    const pop = S.pop, vp = S.host.viewport(); if (!pop || !vp) return; const vr = vp.getBoundingClientRect();
+    const pop = S.pop; if (!pop) return; const vr = { width: innerWidth, height: innerHeight };      // (the window can go anywhere on the page, not only over the model)
     const x = Math.max(8, Math.min(parseFloat(pop.style.left) || 8, vr.width - pop.offsetWidth - 8)), y = Math.max(8, Math.min(parseFloat(pop.style.top) || 8, vr.height - pop.offsetHeight - 8));
     pop.style.left = Math.round(x) + 'px'; pop.style.top = Math.round(y) + 'px'; pop._lx = pop.style.left; pop._ly = pop.style.top;
   }
@@ -366,19 +367,20 @@
   function openNote(id, o) {
     o = o || {};
     const n = C.find(S.items, id); if (!n) return;
+    S.off = false;
     if (!o.keep && !(S.openId === id && !o.expand)) S.expanded = !!o.expand;
     if (S.openId !== id) { S.replyTo = null; S.showHist = false; S.editProps = false; } S.draft = null; S.editing = null; S.openId = id; buildPop(); render();
     if (o.fly !== false) flyTo(n);
   }
   let stickBottom = false;
   function buildPop() {
-    const prev = S.pop; const keep = prev && !S.draft && prev._id === S.openId ? { sc: (prev.querySelector('.nt-scroll') || {}).scrollTop || 0, x: prev._lx, y: prev._ly } : null;
+    const prev = S.pop; const keep = prev && !S.draft && prev._id ? { sc: prev._id === S.openId ? (prev.querySelector('.nt-scroll') || {}).scrollTop || 0 : 0, x: prev._lx, y: prev._ly } : null;      // (going from one note to another keeps the window where it is and does not play the opening animation again)
     S._auth = null; S._pmap = null;
     const had = !prev || prev.classList.contains('win-focus');      // (a window that was in use stays the one in use when it is drawn again)
     if (prev) prev.remove();
     const n = S.draft || C.find(S.items, S.openId); if (!n) { S.pop = null; return; }
     const pop = el('div', 'note-pop'); pop.addEventListener('mousedown', (e) => e.stopPropagation()); pop.addEventListener('pointerdown', (e) => e.stopPropagation());
-    pop.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true }); S.pop = pop; S.host.viewport().append(pop);
+    pop.addEventListener('wheel', (e) => e.stopPropagation(), { passive: true }); S.pop = pop; document.body.append(pop);
     { const tb = el('div', 'nt-titlebar'); let ico = el('span', 'nt-tico'); ico.innerHTML = svg('note');
       if (!S.draft) { ico = numBadge(n.tag, '', n.status === 'resolved'); ico.classList.add('nt-tbadge'); }
       const x = iconBtn('x', S.draft ? 'Cancel (Esc)' : 'Close (Esc)'); x.addEventListener('click', closePop);
@@ -431,7 +433,7 @@
     const scene = n.kind === 'scene' || !n.part, refs = scene ? [] : [n.part].concat(n.also || []), need = 'Before you change a note, it needs to know who you are.';
     const head = el('div', 'nt-seclabel nt-plabel'); head.append(el('span', null, scene ? 'Where' : refs.length > 1 ? 'Parts · ' + refs.length : 'Parts'));
     if (S.editProps && !scene) { const add = el('button', 'nt-padd'); add.type = 'button'; add.title = 'Add the parts that are selected in the viewport'; add.innerHTML = svg('plus') + '<span>Add selected</span>'; add.addEventListener('click', () => needName(() => attachSelected(n), need)); head.append(el('span', 'nt-grow'), add); }
-    const out = [head]; if (meta) out.push(el('div', 'nt-pmeta', meta));
+    const out = [head];
     const list = el('div', 'nt-plist2');
     if (scene) {
       const card = el('div', 'nt-partcard'), ico = el('span', 'nt-pico'); ico.innerHTML = svg(n.kind === 'scene' ? 'layers' : 'pin'); const txt = el('div', 'nt-ptxt'); txt.append(el('div', 'nt-pname', n.kind === 'scene' ? 'The whole scene' : 'A point in the scene')); card.append(txt, el('span', 'nt-grow'));
@@ -474,10 +476,10 @@
     const f = d.form || (d.form = { title: '', desc: '', tag: 'info', assignee: '', priority: 'normal', due: '' });
     let num = numBadge(f.tag, '+');
     pop.append(...popHead(num, 'New note', { name: d.part ? (d.part.name || 'A part') + (d.also && d.also.length ? ' + ' + d.also.length + ' more' : '') : d.kind === 'scene' ? 'The whole scene' : 'A point in the scene', meta: 'A new note' }, {}));
-    const form = el('div', 'nt-form'); const ttl = el('input', 'nt-ttl'); ttl.placeholder = 'Title'; ttl.maxLength = C.LIMITS.title; ttl.value = f.title; ttl.setAttribute('aria-label', 'Title');
-    const desc = el('textarea', 'nt-descin'); desc.placeholder = 'Description (optional)'; desc.rows = 2; desc.maxLength = C.LIMITS.text; desc.value = f.desc;
+    const form = el('div', 'nt-form');
+    const desc = el('textarea', 'nt-descin'); desc.placeholder = 'Write a note'; desc.setAttribute('aria-label', 'Note'); desc.rows = 3; desc.maxLength = C.LIMITS.text; desc.value = f.desc;
     const grow = () => { desc.style.height = 'auto'; desc.style.height = Math.min(Math.max(desc.scrollHeight, 44), 160) + 'px'; };
-    form.append(ttl, desc); pop.append(form);
+    form.append(desc); pop.append(form);
     let props = null;
     const set = (k, v) => { f[k] = v; if (k === 'tag') { const nn = numBadge(v, '+'); num.replaceWith(nn); num = nn; } const np = propsBlock(f, set); props.replaceWith(np); props = np; };
     props = propsBlock(f, set); pop.append(props);
@@ -488,19 +490,17 @@
     }
     const foot = el('div', 'nt-formfoot'); const cam = shotButton(d, buildPop);
     const cancel = el('button', 'nt-btn', 'Cancel'); cancel.type = 'button'; cancel.addEventListener('click', closePop);
-    const make = el('button', 'nt-btn primary', 'Create note'); make.type = 'button'; make.disabled = !f.title.trim();
-    const go = () => { if (!f.title.trim()) { ttl.focus(); return; } needName(() => createNote(d, f), 'Before you write a note, it needs to know who you are.'); };
-    ttl.addEventListener('input', () => { f.title = ttl.value; make.disabled = !f.title.trim(); });
-    ttl.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); go(); } else if (e.key === 'Escape') { e.preventDefault(); closePop(); } });
-    desc.addEventListener('input', () => { f.desc = desc.value; grow(); });
+    const make = el('button', 'nt-btn primary', 'Create note'); make.type = 'button'; make.disabled = !f.desc.trim();
+    const go = () => { if (!f.desc.trim()) { desc.focus(); return; } needName(() => createNote(d, f), 'Before you write a note, it needs to know who you are.'); };
+    desc.addEventListener('input', () => { f.desc = desc.value; make.disabled = !f.desc.trim(); grow(); });
     desc.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); go(); } else if (e.key === 'Escape') { e.preventDefault(); closePop(); } });
     make.addEventListener('click', go); foot.append(cam, el('span', 'nt-grow'), cancel, make); pop.append(foot);
-    setTimeout(() => { grow(); if (!S.editing) ttl.focus({ preventScroll: true }); }, 20);
+    setTimeout(() => { grow(); if (!S.editing) desc.focus({ preventScroll: true }); }, 20);
   }
   function createNote(d, f) {
     const by = author(); let note = null;
     change('Add note', () => {
-      note = C.create(S.items, { by, title: f.title, text: f.desc, kind: d.kind, part: d.part, also: d.also, local: d.local, world: d.world, normal: d.normal, cam: d.cam, tag: f.tag, shots: d.shots || [], shotCams: d.shotCams || [] });
+      note = C.create(S.items, { by, title: '', text: f.desc, kind: d.kind, part: d.part, also: d.also, local: d.local, world: d.world, normal: d.normal, cam: d.cam, tag: f.tag, shots: d.shots || [], shotCams: d.shotCams || [] });
       if (f.assignee) C.assign(note, by, f.assignee); if (f.priority && f.priority !== 'normal') C.setPriority(note, by, f.priority); if (f.due) C.setDue(note, by, f.due);
       if (note.shots.length) keepShots(note);
     });
@@ -521,22 +521,16 @@
     const vis = visibleList(n.id), at = vis.findIndex(x => x.id === n.id);
     const prev = iconBtn('left', 'Previous note'), next = iconBtn('right', 'Next note'); prev.disabled = next.disabled = vis.length < 2 || at < 0;
     prev.addEventListener('click', () => step(-1)); next.addEventListener('click', () => step(1));
-    pop.append(...popHead(null, C.noteTitle(n), null, {}));
-    if (S.editProps) {
-      const tEl = pop.querySelector('.nt-htitle'), inp = el('input', 'nt-rename'); inp.value = C.noteTitle(n); inp.maxLength = C.LIMITS.title; inp.setAttribute('aria-label', 'The name of the note');
-      inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } else if (e.key === 'Escape') { e.preventDefault(); inp.value = C.noteTitle(n); inp.blur(); } });
-      inp.addEventListener('change', () => { const v = inp.value.trim(); if (!v) { inp.value = C.noteTitle(n); return; } needName(() => { change('Rename note', () => C.setTitle(n, author(), v)); }, need); });
-      if (tEl) tEl.replaceWith(inp);
-    }
     const live = n.messages.filter(m => !m.deleted), dm = live.find(m => m.desc), cs = live.filter(m => !m.desc);
     if (!S.expanded) {      // the short form: the description, and how many comments there are
       const brief = el('div', 'nt-brief');
       if (dm) { const bd = el('div', 'nt-body'); bd.append(richText(dm.text, 'clamp'), el('div', 'nt-descby', 'Written by ' + dm.by + ' \u00b7 ' + C.ago(dm.at))); brief.append(bd); }
-      else brief.append(el('div', 'nt-nodesc', 'No description'));
+      else brief.append(el('div', 'nt-nodesc', 'Empty note'));
       pop.append(brief);
       pop.append(...partsSection(n, sub.meta));
       const info = el('button', 'nt-moreinfo'); info.type = 'button'; info.textContent = (cs.length ? cs.length + (cs.length === 1 ? ' comment' : ' comments') : 'No comments yet') + ' · Show the details'; info.title = 'Show the details and the comments';
       info.addEventListener('click', () => { S.expanded = true; buildPop(); }); pop.append(info);
+      { const tb = toolBar({ left: [prev, next], right: [done, more] }); tb.classList.add('nt-bar-end'); pop.append(tb); }      // (the bar with back, forward, done and more is there in the short form too)
       return;
     }
     // what it is about
@@ -549,19 +543,19 @@
       }); return g;
     };
     if (S.editProps && !n.deleted) {
-      const blk = el('div', 'nt-descblock'), ta = el('textarea', 'nt-descin'); ta.placeholder = 'What is this about?'; ta.rows = 2; ta.maxLength = C.LIMITS.text; ta.value = dm ? dm.text : ''; ta.setAttribute('aria-label', 'Description');
+      const blk = el('div', 'nt-descblock'), ta = el('textarea', 'nt-descin'); ta.placeholder = 'Write a note'; ta.rows = 2; ta.maxLength = C.LIMITS.text; ta.value = dm ? dm.text : ''; ta.setAttribute('aria-label', 'Note');
       const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(Math.max(ta.scrollHeight, 44), 200) + 'px'; };
       ta.addEventListener('input', grow); ta.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { e.preventDefault(); ta.value = dm ? dm.text : ''; ta.blur(); } });
-      ta.addEventListener('change', () => needName(() => { change('Describe note', () => C.setDesc(n, author(), ta.value)); }, need));
+      ta.addEventListener('change', () => needName(() => { change('Edit note', () => { C.setDesc(n, author(), ta.value); if (ta.value.trim()) C.setTitle(n, author(), ta.value); }); }, need));
       const cam = iconBtn('camera', (n.shots || []).length >= C.LIMITS.shots ? 'Up to ' + C.LIMITS.shots + ' screenshots' : 'Add a screenshot of the view', 'nt-shot' + ((n.shots || []).length ? ' on' : '')); cam.disabled = (n.shots || []).length >= C.LIMITS.shots;
       cam.addEventListener('click', () => needName(async () => {
         cam.disabled = true; const w = n.kind === 'scene' ? null : worldOf(n, new (V().Vector3)()); const v = await captureView(w ? w.toArray() : null); cam.disabled = false;
         if (v.thumb) { C.addShot(n, author(), v.thumb, v.cam); keepShots(n); } else S.host.toast('Notes', 'The picture could not be taken', 'warn', 2400); buildPop();
       }, need));
-      const top = el('div', 'nt-desctop'); top.append(el('span', 'nt-desclabel', 'Description'), el('span', 'nt-grow'), cam); blk.append(top, ta); const g0 = gallery(true); if (g0) blk.append(g0); pop.append(blk); setTimeout(grow, 0);
+      const top = el('div', 'nt-desctop'); top.append(el('span', 'nt-desclabel', 'Note'), el('span', 'nt-grow'), cam); blk.append(top, ta); const g0 = gallery(true); if (g0) blk.append(g0); pop.append(blk); setTimeout(grow, 0);
     }
     else if (dm) { const blk = el('div', 'nt-descblock'); blk.append(descEl(n, dm)); const g1 = gallery(false); if (g1) blk.append(g1); pop.append(blk); }
-    else if (!n.deleted) { const w = el('div', 'nt-descblock'); w.append(el('div', 'nt-nodesc', 'No description')); const g2 = gallery(false); if (g2) w.append(g2); pop.append(w); }
+    else if (!n.deleted) { const w = el('div', 'nt-descblock'); w.append(el('div', 'nt-nodesc', 'Empty note')); const g2 = gallery(false); if (g2) w.append(g2); pop.append(w); }
         pop.append(...partsSection(n, sub.meta));
     pop.append(toolBar({ left: [prev, next], right: [done, more] }));
     if (S.editProps) pop.append(propsBlock(n, (k, v) => needName(() => {
@@ -591,7 +585,7 @@
   function descEl(n, m) {
     if (S.editing === m.id) return messageEl(n, m);                  // being edited it uses the same box as a message
     const blk = el('div', 'nt-desc'), top = el('div', 'nt-desctop');
-    top.append(el('span', 'nt-desclabel', 'Description')); blk.append(top, richText(m.text));
+    top.append(el('span', 'nt-desclabel', 'Note')); blk.append(top, richText(m.text));
     blk.append(el('div', 'nt-descby', m.edits.length ? 'Edited by ' + [...new Set(m.edits.map(e => e.by))].join(', ') + ' \u00b7 ' + C.ago(m.updatedAt) : 'Written by ' + m.by + ' \u00b7 ' + C.ago(m.at)));
     return blk;
   }
@@ -602,7 +596,7 @@
       body.append(top, el('div', 'nt-gone', 'Deleted by ' + m.deleted.by + ' · ' + C.stamp(m.deleted.at)));
       const rb = el('button', 'nt-link', 'Bring it back'); rb.type = 'button'; rb.addEventListener('click', () => needName(() => { change('Restore message', () => C.restoreMessage(n, m.id, author())); buildPop(); })); body.append(rb); row.append(body); return row;
     }
-    const act = el('span', 'nt-acts'); const ed = iconBtn('pencil', 'Edit'), rm = iconBtn('trash', 'Delete this message'); act.append(ed, rm); top.append(el('span', 'nt-grow'), act); body.append(top);
+    const act = el('span', 'nt-acts'); const rp = iconBtn('reply', 'Reply to this message', S.replyTo === m.id ? 'on' : ''), ed = iconBtn('pencil', 'Edit'), rm = iconBtn('trash', 'Delete this message'); act.append(rp, ed, rm); top.append(el('span', 'nt-grow'), act); body.append(top);
     if (S.editing === m.id) {
       const cancel = iconBtn('x', 'Cancel'); cancel.addEventListener('click', () => { S.editing = null; buildPop(); });
       const c = composer('Edit…', 'Save', (v) => { change('Edit message', () => C.edit(n, m.id, author(), v)); S.editing = null; buildPop(); }, { value: m.text, onEsc: () => { S.editing = null; buildPop(); }, extra: [cancel] });
@@ -614,15 +608,7 @@
         qe.addEventListener('click', () => { const t2 = S.pop && S.pop.querySelector('[data-mid="' + q.id + '"]'); if (t2) { t2.scrollIntoView({ block: 'nearest' }); t2.classList.remove('flash'); void t2.offsetWidth; t2.classList.add('flash'); } }); body.append(qe); }
     }
     body.append(richText(m.text));
-    const bar = el('div', 'nt-react'); const me = author(); const rr = m.react || {};
-    const rbtn = (kind, icon, tip) => {
-      const list = rr[kind] || []; const b = el('button', 'nt-rb' + (me && list.includes(me) ? ' on ' + kind : '') + (list.length ? ' has' : '')); b.type = 'button'; b.innerHTML = svg(icon) + (list.length ? '<span>' + list.length + '</span>' : '');
-      b.title = list.length ? tip + ': ' + list.join(', ') : tip; b.setAttribute('aria-label', tip);
-      b.addEventListener('click', () => needName(() => { change('React', () => C.react(n, m.id, author(), kind)); buildPop(); }, 'Before you react, notes need to know who you are.')); return b;
-    };
-    const rp = el('button', 'nt-rb' + (S.replyTo === m.id ? ' on' : '')); rp.type = 'button'; rp.innerHTML = svg('reply'); rp.title = 'Reply to this message'; rp.setAttribute('aria-label', 'Reply');
     rp.addEventListener('click', () => { S.replyTo = S.replyTo === m.id ? null : m.id; buildPop(); });
-    bar.append(rbtn('like', 'thumbup', 'Like'), rbtn('dislike', 'thumbdown', 'Dislike'), rp); body.append(bar);
     if (m.edits.length) {
       const who = [...new Set(m.edits.map(e => e.by))].join(', ');
       const info = el('div', 'nt-edited'); const lab = el('button', 'nt-link', 'Edited by ' + who + ' · ' + C.ago(m.updatedAt)); lab.type = 'button'; lab.title = 'Show what it said before';
@@ -637,18 +623,12 @@
   function moreMenu(anchor, n) {
     document.querySelectorAll('.nt-menu').forEach(x => x.remove());
     const menu = el('div', 'nt-menu'); const add = (label, fn, danger) => { const b = el('button', danger ? 'danger' : '', label); b.type = 'button'; b.addEventListener('click', (e) => { e.stopPropagation(); menu.remove(); fn(); }); menu.append(b); };
-    add('Show it in the view', () => flyTo(n, true));
     add('Edit', () => { S.editProps = true; S.expanded = true; buildPop(); });
-    if (n.kind !== 'scene') add('Select its parts' + ((n.also || []).length ? ' (' + (1 + n.also.length) + ')' : ''), () => selectNoteParts(n));
-    add('Add the selected parts to this note', () => needName(() => attachSelected(n), 'Before you change a note, it needs to know who you are.'));
-    { const vis = visibleList(n.id); if (vis.length > 1) { add('Next note', () => step(1)); add('Previous note', () => step(-1)); } }
+    add('Add selected parts', () => needName(() => attachSelected(n), 'Before you change a note, it needs to know who you are.'));
     { const part = partOf(n); if (part && !part.visible) add('Show the hidden part', () => { S.host.showPart(part); layout(); buildPop(); }); }
-    if (n.kind !== 'scene') add('Move the pin…', () => startPlace({ moveId: n.id }));
-    add('Save the view now with this note', () => needName(() => { change('Update view', () => C.moveAnchor(n, author(), { cam: camNow() })); buildPop(); }));
     add('Add a screenshot of the view', () => needName(() => { const w = n.kind === 'scene' ? null : worldOf(n, new (V().Vector3)()); captureView(w ? w.toArray() : null).then(v => { if (v.thumb) { C.addShot(n, author(), v.thumb, v.cam); keepShots(n); } else S.host.toast('Notes', 'The picture could not be taken', 'warn', 2400); buildPop(); }); }));
     if ((n.shots || []).length) add('Take the screenshots off', () => needName(() => { while ((n.shots || []).length) C.removeShot(n, author(), 0); delete S.thumbs[n.id]; buildPop(); }));
     add(S.showHist ? 'Hide the history' : 'History · ' + n.activity.length, () => { S.showHist = !S.showHist; buildPop(); });
-    add('Copy as text', () => { copy(C.toText([n], { title: 'Note ' + n.n })); });
     add(n.deleted ? 'Bring the note back' : 'Delete the note', () => needName(() => { change(n.deleted ? 'Restore note' : 'Delete note', () => (n.deleted ? C.restoreNote(n, author()) : C.removeNote(n, author()))); if (n.deleted && S.filter !== 'deleted') { closePop(); } else buildPop(); }), !n.deleted);
     S.pop.append(menu); const b = anchor.getBoundingClientRect(), p = S.pop.getBoundingClientRect(); menu.style.top = (b.bottom - p.top + 4) + 'px'; menu.style.right = (p.right - b.right) + 'px';
     setTimeout(() => document.addEventListener('click', function off() { menu.remove(); document.removeEventListener('click', off); }, { once: false }), 0);
@@ -702,7 +682,7 @@
     o = o || {};
     if (!S.host.state.parts.some(p => !p.deleted)) { S.host.toast('Notes', 'Open a model first', 'info', 2200); return; }
     if (!o.moveId && !author()) { needName(() => startPlace(o), 'Before you write a note, it needs to know who you are.'); return; }
-    S.placing = { moveId: o.moveId || null }; document.body.classList.add('notes-placing'); closePop(); render();
+    S.off = false; S.pins = true; S.placing = { moveId: o.moveId || null }; document.body.classList.add('notes-placing'); closePop(); render();
     S.host.toast(o.moveId ? 'Move the pin' : 'Add a note', 'Click the spot on the model. Esc cancels. Dragging still turns the view.', 'info', 3600);
   }
   function stopPlace() { if (!S.placing) return; S.placing = null; document.body.classList.remove('notes-placing'); render(); }
@@ -716,7 +696,7 @@
       return;
     }
     const d = { kind: 'pin', part: hit.part, also: alsoFor(hit.part), local: hit.local, world: hit.world, normal: hit.localNormal, cam: camNow(), thumb: '', screen: toViewport(ev) };
-    S.draft = d; S.openId = null; buildPop(); render();
+    S.off = false; S.pins = true; S.draft = d; S.openId = null; buildPop(); render();
     void by;
   }
   function buildPopKeepText() { const ta = S.pop && $('textarea', S.pop); const t = ta ? ta.value : ''; buildPop(); const ta2 = S.pop && $('textarea', S.pop); if (ta2 && t) { ta2.value = t; ta2.dispatchEvent(new Event('input')); } }
@@ -725,6 +705,8 @@
   const sameRef = (p, ref) => { if (!ref) return false; const r0 = S.host.partRef(p); return !!((ref.uid && r0.uid === ref.uid) || (ref.name && r0.name === ref.name)); };
   // a note made on one of several selected parts is about all of them
   function alsoFor(primary) { const sel = selectedParts(); if (sel.length < 2 || !primary || !sel.some(p => sameRef(p, primary))) return []; return sel.filter(p => !sameRef(p, primary)).map(p => S.host.partRef(p)); }
+  // New note: with parts selected the pin goes on the selection, otherwise a spot is clicked on the model
+  function newNote() { if (S.placing) { stopPlace(); return; } if (selectedParts().length) { S.off = false; S.pins = true; addForSelection(); } else startPlace(); }
   // a note about the selected part (its centre) or about the whole scene
   function addForSelection() {
     needName(() => {
@@ -733,7 +715,7 @@
       let primary = null, hit = null; for (const p of sel) { hit = S.host.partAnchor(p); if (hit) { primary = p; break; } }
       if (!hit) { primary = sel[0]; hit = { part: S.host.partRef(primary), local: null, world: null }; }      // (no mesh of its own: the note is about it, without a pin)
       const also = sel.filter(p => p !== primary).map(p => S.host.partRef(p));
-      S.draft = { kind: 'part', part: hit.part, also, local: hit.local, world: hit.world, normal: null, cam: camNow(), thumb: '' }; S.openId = null; buildPop(); render();
+      S.off = false; S.pins = true; S.draft = { kind: 'part', part: hit.part, also, local: hit.local, world: hit.world, normal: null, cam: camNow(), thumb: '' }; S.openId = null; buildPop(); render();
     }, 'Before you write a note, it needs to know who you are.');
   }
   // a note at the spot of a right click: the same as placing one, with the click already made
@@ -742,7 +724,7 @@
     needName(() => {
       const hit = S.host.rayHit(pt); if (!hit) { S.host.toast('Notes', 'Nothing there: right-click on the model', 'info', 1800); return; }
       const d = { kind: 'pin', part: hit.part, also: alsoFor(hit.part), local: hit.local, world: hit.world, normal: hit.localNormal, cam: camNow(), thumb: '', screen: toViewport(pt) };
-      closePop(); S.draft = d; S.openId = null; buildPop(); render();
+      closePop(); S.off = false; S.pins = true; S.draft = d; S.openId = null; buildPop(); render();
     }, 'Before you write a note, it needs to know who you are.');
   }
   // a note about the whole part under a right click (placed at the part's centre, not at the click)
@@ -752,11 +734,11 @@
       const hit = S.host.rayHit(pt); if (!hit || !hit.part) { S.host.toast('Notes', 'Nothing there: right-click on a part', 'info', 1800); return; }
       S.parts.delete('__pt'); const p = partOf({ id: '__pt', part: hit.part }); S.parts.delete('__pt');
       const a = p && S.host.partAnchor(p); if (!a) { S.host.toast('Notes', 'That part cannot hold a note', 'info', 1800); return; }
-      closePop(); S.draft = { kind: 'part', part: a.part, also: alsoFor(a.part), local: a.local, world: a.world, normal: null, cam: camNow(), thumb: '' }; S.openId = null; buildPop(); render();
+      closePop(); S.off = false; S.pins = true; S.draft = { kind: 'part', part: a.part, also: alsoFor(a.part), local: a.local, world: a.world, normal: null, cam: camNow(), thumb: '' }; S.openId = null; buildPop(); render();
     }, 'Before you write a note, it needs to know who you are.');
   }
   function addForScene() {
-    needName(() => { S.draft = { kind: 'scene', part: null, local: null, world: null, normal: null, cam: camNow(), thumb: '' }; S.openId = null; buildPop(); render(); }, 'Before you write a note, it needs to know who you are.');
+    needName(() => { S.off = false; S.pins = true; S.draft = { kind: 'scene', part: null, local: null, world: null, normal: null, cam: camNow(), thumb: '' }; S.openId = null; buildPop(); render(); }, 'Before you write a note, it needs to know who you are.');
   }
 
   // ── the Notes card ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -799,10 +781,46 @@
     if (S.isoNoted) S.host.toast('Only the parts with notes', ps.length + (ps.length === 1 ? ' part' : ' parts') + ' shown. Press the button again to show everything.', 'info', 3200);
   }
   function step(d) { const l = visibleList(S.openId); if (!l.length) return; let i = l.findIndex(n => n.id === S.openId); i = i < 0 ? (d > 0 ? 0 : l.length - 1) : (i + d + l.length) % l.length; openNote(l[i].id, { keep: true }); }
+  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#notes-tool')) { try { window.MONotesUI.toggleMode(); } catch (_) {} } });
+  // Notes mode: off when a file opens, unless it holds notes that are new to you; on after the toolbar button, and while a note is open, being written or placed.
+  function notesOn() { return !S.off && !!(S.on || S.placing || S.pop || S.draft); }
+  function enterNotes() { S.off = false; S.on = true; S.pins = true; render(); }
+  function exitNotes() { stopPlace(); closePop(); S.pins = false; S.off = true; S.on = false; render(); }
+  // The top pill, like Animate's: on while the notes are on (pins shown over notes, a note open or being written, or placing one).
+  // A click opens the list, the eye shows or hides the pins, the X leaves (stops placing, closes the note, hides the pins).
+  function syncPill() {
+    const el = document.getElementById('vp-notes-pill'); if (!el) return;
+    const on = notesOn();
+    el.hidden = !on; if (!on) return;
+    if (!el._wired) {
+      el._wired = true;
+      el.innerHTML = '<span class="anim-pill-dot" aria-hidden="true"></span><span class="vp-pill-label"></span>' +
+        '<span class="anim-pill-btn" role="button" tabindex="0" data-a="pins"></span>' +
+        '<span class="anim-pill-btn" role="button" tabindex="0" data-a="exit" title="Leave notes mode: hide the pins and close the note" aria-label="Leave notes mode">' + svg('x') + '</span>';
+      const act = (e) => {
+        const b = e.target.closest('[data-a]');
+        if (!b) { try { window.MONotesUI.openList(); } catch (_) {} return; }
+        e.stopPropagation();
+        if (b.dataset.a === 'exit') exitNotes();
+        else { S.pins = !S.pins; render(); }
+      };
+      el.addEventListener('click', act);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); act(e); } });
+    }
+    const st = C.stats(S.items);
+    const label = S.placing ? 'Notes · click the model' : 'Notes' + (st.total ? ' · ' + st.open + ' open' : '');
+    const lab = el.querySelector('.vp-pill-label'); if (lab.textContent !== label) lab.textContent = label;
+    el.classList.toggle('is-paused', !S.placing);
+    const pb = el.querySelector('[data-a="pins"]'), want = S.pins ? 'eye' : 'eyeoff';
+    if (pb.dataset.s !== want) { pb.dataset.s = want; pb.innerHTML = svg(want); pb.title = S.pins ? 'Hide the pins' : 'Show the pins'; pb.setAttribute('aria-label', pb.title); }
+    el.title = 'Open the notes list';
+  }
   function render() {
     const card = S.card; if (!card) return; S._pmap = null;
+    try { syncPill(); } catch (_) {}      // (the top pill, like Animate's: the notes are on)
+    { const tb = document.getElementById('notes-tool'); if (tb) { const on = notesOn(); tb.classList.toggle('active', on); tb.setAttribute('aria-pressed', String(on)); tb.title = on ? 'Notes mode is on. Click to leave it' : 'Enter notes mode'; } }      // (the toolbar button glows while notes mode is on)
     const st = C.stats(S.items), me = author();
-    const badge = $('#notes-count', card.section); if (badge) { badge.hidden = st.total === 0; badge.textContent = String(st.open); badge.title = st.open + ' open of ' + st.total; }
+    const badge = $('#notes-count', card.section); if (badge) { badge.hidden = st.total === 0; badge.textContent = String(st.open); badge.classList.toggle('is-zero', st.open === 0); badge.title = st.open + ' open of ' + st.total; }
     $('.nt-me', card.body).textContent = me ? me : 'Set your name'; card.setSeg(); card.setPins(); card.setReview(); card.isoBtn.classList.toggle('on', !!S.isoNoted && !!S.host.isolated());
     const list = visibleList();
     { const vis = S.openId && !list.some(x => x.id === S.openId) ? visibleList(S.openId) : list, at = vis.findIndex(x => x.id === S.openId); card.navLabel.textContent = vis.length ? (at >= 0 ? (at + 1) + ' of ' + vis.length : vis.length + (vis.length === 1 ? ' note' : ' notes')) : 'No notes'; card.navPrev.disabled = card.navNext.disabled = vis.length < 1; }
@@ -861,44 +879,79 @@
         { icon: S.pins ? 'eye-off' : 'eye', label: S.pins ? 'Hide the pins' : 'Show the pins', fn: () => { S.pins = !S.pins; render(); } },
       ], Math.max(8, Math.round(b.left - 190)), Math.round(b.bottom + 4));
     });
-    const mine = el('span', 'nt-me-av'); me.before(mine); top.append(me, el('span', 'nt-grow'), pins); body.append(top);
+    const mine = el('span', 'nt-me-av'); top.append(mine, me, el('span', 'nt-grow'), pins);      // (who you are and the eye for the pins: shown in the sign-off area below; the badge goes first, before the name)
     // make a note: on a spot, on the selected part(s), or about the whole scene
     const tool = (icon, tip, fn) => { const b = el('button', 'nt-tool'); b.type = 'button'; b.title = tip; b.setAttribute('aria-label', tip); b.innerHTML = svg(icon); b.addEventListener('click', fn); return b; };
     const acts = el('div', 'nt-tools');
-    const addPin = el('button', 'nt-new'); addPin.type = 'button'; addPin.title = 'Click a spot on the model to make a note (N)'; addPin.setAttribute('aria-label', 'New note: click a spot on the model'); addPin.innerHTML = svg('plus') + '<span>New note</span>';
-    addPin.addEventListener('click', () => (S.placing ? stopPlace() : startPlace()));
-    acts.append(addPin, tool('box', 'A note about the selected part (or parts)', addForSelection), tool('layers', 'A note about the whole scene', addForScene)); body.append(acts);
+    const addPin = el('button', 'nt-new'); addPin.type = 'button'; addPin.title = 'Make a note on the selected part, or click a spot on the model (N)'; addPin.setAttribute('aria-label', 'New note: on the selected part, or click a spot on the model'); addPin.innerHTML = svg('plus') + '<span>New note</span>';
+    addPin.addEventListener('click', () => newNote());
+    acts.append(addPin); body.append(acts);
     // which notes
-    const seg = el('div', 'nt-seg'); seg.setAttribute('role', 'tablist');
-    for (const [v, l] of [['open', 'Open'], ['all', 'All'], ['resolved', 'Done'], ['unread', 'New'], ['mine', 'Mine']]) { const b = el('button', null, l); b.type = 'button'; b.dataset.v = v; b.title = ({ open: 'Open notes', all: 'All notes', resolved: 'Done', unread: 'New to me', mine: 'Mine: for me, by me, or mentioning me' })[v]; b.addEventListener('click', () => { S.filter = v; S.rowLimit = 150; render(); }); seg.append(b); }
+    const seg = el('div', 'cmd-seg'); seg.setAttribute('role', 'tablist');
+    for (const [v, l] of [['open', 'Open'], ['all', 'All'], ['resolved', 'Done']]) { const b = el('button', null, l); b.type = 'button'; b.dataset.v = v; b.title = ({ open: 'Open notes', all: 'All notes', resolved: 'Done' })[v]; b.addEventListener('click', () => { S.filter = v; S.rowLimit = 150; render(); }); seg.append(b); }
     body.append(seg);
     const sbar = el('div', 'nt-sbar'); const box = el('label', 'nt-searchbox'); box.innerHTML = svg('search');
     const q = el('input', 'nt-search'); q.type = 'search'; q.placeholder = 'Search'; q.addEventListener('input', () => { S.search = q.value.trim(); S.rowLimit = 150; render(); }); q.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { q.value = ''; S.search = ''; render(); } });
     box.append(q);
     const ssel = el('select', 'nt-sel'); ssel.title = 'Order'; for (const [v, l] of [['number', 'Number'], ['newest', 'Newest'], ['priority', 'Priority'], ['due', 'Due date'], ['part', 'Part']]) { const o = el('option', null, l); o.value = v; ssel.append(o); }
     ssel.addEventListener('change', () => { S.sort = ssel.value; S.rowLimit = 150; render(); }); ssel.addEventListener('keydown', (e) => e.stopPropagation());
-    const selBtn = iconBtn('box', 'Only the notes on the selected part'); selBtn.addEventListener('click', () => { S.onlySel = !S.onlySel; S.selKey = S.onlySel ? [...S.host.state.selected].join(',') : ''; render(); });
     const del = iconBtn('trash', 'Show deleted notes'); del.addEventListener('click', () => { S.filter = S.filter === 'deleted' ? 'open' : 'deleted'; render(); });
-    sbar.append(box, ssel, selBtn, del); body.append(sbar);
+    sbar.append(box, ssel, del); body.append(sbar);
     // the list, and a stepper to jump through it
     const nav = el('div', 'nt-nav'); const navLabel = el('span', 'nt-navlabel', ''); const navPrev = iconBtn('left', 'Previous note'), navNext = iconBtn('right', 'Next note');
     navPrev.addEventListener('click', () => step(-1)); navNext.addEventListener('click', () => step(1));
     const isoBtn = iconBtn('focus', 'Show only the parts that have notes'); isoBtn.addEventListener('click', isolateNoted); nav.append(navLabel, isoBtn, navPrev, navNext); body.append(nav);
     const list = el('div', 'nt-list'); body.append(list);
-    const markRead = el('button', 'nt-link', ''); markRead.type = 'button'; markRead.hidden = true; markRead.addEventListener('click', markAllRead); body.append(markRead);
+    const markRead = el('button', 'nt-markread', ''); markRead.type = 'button'; markRead.hidden = true; markRead.addEventListener('click', markAllRead); body.append(markRead);
     // sign-off on the scene
     const rev = el('div', 'nt-review'); const revSum = el('div', 'nt-sub nt-revsum');
     const rbtn2 = (state, icon, label, tip) => { const b = el('button', 'nt-rv'); b.type = 'button'; b.dataset.state = state; b.title = tip; b.innerHTML = svg(icon) + '<span>' + label + '</span>'; b.addEventListener('click', () => needName(() => { C.setReview(S.reviews, author(), state); render(); }, 'Before you sign off, notes need to know who you are.')); return b; };
     rev.append(rbtn2('approved', 'check', 'Approve', 'Approve this scene'), rbtn2('changes', 'undo', 'Changes', 'Ask for changes before it goes on'));
-    body.append(el('div', 'nt-seclabel', 'Sign-off'), rev, revSum);
+    body.append(el('div', 'nt-seclabel', 'Sign-off'), top, rev, revSum);
     // in and out
     const foot = el('div', 'nt-tools nt-foot');
     foot.append(tool('down', 'Bring in notes: from a scene file, a JSON file or a BCF file (what design tools use)', importFromFile), tool('up', 'Take the notes out: a report page, a spreadsheet, JSON or BCF', (e) => exportMenu(e.currentTarget)), tool('copy', 'Copy the notes as text', () => copy(C.toMarkdown(S.items, { title: title(), at: new Date().toISOString(), reviews: S.reviews })))); body.append(foot);
-    const setSeg = () => { for (const b of seg.children) b.classList.toggle('on', b.dataset.v === S.filter); del.classList.toggle('on', S.filter === 'deleted'); selBtn.classList.toggle('on', S.onlySel); };
+    // ── one toolbar: the few things used all the time are on it, the rest is in the ⋯ menu (as on iOS) ──────────────────────────────────
+    // (the other controls above are still built, and stay in the page out of sight, so everything that reads them keeps working)
+    const bar = el('div', 'nt-bar');
+    const searchBtn = iconBtn('search', 'Search the notes'), moreBtn = iconBtn('more', 'More');
+    const searchRow = el('div', 'nt-searchrow'); searchRow.append(box);
+    const showSearch = (on) => { S.searchOpen = on; searchRow.hidden = !(on || S.search); searchBtn.classList.toggle('on', !!(on || S.search)); if (on) setTimeout(() => q.focus(), 30); };
+    searchBtn.addEventListener('click', () => showSearch(searchRow.hidden));
+    q.addEventListener('blur', () => { if (!q.value.trim()) showSearch(false); });
+    moreBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); const b = moreBtn.getBoundingClientRect(), tick = (c) => (c ? '  ✓' : '');
+      const sm = C.reviewSummary(S.reviews), me2 = author(), mine2 = me2 && S.reviews[me2] ? S.reviews[me2].state : '';
+      const asReviewer = (state, label, icon) => ({ icon, label: label + tick(mine2 === state), fn: () => needName(() => { C.setReview(S.reviews, author(), state); render(); }, 'Before you sign off, notes need to know who you are.') });
+      S.host.ctxMenu([
+        { icon: 'box', label: 'A note on the selected part', fn: addForSelection },
+        { icon: 'focus', label: 'Show only the parts with notes' + tick(S.isoNoted && S.host.isolated()), fn: isolateNoted },
+        '---',
+        ...[['number', 'Pins: the number'], ['text', 'Pins: the title'], ['icon', 'Pins: the kind'], ['color', 'Pins: only the colour'], ['name', 'Pins: the writer']].map(([v, l]) => ({ icon: 'circle', label: l + tick(S.badge === v), fn: () => { S.badge = v; try { S.host.prefs.set('noteBadge', v); } catch (_) {} render(); } })),
+        { icon: S.pins ? 'eye-off' : 'eye', label: S.pins ? 'Hide the pins' : 'Show the pins', fn: () => { S.pins = !S.pins; render(); } },
+        '---',
+        ...[['number', 'Sort by number'], ['newest', 'Sort by newest'], ['priority', 'Sort by priority'], ['due', 'Sort by due date'], ['part', 'Sort by part']].map(([v, l]) => ({ icon: 'circle', label: l + tick(S.sort === v), fn: () => { S.sort = v; ssel.value = v; S.rowLimit = 150; render(); } })),
+        { icon: 'trash-2', label: 'Show deleted notes' + tick(S.filter === 'deleted'), fn: () => { S.filter = S.filter === 'deleted' ? 'open' : 'deleted'; render(); } },
+        '---',
+        asReviewer('approved', 'Approve this scene', 'check'),
+        asReviewer('changes', 'Ask for changes', 'undo-2'),
+        { icon: 'user', label: 'Your name: ' + (me2 || 'not set') + '…', fn: () => askName('Change the name shown next to what you write.').then(n => { if (n) setAuthor(n); }) },
+        '---',
+        { icon: 'download', label: 'Bring in notes…', fn: importFromFile },
+        { icon: 'upload', label: 'Take the notes out…', fn: () => exportMenu(moreBtn) },
+        { icon: 'copy', label: 'Copy as text', fn: () => copy(C.toMarkdown(S.items, { title: title(), at: new Date().toISOString(), reviews: S.reviews })) },
+      ], Math.max(8, Math.round(b.right - 230)), Math.round(b.bottom + 4));
+    });
+    acts.classList.add('nt-bar'); acts.append(searchBtn, moreBtn);
+    const hid = el('div', 'nt-hidden'); hid.hidden = true; hid.append(top, rev, foot, sbar, isoBtn);
+    searchRow.hidden = true;
+    body.append(acts, seg, searchRow, nav, list, markRead, revSum, hid);
+    const setSeg = () => { for (const b of seg.children) b.classList.toggle('active', b.dataset.v === S.filter); del.classList.toggle('on', S.filter === 'deleted'); };
     const setReview = () => {
       const me2 = author(), mine2 = me2 && S.reviews[me2] ? S.reviews[me2].state : '', sm = C.reviewSummary(S.reviews);
       for (const b of rev.children) b.classList.toggle('on', b.dataset.state === mine2);
-      revSum.textContent = sm.state === 'none' ? 'No sign-off yet' : [sm.approved.length ? 'Approved by ' + sm.approved.join(', ') : '', sm.changes.length ? 'Changes asked by ' + sm.changes.join(', ') : ''].filter(Boolean).join(' · ');
+      revSum.hidden = sm.state === 'none';
+      revSum.textContent = sm.state === 'none' ? '' : [sm.approved.length ? 'Approved by ' + sm.approved.join(', ') : '', sm.changes.length ? 'Changes asked by ' + sm.changes.join(', ') : ''].filter(Boolean).join(' · ');
     };
     ref.parentNode.insertBefore(grp, ref); ref.parentNode.insertBefore(sec, ref);
     S.card = { section: sec, body, list, pins, addPin, markRead, foot, mine, setSeg, setPins: () => {}, setReview, isoBtn, navLabel, navPrev, navNext };
@@ -919,7 +972,9 @@
     const p = C.parse(raw); S.items = p.items; S.seen = p.seen; S.reviews = p.reviews || {}; S.parts.clear(); S.thumbs = {};
     for (const n of S.items) if (n.shots && n.shots.length) keepShots(n);
     for (const [id, b] of pinEls) { b.remove(); pinEls.delete(id); }
-    closePop(); updateSince(); render();
+    closePop(); updateSince();
+    { const nw = S.items.some(n => !n.deleted && C.unread(n, author(), S.since)); S.on = nw; S.pins = nw; S.off = false; }      // (on a file open the notes are shown only when some of them are new to this person)
+    render();
     const st = C.stats(S.items);
     if (st.total && !o.quiet) {
       const me = author(), news = S.items.filter(n => C.unread(n, me, S.since));
@@ -935,7 +990,7 @@
       const sec = S.card && S.card.section; if (sec) sec.querySelector('.section-h').classList.remove('collapsed');
     }
   }
-  function reset() { S.items = []; S.seen = {}; S.reviews = {}; S.thumbs = {}; S.parts.clear(); S.filter = 'open'; S.search = ''; for (const [id, b] of pinEls) { b.remove(); pinEls.delete(id); } closePop(); stopPlace(); updateSince(); render(); }
+  function reset() { S.items = []; S.seen = {}; S.reviews = {}; S.thumbs = {}; S.parts.clear(); S.filter = 'open'; S.search = ''; for (const [id, b] of pinEls) { b.remove(); pinEls.delete(id); } closePop(); stopPlace(); updateSince(); S.on = false; S.pins = false; S.off = false; render(); }
   function importFromFile() {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.glb,.json,.bcf,.bcfzip,.zip,model/gltf-binary,application/json';
     inp.addEventListener('change', async () => {
@@ -991,7 +1046,7 @@
   function css() {
     const st = el('style'); st.textContent = `
 .notes-placing #canvas{cursor:crosshair!important}
-#note-pins{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:calc(var(--z-console) + 1)}
+#note-pins{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:calc(var(--z-view-layer) - 1)}
 .note-pin{position:absolute;left:0;top:0;width:var(--btn-h-sm);height:var(--btn-h-sm);border:0;background:none;padding:0;color:var(--white);font:var(--fw-semibold) var(--fs-11)/1 var(--font-sans,system-ui);font-variant-numeric:tabular-nums;display:grid;place-items:center;pointer-events:auto;cursor:pointer;filter:drop-shadow(0 1px 2px var(--blk-40)) drop-shadow(0 3px 7px var(--blk-30));transition:opacity var(--dur-base) var(--ease-out),scale var(--dur-200) var(--ease-ios)}
 .shape{position:absolute;inset:0;width:100%;height:100%;fill:var(--c,var(--ac));stroke:var(--white);stroke-width:1.8;overflow:visible;transition:fill var(--dur-base) var(--ease-out),stroke var(--dur-base) var(--ease-out)}
 .note-pin>b{position:relative;font-weight:inherit;pointer-events:none}.note-pin[data-shape=triangle]>b{margin-top:5px}
@@ -1011,7 +1066,7 @@
 @keyframes note-pin-in{from{scale:.4;opacity:0}}
 @media (prefers-reduced-motion:reduce){.note-pin,.note-pin.in{animation:none;transition:opacity var(--dur-base)}}
 
-.note-pop{position:absolute;z-index:calc(var(--z-console) + 2);width:340px;max-height:min(760px,calc(100% - 16px));display:flex;flex-direction:column;background:var(--surface-pop);border:0;border-radius:var(--surface-win-r);box-shadow:var(--surface-shadow-win);color:var(--tx);font:var(--fs-sm)/var(--lh-base) var(--font-sans,system-ui);animation:var(--menu-in)}
+.note-pop{position:fixed;z-index:calc(var(--z-console) + 2);width:340px;max-height:min(760px,calc(100% - 16px));display:flex;flex-direction:column;background:var(--surface-pop);border:0;border-radius:var(--surface-win-r);box-shadow:var(--surface-shadow-win);color:var(--tx);font:var(--fs-sm)/var(--lh-base) var(--font-sans,system-ui);animation:var(--menu-in)}
 .nt-rz{position:absolute;z-index:3;touch-action:none}.nt-rz-e,.nt-rz-w{top:44px;bottom:22px;width:8px;cursor:ew-resize}.nt-rz-e{right:-4px}.nt-rz-w{left:-4px}.nt-rz-s{left:22px;right:22px;bottom:-4px;height:8px;cursor:ns-resize}.nt-rz-se,.nt-rz-sw{bottom:-4px;width:16px;height:16px}.nt-rz-se{right:-4px;cursor:nwse-resize}.nt-rz-sw{left:-4px;cursor:nesw-resize}
 .note-pop:not(.win-focus){box-shadow:var(--surface-shadow-win-off)}
 .note-pop>*{flex:none}.note-pop>.nt-rz{flex:none}.note-pop>.nt-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;overscroll-behavior:contain;border-radius:0 0 var(--surface-win-r) var(--surface-win-r)}.note-pop>.nt-scroll::-webkit-scrollbar{display:none;width:0;height:0}.note-pop.dragging{user-select:none}
@@ -1038,10 +1093,10 @@
 .nt-where{display:flex;align-items:center;gap:var(--space-md);padding:0 var(--space-xl) var(--space-md);color:var(--tx3);font-size:var(--fs-11);min-width:0}
 .nt-link{background:none;border:0;padding:0;color:var(--ac-text);cursor:pointer;font:inherit;text-align:left;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nt-link:hover{text-decoration:underline}.nt-link.warn,.nt-warn{color:var(--pin)}
 .nt-thumb{display:block;width:calc(100% - 28px);height:84px;object-fit:cover;margin:0 var(--space-2xl) var(--space-lg);border-radius:var(--r-md);cursor:pointer;box-shadow:var(--surface-ring)}
-.nt-msgs{display:flex;flex-direction:column;gap:var(--space-2xl);min-height:120px;overflow-y:auto;padding:var(--space-2xl);scrollbar-width:thin;scrollbar-color:var(--s7) transparent}
+.nt-msgs{display:flex;flex-direction:column;gap:var(--space-xl);min-height:120px;overflow-y:auto;padding:var(--space-lg) var(--space-2xl);}
 .nt-msg{display:flex;gap:var(--space-lg);border-radius:var(--r-md)}.nt-av{flex:none;width:var(--btn-h-sm);height:var(--btn-h-sm);border-radius:50%;color:var(--white);display:grid;place-items:center;font:var(--fw-semibold) var(--fs-11)/1 var(--font-sans)}
 .nt-body{flex:1;min-width:0}.nt-top{display:flex;align-items:center;gap:var(--space-md);min-height:22px}.nt-top b{font-weight:var(--fw-semibold)}.nt-time{color:var(--tx3);font-size:var(--fs-11)}
-.nt-acts{display:inline-flex;opacity:0;transition:opacity var(--dur-fast)}.nt-msg:hover .nt-acts,.nt-acts:focus-within{opacity:1}.nt-acts .nt-ib{width:22px;height:22px}.nt-acts .nt-ib svg{width:var(--icon-xs);height:var(--icon-xs)}
+.nt-acts:has(.on){opacity:1}.nt-acts .nt-ib.on{color:var(--ac-text)}.nt-acts{display:inline-flex;opacity:0;transition:opacity var(--dur-fast)}.nt-msg:hover .nt-acts,.nt-acts:focus-within{opacity:1}.nt-acts .nt-ib{width:22px;height:22px}.nt-acts .nt-ib svg{width:var(--icon-xs);height:var(--icon-xs)}
 .nt-text,.nt-was{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--tx)}.nt-was{color:var(--tx3);margin:2px 0 6px;padding-left:var(--space-md);border-left:2px solid var(--s6)}.nt-gone{color:var(--tx3);font-style:italic}
 .nt-edited{font-size:var(--fs-11);margin-top:2px}.nt-prev{margin-top:4px;font-size:var(--fs-11)}
 .nt-quote{display:block;width:100%;text-align:left;background:none;border:0;border-left:2px solid var(--s6);padding:0 0 0 var(--space-md);margin:var(--space-2xs) 0;color:var(--tx3);font:inherit;font-size:var(--fs-11);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:var(--tr-bg-fg)}.nt-quote:hover{color:var(--tx2)}.nt-quote b{font-weight:var(--fw-semibold);color:var(--tx2)}
@@ -1049,11 +1104,11 @@
 .nt-rb{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-xs);height:22px;min-width:22px;padding:0 var(--space-sm);border:0;border-radius:var(--r-pill);background:transparent;color:var(--tx3);font:inherit;font-size:var(--fs-11);cursor:pointer;opacity:0;transition:var(--tr-bg-fg),opacity var(--dur-fast)}.nt-rb svg{width:var(--icon-xs);height:var(--icon-xs)}
 .nt-msg:hover .nt-rb,.nt-rb.has,.nt-rb.on,.nt-rb:focus-visible{opacity:1}.nt-rb:hover{background:var(--s4);color:var(--tx)}.nt-rb.on{background:var(--ac-tint-12);color:var(--ac-text)}.nt-rb.on.done{background:color-mix(in srgb,var(--ok) 14%,transparent);color:var(--ok)}
 .nt-msg.flash{animation:nt-flash 1.1s var(--ease-out)}@keyframes nt-flash{from{background:var(--ac-tint-18)}}
-.nt-hist{list-style:none;margin:0 var(--space-2xl) var(--space-lg);padding:0;max-height:96px;overflow:auto;color:var(--tx3);font-size:var(--fs-11);scrollbar-width:thin}
+.nt-hist{list-style:none;margin:0 var(--space-2xl) var(--space-lg);padding:0;max-height:96px;overflow:auto;color:var(--tx3);font-size:var(--fs-11)}
 .nt-brief{display:flex;gap:var(--space-lg);padding:var(--space-md) var(--space-2xl) var(--space-lg);}.nt-text.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.nt-moreinfo{display:block;width:calc(100% - 28px);margin:var(--space-lg) var(--space-2xl) var(--space-2xl);padding:var(--space-sm) var(--space-lg);border:0;border-radius:var(--r-sm);background:var(--s3);color:var(--tx3);font:inherit;font-size:var(--fs-11);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:var(--tr-bg-fg)}.nt-moreinfo:hover{background:var(--s4);color:var(--tx)}
+.nt-moreinfo{display:block;width:calc(100% - 28px);margin:var(--space-lg) var(--space-2xl) var(--space-2xl);padding:var(--space-sm) var(--space-lg);border:0;border-radius:var(--r-sm);background:var(--s3);color:var(--tx3);font:inherit;font-size:var(--fs-11);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:var(--tr-bg-fg)}.nt-moreinfo{box-sizing:border-box;width:calc(100% - var(--space-2xl) * 2);margin-bottom:var(--space-sm)}.nt-bar.nt-bar-end{padding:0 var(--space-lg) var(--space-lg)}.nt-moreinfo:hover{background:var(--s4);color:var(--tx)}
 .nt-comp{margin:0 var(--space-2xl) var(--space-2xl);padding:var(--space-md) var(--space-sm) var(--space-sm) var(--space-lg);border-radius:var(--r-lg);background:var(--ctl-bg);border:1px solid var(--ctl-bd);display:flex;flex-direction:column;gap:var(--space-xs);transition:border-color var(--dur-base) var(--ease-out)}.nt-comp:hover{border-color:var(--ctl-bd-hover)}.nt-comp:focus-within{border-color:var(--s7)}
-.nt-comp textarea{display:block;width:100%;box-sizing:border-box;resize:none;border:0;outline:0;background:transparent;color:var(--tx);font:inherit;min-height:20px;max-height:140px;padding:var(--space-2xs) 0;overflow-y:auto;scrollbar-width:thin}
+.nt-comp textarea{display:block;width:100%;box-sizing:border-box;resize:none;border:0;outline:0;background:transparent;color:var(--tx);font:inherit;min-height:20px;max-height:140px;padding:var(--space-2xs) 0;overflow-y:auto}
 .nt-comp-row{display:flex;align-items:center;gap:var(--space-xs)}.nt-as{color:var(--tx3);font-size:var(--fs-11);cursor:pointer;margin-left:var(--space-xs)}.nt-as:hover{color:var(--tx);text-decoration:underline}
 .nt-send{width:var(--btn-h-sm);height:var(--btn-h-sm);border-radius:50%;background:var(--ac);color:var(--tx-on-accent,var(--white))}.nt-send svg{width:var(--icon-xs);height:var(--icon-xs)}.nt-send:hover:not(:disabled){background:var(--ac);color:var(--tx-on-accent,var(--white));filter:brightness(1.1)}.nt-send:disabled{background:var(--s4);color:var(--tx3);opacity:1}
 .nt-shot.on{background:var(--ac-tint-12);color:var(--ac-text)}
@@ -1071,7 +1126,7 @@
 .note-pop :is(input,textarea,select):focus-visible{outline:none}
 .nt-form{display:flex;flex-direction:column;gap:var(--space-md);padding:var(--space-lg) var(--space-2xl) var(--space-md)}
 .nt-ttl,.nt-descin{width:100%;box-sizing:border-box;border:1px solid var(--ctl-bd);border-radius:var(--ctl-r);background:var(--ctl-bg);color:var(--tx);font:inherit;outline:none;transition:border-color var(--dur-base) var(--ease-out)}
-.nt-ttl{height:var(--btn-h-md);padding:0 var(--ctl-px);font-size:var(--fs-md);font-weight:var(--fw-semibold)}.nt-descin{resize:none;padding:var(--space-md) var(--ctl-px);min-height:44px;overflow-y:auto;scrollbar-width:thin}
+.nt-ttl{height:var(--btn-h-md);padding:0 var(--ctl-px);font-size:var(--fs-md);font-weight:var(--fw-semibold)}.nt-descin{resize:none;padding:var(--space-md) var(--ctl-px);min-height:44px;overflow-y:auto}
 .nt-ttl:hover,.nt-descin:hover{border-color:var(--ctl-bd-hover)}.nt-ttl:focus,.nt-descin:focus{border-color:var(--s7)}
 .nt-formfoot{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-md) var(--space-2xl) var(--space-2xl)}
 .nt-btn.primary{background:var(--ac);color:var(--tx-on-accent,var(--white))}.nt-btn.primary:hover:not(:disabled){background:var(--ac);filter:brightness(1.1)}.nt-btn:disabled{opacity:var(--op-4);cursor:default}
@@ -1114,12 +1169,14 @@
 .nt-me{background:none;border:0;color:var(--tx);font:inherit;font-size:var(--fs-md);font-weight:var(--fw-medium);cursor:pointer;padding:0;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.nt-me:hover{color:var(--tx-control-hover)}
 #notes-section .nt-me-av{display:inline-flex}#notes-section .nt-me-av .nt-av{width:22px;height:22px;font-size:var(--fs-10)}
 .nt-top-row .nt-sel{width:74px}
+.nt-bar{display:flex;align-items:center;gap:var(--space-md)}.nt-bar .nt-new{flex:1;min-width:0}.nt-bar .nt-ib{flex:none;width:34px;height:34px;border-radius:50%;background:var(--s3);color:var(--tx-control)}.nt-bar .nt-ib:hover{background:var(--s4)}.nt-bar .nt-ib.on{background:var(--ac-tint-18);color:var(--ac-text)}.nt-bar .nt-ib svg{width:16px;height:16px}
+.nt-searchrow .nt-searchbox{display:block}.nt-hidden,#notes-section .nt-seclabel{display:none!important}.nt-revsum{padding:0 var(--space-2xs)}
 .nt-tools{display:flex;gap:var(--space-sm)}.nt-tool{flex:1;height:var(--btn-h-md);display:inline-grid;place-items:center;border:0;border-radius:var(--r-md);background:var(--s3);color:var(--tx-control);cursor:pointer;padding:0;transition:var(--tr-bg-fg),transform var(--dur-fast) var(--ease-ios)}.nt-tool svg{width:var(--icon-sm);height:var(--icon-sm)}.nt-tool:hover{background:var(--s4);color:var(--tx)}.nt-tool:active{transform:scale(.96)}.nt-tool.on{background:var(--ac-tint-18);color:var(--ac-text)}
-.nt-seg{display:flex;gap:var(--space-2xs);padding:2px;border-radius:var(--r-md);background:var(--s3)}.nt-seg button{flex:1;min-width:0;height:var(--btn-h-sm);border:0;border-radius:calc(var(--r-md) - 2px);background:transparent;color:var(--tx3);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg)}.nt-seg button:hover{color:var(--tx)}.nt-seg button.on{background:var(--s6);color:var(--tx);box-shadow:0 1px 2px var(--blk-30)}
+.nt-markread{display:block;width:100%;height:var(--btn-h-sm);padding:0 var(--space-md);border:0;border-radius:var(--r-md);background:var(--s3);color:var(--tx2);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg)}.nt-markread:hover{background:var(--s4);color:var(--tx)}.nt-markread:active{transform:scale(.98)}.nt-markread[hidden]{display:none}.nt-seg{display:flex;gap:var(--space-2xs);padding:2px;border-radius:var(--r-md);background:var(--s3)}.nt-seg button{flex:1;min-width:0;height:var(--btn-h-sm);border:0;border-radius:calc(var(--r-md) - 2px);background:transparent;color:var(--tx3);font:inherit;font-size:var(--fs-11);font-weight:var(--fw-medium);cursor:pointer;transition:var(--tr-bg-fg)}.nt-seg button:hover{color:var(--tx)}.nt-seg button.on{background:var(--s6);color:var(--tx);box-shadow:0 1px 2px var(--blk-30)}
 .nt-sbar{display:flex;gap:var(--space-sm);align-items:center}.nt-searchbox{position:relative;flex:1;min-width:0;display:block}.nt-searchbox svg{position:absolute;left:var(--space-lg);top:50%;width:var(--icon-xs);height:var(--icon-xs);margin-top:-6.5px;color:var(--tx3);pointer-events:none}
 .nt-search{width:100%;box-sizing:border-box;height:var(--ctl-h);padding:0 var(--ctl-px) 0 30px;border:1px solid var(--ctl-bd);border-radius:var(--ctl-r);background:var(--ctl-bg);color:var(--tx);font:inherit;font-size:var(--ctl-fs);outline:none;transition:border-color var(--dur-base) var(--ease-out)}.nt-search:hover{border-color:var(--ctl-bd-hover)}.nt-search:focus{border-color:var(--ctl-bd-focus)}
 .nt-sbar .nt-sel{width:72px;height:var(--ctl-h)}.nt-sbar .nt-ib.on{background:var(--ac-tint-18);color:var(--ac-text)}
-.nt-list{display:flex;flex-direction:column;gap:var(--space-2xs);max-height:320px;overflow:auto;scrollbar-width:thin}.nt-empty{color:var(--tx3);padding:var(--space-md) var(--space-2xs);font-size:var(--fs-sm)}
+.nt-list{display:flex;flex-direction:column;gap:var(--space-2xs);max-height:320px;overflow:auto}.nt-empty{color:var(--tx3);padding:var(--space-md) var(--space-2xs);font-size:var(--fs-sm)}
 .nt-row{display:flex;align-items:flex-start;gap:var(--space-lg);padding:var(--space-md);border-radius:var(--r-md);cursor:pointer;outline:none;transition:var(--tr-bg-fg)}.nt-row:hover,.nt-row:focus-visible{background:var(--s3)}.nt-row.sel{background:var(--ac-tint-12)}.nt-row.done .nt-line{opacity:var(--op-5)}.nt-row.del{opacity:var(--op-5)}
 .nt-rav{position:relative;flex:none;display:inline-flex}.nt-rav .nt-av{width:var(--btn-h-sm);height:var(--btn-h-sm);font-size:var(--fs-11)}.nt-rnum{position:absolute;right:-5px;bottom:-4px;min-width:14px;height:14px;padding:0 var(--space-xs);box-sizing:border-box;border-radius:var(--r-pill);display:grid;place-items:center;color:var(--white);font:var(--fw-semibold) var(--fs-9)/1 var(--font-sans);box-shadow:0 0 0 2px var(--surface-pop,var(--bg))}.nt-rnum.new{outline:2px solid var(--er);outline-offset:1px}
 .nt-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-2xs)}.nt-rtop{display:flex;align-items:baseline;gap:var(--space-sm)}.nt-rtop b{font-weight:var(--fw-semibold);font-size:var(--fs-sm);color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1146,10 +1203,109 @@
     window.addEventListener('keydown', onKey, true);
     updateSince(); render();
   }
+  // ── for Claude (the MCP connection): the same steps a person takes, written under the name "Claude" ─────────────────────────
+  // Every step is one undo step, like a person's, and shows in the note's history with that name. Claude never asks for a name, and never
+  // signs a scene off (approve / ask for changes is a person's decision).
+  const CLAUDE = 'Claude';
+  const need = () => { if (!S.host) throw new Error('Notes are not ready yet: open a model first.'); };
+  const ref = (r) => {
+    need();
+    const n = typeof r === 'number' || /^\d+$/.test(String(r)) ? S.items.find(x => x.n === Number(r)) : C.find(S.items, String(r));
+    if (!n) throw new Error('There is no note ' + r + '. list_notes shows the numbers.');
+    return n;
+  };
+  const clip = (t, k) => (t.length > k ? t.slice(0, k - 1) + '…' : t);
+  function brief(n, o) {
+    o = o || {};
+    const msgs = n.messages.map((m, i) => ({ message: i + 1, id: m.id, by: m.by, at: m.at, ...(m.desc ? { description: true } : {}), text: o.full ? m.text : clip(m.text, 500), ...(m.edits.length ? { edited_by: [...new Set(m.edits.map(e => e.by))] } : {}), ...(m.deleted ? { deleted_by: m.deleted.by } : {}) }));
+    const part = partOf(n), also = (n.also || []).map(a => a.name).filter(Boolean);
+    return {
+      note: n.n, id: n.id, title: C.noteTitle ? C.noteTitle(n) : n.title, status: n.deleted ? 'deleted' : n.status, tag: n.tag, priority: n.priority || 'normal', due: n.due || null, assignee: n.assignee || null,
+      kind: n.kind, where: C.where(n), ...(also.length ? { also_about: also } : {}),
+      part_id: part ? part.partId : null, part_hidden: part ? !part.visible : false, part_gone: !!(n.part && !part),
+      started_by: n.created.by, started_at: n.created.at, last_change: C.lastChange(n), replies: n.messages.filter(m => !m.deleted && !m.desc).length, pictures: (n.shots || []).length,
+      ...(o.messages === false ? {} : { messages: o.full ? msgs : msgs.slice(-6) }),
+      ...(o.history ? { history: n.activity.map(a => C.stamp(a.at) + ' ' + C.activityLine(a)) } : {}),
+    };
+  }
+  const agent = {
+    list(o) {
+      need(); o = o || {};
+      const want = o.status || 'open', q = String(o.search || '').trim().toLowerCase(), part = String(o.part || '').trim().toLowerCase(), asg = String(o.assignee || '').trim().toLowerCase();
+      let list = S.items.filter(n => (want === 'deleted' ? !!n.deleted : !n.deleted && (want === 'all' || n.status === want)));
+      if (o.tag) list = list.filter(n => n.tag === o.tag);
+      if (o.priority) list = list.filter(n => (n.priority || 'normal') === o.priority);
+      if (o.overdue) list = list.filter(n => n.status === 'open' && n.due && C.dueState && C.dueState(n) === 'overdue');
+      if (asg) list = list.filter(n => (asg === 'none' ? !n.assignee : n.assignee.toLowerCase() === asg));
+      if (part) list = list.filter(n => (C.where(n) + ' ' + (n.also || []).map(a => a.name).join(' ')).toLowerCase().includes(part));
+      if (q) list = list.filter(n => (n.title + ' ' + C.where(n) + ' ' + n.messages.map(m => m.by + ' ' + m.text).join(' ')).toLowerCase().includes(q));
+      list.sort((a, b) => a.n - b.n);
+      const limit = Math.min(100, Math.max(1, o.limit | 0 || 30)), st = C.stats(S.items), rv = C.reviewSummary ? C.reviewSummary(S.reviews) : null;
+      return { total: st.total, open: st.open, resolved: st.resolved, matched: list.length, shown: Math.min(limit, list.length), authors: C.authors(S.items), ...(rv ? { sign_off: rv } : {}), notes: list.slice(0, limit).map(n => brief(n, { messages: o.with_messages !== false, full: !!o.full })) };
+    },
+    get(r) { return brief(ref(r), { full: true, history: true }); },
+    // o: { title, text, part (a part of the scene), scene (a note about the whole scene), tag, assignee, priority, due }
+    async add(o) {
+      need();
+      const body = String(o.text || '').trim(), ttl = String(o.title || '').trim();
+      if (!body && !ttl) throw new Error('Give a title or text: what the note says.');
+      let a = null;
+      if (!o.scene) {
+        if (!o.part) throw new Error('Say where: ids or name_contains for a part, or whole_scene true for a note about the whole scene.');
+        a = S.host.partAnchor(o.part); if (!a) throw new Error('That part has no shape to pin a note on.');
+      }
+      let v = { cam: camNow(), thumb: '' };
+      try { v = await Promise.race([captureView(a ? a.world : null), new Promise(r => setTimeout(() => r({ cam: camNow(), thumb: '' }), 4000))]); } catch (_) {}
+      let note = null;
+      change('Add note (Claude)', () => {
+        note = C.create(S.items, { by: CLAUDE, title: ttl, text: body, kind: a ? 'part' : 'scene', part: a && a.part, local: a && a.local, world: a && a.world, normal: null, cam: v.cam, tag: o.tag, shots: v.thumb ? [v.thumb] : [], shotCams: v.thumb && v.cam ? [v.cam] : [] });
+        if (o.assignee) C.assign(note, CLAUDE, o.assignee);
+        if (o.priority && o.priority !== 'normal') C.setPriority(note, CLAUDE, o.priority);
+        if (o.due) C.setDue(note, CLAUDE, o.due);
+        if (note.shots.length) keepShots(note);
+      });
+      return brief(note);
+    },
+    reply(r, body) { const n = ref(r); change('Reply (Claude)', () => C.reply(n, CLAUDE, body)); return brief(n); },
+    // o: { title, description, status, tag, priority, due, assignee, edit: { message, text }, delete_message, restore_message, delete, restore }
+    update(r, o) {
+      const n = ref(r); o = o || {}; const did = [];
+      const msg = (k) => { const m = typeof k === 'number' || /^\d+$/.test(String(k)) ? n.messages[Number(k) - 1] : C.msgOf(n, String(k)); if (!m) throw new Error('This note has no message ' + k + '.'); return m; };
+      change('Change note (Claude)', () => {
+        if (o.restore) { C.restoreNote(n, CLAUDE); did.push('brought back'); }
+        if (o.title) { C.setTitle(n, CLAUDE, o.title); did.push('retitled'); }
+        if (o.description !== undefined) { C.setDesc(n, CLAUDE, o.description); did.push('description changed'); }
+        if (o.status) { C.setStatus(n, CLAUDE, o.status); did.push(o.status); }
+        if (o.tag) { C.setTag(n, CLAUDE, o.tag); did.push('tag ' + o.tag); }
+        if (o.priority) { C.setPriority(n, CLAUDE, o.priority); did.push('priority ' + o.priority); }
+        if (o.due !== undefined) { C.setDue(n, CLAUDE, o.due); did.push(o.due ? 'due ' + o.due : 'no due date'); }
+        if (o.assignee !== undefined) { C.assign(n, CLAUDE, o.assignee); did.push(o.assignee ? 'assigned to ' + o.assignee : 'unassigned'); }
+        if (o.edit) { C.edit(n, msg(o.edit.message).id, CLAUDE, o.edit.text); did.push('message edited'); }
+        if (o.delete_message) { C.removeMessage(n, msg(o.delete_message).id, CLAUDE); did.push('message deleted'); }
+        if (o.restore_message) { C.restoreMessage(n, msg(o.restore_message).id, CLAUDE); did.push('message brought back'); }
+        if (o.delete) { C.removeNote(n, CLAUDE); did.push('deleted'); }
+      });
+      if (!did.length) throw new Error('Nothing to change: give title, description, status, tag, priority, due, assignee, edit, delete_message, restore_message, delete or restore.');
+      return { changed: did, ...brief(n) };
+    },
+    // format: markdown (default), html, csv or json
+    report(o) {
+      need(); o = o || {};
+      if (!C.stats(S.items).total) throw new Error('There are no notes.');
+      const opts = { title: title(), at: new Date().toISOString(), openOnly: !!o.open_only }, X = window.MONotesIO, f = o.format || 'markdown';
+      const live = S.items.filter(n => !n.deleted && (!o.open_only || n.status === 'open'));
+      const out = { stats: C.stats(S.items), format: f, text: '' };
+      if (f === 'html') out.text = C.toHtml(S.items, opts);
+      else if (f === 'csv') { if (!X) throw new Error('The spreadsheet export is not available here.'); out.text = X.toCsv(live, opts); }
+      else if (f === 'json') { if (!X) throw new Error('The JSON export is not available here.'); out.text = X.toJson(live, S.reviews, opts); }
+      else out.text = C.toMarkdown(S.items, opts);
+      return out;
+    },
+  };
   window.MONotesUI = {
-    init, layout, load, reset, serialize, count, undoOp,
-    togglePlace: () => (S.placing ? stopPlace() : startPlace()), addForSelection, addForScene, addAt, addToPartAt, isolateNoted, importFromFile, saveReport,
-    togglePins: () => { S.pins = !S.pins; render(); }, openList: () => { const s = S.card && S.card.section; if (s) { s.querySelector('.section-h').classList.remove('collapsed'); s.scrollIntoView({ block: 'nearest' }); } }, next: () => step(1), prev: () => step(-1),
+    init, layout, load, reset, serialize, count, undoOp, agent, stats: () => C.stats(S.items), open: (id) => openNote(id),
+    togglePlace: () => newNote(), addForSelection, addForScene, addAt, addToPartAt, isolateNoted, importFromFile, saveReport,
+    toggleMode: () => (notesOn() ? exitNotes() : enterNotes()), togglePins: () => { S.pins = !S.pins; if (S.pins) S.off = false; render(); }, openList: () => { const s = S.card && S.card.section; if (s) { s.querySelector('.section-h').classList.remove('collapsed'); s.scrollIntoView({ block: 'nearest' }); } }, next: () => step(1), prev: () => step(-1),
     markAllRead, review: (state) => needName(() => { C.setReview(S.reviews, author(), state); render(); }, 'Before you sign off, notes need to know who you are.'), reviews: () => S.reviews, items: () => S.items, author, isPlacing: () => !!S.placing, setAuthor,
     _state: S,
   };
