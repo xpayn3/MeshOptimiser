@@ -1,14 +1,14 @@
 // ========== MESHOPTIMISER SITE: THE PART NEXT TO THE CHAT ==========
-// The Gearbox Assy of the example session on claude.html, as a real mesh: the app's own export (95 parts, Draco, about 90,000
+// A Scania V8 engine in the example session on claude.html, as a real mesh: the app's own export (1,295 parts, Draco, about 100,000
 // triangles so the page stays light) beside the conversation. As each message of the chat appears the part does what
-// Claude just asked the app to do: find_fasteners lights the 48 bolts, nuts and washers, hide_parts takes them away, fit_to_budget
-// flashes the triangles and counts the scene down from 646,064 to 299,984. It draws only while something moves (a step, a resize),
+// Claude just asked the app to do: find_fasteners lights the 376 bolts, nuts and washers, nuts and washers, hide_parts takes them away, fit_to_budget
+// flashes the triangles and counts the scene down from 3,682,816 to 298,957. It draws only while something moves (a step, a resize),
 // never in a loop. Loaded by site.js on a desktop screen with motion allowed; anything that goes wrong leaves the chat on its own.
 // (the import map in the page head says where 'three' and the add-ons come from)
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { studioEnvironment } from './axle-look.js?v=5';
 
 // Claude's own colours: the coral of its mark and a warm sand, on some parts of the model, and the coral for what a tool is working on
 const CORAL = new THREE.Color(0xd97757), SAND = new THREE.Color(0xe9dcc6);
@@ -27,11 +27,15 @@ export async function start(root, base) {
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environmentIntensity = 0.8;
-  const head = new THREE.DirectionalLight(0xffffff, 0.8);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3a40, 0.35), head, head.target);
+  // the same studio and lights as the truck axle (axle-look.js, hero3d.js)
+  renderer.toneMapping = THREE.NeutralToneMapping || THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  scene.environment = studioEnvironment(renderer);
+  scene.environmentIntensity = 1.3;
+  const head = new THREE.DirectionalLight(0xffffff, 0.3);
+  const keyL = new THREE.DirectionalLight(0xffffff, 1.1); keyL.position.set(80, 100, -60);
+  const fill = new THREE.DirectionalLight(0xb0c4ff, 0.18); fill.position.set(-80, 60, 40);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x303642, 0.3), keyL, fill, head, head.target);
 
   const draco = new DRACOLoader().setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/draco/gltf/');
   const loader = new GLTFLoader().setDRACOLoader(draco);
@@ -45,14 +49,14 @@ export async function start(root, base) {
   const wireMat = new THREE.MeshBasicMaterial({ color: 0xf3c4ad, wireframe: true, transparent: true, opacity: 0, depthWrite: false });
   const meshes = [];
   model.traverse((o) => { if (o.isMesh) meshes.push(o); });          // (collected first: a twin added while walking would be walked too)
+  const isFast = (o) => { for (let q = o; q && q !== model; q = q.parent) if (fastener.has(q.name)) return true; return false; };      // (a name sits on the mesh or on the node it hangs from)
   for (const o of meshes) {
     o.material = o.material.clone();
     o.material.envMapIntensity = 1;
-    if (!fastener.has(o.name) && o.material.color) { const k = hash(o.name); if (k < 24) o.material.color.copy(CORAL); else if (k < 38) o.material.color.copy(SAND); }
     const twin = new THREE.Mesh(o.geometry, wireMat);
     twin.matrixAutoUpdate = false; twin.visible = false;
     o.add(twin);
-    parts.push({ mesh: o, twin, isFastener: fastener.has(o.name), base: o.material.color.clone() });
+    parts.push({ mesh: o, twin, isFastener: isFast(o), base: o.material.color.clone() });
   }
   model.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(model);
@@ -60,14 +64,14 @@ export async function start(root, base) {
   const radius = size.length() / 2;
 
   const camera = new THREE.PerspectiveCamera(32, 1, radius * 0.05, radius * 20);
-  const view = { yaw: 0.65, pitch: 0.42 };
+  const view = { yaw: 2.25, pitch: 0.36 };
   const accent = CORAL;
 
   // ---- the state, and a tween between two states ----
   const cur = { hl: 0, hide: 0, wire: 0, count: data.tris[0], yaw: 0 };
   let w = 0, h = 0, queued = false;
   const place = () => {
-    const yaw = view.yaw + cur.yaw, d = radius * 3.7;
+    const yaw = view.yaw + cur.yaw, d = radius * 3.4;
     camera.position.set(ctr.x + Math.cos(yaw) * Math.cos(view.pitch) * d, ctr.y + Math.sin(view.pitch) * d, ctr.z + Math.sin(yaw) * Math.cos(view.pitch) * d);
     camera.up.set(0, 1, 0);
     camera.lookAt(ctr);

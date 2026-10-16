@@ -227,7 +227,7 @@
     const when = new IntersectionObserver((entries) => {
       if (!entries.some((e) => e.isIntersecting)) return;
       when.disconnect();
-      import('./chat3d.js?v=10').then((m) => m.start(cx3d, '')).catch(() => {});
+      import('./chat3d.js?v=14').then((m) => m.start(cx3d, '')).catch(() => {});
     }, { rootMargin: '600px 0px' });
     when.observe(cx3d.closest('[data-cx-grid]') || cx3d);
   }
