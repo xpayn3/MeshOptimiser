@@ -303,7 +303,8 @@
       // it starts pulling apart when a fifth of the section is on screen (its top at 80 % of the window), not only once it has reached the top;
       // it is fully apart where it always was, when the pinned screen lets go
       const lead = window.innerHeight * 0.8;
-      const p = Math.max(0, Math.min(1, room > 0 ? (lead - rect.top) / (room + lead) : 0));
+      const after = window.innerHeight * 0.22;      // the pin lets go this far before the model is fully apart: it finishes pulling apart as the section moves up
+      const p = Math.max(0, Math.min(1, room > 0 ? (lead - rect.top) / (room + lead + after) : 0));
       const eased = p * p * (3 - 2 * p);
       if (Math.abs(eased - last) > 0.0005) {
         last = eased; pop.style.setProperty('--p', eased.toFixed(4)); if (hero3d) hero3d.setP(eased);
