@@ -1029,7 +1029,8 @@
       await tour(id, 'More', [/Frame/, /Group/, /Isolate/], 2);
       await tour(id, 'More', [/Show all/], 0);
       await leaf(id, 'Hide');
-      await swing(id, R_OUT + 90, 135, 900); ghost.classList.remove('is-on'); await wait(id, 900);
+      { const [cx, cy] = centreOf(); await swing(id, 0, Math.atan2(gx - cx, -(gy - cy)) * 180 / Math.PI, 700); }      // (straight back to the centre, the way it came, then it rests)
+      await wait(id, 700); ghost.classList.remove('is-on'); await wait(id, 900);
     };
     // It plays while the demo is on screen, round after round, and stops when it leaves the screen. Any touch of it (a pointer over the ring, a tap or
     // click anywhere on it, a key) stops it for good and puts the board back. Nothing runs with reduced motion or without IntersectionObserver.
