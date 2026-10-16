@@ -1,7 +1,7 @@
 /* Help: the knowledge base inside the app (F1, or Menu › Help & docs).
  *
  * The articles are the website's (xpayn3.github.io/MeshOptimiser/docs), copied into help-content.js by
- * tools/build-help.mjs and loaded the first time the window opens, so start-up pays nothing for them and Help
+ * tools/app/build-help.mjs and loaded the first time the window opens, so start-up pays nothing for them and Help
  * works offline. Pictures are the website's and are loaded from there; one that cannot load is left out.
  * The frame of the window is in index.html (#help-modal); this fills it.
  */

@@ -1074,7 +1074,7 @@ MCP_INSTRUCTIONS = (
     "The app asks the user to allow each change to the model; if they say no, stop and ask what they want instead. Prompts optimise_for_web, remove_fasteners and review_scene start common jobs. To reach a size or a place in one call use optimise_to_target; ask what a step would save with dry_run before asking the user to allow it; compare_images shows before and after; batch_optimise does a folder. People review a model with notes (pins and conversations at a place in it, saved in the scene file): read them with list_notes before you start, answer them with reply_to_note, resolve one only when what it asks is done, and leave your own notes (add_note) on what you flagged or left alone. Do not rewrite what other people wrote. Long jobs show progress and the user can stop them. The user may be in Claude mode, which has no viewport: they read a feed of your calls, results and pictures. Use say to tell them what you are about to do and what you found, and take a screenshot after each change that they should see.")
 
 # What an agent knows about optimising: the playbooks (written by hand, knowledge/playbooks) and the app's help articles (built from the
-# website's docs by tools/build-knowledge.mjs, knowledge/docs). Served as resources, and searched and read by the search_docs and
+# website's docs by tools/app/build-knowledge.mjs, knowledge/docs). Served as resources, and searched and read by the search_docs and
 # read_doc tools, which the server answers itself (the app does not need to be open for them).
 KNOWLEDGE = Path(__file__).resolve().parent / "knowledge"
 _PLAYBOOKS = [("optimise", "How to optimise a model (start here)", "The rules, the order of work, every tool in its place, and how to report."),

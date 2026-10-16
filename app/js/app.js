@@ -27215,7 +27215,7 @@ function _stripPhysics(row) {
 const _Shading = (() => {
   const q$ = (id) => document.getElementById(id);
   // The pictures are baked, not drawn here: a hex nut in each look, rendered at 256 px with antialiasing by
-  // tools/render-shading-thumbs.mjs (re-run it after changing a look in _CLAY_LOOKS or _CAD_LOOKS). They are
+  // tools/app/render-shading-thumbs.mjs (re-run it after changing a look in _CLAY_LOOKS or _CAD_LOOKS). They are
   // small files shown as plain images, so the card costs nothing to open and is sharp on a 3x screen.
   const THUMB_V = 1;
   const thumb = (name) => {

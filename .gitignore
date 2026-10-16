@@ -20,13 +20,14 @@ Thumbs.db
 .idea/
 .claude/
 CLAUDE.md
+CLAUDE.local.md
 *.swp
 *.lnk
 
 exports/
 server.log
 
-# In-app updater: the backup of the previous version, and what tools/build-update.py writes
+# In-app updater: the backup of the previous version, and what tools/app/build-update.py writes
 .update/
 dist/
 
@@ -38,5 +39,9 @@ _before-*.html
 # Local setting marker (Settings > General > Show a terminal window)
 .show-console
 
-# The bundled Python for the Windows download (built by tools/build-runtime.py)
+# The bundled Python for the Windows download (built by tools/app/build-runtime.py)
 runtime/
+
+# Loose screenshots and test output (kept on disk, not in the repo)
+scratch/
+/*.png

@@ -1,4 +1,4 @@
-// node tools/record-demo.mjs <folder> [model.glb] [--fps=25] [--still=<second>] [--only=<second to stop at>]
+// node tools/app/record-demo.mjs <folder> [model.glb] [--fps=25] [--still=<second>] [--only=<second to stop at>]
 //
 // Records the demo clip of the website (a 20 s loop, 1920 x 1080, the app only): a big cursor works the real app on a model: it orbits and
 // pans, pulls the model apart with Exploded view, opens the Materials and Library drawers and the command search, then goes back to
@@ -14,7 +14,7 @@ import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const arg = (k, d) => { const a = process.argv.find(x => x.startsWith('--' + k + '=')); return a ? a.split('=')[1] : d; };
 const pos = process.argv.slice(2).filter(x => !x.startsWith('--'));
-const OUT = pos[0]; if (!OUT) { console.log('usage: node tools/record-demo.mjs <folder> [model.glb] [--fps=25] [--still=s]'); process.exit(2); }
+const OUT = pos[0]; if (!OUT) { console.log('usage: node tools/app/record-demo.mjs <folder> [model.glb] [--fps=25] [--still=s]'); process.exit(2); }
 const MODEL = (pos[1] || 'C:/Users/Luka/Downloads/Scania-Engine-V8-XT-Turbo.glb').replace(/\\/g, '/');
 const FPS = +arg('fps', 25), STILL = arg('still', null), ONLY = arg('only', null);
 const FFMPEG = process.env.FFMPEG || 'ffmpeg';

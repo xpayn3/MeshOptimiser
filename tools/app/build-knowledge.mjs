@@ -1,4 +1,4 @@
-// node tools/build-knowledge.mjs <path to docs-content.js>
+// node tools/app/build-knowledge.mjs <path to docs-content.js>
 //
 // The help articles of the website (apps/meshoptimiser/docs-content.js in the website repo: the knowledge base of the app, one
 // article per tool and job) turned into plain Markdown in knowledge/docs/, with an index. serve.py hands these to Claude over MCP:
@@ -9,7 +9,7 @@ import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
 const src = process.argv[2];
-if (!src) { console.log('usage: node tools/build-knowledge.mjs <path to docs-content.js>'); process.exit(2); }
+if (!src) { console.log('usage: node tools/app/build-knowledge.mjs <path to docs-content.js>'); process.exit(2); }
 const docs = createRequire(import.meta.url)(path.resolve(src));
 const OUT = path.resolve('app/knowledge/docs');
 // what an agent needs: how to read, clean up, simplify, check and export a model. Not how to install the app.

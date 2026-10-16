@@ -1,4 +1,4 @@
-// node tools/capture-claude-jobs.mjs <folder> [model, default inbox/GearboxAssy.glb]
+// node tools/app/capture-claude-jobs.mjs <folder> [model, default inbox/GearboxAssy.glb]
 //
 // Two pictures for the website's page about Claude, as 2400 x 1350 PNG: a job in progress (the badge's dropdown with its progress bar and the
 // Stop button, while batch_optimise works through a folder) and the before and after picture compare_images makes after optimise_to_target
@@ -8,7 +8,7 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const OUT = process.argv[2]; if (!OUT) { console.log('usage: node tools/capture-claude-jobs.mjs <folder> [model]'); process.exit(2); }
+const OUT = process.argv[2]; if (!OUT) { console.log('usage: node tools/app/capture-claude-jobs.mjs <folder> [model]'); process.exit(2); }
 const MODEL = process.argv[3] || 'inbox/GearboxAssy.glb';
 const APP = 4343, DBG = 9378, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-jobs-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));

@@ -4,8 +4,8 @@
 // the last, with the triangles drawn in the accent blue, down to a handful of facets; then it is rebuilt back
 // up to the smooth one. This is the one clip that shows the mesh on purpose: reducing triangles is its subject.
 //
-//   node tools/render-cover-clip.mjs               renders the clip and the poster
-//   node tools/render-cover-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
+//   node tools/app/render-cover-clip.mjs               renders the clip and the poster
+//   node tools/app/render-cover-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
 //
 // ffmpeg must be on the PATH, or named in FFMPEG. The drawing is in clip-kit.mjs.
 import { T, prepare, smooth, size, run } from './clip-kit.mjs';

@@ -5,8 +5,8 @@
 // ambient-occlusion term and a small studio (a sky, a horizon, two soft boxes), then averaged down to
 // 256 px, so every edge is antialiased and the picture stays sharp on a 3x screen.
 //
-//   node tools/render-shading-thumbs.mjs            all looks
-//   node tools/render-shading-thumbs.mjs steel      one look 
+//   node tools/app/render-shading-thumbs.mjs            all looks
+//   node tools/app/render-shading-thumbs.mjs steel      one look 
 //
 // The looks below mirror _CLAY_LOOKS and _CAD_LOOKS in app.js: change one there, change it here, re-run.
 // (ffmpeg is needed for the .webp; set FFMPEG if it is not on PATH. Without it the .png files stay.)
@@ -16,7 +16,7 @@ import zlib from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = path.join(ROOT, 'app', 'assets', 'shading');
 const FFMPEG = process.env.FFMPEG || 'ffmpeg';
 const SS = 4, FINAL = 256, S = FINAL * SS;                       // the ray-march is S x S, the file FINAL x FINAL

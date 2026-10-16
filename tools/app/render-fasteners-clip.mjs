@@ -4,8 +4,8 @@
 // with a washer). The bolts turn the accent blue, lift out and fade, leaving the bracket with its empty
 // holes, and then they come back. The bracket stays where it is.
 //
-//   node tools/render-fasteners-clip.mjs               renders the clip and the poster
-//   node tools/render-fasteners-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
+//   node tools/app/render-fasteners-clip.mjs               renders the clip and the poster
+//   node tools/app/render-fasteners-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
 //
 // ffmpeg must be on the PATH, or named in FFMPEG. The drawing is in clip-kit.mjs.
 import { T, rrect, hole, ext, inXZ, merge, prepare, smooth, hexBolt, BEV, run } from './clip-kit.mjs';

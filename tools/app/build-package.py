@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the full download: MeshOptimiser-v<version>.zip, what the website's Download button and install.ps1 fetch.
 
-    python tools/build-package.py                  # into dist/, version from app/version.json
-    python tools/build-package.py --out some/dir
-    python tools/build-package.py --with-runtime   # the Windows download with Python and every package inside: MeshOptimiser-v<version>-windows.zip
+    python tools/app/build-package.py                  # into dist/, version from app/version.json
+    python tools/app/build-package.py --out some/dir
+    python tools/app/build-package.py --with-runtime   # the Windows download with Python and every package inside: MeshOptimiser-v<version>-windows.zip
 
 The zip holds the install folder as it is meant to look: the thin launchers (start.bat, start_hidden.vbs, start.command,
 start.ico, Install MeshOptimiser.bat), README.md, README.txt, LICENSE and the app/ folder, with the files at the root of the
@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse, json, subprocess, sys, zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 SKIP_DIRS = {"tests", "tools", "docs", "site", "dist", ".github", "_archive", "__pycache__", ".claude", ".update"}
 SKIP_FILES = {"changelog.md", "unreleased_fixes.md", ".gitignore", ".gitattributes", "claude.md", "server.log"}
 SKIP_GLOBS = ("RELEASE_NOTES_", "test-converter.")
@@ -38,7 +38,7 @@ def files() -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default="dist")
-    ap.add_argument("--with-runtime", action="store_true", help="also pack app/runtime (built by tools/build-runtime.py): nothing to install on first start")
+    ap.add_argument("--with-runtime", action="store_true", help="also pack app/runtime (built by tools/app/build-runtime.py): nothing to install on first start")
     a = ap.parse_args()
     ver = json.loads((ROOT / "app" / "version.json").read_text("utf-8"))["version"]
     names = files()
@@ -47,7 +47,7 @@ def main() -> int:
     out = ROOT / a.out; out.mkdir(parents=True, exist_ok=True)
     rt = ROOT / "app" / "runtime"
     if a.with_runtime:
-        if not (rt / "python.exe").is_file(): raise SystemExit("app/runtime is not there: run python tools/build-runtime.py first.")
+        if not (rt / "python.exe").is_file(): raise SystemExit("app/runtime is not there: run python tools/app/build-runtime.py first.")
         names += sorted(p.relative_to(ROOT).as_posix() for p in rt.rglob("*") if p.is_file())
     zpath = out / (f"MeshOptimiser-v{ver}-windows.zip" if a.with_runtime else f"MeshOptimiser-v{ver}.zip")
     with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:

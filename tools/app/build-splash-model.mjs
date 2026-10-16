@@ -1,4 +1,4 @@
-// node tools/build-splash-model.mjs [dir with hero-mesh.json + hero-mesh.bin]
+// node tools/app/build-splash-model.mjs [dir with hero-mesh.json + hero-mesh.bin]
 //
 // Bakes the model drawn on the splash screen (index.html, "Start-up"): the rear derailleur of the site's opening
 // picture, 43 parts and about 68,000 triangles, reduced to its sharp edges (the same 30 degree edges the CAD view draws),
@@ -9,7 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import * as THREE from '../app/vendor/three/build/three.core.js';
+import * as THREE from '../../app/vendor/three/build/three.core.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = process.argv[2] || process.env.SRC || 'C:/Users/Luka/Downloads/Luka_site_v2/apps/meshoptimiser';
@@ -46,7 +46,7 @@ const lo = all.min.toArray(), sz = all.getSize(new THREE.Vector3()).toArray();
 const out = new Int16Array(total * 6);
 let w = 0;
 for (const keep of chunks) for (let i = 0; i < keep.length; i++) out[w++] = Math.round(((keep[i] - lo[i % 3]) / sz[i % 3]) * 65535 - 32768);
-const dir = path.join(here, '..', 'app', 'assets');
+const dir = path.join(here, '..', '..', 'app', 'assets');
 fs.writeFileSync(path.join(dir, 'splash-model.bin'), Buffer.from(out.buffer));
 fs.writeFileSync(path.join(dir, 'splash-model.json'), JSON.stringify({ min: lo.map(n => +n.toFixed(3)), span: sz.map(n => +n.toFixed(3)), segments: total, parts }));
 console.log(meta.parts.length + ' parts, ' + total + ' segments, ' + (out.byteLength / 1024).toFixed(0) + ' KB');

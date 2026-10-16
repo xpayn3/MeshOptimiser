@@ -1,21 +1,21 @@
-// node tools/build-splash-glb.mjs <model.glb> [parts] [segments]
+// node tools/app/build-splash-glb.mjs <model.glb> [parts] [segments]
 //
 // Bakes the model drawn on the splash screen (index.html, "Start-up") from a plain GLB: its meshes are gathered into
 // about 48 groups of parts that sit near each other (so they can fly in from where an exploded view would put them), each
 // reduced to its sharp edges (the same kind of edges the CAD view draws), and the longest of them kept up to a budget so the
 // splash stays small. Writes assets/splash-model.json (the parts) and assets/splash-model.bin (Int16 line-segment ends,
-// 6 numbers per segment, parts one after the other), the same files tools/build-splash-model.mjs wrote for the derailleur.
+// 6 numbers per segment, parts one after the other), the same files tools/app/build-splash-model.mjs wrote for the derailleur.
 //
 // Z is up on the splash. This engine's file is already Z-up (its V opens towards +Z, the crankshaft runs along Y), so it is only
 // centred, set on z = 0 and scaled to about 150 units across.
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import * as THREE from '../app/vendor/three/build/three.core.js';
+import * as THREE from '../../app/vendor/three/build/three.core.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const file = process.argv[2];
-if (!file) { console.error('usage: node tools/build-splash-glb.mjs <model.glb> [parts] [segments]'); process.exit(1); }
+if (!file) { console.error('usage: node tools/app/build-splash-glb.mjs <model.glb> [parts] [segments]'); process.exit(1); }
 const K = +process.argv[3] || 48, BUDGET = +process.argv[4] || 22000;
 const ANGLE = 30;
 const SKIP = new RegExp(process.env.SKIP || 'chain', 'i');      // nodes (and what hangs under them) whose name matches are left out: the chain links glow far too much, small and crowded as they are                                       // degrees between faces for an edge
@@ -122,7 +122,7 @@ const lo = all.min.toArray(), sz = all.getSize(new THREE.Vector3()).toArray();
 const out = new Int16Array(total * 6);
 let w = 0;
 for (const keep of chunks) for (let i = 0; i < keep.length; i++) out[w++] = Math.round(((keep[i] - lo[i % 3]) / sz[i % 3]) * 65535 - 32768);
-const dir = path.join(here, '..', 'app', 'assets');
+const dir = path.join(here, '..', '..', 'app', 'assets');
 fs.writeFileSync(path.join(dir, 'splash-model.bin'), Buffer.from(out.buffer));
 fs.writeFileSync(path.join(dir, 'splash-model.json'), JSON.stringify({ min: lo.map(n => +n.toFixed(3)), span: sz.map(n => +n.toFixed(3)), segments: total, meshes: meshes.length, parts }));
 console.log(parts.length + ' parts, ' + total + ' segments, ' + (out.byteLength / 1024).toFixed(0) + ' KB, box ' + sz.map(n => n.toFixed(0)).join(' x '));

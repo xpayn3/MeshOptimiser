@@ -1,7 +1,7 @@
 // node tests/e2e-update.mjs [shots folder]
 //
 // The in-app updater, whole: a copy of this app in a temp folder (version 0.21.0), a "0.22.0" release built from it with
-// tools/build-update.py, a feed for it on 127.0.0.1, and headless Chrome on the copy. It checks the corner card, Settings ›
+// tools/app/build-update.py, a feed for it on 127.0.0.1, and headless Chrome on the copy. It checks the corner card, Settings ›
 // Updates (switches, skip, later, channel), an update that restarts the server and reloads the page, the notice afterwards,
 // the way back, the unsaved-changes question, and a feed whose checksum is wrong. Nothing here touches the real app folder or
 // the server you may have open on 4242. Needs Chrome, Python and Node 22+.
@@ -36,7 +36,7 @@ let html = fs.readFileSync(path.join(B, 'app', 'index.html'), 'utf8'); html = ht
 fs.writeFileSync(path.join(B, 'CHANGELOG.md'), '# Changelog\n\n## v0.22.0\n\nReleased 20 Oct 2026.\n\n- ![new][new] **Test feature one.** Something.\n- ![fix][fix] **Test fix two.** Something else.\n');
 const git = (args) => spawnSync('git', args, { cwd: B, encoding: 'utf8' });
 git(['init', '-q']); git(['add', '-A']);
-const bu = spawnSync('python', ['tools/build-update.py', '--out', 'dist', '--url-base', `http://127.0.0.1:${FEED}/`, '--headline', 'Two things for the test.'], { cwd: B, encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+const bu = spawnSync('python', ['tools/app/build-update.py', '--out', 'dist', '--url-base', `http://127.0.0.1:${FEED}/`, '--headline', 'Two things for the test.'], { cwd: B, encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
 console.log((bu.stdout || '') + (bu.stderr || ''));
 check('build-update.py builds the archive and the feed', bu.status === 0 && fs.existsSync(path.join(D, 'latest.json')), bu.stderr);
 const feed0 = JSON.parse(fs.readFileSync(path.join(D, 'latest.json'), 'utf8'));

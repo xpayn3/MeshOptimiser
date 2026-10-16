@@ -3,8 +3,8 @@
 // The bracket stays where it is, in the middle of the picture, and the pin, the retaining ring, the
 // bolts and the washers fly out of it. The parts flash the accent blue (--ac) for an instant as they break away.
 //
-//   node tools/render-split-clip.mjs                  renders the clip and the poster
-//   node tools/render-split-clip.mjs --still=0.4      one frame at t = 0.4 as tools/still.png (to look at)
+//   node tools/app/render-split-clip.mjs                  renders the clip and the poster
+//   node tools/app/render-split-clip.mjs --still=0.4      one frame at t = 0.4 as tools/still.png (to look at)
 //
 // ffmpeg must be on the PATH, or named in FFMPEG. The drawing is in clip-kit.mjs.
 import { T, BEV, rrect, hole, slot, ext, inYZ, inXZ, lathe, alongX, alongZ, merge, prepare, smooth, run } from './clip-kit.mjs';

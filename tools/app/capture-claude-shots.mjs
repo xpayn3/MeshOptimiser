@@ -1,4 +1,4 @@
-// node tools/capture-claude-shots.mjs <folder> [model, default inbox/GearboxAssy.glb]
+// node tools/app/capture-claude-shots.mjs <folder> [model, default inbox/GearboxAssy.glb]
 //
 // Takes the three pictures of the Claude feature that the website shows (Settings > Claude, the top-bar badge with its dropdown, and the
 // Allow / Don't allow prompt over the model), as 2400 x 1350 PNG (1920 x 1080 at 1.25), by driving the real app in headless Chrome on a server of its own (port 4343).
@@ -8,7 +8,7 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 const CH = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const OUT = process.argv[2]; if (!OUT) { console.log('usage: node tools/capture-claude-shots.mjs <folder> [model]'); process.exit(2); }
+const OUT = process.argv[2]; if (!OUT) { console.log('usage: node tools/app/capture-claude-shots.mjs <folder> [model]'); process.exit(2); }
 const MODEL = process.argv[3] || 'inbox/GearboxAssy.glb';
 const APP = 4343, DBG = 9377, PROFILE = (process.env.TEMP || '.') + '/cdp-profile-shots-' + Date.now();
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));

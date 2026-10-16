@@ -1,4 +1,4 @@
-// node tools/build-splash-art.mjs — draws the little clip on the splash screen (index.html) as inline SVG.
+// node tools/app/build-splash-art.mjs — draws the little clip on the splash screen (index.html) as inline SVG.
 //
 // An isometric cube in two states that the CSS (index.html, "Start-up") fades between: a dense wireframe, and the
 // same cube as six flat triangles in the CAD view's colours. The markup between the splash-art markers is replaced.
@@ -37,7 +37,7 @@ const svg = `<svg class="splash-clip" viewBox="-44 -44 88 88" width="132" height
       <g class="sp-dense"><path d="${['top', 'left', 'right'].map(k => dense(face[k])).join('')}"/></g>
     </svg>`;
 
-const file = new URL('../app/index.html', import.meta.url);
+const file = new URL('../../app/index.html', import.meta.url);
 let html = fs.readFileSync(file, 'utf8');
 const wrapped = `<!-- splash-art -->\n    ${svg}\n    <!-- /splash-art -->`;
 if (html.includes('<!-- splash-art -->')) html = html.replace(/<!-- splash-art -->[\s\S]*?<!-- \/splash-art -->/, () => wrapped);

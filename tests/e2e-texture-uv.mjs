@@ -75,7 +75,7 @@ try {
     const m = window.state.parts[0].mesh.material; m.map = tex; m.color.set(0xffffff); m.needsUpdate = true; return true; })()`);
   await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: 700, y: 450, deltaX: 0, deltaY: 5 }); await sleep(2500);   // (the view draws on demand: a small zoom asks for a frame, as the material editor's own requestRender does)
   const shot = await send('Page.captureScreenshot', { format: 'png' });
-  (await import('fs')).writeFileSync(process.env.SHOT || 'texture-uv.png', Buffer.from(shot.data, 'base64'));
+  (await import('fs')).writeFileSync(process.env.SHOT || 'scratch/texture-uv.png', Buffer.from(shot.data, 'base64'));
   console.log('screenshot saved');
   await evalJS("window.__moResetScene()"); await sleep(2500);
   await load(false);

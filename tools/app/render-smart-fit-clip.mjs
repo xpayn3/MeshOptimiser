@@ -4,8 +4,8 @@
 // after another each turns the accent blue and is swapped for the plain shape that fits it (a disc, a box, a
 // cylinder), and then they are swapped back.
 //
-//   node tools/render-smart-fit-clip.mjs               renders the clip and the poster
-//   node tools/render-smart-fit-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
+//   node tools/app/render-smart-fit-clip.mjs               renders the clip and the poster
+//   node tools/app/render-smart-fit-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
 //
 // ffmpeg must be on the PATH, or named in FFMPEG. The drawing is in clip-kit.mjs.
 import { T, rrect, hole, ext, inXZ, lathe, alongX, merge, prepare, smooth, gearGeometry, hexBolt, BEV, run } from './clip-kit.mjs';

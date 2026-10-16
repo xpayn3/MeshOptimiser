@@ -6,8 +6,8 @@
 // ring) turn the accent blue, and the clip lets go again. The gears turn the whole time, so it
 // loops: each one advances a whole number of teeth that is a multiple of its lightening-hole pattern.
 //
-//   node tools/render-select-hidden-clip.mjs               renders the clip and the poster
-//   node tools/render-select-hidden-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
+//   node tools/app/render-select-hidden-clip.mjs               renders the clip and the poster
+//   node tools/app/render-select-hidden-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
 //
 // ffmpeg must be on the PATH, or named in FFMPEG. The drawing is in clip-kit.mjs.
 import { T, rrect, hole, ext, lathe, alongZ, merge, prepare, smooth, gearGeometry, run } from './clip-kit.mjs';

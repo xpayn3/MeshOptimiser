@@ -281,7 +281,8 @@ app/                      the program (everything below runs from here; .venv, i
  ├── assets/, knowledge/  pictures, help clips; the docs Claude reads over MCP
  └── step2glb.{bat,command}   headless converters
 tests/                    node and python suites; selftest.js is the in-app suite (?selftest)
-tools/                    build scripts (help, knowledge base, update archive, release zip)
+tools/app/                build scripts for the app (help, knowledge base, update archive, release zip, clips, splash)
+tools/site/               build scripts for the website (see site/)
 docs/, site/, CHANGELOG.md   not part of the download
 ```
 

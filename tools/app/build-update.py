@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the in-app update for a release: the archive of the app's own files and its entry in latest.json.
 
-    python tools/build-update.py                       # version from the top of CHANGELOG.md, channel stable
-    python tools/build-update.py --version 0.22.0 --channel beta
-    python tools/build-update.py --feed path/to/old-latest.json --out dist
+    python tools/app/build-update.py                       # version from the top of CHANGELOG.md, channel stable
+    python tools/app/build-update.py --version 0.22.0 --channel beta
+    python tools/app/build-update.py --feed path/to/old-latest.json --out dist
 
 Writes, into --out (default dist/):
     meshoptimiser-app-<version>.zip   the files the running app is made of, plus update-manifest.json (a SHA-256 for each)
@@ -25,7 +25,7 @@ from __future__ import annotations
 import argparse, hashlib, json, re, subprocess, sys, time, zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent           # the repository: CHANGELOG.md, tools/, tests/ ...
+ROOT = Path(__file__).resolve().parent.parent.parent           # the repository: CHANGELOG.md, tools/, tests/ ...
 APP = ROOT / "app"                                       # the program, and what the updater replaces: paths in the archive are relative to it
 sys.path.insert(0, str(APP))
 import updater                                                    # (PROTECTED and LAUNCHERS live there, once)

@@ -4,8 +4,8 @@
 // round cut-out with a boss, and a grid of vent holes. Each hole is closed by a patch that grows from its
 // middle in the accent blue and settles into the surface, left to right; then they open again.
 //
-//   node tools/render-fill-holes-clip.mjs               renders the clip and the poster
-//   node tools/render-fill-holes-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
+//   node tools/app/render-fill-holes-clip.mjs               renders the clip and the poster
+//   node tools/app/render-fill-holes-clip.mjs --still=0.5   one frame at t = 0.5 as tools/still.png (to look at)
 //
 // ffmpeg must be on the PATH, or named in FFMPEG. The drawing is in clip-kit.mjs.
 import { T, rrect, ext, merge, prepare, smooth, hole, run } from './clip-kit.mjs';

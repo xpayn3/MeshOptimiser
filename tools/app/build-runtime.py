@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build runtime/: a ready Python with every dependency installed, to be packed into the Windows download.
 
-    python tools/build-runtime.py                       # uses ./.venv (the environment start.bat made) and the Python it was made from
-    python tools/build-runtime.py --venv C:/path/.venv  # another environment
-    python tools/build-runtime.py --slim                # also leave out what the app never imports (matplotlib and its fonts: a few tens of MB)
+    python tools/app/build-runtime.py                       # uses ./.venv (the environment start.bat made) and the Python it was made from
+    python tools/app/build-runtime.py --venv C:/path/.venv  # another environment
+    python tools/app/build-runtime.py --slim                # also leave out what the app never imports (matplotlib and its fonts: a few tens of MB)
 
 Why: the first start used to make a virtual environment and download about 600 MB with pip (cadquery-ocp pulls in vtk and more), which
 fails on slow, filtered or offline PCs, and needs Python 3.10 - 3.12 on the PC first. With app/runtime/ in the zip, start.bat finds
@@ -14,13 +14,13 @@ requirements.txt) copied from a Python that is already on this PC and from the e
 downloaded. runtime/MANIFEST.json says which Python, which packages and which requirements.txt it was built for (start.bat and the
 updater compare that with requirements.txt). It is checked at the end by importing the three libraries and converting a STEP file.
 
-app/runtime/ is a build product (git ignores it). tools/build-package.py --with-runtime packs it into MeshOptimiser-v<version>-windows.zip.
+app/runtime/ is a build product (git ignores it). tools/app/build-package.py --with-runtime packs it into MeshOptimiser-v<version>-windows.zip.
 """
 from __future__ import annotations
 import argparse, hashlib, json, os, shutil, subprocess, sys, time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 APP = ROOT / "app"
 SKIP_LIB = {"test", "tests", "idlelib", "tkinter", "turtledemo", "lib2to3", "__pycache__", "site-packages", "ensurepip"}
 SLIM_PACKAGES = ("matplotlib", "mpl_toolkits", "pylab.py", "fontTools", "contourpy", "kiwisolver", "cycler", "pyparsing", "dateutil")
