@@ -77,8 +77,7 @@ try {
   await sleep(1800);
   check('split: the app chrome is gone (top bar, sidebars, status bar, viewport tools)', await evalJS("['tb','sidebar-left','sidebar-right','sb','vp-overlay'].every(i => getComputedStyle(document.getElementById(i)).display === 'none')"));
   check('split: the viewport card fills the rest of the window', await evalJS("(() => { const r = document.getElementById('viewport').getBoundingClientRect(), f = document.getElementById('claude-feed').getBoundingClientRect(); return r.left > f.right && r.left - f.right < 24 && innerWidth - r.right < 24 && r.top < 24 && innerHeight - r.bottom < 24; })()"));
-  const st = await evalJS("document.getElementById('cf-stats').textContent");
-  check('split: basic stats sit in the top right', /parts/.test(st) && /tris/.test(st) && /verts/.test(st) && await evalJS("(() => { const r = document.getElementById('cf-stats').getBoundingClientRect(); return r.top < 60 && r.right > innerWidth - 60; })()"), st);
+  await sleep(700); check('split: the Properties card floats at the bottom right of the viewport', await evalJS("(() => { const c = document.getElementById('cf-props'), r = c.getBoundingClientRect(); return /Properties/.test(c.textContent) && /Parts/.test(c.textContent) && r.bottom > innerHeight - 40 && r.right > innerWidth - 40; })()"));
   await evalJS("document.getElementById('cf-set').click()"); await sleep(600);
   check('Settings opens above the feed', await evalJS("(() => { const m = document.getElementById('settings-modal'); if (!m || !m.classList.contains('show')) return false; const r = m.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2).closest('#settings-modal') !== null; })()"));
   await evalJS("document.getElementById('settings-close')?.click()"); await sleep(400);

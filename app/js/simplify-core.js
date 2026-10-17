@@ -103,6 +103,9 @@ export function lockSharp(an, deg) {
 // `attrs` is what packAttributes returned, or null.
 //
 // Tried in order, the first that gets within 25% of the target wins:
+//   0. sharp edges locked (opts.sharp), when that still reaches the target: kept only when its own error estimate is not clearly
+//      worse than the plain run's (measured on a real part: the locked vertices can make the rest of the surface drift five times
+//      further, 25 mm against 4.5 mm at 10 %), so the plain rungs below are always run as well and the two are compared;
 //   1. attribute-aware, borders locked   (keeps creases, UV seams and colours)
 //   2. positions only, borders locked    (outlines don't creep)
 //   3. positions only, borders free      (a mesh that is mostly border)
@@ -115,8 +118,10 @@ export function lockSharp(an, deg) {
 export function reduceIndex(S, sub, positions, target, attrs, opts) {
   const scale = S.getScale(positions, 3) || 1;
   const near = (r) => r.idx.length <= target * 1.25;
-  let best = null;
+  let best = null, sharpR = null;
   const keep = (idx, rel) => { const r = { idx, err: rel * scale }; if (!best || r.idx.length < best.idx.length) best = r; return r; };
+  // the sharp-edge result against a plain one that also reached the target: the lock wins unless it costs clearly more elsewhere
+  const pick = (r) => (sharpR && sharpR.err <= r.err * 1.5) ? sharpR : r;
 
   // 0. sharp edges first, when asked for (opts.sharp is an angle in degrees): the vertices on them are locked. It only counts if
   //    the target is still reached with them locked, so a part made of nothing but hard edges falls through to the paths below
@@ -133,23 +138,26 @@ export function reduceIndex(S, sub, positions, target, attrs, opts) {
         if (lock.count > (opts.maxShare > 0 ? opts.maxShare : 0.08) * (positions.length / 3)) continue;
         const [idx, rel] = S.simplifyWithAttributes(sub, positions, 3, a.data, a.stride, a.weights, lock.flags, target, 1.0, ['LockBorder']);
         const r = keep(idx, rel);
-        if (near(r)) { r.sharpKept = lock.count; return r; }
+        if (near(r)) { r.sharpKept = lock.count; sharpR = r; break; }
       }
     } catch (_) { /* fall through to the usual paths */ }
   }
   if (attrs && S.simplifyWithAttributes && S.useExperimentalFeatures) {
     try {
       const [idx, rel] = S.simplifyWithAttributes(sub, positions, 3, attrs.data, attrs.stride, attrs.weights, null, target, 1.0, ['LockBorder']);
-      if (near(keep(idx, rel))) return best;
+      const r = keep(idx, rel);
+      if (near(r)) return pick(r);
     } catch (_) { /* an older build, or the data did not fit: fall through to the plain path */ }
   }
   {
     const [idx, rel] = S.simplify(sub, positions, 3, target, 1.0, ['LockBorder']);
-    if (near(keep(idx, rel))) return best;
+    const r = keep(idx, rel);
+    if (near(r)) return pick(r);
   }
   {
     const [idx, rel] = S.simplify(sub, positions, 3, target, 1.0);
-    keep(idx, rel);
+    const r = keep(idx, rel);
+    if (near(r)) return pick(r);
   }
-  return best;
+  return sharpR || best;
 }

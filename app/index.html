@@ -200,6 +200,7 @@
   /* Inter ships with the app (vendor/inter), so the interface looks the same
      on every machine; the system fonts are only a fallback while it loads. */
   --font-sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:ui-monospace,'Cascadia Mono','SF Mono',Menlo,Consolas,monospace;
 
   /* Font weights */
   /* No bold in the interface: labels, buttons and menu items are regular;
@@ -256,6 +257,27 @@
 
   /* Z-index scale */
   --z-sticky:50;
+  /* The layers that were typed in as numbers, named (2026-10-17): each keeps the number it had, so the parts stack as before. Lowest first.
+     Under 10, and inside the animation dock (12, 20), a number is the stacking within one component and stays a number. */
+  --z-bar:10;                         /* #tb, the top bar */
+  --z-drop:30;                        /* #vp-drop, the drop target over the view */
+  --z-vp-pop:60;                      /* #vp-settings-pop, #vp-brep-pop: small popovers over the view (their tip one above) */
+  --z-menu:80;                        /* .export-menu under Export */
+  --z-window:100;                     /* .dlg-popup, #loader, and the layer app.js hands the floating windows (WIN_LAYER) */
+  --z-brush-ring:149;                 /* the paint-select ring (app.js), just under the marquee */
+  --z-marquee:150;                    /* #marquee-box */
+  --z-bar-open:190;                   /* #tb while one of its menus is open: over the view's pills */
+  --z-toast:250;                      /* .toasts */
+  --z-dialog:300;                     /* .dlg-bg, the dialogs that ask; #ctx-menu stands with them */
+  --z-wand:330;                       /* #quick-wand */
+  --z-colour-picker:400;              /* .cp-pop (app.js) */
+  --z-quick-wheel:450;                /* #qc-wheel (app.js) */
+  --z-token-pop:600;                  /* .brn-token-pop in Batch rename */
+  --z-claude:900;                     /* #claude-pop */
+  --z-quick-ring:9000;                /* .qr (app.js) */
+  --z-recover:9500;                   /* #mo-recover, the recovery card */
+  --z-confirm:99999;                  /* .cq-bg, the sheet that asks to allow a change */
+  --z-max:2147483000;                 /* the iframe of a scene tab, over everything of the page that holds it (app.js, tabs: spawn) */
   --z-toolbar:90;
   --z-overlay:200;
   --z-modal:500;
@@ -348,7 +370,7 @@ body.resizing{cursor:col-resize !important;user-select:none}
 body.resizing *{cursor:col-resize !important}
 
 /* Toolbar */
-#tb{grid-column:1/-1;display:flex;align-items:center;padding:0 var(--space-xl);gap:var(--space-sm);background:var(--bg);border-bottom:1px solid var(--bd);z-index:10}
+#tb{grid-column:1/-1;display:flex;align-items:center;padding:0 var(--space-xl);gap:var(--space-sm);background:var(--bg);border-bottom:1px solid var(--bd);z-index:var(--z-bar)}
 .brand{display:flex;align-items:center;gap:var(--space-md);position:relative}
 .brand-mark{position:relative;display:grid;place-items:center}
 /* Brand button — replaces the app-name text. Click to open the brand-menu
@@ -745,7 +767,7 @@ input[type=range]:disabled{opacity:var(--op-4)}
 
 /* Marquee (rubber-band) selection box drawn over the viewport while the user
    shift- or ctrl-drags. Display toggled via JS by adding/removing .active. */
-#marquee-box{position:fixed;pointer-events:none;z-index:150;display:none}
+#marquee-box{position:fixed;pointer-events:none;z-index:var(--z-marquee);display:none}
 #marquee-box.active{display:block}
 
 /* Slider — plain native <input type="range"> with a label/value header above.
@@ -1030,7 +1052,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .tbtn .caret,.brand-caret{width:10px;height:10px;margin-left:var(--space-5);opacity:1;background:var(--select-arrow) center/10px 10px no-repeat}
 .brand-caret{margin-left:0}
 :is(.tbtn .caret>*,.brand-caret>*,#_a#_b){display:none}
-.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;z-index:80;visibility:hidden;pointer-events:none}
+.export-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:240px;z-index:var(--z-menu);visibility:hidden;pointer-events:none}
 .export-menu.show{visibility:visible;pointer-events:auto;animation:var(--menu-in)}
 .export-menu-item{all:unset;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none}
 .export-menu-item .hint{color:var(--tx3);font-weight:var(--fw-regular)}
@@ -1038,7 +1060,7 @@ body.msr-mode #canvas{cursor:crosshair}
 /* The viewport settings popover is never shown now: its controls are moved
    into the Settings window the first time that opens (app.js, _Settings).
    Until then they wait here, laid out but unseen. */
-#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;padding:0;z-index:60;opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity var(--dur-160) var(--ease-out),transform var(--dur-160) var(--ease-out),visibility 0s linear var(--dur-160);max-height:calc(100vh - 100px);overflow-y:auto}
+#vp-settings-pop{position:absolute;top:0;right:44px;width:280px;padding:0;z-index:var(--z-vp-pop);opacity:0;visibility:hidden;transform:translateY(-4px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity var(--dur-160) var(--ease-out),transform var(--dur-160) var(--ease-out),visibility 0s linear var(--dur-160);max-height:calc(100vh - 100px);overflow-y:auto}
 
 /* Materials: a grid of preview spheres. Each cell is a rendered sphere
    showing the material on a neutral checkerboard; double-click opens the
@@ -1312,7 +1334,7 @@ body.msr-mode #canvas{cursor:crosshair}
    for every draggable popup (material editor, advanced flatten, batch
    rename, etc.) — card/header/resize-handles/footer. Per-popup CSS lives
    in its own block, keyed off the popup's id wrapper. */
-.dlg-popup{position:fixed;inset:0;display:none;z-index:100;pointer-events:none}      /* (100: under the modal windows, see "Floating windows are the lowest layer") */
+.dlg-popup{position:fixed;inset:0;display:none;z-index:var(--z-window);pointer-events:none}      /* (100: under the modal windows, see "Floating windows are the lowest layer") */
 .dlg-popup.show{display:block}
 .dlg-popup .dlg-pop{position:absolute;max-width:calc(100vw - 24px);max-height:calc(100vh - 24px);display:flex;flex-direction:column;overflow:hidden;pointer-events:auto;transform:translateY(-8px) scale(.97);opacity:0;transition:transform var(--dur-slow) cubic-bezier(.2,.9,.3,1.1),opacity var(--dur-160) ease}
 .dlg-popup.show .dlg-pop{transform:translateY(0) scale(1);opacity:1}
@@ -1429,7 +1451,7 @@ body.msr-mode #canvas{cursor:crosshair}
 .brn-collapsible.open .chev::before{transform:translateY(-1px) rotate(45deg)}
 .brn-collapsible-b{display:none;padding:var(--space-lg) var(--space-xl) var(--space-xl) var(--space-xl);border-top:1px solid var(--s3);flex-direction:column;gap:var(--space-md)}
 .brn-collapsible.open .brn-collapsible-b{display:flex}
-.brn-token-pop{position:absolute;padding:var(--space-xs);z-index:600;display:none;max-height:280px;overflow:auto;min-width:280px}
+.brn-token-pop{position:absolute;padding:var(--space-xs);z-index:var(--z-token-pop);display:none;max-height:280px;overflow:auto;min-width:280px}
 .brn-token-pop.show{display:block}
 .brn-token-item{padding:var(--space-sm) var(--space-lg);border-radius:var(--r-sm);cursor:pointer;display:flex;justify-content:space-between;gap:var(--space-2xl);align-items:center;font-family:var(--font-sans);font-size:var(--fs-12);color:var(--tx)}
 .brn-token-item:hover,.brn-token-item.active{background:var(--ac-soft)}
@@ -1495,15 +1517,15 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .sc-kb-row.is-fn{height:calc(var(--u) * .8);margin-bottom:calc(var(--u) * .3)}
 /* a key cap: its face, and a darker edge under it; a pressed cap sinks onto the edge */
 .sc-key{box-sizing:border-box;flex:none;display:flex;flex-direction:column;justify-content:space-between;width:calc(var(--u) * var(--w,1) - 4px);height:calc(100% - 4px);margin:var(--space-2xs);padding:var(--space-5) var(--space-5) var(--space-7);overflow:hidden;
-  border-radius:var(--r-sm);background:#222224;box-shadow:inset 0 -3px 0 var(--blk-40),inset 0 0 0 1px var(--wht-4);color:var(--tx3);
+  border-radius:var(--r-sm);background:var(--bg3);box-shadow:inset 0 -3px 0 var(--blk-40),inset 0 0 0 1px var(--wht-4);color:var(--tx3);
   transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),box-shadow var(--dur-fast) var(--ease-out),transform var(--dur-instant) var(--ease-out)}
 .sc-key.is-gap{visibility:hidden}
 .sc-key i{font-style:normal;font-size:var(--fs-11);line-height:var(--lh-none);white-space:nowrap}
 .sc-key em{font-style:normal;font-size:9.5px;line-height:1.15;color:var(--tx-control);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-key:not(.is-inert,.is-gap){cursor:pointer}
-.sc-key:not(.is-inert,.is-gap,.is-held,.has):hover{background:#2a2a2d}
-.sc-key.has{background:#3a3a3e;color:var(--tx-control-hover)}
-.sc-key.has:hover{background:#444448}
+.sc-key:not(.is-inert,.is-gap,.is-held,.has):hover{background:var(--bg4)}
+.sc-key.has{background:color-mix(in srgb,var(--bg4),var(--white) 7%);color:var(--tx-control-hover)}
+.sc-key.has:hover{background:color-mix(in srgb,var(--bg4),var(--white) 13%)}
 .sc-key.is-mod{color:var(--tx-control)}
 .sc-key.is-held{background:var(--ac);color:var(--white,#fff);padding-top:var(--space-sm);box-shadow:inset 0 -1px 0 var(--blk-30)}
 .sc-key.is-down{padding-top:var(--space-sm);box-shadow:inset 0 -1px 0 var(--blk-40),inset 0 0 0 1.5px var(--ac)}
@@ -1522,8 +1544,8 @@ body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
 .sc-colour [data-cat="controls"]{--sc-c:var(--cat-controls)}
 .sc-colour [data-cat="tool"]{--sc-c:var(--cat-tool)}
 .sc-colour .sc-row-icon,.sc-colour .sc-group-h svg{color:var(--sc-c,var(--cat-app))}
-.sc-colour .sc-key.has[data-cat]{background:color-mix(in srgb,var(--sc-c) 26%,#2a2a2e);box-shadow:inset 0 -3px 0 var(--blk-40),inset 0 0 0 1px color-mix(in srgb,var(--sc-c) 40%,transparent)}
-.sc-colour .sc-key.has[data-cat]:hover{background:color-mix(in srgb,var(--sc-c) 38%,#2a2a2e)}
+.sc-colour .sc-key.has[data-cat]{background:color-mix(in srgb,var(--sc-c) 26%,var(--bg4));box-shadow:inset 0 -3px 0 var(--blk-40),inset 0 0 0 1px color-mix(in srgb,var(--sc-c) 40%,transparent)}
+.sc-colour .sc-key.has[data-cat]:hover{background:color-mix(in srgb,var(--sc-c) 38%,var(--bg4))}
 .sc-colour .sc-key.has[data-cat] em{color:color-mix(in srgb,var(--sc-c) 55%,#fff)}
 .sc-mouse{display:flex;flex-wrap:wrap;align-items:center;align-content:flex-start;gap:var(--space-md) 18px;height:52px;overflow:hidden;color:var(--tx2);font-size:var(--fs-sm)}
 .sc-mouse>svg{width:var(--icon-sm);height:var(--icon-sm);flex:none;color:var(--tx3)}
@@ -1640,7 +1662,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 @media (prefers-reduced-motion:reduce){.ld-step.is-active .ld-dot{animation-duration:2s}}
 /* Loader */
 /* the progress card of an import into a scene that is already open: it dims the viewport it sits in (the loader is inside the viewport's panel), not the whole app */
-#loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 62%,transparent);z-index:100}
+#loader{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bg) 62%,transparent);z-index:var(--z-window)}
 #loader.show{display:flex}
 .loader-card{width:600px;max-width:92vw;padding:var(--space-4xl) 22px 18px}
 .loader-head{display:flex;align-items:center;gap:var(--space-2xl)}
@@ -1737,7 +1759,7 @@ button.sc-row-keys:hover{background:var(--s5)}
    so the styles live in this stylesheet like every other modal. Reads
    identical at runtime; raw rgba/hex literals preserved for now (a token
    sweep is a follow-up cleanup, not this one). */
-.dlg-bg{position:fixed;inset:0;background:transparent;display:none;place-items:center;z-index:300;opacity:0;transition:opacity var(--dur-180) ease}
+.dlg-bg{position:fixed;inset:0;background:transparent;display:none;place-items:center;z-index:var(--z-dialog);opacity:0;transition:opacity var(--dur-180) ease}
 .dlg-bg.show{display:grid;opacity:1}
 .dlg-card{width:min(420px,calc(100vw - 32px));overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform var(--dur-slow) cubic-bezier(.2,.8,.3,1),opacity var(--dur-180) ease}
 .dlg-bg.show .dlg-card{transform:translateY(0) scale(1);opacity:1}
@@ -1897,7 +1919,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 #export-modal #exp-share-btn{display:inline-grid;place-items:center;box-sizing:border-box;width:38px;min-width:38px;height:38px;min-height:0;padding:0;border-radius:50%}
 #export-modal #exp-share-btn svg,#export-modal #exp-share-btn i{width:16px;height:16px}
 #export-modal #exp-share-btn:active{transform:scale(.94)}
-.exp-share-menu{position:absolute;right:0;bottom:calc(100% + 6px);min-width:190px;padding:4px;background:var(--panel,#1c1c1c);border:1px solid var(--line,rgba(255,255,255,.12));border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:5}
+.exp-share-menu{position:absolute;right:0;bottom:calc(100% + 6px);min-width:190px;padding:4px;background:var(--surface-pop);border:1px solid var(--bd);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:5}
 .exp-share-menu[hidden]{display:none}
 .exp-share-menu button{display:flex;justify-content:space-between;align-items:center;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer;text-align:left}
 .exp-share-menu button:hover,.exp-share-menu button:focus-visible{background:rgba(255,255,255,.08);outline:none}
@@ -1922,7 +1944,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .fmt-compat .muted{color:var(--tx3);font-style:italic;font-size:var(--fs-11)}
 
 /* Toast — top-center compact pill, dark glassmorphism */
-.toasts{position:fixed;top:56px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:var(--space-5);z-index:250;pointer-events:none;align-items:center;max-width:90vw}
+.toasts{position:fixed;top:56px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:var(--space-5);z-index:var(--z-toast);pointer-events:none;align-items:center;max-width:90vw}
 /* Toasts use CSS transitions keyed on data-state so a stack of rapidly-added
    toasts can animate smoothly — keyframes restart from zero on each insert
    and would jank under load. JS toggles data-state="enter" → "open" → "exit". */
@@ -2427,7 +2449,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .plan-sub{color:var(--tx3);font-size:var(--fs-11)}
 .plan-table td:first-child{max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Drop a file on the viewport */
-#vp-drop{position:absolute;inset:8px;z-index:30;display:grid;place-items:center;border:1.5px dashed var(--ac);border-radius:var(--r-2xl);background:color-mix(in srgb,var(--ac) 10%,rgba(12,12,12,.72));pointer-events:none}
+#vp-drop{position:absolute;inset:8px;z-index:var(--z-drop);display:grid;place-items:center;border:1.5px dashed var(--ac);border-radius:var(--r-2xl);background:color-mix(in srgb,var(--ac) 10%,rgba(12,12,12,.72));pointer-events:none}
 #vp-drop[hidden]{display:none}
 .vp-drop-card{display:flex;flex-direction:column;align-items:center;gap:var(--space-sm);text-align:center;color:var(--tx)}
 .vp-drop-card svg{width:28px;height:28px;stroke:var(--ac);stroke-width:1.6;fill:none;margin-bottom:var(--space-xs)}
@@ -2534,7 +2556,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .lib-sec:first-child>.lib-shelf{padding-top:var(--space-xl)}
 .lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:var(--space-md)}
 /* A tile: the part's studio picture on a soft spot of light, its name under it. */
-.lib-item{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;border:0;border-radius:var(--r-lg);overflow:hidden;background:#1d1d1f;box-shadow:0 0 0 1px var(--s3);color:var(--tx2);font:inherit;text-align:center;cursor:grab;transition:box-shadow var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
+.lib-item{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:0;padding:0;border:0;border-radius:var(--r-lg);overflow:hidden;background:var(--bg2);box-shadow:0 0 0 1px var(--s3);color:var(--tx2);font:inherit;text-align:center;cursor:grab;transition:box-shadow var(--dur-fast) var(--ease-out),transform var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .lib-item:hover{color:var(--white);background:var(--ac);box-shadow:0 0 0 1px var(--s6),0 4px 12px var(--blk-50)}
 .lib-item:active{cursor:grabbing;transform:scale(.97)}
 .lib-item[hidden],.lib-sec[hidden],.lib-empty[hidden]{display:none}
@@ -2916,7 +2938,7 @@ html.is-scrubbing,html.is-scrubbing *{cursor:ew-resize!important;user-select:non
 
 /* Materials dock: drag the top edge for height, the inspector's edge for its
    width. */
-#vp-materials-pop.mat-dock{height:min(var(--mat-dock-h),80vh);--mat-dock-bg:#1a1a1a;background:var(--mat-dock-bg);}
+#vp-materials-pop.mat-dock{height:min(var(--mat-dock-h),80vh);--mat-dock-bg:var(--bg2);background:var(--mat-dock-bg);}
 body.mat-dock-open .vpc.tr{bottom:calc(min(var(--mat-dock-h),80vh) + 12px)}
 body.mat-dock-open .vpc.br{bottom:calc(min(var(--mat-dock-h),80vh) + 10px)}
 .mat-inspector{flex:0 0 var(--mat-insp-w)}
@@ -3010,14 +3032,14 @@ body.cmd-dragging .vp-cmd-host{transition:none;will-change:translate}
 @media (prefers-reduced-motion:reduce){#vp-view-pill-menu .vp-pill-item:hover .vp-pill-cube,#vp-view-pill-menu .vp-pill-item:hover .vp-pill-ico{transform:none}}
 .vpc.tc #vp-mode-pills{left:0;transform:translateX(-50%)}
 .vp-pill[hidden]{display:none}
-#vp-brep-pop{position:fixed;z-index:60;width:272px;padding:var(--space-lg);border-radius:var(--r-lg);background:var(--bg3,#1c1c20);border:1px solid var(--s3);box-shadow:0 7px 18px var(--blk-40);color:var(--tx);font-size:var(--fs-md);display:flex;flex-direction:column;gap:var(--space-md)}
+#vp-brep-pop{position:fixed;z-index:var(--z-vp-pop);width:272px;padding:var(--space-lg);border-radius:var(--r-lg);background:var(--bg3,#1c1c20);border:1px solid var(--s3);box-shadow:0 7px 18px var(--blk-40);color:var(--tx);font-size:var(--fs-md);display:flex;flex-direction:column;gap:var(--space-md)}
 #vp-brep-pop[hidden]{display:none}
 #vp-brep-pop .bp-h{font-weight:var(--fw-medium)}
 #vp-brep-pop .bp-s{color:var(--tx2);font-size:var(--fs-sm);line-height:1.45}
 #vp-brep-pop label.bp-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);cursor:pointer}
 #vp-brep-pop .bp-btn{height:var(--btn-h-md);border-radius:var(--r-md);border:0;background:var(--s2);color:var(--tx);font:inherit;cursor:pointer}
 #vp-brep-pop .bp-btn:hover{background:var(--bg4)}
-#vp-brep-tip{position:fixed;z-index:61;pointer-events:none;padding:var(--space-sm) var(--space-md);border-radius:var(--r-md);background:rgba(16,16,16,.85);color:var(--tx);font-size:var(--fs-sm);line-height:1.4;white-space:nowrap}
+#vp-brep-tip{position:fixed;z-index:calc(var(--z-vp-pop) + 1);pointer-events:none;padding:var(--space-sm) var(--space-md);border-radius:var(--r-md);background:rgba(16,16,16,.85);color:var(--tx);font-size:var(--fs-sm);line-height:1.4;white-space:nowrap}
 #vp-brep-tip[hidden]{display:none}
 #vp-brep-tip b{font-weight:var(--fw-medium)}
 #vp-brep-tip i{font-style:normal;color:var(--tx2)}
@@ -3148,7 +3170,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 #ctx-menu .ctx-menu-row.is-off{opacity:.38;cursor:default}
 #ctx-menu .ctx-menu-row.is-off:hover{background:none}
 /* ── Quick wand (hold W: a ring of commands around the pointer) ─────────── */
-#quick-wand{position:fixed;inset:0;display:none;z-index:330;pointer-events:none;user-select:none;font-size:var(--fs-xs);color:var(--tx);opacity:0;transition:opacity var(--dur-instant) var(--ease-out)}
+#quick-wand{position:fixed;inset:0;display:none;z-index:var(--z-wand);pointer-events:none;user-select:none;font-size:var(--fs-xs);color:var(--tx);opacity:0;transition:opacity var(--dur-instant) var(--ease-out)}
 #quick-wand.is-in{opacity:1}
 #quick-wand .qw-ring{position:absolute;width:0;height:0;transform:scale(.88);transition:var(--tr-tf-base)}
 #quick-wand.is-in .qw-ring{transform:none}
@@ -3361,7 +3383,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-pane-b .field>input[type=range]{flex:0 0 230px;width:230px}
 .set-help{display:block;margin-top:var(--space-2xs);font-size:var(--fs-11);color:var(--tx3);line-height:var(--lh-body);white-space:normal;font-weight:var(--fw-regular)}
 /* Crash safety: one calm panel for a problem that needs a decision (see _Recover) */
-#mo-recover{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:9500;display:flex;align-items:center;gap:var(--space-3xl);max-width:min(680px,calc(100vw - 32px));padding:var(--space-2xl) var(--space-3xl);background:var(--surface-pop,#161616);border:1px solid var(--bd2);border-radius:var(--r-2xl);box-shadow:0 5px 13px var(--blk-60);font-size:var(--fs-12);color:var(--tx2)}
+#mo-recover{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:var(--z-recover);display:flex;align-items:center;gap:var(--space-3xl);max-width:min(680px,calc(100vw - 32px));padding:var(--space-2xl) var(--space-3xl);background:var(--surface-pop,#161616);border:1px solid var(--bd2);border-radius:var(--r-2xl);box-shadow:0 5px 13px var(--blk-60);font-size:var(--fs-12);color:var(--tx2)}
 #mo-recover[hidden]{display:none}
 #mo-recover .mr-text{display:flex;flex-direction:column;gap:var(--space-3);min-width:0}
 #mo-recover .mr-title{color:var(--tx);font-size:var(--fs-13,13px)}
@@ -3564,7 +3586,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #welcome-load-pane .loader-bar-fill{border-radius:inherit}
 #welcome-load-pane .loader-bar-fill::after{opacity:.5}
 #welcome-load-pane .ld-steps{margin-top:var(--space-3xl);gap:var(--space-2xs)}
-#welcome-load-pane .ld-step{min-height:30px;padding:var(--space-2) 0;font-size:var(--fs-md);gap:var(--space-lg)}
+#welcome-load-pane .ld-step{min-height:30px;padding:var(--space-xs) 0;font-size:var(--fs-md);gap:var(--space-lg)}
 #welcome-load-pane .ld-step.is-active .ld-name{font-weight:var(--fw-medium)}
 #welcome-load-pane .ld-details{margin-top:var(--space-md)}
 #welcome-load-pane .ld-details>summary{font-size:var(--fs-12)}
@@ -3839,7 +3861,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    tips, the tool pill and an open command panel ride up with it. */
 :root{--lib-dock-h:316px}
 #vp-library-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--lib-dock-h),80vh);
-  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:#1a1a1a;box-shadow:0 -8px 24px -16px var(--blk-50);
+  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:var(--bg2);box-shadow:0 -8px 24px -16px var(--blk-50);
   z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform var(--dur-200) var(--ease-out),visibility 0s linear var(--dur-200);
   font:12px/1.5 var(--font-sans)}
 #vp-library-pop.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
@@ -3869,7 +3891,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) +
 .lib-dock-body{flex:1 1 auto;min-height:0;display:flex}
 #vp-library-pop #lib-list{flex:1 1 auto;min-width:0}
 .lib-inspector{flex:0 0 var(--lib-insp-w);min-width:0;min-height:0;display:flex;gap:var(--space-2xl);padding:var(--space-xl) var(--space-2xl) var(--space-2xl);border-left:1px solid var(--surface-line);background:var(--blk-20)}
-.lib-inspector .li-view{flex:0 0 44%;min-width:0;border-radius:var(--r-lg);overflow:hidden;background:#1d1d1f;touch-action:none}
+.lib-inspector .li-view{flex:0 0 44%;min-width:0;border-radius:var(--r-lg);overflow:hidden;background:var(--bg2);touch-action:none}
 .lib-inspector .li-view canvas{display:block;width:100%;height:100%}
 .lib-inspector:is(.is-empty,.no-view) .li-view{display:none}
 .lib-inspector .li-side{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column;gap:var(--space-lg)}
@@ -4328,18 +4350,18 @@ html.no-motion *,html.no-motion *::before,html.no-motion *::after{animation-dura
    Scania V8 engine (1,295 parts, 1.7 million triangles) as 3D lines: its parts fly together, then it turns slowly while a
    band of light sweeps up it (the script after the markup, from assets/splash-model.*; tools/app/build-splash-model.mjs bakes it).
    The card is always dark, whatever the theme: it is a picture. */
-.sp-card{position:relative;width:min(720px,92vw);border-radius:28px;padding:12px;overflow:hidden;background:#19191a;box-shadow:0 24px 60px rgba(0,0,0,.45),0 2px 8px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.07);animation:sp-card-in .7s var(--ease-out) both;transition:transform .5s var(--ease-out)}
+.sp-card{position:relative;width:min(720px,92vw);border-radius:28px;padding:12px;overflow:hidden;background:var(--surface-pop);box-shadow:0 24px 60px rgba(0,0,0,.45),0 2px 8px rgba(0,0,0,.3),0 0 0 1px rgba(255,255,255,.07);animation:sp-card-in .7s var(--ease-out) both;transition:transform .5s var(--ease-out)}
 body.app-ready .sp-card{transform:scale(1.025)}
 @keyframes sp-card-in{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
-.sp-art{position:relative;aspect-ratio:2/1;overflow:hidden;border-radius:18px;background:#101010}
-.sp-art::after{content:'';position:absolute;left:0;right:0;bottom:0;height:20%;background:linear-gradient(to top,#101010,transparent);pointer-events:none}
+.sp-art{position:relative;aspect-ratio:2/1;overflow:hidden;border-radius:18px;background:var(--bg)}
+.sp-art::after{content:'';position:absolute;left:0;right:0;bottom:0;height:20%;background:linear-gradient(to top,var(--bg),transparent);pointer-events:none}
 #sp-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-.sp-info{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:30px;align-items:end;padding:26px 20px 16px;font-size:var(--fs-11);line-height:1.75;color:#a3a3a8;font-variant-numeric:tabular-nums}
+.sp-info{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:30px;align-items:end;padding:26px 20px 16px;font-size:var(--fs-11);line-height:1.75;color:var(--tx2);font-variant-numeric:tabular-nums}
 .sp-id{display:flex;align-items:center;gap:var(--space-2xl)}
 .sp-word{display:flex;flex-direction:column;line-height:1.1}
 /* the line over the name, as on the website's cards: small capitals in the quiet grey */
-.sp-word small{order:-1;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#6e6e72;margin:0 0 14px}
-.sp-word b{font-size:25px;font-weight:var(--fw-medium);letter-spacing:var(--tracking-tighter);color:#e6e6e8}
+.sp-word small{order:-1;font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);margin:0 0 14px}
+.sp-word b{font-size:25px;font-weight:var(--fw-medium);letter-spacing:var(--tracking-tighter);color:var(--tx)}
 /* the name MeshOptimiser, wherever it is shown as the name (splash, About card, welcome window), is in the website's serif */
 .sp-word b,.brand-menu-title,.wl-title{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;letter-spacing:-.005em}
 .sp-word b{font-size:46px;line-height:1}
@@ -4352,8 +4374,8 @@ body.app-ready .sp-card{transform:scale(1.025)}
 .sp-info b.sp-strong{font-weight:var(--fw-semibold);color:color-mix(in srgb,var(--white) 82%,transparent)}
 .sp-col{min-width:0}
 .sp-r{text-align:right}
-.sp-r div:nth-child(n+2){color:#6e6e72}
-#sp-status{color:#a3a3a8}
+.sp-r div:nth-child(n+2){color:var(--tx3)}
+#sp-status{color:var(--tx2)}
 .sp-r div{overflow:visible}
 .sp-col div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sp-bar{position:absolute;left:0;right:0;bottom:0;height:2px}
@@ -4453,7 +4475,7 @@ body.dock-resizing .is-float>.mat-dock-h{cursor:default}
 .dock-edge[data-dir=sw]{bottom:0;left:0;width:12px;height:12px;cursor:nesw-resize}
 /* a material dragged over another with Shift held takes that one over: the one that will go is marked like a selected one */
 /* dragging a material: its ball follows the pointer, and the pointer is hidden */
-.mat-ghost{position:fixed;left:0;top:0;z-index:100000;pointer-events:none;will-change:transform;border-radius:50%;object-fit:cover;box-shadow:0 6px 16px var(--blk-50);opacity:.95}
+.mat-ghost{position:fixed;left:0;top:0;z-index:var(--z-top);pointer-events:none;will-change:transform;border-radius:50%;object-fit:cover;box-shadow:0 6px 16px var(--blk-50);opacity:.95}
 body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
 #vp-materials-pop :is(.mat-cell,.mat-row).mat-drop-into{background:var(--ac-soft);border-color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac)}
 /* only the floating window in use keeps its hairline edge (see _winFocus in app.js) */
@@ -4574,7 +4596,7 @@ body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
 #prop-body .prop-head .prop-lock-badge.is-locked{background:var(--s4);color:var(--tx)}
 #prop-body .prop-head .prop-lock-badge.is-locked:hover{background:var(--s5)}
 /* a locked part in the tree: a small drawn lock before its name */
-.prop-lock-note{display:inline-flex;align-items:center;gap:var(--space-xs);margin-left:var(--space-md);color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-normal);letter-spacing:normal;text-transform:none;vertical-align:middle}
+.prop-lock-note{display:inline-flex;align-items:center;gap:var(--space-xs);margin-left:var(--space-md);color:var(--tx3);font-size:var(--fs-10);font-weight:var(--fw-regular);letter-spacing:normal;text-transform:none;vertical-align:middle}
 .prop-lock-note svg{width:var(--icon-xs);height:var(--icon-xs)}
 .tree-typeicon.locked,.tree-node .tree-typeicon.locked,.tree-node.selected .tree-typeicon.locked,.tree-node.ancestor-selected .tree-typeicon.locked,.prop-type-icon.locked{color:var(--icon-lock)}      /* (a locked part wears a lock instead of its type icon, in the tree and in Properties: red also on a selected row) */
 #prop-body .prop-head .prop-lock-badge.is-locked svg{color:var(--icon-lock)}
@@ -4672,7 +4694,7 @@ svg.lucide *{vector-effect:non-scaling-stroke}
 #_mat-editor-popup .mat-edit-toggle:has(input:checked){border-color:var(--bd2);color:var(--tx)}
 #_mat-editor-popup .mat-edit-toggle:has(input:focus-visible){outline:2px solid var(--ac);outline-offset:-2px}
 #_mat-editor-popup .mat-edit-toggle input{-webkit-appearance:none;appearance:none;order:1;flex:0 0 auto;position:relative;width:24px;height:14px;margin:0;border-radius:var(--r-pill);background:rgba(120,128,140,.35);cursor:pointer;outline:none;transition:background var(--dur-180) var(--ease-out)}
-#_mat-editor-popup .mat-edit-toggle input::after{content:'';position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:#e6e6e6;transition:transform var(--dur-180) var(--ease-out)}
+#_mat-editor-popup .mat-edit-toggle input::after{content:'';position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:var(--tx);transition:transform var(--dur-180) var(--ease-out)}
 #_mat-editor-popup .mat-edit-toggle input:checked{background:var(--ac)}
 #_mat-editor-popup .mat-edit-toggle input:checked::after{transform:translateX(10px);background:var(--white)}
 @media (prefers-reduced-motion:reduce){#_mat-editor-popup .mat-edit-toggle input,#_mat-editor-popup .mat-edit-toggle input::after{transition:none}}
@@ -4710,7 +4732,7 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
    modal windows (Settings, Export, Import, Help, the search: 200), toasts and the right-click menu are in front of them.
    The top bar is a layer of its own far below, so a menu that drops from it opened behind a floating window: while one
    of its menus is open, the bar comes in front of the floating windows (and stays under the modal windows). */
-#tb:has(.brand-menu.show,.export-menu.show,.export-wrap.open){z-index:190}
+#tb:has(.brand-menu.show,.export-menu.show,.export-wrap.open){z-index:var(--z-bar-open)}
 /* ── end of the floating windows' layer ── */
 
 /* Layers over the view. The toolbars, tips and command cards are one layer, under a popped-out Materials or Library window (below), and
@@ -4785,7 +4807,7 @@ input[type=checkbox],input[type=radio],input[type=range],input[type=color],input
 #vp-materials-pop#vp-materials-pop .mat-dock-h .mat-split .mat-act-arrow svg,#vp-library-pop#vp-library-pop .mat-dock-h .mat-split .mat-act-arrow svg{width:var(--icon-md);height:var(--icon-md)}
 #vp-materials-pop#vp-materials-pop .mat-dock-h .mat-split .mat-act-arrow::before,#vp-library-pop#vp-library-pop .mat-dock-h .mat-split .mat-act-arrow::before{top:var(--space-md);bottom:var(--space-md)}
 /* The ask-before-quitting / reloading window (_confirmQuitDialog): the loss on the left, Cancel and Save together on the right */
-.cq-bg{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--blk-70)}
+.cq-bg{position:fixed;inset:0;z-index:var(--z-confirm);display:flex;align-items:center;justify-content:center;background:var(--blk-70)}
 .cq-card{box-sizing:border-box;width:min(440px,calc(100vw - 32px));padding:var(--space-4xl) var(--space-4xl) var(--space-3xl);border-radius:var(--r-2xl);background:var(--surface-pop,var(--bg1));box-shadow:0 0 0 1px var(--surface-line,var(--s3)),0 12px 32px var(--blk-70);color:var(--tx);font-size:var(--fs-13);line-height:1.5;animation:cq-in .18s var(--ease-out) both}
 @keyframes cq-in{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
 .cq-head{display:flex;align-items:center;gap:var(--space-xl);margin-bottom:var(--space-lg)}
@@ -4965,11 +4987,11 @@ body.anim-mode #vp-mode-bar{display:none}
 /* room under the last row, and the buttons set apart from what scrolls behind them */
 :is(#_anim-dialog,#vp-animate-pop) .dlg-foot.anim-foot{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;align-items:center;gap:var(--space-md);padding:var(--space-xl) var(--space-2xl);border:0;background:none;box-shadow:none;pointer-events:none}      /* (no bar: the two round buttons hover over the content, which scrolls on to the edge of the card) */
 :is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn{pointer-events:auto;box-shadow:0 2px 10px var(--blk-40,rgba(0,0,0,.4))}
-:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger{background:color-mix(in srgb,var(--er) 16%,#1f1f1f);color:var(--er)}
-:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger:hover:not(:disabled){background:color-mix(in srgb,var(--er) 26%,#1f1f1f)}
-:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger:disabled{background:#1f1f1f;color:var(--tx3)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger{background:color-mix(in srgb,var(--er) 16%,var(--bg2));color:var(--er)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger:hover:not(:disabled){background:color-mix(in srgb,var(--er) 26%,var(--bg2))}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-danger:disabled{background:var(--bg2);color:var(--tx3)}
 :is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn:disabled{opacity:1}      /* (a dimmed button stays solid: its colours are dimmed, not its opacity, so the list never shows through) */
-:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-primary:disabled{background:color-mix(in srgb,var(--ac) 30%,#1f1f1f);color:color-mix(in srgb,var(--white) 45%,#1f1f1f)}
+:is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn.cq-primary:disabled{background:color-mix(in srgb,var(--ac) 30%,var(--bg2));color:color-mix(in srgb,var(--white) 45%,var(--bg2))}
 #_anim-dialog .dlg-body,#vp-animate-pop .adk-insp .dlg-body{padding-bottom:calc(40px + var(--space-xl) * 2)}      /* (room under the last card for the hovering buttons) */
 #vp-animate-pop .adk-insp{position:relative}
 :is(#_anim-dialog,#vp-animate-pop) .anim-foot .cq-btn{border-radius:50%;padding:0;width:40px;height:40px}
@@ -4979,7 +5001,7 @@ body.anim-mode #vp-mode-bar{display:none}
    of the motion on the right (the same ones the small Animate window has). Its pop-out button turns it into that small window. */
 :root{--anim-dock-h:300px;--adk-hw:210px;--adk-iw:340px}
 #vp-animate-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--anim-dock-h),80vh);
-  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:#1a1a1a;box-shadow:0 -8px 24px -16px var(--blk-50);outline:none;
+  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:var(--bg2);box-shadow:0 -8px 24px -16px var(--blk-50);outline:none;
   z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform var(--dur-200) var(--ease-out),visibility 0s linear var(--dur-200);
   font:12px/1.5 var(--font-sans);container:adkdock / inline-size}
 #vp-animate-pop.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
@@ -5045,7 +5067,7 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--anim-dock-h),80vh)
 #vp-animate-pop .adk-addb{all:unset;box-sizing:border-box;display:grid;place-items:center;width:var(--win-ico-btn);height:100%;background:var(--ac);color:var(--white);cursor:pointer;transition:filter var(--dur-fast) var(--ease-out)}
 #vp-animate-pop .adk-addb:hover{filter:brightness(1.1)}
 #vp-animate-pop .adk-addb:focus-visible{box-shadow:var(--ring-focus)}
-#vp-animate-pop .adk-addb:disabled{opacity:1;background:color-mix(in srgb,var(--ac) 30%,#1f1f1f);color:color-mix(in srgb,var(--white) 45%,#1f1f1f);pointer-events:none}
+#vp-animate-pop .adk-addb:disabled{opacity:1;background:color-mix(in srgb,var(--ac) 30%,var(--bg2));color:color-mix(in srgb,var(--white) 45%,var(--bg2));pointer-events:none}
 #vp-animate-pop .adk-addb svg{width:var(--icon-md);height:var(--icon-md);stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 #vp-animate-pop .adk-addb.adk-addmore{position:relative;width:22px}
 #vp-animate-pop .adk-addb.adk-addmore::before{content:'';position:absolute;left:0;top:var(--space-md);bottom:var(--space-md);width:1px;background:var(--on-accent-line)}
@@ -5070,20 +5092,20 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--anim-dock-h),80vh)
 .adk-body{flex:1 1 auto;min-height:0;display:flex}
 .adk-scroll.alt-hand{cursor:grab}
 .adk-scroll.is-panning,.adk-scroll.is-panning *{cursor:grabbing!important;user-select:none}
-.adk-scroll{flex:1 1 auto;min-width:0;overflow:auto;position:relative;background:linear-gradient(90deg,#1b1b1b calc(var(--adk-hw) - 1px),var(--bd) calc(var(--adk-hw) - 1px) var(--adk-hw),#171717 var(--adk-hw));scrollbar-width:auto;scrollbar-color:auto;overscroll-behavior:contain}
+.adk-scroll{flex:1 1 auto;min-width:0;overflow:auto;position:relative;background:linear-gradient(90deg,var(--bg2) calc(var(--adk-hw) - 1px),var(--bd) calc(var(--adk-hw) - 1px) var(--adk-hw),var(--bg1) var(--adk-hw));scrollbar-width:auto;scrollbar-color:auto;overscroll-behavior:contain}
 /* its scroll bars: no arrows, a track the colour of the timeline, a slim rounded thumb that lights up under the pointer */
 .adk-scroll::-webkit-scrollbar{width:12px;height:12px}
 .adk-scroll::-webkit-scrollbar-button{display:none;width:0;height:0}
-.adk-scroll::-webkit-scrollbar-track,.adk-scroll::-webkit-scrollbar-corner{background:#171717}
-.adk-scroll::-webkit-scrollbar-thumb{background:var(--s6);background-clip:padding-box;border:3px solid #171717;border-radius:8px;min-width:48px;min-height:32px}
+.adk-scroll::-webkit-scrollbar-track,.adk-scroll::-webkit-scrollbar-corner{background:var(--bg1)}
+.adk-scroll::-webkit-scrollbar-thumb{background:var(--s6);background-clip:padding-box;border:3px solid var(--bg1);border-radius:8px;min-width:48px;min-height:32px}
 .adk-scroll::-webkit-scrollbar-thumb:hover{background:var(--tx3);background-clip:padding-box}
 .adk-scroll::-webkit-scrollbar-thumb:active{background:var(--tx2);background-clip:padding-box}
 .adk-inner{position:relative;min-height:100%;width:calc(var(--adk-hw) + var(--tw,800px));min-width:100%;--gs:80px;display:flex;flex-direction:column}
 #adk-rows{flex:1 1 auto;display:flex;flex-direction:column}
 #adk-rows>.adk-row{flex:0 0 auto}
-.adk-ruler{position:sticky;top:0;z-index:8;display:flex;height:28px;background:#1d1d1d;border-bottom:1px solid var(--bd)}
-.adk-rh{position:sticky;left:0;z-index:7;flex:0 0 var(--adk-hw);width:var(--adk-hw);box-sizing:border-box;display:flex;align-items:center;gap:var(--space-md);padding:0 var(--space-lg);min-width:0;background:#1b1b1b;border-right:1px solid var(--bd);color:var(--tx2);font-size:var(--fs-12)}
-.adk-ruler .adk-rh{background:#1d1d1d;color:var(--tx3);font-size:var(--fs-11);padding:0 var(--space-md)}
+.adk-ruler{position:sticky;top:0;z-index:8;display:flex;height:28px;background:var(--bg2);border-bottom:1px solid var(--bd)}
+.adk-rh{position:sticky;left:0;z-index:7;flex:0 0 var(--adk-hw);width:var(--adk-hw);box-sizing:border-box;display:flex;align-items:center;gap:var(--space-md);padding:0 var(--space-lg);min-width:0;background:var(--bg2);border-right:1px solid var(--bd);color:var(--tx2);font-size:var(--fs-12)}
+.adk-ruler .adk-rh{background:var(--bg2);color:var(--tx3);font-size:var(--fs-11);padding:0 var(--space-md)}
 .adk-ruler .adk-rh .adk-b{flex:0 0 auto}
 .adk-rl{position:relative;flex:0 0 var(--tw,800px);width:var(--tw,800px);overflow:hidden}
 .adk-ruler .adk-rl{cursor:ew-resize;touch-action:none;overflow:visible;clip-path:inset(0)}
@@ -5111,7 +5133,7 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--anim-dock-h),80vh)
 .adk-act .adk-b svg{width:13px;height:13px}
 .adk-lay.is-muted .adk-act{opacity:1}
 .adk-bar{--c:var(--ac);--cyc:99999px;position:absolute;top:3px;bottom:3px;box-sizing:border-box;display:flex;align-items:center;min-width:6px;padding:0 9px;border-radius:3px;overflow:hidden;cursor:grab;touch-action:none;
-  background-color:color-mix(in srgb,var(--c) 46%,#1a1a1a);
+  background-color:color-mix(in srgb,var(--c) 46%,var(--bg2));
   background-image:repeating-linear-gradient(90deg,transparent 0 calc(var(--cyc) - 1px),color-mix(in srgb,var(--c) 40%,transparent) calc(var(--cyc) - 1px) var(--cyc));
   transition:filter var(--dur-fast) var(--ease-out)}
 .adk-bar[data-type=spin]{--c:#5aa2ff}
@@ -5121,7 +5143,7 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--anim-dock-h),80vh)
 .adk-bar[data-type=oscillate]{--c:#f5b95a}
 
 /* the selected clip (only the one whose settings are open, not every clip of the selected object) is solid: a stronger fill and white text, no outline */
-.adk-lay.is-active .adk-bar,.adk-bar.is-active{background-color:color-mix(in srgb,var(--c) 80%,#1a1a1a);color:#fff}
+.adk-lay.is-active .adk-bar,.adk-bar.is-active{background-color:color-mix(in srgb,var(--c) 80%,var(--bg2));color:var(--white)}
 .adk-bar.is-drag{cursor:grabbing}
 .adk-bt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-11);color:color-mix(in srgb,var(--c) 60%,#fff);pointer-events:none}
 .adk-be{position:absolute;top:0;bottom:0;right:0;width:8px;cursor:ew-resize}
@@ -5167,7 +5189,7 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--anim-dock-h),80vh)
 .adk-empty{display:flex;flex:1 1 auto;min-height:100%}
 .adk-empty-rh{align-self:stretch}
 .adk-empty-msg{flex:0 0 var(--tw,800px);display:grid;place-items:center;color:var(--tx3);font-size:var(--fs-12);letter-spacing:var(--tracking-wide);user-select:none}
-.adk-insp{flex:0 0 var(--adk-iw);width:var(--adk-iw);display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--bd);background:#1a1a1a}
+.adk-insp{flex:0 0 var(--adk-iw);width:var(--adk-iw);display:flex;flex-direction:column;min-height:0;border-left:1px solid var(--bd);background:var(--bg2)}
 .adk-insp .dlg-body{flex:1 1 auto;min-height:0;overflow:auto}
 .adk-insp .dlg-foot{flex:0 0 auto}
 #vp-animate-pop.no-insp .adk-insp{display:none}
@@ -5366,7 +5388,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 /* ── end of Edit mesh ── */
 </style>
 <script src="js/appearance.js?v=7-ser1"></script>
-<script src="js/updater.js?v=1"></script>
+<script src="js/updater.js?v=2"></script>
 <style id="updates-css">
 /* Updates: the card in the corner, and Settings › Updates (updater.js). Tokens only. */
 .up-card{position:fixed;right:16px;bottom:44px;z-index:calc(var(--z-overlay) + 1);width:340px;max-width:calc(100vw - 32px);padding:var(--space-2xl) var(--space-3xl);border-radius:var(--surface-pop-r);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);color:var(--tx2);font-size:var(--fs-12);line-height:var(--lh-body);opacity:0;transform:translateY(8px);transition:opacity var(--dur-200) ease,transform var(--dur-200) ease}
@@ -5468,7 +5490,7 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 .claude-pill{all:unset;box-sizing:border-box;display:inline-flex;align-items:center;gap:var(--space-7);height:28px;padding:0 var(--space-xl);border-radius:var(--r-pill);border:1px solid var(--bd);color:var(--tx2);font-size:var(--fs-11);white-space:nowrap;cursor:pointer}
 .claude-pill:hover,.claude-pill[aria-expanded="true"]{background:var(--bg3);color:var(--tx)}
 /* the pill's dropdown */
-#claude-pop{position:fixed;z-index:900;width:304px;box-sizing:border-box;padding:var(--space-2xl);border-radius:var(--r-2xl);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);color:var(--tx-control);font-size:var(--fs-12);display:none;flex-direction:column;gap:var(--space-xl)}
+#claude-pop{position:fixed;z-index:var(--z-claude);width:304px;box-sizing:border-box;padding:var(--space-2xl);border-radius:var(--r-2xl);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);color:var(--tx-control);font-size:var(--fs-12);display:none;flex-direction:column;gap:var(--space-xl)}
 #claude-pop.show{display:flex;animation:var(--menu-in)}
 @media (prefers-reduced-motion:reduce){#claude-pop.show{animation:none}}
 .clp-head{display:flex;align-items:flex-start;gap:var(--space-md)}
@@ -5515,9 +5537,6 @@ body.claude-mode .modal-bg{z-index:calc(var(--z-modal) + 1)}       /* Settings a
 #claude-feed{display:none;position:fixed;top:0;bottom:0;left:0;right:0;z-index:calc(var(--z-modal) - 1);flex-direction:column;background:var(--bg);color:var(--tx);font-size:var(--fs-13)}
 body.claude-mode #claude-feed{display:flex;right:auto;width:100%;transition:width .55s cubic-bezier(.22,.8,.18,1)}
 body.claude-split #claude-feed{right:auto;width:var(--cf-w)}
-#cf-stats{display:none;opacity:0;pointer-events:none;transition:opacity .35s ease;position:fixed;bottom:46px;left:calc((var(--cf-w,440px) + 6px + 100vw - 10px) / 2);translate:-50% 0;max-width:calc(100vw - var(--cf-w,440px) - 48px);z-index:calc(var(--z-modal) - 2);padding:var(--space-sm) var(--space-xl);border-radius:var(--r-pill);border:1px solid var(--bd);background:color-mix(in srgb,var(--bg1) 82%,transparent);backdrop-filter:blur(8px);color:var(--tx2);font-size:var(--fs-11);font-variant-numeric:tabular-nums;pointer-events:none}
-body.claude-mode #cf-stats{display:block}
-body.claude-split #cf-stats{opacity:1;pointer-events:auto;transition-delay:.25s}
 .cf-head{display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-xl) var(--space-xl) var(--space-md)}
 .cf-state{display:flex;align-items:center;gap:var(--space-lg);min-width:0;flex:1}
 .cf-state .cl-dot{width:8px;height:8px;border-radius:50%;background:var(--tx3);flex:none}
@@ -5559,7 +5578,7 @@ body.claude-split .cf-tools{background-color:var(--bg)}      /* (the colour of t
 body.claude-split .cf-title{font-size:30px}
 body.claude-split .cf-tip{font-size:clamp(22px,2.4vw,32px);line-height:1.2}
 body.claude-split .cf-tips{padding:0 var(--space-3xl)}
-@media (prefers-reduced-motion:reduce){.cf-tip{transition:none;transform:none}body.claude-mode #claude-feed,body.claude-mode #viewport,body.claude-split #viewport,#cf-stats,.cf-title{transition:none!important}}
+@media (prefers-reduced-motion:reduce){.cf-tip{transition:none;transform:none}body.claude-mode #claude-feed,body.claude-mode #viewport,body.claude-split #viewport,#cf-props,.cf-title{transition:none!important}}
 .cf-empty b{display:block;font-size:var(--fs-15,15px);font-weight:var(--fw-medium);color:var(--tx);margin-bottom:var(--space-md)}
 .cf-empty p{margin:0 0 var(--space-lg);line-height:var(--lh-base)}
 .cf-cmd code{display:inline-block;max-width:100%;overflow-x:auto;padding:var(--space-md) var(--space-lg);border:1px solid var(--bd);border-radius:var(--r-md,8px);background:var(--bg1);color:var(--tx2);font-size:var(--fs-11)}
@@ -5663,12 +5682,41 @@ body.claude-split iframe.mo-tab-frame{top:var(--space-lg) !important;right:var(-
 @keyframes cf-pulse{50%{background:color-mix(in srgb,var(--ac) 20%,transparent)}}
 body.cf-reveal #viewport,body.cf-reveal iframe.mo-tab-frame{animation:cf-vp 1s cubic-bezier(.22,.9,.3,1) both}
 @keyframes cf-vp{from{opacity:0;filter:blur(10px);transform:scale(.985)}to{opacity:1;filter:none;transform:none}}
-body.cf-reveal #cf-stats{animation:cf-in .6s cubic-bezier(.22,.9,.3,1) .5s both}
+body.cf-reveal #cf-props{animation:cf-in .6s cubic-bezier(.22,.9,.3,1) .5s both}
 }
 .cf-alpha{display:inline-flex;align-items:center;flex:none;height:16px;padding:0 var(--space-md);margin-left:var(--space-md);border-radius:var(--r-pill);background:color-mix(in srgb,var(--wn) 18%,transparent);color:var(--wn);font-size:10px;font-style:normal;font-weight:var(--fw-semibold,600);letter-spacing:.07em;text-transform:uppercase;line-height:1}
 .cf-head>.cf-alpha{margin-left:0}
 #claude-feed.is-drop{box-shadow:inset 0 0 0 2px var(--ac)}
 #claude-feed{position:fixed}
+/* Claude mode wears the colours of the Claude chat window (warm dark greys, off-white text, clay accent) */
+body.claude-mode,html.claude-boot{--bg:#262624;background:#262624}
+#claude-feed{--bg:#262624;--bg1:#2b2a28;--bg2:#30302e;--bg3:#1f1e1d;--bg4:#3d3c39;--tx:#faf9f5;--tx2:#c2c0b6;--tx3:#9c9a92;--bd:rgba(222,220,209,.14);--bd2:rgba(222,220,209,.24);--ac:#d97757;--ac-tint-18:rgba(217,119,87,.18);--surface-line:rgba(222,220,209,.12)}
+.cf-head{padding:var(--space-4xl,28px) var(--space-4xl,28px) var(--space-md)}
+.cf-title{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-xs,2px)}
+/* the tip is hidden while the viewport slides in or out (the column is changing width, the text would reflow) */
+body.cf-anim .cf-tip{opacity:0!important;transition-duration:.12s!important}
+/* the connection status is only a dot beside the name; its words are the tooltip */
+.cf-title .cf-name{display:inline-flex;align-items:center;gap:var(--space-lg)}
+.cf-title .cf-state{display:inline-flex;flex:none;gap:0;cursor:default}
+.cf-title .cf-state>div{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.cf-title .cf-state .cl-dot{width:8px;height:8px;margin-top:4px}
+.cf-title .cf-state{cursor:pointer;padding:var(--space-md);margin:calc(var(--space-md) * -1) 0 calc(var(--space-md) * -1) calc(var(--space-md) * -1);border-radius:var(--r-pill)}
+.cf-title .cf-state:focus-visible{outline:2px solid var(--ac);outline-offset:-2px}
+.cf-head{position:relative;grid-template-areas:"title tools"}
+.cf-statepop{position:absolute;top:calc(100% - var(--space-md));left:var(--space-4xl,20px);z-index:5;min-width:200px;max-width:calc(100% - 2 * var(--space-4xl,20px));display:flex;flex-direction:column;gap:var(--space-xs,2px);padding:var(--space-lg) var(--space-xl);border-radius:var(--r-xl,12px);background:var(--bg1);border:1px solid var(--bd2);box-shadow:var(--sh-pop);font-family:var(--font-sans)}
+.cf-sp-r{display:flex;align-items:center;gap:var(--space-md);font-size:var(--fs-12);font-weight:var(--fw-medium);color:var(--tx)}
+.cf-sp-r .cl-dot{width:8px;height:8px;border-radius:50%;background:var(--tx3);flex:none}
+.cf-statepop[data-state="idle"] .cl-dot{background:var(--cl-live)}
+.cf-statepop[data-state="busy"] .cl-dot{background:var(--ac)}
+.cf-statepop[data-state="ask"] .cl-dot{background:var(--wn)}
+.cf-statepop>span{font-size:var(--fs-11);color:var(--tx3);padding-left:calc(8px + var(--space-md))}
+/* the Properties card, floating at the bottom right of the viewport (the right sidebar's own card design) */
+#cf-props{display:none;opacity:0;pointer-events:none;transition:opacity .35s ease;position:fixed;right:calc(var(--space-lg) + var(--space-xl));bottom:calc(var(--space-lg) + var(--space-xl));width:260px;max-height:calc(100vh - 2 * (var(--space-lg) + var(--space-xl)));margin:0;z-index:calc(var(--z-modal) - 2);line-height:18px;box-shadow:var(--sh-pop)}
+body.claude-mode #cf-props{display:block}
+body.claude-split #cf-props{opacity:1;transition-delay:.25s}
+#cf-props .prop-material-row{display:none}      /* (no material tile in the floating card) */
+#cf-props .section-h{cursor:default;text-transform:none;letter-spacing:0;font-size:var(--fs-12);font-weight:var(--fw-medium);color:var(--tx)}
+.cf-title .cf-sub{font-family:var(--font-sans);font-size:var(--fs-11);font-weight:var(--fw-medium);letter-spacing:.04em;line-height:1.2;color:var(--tx3)}
 #cf-pop{position:absolute;top:56px;right:var(--space-xl);z-index:2;width:min(380px,calc(100% - 2 * var(--space-xl)));max-height:min(520px,70vh);overflow-y:auto;padding:var(--space-md);border-radius:var(--r-xl,14px);border:1px solid var(--bd);background:var(--bg1);box-shadow:0 24px 56px -20px var(--blk-50)}
 #cf-pop[hidden]{display:none}
 .cf-empty-t{margin-bottom:var(--space-xl)}
@@ -5711,9 +5759,9 @@ body.cf-reveal #cf-stats{animation:cf-in .6s cubic-bezier(.22,.9,.3,1) .5s both}
 <style id="cmd-art">
 /* Line drawings at the top of the command cards (Remove holes, Split, Select hidden, Fasteners, Smart fit): thin strokes in two greys and the accent colour; they move only while the card is open (a hidden card is not drawn, so it starts from the beginning each time). Kept in step with the website's drawings. */
 .tile-art { flex: 0 0 auto; align-self: stretch; width: 100%; height: clamp(110px, 11vw, 150px); margin: 0; color: #77777c; --art-dim: #46464a; overflow: visible; }
-.tile-art .art-hot { stroke: var(--tile-c, var(--accent)); }
+.tile-art .art-hot { stroke: var(--tile-c, var(--ac-text)); }
 .tile-art .art-dim { stroke: var(--art-dim); }
-.tile-art text.art-t { fill: var(--tx-3); stroke: none; font: 400 11px var(--mono); letter-spacing: 0.08em; }
+.tile-art text.art-t { fill: var(--tx3); stroke: none; font: 400 11px var(--font-mono); letter-spacing: 0.08em; }
 .tile-art .art-flow { stroke-dasharray: 4 7; }
 .tile-art .art-tri { stroke-dasharray: 1; stroke-dashoffset: 1; }
 .tile-art .art-scan { transform-box: fill-box; }
@@ -5784,11 +5832,11 @@ body.cf-reveal #cf-stats{animation:cf-in .6s cubic-bezier(.22,.9,.3,1) .5s both}
 @keyframes art-gone { 0%, 62% { opacity: 1; transform: scale(1); animation-timing-function: cubic-bezier(0.5, 0, 0.8, 0.4); } 68% { opacity: 0; transform: scale(0.1); } 93% { opacity: 0; transform: scale(0.1); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes art-shackle { 0%, 60% { transform: translateY(-9px); animation-timing-function: cubic-bezier(0.3, 1.7, 0.5, 1); } 68% { transform: translateY(0); } 90% { transform: translateY(0); } 97%, 100% { transform: translateY(-9px); } }
 @keyframes art-lockpop { 0%, 64% { transform: scale(1); animation-timing-function: ease-out; } 68% { transform: scale(1.08); animation-timing-function: cubic-bezier(0.3, 1.5, 0.5, 1); } 78%, 100% { transform: scale(1); } }
-@keyframes art-lockc { 0%, 62% { stroke: var(--tx-3); } 68%, 90% { stroke: var(--tile-c, var(--accent)); } 98%, 100% { stroke: var(--tx-3); } }
+@keyframes art-lockc { 0%, 62% { stroke: var(--tx3); } 68%, 90% { stroke: var(--tile-c, var(--ac-text)); } 98%, 100% { stroke: var(--tx3); } }
 @keyframes art-ring { 0% { opacity: 0; transform: translateY(14px); } 8%, 82% { opacity: 1; transform: translateY(0); } 92%, 100% { opacity: 0; transform: translateY(-6px); } }
 @keyframes art-meshin { 0%, 4% { stroke-dashoffset: 1; opacity: 0; } 10% { opacity: 0.7; } 45%, 72% { stroke-dashoffset: 0; opacity: 0.7; } 84%, 100% { stroke-dashoffset: 0; opacity: 0; } }
 @keyframes art-merge { 0%, 15% { transform: translate(0, 0) scale(1); opacity: 1; } 48% { transform: translate(var(--dx), var(--dy)) scale(0.6); opacity: 1; } 54%, 84% { transform: translate(var(--dx), var(--dy)) scale(0.6); opacity: 0; } 100% { transform: translate(0, 0) scale(1); opacity: 1; } }
-@keyframes art-core { 0%, 40% { transform: scale(1); stroke: var(--tx-3); } 62%, 84% { transform: scale(2.55); stroke: var(--accent); } 100% { transform: scale(1); stroke: var(--tx-3); } }
+@keyframes art-core { 0%, 40% { transform: scale(1); stroke: var(--tx3); } 62%, 84% { transform: scale(2.55); stroke: var(--ac-text); } 100% { transform: scale(1); stroke: var(--tx3); } }
 @keyframes art-once { 0%, 45% { opacity: 0; } 60%, 80% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes art-nut { 0%, 15% { transform: translateX(0); } 45%, 55% { transform: translateX(-130px); } 85%, 100% { transform: translateX(0); } }
 @keyframes art-back { 0%, 45% { stroke-dashoffset: 150; } 60%, 90% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -150; } }
@@ -5796,10 +5844,10 @@ body.cf-reveal #cf-stats{animation:cf-in .6s cubic-bezier(.22,.9,.3,1) .5s both}
 @keyframes art-gear { to { transform: rotate(360deg); } }
 @keyframes art-blink { 50% { opacity: 0; } }
 /* the clean-up tools: the same line drawings, one per card */
-.tile-art .art-solid { fill: var(--card-bg, var(--surface)); stroke: none; }
+.tile-art .art-solid { fill: var(--card-bg, var(--surface-pop)); stroke: none; }
 .tile-art .art-hole, .tile-art .art-sa, .tile-art .art-sb, .tile-art .art-fnd { transform-box: fill-box; transform-origin: center; }
 .tile-art .art-hole { fill: var(--tile-c, #fff); fill-opacity: 0; }
-.tile-art .art-fnd { fill: var(--card-bg, var(--surface)); }
+.tile-art .art-fnd { fill: var(--card-bg, var(--surface-pop)); }
 .tile-art .art-sil { stroke: none; }
 .tile-art .art-cut { stroke-dasharray: 6 6; opacity: 0; }
 .tile-art .art-face { fill: var(--tile-c, #fff); stroke: none; opacity: 0; }
@@ -6817,6 +6865,7 @@ window.moSplash = function (msg, pct) {
             <div class="toggle" title="Openings with nothing behind them (a missing patch in a flat face)"><span id="fh-open-lbl">Open holes</span><label><input type="checkbox" id="fh-open" aria-labelledby="fh-open-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight."><span id="fh-seal-lbl">Close openings into hollow spaces</span><label><input type="checkbox" id="fh-seal" aria-labelledby="fh-seal-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="After the holes are closed, the flat face around each one is joined again and triangulated with the fewest triangles, so the edges and vertices that only cut it up around the old hole are gone. Press Remove holes again to clean up what an earlier run left behind, also on parts in n-gons."><span id="fh-tidy-lbl">Remove vertices left over</span><label><input type="checkbox" id="fh-tidy" aria-labelledby="fh-tidy-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="A mesh can hold separate closed pieces inside its body (the balls of a valve, a pin in a bore). Once the holes are closed they are sealed inside and never visible again, though still drawn. On: every piece that lies entirely inside the closed part is removed."><span id="fh-enclosed-lbl">Remove what is sealed inside</span><label><input type="checkbox" id="fh-enclosed" checked aria-labelledby="fh-enclosed-lbl"><span class="switch"></span></label></div>
             <div class="toggle" title="Lettering, logos and marks that stand proud of a flat face are flattened into it. (Engraved ones are shallow pockets and count as blind holes.) Bosses, pins and ribs are taller than the limit below and stay."><span id="fh-raised-lbl">Raised lettering and logos</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
             <div class="cmd-num" title="A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm."><span>Raised, up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm high</span></label></div>
             <div class="toggle" title="On: an opening that takes up much of its face and of the part is kept (the bore of a washer, a window in a frame). Off: only the size limit decides."><span id="fh-shape-lbl">Keep openings that shape the part</span><label><input type="checkbox" id="fh-shape" aria-labelledby="fh-shape-lbl" checked><span class="switch"></span></label></div>
@@ -7379,6 +7428,7 @@ window.moSplash = function (msg, pct) {
     <div class="section">
       <div class="section-h"><i class="sec-ico" data-lucide="triangle"></i><span>Reduce triangles</span><span class="chev">▾</span></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="toggle" id="decimate-smart-row" title="Tidy the flat faces before and after the reduction (flat triangles joined into polygons and re-triangulated with fewer; every second line of a ring grid taken out). Quick remesh (B) uses the same switch, so the same share gives the same result on both."><span id="decimate-smart-lbl">Smart: tidy flat faces</span><label><input type="checkbox" id="decimate-smart" checked aria-labelledby="decimate-smart-lbl"><span class="switch"></span></label></div>
         <div class="toggle" id="keep-sharp-row" title="While triangles are taken out, hold on to the hard edges of a part (a rim, a step, a corner), when the part has few of them and the goal can still be reached. Parts that are mostly hard edges, like gears, are reduced as before."><span id="keep-sharp-lbl">Keep sharp edges</span><label><input type="checkbox" id="keep-sharp" checked aria-labelledby="keep-sharp-lbl"><span class="switch"></span></label></div>
         <div class="remesh-sub">Whole scene</div>
         <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
@@ -8079,7 +8129,7 @@ window.moSplash = function (msg, pct) {
   </div>
 </div>
 
-<div id="ctx-menu" style="position:fixed;display:none;z-index:300;min-width:230px;user-select:none"></div>
+<div id="ctx-menu" style="position:fixed;display:none;z-index:var(--z-dialog);min-width:230px;user-select:none"></div>
 
 <div id="marquee-box"></div>
 <div class="toasts" id="toasts"></div>
@@ -8478,7 +8528,7 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=90"></script>
-<script type="module" src="js/app.js?v=20261016m-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5"></script>
+<script type="module" src="js/app.js?v=20261017-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

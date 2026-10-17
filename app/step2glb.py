@@ -86,8 +86,11 @@ class Heartbeat:
         # A converter that is killed never reaches __exit__. Away from Windows
         # the helper notices on its next tick: an orphan is handed to another
         # parent, so os.getppid() stops being the converter's pid. On Windows
-        # getppid() keeps returning the old pid, so the check is skipped there
-        # (the server stops the whole process tree with taskkill /T instead).
+        # getppid() keeps returning the old pid, so the helper holds a handle
+        # on the converter's process and asks whether it has ended. (It used
+        # to skip the check there: after a native crash the orphan kept the
+        # server's pipe open and kept printing, so the job never ended and
+        # the server's crash fallback, the plain reader, was never reached.)
         safe_label = self.label.encode("ascii", "replace").decode("ascii")
         code = (
             "import os, sys, time\n"
@@ -95,11 +98,17 @@ class Heartbeat:
             f"LABEL = {safe_label!r}\n"
             f"EXPECT = {float(self.expect_s)}\n"
             f"PARENT = {os.getpid()}\n"
+            "if os.name == 'nt':\n"
+            "    import ctypes\n"
+            "    _H = ctypes.windll.kernel32.OpenProcess(0x00100000, False, PARENT)\n"      # SYNCHRONIZE: enough to wait on it
+            "    def parent_gone(): return bool(_H) and ctypes.windll.kernel32.WaitForSingleObject(_H, 0) == 0\n"
+            "else:\n"
+            "    def parent_gone(): return os.getppid() != PARENT\n"
             "n = 0.0\n"
             "try:\n"
             "    while True:\n"
             "        time.sleep(EVERY)\n"
-            "        if os.name != 'nt' and os.getppid() != PARENT:\n"
+            "        if parent_gone():\n"
             "            break\n"
             "        n += EVERY\n"
             "        msg = f'  . ({LABEL}) still working... {n:.0f}s elapsed'\n"
@@ -1531,6 +1540,7 @@ def solid_to_mesh(solid: TopoDS_Shape):
 
         # ── apply face transform (gp_Trsf is 3x4). Fast-path identity.
         t = loc.Transformation()
+        mirrored = False
         if _identity_trsf(t):
             verts = v_arr.astype(np.float32, copy=False)
         else:
@@ -1542,12 +1552,18 @@ def solid_to_mesh(solid: TopoDS_Shape):
             ), dtype=np.float64)
             v_world = v_arr @ m[:, :3].T + m[:, 3]
             verts = v_world.astype(np.float32, copy=False)
+            mirrored = bool(np.linalg.det(m[:, :3]) < 0)
 
         # ── triangles: collect once, vectorize orientation flip + offset
         # Only flip winding for REVERSED faces. Earlier `!= 0` flipped
         # INTERNAL (2) and EXTERNAL (3) faces too, producing back-face
         # artefacts on cellular / boundary faces.
-        reverse = (face.Orientation() == TopAbs_REVERSED)
+        # A face whose location is a mirror (a reflecting placement inside the
+        # shape: det < 0) turns the winding over as well, so the two cancel
+        # when both apply (what OCCT's own writers do: REVERSED xor mirrored).
+        # The normals are carried through the same matrix, so without this
+        # they and the winding disagreed and the face shaded inside-out.
+        reverse = (face.Orientation() == TopAbs_REVERSED) != mirrored
         tris_buf = np.empty((n_tris, 3), dtype=np.uint32)
         for j in range(1, n_tris + 1):
             a, b, c = tri.Triangle(j).Get()

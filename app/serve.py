@@ -920,7 +920,9 @@ MCP_TOOLS += [
          "reduce_percent": {"type": "number", "description": "Share of the triangles to remove, 5 to 95."}})},
     {"name": "fit_to_budget", "description": "Reduce the whole scene to a triangle budget, taking from the parts that can best spare it. The user is asked to allow it.", "inputSchema": _obj({"target_triangles": {"type": "integer"}}, ["target_triangles"])},
     {"name": "fill_holes", "description": "Close bolt holes, slots and pockets in flat faces up to a size. The user is asked to allow it. Acts on the selected parts, or on the visible scene if nothing is selected and no ids are given.",
-     "inputSchema": _obj({"max_hole_mm": {"type": "number", "description": "The largest hole to fill, in mm (default 10)."}, "ids": _IDS, "name_contains": _NAME})},
+     "inputSchema": _obj({"max_hole_mm": {"type": "number", "description": "The largest hole to fill, in mm (default 10)."},
+                          "remove_enclosed": {"type": "boolean", "description": "Also remove pieces of a mesh that end up sealed inside the closed part (the balls of a valve, a pin in a bore): never visible again. Default: the card's own switch, which is on."},
+                          "ids": _IDS, "name_contains": _NAME})},
     {"name": "remove_small_parts", "description": "Delete every part whose longest side is below a size, in the scene's units (usually mm). The user is asked to allow it.", "inputSchema": _obj({"max_size": {"type": "number", "description": "Parts shorter than this are removed."}}, ["max_size"])},
     {"name": "clean_up", "description": "Tidy the scene. The user is asked to allow it. Choose what to do: remove empty parts, share the geometry of identical parts (duplicates), and repair degenerate triangles.",
      "inputSchema": _obj({"empty": {"type": "boolean"}, "duplicates": {"type": "boolean"}, "degenerate": {"type": "boolean"}})},
@@ -1370,10 +1372,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     #           domain at 127.0.0.1 (DNS rebinding) arrives with its domain here.
     #   Origin  (sent with every cross-site POST) must be this server, or absent
     #           (the app's own GETs, curl, the launcher).
+    #   Sec-Fetch-Site  browsers send it with every request, also a GET without
+    #           an Origin (an <img>, a no-cors fetch): it must say same-origin
+    #           (the app's own page and its tab frames) or none (an address
+    #           typed in). Anything else is another site's page; it used to
+    #           pass and could take the Claude connection over through
+    #           /api/bridge/poll. Node and curl send no such header.
     def _trusted(self) -> bool:
         port = self.server.server_address[1]
         hosts = {f"localhost:{port}", f"127.0.0.1:{port}"}
         if (self.headers.get("Host") or "").strip().lower() not in hosts:
+            return False
+        site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        if site and site not in ("same-origin", "none"):
             return False
         origin = self.headers.get("Origin")
         return origin is None or origin.strip().lower() in {"http://" + h for h in hosts}
@@ -1397,6 +1408,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404, "Not found")
         return None
 
+    @staticmethod
+    def _hidden(path: str) -> bool:
+        """A path with a dot-folder or dot-file in it, also when the dot is written %2e (the file server decodes the path after this check)."""
+        return any(seg.startswith(".") for seg in unquote(unquote(path)).replace("\\", "/").split("/") if seg)
+
     def do_GET(self):
         if not self._trusted(): return self._refuse()
         u = urlparse(self.path)
@@ -1406,7 +1422,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             del self.headers["If-Modified-Since"]
         if u.path == "/favicon.ico":
             self.send_response(204); self.end_headers(); return
-        if any(seg.startswith(".") for seg in u.path.split("/") if seg):
+        if u.path in ("/", "/index.html"): updater.mark_page_served()      # (an update on trial: this run handed out the page)
+        if self._hidden(u.path):
             self.send_error(404, "Not found"); return
         if u.path == "/api/alive":
             return self._handle_alive()
@@ -1435,7 +1452,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_HEAD(self):
         if not self._trusted(): return self._refuse()
         u = urlparse(self.path)
-        if any(seg.startswith(".") for seg in u.path.split("/") if seg):
+        if self._hidden(u.path):
             self.send_error(404, "Not found"); return
         return super().do_HEAD()
 
@@ -2137,6 +2154,7 @@ def main() -> int:
                    + (["--exit-when-closed"] if LIFE["exit_when_closed"] else []) + (["--keep-running"] if args.keep_running else []))
 
     with httpd:
+        updater.mark_listening()      # (an update on trial: this run came up)
         url = f"http://localhost:{chosen_port}/index.html"
         if auto_load: url += "?file=" + quote(auto_load)
         print(f"\n  MeshOptimiser running at  {url}\n  (press Ctrl+C to stop"

@@ -211,6 +211,14 @@ refuse_case("too many files", make_zip({f"f{i}.js": b"x" for i in range(5)}), ""
 # reserved Windows device names, even with an extension or in a folder
 for bad in ["assets/aux.png", "CON", "nul.txt", "a/COM1.js", "Lpt3.x/y.js"]:
     refuse_case("reserved name " + repr(bad), make_zip({bad: b"x"}), "reserved")
+# a path that is both installed and removed is refused before anything is touched (also when only the case differs)
+refuse_case("installed and removed, other case", make_zip({"Index.html": b"x", "app.js": b"y"}, extra_manifest={"delete": ["index.html"]}), "both installs and removes")
+refuse_case("installed and removed", make_zip({"index.html": b"x", "app.js": b"y"}, extra_manifest={"delete": ["app.js"]}), "both installs and removes")
+# a plain check while an update runs leaves the update's state alone
+updater._set(phase="downloading", message="Downloading…", done=5, total=10)
+serve_feed(stable=feed_for(z1)); updater.check("stable")
+ok(updater.STATE["phase"] == "downloading" and updater.STATE["done"] == 5, "a check during an update does not reset its state")
+updater._set(phase="idle", message="", done=0, total=0)
 # an archive swapped after it was checked: caught while writing, everything put back
 reset_app(); before = tree()
 zgood = make_zip({"index.html": b"<html>new</html>", "app.js": b"new js"})
@@ -278,6 +286,37 @@ ok(json.loads(updater.NOTICE.read_text())["kind"] == "rolled_back" and not updat
 reset_app(); run_install(); updater.on_startup(); updater.confirm()
 ok(updater.on_startup() is False and (APP / "version.json").read_text().count("0.22.0") == 1, "a confirmed update is never taken back")
 ok(updater.on_startup() is False, "no pending update: nothing happens")
+# an apply that stopped half-way (power cut, kill): the marker says so, and the next start puts the old version back from the backup
+reset_app(); SERVED["/app.zip"] = (200, z1, {}); serve_feed(stable=feed_for(z1)); run_install()
+p = json.loads(updater.PENDING.read_text()); p["applying"] = True; updater.PENDING.write_text(json.dumps(p))
+(APP / "index.html").write_bytes(b"half written")
+ok(updater.on_startup() is True and (APP / "index.html").read_bytes() == b"<html>old</html>" and json.loads((APP / "version.json").read_text())["version"] == "0.21.0" and not updater.PENDING.is_file(),
+   "an apply that stopped half-way is undone at the next start")
+ok(json.loads(updater.NOTICE.read_text())["kind"] == "rolled_back", "…and the page says so")
+# a bundled runtime: after pip, its manifest names the requirements it now matches (start.bat refuses a runtime built for another requirements.txt)
+(APP / "runtime").mkdir(); (APP / "runtime" / "MANIFEST.json").write_text(json.dumps({"python": "3.12", "requirements_sha256": "old"}))
+ok(updater._runtime_manifest_note(APP / "requirements.txt") and json.loads((APP / "runtime" / "MANIFEST.json").read_text())["requirements_sha256"] == sha((APP / "requirements.txt").read_bytes())
+   and json.loads((APP / "runtime" / "MANIFEST.json").read_text())["python"] == "3.12", "the runtime manifest gets the new requirements hash, the rest stays")
+ok(updater._runtime_manifest_note(APP / "requirements.txt") is True, "…and asking again is harmless")
+shutil.rmtree(APP / "runtime")
+ok(updater._runtime_manifest_note(APP / "requirements.txt") is False, "no runtime folder: nothing to note")
+# runs that came up but where nobody opened the page (a script, Claude with no window) are not failures
+def a_run(listen=True, serve=False):
+    updater._marked.clear()
+    r = updater.on_startup()
+    if not r:
+        if listen: updater.mark_listening()
+        if serve: updater.mark_page_served()
+    return r
+reset_app(); run_install()
+ok(all(a_run() is False for _ in range(6)), "starts in which the server came up and nobody opened the page never roll an update back")
+reset_app(); run_install()
+ok([a_run(serve=True) for _ in range(3)] == [False] * 3 and a_run(serve=True) is True, "a page that loads and never confirms, three runs in a row, is taken back")
+reset_app(); run_install()
+ok([a_run(serve=i % 3 != 2) for i in range(9)] == [False] * 9, "a quiet run in between starts the count again")
+reset_app(); run_install()
+ok(a_run(listen=False) is False and a_run(listen=False) is False and a_run(listen=False) is True, "a server that never comes up is taken back at the third start")
+reset_app(); run_install(); updater.confirm()      # (back to an installed 0.22.0 for the status checks below)
 
 # ── status for the page ─────────────────────────────────────────────────────
 s = updater.status(); ok(s["current"] == "0.22.0" and "phase" in s and "backup" in s, "status has the version, the phase and the backup", s)

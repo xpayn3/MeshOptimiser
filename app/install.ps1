@@ -91,6 +91,8 @@ try {
     try { $feed = Invoke-RestMethod -UseBasicParsing -Uri $Feed } catch { Fail "Could not reach the update feed. Check your internet connection and try again." }
     $version = $feed.stable.version
     if (-not $version) { Fail 'The update feed did not name a version.' }
+    if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') { Fail 'The update feed named a version this installer does not understand.' }
+    $inst = $feed.stable.installer      # the full download's own address, SHA-256 and size (newer feeds carry it; tools/app/build-update.py --installer)
     Good "Version $version"
   } elseif (-not (Test-Path $zipPath)) { Fail "The zip was not found: $zipPath" }
   else { Good "Using $zipPath" }
@@ -101,6 +103,9 @@ try {
     $zipPath = Join-Path $tmp 'app.zip'
     # the release zip first (the program and nothing else); the source archive of the tag when there is none
     $urls = @("https://github.com/$Repo/releases/download/v$version/MeshOptimiser-v$version.zip", "https://github.com/$Repo/archive/refs/tags/v$version.zip")
+    # a feed that publishes the download's checksum: only that file is used, and it is checked before anything is unpacked
+    $wantSha = ''
+    if ($inst -and $inst.sha256 -and $inst.url -and ([string]$inst.url).StartsWith("https://github.com/$Repo/releases/download/")) { $urls = @([string]$inst.url); $wantSha = ([string]$inst.sha256).ToLower() }
     $fetched = $false
     foreach ($url in $urls) {
       try {
@@ -127,6 +132,11 @@ try {
       } catch { try { $out.Close() } catch {}; try { $cli.Dispose() } catch {} }
     }
     if (-not $fetched) { Line ''; Fail "The download failed. Check your internet connection and try again." }
+    if ($wantSha) {
+      $gotSha = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLower()
+      if ($gotSha -ne $wantSha) { Line ''; Fail 'The download does not match its checksum, so it was not used. Nothing was changed. Try again, or download it from the website.' }
+      Good 'Checksum matches'
+    } else { Note 'This release has no published checksum, so the download could not be checked.' }
   } else { Note 'Skipped.' }
 
   # 3. unpack straight into place, with a bar (the folder named in the zip is dropped; the PC's own folders are left alone)
@@ -176,7 +186,7 @@ try {
       Good "$moved old items put in .update\backup-old-layout"
       Note 'The Python environment is rebuilt in app\ on the first start (a few minutes, online).'
     }
-    $i = 0; $last = [datetime]::MinValue; $root = [IO.Path]::GetFullPath($InstallDir)
+    $i = 0; $last = [datetime]::MinValue; $root = [IO.Path]::GetFullPath($InstallDir); $rootSep = $root.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
     foreach ($e in $entries) {
       $i++
       $nm = & $norm $e
@@ -185,7 +195,8 @@ try {
       if (($NotShipped -contains $parts[0]) -or ($Skip -contains $parts[0])) { continue }
       if ($parts[0] -eq 'app' -and $parts.Count -gt 2 -and ($Skip -contains $parts[1])) { continue }
       $dest = [IO.Path]::GetFullPath((Join-Path $InstallDir $rel))
-      if (-not $dest.StartsWith($root)) { continue }      # nothing may land outside the install folder
+      if ($parts -contains '..') { continue }
+      if (-not $dest.StartsWith($rootSep, [StringComparison]::OrdinalIgnoreCase)) { continue }      # nothing may land outside the install folder (the separator keeps a sibling like MeshOptimiser-x out)
       New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($dest)) -Force | Out-Null
       [IO.Compression.ZipFileExtensions]::ExtractToFile($e, $dest, $true)
       if (((Get-Date) - $last).TotalMilliseconds -gt 60) { $last = Get-Date; Bar ($i / $entries.Count) "$i of $($entries.Count) files" }
@@ -219,6 +230,8 @@ try {
           Note 'Downloading Chrome from google.com...'
           $cs = Join-Path $tmp 'ChromeSetup.exe'
           Invoke-WebRequest -UseBasicParsing -Uri 'https://dl.google.com/chrome/install/ChromeStandaloneSetup64.exe' -OutFile $cs
+          $sig = Get-AuthenticodeSignature -FilePath $cs      # only a file signed by Google is run
+          if ($sig.Status -ne 'Valid' -or -not $sig.SignerCertificate -or $sig.SignerCertificate.Subject -notmatch 'O=Google LLC') { throw 'The Chrome installer is not signed by Google.' }
           Start-Process -FilePath $cs -ArgumentList '/silent', '/install' -Wait
           $done = [bool](Find-Chrome)
         } catch {}

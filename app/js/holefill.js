@@ -338,7 +338,8 @@ export function fillFlatHoles(positions, index, opts = {}) {
     for (const f of found) {
       if (!(f.area2 < 0)) continue;                     // clockwise loops are the openings
       const wide = f.size > outline * maxFaceRatio && f.size > diag * maxPartRatio;
-      if (f.size > maxSize) {
+      // (a hair of tolerance: a Ø10 hole measures 10.000000000000002 from its single-precision corners, and "holes up to 10" means it)
+      if (f.size > maxSize * (1 + 1e-6)) {
         result.skipped.tooLarge++;
         if (opts.floating === true) bigLoops.push({ r, hes: f.hes, size: f.size, basis: [ux, uy, uz, vx, vy, vz] });
         // The far end of a countersink or a flared hole is wider than the limit, though the hole is not: such an opening is kept as a
@@ -433,7 +434,8 @@ export function fillFlatHoles(positions, index, opts = {}) {
     if (opts.cleanup === true && opts.rimVertices === true) {
       try { removeRimVertices(); } catch (_) { /* nothing is changed */ }
       if (opts.floating === true) { try { removeFloatingTubes(); } catch (_) { /* nothing is changed */ } }
-      if (result.rimVertices || result.floating) { result.removed = removed; result.caps = Uint32Array.from(caps); result.capOwner = Uint32Array.from(capOwner); }
+      if (opts.enclosed === true) { try { removeEnclosedPieces(); } catch (_) { /* nothing is changed */ } }
+      if (result.rimVertices || result.floating || result.enclosed) { result.removed = removed; result.caps = Uint32Array.from(caps); result.capOwner = Uint32Array.from(capOwner); }
     }
     return result;
   }
@@ -787,6 +789,92 @@ export function fillFlatHoles(positions, index, opts = {}) {
   if ((result.holes && caps.length || opts.cleanup === true) && opts.rimVertices === true) {
     try { removeRimVertices(); } catch (_) { /* the fill itself stands */ }
   }
+  if (opts.enclosed === true && (result.holes || opts.cleanup === true)) {
+    try { removeEnclosedPieces(); } catch (_) { /* the fill itself stands */ }
+  }
+  // ── 10. pieces sealed inside ─────────────────────────────────────────────
+  // A part's mesh can hold separate closed pieces inside its body: the balls of a check valve in a pump, a pin in a bore, the wall
+  // of a cavity. They were seen through the holes; with the holes closed they are sealed inside and never visible again, but still
+  // drawn, and in the viewport's edge overlay they show through as stray lines and points. With opts.enclosed every piece that lies
+  // entirely inside the closed shell goes. The shell is the largest piece (by triangles) of what remains, caps included, and it must
+  // be closed (no edge with a single triangle), or nothing is judged. A piece is inside when rays from the middles of three of its
+  // triangles each cross the shell an odd number of times.
+  function removeEnclosedPieces() {
+    const nCaps = caps.length / 3, total = T + nCaps;
+    const cornerV = (ref, k) => ref < T ? I[ref * 3 + k] : caps[(ref - T) * 3 + k];         // vertex number
+    const cornerW = (ref, k) => ref < T ? tw[ref * 3 + k] : wid[caps[(ref - T) * 3 + k]];  // welded id
+    const live = (ref) => ref < T ? !removed[ref] : true;
+    const uf = new Int32Array(W); for (let i = 0; i < W; i++) uf[i] = i;
+    const find = (a) => { while (uf[a] !== a) { uf[a] = uf[uf[a]]; a = uf[a]; } return a; };
+    const unite = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) uf[rb] = ra; };
+    for (let ref = 0; ref < total; ref++) { if (!live(ref)) continue; unite(cornerW(ref, 0), cornerW(ref, 1)); unite(cornerW(ref, 0), cornerW(ref, 2)); }
+    const count = new Map(); let shellRoot = -1, shellN = 0;
+    for (let ref = 0; ref < total; ref++) { if (!live(ref)) continue; const r = find(cornerW(ref, 0)); const n = (count.get(r) || 0) + 1; count.set(r, n); if (n > shellN) { shellN = n; shellRoot = r; } }
+    if (count.size < 2) return;
+    // the shell must be closed
+    const ekey = (a, b) => a < b ? a * W + b : b * W + a;
+    const ec = new Map(), shellRefs = [];
+    for (let ref = 0; ref < total; ref++) {
+      if (!live(ref) || find(cornerW(ref, 0)) !== shellRoot) continue;
+      shellRefs.push(ref);
+      const a = cornerW(ref, 0), b = cornerW(ref, 1), c = cornerW(ref, 2);
+      if (a === b || b === c || a === c) continue;
+      for (const k of [ekey(a, b), ekey(b, c), ekey(c, a)]) ec.set(k, (ec.get(k) || 0) + 1);
+    }
+    for (const n of ec.values()) if (n === 1) return;           // open somewhere: inside and outside cannot be told apart
+    // rays along +x against the shell: its triangles filed by the cells of a y-z grid
+    let ly = Infinity, lz = Infinity, hy = -Infinity, hz = -Infinity;
+    for (const ref of shellRefs) for (let k = 0; k < 3; k++) { const v = cornerV(ref, k) * 3, y = P[v + 1], z = P[v + 2]; if (y < ly) ly = y; if (y > hy) hy = y; if (z < lz) lz = z; if (z > hz) hz = z; }
+    const G = 64, cy = (hy - ly) / G || 1, cz = (hz - lz) / G || 1;
+    const cellOf = (y, z) => Math.max(0, Math.min(G, Math.floor((y - ly) / cy))) * (G + 1) + Math.max(0, Math.min(G, Math.floor((z - lz) / cz)));
+    const cells = new Map();
+    for (const ref of shellRefs) {
+      let y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+      for (let k = 0; k < 3; k++) { const v = cornerV(ref, k) * 3, y = P[v + 1], z = P[v + 2]; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+      const ja = Math.floor((y0 - ly) / cy), jb = Math.floor((y1 - ly) / cy), ka = Math.floor((z0 - lz) / cz), kb = Math.floor((z1 - lz) / cz);
+      for (let jj = ja; jj <= jb; jj++) for (let kk = ka; kk <= kb; kk++) { const key = jj * (G + 1) + kk; const l = cells.get(key); if (l) l.push(ref); else cells.set(key, [ref]); }
+    }
+    const crossings = (x, y, z) => {
+      const l = cells.get(cellOf(y, z)); if (!l) return 0;
+      let hits = 0;
+      for (const ref of l) {
+        const a = cornerV(ref, 0) * 3, b = cornerV(ref, 1) * 3, c = cornerV(ref, 2) * 3;
+        const ay = P[a + 1] - y, by = P[b + 1] - y, cyy = P[c + 1] - y, az = P[a + 2] - z, bz = P[b + 2] - z, czz = P[c + 2] - z;
+        const d1 = ay * bz - az * by, d2 = by * czz - bz * cyy, d3 = cyy * az - czz * ay;
+        if ((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)) continue;       // the ray misses this triangle's y-z shadow
+        const e1x = P[b] - P[a], e1y = P[b + 1] - P[a + 1], e1z = P[b + 2] - P[a + 2], e2x = P[c] - P[a], e2y = P[c + 1] - P[a + 1], e2z = P[c + 2] - P[a + 2];
+        const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+        if (Math.abs(nx) < 1e-20) continue;                                                // (a triangle seen edge-on along x)
+        if (P[a] - (ny * (y - P[a + 1]) + nz * (z - P[a + 2])) / nx > x) hits++;
+      }
+      return hits;
+    };
+    // every other piece: the middles of three of its triangles, all inside, and the piece goes
+    const byRoot = new Map();
+    for (let ref = 0; ref < total; ref++) { if (!live(ref)) continue; const r = find(cornerW(ref, 0)); if (r === shellRoot) continue; let l = byRoot.get(r); if (!l) byRoot.set(r, l = []); l.push(ref); }
+    let gone = 0, goneTris = 0; const dropCaps = new Set();
+    for (const refs of byRoot.values()) {
+      let inside = 0;
+      for (const q of [0, Math.floor(refs.length / 2), refs.length - 1]) {
+        const ref = refs[q], a = cornerV(ref, 0) * 3, b = cornerV(ref, 1) * 3, c = cornerV(ref, 2) * 3;
+        if (crossings((P[a] + P[b] + P[c]) / 3, (P[a + 1] + P[b + 1] + P[c + 1]) / 3, (P[a + 2] + P[b + 2] + P[c + 2]) / 3) % 2 === 1) inside++;
+      }
+      if (inside !== 3) continue;
+      for (const ref of refs) { if (ref < T) { removed[ref] = 1; goneTris++; } else dropCaps.add(ref - T); }
+      gone++;
+    }
+    if (!gone) return;
+    if (dropCaps.size) {
+      const nc = [], no = [];
+      for (let k = 0; k < nCaps; k++) if (!dropCaps.has(k)) { nc.push(caps[k * 3], caps[k * 3 + 1], caps[k * 3 + 2]); no.push(capOwner[k]); }
+      caps.length = 0; capOwner.length = 0;
+      for (const v of nc) caps.push(v);
+      for (const v of no) capOwner.push(v);
+      result.addedTris -= dropCaps.size;
+    }
+    result.removedTris += goneTris;
+    result.enclosed = (result.enclosed || 0) + gone;
+  }
   // ── 9. walls left floating ───────────────────────────────────────────────
   // A hole in a broken mesh can come with its wall cut loose: a thin open tube (a ring of facets, no ends) that touches nothing, sitting
   // where the hole was, with the face around it open or already closed. It is not part of any solid. Such a tube is taken out when it is
@@ -1116,9 +1204,15 @@ function earClip(xs, ys) {
   const corners = ring.slice();
 
   // 2. ear clipping on the corners
+  // Only a corner that turns the wrong way (reflex, or straight) can lie inside an ear of a simple outline, so the test for a blocked
+  // ear looks at those alone. They are few on a round hole or a slot: the test used to run over every point of the ring, which made the
+  // whole thing cubic (a 3000-point outline took minutes; it takes well under a second now).
   const tris = [];
+  const reflex = new Set();
+  const turnOf = (i) => { const m = ring.length; return cross(ring[(i + m - 1) % m], ring[i], ring[(i + 1) % m]); };
+  for (let i = 0; i < ring.length; i++) if (!(turnOf(i) > eps)) reflex.add(ring[i]);
   const blocked = (a, bb, c) => {
-    for (const p of ring) {
+    for (const p of reflex) {
       if (p === a || p === bb || p === c || same(p, a) || same(p, bb) || same(p, c)) continue;
       if (cross(a, bb, p) >= -eps && cross(bb, c, p) >= -eps && cross(c, a, p) >= -eps) return true;   // in or on the triangle
     }
@@ -1141,6 +1235,11 @@ function earClip(xs, ys) {
     const m = ring.length;
     tris.push([ring[(best + m - 1) % m], ring[best], ring[(best + 1) % m]]);
     ring.splice(best, 1);
+    // the two corners beside the clipped one may have straightened out (a corner never turns the other way by losing a neighbour)
+    if (ring.length > 2) {
+      const m2 = ring.length;
+      for (const j of [(best + m2 - 1) % m2, best % m2]) { if (turnOf(j) > eps) reflex.delete(ring[j]); else reflex.add(ring[j]); }
+    }
   }
   if (ring.length === 3) tris.push([ring[0], ring[1], ring[2]]);
   else if (ring.length > 3) {

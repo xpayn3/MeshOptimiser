@@ -303,8 +303,11 @@
 
   // ── start-up ──────────────────────────────────────────────────────────────
   async function start() {
-    for (let i = 0; i < 100 && !document.body.classList.contains('app-ready'); i++) await sleep(300);   // (the app is up: say so to the server)
-    try { await api('/api/update/confirm', {}); } catch (_) {}
+    // The app is up: say so to the server. Only when it really came up: a page that never reaches app-ready (the new version's
+    // app.js throws at load) used to confirm after the 30 s wait ran out, which made the broken version permanent.
+    let ready = false;
+    for (let i = 0; i < 100; i++) { if (document.body.classList.contains('app-ready')) { ready = true; break; } await sleep(300); }
+    if (ready) { try { await api('/api/update/confirm', {}); } catch (_) {} }
     await refreshServer(); paint();
     if (ui.supported === false) return;
     const n = ui.server && ui.server.notice;

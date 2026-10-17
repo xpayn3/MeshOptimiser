@@ -1,13 +1,13 @@
 // MeshOptimiser - app.js (rebuilt for large engineering CAD)
 import * as THREE from 'three';
-import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=27';
+import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v=29';
 import { findFloating } from './floating.js?v=1';
 import * as MEDIT from './meshedit.js?v=5';
 import { dissolvePoints } from './dissolve.js?v=3';
 import * as MT from './meshtools.js?v=2';
 import { partition as splitPartition, buildChildGeometries as splitBuildChildren } from './split.js?v=1';
 import * as SPL from './splines.js?v=3';
-import { reduceIndex, packAttributes } from './simplify-core.js?v=3';
+import { reduceIndex, packAttributes } from './simplify-core.js?v=4';
 import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=2';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
@@ -1510,7 +1510,7 @@ const _MeshWorkers = (() => {
       const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
       workers = [];
       for (let i = 0; i < n; i++) {
-        const w = new Worker(new URL('./mesh-worker.js?v=40', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./mesh-worker.js?v=42', import.meta.url), { type: 'module' });
         w.onmessage = (e) => {
           const p = pending.get(e.data && e.data.id);
           if (!p) return;
@@ -6568,8 +6568,8 @@ const _RendererOwner = (() => {
       return { instance: r, backendName: 'WebGL2' };
     }
   }
-  // Apply the standard config (pixel ratio, size, color space, tone mapping,
-  // dithering). Hoisted so any future rebuild path can call
+  // Apply the standard config (pixel ratio, size, color space, tone mapping).
+  // Hoisted so any future rebuild path can call
   // it on the new instance to get identical state.
   function applyConfig(r, { canvas }) {
     r.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -6580,8 +6580,8 @@ const _RendererOwner = (() => {
       r.toneMapping = THREE.NeutralToneMapping ?? THREE.ACESFilmicToneMapping;
       r.toneMappingExposure = 1.0;
     }
-    // Dithering breaks up 8-bit quantization banding in the background gradient.
-    try { if ('dithering' in r) r.dithering = true; } catch (_) {}
+    // (No dithering: the WebGPU renderer of this three.js version has none. The `dithering = true` that stood here was skipped by
+    // its own `'dithering' in r` test and did nothing, on both backends.)
     // The shadow system is on from the start (nothing casts or receives until Scene > Shadows is switched on, and then it costs only what
     // the shadows cost): the lighting programs are built with it once. Switched on later, they were built without a shadow node and the
     // shader did not compile.
@@ -6653,6 +6653,17 @@ async function initRenderer() {
   } catch (_) {}
 
   _RendererOwner.attachDeviceLostHandler(renderer);
+
+  // The pixel ratio follows the screen. Browser zoom and a move to a monitor of another density change devicePixelRatio, and
+  // the canvas may keep its CSS size, so no resize comes: the picture stayed at the old ratio (soft, or drawn at twice the pixels
+  // it needs). A media query on the current ratio fires once when it changes; it is then set up again for the new one, and
+  // applyPerfMode works the ratio out again (the screen's, capped by the model's weight and the performance setting).
+  (function _followPixelRatio() {
+    let mq = null;
+    const onChange = () => { watch(); try { applyPerfMode(); } catch (_) {} };
+    function watch() { try { mq?.removeEventListener('change', onChange); mq = matchMedia(`(resolution: ${devicePixelRatio}dppx)`); mq.addEventListener('change', onChange); } catch (_) {} }
+    watch();
+  })();
 }
 
 // One camera object that can be perspective or orthographic.
@@ -8266,8 +8277,10 @@ function setBackground(mode) {
     // The value here is what goes INTO the tone mapper — the neutral curve
     // darkens low values, so #444446 is what comes out as #27272b (the old
     // 0x3c3c3c came out as a near-black #1e1e1e).
-    scene.background = new THREE.Color(0x444547);
-    renderer.setClearColor(0x444547, 1);
+    // (Claude mode: a deeper grey, so the model stands out in its card next to the feed)
+    const darkBg = document.body.classList.contains('claude-mode') ? 0x383838 : 0x444547;
+    scene.background = new THREE.Color(darkBg);
+    renderer.setClearColor(darkBg, 1);
   }
   else if (mode === 'grad') {
     // Studio gradient — computed entirely in the GPU shader via Three.js TSL
@@ -8326,7 +8339,44 @@ function setBackground(mode) {
 // once. Cached on the renderer so consecutive 'hdri' mode toggles don't
 // re-pay the cost.
 let _defaultEnvTex = null;
+let _defaultEnvUp = null;          // the up axis _defaultEnvTex was made for
 let _hdriPmrem = null;
+
+// ── Environments stand on the scene's floor ──────────────────────────────────────────────────────────────────────────
+// three's environments have their sky at +Y: RoomEnvironment's ceiling lights, the top row of an equirect. This app's world is
+// Z-up unless the scene is set to Y-up, and the node materials of three r172 ignore scene.environmentRotation, so an environment
+// used as it comes lit a Z-up model from the side (the studio's ceiling fell on the +Y faces, not the tops) and an HDRI's sky stood
+// beside the model. So the turn is baked into the environment when it is made: the studio room is turned a quarter about X before
+// it is rendered, and an equirect is drawn onto a box round the camera with its lookup turned the same way. Each is made for the
+// up axis of the moment, and made again when that changes (_envFollowUp).
+function _envUpAxis() { return state.sceneUpAxis === 'y' ? 'y' : 'z'; }
+function _envFromRoom(RoomEnvironment) {
+  _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
+  const room = new RoomEnvironment();
+  if (_envUpAxis() === 'z') { room.rotation.x = Math.PI / 2; room.updateMatrixWorld(true); }      // (its ceiling, at +Y, goes to +Z)
+  const tex = _hdriPmrem.fromScene(room, 0.04).texture;
+  room.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
+  return tex;
+}
+function _envFromEquirect(equirect) {
+  _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
+  if (_envUpAxis() !== 'z') return _hdriPmrem.fromEquirectangular(equirect).texture;
+  // A box round the cube camera PMREM renders from; each pixel looks the equirect up in the direction it is seen in, turned so that
+  // the world's +Z asks for the equirect's +Y (the same lookup three makes in fromEquirectangular, with the axes turned: x, z, -y).
+  const T = THREE.TSL, d = T.positionWorldDirection;
+  const mat = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthTest: false, depthWrite: false, fog: false, toneMapped: false });
+  mat.fragmentNode = T.vec4(T.texture(equirect, T.equirectUV(T.vec3(d.x, d.z, d.y.negate())), 0).rgb, 1);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), mat), sc = new THREE.Scene();
+  box.frustumCulled = false;
+  sc.add(box);
+  try { return _hdriPmrem.fromScene(sc, 0, 0.1, 10).texture; }
+  finally { box.geometry.dispose(); mat.dispose(); }
+}
+// The up axis changed: the environment in use is made again for it (the plain backgrounds' studio, or the HDRI).
+function _envFollowUp() {
+  if (!scene || !renderer) return;
+  if (state.bgMode === 'hdri') _ensureHdriEnvironment(); else _ensureStudioReflections();
+}
 
 // ── Something to reflect, on the plain backgrounds ─────────────────────────
 // With a plain background the scene used to be lit by three lights and
@@ -8358,15 +8408,13 @@ async function _ensureStudioReflections() {
   if (_studioReflTimer > 0) return;               // already waiting
   _studioReflTimer = 0;
   try {
-    if (!_studioRefl || _studioRefl.renderer !== renderer) {
+    if (!_studioRefl || _studioRefl.renderer !== renderer || _studioRefl.up !== _envUpAxis()) {
       const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
       // (the one PMREM generator of the session, shared with the HDRI code
       // below: a second one made here was never freed)
-      _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
-      const room = new RoomEnvironment();
-      const tex = _hdriPmrem.fromScene(room, 0.04).texture;
-      room.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
-      _studioRefl = { renderer, tex };
+      const old = _studioRefl && _studioRefl.renderer === renderer ? _studioRefl.tex : null;
+      _studioRefl = { renderer, tex: _envFromRoom(RoomEnvironment), up: _envUpAxis() };
+      if (old) { if (scene.environment === old) scene.environment = _studioRefl.tex; try { old.dispose(); } catch (_) {} }      // (made for the other up axis)
     }
   } catch (e) {
     // the renderer may not be ready this early: try again shortly, a few times
@@ -8444,13 +8492,13 @@ function _paintHdriPreset(id) {
   return tex;
 }
 function _ensurePresetEnv(id) {
-  if (_hdriPresetCache.has(id)) return _hdriPresetCache.get(id);
+  const key = id + '|' + _envUpAxis();
+  if (_hdriPresetCache.has(key)) return _hdriPresetCache.get(key);
   const equirect = _paintHdriPreset(id);
   if (!equirect) return null;
-  _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
-  const envTex = _hdriPmrem.fromEquirectangular(equirect).texture;
+  const envTex = _envFromEquirect(equirect);
   equirect.dispose();
-  _hdriPresetCache.set(id, envTex);
+  _hdriPresetCache.set(key, envTex);
   return envTex;
 }
 // Apply a preset: install its env into the scene + update the readout.
@@ -8464,6 +8512,7 @@ async function _applyHdriPreset(id) {
     state._customHdri = null;
     state._customHdriName = null;
   }
+  state._customHdriSrc = null;
   if (id === 'studio') {
     await _ensureHdriEnvironment();   // RoomEnvironment path
     const cur = document.getElementById('hdri-current');
@@ -8491,6 +8540,16 @@ function _markHdriPresetActive(id) {
   });
 }
 async function _ensureHdriEnvironment() {
+  // (a loaded HDRI made for the other up axis is made again from its source, which is kept for that)
+  if (state._customHdri && state._customHdriSrc && state._customHdriUp !== _envUpAxis()) {
+    try {
+      const env = _envFromEquirect(state._customHdriSrc);
+      state._customHdriSrc.dispose();                 // (its GPU copy; the picture stays, for the next turn)
+      state._customHdri.dispose?.();
+      state._customHdri = env;
+      state._customHdriUp = _envUpAxis();
+    } catch (e) { console.warn('[hdri] could not turn the loaded HDRI to the up axis:', e); }
+  }
   if (state._customHdri) {
     scene.background = state._customHdri;
     scene.environment = state._customHdri;
@@ -8514,13 +8573,13 @@ async function _ensureHdriEnvironment() {
       return;
     }
   }
-  if (!_defaultEnvTex) {
+  if (!_defaultEnvTex || _defaultEnvUp !== _envUpAxis()) {
     try {
       const { RoomEnvironment } = await import('three/addons/environments/RoomEnvironment.js');
-      _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
-      const envScene = new RoomEnvironment();
-      _defaultEnvTex = _hdriPmrem.fromScene(envScene, 0.04).texture;
-      envScene.traverse(o => { if (o.isMesh) { o.geometry?.dispose(); o.material?.dispose(); } });
+      const old = _defaultEnvTex;
+      _defaultEnvTex = _envFromRoom(RoomEnvironment);
+      _defaultEnvUp = _envUpAxis();
+      if (old) { if (scene.background === old) scene.background = null; if (scene.environment === old) scene.environment = null; try { old.dispose(); } catch (_) {} }
     } catch (e) {
       console.warn('[hdri] default env load failed:', e);
       return;
@@ -8556,12 +8615,13 @@ async function _loadCustomHdri(file) {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     // Run through PMREM so it lights PBR materials with the correct
     // pre-filtered roughness mips; without this, reflections are noisy.
-    _hdriPmrem ||= new THREE.PMREMGenerator(renderer);
-    const envTex = _hdriPmrem.fromEquirectangular(tex).texture;
-    tex.dispose();
+    const envTex = _envFromEquirect(tex);
+    tex.dispose();                                  // (its GPU copy: the picture itself is kept, to be turned again if the up axis changes)
     // Drop the previous custom HDRI to avoid GPU leaks.
     state._customHdri?.dispose?.();
     state._customHdri = envTex;
+    state._customHdriSrc = tex;
+    state._customHdriUp = _envUpAxis();
     state._customHdriName = file.name;
     if (state.bgMode === 'hdri') _ensureHdriEnvironment();
     const cur = document.getElementById('hdri-current');
@@ -8576,11 +8636,13 @@ async function _loadCustomHdri(file) {
   }
 }
 
-// Apply state.hdriRotation. Two paths run in parallel because the WebGPU
-// bundle's NodeMaterial path doesn't reliably re-light meshes when
-// scene.environmentRotation alone changes:
-//   1. scene.environmentRotation / backgroundRotation rotate the visible
-//      background (and the diffuse env on WebGL2).
+// Apply state.hdriRotation. Two paths run in parallel because the node
+// materials of three r172 ignore scene.environmentRotation (on both
+// renderers): the lighting and reflections stay where the environment was
+// made (turned to the up axis: _envFromRoom / _envFromEquirect):
+//   1. scene.backgroundRotation turns the visible background about the
+//      scene's up axis (environmentRotation is set the same, for a three
+//      that reads it).
 //   2. The directional "sun" light gets repositioned to match the gizmo,
 //      providing the visible relighting that responds to the user drag.
 // Together this gives the same look as a real HDRI rotation regardless
@@ -8588,8 +8650,9 @@ async function _loadCustomHdri(file) {
 function _applyHdriRotation() {
   if (!scene) return;
   const rot = state.hdriRotation || 0;
-  if (scene.environmentRotation) scene.environmentRotation.set(0, 0, rot);
-  if (scene.backgroundRotation)  scene.backgroundRotation.set(0, 0, rot);
+  const yUp = _envUpAxis() === 'y';
+  if (scene.environmentRotation) scene.environmentRotation.set(0, yUp ? rot : 0, yUp ? 0 : rot);
+  if (scene.backgroundRotation)  scene.backgroundRotation.set(0, yUp ? rot : 0, yUp ? 0 : rot);
   if (state._lights?.dir && state._lights._stashedForHdri) {
     _applyHdriSunPosition();
   }
@@ -8683,7 +8746,9 @@ function _applyHdriSunPosition() {
   const el = Math.PI * 0.30;
   const r = 1000;
   const cos = Math.cos(el);
-  state._lights.dir.position.set(
+  // (the same place turned to a Y-up scene: its height on Y, and Z where Y was, the other way round)
+  if (_envUpAxis() === 'y') state._lights.dir.position.set(r * Math.cos(az) * cos, r * Math.sin(el), -r * Math.sin(az) * cos);
+  else state._lights.dir.position.set(
     r * Math.cos(az) * cos,
     r * Math.sin(az) * cos,
     r * Math.sin(el),
@@ -10281,6 +10346,7 @@ function newScene() {
 function _newSceneHere() {
   state._sceneActive = false;       // ensure clearModel fully resets
   clearModel();
+  try { _Autosave.resume(); } catch (_) {}      // (a window reused after "Close without saving" writes recovery copies again)
   state._loadedFilename = null;
   state._sourceFile = null;
   state._sourceExtensions = null;
@@ -10535,6 +10601,57 @@ function _camKeep() {
 // render target too large to allocate, a read-back that throws) all of it is
 // given back here, so a failed screenshot cannot leave the viewport in
 // wireframe, without its grid, or stretched.
+// ── The scene as pixels, from the GPU ─────────────────────────────────────────────────────────────────────────────────
+// Draws the scene from `cam` at w × h and reads the picture back: RGBA, 8 bits, top row first, opaque, tone-mapped and in sRGB
+// as the viewport shows it. Null when it cannot: the callers then take the picture from the live canvas (a frame drawn at the
+// size they want, which shows as a flicker in the view).
+// - three r172 does neither the tone mapping nor the sRGB conversion when it draws into a render target (they belong to the
+//   drawing on the canvas), so the scene goes into a half-float target first, and a full-screen pass applies the renderer's own
+//   tone mapping, exposure and output colour space on the way into the 8-bit target that is read.
+// - readRenderTargetPixelsAsync returns the data. (The callers used to pass an array last, as for the WebGL renderer: it was
+//   taken for the texture index, and the read failed every time with "Invalid value used as weak map key".)
+// - WebGPU copies rows in steps of 256 bytes and r172 does not pad the buffer it reads into, so on WebGPU the target read is a
+//   multiple of 64 pixels wide and the picture is drawn into its first w columns.
+// - WebGPU gives the top row first, WebGL the bottom row first.
+let _gpuCaptureWarned = false;
+async function _gpuCapture(cam, w, h) {
+  const T = THREE.TSL;
+  if (!renderer || !scene || !cam || !(w > 0 && h > 0) || typeof renderer.readRenderTargetPixelsAsync !== 'function' || !THREE.QuadMesh || !THREE.NodeMaterial || !T?.renderOutput) return null;
+  const isGPU = !!(renderer.backend && renderer.backend.isWebGPUBackend);
+  const W = isGPU ? Math.ceil(w / 64) * 64 : w;
+  // (a picture larger than the GPU's textures may be is left to the canvas path: WebGPU does not throw for it, the read-back just comes out black)
+  let maxTex = 8192;
+  try { maxTex = isGPU ? (renderer.backend.device?.limits?.maxTextureDimension2D || 8192) : (renderer.backend.gl?.getParameter(renderer.backend.gl.MAX_TEXTURE_SIZE) || 4096); } catch (_) {}
+  if (W > maxTex || h > maxTex) return null;
+  // (smoothed edges as the viewport has them, but not for the biggest pictures: four samples of a half-float 8K picture are a gigabyte)
+  const hdr = new THREE.RenderTarget(w, h, { type: THREE.HalfFloatType, samples: w * h <= 8.3e6 ? 4 : 0 });
+  const ldr = new THREE.RenderTarget(W, h, { type: THREE.UnsignedByteType, depthBuffer: false });
+  ldr.viewport.set(0, 0, w, h);
+  const mat = new THREE.NodeMaterial();
+  mat.fragmentNode = T.renderOutput(T.texture(hdr.texture), renderer.toneMapping, renderer.outputColorSpace);
+  const quad = new THREE.QuadMesh(mat);
+  const prev = renderer.getRenderTarget();
+  try {
+    renderer.setRenderTarget(hdr);
+    await renderer.renderAsync(scene, cam);
+    renderer.setRenderTarget(ldr);
+    await quad.renderAsync(renderer);
+    const px = await renderer.readRenderTargetPixelsAsync(ldr, 0, 0, W, h);
+    if (!px || px.length < W * h * 4) throw new Error('short read-back: ' + (px ? px.length : 0) + ' bytes');
+    const out = new Uint8ClampedArray(w * h * 4), row = w * 4, srcRow = W * 4;
+    for (let y = 0; y < h; y++) { const sy = isGPU ? y : h - 1 - y; out.set(px.subarray(sy * srcRow, sy * srcRow + row), y * row); }
+    for (let i = 3; i < out.length; i += 4) out[i] = 255;             // (the view itself is opaque)
+    return out;
+  } catch (e) {
+    if (!_gpuCaptureWarned) { _gpuCaptureWarned = true; console.info('[capture] GPU read-back failed, using the live canvas:', e?.message || e); }
+    return null;
+  } finally {
+    try { renderer.setRenderTarget(prev || null); } catch (_) {}
+    try { mat.dispose(); } catch (_) {}
+    try { hdr.dispose(); ldr.dispose(); } catch (_) {}
+  }
+}
+
 async function _captureFrameAsBlob(outW, outH, opts = {}) {
   const hasGrid = (typeof gridHelper !== 'undefined' && gridHelper);
   const prevMode = state?.viewMode, prevGrid = hasGrid ? gridHelper.visible : null;
@@ -10588,27 +10705,9 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
     camera.updateProjectionMatrix();
   }
 
-  const target = new THREE.WebGLRenderTarget(outW, outH, {
-    minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
-  });
-  const oldTarget = renderer.getRenderTarget?.();
-  const pixels = new Uint8Array(outW * outH * 4);
-  let readOk = false;
-  try {
-    renderer.setRenderTarget(target);
-    if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, camera);
-    else renderer.render(scene, camera);
-    try {
-      if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
-        await renderer.readRenderTargetPixelsAsync(target, 0, 0, outW, outH, pixels);
-      } else {
-        renderer.readRenderTargetPixels(target, 0, 0, outW, outH, pixels);
-      }
-      readOk = true;
-    } catch (_) { /* fall through to live-canvas path */ }
-  } finally {
-    renderer.setRenderTarget(oldTarget || null);
-    target.dispose();
+  let pixels = null;
+  try { pixels = await _gpuCapture(camera, outW, outH); }
+  finally {
     if (stashedAspect != null) {
       camera.aspect = stashedAspect;
       camera.updateProjectionMatrix();
@@ -10618,19 +10717,11 @@ async function _captureFrameAsBlobRun(outW, outH, opts = {}) {
   const out = document.createElement('canvas');
   out.width = outW; out.height = outH;
   const ctx = out.getContext('2d');
-  if (readOk) {
-    // GL origin is bottom-left; canvas2d is top-left. Flip rows during copy.
-    const img = ctx.createImageData(outW, outH);
-    const dst = img.data, rowBytes = outW * 4;
-    for (let y = 0; y < outH; y++) {
-      const sRow = (outH - 1 - y) * rowBytes;
-      const dRow = y * rowBytes;
-      dst.set(pixels.subarray(sRow, sRow + rowBytes), dRow);
-    }
-    ctx.putImageData(img, 0, 0);
+  if (pixels) {
+    ctx.putImageData(new ImageData(pixels, outW, outH), 0, 0);       // (already top row first: _gpuCapture)
   } else {
-    // Read failed (typical on WebGPU drivers that don't implement
-    // readRenderTargetPixelsAsync). Fall back to a temporary resize of the
+    // The GPU read-back failed (_gpuCapture says why, once, in the
+    // console). Fall back to a temporary resize of the
     // live canvas so the render lands at exactly the requested output
     // dimensions — no letterboxing. The visible viewport flickers for one
     // frame but the saved image fills the entire output (no black bars).
@@ -12512,13 +12603,15 @@ const _ClaudeBridge = (() => {
     async fill_holes(a) {
       const inp = $q('fill-holes-size'); if (!inp || !window.__moAgent?.fillHoles) throw new Error('Remove holes is not available here.');
       const hasWhich = (Array.isArray(a.ids) && a.ids.length) || String(a.name_contains || '').trim();
+      const enc = $q('fh-enclosed'), encOld = enc ? enc.checked : true;      // (the card's own switch stands unless the call says otherwise)
       const old = inp.value, b = snap();
       try {
         inp.value = String(a.max_hole_mm > 0 ? a.max_hole_mm : 10);
+        if (enc && typeof a.remove_enclosed === 'boolean') enc.checked = a.remove_enclosed;
         if (hasWhich) pickSel(needIds(a, 'fill')); else pickSel([]);
         await window.__moAgent.fillHoles();
-      } finally { inp.value = old; }
-      return text({ max_hole_mm: a.max_hole_mm > 0 ? a.max_hole_mm : 10, ...diff(b, snap()) });
+      } finally { inp.value = old; if (enc) enc.checked = encOld; }
+      return text({ max_hole_mm: a.max_hole_mm > 0 ? a.max_hole_mm : 10, remove_enclosed: enc ? (typeof a.remove_enclosed === 'boolean' ? a.remove_enclosed : encOld) : undefined, ...diff(b, snap()) });
     },
     async remove_floating_pieces(a) {
       const inp = $q('fl-size'), tr = $q('fl-tris'); if (!inp || !window.__moAgent?.removeFloating) throw new Error('Remove floating pieces is not available here.');
@@ -13042,55 +13135,20 @@ async function _captureRecentThumb(filename, recentId, epoch) {
     if (state._originMarker) state._originMarker.visible = hide ? false : wasOrigin;
   };
   hideHelpers(true);
-  const target = new THREE.WebGLRenderTarget(SIZE, SIZE, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-  const oldTarget = renderer.getRenderTarget?.();
-  let pixels = new Uint8Array(SIZE * SIZE * 4);
-  let readOk = false;
-  try {
-    renderer.setRenderTarget(target);
-    if (typeof renderer.renderAsync === 'function') await renderer.renderAsync(scene, cam);
-    else renderer.render(scene, cam);
-    try {
-      if (typeof renderer.readRenderTargetPixelsAsync === 'function') {
-        await renderer.readRenderTargetPixelsAsync(target, 0, 0, SIZE, SIZE, pixels);
-      } else {
-        renderer.readRenderTargetPixels(target, 0, 0, SIZE, SIZE, pixels);
-      }
-      readOk = true;
-    } catch (readErr) {
-      // WebGPU's readRenderTargetPixelsAsync rejects with "Invalid value
-      // used as weak map key" against a freshly-allocated RenderTarget —
-      // the GPU texture isn't registered with the backend's resource map
-      // yet at the moment the copy command runs. Known three.js issue;
-      // the canvas-snapshot fallback below keeps thumbs working. Log once
-      // per session so the failure is discoverable in the console without
-      // spamming on every model load.
-      if (!_captureRecentThumb._loggedReadFail) {
-        console.info('[recent-thumb] using canvas-snapshot path (WebGPU readRenderTargetPixelsAsync unavailable):', readErr?.message || readErr);
-        _captureRecentThumb._loggedReadFail = true;
-      }
-    }
-  } finally {
-    renderer.setRenderTarget(oldTarget || null);
-    target.dispose();
+  let pixels = null;
+  try { pixels = await _gpuCapture(cam, SIZE, SIZE); }
+  finally {
     hideHelpers(false);
     requestRender?.();
   }
   let dataUrl;
-  if (readOk) {
-    // GL/WebGPU framebuffer origin is bottom-left; canvas2D is top-left. Flip rows.
+  if (pixels) {
     const c = document.createElement('canvas');
     c.width = SIZE; c.height = SIZE;
-    const ctx = c.getContext('2d');
-    const imageData = ctx.createImageData(SIZE, SIZE);
-    for (let y = 0; y < SIZE; y++) {
-      const src = (SIZE - 1 - y) * SIZE * 4;
-      const dst = y * SIZE * 4;
-      imageData.data.set(pixels.subarray(src, src + SIZE * 4), dst);
-    }
-    ctx.putImageData(imageData, 0, 0);
+    c.getContext('2d').putImageData(new ImageData(pixels, SIZE, SIZE), 0, 0);
     dataUrl = c.toDataURL('image/jpeg', 0.86);
   } else {
+    // (the GPU read-back failed: _gpuCapture says why, once, in the console)
     // Snapshot the live viewport canvas instead. Cropped to a centred
     // square so wide viewports don't produce stretched thumbnails.
     try {
@@ -13782,6 +13840,7 @@ function _applySceneUpAxis() {
   state.partsRoot.updateMatrixWorld(true);
   _rootChangedFrom(before);
   if (camera) camera.up.set(0, state.sceneUpAxis === 'y' ? 1 : 0, state.sceneUpAxis === 'z' ? 1 : 0);
+  try { _envFollowUp(); _applyHdriRotation(); if (state._lights?._stashedForHdri) _applyHdriSunPosition(); } catch (_) {}      // (the environment and the sun stand on the new floor)
   // OrbitControls turns about the up it read from the camera when it was
   // built; without this, orbiting in a Y-up scene still turned about Z.
   try {
@@ -18723,45 +18782,6 @@ function _commitMarqueeSelection(m) {
   $('del-sel-count').textContent = state.selected.size;
 }
 
-// Range-select between anchorId and clickedId in DOM (visual) order. If
-// `additive` is true, the existing selection is preserved and the range is
-// added; otherwise the selection is replaced with the range. The DOM walk
-// honours the user's current sort + filter + group expansion state, so the
-// range matches what the user actually sees in the tree.
-function _treeSelectRange(anchorId, clickedId, additive) {
-  const treeEl = document.getElementById('tree');
-  if (!treeEl) return;
-  // Rows hidden by a search or a collapsed group stay in the DOM; a range
-  // must not sweep them up (Delete would then remove parts never shown).
-  const nodes = treeEl._rows ? _treeShownRows().filter(r => r.dataset.partId)
-    : treeEl.querySelectorAll('.tree-node[data-part-id]:not(.is-hidden)');
-  let iA = -1, iB = -1;
-  for (let i = 0; i < nodes.length; i++) {
-    const id = parseInt(nodes[i].dataset.partId, 10);
-    if (id === anchorId)  iA = i;
-    if (id === clickedId) iB = i;
-  }
-  // Anchor not visible (filtered out / in a collapsed group): fall back to a
-  // plain click on the new id so the user gets predictable behaviour.
-  if (iA < 0 || iB < 0) {
-    selectPart(clickedId, additive ? 'add' : 'single');
-    state._selAnchorId = clickedId;
-    return;
-  }
-  const lo = Math.min(iA, iB), hi = Math.max(iA, iB);
-  if (!additive) { state.selected.clear(); state.selectedGroupIds?.clear?.(); }
-  for (let i = lo; i <= hi; i++) {
-    const id = parseInt(nodes[i].dataset.partId, 10);
-    const p = getPart(id);
-    if (p && !p.deleted) state.selected.add(id);
-  }
-  applySelectionColors();
-  rebuildTreeSelectionOnly();
-  refreshPropertiesPanel();
-  updateGizmo();
-  $('del-sel-count').textContent = state.selected.size;
-}
-
 // Click on a row of the tree with the modifiers, groups and parts alike (so they can be picked together):
 //   click            this row alone (a group: the group and everything in it)
 //   Ctrl / Cmd       toggles the row as a unit: a group goes in or out with all its parts
@@ -19972,7 +19992,7 @@ const _Tabs = (() => {
     fr.dataset.booting = '1';
     fr.setAttribute('allow', 'fullscreen; clipboard-write; clipboard-read');
     fr.setAttribute('tabindex', '-1');
-    fr.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;margin:0;padding:0;z-index:2147483000;background:#101010;display:block;opacity:0;pointer-events:none';
+    fr.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;border:0;margin:0;padding:0;z-index:var(--z-max);background:var(--bg);display:block;opacity:0;pointer-events:none';
     fr.__moBoot = boot || {};
     const u = new URL(TOP.location.href);
     u.search = '?tab=' + id;
@@ -20764,6 +20784,9 @@ const _Autosave = (() => {
     forget, recovered, offerList, pending, recoverKey, dropKey, settle,
     now: snap,
     discardHere() { closing = true; return forget(); },
+    // the window was emptied and kept (the last tab, or 'main', closed from the strip): it is alive again and writes copies again.
+    // `closing` used to stay set for the life of the window, so a scene opened after "Close without saving" was never covered.
+    resume() { closing = false; },
     nudge() { lastTop = undefined; lastAt = 0; },
     clearAll() { lastTop = undefined; kept = false; return all().then(a => Promise.all(a.map(s => del(s.key).catch(() => {})))).then(a => a.length); },
   };
@@ -20940,17 +20963,22 @@ function deleteParts(ids, label='Deleted parts') {
   // up empty. Without this, the userGroup tree kept showing the group header
   // with a stale badge count and no rows underneath — which read as "delete
   // didn't actually delete anything" because the parent stuck around.
+  // What the delete takes out of the user groups is recorded on the undo step: the memberships it drops (`groups`) and the groups it
+  // dissolves (`removedGroups`, with everything needed to put them back). A group is dissolved BEFORE its members are taken out of it,
+  // so its meshes are moved back under partsRoot and are drawn again when the delete is undone (they used to stay under the detached
+  // container: undo listed them in the tree and the viewport showed nothing).
+  const groups = [], removedGroups = [];
   if (Array.isArray(state.userGroups) && state.userGroups.length) {
-    const drop = [];
-    for (const g of state.userGroups) {
-      if (!g.partIds || !g.partIds.size) { drop.push(g.id); continue; }
-      let changed = false;
-      for (const pid of [...g.partIds]) if (set.has(pid)) { g.partIds.delete(pid); changed = true; }
-      if (changed && g.partIds.size === 0) drop.push(g.id);
+    for (const g of [...state.userGroups]) {
+      if (!g.partIds || !g.partIds.size) { const r = removeUserGroup(g.id, { skipRebuild: true, skipUndo: true }); if (r) removedGroups.push(r); continue; }
+      const gone = [...g.partIds].filter(pid => set.has(pid));
+      if (!gone.length) continue;
+      if (gone.length === g.partIds.size) { const r = removeUserGroup(g.id, { skipRebuild: true, skipUndo: true }); if (r) removedGroups.push(r); continue; }
+      for (const pid of gone) g.partIds.delete(pid);
+      groups.push({ groupId: g.id, partIds: gone });
     }
-    for (const gid of drop) try { removeUserGroup(gid, { skipRebuild: true, skipUndo: true }); } catch (_) {}
   }
-  if (hidden.length) pushUndo({ type: 'delete', items: hidden, label, wasExploded: !!(state.explode && (state.explode.x || state.explode.y || state.explode.z)) });
+  if (hidden.length) pushUndo({ type: 'delete', items: hidden, label, groups, removedGroups, wasExploded: !!(state.explode && (state.explode.x || state.explode.y || state.explode.z)) });
   state.selected.clear(); $('del-sel-count').textContent = 0;
   // Model center changes when parts disappear; per-part _origPos values are
   // still valid for survivors, so leave them alone.
@@ -21555,6 +21583,11 @@ _UndoOps.register('delete', {
       }
       if (exploded) applyExplode();
     } catch (e) { console.warn('[undo] delete: could not place the parts in the view:', e); }
+    // the groups the delete dissolved come back, and the memberships it dropped
+    try {
+      for (const r of op.removedGroups || []) _userGroupPutBack(r);
+      for (const g of op.groups || []) { const ug = getGroupById(g.groupId); if (ug) for (const pid of g.partIds) ug.partIds.add(pid); }
+    } catch (e) { console.warn('[undo] delete: could not put the groups back:', e); }
     recomputeStats(); refreshFlagged();
     _finalizeUndo({ rebuildTree: true });
   },
@@ -21570,6 +21603,10 @@ _UndoOps.register('delete', {
         p.instancedMesh.instanceMatrix.needsUpdate = true;
       }
     }
+    try {
+      for (const g of op.groups || []) { const ug = getGroupById(g.groupId); if (ug) for (const pid of g.partIds) ug.partIds.delete(pid); }
+      for (const r of op.removedGroups || []) _userGroupTakeOut(r);
+    } catch (e) { console.warn('[redo] delete: could not take the groups out:', e); }
     state.history.push(op);
     state.selected.clear();
     recomputeStats(); refreshFlagged();
@@ -22486,8 +22523,13 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
   for (const it of drawList) it.world.premultiply(settingsOut);
 
   // Pre-compute the bbox-center offset if needed for origin recentering.
+  // The dialog says 'keep' / 'center' / 'floor', the Claude presets 'model' / 'floor' ('bbox' is the old name of 'center'): the
+  // builder used to know only 'bbox', so "Recentre to bbox centre" and "drop to floor" wrote the file exactly like "Keep model origin".
+  // 'center' puts the middle of the box at the origin; 'floor' puts the middle of the box on X and Y at the origin and the lowest
+  // point on Z = 0 (the app's own up axis; the turn into Y-up comes after).
   let originOffset = new THREE.Vector3(0, 0, 0);
-  if (origin === 'bbox') {
+  if (origin === 'bbox') origin = 'center';
+  if (origin === 'center' || origin === 'floor') {
     const box = new THREE.Box3();
     const tmp = new THREE.Vector3();
     // Measured from what will actually be written: each entry's geometry
@@ -22504,7 +22546,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
         box.expandByPoint(tmp);
       }
     }
-    if (!box.isEmpty()) box.getCenter(originOffset);
+    if (!box.isEmpty()) { box.getCenter(originOffset); if (origin === 'floor') originOffset.z = box.min.z; }
   }
 
   // Scale + axis matrices applied AFTER per-part world transform.
@@ -27337,13 +27379,30 @@ async function doExport(opts) {
     toast('Export failed', e && e.message ? e.message : String(e), 'error', 6000);
   }
 }
+// An exploded view is a view: a file is written with the parts together (Save does the same, see _saveSceneImpl). `fn` runs at once and
+// must build what it needs from the parts; the view goes back as it was afterwards.
+function _whileTogether(fn) {
+  const ex0 = state.explode ? { ...state.explode } : null, was = !!(ex0 && (ex0.x || ex0.y || ex0.z));
+  if (was) { state.explode = { x: 0, y: 0, z: 0 }; try { applyExplode(); } catch (_) {} }
+  try { return fn(); }
+  finally { if (was) { state.explode = ex0; try { applyExplode(); } catch (_) {} } }
+}
 async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', pivot='part', draco=false, meshopt=false, reorder=false, flat=false, stlAscii=false, fileName='', animate=false }) {
   const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
   setLoader(true, 'Preparing export…', fmtLabel);
   await new Promise(r => setTimeout(r, 16));
   // OBJ and FBX can hold quads and n-gons: the polygons of the parts are written as they are (the "Keep quads" switch, on by default)
   const quadsOn = (format === 'obj' || format === 'fbx') && !merge && document.getElementById('exp-quads')?.checked !== false;
-  const { root, count, meshByPart, postMat: _postMat, settingsOut: _settingsOut } = buildExportRoot({ visibleOnly, merge, scale, axis, origin, pivot, flat, lines: (format === 'glb' || format === 'gltf') && !merge, quads: quadsOn });
+  // The animation is baked in the same breath, while the parts are together: baked after the view was put back, the clip carried the
+  // explode offsets while the nodes were written at rest, and a spinning part circled its offset in the file.
+  let _clip = null, _clipErr = null;
+  const { root, count, meshByPart, postMat: _postMat, settingsOut: _settingsOut } = _whileTogether(() => {
+    const r = buildExportRoot({ visibleOnly, merge, scale, axis, origin, pivot, flat, lines: (format === 'glb' || format === 'gltf') && !merge, quads: quadsOn });
+    if (animate && !merge && r.meshByPart && (format === 'glb' || format === 'gltf')) {
+      try { _clip = _animationClipForExport(r.meshByPart, r.postMat, r.settingsOut); } catch (e) { _clipErr = e; }
+    }
+    return r;
+  });
   if (count === 0) { setLoader(false); toast('Nothing to export', 'No visible parts', 'warn'); return; }
   let hasQuads = false;
   if (quadsOn) root.traverse(o => { if (o.isMesh && o.geometry && o.geometry._moPoly) hasQuads = true; });
@@ -27380,8 +27439,8 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       const isBin = format === 'glb';
       let animations = [];
       if (animate && !merge && meshByPart) {
-        try { const clip = _animationClipForExport(meshByPart, _postMat, _settingsOut); if (clip) animations = [clip]; }
-        catch (e) { console.warn('[export] animation:', e); toast('Animation left out', 'It could not be written: ' + (e && e.message || e), 'warn', 6000); }
+        if (_clip) animations = [_clip];
+        else if (_clipErr) { const e = _clipErr; console.warn('[export] animation:', e); toast('Animation left out', 'It could not be written: ' + (e && e.message || e), 'warn', 6000); }
       }
 
       // Filter the spammy "Creating normalized normal attribute" warning
@@ -27749,10 +27808,14 @@ function wireUI() {
         canvas.width = canvas.height = SIZE * 2;
         let renderer;
         try {
-          renderer = new THREE.WebGPURenderer({ canvas, antialias: true, alpha: true });
+          // On WebGL, as the library preview: a WebGPU renderer here opened a second GPU device beside the viewport's, and kept
+          // it for the session. The context keeps its drawing buffer, because the picture is read back a frame after it is drawn.
+          const gl = canvas.getContext('webgl2', { alpha: true, antialias: true, preserveDrawingBuffer: true });
+          if (!gl) throw new Error('no WebGL2');
+          renderer = new THREE.WebGPURenderer({ canvas, context: gl, antialias: true, alpha: true, forceWebGL: true });
           await renderer.init();
         } catch (e) {
-          console.warn('[prim-thumb] WebGPU init failed:', e?.message || e);
+          console.warn('[prim-thumb] renderer init failed:', e?.message || e);
           unavailable = true;
           return null;
         }
@@ -28077,7 +28140,7 @@ function wireUI() {
     if (over || _brushStroke) {
       if (!_brushRing) {
         _brushRing = document.createElement('div');
-        _brushRing.style.cssText = 'position:fixed;z-index:149;pointer-events:none;border:1.5px solid rgba(190,225,255,.85);border-radius:50%;box-sizing:border-box;background:rgba(190,225,255,.08)';
+        _brushRing.style.cssText = 'position:fixed;z-index:var(--z-brush-ring);pointer-events:none;border:1.5px solid rgba(190,225,255,.85);border-radius:50%;box-sizing:border-box;background:rgba(190,225,255,.08)';
         document.body.appendChild(_brushRing);
       }
       _ringAt = { x: e.clientX, y: e.clientY }; _ringDraw();
@@ -28778,6 +28841,7 @@ function wireUI() {
   $('hdri-default-btn')?.addEventListener('click', () => {
     state._customHdri?.dispose?.();
     state._customHdri = null;
+    state._customHdriSrc = null;
     state._customHdriName = null;
     if (state.bgMode === 'hdri') _ensureHdriEnvironment();
     const cur = $('hdri-current'); if (cur) cur.textContent = 'Built-in studio';
@@ -31860,11 +31924,6 @@ function _addGeometryPart(geom, baseName, opts = {}) {
   return partInfo;
 }
 
-// A new line in the scene from points (what the Sweep card's "Add" buttons make): editable like any other.
-function _addSpline(baseName, points, closed) {
-  return _addSplineSrc(baseName, { type: 'linear', closed: !!closed, points: points.map(p => ({ p })) });
-}
-
 // ── The Sweep card ───────────────────────────────────────────────────────────
 // A profile carried along a path. Paths and profiles are lines in the scene (draw them with
 // the Draw tool); the profile can also be a circle or a rectangle made here. The result is a
@@ -34178,6 +34237,9 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     state.history.length = 0;
     if (state.redo) state.redo.length = 0;
     _refreshUndoRedoButtons();
+    // A scene with a file imported into it is not the file that was saved, whatever the (now empty) history says: without this the
+    // tab closed without asking and no recovery copy was written. (An import into an empty scene is an ordinary open.)
+    if (state.parts.length > made) { try { _Dirty.force(); } catch (_) {} }
   }
   state.partsRoot.add(sceneRoot);
   state.partsRoot.updateMatrixWorld(true);
@@ -36866,10 +36928,10 @@ const _ModelInspector = (() => {
       .mi2-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:8px 8px;border-radius:9px}
       .mi2-row:hover{background:var(--s1)}
       .mi2-dot{width:8px;height:8px;border-radius:50%;background:var(--tx3)}
-      .mi2-row.t-ok .mi2-dot{background:#3ecf8e}
-      .mi2-row.t-warn .mi2-dot{background:#f5a524}
-      .mi2-row.t-bad .mi2-dot{background:#ef5350}
-      .mi2-row.t-info .mi2-dot{background:#6b8dff}
+      .mi2-row.t-ok .mi2-dot{background:var(--ok)}
+      .mi2-row.t-warn .mi2-dot{background:var(--wn)}
+      .mi2-row.t-bad .mi2-dot{background:var(--er)}
+      .mi2-row.t-info .mi2-dot{background:var(--ac-text)}
       .mi2-l{color:var(--tx)}
       .mi2-n{color:var(--tx3);font-size:11px;line-height:1.4;margin-top:1px}
       .mi2-c{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;min-width:96px}
@@ -41075,7 +41137,7 @@ const _QuickColour = (() => {
     if (root) return;
     const st = document.createElement('style');
     st.textContent = `
-      #qc-wheel{position:fixed;z-index:450;width:${SIZE}px;pointer-events:none;visibility:hidden;display:flex;flex-direction:column;align-items:center;font:12px var(--font-sans);color:var(--tx)}
+      #qc-wheel{position:fixed;z-index:var(--z-quick-wheel);width:${SIZE}px;pointer-events:none;visibility:hidden;display:flex;flex-direction:column;align-items:center;font:12px var(--font-sans);color:var(--tx)}
       /* it grows out of its middle, the ring opening outward as it does, and goes away the same way in reverse: it draws back into its middle */
       /* the pointer is hidden while it is over the wheel (the dot stands in for it); out past the cancel line it shows again */
       body.qc-nocursor,body.qc-nocursor *{cursor:none!important}
@@ -41091,7 +41153,7 @@ const _QuickColour = (() => {
       @media (prefers-reduced-motion:reduce){#qc-wheel.show canvas,#qc-wheel.show .qc-cap,#qc-wheel.leaving{animation:none;visibility:hidden}#qc-wheel.leaving canvas,#qc-wheel.leaving .qc-cap{animation:none}}
       #qc-wheel canvas{display:block;width:${SIZE}px;height:${SIZE}px;transition:opacity 140ms ease-out}
       #qc-wheel.cancelling canvas{opacity:.45}
-      #qc-wheel .qc-dot{position:absolute;left:0;top:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;box-sizing:border-box;border:2px solid #000;pointer-events:none;display:none;transform:translate3d(var(--x,0px),var(--y,0px),0);transition:background 180ms ease-out}
+      #qc-wheel .qc-dot{position:absolute;left:0;top:0;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;box-sizing:border-box;border:2px solid var(--black);pointer-events:none;display:none;transform:translate3d(var(--x,0px),var(--y,0px),0);transition:background 180ms ease-out}
       /* crossing the cancel line (either way) the dot and the pill glide to their new place; while the pointer drags them they follow it at once */
       #qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:background 180ms ease-out,opacity 140ms ease-out,transform 240ms cubic-bezier(.16,1,.3,1)}
       #qc-wheel .qc-cancel{position:absolute;left:0;top:0;will-change:transform,opacity;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%) scale(.9);display:flex;align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.94);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 3px 9px rgba(0,0,0,.35);white-space:nowrap;opacity:0;transition:opacity 140ms ease-out,transform 140ms ease-out}
@@ -41099,7 +41161,7 @@ const _QuickColour = (() => {
       #qc-wheel .qc-cancel em{font-style:normal;color:var(--tx3);font-size:11px}
       #qc-wheel.cancelling .qc-cancel{opacity:1;transform:translate3d(var(--x,0px),var(--y,0px),0) translate(-50%,-190%)}
       @media (prefers-reduced-motion:reduce){#qc-wheel canvas,#qc-wheel .qc-cancel,#qc-wheel .qc-dot,#qc-wheel .qc-dot.glide,#qc-wheel .qc-cancel.glide{transition:none}}
-      #qc-wheel .qc-cap{margin-top:-8px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:rgba(16,16,16,.9);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 4px 13px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
+      #qc-wheel .qc-cap{margin-top:-8px;display:flex;width:max-content;flex:none;align-items:center;gap:5px;height:30px;padding:0 14px;border-radius:999px;background:var(--surface-bar);box-shadow:0 0 0 1px rgba(255,255,255,.09),0 4px 13px rgba(0,0,0,.4);white-space:nowrap;font-variant-numeric:tabular-nums}
       #qc-wheel .qc-cap i{width:14px;height:14px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.22)}
       #qc-wheel .qc-cap svg{width:10px;height:10px;color:var(--tx3);fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
       #qc-wheel .qc-cap b{font-weight:500;font-family:var(--font-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:12px;letter-spacing:.02em;text-align:left}
@@ -42569,7 +42631,9 @@ const _Anim = (() => {
     deltaOf(rec, DELTA);
     applyLook(rec);
     if (rec.kind === 'part') {
-      const p = live(rec.partId); if (!p) return 0;
+      // a deleted part keeps its record (−1: nothing moved, keep it): it comes back with its motion and its rest when the delete is
+      // undone. The record used to be dropped on the first pass, with the only copy of the rest, so undo brought the part back frozen mid-turn.
+      const p = live(rec.partId); if (!p) return getPart(rec.partId) ? -1 : 0;
       // rest · T(c) · delta · T(−c): the turn is about the middle of the part's own geometry
       const R0 = restE(rec.partId, rec);
       rigidPartMotion(R0, rec.c, DELTA, M5); M5.multiply(R0);      // (the motion first as a rigid transform, then the part's rest under it)
@@ -42583,22 +42647,23 @@ const _Anim = (() => {
     F4.invert(); G4.multiply(F4).multiply(T4.makeTranslation(-rec.C.x, -rec.C.y, -rec.C.z));
     if (PW) G4.premultiply(PW);
     RG.multiplyMatrices(FR.R, G4);
-    let n = 0;
+    let n = 0, gone = 0;
     for (const id of rec.members) {
-      const p = live(id); if (!p) continue;
+      const p = live(id); if (!p) { if (getPart(id)) gone++; continue; }
       const m = p.mesh;
       W4.multiplyMatrices(RG, restE(id, rec));
       (m.parent ? M3.copy(parentInv(m.parent)) : M3.identity()).multiply(W4).decompose(m.position, m.quaternion, m.scale);
       m.updateMatrixWorld(true);
       n++;
     }
-    return n;
+    return n || (gone ? -1 : 0);      // (a group whose members are all deleted waits for them, as a part does)
   }
   // one pass over some objects (all of them, or the one that changed); an object that has nothing left to move is dropped
+  // (0), one whose parts are deleted is kept for their return (−1)
   function applyAll(recs) {
     beginFrame();
     let n = 0;
-    for (const rec of (recs || items.values())) { const k = applyRec(rec); if (!k) items.delete(rec.key); n += k; }
+    for (const rec of (recs || items.values())) { const k = applyRec(rec); if (k === 0) items.delete(rec.key); else if (k > 0) n += k; }
     return n;
   }
   const apply = (rec) => { beginFrame(); return applyRec(rec) > 0; };
@@ -42812,7 +42877,8 @@ const _Anim = (() => {
     }
     commitSoon('Edit motion');
   }
-  function dropRec(rec) { restoreLook(rec); for (const id of rec.rests.keys()) { const p = live(id); if (p) place(p.mesh, restE(id, rec)); } }
+  // (a deleted part's hidden mesh goes back to rest too, so an undo of the delete finds it there)
+  function dropRec(rec) { restoreLook(rec); for (const id of rec.rests.keys()) { const p = getPart(id); if (p && p.mesh) place(p.mesh, restE(id, rec)); } }
   function dropAll(recs) { beginFrame(); for (const rec of recs) dropRec(rec); }
   // Take a kind of layer (or everything) off the given keys; an object with no layer left goes back to where it started.
   function remove(keys, type) {
@@ -44420,8 +44486,12 @@ function _undoSplitBatch(batch) {
   state.parts = state.parts.filter(p => !p._removed);
 }
 
+// (the exploded view is put back together while the pieces are made, and comes back after: see _settledView)
 function splitSelectedParts(epsRel, method) {
   if (state.selected.size === 0) { toast('Select a mesh first', 'Click a part in the viewport or tree.', 'warn'); return; }
+  return _settledView(() => _splitSelectedPartsCore(epsRel, method));
+}
+function _splitSelectedPartsCore(epsRel, method) {
   // Detach the gizmo before split — otherwise selected meshes are parented
   // under state.pivot and origParent ends up being the pivot, dragging split
   // children around with later gizmo interactions.
@@ -45070,12 +45140,16 @@ function resetExplode() {
 
 // -- Stacked copies ---------------------------------------------------------
 // Parts that sit on an identical copy: the same shape in the same place.
-// Candidates share a triangle and vertex count (near copies: a triangle
-// count within 25%), a world box whose centre and sides agree within the
-// tolerance (a share of the larger part's diagonal) and the mean of their
-// vertices in world space. They are grouped, one part of each group is kept
-// (the first loaded) and the rest are the "extra" copies. Hidden parts are
-// not looked at (the tree's eyes).
+// Candidates share a triangle count (near copies: within 25%), a world box
+// whose centre and sides agree within the tolerance (a share of the larger
+// part's diagonal) and the centre of their surface (the area-weighted middle
+// of the triangles) in world space. They are grouped, one part of each group
+// is kept (the first loaded) and the rest are the "extra" copies. Hidden
+// parts are not looked at (the tree's eyes).
+// Not the vertex count: a twin whose vertices are welded (8 on a box) next
+// to one whose are not (24, as CAD writes them) is the same part. Not the
+// mean of the vertices: it moves with the tessellation (a fillet meshed
+// finer on one side), the centre of the surface does not.
 let _stkTol = 0.5, _stkNear = false;      // percent of the part's diagonal; also near copies
 try { const v = parseFloat(localStorage.getItem('stepopt-stk-tol')); if (v >= 0 && v <= 5) _stkTol = v; _stkNear = localStorage.getItem('stepopt-stk-near') === '1'; } catch (_) {}
 let _stkIds = [];
@@ -45084,9 +45158,20 @@ function _stkMeanWorld(p) {
   const pos = g && g.attributes && g.attributes.position;
   if (!pos) return null;
   if (!g._stkMean) {
-    let x = 0, y = 0, z = 0; const n = pos.count, a = pos.array;
-    for (let i = 0; i < n; i++) { x += a[i * 3]; y += a[i * 3 + 1]; z += a[i * 3 + 2]; }
-    g._stkMean = new THREE.Vector3(x / n, y / n, z / n);
+    // the centre of the surface: each triangle's middle, weighted by its area (a mesh with no area falls back to the mean of the vertices)
+    const idx = g.index ? g.index.array : null, n = idx ? idx.length : pos.count;
+    let x = 0, y = 0, z = 0, w = 0;
+    for (let i = 0; i + 2 < n; i += 3) {
+      const a = (idx ? idx[i] : i) * 3, b = (idx ? idx[i + 1] : i + 1) * 3, c = (idx ? idx[i + 2] : i + 2) * 3;
+      const ax = pos.getX(a / 3), ay = pos.getY(a / 3), az = pos.getZ(a / 3);
+      const ux = pos.getX(b / 3) - ax, uy = pos.getY(b / 3) - ay, uz = pos.getZ(b / 3) - az;
+      const vx = pos.getX(c / 3) - ax, vy = pos.getY(c / 3) - ay, vz = pos.getZ(c / 3) - az;
+      const area = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+      if (!(area > 0)) continue;
+      x += area * (ax + ux / 3 + vx / 3); y += area * (ay + uy / 3 + vy / 3); z += area * (az + uz / 3 + vz / 3); w += area;
+    }
+    if (!(w > 0)) { const m = pos.count; for (let i = 0; i < m; i++) { x += pos.getX(i); y += pos.getY(i); z += pos.getZ(i); } w = m; }
+    g._stkMean = new THREE.Vector3(x / w, y / w, z / w);
   }
   return g._stkMean.clone().applyMatrix4(_resolvePartWorldMatrix(p));
 }
@@ -45116,7 +45201,7 @@ function _findStackedCopies(tolPct, near) {
       if (Math.abs(A.sx - B.sx) > tol || Math.abs(A.sy - B.sy) > tol || Math.abs(A.sz - B.sz) > tol) continue;
       const pa = A.p, pb = B.p;
       if (near) { if (Math.abs(pa.triCount - pb.triCount) > 0.25 * Math.max(pa.triCount, pb.triCount, 1)) continue; }
-      else if (pa.triCount !== pb.triCount || pa.vertCount !== pb.vertCount) continue;
+      else if (pa.triCount !== pb.triCount) continue;
       const ma = meanOf(A), mb = meanOf(B);
       if (ma && mb && ma.distanceTo(mb) > tol * 2) continue;
       join(i, j);
@@ -45960,22 +46045,29 @@ async function mergeByColour_job() {
 window._mergeByColour = mergeByColour;
 
 async function mergeSelectedIntoOne() { return _Job.run('Merge', () => mergeSelectedIntoOne_job()); }
-async function mergeSelectedIntoOne_job() {
+async function mergeSelectedIntoOne_job() { return _settledView(() => _mergeSelectedCore()); }
+// Runs `fn` (plain or async) with an exploded view put back together, and explodes it again afterwards; the parts `fn` made or moved
+// measure their rest position first. Merge, Split and Flatten change what a part's rest is, so they must not see the view's offsets:
+// Split used to copy the exploded place as the pieces' rest, and Flatten re-measured every rest at the exploded position.
+function _settledView(fn) {
   const ex = state.explode ? { x: state.explode.x, y: state.explode.y, z: state.explode.z } : null;
   const was = !!(ex && (ex.x || ex.y || ex.z));
   if (was) { try { resetExplode(); } catch (_) {} }
-  try { return await _mergeSelectedCore(); }
-  finally {
-    if (was) {
-      try {
-        state._explodeBaselineDone = false;       // (the new part has no rest position yet; the others keep theirs)
-        state.explode = ex;
-        const sc = state._explodeScrubbers;
-        if (sc) { sc.all?.setValue(Math.max(ex.x, ex.y, ex.z)); sc.x?.setValue(ex.x); sc.y?.setValue(ex.y); sc.z?.setValue(ex.z); }
-        applyExplode();
-      } catch (e) { console.warn('[merge] could not restore the exploded view:', e); }
-    }
-  }
+  const back = () => {
+    if (!was) return;
+    try {
+      state._explodeBaselineDone = false;       // (a new part has no rest position yet; the others keep theirs)
+      state.explode = ex;
+      const sc = state._explodeScrubbers;
+      if (sc) { sc.all?.setValue(Math.max(ex.x, ex.y, ex.z)); sc.x?.setValue(ex.x); sc.y?.setValue(ex.y); sc.z?.setValue(ex.z); }
+      applyExplode();
+    } catch (e) { console.warn('[explode] could not restore the exploded view:', e); }
+  };
+  let r;
+  try { r = fn(); } catch (e) { back(); throw e; }
+  if (r && typeof r.then === 'function') return r.finally(back);
+  back();
+  return r;
 }
 async function _mergeSelectedCore() {
   const ids = [...state.selected];
@@ -46275,14 +46367,17 @@ _UndoOps.register('merge', {
 _UndoOps.register('group', {
   undo(op) {
     const m4 = new THREE.Matrix4();
+    // groups the new one emptied come back first, so a part's previous parent is in the scene again when it is hung back under it
+    for (const r of op.emptiedGroups || []) { try { _userGroupPutBack(r); } catch (_) {} }
     for (const it of op.items) {
       const p = getPart(it.partId); if (!p || !p.mesh) continue;
-      const targetParent = it.prevParent || state.partsRoot;
+      const targetParent = (it.prevParent && (it.prevParent === state.partsRoot || it.prevParent.parent)) ? it.prevParent : state.partsRoot;
       targetParent.attach(p.mesh);
       m4.fromArray(it.prevMatrix);
       p.mesh.matrix.copy(m4);
       p.mesh.matrix.decompose(p.mesh.position, p.mesh.quaternion, p.mesh.scale);
       p.mesh.updateMatrixWorld(true);
+      if (it.prevGroupId) { const og = getGroupById(it.prevGroupId); if (og) og.partIds.add(it.partId); }
     }
     if (op.groupRef && op.groupRef.parent) op.groupRef.parent.remove(op.groupRef);
     // Drop the userGroup record by id (used to be a separate wrapper).
@@ -46346,14 +46441,17 @@ function addUserGroup(name, partIds, opts = {}) {
   const undoItems = [];
   for (const p of movable) {
     p.mesh.updateWorldMatrix(true, false);
-    undoItems.push({ partId: p.partId, prevParent: p.mesh.parent, prevMatrix: p.mesh.matrix.elements.slice() });
     const old = getGroupForPart(p.partId);
+    undoItems.push({ partId: p.partId, prevParent: p.mesh.parent, prevMatrix: p.mesh.matrix.elements.slice(), prevGroupId: old ? old.id : null });
     if (old) old.partIds.delete(p.partId);
     grp.attach(p.mesh);
   }
-  // Drop now-empty old groups (and their THREE.Group containers)
+  // Drop now-empty old groups (and their THREE.Group containers). They go on the undo step: undo used to hang the parts back under
+  // a container that was no longer in the scene, so they vanished.
+  const emptiedGroups = [];
   state.userGroups = state.userGroups.filter(g => {
     if (g.partIds.size > 0) return true;
+    emptiedGroups.push({ groupRecord: g, groupRef: g.ref, groupHostObj: g.ref && g.ref.parent ? g.ref.parent : state.partsRoot, items: [] });
     if (g.ref && g.ref.parent) g.ref.parent.remove(g.ref);
     return false;
   });
@@ -46366,7 +46464,7 @@ function addUserGroup(name, partIds, opts = {}) {
   state.userGroups.push(ug);
   state._userGroupCount++;
   if (!opts.skipUndo) {
-    pushUndo({ type: 'group', groupObjectName: name, items: undoItems, groupRef: grp, groupRecordId: ug.id });
+    pushUndo({ type: 'group', groupObjectName: name, items: undoItems, groupRef: grp, groupRecordId: ug.id, emptiedGroups });
   }
   return ug;
 }
@@ -46392,19 +46490,47 @@ function removeUserGroup(groupId, opts = {}) {
   }
   if (g.ref && g.ref.parent) g.ref.parent.remove(g.ref);
   state.userGroups.splice(idx, 1);
-  if (!opts.skipUndo) {
-    try {
-      pushUndo({
-        type: 'userGroupRemove',
-        groupRecord: g,           // resurrect into state.userGroups on undo
-        groupRef: g.ref,          // re-add to host scene-graph node
-        groupHostObj: _hostObj,
-        items: _undoItems,
-      });
-    } catch (_) {}
-  }
+  const op = {
+    type: 'userGroupRemove',
+    groupRecord: g,           // resurrect into state.userGroups on undo
+    groupRef: g.ref,          // re-add to host scene-graph node
+    groupHostObj: _hostObj,
+    items: _undoItems,
+  };
+  if (!opts.skipUndo) { try { pushUndo(op); } catch (_) {} }
   if (!opts.skipRebuild) rebuildTree();
   requestRender();
+  return op;             // (a delete that dissolves a group keeps this on its own undo step)
+}
+// The two halves of a removed user group, shared by the userGroupRemove step and by a delete that dissolved the group:
+// put the container back under its host, the members back under the container with their local matrices, and the record in the list.
+function _userGroupPutBack(op) {
+  if (op.groupRef && op.groupHostObj && !op.groupRef.parent) op.groupHostObj.add(op.groupRef);
+  for (const it of op.items || []) {
+    const p = getPart(it.partId);
+    if (!p || !p.mesh || !op.groupRef) continue;
+    op.groupRef.attach(p.mesh);
+    if (it.prevLocalMat) {
+      p.mesh.matrix.fromArray(it.prevLocalMat);
+      p.mesh.matrix.decompose(p.mesh.position, p.mesh.quaternion, p.mesh.scale);
+      p.mesh.updateMatrixWorld(true);
+    }
+  }
+  if (!(state.userGroups || []).find(g => g.id === op.groupRecord.id)) {
+    state.userGroups = state.userGroups || [];
+    state.userGroups.push(op.groupRecord);
+    state._userGroupCount = (state._userGroupCount || 0) + 1;
+  }
+}
+function _userGroupTakeOut(op) {
+  for (const it of op.items || []) {
+    const p = getPart(it.partId);
+    if (!p || !p.mesh) continue;
+    state.partsRoot.attach(p.mesh);
+  }
+  if (op.groupRef && op.groupRef.parent) op.groupRef.parent.remove(op.groupRef);
+  const idx = (state.userGroups || []).findIndex(g => g.id === op.groupRecord.id);
+  if (idx >= 0) state.userGroups.splice(idx, 1);
 }
 
 function renameUserGroup(groupId, name, opts = {}) {
@@ -47349,7 +47475,9 @@ async function flattenTree_job(preset) {
     onlyUserGroups,
   });
   if (!opts) return;
-
+  return _settledView(() => _flattenTreeCore(opts));      // (the exploded view is put back together while the groups dissolve, and comes back after)
+}
+async function _flattenTreeCore(opts) {
   const roots = _flattenScopeRoots(opts.scope);
   if (!roots.length) { toast('Nothing in scope', 'No groups selected to flatten', 'warn'); return; }
 
@@ -50475,36 +50603,12 @@ _UndoOps.register('hierUngroup', {
 // back under its container.
 _UndoOps.register('userGroupRemove', {
   undo(op) {
-    if (op.groupRef && op.groupHostObj && !op.groupRef.parent) {
-      op.groupHostObj.add(op.groupRef);
-    }
-    for (const it of op.items) {
-      const p = getPart(it.partId);
-      if (!p || !p.mesh || !op.groupRef) continue;
-      op.groupRef.attach(p.mesh);
-      if (it.prevLocalMat) {
-        p.mesh.matrix.fromArray(it.prevLocalMat);
-        p.mesh.matrix.decompose(p.mesh.position, p.mesh.quaternion, p.mesh.scale);
-        p.mesh.updateMatrixWorld(true);
-      }
-    }
-    if (!(state.userGroups || []).find(g => g.id === op.groupRecord.id)) {
-      state.userGroups = state.userGroups || [];
-      state.userGroups.push(op.groupRecord);
-      state._userGroupCount = (state._userGroupCount || 0) + 1;
-    }
+    _userGroupPutBack(op);
     state.redo.push(op);
     _finalizeUndo({ rebuildTree: true });
   },
   redo(op) {
-    for (const it of op.items) {
-      const p = getPart(it.partId);
-      if (!p || !p.mesh) continue;
-      state.partsRoot.attach(p.mesh);
-    }
-    if (op.groupRef && op.groupRef.parent) op.groupRef.parent.remove(op.groupRef);
-    const idx = (state.userGroups || []).findIndex(g => g.id === op.groupRecord.id);
-    if (idx >= 0) state.userGroups.splice(idx, 1);
+    _userGroupTakeOut(op);
     state.history.push(op);
     _finalizeUndo({ rebuildTree: true });
   },
@@ -52087,7 +52191,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   function _buildPopover() {
     if (popEl) return;
     const css = `
-      .cp-pop{position:fixed;z-index:400;width:300px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:none;box-sizing:border-box;padding:12px;border-radius:16px;background:color-mix(in srgb,var(--bg2,#1a1a1a) 92%,#000);border:1px solid var(--bd2);box-shadow:0 5px 13px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.03) inset;color:var(--tx);font:12px var(--font-sans);opacity:0;transform:translateY(6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 170ms var(--ease-out),background 120ms linear,border-color 120ms linear}
+      .cp-pop{position:fixed;z-index:var(--z-colour-picker);width:300px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:none;box-sizing:border-box;padding:12px;border-radius:16px;background:color-mix(in srgb,var(--bg2) 92%,var(--black));border:1px solid var(--bd2);box-shadow:0 5px 13px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.03) inset;color:var(--tx);font:12px var(--font-sans);opacity:0;transform:translateY(6px) scale(.97);transform-origin:top right;pointer-events:none;transition:opacity 140ms var(--ease-out),transform 170ms var(--ease-out),background 120ms linear,border-color 120ms linear}
       .cp-pop::-webkit-scrollbar{display:none}
       .cp-pop.show{opacity:1;transform:none;pointer-events:auto}
       .cp-pop *{box-sizing:border-box}
@@ -52107,10 +52211,10 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-sv{position:relative;width:100%;height:150px;border-radius:12px;cursor:crosshair;overflow:hidden;clip-path:inset(0 round 12px);isolation:isolate;background:#f00;touch-action:none;user-select:none}
       .cp-sv::before{content:'';position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(to right,#fff,rgba(255,255,255,0))}
       .cp-sv::after{content:'';position:absolute;inset:-1px;border-radius:inherit;background:linear-gradient(to top,#000,rgba(0,0,0,0))}
-      .cp-cur{position:absolute;width:16px;height:16px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none;z-index:2}
+      .cp-cur{position:absolute;width:16px;height:16px;border-radius:50%;border:2px solid var(--white);box-shadow:0 0 0 1px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none;z-index:2}
       .cp-bar{position:relative;width:100%;height:14px;margin-top:10px;border-radius:7px;cursor:pointer;touch-action:none;user-select:none}
       .cp-hue{background:linear-gradient(to right,#f00 0%,#ff0 17%,#0f0 33%,#0ff 50%,#00f 67%,#f0f 83%,#f00 100%)}
-      .cp-bar-cur{position:absolute;top:50%;width:18px;height:18px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none}
+      .cp-bar-cur{position:absolute;top:50%;width:18px;height:18px;border-radius:50%;border:2px solid var(--white);box-shadow:0 0 0 1px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none}
       .cp-wheel-wrap{display:flex;flex-direction:column;align-items:center}
       .cp-wheel-box{position:relative;width:${WHEEL}px;height:${WHEEL}px;cursor:crosshair;touch-action:none;user-select:none;border-radius:50%}
       .cp-wheel-box canvas{display:block;width:100%;height:100%;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.06)}
@@ -52130,7 +52234,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       .cp-f input{width:100%;min-width:0;height:28px;padding:0 8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);border-radius:8px;color:var(--tx);font:inherit;font-size:12px;font-variant-numeric:tabular-nums;outline:none;transition:border-color 120ms var(--ease-out),background 120ms var(--ease-out)}
       .cp-f input:hover{border-color:rgba(255,255,255,.14)}
       .cp-f input:focus{border-color:var(--ac);background:var(--ac-tint-08,rgba(13,153,255,.08))}
-      .cp-f input.bad{border-color:var(--er,#e5484d)}
+      .cp-f input.bad{border-color:var(--er)}
       .cp-f-hex input{text-transform:uppercase;letter-spacing:.04em}
       .cp-sw-h{display:flex;align-items:center;gap:6px;width:100%;margin:10px 0 0;padding:4px 2px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:10px;color:var(--tx3);letter-spacing:.04em;text-transform:uppercase;cursor:pointer;text-align:left;transition:color 120ms var(--ease-out)}
       .cp-sw-h:hover{color:var(--tx)}
@@ -52981,15 +53085,22 @@ setTimeout(() => _dndDecorateTree(), 0);
   // to reduce: then the normals are left out of the weld (position and UV, colour decide), and `flat` says that the reduced mesh needs
   // normals again: _creaseAfter gives it the app's usual shading, smooth where the faces meet at less than 30 degrees. (Needs
   // _loadSimplifier to have run.)
+  // What the simplifier works on. CAD meshes come with a vertex per face corner: the converter and most exporters split them at every
+  // hard edge for flat shading, so to the simplifier every face is an island whose rim it may only collapse along, and the surface is
+  // reduced badly (it used to weld only a mesh without an index). Welding by position, UVs and colours kept apart and the normals dropped
+  // and re-creased afterwards (_creaseAfter), gives it the real surface. Measured on the Scania V8's heaviest parts at 10 %: the worst
+  // deviation fell from 9 mm to 1.5 mm, and a part whose borders used to tear (73 mm; 98 border edges became 11) came out whole.
+  // A mesh whose vertices are already shared (welding by position merges fewer than 40 %) keeps its normals as they are.
   function _weldForReduction(geom) {
-    if (geom.index) return { src: geom, flat: false };
-    const n = geom.attributes.position.count;
-    const all = _mergeVertices(geom.clone());
-    if (all.attributes.position.count <= n * 0.6) return { src: all, flat: false };
+    const all = geom.index ? geom : _mergeVertices(geom.clone());
+    const n = all.attributes.position.count;
     const g = new THREE.BufferGeometry();
     for (const k of ['position', 'uv', 'color']) if (geom.attributes[k]) g.setAttribute(k, geom.attributes[k].clone());
+    if (geom.index) g.setIndex(geom.index.clone());
     for (const grp of geom.groups || []) g.addGroup(grp.start, grp.count, grp.materialIndex);
-    return { src: _mergeVertices(g), flat: true };
+    const byPos = _mergeVertices(g);
+    if (byPos.attributes.position.count > n * 0.6) return { src: all, flat: false };
+    return { src: byPos, flat: true };
   }
   function _creaseAfter(out, flat) {
     if (!out || !flat) return out;
@@ -53070,8 +53181,42 @@ setTimeout(() => _dndDecorateTree(), 0);
     const el = $('keep-sharp');
     try { if (el && localStorage.getItem('stepopt-keep-sharp') === '0') el.checked = false; } catch (_) {}
     el?.addEventListener('change', () => { try { localStorage.setItem('stepopt-keep-sharp', el.checked ? '1' : '0'); } catch (_) {} });
+    const sm = $('decimate-smart');
+    try { if (sm && localStorage.getItem('stepopt-decimate-smart') === '0') sm.checked = false; } catch (_) {}
+    sm?.addEventListener('change', () => { try { localStorage.setItem('stepopt-decimate-smart', sm.checked ? '1' : '0'); } catch (_) {} });
   }
   const _sharpOpts = () => { const el = $('keep-sharp'); return !el || el.checked ? { sharp: 40 } : null; };
+  // Smart (the Decimate card's switch, on by default): the worker cleans the flat faces before and after the reduction (Untriangulate,
+  // Un-Subdivide). Decimate and Quick remesh (B) read the same switch, so the same share gives the same result on both.
+  const _smartOn = () => { const el = $('decimate-smart'); return (!el || el.checked) && !window.__moQuickPlain; };
+  // What the worker needs for the smart passes: the flag, where three's core is, and the mesh's own normals (flat faces are told by them).
+  function _smartPayload(geom, threeUrl) {
+    const smart = _smartOn() && !!threeUrl;
+    let normals = null;
+    if (smart) {
+      const nrm = geom.attributes.normal, pos = geom.attributes.position;
+      if (nrm && pos && nrm.count === pos.count && nrm.itemSize >= 3) { normals = new Float32Array(nrm.count * 3); for (let v = 0; v < nrm.count; v++) { normals[v * 3] = nrm.getX(v); normals[v * 3 + 1] = nrm.getY(v); normals[v * 3 + 2] = nrm.getZ(v); } }
+    }
+    return { smart, threeUrl: smart ? threeUrl : null, normals };
+  }
+  // How much surface a geometry has, and how far across it is: what a reduced copy is held against. A small or open part can be taken so
+  // far that most of its surface is gone (measured: a 100-triangle bolt left with a quarter of its surface at 25 %, which reads as the
+  // part disappearing). Decimate and Quick remesh refuse such a result the same way.
+  function _shapeOf(g) {
+    const p = g.attributes.position, ix = g.index ? g.index.array : null, n = ix ? ix.length : p.count;
+    const flat = !p.isInterleavedBufferAttribute && p.itemSize === 3 && p.array ? p.array : null;
+    const X = (v, c) => flat ? flat[v * 3 + c] : p.getComponent(v, c);
+    let area = 0;
+    for (let i = 0; i + 2 < n; i += 3) {
+      const a = ix ? ix[i] : i, b = ix ? ix[i + 1] : i + 1, c = ix ? ix[i + 2] : i + 2;
+      const ux = X(b, 0) - X(a, 0), uy = X(b, 1) - X(a, 1), uz = X(b, 2) - X(a, 2), vx = X(c, 0) - X(a, 0), vy = X(c, 1) - X(a, 1), vz = X(c, 2) - X(a, 2);
+      area += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+    }
+    if (!g.boundingBox) g.computeBoundingBox();
+    const bb = g.boundingBox;
+    return { area, diag: bb ? bb.min.distanceTo(bb.max) : 0 };
+  }
+  const _keepsShape = (before, after) => after.area >= before.area * 0.6 && after.diag >= before.diag * 0.9;
   function _simplifyKeepingAttributes(S, geom, keep, tol) {
     // An index buffer is required; weld a non-indexed mesh first (this
     // keeps attributes and only joins vertices that match in all of them).
@@ -53097,8 +53242,8 @@ setTimeout(() => _dndDecorateTree(), 0);
     for (const g of groups) {
       const sub = index.subarray(g.start, g.start + g.count);
       if (tol > 0) {                                   // as far as the tolerance allows
-        const [res, err] = S.simplify(sub, positions, 3, 0, Math.min(1, tol / scale));
-        worst = Math.max(worst, err * scale);
+        const [res, rel] = S.simplify(sub, positions, 3, 0, Math.min(1, tol / scale));
+        worst = Math.max(worst, rel * scale);
         outParts.push({ idx: res, materialIndex: g.materialIndex });
         continue;
       }
@@ -53147,12 +53292,23 @@ setTimeout(() => _dndDecorateTree(), 0);
     const IndexType = used > 65535 ? Uint32Array : Uint16Array;
     const newIndex = new IndexType(total);
     let w = 0;
+    const spans = [];
     for (const o of outParts) {
       const start = w;
       for (let i = 0; i < o.idx.length; i++) newIndex[w++] = remap[o.idx[i]];
-      if (outParts.length > 1) out.addGroup(start, o.idx.length, o.materialIndex);
-      else if (src.groups && src.groups.length === 1) out.addGroup(start, o.idx.length, src.groups[0].materialIndex || 0);
+      spans.push({ start, count: o.idx.length, materialIndex: o.materialIndex | 0 });
     }
+    // One draw group per group of the source, in the source's order, also when every triangle of a group went (the callers leave
+    // empty groups out of `outParts`): a part with an array material is drawn group by group, and a geometry with none of them is
+    // not drawn at all. It used to add groups only when more than one part came back, so Remove hidden faces, Remove holes or
+    // Floating pieces emptying one material of a two-material part made the whole part vanish from the viewport.
+    if (src.groups && src.groups.length) {
+      for (const g of src.groups) {
+        const mi = g.materialIndex | 0;
+        const s = spans.find(x => x.materialIndex === mi) || (src.groups.length === 1 ? spans[0] : null);
+        out.addGroup(s ? s.start : 0, s ? s.count : 0, mi);
+      }
+    } else if (spans.length > 1) for (const s of spans) out.addGroup(s.start, s.count, s.materialIndex);
     out.setIndex(new THREE.BufferAttribute(newIndex, 1));
     if (!out.attributes.normal) out.computeVertexNormals();
     return out;
@@ -53245,7 +53401,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     const skipped = [];
     const failed = [];
     const undoItems = [];
-    let trisBefore = 0, trisAfter = 0, parts = 0;
+    let trisBefore = 0, trisAfter = 0, parts = 0, gentler = 0;
 
     // The simplifier runs in background workers, several parts at a time.
     // Each job is queued here and awaited in order below; a part whose job
@@ -53265,19 +53421,25 @@ setTimeout(() => _dndDecorateTree(), 0);
       for (const id of ids) {
         const p = getPart(id);
         const geom = p && !p.deleted && p.mesh ? p.mesh.geometry : null;
-        const posAttr = geom && geom.attributes ? geom.attributes.position : null;
-        if (!posAttr || !geom.index || geom.index.count < 36) continue;
-        if (posAttr.isInterleavedBufferAttribute || !(posAttr.array instanceof Float32Array) || posAttr.itemSize !== 3) continue;
+        const posAttr0 = geom && geom.attributes ? geom.attributes.position : null;
+        if (!posAttr0 || (geom.index ? geom.index.count : posAttr0.count) < 36) continue;
+        if (posAttr0.isInterleavedBufferAttribute || !(posAttr0.array instanceof Float32Array) || posAttr0.itemSize !== 3) continue;
+        let weld = null;
         queued.set(id, _MeshWorkers.run(() => {
+          weld = _weldForReduction(geom);                // (welded by position first: see _weldForReduction; a mesh without an index gets one)
+          const src = weld.src, posAttr = src.attributes.position;
           const positions = posAttr.array.slice();
-          const index = Uint32Array.from(geom.index.array);
-          const groups = (geom.groups && geom.groups.length > 1)
-            ? geom.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
+          const index = Uint32Array.from(src.index.array);
+          const groups = (src.groups && src.groups.length > 1)
+            ? src.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
             : [{ start: 0, count: index.length, materialIndex: 0 }];
-          const ap = packAttributes(geom);
+          const ap = packAttributes(src);
           const attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights } : null;
-          return { msg: { op: 'simplify', positions, index, groups, keep, tol: tolFor(p, FIRST_PASS), url: simplifierUrl, attrs, sharp: (_sharpOpts() || {}).sharp || 0 }, transfer: attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer] };
-        }).then(reply => (reply && reply.ok) ? { parts: reply.parts, err: reply.err || 0 } : null));
+          const sp = _smartPayload(src, _threeCoreUrl());
+          const transfer = attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer];
+          if (sp.normals) transfer.push(sp.normals.buffer);
+          return { msg: { op: 'simplify', positions, index, groups, keep, tol: tolFor(p, FIRST_PASS), url: simplifierUrl, attrs, sharp: (_sharpOpts() || {}).sharp || 0, ...sp }, transfer };
+        }).then(reply => (reply && reply.ok && weld) ? { parts: reply.parts, err: reply.err || 0, src: weld.src, flat: weld.flat } : null));
       }
     }
 
@@ -53294,7 +53456,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         let reduced = null;
         if (queued.has(p.partId)) {
           const job = await queued.get(p.partId);
-          if (job && p.mesh.geometry === geom) { reduced = _geomFromIndexParts(geom, job.parts); if (reduced) _simpErr.set(reduced, job.err); }
+          if (job && p.mesh.geometry === geom) { reduced = _creaseAfter(_geomFromIndexParts(job.src, job.parts), job.flat); if (reduced) _simpErr.set(reduced, job.err); }
         }
         if (!reduced && meshopt) reduced = _simplifyKeepingAttributes(meshopt, geom, keep, tolFor(p, FIRST_PASS));
         if (!reduced && tolMm) { skipped.push(p.name + ' (needs the simplifier, which did not load)'); continue; }
@@ -53335,6 +53497,20 @@ setTimeout(() => _dndDecorateTree(), 0);
         const reducedTris = reduced.index ? reduced.index.count / 3 : reduced.attributes.position.count / 3;
         if (!(reducedTris >= 1)) { skipped.push(p.name + ' (would collapse to nothing)'); continue; }
         if (reducedTris >= triBefore) { skipped.push(p.name + ' (cannot be reduced further)'); continue; }
+        // The same guard as Quick remesh: a result that has lost most of its surface is tried again at gentler shares, and a part that
+        // keeps its shape at none of them is left alone (it used to be taken down to a sliver at −90 %).
+        if (!tolMm && meshopt) {
+          const s0 = _shapeOf(geom);
+          let s1 = _shapeOf(reduced), k = keep, tries = 0;
+          while (!_keepsShape(s0, s1) && tries++ < 3 && k < 0.9) {
+            k = Math.min(0.9, k * 1.6);
+            const again = _simplifyKeepingAttributes(meshopt, geom, k, 0);
+            if (!again) break;
+            reduced = again; s1 = _shapeOf(reduced);
+          }
+          if (!_keepsShape(s0, s1)) { skipped.push(p.name + ' (would lose its shape)'); continue; }
+          if (k !== keep) gentler++;
+        }
         reduced.computeBoundingBox();
         reduced.computeBoundingSphere();
 
@@ -53415,19 +53591,19 @@ setTimeout(() => _dndDecorateTree(), 0);
       const st = document.createElement('style');
       st.id = 'qr-style';
       st.textContent = `
-.qr{position:fixed;z-index:9000;width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 5px 13px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.35);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
+.qr{position:fixed;z-index:var(--z-quick-ring);width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 5px 13px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.35);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
 .qr.is-in{opacity:1;transform:none}
 .qr.is-out{opacity:0;transform:scale(.92);transition:opacity 110ms ease,transform 110ms ease}
-.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:var(--r-sm,6px);background:var(--ac,#0d99ff);box-shadow:0 4px 14px rgba(13,153,255,.35);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
+.qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:var(--r-sm,6px);background:var(--ac);box-shadow:0 4px 14px rgba(13,153,255,.35);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
 .qr.is-first .qr-thumb{background:var(--s5,rgba(255,255,255,.1));box-shadow:none}
-.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:center;justify-content:center;line-height:1;font-size:var(--fs-13,13px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;color:var(--tx3,#8a8a8a);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
-.qr-i.is-near{color:var(--tx2,#bdbdbd)}
-.qr-i.is-hot{color:#fff;transform:scale(1.06)}
-.qr.is-first .qr-i.is-hot{color:var(--tx,#eee)}
-.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:var(--r-lg,10px);background:var(--bg2,#1b1b1c);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 4px 10px rgba(0,0,0,.45);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3,#8a8a8a);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-i{position:relative;height:${ITEM}px;display:flex;align-items:center;justify-content:center;line-height:1;font-size:var(--fs-13,13px);font-weight:var(--fw-regular,400);font-variant-numeric:tabular-nums;color:var(--tx3);transition:color 150ms ease,transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-i.is-near{color:var(--tx2)}
+.qr-i.is-hot{color:var(--white);transform:scale(1.06)}
+.qr.is-first .qr-i.is-hot{color:var(--tx)}
+.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 4px 10px rgba(0,0,0,.45);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
 .qr.is-left .qr-tip{left:auto;right:calc(100% + 10px)}
-.qr-tip b{font-weight:var(--fw-regular,400);color:var(--tx,#eee)}
-.qr-tip i{width:6px;height:6px;border-radius:50%;background:var(--ac,#0d99ff);opacity:0;transition:opacity 120ms ease}
+.qr-tip b{font-weight:var(--fw-regular,400);color:var(--tx)}
+.qr-tip i{width:6px;height:6px;border-radius:50%;background:var(--ac);opacity:0;transition:opacity 120ms ease}
 .qr.is-busy .qr-tip i{opacity:1;animation:qr-pulse .7s ease-in-out infinite alternate}
 @keyframes qr-pulse{from{transform:scale(.6);opacity:.45}to{transform:scale(1.15);opacity:1}}
 @media (prefers-reduced-motion:reduce){.qr,.qr-thumb,.qr-i,.qr-tip{transition:none!important}.qr.is-busy .qr-tip i{animation:none}}`;
@@ -53436,22 +53612,6 @@ setTimeout(() => _dndDecorateTree(), 0);
 
     const trisOf = (g) => ((g.index ? g.index.count : g.attributes.position.count) / 3) | 0;
     const pctOf = (k) => Math.round(k * 100);
-    // how much surface a geometry has, and how far across it is (what a reduced copy is held against)
-    function shapeOf(g) {
-      const p = g.attributes.position, ix = g.index ? g.index.array : null, n = ix ? ix.length : p.count;
-      const flat = !p.isInterleavedBufferAttribute && p.itemSize === 3 && p.array ? p.array : null;
-      const X = (v, c) => flat ? flat[v * 3 + c] : p.getComponent(v, c);
-      let area = 0;
-      for (let i = 0; i + 2 < n; i += 3) {
-        const a = ix ? ix[i] : i, b = ix ? ix[i + 1] : i + 1, c = ix ? ix[i + 2] : i + 2;
-        const ux = X(b, 0) - X(a, 0), uy = X(b, 1) - X(a, 1), uz = X(b, 2) - X(a, 2), vx = X(c, 0) - X(a, 0), vy = X(c, 1) - X(a, 1), vz = X(c, 2) - X(a, 2);
-        area += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
-      }
-      if (!g.boundingBox) g.computeBoundingBox();
-      const bb = g.boundingBox;
-      return { area, diag: bb ? bb.min.distanceTo(bb.max) : 0 };
-    }
-
     // one level of one part: its geometry, worked out once
     function levelOf(sess, part, keep) {
       if (part.cache.has(keep)) return Promise.resolve(part.cache.get(keep));
@@ -53459,11 +53619,10 @@ setTimeout(() => _dndDecorateTree(), 0);
       const job = (async () => {
         await sess.ready;
         if (S !== sess) return part.orig;                  // (the pill closed while this waited for its turn)
-        // A mesh without an index (an OBJ, an STL, a mesh from some FBX files: three corners per triangle, nothing shared) is welded first,
-        // as Decimate does it: the simplifier works on shared points, and without them nothing was taken away. The part keeps its own
-        // geometry (`orig`) for Esc; the welded copy is only what the levels are worked out from.
+        // The mesh is welded by position first, as Decimate does it (see _weldForReduction: the simplifier works on shared points, and a
+        // CAD mesh has a vertex per face corner). The part keeps its own geometry (`orig`) for Esc; the welded copy is only what the
+        // levels are worked out from.
         if (!part.srcP) part.srcP = (async () => {
-          if (part.orig.index) return part.orig;
           try { await _loadSimplifier(); const w = _weldForReduction(part.orig); part.flat = w.flat; return w.src; } catch (_) { return part.orig; }
         })();
         part.src = await part.srcP;
@@ -53482,16 +53641,11 @@ setTimeout(() => _dndDecorateTree(), 0);
                 ? geom.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
                 : [{ start: 0, count: index.length, materialIndex: 0 }];
               const ap = packAttributes(geom), attrs = ap ? { data: ap.data, stride: ap.stride, weights: ap.weights } : null;
-              // Smart (the default; window.__moQuickPlain = true switches it off): the flat faces are cleaned before and after the reduction
-              const smart = !window.__moQuickPlain && !!threeUrl;
-              let normals = null;
-              if (smart) {
-                const nrm = geom.attributes.normal;
-                if (nrm && nrm.count === posAttr.count && nrm.itemSize >= 3) { normals = new Float32Array(nrm.count * 3); for (let v = 0; v < nrm.count; v++) { normals[v * 3] = nrm.getX(v); normals[v * 3 + 1] = nrm.getY(v); normals[v * 3 + 2] = nrm.getZ(v); } }
-              }
+              // Smart (the Decimate card's switch; window.__moQuickPlain = true switches it off): the flat faces are cleaned before and after the reduction
+              const sp = _smartPayload(geom, threeUrl);
               const moved = attrs ? [positions.buffer, index.buffer, attrs.data.buffer] : [positions.buffer, index.buffer];
-              if (normals) moved.push(normals.buffer);
-              return { msg: { op: 'simplify', positions, index, groups, keep, tol: 0, url: sess.url, attrs, sharp: (_sharpOpts() || {}).sharp || 0, smart, threeUrl, normals }, transfer: moved };
+              if (sp.normals) moved.push(sp.normals.buffer);
+              return { msg: { op: 'simplify', positions, index, groups, keep, tol: 0, url: sess.url, attrs, sharp: (_sharpOpts() || {}).sharp || 0, ...sp }, transfer: moved };
             });
             if (S !== sess) return part.orig;              // (closed while it was being worked out: the result is not built)
             if (reply && reply.ok) { out = _creaseAfter(_geomFromIndexParts(geom, reply.parts), part.flat); err = reply.err || 0; }
@@ -53505,9 +53659,8 @@ setTimeout(() => _dndDecorateTree(), 0);
         let lostShape = false;
         if (out) {
           out.computeBoundingBox(); out.computeBoundingSphere();
-          if (!part.shape0) part.shape0 = shapeOf(part.orig);
-          const a = part.shape0, b = shapeOf(out);
-          if (!(b.area >= a.area * 0.6 && b.diag >= a.diag * 0.9)) { try { out.dispose(); } catch (_) {} out = null; lostShape = true; }
+          if (!part.shape0) part.shape0 = _shapeOf(part.orig);
+          if (!_keepsShape(part.shape0, _shapeOf(out))) { try { out.dispose(); } catch (_) {} out = null; lostShape = true; }
         }
         if (out) _simpErr.set(out, err);
         let res = out || part.orig;
@@ -55142,7 +55295,7 @@ setTimeout(() => _dndDecorateTree(), 0);
 
     const undoItems = [], failed = [];
     const done = new Map();                 // source geometry (+ scale) → what it became
-    const tally = { holes: 0, through: 0, blind: 0, open: 0, flattened: 0, removedTris: 0, addedTris: 0, raised: 0, raisedTall: 0, partOfShape: 0, leaking: 0, tooDeep: 0, tooLarge: 0, tooSmall: 0, kind: 0, uncappable: 0, rim: 0, floating: 0, sealed: 0 };
+    const tally = { holes: 0, through: 0, blind: 0, open: 0, flattened: 0, removedTris: 0, addedTris: 0, raised: 0, raisedTall: 0, partOfShape: 0, leaking: 0, tooDeep: 0, tooLarge: 0, tooSmall: 0, kind: 0, uncappable: 0, rim: 0, floating: 0, sealed: 0, enclosed: 0 };
     let parts = 0, instanced = 0, triBefore = 0;
     const wasPoly = new Set();
     const sv = new THREE.Vector3();
@@ -55201,7 +55354,7 @@ setTimeout(() => _dndDecorateTree(), 0);
           try {
             let index = geom.index ? geom.index.array : null;
             const res = found.get(key) || fillFlatHoles(plainPositions(posAttr), index, optsFor(scale));
-            if (res.holes > 0 || res.rimVertices > 0 || res.floating > 0) {
+            if (res.holes > 0 || res.rimVertices > 0 || res.floating > 0 || res.enclosed > 0) {
               let src = geom;
               if (!index) {
                 index = new Uint32Array(posAttr.count);
@@ -55249,7 +55402,7 @@ setTimeout(() => _dndDecorateTree(), 0);
           undoItems.push({ partId: p.partId, before, after: _decSnap(p) });
           parts++;
           for (const f of ['holes', 'through', 'blind', 'open', 'flattened', 'removedTris', 'addedTris']) tally[f] += hit.res[f] || 0;
-          tally.rim += hit.res.rimVertices || 0; tally.floating += hit.res.floating || 0; tally.sealed += hit.res.sealed || 0;
+          tally.rim += hit.res.rimVertices || 0; tally.floating += hit.res.floating || 0; tally.sealed += hit.res.sealed || 0; tally.enclosed += hit.res.enclosed || 0;
         }
         if (performance.now() - lastYield > 60) {
           if (label) label.textContent = 'Filling… ' + Math.round((i + 1) / targets.length * 100) + '%';
@@ -55334,24 +55487,25 @@ setTimeout(() => _dndDecorateTree(), 0);
     if (tally.flattened) kinds.push(fmtNum(tally.flattened) + ' raised');
     if (tally.open) kinds.push(fmtNum(tally.open) + ' open');
     if (tally.sealed) kinds.push(fmtNum(tally.sealed) + ' sealed from outside');
+    if (tally.enclosed) kinds.push(fmtNum(tally.enclosed) + (tally.enclosed === 1 ? ' piece' : ' pieces') + ' sealed inside removed');
     const saved = tidied ? triBefore - undoItems.reduce((s, u) => s + (getPart(u.partId)?.triCount || 0), 0) : tally.removedTris - tally.addedTris;
     const summary = tally.holes
       ? n(tally.holes, 'hole', 'holes') + ' filled in ' + n(parts, 'part', 'parts') + (kinds.length ? ' (' + kinds.join(', ') + ')' : '') +
         ' · ' + (saved >= 0 ? '−' + fmtNum(saved) : '+' + fmtNum(-saved)) + ' triangles'
-      : (tally.rim || tally.floating)
-        ? 'No holes to close; ' + (tally.rim ? fmtNum(tally.rim) + ' leftover ' + (tally.rim === 1 ? 'vertex' : 'vertices') + ' taken out of flat faces' : '') + (tally.rim && tally.floating ? ' and ' : '') + (tally.floating ? fmtNum(tally.floating) + ' loose ' + (tally.floating === 1 ? 'wall' : 'walls') + ' removed' : '') + ' in ' + n(parts, 'part', 'parts') + ' · −' + fmtNum(Math.max(0, tally.removedTris - tally.addedTris)) + ' triangles'
+      : (tally.rim || tally.floating || tally.enclosed)
+        ? 'No holes to close; ' + [tally.rim ? fmtNum(tally.rim) + ' leftover ' + (tally.rim === 1 ? 'vertex' : 'vertices') + ' taken out of flat faces' : '', tally.floating ? fmtNum(tally.floating) + ' loose ' + (tally.floating === 1 ? 'wall' : 'walls') + ' removed' : '', tally.enclosed ? fmtNum(tally.enclosed) + (tally.enclosed === 1 ? ' piece' : ' pieces') + ' sealed inside removed' : ''].filter(Boolean).join(' and ') + ' in ' + n(parts, 'part', 'parts') + ' · −' + fmtNum(Math.max(0, tally.removedTris - tally.addedTris)) + ' triangles'
       : 'No holes ' + (adv.minSize > 0 ? 'from ' + adv.minSize + ' to ' : 'up to ') + maxSize + ' mm in ' + (picked ? 'the selection' : 'the visible parts');
     // The panel and the toast say it short (what was done, and how many were left alone); the whole list is the hover text and the log.
     const leftN = tally.partOfShape + tally.raised + tally.raisedTall + tally.leaking + tally.tooDeep + tally.tooLarge + tally.tooSmall + tally.kind + tally.uncappable + (instanced || 0);
     const brief = tally.holes ? n(tally.holes, 'hole', 'holes') + ' filled in ' + n(parts, 'part', 'parts') + ' · ' + (saved >= 0 ? '−' + fmtNum(saved) : '+' + fmtNum(-saved)) + ' triangles' : summary;
     if (info) { info.textContent = brief + (leftN ? ' · ' + fmtNum(leftN) + ' left alone' : ''); info.title = summary + (left.length ? '. Left alone: ' + left.join(', ') + '.' : '.'); }
-    toast(tally.holes ? 'Holes filled' : 'Remove holes', brief + (leftN ? ' · ' + fmtNum(leftN) + ' left alone' : ''), tally.holes || tally.rim || tally.floating ? 'success' : 'info', 4500);
+    toast(tally.holes ? 'Holes filled' : 'Remove holes', brief + (leftN ? ' · ' + fmtNum(leftN) + ' left alone' : ''), tally.holes || tally.rim || tally.floating || tally.enclosed ? 'success' : 'info', 4500);
     if (failed.length) toast('Failed', failed.slice(0, 3).join(', ') + (failed.length > 3 ? ' +' + (failed.length - 3) + ' more' : ''), 'error', 5000);
     try { Log.info('[remove holes] ' + summary + (left.length ? ' — left alone: ' + left.join(', ') : '')); } catch (_) {}
   }
   // Advanced options of Remove holes (the accordion in its panel). Defaults
   // reproduce what the tool did before the options existed.
-  const _FH_DEF = { size: '12', min: '0', depth: '10', flat: '0.57', through: true, blind: true, open: true, shape: true, raised: true, rise: '0.5', tidy: true, seal: true, move: '0.5' };
+  const _FH_DEF = { size: '12', min: '0', depth: '10', flat: '0.57', through: true, blind: true, open: true, shape: true, raised: true, rise: '0.5', tidy: true, seal: true, enclosed: true, move: '0.5' };
   const _fhEl = (k) => document.getElementById(k === 'size' ? 'fill-holes-size' : 'fh-' + k);
   function _fillHoleOpts() {
     const num = (k, lo, hi) => { const v = parseFloat(String(_fhEl(k)?.value ?? '').replace(',', '.')); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : parseFloat(_FH_DEF[k]); };
@@ -55362,6 +55516,8 @@ setTimeout(() => _dndDecorateTree(), 0);
       depthFactor: num('depth', 1, 100),
       cosTol: Math.abs(flat - 0.57) < 1e-9 ? 0.99995 : Math.cos(flat * Math.PI / 180),
       through: on('through'), blind: on('blind'), open: on('open'), tidy: on('tidy'), rimVertices: true, cleanup: on('tidy'), floating: on('tidy'), seal: on('seal'), move: num('move', 0, 100),
+      // pieces of the mesh that end up sealed inside the closed part (the balls of a valve, a pin in a bore): never visible again, so they go
+      enclosed: on('enclosed'),
       // lettering and logos that stand proud of a face, up to this height (mm)
       raised: on('raised'), raisedMax: num('rise', 0.01, 1000),
       // off: an opening is filled however much of its face or its part it takes up
@@ -56236,7 +56392,7 @@ setTimeout(() => _dndDecorateTree(), 0);
               try {
                 const src = { position: arr3(g.attributes.position), uv: g.attributes.uv ? arr3(g.attributes.uv) : null, normal: g.attributes.normal ? arr3(g.attributes.normal) : null,
                   index: g.index ? g.index.array : null, groups: g.groups && g.groups.length ? g.groups : null };
-                const ropts = { weld: o.weld, degenerate: o.degen, orient: o.orient, tol: o.tol };
+                const ropts = { weld: o.weld, degenerate: o.degen, orient: o.orient, tol: o.tol, normals: o.normals };
                 // On a worker when there is one (a large part takes seconds and must not hold the page); here otherwise.
                 let r = null;
                 if (_MeshWorkers.available()) {
@@ -57708,7 +57864,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
   // none open they go back to their own layer. Either way a floating window is the lowest thing that floats: the top bar's
   // menus (its bar is lifted while one is open), Settings and the other modal windows (200), toasts and the right-click menu
   // all stand in front of it. (The layer used to be 300, above the modal windows: the editor covered Settings and the search.)
-  const WIN_LAYER = 100;
+  const WIN_LAYER = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--z-window'), 10) || 100;   // (--z-window in index.html)
   const stack = () => {
     const open = winOrder.filter(el => el.isConnected && el.classList.contains('show') && (!isDock(el) || el.classList.contains('is-float')));
     const anyDlg = open.some(el => !isDock(el));
@@ -59764,6 +59920,7 @@ window.__moElements = _Elements.api;
     tipI = Math.floor(Math.random() * TIPS.length); put();
     tipT = setInterval(() => { if (document.hidden) return; el.classList.remove('on'); setTimeout(() => { tipI++; put(); }, calm ? 0 : 1000); }, 7000);
   }
+  function fillPop(pop, st) { pop.innerHTML = '<div class="cf-sp-r"><i class="cl-dot"></i><b></b></div><span></span>'; pop.dataset.state = st.dataset.state; pop.querySelector('b').textContent = st.querySelector('b').textContent; pop.querySelector('span').textContent = st.querySelector('span').textContent; }
   function paint() {
     raf = 0; if (!root || mode === 'off') { tipsShow(false); return; }
     const b = B(), s = b ? b.snapshot() : null, feed = b ? b.feed() : [];
@@ -59772,7 +59929,8 @@ window.__moElements = _Elements.api;
     head.dataset.state = s ? s.state : 'off';
     head.querySelector('b').textContent = !s || !s.on ? 'Claude is not connected' : s.state === 'busy' ? 'Claude is working' : s.state === 'ask' ? 'Waiting for your answer' : 'Server online';
     head.querySelector('span').textContent = sub;
-    try { tl().scene_summary().then((c) => { const j = JSON.parse(c[0].text); if (root && j.file && j.parts) head.querySelector('span').textContent = j.file + ' · ready · ' + sub; }).catch(() => {}); } catch (_) {}
+    const tipOf = () => { head.title = head.querySelector('b').textContent + ' · ' + head.querySelector('span').textContent; head.setAttribute('aria-label', head.title); const pop = root.querySelector('.cf-statepop'); if (pop) fillPop(pop, head); }; tipOf();
+    try { tl().scene_summary().then((c) => { const j = JSON.parse(c[0].text); if (root && j.file && j.parts) { head.querySelector('span').textContent = j.file + ' · ready · ' + sub; tipOf(); } }).catch(() => {}); } catch (_) {}
     const split = mode === 'split'; const vb = root.querySelector('#cf-view'); vb.setAttribute('aria-pressed', split ? 'true' : 'false'); vb.title = split ? 'Hide viewport' : 'Show viewport'; vb.setAttribute('aria-label', vb.title);
     paintLoad();
     root.querySelector('#cf-conn').checked = !!(s && s.on);
@@ -59851,14 +60009,15 @@ window.__moElements = _Elements.api;
       return '<button type="button" class="cf-rec' + (pickedIdx === i ? ' is-picked' : pickedIdx >= 0 ? ' is-gone' : '') + '" data-rec="' + i + '"' + (pickedIdx >= 0 ? ' style="--d:' + Math.min(i, 6) * 40 + 'ms"' : '') + '><span class="cf-rec-pic">' + (f.thumb ? '<img src="' + esc(f.thumb) + '" alt="" draggable="false">' : '<i>' + esc(kind || 'FILE') + '</i>') + '</span><span class="cf-rec-m"><b>' + esc(stem) + '</b><span>' + [kind, fmtB(f.size), ageOf(f.ts)].filter(Boolean).join(' · ') + '</span></span>' + (pickedIdx === i ? '<em>Opening…</em>' : i === 0 ? '<em>Continue</em>' : '') + '</button>';
     }).join('') : '<div class="cf-rec-none">Files you open are kept here.</div>') + '</div>';
   };
-  // the few numbers shown over the bare viewport (split mode)
-  const stats = async () => {
+  // the Properties card over the bare viewport (split mode): the same card as in the right sidebar (hidden in Claude mode), copied from it so the design and the numbers stay identical
+  let propSig = '';
+  const stats = () => {
     statTm = 0; if (mode !== 'split' || !statEl) return;
     try {
-      const j = JSON.parse((await tl().scene_summary())[0].text), n = (v) => Number(v).toLocaleString('en');
-      statEl.textContent = [j.file && j.file !== 'Untitled scene' ? j.file : null, n(j.parts) + ' parts', n(j.triangles) + ' tris', n(j.vertices) + ' verts'].filter(Boolean).join(' · ');
+      const src = document.getElementById('prop-body');
+      const html = src ? src.innerHTML.replace(/\sid="[^"]*"/g, '') : '';
+      if (html !== propSig) { propSig = html; statEl.innerHTML = '<div class="section-h"><span>Properties</span></div><div class="section-b">' + html + '</div>'; }
     } catch (_) {}
-    statTm = setTimeout(stats, 1500);
   };
   // the numbers of the model card roll up from 0 once the card has landed (a timer sets the final value, for a tab that is not drawn)
   const countUp = (node) => {
@@ -59895,12 +60054,26 @@ window.__moElements = _Elements.api;
   function ensure() {
     if (root) return;
     root = document.createElement('section'); root.id = 'claude-feed'; root.setAttribute('aria-label', 'Claude feed');
-    root.innerHTML = '<header class="cf-head"><h2 class="cf-title">Claude mode</h2><div class="cf-state" data-state="off"><i class="cl-dot"></i><div><b></b><span></span></div></div><div class="cf-tools"><span class="cf-alpha" title="Claude mode is an early version: it works, but expect rough edges">Alpha</span><div class="cf-btns"><button type="button" class="cf-ib" id="cf-open" title="Open a model" aria-label="Open a model" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h13a2 2 0 0 0 2-1.4l2-7A1 1 0 0 0 20 10H8a2 2 0 0 0-1.9 1.4L4 20zm0 0V6a2 2 0 0 1 2-2h3l2 2h5a2 2 0 0 1 2 2v2"/></svg></button><button type="button" class="cf-ib" aria-pressed="false" id="cf-view" title="Show viewport" aria-label="Show viewport"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button><button type="button" class="cf-ib" id="cf-set" title="Claude settings" aria-label="Claude settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button><button type="button" class="cf-ib" id="cf-clear" title="Clear the feed" aria-label="Clear the feed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button type="button" class="cf-ib" id="cf-exit" title="Exit Claude mode" aria-label="Exit Claude mode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div></header><div class="cf-load" hidden></div><div class="cf-list" role="log" aria-live="polite" aria-label="What Claude did"><div class="cf-empty"></div></div><footer class="cf-foot"><div class="cf-job" hidden><div class="cf-job-t"><span></span><button type="button" class="btn" id="cf-stop">Stop</button></div><i class="cf-job-bar"><b style="width:0"></b></i></div><div class="cf-chips"><span>Start a job</span><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__optimise_for_web" title="Copies the request; paste it into Claude (Shift-click copies the /command instead)">Optimise for web</button><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__remove_fasteners" title="Copies the request; paste it into Claude (Shift-click copies the /command instead)">Remove fasteners</button><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__review_scene" title="Copies the request; paste it into Claude (Shift-click copies the /command instead)">Review scene</button></div><div class="cf-ctl"><div class="toggle"><span>Connected</span><label><input type="checkbox" id="cf-conn"><span class="switch"></span></label></div><div class="toggle"><span>Ask before edits</span><label><input type="checkbox" id="cf-ask"><span class="switch"></span></label></div><div class="cf-hist"><button type="button" class="cf-ib" id="cf-undo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button><button type="button" class="cf-ib" id="cf-redo" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button><button type="button" class="cf-ib" id="cf-copy" title="Copy the command that adds this app to Claude" aria-label="Copy the command that adds this app to Claude"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div></div></footer>';
+    root.innerHTML = '<header class="cf-head"><h2 class="cf-title"><span class="cf-name">MeshOptimiser<span class="cf-state" data-state="off" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false"><i class="cl-dot"></i><div><b></b><span></span></div></span></span><small class="cf-sub">Claude mode</small></h2><div class="cf-tools"><span class="cf-alpha" title="Claude mode is an early version: it works, but expect rough edges">Alpha</span><div class="cf-btns"><button type="button" class="cf-ib" id="cf-open" title="Open a model" aria-label="Open a model" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h13a2 2 0 0 0 2-1.4l2-7A1 1 0 0 0 20 10H8a2 2 0 0 0-1.9 1.4L4 20zm0 0V6a2 2 0 0 1 2-2h3l2 2h5a2 2 0 0 1 2 2v2"/></svg></button><button type="button" class="cf-ib" aria-pressed="false" id="cf-view" title="Show viewport" aria-label="Show viewport"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg></button><button type="button" class="cf-ib" id="cf-set" title="Claude settings" aria-label="Claude settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button><button type="button" class="cf-ib" id="cf-clear" title="Clear the feed" aria-label="Clear the feed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button type="button" class="cf-ib" id="cf-exit" title="Exit Claude mode" aria-label="Exit Claude mode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div></header><div class="cf-load" hidden></div><div class="cf-list" role="log" aria-live="polite" aria-label="What Claude did"><div class="cf-empty"></div></div><footer class="cf-foot"><div class="cf-job" hidden><div class="cf-job-t"><span></span><button type="button" class="btn" id="cf-stop">Stop</button></div><i class="cf-job-bar"><b style="width:0"></b></i></div><div class="cf-chips"><span>Start a job</span><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__optimise_for_web" title="Copies the request; paste it into Claude (Shift-click copies the /command instead)">Optimise for web</button><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__remove_fasteners" title="Copies the request; paste it into Claude (Shift-click copies the /command instead)">Remove fasteners</button><button type="button" class="cf-chip" data-copy="/mcp__meshoptimiser__review_scene" title="Copies the request; paste it into Claude (Shift-click copies the /command instead)">Review scene</button></div><div class="cf-ctl"><div class="toggle"><span>Connected</span><label><input type="checkbox" id="cf-conn"><span class="switch"></span></label></div><div class="toggle"><span>Ask before edits</span><label><input type="checkbox" id="cf-ask"><span class="switch"></span></label></div><div class="cf-hist"><button type="button" class="cf-ib" id="cf-undo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button><button type="button" class="cf-ib" id="cf-redo" title="Redo" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button><button type="button" class="cf-ib" id="cf-copy" title="Copy the command that adds this app to Claude" aria-label="Copy the command that adds this app to Claude"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></button></div></div></footer>';
     document.body.appendChild(root);
     pop = document.createElement('div'); pop.id = 'cf-pop'; pop.hidden = true; root.appendChild(pop);
-    statEl = document.createElement('div'); statEl.id = 'cf-stats'; statEl.setAttribute('aria-label', 'Model numbers'); document.body.appendChild(statEl);
+    statEl = document.createElement('div'); statEl.id = 'cf-props'; statEl.className = 'section section-fixed'; statEl.inert = true; statEl.setAttribute('aria-label', 'Properties'); document.body.appendChild(statEl);
+    // the card follows the sidebar's own: copied again when #prop-body changes (not on a timer)
+    try { const pb = document.getElementById('prop-body'); if (pb) new MutationObserver(() => { if (mode === 'split' && !statTm) statTm = setTimeout(stats, 120); }).observe(pb, { childList: true, subtree: true, characterData: true, attributes: true }); } catch (_) {}
+    // the card's markup comes from #prop-body, and part of its CSS is written for #prop-body (the Lock badge, for one): copy those rules so they apply to #cf-props too
+    try {
+      const pick = (rules) => { let out = ''; for (const r of rules) { if (r.selectorText) { const sel = r.selectorText.split(',').filter((x) => x.includes('#prop-body')); if (sel.length) out += sel.join(',').replace(/#prop-body/g, '#cf-props') + '{' + r.style.cssText + '}'; } else if (r instanceof CSSMediaRule) { const inner = pick(r.cssRules); if (inner) out += '@media ' + r.conditionText + '{' + inner + '}'; } } return out; };
+      let css = ''; for (const sh of document.styleSheets) { try { css += pick(sh.cssRules); } catch (_) {} }
+      if (css) { const st = document.createElement('style'); st.id = 'cf-props-css'; st.textContent = css; document.head.appendChild(st); }
+    } catch (_) {}
     listEl = root.querySelector('.cf-list');
     tipsEl = document.createElement('div'); tipsEl.className = 'cf-tips'; tipsEl.hidden = true; tipsEl.setAttribute('aria-hidden', 'true'); tipsEl.innerHTML = '<div class="cf-tip"></div>'; root.appendChild(tipsEl);
+    // the status dot opens a small dropdown with the words (state, requests, the open file)
+    { const st = root.querySelector('.cf-state'); const close = () => { const p = root.querySelector('.cf-statepop'); if (p) p.remove(); st.setAttribute('aria-expanded', 'false'); };
+      const toggle = () => { if (root.querySelector('.cf-statepop')) { close(); return; } const p = document.createElement('div'); p.className = 'cf-statepop'; p.setAttribute('role', 'status'); root.querySelector('.cf-head').appendChild(p); fillPop(p, st); st.setAttribute('aria-expanded', 'true'); };
+      st.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
+      st.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } else if (e.key === 'Escape') close(); });
+      document.addEventListener('pointerdown', (e) => { if (!e.target.closest('.cf-statepop, .cf-state')) close(); }, true); }
     try { const ft = root.querySelector('.cf-foot'), fit = () => root.style.setProperty('--cf-foot', ft.offsetHeight + 'px'); new ResizeObserver(fit).observe(ft); fit(); } catch (_) {}       // (the loading card floats just above the controls)
     listEl.addEventListener('scroll', () => { sticky = listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 60; });
     root.addEventListener('dragover', (ev) => { if (ev.dataTransfer && [...ev.dataTransfer.types].includes('Files')) { ev.preventDefault(); root.classList.add('is-drop'); } });
@@ -59982,7 +60155,9 @@ window.__moElements = _Elements.api;
     // Claude mode has one viewport: a model that is opened replaces the one in it, instead of opening a scene tab (a second copy of the app) over it
     if (m !== 'off') { if (!('__moNoTabsWas' in window)) window.__moNoTabsWas = !!window.__moNoTabs; window.__moNoTabs = true; }
     else if ('__moNoTabsWas' in window) { window.__moNoTabs = window.__moNoTabsWas; delete window.__moNoTabsWas; }
+    { const was = document.body.classList.contains('claude-split'); if (was !== (m === 'split')) { document.body.classList.add('cf-anim'); clearTimeout(window.__moCfAnimTm); window.__moCfAnimTm = setTimeout(() => document.body.classList.remove('cf-anim'), 700); } }
     document.body.classList.toggle('claude-split', m === 'split');
+    try { if (state.bgMode === 'dark') setBackground('dark'); } catch (_) {}
     try { localStorage.setItem(KEY, m); } catch (_) {}
     clearTimeout(statTm); statTm = 0; if (m === 'split') stats();
     if (m !== 'off') { try { if (!B().feed().length) announce(); } catch (_) {} }

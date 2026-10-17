@@ -81,6 +81,7 @@ def main() -> int:
     ap.add_argument("--url-base", help="where the zip will be downloaded from (default: the GitHub release of this tag)")
     ap.add_argument("--min-from", default="", help="the oldest version that may update to this one in the app")
     ap.add_argument("--headline", default="", help="one sentence for the update notice (default: none)")
+    ap.add_argument("--installer", help="the full download zip of this release (build-package.py output): its address, SHA-256 and size go into the feed so install.ps1 can check it")
     ap.add_argument("--delete", action="append", default=[], help="a file the previous version had that this one does not (repeatable)")
     a = ap.parse_args()
 
@@ -116,6 +117,10 @@ def main() -> int:
         "requirements_sha256": req_sha, "requirements_changed": bool(prev.get("requirements_sha256")) and prev.get("requirements_sha256") != req_sha,
         "launcher": launcher, "min_from": a.min_from,
     }
+    if a.installer:
+        ip = Path(a.installer)
+        if not ip.is_file(): raise SystemExit(f"{a.installer} is not a file.")
+        feed[a.channel]["installer"] = {"url": base + ip.name, "sha256": sha256_file(ip), "size": ip.stat().st_size}
     (out / "latest.json").write_text(json.dumps(feed, indent=1) + "\n", "utf-8")
     mb = zpath.stat().st_size / 1048576
     print(f"{zpath.relative_to(ROOT)}  {mb:.1f} MB, {len(files)} files, version {ver} ({a.channel})")

@@ -10,9 +10,10 @@ The checks, in order, before a single file is replaced:
   - the feed and the archive are fetched over https, from a short list of hosts (FEED_HOSTS / ARCHIVE_HOSTS), also after a redirect;
   - the archive has the size and SHA-256 the feed promised;
   - every file in it matches the hash its own manifest gives, has a safe relative path, and is not in a protected place;
-  - when the Python requirements changed, they are installed first, and a failure there stops the update with nothing changed.
-A file that cannot be written puts everything back at once. If the new version never gets a page working (three starts with no
-confirmation from the page), the next start puts the old version back.
+  - when the Python requirements changed, they are installed first, and a failure there stops the update before any file of the app is replaced
+    (pip itself works on the live environment, so some packages may already be installed).
+A file that cannot be written puts everything back at once. If the new version keeps failing (the server does not come up, or the page loads and never confirms: two runs in a row),
+the next start puts the old version back.
 
 Nothing here runs unless the page asks (serve.py's /api/update/* endpoints, which only this computer's own page can call).
 """
@@ -46,6 +47,7 @@ PYTHON = sys.executable                       # serve.py points this at the proj
 _lock = threading.RLock()
 STATE: dict = {"phase": "idle", "message": "", "done": 0, "total": 0, "error": None, "version": None}
 _cancel = threading.Event()
+_marked: set = set()                          # (what this run has already written into pending.json: see _mark)
 
 
 class UpdateError(Exception):
@@ -187,7 +189,9 @@ def check(channel: str = "stable", quiet: bool = False) -> dict:
     """Ask the feed what is newest on `channel`. Returns what the page needs to say; never changes anything.
     `quiet`: called from inside an update, which owns the state. The entry the answer came from comes back as "_entry"."""
     channel = channel if channel in ("stable", "beta") else "stable"
-    if not quiet: _set(phase="checking", message="Looking for updates…", error=None)
+    with _lock:                                   # (a plain check never touches the state of an update that is running)
+        mine = not quiet and not busy()
+        if mine: STATE.update(phase="checking", message="Looking for updates…", error=None)
     try:
         with _open(feed_url(), FEED_HOSTS, 10) as r:
             raw = r.read(MAX_FEED + 1)
@@ -222,7 +226,9 @@ def check(channel: str = "stable", quiet: bool = False) -> dict:
                 out["installable"] = True
         return out
     finally:
-        if not quiet: _set(phase="idle", message="")
+        if mine:
+            with _lock:
+                if STATE["phase"] == "checking": STATE.update(phase="idle", message="")
 
 
 # ── 2. download ─────────────────────────────────────────────────────────────
@@ -282,8 +288,8 @@ def verify_archive(zpath: Path, expect_version: str | None = None) -> dict:
         for i, f in enumerate(files):
             if not isinstance(f, dict): raise UpdateError("The update manifest is not valid.")
             rel = _safe_rel(str(f.get("path") or ""))
-            if rel in seen: raise UpdateError("The update lists a file twice: " + rel)
-            seen.add(rel)
+            if rel.lower() in seen: raise UpdateError("The update lists a file twice: " + rel)      # (case-folded: Windows and macOS see one file)
+            seen.add(rel.lower())
             info = infos.get(rel)
             if info is None: raise UpdateError("The update archive is missing " + rel)
             h = hashlib.sha256()
@@ -294,7 +300,7 @@ def verify_archive(zpath: Path, expect_version: str | None = None) -> dict:
                     if n > info.file_size + 1: break
             if h.hexdigest() != str(f.get("sha256") or "").lower(): raise UpdateError("A file in the update does not match its checksum: " + rel)
         for d in man.get("delete") or []:
-            _safe_rel(str(d))
+            if _safe_rel(str(d)).lower() in seen: raise UpdateError("The update both installs and removes a file: " + str(d)[:80])
         man["_files"] = [str(f["path"]) for f in files]
         return man
 
@@ -317,14 +323,29 @@ def _pip_install(req: Path) -> None:
     try:
         p = subprocess.run([py, "-m", "pip", "install", "-r", str(req), "--disable-pip-version-check"], cwd=str(ROOT), capture_output=True, text=True, timeout=1800)
     except Exception as e:
-        raise UpdateError("The Python packages could not be installed (" + str(e)[:80] + "). Nothing was changed.")
+        raise UpdateError("The Python packages could not be installed (" + str(e)[:80] + "). The app's files were not changed; some packages may already have been installed.")
     if p.returncode != 0:
         tail = " ".join((p.stdout + p.stderr).strip().splitlines()[-2:])[:200]
-        raise UpdateError("The Python packages could not be installed: " + tail + " Nothing was changed.")
+        raise UpdateError("The Python packages could not be installed: " + tail + " The app's files were not changed; some packages may already have been installed.")
     marker = ROOT / ".venv" / ".requirements.installed"
     try:
         if marker.parent.is_dir(): shutil.copyfile(req, marker)
     except Exception: pass
+    _runtime_manifest_note(req)
+
+
+def _runtime_manifest_note(req: Path) -> bool:
+    """A bundled runtime (app/runtime, no .venv) got the packages too: its MANIFEST.json must name the new requirements hash, or the
+    launcher (start.bat) reads the runtime as built for another requirements.txt and refuses to start with it. True when it was written."""
+    mf = ROOT / "runtime" / "MANIFEST.json"
+    try:
+        m = _read_json(mf)
+        if not isinstance(m, dict): return False
+        m["requirements_sha256"] = _sha256_file(req)
+        _write_json(mf, m)
+        return True
+    except Exception:
+        return False
 
 
 def apply_archive(zpath: Path, man: dict) -> dict:
@@ -347,6 +368,10 @@ def apply_archive(zpath: Path, man: dict) -> dict:
         meta = {"from": old_ver, "to": new_ver, "at": int(time.time()), "launcher": launcher_level(), "replaced": [], "created": [], "deleted": []}
         _write_json(BACKUP_DIR / "backup.json", meta)
         _set(phase="installing", message="Installing…", done=0, total=len(changed) + len(deletes))
+        # The marker goes down before the first file is touched. A crash in the middle of the swap (power, kill, antivirus) used to leave
+        # a half-replaced app that nothing rolled back, and a retry threw the only backup away; now the next start sees "applying" and
+        # puts the old version back from the backup (on_startup).
+        _write_json(PENDING, {"from": old_ver, "to": new_ver, "boots": 0, "at": int(time.time()), "applying": True})
         n = 0
         try:
             for rel in changed + deletes:
@@ -374,11 +399,16 @@ def apply_archive(zpath: Path, man: dict) -> dict:
                     _retry(os.replace, tmp, dst)
                 n += 1; _set(done=n)
             _write_json(VERSION_FILE, {"version": new_ver, "launcher": launcher_level()})
+            _write_json(PENDING, {"from": old_ver, "to": new_ver, "boots": 0, "at": int(time.time())})      # (inside the try: if it cannot be written, everything goes back)
         except Exception as e:
-            _restore(meta)
+            try: _restore(meta)
+            except Exception as e2:        # (the marker keeps saying "applying": the next start finishes putting the old version back)
+                raise UpdateError("The files could not be written (" + str(e)[:80] + ") and not all of them could be put back (" + str(e2)[:80]
+                                  + "). Start the app again: it puts the old version back then.")
+            try: PENDING.unlink()
+            except Exception: pass
             if isinstance(e, UpdateError): raise UpdateError(str(e) + " The old version was put back.")
             raise UpdateError("The files could not be written (" + str(e)[:100] + "). The old version was put back.")
-    _write_json(PENDING, {"from": old_ver, "to": new_ver, "boots": 0, "at": int(time.time())})
     return {"changed": len(changed), "deleted": len(deletes), "from": old_ver, "to": new_ver}
 
 
@@ -421,8 +451,10 @@ def start_install(channel: str, on_done, guard=None) -> None:
         _cancel.clear()
         STATE.update(phase="downloading", message="Starting…", done=0, total=0, error=None, version=None)
     def run():
-        tmp = Path(tempfile.mkdtemp(prefix="mo-update-", dir=str(UPDATE_DIR if UPDATE_DIR.exists() else ROOT)))
+        tmp = None
         try:
+            UPDATE_DIR.mkdir(parents=True, exist_ok=True)
+            tmp = Path(tempfile.mkdtemp(prefix="mo-update-", dir=str(UPDATE_DIR)))
             info = check(channel, quiet=True)
             if not info.get("available"): raise UpdateError("You already have the newest version.")
             if not info.get("installable"): raise UpdateError(info.get("reason") or "This release cannot be installed from here.")
@@ -447,7 +479,7 @@ def start_install(channel: str, on_done, guard=None) -> None:
         except Exception as e:
             _set(phase="error", error="The update stopped unexpectedly: " + str(e)[:140] + ". The old version is still in place.", message="")
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            if tmp is not None: shutil.rmtree(tmp, ignore_errors=True)
     threading.Thread(target=run, daemon=True).start()
 
 
@@ -456,16 +488,49 @@ def cancel() -> None:
 
 
 # ── 6. at start-up, and when the page is up ─────────────────────────────────
+def _mark(key: str) -> None:
+    """Note, once per run, in pending.json that this run of the server reached `key` ("listened": it came up; "served": it handed out the page)."""
+    with _lock:
+        if key in _marked: return
+        _marked.add(key)
+        p = _read_json(PENDING)
+        if isinstance(p, dict) and not p.get(key):
+            p[key] = True
+            try: _write_json(PENDING, p)
+            except Exception: pass
+
+
+def mark_listening() -> None: _mark("listened")
+def mark_page_served() -> None: _mark("served")
+
+
 def on_startup() -> bool:
-    """An update that was applied but never confirmed by a working page three times is taken back. True when it was."""
+    """An update that was applied and then failed on its next starts is taken back. True when it was.
+    A run before this one counts as failed when the server never came up, or when it handed out the page and the page never
+    confirmed. A run in which nobody opened the page (a start from a script, or by Claude, with no window) counts as neither:
+    it resets the count. A server that never came up twice in a row, or a page that loaded and never confirmed three times in a row
+    (a window closed early looks the same as a broken page, so that needs more evidence), and the next start puts the old version back."""
     try:                                           # folders an earlier run could not delete at once
         for old in UPDATE_DIR.glob("*.old-*"): shutil.rmtree(old, ignore_errors=True)
         for old in UPDATE_DIR.glob("mo-update-*"): shutil.rmtree(old, ignore_errors=True)
     except Exception: pass
     p = _read_json(PENDING)
     if not isinstance(p, dict): return False
+    if p.get("applying"):                          # the last run stopped in the middle of swapping the files: back to the old version
+        try:
+            rollback("The update did not finish.")
+            return True
+        except UpdateError:
+            try: PENDING.unlink()
+            except Exception: pass
+            return False
+    if int(p.get("boots") or 0) > 0:
+        failed = (not p.get("listened")) or bool(p.get("served"))
+        p["bad"] = int(p.get("bad") or 0) + 1 if failed else 0
+        p["dead"] = int(p.get("dead") or 0) + 1 if not p.get("listened") else 0      # (runs in a row in which the server never came up)
+    p["listened"] = False; p["served"] = False
     p["boots"] = int(p.get("boots") or 0) + 1
-    if p["boots"] >= 3:
+    if int(p.get("bad") or 0) >= 3 or int(p.get("dead") or 0) >= 2:
         try:
             rollback("The new version did not start properly.")
             return True
@@ -479,11 +544,12 @@ def on_startup() -> bool:
 
 def confirm() -> None:
     """The page of the new version is up: the update is good."""
-    p = _read_json(PENDING)
-    if isinstance(p, dict):
-        _write_json(NOTICE, {"kind": "updated", "from": p.get("from"), "to": p.get("to"), "at": int(time.time())})
-        try: PENDING.unlink()
-        except Exception: pass
+    with _lock:
+        p = _read_json(PENDING)
+        if isinstance(p, dict):
+            _write_json(NOTICE, {"kind": "updated", "from": p.get("from"), "to": p.get("to"), "at": int(time.time())})
+            try: PENDING.unlink()
+            except Exception: pass
 
 
 def clear_notice() -> None:

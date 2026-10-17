@@ -21,8 +21,8 @@
 //
 // Every reply carries the request's id and ok: true / false.
 
-import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=27';
-import { reduceIndex } from './simplify-core.js?v=3';
+import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=29';
+import { reduceIndex } from './simplify-core.js?v=4';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=2';
 import { repairMesh, analyseNormals } from './meshrepair.js?v=4';
 import { findRepeats } from './repeats.js?v=1';

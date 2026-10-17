@@ -95,3 +95,36 @@ console.log('meshrepair: all checks pass');
   console.assert(sheet.stats.flipped === 0, 'a flat sheet is not turned, got ' + sheet.stats.flipped);
   console.log('meshrepair: align checks pass');
 }
+
+{ // a sound CAD cube: 24 vertices (four per face, each with the face's normal). The weld joins the faces for the topology, but every
+  // corner keeps its normal, so the part comes out as it went in and counts as unchanged. (It used to come out with 8 vertices and the
+  // first corner's normal on each: every hard edge smoothed, and "repaired".)
+  const corners = [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+  const faces = [[[0,3,2,1],[0,0,-1]], [[4,5,6,7],[0,0,1]], [[0,1,5,4],[0,-1,0]], [[2,3,7,6],[0,1,0]], [[1,2,6,5],[1,0,0]], [[3,0,4,7],[-1,0,0]]];
+  const pos = [], nrm = [], idx = [];
+  for (const [q, nn] of faces) { const b = pos.length / 3; for (const c of q) { pos.push(...corners[c]); nrm.push(...nn); } idx.push(b, b + 1, b + 2, b, b + 2, b + 3); }
+  const cube = { position: Float32Array.from(pos), normal: Float32Array.from(nrm), index: Uint32Array.from(idx) };
+  const r = repairMesh(cube);
+  ok(r.stats.vertsAfter === 24, 'a cube with flat normals keeps its 24 vertices, got ' + r.stats.vertsAfter);
+  ok(r.changed === false, 'a sound cube is unchanged');
+  ok(r.stats.flipped === 0 && r.stats.trisAfter === 12, 'nothing turned, 12 triangles');
+  let sameNormal = true;
+  for (let t = 0; t < r.index.length; t += 3) {           // each triangle's corners carry the normal of their face
+    const a = r.position, nx = r.normal;
+    const ax = a[r.index[t] * 3], ay = a[r.index[t] * 3 + 1], az = a[r.index[t] * 3 + 2];
+    const bx = a[r.index[t + 1] * 3], by = a[r.index[t + 1] * 3 + 1], bz = a[r.index[t + 1] * 3 + 2];
+    const cx = a[r.index[t + 2] * 3], cy = a[r.index[t + 2] * 3 + 1], cz = a[r.index[t + 2] * 3 + 2];
+    const fx = (by - ay) * (cz - az) - (bz - az) * (cy - ay), fy = (bz - az) * (cx - ax) - (bx - ax) * (cz - az), fz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    const L = Math.hypot(fx, fy, fz);
+    for (let k = 0; k < 3; k++) { const v = r.index[t + k] * 3; const d = (nx[v] * fx + nx[v + 1] * fy + nx[v + 2] * fz) / L; if (d < 0.999) sameNormal = false; }
+  }
+  ok(sameNormal, 'every corner keeps the normal of its face');
+  const r2 = repairMesh(cube, { normals: true });
+  ok(r2.stats.vertsAfter === 8 && r2.changed === true, 'with the normals to be rebuilt, the corners weld to 8 vertices, got ' + r2.stats.vertsAfter);
+  const soup = cubeSoup();
+  const flat = []; for (let t = 0; t < 12; t++) { const [a, b, c] = [0, 1, 2].map(k => soup.position.subarray((t * 3 + k) * 3, (t * 3 + k) * 3 + 3)); const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]]; const nn = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]; const L = Math.hypot(...nn); for (let k = 0; k < 3; k++) flat.push(nn[0]/L, nn[1]/L, nn[2]/L); }
+  const r3 = repairMesh({ position: soup.position, normal: Float32Array.from(flat) });
+  ok(r3.stats.vertsAfter === 24 && edgesConsistent({ index: Uint32Array.from(r3.index) }) === false && r3.stats.trisAfter === 12, 'a soup with flat normals welds to 24 vertices (one per corner and face), got ' + r3.stats.vertsAfter);
+  if (fails) { console.error(fails + ' check(s) failed'); process.exit(1); }
+  console.log('meshrepair: normal checks pass');
+}

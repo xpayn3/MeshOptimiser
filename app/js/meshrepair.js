@@ -146,9 +146,10 @@ function nestDepths(W, A, B, C, flip, pieces) {
 
 // Repair one mesh. `src`: { position, uv?, normal?, index?, groups? } (typed arrays; groups as in three.js).
 // opts: weld, degenerate (empty and doubled triangles), orient, outward (false: closed pieces keep the side they had), tol (0: a millionth of the size), maxOrient (triangles; bigger meshes skip it).
+// normals: true when the caller rebuilds the normals afterwards (the weld then joins corners whatever their normal); false keeps each corner's normal.
 // Returns { position, uv, normal, index, groups, stats, changed }.
 export function repairMesh(src, opts = {}) {
-  const o = { weld: true, degenerate: true, orient: true, tol: 0, maxOrient: 2000000, ...opts };
+  const o = { weld: true, degenerate: true, orient: true, tol: 0, maxOrient: 2000000, normals: false, ...opts };
   const pos = src.position, n = (pos.length / 3) | 0;
   const idxIn = src.index || null;
   const triN = idxIn ? (idxIn.length / 3) | 0 : (n / 3) | 0;
@@ -215,16 +216,52 @@ export function repairMesh(src, opts = {}) {
     if (kept <= o.maxOrient) stats.flipped = orientTriangles(W, A, B, C, keep, m, o.outward !== false); else stats.orientSkipped = true;
   }
 
-  // 4. what is left, with the vertices nobody uses any more taken out
-  const remap = new Int32Array(m).fill(-1);
+  // 4. what is left, with the vertices nobody uses any more taken out. A corner keeps its own normal: two vertices at one place
+  // with different normals (a hard edge of a CAD part) are one vertex for the topology above, so faces still join across the edge,
+  // but they stay two vertices in the output. (The weld used to keep the first corner's normal for all of them, which smoothed every
+  // hard edge of a sound part and counted it as a repair. A mesh whose normals are rebuilt afterwards, opts.normals, is welded across them.)
+  const split = !!(Wn && !o.normals);
+  const NQ = 64;                                            // normals that agree to about a degree count as one
+  const cornerOf = (t, k) => (idxIn ? idxIn[t * 3 + k] : t * 3 + k);
+  const remap = new Int32Array(m).fill(-1);                 // welded id -> output vertex (normals not split)
+  const outOf = split ? new Int32Array(n).fill(-1) : null;  // original corner -> output vertex
+  const byKey = split ? new Map() : null;                   // "welded id|quantised normal" -> output vertex
+  const srcOf = [];                                         // output vertex -> an original corner (for its normal)
   let used = 0, keptTris = 0;
-  for (let t = 0; t < triN; t++) if (keep[t]) { keptTris++; const a = A[t], b = B[t], c = C[t]; if (remap[a] < 0) remap[a] = used++; if (remap[b] < 0) remap[b] = used++; if (remap[c] < 0) remap[c] = used++; }
+  const outIndexOf = (t, k, j) => {
+    if (!split) { if (remap[j] < 0) remap[j] = used++; return remap[j]; }
+    const i = cornerOf(t, k);
+    if (outOf[i] >= 0) return outOf[i];
+    const key = j + '|' + Math.round(src.normal[i * 3] * NQ) + '|' + Math.round(src.normal[i * 3 + 1] * NQ) + '|' + Math.round(src.normal[i * 3 + 2] * NQ);
+    let r = byKey.get(key);
+    if (r === undefined) { r = used++; byKey.set(key, r); srcOf.push(i); }
+    outOf[i] = r;
+    return r;
+  };
+  const cornerOut = new Int32Array(triN * 3);
+  for (let t = 0; t < triN; t++) {
+    if (!keep[t]) continue;
+    keptTris++;
+    cornerOut[t * 3] = outIndexOf(t, 0, A[t]); cornerOut[t * 3 + 1] = outIndexOf(t, 1, B[t]); cornerOut[t * 3 + 2] = outIndexOf(t, 2, C[t]);
+  }
   const position = new Float32Array(used * 3), uv = Wuv ? new Float32Array(used * 2) : null, normal = Wn ? new Float32Array(used * 3) : null;
-  for (let j = 0; j < m; j++) {
-    const r = remap[j]; if (r < 0) continue;
-    position[r * 3] = W[j * 3]; position[r * 3 + 1] = W[j * 3 + 1]; position[r * 3 + 2] = W[j * 3 + 2];
-    if (uv) { uv[r * 2] = Wuv[j * 2]; uv[r * 2 + 1] = Wuv[j * 2 + 1]; }
-    if (normal) { normal[r * 3] = Wn[j * 3]; normal[r * 3 + 1] = Wn[j * 3 + 1]; normal[r * 3 + 2] = Wn[j * 3 + 2]; }
+  if (split) {
+    for (let t = 0; t < triN; t++) {
+      if (!keep[t]) continue;
+      for (let k = 0; k < 3; k++) {
+        const r = cornerOut[t * 3 + k], j = k === 0 ? A[t] : k === 1 ? B[t] : C[t], i = srcOf[r];
+        position[r * 3] = W[j * 3]; position[r * 3 + 1] = W[j * 3 + 1]; position[r * 3 + 2] = W[j * 3 + 2];
+        if (uv) { uv[r * 2] = Wuv[j * 2]; uv[r * 2 + 1] = Wuv[j * 2 + 1]; }
+        normal[r * 3] = src.normal[i * 3]; normal[r * 3 + 1] = src.normal[i * 3 + 1]; normal[r * 3 + 2] = src.normal[i * 3 + 2];
+      }
+    }
+  } else {
+    for (let j = 0; j < m; j++) {
+      const r = remap[j]; if (r < 0) continue;
+      position[r * 3] = W[j * 3]; position[r * 3 + 1] = W[j * 3 + 1]; position[r * 3 + 2] = W[j * 3 + 2];
+      if (uv) { uv[r * 2] = Wuv[j * 2]; uv[r * 2 + 1] = Wuv[j * 2 + 1]; }
+      if (normal) { normal[r * 3] = Wn[j * 3]; normal[r * 3 + 1] = Wn[j * 3 + 1]; normal[r * 3 + 2] = Wn[j * 3 + 2]; }
+    }
   }
   const index = new Uint32Array(keptTris * 3);
   const outGroups = [];
@@ -239,12 +276,14 @@ export function repairMesh(src, opts = {}) {
     if (!keep[t]) continue;
     const g = groups ? grp[t] : 0;
     let w2 = at[g];
-    index[w2++] = remap[A[t]]; index[w2++] = remap[B[t]]; index[w2++] = remap[C[t]];
+    index[w2++] = cornerOut[t * 3]; index[w2++] = cornerOut[t * 3 + 1]; index[w2++] = cornerOut[t * 3 + 2];
     at[g] = w2;
   }
   if (groups) for (let g = 0; g < nGroups; g++) if (at[g] > starts[g]) outGroups.push({ start: starts[g], count: at[g] - starts[g], materialIndex: groups[g].materialIndex || 0 });
   stats.vertsAfter = used; stats.trisAfter = keptTris;
-  const changed = stats.welded > 0 || stats.degenerate > 0 || stats.duplicate > 0 || stats.flipped > 0;
+  stats.vertsRemoved = n - used;                            // (stats.welded counts the joins the topology made; this is what left the output)
+  // changed: the output is not the input. A sound part whose corners all kept their place and their normal is left as it is.
+  const changed = used !== n || keptTris !== triN || stats.flipped > 0;
   return { position, uv, normal, index, groups: outGroups, stats, changed };
 }
 
