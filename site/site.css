@@ -1821,3 +1821,6 @@ h1, h2 { font-family: var(--serif); font-weight: 300; font-optical-sizing: auto;
   .band-head { gap: 18px; }
   .band-head .lead { line-height: 1.62; }
 }
+/* the version of a mesh tool, small beside its name (tv() in tools/site/build-app-site.js) */
+.tv { display: inline-block; margin-left: 8px; font: 500 10px/1 var(--font); font-style: normal; letter-spacing: 0.04em; text-transform: none; color: var(--tx-3, var(--tx)); opacity: 0.85; vertical-align: 0.15em; white-space: nowrap; cursor: default; }
+h1 .tv { font-size: 13px; margin-left: 12px; }

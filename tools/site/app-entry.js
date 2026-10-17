@@ -682,6 +682,27 @@ window.labApps = [
       ['Fasteners', 'Every bolt, nut and washer, found by shape. Whatever the CAD file called them.', 'Images/apps/meshoptimiser-clip-fasteners.webm', 'fasteners'],
       ['Smart fit', 'A dense part becomes a box, a cylinder or blocks that keep its outline.', 'Images/apps/meshoptimiser-clip-smart-fit.webm', 'smart-fit'],
     ],
+    // Each mesh tool's own version: how many releases added or improved it (counted from CHANGELOG.md, new / improved / changed entries
+    // only). [name on the site, version, [other names it goes by], [docs slug]]. Raise it when a release improves the tool. Tools that are
+    // not in a tagged release (Lettering removal, Round part) are left out until they are. The Alpha / Beta idea is not shown on the site yet.
+    toolVersions: [
+      ['Remove holes', 15, ['Fill holes'], ['fill-holes']],
+      ['Fasteners', 6, [], ['fasteners']],
+      ['Split', 6, [], ['split']],
+      ['Decimate', 5, [], ['decimate']],
+      ['Merge by colour', 5, ['Merge by material or group'], []],
+      ['Dissolve', 4, [], []],
+      ['Edit mesh', 4, [], ['edit-mesh']],
+      ['Fit to budget', 4, [], ['fit-to-budget']],
+      ['Quick remesh', 4, ['Quick remesh (B)'], []],
+      ['Smart fit', 3, [], ['smart-fit']],
+      ['Untriangulate', 3, ['Remesh'], ['remesh']],
+      ['Repair mesh', 2, [], []],
+      ['Sweep', 2, [], ['sweep']],
+      ['Cloner', 2, [], []],
+      ['Remove hidden faces', 1, [], ['remove-hidden-faces']],
+      ['Stacked copies', 1, [], ['stacked-copies']],
+    ],
     stats: [['Version', '0.34.0'], ['Category', 'CAD tool'], ['Platform', 'Windows · macOS'], ['Runs', 'Locally']],
     about: [
       'For the STEP assembly that has to go on a web page.',

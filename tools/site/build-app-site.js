@@ -41,7 +41,7 @@ const SHOWCASE = [
   { title: 'Make it yours', note: 'The app', names: ['Keyboard remapper', 'A look of your own', 'Numbers you drag', 'Cards over the model', 'Scene tabs', 'Floating Materials and Library'] },
   { title: 'Work with Claude', note: 'Ask for it', names: ['Just ask', 'You decide', 'Try it first', 'One request, a whole job', 'A whole folder', 'Pictures for a client'] },
 ];
-const CSS_V = 485;
+const CSS_V = 486;
 const RP_V = 2;           // report.js
 const JS_V = 125;
 
@@ -78,6 +78,17 @@ function siteFor(app, docs) {
   const version = (app.stats.find(([label]) => label === 'Version') || [])[1] || '';
   const platform = (app.stats.find(([label]) => label === 'Platform') || [])[1] || '';
   const licence = (app.info.find(([label]) => label === 'Licence') || [])[1] || '';
+  // the small version of a mesh tool beside its name (app.toolVersions in app-entry.js), looked up by name or by docs slug
+  const toolKey = text => String(text).toLowerCase().replace(/[^a-z]+/g, '');
+  const toolByName = new Map(), toolBySlug = new Map();
+  for (const [name, v, aka = [], slugs = []] of app.toolVersions || []) {
+    for (const n of [name, ...aka]) toolByName.set(toolKey(n), v);
+    for (const s of slugs) toolBySlug.set(s, v);
+  }
+  const tv = (name, docSlug) => {
+    const v = toolBySlug.get(docSlug) ?? toolByName.get(toolKey(name));
+    return v ? `<span class="tv" title="Version ${v} of this tool: the number of releases that added or improved it">v${v}</span>` : '';
+  };
   const repo = app.repo.replace(/\/+$/, '');
   const latest = app.changelog.versions.find(v => v.latest) || app.changelog.versions[0];
   // the download is our own release zip, MeshOptimiser-v<version>.zip, with the files at its root: it unpacks into one folder named after the app and the version (GitHub's source zip is named after a commit and unpacks twice)
@@ -515,7 +526,7 @@ ${d.names ? `        <script type="application/json" data-live-names>${JSON.stri
     return c.stars.concat(c.more.map(([n, l, d]) => [n, l, '', d])).map(([name, line, src, doc], i) => `
           <figure class="star">
             ${starArt(i, name)}
-            <figcaption><i>${pad2(i + 1)}</i><strong>${esc(name)}</strong><span>${esc(line)}</span>${link(doc, name)}</figcaption>
+            <figcaption><i>${pad2(i + 1)}</i><strong>${esc(name)}${tv(name, doc)}</strong><span>${esc(line)}</span>${link(doc, name)}</figcaption>
           </figure>`).join('');
   };
   const cleanupBand = () => {
@@ -1405,7 +1416,7 @@ ${showcase().map((group, gi) => `
           <h2>${esc(group.title)}</h2>
         </div>
         <ul class="tools">
-${group.items.map(([name, line, flag]) => `          <li><i class="ico">${svgIcon(ICONS.items[name])}</i><div><strong>${esc(name)}${flag === 'new' ? '<em class="tag-new">New</em>' : ''}</strong><span>${esc(line)}</span></div></li>`).join('\n')}
+${group.items.map(([name, line, flag]) => `          <li><i class="ico">${svgIcon(ICONS.items[name])}</i><div><strong>${esc(name)}${tv(name)}${flag === 'new' ? '<em class="tag-new">New</em>' : ''}</strong><span>${esc(line)}</span></div></li>`).join('\n')}
         </ul>
       </div>
     </section>`).join('') + `
@@ -1420,8 +1431,8 @@ ${group.items.map(([name, line, flag]) => `          <li><i class="ico">${svgIco
           <summary>${app.allFeatures ? `All ${app.allFeatures.reduce((n, g) => n + g.items.length, 0)} features` : `${app.featureGroups.reduce((n, g) => n + g.items.length + (g.more || []).length, 0)} features`}<i aria-hidden="true"></i></summary>
           <div class="allfeat-body">
 ${app.allFeatures
-  ? app.allFeatures.filter(g => g.items.length).map(g => `            <div><h3>${esc(g.title)}</h3><ul>${g.items.map(name => `<li>${esc(name)}</li>`).join('')}</ul></div>`).join('\n')
-  : app.featureGroups.map(group => ({ group, rest: group.items.concat(group.more || []) })).filter(x => x.rest.length).map(({ group, rest }) => `            <div><h3>${esc(group.title)}</h3><ul>${rest.map(([name, , flag]) => `<li>${esc(name)}${flag === 'new' ? '<em class="tag-new">New</em>' : ''}</li>`).join('')}</ul></div>`).join('\n')}
+  ? app.allFeatures.filter(g => g.items.length).map(g => `            <div><h3>${esc(g.title)}</h3><ul>${g.items.map(name => `<li>${esc(name)}${tv(name)}</li>`).join('')}</ul></div>`).join('\n')
+  : app.featureGroups.map(group => ({ group, rest: group.items.concat(group.more || []) })).filter(x => x.rest.length).map(({ group, rest }) => `            <div><h3>${esc(group.title)}</h3><ul>${rest.map(([name, , flag]) => `<li>${esc(name)}${tv(name)}${flag === 'new' ? '<em class="tag-new">New</em>' : ''}</li>`).join('')}</ul></div>`).join('\n')}
           </div>
         </details>
       </div>
@@ -1501,7 +1512,7 @@ ${docs.groups.map(group => `      <section class="kb-group" id="${esc(group.id)}
           ${group.blurb ? `<p>${rich(group.blurb)}</p>` : ''}
         </div>
         <ol class="kb-list">
-${docs.articles.filter(a => a.group === group.id).map(a => `          <li data-words="${esc(docWords(a))}"><a href="docs/${a.slug}.html"><strong>${esc(a.title)}</strong><span>${esc(a.summary)}</span></a></li>`).join('\n')}
+${docs.articles.filter(a => a.group === group.id).map(a => `          <li data-words="${esc(docWords(a))}"><a href="docs/${a.slug}.html"><strong>${esc(a.title)}${tv(a.title, a.slug)}</strong><span>${esc(a.summary)}</span></a></li>`).join('\n')}
         </ol>
       </section>`).join('\n')}
      </div>${docsRail()}
@@ -1520,7 +1531,7 @@ ${docs.articles.filter(a => a.group === group.id).map(a => `          <li data-w
     <section class="wrap kb-page">${docsNav(article)}
       <article class="kb-article">
         <p class="kicker"><a href="docs.html">Docs</a><b>·</b><a href="docs.html#${esc(article.group)}">${esc(groupOf(article).title)}</a></p>
-        <h1>${esc(article.title)}</h1>
+        <h1>${esc(article.title)}${tv(article.title, article.slug)}</h1>
         <p class="lead">${rich(article.summary)}</p>${articleArt ? `
         <figure class="star kb-anim">${articleArt}</figure>` : ''}
         <div class="kb-body">
