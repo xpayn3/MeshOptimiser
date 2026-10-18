@@ -86,12 +86,28 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera }) {
     const noise = (k, animated = false) => hash(px.x.add(px.y.mul(2111.0)).add(animated ? u.seed.mul(k) : float(k * 37)));
     const fromC = screenUV.sub(0.5);
 
+    // The surface around a pixel, as a plane. On a plane the depth is not linear across the screen, but its inverse is (in perspective;
+    // with an orthographic camera the depth itself is): `lin` is that quantity, and its slope across and down is taken from the nearer
+    // of the two neighbours on each side, so a pixel at the edge of a part takes the slope of its own surface, not a jump to the next.
+    // zOn(off) is the depth the plane has at that offset from the pixel: what the depth there would be if nothing stood in front.
+    const lin = (z) => mix(float(1).div(z), z, u.ortho);
+    const unlin = (l) => mix(float(1).div(l), l, u.ortho);
+    const planeAt = (uv) => {
+      const z0 = viewZAt(uv), l0 = lin(z0);
+      const dx = vec2(u.texel.x, 0), dy = vec2(0, u.texel.y);
+      const xa = lin(viewZAt(uv.add(dx))).sub(l0), xb = l0.sub(lin(viewZAt(uv.sub(dx))));
+      const ya = lin(viewZAt(uv.add(dy))).sub(l0), yb = l0.sub(lin(viewZAt(uv.sub(dy))));
+      const gx = mix(xb, xa, step(abs(xa), abs(xb))).div(u.texel.x);
+      const gy = mix(yb, ya, step(abs(ya), abs(yb))).div(u.texel.y);
+      return { z0, zOn: (off) => unlin(l0.add(gx.mul(off.x)).add(gy.mul(off.y))) };
+    };
+
     // Ambient occlusion
     let ao = float(1);
     if (fx.ao) {
       const taps = spiral(q.ao);
       const aoRaw = Fn(() => {
-        const z0 = viewZAt(screenUV);
+        const { z0, zOn } = planeAt(screenUV);
         const sky = step(0.99999, depthTex.sample(screenUV).r);
         // how far, in uv, a world length of `radius` reaches at this depth (perspective: shrinks with distance)
         const reach = mix(u.radius.mul(u.projY).mul(0.5).div(max(z0.negate(), 1e-4)), u.radius.mul(u.projY).mul(0.5), u.ortho);
@@ -102,7 +118,9 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera }) {
           const rx = ca.mul(tx).sub(sa.mul(ty)), ry = sa.mul(tx).add(ca.mul(ty));
           const off = vec2(rx.div(u.aspect), ry).mul(reach);
           const z = viewZAt(screenUV.add(off));
-          const diff = z.sub(z0);                                   // > 0: that point is nearer the camera than this one
+          // Measured from the pixel's own plane, not from its depth: on a flat panel seen at a slant the far side of the disc is nearer the
+          // camera than the pixel without standing in front of it, and the panel used to shade itself in a pattern that followed the noise.
+          const diff = z.sub(zOn(off));                             // > 0: that point stands out of this pixel's surface, towards the camera
           const inRange = smoothstep(0, 1, u.radius.mul(1.5).div(max(abs(diff), 1e-6)));
           const blocks = step(u.radius.mul(0.02), diff);
           occ = occ.add(blocks.mul(inRange));
@@ -110,13 +128,22 @@ export function createPhoto({ THREE, getRenderer, getScene, getCamera }) {
         const a = float(1).sub(occ.div(taps.length).mul(1.6));
         return mix(clamp(a, 0, 1), float(1), sky);
       })();
-      // Softened over a 3x3 block: the per-pixel noise of the taps turns into a smooth shade.
+      // Softened over a 5x5 block, two pixels apart, that keeps to the pixel's own surface: a sample counts by how close its depth is to
+      // the pixel's plane, so the noise of the taps turns into a smooth shade without the shade of one part bleeding onto the part behind.
       const aoTex = convertToTexture(vec4(aoRaw, aoRaw, aoRaw, 1));
-      let aoSum = float(0);
-      for (let y = -1; y <= 1; y++) for (let x = -1; x <= 1; x++) {
-        aoSum = aoSum.add(aoTex.sample(screenUV.add(vec2(x, y).mul(u.texel).mul(1.5))).r);
-      }
-      ao = mix(float(1), aoSum.div(9), u.ao);
+      ao = Fn(() => {
+        const { z0, zOn } = planeAt(screenUV);
+        const tol = max(u.radius.mul(0.05), abs(z0).mul(0.002));
+        let sum = float(0), wsum = float(0);
+        for (let y = -2; y <= 2; y++) for (let x = -2; x <= 2; x++) {
+          const off = vec2(x, y).mul(u.texel).mul(2);
+          const same = float(1).sub(smoothstep(0, tol, abs(viewZAt(screenUV.add(off)).sub(zOn(off)))));
+          const w = same.mul(Math.exp(-(x * x + y * y) / 4.5));
+          sum = sum.add(aoTex.sample(screenUV.add(off)).r.mul(w));
+          wsum = wsum.add(w);
+        }
+        return mix(float(1), sum.div(max(wsum, 1e-4)), u.ao);
+      })();
     }
 
     // Lens fringe: red and blue sampled a little further from and nearer to the centre; nothing in the middle.

@@ -624,7 +624,7 @@ input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin
 .prim-unit{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx3);white-space:nowrap;line-height:var(--lh-none)}
 .prim-row .prim-toggle{position:relative;display:inline-flex;align-items:center;cursor:pointer;width:var(--switch-w);height:var(--switch-h);justify-self:start;grid-column:2 / span 2}
 .prim-row .prim-toggle input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
-.prim-row .prim-toggle span{position:relative;display:block;width:var(--switch-w);height:var(--switch-h);background:rgba(120,128,140,.35);border:0;border-radius:var(--r-lg);transition:background var(--dur-140) ease}
+.prim-row .prim-toggle span{position:relative;display:block;width:var(--switch-w);height:var(--switch-h);background:var(--switch-off);border:0;border-radius:var(--r-lg);transition:background var(--dur-140) ease}
 .prim-row .prim-toggle span::after{content:'';position:absolute;top:var(--switch-pad);left:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob);border-radius:50%;background:var(--white);transition:left var(--dur-140) ease,background var(--dur-140) ease}
 .prim-row .prim-toggle input:checked + span{background:var(--ac)}
 .prim-row .prim-toggle input:checked + span::after{left:calc(var(--switch-pad) + var(--switch-travel))}
@@ -936,7 +936,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .toggle > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .toggle:first-child{border-top:none}
 .toggle label{flex-shrink:0;display:inline-flex;align-items:center;cursor:pointer}
-.toggle .switch{position:relative;width:34px;height:20px;background:rgba(120,128,140,.35);border-radius:var(--r-lg);transition:background var(--dur-slow) var(--ease-ios);cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px var(--blk-12);display:block}
+.toggle .switch{position:relative;width:34px;height:20px;background:var(--switch-off);border-radius:var(--r-lg);transition:background var(--dur-slow) var(--ease-ios);cursor:pointer;flex-shrink:0;box-shadow:inset 0 0 0 1px var(--blk-12);display:block}
 .toggle .switch::after{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;background:white;border-radius:50%;transition:transform var(--dur-slow) var(--ease-ios);box-shadow:0 1px 2px var(--blk-25),0 2px 6px var(--blk-12)}
 /* The checkbox itself is kept in the page, unseen, so a switch can be reached
    with Tab and flipped with Space (display:none took all of them out of the
@@ -967,7 +967,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
    (Cam / Top / Front / Side) and reveals a dropdown of the alternatives.
    Replaces the four T/F/S/Persp buttons that used to live in the TL stack
    so the toolbar reads quieter and the active view is always legible. */
-.vp-pill{display:inline-flex;align-items:center;gap:var(--space-sm);background:rgba(16,16,16,.72);border:0;border-radius:var(--r-pill);color:var(--tx);font-weight:var(--fw-medium);letter-spacing:var(--tracking-1);cursor:pointer;transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out);user-select:none;min-width:72px;justify-content:center;line-height:var(--lh-none)}
+.vp-pill{display:inline-flex;align-items:center;gap:var(--space-sm);background:var(--pill-bg);border:0;border-radius:var(--r-pill);color:var(--tx);font-weight:var(--fw-medium);letter-spacing:var(--tracking-1);cursor:pointer;transition:background var(--dur-base) var(--ease-out),color var(--dur-base) var(--ease-out),transform var(--dur-fast) var(--ease-out);user-select:none;min-width:72px;justify-content:center;line-height:var(--lh-none)}
 .vp-pill:hover{background:color-mix(in srgb, var(--ac) 14%, var(--blk-30));color:var(--tx)}
 .vp-pill:active{transform:scale(.97)}
 .vp-pill[aria-expanded="true"]{background:color-mix(in srgb, var(--ac) 18%, var(--blk-30))}
@@ -980,7 +980,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .vp-pill-menu.show{visibility:visible;pointer-events:auto;animation:var(--menu-in)}
 .vp-pill-item{display:flex;align-items:center;border:0;text-align:left;cursor:pointer}
 .vp-pill-item-kbd{font-family:var(--font-sans);border-radius:var(--r-xs);line-height:var(--lh-none);flex-shrink:0;transition:color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out)}
-.vp-stat{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx2);background:rgba(16,16,16,.72);border:1px solid var(--bd);border-radius:var(--r-sm);padding:var(--space-xs) var(--space-md);white-space:nowrap;font-variant-numeric:tabular-nums}
+.vp-stat{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx2);background:var(--pill-bg);border:1px solid var(--bd);border-radius:var(--r-sm);padding:var(--space-xs) var(--space-md);white-space:nowrap;font-variant-numeric:tabular-nums}
 /* Gizmo HUD — small DRO that pops next to the gizmo while a drag is active.
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
    per-axis Euler) for rotate, scale factor for scale. Position is updated
@@ -2373,6 +2373,9 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
   --surface-shadow-win:0 2px 5px var(--blk-40),0 18px 36px -8px var(--blk-60);    /* the window in front: deep, and almost all of it below */
   --surface-shadow-win-off:var(--surface-ring-dark);    /* a window that is not the one in use: no shadow, only the dark hairline */
   --surface-bar:rgba(16,16,16,.94);                   /* toolbars floating over the viewport */
+  --pill-bg:rgba(16,16,16,.72);                       /* the pills over the view (.vp-pill), the stats readout, the tags on the start screen */
+  --switch-off:rgba(120,128,140,.35);                 /* the track of a switch that is off */
+  --tree-group-fg:#c4c4c6;                            /* the name of a group in the parts list: a soft grey, not white */
   --dock-h:330px;
   --switch-w:30px; --switch-h:16px; --switch-knob:12px; --switch-pad:2px;      /* the small switch (Photo mode, and every switch of the right sidebar) */
   --switch-travel:calc(var(--switch-w) - var(--switch-knob) - var(--switch-pad) * 2);
@@ -2813,7 +2816,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 #tree-hscroll{flex:0 0 auto;overflow-x:auto;overflow-y:hidden;background:var(--bg)}
 #tree-hscroll > div{height:1px}
 /* Group names: a soft grey, regular weight — not pure white. */
-.tree-node.is-group .tree-label{color:#c4c4c6;font-weight:var(--fw-regular)}
+.tree-node.is-group .tree-label{color:var(--tree-group-fg);font-weight:var(--fw-regular)}
 .tree-node.is-group.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 62%, var(--tx2))}
 .tree-node.is-group.selected .tree-label{color:var(--ac)}
 /* View cube: soft plate on hover, accent on the face under the pointer. */
@@ -3703,15 +3706,15 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .welcome-recent .wr-top{display:flex;align-items:center;gap:var(--space-md);min-width:0}
 .welcome-recent .wr-tags{display:flex;gap:var(--space-sm);flex:0 0 auto}
 .welcome-recent .wr-tags .wr-tag{position:static}
-.welcome-recent .wr-tag.is-conv{background:rgba(16,16,16,.72);color:var(--tx-control-hover)}
-.welcome-recent .wr-tag.is-notes{background:rgba(16,16,16,.72);color:var(--tx-control-hover);gap:var(--space-xs,4px)}.welcome-recent .wr-tag.is-notes svg{width:12px;height:12px}
+.welcome-recent .wr-tag.is-conv{background:var(--pill-bg);color:var(--tx-control-hover)}
+.welcome-recent .wr-tag.is-notes{background:var(--pill-bg);color:var(--tx-control-hover);gap:var(--space-xs,4px)}.welcome-recent .wr-tag.is-notes svg{width:12px;height:12px}
 .welcome-recent.is-recovered:focus-visible{box-shadow:inset 0 0 0 1.5px var(--wn)}
 .welcome-recent .wr-meta{flex:1 1 auto;display:flex;flex-direction:column;gap:var(--space-3);min-width:0;padding:0}
 .welcome-recent .wr-name{font-size:var(--fs-md);line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .welcome-recent .wr-sub{display:flex;align-items:center;gap:var(--space-sm);font-size:var(--fs-11);line-height:14px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
 .welcome-recent .wr-sub span+span::before{content:'·';margin-right:var(--space-sm)}
 
-.welcome-recent .wr-del{position:absolute;right:12px;top:50%;margin-top:-11px;width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;border-radius:var(--r-sm);background:rgba(16,16,16,.72);color:var(--tx2);opacity:0;cursor:pointer;
+.welcome-recent .wr-del{position:absolute;right:12px;top:50%;margin-top:-11px;width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;border-radius:var(--r-sm);background:var(--pill-bg);color:var(--tx2);opacity:0;cursor:pointer;
   transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .welcome-recent .wr-del svg{width:var(--icon-xs);height:var(--icon-xs);stroke:currentColor;fill:none;stroke-width:2}
 .welcome-recent:hover .wr-del,.welcome-recent:focus-within .wr-del{opacity:1}
@@ -4327,7 +4330,12 @@ body.dyn-placing,body.dyn-placing #canvas{cursor:grabbing!important}
 #shading-section .shade-sw:hover .shade-card{background:var(--s3)}
 #shading-section .shade-sw.is-on .shade-card{background:var(--bg2)}
 #shading-section .section-b{padding-bottom:var(--space-xs)}      /* (the last row is a toggle with room of its own: the card ends as far below it as it starts above it) */
-#shading-section .toggle.shade-outlines{border-top:0}      /* (no hairline between the shapes and Outlines) */
+#shading-section .toggle.shade-outlines{border-top:0}      /* (no hairline between the shapes and CAD lines) */
+#shading-section .shade-lines-status{display:flex;align-items:center;gap:var(--space-xs);margin-top:calc(-1 * var(--space-2xs));font-size:var(--fs-11);color:var(--tx3);line-height:var(--lh-body)}
+#shading-section .shade-lines-status::before{content:"";flex:none;width:6px;height:6px;border-radius:var(--r-pill);background:var(--tx3)}
+#shading-section .shade-lines-status[data-kind="cad"]::before{background:var(--ac)}
+#shading-section .shade-lines-status[data-kind="mixed"]::before{background:linear-gradient(90deg, var(--ac) 50%, var(--tx3) 50%)}
+#shading-section .shade-lines-status[data-kind="off"]::before{background:transparent;box-shadow:inset 0 0 0 1px var(--tx3)}
 /* Edge to edge: with no card around them, Properties and Shading line up with the buttons and the group labels (--space-xs in from the sidebar edge) */
 #sidebar-right .section.section-fixed>.section-h,#shading-section>.section-h{padding-left:var(--space-xs);padding-right:var(--space-xs)}
 #sidebar-right .section.section-fixed>.section-b,#shading-section>.section-b{padding-left:var(--space-xs);padding-right:var(--space-xs)}
@@ -4766,7 +4774,7 @@ svg.lucide *{vector-effect:non-scaling-stroke}
 #_mat-editor-popup .mat-edit-toggle:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx-control-hover)}
 #_mat-editor-popup .mat-edit-toggle:has(input:checked){border-color:var(--bd2);color:var(--tx)}
 #_mat-editor-popup .mat-edit-toggle:has(input:focus-visible){outline:2px solid var(--ac);outline-offset:-2px}
-#_mat-editor-popup .mat-edit-toggle input{-webkit-appearance:none;appearance:none;order:1;flex:0 0 auto;position:relative;width:24px;height:14px;margin:0;border-radius:var(--r-pill);background:rgba(120,128,140,.35);cursor:pointer;outline:none;transition:background var(--dur-180) var(--ease-out)}
+#_mat-editor-popup .mat-edit-toggle input{-webkit-appearance:none;appearance:none;order:1;flex:0 0 auto;position:relative;width:24px;height:14px;margin:0;border-radius:var(--r-pill);background:var(--switch-off);cursor:pointer;outline:none;transition:background var(--dur-180) var(--ease-out)}
 #_mat-editor-popup .mat-edit-toggle input::after{content:'';position:absolute;left:2px;top:2px;width:10px;height:10px;border-radius:50%;background:var(--tx);transition:transform var(--dur-180) var(--ease-out)}
 #_mat-editor-popup .mat-edit-toggle input:checked{background:var(--ac)}
 #_mat-editor-popup .mat-edit-toggle input:checked::after{transform:translateX(10px);background:var(--white)}
@@ -7053,13 +7061,16 @@ window.moSplash = function (msg, pct) {
           <button type="button" data-mode="tr" title="Flat faces stop being polygons and show their triangles again. Works on the selection, or on every part when nothing is selected."><i data-lucide="triangle"></i>Triangulate</button>
         </div>
         <div class="remesh-pane" id="remesh-pane-ut" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="cmd-num" title="How far neighbouring triangles may turn from each other and still count as one flat face. Strict 0.2°, Normal 1°, Loose 5°."><span>Flat faces within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-angle" value="1"><span>°</span></label></div>
-        <div class="toggle" title="Turn the edges inside each rebuilt face until the triangles are as even as its vertices allow, instead of long thin fans. No vertex is added or taken away."><span id="ut-even-lbl">Even triangles</span><label><input type="checkbox" id="ut-even" aria-labelledby="ut-even-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Also take away the points that only sit on a straight line of a face's outline (a long edge cut into pieces). They go from every face that touches them at once, so nothing cracks, and the shape does not change."><span id="ut-straight-lbl">Points on straight lines</span><label><input type="checkbox" id="ut-straight" aria-labelledby="ut-straight-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="A vertex whose triangles all lie in one plane is shaded flat. This is what the rim of a hole you closed needs: it still carries the tilted normal it had against the hole's wall, and a face like that is not joined."><span id="ut-flatten-lbl">Flatten shading on flat faces</span><label><input type="checkbox" id="ut-flatten" aria-labelledby="ut-flatten-lbl" checked><span class="switch"></span></label></div>
-        <div class="cmd-num" title="A flat face is left alone if its vertex normals differ from the face by more than this (smooth shading that would change). Raise it to 90 for a welded mesh."><span>Shading tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-normal" value="5"><span>°</span></label></div>
-        <div class="cmd-num" title="Limited dissolve, for faces that are only nearly flat (a panel with a little noise or a gentle bend): after the flat faces are joined, a point that is left goes if the triangles round it turn from each other by less than this, and the surface moves by less than 'Surface may move' where it was (a thousandth of the part's size when that is 0). A fold, a bump or a curve steeper than this stays. 0 turns it off."><span>Dissolve nearly flat within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-limit" value="3"><span>°</span></label></div>
-        <div class="cmd-num" title="Where a vertex is a little off the plane of its face (a gently curved panel) it may still go if the surface moves no more than this. 0: only vertices in the plane. Never more than 1% of the part's size."><span>Surface may move</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-tol" value="0"><span>mm</span></label></div>
+        <div class="toggle" title="Instead of joining flat faces: pair neighbouring triangles into quads, the way Blender's Triangles to Quads does, on curved surfaces too. The best pairs go first, each triangle in one quad at most; never across a CAD face boundary or a UV seam. No point moves and no triangle goes: Keep quads in the OBJ or FBX export writes them."><span id="ut-quads-lbl">Pair into quads</span><label><input type="checkbox" id="ut-quads" aria-labelledby="ut-quads-lbl"><span class="switch"></span></label></div>
+        <div class="cmd-num" data-ut="quads" style="display:none" title="Two triangles are paired only if they are folded apart by no more than this (the angle between their faces). Blender's default is 40°."><span>Fold up to</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-qface" value="40"><span>°</span></label></div>
+        <div class="cmd-num" data-ut="quads" style="display:none" title="Every corner of the quad two triangles make must be within this of square. Blender's default is 40°."><span>Corners within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-qshape" value="40"><span>°</span></label></div>
+        <div class="cmd-num" data-ut="flat" title="How far neighbouring triangles may turn from each other and still count as one flat face. Strict 0.2°, Normal 1°, Loose 5°."><span>Flat faces within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-angle" value="1"><span>°</span></label></div>
+        <div class="toggle" data-ut="flat" title="Turn the edges inside each rebuilt face until the triangles are as even as its vertices allow, instead of long thin fans. No vertex is added or taken away."><span id="ut-even-lbl">Even triangles</span><label><input type="checkbox" id="ut-even" aria-labelledby="ut-even-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" data-ut="flat" title="Also take away the points that only sit on a straight line of a face's outline (a long edge cut into pieces). They go from every face that touches them at once, so nothing cracks, and the shape does not change."><span id="ut-straight-lbl">Points on straight lines</span><label><input type="checkbox" id="ut-straight" aria-labelledby="ut-straight-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" data-ut="flat" title="A vertex whose triangles all lie in one plane is shaded flat. This is what the rim of a hole you closed needs: it still carries the tilted normal it had against the hole's wall, and a face like that is not joined."><span id="ut-flatten-lbl">Flatten shading on flat faces</span><label><input type="checkbox" id="ut-flatten" aria-labelledby="ut-flatten-lbl" checked><span class="switch"></span></label></div>
+        <div class="cmd-num" data-ut="flat" title="A flat face is left alone if its vertex normals differ from the face by more than this (smooth shading that would change). Raise it to 90 for a welded mesh."><span>Shading tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-normal" value="5"><span>°</span></label></div>
+        <div class="cmd-num" data-ut="flat" title="Limited dissolve, for faces that are only nearly flat (a panel with a little noise or a gentle bend): after the flat faces are joined, a point that is left goes if the triangles round it turn from each other by less than this, and the surface moves by less than 'Surface may move' where it was (a thousandth of the part's size when that is 0). A fold, a bump or a curve steeper than this stays. 0 turns it off."><span>Dissolve nearly flat within</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-limit" value="3"><span>°</span></label></div>
+        <div class="cmd-num" data-ut="flat" title="Where a vertex is a little off the plane of its face (a gently curved panel) it may still go if the surface moves no more than this. 0: only vertices in the plane. Never more than 1% of the part's size."><span>Surface may move</span><label class="size-field"><input type="text" inputmode="decimal" id="ut-tol" value="0"><span>mm</span></label></div>
         </div>
         <div class="remesh-pane" id="remesh-pane-tr" style="display:none;flex-direction:column;gap:var(--space-sm)">
         <div class="toggle" title="Turn the edges inside each flat face until the triangles are as even as its vertices allow (fewer long thin ones). The number of triangles and the vertices do not change."><span id="tr-even-lbl">Even out the triangles</span><label><input type="checkbox" id="tr-even" aria-labelledby="tr-even-lbl" checked><span class="switch"></span></label></div>
@@ -7349,7 +7360,8 @@ window.moSplash = function (msg, pct) {
           <div class="shade-fam" id="vw-clay" data-mode="clay"></div>
           <div class="shade-fam" id="vw-cad" data-mode="cad"></div>
         </div>
-        <div class="toggle shade-outlines"><span id="shade-outlines-lbl" title="A fine dark line on the sharp edges of every part, in every view">Outlines</span><label><input type="checkbox" id="shade-outlines" aria-labelledby="shade-outlines-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle shade-outlines"><span id="shade-outlines-lbl" title="A fine dark line on the edges of every part, in every view. A part from a STEP file opened with its CAD data draws the file's own edges; any other part draws the sharp edges found by the angle between its faces. The line under the switch says which.">CAD lines</span><label><input type="checkbox" id="shade-outlines" aria-labelledby="shade-outlines-lbl" aria-describedby="shade-lines-status" checked><span class="switch"></span></label></div>
+        <div class="shade-lines-status" id="shade-lines-status" role="status" aria-live="polite"></div>
       </div>
     </div>
 
@@ -7814,7 +7826,7 @@ window.moSplash = function (msg, pct) {
   <div class="bp-s" id="bp-sum"></div>
   <div class="toggle"><span>Face info on hover</span><label><input type="checkbox" id="bp-faceinfo" aria-label="Face info on hover"><span class="switch"></span></label></div>
   <div class="toggle"><span>Tangent edges</span><label><input type="checkbox" id="bp-tangent" aria-label="Tangent edges" checked><span class="switch"></span></label></div>
-  <div class="bp-s">The lines are the edges of the CAD file, not found from the triangles. Face info shows what the CAD face under the pointer is: its type, size and radius. A part you edit goes back to ordinary outlines.</div>
+  <div class="bp-s">The lines are the edges of the CAD file, not found from the triangles. Face info shows what the CAD face under the pointer is: its type, size and radius. A part you edit keeps its CAD edges as lines; Remove holes and Simplify round faces keep its CAD faces too. CAD lines on the Shading card turns the lines on or off.</div>
 </div>
 <div id="vp-brep-tip" hidden></div>
 <div class="modal-bg" id="import-modal">
@@ -8059,7 +8071,8 @@ window.moSplash = function (msg, pct) {
         <div class="exp-group-title" id="exp-geom-title">Size and position</div>
         <div class="field exp-row"><span class="exp-row-l" id="exp-scale-lbl"><b>Unit scale</b><small>Multiplies every size in the file</small></span>
           <select id="exp-scale" aria-labelledby="exp-scale-lbl" class="mac-sel">
-            <option value="1" selected>1.0 (no change)</option>
+            <option value="auto" selected>The format's own (glTF and USDZ in metres, the rest in mm)</option>
+            <option value="1">1.0 (no change)</option>
             <option value="0.001">× 0.001 (mm → m)</option>
             <option value="0.01">× 0.01 (cm → m)</option>
             <option value="0.1">× 0.1 (mm → cm)</option>
@@ -8075,7 +8088,8 @@ window.moSplash = function (msg, pct) {
         </div>
         <div class="field exp-row"><span class="exp-row-l" id="exp-axis-lbl"><b>Up axis</b><small>Which way is up in the file</small></span>
           <select id="exp-axis" aria-labelledby="exp-axis-lbl" class="mac-sel">
-            <option value="z-up" selected>Keep as in the scene</option>
+            <option value="auto" selected>The format's own (glTF, OBJ, USDZ Y up; FBX, STL, PLY Z up)</option>
+            <option value="z-up">Keep as in the scene (Z up)</option>
             <option value="y-up">Turn Z-up into Y-up (for glTF, OBJ, Maya)</option>
           </select>
         </div>
@@ -8730,13 +8744,13 @@ window.moSplash = function (msg, pct) {
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
-<script defer src="js/notes.js?v=101"></script>
-<script type="module" src="js/app.js?v=20261050-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1"></script>
+<script defer src="js/notes.js?v=102"></script>
+<script type="module" src="js/app.js?v=20261057-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
 <script defer src="js/cloner.js?v=20261018-undo"></script>
-<script defer src="js/help.js?v=16"></script>
+<script defer src="js/help.js?v=20"></script>
 <script>
   // Reveal the app when it says it has booted (app.js: 'mo-boot-ready', after the renderer and the
   // scene are up and the icons are drawn), the splash has been up long enough not to flash, and the

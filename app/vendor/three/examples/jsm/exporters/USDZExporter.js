@@ -43,6 +43,7 @@ class USDZExporter {
 
 		const files = {};
 		const modelFileName = 'model.usda';
+		_xformNames.clear();      // MeshOptimiser patch: the names given out in this file (see buildXform)
 
 		// model file should be first in USDZ archive so we init it here
 		files[ modelFileName ] = null;
@@ -67,7 +68,7 @@ class USDZExporter {
 
 					if ( ! ( geometryFileName in files ) ) {
 
-						const meshObject = buildMeshObject( geometry );
+						const meshObject = buildMeshObject( geometry, _meshName( object ) );      // MeshOptimiser patch: named after the first object drawn with it
 						files[ geometryFileName ] = buildUSDFileAsString( meshObject );
 
 					}
@@ -261,9 +262,22 @@ function buildUSDFileAsString( dataToInsert ) {
 
 // Xform
 
+// MeshOptimiser patch: each object's prim is named after the object (a USD identifier: letters, digits and _, not starting with a digit),
+// so a program that opens the file (Blender, Reality Composer) shows the part's own name, not Object_123. Unique within the file.
+const _xformNames = new Set();
+function _xformName( object ) {
+
+	let base = String( object.name || '' ).replace( /[^A-Za-z0-9_]/g, '_' ).replace( /^(?=[0-9])/, '_' ) || 'Object_' + object.id;
+	let name = base, k = 1;
+	while ( _xformNames.has( name ) ) name = base + '_' + ( k ++ );
+	_xformNames.add( name );
+	return name;
+
+}
+
 function buildXform( object, geometry, material ) {
 
-	const name = 'Object_' + object.id;
+	const name = _xformName( object );
 	const transform = buildMatrix( object.matrixWorld );
 
 	if ( object.matrixWorld.determinant() < 0 ) {
@@ -303,9 +317,9 @@ function buildMatrixRow( array, offset ) {
 
 // Mesh
 
-function buildMeshObject( geometry ) {
+function buildMeshObject( geometry, name ) {
 
-	const mesh = buildMesh( geometry );
+	const mesh = buildMesh( geometry, name );
 	return `
 def "Geometry"
 {
@@ -315,9 +329,17 @@ ${mesh}
 
 }
 
-function buildMesh( geometry ) {
+// MeshOptimiser patch: a program that folds an Xform into its one mesh (Blender) names the object after the mesh prim, so the prim
+// takes the name of the first object drawn with the geometry instead of Geometry for all. (The scope above it keeps the name
+// Geometry: the references point at </Geometry>.)
+function _meshName( object ) {
 
-	const name = 'Geometry';
+	return String( object.name || '' ).replace( /[^A-Za-z0-9_]/g, '_' ).replace( /^(?=[0-9])/, '_' ) || 'Geometry';
+
+}
+
+function buildMesh( geometry, name = 'Geometry' ) {
+
 	const attributes = geometry.attributes;
 	const count = attributes.position.count;
 

@@ -19,7 +19,7 @@ When a scene has this information, a **CAD edges** pill appears in the row of pi
 
 Two tools use the CAD faces as well as draw them. **Remove holes** and **Untriangulate** both need to know which triangles make up one flat face. Without the CAD information they work it out from the angles between triangles, with a small tolerance, and a face whose tessellation wobbles a little can fall apart into facets, or two faces that meet at a very shallow angle can be taken for one. With it, a face the CAD file calls a plane is one flat face, exactly, and two neighbouring plane faces are never joined. The rest of the part is handled as before. Nothing to switch on: it happens whenever the part still carries its CAD faces.
 
-> A part you edit (decimate, remesh, move its points) goes back to ordinary outlines, because the CAD faces no longer match its triangles. Copies of the same part share the information. A simplified level-of-detail part has none.
+> A part you edit (decimate, remesh, move its points) keeps its CAD edges as lines but loses its CAD faces, because they no longer match its triangles. **Remove holes** and **Simplify round faces** keep the CAD faces: after Remove holes, the face round a closed hole takes in the patch, the hole’s own faces and the edges round them go, and the other CAD tools still work on the part. Copies of the same part share the information. A simplified level-of-detail part has none.
 
 ## Surface parts
 

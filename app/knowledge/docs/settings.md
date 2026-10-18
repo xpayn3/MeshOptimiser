@@ -60,7 +60,6 @@ What the 3D view draws around the model.
 - **Highlight small parts**: Tints the parts that are under the size threshold of Delete small parts.
 - **Arrow to a selection out of view**: A faint arrow at the edge of the view points to the selection when none of it is on screen. Click the arrow to frame the selection. On by default.
 - **CAD view look**: The look the CAD view (key `6`) shades with: **Ceramic**, **Light** or **Mono**. The same choice is in the **Shading** card on the right.
-- **Outlines**: A fine dark line on the sharp edges of every part, in every view. On by default. The same switch is in the **Shading** card.
 - **Ground grid**: The floor grid. `G` switches it too.
 - **Sun direction gizmo**: A handle in the viewport for turning the light.
 - **FPS counter and Renderer stats**: Small read-outs of how fast the view is drawing.

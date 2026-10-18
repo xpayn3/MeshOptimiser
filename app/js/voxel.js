@@ -233,66 +233,100 @@ export function voxelRemesh(positions, index, opts = {}) {
     const g = [Gat(fi + 1, fj, fk) - Gat(fi - 1, fj, fk), Gat(fi, fj + 1, fk) - Gat(fi, fj - 1, fk), Gat(fi, fj, fk + 1) - Gat(fi, fj, fk - 1)], l = Math.hypot(...g) || 1;
     return [-g[0] / l, -g[1] / l, -g[2] / l];                    // (outward: the field falls going out)
   };
-  const vid = new Int32Array(N).fill(-1), vp = [], fixedV = [];
+  // One point per sheet of surface in a cell, not one per cell: where two separate sheets pass through a cell (a thin wall, the
+  // tip of an ear) a single point would join them and the edges there would have four faces. The sheets are found from the
+  // crossings on the cell's six faces: on each face the crossed sides are joined in pairs (two crossed: those two; four crossed,
+  // the ambiguous case of two inside corners across the diagonal: each inside corner's two sides, so inside corners are kept
+  // apart). Each crossed edge of the cell lies on two faces, so the pairs close into loops, one loop per sheet. The two cells on
+  // either side of a face read the same four corners and join the same pairs, so every edge of the result has exactly two faces.
+  const vbase = new Int32Array(N).fill(-1), ev = [], vp = [], fixedV = [];        // ev[vbase[cell] + e]: the point of cube edge e
   const corner = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
   const edges = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
-  const val = new Float64Array(8), ids = new Int32Array(8);
+  // each face: its corners in order round it, and the cube edges between them (side s joins corner s and corner s + 1)
+  const FACES = [[[0, 1, 3, 2], [0, 5, 1, 4]], [[4, 5, 7, 6], [2, 7, 3, 6]], [[0, 1, 5, 4], [0, 9, 2, 8]], [[2, 3, 7, 6], [1, 11, 3, 10]], [[0, 2, 6, 4], [4, 10, 6, 8]], [[1, 3, 7, 5], [5, 11, 7, 9]]];
+  const val = new Float64Array(8), ids = new Int32Array(8), link = new Int32Array(24), comp = new Int32Array(12), crossed = new Uint8Array(12);
+  const join = (p, q) => { link[2 * p + (link[2 * p] < 0 ? 0 : 1)] = q; link[2 * q + (link[2 * q] < 0 ? 0 : 1)] = p; };
   for (let k = 0; k < NZ - 1; k++) for (let j = 0; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) {
     let inside = 0;
     for (let c = 0; c < 8; c++) { ids[c] = ((k + corner[c][2]) * NY + j + corner[c][1]) * NX + i + corner[c][0]; val[c] = G[ids[c]]; if (val[c] > 0) inside++; }
     if (inside === 0 || inside === 8) continue;
-    // the crossings and their normals
-    const A = [0, 0, 0, 0, 0, 0], bq = [0, 0, 0]; let mx = 0, my = 0, mz = 0, n = 0, fromFill = 0;
-    for (const [a, b] of edges) {
-      if ((val[a] > 0) === (val[b] > 0)) continue;
-      const t = val[a] / (val[a] - val[b]);
-      const p = [cx(i + corner[a][0]) + t * (corner[b][0] - corner[a][0]) * h, cy(j + corner[a][1]) + t * (corner[b][1] - corner[a][1]) * h, cz(k + corner[a][2]) + t * (corner[b][2] - corner[a][2]) * h];
-      // the normal: the original face's when the part decides here (no fill at either end), else the field's
-      let nn = null;
-      const ia = ids[a], ib = ids[b];
-      if (G[ia] === S[ia] && G[ib] === S[ib]) {
-        let bt = -1, bd = Infinity;
-        for (const tt of [T[ia], T[ib]]) { if (tt < 0) continue; const q = closestOnTri(p, vtx(I[3 * tt]), vtx(I[3 * tt + 1]), vtx(I[3 * tt + 2])), d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2; if (d < bd) { bd = d; bt = tt; } }
-        if (bt >= 0) { nn = [FN[3 * bt], FN[3 * bt + 1], FN[3 * bt + 2]]; const og = grad(p[0], p[1], p[2]); if (nn[0] * og[0] + nn[1] * og[1] + nn[2] * og[2] < 0) nn = [-nn[0], -nn[1], -nn[2]]; }
+    for (let e = 0; e < 12; e++) crossed[e] = (val[edges[e][0]] > 0) !== (val[edges[e][1]] > 0) ? 1 : 0;
+    // the pairs on each face (each crossed edge gets two links, one from each of its faces)
+    link.fill(-1);
+    for (const [cs, sides] of FACES) {
+      let n = 0, s0 = -1, s1 = -1;
+      for (let t = 0; t < 4; t++) if (crossed[sides[t]]) { if (n === 0) s0 = sides[t]; else s1 = sides[t]; n++; }
+      if (n === 2) join(s0, s1);
+      else if (n === 4) for (let t = 0; t < 4; t++) if (val[cs[t]] > 0) join(sides[(t + 3) % 4], sides[t]);      // (round each inside corner)
+    }
+    // the loops: one sheet each
+    comp.fill(-1); let nc = 0;
+    for (let e = 0; e < 12; e++) {
+      if (!crossed[e] || comp[e] >= 0) continue;
+      let cur = e, prev = -1;
+      while (cur >= 0 && comp[cur] < 0) { comp[cur] = nc; const nx = link[2 * cur] !== prev ? link[2 * cur] : link[2 * cur + 1]; prev = cur; cur = nx; }
+      nc++;
+    }
+    const base = ev.length; vbase[(k * NY + j) * NX + i] = base;
+    for (let e = 0; e < 12; e++) ev.push(-1);
+    for (let c = 0; c < nc; c++) {
+      // the crossings of this sheet and their normals
+      const A = [0, 0, 0, 0, 0, 0], bq = [0, 0, 0]; let mx = 0, my = 0, mz = 0, n = 0, fromFill = 0;
+      for (let e = 0; e < 12; e++) {
+        if (comp[e] !== c) continue;
+        const a = edges[e][0], b = edges[e][1];
+        const t = val[a] / (val[a] - val[b]);
+        const p = [cx(i + corner[a][0]) + t * (corner[b][0] - corner[a][0]) * h, cy(j + corner[a][1]) + t * (corner[b][1] - corner[a][1]) * h, cz(k + corner[a][2]) + t * (corner[b][2] - corner[a][2]) * h];
+        // the normal: the original face's when the part decides here (no fill at either end), else the field's
+        let nn = null;
+        const ia = ids[a], ib = ids[b];
+        if (G[ia] === S[ia] && G[ib] === S[ib]) {
+          let bt = -1, bd = Infinity;
+          for (const tt of [T[ia], T[ib]]) { if (tt < 0) continue; const q = closestOnTri(p, vtx(I[3 * tt]), vtx(I[3 * tt + 1]), vtx(I[3 * tt + 2])), d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2 + (q[2] - p[2]) ** 2; if (d < bd) { bd = d; bt = tt; } }
+          if (bt >= 0) { nn = [FN[3 * bt], FN[3 * bt + 1], FN[3 * bt + 2]]; const og = grad(p[0], p[1], p[2]); if (nn[0] * og[0] + nn[1] * og[1] + nn[2] * og[2] < 0) nn = [-nn[0], -nn[1], -nn[2]]; }
+        }
+        if (!nn) { nn = grad(p[0], p[1], p[2]); fromFill++; }
+        const d = nn[0] * p[0] + nn[1] * p[1] + nn[2] * p[2];
+        A[0] += nn[0] * nn[0]; A[1] += nn[0] * nn[1]; A[2] += nn[0] * nn[2]; A[3] += nn[1] * nn[1]; A[4] += nn[1] * nn[2]; A[5] += nn[2] * nn[2];
+        bq[0] += nn[0] * d; bq[1] += nn[1] * d; bq[2] += nn[2] * d;
+        mx += p[0]; my += p[1]; mz += p[2]; n++;
       }
-      if (!nn) { nn = grad(p[0], p[1], p[2]); fromFill++; }
-      const d = nn[0] * p[0] + nn[1] * p[1] + nn[2] * p[2];
-      A[0] += nn[0] * nn[0]; A[1] += nn[0] * nn[1]; A[2] += nn[0] * nn[2]; A[3] += nn[1] * nn[1]; A[4] += nn[1] * nn[2]; A[5] += nn[2] * nn[2];
-      bq[0] += nn[0] * d; bq[1] += nn[1] * d; bq[2] += nn[2] * d;
-      mx += p[0]; my += p[1]; mz += p[2]; n++;
+      mx /= n; my /= n; mz /= n;
+      // minimise the distance to the crossing planes, pulled a little towards the middle of the crossings (where they say nothing)
+      const lam = 0.05 * n;
+      const a00 = A[0] + lam, a01 = A[1], a02 = A[2], a11 = A[3] + lam, a12 = A[4], a22 = A[5] + lam;
+      const r0 = bq[0] + lam * mx, r1 = bq[1] + lam * my, r2_ = bq[2] + lam * mz;
+      const det = a00 * (a11 * a22 - a12 * a12) - a01 * (a01 * a22 - a12 * a02) + a02 * (a01 * a12 - a11 * a02);
+      let x = mx, y = my, z = mz;
+      if (Math.abs(det) > 1e-12) {
+        x = (r0 * (a11 * a22 - a12 * a12) - a01 * (r1 * a22 - a12 * r2_) + a02 * (r1 * a12 - a11 * r2_)) / det;
+        y = (a00 * (r1 * a22 - a12 * r2_) - r0 * (a01 * a22 - a12 * a02) + a02 * (a01 * r2_ - r1 * a02)) / det;
+        z = (a00 * (a11 * r2_ - r1 * a12) - a01 * (a01 * r2_ - r1 * a02) + r0 * (a01 * a12 - a11 * a02)) / det;
+      }
+      // it stays within the cell (a little beyond), or falls back to the middle of the crossings; in a cell with two sheets each
+      // keeps to the middle of its own crossings, so the two cannot meet
+      const x0 = cx(i) - 0.25 * h, x1 = cx(i + 1) + 0.25 * h, y0 = cy(j) - 0.25 * h, y1 = cy(j + 1) + 0.25 * h, z0 = cz(k) - 0.25 * h, z1 = cz(k + 1) + 0.25 * h;
+      if (nc > 1 || !(x >= x0 && x <= x1 && y >= y0 && y <= y1 && z >= z0 && z <= z1)) { x = mx; y = my; z = mz; }
+      const v = vp.length / 3;
+      vp.push(x, y, z); fixedV.push(fromFill ? 0 : 1);         // (a point of the original surface stays where it is)
+      for (let e = 0; e < 12; e++) if (comp[e] === c) ev[base + e] = v;
     }
-    mx /= n; my /= n; mz /= n;
-    // minimise the distance to the crossing planes, pulled a little towards the middle of the crossings (where they say nothing)
-    const lam = 0.05 * n;
-    const a00 = A[0] + lam, a01 = A[1], a02 = A[2], a11 = A[3] + lam, a12 = A[4], a22 = A[5] + lam;
-    const r0 = bq[0] + lam * mx, r1 = bq[1] + lam * my, r2_ = bq[2] + lam * mz;
-    const det = a00 * (a11 * a22 - a12 * a12) - a01 * (a01 * a22 - a12 * a02) + a02 * (a01 * a12 - a11 * a02);
-    let x = mx, y = my, z = mz;
-    if (Math.abs(det) > 1e-12) {
-      x = (r0 * (a11 * a22 - a12 * a12) - a01 * (r1 * a22 - a12 * r2_) + a02 * (r1 * a12 - a11 * r2_)) / det;
-      y = (a00 * (r1 * a22 - a12 * r2_) - r0 * (a01 * a22 - a12 * a02) + a02 * (a01 * r2_ - r1 * a02)) / det;
-      z = (a00 * (a11 * r2_ - r1 * a12) - a01 * (a01 * r2_ - r1 * a02) + r0 * (a01 * a12 - a11 * a02)) / det;
-    }
-    // it stays within the cell (a little beyond), or falls back to the middle of the crossings
-    const x0 = cx(i) - 0.25 * h, x1 = cx(i + 1) + 0.25 * h, y0 = cy(j) - 0.25 * h, y1 = cy(j + 1) + 0.25 * h, z0 = cz(k) - 0.25 * h, z1 = cz(k + 1) + 0.25 * h;
-    if (!(x >= x0 && x <= x1 && y >= y0 && y <= y1 && z >= z0 && z <= z1)) { x = mx; y = my; z = mz; }
-    vid[(k * NY + j) * NX + i] = vp.length / 3;
-    vp.push(x, y, z); fixedV.push(fromFill ? 0 : 1);         // (a point of the original surface stays where it is)
   }
   const ix = [];
-  const cellId = (i, j, k) => vid[(k * NY + j) * NX + i];
+  const pt = (i, j, k, e) => { const b = vbase[(k * NY + j) * NX + i]; return b < 0 ? -1 : ev[b + e]; };
   const quad = (a, b, c, d, flip) => { if (a < 0 || b < 0 || c < 0 || d < 0) return; if (flip) ix.push(a, c, b, a, d, c); else ix.push(a, b, c, a, c, d); };
+  // each crossed grid edge: a quad of the four cells round it, each cell giving the point of its sheet that crosses this edge
   for (let k = 1; k < NZ - 1; k++) for (let j = 1; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) {        // x edges
     const a = Gat(i, j, k) > 0, b = Gat(i + 1, j, k) > 0; if (a === b) continue;
-    quad(cellId(i, j - 1, k - 1), cellId(i, j, k - 1), cellId(i, j, k), cellId(i, j - 1, k), !a);
+    quad(pt(i, j - 1, k - 1, 3), pt(i, j, k - 1, 2), pt(i, j, k, 0), pt(i, j - 1, k, 1), !a);
   }
   for (let k = 1; k < NZ - 1; k++) for (let j = 0; j < NY - 1; j++) for (let i = 1; i < NX - 1; i++) {        // y edges
     const a = Gat(i, j, k) > 0, b = Gat(i, j + 1, k) > 0; if (a === b) continue;
-    quad(cellId(i - 1, j, k - 1), cellId(i - 1, j, k), cellId(i, j, k), cellId(i, j, k - 1), !a);
+    quad(pt(i - 1, j, k - 1, 7), pt(i - 1, j, k, 5), pt(i, j, k, 4), pt(i, j, k - 1, 6), !a);
   }
   for (let k = 0; k < NZ - 1; k++) for (let j = 1; j < NY - 1; j++) for (let i = 1; i < NX - 1; i++) {        // z edges
     const a = Gat(i, j, k) > 0, b = Gat(i, j, k + 1) > 0; if (a === b) continue;
-    quad(cellId(i - 1, j - 1, k), cellId(i, j - 1, k), cellId(i, j, k), cellId(i - 1, j, k), !a);
+    quad(pt(i - 1, j - 1, k, 11), pt(i, j - 1, k, 10), pt(i, j, k, 8), pt(i - 1, j, k, 9), !a);
   }
   let pos = new Float32Array(vp), idx = new Uint32Array(ix);
   // the fill is relaxed: each of its points moves towards the middle of its neighbours a few times (the points of the original
@@ -322,6 +356,24 @@ export function voxelRemesh(positions, index, opts = {}) {
       const Sm = opts.simplifier, scale = Sm.getScale(pos, 3) || 1;
       const [ri] = Sm.simplify(idx, pos, 3, 3, (h * adapt) / scale);
       if (ri && ri.length >= 12) idx = new Uint32Array(ri);
+      // The reduction can fold a thin place flat into a fin: the same triangle twice, facing both ways, whose three edges then have
+      // four faces (measured: 3 on Suzanne at 160 cells, which Blender opened into 6 holes when it dropped the copies). A fin
+      // encloses nothing, so both of its triangles go and the surface round it stays closed; a triangle written twice the same way
+      // round loses its copy, and one that has lost an edge goes.
+      {
+        const seen = new Map(), drop = new Uint8Array(idx.length / 3);
+        for (let t = 0; t < idx.length / 3; t++) {
+          const a = idx[3 * t], b = idx[3 * t + 1], c = idx[3 * t + 2];
+          if (a === b || b === c || a === c) { drop[t] = 1; continue; }
+          const lo = Math.min(a, b, c), hi = Math.max(a, b, c), key = lo + ':' + (a + b + c - lo - hi) + ':' + hi;
+          const o = seen.get(key);
+          if (o === undefined) { seen.set(key, t); continue; }
+          const p = idx[3 * o], q = idx[3 * o + 1];
+          const sameWay = (p === a && q === b) || (p === b && q === c) || (p === c && q === a);
+          drop[t] = 1; if (!sameWay) { drop[o] = 1; seen.delete(key); }
+        }
+        if (drop.some(Boolean)) { const keep = []; for (let t = 0; t < drop.length; t++) if (!drop[t]) keep.push(idx[3 * t], idx[3 * t + 1], idx[3 * t + 2]); idx = new Uint32Array(keep); }
+      }
     } catch (_) { /* keep it as it is */ }
     const used = new Int32Array(pos.length / 3).fill(-1), np = [];
     for (let i = 0; i < idx.length; i++) { const v = idx[i]; if (used[v] < 0) { used[v] = np.length / 3; np.push(pos[3 * v], pos[3 * v + 1], pos[3 * v + 2]); } idx[i] = used[v]; }

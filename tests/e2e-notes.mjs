@@ -43,10 +43,10 @@ const popBox = () => evalJS(`(() => { const p = document.querySelector('.note-po
 const editTask = () => evalJS(`(async () => { document.querySelector('.note-pop .nt-bar .nt-ib[aria-label=More]').click(); await new Promise(r => setTimeout(r, 120)); [...document.querySelectorAll('.nt-menu button')].find(b => b.textContent.trim() === 'Edit').click(); await new Promise(r => setTimeout(r, 150)); })()`);
 const writeNote = (x, y, title, desc = '') => evalJS(`(async () => {
   ${UI}.addAt({ clientX: ${x}, clientY: ${y} });
-  for (let i = 0; i < 40 && !document.querySelector('.note-pop .nt-ttl'); i++) await new Promise(r => setTimeout(r, 25));
-  const ti = document.querySelector('.note-pop .nt-ttl'); if (!ti) return false;
-  ti.value = ${JSON.stringify(title)}; ti.dispatchEvent(new Event('input'));
-  const de = document.querySelector('.note-pop .nt-descin'); if (de && ${JSON.stringify(desc)}) { de.value = ${JSON.stringify(desc)}; de.dispatchEvent(new Event('input')); }
+  // (the form has one box since notes became tasks: its first line is the note's name)
+  for (let i = 0; i < 40 && !document.querySelector('.note-pop .nt-descin'); i++) await new Promise(r => setTimeout(r, 25));
+  const de = document.querySelector('.note-pop .nt-descin'); if (!de) return false;
+  de.value = ${JSON.stringify(title)} + (${JSON.stringify(desc)} ? String.fromCharCode(10) + ${JSON.stringify(desc)} : ''); de.dispatchEvent(new Event('input'));
   document.querySelector('.note-pop .nt-formfoot .nt-btn.primary').click();
   await new Promise(r => setTimeout(r, 30)); return true; })()`);
 
@@ -172,9 +172,10 @@ try {
   check('the window drags by its top row', Math.abs((pd.l - p0.l) + 120) <= 2 && Math.abs((pd.t - p0.t) - 64) <= 2, [p0, pd]);
   check('and stays where it was dropped', (await popBox()).l === pd.l);
   p0.l = pd.l; p0.t = pd.t;
-  // ── the card's buttons are icons in a row ──
-  const rows = await evalJS(`(() => [...document.querySelectorAll('#notes-body .nt-tools')].map(r => { const b = [...r.children].map(x => x.getBoundingClientRect()); return { n: b.length, sameRow: b.every(x => Math.abs(x.top - b[0].top) < 1), text: [...r.children].map(x => x.textContent.trim()).join('') }; }))()`);
-  check('the two button rows are three buttons each on one line: New note then icons, and icons only below', rows.length === 2 && rows.every(r => r.n === 3 && r.sameRow) && rows[0].text === 'New note' && rows[1].text === '', rows);
+  // ── the card's buttons: one toolbar, New note then the icons (search, pins, more); the rest is in the More menu, the older rows
+  //    are still built but out of sight (notes.js: "one toolbar") ──
+  const rows = await evalJS(`(() => [...document.querySelectorAll('#notes-body .nt-tools')].filter(r => !r.closest('[hidden]')).map(r => { const b = [...r.children].map(x => x.getBoundingClientRect()); return { n: b.length, sameRow: b.every(x => Math.abs((x.top + x.height / 2) - (b[0].top + b[0].height / 2)) < 2), text: [...r.children].map(x => x.textContent.trim()).join('') }; }))()`);
+  check('one toolbar on one line: New note, then three icons', rows.length === 1 && rows[0].n === 4 && rows[0].sameRow && rows[0].text === 'New note', rows);
   // ── reactions and reply, each click leaves the window where it is ──────────────────────────────────────
   const steps = [];
   const clickIn = async (sel, label) => {
@@ -187,25 +188,22 @@ try {
   await evalJS(`(() => { const ta = document.querySelector('.note-pop .nt-comp textarea'); ta.value = 'the first comment'; ta.dispatchEvent(new Event('input')); ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
   await sleep(300);
   check('a comment goes under the note, and the description stays above it', await evalJS(`(() => { const n = ${UI}.items().find(x => x.id === ${UI}._state.openId); return n.messages.length >= 2 && n.messages[0].desc === true && n.messages[1].desc !== true && n.messages[1].text === 'the first comment' && !!document.querySelector('.note-pop .nt-msgs .nt-msg'); })()`));
-  await clickIn('.note-pop .nt-rb[aria-label="Like"]', 'like');
-  check('Like counts and is marked mine', await evalJS(`(() => { const b = document.querySelector('.note-pop .nt-rb[aria-label="Like"]'); return b.classList.contains('on') && b.textContent.trim() === '1'; })()`));
-  await clickIn('.note-pop .nt-rb[aria-label="Dislike"]', 'dislike');
-  check('there is no Done button under a comment (done is for the whole note)', !(await evalJS("!!document.querySelector('.note-pop .nt-rb[aria-label=Done]')")));
-  check('Dislike takes the like away', await evalJS(`(() => { const l = document.querySelector('.note-pop .nt-rb[aria-label="Like"]'), d = document.querySelector('.note-pop .nt-rb[aria-label="Dislike"]'); return !l.classList.contains('on') && d.classList.contains('on'); })()`));
-  // reply to the first message
-  await clickIn('.note-pop .nt-rb[aria-label="Reply"]', 'reply');
-  check('Reply shows who is being answered', await evalJS("!!document.querySelector('.note-pop .nt-replying')"));
-  await evalJS(`(() => { const ta = document.querySelector('.note-pop textarea'); ta.value = 'An answer'; ta.dispatchEvent(new Event('input')); ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
+  // (Like, Dislike and Reply under a comment went in v0.34.0 with the shorter note window; the notes still keep reactions in their data)
+  check('a comment has no reaction or reply buttons', !(await evalJS("!!document.querySelector('.note-pop .nt-rb')")));
+  await clickIn('.note-pop .nt-comp textarea', 'the comment box');
+  await evalJS(`(() => { const ta = document.querySelector('.note-pop .nt-comp textarea'); ta.value = 'A second comment'; ta.dispatchEvent(new Event('input')); ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`);
   await sleep(300);
-  check('the answer carries the quote of what it answers', await evalJS("document.querySelectorAll('.note-pop .nt-quote').length === 1"));
-  check('and is saved with the id of that message', await evalJS(`(() => { const n = ${UI}.items().find(n => n.messages.some(m => m.text === 'An answer')); const a = n && n.messages.find(m => m.text === 'An answer'), c = n && n.messages.find(m => m.text === 'the first comment'); return !!(a && c && a.to === c.id); })()`));
+  // (an answer to a comment: the window has no Reply button since v0.34.0, but answers from older scenes, BCF files and Claude are kept,
+  //  so one is made through the notes' own API for the save check further down)
+  await evalJS(`(() => { const S = ${UI}._state; const n = S.items.find(x => x.id === S.openId); const c = n && n.messages.find(m => m.text === 'the first comment'); if (c) window.MONotes.reply(n, 'Tester One', 'An answer', undefined, c.id); })()`); await sleep(200);
+  check('a second comment goes under the first', await evalJS(`(() => { const n = ${UI}.items().find(x => x.id === ${UI}._state.openId); const t = n ? n.messages.filter(m => !m.desc).map(m => m.text) : []; return t.indexOf('the first comment') === 0 && t.indexOf('A second comment') === 1; })()`));
   const moved = steps.filter(s => s[1] !== true);
   check('no click inside the window moved it', moved.length === 0, moved);
 
   // ── rebuild it again and again: position, scroll, no new animation ─────────────────────────────────────
   await evalJS(`(() => { const l = document.querySelector('.note-pop .nt-msgs'); if (l) l.scrollTop = 0; })()`);
   const b0 = await popBox();
-  for (let i = 0; i < 40; i++) await evalJS(`(() => { const x = document.querySelector('.note-pop .nt-rb[aria-label="Like"]'); x && x.click(); })()`);
+  for (let i = 0; i < 40; i++) await evalJS(`(() => { const x = document.querySelector('.note-pop .nt-comp textarea'); x && x.click(); })()`);
   await sleep(300);
   const b1 = await popBox();
   check('40 quick clicks leave it where it was', b1 && b0 && b1.l === b0.l && b1.t === b0.t, [b0, b1]);
@@ -290,7 +288,13 @@ try {
   const pid = await evalJS(`${UI}._state.openId`);
   check('Urgent is saved on the note', await evalJS(`${UI}.items().find(n => n.id === ${JSON.stringify(pid)}).priority === 'urgent'`));
   check('and its pin is marked', (await evalJS(`(document.querySelector('.note-pin[data-id="' + ${JSON.stringify(pid)} + '"]') || { dataset: {} }).dataset.pri`)) === 'urgent');
-  await evalJS(`(() => { const ta = document.querySelector('.note-pop textarea'); ta.focus(); window.MONotes.reply(${UI}._state.items.find(n => !n.deleted), 'Ana Kovac', 'a reply from someone else'); ta.value = 'hello @An'; ta.setSelectionRange(9, 9); ta.dispatchEvent(new Event('input')); })()`); await sleep(150);
+  // (someone else's reply first: it redraws the window, so the comment box is found after it)
+  await evalJS(`(() => { window.MONotes.reply(${UI}._state.items.find(n => !n.deleted), 'Ana Kovac', 'a reply from someone else'); })()`); await sleep(300);
+  // (the window is still editing the note from the step above, where only the description can be typed: save the edit, then open the
+  //  whole note if it is in its short form, as a person would; the comment box is where names are offered)
+  if (await evalJS(`${UI}._state.editProps === true`)) { await evalJS("document.querySelector('.note-pop .nt-bar .nt-edit')?.click()"); await sleep(300); }      // (Done editing: while editing, the dots are a pencil that leaves)
+  if (!(await evalJS("!!document.querySelector('.note-pop .nt-comp textarea')"))) { await evalJS("document.querySelector('.note-pop .nt-fold')?.click()"); await sleep(300); }
+  await evalJS(`(() => { const ta = document.querySelector('.note-pop .nt-comp textarea'); ta.focus(); ta.value = 'hello @An'; ta.setSelectionRange(9, 9); ta.dispatchEvent(new Event('input')); })()`); await sleep(150);
   check('typing @ offers the names of the people on the notes', await evalJS("(() => { const m = document.querySelector('.note-pop .nt-mentions'); return !!m && !m.hidden && /Ana Kovac/.test(m.textContent); })()"));
   await evalJS("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
   const lab0 = await evalJS("document.querySelector('#notes-body .nt-navlabel').textContent");
@@ -299,10 +303,10 @@ try {
   check('the card jumps to the next note and says which one ("3 of 9")', /^\d+ of \d+$/.test(lab1), [lab0, lab1]);
   check('and opens it', !!(await evalJS(`${UI}._state.openId`)));
   const allRows = await evalJS("document.querySelectorAll('#notes-body .nt-row').length");
-  await evalJS(`(() => { const S = ${UI}._state; const n = S.items.find(x => !x.deleted && x.part); if (n) { const p = S.host.state.parts.find(q => (n.part.uid && q.uid === n.part.uid) || q.name === n.part.name); if (p) { S.host.state.selected.clear(); S.host.state.selected.add(p.partId); } } document.querySelector('#notes-body .nt-sbar .nt-ib[aria-label^="Only the notes"]').click(); })()`); await sleep(300);
+  await evalJS(`(() => { const S = ${UI}._state; const n = S.items.find(x => !x.deleted && x.part); if (n) { const p = S.host.state.parts.find(q => (n.part.uid && q.uid === n.part.uid) || q.name === n.part.name); if (p) { S.host.state.selected.clear(); S.host.state.selected.add(p.partId); } } })()`); await evalJS(`(async () => { document.querySelector('#notes-body .nt-bar .nt-ib[aria-label=More]').click(); await new Promise(r => setTimeout(r, 150)); const row = [...document.querySelectorAll('#ctx-menu .ctx-menu-row')].find(r => /^Only the notes on the selected part/.test(r.textContent.trim())); row.click(); await new Promise(r => setTimeout(r, 150)); })()`); await sleep(300);
   const selRows = await evalJS("document.querySelectorAll('#notes-body .nt-row').length");
   check('"only the selected part" narrows the list', selRows >= 1 && selRows <= allRows, [allRows, selRows]);
-  await evalJS(`document.querySelector('#notes-body .nt-sbar .nt-ib[aria-label^="Only the notes"]').click()`);
+  await evalJS(`(async () => { document.querySelector('#notes-body .nt-bar .nt-ib[aria-label=More]').click(); await new Promise(r => setTimeout(r, 150)); const row = [...document.querySelectorAll('#ctx-menu .ctx-menu-row')].find(r => /^Only the notes on the selected part/.test(r.textContent.trim())); row.click(); await new Promise(r => setTimeout(r, 150)); })()`);      // (the same entry of the card's More menu turns it off)
 
   // ── due dates ──
   await evalJS(`${UI}.next()`); await sleep(300);
@@ -314,7 +318,8 @@ try {
   await evalJS(`(() => { const i = document.querySelector('.note-pop .nt-date'); i.value = ${JSON.stringify(yday)}; i.dispatchEvent(new Event('change')); })()`); await sleep(300);
   check('a due date is set from the window', (await evalJS(`${UI}.items().find(n => n.id === ${JSON.stringify(dueId)}).due`)) === yday);
   check('a date in the past, not done, marks the pin late', await evalJS(`document.querySelector('.note-pin[data-id="' + ${JSON.stringify(dueId)} + '"]').classList.contains('late')`));
-  check('and the window says it is overdue', /Overdue/.test(await evalJS("document.querySelector('.note-pop .nt-pmeta').textContent")));
+  // (the window shows it on the due-date pill, red, since v0.34.0; it no longer writes "Overdue" in a line of its own)
+  check('and the window marks the date late', await evalJS("!!document.querySelector('.note-pop .nt-due.late')"));
   await evalJS(`document.querySelector('.note-pop .nt-duebox .nt-ib').click()`); await sleep(250);
   check('the due date can be taken off', (await evalJS(`${UI}.items().find(n => n.id === ${JSON.stringify(dueId)}).due`)) === '');
   await evalJS("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
@@ -333,22 +338,24 @@ try {
   // ── show only the parts that have notes ──
   const total = await evalJS("window.state.parts.filter(p => !p.deleted && p.visible).length");
   const noted = await evalJS(`new Set(${UI}.items().filter(n => !n.deleted && n.part).map(n => n.part.name)).size`);
-  await evalJS(`document.querySelector('#notes-body .nt-nav .nt-ib[aria-label^="Show only the parts"]').click()`); await sleep(500);
+  // (in the card's More menu since v0.34.0, with a tick while it is on)
+  await evalJS(`(async () => { document.querySelector('#notes-body .nt-bar .nt-ib[aria-label=More]').click(); await new Promise(r => setTimeout(r, 150)); const row = [...document.querySelectorAll('#ctx-menu .ctx-menu-row')].find(r => r.textContent.trim().startsWith("Show only the parts with notes")); const t = row ? row.textContent.trim() : ''; if (row && true) row.click(); else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise(r => setTimeout(r, 150)); return t; })()`); await sleep(500);
   const shown = await evalJS("window.state.parts.filter(p => !p.deleted && p.visible).length");
   check('the isolate button leaves only the parts that have notes visible', shown > 0 && shown < total && shown <= noted + 3, [total, shown, noted]);
-  check('and the button shows it is on', await evalJS("document.querySelector('#notes-body .nt-nav .nt-ib[aria-label^=\"Show only the parts\"]').classList.contains('on')"));
-  await evalJS(`document.querySelector('#notes-body .nt-nav .nt-ib[aria-label^="Show only the parts"]').click()`); await sleep(500);
+  check('and the menu shows it is on', /✓/.test(await evalJS(`(async () => { document.querySelector('#notes-body .nt-bar .nt-ib[aria-label=More]').click(); await new Promise(r => setTimeout(r, 150)); const row = [...document.querySelectorAll('#ctx-menu .ctx-menu-row')].find(r => r.textContent.trim().startsWith("Show only the parts with notes")); const t = row ? row.textContent.trim() : ''; if (row && false) row.click(); else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise(r => setTimeout(r, 150)); return t; })()`)));
+  await evalJS(`(async () => { document.querySelector('#notes-body .nt-bar .nt-ib[aria-label=More]').click(); await new Promise(r => setTimeout(r, 150)); const row = [...document.querySelectorAll('#ctx-menu .ctx-menu-row')].find(r => r.textContent.trim().startsWith("Show only the parts with notes")); const t = row ? row.textContent.trim() : ''; if (row && true) row.click(); else document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise(r => setTimeout(r, 150)); return t; })()`); await sleep(500);
   check('pressing it again shows everything', (await evalJS("window.state.parts.filter(p => !p.deleted && p.visible).length")) === total);
 
   // ── a note about several parts ──
   await evalJS(`(() => { const S = ${UI}._state; const ps = S.host.state.parts.filter(p => !p.deleted && p.mesh).slice(3, 6); S.host.state.selected.clear(); for (const p of ps) S.host.state.selected.add(p.partId); })()`);
   await evalJS(`${UI}.addForSelection()`); await sleep(500);
-  await evalJS(`(() => { const ti = document.querySelector('.note-pop .nt-ttl'); ti.value = 'three parts together'; ti.dispatchEvent(new Event('input')); ti.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); })()`); await sleep(400);
+  // (one box since notes became tasks: its first line is the title)
+  await evalJS(`(() => { const de = document.querySelector('.note-pop .nt-descin'); de.value = 'three parts together'; de.dispatchEvent(new Event('input')); document.querySelector('.note-pop .nt-formfoot .nt-btn.primary').click(); })()`); await sleep(400);
   const multi = await evalJS(`(() => { const n = ${UI}.items().find(x => x.title === 'three parts together'); return n ? { also: n.also.length, kind: n.kind } : null; })()`);
   check('a note written with three parts selected is about all three', multi && multi.also === 2 && multi.kind === 'part', multi);
   check('and the window says so', /Parts . 3/.test(await evalJS("document.querySelector('.note-pop .nt-plabel').textContent")));
   const order = await evalJS("(() => { const kids = [...document.querySelector('.note-pop .nt-scroll').children].map(c => c.className.split(' ')[0]); return { kids, d: kids.indexOf('nt-descblock'), l: kids.indexOf('nt-seclabel'), m: kids.indexOf('nt-pmeta'), c: kids.indexOf('nt-plist2'), pr: kids.indexOf('nt-props') }; })()");
-  check('under the description: a Parts title, the line about the note, a card for every part, then the toolbar and the comments; the controls stay hidden', order.d >= 0 && order.l === order.d + 1 && order.m === order.d + 2 && order.c === order.d + 3 && order.kids[order.c + 1] === 'nt-bar' && order.kids[order.c + 2] === 'nt-cpanel' && order.pr === -1, order);
+  check('under the description: a Parts title, a card for every part, then the toolbar and the comments; the controls stay hidden (the line about the note went in v0.34.0)', order.d >= 0 && order.l === order.d + 1 && order.m === -1 && order.c === order.d + 2 && order.kids[order.c + 1] === 'nt-bar' && order.kids[order.c + 2] === 'nt-cpanel' && order.pr === -1, order);
   check('the title says Parts, and how many', await evalJS("document.querySelector('.note-pop .nt-plabel').textContent.startsWith('Parts')"));
   check('and every part has its own card with one Focus button', await evalJS("(() => { const cs = [...document.querySelectorAll('.note-pop .nt-plist2 .nt-partcard')]; return cs.length === 3 && cs.every(c => c.querySelector('.nt-pname').textContent.length > 0 && c.querySelectorAll('.nt-focus').length === 1); })()"));
   await evalJS(`(() => { const n = ${UI}.items().find(x => x.title === 'three parts together'); const S = ${UI}._state; S.host.state.selected.clear(); ${UI}.isolateNoted && 0; })()`);

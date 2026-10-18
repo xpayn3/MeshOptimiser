@@ -50,7 +50,7 @@ In the right sidebar, under **Properties**, is the **Shading** card. If it is fo
 - **Default**: The plain Solid view, with the model’s own materials.
 - **Clay, Porcelain, Steel, Red wax**: The four clay looks.
 - **Ceramic, Light, Mono**: The three CAD looks. They carry a small CAD badge.
-- **Outlines**: A switch under the row. It turns the dark lines on sharp edges on or off.
+- **CAD lines**: A switch under the row. It turns the dark lines on the edges on or off, and the line under it says what they are.
 
 1. Click a look. The view switches to clay or CAD, whichever the look belongs to, and the look you clicked is lit.
 2. Click another look to change it. The model changes at once.
@@ -58,9 +58,11 @@ In the right sidebar, under **Properties**, is the **Shading** card. If it is fo
 
 Keys 5 and 6 do the same as clicking: they switch to clay or CAD with the last look you used, and press again to go back to solid.
 
-## Outlines
+## CAD lines
 
-The **Outlines** switch draws a fine dark line along the sharp edges of every part. It works in Solid, Clay and CAD views, and is on to begin with. It is not drawn in Wireframe, X-ray or Heatmap. The same switch is under **Settings**, **Viewport**, together with the choice of CAD look.
+The **CAD lines** switch draws a fine dark line along the edges of every part. It works in Solid, Clay and CAD views, and is on to begin with. It is not drawn in Wireframe, X-ray or Heatmap. It is the only place to switch the lines; the **CAD edges** pill and **Settings** do not have it.
+
+The line under the switch says what the lines are. **Real CAD edges, from the STEP file**: the parts came from a STEP file with their CAD data, and the lines are the edges the designer drew. **Outlines found by angle**: the model has no CAD data (a GLB, OBJ, FBX or STL), and the lines are drawn where two faces meet at a sharp angle. When a scene has both, it counts the parts of each kind. A dot in the accent colour means real CAD edges.
 
 On a very large scene, the smallest parts may be drawn without outlines to keep the view quick. The app tells you when it does this.
 

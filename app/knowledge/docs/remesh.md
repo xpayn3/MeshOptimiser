@@ -10,6 +10,7 @@ Remesh has two actions in one panel, and a quick way to make a part lighter, [Qu
 
 - Untriangulate: on a part whose flat faces carry vertices they do not need, for example around holes you closed with [Remove holes](meshoptimiser://docs/fill-holes). The part loses those vertices and the triangles that hung on them.
 - Triangulate: to go back to plain triangles, or to even out long thin triangles on flat faces.
+- Untriangulate with **Pair into quads** on: on a mesh that was made of quads and arrived as triangles, before you take it into a modelling program. Neighbouring triangles become four-sided polygons again, on curved surfaces too.
 
 ## Steps
 
@@ -28,6 +29,9 @@ The two keys work on the selection only, so a key never changes the whole scene 
 
 ## The settings of Untriangulate
 
+- **Pair into quads**: Instead of joining flat faces, pairs neighbouring triangles into quads, the way Blender’s **Triangles to Quads** does. The best pairs go first and each triangle goes into one quad at most. Two triangles are never paired across the boundary of a CAD face or across a UV seam. With it on, the panel shows only its two angles below. It is off at first.
+- **Fold up to**: With **Pair into quads**: two triangles are paired only if the angle between them is no more than this. It starts at 40°.
+- **Corners within**: With **Pair into quads**: every corner of the quad two triangles make must be within this of a right angle. It starts at 40°.
 - **Flat faces within**: How far neighbouring triangles may turn from each other and still count as one flat face, in degrees. It starts at 1.
 - **Even triangles**: Turns the edges inside each rebuilt face until its triangles are as even as its vertices allow, instead of long thin fans. No vertex is added or taken away.
 - **Flatten shading on flat faces**: A vertex whose triangles all lie in one plane is shaded flat. The rim of a hole you closed needs this. It still carries the tilted shading it had against the wall of the hole, and a face like that is not joined.
@@ -47,6 +51,8 @@ Untriangulate repeats until nothing more can be joined. Joining faces makes bigg
 ## What does not change
 
 The shape of the part. Untriangulate takes away only vertices that lie in the middle of a flat face, so the face keeps its outline. Only when you raise **Surface may move** above 0 can the surface shift, and by no more than the distance you typed. Triangulate adds no vertex and takes none away.
+
+Pair into quads moves no point and takes no triangle away: it only says which two triangles make one quad. Export to OBJ or FBX with **Keep quads** on to write the quads into the file. A quad on a curved surface is a little bent, so another program may cut it along its other diagonal when it draws it.
 
 ## How it shows in the view
 

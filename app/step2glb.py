@@ -221,6 +221,7 @@ class Config:
     """All runtime knobs in one place. Replaces the prior globals()-poking pattern."""
     quality: float = 0.5         # linear deflection, mm (or a fraction of each edge's size if relative=True)
     relative: bool = False       # OCCT's relative deflection: each edge gets quality x its own size, a face the largest of its edges
+    size_cap: float = 0.0        # a solid's linear deflection at most this share of its own diagonal (0 = off; see _refine_small_solids)
     angular: float = 0.5         # angular deflection, radians (~28.6 degrees default)
     min_size_pct: float = 0.0    # drop parts whose bbox-diag is < this % of model diag
     instance: bool = True        # collapse identical shapes into glTF refs
@@ -1510,6 +1511,22 @@ def _shape_diag(shape) -> float:
         return 0.0
 
 
+def _refine_small_solids(shape, linear: float, angular: float) -> int:
+    """A fixed deflection is coarse on a small part: 0.5 mm leaves a 63 mm round plate 18 segments round, a polygon 2 % smaller
+    than the circle (NIST's FTC 11), while the same 0.5 mm is fine on a part a metre long. So after the whole shape is meshed, a
+    solid whose CFG.size_cap share of its own diagonal is under the deflection is meshed again at that share (never under a
+    tenth of the deflection, so a tiny screw is not cut into thousands of triangles). Big parts keep the mesh they had; a shape
+    placed several times is refined once (meshing it again at the same setting does nothing). Returns how many were refined."""
+    n = 0
+    exp = TopExp_Explorer(shape, TopAbs_SOLID)
+    while exp.More():
+        s = exp.Current(); exp.Next()
+        lin = max(linear * 0.1, CFG.size_cap * _shape_diag(s))
+        if 0 < lin < linear * 0.999:
+            _mesh_shape(s, lin, angular, False); n += 1
+    return n
+
+
 def tessellate(shape: TopoDS_Shape, linear_deflection: float = 0.5,
                angular_deflection: float = 0.5, relative: bool = False) -> None:
     """Tessellate every face on `shape` in place.
@@ -1531,6 +1548,9 @@ def tessellate(shape: TopoDS_Shape, linear_deflection: float = 0.5,
         log(f"tessellating (linear={linear_deflection} {mode}, angular={angular_deflection}, parallel)")
         with Heartbeat("tessellation"):
             _mesh_shape(shape, linear_deflection, angular_deflection, relative)
+            if CFG.size_cap > 0 and not relative:
+                k = _refine_small_solids(shape, linear_deflection, angular_deflection)
+                if k: log(f"   {k} small solid{'s' if k != 1 else ''} meshed finer (at most {CFG.size_cap * 100:g} % of their size)")
         log(f"tessellated in {time.time() - t0:.1f}s", "ok")
         return
 
@@ -1765,6 +1785,19 @@ def solid_to_mesh(solid: TopoDS_Shape):
             tris_buf[j - 1, 2] = c - 1
         if reverse:
             tris_buf = tris_buf[:, [1, 0, 2]]
+        # A face that is only triangles (AP242 tessellated geometry: a COMPLEX_TRIANGULATED_FACE has no surface under it) carries
+        # normals of its own, and they are what says which side is out. Files are written whose triangles run the other way round
+        # to those normals (NIST's FTC 08 tessellated test part: every triangle), so the winding follows the normals, not the order.
+        if tri.HasNormals() and BRep_Tool.Surface_s(face) is None:
+            try:
+                nl = np.asarray([(q.X(), q.Y(), q.Z()) for q in (tri.Normal(j) for j in range(1, n_nodes + 1))], dtype=np.float64)
+                t0 = tris_buf if not reverse else tris_buf[:, [1, 0, 2]]       # (the order as the file has it)
+                cr = np.cross(v_arr[t0[:, 1]] - v_arr[t0[:, 0]], v_arr[t0[:, 2]] - v_arr[t0[:, 0]])
+                if float(np.einsum('ij,ij->', cr, nl[t0[:, 0]] + nl[t0[:, 1]] + nl[t0[:, 2]])) < 0:
+                    tris_buf = tris_buf[:, [1, 0, 2]]
+                    RESULT['faces_turned_to_normals'] = RESULT.get('faces_turned_to_normals', 0) + 1
+            except Exception:
+                pass
         if want_brep:
             try:
                 a = verts[tris_buf[:, 1]].astype(np.float64) - verts[tris_buf[:, 0]]
@@ -2045,6 +2078,7 @@ def _cache_params(input_path: Path) -> dict:
         "min_size_pct": CFG.min_size_pct,
         "relative": CFG.relative,
         "angular": CFG.angular,
+        "size_cap": CFG.size_cap,
         "tiers": CFG.tiers,
         "min_edge": CFG.min_edge,
         "normals": CFG.normals,
@@ -3001,6 +3035,9 @@ def main() -> int:
                     help="Read --quality as a fraction of each edge's own size (OpenCascade's relative deflection), not a distance.")
     ap.add_argument("--angular", type=float, default=0.5,
                     help="Angular deflection in radians. Default 0.5 (~28.6°).")
+    ap.add_argument("--size-cap", type=float, default=0.002,
+                    help="A solid's linear deflection at most this share of its own diagonal, so small round parts are not "
+                         "left polygonal (default 0.002, 0.2 %%; 0 turns it off; ignored with --relative and --tiers).")
     ap.add_argument("--min-size", type=float, default=0.0)
     ap.add_argument("--tiers", type=str, default=None, metavar="A,B:Ls,As:Lm,Am:Ll,Al",
                     help="Tessellate by part size. A and B are the limits between small / medium / "
@@ -3160,6 +3197,7 @@ def main() -> int:
         quality       = args.quality,
         relative      = bool(args.relative),
         angular       = args.angular,
+        size_cap      = max(0.0, args.size_cap),
         min_size_pct  = args.min_size,
         instance      = not args.no_instance,
         pca_instances = bool(args.pca_instances),

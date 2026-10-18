@@ -18,6 +18,7 @@
 //   { op: 'quads',    positions, index }                    → the outlines of the four-sided pairs of triangles (meshedit.js)
 //   { op: 'untriangulate', positions, index, groups, angle, normals, threeUrl }
 //                                                            → rebuilt triangles per material group (untriangulate.js)
+//     (quads: true pairs triangles into quads instead, pairIntoQuads: faceDeg, shapeDeg, uvs, cadFace; the triangles stay)
 //   { op: 'emboss',   parts: [{ id, positions, index }], opts }  → the parts that are lettering laid over another part (emboss.js)
 //   { op: 'voxel',    positions, index, opts, url }          → Voxel remesh (voxel.js): positions, normals, index and its numbers
 //   { op: 'meshop',   name, positions, index, opts }          → one of the mesh tools (meshops.js): positions, normals, index, numbers
@@ -29,15 +30,15 @@
 
 import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=32';
 import { findEmbossedBodies, findSurfaceMarks } from './emboss.js?v=7';
-import { reduceIndex } from './simplify-core.js?v=5';
+import { reduceIndex } from './simplify-core.js?v=6';
 import { analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { repairMesh, analyseNormals } from './meshrepair.js?v=8';
 import { findRepeats } from './repeats.js?v=1';
 import { buildTopology, pairQuads, buildPolygons, outlineLines } from './meshedit.js?v=5';
-import { untriangulate, evenTriangles } from './untriangulate.js?v=11';
+import { untriangulate, evenTriangles, pairIntoQuads } from './untriangulate.js?v=12';
 import { unsubdivide } from './unsubdivide.js?v=1';
-import { voxelRemesh } from './voxel.js?v=2';
-import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=10';
+import { voxelRemesh } from './voxel.js?v=4';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=11';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
 // then in the middle of one. (Three more passes at most; each is a fraction of the first.)
 function untriangulatePasses(positions, index, opts) {
@@ -225,22 +226,25 @@ self.onmessage = async (e) => {
     if (m.op === 'untriangulate' || m.op === 'even') {
       const even = m.op === 'even';
       // a vertex whose triangles all lie in one plane shades flat (the rim of a hole that was closed keeps the tilted normal it had)
-      if (!even && m.fixNormals && m.normals) flattenRimNormals(m.positions, m.index, m.normals, null);
-      const triangulate = even ? null : await getTriangulator(m.threeUrl);
-      const parts = [], transfer = [], stats = { trisBefore: 0, trisAfter: 0, polygons: 0, joined: 0, rebuilt: 0, vertsRemoved: 0, straight: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
+      if (!even && !m.quads && m.fixNormals && m.normals) flattenRimNormals(m.positions, m.index, m.normals, null);
+      const triangulate = (even || m.quads) ? null : await getTriangulator(m.threeUrl);
+      const parts = [], transfer = [], stats = { trisBefore: 0, trisAfter: 0, polygons: 0, joined: 0, rebuilt: 0, vertsRemoved: 0, straight: 0, quads: 0, seams: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
       let polyBase = 0;
       for (const g of m.groups) {
         const sub = m.index.subarray(g.start, g.start + g.count);
         const cadPoly = m.cadPoly && m.cadPoly.length * 3 === m.index.length ? m.cadPoly.subarray(g.start / 3, (g.start + g.count) / 3) : null;
         const opts = { angleDeg: m.angle || 1, normals: m.normals || null, triangulate, normalTol: m.normalTol || 5, flip: m.flip !== false, tolerance: m.tolerance || 0, straight: !!m.straight, limitDeg: m.limitDeg || 0, poly: cadPoly, limitTol: m.tolerance || 0 };
-        const r = even ? evenTriangles(m.positions, sub, { angleDeg: m.angle || 1 }) : untriangulatePasses(m.positions, sub, opts);
+        const face = m.quads && m.cadFace && m.cadFace.length * 3 === m.index.length ? m.cadFace.subarray(g.start / 3, (g.start + g.count) / 3) : null;
+        const r = even ? evenTriangles(m.positions, sub, { angleDeg: m.angle || 1 })
+          : m.quads ? pairIntoQuads(m.positions, sub, { faceDeg: m.faceDeg, shapeDeg: m.shapeDeg, uvs: m.uvs || null, face })
+          : untriangulatePasses(m.positions, sub, opts);
         if (!r) { const n = sub.length / 3; parts.push({ idx: sub.slice(), poly: Int32Array.from({ length: n }, (_, i) => polyBase + i), materialIndex: g.materialIndex }); polyBase += n; stats.trisBefore += sub.length / 3; stats.trisAfter += sub.length / 3; continue; }
         const poly = r.poly;
         for (let i = 0; i < poly.length; i++) poly[i] += polyBase;
         polyBase += r.stats.polygons;
         parts.push({ idx: r.index, poly, materialIndex: g.materialIndex });
         transfer.push(r.index.buffer, poly.buffer);
-        for (const k of ['trisBefore', 'trisAfter', 'polygons', 'joined', 'rebuilt', 'vertsRemoved', 'straight']) stats[k] += r.stats[k] || 0;
+        for (const k of ['trisBefore', 'trisAfter', 'polygons', 'joined', 'rebuilt', 'vertsRemoved', 'straight', 'quads', 'seams']) stats[k] += r.stats[k] || 0;
         for (const k in stats.kept) stats.kept[k] += r.stats.kept[k];
       }
       self.postMessage({ id: m.id, ok: true, parts, stats }, transfer);

@@ -4,16 +4,16 @@ import { fillFlatHoles, applyHoleFill, flattenRimNormals } from './holefill.js?v
 import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss.js?v=7';
 import { findFloating } from './floating.js?v=1';
 import { fillRoundGrooves, outlineRevolve, revolveLoops, sweepBelt, sweepLoops } from './revolve.js?v=8';
-import { voxelRemesh } from './voxel.js?v=2';
-import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=10';
+import { voxelRemesh } from './voxel.js?v=4';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=11';
 import { carryUvs } from './uvcarry.js?v=2';
-import { createPhoto } from './photo.js?v=4';
+import { createPhoto } from './photo.js?v=5';
 import * as MEDIT from './meshedit.js?v=5';
 import { dissolvePoints } from './dissolve.js?v=3';
 import * as MT from './meshtools.js?v=5';
 import { partition as splitPartition, buildChildGeometries as splitBuildChildren } from './split.js?v=2';
 import * as SPL from './splines.js?v=3';
-import { reduceIndex, packAttributes } from './simplify-core.js?v=5';
+import { reduceIndex, packAttributes } from './simplify-core.js?v=6';
 import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
@@ -202,6 +202,19 @@ function _reindexParts() {
 }
 
 // Render any pending <i data-lucide="..."> placeholders into actual SVGs.
+// Caps Lock must not change the shortcuts. With it on, a plain S arrives as "S" (which the app reads as Shift+S) and Shift+S as "s", so
+// S did not isolate, and every one-letter key acted as its Shift version. Before any other key listener (the capture phase on window
+// runs first) the letter is put back to what the Shift key says: lower case without it, upper case with it. Typing in a field is not
+// touched (a field reads the characters, not this).
+window.addEventListener('keydown', (e) => {
+  if (typeof e.key !== 'string' || e.key.length !== 1 || !/[a-z]/i.test(e.key)) return;
+  if (!e.getModifierState || !e.getModifierState('CapsLock')) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''))) return;
+  const k = e.shiftKey ? e.key.toUpperCase() : e.key.toLowerCase();
+  if (k !== e.key) { try { Object.defineProperty(e, 'key', { value: k }); } catch (_) {} }
+}, true);
+
 // Idempotent — Lucide skips already-rendered icons. Safe to call after any
 // DOM injection that may have introduced new placeholders.
 //
@@ -1561,7 +1574,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=63', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=68', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -2834,7 +2847,9 @@ async function convertStepViaServer(file, opts = {}) {
         // Name the scene after the file the user opened, not the server's
         // "<job id>_name.glb" working copy.
         const glbBlob = new Blob([buf]);
+        // (the converter writes Z up in millimetres, the scene's own convention: see _gltfConvention)
         const glbFile = new File([glbBlob], file.name.replace(/\.[^.\\/]+$/, '') + '.glb');
+        glbFile.__moConverted = true;
         _cacheConvertedGlb(file.name, file.size, glbBlob).then(ok => { if (ok) { try { _Welcome?.markConverted(file.name, file.size, glbBlob.size); } catch (_) {} } });
         // The CAD faces and edges come with the GLB (see _Brep).
         if (j.brep) _Brep.stage(await _Brep.fetchSidecar(j.result), { name: file.name, size: file.size });
@@ -3832,7 +3847,7 @@ const _Settings = (() => {
   async function _detailsText() {
     const gpu = await _gpuInfo(), p = _Prefs.all();
     return ['MeshOptimiser details', ..._aboutFacts().map(([k, v]) => k + ': ' + v), 'GPU: ' + gpu,
-      'Look: ' + [p.uiTone || 'graphite', p.uiAccent || 'default accent'].join(', ') + ' · CAD look ' + (p.cadLook || 'ceramic') + ' · outlines ' + (p.edgesMode === 'off' ? 'off' : 'on')].join('\n');
+      'Look: ' + [p.uiTone || 'graphite', p.uiAccent || 'default accent'].join(', ') + ' · CAD look ' + (p.cadLook || 'ceramic') + ' · CAD lines ' + (p.edgesMode === 'off' ? 'off' : 'on')].join('\n');
   }
   async function _openReport() {
     let text = '';
@@ -4083,11 +4098,9 @@ const _Settings = (() => {
       _toggleRow('set-sel-glow', 'Glow on the selection', _Prefs.get('selGlow') !== false, 'A soft cyan light on the surface of the selected parts, brightest at their edges, so they stand out in a busy model. Off: the thin outline alone.') +
       _group('Shading') +
       `<div class="set-row set-stack"><span>CAD view look<span class="set-help">The matcap the CAD view (key 6) shades with.</span></span>${_chipsPref('cadLook', Object.entries(_CAD_LOOKS).map(([k, l]) => [l.label, k]), _cadLook())}</div>` +
-      _toggleRow('set-outlines', 'Outlines', _Prefs.get('edgesMode') !== 'off', 'A fine dark line on the sharp edges of every part, in every view.') +
       _group('Wireframe') +
       `<div class="set-row set-stack"><span>Lines<span class="set-help">Quads draws the polygons you edit: two flat triangles that make a four-sided cell show as one cell, with no diagonal. Triangles is every edge of the mesh, as it really is. This changes what is drawn, not the mesh; Untriangulate, under Reduce triangles, is what changes the mesh.</span></span>${_chipsPref('wireMode', [['Quads', 'quads'], ['Triangles', 'triangles']], _wireMode())}</div>` +
       `<div class="set-row set-stack"><span>Flat within<span class="set-help">For parts that have polygons of their own (from an OBJ or FBX file, or after Untriangulate): how far neighbouring triangles may turn away from each other and still be one polygon. Parts drawn as Quads or Triangles do not use it.</span></span>${_chipsPref('wireAngle', [['Strict', 0.2], ['Normal', 1], ['Loose', 5]], _Prefs.get('wireAngle') || 1)}</div>`;
-    $s('set-outlines')?.addEventListener('change', (e) => { _Prefs.set('edgesMode', e.target.checked ? 'on' : 'off'); try { _cadOnPref('edgesMode'); } catch (_) {} try { _Shading.sync(); } catch (_) {} });
     // Show a terminal window: only where there is a local server that can keep the marker the launcher looks for (not the online version)
     (async () => {
       const row = $s('set-console-row'), cb = $s('set-console'); if (!row || !cb) return;
@@ -12205,7 +12218,7 @@ const _ClaudeBridge = (() => {
         }
         let out = blob;
         if (ss > 1) out = (await scaled(blob, W, H, 'image/png')).blob;
-        if (!corner) { try { const bm = await createImageBitmap(out), c = document.createElement('canvas'); c.width = c.height = 1; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(bm, 0, 0, 1, 1); corner = Array.from(x.getImageData(0, 0, 1, 1).data); } catch (_) {} }
+        if (!corner) { try { const bm = await createImageBitmap(out), c = document.createElement('canvas'); c.width = c.height = 1; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(bm, 0, 0, 1, 1, 0, 0, 1, 1); corner = Array.from(x.getImageData(0, 0, 1, 1).data); } catch (_) {} }      // (the top-left pixel itself: drawn whole into one pixel it was a sample of the middle)
         blobs.push({ v, out }); if (_collect) _collect.push(out);
         if (a.save !== false) files.push(await saveToServer(out, stem + '_' + (views.length > 1 || v !== 'current' ? (v === 'current' ? 'view' : v) : 'render') + '.png'));
       }
@@ -12635,7 +12648,11 @@ const _ClaudeBridge = (() => {
       if (!hook) throw new Error('Untriangulate is not available here.');
       const hasWhich = (Array.isArray(a.ids) && a.ids.length) || String(a.name_contains || '').trim();
       pickSel(hasWhich ? needIds(a, 'untriangulate') : []);
-      const b = snap(); await hook(); await sleep(200);
+      if (a.mode === 'quads') {
+        const b = snap(); const r = await hook({ quads: true, faceDeg: a.face_angle_deg, shapeDeg: a.shape_angle_deg }); await sleep(200);
+        return text({ scope: hasWhich ? 'the chosen parts' : 'the whole scene', mode: 'quads', ...(r || {}), ...diff(b, snap()), note: 'Neighbouring triangles were paired into quads (not across CAD face boundaries or UV seams). No point moved and no triangle went: the OBJ and FBX exports write the quads when Keep quads is on.' });
+      }
+      const b = snap(); await hook({ quads: false }); await sleep(200);
       return text({ scope: hasWhich ? 'the chosen parts' : 'the whole scene', ...diff(b, snap()), note: 'The shape is not changed: only triangles that cut a flat face up go.' });
     },
     async fix_mesh(a) {
@@ -13074,7 +13091,7 @@ const _ClaudeBridge = (() => {
         unity: { format: 'fbx', scale: 0.001, axis: 'y-up', origin: 'model', draco: false, merge: false },
         print: { format: 'stl', scale: 1, axis: 'z-up', origin: 'floor', draco: false, merge: true },
       };
-      const p = { ...(P[a.preset] || { format: a.format || 'glb', scale: 1, axis: 'z-up', origin: 'model', draco: false, merge: false }) };
+      const p = { ...(P[a.preset] || { format: a.format || 'glb', scale: 'auto', axis: 'auto', origin: 'model', draco: false, merge: false }) };      // (each format's own: see _exportConvention)
       const format = a.format || p.format;
       if (a.compression && !['none', 'draco', 'meshopt'].includes(a.compression)) throw new Error('compression must be none, draco or meshopt.');
       if (a.compression) p.draco = a.compression === 'draco';
@@ -13198,7 +13215,9 @@ const _ClaudeBridge = (() => {
     add_library_part: (a) => ['Add ' + (Math.min(20, Math.max(1, a.count | 0 || 1))) + ' library part' + ((a.count | 0) > 1 ? 's' : '') + ' (' + String(a.kind || '').slice(0, 30) + ')', 'The part is added to the scene. Undo (Ctrl+Z) takes it back.'],
     smart_optimise: (a) => ['Run Smart optimise (' + (a.level || 'auto') + ')', 'Every clean-up at that level, one after another on the whole scene' + (a.target_triangles ? ', down to about ' + a.target_triangles + ' triangles' : '') + '. It removes parts and triangles. One undo (Ctrl+Z) takes the whole run back.'],
     smart_fit: (a, n) => ['Replace ' + n + ' part' + (n === 1 ? '' : 's') + ' with simple shapes (' + String(a.shape || 'auto').replace(/_/g, ' ') + ')', 'Each part’s own mesh is thrown away and a box, cylinder or blocks of the same size take its place. Undo (Ctrl+Z) takes it back.'],
-    untriangulate: (a, n) => ['Untriangulate ' + (n ? n + ' part' + (n === 1 ? '' : 's') : 'the whole scene'), 'Flat faces are re-triangulated with the fewest triangles. The shape does not change. Undo (Ctrl+Z) takes it back.'],
+    untriangulate: (a, n) => a.mode === 'quads'
+      ? ['Pair triangles into quads on ' + (n ? n + ' part' + (n === 1 ? '' : 's') : 'the whole scene'), 'Neighbouring triangles become four-sided polygons where they make one. No point moves and no triangle goes; the OBJ and FBX exports write the quads.']
+      : ['Untriangulate ' + (n ? n + ' part' + (n === 1 ? '' : 's') : 'the whole scene'), 'Flat faces are re-triangulated with the fewest triangles. The shape does not change. Undo (Ctrl+Z) takes it back.'],
     fix_mesh: (a, n) => [({ close_cracks: 'Close cracks', close_open_edges: 'Close open edges', remove_slivers: 'Remove slivers', patch_holes: 'Patch holes' }[a.action] || 'Mend') + ' (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'The mesh is mended and kept where it is. Undo (Ctrl+Z) takes it back.'],
     reshape_mesh: (a, n) => [({ remesh_evenly: 'Remesh evenly', smooth: 'Smooth surface', convex_hull: 'Convex hull', convex_pieces: 'Convex pieces', merge_bodies: 'Merge bodies' }[a.action] || 'Reshape') + ' (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'Each part is rebuilt. Undo (Ctrl+Z) takes it back.'],
     simplify_round_faces: (a, n) => ['Simplify round faces (' + n + ' part' + (n === 1 ? '' : 's') + ')', 'The round faces get fewer facets' + (a.deviation_mm > 0 ? ', moving by at most ' + a.deviation_mm + ' mm' : '') + (a.min_segments > 0 ? ', at least ' + a.min_segments + ' a turn' : '') + '. The flat faces and the CAD faces are kept. Undo (Ctrl+Z) takes it back.'],
@@ -16367,7 +16386,8 @@ const _Photo = (() => {
     reach = Math.max(box.getSize(new THREE.Vector3()).length(), 1e-6);
     return box;
   }
-  // The floor: a round, softly lit stage (three times the model's size, so that it never reaches the camera's near plane) just under the lowest point of the model, level with the grid; it fades to nothing towards its
+  // The floor: a round, softly lit stage on the grid, centred on the origin (0, 0, 0), as large as it takes to reach past the model with
+  // room to spare (three times the model's size at least, so that it never reaches the camera's near plane); it fades to nothing towards its
   // rim and catches the sun's shadow. (Not three's ShadowMaterial: in this version it writes "null" into the shader once a light that casts no
   // shadow is in the scene, and the program does not compile.)
   function placeFloor() {
@@ -16386,8 +16406,10 @@ const _Photo = (() => {
     }
     const centre = box.getCenter(new THREE.Vector3());
     floor.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), up);
-    floor.scale.setScalar(reach * 3);
-    floor.position.copy(centre).addScaledVector(up, box.min.dot(up) - centre.dot(up) - reach * 0.0005);
+    // (the disc is solid to an eighth of its width and gone at its rim: the model, wherever it stands, lies in the solid part)
+    const off = centre.clone().addScaledVector(up, -centre.dot(up)).length();
+    floor.scale.setScalar(Math.max(reach * 3, (off + reach / 2) / 0.12));
+    floor.position.set(0, 0, 0).addScaledVector(up, -reach * 0.0005);      // (a hair under the grid, so the two do not fight)
     floor.visible = true;
     floor.updateMatrixWorld(true);
   }
@@ -18263,6 +18285,59 @@ function _getEdgesGeom(g) {
   catch (_) { _edgesFailed.add(g); return null; }
   _edgesCache.set(g, e);
   return e;
+}
+// Remove holes on a part that still has its CAD faces: what applyHoleFill would give, with the CAD faces kept. A triangle that stays keeps
+// its face, a cap joins the face it closes (its owner's), and the triangles of each group are put in face order, so every face is one
+// run of triangles again, as the record needs. A face whose triangles all went (the wall of a hole) is kept with none, so the edges
+// keep their face numbers; the edges along such a face go (the rim of a hole that is closed is no longer an edge). The area of a face
+// that got caps is measured again. Returns { parts, cad } or null (no record, or one for other triangles: the faces are then dropped, as before).
+function _brepAfterFill(geom, index, res, groups, posAttr) {
+  const rec = _Brep.record(geom), T = (index.length / 3) | 0;
+  if (!rec || !rec.faces || !rec.faces.length || rec.tris !== T || !res || !res.removed) return null;
+  const F = rec.faces.length, faceOf = new Int32Array(T).fill(-1);
+  rec.faces.forEach((fc, i) => { for (let t = fc[1]; t < fc[1] + fc[2] && t < T; t++) faceOf[t] = i; });
+  const gs = (groups && groups.length > 1)
+    ? groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
+    : [{ start: 0, count: index.length, materialIndex: groups && groups[0] ? groups[0].materialIndex : 0 }];
+  const groupOfTri = new Int32Array(T).fill(-1);
+  gs.forEach((g, gi) => { for (let t = (g.start / 3) | 0, end = ((g.start + g.count) / 3) | 0; t < end && t < T; t++) groupOfTri[t] = gi; });
+  const lists = gs.map(() => []), capped = new Uint8Array(F);
+  for (let t = 0; t < T; t++) if (!res.removed[t]) lists[groupOfTri[t] < 0 ? 0 : groupOfTri[t]].push([faceOf[t], index[t * 3], index[t * 3 + 1], index[t * 3 + 2]]);
+  const nCaps = res.capOwner ? res.capOwner.length : 0;
+  for (let i = 0; i < nCaps; i++) {
+    const o = res.capOwner[i], f = faceOf[o];
+    if (f >= 0) capped[f] = 1;
+    lists[groupOfTri[o] < 0 ? 0 : groupOfTri[o]].push([f, res.caps[i * 3], res.caps[i * 3 + 1], res.caps[i * 3 + 2]]);
+  }
+  const key = (f) => (f < 0 ? Infinity : f);
+  const start = new Int32Array(F).fill(-1), count = new Int32Array(F), parts = [];
+  let w = 0, last = -1;
+  for (let gi = 0; gi < gs.length; gi++) {
+    const L = lists[gi].map((x, i) => [x, i]).sort((a, b) => key(a[0][0]) - key(b[0][0]) || a[1] - b[1]).map(x => x[0]);
+    if (!L.length) continue;
+    const idx = new Uint32Array(L.length * 3);
+    L.forEach((x, i) => {
+      const f = x[0];
+      if (f >= 0) { if (start[f] < 0) { if (f < last) throw new Error('faces out of order'); start[f] = w + i; last = f; } count[f]++; }
+      idx[i * 3] = x[1]; idx[i * 3 + 1] = x[2]; idx[i * 3 + 2] = x[3];
+    });
+    w += L.length;
+    parts.push({ idx, materialIndex: gs[gi].materialIndex });
+  }
+  // a face with no triangles left starts where the next one does (the record is searched by start)
+  for (let f = F - 1, next = w; f >= 0; f--) { if (start[f] < 0) start[f] = next; else next = start[f]; }
+  const area = (a, b, c) => {
+    const ax = posAttr.getX(a), ay = posAttr.getY(a), az = posAttr.getZ(a);
+    const ux = posAttr.getX(b) - ax, uy = posAttr.getY(b) - ay, uz = posAttr.getZ(b) - az, vx = posAttr.getX(c) - ax, vy = posAttr.getY(c) - ay, vz = posAttr.getZ(c) - az;
+    return Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+  };
+  const newArea = new Float64Array(F);
+  { let t = 0; for (const p of parts) for (let i = 0; i < p.idx.length; i += 3, t++) { const f = faceAt(t); if (f >= 0 && capped[f]) newArea[f] += area(p.idx[i], p.idx[i + 1], p.idx[i + 2]); } }
+  function faceAt(t) { let lo = 0, hi = F - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (start[m] <= t) lo = m; else hi = m - 1; } return t >= start[lo] && t < start[lo] + count[lo] ? lo : -1; }
+  const faces = rec.faces.map((fc, i) => { const n = fc.slice(); n[1] = start[i]; n[2] = count[i]; if (capped[i] && fc.length > 3) n[3] = newArea[i]; return n; });
+  const empty = (f) => f >= 0 && f < F && count[f] === 0 && rec.faces[f][2] > 0;
+  const rows = (rec.rows || []).filter(r => !empty(r[3]) && !empty(r[4]));
+  return { parts, cad: { faces, rows, pts: rec.pts } };
 }
 // ── B-rep: the CAD faces and the true CAD edges of a STEP that was opened "as B-rep" ────────────────────────────────────
 // step2glb.py --brep writes, beside the GLB, <name>.glb.brep.json (per solid: its CAD faces as [kind, first triangle, triangle
@@ -24733,13 +24808,13 @@ function _fbxLocalTRS(meshObj, lin) {
 }
 
 // The UVs of a mesh for FBX's LayerElementUV (ByPolygonVertex, IndexToDirect): the vertex UVs as they are, and for every polygon corner,
-// in PolygonVertexIndex order, the vertex it is. FBX counts V from the bottom, as three does for an ordinary texture; a glTF texture
-// (flipY false) counts it from the top, so a mesh drawn with one has its V turned (1 - v) for the file.
+// in PolygonVertexIndex order, the vertex it is. FBX counts V from the bottom and the scene from the top (every file is read that way
+// round: see _ingestSceneRoot), so V is turned (1 - v) for the file. (It used to be turned only for a mesh drawn with a glTF texture, so
+// the UVs of an untextured glTF model, and of everything once an OBJ or FBX could come in the other way round, were written mirrored.)
 function _fbxUvData(meshObj, faces) {
   const g = meshObj.geometry, uvA = g && g.attributes.uv;
   if (!uvA || uvA.itemSize !== 2) return null;
-  const mats = [].concat(meshObj.material || []), withMap = mats.find(m => m && m.map);
-  const flip = !!(withMap && withMap.map.flipY === false);
+  const flip = true;
   const uv = new Float64Array(uvA.count * 2);
   for (let i = 0; i < uvA.count; i++) { uv[i * 2] = uvA.getX(i); uv[i * 2 + 1] = flip ? 1 - uvA.getY(i) : uvA.getY(i); }
   const idx = g.index, n = faces ? faces.verts.length : idx ? idx.count : g.attributes.position.count;
@@ -26218,6 +26293,7 @@ function _exportObjStreaming(root, mtlBaseName) {
   // user reading the file knows why pivots/hierarchy look the way they do.
   const parts = [
     '# Exported by MeshOptimiser\n',
+    ...(root.userData && root.userData.moUp ? ['# Up axis: ' + root.userData.moUp + '; 1 unit = ' + (root.userData.moMmPerUnit || 1) + ' mm\n'] : []),
     '# OBJ does not store per-object transforms — all vertices are baked\n',
     '# into world space, so every imported object inherits an origin at\n',
     '# (0,0,0). In Blender, enable the importer\'s "Object Origin → Bounds\n',
@@ -26319,7 +26395,7 @@ function _exportObjStreaming(root, mtlBaseName) {
     if (uv) {
       const uc = uv.count;
       for (let i = 0; i < uc; i++) {
-        append('vt ' + _objFloat(uv.getX(i), _OBJ_UV_DEC) + ' ' + _objFloat(uv.getY(i), _OBJ_UV_DEC) + '\n');
+        append('vt ' + _objFloat(uv.getX(i), _OBJ_UV_DEC) + ' ' + _objFloat(1 - uv.getY(i), _OBJ_UV_DEC) + '\n');      // (OBJ counts V from the bottom; the scene from the top)
       }
     }
     // normals (apply normal matrix; renormalize)
@@ -28043,8 +28119,33 @@ function _cadEdgesBuild() {
   _cadEdgeStale.clear();
   requestRender();
 }
+// The line under CAD lines on the Shading card: whether the lines are the CAD file's own edges (a part with a B-rep record, kept
+// through edits as lines: _Brep) or the sharp edges found by angle (_edgesFor), counted over the parts that are shown.
+let _cadLinesStatusDue = false;
+function _cadLinesStatus() {
+  if (_cadLinesStatusDue) return;
+  _cadLinesStatusDue = true;
+  Promise.resolve().then(() => {             // (once for all the calls of one task; a frame can be late in a tab that is not in front)
+    _cadLinesStatusDue = false;
+    const el = document.getElementById('shade-lines-status'); if (!el) return;
+    let cad = 0, angle = 0;
+    const real = (g) => { const r = g && _Brep.record(g); return !!(r && r.rows && r.rows.length); };
+    for (const p of state.parts) { if (!p || p.deleted || !p.mesh || !p.mesh.geometry || p.visible === false) continue; if (real(p.mesh.geometry)) cad++; else angle++; }
+    for (const g of (state.instancedGroups || [])) { const inst = g.instanced; if (!inst || !inst.geometry) continue; const n = inst.count || 1; if (real(inst.geometry)) cad += n; else angle += n; }
+    const off = _Prefs.get('edgesMode') === 'off', parts = (n) => fmtNum(n) + (n === 1 ? ' part' : ' parts');
+    let kind, text;
+    if (!cad && !angle) { kind = off ? 'off' : 'angle'; text = off ? 'Off' : 'No parts yet'; }
+    else if (cad && !angle) { kind = 'cad'; text = 'Real CAD edges, from the STEP file'; }
+    else if (!cad) { kind = 'angle'; text = 'Outlines found by angle: no CAD data in this scene'; }
+    else { kind = 'mixed'; text = 'Real CAD edges on ' + parts(cad) + ', found by angle on ' + parts(angle); }
+    if (off) { text = 'Off · ' + text.charAt(0).toLowerCase() + text.slice(1); kind = 'off'; }
+    if (state.viewMode === 'wire') text += ' · Wireframe draws its own lines';
+    el.dataset.kind = kind; el.textContent = text;
+  });
+}
 // Make the layer match what is wanted now (mode and preference).
 function _cadEdgesSync() {
+  try { _cadLinesStatus(); } catch (_) {}
   clearTimeout(_cadEdgesTimer); _cadEdgesTimer = 0;
   if (!_edgesWanted()) { if (_cadEdgesActive) { _cadEdgesActive = false; _cadEdgesClear(); } return; }
   if (!_cadEdgesActive) { _cadEdgesActive = true; _cadSurfaceOffset(true); }
@@ -28527,6 +28628,7 @@ const _Shading = (() => {
       else if (r > row.scrollLeft + row.clientWidth - 12) row.scrollTo({ left: r - row.clientWidth + 12, behavior: 'smooth' });
     }
     const ol = q$('shade-outlines'); if (ol) ol.checked = _Prefs.get('edgesMode') !== 'off';
+    try { _cadLinesStatus(); } catch (_) {}
   }
   function choose(kind, look) {
     const key = kind === 'clay' ? 'clayLook' : 'cadLook';
@@ -28633,6 +28735,7 @@ function _whileTogether(fn) {
 }
 async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up', origin='model', pivot='part', draco=false, meshopt=false, reorder=false, flat=false, stlAscii=false, fileName='', animate=false }) {
   const fmtLabel = format === 'gltf' ? 'glTF' : format.toUpperCase();     // as the format is written everywhere else
+  { const own = _exportConvention(format); if (axis === 'auto') axis = own.axis; if (scale === 'auto' || !(scale > 0)) scale = own.scale; }      // ("each format's own": see _exportConvention)
   setLoader(true, 'Preparing export…', fmtLabel);
   await new Promise(r => setTimeout(r, 16));
   // OBJ and FBX can hold quads and n-gons: the polygons of the parts are written as they are (the "Keep quads" switch, on by default)
@@ -28657,6 +28760,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
   // negative determinant) then has its triangles wound the wrong way round and comes out inside-out. glTF and USDZ keep the
   // transform, and their readers turn the triangles themselves; the merge path flips its own.
   if (!merge && (format === 'obj' || format === 'stl' || format === 'ply')) _flipMirroredForBake(root, format);
+  root.userData.moUp = (axis === 'y-up' || state.sceneUpAxis === 'y') ? 'Y' : 'Z'; root.userData.moMmPerUnit = +(1 / scale).toPrecision(12);      // (the OBJ header says so)
 
   // Pre-flight: text-based formats produce huge output for dense models, but
   // the streaming writers below cope with any size, so nothing is asked:
@@ -28685,6 +28789,9 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
       try { brepPack = (format === 'glb' && !merge && !draco && !meshopt && !reorder) ? _Brep.pack(root) : null; } catch (e) { console.warn('[export] CAD edges:', e); }
       const exp = new GLTFExporter();
       const isBin = format === 'glb';
+      // the file says which way is up and how long its unit is, so this app reads it back exactly (see _gltfConvention)
+      { const up = (axis === 'y-up' || state.sceneUpAxis === 'y') ? 'Y' : 'Z', mmPerUnit = +(1 / scale).toPrecision(12);
+        exp.register(w => ({ afterParse() { const a = w.json.asset || (w.json.asset = {}); a.generator = 'MeshOptimiser (three.js GLTFExporter)'; a.extras = Object.assign({}, a.extras, { meshoptimiser: { up, mmPerUnit } }); } })); }
       let animations = [];
       if (animate && !merge && meshByPart) {
         if (_clip) animations = [_clip];
@@ -28859,6 +28966,8 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
         if (!cloned.has(o.geometry)) {
           o.geometry = o.geometry.clone();
           cloned.add(o.geometry);
+          const uvA = o.geometry.attributes.uv;      // (PLY counts V from the bottom; the scene from the top)
+          if (uvA && uvA.itemSize === 2) for (let i = 0; i < uvA.count; i++) uvA.setY(i, 1 - uvA.getY(i));
         }
         if (o.geometry.attributes.color) return;
         const c = o.material?.color;
@@ -30425,11 +30534,11 @@ function wireUI() {
     const draco = $('exp-draco')?.checked && fmt === 'glb';
     const meshopt = $('exp-meshopt')?.checked && fmt === 'glb', reorder = $('exp-reorder')?.checked && fmt === 'glb' && !meshopt;
     // New options: unit scale, up-axis, origin recenter.
-    const scaleSel = $('exp-scale')?.value || '1';
-    let scale = parseFloat(scaleSel);
+    const scaleSel = $('exp-scale')?.value || 'auto';
+    let scale = scaleSel === 'auto' ? 'auto' : parseFloat(scaleSel);
     if (scaleSel === 'custom') scale = parseFloat($('exp-scale-custom')?.value || '1');
-    if (!isFinite(scale) || scale <= 0) scale = 1;
-    const axis = $('exp-axis')?.value || 'z-up';
+    if (scale !== 'auto' && (!isFinite(scale) || scale <= 0)) scale = 1;
+    const axis = $('exp-axis')?.value || 'auto';
     const origin = $('exp-origin')?.value || 'model';
     const pivot = $('exp-pivot')?.value || 'part';
     const flat = !!$('exp-flat')?.checked;
@@ -30439,7 +30548,7 @@ function wireUI() {
     // The choices that are the same from one export to the next are kept.
     // (Not "selected only": it depends on what is selected right now. Not the file name: it belongs to the scene.)
     _Prefs.set('exportOpts', {
-      scale: scaleSel, scaleCustom: $('exp-scale-custom')?.value || '1', axis, origin, pivot,
+      scale: scaleSel, scaleCustom: $('exp-scale-custom')?.value || '1', axis, origin, pivot, conv: 2,
       merge, visible: visibleOnly, flat,
     });
 
@@ -30667,6 +30776,8 @@ function wireUI() {
   // Put back what was chosen last time.
   try {
     const o = _Prefs.get('exportOpts');
+    // (choices saved before "each format's own" existed: the old defaults, 1.0 and Keep as in the scene, become it once)
+    if (o && typeof o === 'object' && !o.conv) { if (o.scale === '1') o.scale = 'auto'; if (o.axis === 'z-up') o.axis = 'auto'; }
     if (o && typeof o === 'object') {
       const sc = $('exp-scale');
       if (sc && [...sc.options].some(op => op.value === o.scale)) {
@@ -35453,6 +35564,71 @@ function _layersOfNode(m) {
   }
   return null;
 }
+// ── The scene's convention: Z up, millimetres ─────────────────────────────────────────────────────────────────────────
+// The scene holds every model Z up in millimetres: CAD's convention, and what the STEP converter writes. A file in another
+// convention is brought into it when it is opened, in the numbers themselves (the points of every mesh and the place of every
+// node), so no part carries a turn or a scale of a thousand into the tools that measure in millimetres:
+//   glTF / GLB   Y up, in metres, as its specification has it (Blender, three.js, Sketchfab). Not the app's own files: a saved
+//                scene, a STEP converted here (trimesh writes it) and an export from before this change are Z up in millimetres,
+//                and an export from now on says what it is (asset.extras.meshoptimiser { up, mmPerUnit }).
+//   OBJ          Y up by custom; no unit, so the numbers are taken as millimetres. An OBJ this app wrote says its up axis.
+//   FBX          what its header says: UpAxis, and UnitScaleFactor (centimetres per unit).
+//   STL, 3MF     Z up, millimetres: as they are.
+// Writing goes the other way (see _exportConvention). Before this, every file was taken as Z-up millimetres, so a model from
+// Blender lay on its back, a GLB was a thousand times too small and an FBX ten times too big next to it.
+function _toSceneConvention(root, conv) {
+  if (!conv) return false;
+  const k = conv.mmPerUnit > 0 ? conv.mmPerUnit : 1, turn = !!conv.yUp;
+  if (Math.abs(k - 1) < 1e-12 && !turn) return false;
+  // C = scale k after a quarter turn about X (Y up to Z up). Every node's own matrix becomes C M C^-1 (its turn turned the same
+  // way, its place turned and scaled, a non-uniform scale swapped between Y and Z), every geometry C v: the world positions come
+  // out as C times what they were, and nothing above the file's root changes.
+  const C = new THREE.Matrix4().makeScale(k, k, k);
+  if (turn) C.multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+  const Ci = C.clone().invert(), m = new THREE.Matrix4(), seen = new Set();
+  root.traverse(o => {
+    if (o === root) return;
+    o.updateMatrix(); o.matrix.premultiply(C).multiply(Ci); o.matrix.decompose(o.position, o.quaternion, o.scale);
+    if (o.geometry && !seen.has(o.geometry)) { seen.add(o.geometry); o.geometry.applyMatrix4(C); }
+    if (o.isInstancedMesh) { for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, m); m.premultiply(C).multiply(Ci); o.setMatrixAt(i, m); } o.instanceMatrix.needsUpdate = true; }
+  });
+  root.updateMatrixWorld(true);
+  return true;
+}
+// A glTF's convention (null: the scene's own, Z up in millimetres).
+function _gltfConvention(gltf, file) {
+  const a = (gltf && gltf.parser && gltf.parser.json && gltf.parser.json.asset) || (gltf && gltf.asset) || {};
+  const x = a.extras && a.extras.meshoptimiser;
+  if (x && (x.up === 'Y' || x.up === 'Z')) return { yUp: x.up === 'Y', mmPerUnit: +x.mmPerUnit > 0 ? +x.mmPerUnit : 1 };
+  if (file && file.__moConverted) return null;                                       // (a STEP just converted by the server)
+  let saved = false;
+  try { gltf.scene.traverse(o => { if (o.userData && o.userData.soName) saved = true; }); } catch (_) {}
+  if (saved) return null;                                                              // (a scene saved by this app)
+  if (/MeshOptimiser|trimesh|THREE\.GLTFExporter/i.test(String(a.generator || ''))) return null;      // (this app's older exports, the converter's files)
+  return { yUp: true, mmPerUnit: 1000 };
+}
+// An OBJ's: Y up, unless this app wrote it Z up (its older files say nothing of the axis and were Z up).
+function _objConvention(text) {
+  const head = String(text).slice(0, 2000), m = head.match(/^# Up axis: ([YZ])/m);
+  if (m) return m[1] === 'Y' ? { yUp: true, mmPerUnit: 1 } : null;
+  if (/^# Exported by MeshOptimiser/m.test(head)) return null;
+  return { yUp: true, mmPerUnit: 1 };
+}
+// An FBX's, from its header as three's reader keeps it (UpAxis 1 is Y; UnitScaleFactor is centimetres per unit, 1 when not said).
+function _fbxConvention(root) {
+  const u = root && root.userData || {};
+  const cm = +u.unitScaleFactor > 0 ? +u.unitScaleFactor : 1;
+  return { yUp: u.upAxis === undefined ? true : u.upAxis === 1, mmPerUnit: cm * 10 };
+}
+// How each format is written when the export says "each format's own": glTF, GLB and USDZ Y up in metres (their specifications),
+// OBJ Y up in millimetres (the custom; OBJ has no unit), FBX Z up in millimetres (its header says so), STL and PLY Z up in
+// millimetres (what a slicer expects).
+function _exportConvention(format) {
+  const yUp = format === 'glb' || format === 'gltf' || format === 'usdz' || format === 'obj';
+  const metres = format === 'glb' || format === 'gltf' || format === 'usdz';
+  return { axis: yUp ? 'y-up' : 'z-up', scale: metres ? 0.001 : 1 };
+}
+
 async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   const formatLabel = format.toUpperCase();
   // Capture & clear the import flag up-front so format-specific failures
@@ -35460,6 +35636,8 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   const importMode = !!state._importMode;
   state._importMode = false;
   setLoaderProgress(60);
+  // the file's own convention brought into the scene's (see _toSceneConvention); the loaders say which it is
+  try { if (sceneRoot.userData && sceneRoot.userData.__moConv !== undefined) { _toSceneConvention(sceneRoot, sceneRoot.userData.__moConv); delete sceneRoot.userData.__moConv; } } catch (e) { console.warn('[import] could not bring the file into the scene\'s axes and units:', e); }
   // Yield one microtask so any in-flight WebGPU command buffer can finish
   // before clearModel() starts calling .destroy()/.dispose() on resources.
   await _nextFrame();
@@ -35487,6 +35665,22 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
   });
   try { _registerSplines(sceneRoot, importMode); } catch (e) { console.warn('[spline] could not read the lines of this file:', e); }
   sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
+  // Texture coordinates run one way in the scene: V from the top, as glTF has them, which is what three's GLB and USDZ writers expect
+  // (the USDZ writer turns V for its file; the OBJ, FBX and PLY writers do too: the OBJ writer, _fbxUvData, the PLY branch of _doExportImpl). OBJ, FBX and 3MF count V from the
+  // bottom, so their coordinates are turned here and their textures read the same way round (flipY false), which draws exactly as
+  // before. Without it a scene held both directions and nothing said which: an OBJ or FBX written from a glTF model, or a GLB
+  // from an OBJ one, had every map upside down.
+  if ((format === 'obj' || format === 'fbx' || format === '3mf') && !(sceneRoot.userData && sceneRoot.userData.__moUvTop)) {
+    const seenG = new Set(), seenT = new Set();
+    for (const m of meshList) {
+      const g = m.geometry;
+      if (g && !seenG.has(g)) {
+        seenG.add(g);
+        for (const k of ['uv', 'uv1', 'uv2', 'uv3']) { const a = g.attributes[k]; if (!a || a.itemSize !== 2) continue; for (let i = 0; i < a.count; i++) a.setY(i, 1 - a.getY(i)); a.needsUpdate = true; }
+      }
+      for (const mat of [].concat(m.material || [])) for (const key in mat) { const t = mat[key]; if (t && t.isTexture && !seenT.has(t)) { seenT.add(t); t.flipY = false; t.needsUpdate = true; } }
+    }
+  }
   // Copies that arrive as separate geometries (a file from another tool writes
   // the same bolt out again for every place it is used): find them from the
   // numbers and give them one geometry, so that they are kept, drawn and
@@ -35966,6 +36160,7 @@ async function loadGlbFile(file) {
     try { await _Brep.stageFromGltf(gltf); } catch (e) { console.warn('[B-rep] could not read the CAD edges stored in this file:', e); }
     try { const nb = _Brep.attach(gltf.scene, !!state._importMode); if (nb) Log.info(`B-rep: ${fmtNum(_Brep.info.faces)} faces and ${fmtNum(_Brep.info.edges)} CAD edges on ${fmtNum(nb)} solid${nb === 1 ? '' : 's'}`, { tag: 'load' }); }
     catch (e) { console.warn('[B-rep] could not read the B-rep of this file:', e); }
+    gltf.scene.userData.__moConv = _gltfConvention(gltf, file);
     await _ingestSceneRoot(gltf.scene, file, buffer.byteLength, 'glb');
   });
 }
@@ -36063,9 +36258,11 @@ async function loadFbxFile(file) {
         } catch (e3) { reject(e3); }
       });
       root = gltf.scene;
+      root.userData.__moUvTop = true;          // (read as glTF: V already runs from the top)
     }
     const flattened = _flattenSkinnedMeshes(root);
     if (flattened) Log.info(`Flattened ${flattened} SkinnedMesh${flattened === 1 ? '' : 'es'} to static geometry (rigging dropped)`, { tag: 'fbx' });
+    if (!root.userData.__moUvTop) root.userData.__moConv = _fbxConvention(root);      // (read through Assimp: left as Assimp gives it)
     await _ingestSceneRoot(root, file, buffer.byteLength, 'fbx');
   });
 }
@@ -36095,6 +36292,7 @@ async function loadObjFile(file) {
     setLoaderProgress(35);
     setLoader(true, 'Parsing OBJ scene…', `${(text.length/1048576).toFixed(1)} MB`);
     const root = new OBJLoader().parse(text);
+    root.userData.__moConv = _objConvention(text);
     await _ingestSceneRoot(root, file, text.length, 'obj');
   });
 }
@@ -37966,6 +38164,7 @@ const _BrepUI = (() => {
   function sync() {
     const on = !!_Brep.info.on;
     const pill = $id('vp-brep-pill'); if (pill) pill.hidden = !on;
+    try { _cadLinesStatus(); } catch (_) {}
     if (!on) { closePop(); hideFace(); }
     const sum = $id('bp-sum');
     if (sum && on) {
@@ -39914,7 +40113,7 @@ function _openMaterialEditor(info) {
         const tex = new THREE.Texture(img);
         tex.colorSpace = _texColorSpace(cs);
         tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-        tex.flipY = true;
+        tex.flipY = false;          // (V runs from the top in the scene, as in a glTF: see _ingestSceneRoot)
         tex.needsUpdate = true;
         tex.name = file.name;
         tex.userData = tex.userData || {};
@@ -47816,6 +48015,9 @@ async function _mergeSelectedCore() {
     } else {
       for (let i = 0; i < iLen; i++) indices[idxOff + i] = i + vertBase;
     }
+    // A mirrored part (its matrix turns space over: determinant < 0) is drawn the right way out because three turns its faces when it
+    // draws it. Baked into the merged mesh, which is not mirrored, its triangles must be turned here, or it comes out inside out.
+    if (localFromWorld.determinant() < 0) for (let t = idxOff; t + 2 < idxOff + iLen; t += 3) { const a = indices[t + 1]; indices[t + 1] = indices[t + 2]; indices[t + 2] = a; }
     idxOff   += iLen;
     vertBase += vCount;
     totalTris += iLen / 3;
@@ -55805,7 +56007,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       convexPieces: { title: 'Convex pieces', done: 'Convex pieces made', params: [{ key: 'maxPieces', label: 'Pieces at most', min: 1, max: 32, step: 1, def: 8 }, { key: 'concavity', label: 'Cut while emptier than', kind: 'pct', min: 1, max: 50, step: 1, def: 10, help: "A piece is cut in two while more than this share of its hull is empty." }, { key: 'maxPoints', label: 'Points per piece', min: 8, max: 255, step: 1, def: 64 }], sum: (r) => r.pieces + ' pieces' },
       mergeBodies: { title: 'Merge bodies', done: 'Bodies merged', params: [], sum: (r) => r.merged + ' of ' + r.bodies + ' bodies merged' + (r.notClosed ? ' · ' + r.notClosed + ' not closed, left as they were' : '') },
       // fewer facets on the round faces of a part that still has its CAD faces (roundfaces.js): the deviation is a share of the part's size
-      roundFaces: { title: 'Simplify round faces', done: 'Round faces simplified', whole: true, params: [{ key: 'tolerance', label: 'Deviation up to', kind: 'size%', min: 0.005, max: 2, step: 0.005, def: 0.05, help: "How far the surface may move from the true round face, as a share of the part's size. Looser: fewer facets." }, { key: 'segments', label: 'Segments per turn, at least', min: 6, max: 96, step: 1, def: 12, help: 'A full turn keeps at least this many facets, however loose the deviation.' }], sum: (r) => fmtNum(r.dissolved) + (r.dissolved === 1 ? ' point' : ' points') + ' dissolved · ' + fmtNum(r.before) + ' → ' + fmtNum(r.after) + ' triangles' + (r.left ? ' · ' + fmtNum(r.left) + ' kept' : '') + (r.why && !r.dissolved ? ' · ' + r.why : '') },
+      roundFaces: { title: 'Simplify round faces', done: 'Round faces simplified', whole: true, params: [{ key: 'tolerance', label: 'Deviation up to', kind: 'size%', min: 0.005, max: 2, step: 0.005, def: 0.05, help: "How far the surface may move from the true round face, as a share of the part's size. Looser: fewer facets." }, { key: 'segments', label: 'Segments per turn, at least', min: 6, max: 96, step: 1, def: 12, help: 'A full turn keeps at least this many facets, however loose the deviation.' }], sum: (r) => { const n = +(r.collapsed ?? r.dissolved) || 0; return fmtNum(n) + (n === 1 ? ' point' : ' points') + ' dissolved · ' + fmtNum(+r.before || 0) + ' → ' + fmtNum(+r.after || 0) + ' triangles' + (r.left ? ' · ' + fmtNum(+r.left) + ' kept' : '') + (r.why && !n ? ' · ' + r.why : ''); } },
       // fillets and chamfers off a part that still has its CAD faces (defeature.js); the limits are shares of the part's size, 0 switches a kind off
       removeBlends: { title: 'Remove fillets and chamfers', done: 'Fillets and chamfers removed', whole: true, params: [{ key: 'maxRadius', label: 'Fillets up to', kind: 'size%', min: 0, max: 50, step: 0.1, def: 2, allowZero: true, help: "The largest fillet radius to take off, as a share of the part's size (the card says what that is in the part's units). 0 leaves every fillet. A half-round boss of that radius counts as a fillet too, so keep it near the fillets you mean." }, { key: 'maxChamfer', label: 'Chamfers up to', kind: 'size%', min: 0, max: 50, step: 0.1, def: 2, allowZero: true, help: "The widest chamfer to take off, as a share of the part's size. 0 leaves every chamfer." }], sum: (r) => { const left = r.skipped ? Object.values(r.skipped).reduce((s, n) => s + n, 0) : 0; const lim = (r.maxRadius > 0 || r.maxChamfer > 0) ? ' (fillets to r ' + (r.maxRadius > 0 ? fmtNum(Math.round(r.maxRadius * 10) / 10) : '0') + ', chamfers to ' + (r.maxChamfer > 0 ? fmtNum(Math.round(r.maxChamfer * 10) / 10) : '0') + ')' : ''; return r.fillets + (r.fillets === 1 ? ' fillet' : ' fillets') + ' and ' + r.chamfers + (r.chamfers === 1 ? ' chamfer' : ' chamfers') + ' off' + lim + (left ? ' · ' + left + ' blend ' + (left === 1 ? 'face' : 'faces') + ' left (' + Object.entries(r.skipped).filter(([, n]) => n).map(([k, n]) => n + ' ' + ({ supports: 'on a face that is not a plane or cylinder', fit: 'whose face could not be fitted', topology: 'of an odd shape', moved: 'that would have to move too far', corner: 'where four or more faces meet at a point', touches: 'touching a blend already taken off' }[k] || k)).join(', ') + ')' : ''); } },
     };
@@ -56187,16 +56389,19 @@ setTimeout(() => _dndDecorateTree(), 0);
   // them). The step is undone with Ctrl+Z, like Decimate (it uses the same undo step).
   const _threeCoreUrl = () => { const u = _importMapUrl('three'); return u ? u.replace(/[^/]*$/, 'three.core.js') : null; };
   let _untriBusy = false;
-  window.__moAgent = Object.assign(window.__moAgent || {}, { untriangulate: _Job.strict(() => _untriangulateSelected()) });
-  async function _untriangulateSelected() { return _Job.run('Merge triangles', () => _untriangulateSelected_job()); }
-  async function _untriangulateSelected_job() {
+  window.__moAgent = Object.assign(window.__moAgent || {}, { untriangulate: _Job.strict((o) => _untriangulateSelected(o)) });
+  // (o: what _untriangulateRun takes, for Claude's tool: quads, faceDeg, shapeDeg)
+  async function _untriangulateSelected(o) { return _Job.run('Merge triangles', () => _untriangulateSelected_job(o)); }
+  async function _untriangulateSelected_job(o) {
     if (_untriBusy) return;
     _untriBusy = true;
-    try { return await _untriangulateRun(); }
+    try { return await _untriangulateRun(o && typeof o === 'object' && !(o instanceof Event) ? o : {}); }
     finally { _untriBusy = false; }
   }
   // o.ids: these parts instead of the selection; o.quiet: no loader and no toasts (another tool is calling);
   // o.collect: an array that gets the undo items instead of a step of its own (the caller makes one step of both).
+  // o.quads (or the card's Pair into quads): pair neighbouring triangles into quads instead (pairIntoQuads in untriangulate.js, Blender's
+  // Triangles to Quads): o.faceDeg / o.shapeDeg, 40 each by default; no point moves and no triangle goes, only the polygons change.
   async function _untriangulateRun(o = {}) {
     const picked = !o.ids && state.selected && state.selected.size > 0;
     const ids = o.ids ? o.ids : picked ? [...state.selected] : state.parts.filter(p => !p.deleted).map(p => p.partId);
@@ -56213,11 +56418,14 @@ setTimeout(() => _dndDecorateTree(), 0);
     // the points that only sit on a straight line of an outline go too (from every polygon that touches them, so no crack opens)
     const straight = !even && (o.straight !== undefined ? !!o.straight : document.getElementById('ut-straight')?.checked !== false);
     // and the points left on faces that are only nearly flat (limited dissolve): the angle the triangles round a point may turn by
+    const quads = !even && (o.quads !== undefined ? !!o.quads : document.getElementById('ut-quads')?.checked === true);
+    const qDeg = (v, id) => { const x = v !== undefined && v !== null ? +v : parseFloat(String(document.getElementById(id)?.value ?? '40').replace(',', '.')); return Number.isFinite(x) && x > 0 ? Math.min(90, x) : 40; };
+    const faceDeg = qDeg(o.faceDeg, 'ut-qface'), shapeDeg = qDeg(o.shapeDeg, 'ut-qshape');
     const limitDeg = (() => { if (even) return 0; const v = o.limit !== undefined ? +o.limit : parseFloat(String(document.getElementById('ut-limit')?.value ?? '3').replace(',', '.')); return Number.isFinite(v) ? Math.max(0, Math.min(30, v)) : 3; })();
     const skipped = [], failed = [], undoItems = [];
-    const agg = { trisBefore: 0, trisAfter: 0, polygons: 0, rebuilt: 0, vertsRemoved: 0, straight: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
+    const agg = { trisBefore: 0, trisAfter: 0, polygons: 0, rebuilt: 0, vertsRemoved: 0, straight: 0, quads: 0, seams: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
     let parts = 0, done = 0, marked = 0;
-    load(true, name, (picked ? 'the selection' : 'the scene') + '…');
+    load(true, quads ? 'Pair into quads' : name, (picked ? 'the selection' : 'the scene') + '…');
     loadPct(2);
     try {
       // every part is queued; a worker takes one when it is free
@@ -56230,7 +56438,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         if (!pos) continue;
         const tris = geom.index ? geom.index.count / 3 : pos.count / 3;
         if (tris < 4) continue;
-        const src = geom.index ? geom : _mergeVertices(geom.clone());       // (a mesh without an index is welded first, like Decimate does)
+        const src = (geom.index || quads) ? geom : _mergeVertices(geom.clone());       // (a mesh without an index is welded first, like Decimate does; pairing changes no triangle, so it works on the part's own)
         // how far the surface may move where a vertex that is not quite in its face's plane goes (mm; at most 1% of the part's size)
         let tolLocal = 0;
         {
@@ -56244,10 +56452,18 @@ setTimeout(() => _dndDecorateTree(), 0);
             tolLocal = Math.min(mm, worldDiag * 0.01) / sc;
           }
         }
-        const cadPlane = even ? null : _Brep.planePoly(src);                   // the CAD plane faces, when the part came from a STEP with them: exact polygons
+        const cadPlane = (even || quads) ? null : _Brep.planePoly(src);                   // the CAD plane faces, when the part came from a STEP with them: exact polygons
+        // pairing: the CAD face of every triangle (no quad across a face boundary) and the UVs (none across a seam)
+        let cadFace = null, uvs = null;
+        if (quads) {
+          const rec = _Brep.record(src);
+          if (rec && rec.faces && rec.faces.length && rec.tris === tris) { cadFace = new Int32Array(tris).fill(-1); rec.faces.forEach((fc, i) => { for (let t = fc[1]; t < fc[1] + fc[2] && t < tris; t++) cadFace[t] = i; }); }
+          const uvA = src.attributes.uv;
+          if (uvA && uvA.itemSize >= 2 && uvA.count === pos.count) { uvs = new Float32Array(uvA.count * 2); for (let i = 0; i < uvA.count; i++) { uvs[i * 2] = uvA.getX(i); uvs[i * 2 + 1] = uvA.getY(i); } }
+        }
         queued.set(id, _MeshWorkers.run(() => {
           const positions = _wireXYZ(src.attributes.position, true);
-          const index = Uint32Array.from(src.index.array);
+          const index = src.index ? Uint32Array.from(src.index.array) : Uint32Array.from({ length: src.attributes.position.count }, (_, i) => i);
           const cadPoly = cadPlane ? cadPlane.slice() : null;
           const groups = (src.groups && src.groups.length > 1)
             ? src.groups.map(g => ({ start: g.start, count: Math.min(g.count, index.length - g.start), materialIndex: g.materialIndex }))
@@ -56259,7 +56475,8 @@ setTimeout(() => _dndDecorateTree(), 0);
             for (let i = 0; i < nrm.count; i++) { normals[i * 3] = nrm.getX(i); normals[i * 3 + 1] = nrm.getY(i); normals[i * 3 + 2] = nrm.getZ(i); }
           }
           const transfer = [positions.buffer, index.buffer]; if (normals) transfer.push(normals.buffer); if (cadPoly) transfer.push(cadPoly.buffer);
-          return { msg: { op: even ? 'even' : 'untriangulate', positions, index, groups, angle, normals, normalTol, flip, fixNormals, straight, limitDeg, tolerance: tolLocal, threeUrl, cadPoly }, transfer };
+          const qMsg = quads ? { quads: true, faceDeg, shapeDeg, uvs: uvs ? uvs.slice() : null, cadFace: cadFace ? cadFace.slice() : null } : {};
+          return { msg: { op: even ? 'even' : 'untriangulate', positions, index, groups, angle, normals, normalTol, flip, fixNormals, straight, limitDeg, tolerance: tolLocal, threeUrl, cadPoly, ...qMsg }, transfer };
         }).then(reply => (reply && reply.ok) ? { src, reply, geom } : null));
       }
       for (const id of ids) {
@@ -56273,16 +56490,16 @@ setTimeout(() => _dndDecorateTree(), 0);
         const { src, reply } = job, st = reply.stats;
         agg.trisBefore += st.trisBefore; agg.polygons += st.polygons;
         for (const k of ['rebuilt', 'vertsRemoved']) agg[k] += st[k];
-        agg.straight += st.straight || 0;
+        agg.straight += st.straight || 0; agg.quads += st.quads || 0; agg.seams += st.seams || 0;
         for (const k in agg.kept) agg.kept[k] += st.kept[k];
         if (!st.rebuilt && !st.straight) {
           agg.trisAfter += st.trisBefore;
           // Nothing needed rebuilding (every flat face is already as few triangles as its outline needs, as after Triangulate), but
           // the faces are polygons all the same: the mesh stays as it is and remembers them, so it draws and counts them as such.
-          if (!even && !o.noPolys && src === job.geom && src.index && st.polygons < st.trisBefore) {
+          if (!even && !o.noPolys && src === job.geom && (src.index || quads) && st.polygons < st.trisBefore) {
             const polyKeep = new Int32Array(reply.parts.reduce((s, x) => s + x.poly.length, 0));
             for (let o = 0, i = 0; i < reply.parts.length; i++) { polyKeep.set(reply.parts[i].poly, o); o += reply.parts[i].poly.length; }
-            if (polyKeep.length === src.index.count / 3) { _polyIds.set(src, polyKeep); _triOnly.delete(src); marked++; }
+            if (polyKeep.length === (src.index ? src.index.count : src.attributes.position.count) / 3) { _polyIds.set(src, polyKeep); _triOnly.delete(src); marked++; }
           }
           continue;
         }
@@ -56334,6 +56551,13 @@ setTimeout(() => _dndDecorateTree(), 0);
       if (failed.length) say('Triangulate failed', failed.slice(0, 3).join(', '), 'error', 5000);
       return { parts, faces: agg.rebuilt };
     }
+    if (quads) {
+      if (marked) say('Paired into quads', fmtNum(agg.quads) + ' quads from ' + fmtNum(agg.trisBefore) + ' triangles on ' + marked + (marked === 1 ? ' part' : ' parts') + '. No point moved; Keep quads in the OBJ or FBX export writes them' + (agg.seams ? ' (' + fmtNum(agg.seams) + ' pairs left apart at UV seams)' : ''), 'success', 5500);
+      else if (!failed.length) say('Pair into quads', 'No two triangles make a quad within ' + faceDeg + '° fold and ' + shapeDeg + '° from square', 'info', 4500);
+      if (failed.length) say('Pair into quads failed', failed.slice(0, 3).join(', ') + (failed.length > 3 ? ' +' + (failed.length - 3) + ' more' : ''), 'error', 5000);
+      try { _wireSoon(); } catch (_) {}
+      return { parts: marked, quads: agg.quads, triangles: agg.trisBefore, left_apart_at_uv_seams: agg.seams };
+    }
     if (!parts && marked) { say('Untriangulated', marked + (marked === 1 ? ' part' : ' parts') + ': the flat faces are polygons (n-gons) now; their triangles were already as few as the outlines need', 'success', 4500); try { _wireSoon(); } catch (_) {} return; }
     if (parts > 0) {
       const dropped = agg.trisBefore - agg.trisAfter, pct = agg.trisBefore ? dropped / agg.trisBefore * 100 : 0;
@@ -56372,10 +56596,17 @@ setTimeout(() => _dndDecorateTree(), 0);
     } finally { _untriBusy = false; }
   }
   window.__moAgent = Object.assign(window.__moAgent || {}, { triangulate: _Job.strict(() => _triangulateSelected()) });
-  for (const [pre, defs] of [['ut', { 'ut-angle': '1', 'ut-normal': '5', 'ut-even': true, 'ut-straight': true, 'ut-limit': '3', 'ut-flatten': true }], ['tr', { 'tr-angle': '1', 'tr-even': true, 'tr-lines': true }]]) {
+  for (const [pre, defs] of [['ut', { 'ut-quads': false, 'ut-qface': '40', 'ut-qshape': '40', 'ut-angle': '1', 'ut-normal': '5', 'ut-even': true, 'ut-straight': true, 'ut-limit': '3', 'ut-flatten': true }], ['tr', { 'tr-angle': '1', 'tr-even': true, 'tr-lines': true }]]) {
     document.getElementById(pre + '-reset')?.addEventListener('click', () => { for (const k in defs) { const el = document.getElementById(k); if (!el) continue; if (el.type === 'checkbox') el.checked = defs[k]; else el.value = defs[k]; el.dispatchEvent(new Event('change')); } });
   }
-  try { for (const id of ['ut-angle', 'tr-angle']) _scrubField(document.getElementById(id), { min: 0.05, max: 30, step: 0.05, decimals: 2 }); _scrubField(document.getElementById('ut-normal'), { min: 0.5, max: 90, step: 0.5, decimals: 1 }); _scrubField(document.getElementById('ut-tol'), { min: 0, max: 100, step: 0.1, decimals: 2 }); _scrubField(document.getElementById('ut-limit'), { min: 0, max: 30, step: 0.5, decimals: 1 }); } catch (_) {}
+  try { for (const id of ['ut-angle', 'tr-angle']) _scrubField(document.getElementById(id), { min: 0.05, max: 30, step: 0.05, decimals: 2 }); _scrubField(document.getElementById('ut-normal'), { min: 0.5, max: 90, step: 0.5, decimals: 1 }); _scrubField(document.getElementById('ut-tol'), { min: 0, max: 100, step: 0.1, decimals: 2 }); _scrubField(document.getElementById('ut-limit'), { min: 0, max: 30, step: 0.5, decimals: 1 }); for (const id of ['ut-qface', 'ut-qshape']) _scrubField(document.getElementById(id), { min: 1, max: 90, step: 1, decimals: 0 }); } catch (_) {}
+  // Pair into quads shows its two angles and hides what only the flat join uses
+  {
+    const q = document.getElementById('ut-quads');
+    const paintQ = () => { const on = !!(q && q.checked); for (const el of document.querySelectorAll('#remesh-pane-ut > [data-ut]')) el.style.display = (el.dataset.ut === 'quads') === on ? '' : 'none'; };
+    q?.addEventListener('change', paintQ); paintQ();
+    window.__utPaintQuads = paintQ;
+  }
   // The Remesh card in the sidebar: shown open and brought into view (from the search, Ctrl+K).
   function _showSection(id) {
     const sec = document.getElementById(id);
@@ -56405,10 +56636,11 @@ setTimeout(() => _dndDecorateTree(), 0);
     paint();
   }
   // what is set in the two panels is kept in this browser
-  for (const [key, ids] of [['stepopt-untri', ['ut-angle', 'ut-normal', 'ut-even', 'ut-flatten', 'ut-tol']], ['stepopt-tri', ['tr-angle', 'tr-even', 'tr-lines']]]) {
+  for (const [key, ids] of [['stepopt-untri', ['ut-quads', 'ut-qface', 'ut-qshape', 'ut-angle', 'ut-normal', 'ut-even', 'ut-flatten', 'ut-tol']], ['stepopt-tri', ['tr-angle', 'tr-even', 'tr-lines']]]) {
     const els = ids.map(i => document.getElementById(i)).filter(Boolean);
     try { const v = JSON.parse(localStorage.getItem(key) || 'null'); if (v) for (const el of els) if (v[el.id] !== undefined) { if (el.type === 'checkbox') el.checked = !!v[el.id]; else el.value = String(v[el.id]); } } catch (_) {}
     for (const el of els) el.addEventListener('change', () => { const o = {}; for (const e of els) o[e.id] = e.type === 'checkbox' ? e.checked : e.value; try { localStorage.setItem(key, JSON.stringify(o)); } catch (_) {} });
+    try { window.__utPaintQuads && window.__utPaintQuads(); } catch (_) {}
   }
 
 
@@ -57627,7 +57859,10 @@ setTimeout(() => _dndDecorateTree(), 0);
                 for (let v = 0; v < index.length; v++) index[v] = v;
                 src = geom.clone(); src.setIndex(new THREE.BufferAttribute(index, 1));
               }
-              const out = _geomFromIndexParts(src, applyHoleFill(index, res, geom.groups));
+              let kept = null;                                                  // (the CAD faces, when the part has them, go on to the new shape)
+              try { kept = _brepAfterFill(geom, index, res, geom.groups, posAttr); } catch (_) { kept = null; }
+              const out = _geomFromIndexParts(src, kept ? kept.parts : applyHoleFill(index, res, geom.groups));
+              if (out && kept) { try { _Brep.adopt(out, kept.cad); } catch (_) {} }
               if (out) {
                 // the rim of a closed hole is flat now: its vertices must shade as flat too (a mark's rim lies in a face that may curve:
                 // its vertices take the mean of the face's and the cap's normals instead)

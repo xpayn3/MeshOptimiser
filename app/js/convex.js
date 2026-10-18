@@ -2,8 +2,9 @@
 //
 //   convexHull: the smallest convex shell round all of a part's points (an incremental hull: a tetrahedron of extreme points,
 //     then every point outside it added in turn, the faces it can see replaced by a fan from it to their outline). maxPoints
-//     keeps only the points that are furthest out in that many even directions, so the shell stays small enough for a game engine
-//     (most want 255 points or fewer); the shell is then a little inside the true hull, never outside the part's extent.
+//     caps the shell's points for a game engine (most want 255 or fewer): the true hull is kept when it has no more than that,
+//     and only a hull with more is cut down to the points furthest out in that many even directions (then a little inside the
+//     true hull, never outside the part's extent).
 //   convexPieces: a few convex shells that together follow a concave part (an approximate convex decomposition). The part is
 //     filled as solid cells (voxel.js); a set of cells whose hull holds much more than the cells (more than `concavity` of it
 //     empty) is cut in two where it is narrowest across one of its axes (its waist), and so on, up to maxPieces; each set then
@@ -25,16 +26,40 @@ function directions(n) {
   return out;
 }
 
+// The points furthest out in n even directions.
+function extremes(P, n) {
+  const keep = new Set();
+  for (const d of directions(n)) { let b = -1, bv = -Infinity; for (let i = 0; i < P.length; i++) { const v = dot(P[i], d); if (v > bv) { bv = v; b = i; } } keep.add(b); }
+  return [...keep].map(i => P[i]);
+}
+
 // The hull of points ([x, y, z] each). Returns { points, faces ([a, b, c] into points, counter-clockwise seen from outside) } or null.
+// With maxPoints, the true hull when it has no more points than that (a Suzanne's has 245: it used to be cut to the extremes of 255
+// directions first, 122 points, a shell 1 % smaller than the true one for nothing); only a bigger one is cut down. To keep a big
+// mesh quick, a first hull of the extremes in many directions is made and every point inside it dropped before the true hull is
+// built from the rest (Akl and Toussaint's shortcut: the points inside a hull of some of the points are inside the hull of all).
 export function hullOf(pts, maxPoints = 0) {
   // without repeats
   const seen = new Map(); let P = [];
   for (const p of pts) { const k = p.map(x => Math.round(x * 1e6)).join(','); if (!seen.has(k)) { seen.set(k, 1); P.push(p); } }
   if (maxPoints > 0 && P.length > maxPoints) {
-    const keep = new Set();
-    for (const d of directions(maxPoints)) { let b = -1, bv = -Infinity; P.forEach((p, i) => { const v = dot(p, d); if (v > bv) { bv = v; b = i; } }); keep.add(b); }
-    P = [...keep].map(i => P[i]);
+    const seed = extremes(P, Math.max(256, maxPoints)), h0 = hullCore(seed);
+    let full = null;
+    if (h0) {
+      const F = h0.faces.map(([a, b, c]) => { const pa = h0.points[a], n = cross(sub(h0.points[b], pa), sub(h0.points[c], pa)), l = len(n) || 1e-30; return [n[0] / l, n[1] / l, n[2] / l, dot([n[0] / l, n[1] / l, n[2] / l], pa)]; });
+      let size = 0; for (const p of seed) size = Math.max(size, len(sub(p, seed[0])));
+      const eps = size * 1e-9, rest = seed.slice();
+      for (const p of P) { for (const q of F) if (q[0] * p[0] + q[1] * p[1] + q[2] * p[2] - q[3] > eps) { rest.push(p); break; } }
+      full = hullCore(rest);
+    }
+    if (full && full.points.length <= maxPoints) return full;
+    P = extremes(full ? full.points : P, maxPoints);
   }
+  return hullCore(P);
+}
+
+// The hull of points without repeats (incremental).
+function hullCore(P) {
   if (P.length < 4) return null;
   let size = 0; for (const p of P) size = Math.max(size, len(sub(p, P[0])));
   const eps = size * 1e-9;

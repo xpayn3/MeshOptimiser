@@ -7,8 +7,13 @@
 
 // How much each attribute counts against position when two vertices are
 // merged. Positions are measured against the size of the mesh, normals are
-// unit vectors, so these are small numbers.
-export const ATTR_WEIGHT = { normal: 0.5, uv: 0.2, color: 0.2 };
+// unit vectors, so these are small numbers. Halved from 0.5 / 0.2 / 0.2 after
+// measuring against Blender's Decimate (tests/blender/compare-tools.mjs and the
+// variants beside it): on three NIST CAD parts the surface moved 2 to 9 % less
+// and the shading normals turned less as well; on an organic mesh the surface
+// moved 16 % less and the UVs 19 % less, for 0.3 degrees more on the normals.
+// Lower still (a fifth, or none) the normals of smooth parts turned 2 to 3 times as far.
+export const ATTR_WEIGHT = { normal: 0.25, uv: 0.1, color: 0.1 };
 
 // Normals, the first UV set and vertex colours of `geom`, side by side in one
 // Float32Array (what simplifyWithAttributes wants). null when the mesh has

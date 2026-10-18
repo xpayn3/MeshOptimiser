@@ -954,6 +954,8 @@
       S.host.ctxMenu([
         { icon: 'box', label: 'A note on the selected part', fn: addForSelection },
         { icon: 'focus', label: 'Show only the parts with notes' + tick(S.isoNoted && S.host.isolated()), fn: isolateNoted },
+        // (the list follows the selection while this is on: the button that turned it on went with the old rows of the card in v0.34.0)
+        { icon: 'box', label: 'Only the notes on the selected part' + tick(S.onlySel), fn: () => { S.onlySel = !S.onlySel; S.selKey = S.onlySel ? [...S.host.state.selected].join(',') : ''; render(); } },
         '---',
         { icon: 'map-pin', label: 'Pins', sub: [
           ...[['number', 'The number'], ['text', 'The title'], ['icon', 'The kind'], ['color', 'Only the colour'], ['name', 'The writer']].map(([v, l]) => ({ icon: 'circle', label: l + tick(S.badge === v), fn: () => { S.badge = v; try { S.host.prefs.set('noteBadge', v); } catch (_) {} render(); } })),

@@ -27,6 +27,8 @@ CLAUDE.local.md
 exports/
 server.log
 server.log.1
+# OpenCASCADE's SaveAs falls back to this name when it cannot write where it was told (step2glb.py now reports that as an error)
+Document_
 
 # In-app updater: the backup of the previous version, and what tools/app/build-update.py writes
 .update/

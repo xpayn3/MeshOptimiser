@@ -38,6 +38,9 @@ try {
   };
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1500, height: 950, deviceScaleFactor: 1, mobile: false });
+  // (Animate opens as the timeline drawer along the bottom since v0.34.0; this test is about the small window, which is still there
+  //  for whoever chooses it: it is chosen before the page loads, unless a choice is already saved)
+  await send('Page.addScriptToEvaluateOnNewDocument', { source: "try { if (!localStorage.getItem('mo-anim-tl')) localStorage.setItem('mo-anim-tl', JSON.stringify({ mode: 'mini' })); } catch (_) {}" });
   await send('Page.navigate', { url: 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html?t=' + Date.now() });
   for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
   await sleep(1500);
@@ -64,7 +67,8 @@ try {
   await evalJS("document.querySelector('#vp-animate-pill [data-a=\"toggle\"]').click()");
   const p1 = await mw(id1); await sleep(500); const p2 = await mw(id1);
   check('paused: the part stays where it is', p1 === p2);
-  check('paused: the pill says Paused and stays', await evalJS("(() => { const t = document.getElementById('vp-animate-pill'); return !t.hidden && /Paused/.test(t.textContent); })()"));
+  // (paused, the pill goes away since v0.34.0: it is played again from the card in the right sidebar or the timeline)
+  check('paused: the pill goes away', await evalJS("document.getElementById('vp-animate-pill').hidden === true"));
   await evalJS("document.querySelector('#vp-animate-pill [data-a=\"toggle\"]').click()"); await sleep(200);
   check('the button on the pill plays it again', /Playing/.test(await evalJS("document.getElementById('vp-animate-pill').textContent")));
   await evalJS("document.querySelector('#vp-animate-pill [data-a=\"exit\"]').click()"); await sleep(200);
@@ -185,7 +189,7 @@ try {
   await evalJS("document.getElementById('anim-pb-rate').click(); document.getElementById('anim-pb-rate').click(); document.getElementById('anim-pb-rate').click(); document.getElementById('anim-pb-rate').click();");
   check('the playback speed goes round to 1×', (await evalJS("document.getElementById('anim-pb-rate').textContent")) === '1×');
   await evalJS("document.querySelector('#_anim-dialog .dlg-body').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }))"); await sleep(150);
-  check('Space pauses', /Paused/.test(await evalJS("document.getElementById('vp-animate-pill').textContent")));
+  check('Space pauses', (await evalJS("window.__moAnimStats().playing")) === false);      // (the pill no longer says Paused: it goes away)
   await evalJS("document.querySelector('#_anim-dialog .dlg-body').dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }))"); await sleep(150);
   check('Space plays again', /Playing/.test(await evalJS("document.getElementById('vp-animate-pill').textContent")));
   await call('animate_parts', { action: 'clear' });
@@ -207,7 +211,7 @@ try {
   check('the animation is still there after the video', r.ok && r.j && r.j.animations.length === 1, r);
   await call('animate_parts', { action: 'clear' });
   // — closing the window brings the gizmo back —
-  await evalJS("document.querySelector('#_anim-dialog .dlg-x').click()");
+  await evalJS("document.querySelector('#_anim-dialog .dlg-x[aria-label=Close]').click()");
   await call('select_parts', { ids: [id1], mode: 'replace' });
   await sleep(800);
   check('the gizmo is back when the window is closed', await evalJS("!!window.state.gizmo.object"));

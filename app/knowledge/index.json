@@ -69,7 +69,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "A tour of the screen: the top bar and tabs, the parts tree, the 3D view and its toolbars, the cards on the right, the drawers, the status bar and how to resize it all.",
-  "chars": 8204
+  "chars": 8205
  },
  {
   "slug": "move-the-view",
@@ -149,7 +149,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "One window with its sections and a search. What each section holds, in a sentence or two, from the start-up options and the search to the look of the interface.",
-  "chars": 12042
+  "chars": 11901
  },
  {
   "slug": "read-the-numbers",
@@ -237,7 +237,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Join the triangles of each flat face into one polygon and take away the vertices in its middle, or go back to even triangles. The shape stays as it is.",
-  "chars": 6638
+  "chars": 7833
  },
  {
   "slug": "split",
@@ -309,7 +309,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "A STEP file knows its real faces and real edges. MeshOptimiser keeps them, so the outlines are the ones the designer drew.",
-  "chars": 2789
+  "chars": 3035
  },
  {
   "slug": "quick-colour-wheel",
@@ -333,7 +333,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Six ways to draw the same model: solid, wireframe, X-ray, heatmap, clay and CAD. One key each, plus the Shading card for the clay and CAD looks.",
-  "chars": 5300
+  "chars": 5786
  },
  {
   "slug": "colours-materials",
@@ -374,6 +374,54 @@
   "groupTitle": "Look and arrange",
   "summary": "Take the small rounds and chamfers off a part that came from a STEP, and get its sharp edges back. The faces on either side are extended until they meet.",
   "chars": 2406
+ },
+ {
+  "slug": "mend-mesh",
+  "title": "Mend a mesh: Close cracks, Remove slivers, Patch holes",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Three small repairs for meshes that came out of a CAD program: close the hairline cracks between faces, get rid of needle-thin triangles, and patch openings so the patch follows the curve round them.",
+  "chars": 2989
+ },
+ {
+  "slug": "reshape-mesh",
+  "title": "Reshape a mesh: Remesh evenly, Smooth surface, Convex hull and more",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodies joined into one.",
+  "chars": 3162
+ },
+ {
+  "slug": "booleans",
+  "title": "Union, Subtract and Intersect parts",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Join parts into one, cut one part with others, or keep only where they overlap. Exact, on closed parts, with the first part you picked as the one that changes.",
+  "chars": 1692
+ },
+ {
+  "slug": "voxel-remesh",
+  "title": "Voxel remesh",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Rebuild a part as one clean, closed, even surface, the way Blender’s Voxel remesh does. Overlapping bodies become one and hollows inside are filled. Good for a watertight stand-in of a messy part.",
+  "chars": 2272
+ },
+ {
+  "slug": "round-parts",
+  "title": "Round parts: Fill round grooves, Fill solid round, Belt",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Rebuild a turned part (a spool, a bushing, a pulley) clean from its profile, with its ridges and grooves filled. A fan or a gear can be made one solid round shape, and a drive belt loses its ribs.",
+  "chars": 2312
+ },
+ {
+  "slug": "lettering",
+  "title": "Remove lettering and logos",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Take text and logos off parts, however the CAD program made them: raised or engraved in the part’s own surface, or modelled as separate little bodies laid over it.",
+  "chars": 2521
  },
  {
   "slug": "edit-mesh",

@@ -12,7 +12,7 @@
 import { closeCracks, removeSlivers, patchHoles } from './meshfix.js?v=3';
 import { remeshEvenly } from './remesh.js?v=3';
 import { smoothSurface } from './smooth.js?v=3';
-import { convexHull, convexPieces } from './convex.js?v=1';
+import { convexHull, convexPieces } from './convex.js?v=2';
 import { removeBlends } from './defeature.js?v=4';
 import { simplifyRoundFaces } from './roundfaces.js?v=1';
 import { manifoldReady, mergeBodies, booleanOf } from './booleans.js?v=2';

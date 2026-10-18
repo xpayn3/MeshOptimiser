@@ -474,3 +474,103 @@ export function evenTriangles(positions, index, opts = {}) {
   }
   return { index: out, poly: Int32Array.from(poly), stats };
 }
+
+// Pair into quads (Blender's Face › Triangles to Quads, bmesh join_triangles): two triangles that share an edge become one four-sided
+// polygon when they are folded apart by no more than opts.faceDeg (default 40) and every corner of the four-sided shape they make is
+// within opts.shapeDeg of square (default 40). The pairs are taken best first (the least fold plus the least out of square), each
+// triangle in one pair at most, so a triangulated quad mesh gets its quads back on curved surfaces too, where the flat join above
+// finds nothing. No point moves and no triangle is added or taken away: only the polygon each triangle belongs to changes (the OBJ
+// and FBX writers then write the quads). Never paired across
+//   - an edge where a mesh does not fold cleanly (three triangles on it, or two that run it the same way, one of them turned over),
+//   - a CAD face boundary (opts.face: the CAD face of each triangle, from _Brep; -1 where unknown),
+//   - a UV seam (opts.uvs: xy per vertex; the two triangles' corners on the shared edge must have the same UVs),
+//   - a four-sided shape that is not convex (its other diagonal would leave it).
+// Returns { index (the same triangles), poly, stats } like untriangulate, or null.
+export function pairIntoQuads(positions, index, opts = {}) {
+  const faceDeg = opts.faceDeg > 0 ? +opts.faceDeg : 40, shapeDeg = opts.shapeDeg > 0 ? +opts.shapeDeg : 40;
+  const face = opts.face || null, uvs = opts.uvs || null;
+  const vc = Math.floor(positions.length / 3), T = index ? Math.floor(index.length / 3) : Math.floor(vc / 3);
+  if (!T) return null;
+  const tv = index ? (t, k) => index[t * 3 + k] : (t, k) => t * 3 + k;
+  const P = (v, c) => positions[v * 3 + c];
+  // corners at one place are one point (the split points of a seam or a shading crease)
+  let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+  for (let i = 0; i < vc; i++) {
+    const x = P(i, 0), y = P(i, 1), z = P(i, 2);
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+  }
+  const diag = Math.hypot(x1 - x0, y1 - y0, z1 - z0) || 1, cell = diag * 1e-6;
+  const canon = new Int32Array(vc), seen = new Map();
+  let nC = 0;
+  for (let i = 0; i < vc; i++) {
+    const key = Math.round((P(i, 0) - x0) / cell) + ',' + Math.round((P(i, 1) - y0) / cell) + ',' + Math.round((P(i, 2) - z0) / cell);
+    let id = seen.get(key); if (id === undefined) { id = nC++; seen.set(key, id); } canon[i] = id;
+  }
+  seen.clear();
+  const nrm = new Float64Array(T * 3), ok = new Uint8Array(T);
+  for (let t = 0; t < T; t++) {
+    const a = tv(t, 0), b = tv(t, 1), c = tv(t, 2);
+    if (canon[a] === canon[b] || canon[b] === canon[c] || canon[a] === canon[c]) continue;
+    const ux = P(b, 0) - P(a, 0), uy = P(b, 1) - P(a, 1), uz = P(b, 2) - P(a, 2), vx = P(c, 0) - P(a, 0), vy = P(c, 1) - P(a, 1), vz = P(c, 2) - P(a, 2);
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx, l = Math.hypot(nx, ny, nz);
+    if (!(l > diag * diag * 1e-14)) continue;
+    nrm[t * 3] = nx / l; nrm[t * 3 + 1] = ny / l; nrm[t * 3 + 2] = nz / l; ok[t] = 1;
+  }
+  // each edge with the triangle slots (t * 3 + k, the side from corner k to k + 1) that have it
+  const edges = new Map();
+  for (let t = 0; t < T; t++) {
+    if (!ok[t]) continue;
+    for (let k = 0; k < 3; k++) {
+      const p = canon[tv(t, k)], q = canon[tv(t, (k + 1) % 3)], key = p < q ? p * nC + q : q * nC + p;
+      const e = edges.get(key); if (e) e.push(t * 3 + k); else edges.set(key, [t * 3 + k]);
+    }
+  }
+  const limF = faceDeg * Math.PI / 180, limS = shapeDeg * Math.PI / 180;
+  const corner = (p, q, r) => {                    // how far the corner at p, between the sides to q and r, is from square
+    const ux = P(q, 0) - P(p, 0), uy = P(q, 1) - P(p, 1), uz = P(q, 2) - P(p, 2), vx = P(r, 0) - P(p, 0), vy = P(r, 1) - P(p, 1), vz = P(r, 2) - P(p, 2);
+    const l = Math.hypot(ux, uy, uz) * Math.hypot(vx, vy, vz);
+    if (!(l > 0)) return Infinity;
+    let c = (ux * vx + uy * vy + uz * vz) / l; c = c < -1 ? -1 : c > 1 ? 1 : c;
+    return Math.abs(Math.acos(c) - Math.PI / 2);
+  };
+  const sameUv = (i, j) => !uvs || (Math.abs(uvs[i * 2] - uvs[j * 2]) <= 1e-6 && Math.abs(uvs[i * 2 + 1] - uvs[j * 2 + 1]) <= 1e-6);
+  const stats = { trisBefore: T, trisAfter: T, polygons: T, quads: 0, seams: 0, faces: 0, rebuilt: 0, vertsRemoved: 0, kept: { touching: 0, curved: 0, shading: 0, other: 0 } };
+  const cand = [];
+  for (const slots of edges.values()) {
+    if (slots.length !== 2) continue;
+    const s1 = slots[0], s2 = slots[1], t1 = (s1 / 3) | 0, t2 = (s2 / 3) | 0, k1 = s1 % 3, k2 = s2 % 3;
+    if (t1 === t2) continue;
+    // t1 runs the edge a → b, t2 must run it b → a (both facing the same way)
+    const a1 = tv(t1, k1), b1 = tv(t1, (k1 + 1) % 3), c = tv(t1, (k1 + 2) % 3);
+    const b2 = tv(t2, k2), a2 = tv(t2, (k2 + 1) % 3), d = tv(t2, (k2 + 2) % 3);
+    if (canon[b2] !== canon[b1] || canon[a2] !== canon[a1] || canon[c] === canon[d]) continue;
+    if (face && face[t1] !== face[t2] && (face[t1] >= 0 || face[t2] >= 0)) { stats.faces++; continue; }
+    if (!sameUv(a1, a2) || !sameUv(b1, b2)) { stats.seams++; continue; }
+    let cf = nrm[t1 * 3] * nrm[t2 * 3] + nrm[t1 * 3 + 1] * nrm[t2 * 3 + 1] + nrm[t1 * 3 + 2] * nrm[t2 * 3 + 2]; cf = cf < -1 ? -1 : cf > 1 ? 1 : cf;
+    const fold = Math.acos(cf);
+    if (fold > limF) continue;
+    // the four-sided shape a, d, b, c: its corners at a and b lie between c and d, those at c and d between a and b
+    const sq = [corner(a1, c, d), corner(b1, c, d), corner(c, a1, b1), corner(d, a1, b1)];
+    const worst = Math.max(...sq);
+    if (!(worst <= limS)) continue;
+    // convex: a and b on either side of the other diagonal c-d, seen along the two triangles' mean normal
+    const nx = nrm[t1 * 3] + nrm[t2 * 3], ny = nrm[t1 * 3 + 1] + nrm[t2 * 3 + 1], nz = nrm[t1 * 3 + 2] + nrm[t2 * 3 + 2];
+    const side = (v) => {
+      const ex = P(d, 0) - P(c, 0), ey = P(d, 1) - P(c, 1), ez = P(d, 2) - P(c, 2), fx = P(v, 0) - P(c, 0), fy = P(v, 1) - P(c, 1), fz = P(v, 2) - P(c, 2);
+      return (ey * fz - ez * fy) * nx + (ez * fx - ex * fz) * ny + (ex * fy - ey * fx) * nz;
+    };
+    const sa = side(a1), sb = side(b1);
+    if (!(sa * sb < 0)) continue;
+    cand.push([fold / limF + (sq[0] + sq[1] + sq[2] + sq[3]) / (4 * limS), t1, t2]);
+  }
+  cand.sort((x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2]);
+  const mate = new Int32Array(T).fill(-1);
+  for (const [, t1, t2] of cand) if (mate[t1] < 0 && mate[t2] < 0) { mate[t1] = t2; mate[t2] = t1; stats.quads++; }
+  const poly = new Int32Array(T).fill(-1);
+  let count = 0;
+  for (let t = 0; t < T; t++) { if (poly[t] >= 0) continue; poly[t] = count; if (mate[t] >= 0) poly[mate[t]] = count; count++; }
+  stats.polygons = count;
+  const out = new Uint32Array(T * 3);
+  for (let t = 0; t < T; t++) { out[t * 3] = tv(t, 0); out[t * 3 + 1] = tv(t, 1); out[t * 3 + 2] = tv(t, 2); }
+  return { index: out, poly, stats };
+}

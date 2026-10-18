@@ -57,9 +57,11 @@ const uvError = (k) => evalJS(`(() => {
     let x = 0, y = 0, z = 0, u = 0, v = 0; for (const i of c) { x += P.getX(i) / 3; y += P.getY(i) / 3; z += P.getZ(i) / 3; u += U.getX(i) / 3; v += U.getY(i) / 3; }
     const us = c.map(i => U.getX(i)); if (us.every(q => q === 0) && c.every(i => U.getY(i) === 0)) zero++;
     if (Math.max(...us) - Math.min(...us) > 0.5) continue;
-    const r = Math.hypot(x - cx, y, z) || 1, th = Math.acos(Math.max(-1, Math.min(1, y / r)));
-    let ph = Math.atan2(z, x - cx); if (ph < 0) ph += Math.PI * 2;
-    const eu = ph / (Math.PI * 2), ev = 1 - th / Math.PI;
+    // (the OBJ is Y up and the app stands it upright, Z up: the file's y is the app's z, the file's z the app's -y)
+    const fy = z, fz = -y;
+    const r = Math.hypot(x - cx, fy, fz) || 1, th = Math.acos(Math.max(-1, Math.min(1, fy / r)));
+    let ph = Math.atan2(fz, x - cx); if (ph < 0) ph += Math.PI * 2;
+    const eu = ph / (Math.PI * 2), ev = th / Math.PI;      // (the file's V is 1 - th / pi, from the bottom; the app holds V from the top, as glTF)
     if (Math.abs(eu - u) > 0.5) continue;
     if (ev < 0.06 || ev > 0.94) continue;
     errs.push(Math.max(Math.abs(eu - u), Math.abs(ev - v)));
