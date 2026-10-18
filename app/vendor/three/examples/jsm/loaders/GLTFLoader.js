@@ -3891,6 +3891,8 @@ class GLTFParser {
 			}
 
 			const group = new Group();
+			group.userData.__moPrims = true; // MeshOptimiser: the primitives of one glTF mesh (the app joins them into one part, a material a primitive)
+			for ( const m of meshes ) m.userData.__moPrim = true;
 
 			if ( meshDef.extensions ) addUnknownExtensionsToUserData( extensions, group, meshDef );
 
