@@ -128,3 +128,91 @@ console.log('meshrepair: all checks pass');
   if (fails) { console.error(fails + ' check(s) failed'); process.exit(1); }
   console.log('meshrepair: normal checks pass');
 }
+{ // Align across uv seams: a cube with every face its own four corners and uvs (as CAD exports do), all faces turned inward
+  const faces = [[0,1,2,3],[5,4,7,6],[4,0,3,7],[1,5,6,2],[3,2,6,7],[4,5,1,0]];
+  const C = [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+  const pos = [], uv = [], idx = [];
+  for (const f of faces) { const b = pos.length / 3; f.forEach((k, i) => { pos.push(...C[k]); uv.push(i & 1, i >> 1); }); idx.push(b, b + 1, b + 2, b, b + 2, b + 3); }
+  const r = repairMesh({ position: Float32Array.from(pos), uv: Float32Array.from(uv), index: Uint32Array.from(idx) }, { degenerate: false, outward: true });
+  ok(r.stats.flipped === 12, 'an inside-out cube with uv seams has all 12 faces turned, turned ' + r.stats.flipped);
+  ok(signedVolume(r) > 0.99, 'and faces outward after, volume ' + signedVolume(r));
+  ok(r.uv && r.stats.vertsAfter > 8, 'the uv seams stay (more than the 8 corners), got ' + r.stats.vertsAfter);
+}
+{ // a small patch turned the other way on an open sheet is turned to match the rest, also when the walk starts in the patch
+  const N = 10, pos = [], idx = [];
+  for (let j = 0; j <= N; j++) for (let i = 0; i <= N; i++) pos.push(i, j, 0);
+  const at = (i, j) => j * (N + 1) + i;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { idx.push(at(i, j), at(i + 1, j), at(i + 1, j + 1)); idx.push(at(i, j), at(i + 1, j + 1), at(i, j + 1)); }   // facing +z
+  for (const t of [0, 1, 2, 3]) { const x = idx[t * 3 + 1]; idx[t * 3 + 1] = idx[t * 3 + 2]; idx[t * 3 + 2] = x; }   // the first four (where the walk starts) face -z
+  const r = repairMesh({ position: Float32Array.from(pos), index: Uint32Array.from(idx) }, { degenerate: false, outward: true });
+  ok(r.stats.flipped === 4, 'only the 4 triangles of the patch are turned, turned ' + r.stats.flipped);
+  let up = 0; const p = r.position, x = r.index;
+  for (let t = 0; t < x.length; t += 3) { const a = x[t] * 3, b = x[t + 1] * 3, c = x[t + 2] * 3; if ((p[b] - p[a]) * (p[c + 1] - p[a + 1]) - (p[b + 1] - p[a + 1]) * (p[c] - p[a]) > 0) up++; }
+  ok(up === N * N * 2, 'every triangle faces +z after, ' + up + ' of ' + N * N * 2);
+  if (fails) { console.error(fails + ' check(s) failed'); process.exit(1); }
+  console.log('meshrepair: align checks pass');
+}
+{ // edges shared by three or more triangles and pinched corners are taken apart, and the Model inspector's check (meshcheck.js) agrees
+  const { checkMesh } = await import('../app/js/meshcheck.js');
+  // an outward box from (x0,y0,z0) to (x1,y1,z1), as 8 shared corners and 12 triangles
+  const box = (P, I, x0, y0, z0, x1, y1, z1) => {
+    const b = P.length / 3;
+    for (const [x, y, z] of [[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0],[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]]) P.push(x, y, z);
+    for (const t of [[0,3,2],[0,2,1],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[2,3,7],[2,7,6],[1,2,6],[1,6,5],[3,0,4],[3,4,7]]) I.push(b + t[0], b + t[1], b + t[2]);
+  };
+  const run = (P, I, extra = {}) => {
+    const r = repairMesh({ position: Float32Array.from(P), index: Uint32Array.from(I), ...extra }, { manifold: true });
+    return { r, c: checkMesh(r.position, r.index) };
+  };
+  { // two boxes that share an edge
+    const P = [], I = []; box(P, I, 0, 0, 0, 1, 1, 1); box(P, I, 1, 1, 0, 2, 2, 1);
+    const before = checkMesh(Float32Array.from(P), Uint32Array.from(I));
+    ok(before.nonManifoldEdges > 0, 'two boxes on one edge: the check sees edges shared by more than two triangles, ' + before.nonManifoldEdges);
+    const { r, c } = run(P, I);
+    ok(c.nonManifoldEdges === 0 && c.nonManifoldVertices === 0, 'after: no such edges or pinched corners, got ' + c.nonManifoldEdges + ' / ' + c.nonManifoldVertices);
+    ok(r.stats.trisAfter === 24 && c.insideOut === 0, 'every triangle stays and nothing is inside out');
+    ok(r.stats.splitEdges > 0 && r.stats.splitCorners === 2, 'it says what it split: ' + r.stats.splitEdges + ' edges at ' + r.stats.splitCorners + ' points');
+  }
+  { // two boxes that touch at one corner
+    const P = [], I = []; box(P, I, 0, 0, 0, 1, 1, 1); box(P, I, 1, 1, 1, 2, 2, 2);
+    const before = checkMesh(Float32Array.from(P), Uint32Array.from(I));
+    ok(before.nonManifoldVertices > 0, 'two boxes on one corner: the check sees a pinched corner');
+    const { r, c } = run(P, I);
+    ok(c.nonManifoldVertices === 0, 'after: no pinched corner, got ' + c.nonManifoldVertices);
+    let far = 0; for (let i = 0; i < r.position.length; i++) far = Math.max(far, Math.abs(r.position[i] - Math.round(r.position[i])));
+    ok(far > 0 && far < 1e-3, 'the copy moved by a hair only: ' + far);
+  }
+  { // a fin standing on a sheet, along one edge
+    const P = [0,0,0, 1,0,0, 1,1,0, 0,1,0, 2,0,0, 2,1,0, 1,0,1, 1,1,1], I = [0,1,2, 0,2,3, 1,4,5, 1,5,2, 1,2,7, 1,7,6];
+    const { r, c } = run(P, I);
+    ok(c.nonManifoldEdges === 0 && c.nonManifoldVertices === 0, 'a fin on a sheet: after, no such edges or pinched corners, got ' + c.nonManifoldEdges + ' / ' + c.nonManifoldVertices);
+    ok(r.stats.trisAfter === 6, 'the fin stays');
+  }
+  { // a sound box is left as it is
+    const P = [], I = []; box(P, I, 0, 0, 0, 1, 1, 1);
+    const { r } = run(P, I);
+    ok(!r.changed && r.stats.splitCorners === 0, 'a sound box is not changed');
+  }
+  { // a triangle stored twice with other uvs is doubled all the same
+    const P = [0,0,0, 1,0,0, 0,1,0, 0,0,0, 1,0,0, 0,1,0], UV = [0,0, 1,0, 0,1, .5,.5, .6,.5, .5,.6];
+    const r = repairMesh({ position: Float32Array.from(P), uv: Float32Array.from(UV), index: Uint32Array.from([0,1,2, 3,4,5]) });
+    ok(r.stats.duplicate === 1 && r.stats.trisAfter === 1, 'a doubled triangle with other uvs is removed, duplicates ' + r.stats.duplicate);
+  }
+  if (fails) { console.error(fails + ' check(s) failed'); process.exit(1); }
+  console.log('meshrepair: manifold checks pass');
+}
+{ // a turned face keeps its own corners: an inside-out box whose 8 corners are shared by its triangles and carry normals comes out whole
+  const { checkMesh } = await import('../app/js/meshcheck.js');
+  const V = [[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+  const F = [[0,3,2],[0,2,1],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[2,3,7],[2,7,6],[1,2,6],[1,6,5],[3,0,4],[3,4,7]];
+  const pos = Float32Array.from(V.flat()), nrm = Float32Array.from(V.flat().map(x => (x - 0.5) / Math.sqrt(0.75)));
+  const index = Uint32Array.from(F.flatMap(([a, b, c]) => [a, c, b]));          // every face wound inward
+  const r = repairMesh({ position: pos, normal: nrm, index }, { manifold: true });
+  const ch = checkMesh(r.position, r.index);
+  ok(r.stats.flipped === 12, 'all 12 faces turned, turned ' + r.stats.flipped);
+  ok(ch.degenerate === 0 && ch.duplicate === 0 && ch.nonManifoldEdges === 0 && ch.insideOut === 0 && ch.inconsistent === 0,
+    'and the box is whole after: ' + JSON.stringify({ degenerate: ch.degenerate, duplicate: ch.duplicate, nonManifoldEdges: ch.nonManifoldEdges, insideOut: ch.insideOut, inconsistent: ch.inconsistent }));
+  ok(signedVolume(r) > 0.99 && signedVolume(r) < 1.01, 'volume 1 after, got ' + signedVolume(r));
+  if (fails) { console.error(fails + ' check(s) failed'); process.exit(1); }
+  console.log('meshrepair: turned-corner checks pass');
+}

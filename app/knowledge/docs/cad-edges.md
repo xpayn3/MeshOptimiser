@@ -15,6 +15,10 @@ When a scene has this information, a **CAD edges** pill appears in the row of pi
 - **Face info on hover**: Off by default. Point at a face and a tip names it: plane, cylinder, cone, sphere, torus, a free-form surface and so on, with its radius or angle, its area and how many triangles it has. The face is tinted blue while you point at it.
 - **Tangent edges**: On by default. These are the edges where two faces run smoothly into each other, such as the borders of a fillet. Switch them off to see only the edges that are really sharp.
 
+## Flat faces that are exactly flat
+
+Two tools use the CAD faces as well as draw them. **Remove holes** and **Untriangulate** both need to know which triangles make up one flat face. Without the CAD information they work it out from the angles between triangles, with a small tolerance, and a face whose tessellation wobbles a little can fall apart into facets, or two faces that meet at a very shallow angle can be taken for one. With it, a face the CAD file calls a plane is one flat face, exactly, and two neighbouring plane faces are never joined. The rest of the part is handled as before. Nothing to switch on: it happens whenever the part still carries its CAD faces.
+
 > A part you edit (decimate, remesh, move its points) goes back to ordinary outlines, because the CAD faces no longer match its triangles. Copies of the same part share the information. A simplified level-of-detail part has none.
 
 ## Surface parts

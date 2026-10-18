@@ -7,7 +7,7 @@ Hiding is how you look inside a model. A hidden part is still in the scene. It i
 - `H`: Hide the selected parts
 - `Shift + H`: Hide the rest: everything that is not selected
 - `Alt + H`: Show all parts again
-- `S`: Isolate the selection. Press it again to show everything.
+- `S`: Isolate the selection. When the selection is already the only thing on show, S shows everything again.
 
 ## Isolate
 
@@ -15,6 +15,7 @@ Hiding is how you look inside a model. A hidden part is still in the scene. It i
 2. Press `S`. Everything else disappears.
 3. A pill at the top of the viewport says so, for example “Isolated · 1 of 95 parts”.
 4. Press `S` again, or click the pill, to show everything.
+5. To look at other parts instead, select them and press `S`: the view isolates those. `S` leaves the isolation only when the selected parts are already the only ones on show.
 
 ## In the parts tree
 

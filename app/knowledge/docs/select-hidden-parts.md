@@ -40,6 +40,6 @@ Selecting changes nothing. The delete is one undo step: `Ctrl + Z`.
 - If a part that you can see through a small opening was selected, run it again with **Accuracy** on Thorough.
 - To remove only the hidden fasteners and keep hidden structure, type part of their name in **Name contains**, or set a small value in **Largest part, of model size**.
 
-[Smart optimise](meshoptimiser://docs/smart-optimise) runs this command as one of its steps, **Remove parts hidden inside**, with its usual settings.
+[Smart optimise](meshoptimiser://docs/smart-optimise) runs this command as one of its steps, **Hidden parts**, with its usual settings.
 
 Related: [remove-hidden-faces](meshoptimiser://docs/remove-hidden-faces), [delete-small-parts](meshoptimiser://docs/delete-small-parts), [fasteners](meshoptimiser://docs/fasteners), [smart-optimise](meshoptimiser://docs/smart-optimise), [hide-isolate](meshoptimiser://docs/hide-isolate), [workflow](meshoptimiser://docs/workflow)

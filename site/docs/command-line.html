@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -168,7 +170,7 @@
           <h2 id="examples">Examples</h2>
           <dl class="table">
             <div><dt><code>python step2glb.py input.step --quality 0.2 --min-size 0.5</code></dt><dd>A finer tessellation, and parts smaller than 0.5% of the model left out.</dd></div>
-            <div><dt><code>python step2glb.py input.step --relative</code></dt><dd>Quality as a fraction of the model’s size, so it does not depend on the file’s units.</dd></div>
+            <div><dt><code>python step2glb.py input.step --relative</code></dt><dd>Quality as a fraction of the size of each edge, so it does not depend on the file’s units.</dd></div>
             <div><dt><code>python step2glb.py input.step --meshopt</code></dt><dd>Compress the result with gltfpack.</dd></div>
             <div><dt><code>python step2glb.py input.step --simplify 0.5</code></dt><dd>Also halve the triangle count. Lossy.</dd></div>
             <div><dt><code>python step2glb.py input.step --no-colors --no-instance</code></dt><dd>The plain reader: no colours, no instancing.</dd></div>
@@ -184,7 +186,7 @@
           <h2 id="mesh-quality">Mesh quality</h2>
           <dl class="table">
             <div><dt><code>--quality</code>, <code>-q</code></dt><dd>How closely the triangles follow the true surface (the linear deflection). Smaller is finer and heavier. The default is 0.5, in the units of the file, normally millimetres.</dd></div>
-            <div><dt><code>--relative</code></dt><dd>Reads <code>--quality</code> as a fraction of the model’s bounding-box diagonal instead of an absolute distance.</dd></div>
+            <div><dt><code>--relative</code></dt><dd>Reads <code>--quality</code> as a fraction of each edge’s own size (OpenCascade’s relative deflection) instead of an absolute distance: short edges get a finer mesh, long ones a coarser one.</dd></div>
             <div><dt><code>--angular</code></dt><dd>The angular deflection, in radians: a second limit on how coarsely curved surfaces are cut into triangles. The default is 0.5, about 28.6°.</dd></div>
             <div><dt><code>--tiers</code></dt><dd>Tessellate by part size. Give the two limits between small, medium and large parts, in percent of the size of the whole model, then a quality in millimetres and an angle in degrees for small, for medium and for large parts. For example <code>--tiers 5,30:2,60:0.2,30:0.05,10</code>.</dd></div>
             <div><dt><code>--min-edge</code></dt><dd>The smallest triangle edge the mesher may make, in the units of the file. It stops tiny fillets and threads from filling up with slivers. The default, 0, is no limit.</dd></div>
@@ -207,7 +209,7 @@
             <div><dt><code>--no-colors</code></dt><dd>Use the plain reader: geometry only, no colours, names or hierarchy. The fastest.</dd></div>
             <div><dt><code>--force-colors</code></dt><dd>Always read colours, names and the hierarchy. Without this option, the converter skips them for files over 1 GB.</dd></div>
             <div><dt><code>--no-shuo</code></dt><dd>Skip per-instance colour overrides. A big saving in time on assemblies with many repeated parts.</dd></div>
-            <div><dt><code>--no-layers</code></dt><dd>Skip CAD layer information.</dd></div>
+            <div><dt><code>--no-layers</code></dt><dd>Skip the CAD layers. With them read, each part carries the names of its layers into the GLB, where the app shows them and selects by them.</dd></div>
             <div><dt><code>--no-materials</code></dt><dd>Skip material information.</dd></div>
             <div><dt><code>--no-step-names</code></dt><dd>Skip product names. Parts get generic names in the tree.</dd></div>
             <div><dt><code>--no-step-props</code></dt><dd>Skip validation properties such as mass and area.</dd></div>

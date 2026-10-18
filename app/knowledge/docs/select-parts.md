@@ -42,6 +42,7 @@ The card **Selection & actions** in the right sidebar has buttons for the common
 - **Make unique**: Gives each selected shared part a mesh of its own, so changing, reducing or deleting detail on it leaves the other copies alone. One undo step.
 - **By colour**: Selects every part that shares a colour with the selection.
 - **By name**: Asks for a pattern and selects every part whose name matches it. Typing `screw` selects every part with screw in its name, in capitals or not. The pattern is a regular expression, a compact way to describe text, so some characters such as `.` and `*` have a special meaning.
+- **By layer**: In the command search (`Ctrl + K`), **Select by layer** lists the CAD layers of the scene with how many parts are on each; click one to select them. A part's layer is also a badge in the Properties card, and a click on the badge does the same. Layers come from a STEP file imported with **Keep layers** on under **What to read**; a scene saved here keeps them.
 
 Two tools select for you in a cleverer way: [Select hidden parts](meshoptimiser://docs/select-hidden-parts) and the size threshold of [Delete small parts](meshoptimiser://docs/delete-small-parts).
 

@@ -297,5 +297,18 @@ for (const n of [600, 3000]) {
   check('with the shell open somewhere, no piece is judged inside', !r4.enclosed, JSON.stringify({ holes: r4.holes, enclosed: r4.enclosed }));
 }
 
+// ── 7. a depth limit (opts.maxDepth): engraved lettering is a shallow pocket, a bore is not
+{
+  const g = plate([{ x: 0, y: 0, r: 5, kind: 'blind', depth: 2.5 }]);
+  const shallowOnly = fill(g, 20, { maxDepth: 1 });
+  check('a 2.5 mm deep pocket is left alone with the depth limit at 1 mm', shallowOnly.holes === 0 && shallowOnly.skipped.tooDeep === 1, JSON.stringify({ holes: shallowOnly.holes, skipped: shallowOnly.skipped }));
+  const deeper = fill(g, 20, { maxDepth: 3 });
+  check('…and closed with the limit at 3 mm', deeper.holes === 1 && deeper.blind === 1);
+  const none = fill(g, 20, { maxDepth: 0 });
+  check('…and 0 means no depth limit', none.holes === 1);
+  const thr = fill(through, 20, { maxDepth: 1 });
+  check('the depth limit does not touch a through hole', thr.holes === 1);
+}
+
 console.log(`holefill-proof: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

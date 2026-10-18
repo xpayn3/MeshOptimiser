@@ -28,18 +28,20 @@
 //   opts.limitDeg      also a limited dissolve of what is left on faces that are nearly flat: a point goes when the triangles round it
 //                      turn from each other by no more than this (degrees) and the surface moves by less than opts.limitTol (mesh units;
 //                      default a thousandth of the part's size). 0 (the default) is off.
-//   opts.triangulate   (contour, holes) → [[i, j, k], …]: indices into contour then holes, each a list of [x, y]
+//   opts.poly          Int32Array, a polygon number per triangle where it is already known (the CAD plane faces of a STEP: exact,
+//                      whatever the tessellation's normals say), -1 elsewhere; those grow by angle as usual
+//   opts.triangulate   (contour, holes) ý [[i, j, k], &]: indices into contour then holes, each a list of [x, y]
 //                      (THREE.ShapeUtils does this; it is passed in so this file needs no library)
 // Returns { index, poly, stats } or null: `index` the new triangle list (the mesh's own vertex numbers, so the
 // caller drops the vertices nothing uses any more), `poly` the polygon of every new triangle.
 
-import { analysePolygons } from './wirelines.js?v=2';
+import { analysePolygons } from './wirelines.js?v=3';
 import { dissolvePoints, applyDissolve, reduceCollinear, restoreDropped } from './dissolve.js?v=3';
 
 export function untriangulate(positions, index, opts = {}) {
   const { angleDeg = 1, normals = null, normalTol = 5, triangulate, flip = true, tolerance = 0 } = opts;
   if (typeof triangulate !== 'function') throw new Error('untriangulate needs a triangulate function');
-  const a = analysePolygons(positions, index, angleDeg);
+  const a = analysePolygons(positions, index, angleDeg, opts.poly && opts.poly.length === (index ? index.length / 3 : positions.length / 9) ? opts.poly : null);
   if (!a) return null;
   const { T, tv, canon, diag, nrm, adj, poly, polys } = a;
   const planeTol = Math.max(diag * 2e-5, +tolerance || 0), lineTol = diag * 5e-6;     // how far off the plane / off a straight run still counts as on it
@@ -53,7 +55,7 @@ export function untriangulate(positions, index, opts = {}) {
   for (let t = 0; t < T; t++) order[fill[poly[t]]++] = t;
 
   const cosN = Math.cos(normalTol * Math.PI / 180);
-  const rebuilt = new Map();                       // polygon → Uint32Array of its new triangles (vertex numbers)
+  const rebuilt = new Map();                       // polygon ý Uint32Array of its new triangles (vertex numbers)
   const P = (v, c) => positions[v * 3 + c];
 
   // A polygon the whole-outline rebuild cannot take (its outline touches itself, or is too odd for the triangulator) still has
@@ -165,7 +167,7 @@ export function untriangulate(positions, index, opts = {}) {
     const N = [nrm[seed * 3], nrm[seed * 3 + 1], nrm[seed * 3 + 2]];
 
     // the outline: edges whose other side is not this polygon
-    const next = new Map();                        // place → { to place, vertex number at this place }
+    const next = new Map();                        // place ý { to place, vertex number at this place }
     const here = new Set();                        // every place a triangle of this polygon touches
     let pinch = false;
     for (let i = from; i < to && !pinch; i++) {
@@ -367,7 +369,7 @@ function flipToDelaunay(tris, pts, tol) {
   const cross = (a, b, c) => (pts[b][0] - pts[a][0]) * (pts[c][1] - pts[a][1]) - (pts[c][0] - pts[a][0]) * (pts[b][1] - pts[a][1]);
   for (const t of tris) if (cross(t[0], t[1], t[2]) < 0) { const w = t[1]; t[1] = t[2]; t[2] = w; }      // all counter-clockwise
   const key = (a, b) => a < b ? a + ',' + b : b + ',' + a;
-  const edge = new Map();                          // edge → [triangle, triangle]
+  const edge = new Map();                          // edge ý [triangle, triangle]
   const add = (a, b, t) => { const k = key(a, b), e = edge.get(k); if (e) e[1] = t; else edge.set(k, [t, -1]); };
   const drop = (a, b, t) => { const k = key(a, b), e = edge.get(k); if (!e) return; if (e[0] === t) { e[0] = e[1]; } e[1] = -1; if (e[0] < 0) edge.delete(k); };
   for (let t = 0; t < n; t++) for (let k = 0; k < 3; k++) add(tris[t][k], tris[t][(k + 1) % 3], t);

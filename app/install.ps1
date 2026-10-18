@@ -17,7 +17,7 @@ $ProgressPreference = 'SilentlyContinue'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 $Feed = 'https://xpayn3.github.io/MeshOptimiser/latest.json'
 $Repo = 'xpayn3/MeshOptimiser'
-$Skip = @('.venv', 'inbox', 'exports', '__pycache__', '.update', 'server.log', '.show-console')      # belong to this PC: an update leaves them alone (in app\ too)
+$Skip = @('.venv', 'inbox', 'exports', '__pycache__', '.update', 'server.log', 'server.log.1', '.show-console')      # belong to this PC: an update leaves them alone (in app\ too)
 $NotShipped = @('tests', 'tools', 'docs', 'site', 'dist', '_archive', '.github', '.claude', 'CHANGELOG.md', 'UNRELEASED_FIXES.md', '.gitignore', '.gitattributes')      # in a source archive, not in the release zip
 $Launchers = @('start.bat', 'start_hidden.vbs', 'start.command', 'start.ico', 'Install MeshOptimiser.bat', 'README.md', 'README.txt', 'LICENSE')      # the files of the install folder itself
 
@@ -153,6 +153,12 @@ try {
     if (($names -notcontains ($prefix + 'start.bat')) -or ($names -notcontains ($prefix + 'app/serve.py'))) { Line ''; Fail 'The download does not look like MeshOptimiser (no start.bat or app\serve.py inside).' }
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 
+    # MeshOptimiser still running from this folder holds its Python runtime open (python312.dll): the copy would stop half-way,
+    # after an old .venv had already gone. Ask for it to be closed first, before anything is touched.
+    $full = [IO.Path]::GetFullPath($InstallDir).TrimEnd('\') + '\'
+    $running = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { try { $_.Path -and $_.Path.StartsWith($full, [StringComparison]::OrdinalIgnoreCase) } catch { $false } })
+    if ($running.Count) { Line ''; Fail 'MeshOptimiser is running from this folder. Close its window (and the console, if it shows one), then run this again.' }
+
     # an install from before the app\ folder: everything loose in the folder. Move what belongs to this PC, put the rest aside.
     $oldLayout = (Test-Path (Join-Path $InstallDir 'serve.py')) -and -not (Test-Path (Join-Path $InstallDir 'app\serve.py'))
     if ($oldLayout) {
@@ -202,6 +208,12 @@ try {
       if (((Get-Date) - $last).TotalMilliseconds -gt 60) { $last = Get-Date; Bar ($i / $entries.Count) "$i of $($entries.Count) files" }
     }
     Done-Bar "$($entries.Count) files"
+    # The in-app updater's backup and its unconfirmed-update marker belong to the version that was here before: kept, a later
+    # "Restore the earlier version" (or a start that thinks an update failed) would copy those old files over this one.
+    foreach ($stale in @('app\.update\backup', 'app\.update\pending.json')) {
+      $p = Join-Path $InstallDir $stale
+      if (Test-Path -LiteralPath $p) { try { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop } catch { Note "Could not clear $stale; the app refuses to use it anyway." } }
+    }
   } finally { $arc.Dispose() }
 
   # 4. a browser for the app's own window (Chrome is the best: its graphics are what MeshOptimiser is made for)

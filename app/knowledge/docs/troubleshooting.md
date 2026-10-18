@@ -57,7 +57,7 @@ The window cannot be smaller than 960 by 560 pixels. In a smaller window the app
 
 Large assemblies take time, and the reading of names, colours and the tree is the slowest part. The progress card keeps showing the converter’s latest message while it works. To make it faster, change the import settings:
 
-- Under **What to read**, leave **Instance overrides**, **Layers** and **Validation properties** off.
+- Under **What to read**, leave **Instance overrides**, **Keep layers** and **Validation properties** off.
 - Choose a coarser **Surface quality**.
 - Set **Drop small parts** above 0 to skip tiny fasteners.
 - For a huge file where you only need the shape, choose **Geometry only** under **Colours and structure**.

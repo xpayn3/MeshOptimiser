@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" aria-current="page" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -208,6 +210,7 @@
             <div><dt>Straighten</dt><dd>For edges. Moves the points along a picked line of edges onto the straight line between its two ends.</dd></div>
             <div><dt>Weld</dt><dd>For points and edges. Opens a small card of its own, with <span class="ui">Join within</span> and a <span class="ui">Weld</span> button. Picked points become one, at their middle. With a distance in <span class="ui">Join within</span>, the points that are that close to each other become one each. With 0, all the picked points become one. Picked edges collapse to a point. Triangles that are left with two corners in one place go.</dd></div>
             <div><dt>Fill</dt><dd>For edges. Closes a hole whose whole rim is picked. A double-click on an open edge picks the whole loop. The cap has points of its own, so it shades on its own.</dd></div>
+            <div><dt>Close</dt><dd>Close open edges. With nothing picked it caps every rim where the surface stops, on the selected parts, which is Fill for all the open rims at once: for a part that is missing faces, open bores or a side that was never exported, that should be watertight. A rim that folds over, or that meets another rim at a point, is left, and the message says how many. With one rim picked (edges; a double-click picks the loop) it caps that rim. With two rims picked it closes the gap between them with a strip of triangles from one to the other: the ring floor between the two rims of a counterbore, the wall between its floor and its mouth, the missing length of a tube. The two rims need not be the same size or have the same number of points. It is also in the search as <span class="ui">Close open edges</span>, from Model mode too. One undo step.</dd></div>
             <div><dt>Extract</dt><dd>For polygons. Takes the picked polygons out into a part of their own, in the same place and with the same material.</dd></div>
             <div><dt>Reverse normals</dt><dd>For polygons. Described above.</dd></div>
           </dl>
@@ -231,7 +234,7 @@
           </ul></div>
         </div>
         <nav class="kb-turn" aria-label="More articles">
-          <a class="is-before" href="../docs/move-rotate-scale.html"><span>Before</span><strong>Move, rotate, scale and measure</strong></a>
+          <a class="is-before" href="../docs/remove-fillets.html"><span>Before</span><strong>Remove fillets and chamfers</strong></a>
           <a class="is-after" href="../docs/align-to-floor.html"><span>Next</span><strong>Align to floor</strong></a>
         </nav>
       </article>

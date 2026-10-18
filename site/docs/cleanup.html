@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -169,7 +171,7 @@
           </dl>
           <p>Each command reports what it did, or says that it found nothing.</p>
           <aside class="kb-note"><p>Be careful with <span class="ui">Deduplicate geometry</span> on an assembly. It removes a part only when another part with identical mesh data sits in the same place (two copies stacked on each other), so a set of identical bolts placed in different positions stays. Check the parts count afterwards, and press <kbd>Ctrl</kbd><kbd>Z</kbd> if it took parts you wanted. (Before v0.20.0 it removed every repeat, placed or not; that was a bug.)</p></aside>
-          <p><a href="../docs/smart-optimise.html">Smart optimise</a> starts every run with the first three commands, empty parts, degenerate parts and empty groups, under the name <span class="ui">Remove empty and broken parts</span>. It does not run <span class="ui">Deduplicate geometry</span> or any of the other commands on this page.</p>
+          <p><a href="../docs/smart-optimise.html">Smart optimise</a> starts every run with the first three commands, empty parts, degenerate parts and empty groups, under the name <span class="ui">Empty parts</span>. It does not run <span class="ui">Deduplicate geometry</span> or any of the other commands on this page.</p>
           <h2 id="edit-selection">Edit selection</h2>
           <dl class="table">
             <div><dt>Recentre on origin</dt><dd>Moves the model so the centre of its bounding box sits at 0,0,0.</dd></div>

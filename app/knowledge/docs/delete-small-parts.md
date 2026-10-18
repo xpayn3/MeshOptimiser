@@ -39,6 +39,6 @@ The delete is one undo step. Press `Ctrl + Z` and the parts are back.
 
 > A common mistake is a threshold that is too high. At a few percent, handles, knobs, feet and hinges count as small too. Always press **Isolate** and look before you delete.
 
-To remove only the hardware, and not every small part, use [Fasteners](meshoptimiser://docs/fasteners). [Smart optimise](meshoptimiser://docs/smart-optimise) has this step too, under the name **Remove parts under**.
+To remove only the hardware, and not every small part, use [Fasteners](meshoptimiser://docs/fasteners). [Smart optimise](meshoptimiser://docs/smart-optimise) has this step too, under the name **Small parts**.
 
 Related: [select-hidden-parts](meshoptimiser://docs/select-hidden-parts), [fasteners](meshoptimiser://docs/fasteners), [smart-optimise](meshoptimiser://docs/smart-optimise), [read-the-numbers](meshoptimiser://docs/read-the-numbers), [workflow](meshoptimiser://docs/workflow)

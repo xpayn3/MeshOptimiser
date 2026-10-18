@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -157,7 +159,7 @@
             <div><dt><kbd>H</kbd></dt><dd>Hide the selected parts</dd></div>
             <div><dt><kbd>Shift</kbd><kbd>H</kbd></dt><dd>Hide the rest: everything that is not selected</dd></div>
             <div><dt><kbd>Alt</kbd><kbd>H</kbd></dt><dd>Show all parts again</dd></div>
-            <div><dt><kbd>S</kbd></dt><dd>Isolate the selection. Press it again to show everything.</dd></div>
+            <div><dt><kbd>S</kbd></dt><dd>Isolate the selection. When the selection is already the only thing on show, S shows everything again.</dd></div>
           </dl>
           <h2 id="isolate">Isolate</h2>
           <ol class="kb-steps">
@@ -165,6 +167,7 @@
             <li>Press <kbd>S</kbd>. Everything else disappears.</li>
             <li>A pill at the top of the viewport says so, for example “Isolated · 1 of 95 parts”.</li>
             <li>Press <kbd>S</kbd> again, or click the pill, to show everything.</li>
+            <li>To look at other parts instead, select them and press <kbd>S</kbd>: the view isolates those. <kbd>S</kbd> leaves the isolation only when the selected parts are already the only ones on show.</li>
           </ol>
           <figure class="kb-figure"><a class="zoom" href="../Images/apps/meshoptimiser-isolate.webp" data-group="article" data-caption="A set of parts on their own, isolated."><img src="../Images/apps/meshoptimiser-isolate.webp" alt="MeshOptimiser: A set of parts on their own, isolated." width="2400" height="1350" loading="lazy" decoding="async" /></a><figcaption>A set of parts on their own, isolated.</figcaption></figure>
           <h2 id="in-the-parts-tree">In the parts tree</h2>

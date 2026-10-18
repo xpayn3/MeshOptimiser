@@ -7,7 +7,7 @@ Features:
   - XCAF-based STEP reader: extracts per-solid colors + names + assembly tree
   - PCA pose-normalized hash: same shape at different positions/rotations is detected
     as instances → one geometry on GPU + per-instance transforms
-  - Configurable tessellation quality (absolute or relative to bbox diagonal)
+  - Configurable tessellation quality (absolute, or relative to the size of each edge)
   - Optional size threshold (drop tiny parts during conversion)
   - Writes GLB with PBR materials so the web viewer picks up color groups
   - Optional EXT_meshopt_compression via gltfpack (industry-standard, ~10x smaller)
@@ -20,7 +20,7 @@ Usage:
     python step2glb.py input.step --quality 0.2 --min-size 0.5
     python step2glb.py input.step --simplify 0.5    # halve triangle count (lossy)
     python step2glb.py input.step --no-meshopt      # disable auto-meshopt
-    python step2glb.py input.step --relative        # quality is fraction of diag
+    python step2glb.py input.step --relative        # quality is a fraction of each edge's size
     python step2glb.py input.step --no-colors --no-instance   # plain reader, no instancing
     python step2glb.py part.iges                    # IGES / BREP: same options as STEP
     python step2glb.py input.step --lod 100,50,25   # also input_lod1.glb, input_lod2.glb
@@ -151,8 +151,8 @@ from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS_Shape, TopoDS
 from OCP.TDocStd import TDocStd_Document
 from OCP.TCollection import TCollection_ExtendedString
-from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorType
-from OCP.TDF import TDF_LabelSequence, TDF_Label, TDF_Tool
+from OCP.XCAFDoc import XCAFDoc_DocumentTool, XCAFDoc_ColorType, XCAFDoc_ColorTool
+from OCP.TDF import TDF_LabelSequence, TDF_Label, TDF_Tool, TDF_AttributeSequence
 from OCP.Quantity import Quantity_Color
 from OCP.TDataStd import TDataStd_Name, TDataStd_NamedData
 from OCP.TCollection import TCollection_AsciiString
@@ -219,8 +219,8 @@ def input_kind(path) -> str:
 @dataclass
 class Config:
     """All runtime knobs in one place. Replaces the prior globals()-poking pattern."""
-    quality: float = 0.5         # linear deflection, mm (or fraction of diag if relative=True)
-    relative: bool = False       # interpret quality as fraction of overall bbox diagonal
+    quality: float = 0.5         # linear deflection, mm (or a fraction of each edge's size if relative=True)
+    relative: bool = False       # OCCT's relative deflection: each edge gets quality x its own size, a face the largest of its edges
     angular: float = 0.5         # angular deflection, radians (~28.6 degrees default)
     min_size_pct: float = 0.0    # drop parts whose bbox-diag is < this % of model diag
     instance: bool = True        # collapse identical shapes into glTF refs
@@ -363,20 +363,34 @@ def _save_xcaf_cache(doc, path: Path) -> None:
         # Some OCP versions auto-init or expose this differently; if it's
         # not available the SaveAs will tell us with a clearer error.
         pass
+    t0 = time.time()
     status = app.SaveAs(doc, TCollection_ExtendedString(str(path)))
     # PCDM_StoreStatus enum: 0 == PCDM_SS_OK; non-zero is some failure mode.
     if int(status) != 0:
         raise RuntimeError(f"OCAF SaveAs returned status={status}")
+    # SaveAs has said OK and written "Document_" beside the STEP instead (after an Open in the same run): the cache was then
+    # never renewed. A write that did not reach the file is an error.
+    if not path.exists() or path.stat().st_mtime < t0 - 2:
+        raise RuntimeError("OCAF SaveAs reported success but did not write the cache file")
 
 
 def _load_xcaf_cache(path: Path):
     """Read an OCCT binary OCAF/XCAF file, returning the same 4-tuple as
     parse_step_xcaf so callers don't need to special-case the cached path."""
     app = _xcaf_app()
-    doc = TDocStd_Document(TCollection_ExtendedString("step-doc"))
-    status = app.Open(TCollection_ExtendedString(str(path)), doc)
+    doc = TDocStd_Document(TCollection_ExtendedString("BinXCAF"))
+    # app.Open() fills a document of its own and hands it back through a C++ out-parameter, which OCP drops: the document
+    # passed in stayed empty, every cache load failed ("no shapes") and the STEP was parsed again each time. The retrieval
+    # driver reads into the document given to it.
+    try:
+        from OCP.BinXCAFDrivers import BinXCAFDrivers_DocumentRetrievalDriver
+        drv = BinXCAFDrivers_DocumentRetrievalDriver()
+        drv.Read(TCollection_ExtendedString(str(path)), doc, app)
+        status = drv.GetStatus()
+    except ImportError:
+        status = app.Open(TCollection_ExtendedString(str(path)), doc)
     if int(status) != 0:
-        raise RuntimeError(f"OCAF Open returned status={status}")
+        raise RuntimeError(f"OCAF read returned status={status}")
     shape_tool = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
     color_tool = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
     free_labels = TDF_LabelSequence()
@@ -641,17 +655,34 @@ def _loose_shells(shape, color_tool, default_color):
         shapes.append(sh)
         colours.append(get_shape_color(sh, color_tool) or default_color)
         exp.Next()
+    # Faces in no shell at all (a surface model: trimmed or curve-bounded surfaces, as gear.stp of the AP203 samples has 32 of):
+    # they were dropped, and such a STEP came out as "no solid bodies". One body a colour, as an IGES surface model gets.
+    from OCP.TopoDS import TopoDS_Compound
+    loose = TopoDS_Compound(); b = BRep_Builder(); b.MakeCompound(loose)
+    n = 0
+    exp = TopExp_Explorer(shape, TopAbs_FACE, TopAbs_SHELL)
+    while exp.More():
+        b.Add(loose, exp.Current()); n += 1
+        exp.Next()
+    if n:
+        fs, fc = _surface_bodies(loose, color_tool, default_color)
+        shapes += fs; colours += fc
     return shapes, colours
 
 
 def get_label_color(label: TDF_Label, color_tool) -> tuple[float, float, float] | None:
-    """Get the RGB color of a shape label, trying surface/generic/curve types in order."""
+    """Get the RGB color of a shape label, trying surface/generic/curve types in order.
+
+    The label form of GetColor is static in OCP (GetColor_s); the bound method takes only a shape, so calling it with a label
+    raised a TypeError that was swallowed here, and no colour on a label was ever read (only colours on shapes and through
+    VisMaterials came through)."""
     c = Quantity_Color()
+    get = getattr(XCAFDoc_ColorTool, "GetColor_s", None)
     for t in (XCAFDoc_ColorType.XCAFDoc_ColorSurf,
               XCAFDoc_ColorType.XCAFDoc_ColorGen,
               XCAFDoc_ColorType.XCAFDoc_ColorCurv):
         try:
-            if color_tool.GetColor(label, t, c):
+            if (get(label, t, c) if get else color_tool.GetColor(label, t, c)):
                 return (c.Red(), c.Green(), c.Blue())
         except Exception:
             pass
@@ -720,6 +751,70 @@ def get_shape_color(shape, color_tool) -> tuple[float, float, float] | None:
         except Exception:
             pass
     return None
+
+
+def _dominant_face_color(solid, shape_tool, color_tool):
+    """The colour most of a solid's faces carry (by count), or None when none of them has one."""
+    counts: dict = {}
+    try:
+        fx = TopExp_Explorer(solid, TopAbs_FACE)
+        n = 0
+        while fx.More() and n < 20000:
+            face = fx.Current(); n += 1
+            col = get_shape_color(face, color_tool)
+            if col is None:
+                try:
+                    flbl = TDF_Label()
+                    if shape_tool.FindShape_s(face, flbl): col = get_label_color(flbl, color_tool)
+                except Exception:
+                    col = None
+            if col is not None:
+                key = tuple(round(v, 4) for v in col)
+                counts[key] = counts.get(key, 0) + 1
+            fx.Next()
+    except Exception:
+        return None
+    return max(counts.items(), key=lambda kv: kv[1])[0] if counts else None
+
+
+def _split_by_face_color(solid, shape_tool, color_tool, body_color):
+    """A solid whose faces carry more than one colour (a face painted apart from its body: SolidWorks, Creo), as one compound
+    of faces a colour: [(shape, colour), ...]; None when every face shows the same colour. A face with no colour of its own
+    takes the body's. Before, the body took one colour and faces in a second colour showed in the first."""
+    from OCP.TopoDS import TopoDS_Compound
+    groups: dict = {}
+    order: list = []
+    try:
+        fx = TopExp_Explorer(solid, TopAbs_FACE)
+        n = 0
+        while fx.More():
+            face = fx.Current(); n += 1
+            if n > 50000:
+                return None                   # (a body this big keeps one colour: the scan would cost more than it shows)
+            col = get_shape_color(face, color_tool)
+            if col is None:
+                try:
+                    flbl = TDF_Label()
+                    if shape_tool.FindShape_s(face, flbl): col = get_label_color(flbl, color_tool)
+                except Exception:
+                    col = None
+            key = tuple(round(v, 4) for v in (col or body_color)) if (col or body_color) else None
+            if key not in groups:
+                groups[key] = []; order.append(key)
+            groups[key].append(face)
+            fx.Next()
+    except Exception:
+        return None
+    if len(groups) < 2:
+        return None
+    out = []
+    b = BRep_Builder()
+    for key in order:
+        comp = TopoDS_Compound(); b.MakeCompound(comp)
+        for face in groups[key]:
+            b.Add(comp, face)
+        out.append((comp, key))
+    return out
 
 
 def get_label_name(label: TDF_Label) -> str | None:
@@ -865,10 +960,15 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
         # stock label-only lookup doesn't.
         solids = []
         solid_colors = []
+        # faces have colours of their own only where the product has sub-shapes in the document (no scan elsewhere)
+        try:
+            subs = TDF_LabelSequence()
+            face_colours = bool(XCAFDoc_ShapeTool.GetSubShapes_s(label, subs)) and subs.Length() > 0
+        except Exception:
+            face_colours = False
         exp = TopExp_Explorer(shape, TopAbs_SOLID)
         while exp.More():
             solid = exp.Current()
-            solids.append(solid)
             scol = None
             # First try: find the solid's own label and read its color.
             try:
@@ -882,8 +982,19 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
             # Fallback: shape-direct color attachment.
             if scol is None:
                 scol = get_shape_color(solid, color_tool)
+            # Then the faces: a SolidWorks STEP often colours faces and neither the body nor the part, and the part came out grey.
+            # The body takes the colour most of its faces carry (one colour a body: faces in a second colour show in the first).
+            if scol is None and color is None:
+                scol = _dominant_face_color(solid, shape_tool, color_tool)
             # Final fallback: inherit the product's color.
-            solid_colors.append(scol or color)
+            split = _split_by_face_color(solid, shape_tool, color_tool, scol or color) if face_colours else None
+            if split:
+                for piece, pcol in split:
+                    solids.append(piece); solid_colors.append(pcol)
+                RESULT["bodies_split_by_face_colour"] = RESULT.get("bodies_split_by_face_colour", 0) + 1
+            else:
+                solids.append(solid)
+                solid_colors.append(scol or color)
             exp.Next()
         if not solids and surfaces:
             # An IGES or BREP surface model: no solid, so the faces are the body.
@@ -895,6 +1006,57 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
         products[key] = XcafProduct(name=name, color=color, solids=solids,
                                      meshes=[], solid_colors=solid_colors)
         return key
+
+    # An instance can carry a colour of its own: on its component label (every part under that instance takes it), or a SHUO
+    # (specified higher usage occurrence: one occurrence, named by its whole path of components, coloured apart from the other
+    # copies of the same part). Such an occurrence gets a copy of the product in that colour; the copy shares the solids, so
+    # it is meshed once (extract_product_meshes) and only its material differs. Before, neither was read and every copy came
+    # out in the product's colour, while the "Instance overrides (SHUO)" switch made reading slower for nothing.
+    def coloured_variant(prod_key: str, col) -> str:
+        prod = products[prod_key]
+        if col is None or not prod.solids:
+            return prod_key
+        if prod.color == col and all(c in (None, col) for c in (prod.solid_colors or [])):
+            return prod_key
+        key = f"{prod_key}|{_hex(col)}"
+        if key not in products:
+            products[key] = XcafProduct(name=prod.name, color=col, solids=prod.solids, meshes=[],
+                                         solid_colors=[col] * len(prod.solids))
+        return key
+
+    shuo_on: dict[str, bool] = {}
+
+    def has_shuo(comp: TDF_Label) -> bool:
+        key = _label_entry(comp)
+        if key not in shuo_on:
+            try:
+                seq = TDF_AttributeSequence()
+                shuo_on[key] = XCAFDoc_ShapeTool.GetAllComponentSHUO_s(comp, seq) and seq.Length() > 0
+            except Exception:
+                shuo_on[key] = False
+        return shuo_on[key]
+
+    def shuo_color(prod_label: TDF_Label, locs: list, comps: list):
+        """The colour a SHUO gives this occurrence (locs, comps: the placements and labels of its components, from the top
+        down). GetInstanceColor also answers for an occurrence with no SHUO (with the part's own colour), and FindSHUO matches
+        paths that have none, so a SHUO counts only where a component on the path carries one and its colour differs from the
+        part's: a SHUO that gives a part its own colour back inside a coloured sub-assembly is not seen (not met in a file yet)."""
+        if not CFG.read_shuo or len(locs) < 2 or not any(has_shuo(c) for c in comps):
+            return None
+        try:
+            whole = TopLoc_Location()
+            for l in locs:
+                whole = whole * l
+            occ = shape_tool.GetShape_s(prod_label).Moved(whole)
+            c = Quantity_Color()
+            for t in (XCAFDoc_ColorType.XCAFDoc_ColorSurf, XCAFDoc_ColorType.XCAFDoc_ColorGen):
+                if color_tool.GetInstanceColor(occ, t, c):
+                    return (c.Red(), c.Green(), c.Blue())
+        except Exception:
+            pass
+        return None
+
+    shuo_hits = [0, 0]                                 # occurrences coloured by a SHUO, by their component
 
     meta_cache: dict[str, dict] = {}
 
@@ -920,7 +1082,8 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
         return ex
 
     def visit(label: TDF_Label, location: TopLoc_Location,
-              parent_path: str = "", name_override: str | None = None):
+              parent_path: str = "", name_override: str | None = None,
+              locs: tuple = (), inherited=None, comps_path: tuple = ()):
         # Better default name by context: "Assembly" for nested assemblies,
         # "Part" for leaf products. Was "node" / "part" — too generic to be
         # useful when scanning a tree of 5000 nodes.
@@ -951,12 +1114,24 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
                 # role rather than just saying "part" everywhere.
                 comp_name = (get_label_name(comp) or get_label_name(ref_label)
                              or ("Subassembly" if shape_tool.IsAssembly_s(ref_label) else "Component"))
+                locs_here = locs + (comp_loc,)
+                comps_here = comps_path + (comp,)
+                inst_col = get_label_color(comp, color_tool) or inherited
                 if shape_tool.IsAssembly_s(ref_label):
-                    sub = visit(ref_label, comp_loc, path_here, comp_name)
+                    sub = visit(ref_label, comp_loc, path_here, comp_name, locs_here, inst_col, comps_here)
                     if sub is not None:
                         kids.append(sub)
                 else:
                     prod_key = get_or_create_product(ref_label)
+                    own = shuo_color(ref_label, list(locs_here), list(comps_here))
+                    base = products[prod_key]
+                    if own is not None and own == (base.color or next((c for c in (base.solid_colors or []) if c), None)):
+                        own = None
+                    if own is not None:
+                        shuo_hits[0] += 1
+                    elif inst_col is not None:
+                        shuo_hits[1] += 1
+                    prod_key = coloured_variant(prod_key, own if own is not None else inst_col)
                     prod = products[prod_key]
                     col = prod.color or next((c for c in (prod.solid_colors or []) if c), None)
                     kids.append(XcafNode(
@@ -984,6 +1159,10 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
         n = visit(free_labels.Value(i), identity)
         if n is not None:
             roots.append(n)
+    if RESULT.get("bodies_split_by_face_colour"):
+        log(f"{RESULT['bodies_split_by_face_colour']:,} bodies have faces in more than one colour: each colour is a piece of its own", "ok")
+    if shuo_hits[0] or shuo_hits[1]:
+        log(f"instance colours: {shuo_hits[0]} occurrence(s) from SHUO, {shuo_hits[1]} from their component", "ok")
     return products, roots
 
 
@@ -1001,11 +1180,15 @@ def extract_product_meshes(products: dict) -> None:
     done = 0
     total_meshes = 0
     skipped = 0
+    seen: dict[int, object] = {}                      # (a coloured copy of a product shares its solids)
     with Heartbeat("product mesh extraction"):
         for prod in products.values():
             meshes = []
             for solid in prod.solids:
-                r = solid_to_mesh(solid)
+                if id(solid) in seen:
+                    r = seen[id(solid)]
+                else:
+                    r = seen[id(solid)] = solid_to_mesh(solid)
                 if r is None:
                     skipped += 1
                     continue
@@ -1302,7 +1485,15 @@ def _mesh_shape(shape, linear: float, angular: float, relative: bool) -> None:
     prm.InParallel = True
     if CFG.min_edge > 0:
         prm.MinSize = float(CFG.min_edge)
-    BRepMesh_IncrementalMesh(shape, prm)
+    m = BRepMesh_IncrementalMesh(shape, prm)
+    # BRepMesh_Status: 1 an open wire, 2 a wire that crosses itself, 4 a face it could not mesh, 8 a face meshed again. It was
+    # never read: a face the mesher gave up on simply had no triangles. The flags of every run are kept and told at the end.
+    try:
+        st = int(m.GetStatusFlags())
+    except Exception:
+        st = 0
+    if st:
+        RESULT["mesher_status"] = RESULT.get("mesher_status", 0) | st
 
 
 def _shape_diag(shape) -> float:
@@ -1323,8 +1514,8 @@ def tessellate(shape: TopoDS_Shape, linear_deflection: float = 0.5,
                angular_deflection: float = 0.5, relative: bool = False) -> None:
     """Tessellate every face on `shape` in place.
 
-    `relative=True` interprets `linear_deflection` as a fraction of each shape's
-    own bbox diagonal — gives unit-independent quality (0.001 == 0.1% of diag).
+    `relative=True` is OCCT's relative deflection: each edge is meshed to `linear_deflection` times its own size, and a face to
+    the largest deflection of its edges. Not a share of the model's size: small edges get fine meshes, long ones coarse.
     Default is absolute deflection in model units (typically mm).
 
     With CFG.tiers the solids are sorted by size into small / medium / large
@@ -1529,9 +1720,11 @@ def solid_to_mesh(solid: TopoDS_Shape):
         face = TopoDS.Face_s(exp.Current())
         tri = BRep_Tool.Triangulation_s(face, loc)
         if tri is None:
+            RESULT["faces_untessellated"] = RESULT.get("faces_untessellated", 0) + 1      # (counted: they used to vanish without a word)
             exp.Next(); continue
         n_nodes = tri.NbNodes(); n_tris = tri.NbTriangles()
         if n_nodes == 0 or n_tris == 0:
+            RESULT["faces_untessellated"] = RESULT.get("faces_untessellated", 0) + 1
             exp.Next(); continue
 
         # ── vertices: list-comp of (X,Y,Z) tuples then a single asarray
@@ -1619,15 +1812,31 @@ def solid_to_mesh(solid: TopoDS_Shape):
         exp.Next()
     if not all_verts: return None
     out_v = np.vstack(all_verts)
+    out_t = np.vstack(all_tris)
     if want_normals and len(all_norms) == len(all_verts):
-        _NORMALS[id(out_v)] = (out_v, np.vstack(all_norms))
+        out_n = np.vstack(all_norms)
+        # Every CAD face is meshed with points of its own, so where two faces meet smoothly (a fillet into a wall) the points
+        # along the seam are written twice with the same position and the same normal: 4 to 10 % of the vertices of a STEP.
+        # They are joined here, bit for bit equal only, so nothing moves and no shading changes. Not with the B-rep kept: the
+        # CAD-face tools expect each face to have its own points.
+        if not want_brep and not CFG.brep and len(out_v) > 1:
+            rows = np.ascontiguousarray(np.hstack([out_v, out_n])).view(np.dtype((np.void, out_v.itemsize * 6))).ravel()
+            _, first, inv = np.unique(rows, return_index=True, return_inverse=True)
+            if len(first) < len(rows):
+                order = np.argsort(first, kind="stable")
+                rank = np.empty_like(order); rank[order] = np.arange(len(order))
+                keep = first[order]
+                RESULT["vertices_joined"] = RESULT.get("vertices_joined", 0) + int(len(rows) - len(keep))
+                out_v = np.ascontiguousarray(out_v[keep]); out_n = np.ascontiguousarray(out_n[keep])
+                out_t = rank[inv.ravel()][out_t].astype(np.uint32)
+        _NORMALS[id(out_v)] = (out_v, out_n)
     if want_brep and brep_faces:
         try:
             rows, pts = _solid_edges(solid, brep_hits, fmap)
             _BREP[id(out_v)] = (out_v, {"faces": brep_faces, "edges": rows, "points": pts, "tris": tri_total})
         except Exception as e:
             log(f"B-rep edges of one solid skipped: {e}", "warn")
-    return out_v, np.vstack(all_tris)
+    return out_v, out_t
 
 
 def _trimesh(verts, tris, normals=None) -> "trimesh.Trimesh":
@@ -1850,7 +2059,31 @@ def _cache_params(input_path: Path) -> dict:
         "brep": CFG.brep,
         "lod": list(CFG.lod),
         "lod_error": CFG.lod_error if CFG.lod else None,
+        # (these change what is in the file too: without them, a run with --no-step-names and then a plain run got the nameless
+        # GLB back, and a new converter served what an older one had made)
+        "with_props": CFG.with_props,
+        "pca_instances": CFG.pca_instances,
+        "read": [CFG.read_shuo, CFG.read_layers, CFG.read_materials, CFG.read_names, CFG.read_props],
+        "converter": _converter_version(),
+        # (the file itself, not only its date: a revision copied in with an older date was served the GLB of the one before)
+        "source_size": _stat_or(input_path, "st_size"),
+        "source_mtime_ns": _stat_or(input_path, "st_mtime_ns"),
     }
+
+
+def _stat_or(p: Path, field: str):
+    try: return getattr(p.stat(), field)
+    except OSError: return None
+
+
+_CONVERTER_VERSION = None
+def _converter_version() -> str:
+    """A short fingerprint of this script: a GLB made by another version of the converter is not reused."""
+    global _CONVERTER_VERSION
+    if _CONVERTER_VERSION is None:
+        try: _CONVERTER_VERSION = hashlib.sha1(Path(__file__).read_bytes()).hexdigest()[:12]
+        except Exception: _CONVERTER_VERSION = "?"
+    return _CONVERTER_VERSION
 
 
 def _write_params(input_path: Path, output_path: Path) -> None:
@@ -2078,6 +2311,19 @@ def _collect_outputs(output_path: Path) -> None:
         return
     RESULT["levels"] = levels
     RESULT["tris_out"] = levels[0]["tris"]
+    gaps = RESULT.get("faces_untessellated", 0)
+    if gaps:
+        log(f"{gaps:,} CAD faces could not be meshed and are missing from the model (holes where they were). "
+            "A finer --quality, or another export of the STEP from the CAD program, may bring them back.", "warn")
+    joined = RESULT.get("vertices_joined", 0)
+    if joined:
+        log(f"{joined:,} vertices written twice along smooth seams between CAD faces were joined (nothing moved)", "ok")
+    st = RESULT.get("mesher_status", 0)
+    said = [w for bit, w in ((1, "a face outline that is not closed"), (2, "a face outline that crosses itself"),
+                             (4, "faces it could not mesh")) if st & bit]
+    if said:
+        log("the mesher met " + ", ".join(said) + ": look for gaps or odd triangles there"
+            + ("" if gaps else " (every face still has triangles)"), "warn")
     RESULT["size_mb"] = levels[0]["size_mb"]
     if len(levels) > 1:
         for i, lv in enumerate(levels):
@@ -2229,6 +2475,9 @@ def convert(input_path: Path, output_path: Path) -> None:
     # Read with XCAF for colors + names + materials + layers + assembly tree.
     # parse_step_xcaf_cached transparently uses a binary OCAF cache file
     # (next to the STEP, .xcaf-cache.xbf) so re-runs skip the slow ReadFile.
+    # Only the reading is in the try: writing the GLB comes after it, so a disk that is full is reported as that, and not as
+    # "XCAF reader failed" followed by reading the whole STEP again with the plain reader.
+    ready = None
     try:
         doc, shape_tool, color_tool, free_labels = parse_xcaf_cached(input_path)
         scene_meta = collect_metadata(shape_tool, color_tool, doc, free_labels)
@@ -2295,8 +2544,28 @@ def convert(input_path: Path, output_path: Path) -> None:
                 roots = [r for r in (prune(r) for r in roots) if r is not None]
                 if not roots:
                     raise AllTooSmall()
+                # The dropped products go from the products too: the writer puts every product's meshes in the file whether
+                # a node uses them or not, so the file stayed as big as before and the triangle count included them.
+                products = {k: v for k, v in products.items() if k not in dropped}
 
-        _write_levels_hier(roots, products, output_path, scene_meta)
+        ready = (roots, products, scene_meta)
+    except AllTooSmall:
+        raise                # the plain reader would only remove them all again
+    except NoSolids:
+        # The plain reader gets its turn before the file is given up on; it
+        # is the one that raises for good when it finds no solid either.
+        log("no solid bodies in the XCAF document, trying the plain reader", "warn")
+    except Exception as e:
+        log(f"XCAF reader failed ({e}), falling back to plain reader (no hierarchy)", "warn")
+        traceback.print_exc()
+    if ready is not None:
+        roots, products, scene_meta = ready
+        try:
+            _write_levels_hier(roots, products, output_path, scene_meta)
+        except NoSolids:
+            ready = None          # (nothing to put in the file: the plain reader gets its turn, as before)
+            log("no solid bodies in the XCAF document, trying the plain reader", "warn")
+    if ready is not None:
         _write_params(input_path, output_path)
         _collect_outputs(output_path)
 
@@ -2307,15 +2576,6 @@ def convert(input_path: Path, output_path: Path) -> None:
         print(f"  done in {time.time() - t_total:.1f}s  {in_mb:.1f} MB -> {out_mb:.1f} MB ({ratio:.1f}x smaller)")
         print()
         return
-    except AllTooSmall:
-        raise                # the plain reader would only remove them all again
-    except NoSolids:
-        # The plain reader gets its turn before the file is given up on; it
-        # is the one that raises for good when it finds no solid either.
-        log("no solid bodies in the XCAF document, trying the plain reader", "warn")
-    except Exception as e:
-        log(f"XCAF reader failed ({e}), falling back to plain reader (no hierarchy)", "warn")
-        traceback.print_exc()
     scene_meta = {}
     shape = _read_plain_shape(input_path)
     tessellate(shape, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
@@ -2738,7 +2998,7 @@ def main() -> int:
     ap.add_argument("--quality", "-q", type=float, default=0.5,
                     help="Linear deflection. Smaller = finer mesh. Default 0.5 (mm).")
     ap.add_argument("--relative", action="store_true",
-                    help="Interpret --quality as fraction of bbox diagonal (unit-independent).")
+                    help="Read --quality as a fraction of each edge's own size (OpenCascade's relative deflection), not a distance.")
     ap.add_argument("--angular", type=float, default=0.5,
                     help="Angular deflection in radians. Default 0.5 (~28.6°).")
     ap.add_argument("--min-size", type=float, default=0.0)

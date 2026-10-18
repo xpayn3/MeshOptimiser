@@ -4,7 +4,7 @@
 // hands each one mesh at a time: plain typed arrays in, plain typed arrays
 // out. Nothing here touches three.js or the page.
 //
-//   { op: 'fill',     positions, index, opts }            → what fillFlatHoles returns
+//   { op: 'fill',     positions, index, opts }            → what fillFlatHoles returns (opts.cadPoly: the CAD plane face per triangle, or null)
 //   { op: 'simplify', positions, index, groups, keep, url, attrs } → index ranges per material group,
 //                                                                  and the error estimate (see simplify-core.js)
 //   { op: 'simplify', …, tol } instead of keep: as far as no point moves more than `tol` (in the mesh's units)
@@ -18,22 +18,32 @@
 //   { op: 'quads',    positions, index }                    → the outlines of the four-sided pairs of triangles (meshedit.js)
 //   { op: 'untriangulate', positions, index, groups, angle, normals, threeUrl }
 //                                                            → rebuilt triangles per material group (untriangulate.js)
+//   { op: 'emboss',   parts: [{ id, positions, index }], opts }  → the parts that are lettering laid over another part (emboss.js)
+//   { op: 'voxel',    positions, index, opts, url }          → Voxel remesh (voxel.js): positions, normals, index and its numbers
+//   { op: 'meshop',   name, positions, index, opts }          → one of the mesh tools (meshops.js): positions, normals, index, numbers
+//   { op: 'boolean',  kind, a, b }                            → Union, Subtract or Intersect of two meshes (meshops.js, Manifold)
+//   { op: 'marks',    positions, index, opts }                   → raised and engraved marks cut into the mesh, on any face, in the
+//                                                                   shape of a 'fill' result (findSurfaceMarks in emboss.js)
 //
 // Every reply carries the request's id and ok: true / false.
 
-import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=29';
-import { reduceIndex } from './simplify-core.js?v=4';
-import { analysePolygons, polygonEdges } from './wirelines.js?v=2';
-import { repairMesh, analyseNormals } from './meshrepair.js?v=4';
+import { fillFlatHoles, flattenRimNormals } from './holefill.js?v=32';
+import { findEmbossedBodies, findSurfaceMarks } from './emboss.js?v=7';
+import { reduceIndex } from './simplify-core.js?v=5';
+import { analysePolygons, polygonEdges } from './wirelines.js?v=3';
+import { repairMesh, analyseNormals } from './meshrepair.js?v=8';
 import { findRepeats } from './repeats.js?v=1';
 import { buildTopology, pairQuads, buildPolygons, outlineLines } from './meshedit.js?v=5';
-import { untriangulate, evenTriangles } from './untriangulate.js?v=10';
+import { untriangulate, evenTriangles } from './untriangulate.js?v=11';
 import { unsubdivide } from './unsubdivide.js?v=1';
+import { voxelRemesh } from './voxel.js?v=2';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=10';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
 // then in the middle of one. (Three more passes at most; each is a fraction of the first.)
 function untriangulatePasses(positions, index, opts) {
   let r = untriangulate(positions, index, opts);
   if (!r) return r;
+  if (opts.poly) return r;                        // (the faces are the CAD's: joining them further is not wanted, and one pass rebuilds each)
   for (let pass = 0; pass < 3; pass++) {
     const r2 = untriangulate(positions, r.index, opts);
     if (!r2 || r2.index.length >= r.index.length) break;
@@ -87,12 +97,38 @@ async function getTriangulator(url) {
 self.onmessage = async (e) => {
   const m = e.data;
   try {
+    if (m.op === 'emboss') {
+      const opts = { ...(m.opts || {}) };
+      if (Array.isArray(opts.candidates)) opts.candidates = new Set(opts.candidates);      // (a Set does not travel through postMessage as one)
+      self.postMessage({ id: m.id, ok: true, res: findEmbossedBodies(m.parts || [], opts) });
+      return;
+    }
+    if (m.op === 'marks') {
+      const res = findSurfaceMarks(m.positions, m.index, m.opts);
+      self.postMessage({ id: m.id, ok: true, res }, [res.removed.buffer, res.caps.buffer, res.capOwner.buffer]);
+      return;
+    }
     if (m.op === 'fill') {
       const res = fillFlatHoles(m.positions, m.index, m.opts);
       const out = { id: m.id, ok: true, res };
       const transfer = [];
       if (res.removed) transfer.push(res.removed.buffer, res.caps.buffer, res.capOwner.buffer);
       self.postMessage(out, transfer);
+      return;
+    }
+    if (m.op === 'meshop' || m.op === 'boolean') {
+      const r = m.op === 'meshop' ? await runMeshOp(m.name, m.positions, m.index, m.opts || {}) : await runBoolean(m.kind, m.a, m.b, m.opts || {});
+      const transfer = r && r.positions ? [r.positions.buffer, r.normals.buffer, r.index.buffer] : [];
+      self.postMessage({ id: m.id, ok: true, res: r }, transfer);
+      return;
+    }
+    if (m.op === 'voxel') {
+      let S = null;
+      try { if (m.url) S = await getSimplifier(m.url); } catch (_) { S = null; }
+      const uv = m.opts && m.opts.uv, srcP = uv ? m.positions.slice() : null, srcI = uv ? (m.index ? m.index.slice() : Uint32Array.from({ length: m.positions.length / 3 }, (_, i) => i)) : null;
+      const r = withUvs(voxelRemesh(m.positions, m.index, { ...(m.opts || {}), simplifier: S }), srcP, srcI, uv);      // (the part's UVs carried onto the result)
+      const transfer = r.positions ? [r.positions.buffer, r.normals.buffer, r.index.buffer] : [];
+      self.postMessage({ id: m.id, ok: true, res: r }, transfer);
       return;
     }
     if (m.op === 'repeats') {
@@ -195,7 +231,8 @@ self.onmessage = async (e) => {
       let polyBase = 0;
       for (const g of m.groups) {
         const sub = m.index.subarray(g.start, g.start + g.count);
-        const opts = { angleDeg: m.angle || 1, normals: m.normals || null, triangulate, normalTol: m.normalTol || 5, flip: m.flip !== false, tolerance: m.tolerance || 0, straight: !!m.straight, limitDeg: m.limitDeg || 0, limitTol: m.tolerance || 0 };
+        const cadPoly = m.cadPoly && m.cadPoly.length * 3 === m.index.length ? m.cadPoly.subarray(g.start / 3, (g.start + g.count) / 3) : null;
+        const opts = { angleDeg: m.angle || 1, normals: m.normals || null, triangulate, normalTol: m.normalTol || 5, flip: m.flip !== false, tolerance: m.tolerance || 0, straight: !!m.straight, limitDeg: m.limitDeg || 0, poly: cadPoly, limitTol: m.tolerance || 0 };
         const r = even ? evenTriangles(m.positions, sub, { angleDeg: m.angle || 1 }) : untriangulatePasses(m.positions, sub, opts);
         if (!r) { const n = sub.length / 3; parts.push({ idx: sub.slice(), poly: Int32Array.from({ length: n }, (_, i) => polyBase + i), materialIndex: g.materialIndex }); polyBase += n; stats.trisBefore += sub.length / 3; stats.trisAfter += sub.length / 3; continue; }
         const poly = r.poly;

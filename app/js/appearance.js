@@ -106,4 +106,7 @@
 
   window.MOAppearance = { DEFAULTS: DEFAULTS, ACCENTS: ACCENTS, TONES: TONES, FONTS: FONTS, TEXT_SCALES: TEXT_SCALES, DENSITIES: DENSITIES, RADII: RADII, read: read, apply: apply };
   try { apply(); } catch (e) { /* the default look stays */ }
+  // The other scene tabs are pages of their own (frames): a change made in Settings reaches them through the storage event, so
+  // every tab takes the new look at once instead of at its next reload.
+  try { window.addEventListener('storage', function (e) { if (e.key === KEY || e.key === null) { try { apply(); } catch (_) {} } }); } catch (e) {}
 })();

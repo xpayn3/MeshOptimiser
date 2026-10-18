@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -170,18 +172,19 @@
           </ol>
           <p>To check every part of the model at once, press <span class="ui">Scan whole model</span> instead.</p>
           <h2 id="what-the-options-mean">What the options mean</h2>
-          <p>The four buttons at the top set how readily pieces are told apart:</p>
+          <p>A mesh from CAD keeps a separate point for each corner of each face, so the same place is stored several times. The four buttons at the top set how far apart two points may be and still count as one place (the weld):</p>
           <dl class="table">
-            <div><dt>Strict</dt><dd>The most pieces. Nothing is joined. Use it if you suspect the file has doubled points along its edges.</dd></div>
-            <div><dt>Tight</dt><dd>The default. Points that are exact duplicates are joined, which keeps one solid whole along its sharp edges without joining neighbouring solids.</dd></div>
-            <div><dt>Normal</dt><dd>Also joins points that are a tiny distance apart, to allow for small rounding differences.</dd></div>
-            <div><dt>Loose</dt><dd>Joins points within 0.1% of the model’s size, so solids that touch are joined on purpose. Use it when you want fewer, larger parts.</dd></div>
+            <div><dt>Normal</dt><dd>The default. Points within one millionth of the model’s size are one place. Doubled points that drifted a little in rounding are joined, and no two separate solids of a real model are that close.</dd></div>
+            <div><dt>Tight</dt><dd>Only points that are exact duplicates are one place. Use it when Normal joins solids that should stay apart.</dd></div>
+            <div><dt>Loose</dt><dd>Points within 0.1% of the model’s size are one place, so solids that touch are joined on purpose. Use it when you want fewer, larger parts.</dd></div>
+            <div><dt>Exact</dt><dd>Nothing is joined. A mesh from CAD falls into its faces, hundreds of pieces of a few triangles. Only for a file you know shares its points.</dd></div>
           </dl>
-          <p>Right under the four buttons is <span class="ui">Weld tolerance</span>. It is the same distance, set by hand, for when none of the four fits. It sits on the panel itself, not under Advanced. The line below it says what the distance comes to at the size of your model.</p>
+          <p>Right under the four buttons is <span class="ui">Weld tolerance</span>. It is the same distance, set by hand, for when none of the four fits. The line below it says what the distance comes to at the size of your model.</p>
           <p><span class="ui">Algorithm</span> chooses how connection is decided:</p>
           <dl class="table">
-            <div><dt>Vertex connectivity</dt><dd>The default. Triangles that share a corner point belong together.</dd></div>
-            <div><dt>Edge connectivity</dt><dd>Stricter. Triangles belong together only when they share a whole edge, so solids that meet at a single point stay separate.</dd></div>
+            <div><dt>Bodies</dt><dd>The default. A body is a closed surface. Where two solids were welded together on export, touching at a point, along an edge or on a face, each keeps its own surface and they come apart. A solid whose faces are tessellated at different densities stays whole.</dd></div>
+            <div><dt>Vertex connectivity</dt><dd>Triangles that share a corner point belong together, so everything that touches stays one part.</dd></div>
+            <div><dt>Edge connectivity</dt><dd>Triangles belong together only when they share a whole edge, so solids that meet at a single point stay separate; solids that share an edge or a face are joined.</dd></div>
             <div><dt>Spatial proximity (AABB)</dt><dd>Groups triangles by where they are in space instead of how they are connected. Useful when the connections in the file are fused but the solids are still apart.</dd></div>
             <div><dt>Hybrid (vertex + spatial)</dt><dd>Vertex connectivity first, then a second pass by position on any piece that still holds more than half of the mesh.</dd></div>
             <div><dt>Faces (split at creases)</dt><dd>Every face becomes a part. Triangles that share an edge and lie within the <span class="ui">Face angle</span> of each other stay together, and every crease starts another part. A crease is an edge where the surface turns sharply. A flat face, or a smooth curved one, comes out as one part.</dd></div>
@@ -195,7 +198,8 @@
           <p>The pieces of a split part stay in every group the part was a member of.</p>
           <h2 id="undo">Undo</h2>
           <p>One split is one undo step: <kbd>Ctrl</kbd><kbd>Z</kbd> puts the part back together.</p>
-          <aside class="kb-note"><p>If the message says no separable parts were found, the mesh is one connected solid at this setting. Try <span class="ui">Strict</span>, or the <span class="ui">Spatial proximity (AABB)</span> algorithm.</p></aside>
+          <p>When a split would make hundreds of pieces of a few triangles each, the preview says so and the button asks first: that is the mesh cut into its faces, not into parts, and the cure is the <span class="ui">Normal</span> preset with <span class="ui">Bodies</span>, or a higher <span class="ui">Smallest part</span>.</p>
+          <aside class="kb-note"><p>If the message says no separable parts were found, the mesh is one connected surface at this setting. A part that was modelled as one solid in CAD, a pulley with its bracket for example, is one surface however it looks, and no setting takes it apart. Try <span class="ui">Tight</span>, or the <span class="ui">Spatial proximity (AABB)</span> algorithm, for a file that really holds separate pieces.</p></aside>
           <div class="kb-see"><h2>Related</h2><ul>
             <li><a href="../docs/parts-tree.html">The parts tree</a></li>
             <li><a href="../docs/select-parts.html">Select parts</a></li>

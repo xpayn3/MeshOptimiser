@@ -213,7 +213,13 @@ def _restart_server():
     except Exception:
         pass
     try:
-        log = open(ROOT / "server.log", "ab")
+        # (every restarted server appends to this file: past 5 MB the old one is kept as server.log.1 and a new one begins)
+        lp = ROOT / "server.log"
+        try:
+            if lp.is_file() and lp.stat().st_size > 5 * 1024 * 1024: os.replace(lp, ROOT / "server.log.1")
+        except OSError:
+            pass
+        log = open(lp, "ab")
         kw = {"cwd": str(ROOT), "stdin": subprocess.DEVNULL, "stdout": log, "stderr": log, "close_fds": True}
         if os.name == "nt": kw["creationflags"] = 0x00000008 | 0x00000200      # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
         else: kw["start_new_session"] = True
@@ -529,6 +535,19 @@ CACHE_DIR = INBOX / "cache"
 CACHE_MAX_BYTES = 3 * 1024 ** 3
 _BREP_EXTS = (".brep.json", ".brep.bin")        # what step2glb.py --brep writes beside a GLB (<name>.glb.brep.json / .bin)
 
+_OCP_SIG = None
+def _ocp_signature() -> str:
+    """Which OpenCascade the converter runs on (the OCP package's folder and its date), found without importing it."""
+    global _OCP_SIG
+    if _OCP_SIG is None:
+        try:
+            out = subprocess.run([PYTHON_BIN, "-c", "import importlib.util,os;s=importlib.util.find_spec('OCP');p=os.path.dirname(s.origin) if s and s.origin else '';print(p+'|'+(str(os.stat(p).st_mtime_ns) if p else ''))"],
+                                 capture_output=True, text=True, timeout=20)
+            _OCP_SIG = (out.stdout or "").strip() or "?"
+        except Exception:
+            _OCP_SIG = "?"
+    return _OCP_SIG
+
 def _converter_signature() -> str:
     parts = []
     for f in (ROOT / "step2glb.py", ROOT / "version.json"):
@@ -536,10 +555,15 @@ def _converter_signature() -> str:
             st = f.stat(); parts.append(f"{f.name}:{st.st_size}:{st.st_mtime_ns}")
         except OSError:
             parts.append(f.name + ":?")
+    parts.append("ocp:" + _ocp_signature())        # (an updated runtime used to keep serving results of the old one)
     return "|".join(parts)
 
 def _cache_key(file_digest: str, suffix: str, quality: float, min_size: float, opts: dict) -> str:
     clean = {k: v for k, v in sorted(opts.items()) if not k.startswith("_") and k != "force"}
+    # (with the colour reader the assembly's own sharing is used whatever "Share identical shapes" says: turning it off made a
+    # second conversion of the same file for the same result. Only when that reader is sure to run: colours "on", and not a BREP,
+    # which is always read plain; with "auto" a file over 1 GB is read plain too, and there the switch does change the result)
+    if clean.get("colors", "on") == "on" and suffix.lower() not in (".brep", ".brp"): clean.pop("instance", None)
     blob = json.dumps([file_digest, suffix.lower(), quality, min_size, clean, _converter_signature()], sort_keys=True, default=str)
     return hashlib.blake2b(blob.encode("utf-8"), digest_size=16).hexdigest()
 
@@ -548,36 +572,54 @@ def _cache_lookup(key: str, dst_path: Path) -> bool:
     try:
         glb = CACHE_DIR / f"{key}.glb"
         if not glb.is_file(): return False
-        shutil.copyfile(glb, dst_path)
+        tmp = dst_path.with_name(dst_path.name + ".part")
+        shutil.copyfile(glb, tmp); os.replace(tmp, dst_path)       # (never a half-copied GLB under the name the page asks for)
         params = CACHE_DIR / f"{key}.glb.params.json"
         if params.is_file():
             shutil.copyfile(params, dst_path.with_suffix(dst_path.suffix + ".params.json"))
         for ext in _BREP_EXTS:              # the B-rep beside the GLB, when it was asked for
             side = CACHE_DIR / f"{key}.glb{ext}"
             if side.is_file(): shutil.copyfile(side, dst_path.with_suffix(dst_path.suffix + ext))
-        try: os.utime(glb, None)            # recently used stays
-        except OSError: pass
+        for f in CACHE_DIR.glob(f"{key}.glb*"):        # recently used stays: the GLB and its records and B-rep together
+            try: os.utime(f, None)
+            except OSError: pass
         return True
     except OSError:
-        try: dst_path.unlink(missing_ok=True)
-        except OSError: pass
+        for f in (dst_path, dst_path.with_name(dst_path.name + ".part")):     # (the temporary copy too: it was left in inbox/)
+            try: f.unlink(missing_ok=True)
+            except OSError: pass
         return False
 
 def _cache_store(key: str, dst_path: Path) -> None:
+    def put(src: Path, name: str):
+        tmp = CACHE_DIR / (name + ".part")
+        shutil.copyfile(src, tmp); os.replace(tmp, CACHE_DIR / name)
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(dst_path, CACHE_DIR / f"{key}.glb")
+        # the records first and the GLB last: a lookup finds the GLB only when everything that goes with it is there
         params = dst_path.with_suffix(dst_path.suffix + ".params.json")
-        if params.is_file(): shutil.copyfile(params, CACHE_DIR / f"{key}.glb.params.json")
+        if params.is_file(): put(params, f"{key}.glb.params.json")
         for ext in _BREP_EXTS:
             side = dst_path.with_suffix(dst_path.suffix + ext)
-            if side.is_file(): shutil.copyfile(side, CACHE_DIR / f"{key}.glb{ext}")
-        files = [f for f in CACHE_DIR.iterdir() if f.is_file()]
-        total = sum(f.stat().st_size for f in files)
-        for f in sorted(files, key=lambda f: f.stat().st_mtime):
-            if total <= CACHE_MAX_BYTES: break
-            try: sz = f.stat().st_size; f.unlink(); total -= sz
-            except OSError: pass
+            if side.is_file(): put(side, f"{key}.glb{ext}")
+        put(dst_path, f"{key}.glb")
+        # Evicted a result at a time (its GLB, records and B-rep together), the least recently used first. Per file, a reused
+        # model lost its B-rep first; and one result over the cap no longer empties the whole cache: the newest stays.
+        groups: dict = {}
+        for f in CACHE_DIR.iterdir():
+            if not f.is_file(): continue
+            k = f.name.split(".glb", 1)[0]
+            g = groups.setdefault(k, {"size": 0, "t": 0.0, "files": []})
+            try: st = f.stat()
+            except OSError: continue
+            g["size"] += st.st_size; g["t"] = max(g["t"], st.st_mtime); g["files"].append(f)
+        total = sum(g["size"] for g in groups.values())
+        for k, g in sorted(groups.items(), key=lambda kv: kv[1]["t"]):
+            if total <= CACHE_MAX_BYTES or k == key: continue
+            for f in g["files"]:
+                try: f.unlink()
+                except OSError: pass
+            total -= g["size"]
     except OSError:
         pass
 
@@ -593,6 +635,10 @@ def _convert_thread(job_id: str, src_path: Path, dst_path: Path,
             except OSError: pass
         with JOBS_LOCK:
             job = JOBS.get(job_id)
+            if job is None or job.get("status") == "cancelled":
+                for f in [dst_path, dst_path.with_suffix(dst_path.suffix + ".params.json")] + [dst_path.with_suffix(dst_path.suffix + e) for e in _BREP_EXTS]:
+                    try: f.unlink(missing_ok=True)
+                    except OSError: pass
             if job is not None and job.get("status") != "cancelled":
                 job["log"].append("same file and settings as before: the kept result is used")
                 job["message"] = "opened from the kept result"
@@ -731,6 +777,7 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
                          "--no-step-names", "--no-step-props"}
                 cmd = [a for a in cmd if a not in strip] + ["--no-colors"]
                 rc = _run(cmd)
+                opts = {**opts, "_ckey": None}       # (not kept: it was asked for with colours, and has none)
         with JOBS_LOCK:
             PROCS.pop(job_id, None)
             cancelled = JOBS[job_id].get("status") == "cancelled"
@@ -787,7 +834,28 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
 # /api/bridge/poll, we hand it the command there, and it posts the answer to
 # /api/bridge/result. Nothing here runs unless a page is polling.
 MCP_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
-BRIDGE = {"cv": threading.Condition(), "queue": [], "results": {}, "last_poll": 0.0, "prog": {}, "cancel": set(), "rpc": {}}
+BRIDGE = {"cv": threading.Condition(), "queue": [], "results": {}, "last_poll": 0.0, "prog": {}, "cancel": set(), "rpc": {},
+          "taken": {}, "expired": {}}      # taken: job id -> the window that took it; expired: jobs whose caller stopped waiting
+MCP_STATS_LOCK = threading.Lock()
+
+
+def _expire(jid):
+    """No call waits for this job any more (it timed out, or its window went away). Hold BRIDGE["cv"]."""
+    ex = BRIDGE["expired"]
+    BRIDGE["cancel"].add(jid); ex[jid] = None              # (a dict: kept in order, the oldest first)
+    while len(ex) > 500:
+        old = next(iter(ex)); del ex[old]
+        BRIDGE["cancel"].discard(old); BRIDGE["prog"].pop(old, None); BRIDGE["results"].pop(old, None)
+
+
+def _fail_taken(pred, error):
+    """End the calls waiting on jobs that a window took and will not answer (it was replaced, switched off, restarted). Hold BRIDGE["cv"].
+    The jobs are expired too: should the window answer after all, the answer is dropped (it used to stay in results for good)."""
+    for jid, win in list(BRIDGE["taken"].items()):
+        if pred(win) and jid not in BRIDGE["results"]:
+            BRIDGE["results"][jid] = {"ok": False, "error": error}
+            _expire(jid)
+    BRIDGE["cv"].notify_all()
 # What Claude asked for since the server started: printed in this window as it happens, and read at /api/bridge/status.
 MCP_STATS = {"since": time.time(), "calls": 0, "errors": 0, "connects": 0, "tools": {}}
 
@@ -855,6 +923,15 @@ MCP_TOOLS += [
     {"name": "set_grid", "description": "Show or hide the ground grid (G).", "inputSchema": _obj({"visible": {"type": "boolean", "description": "true shows it (default), false hides it."}})},
     {"name": "measure_parts", "description": "Distance between two parts: centre to centre, and the gap between their bounding boxes, with each part's size. In the scene's units (usually mm).", "inputSchema": _obj({"ids": {"type": "array", "items": {"type": "integer"}, "description": "Exactly two part ids from list_parts."}}, ["ids"])},
     {"name": "find_stacked_copies", "description": "Find parts that sit on an identical copy (same shape, same place) and select the extra copies; the first of each group is kept. Delete them afterwards with delete_parts.", "inputSchema": _obj({"tolerance_percent": {"type": "number", "description": "How close counts as the same place, in percent of the part (0 to 5, default what the app uses)."}, "near_copies": {"type": "boolean", "description": "Also count parts whose triangle count differs a little."}})},
+    {"name": "remove_lettering", "description": "Remove lettering and logos from parts, however the CAD system made them: raised or engraved text cut into a part's own mesh (flattened into the face or closed), and text modelled as bodies of their own laid over a part (deleted; the part under them is complete). The user is asked to allow it. Works on selected parts only: give ids or name_contains, or have the user select the parts first (nothing selected: an error). dry_run true only counts and selects the bodies.",
+     "inputSchema": _obj({"raised_max_mm": {"type": "number", "description": "Raised text no higher than this above its face (default 0.6: CAD text drawn 0.5 mm high measures a little more once tessellated)."},
+                          "engraved_max_mm": {"type": "number", "description": "Engraved text no deeper than this below its face (default 0.5; 0 leaves engraved text alone)."},
+                          "max_size_mm": {"type": "number", "description": "The widest a letter, logo or line of text may be (default 40)."},
+                          "in_mesh": {"type": "boolean", "description": "Text cut into the part's own mesh, on a flat or a curved face (default true)."},
+                          "bodies": {"type": "boolean", "description": "Text modelled as separate bodies laid over a part (default true)."},
+                          "hidden_bodies": {"type": "boolean", "description": "Bodies that lie entirely inside another closed part (default true)."},
+                          "dry_run": {"type": "boolean", "description": "Only find and count; change nothing."},
+                          "ids": _IDS, "name_contains": _NAME})},
     {"name": "list_groups", "description": "The groups in the tree: the ones made in the app (user groups, which ungroup can dissolve) and the ones that come from the file's own hierarchy.", "inputSchema": _obj()},
     {"name": "ungroup", "description": "Dissolve groups made in the app (Ctrl+Shift+G). The user is asked to allow it. The parts stay.", "inputSchema": _obj({"group_ids": {"type": "array", "items": {"type": "string"}, "description": "Ids from list_groups."}, "name_contains": {"type": "string", "description": "Every group whose name contains this."}})},
     {"name": "scene_tabs", "description": "The scene tabs of the app: list them, switch to one (later tools act on the scene that is on screen), or open a new empty one.", "inputSchema": _obj({"action": {"type": "string", "enum": ["list", "switch", "new"]}, "index": {"type": "integer"}, "title_contains": {"type": "string"}})},
@@ -862,8 +939,8 @@ MCP_TOOLS += [
     {"name": "transform_parts", "description": "Move, turn and/or scale parts, relative to where they are, along the scene's axes. Turning and scaling are about the middle of the chosen parts together. The user is asked to allow it. Not while the view is exploded. " + _WHICH, "inputSchema": _obj({"move": {"type": "array", "items": {"type": "number"}, "description": "[x, y, z] in the scene's units."}, "rotate_degrees": {"type": "array", "items": {"type": "number"}, "description": "[x, y, z] degrees."}, "scale": {"description": "A number (all axes) or [x, y, z]; not together with a turn when the axes differ."}, "ids": _IDS, "name_contains": _NAME})},
     {"name": "recenter_model", "description": "Move the whole model so its middle is at the origin. The user is asked to allow it.", "inputSchema": _obj()},
     {"name": "align_to_floor", "description": "Stand the whole model on the floor, centred over 0,0,0 (with the choices of the app's Align to floor card). The user is asked to allow it.", "inputSchema": _obj()},
-    {"name": "split_parts", "description": "Split meshes into their disconnected pieces, as separate parts. The user is asked to allow it. " + _WHICH + " Or whole_scene true to scan everything.", "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "whole_scene": {"type": "boolean"}, "method": {"type": "string", "enum": ["vertex", "edge", "spatial", "hybrid"], "description": "How pieces are found (default vertex: triangles that share a vertex)."}})},
-    {"name": "repair_mesh", "description": "Mend broken geometry: join doubled vertices, remove empty and doubled triangles, turn faces the same way. The user is asked to allow it. " + _WHICH + " With neither, the whole scene.", "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "weld": {"type": "boolean"}, "degenerate": {"type": "boolean"}, "orient": {"type": "boolean"}, "smooth_normals": {"type": "boolean"}})},
+    {"name": "split_parts", "description": "Split meshes into their disconnected pieces, as separate parts. The user is asked to allow it. " + _WHICH + " Or whole_scene true to scan everything.", "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "whole_scene": {"type": "boolean"}, "method": {"type": "string", "enum": ["bodies", "vertex", "edge", "spatial", "hybrid"], "description": "How pieces are found. Default bodies: closed surfaces, so solids that touch at a point, an edge or a face come apart. vertex: everything that shares a point stays together. edge: only a shared whole edge joins. spatial: by position on a grid, ignoring how triangles connect. hybrid: vertex, then spatial on a piece that holds over half the mesh."}})},
+    {"name": "repair_mesh", "description": "Mend broken geometry: join doubled vertices, remove empty and doubled triangles, turn faces the same way, separate surfaces that only touch (edges shared by three or more triangles, pinched corners; separate_touching, on by default). The user is asked to allow it. " + _WHICH + " With neither, the whole scene.", "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "weld": {"type": "boolean"}, "degenerate": {"type": "boolean"}, "orient": {"type": "boolean"}, "separate_touching": {"type": "boolean"}, "smooth_normals": {"type": "boolean"}})},
     {"name": "remove_hidden_faces", "description": "Delete faces that can never be seen from outside (the inside of a housing, where parts press together). Slow on big scenes: start with a few parts. The user is asked to allow it. " + _WHICH, "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "whole_scene": {"type": "boolean"}, "views": {"type": "integer", "enum": [26, 64, 128], "description": "Directions looked from: 26 fast, 64 normal (default), 128 thorough."}, "keep_neighbours": {"type": "boolean", "description": "Keep faces next to visible ones (default true)."}})},
     {"name": "smart_optimise", "description": "The app's Smart optimise: every clean-up in the right order on the whole scene, as ONE undo step. The user is asked to allow it. Levels: auto (picks from the size of the scene), light (only empty and broken parts), balanced (also hidden parts, bolts to cylinders, parts under 1% of the model, half the triangles), strong (parts under 2%, fills holes, a quarter of the triangles). Every step can be overridden. Read playbook optimise first; start with light or balanced and look.",
      "inputSchema": _obj({"level": {"type": "string", "enum": ["auto", "light", "balanced", "strong"], "description": "How far to go (default auto)."},
@@ -882,9 +959,23 @@ MCP_TOOLS += [
          "max_boxes": {"type": "integer", "description": "For few_boxes: the most boxes a part may become (1 to 32, default 6)."}, "blocks_detail": {"type": "integer", "description": "For blocks: cells along the longest side (2 to 48, default 8)."}})},
     {"name": "untriangulate", "description": "Join neighbouring triangles that lie in one plane and triangulate each flat face again with the fewest triangles. The shape does not change at all: a free reduction on CAD models. The user is asked to allow it. Works on the chosen parts, or on the whole scene if none are given.",
      "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME})},
+    {"name": "fix_mesh", "description": "Mend CAD meshes, keeping their shape. action close_cracks: hairline gaps and T-junctions between faces are closed (points within gap_mm become one, an edge with a point on it is split there), so the part becomes closed; close_open_edges: every rim where the surface stops (missing faces: an open bore, a side that was never exported) gets one flat cap, so the part becomes watertight (a rim that folds over itself is left and counted; not fill_holes, which removes designed holes); remove_slivers: needle triangles are collapsed and caps flipped, nothing turned over; patch_holes: openings up to max_hole_mm across are closed with a patch that follows the curve of the surface round them (faired). The user is asked to allow it. " + _WHICH,
+     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "action": {"type": "string", "enum": ["close_cracks", "close_open_edges", "remove_slivers", "patch_holes"]}, "gap_mm": {"type": "number", "description": "close_cracks: widest gap to close, in mm (default a ten-thousandth of the part's size)."}, "needle_percent": {"type": "number", "description": "remove_slivers: a needle's shortest edge is under this percent of its longest (default 4)."}, "max_hole_mm": {"type": "number", "description": "patch_holes: largest hole across, in mm (default a tenth of the part's size)."}}, ["action"])},
+    {"name": "reshape_mesh", "description": "Rebuild parts. action remesh_evenly: even, well-shaped triangles on the original surface, sharp edges (over sharp_deg) and outlines kept; smooth: takes noise and faceting out without rounding edges sharper than sharp_deg; convex_hull: the convex shell round the part (at most max_points points, for collision shapes); convex_pieces: a few convex shells following a concave part (at most max_pieces); merge_bodies: all closed bodies of the part joined into one exact solid (Manifold). The user is asked to allow it. " + _WHICH,
+     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "action": {"type": "string", "enum": ["remesh_evenly", "smooth", "convex_hull", "convex_pieces", "merge_bodies"]}, "edge_mm": {"type": "number", "description": "remesh_evenly: edge length in mm (default: about as many triangles as now)."}, "sharp_deg": {"type": "number", "description": "remesh_evenly, smooth: edges sharper than this stay (default 30)."}, "strength": {"type": "integer", "description": "smooth: rounds, 1 to 20 (default 6)."}, "max_points": {"type": "integer", "description": "convex_hull, convex_pieces: points per shell (default 255 / 64)."}, "max_pieces": {"type": "integer", "description": "convex_pieces: at most this many (default 8)."}}, ["action"])},
+    {"name": "simplify_round_faces", "description": "Fewer facets on the round faces (cylinders, cones, spheres, tori, fillets, bores) of parts that still have their CAD faces: points are taken out of the round faces until the facets are as coarse as deviation_mm allows, the flat faces follow at the rims so nothing cracks, and the part keeps its CAD faces for the other CAD tools. The flat faces themselves are left to untriangulate. The user is asked to allow it. Parts: ids, name_contains, or the selection; with none of them, every part that is shown.",
+     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "deviation_mm": {"type": "number", "description": "How far the surface may move from the true round face, mm (default 0.05 % of the part's size)."}, "min_segments": {"type": "integer", "description": "A full turn keeps at least this many facets (default 12)."}})},
+    {"name": "remove_fillets", "description": "Take the fillets and chamfers off parts that still have their CAD faces (a STEP opened with them) and make the edges sharp: each blend's two neighbouring faces are extended until they meet. Fillets up to max_radius_mm and chamfers up to max_chamfer_mm (default: 2 % of the part's size each; 0 leaves that kind). Works between planes and cylinders; a blend on another kind of face is left and counted. The user is asked to allow it. Parts: ids, name_contains, or the selection; with none of them, every part that is shown.",
+     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "max_radius_mm": {"type": "number", "description": "The largest fillet radius to take off, mm (0: leave fillets)."}, "max_chamfer_mm": {"type": "number", "description": "The widest chamfer to take off, mm (0: leave chamfers)."}})},
+    {"name": "boolean_parts", "description": "Exact booleans between parts (Manifold, in world space): union, subtract (the first less the others) or intersect. The first id is the part that changes; the other parts are left as they are. Only closed bodies take part. The user is asked to allow it.",
+     "inputSchema": _obj({"ids": {"type": "array", "items": {"type": "integer"}, "description": "Two part ids or more; the first changes."}, "op": {"type": "string", "enum": ["union", "subtract", "intersect"]}}, ["ids", "op"])},
+    {"name": "voxel_remesh", "description": "Rebuild parts on a voxel grid (like Blender's Voxel remesh or ZBrush's DynaMesh): one closed, even surface; overlapping bodies become one, hollows shut inside are filled, sharp edges are kept to the size of a voxel, and the result is reduced as far as adaptivity allows. Optionally closes gaps narrower than close_gaps_mm. Good for a clean, watertight stand-in of a messy or many-bodied part; not exact CAD (use simplify_round_part for round parts and belts). The user is asked to allow it. " + _WHICH,
+     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "detail": {"type": "integer", "description": "Voxels along each part's longest side, 32 to 400 (default 160)."}, "adaptivity": {"type": "number", "description": "How far the reduction may move the surface, in voxels, 0 to 2 (default 0.25; 0 keeps every face of the grid)."}, "close_gaps_mm": {"type": "number", "description": "Also fill gaps narrower than this, in mm (default 0: none)."}})},
+    {"name": "simplify_round_part", "description": "For round parts (turned: a spool, bushing, pulley, grommet, fan clutch). mode ridges (default): fill the ridges and grooves of the surface and rebuild the part clean from its profile. The axis is found by itself; gaps along the axis narrower than width_mm are filled flush with the ridge tops, while steps, lips, chamfers, recesses and the bore stay exactly. The part keeps its number of segments and comes out closed with far fewer triangles. A part that is not round around one axis (bolt holes in a flange, a flat, a key way) is refused and left as it was, with the reason. mode belt is for a band swept along a closed path in a plane (a poly-V drive belt, a flat belt, a seal strip): its ribs or grooves along the band are filled and it is swept again from one cross-section. mode solid is for parts round only in steps (a fan with fins, a clutch with ribs), not quite round, or with gaps in the mesh: the part is rebuilt as one solid round shape from its outline, so fins and everything between them become solid; a good low-detail stand-in. The user is asked to allow it. " + _WHICH,
+     "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "width_mm": {"type": "number", "description": "Fill gaps narrower than this, in mm. It must be wider than the spacing of the ridges and narrower than any channel to keep. Default: 15 % of the part's length or diameter, whichever is smaller. 0 fills none (mode solid)."}, "mode": {"type": "string", "enum": ["ridges", "solid", "belt"], "description": "ridges (default): remove ridges, the rest stays exact; the part must be round all the way round. solid: make it one solid round shape (fins, ribs and gaps filled). belt: a belt or band along a closed path; its ribs are filled."}, "segments": {"type": "integer", "description": "Segments around the axis. Default: the part's own (ridges) or 64 (solid)."}})},
     {"name": "search_docs", "description": "Search the app's own knowledge base: the playbooks (how to optimise, recipes by goal, judgement, safety, troubleshooting) and about 50 help articles, one per tool and job. Use it before guessing how a tool works, and for a symptom (flicker, lying on its side, too big). Answered by the server: the app need not be open.",
      "inputSchema": _obj({"query": {"type": "string", "description": "Words or a question."}, "limit": {"type": "integer", "description": "How many results (1 to 10, default 5)."}}, ["query"])},
-    {"name": "read_doc", "description": "Read one article or playbook of the knowledge base in full. name: a slug from search_docs (smart-optimise, fasteners, fill-holes, workflow, ...) or a playbook (optimise, goals, judgement, tools, safety, troubleshooting).",
+    {"name": "read_doc", "description": "Read one article or playbook of the knowledge base in full. name: a slug from search_docs (smart-optimise, fasteners, fill-holes, workflow, ...) or a playbook (optimise, goals, judgement, tools, safety, problems; 'troubleshooting' is the help article).",
      "inputSchema": _obj({"name": {"type": "string"}}, ["name"])},
     {"name": "render_image", "description": "A picture for a client or a report: big and smooth (up to 8192 px), saved as a PNG in the exports folder, with a small preview returned so you can judge it. Choose the camera (view or views: several make a contact sheet and one file each), the look (mode: solid, clay, cad, ...), the background (transparent, white, light, grey, dark, black) and whether the grid is hidden. The model is framed to fill the picture (fit). For a quick look at the viewport use screenshot.",
      "inputSchema": _obj({"width": {"type": "integer", "description": "Pixels, 320 to 8192 (default 2560); a picture is kept under about 36 million pixels in all, so 8192 x 8192 is made 6000 x 6000."}, "height": {"type": "integer", "description": "Pixels, 180 to 8192 (default 1440)."},
@@ -897,6 +988,7 @@ MCP_TOOLS += [
     {"name": "select_by_colour", "description": "Select every visible part with the same colour as the chosen parts, or with a colour you give. Only selects.", "inputSchema": _obj({"ids": _IDS, "name_contains": _NAME, "colour": {"type": "string", "description": "A hex colour such as #ff8800, instead of taking it from parts."}, "mode": {"type": "string", "enum": ["replace", "add", "remove"]}})},
     {"name": "list_materials", "description": "The materials of the scene: name, colour, how many parts use each, metalness, roughness and opacity.", "inputSchema": _obj({"name_contains": _NAME})},
     {"name": "select_by_material", "description": "Select the visible parts that use a material (by part of its name, see list_materials). Only selects.", "inputSchema": _obj({"name_contains": {"type": "string"}, "mode": {"type": "string", "enum": ["replace", "add", "remove"]}}, ["name_contains"])},
+    {"name": "select_by_layer", "description": "Select the visible parts on a CAD layer (by part of the layer's name). Layers come from a STEP file imported with the Layers switch on; list_parts shows a part's layer. Without name_contains it only lists the layers of the scene and how many parts are on each. Only selects.", "inputSchema": _obj({"name_contains": {"type": "string", "description": "Part of a layer name. Leave it out to list the layers."}, "mode": {"type": "string", "enum": ["replace", "add", "remove"]}})},
     {"name": "check_model", "description": "A health check in one call, as an experienced user would do in the first minute: where the triangles are (the heaviest parts and their share), how many parts are tiny, very thin, empty, drawn twice, hidden or instanced, whether the size looks like millimetres, and advice on what to do next. Changes nothing. Start here after scene_summary.", "inputSchema": _obj({"low_triangles": {"type": "integer", "description": "Parts under this many triangles count as low (default 12)."}})},
     {"name": "optimisation_report", "description": "The app's Optimisation report as data: triangles, vertices, parts, draw calls, materials, mesh memory and file size, the file as it was opened against now, with the change in percent, and the largest surface move the reductions caused. For a client note or a before-and-after line.", "inputSchema": _obj()},
     {"name": "estimate_export_size", "description": "What a GLB of the visible parts would weigh (plain and with Draco, estimated) and whether it fits the app's usual limits for a web page (5 MB, 100k triangles), Shopify (15 MB), Apple AR Quick Look (10 MB) and a phone app (25 MB, 200k). Use it to know how far to optimise before you export.", "inputSchema": _obj()},
@@ -931,9 +1023,11 @@ MCP_TOOLS += [
          "format": {"type": "string", "enum": ["glb", "gltf", "fbx", "usdz", "obj", "stl"]},
          "file_name": {"type": "string", "description": "A name without the extension."},
          "compression": {"type": "string", "enum": ["none", "draco", "meshopt"], "description": "For a GLB: none, draco (the safe choice, every viewer), or meshopt (usually smaller and faster to open; the viewer must read EXT_meshopt_compression: three.js, Babylon.js and model-viewer do). Overrides the preset."},
-         "faster_to_draw": {"type": "boolean", "description": "For a GLB without compression: reorder the triangles and vertices for the graphics card. The shape does not change; any viewer opens it. Meshopt already does this."}})},
+         "faster_to_draw": {"type": "boolean", "description": "For a GLB without compression: reorder the triangles and vertices for the graphics card. The shape does not change; any viewer opens it. Meshopt already does this."},
+         "animation": {"type": "boolean", "description": "For a GLB or glTF: write what animate_parts (or the Animate window) animates as a clip in the file. Default true; false leaves it out."}})},
     {"name": "turntable_video", "description": "Render a video of the model turning once (WebM) into the exports folder and return its path. The animations set with animate_parts (or in the Animate window) play in it, each frame at its own time.",
-     "inputSchema": _obj({"seconds": {"type": "integer", "description": "4 to 12 (default 6)."}, "width": {"type": "integer", "description": "Default 1280."}, "height": {"type": "integer", "description": "Default 720."}, "fps": {"type": "integer", "description": "24, 30 or 60 (default 30)."}})},
+     "inputSchema": _obj({"seconds": {"type": "integer", "description": "4 to 12 (default 6)."}, "width": {"type": "integer", "description": "Default 1280."}, "height": {"type": "integer", "description": "Default 720."}, "fps": {"type": "integer", "description": "24, 30 or 60 (default 30)."},
+                          "animations": {"type": "boolean", "description": "Play what animate_parts animates while the view turns. Default true; false records the model standing still."}})},
     {"name": "animate_parts", "description": "Choose which parts or groups MOVE in the video (and in the app), and how. Each gets animation layers that run until removed; turntable_video plays them (set animations false there to leave them out). Kinds: spin (turns a minute round an axis, with loop mode, repeats, delay and loop points), swing (to and fro by an angle), noise (a smooth random shake of the position and the turn) and path (a trip along a circle, figure of eight, square, wave or line). A part moves about the middle of its own geometry in its own axes; a group moves every part inside it together. A part or group has at most one layer of each kind, and the layers add up. Nothing in the model is changed: exports and saved scenes see the parts where they started. Use action list to see what is animated, remove for some parts, clear for everything. Look at the model first (list_parts, list_groups): pick the parts that really move (a fan, a pulley, a wheel), not the whole assembly.",
      "inputSchema": _obj({
          "action": {"type": "string", "enum": ["add", "remove", "list", "clear"], "description": "Default add."},
@@ -1026,7 +1120,7 @@ MCP_TOOLS += [
 ]
 _SHARP_TOOLS = {"decimate", "fit_to_budget", "smart_optimise", "optimise_to_target"}
 _DRY_TOOLS = {"delete_parts", "remove_small_parts", "merge_parts", "merge_by_colour", "decimate", "fit_to_budget", "fill_holes", "remove_hidden_faces", "repair_mesh",
-              "clean_up", "duplicate_parts", "smart_optimise", "smart_fit", "untriangulate", "run_recipe", "optimise_to_target"}
+              "clean_up", "duplicate_parts", "smart_optimise", "smart_fit", "untriangulate", "simplify_round_part", "voxel_remesh", "fix_mesh", "reshape_mesh", "remove_fillets", "simplify_round_faces", "boolean_parts", "run_recipe", "optimise_to_target"}
 for _t in MCP_TOOLS:
     if _t["name"] in _SHARP_TOOLS:
         _t["inputSchema"].setdefault("properties", {})["keep_sharp_edges"] = {"type": "boolean", "description": "Hold on to the hard edges of each part (rims, steps, corners) while triangles are taken out, as far as the goal allows. Default: what the Keep sharp edges switch in the app says (on). Parts that are mostly hard edges, like gears, are reduced as before."}
@@ -1039,7 +1133,7 @@ MCP_TIMEOUT_MORE = {"optimise_to_target": 1800, "compare_images": 900, "batch_op
 MCP_TIMEOUT = {"decimate": 900, "fit_to_budget": 900, "fill_holes": 900, "merge_parts": 600, "export_model": 600,
                "turntable_video": 900, "open_file": 600, "find_fasteners": 300, "clean_up": 600, "remove_small_parts": 300,
                "split_parts": 600, "repair_mesh": 600, "remove_hidden_faces": 900, "duplicate_parts": 300, "merge_by_colour": 600,
-               "smart_optimise": 1800, "render_image": 900, "run_recipe": 1800, "save_scene": 600, "check_model": 300, "find_hidden_parts": 600, "smart_fit": 600, "untriangulate": 900, "remove_floating_pieces": 600, "make_unique": 300}
+               "smart_optimise": 1800, "render_image": 900, "run_recipe": 1800, "save_scene": 600, "check_model": 300, "find_hidden_parts": 600, "smart_fit": 600, "untriangulate": 900, "remove_fillets": 600, "simplify_round_faces": 900, "simplify_round_part": 300, "voxel_remesh": 900, "fix_mesh": 600, "reshape_mesh": 900, "boolean_parts": 600, "remove_floating_pieces": 600, "make_unique": 300}
 MCP_TIMEOUT.update(MCP_TIMEOUT_MORE)
 OPEN_EXT = {".step", ".stp", ".iges", ".igs", ".brep", ".brp", ".glb", ".gltf", ".fbx", ".obj", ".3mf", ".stl"}
 EXPORT_DIR = Path(__file__).resolve().parent / "exports"
@@ -1047,22 +1141,22 @@ EXPORT_DIR = Path(__file__).resolve().parent / "exports"
 # MCP lets a server say more than "here are my tools": each tool can say whether it only reads or changes things (Claude's
 # client uses that to decide what to ask), the server can offer documents to read (resources) and jobs to start (prompts), and
 # it sends a short brief when the connection opens (instructions). The app still asks the user before it changes anything.
-_READ_ONLY = {"say", "scene_summary", "list_parts", "get_selection", "screenshot", "measure_parts", "list_groups", "search_docs", "read_doc", "check_model", "optimisation_report", "estimate_export_size", "list_materials", "list_recipes", "list_library", "list_folder", "list_notes", "get_note", "show_note", "export_notes"}
+_READ_ONLY = {"say", "scene_summary", "list_parts", "get_selection", "screenshot", "measure_parts", "list_groups", "search_docs", "read_doc", "check_model", "optimisation_report", "estimate_export_size", "list_materials", "list_recipes", "list_library", "list_folder", "list_notes", "get_note", "show_note"}
 _CHANGES_MODEL = {"delete_parts", "remove_small_parts", "merge_parts", "merge_by_colour", "decimate", "fit_to_budget", "fill_holes",
                   "remove_hidden_faces", "repair_mesh", "clean_up", "split_parts", "duplicate_parts", "group_parts", "ungroup", "remove_floating_pieces", "make_unique",
-                  "rename_parts", "transform_parts", "recenter_model", "align_to_floor", "smart_optimise", "smart_fit", "untriangulate", "run_recipe", "add_library_part", "optimise_to_target"}
+                  "rename_parts", "transform_parts", "recenter_model", "align_to_floor", "smart_optimise", "smart_fit", "untriangulate", "simplify_round_part", "voxel_remesh", "fix_mesh", "reshape_mesh", "remove_fillets", "simplify_round_faces", "boolean_parts", "run_recipe", "add_library_part", "optimise_to_target"}
 _TITLES = {"scene_summary": "What is open", "list_parts": "List parts", "get_selection": "What is selected", "select_parts": "Select parts",
            "select_all": "Select all or invert", "frame_selection": "Fly to the selection", "screenshot": "Take a screenshot", "hide_parts": "Hide parts",
            "isolate_parts": "Isolate parts", "show_all": "Show everything", "set_view_mode": "Change the view mode", "set_explode": "Explode the view",
            "set_grid": "Show or hide the grid", "set_camera_view": "Move the camera", "undo": "Undo", "redo": "Redo", "find_fasteners": "Find bolts and nuts",
-           "find_stacked_copies": "Find stacked copies", "measure_parts": "Measure between parts", "list_groups": "List groups", "scene_tabs": "Scene tabs",
+           "find_stacked_copies": "Find stacked copies", "remove_lettering": "Remove lettering", "measure_parts": "Measure between parts", "list_groups": "List groups", "scene_tabs": "Scene tabs",
            "delete_parts": "Delete parts", "remove_small_parts": "Delete small parts", "merge_parts": "Merge parts", "merge_by_colour": "Merge by colour",
            "decimate": "Reduce triangles", "fit_to_budget": "Fit to a triangle budget", "fill_holes": "Remove holes", "remove_hidden_faces": "Remove hidden faces",
            "repair_mesh": "Repair meshes", "clean_up": "Clean up", "split_parts": "Split into pieces", "duplicate_parts": "Duplicate parts", "group_parts": "Group parts",
            "ungroup": "Ungroup", "rename_parts": "Rename parts", "transform_parts": "Move, turn, scale", "recenter_model": "Recentre the model",
-           "align_to_floor": "Stand on the floor", "export_model": "Export the model", "turntable_video": "Turntable video", "animate_parts": "Animate parts", "render_image": "Render a picture", "open_file": "Open a file", "select_similar": "Select similar parts", "select_by_colour": "Select by colour", "list_materials": "List materials", "select_by_material": "Select by material", "check_model": "Check the model", "optimisation_report": "Optimisation report", "estimate_export_size": "Estimate the export size", "list_recipes": "List recipes", "run_recipe": "Run a recipe", "list_library": "List the library", "add_library_part": "Add a library part", "save_scene": "Save the scene", "smart_optimise": "Smart optimise", "optimise_to_target": "Optimise to a size", "compare_images": "Before and after picture", "list_folder": "List a folder", "batch_optimise": "Optimise a folder", "find_hidden_parts": "Find hidden parts", "smart_fit": "Replace with simple shapes",
+           "align_to_floor": "Stand on the floor", "export_model": "Export the model", "turntable_video": "Turntable video", "animate_parts": "Animate parts", "render_image": "Render a picture", "open_file": "Open a file", "select_similar": "Select similar parts", "select_by_colour": "Select by colour", "list_materials": "List materials", "select_by_material": "Select by material", "select_by_layer": "Select by layer", "check_model": "Check the model", "optimisation_report": "Optimisation report", "estimate_export_size": "Estimate the export size", "list_recipes": "List recipes", "run_recipe": "Run a recipe", "list_library": "List the library", "add_library_part": "Add a library part", "save_scene": "Save the scene", "smart_optimise": "Smart optimise", "optimise_to_target": "Optimise to a size", "compare_images": "Before and after picture", "list_folder": "List a folder", "batch_optimise": "Optimise a folder", "find_hidden_parts": "Find hidden parts", "smart_fit": "Replace with simple shapes",
            "remove_floating_pieces": "Remove floating pieces", "make_unique": "Make unique", "select_instances": "Select instances", "lock_parts": "Lock parts", "list_notes": "List the notes", "get_note": "Read a note", "show_note": "Show a note in the view", "add_note": "Leave a note", "reply_to_note": "Reply to a note", "update_note": "Change a note", "export_notes": "Export the notes",
-           "untriangulate": "Untriangulate flat faces", "say": "Write to the feed", "search_docs": "Search the app's help", "read_doc": "Read a help article or playbook"}
+           "untriangulate": "Untriangulate flat faces", "simplify_round_part": "Round part: remove ridges or make solid", "voxel_remesh": "Voxel remesh", "fix_mesh": "Mend a mesh", "reshape_mesh": "Reshape a mesh", "remove_fillets": "Remove fillets and chamfers", "simplify_round_faces": "Simplify round faces", "boolean_parts": "Boolean between parts", "say": "Write to the feed", "search_docs": "Search the app's help", "read_doc": "Read a help article or playbook"}
 for _t in MCP_TOOLS:
     _t["annotations"] = {"title": _TITLES.get(_t["name"], _t["name"].replace("_", " ")), "readOnlyHint": _t["name"] in _READ_ONLY,
                          "destructiveHint": _t["name"] in _CHANGES_MODEL, "idempotentHint": _t["name"] in _READ_ONLY, "openWorldHint": False}
@@ -1254,9 +1348,10 @@ def _mcp_call(name, args, on_progress=None, rpc_id=None):
     res = _mcp_local(name, args) if name in _LOCAL_TOOLS else _mcp_call_inner(name, args, on_progress, rpc_id)
     dt = time.time() - t0
     bad = bool(res.get("isError"))
-    st = MCP_STATS["tools"].setdefault(name, {"n": 0, "errors": 0, "ms": 0, "max_ms": 0})
-    st["n"] += 1; st["ms"] += int(dt * 1000); st["max_ms"] = max(st["max_ms"], int(dt * 1000)); MCP_STATS["calls"] += 1
-    if bad: st["errors"] += 1; MCP_STATS["errors"] += 1
+    with MCP_STATS_LOCK:
+        st = MCP_STATS["tools"].setdefault(name, {"n": 0, "errors": 0, "ms": 0, "max_ms": 0})
+        st["n"] += 1; st["ms"] += int(dt * 1000); st["max_ms"] = max(st["max_ms"], int(dt * 1000)); MCP_STATS["calls"] += 1
+        if bad: st["errors"] += 1; MCP_STATS["errors"] += 1
     first = ((res.get("content") or [{}])[0].get("text") or "") if bad else ""
     _mcp_log(f"{name}{(' (' + _brief(args) + ')') if args else ''} -> {'ERROR: ' + first[:110].replace(chr(10), ' ') if bad else 'ok'} in {dt:.1f} s")
     return res
@@ -1264,7 +1359,8 @@ def _mcp_call(name, args, on_progress=None, rpc_id=None):
 def _mcp_call_inner(name, args, on_progress=None, rpc_id=None):
     """Run one tool in the open app and wait for its answer. A job that reports progress is passed on to on_progress while it runs."""
     cv = BRIDGE["cv"]
-    if not BRIDGE.get("inflight") and time.time() - BRIDGE["last_poll"] > 35:
+    with cv: quiet = not BRIDGE.get("inflight") and time.time() - BRIDGE["last_poll"] > 35
+    if quiet:
         return _mcp_text("MeshOptimiser is not listening. Open the app in a browser and turn on Settings > General > Let Claude connect.", True)
     cid = uuid.uuid4().hex
     with cv:
@@ -1283,25 +1379,41 @@ def _mcp_call_inner(name, args, on_progress=None, rpc_id=None):
                 left = deadline - time.time()
                 if left <= 0:
                     BRIDGE["queue"][:] = [c for c in BRIDGE["queue"] if c["id"] != cid]
-                    return _mcp_text("The app did not answer in time. Is the page open and in front? (If it asked for permission, it was not answered.)", True)
+                    # (the page is asked to stop it, and an answer that comes later is thrown away: the job used to go on, an Allow
+                    # prompt stayed up, and an edit allowed later happened after Claude had been told it failed)
+                    _expire(cid)
+                    return _mcp_text("The app did not answer in time. Is the page open and in front? (If it asked for permission, it was not answered.) The job was called off; anything it still finishes is not kept as an answer.", True)
                 cv.wait(min(left, 2.0))
             res = BRIDGE["results"].pop(cid)
         finally:
             BRIDGE["inflight"] = max(0, BRIDGE.get("inflight", 1) - 1)
-            BRIDGE["prog"].pop(cid, None); BRIDGE["cancel"].discard(cid)
+            BRIDGE["prog"].pop(cid, None); BRIDGE["taken"].pop(cid, None)
+            if cid not in BRIDGE["expired"]: BRIDGE["cancel"].discard(cid)      # (an expired one stays on: the page reads it with its progress)
             if rpc_id is not None: BRIDGE["rpc"].pop(str(rpc_id), None)
     if res.get("ok"):
         content = res.get("content")
         return {"content": content if isinstance(content, list) and content else [{"type": "text", "text": "Done."}]}
     return _mcp_text(str(res.get("error") or "The app reported an error."), True)
 
-def _mcp_dispatch(msg):
-    """One JSON-RPC message in, one reply (or None for a notification)."""
+def _mcp_dispatch(msg, session=""):
+    """One JSON-RPC message in, one reply (or None for a notification). A request that cannot be read gets an error, never a
+    dropped connection. The session keeps two clients' request ids apart (a cancel from one cannot stop the other's job)."""
     if not isinstance(msg, dict): return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid request"}}
+    try:
+        return _mcp_dispatch_inner(msg, session)
+    except Exception as e:
+        _mcp_log(f"a request could not be handled: {type(e).__name__}: {str(e)[:120]}")
+        if msg.get("id") is None: return None
+        bad_args = isinstance(e, (TypeError, ValueError, AttributeError, KeyError))
+        return {"jsonrpc": "2.0", "id": msg.get("id"), "error": {"code": -32602 if bad_args else -32603,
+                "message": ("Invalid params: " if bad_args else "Internal error: ") + str(e)[:200]}}
+
+def _mcp_dispatch_inner(msg, session):
     mid, method, params = msg.get("id"), msg.get("method"), msg.get("params") or {}
+    if not isinstance(params, dict): raise TypeError("params must be an object")
     if method == "notifications/cancelled":          # the client gave up on a request: ask the app to stop that job
         with BRIDGE["cv"]:
-            cid = BRIDGE["rpc"].get(str(params.get("requestId")))
+            cid = BRIDGE["rpc"].get(session + ":" + str(params.get("requestId")))
             if cid: BRIDGE["cancel"].add(cid); _mcp_log("the client cancelled a request")
         return None
     if method is None or mid is None:        # a notification, or a reply to us: nothing to say
@@ -1331,7 +1443,7 @@ def _mcp_dispatch(msg):
         name = params.get("name")
         if name not in MCP_TOOL_NAMES: return err(-32602, f"Unknown tool: {name}")
         args = params.get("arguments")
-        return ok(_mcp_call(name, args if isinstance(args, dict) else {}))
+        return ok(_mcp_call(name, args if isinstance(args, dict) else {}, None, session + ":" + str(mid)))
     return err(-32601, f"Method not found: {method}")
 
 
@@ -1392,14 +1504,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _refuse(self):
         return self._json({"error": "forbidden"}, 403)
 
+    # A path under `base` for the rest of a URL, or None when it would leave it. (`Path / "C:/x"` or `/ "/x"` drops the base,
+    # and normpath keeps a drive letter: so the result is resolved and must still be inside.)
+    @staticmethod
+    def _inside(base: Path, rest: str):
+        rel = unquote(rest).replace("\\", "/")
+        if not rel or rel.startswith("/") or re.match(r"^[A-Za-z]:", rel) or ":" in rel:
+            return None
+        try:
+            full = (base / rel).resolve()
+            full.relative_to(base.resolve())
+        except (ValueError, OSError):
+            return None
+        return full
+
     # The self-test (?selftest) lives in tests/ beside this folder in the repository, not in the shipped package.
     def translate_path(self, path):
         p = urlparse(path).path
         if p.startswith("/tests/") and not (ROOT / "tests").is_dir():
             up = ROOT.parent / "tests"
-            rel = os.path.normpath(unquote(p[len("/tests/"):])).replace("\\", "/")
-            if up.is_dir() and not rel.startswith(".."):
-                return str(up / rel)
+            full = self._inside(up, p[len("/tests/"):]) if up.is_dir() else None
+            if full is not None:
+                return str(full)
+            if up.is_dir():
+                return str(ROOT / "__refused__")                     # (a 404, never the default lookup of an odd path)
+        # The sample models (inbox/GearboxAssy.glb and the others the tests open) are in the repository's inbox/, beside
+        # this folder; the app's own inbox is app/inbox. A file that is not in the app's inbox is looked for there.
+        if p.startswith("/inbox/"):
+            up = ROOT.parent / "inbox"
+            rest = p[len("/inbox/"):]
+            full = self._inside(up, rest) if up.is_dir() and up.resolve() != INBOX.resolve() else None
+            mine = self._inside(INBOX, rest)
+            if full is not None and not (mine is not None and mine.is_file()) and full.is_file():
+                return str(full)
         return super().translate_path(path)
 
     # No folder listings, and nothing from a dot-folder (.git, .venv): the app
@@ -1410,8 +1547,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     @staticmethod
     def _hidden(path: str) -> bool:
-        """A path with a dot-folder or dot-file in it, also when the dot is written %2e (the file server decodes the path after this check)."""
-        return any(seg.startswith(".") for seg in unquote(unquote(path)).replace("\\", "/").split("/") if seg)
+        """A path with a dot-folder or dot-file in it, also when the dot is written %2e (the file server decodes the path after this check),
+        or one spelled with a Windows short name (VENV~1 for .venv: the 8.3 name of a dot-folder has no dot)."""
+        return any(seg.startswith(".") or re.search(r"~\d", seg) for seg in unquote(unquote(path)).replace("\\", "/").split("/") if seg)
 
     def do_GET(self):
         if not self._trusted(): return self._refuse()
@@ -1495,7 +1633,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if (p.get("_meta") or {}).get("progressToken") is not None and p.get("name") in _STREAMED and "text/event-stream" in (self.headers.get("Accept") or ""):
                 return self._stream_call(body)
         msgs = body if isinstance(body, list) else [body]
-        out = [r for r in (_mcp_dispatch(m) for m in msgs) if r is not None]
+        session = (self.headers.get("Mcp-Session-Id") or "").strip()[:80]
+        out = [r for r in (_mcp_dispatch(m, session) for m in msgs) if r is not None]
         if not out:
             self.send_response(202); self.send_header("Content-Length", "0"); self.end_headers(); return
         return self._json(out if isinstance(body, list) else out[0])
@@ -1520,7 +1659,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             n = {"progressToken": token, "progress": v, "message": pr.get("message") or ""}
             if pr.get("total"): n["total"] = pr["total"]
             send({"jsonrpc": "2.0", "method": "notifications/progress", "params": n})
-        res = _mcp_call(name, args, on_progress, body.get("id"))
+        session = (self.headers.get("Mcp-Session-Id") or "").strip()[:80]
+        res = _mcp_call(name, args, on_progress, session + ":" + str(body.get("id")))
         try: send({"jsonrpc": "2.0", "id": body.get("id"), "result": res})
         except Exception: pass
 
@@ -1530,10 +1670,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         cid = str(body.get("id") or "")
         with BRIDGE["cv"]:
             if cid:
-                BRIDGE["prog"][cid] = {"progress": body.get("progress") or 0, "total": body.get("total") or 0, "message": str(body.get("message") or "")[:200]}
+                if cid not in BRIDGE["expired"]:
+                    BRIDGE["prog"][cid] = {"progress": body.get("progress") or 0, "total": body.get("total") or 0, "message": str(body.get("message") or "")[:200]}
                 BRIDGE["last_poll"] = time.time()             # a busy page is an alive page
                 BRIDGE["cv"].notify_all()
-            cancel = cid in BRIDGE["cancel"]
+            # A job this server never handed out (it was restarted while the page held an Allow prompt) has nobody waiting for it:
+            # the page is told to stop, so an edit allowed then does not happen with its answer going nowhere.
+            unknown = bool(cid) and cid not in BRIDGE["taken"] and cid not in BRIDGE["expired"] \
+                and not any(c.get("id") == cid for c in BRIDGE["queue"])
+            cancel = cid in BRIDGE["cancel"] or unknown
         return self._json({"ok": True, "cancel": cancel})
 
     def _handle_bridge_list(self):
@@ -1544,24 +1689,38 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not p or not p.is_dir():
             return self._json({"error": "not a folder: " + str(body.get("path", ""))}, 400)
         found = []
+        # (a recursive look at C:\ walked the whole disk and kept a thread busy long after the call had timed out: it stops after
+        # 20,000 folders or 20 seconds, and says so)
+        t_end, dirs, cut = time.time() + 20, 0, False
+        def unreadable(err):
+            if Path(getattr(err, "filename", "") or "") == p: raise err     # the folder asked for: say so (a folder inside it is passed over)
         try:
-            for f in (p.rglob("*") if body.get("recursive") else p.iterdir()):
-                try:
-                    if f.is_file() and f.suffix.lower() in OPEN_EXT and not any(s.startswith(".") for s in f.relative_to(p).parts):
-                        size = f.stat().st_size
-                        if size <= 2 * 1024 ** 3: found.append({"name": str(f.relative_to(p)).replace("\\", "/"), "path": str(f), "megabytes": round(size / 1048576, 2)})
-                except OSError: continue
-                if len(found) >= 5000: break
+            for root, sub, files in os.walk(p, onerror=unreadable):
+                sub[:] = [d for d in sub if not d.startswith(".")] if body.get("recursive") else []
+                dirs += 1
+                for fn in files:
+                    if fn.startswith(".") or Path(fn).suffix.lower() not in OPEN_EXT: continue
+                    fp = Path(root) / fn
+                    try:
+                        size = fp.stat().st_size
+                        if size <= 2 * 1024 ** 3: found.append({"name": str(fp.relative_to(p)).replace("\\", "/"), "path": str(fp), "megabytes": round(size / 1048576, 2)})
+                    except OSError: continue
+                    if len(found) >= 5000: break
+                if len(found) >= 5000 or dirs >= 20000 or time.time() > t_end:
+                    cut = True; break
         except OSError as e:
             return self._json({"error": "cannot read that folder: " + str(e)}, 400)
         found.sort(key=lambda r: r["name"].lower())
-        return self._json({"folder": str(p), "total": len(found), "files": found[:300]})
+        out = {"folder": str(p), "total": len(found), "files": found[:300]}
+        if cut: out["stopped_early"] = "The look stopped at a limit (5,000 files, 20,000 folders or 20 seconds): the list is not complete. Ask for a smaller folder."
+        return self._json(out)
 
     def _handle_bridge_restart(self):
         """Start the connection from scratch: forget the window that had it, answer what was waiting, read the knowledge again."""
         with BRIDGE["cv"]:
             for cmd in BRIDGE["queue"]: BRIDGE["results"][cmd["id"]] = {"ok": False, "error": "The connection was restarted before the app could answer."}
             BRIDGE["queue"][:] = []
+            _fail_taken(lambda w: True, "The connection was restarted before the app could answer.")
             BRIDGE["last_poll"] = 0.0; BRIDGE["active"] = None; BRIDGE["inflight"] = 0
             BRIDGE["cv"].notify_all()
         _reload_knowledge()
@@ -1604,10 +1763,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if action == "cancel":
                 updater.cancel(); return self._json({"ok": True})
             if action == "rollback":
-                if updater.busy(): return self._json({"ok": False, "error": "An update is running."}, 409)
-                res = updater.rollback("You asked for the earlier version.")
+                res = updater.rollback("You asked for the earlier version.")      # (it refuses by itself while an update is moving files)
                 _after_update({"to": res["restored"]})
-                return self._json({"ok": True, **res})
+                return self._json({"ok": True, **res, "phase": updater.status().get("phase")})
             if action == "confirm":
                 updater.confirm(); return self._json({"ok": True})
             if action == "dismiss":
@@ -1623,6 +1781,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             BRIDGE["last_poll"] = 0.0; BRIDGE["active"] = None
             for cmd in BRIDGE["queue"]: BRIDGE["results"][cmd["id"]] = {"ok": False, "error": "The app was switched off (Let Claude connect) before it could answer."}
             BRIDGE["queue"][:] = []
+            _fail_taken(lambda w: True, "The app was switched off (Let Claude connect) before it could answer.")
             BRIDGE["cv"].notify_all()
         if was: _mcp_log("the app switched the connection off")
         return self._json({"ok": True})
@@ -1653,8 +1812,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if fresh or not active or time.time() - BRIDGE["last_poll"] > 35:
                 if active != cid or time.time() - BRIDGE["last_poll"] > 35:
                     gap = time.time() - BRIDGE["last_poll"] if BRIDGE["last_poll"] else None
-                    MCP_STATS["connects"] += 1
+                    with MCP_STATS_LOCK: MCP_STATS["connects"] += 1
                     _mcp_log(f"the app is listening (window {cid[:6]}{', quiet for ' + str(int(gap)) + ' s' if gap and gap > 35 else ''})")
+                if active and active != cid:       # (the window that had it was closed or replaced: what it took will not be answered)
+                    _fail_taken(lambda w, old=active: w == old, "The window that was working on this was closed or replaced by another one.")
                 BRIDGE["active"] = cid
             elif active != cid:
                 _mcp_log(f"window {cid[:6]} was turned away: window {str(active)[:6]} has the connection")
@@ -1673,7 +1834,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 BRIDGE["last_poll"] = time.time()
             if BRIDGE.get("seq") != mine and BRIDGE["queue"]:        # a command must go to the live poll only
                 self.send_response(204); self.send_header("Content-Length", "0"); self.end_headers(); return
-            if BRIDGE["queue"]: cmd = BRIDGE["queue"].pop(0)
+            if BRIDGE["queue"] and self._peer_gone():                # (the page that asked has gone: the command waits for the next poll)
+                return
+            if BRIDGE["queue"]:
+                cmd = BRIDGE["queue"].pop(0)
+                BRIDGE["taken"][cmd["id"]] = cid
         if cmd is None:
             self.send_response(204); self.end_headers(); return
         return self._json(cmd)
@@ -1719,11 +1884,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if not chunk: break
                 self.wfile.write(chunk)
 
+    def _peer_gone(self) -> bool:
+        """The other end of this request has closed its connection (a page that was closed while its poll waited)."""
+        try:
+            import socket as _s
+            ready, _, _ = select.select([self.connection], [], [], 0)
+            return bool(ready) and self.connection.recv(1, _s.MSG_PEEK) == b""
+        except Exception:
+            return False
+
     def _handle_bridge_result(self):
-        body = self._read_json()
+        body = self._read_json(64 * 1024 * 1024)       # (a big screenshot: the 8 MB of other requests was too little, and the call hung)
         if not isinstance(body, dict) or not body.get("id"):
             return self._json({"error": "bad result"}, 400)
         with BRIDGE["cv"]:
+            if str(body["id"]) in BRIDGE["expired"]:      # nobody waits for it any more (the call timed out): not kept
+                jid = str(body["id"]); BRIDGE["expired"].pop(jid, None); BRIDGE["cancel"].discard(jid); BRIDGE["prog"].pop(jid, None); BRIDGE["results"].pop(jid, None)
+                return self._json({"ok": False, "late": True})
+            if str(body["id"]) not in BRIDGE["taken"]:     # a job of a server before a restart: nobody here waits for it (it was kept for ever)
+                return self._json({"ok": False, "late": True})
             BRIDGE["results"][str(body["id"])] = body
             BRIDGE["last_poll"] = time.time()      # an answer proves the page is alive, even if a long job kept it from asking again yet
             BRIDGE["cv"].notify_all()
@@ -1849,6 +2028,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _refuse_upload(self, obj, status):
+        """Refuse an upload with its reason. The body is read (and thrown away) first: answered before it, the browser saw the
+        connection reset and said "Failed to fetch" instead of the reason. Reading it over this computer's own loopback is quick."""
+        try:
+            left = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            left = 0
+        try:
+            while left > 0:
+                chunk = self.rfile.read(min(left, 1 << 20))
+                if not chunk: break
+                left -= len(chunk)
+        except OSError:
+            pass
+        self.close_connection = True
+        return self._json(obj, status)
+
     def _handle_convert(self):
         u = urlparse(self.path)
         q = parse_qs(u.query)
@@ -1859,17 +2055,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # Extension allow-list — never write anything that's not a CAD file
         # step2glb.py reads (it picks its reader by the extension).
         if not name.lower().endswith(CAD_EXTS):
-            return self._json({"error": "filename must end in .step, .stp, .iges, .igs, .brep or .brp"}, 400)
+            return self._refuse_upload({"error": "filename must end in .step, .stp, .iges, .igs, .brep or .brp"}, 400)
 
         try:
             quality = float(q.get("quality", ["0.5"])[0])
             min_size = float(q.get("min_size", ["0"])[0])
         except ValueError:
-            return self._json({"error": "quality and min_size must be numeric"}, 400)
+            return self._refuse_upload({"error": "quality and min_size must be numeric"}, 400)
         if not (1e-6 <= quality <= 1e3):
-            return self._json({"error": "quality out of range (1e-6 .. 1000)"}, 400)
+            return self._refuse_upload({"error": "quality out of range (1e-6 .. 1000)"}, 400)
         if not (0.0 <= min_size <= 100.0):
-            return self._json({"error": "min_size out of range (0 .. 100)"}, 400)
+            return self._refuse_upload({"error": "min_size out of range (0 .. 100)"}, 400)
 
         # Optional import-settings modal flags. All have safe defaults that
         # match the historical behavior, so missing/malformed values simply
@@ -1902,28 +2098,28 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             ang = float(q.get("angle", ["0"])[0])
             min_edge = float(q.get("min_edge", ["0"])[0])
         except ValueError:
-            return self._json({"error": "angle and min_edge must be numeric"}, 400)
+            return self._refuse_upload({"error": "angle and min_edge must be numeric"}, 400)
         if ang:
             if not (0.06 <= ang <= 180):
-                return self._json({"error": "angle out of range (0.06 .. 180 degrees)"}, 400)
+                return self._refuse_upload({"error": "angle out of range (0.06 .. 180 degrees)"}, 400)
             opts["angular"] = math.radians(ang)
         if not (0.0 <= min_edge <= 1000.0):
-            return self._json({"error": "min_edge out of range (0 .. 1000)"}, 400)
+            return self._refuse_upload({"error": "min_edge out of range (0 .. 1000)"}, 400)
         opts["min_edge"] = min_edge
         tiers = q.get("tiers", [""])[0]
         if tiers:
             if not re.fullmatch(r"[0-9.]+,[0-9.]+(:[0-9.]+,[0-9.]+){3}", tiers):
-                return self._json({"error": "tiers must look like 5,30:2,60:0.2,30:0.05,10"}, 400)
+                return self._refuse_upload({"error": "tiers must look like 5,30:2,60:0.2,30:0.05,10"}, 400)
             opts["tiers"] = tiers
 
         try:
             size = int(self.headers.get("Content-Length", "0"))
         except ValueError:
-            return self._json({"error": "Content-Length must be integer"}, 400)
+            return self._refuse_upload({"error": "Content-Length must be integer"}, 400)
         if size <= 0:
-            return self._json({"error": "empty body"}, 400)
+            return self._refuse_upload({"error": "empty body"}, 400)
         if size > MAX_UPLOAD_BYTES:
-            return self._json({
+            return self._refuse_upload({
                 "error": f"upload too large ({size / 1048576:.1f} MB > "
                          f"{MAX_UPLOAD_BYTES / 1048576:.0f} MB cap)"
             }, 413)
@@ -1932,7 +2128,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             free = shutil.disk_usage(INBOX).free
             if free < size * 3:
-                return self._json({
+                return self._refuse_upload({
                     "error": f"not enough free disk space for this file ({free / 1048576:.0f} MB free, "
                              f"about {size * 3 / 1048576:.0f} MB needed)"
                 }, 507)
@@ -1950,7 +2146,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             src.relative_to(INBOX.resolve())
         except ValueError:
-            return self._json({"error": "path traversal attempt blocked"}, 400)
+            return self._refuse_upload({"error": "path traversal attempt blocked"}, 400)
         dst = src.with_suffix(".glb")
 
         # Stream-read the body, enforcing the cap precisely (Content-Length

@@ -77,11 +77,11 @@ def sha256_file(p: Path) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--version"); ap.add_argument("--channel", choices=["stable", "beta"], default="stable")
-    ap.add_argument("--out", default="dist"); ap.add_argument("--feed", help="the feed as it is now; this release is put into it")
+    ap.add_argument("--out", default="dist"); ap.add_argument("--feed", help="the feed as it is now; this release is put into it (default: site/latest.json)")
     ap.add_argument("--url-base", help="where the zip will be downloaded from (default: the GitHub release of this tag)")
     ap.add_argument("--min-from", default="", help="the oldest version that may update to this one in the app")
     ap.add_argument("--headline", default="", help="one sentence for the update notice (default: none)")
-    ap.add_argument("--installer", help="the full download zip of this release (build-package.py output): its address, SHA-256 and size go into the feed so install.ps1 can check it")
+    ap.add_argument("--installer", help="the full download zip of this release (build-package.py output): its address, SHA-256 and size go into the feed so install.ps1 can check it (default: MeshOptimiser-v<version>.zip in --out, when it is there)")
     ap.add_argument("--delete", action="append", default=[], help="a file the previous version had that this one does not (repeatable)")
     a = ap.parse_args()
 
@@ -104,6 +104,11 @@ def main() -> int:
     # the archive must pass the same checks the app runs
     updater.verify_archive(zpath, ver)
 
+    # The defaults are what a release needs: without the current feed, "requirements_changed" could never be true (there was no
+    # earlier hash to compare with), and without the installer install.ps1 downloaded the full zip unchecked (0.34.0's feed).
+    if not a.feed and (ROOT / "site" / "latest.json").is_file(): a.feed = str(ROOT / "site" / "latest.json")
+    if not a.installer and (out / f"MeshOptimiser-v{ver}.zip").is_file(): a.installer = str(out / f"MeshOptimiser-v{ver}.zip")
+    if not a.installer: print(f"  NOTE: no installer zip (MeshOptimiser-v{ver}.zip in {a.out}): the feed has no installer block, and install.ps1 will not be able to check the full download. Run build-package.py first, or pass --installer.")
     feed = {"schema": 1}
     if a.feed and Path(a.feed).is_file():
         try: feed = json.loads(Path(a.feed).read_text("utf-8")); feed["schema"] = 1

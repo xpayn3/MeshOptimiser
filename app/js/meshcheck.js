@@ -29,26 +29,30 @@
 
 export const DEFAULTS = { weldTol: 2e-6, sliver: 1e-3, flat: 2e-7 };
 
-export function checkMesh(positions, index, opts = {}) {
-  const o = { ...DEFAULTS, ...opts };
-  const vc = Math.floor(positions.length / 3);
-  const T0 = index ? Math.floor(index.length / 3) : Math.floor(vc / 3);
-  const out = { tris: T0, vertices: vc, welded: 0, degenerate: 0, slivers: 0, duplicate: 0, openEdges: 0, holes: 0, nonManifoldEdges: 0,
-    nonManifoldVertices: 0, inconsistent: 0, pieces: 0, closedPieces: 0, insideOut: 0, cavities: 0, mixedPieces: 0, volume: 0, diag: 0 };
-  if (!T0 || !vc) return out;
+// How flat a triangle is: twice its area over its longest side squared (0: its corners are on one line). Two of its sides as
+// vectors from the first corner. Below DEFAULTS.flat the check counts it as having no area; Repair mesh removes it on the same test.
+export function flatness(ux, uy, uz, vx, vy, vz) {
+  const wx = vx - ux, wy = vy - uy, wz = vz - uz;
+  const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+  const L2 = Math.max(ux * ux + uy * uy + uz * uz, vx * vx + vy * vy + vz * vz, wx * wx + wy * wy + wz * wz);
+  return L2 > 0 ? Math.sqrt(cx * cx + cy * cy + cz * cz) / L2 : 0;
+}
 
-  // ── 1. the size of the part, and the vertices that are one ─────────────────────────────────────────────────────────────
+// The vertices that are one place: welded when they are within weldTol of the part's size of each other, but never closer than a
+// few steps of the float32 numbers the positions are kept in at the place the part is (a small part far from the origin cannot hold
+// its corners any finer than that). The search looks into the neighbouring cells of a grid, so two points a hair apart are joined
+// however the grid falls between them. Returns { ids (vertex → welded point), rep (welded point → its first vertex), count, tol, diag }.
+// Repair mesh (meshrepair.js) works on this same weld, so what it mends is what this check counts.
+export function weldByDistance(positions, weldTol = DEFAULTS.weldTol) {
+  const vc = Math.floor(positions.length / 3);
   let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
   for (let i = 0; i < vc; i++) {
     const x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2];
     if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
   }
   const diag = Math.hypot(x1 - x0, y1 - y0, z1 - z0) || 1;
-  out.diag = diag;
-  // How close is "the same place": a few millionths of the part's size, but never closer than a few steps of the float32 numbers the
-  // positions are kept in at the place the part is (a small part far from the origin cannot hold its corners any finer than that).
   const mag = Math.max(Math.abs(x0), Math.abs(x1), Math.abs(y0), Math.abs(y1), Math.abs(z0), Math.abs(z1));
-  const tol = Math.max(diag * o.weldTol, mag * 1.2e-7 * 8), tol2 = tol * tol, cell = tol * 50, inv = 1 / cell, tf = tol / cell;
+  const tol = Math.max(diag * weldTol, mag * 1.2e-7 * 8), tol2 = tol * tol, cell = tol * 50, inv = 1 / cell, tf = tol / cell;
   const ids = new Int32Array(vc), repOf = [], nextRep = [], head = new Map();
   const ck = (a, b, c) => ((a + 2) * 65536 + (b + 2)) * 65536 + (c + 2);
   let N = 0;
@@ -74,12 +78,25 @@ export function checkMesh(positions, index, opts = {}) {
     }
     ids[i] = found;
   }
-  head.clear();
+  return { ids, rep: repOf, count: N, tol, diag };
+}
+
+export function checkMesh(positions, index, opts = {}) {
+  const o = { ...DEFAULTS, ...opts };
+  const vc = Math.floor(positions.length / 3);
+  const T0 = index ? Math.floor(index.length / 3) : Math.floor(vc / 3);
+  const out = { tris: T0, vertices: vc, welded: 0, degenerate: 0, slivers: 0, duplicate: 0, openEdges: 0, holes: 0, nonManifoldEdges: 0,
+    nonManifoldVertices: 0, inconsistent: 0, pieces: 0, closedPieces: 0, insideOut: 0, cavities: 0, mixedPieces: 0, volume: 0, diag: 0 };
+  if (!T0 || !vc) return out;
+
+  // ── 1. the size of the part, and the vertices that are one ─────────────────────────────────────────────────────────────
+  const w = weldByDistance(positions, o.weldTol), ids = w.ids, repOf = w.rep, N = w.count, diag = w.diag;
+  out.diag = diag;
   out.welded = N;
   const P = (id) => repOf[id] * 3;           // where a welded vertex is (its first vertex)
 
   // ── 2. the triangles: empty ones and doubled ones are counted and left out; the rest give the edges ─────────────────────
-  let cap = 1024; while (cap < T0 * 3) cap <<= 1;
+  let cap = 1024; while (cap < T0 * 6) cap <<= 1;           // (up to 3·T0 edges: kept at most half full, or linear probing crawls on an unwelded soup)
   const mask = cap - 1, ekey = new Float64Array(cap).fill(-1), eslot = new Int32Array(cap);
   const E3 = T0 * 3;
   const ec = new Uint8Array(E3), et1 = new Int32Array(E3), et2 = new Int32Array(E3), ed1 = new Uint8Array(E3), ed2 = new Uint8Array(E3), ea = new Int32Array(E3), eb = new Int32Array(E3);
@@ -105,11 +122,9 @@ export function checkMesh(positions, index, opts = {}) {
     if (a === b || b === c || a === c) { out.degenerate++; continue; }
     const ux = positions[i1 * 3] - positions[i0 * 3], uy = positions[i1 * 3 + 1] - positions[i0 * 3 + 1], uz = positions[i1 * 3 + 2] - positions[i0 * 3 + 2];
     const vx = positions[i2 * 3] - positions[i0 * 3], vy = positions[i2 * 3 + 1] - positions[i0 * 3 + 1], vz = positions[i2 * 3 + 2] - positions[i0 * 3 + 2];
-    const wx = vx - ux, wy = vy - uy, wz = vz - uz;
-    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx, cr = Math.sqrt(cx * cx + cy * cy + cz * cz);
-    const L2 = Math.max(ux * ux + uy * uy + uz * uz, vx * vx + vy * vy + vz * vz, wx * wx + wy * wy + wz * wz);
-    if (cr <= o.flat * L2) { out.degenerate++; continue; }
-    if (cr < o.sliver * L2) out.slivers++;
+    const sh2 = flatness(ux, uy, uz, vx, vy, vz);
+    if (sh2 <= o.flat) { out.degenerate++; continue; }
+    if (sh2 < o.sliver) out.slivers++;
     // the same triangle again (either way round)?
     const lo = Math.min(a, b, c), hi = Math.max(a, b, c), mid = a + b + c - lo - hi;
     const dh = Math.imul(lo, 73856093) ^ Math.imul(mid, 19349663) ^ Math.imul(hi, 83492791);

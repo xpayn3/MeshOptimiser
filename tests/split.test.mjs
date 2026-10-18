@@ -40,6 +40,90 @@ const run = (g, o) => partition(g.attributes.position.array, g.index ? g.index.a
   ok(run(apart, { method: 'hybrid', epsAbs: 1e-9 }).count === 3, 'hybrid: three boxes apart, three pieces');
 }
 
+// ── welding within a tolerance ──────────────────────────────────────────────────────────────────────────────────────────
+{
+  // two boxes 5 apart, every corner doubled with a drift of one float step on the duplicate: with the old rounding to a grid about
+  // 2 % of the doubled corners fell on both sides of a cell border and their faces came loose
+  const base = merge([box(0, 0, 0), box(5, 0, 0)]);
+  const p = base.attributes.position.array, idx = base.index.array;
+  const pos2 = new Float32Array(p.length * 2); pos2.set(p);
+  for (let i = 0; i < p.length; i++) { const v = p[i]; const up = v + Math.abs(v) * 6e-8 + 1e-9; pos2[p.length + i] = up; }
+  const idx2 = new Uint32Array(idx.length);
+  const nv = p.length / 3;
+  for (let t = 0; t < idx.length / 3; t++) for (let k = 0; k < 3; k++) idx2[t * 3 + k] = idx[t * 3 + k] + ((t * 7 + k) % 3 === 0 ? nv : 0);   // a third of the corners use the drifted copy
+  let loose = 0;
+  for (let trial = 0; trial < 40; trial++) {
+    const shift = trial * 0.0137;                                          // the mesh at many places on the grid
+    const pp = pos2.map((v, i) => v + shift);
+    const r = partition(pp, idx2, { method: 'vertex', epsAbs: 1e-5 });
+    if (r.count !== 2) loose++;
+  }
+  ok(loose === 0, 'drifted duplicates weld at every place on the grid (' + loose + ' of 40 positions came loose)');
+  const two = merge([box(0, 0, 0), box(5, 0, 0)]);
+  ok(partition(two.attributes.position.array, two.index.array, { method: 'vertex', epsAbs: 1e-5 }).count === 2, 'the tolerance joins nothing 5 apart');
+  const near = merge([box(0, 0, 0), box(1.00001, 0, 0)]);
+  ok(partition(near.attributes.position.array, near.index.array, { method: 'vertex', epsAbs: 1.2e-5 }).count === 1, 'and joins boxes 0.00001 apart at a tolerance of 0.000012');
+  ok(partition(near.attributes.position.array, near.index.array, { method: 'vertex', epsAbs: 2e-6 }).count === 2, 'but not at a tolerance of 0.000002');
+}
+
+// ── bodies ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+{
+  const touchCorner = merge([box(0, 0, 0), box(1, 1, 1)]);
+  ok(run(touchCorner, { method: 'bodies', epsAbs: 1e-9 }).count === 2, 'bodies: two boxes that meet at a corner are two');
+  const touchEdge = merge([box(0, 0, 0), box(1, 1, 0)]);                                  // share the edge x=0.5,y=0.5
+  ok(run(touchEdge, { method: 'bodies', epsAbs: 1e-9 }).count === 2, 'bodies: two boxes that share an edge are two (vertex: ' + run(touchEdge, { method: 'vertex', epsAbs: 1e-9 }).count + ', edge: ' + run(touchEdge, { method: 'edge', epsAbs: 1e-9 }).count + ')');
+  ok(run(touchEdge, { method: 'edge', epsAbs: 1e-9 }).count === 1, '(edge connectivity joins them, as it always did)');
+  const stacked = merge([box(0, 0, 0), box(0, 1, 0)]);                                    // share the whole face y=0.5
+  const st = run(stacked, { method: 'bodies', epsAbs: 1e-9 });
+  ok(st.count === 2 && st.sizes[0] === 12 && st.sizes[1] === 12, 'bodies: two boxes stacked face to face are two, each with its 12 triangles');
+  const row = merge([box(0, 0, 0), box(1, 0, 0), box(2, 0, 0), box(1, 1, 0)]);           // a row of three and one on top of the middle
+  ok(run(row, { method: 'bodies', epsAbs: 1e-9 }).count === 4, 'bodies: four boxes in contact are four');
+  // a solid with a T-junction: a box whose top face is cut in two with a shared edge the other faces do not have points on
+  {
+    const g = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+    const p = Array.from(g.attributes.position.array), tris = [];
+    for (let t = 0; t < p.length / 9; t++) tris.push([p.slice(t * 9, t * 9 + 3), p.slice(t * 9 + 3, t * 9 + 6), p.slice(t * 9 + 6, t * 9 + 9)]);
+    const top = tris.filter(tr => tr.every(v => v[1] > 0.49)), rest = tris.filter(tr => !tr.every(v => v[1] > 0.49));
+    // the top as four triangles round its centre: their edges to the corners are T-junctions against the side faces' edges? no:
+    // the sides keep the corner-to-corner edge, the top has corner-to-centre edges plus the same outer edges, so this is a fine
+    // top on a coarse side only if the outer edges are split: split each outer edge at its middle
+    const c = [0, 0.5, 0], corners = [[-0.5, 0.5, -0.5], [0.5, 0.5, -0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]];
+    const fine = [];
+    for (let i = 0; i < 4; i++) { const a = corners[i], b = corners[(i + 1) % 4], m = [(a[0] + b[0]) / 2, 0.5, (a[2] + b[2]) / 2]; fine.push([a, m, c], [m, b, c]); }
+    const all = rest.concat(fine);
+    const pos = new Float32Array(all.flat(2));
+    const r = partition(pos, null, { method: 'bodies', epsAbs: 1e-9 });
+    ok(r.count === 1, 'bodies: a box whose top is finer than its sides (T-junctions along the top edges) stays one body (' + r.count + ')');
+    const r2 = partition(pos, null, { method: 'edge', epsAbs: 1e-9 });
+    ok(r2.count === 2, '(edge connectivity cuts the top off: ' + r2.count + ')');
+  }
+  // a sliver (two corners at one place) at a seam does not become a part of its own
+  {
+    const g = merge([box(0, 0, 0), box(0, 1, 0)]);
+    const p = Array.from(g.attributes.position.array), idx = Array.from(g.index.array);
+    const n = p.length / 3;
+    p.push(-0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5, 0.5, -0.5);                                // a zero-area triangle along a seam edge
+    idx.push(n, n + 1, n + 2);
+    const r = partition(new Float32Array(p), new Uint32Array(idx), { method: 'bodies', epsAbs: 1e-9 });
+    ok(r.count === 2, 'bodies: a zero-area triangle on the seam goes with a neighbour (' + r.count + ' pieces)');
+  }
+  // a single stray triangle at a seam is a crumb, not a part
+  {
+    const g = merge([box(0, 0, 0), box(0, 1, 0)]);
+    const p = Array.from(g.attributes.position.array), idx = Array.from(g.index.array);
+    const n = p.length / 3;
+    p.push(-0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0, 0.9, -0.9);                                   // a flap off the seam edge, wound the wrong way round
+    idx.push(n + 1, n, n + 2);
+    const r = partition(new Float32Array(p), new Uint32Array(idx), { method: 'bodies', epsAbs: 1e-9 });
+    ok(r.count === 2, 'bodies: a flap of one triangle on the seam goes with a neighbour (' + r.count + ' pieces)');
+  }
+  const closed = new THREE.CylinderGeometry(1, 1, 2, 24);
+  ok(run(closed, { method: 'bodies', epsAbs: 1e-9 }).count === 1, 'bodies: a cylinder is one body');
+  const plane = new THREE.PlaneGeometry(1, 1, 10, 10);
+  ok(run(plane, { method: 'bodies', epsAbs: 1e-9 }).count === 1, 'bodies: an open sheet is one body');
+  ok(partition(new Float32Array(0), null, { method: 'bodies' }).count === 0, 'bodies: nothing in, nothing out');
+}
+
 // ── faces ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
 {
   const b = new THREE.BoxGeometry(1, 1, 1);

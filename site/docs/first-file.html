@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -176,7 +178,7 @@
             <div><dt>Surface quality</dt><dd>How closely the triangles follow curved surfaces: <span class="ui">Coarse</span>, <span class="ui">Standard</span>, <span class="ui">Fine</span> or <span class="ui">Ultra</span>. Coarse is the fastest and shows facets on curves. Ultra is slow and very smooth. Standard is the recommended one. <span class="ui">Custom</span> means your own numbers, under Tessellation.</dd></div>
             <div><dt>Tessellation</dt><dd>The numbers behind that choice. Click the row to open it. It is explained below.</dd></div>
             <div><dt>Colours and structure</dt><dd><span class="ui">Colours &amp; hierarchy</span> reads colours, names and the assembly tree. <span class="ui">Geometry only</span> is the fastest and gives you neither colours nor a tree. It suits huge files where you only need the shape.</dd></div>
-            <div><dt>What to read</dt><dd>Five switches for extra information in the file: <span class="ui">Instance overrides</span>, <span class="ui">Layers</span>, <span class="ui">Materials</span>, <span class="ui">Product names</span> and <span class="ui">Validation properties</span>. Each one adds a pass over the file. Instance overrides is the slowest on assemblies with many repeated parts.</dd></div>
+            <div><dt>What to read</dt><dd>Five switches for extra information in the file: <span class="ui">Instance overrides</span>, <span class="ui">Keep layers</span>, <span class="ui">Materials</span>, <span class="ui">Product names</span> and <span class="ui">Validation properties</span>. Each one adds a pass over the file. Instance overrides is the slowest on assemblies with many repeated parts. <span class="ui">Keep layers</span> keeps the CAD layer each part is on: it shows in the Properties card and <span class="ui">Select by layer</span> in the command search selects every part on one.</dd></div>
             <div><dt>Drop small parts</dt><dd>Leaves out parts smaller than this share of the model during conversion. 0 keeps everything.</dd></div>
             <div><dt>Share identical shapes</dt><dd>Stores a repeated shape once. Leave it on.</dd></div>
             <div><dt>Swap Y and Z</dt><dd>Stands a model up that comes in lying on its side.</dd></div>

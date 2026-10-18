@@ -396,7 +396,7 @@ body.resizing *{cursor:col-resize !important}
 .brand-menu-changelog ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-3)}
 .brand-menu-changelog li{font-size:var(--fs-sm);line-height:var(--lh-snug);padding-left:var(--space-lg);position:relative;color:var(--wht-80);}
 .brand-menu-changelog li::before{content:"";position:absolute;left:2px;top:8px;width:3px;height:3px;border-radius:50%;background:var(--wht-50);}
-.brand-menu-sep{height:0;margin:var(--space-xs) 0;background:none}      /* (no line: the groups are told apart by space alone) */
+.brand-menu-sep{height:0;margin:var(--space-lg) 0 var(--space-md);background:none}      /* (no line: the groups are told apart by space alone) */
 .brand-menu-item{all:unset;display:flex;align-items:center;cursor:pointer;user-select:none}
 .brand-menu-item svg{width:var(--icon-sm);height:var(--icon-sm);fill:none;stroke-width:2;flex:0 0 auto}
 .brand-menu-item svg.brand-gh{stroke:none;fill:currentColor;color:var(--wht-80);}
@@ -544,6 +544,8 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 /* The Shading angle: a thin row (the name, and a number to type or drag), between two hairlines, above the material strip. */
 .prop-shade{display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);height:28px;margin:0 0 var(--space-lg);padding:0;border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);font-size:var(--fs-12);color:var(--tx3)}
 .prop-shade{--fld-ring:none;--fld-h:22px;--fld-w:62px;--fld-px:6px;--fld-mr:-6px;--fld-bg:transparent;--fld-bd:0;--fld-r:6px;--fld-just:flex-end;--fld-tr:background 140ms var(--ease-out);--fld-bg-hover:var(--s2);--fld-fg-hover:var(--tx)}
+.prop-material-row+.prop-shade{margin-top:var(--space-xl)}      /* (the material strip above it has its own rounded box: the row does not touch it) */
+.prop-shade.is-off{opacity:.45;pointer-events:none}      /* (no part selected, or a line: the row stays and is greyed) */
 .prop-shade .size-field input{width:30px;text-align:right;background:transparent;border:0;color:var(--tx);font:inherit;font-variant-numeric:tabular-nums;cursor:ew-resize}
 .prop-shade .size-field input:focus{cursor:default;outline:none}
 /* Material chip under the part name — full-width row with a 36px shaded
@@ -620,12 +622,12 @@ i[data-lucide]{display:inline-block;width:1em;height:1em;line-height:var(--lh-no
 input.prim-value{width:52px;outline:none;-moz-appearance:textfield}
 input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .prim-unit{font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx3);white-space:nowrap;line-height:var(--lh-none)}
-.prim-row .prim-toggle{position:relative;display:inline-flex;align-items:center;cursor:pointer;width:30px;height:16px;justify-self:start;grid-column:2 / span 2}
+.prim-row .prim-toggle{position:relative;display:inline-flex;align-items:center;cursor:pointer;width:var(--switch-w);height:var(--switch-h);justify-self:start;grid-column:2 / span 2}
 .prim-row .prim-toggle input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
-.prim-row .prim-toggle span{position:relative;display:block;width:30px;height:16px;background:var(--bg3);border:1px solid var(--bd);border-radius:var(--r-lg);transition:background var(--dur-140) ease,border-color var(--dur-140) ease}
-.prim-row .prim-toggle span::after{content:'';position:absolute;top:1px;left:1px;width:12px;height:12px;border-radius:50%;background:var(--tx3);transition:left var(--dur-140) ease,background var(--dur-140) ease}
-.prim-row .prim-toggle input:checked + span{background:rgba(110,168,255,.32);border-color:rgba(110,168,255,.5)}
-.prim-row .prim-toggle input:checked + span::after{left:15px;background:var(--tx-on-accent)}
+.prim-row .prim-toggle span{position:relative;display:block;width:var(--switch-w);height:var(--switch-h);background:rgba(120,128,140,.35);border:0;border-radius:var(--r-lg);transition:background var(--dur-140) ease}
+.prim-row .prim-toggle span::after{content:'';position:absolute;top:var(--switch-pad);left:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob);border-radius:50%;background:var(--white);transition:left var(--dur-140) ease,background var(--dur-140) ease}
+.prim-row .prim-toggle input:checked + span{background:var(--ac)}
+.prim-row .prim-toggle input:checked + span::after{left:calc(var(--switch-pad) + var(--switch-travel))}
 .prim-row .prim-toggle input:focus-visible + span{outline:2px solid var(--ac-text);outline-offset:2px}
 .prim-row .prim-select{grid-column:2;grid-row:1;justify-self:end;font-family:var(--font-sans);font-size:var(--fs-11);color:var(--tx2);background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r-pill);padding:var(--space-2xs) 22px var(--space-2xs) var(--space-lg);line-height:var(--lh-snug);cursor:pointer;min-width:64px;transition:var(--tr-bg-bd-fg)}
 .prim-row .prim-select:hover{background:var(--bg3);border-color:var(--bd2);color:var(--tx)}
@@ -944,6 +946,10 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .toggle input:focus-visible+.switch{outline:2px solid var(--ac-text);outline-offset:2px}
 .toggle input:checked+.switch{background:var(--ac)}
 .toggle input:checked+.switch::after{transform:translateX(14px)}
+/* the right sidebar: every switch is the small one, as in Photo mode */
+#sidebar-right .toggle .switch{width:var(--switch-w);height:var(--switch-h)}
+#sidebar-right .toggle .switch::after{left:var(--switch-pad);top:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob)}
+#sidebar-right .toggle input:checked+.switch::after{transform:translateX(var(--switch-travel))}
 
 /* Viewport */
 #viewport{position:relative;background:var(--bg)}
@@ -1598,7 +1604,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .sc-modal .modal-h{gap:var(--space-xl)}
 .sc-modal .modal-h h3{margin-right:auto}
 /* the title in the website's serif, larger, and no line under the bar */
-.modal.sc-modal .modal-h{border-bottom:0;padding-left:47px}      /* (the title starts where the keyboard does) */
+.modal.sc-modal .modal-h{border-bottom:0;padding-left:47px;padding-top:var(--space-5xl);padding-bottom:var(--space-md)}      /* (the title starts where the keyboard does) */
 .modal.sc-modal .modal-h h3{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:32px;line-height:1.1;letter-spacing:-.005em}
 .sc-prof{position:relative}
 .sc-prof-btn{display:inline-flex;align-items:center;gap:var(--space-md);height:var(--btn-h-sm);padding:0 var(--space-md) 0 var(--space-xl);border:0;border-radius:var(--r-sm);background:var(--s3);color:var(--tx-control);font:inherit;font-size:var(--fs-sm);cursor:pointer;transition:var(--tr-bg-fg)}
@@ -1671,10 +1677,20 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* The loading mark: a low-poly sphere that turns while a wave of light climbs through its edges and vertices (a smooth surface being
    meshed). It is drawn on a canvas by _MeshMark in app.js, and only while a loader is on screen. */
 .ml-cv{width:44px;height:44px;flex:none;display:block}
+/* the import card's mark: a spline drawn in one line, breathing between two phases; the same curve as a faceted polyline with its vertices (a surface being meshed), and a bright run of line travelling along it */
+.ld-mark{width:76px;height:30px;flex:none;display:block;overflow:visible}
+.ld-mark path,.ld-mark polyline,.ld-mark line{fill:none;vector-effect:non-scaling-stroke}
+.ld-mark-base{stroke:var(--s4);stroke-width:1;stroke-dasharray:2 3}
+.ld-mark-mesh{stroke:var(--tx3);stroke-width:1;opacity:.55;stroke-linejoin:miter}
+.ld-mark-curve{stroke:var(--s5,var(--s4));stroke-width:1.5}
+.ld-mark-run{stroke:var(--ac);stroke-width:2;stroke-linecap:round;stroke-dasharray:22 78;animation:ld-run 1.6s linear infinite}
+.ld-v{fill:var(--bg);stroke:var(--ac);stroke-width:1.2}
+@keyframes ld-run{from{stroke-dashoffset:0}to{stroke-dashoffset:-100}}
+@media (prefers-reduced-motion:reduce){.ld-mark-run{animation-duration:4s}}
 .loader-text{flex:1;min-width:0}
-#loader-msg{color:var(--tx);font-weight:var(--fw-semibold);font-size:var(--fs-xl);margin-bottom:var(--space-2xs)}
+#loader-msg{color:var(--tx);font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:26px;line-height:1.15;letter-spacing:-.005em;margin-bottom:var(--space-xs)}
 #loader-sub{color:var(--tx2);font-size:var(--fs-12);line-height:var(--lh-base);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}      /* (two lines at most, wrapped: never a sideways scroll) */
-#loader-time{color:var(--tx2);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;padding:var(--space-xs) var(--space-md);background:var(--hairline);border-radius:var(--r-sm)}
+#loader-time{color:var(--tx3);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;margin-right:auto}
 .loader-bar{height:6px;background:var(--s3);border-radius:var(--r-xs);margin-top:var(--space-3xl);overflow:hidden;position:relative}
 .loader-bar-fill{height:100%;width:35%;background:var(--ac);border-radius:var(--r-xs);transition:width var(--dur-300) ease;position:absolute;left:0;overflow:hidden}
 /* One flat accent colour. While something is loading a faint band of light
@@ -1763,25 +1779,26 @@ button.sc-row-keys:hover{background:var(--s5)}
 .dlg-bg.show{display:grid;opacity:1}
 .dlg-card{width:min(420px,calc(100vw - 32px));overflow:hidden;transform:translateY(8px) scale(.97);opacity:0;transition:transform var(--dur-slow) cubic-bezier(.2,.8,.3,1),opacity var(--dur-180) ease}
 .dlg-bg.show .dlg-card{transform:translateY(0) scale(1);opacity:1}
-.dlg-head{display:flex;align-items:flex-start;gap:var(--space-2xl);padding:22px 22px 0}
-.dlg-icon{flex-shrink:0;width:40px;height:40px;border-radius:var(--r-lg);display:grid;place-items:center;background:var(--ac-tint-12);color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-18)}
+.dlg-head{display:flex;align-items:flex-start;gap:var(--space-2xl);padding:var(--space-xl) var(--space-3xl) 0}      /* (the same bar as the other windows: the title stands alone, no big icon) */
+.dlg-icon{display:none;flex-shrink:0;width:40px;height:40px;border-radius:var(--r-lg);display:grid;place-items:center;background:var(--ac-tint-12);color:var(--ac-text);box-shadow:inset 0 0 0 1px var(--ac-tint-18)}
 .dlg-icon svg{width:var(--icon-xl);height:var(--icon-xl);stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .dlg-card.danger .dlg-icon{background:color-mix(in srgb,var(--er) 13%,transparent);color:var(--er);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--er) 20%,transparent)}
 .dlg-text{flex:1;min-width:0;padding-top:var(--space-2xs)}
-.dlg-title{font-size:var(--fs-2xl);font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:var(--tracking-tighter);margin-bottom:var(--space-sm)}
-.dlg-msg{color:var(--tx2);font-size:var(--fs-lg);line-height:var(--lh-note);white-space:pre-wrap;word-wrap:break-word}
+.dlg-title{font-size:var(--fs-xl);font-weight:var(--fw-semibold);color:var(--tx);letter-spacing:var(--tracking-tighter);line-height:var(--lh-compact);margin-bottom:var(--space-lg);padding-right:32px}
+.dlg-msg{color:var(--tx2);font-size:var(--fs-md);line-height:var(--lh-note);white-space:pre-wrap;word-wrap:break-word}
 .dlg-input{display:none;width:100%;margin-top:var(--space-2xl);padding:var(--space-lg) var(--space-xl);background:var(--s2);border:1px solid var(--s4);border-radius:var(--r-md);color:var(--tx);font-size:var(--fs-xl);font-family:inherit;outline:none;transition:border-color var(--dur-base),background var(--dur-base),box-shadow var(--dur-base)}
 .dlg-input:focus{border-color:var(--ac-tint-55);background:var(--s3);box-shadow:var(--ring-field)}
-.dlg-foot{display:flex;justify-content:flex-end;gap:var(--space-md);padding:18px 22px var(--space-4xl);margin-top:18px}
+.dlg-foot{display:flex;justify-content:flex-end;gap:var(--space-md);padding:var(--space-xl) var(--space-2xl) var(--space-2xl);margin-top:var(--space-md)}
+.dlg-foot .dlg-btn{padding:var(--space-7) var(--space-xl);font-size:var(--fs-12);border-radius:var(--r-sm)}
 .dlg-btn{font:inherit;border:1px solid transparent;cursor:pointer;font-weight:var(--fw-medium);transition:transform var(--dur-instant),filter var(--dur-fast),background var(--dur-fast),border-color var(--dur-fast);letter-spacing:var(--tracking-snug)}
 .dlg-btn:active{transform:translateY(.5px)}
 .dlg-btn-cancel{background:var(--s3);border-color:var(--s3);color:var(--tx2)}
 .dlg-btn-cancel:hover{background:var(--s4);color:var(--tx);border-color:var(--s5)}
 .dlg-btn-ok{background:linear-gradient(180deg,var(--ac),var(--ac-active));color:white;border-color:transparent;box-shadow:0 4px 14px var(--ac-tint-25),inset 0 1px 0 var(--s6)}
 .dlg-btn-ok:hover{filter:brightness(1.07)}
-.dlg-btn-ok.danger{background:linear-gradient(180deg,#ff7a85,#e25151);box-shadow:0 4px 14px color-mix(in srgb,var(--er) 32%,transparent),inset 0 1px 0 var(--s6)}
-.dlg-close{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:var(--r-md);display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-xl);transition:color var(--dur-fast),background var(--dur-fast)}
-.dlg-close:hover{color:var(--tx);background:var(--s3)}
+.dlg-btn-ok.danger{background:linear-gradient(180deg,var(--er),color-mix(in srgb,var(--er) 82%,black));box-shadow:0 4px 14px color-mix(in srgb,var(--er) 32%,transparent),inset 0 1px 0 var(--s6)}
+.dlg-close{position:absolute;top:var(--space-xl);right:var(--space-2xl);width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:var(--tx3);background:transparent;border:none;cursor:pointer;font-size:var(--fs-11);transition:color var(--dur-fast),background var(--dur-fast)}
+.dlg-close:hover{color:var(--tx);background:var(--s4)}
 
 /* ── Save Screenshot dialog (:is(#scrshot-dlg,#turntable-dlg,#animvideo-dlg)) ───────────────────────────────
    Migrated from the JS-injected _scrshot-dlg-style block. All rules are
@@ -1862,7 +1879,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 .exp-win .exp-row>.exp-row-l,.exp-win .toggle>.exp-row-l{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:var(--space-2xs);white-space:normal;overflow:visible;text-overflow:clip}
 .exp-row-l b{font-weight:var(--fw-medium);font-size:var(--fs-12);color:var(--tx-control-hover)}
 .exp-row-l small{font-size:var(--fs-11);color:var(--tx3);line-height:var(--lh-base)}
-.exp-win .exp-row>:is(.cs-wrap,select,.exp-num){flex:0 0 212px;width:212px!important;box-sizing:border-box}
+.exp-win .exp-row>:is(.cs-wrap,select,.exp-num){flex:0 0 212px;width:212px;box-sizing:border-box}
 .exp-win .exp-row .cs-wrap .cs-trigger{width:100%}
 .exp-num{height:var(--btn-h-md);padding:0 var(--space-lg);background:var(--bg3);border:1px solid var(--bd);border-radius:var(--btn-r-md);color:var(--tx);font-size:var(--fs-12);font-variant-numeric:tabular-nums;outline:none;transition:var(--tr-bd-base)}
 .exp-num:hover{border-color:var(--bd2)}
@@ -1978,7 +1995,6 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* Global Log Console */
 #log-console{position:fixed;bottom:22px;height:280px;max-height:70vh;background:linear-gradient(180deg,var(--bg1),var(--bg));border-top:1px solid var(--bd);box-shadow:0 -8px 24px -16px var(--blk-50);display:flex;flex-direction:column;z-index:var(--z-console);font:12px/1.5 var(--font-sans)}
 .lc-grip{position:absolute;top:-3px;left:0;right:0;height:6px;cursor:ns-resize;z-index:1}
-.lc-grip:hover{background:var(--ac-tint-15)}
 .lc-h{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-sm) var(--space-lg);border-bottom:1px solid var(--bd);background:var(--bg2);flex-shrink:0;font-family:var(--font-sans)}
 .lc-h .lc-title{font-size:var(--fs-11);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-wide);text-transform:uppercase;color:var(--tx2);padding-right:var(--space-xs)}
 .lc-filters{display:flex;gap:var(--space-3)}
@@ -2107,6 +2123,12 @@ button.sc-row-keys:hover{background:var(--s5)}
 .cs-trigger.is-open{border-color:var(--ac)}
 /* small: beside the 22px number fields of a card (a shape's parameters, a cloner's) */
 .prim-row{--dd-h:22px;--dd-fs:var(--fs-11);--dd-r:var(--r-sm,6px);--dd-px:8px}
+/* Photo mode: its two lists are the ordinary medium dropdown (the pill they had came from the .prim-select class of a shape's row) */
+#photo-section .prim-row{--dd-h:var(--scrub-h);--dd-fs:var(--btn-fs-md);--dd-r:var(--btn-r-md);--dd-px:var(--btn-px-md)}
+#photo-section .prim-row .cs-wrap{width:var(--scrub-w)}      /* (as wide as the number fields above it) */
+/* the rows of the right sidebar's command cards (Smart optimise and the like): the number fields and the dropdown are as wide and as tall as the sliders' fields everywhere else */
+#sidebar-right .cmd-num{--dd-h:var(--scrub-h)}
+#sidebar-right .cmd-num .size-field,#sidebar-right .cmd-num .cs-wrap{box-sizing:border-box;width:var(--scrub-w);height:var(--scrub-h);margin-right:0}
 .vp-pill{height:var(--btn-h-md);font-size:var(--btn-fs-sm);padding:0 var(--space-xl)}
 /* sm */
 .lc-icon-btn{width:var(--btn-h-sm);height:var(--btn-h-sm);border-radius:var(--btn-r-sm)}
@@ -2123,7 +2145,16 @@ button.sc-row-keys:hover{background:var(--s5)}
   border-radius:var(--btn-r-lg);font-size:var(--btn-fs-lg);line-height:var(--lh-none);
   display:inline-flex;align-items:center;justify-content:center;gap:var(--btn-gap);width:auto;
 }
-.hdri-preset.btn-sm{color:var(--tx);padding:0 var(--space-sm);width:100%}
+/* the environments: cards of the size of the material cards (72 px), a picture of the environment on top */
+.prop-mat-strip .hdri-card .prop-mat-sphere{width:100%;height:42px;border-radius:var(--r-sm)}
+.prop-mat-strip .hdri-card .prop-mat-sphere img{image-rendering:auto}
+/* the environments: no card of their own; the row runs from edge to edge of the Scene card and scrolls there (its first one lines up with the rest) */
+#sidebar-right #hdri-strip-row{margin:0 calc(var(--space-lg) * -1);padding:0;height:auto;border-radius:0;background:none;overflow:visible}
+#sidebar-right #hdri-strip{padding:2px var(--space-lg);scroll-padding:0 var(--space-lg);height:auto}
+.hdri-card.active{background:var(--ac-tint-18);box-shadow:inset 0 0 0 1px var(--ac-tint-55)}
+.hdri-photo.btn-sm{color:var(--tx);padding:0 var(--space-sm);width:100%}
+#photo-fx{transition:opacity .15s}
+#photo-fx.is-off,.photo-fx-row.is-off{opacity:.5}
 .tree-search input{box-sizing:border-box;height:var(--btn-h-md);padding:0 var(--space-lg) 0 28px;border-radius:var(--btn-r-md)}
 /* modal close — one icon button everywhere */
 button.x,.modal-h .x{box-sizing:border-box;width:var(--btn-h-md);height:var(--btn-h-md);padding:0;display:inline-grid;place-items:center;border-radius:var(--btn-r-md);color:var(--tx3);font-size:var(--fs-13);line-height:var(--lh-none);transition:var(--tr-bg-fg)}
@@ -2260,6 +2291,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .vpc.tl .vpb-sep{height:1px;width:18px;margin:var(--space-3) auto;background:var(--bar-sep)}
 .vpc.tr .vpb-sep{width:1px;height:18px;margin:0 var(--space-3);background:var(--bar-sep)}
 /* (where the unseen holder of the viewport settings stands: see #vp-settings-pop) */
+#vp-last-tool:disabled{opacity:.4;pointer-events:none}      /* (nothing used yet) */
 .vpc.tr #vp-settings-pop{top:auto;bottom:44px;right:0;transform-origin:bottom right;max-height:min(520px,calc(100vh - 138px));}
 /* the shortcut tips sit clear of the bottom bar */
 .vpc.br{bottom:10px}
@@ -2294,7 +2326,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* bottom bar: a search button on its own, then the display controls */
 .vp-bar{display:flex;align-items:center;gap:var(--space-2xs);padding:var(--space-xs);border-radius:var(--r-lg)}
 /* The command palette's field is the whole bar; it needs no focus box of its own. */
-#cmdk-input,#cmdk-input:focus,#cmdk-input:focus-visible{outline:none;border:0!important;box-shadow:none}
+#cmdk-input,#cmdk-input:focus,#cmdk-input:focus-visible{outline:none;border:0;box-shadow:none}
 /* The log console slides up inside the viewport column and is fully out of
    sight when closed (its top edge used to rest behind the status bar, which
    no longer spans the sidebars). */
@@ -2341,7 +2373,10 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
   --surface-shadow-win:0 2px 5px var(--blk-40),0 18px 36px -8px var(--blk-60);    /* the window in front: deep, and almost all of it below */
   --surface-shadow-win-off:var(--surface-ring-dark);    /* a window that is not the one in use: no shadow, only the dark hairline */
   --surface-bar:rgba(16,16,16,.94);                   /* toolbars floating over the viewport */
-  --mat-dock-h:330px;
+  --dock-h:330px;
+  --switch-w:30px; --switch-h:16px; --switch-knob:12px; --switch-pad:2px;      /* the small switch (Photo mode, and every switch of the right sidebar) */
+  --switch-travel:calc(var(--switch-w) - var(--switch-knob) - var(--switch-pad) * 2);
+  --scrub-w:104px; --scrub-h:var(--num-h); --scrub-px:var(--num-px); --scrub-fill:var(--s5);      /* the number field that is dragged sideways and shows its value as a fill (Shape parameters, Photo mode, HDRI) */
 }
 /* small surfaces */
 .export-menu,.vp-pill-menu,.vp-prim-pop,.cs-pop,#ctx-menu,
@@ -2608,7 +2643,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
    between the sidebars, sliding up from below. (It used to be a 228px
    popover hanging off the bottom toolbar.) */
 #vp-materials-pop.mat-dock{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;width:auto;max-height:none;display:flex;flex-direction:column;overflow:hidden;padding:0;border:0;border-top:1px solid var(--bd);border-radius:0;
-  box-shadow:0 -8px 24px -16px var(--blk-50);z-index:var(--z-toolbar);opacity:1;pointer-events:auto;transform-origin:50% 100%;
+  box-shadow:none;z-index:var(--z-toolbar);opacity:1;pointer-events:auto;transform-origin:50% 100%;
   transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform var(--dur-200) var(--ease-out),visibility 0s linear var(--dur-200);
   font:12px/1.5 var(--font-sans)}
 #vp-materials-pop.mat-dock.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
@@ -2924,8 +2959,8 @@ html.is-scrubbing,html.is-scrubbing *{cursor:ew-resize!important;user-select:non
    is the small one, from the tokens: see "Dropdown"). Wide enough for the
    longest name in the lists. */
 .prim-row .cs-wrap{grid-column:2;grid-row:1;justify-self:end;width:118px}
-:is(.prim-val-wrap,#_a#_b){box-sizing:border-box;width:84px;height:22px;padding:0 var(--space-md);gap:var(--space-xs);justify-content:flex-end;
-  background:linear-gradient(90deg,var(--ac-tint-35) var(--scrub-pct,0%),transparent var(--scrub-pct,0%)),var(--bg2);
+:is(.prim-val-wrap,#_a#_b){box-sizing:border-box;width:var(--scrub-w);height:var(--scrub-h);padding:0 var(--scrub-px);gap:var(--space-xs);justify-content:flex-end;
+  background:linear-gradient(90deg,var(--scrub-fill) var(--scrub-pct,0%),transparent var(--scrub-pct,0%)),var(--bg2);
   border:1px solid var(--bd);border-radius:var(--r-sm,6px);transition:border-color var(--dur-fast) var(--ease-out)}
 :is(.prim-val-wrap,#_a#_b):hover{border-color:var(--bd2)}
 :is(.prim-val-wrap,#_a#_b):focus-within{border-color:var(--ac)}
@@ -2938,21 +2973,20 @@ html.is-scrubbing,html.is-scrubbing *{cursor:ew-resize!important;user-select:non
 
 /* Materials dock: drag the top edge for height, the inspector's edge for its
    width. */
-#vp-materials-pop.mat-dock{height:min(var(--mat-dock-h),80vh);--mat-dock-bg:var(--bg2);background:var(--mat-dock-bg);}
-body.mat-dock-open .vpc.tr{bottom:calc(min(var(--mat-dock-h),80vh) + 12px)}
-body.mat-dock-open .vpc.br{bottom:calc(min(var(--mat-dock-h),80vh) + 10px)}
+#vp-materials-pop.mat-dock{height:min(var(--dock-h),80vh);--mat-dock-bg:var(--bg2);background:var(--mat-dock-bg);}
+body.mat-dock-open .vpc.tr{bottom:calc(min(var(--dock-h),80vh) + 12px)}
+body.mat-dock-open .vpc.br{bottom:calc(min(var(--dock-h),80vh) + 10px)}
 .mat-inspector{flex:0 0 var(--mat-insp-w)}
 .mat-dock-grip{position:absolute;top:0;left:0;right:0;height:5px;cursor:ns-resize;z-index:3}
 .mat-insp-grip{flex:0 0 5px;margin:0 -3px 0 -2px;cursor:col-resize;position:relative;z-index:3}
-:is(.mat-dock-grip,.mat-insp-grip):is(:hover,.dragging){background:var(--ac-tint-35)}
 body.dock-resizing{user-select:none;-webkit-user-select:none}
 body.dock-resizing :is(.vpc.tr,.vpc.br,.vpc.tl){transition:none}
 /* The tool pill on the left stays in the middle of what is left of the
    viewport while a drawer (materials dock, console) is open below it. */
 .vpc.tl:not(#vp-perf){transition:top var(--dur-200) var(--ease-out)}
-body.mat-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--mat-dock-h),80vh) / 2)}
+body.mat-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--dock-h),80vh) / 2)}
 body:has(#log-console.show) .vpc.tl:not(#vp-perf){top:calc(50% - min(280px,70vh) / 2)}
-body.mat-dock-open:has(#log-console.show) .vpc.tl:not(#vp-perf){top:calc(50% - max(min(var(--mat-dock-h),80vh),min(280px,70vh)) / 2)}
+body.mat-dock-open:has(#log-console.show) .vpc.tl:not(#vp-perf){top:calc(50% - max(min(var(--dock-h),80vh),min(280px,70vh)) / 2)}
 @media (max-width:1100px){.mat-insp-grip{display:none}}
 .mat-dock-h .mat-act-presets>span{display:inline-flex;align-items:center}
 /* ── Command panels ────────────────────────────────────────────────────────
@@ -2962,7 +2996,7 @@ body.mat-dock-open:has(#log-console.show) .vpc.tl:not(#vp-perf){top:calc(50% - m
    it. One panel at a time. */
 .vp-cmd-host{position:absolute;left:52px;bottom:12px;width:296px;max-width:calc(100% - 64px);max-height:calc(100% - 24px);
   display:flex;flex-direction:column;justify-content:flex-end;pointer-events:none;z-index:6;transition:bottom var(--dur-200) var(--ease-out)}
-body.mat-dock-open .vp-cmd-host{bottom:calc(min(var(--mat-dock-h),80vh) + 12px);max-height:calc(100% - min(var(--mat-dock-h),80vh) - 24px)}
+body.mat-dock-open .vp-cmd-host{bottom:calc(min(var(--dock-h),80vh) + 12px);max-height:calc(100% - min(var(--dock-h),80vh) - 24px)}
 .vp-cmd-host>.section-cmd{pointer-events:auto;margin:0;display:flex;flex-direction:column;min-height:0;max-height:100%;border:0;border-radius:var(--surface-pop-r);box-shadow:var(--surface-shadow),var(--surface-ring);overflow:hidden}
 .vp-cmd-host>.section-cmd[hidden]{display:none}
 /* (the grip holds the pointer while it is dragged, so its cursor is the one that shows: a rule on every element would restyle the whole page, thousands of tree rows, at the start of each drag) */
@@ -3036,7 +3070,7 @@ body.cmd-dragging .vp-cmd-host{transition:none;will-change:translate}
 #vp-brep-pop[hidden]{display:none}
 #vp-brep-pop .bp-h{font-weight:var(--fw-medium)}
 #vp-brep-pop .bp-s{color:var(--tx2);font-size:var(--fs-sm);line-height:1.45}
-#vp-brep-pop label.bp-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-md);cursor:pointer}
+#vp-brep-pop .toggle{font-size:var(--fs-md);padding:var(--space-sm) 0}
 #vp-brep-pop .bp-btn{height:var(--btn-h-md);border-radius:var(--r-md);border:0;background:var(--s2);color:var(--tx);font:inherit;cursor:pointer}
 #vp-brep-pop .bp-btn:hover{background:var(--bg4)}
 #vp-brep-tip{position:fixed;z-index:calc(var(--z-vp-pop) + 1);pointer-events:none;padding:var(--space-sm) var(--space-md);border-radius:var(--r-md);background:rgba(16,16,16,.85);color:var(--tx);font-size:var(--fs-sm);line-height:1.4;white-space:nowrap}
@@ -3055,7 +3089,7 @@ body.cmd-dragging .vp-cmd-host{transition:none;will-change:translate}
 :is(.vp-pill.vp-pill-mode,#_a#_b#_c):has(.vp-pill-x),#vp-animate-pill#vp-animate-pill.has-play,#vp-notes-pill#vp-notes-pill.has-play{padding-right:var(--pill-x-gap)}
 /* Command panel above the bottom toolbar when there is no room beside it. */
 .vp-cmd-host.lifted{bottom:58px;max-height:calc(100% - 70px)}
-body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) + 58px);max-height:calc(100% - min(var(--mat-dock-h),80vh) - 70px)}
+body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58px);max-height:calc(100% - min(var(--dock-h),80vh) - 70px)}
 /* Viewport toolbars (bottom bar and the tool pill on the left): what is
    switched on is marked in grey, not the accent blue (blue stays for the
    active move / rotate / scale tool and for selection). */
@@ -3112,7 +3146,7 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 .small-by{display:flex;flex-direction:column;gap:var(--space-sm);font-size:var(--fs-12);color:var(--tx2)}
 #thr-scrub .scrub-label::after{content:" of model size";color:var(--tx3)}      /* what the percentage is of, beside the word it belongs to */
 .small-note{margin:-4px 0 0;font-size:var(--fs-11);line-height:var(--lh-35);color:var(--tx3)}      /* what the percentage is of, under its slider, so the number above sits at the right edge with just its % */
-.small-found{display:flex;align-items:baseline;gap:var(--space-md);margin:0;color:var(--tx3);font-size:var(--fs-12);line-height:var(--lh-base)}      /* a readout, not a control: the count, large, and what it counts beside it. No bar, no box, no colour. */
+.small-found{display:flex;align-items:baseline;gap:var(--space-md);margin:0;padding:var(--space-lg) 0;color:var(--tx3);font-size:var(--fs-12);line-height:var(--lh-base)}      /* a readout, not a control: the count, large, and what it counts beside it. No bar, no box, no colour. */
 .small-n{flex:0 0 auto;font-size:var(--fs-5xl);line-height:1.1;letter-spacing:var(--tracking-tighter);color:var(--tx3);font-variant-numeric:tabular-nums;font-weight:var(--fw-regular)}      /* (the look of the number in Properties) */
 .small-found #thr-info{margin:0;min-width:0;color:inherit;font-size:inherit;font-variant-numeric:tabular-nums}
 .small-found.has .small-n{color:var(--tx-control-hover)}
@@ -3220,10 +3254,11 @@ body.mat-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--mat-dock-h),80vh) +
 /* a row that opens a list beside it (Open recent on a tab's menu) */
 #ctx-menu .ctx-menu-chev{width:14px;height:14px;flex:0 0 14px;margin-left:auto;stroke-width:2;color:inherit;opacity:.7}
 :is(#ctx-menu .ctx-menu-row.is-open,#_a#_b){background:var(--ac);color:var(--tx-on-accent)}
+#ctx-menu .ctx-menu-row.is-open .ctx-menu-icon,#ctx-menu .ctx-menu-row.is-open .kbd-chip{color:var(--tx-on-accent);stroke:currentColor;opacity:1}
 #ctx-menu .ctx-sub{position:absolute;z-index:1;box-sizing:border-box;min-width:220px;max-width:360px;max-height:calc(100vh - 12px);overflow-y:auto;scrollbar-width:none;
   padding:var(--menu-pad);background:var(--surface-pop);border-radius:var(--surface-pop-r);box-shadow:var(--surface-shadow),var(--surface-ring)}
 #ctx-menu .ctx-sub .ctx-menu-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#ctx-menu.is-commands{min-width:232px;max-height:min(520px,calc(100vh - 90px));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--s5) transparent}
+#ctx-menu.is-commands{min-width:232px;max-height:min(520px,calc(100vh - 90px));overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none}
 #ctx-menu.is-commands .ctx-menu-row{padding-top:var(--space-5);padding-bottom:var(--space-5)}
 /* ── Scene tabs ────────────────────────────────────────────────────────────
    The scene on screen is the lit tab (icon with the unsaved dot, name, close); the other
@@ -3344,6 +3379,13 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-main.searching .set-card{padding:0;border:0;background:none;margin:0}
 .set-main.searching .set-card-h,.set-main.searching .set-jump{display:none}
 .set-card-plain>:first-child{border-top:0}
+/* flat sections: no grey card, a hairline and the title tell the groups apart */
+.set-card{margin:0;padding:0;border:0;border-radius:0;background:none}
+.set-card+.set-card{border-top:1px solid var(--s5)}
+.set-card-h{height:calc(var(--btn-h-lg) + var(--space-md));color:var(--tx);font-weight:var(--fw-semibold)}
+.set-card:not(.is-fold){padding-bottom:var(--space-md)}
+/* no line between the switches and fields of a section */
+#settings-modal .set-pane-b .toggle,#settings-modal .set-pane-b .field,#settings-modal .set-pane-b .set-row{border-top:0}
 .set-jump{position:sticky;top:-18px;z-index:2;display:flex;flex-wrap:wrap;gap:var(--space-md);margin:0 -24px var(--space-xl);padding:10px var(--space-5xl);background:var(--surface-pop);border-bottom:1px solid var(--surface-line)}
 .set-jump-c{height:24px;padding:0 var(--space-lg);border:1px solid var(--surface-line);border-radius:var(--r-pill);background:none;color:var(--tx2);font:inherit;font-size:var(--fs-12);cursor:pointer}
 .set-jump-c:hover{background:var(--s3);color:var(--tx-control-hover)}
@@ -3355,7 +3397,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-pane-b>:first-child,.set-pane-b>div:first-child>:first-child,.set-group-title+.toggle,.set-group-title+.field,.set-group-title+.set-row{border-top:0}
 .set-pane-b .field>label{flex:1 1 auto;min-width:0;margin:0;font-size:var(--fs-13);font-weight:var(--fw-regular);color:var(--tx-control);justify-content:flex-start;gap:var(--space-md)}
 .set-pane-b .toggle>span:first-child,.set-row>span:first-child{flex:1 1 auto;min-width:0;font-weight:var(--fw-regular)}
-.set-pane-b .field>:is(select,.cs-wrap,input[type=number],input[type=text]){flex:0 0 230px;width:230px!important;box-sizing:border-box}
+.set-pane-b .field>:is(select,.cs-wrap,input[type=number],input[type=text]){flex:0 0 230px;width:230px;box-sizing:border-box}
 .set-pane-b .field>.cs-wrap .cs-trigger{width:100%}
 /* A field that is a box around a bare input (a number with its unit, a
    search box) shows focus itself, by its border. The input inside shows none
@@ -3423,7 +3465,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-foot{align-items:center}
 .set-foot-note{font-size:var(--fs-11);color:var(--tx3)}
 @media (max-width:700px){#settings-body{grid-template-columns:1fr}.set-nav{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--surface-line)}.set-nav-gap,.set-nav-ver,.set-nav-link{display:none}
-  .set-pane-b .field>:is(select,.cs-wrap,input[type=number],input[type=text],input[type=range]){flex-basis:150px;width:150px!important}.set-search{width:150px}}
+  .set-pane-b .field>:is(select,.cs-wrap,input[type=number],input[type=text],input[type=range]){flex-basis:150px;width:150px}.set-search{width:150px}}
 /* ── Floating surfaces: one darker tone everywhere ─────────────────────────
    Menus, popovers, tooltips, toasts, dialogs, windows and the command panels
    all sit on --surface-pop. It is a step above the UI black (#101010) so a
@@ -3449,7 +3491,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    shortcut. */
 #cmdk-modal{align-items:flex-start}
 #cmdk-modal .modal{max-height:60vh;transform-origin:top center;transition:transform var(--dur-slow) var(--ease-out),opacity var(--dur-180) var(--ease-out),height var(--dur-200) var(--ease-ios);border-radius:var(--r-3xl);box-shadow:0 5px 13px var(--blk-60),0 0 0 1px var(--s4)}
-#cmdk-modal .modal-h{padding:var(--space-2xl) var(--space-3xl)!important;gap:var(--space-xl)}
+#cmdk-modal .modal-h{padding:var(--space-2xl) var(--space-3xl);gap:var(--space-xl)}
 #cmdk-modal .cmdk-search-icon{width:19px;height:19px;flex-basis:19px;cursor:grab;touch-action:none;transition:var(--tr-fg)}
 #cmdk-modal .cmdk-search-icon:hover{color:var(--tx)}
 #cmdk-modal .modal.is-moving,#cmdk-modal .modal.is-moving .cmdk-search-icon{cursor:grabbing}
@@ -3460,7 +3502,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #cmdk-modal .cmdk-resize:hover::after,#cmdk-modal .modal.is-moving .cmdk-resize::after{opacity:1}
 .cmdk-search-icon{width:var(--icon-md);height:var(--icon-md);flex:0 0 16px;color:var(--tx3);stroke-width:1.8}
 :is(#cmdk-input,#_a#_b){flex:1;min-width:0;background:none;border:0;outline:none;font:inherit;font-size:var(--fs-3xl)}
-#cmdk-list{padding:var(--space-xs) var(--space-sm) var(--space-sm)!important;scrollbar-width:none;flex:1 1 auto;min-height:0;overflow-y:auto}
+#cmdk-list{padding:var(--space-xs) var(--space-sm) var(--space-sm);scrollbar-width:none;flex:1 1 auto;min-height:0;overflow-y:auto}
 .cmdk-foot{flex:0 0 auto;display:flex;align-items:center;gap:var(--space-2xl);padding:var(--space-md) var(--space-2xl);border-top:1px solid var(--surface-line);background:var(--surface-pop);font-size:var(--fs-11);color:var(--tx3)}
 .cmdk-foot>span{display:inline-flex;align-items:center;gap:var(--space-5)}
 .cmdk-foot .cmdk-foot-tip{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -3563,7 +3605,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    box: the whole window takes a dropped file. The file opened last leads the
    cards, twice as wide. The same window shows the progress while a file
    loads. */
-.wl-modal{width:min(980px,calc(100vw - 48px));min-height:min(720px,calc(100vh - 48px));max-height:min(880px,calc(100vh - 48px));border-radius:var(--r-3xl)}
+.wl-modal{width:min(720px,calc(100vw - 48px));min-height:min(60vh,calc(100vh - 48px));max-height:min(70vh,calc(100vh - 48px));border-radius:var(--r-3xl)}
 .wl-modal.is-loading .wl-nav{display:none}      /* while a file imports the window is only its progress: no Help / Shortcuts / Settings */
 .wl-modal.is-loading{min-height:0}      /* the import progress is short: let the window shrink to it */
 /* While a file imports the window is a progress card floating over the app, not a modal: the app is not dimmed or blurred, and the tab strip
@@ -3577,11 +3619,10 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .wl-modal.is-loading .wl-top{display:none}
 .wl-modal #welcome-load-pane{padding:32px 32px var(--space-4xl)}
 .wl-ld-head{display:flex;align-items:center;gap:var(--space-2xl)}
-.wl-ld-head .ml-cv{width:48px;height:48px}
 .wl-ld-text{flex:1;min-width:0}
-#wl-msg{color:var(--tx);font-weight:var(--fw-semibold);font-size:var(--fs-xl);line-height:1.3;margin-bottom:2px}
+#wl-msg{color:var(--tx);font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:26px;line-height:1.15;letter-spacing:-.005em;margin-bottom:var(--space-xs)}
 #wl-sub{color:var(--tx3);font-size:var(--fs-12);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#wl-time{color:var(--tx3);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;align-self:flex-start;margin-top:2px}
+#wl-time{color:var(--tx3);font-size:var(--fs-12);font-variant-numeric:tabular-nums;flex-shrink:0;margin-right:auto;padding-left:var(--space-2xs)}
 #welcome-load-pane .loader-bar{height:4px;border-radius:var(--r-pill,99px);margin-top:var(--space-4xl);background:var(--s3)}
 #welcome-load-pane .loader-bar-fill{border-radius:inherit}
 #welcome-load-pane .loader-bar-fill::after{opacity:.5}
@@ -3606,18 +3647,18 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .wl-x{all:unset;box-sizing:border-box;display:grid;place-items:center;width:28px;height:28px;margin-left:var(--space-sm);border-radius:var(--r-sm);color:var(--tx3);cursor:pointer}
 .wl-x:hover,.wl-x:focus-visible{background:var(--s4);color:var(--tx)}
 .wl-x svg{width:var(--icon-md);height:var(--icon-md);stroke:currentColor;fill:none;stroke-width:2}
-.wl-modal .modal-b{padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.wl-modal .modal-b{position:relative;padding:0;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 #welcome-pick-pane{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
 .wl-stage{position:relative;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:var(--space-xs) var(--space-5xl) 0}
 /* the search: one bar across the window */
-.wl-search{position:relative;flex:0 0 auto}
+.wl-search{position:relative;flex:0 0 auto;margin-bottom:var(--space-3xl)}
 .wl-search svg,.wl-search i{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:var(--icon-md);height:var(--icon-md);stroke:var(--tx3);fill:none;stroke-width:2;pointer-events:none}
 .wl-search input{box-sizing:border-box;width:100%;height:var(--btn-h-lg);padding:0 var(--space-2xl) 0 42px;background:var(--bg2);border:0;border-radius:var(--r-lg);color:var(--tx);font-size:var(--fs-xl);outline:none;transition:var(--tr-bg)}
 .wl-search input::placeholder{color:var(--tx3)}
 .wl-search input:hover,.wl-search input:focus{background:var(--bg3)}
 .wl-label{flex:0 0 auto;font-size:var(--fs-11);letter-spacing:var(--tracking-wider);text-transform:uppercase;color:var(--tx3);margin:22px 0 var(--space-lg)}
 /* ways to start: three tiles and the four shapes, on the cards' own columns */
-.wl-start{flex:0 0 auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--space-xl)}
+.wl-start{flex:0 0 auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-xl)}
 .wl-tile{all:unset;box-sizing:border-box;position:relative;display:flex;flex-direction:column;justify-content:flex-end;gap:var(--space-2xs);min-width:0;height:92px;padding:var(--space-xl) var(--space-2xl);border-radius:var(--r-lg);background:var(--bg2);color:var(--tx);cursor:pointer;transition:var(--tr-bg)}
 .wl-tile:hover,.wl-tile:focus-visible{background:var(--bg3)}
 .wl-tile>svg,.wl-tile>i{position:absolute;left:14px;top:13px;width:var(--icon-lg);height:var(--icon-lg);stroke:var(--tx2);fill:none;stroke-width:1.8}
@@ -3645,37 +3686,38 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .wl-recents-head .wl-label{margin:0}
 #welcome-recents-clear{all:unset;box-sizing:border-box;align-items:center;height:22px;padding:0 var(--space-md);margin-right:-8px;border-radius:var(--r-sm);font-size:var(--fs-12);color:var(--tx3);cursor:pointer}
 #welcome-recents-clear:hover,#welcome-recents-clear:focus-visible{color:var(--er);background:var(--er-tint-10)}
-.wl-recents{flex:1 1 auto;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:max-content;align-content:start;gap:var(--space-xl);padding-bottom:var(--space-4xl);scrollbar-width:none}
+.wl-recents{flex:1 1 auto;min-height:0;overflow-y:auto;display:grid;grid-template-columns:minmax(0,1fr);grid-auto-rows:max-content;align-content:start;gap:var(--space-xs);padding-bottom:calc(44px + var(--space-xl));scrollbar-width:none}
 .wl-recents.more-below{-webkit-mask-image:linear-gradient(to bottom,var(--black) calc(100% - 30px),transparent);mask-image:linear-gradient(to bottom,var(--black) calc(100% - 30px),transparent)}
 .wl-recents.more-above{-webkit-mask-image:linear-gradient(to bottom,transparent,var(--black) 24px);mask-image:linear-gradient(to bottom,transparent,var(--black) 24px)}
 .wl-recents.more-above.more-below{-webkit-mask-image:linear-gradient(to bottom,transparent,var(--black) 24px,var(--black) calc(100% - 30px),transparent);mask-image:linear-gradient(to bottom,transparent,var(--black) 24px,var(--black) calc(100% - 30px),transparent)}
-.welcome-recent{position:relative;display:flex;flex-direction:column;min-width:0;border-radius:var(--r-lg);background:var(--bg2);color:var(--tx);overflow:hidden;cursor:pointer;transition:var(--tr-bg)}
+.wl-recents.more-above.more-below.is-away{-webkit-mask-image:linear-gradient(to bottom,transparent,var(--black) 24px);mask-image:linear-gradient(to bottom,transparent,var(--black) 24px)}      /* (the footer is away: no fade at the bottom either) */
+.welcome-recent{position:relative;display:flex;flex-direction:row;align-items:center;gap:var(--space-xl);padding:var(--space-md) 44px var(--space-md) var(--space-md);min-width:0;border-radius:var(--r-lg);background:var(--bg2);color:var(--tx);overflow:hidden;cursor:pointer;transition:var(--tr-bg)}
 .welcome-recent:hover,.welcome-recent:focus-visible{background:var(--bg3)}
 .welcome-recent:focus-visible{outline:none;box-shadow:inset 0 0 0 1.5px var(--ac)}
-.welcome-recent .wr-thumb{position:relative;flex:0 0 auto;aspect-ratio:16/10;display:grid;place-items:center;background:var(--bg);overflow:hidden}
+.welcome-recent .wr-thumb{position:relative;flex:0 0 auto;width:44px;aspect-ratio:1/1;border-radius:var(--r-sm);display:grid;place-items:center;background:var(--bg);overflow:hidden}
 .welcome-recent .wr-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;transition:transform 260ms var(--ease-out)}
 .welcome-recent:hover .wr-thumb img{transform:scale(1.03)}
 .welcome-recent .wr-noimg{font-size:var(--fs-12);letter-spacing:.1em;color:var(--tx3)}
-.welcome-recent .wr-tag{position:absolute;left:8px;top:8px;display:inline-flex;align-items:center;height:20px;padding:0 var(--space-md);border-radius:var(--r-lg);background:var(--ac);color:var(--white);font-size:var(--fs-11)}
+.welcome-recent .wr-tag{display:inline-flex;flex:0 0 auto;align-items:center;height:20px;padding:0 var(--space-md);border-radius:var(--r-lg);background:var(--ac);color:var(--white);font-size:var(--fs-11)}
 .welcome-recent .wr-tag.is-rec{background:var(--wn);color:var(--bg)}
-.welcome-recent .wr-tags{position:absolute;left:var(--space-md);top:var(--space-md);display:flex;gap:var(--space-sm)}
+.welcome-recent .wr-top{display:flex;align-items:center;gap:var(--space-md);min-width:0}
+.welcome-recent .wr-tags{display:flex;gap:var(--space-sm);flex:0 0 auto}
 .welcome-recent .wr-tags .wr-tag{position:static}
 .welcome-recent .wr-tag.is-conv{background:rgba(16,16,16,.72);color:var(--tx-control-hover)}
 .welcome-recent .wr-tag.is-notes{background:rgba(16,16,16,.72);color:var(--tx-control-hover);gap:var(--space-xs,4px)}.welcome-recent .wr-tag.is-notes svg{width:12px;height:12px}
 .welcome-recent.is-recovered:focus-visible{box-shadow:inset 0 0 0 1.5px var(--wn)}
-.welcome-recent .wr-meta{display:flex;flex-direction:column;gap:var(--space-3);min-width:0;padding:var(--space-md) var(--space-xl) var(--space-lg)}
+.welcome-recent .wr-meta{flex:1 1 auto;display:flex;flex-direction:column;gap:var(--space-3);min-width:0;padding:0}
 .welcome-recent .wr-name{font-size:var(--fs-md);line-height:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .welcome-recent .wr-sub{display:flex;align-items:center;gap:var(--space-sm);font-size:var(--fs-11);line-height:14px;color:var(--tx3);font-variant-numeric:tabular-nums;white-space:nowrap}
-.welcome-recent .wr-sub span+span:not(.wr-age)::before{content:'·';margin-right:var(--space-sm)}
-.welcome-recent .wr-age{margin-left:auto}
-.welcome-recent .wr-del{position:absolute;right:6px;top:6px;width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;border-radius:var(--r-sm);background:rgba(16,16,16,.72);color:var(--tx2);opacity:0;cursor:pointer;
+.welcome-recent .wr-sub span+span::before{content:'·';margin-right:var(--space-sm)}
+
+.welcome-recent .wr-del{position:absolute;right:12px;top:50%;margin-top:-11px;width:22px;height:22px;display:grid;place-items:center;padding:0;border:0;border-radius:var(--r-sm);background:rgba(16,16,16,.72);color:var(--tx2);opacity:0;cursor:pointer;
   transition:opacity var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out)}
 .welcome-recent .wr-del svg{width:var(--icon-xs);height:var(--icon-xs);stroke:currentColor;fill:none;stroke-width:2}
 .welcome-recent:hover .wr-del,.welcome-recent:focus-within .wr-del{opacity:1}
 .welcome-recent .wr-del:hover{background:var(--er);color:var(--white)}
 /* the file opened last: two columns wide, as tall as the cards beside it */
-.welcome-recent.is-resume{grid-column:span 2}
-.welcome-recent.is-resume .wr-thumb{flex:1 1 auto;aspect-ratio:auto;min-height:112px}
+.welcome-recent.is-resume{grid-column:auto}
 .wl-recents-none{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-xs);min-height:190px;border:1px dashed var(--bd2);border-radius:var(--r-2xl);color:var(--tx2);font-size:var(--fs-13);text-align:center}
 .wl-recents-none svg{width:22px;height:22px;stroke:var(--tx3);fill:none;stroke-width:1.6;margin-bottom:var(--space-sm)}
 .wl-recents-none span{font-size:var(--fs-12);color:var(--tx3)}
@@ -3683,10 +3725,13 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 /* a file held over the window */
 .wl-dropveil{position:absolute;inset:0 12px 10px;z-index:4;display:none;place-items:center;border:1.5px dashed var(--ac);border-radius:var(--r-2xl);background:color-mix(in srgb,var(--surface-pop) 90%,var(--ac));color:var(--tx);font-size:var(--fs-xl);pointer-events:none}
 .wl-stage.drag-over .wl-dropveil{display:grid}
-.wl-foot{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);height:44px;padding:0 var(--space-5xl);border-top:1px solid var(--s3);font-size:var(--fs-sm);color:var(--tx3);white-space:nowrap;overflow:hidden}
+.wl-foot{position:absolute;left:0;right:0;bottom:0;background:var(--surface-pop);display:flex;align-items:center;justify-content:space-between;gap:var(--space-2xl);height:44px;padding:0 var(--space-5xl);font-size:var(--fs-xs);color:var(--tx3);white-space:nowrap}
 .wl-foot>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wl-foot{transition:opacity var(--dur-base,180ms) var(--ease-out)}
+.wl-foot.is-away{opacity:0;pointer-events:none}
+.wl-foot::before{content:'';position:absolute;left:0;right:0;bottom:100%;height:28px;background:linear-gradient(to bottom,transparent,var(--surface-pop));pointer-events:none}      /* (the fade where the list runs under the hints) */
 .wl-foot kbd{font:inherit;color:var(--tx2);background:var(--bg3);border-radius:var(--r-xs);padding:1px var(--space-5);margin-right:var(--space-sm)}
-@media (max-width:860px){.wl-start,.wl-recents{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:860px){.wl-start{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){.wl-nav .wl-link:first-child{display:none}.wl-tile kbd{display:none}}
 /* ── Save scene ─────────────────────────────────────────────────────────── */
 .sv-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-md)}
@@ -3733,10 +3778,42 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
   :is(.size-field.budget-field input,#_a#_b){min-width:58px}
   :is(.align-head .size-field input,#_a#_b){min-width:38px}
 }
+/* the right sidebar: a slider is the dragged number field with a fill (as in Photo mode): the name on the left, the field on the right. The native line is out of
+   sight; the number and the name are dragged sideways, and a click on the number types one (_initScrubberImpl). */
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *){flex-direction:row;align-items:center;justify-content:space-between;gap:0;padding:var(--space-3) 0;min-height:var(--scrub-h)}      /* (no gap: the name runs right up to the field, so the whole row between them drags) */
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-head{display:contents}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-label{flex:1 1 auto;padding-right:var(--space-lg);font-size:var(--fs-sm);color:var(--tx2)}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-range{display:none}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs{position:relative;box-sizing:border-box;flex:0 0 var(--scrub-w);width:var(--scrub-w);height:var(--scrub-h);padding:0 var(--scrub-px);gap:var(--space-xs);justify-content:flex-end;
+  background:linear-gradient(90deg,var(--scrub-fill) var(--scrub-pct,0%),transparent var(--scrub-pct,0%)),var(--bg2);border:1px solid var(--bd);border-radius:var(--r-sm,6px);transition:border-color var(--dur-fast) var(--ease-out)}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *):hover .scrub-rhs{border-color:var(--bd2)}      /* (the whole row is the drag area: the field's edge lights with the pointer anywhere on it) */
+.prim-row:hover .prim-val-wrap:not(:focus-within){border-color:var(--bd2)}
+/* the drag pointer over the whole field (its edge and its unit too) and over the name of a row that has one */
+.prim-val-wrap,.prim-val-wrap .prim-unit,.scrub-rhs,.scrub-unit{cursor:ew-resize}      /* (the name of the row gets it from .scrub-drag) */
+/* and the same on every slider of the app (the floating cards, the dialogs, the Materials dock): the pointer anywhere on the row lights the number's edge */
+:is(.scrub:hover .scrub-value,#_a#_b){border-color:var(--bd2)}
+/* every row of a name and a field, whatever card it is in: no dead gap between the two (the name carries the space as its own padding, so it drags too) */
+.prim-row{column-gap:0}.prim-row>.prim-label{padding-right:var(--space-lg)}
+.photo-fx-row .prim-label{padding:0 var(--space-lg)}
+.cmd-num{gap:0}.cmd-num>span:first-child{flex:1 1 auto;min-width:0;padding-right:var(--space-lg)}
+/* a row that is greyed out (Photo mode off, or that effect off) gives none of the signs of a draggable field: no drag pointer, no lit edge, no lit name */
+#photo-fx#photo-fx.is-off :is(.prim-val-wrap,.prim-unit,.prim-label,input:not([type=checkbox])),#photo-fx#photo-fx .photo-fx-row.is-off :is(.prim-val-wrap,.prim-unit,.prim-label,input:not([type=checkbox])){cursor:default}
+#photo-fx#photo-fx.is-off .prim-row:hover .prim-val-wrap:not(:focus-within),#photo-fx#photo-fx .photo-fx-row.is-off:hover .prim-val-wrap:not(:focus-within){border-color:var(--bd)}
+#photo-fx#photo-fx.is-off .prim-row:hover .prim-label,#photo-fx#photo-fx .photo-fx-row.is-off:hover .prim-label{color:var(--tx2)}
+/* the name lights a little with the pointer anywhere on the row */
+.scrub:hover>.scrub-head>.scrub-label,.scrub:hover>.scrub-label,.drag-row:hover>.prim-label,.photo-fx-row:hover .prim-label,.cmd-num:hover>span:first-child{color:var(--tx)}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *):hover .scrub-label{color:var(--tx)}      /* (the sidebar's own name colour is set with more weight than the rule above) */
+.mat-row-val:hover .scrub-rhs{border-color:var(--bd2)}
+:is(.cmd-num:hover > .size-field,#_a#_b){border-color:var(--bd2)}      /* (a row of a name and a number field: the same, the pointer anywhere on the row; a class, not :has(), which made every style pass slower) */
+:is(.size-field,#_a#_b){cursor:ew-resize}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs:focus-within{border-color:var(--ac)}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs .scrub-value,#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs .scrub-input{flex:1 1 auto;box-sizing:border-box;width:auto;min-width:0;max-width:none;height:100%;padding:0;border:0;border-radius:0;background:none;font-size:var(--fs-12);font-weight:var(--fw-regular);text-align:right;justify-content:flex-end;outline:0;transform:none}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs .scrub-value:hover{background:none}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs .scrub-unit{position:static;transform:none;flex:0 0 auto}
+#sidebar-right#sidebar-right .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs:has(.scrub-unit:not(:empty)) :is(.scrub-value,.scrub-input){padding-right:0}
 .scrub:not(.mat-row-val,.mat-row-val *) .scrub-head{min-height:var(--num-h)}
 .scrub:not(.mat-row-val,.mat-row-val *) .scrub-rhs{gap:var(--space-sm)}
 /* a number in a row of a command panel, and a Shape parameter */
-:is(.prim-val-wrap,#_a#_b){width:104px;height:var(--num-h);padding:0 var(--num-px)}
 .prim-row{min-height:var(--num-h)}
 .align-head{--fld-h:var(--num-h);--fld-px:var(--num-px)}
 /* materials dock: the same height for its value pill */
@@ -3859,17 +3936,16 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    sidebars, like the materials dock (it used to take the tree's place in the
    left sidebar). Drag its top edge for the height. The bottom toolbar, the
    tips, the tool pill and an open command panel ride up with it. */
-:root{--lib-dock-h:316px}
-#vp-library-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--lib-dock-h),80vh);
-  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:var(--bg2);box-shadow:0 -8px 24px -16px var(--blk-50);
+#vp-library-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--dock-h),80vh);
+  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:var(--bg2);box-shadow:none;
   z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform var(--dur-200) var(--ease-out),visibility 0s linear var(--dur-200);
   font:12px/1.5 var(--font-sans)}
 #vp-library-pop.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
-body.lib-dock-open .vpc.tr{bottom:calc(min(var(--lib-dock-h),80vh) + 12px)}
-body.lib-dock-open .vpc.br{bottom:calc(min(var(--lib-dock-h),80vh) + 10px)}
-body.lib-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--lib-dock-h),80vh) / 2)}
-body.lib-dock-open .vp-cmd-host{bottom:calc(min(var(--lib-dock-h),80vh) + 12px);max-height:calc(100% - min(var(--lib-dock-h),80vh) - 24px)}
-body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--lib-dock-h),80vh) + 58px);max-height:calc(100% - min(var(--lib-dock-h),80vh) - 70px)}
+body.lib-dock-open .vpc.tr{bottom:calc(min(var(--dock-h),80vh) + 12px)}
+body.lib-dock-open .vpc.br{bottom:calc(min(var(--dock-h),80vh) + 10px)}
+body.lib-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--dock-h),80vh) / 2)}
+body.lib-dock-open .vp-cmd-host{bottom:calc(min(var(--dock-h),80vh) + 12px);max-height:calc(100% - min(var(--dock-h),80vh) - 24px)}
+body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58px);max-height:calc(100% - min(var(--dock-h),80vh) - 70px)}
 /* its head: title, search, the size fasteners come out in, a line of help, close */
 #vp-library-pop .mat-dock-search{flex:0 1 200px}
 #vp-library-pop .lib-opts{padding:0;gap:var(--space-md);white-space:nowrap}
@@ -4365,7 +4441,7 @@ body.app-ready .sp-card{transform:scale(1.025)}
 /* the name MeshOptimiser, wherever it is shown as the name (splash, About card, welcome window), is in the website's serif */
 .sp-word b,.brand-menu-title,.wl-title{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;letter-spacing:-.005em}
 .sp-word b{font-size:46px;line-height:1}
-.brand-menu-title{font-size:calc(var(--fs-xl) + 3px)}
+.brand-menu-title{font-size:calc(var(--fs-xl) + 7px)}
 .wl-title{font-size:calc(var(--fs-xl) + 9px);line-height:1.1}
 /* the titles of the command cards with a picture on top (Remove holes, Split, Select hidden, Fasteners, Smart fit) */
 .section-cmd.has-hero>.section-h>span:first-child{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:23px;line-height:1.1;letter-spacing:-.01em;color:var(--white)}
@@ -4525,9 +4601,6 @@ body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
 #sidebar-right b.plan-to{line-height:22px}
 #sidebar-right .size-field.budget-field{width:104px;box-sizing:border-box}      /* (it was as wide as its text, 103.81px, and the button took what was left: 124.19px) */
 .shade-thumb{inset:2px;width:calc(100% - 4px);height:calc(100% - 4px)}
-/* The Shading angle row now stands in the Shading section (under Outlines), not in the Properties card: no rules round it there, and it is dimmed with no selection */
-#shading-section .prop-shade{height:32px;margin:0;border-top:0;border-bottom:0}
-#shading-section .prop-shade.is-off{opacity:.45;pointer-events:none}
 /* The grab handle under the selection buttons ("back to the top") shows only while the buttons are stuck at the top of the panel; at rest the panel is already at the top, so it is out of sight (it keeps its place, so nothing moves) */
 .side-top{transition:opacity var(--dur-fast) var(--ease-out)}
 .sel-bar:not(.is-stuck) .side-top{opacity:0;visibility:hidden;pointer-events:none}
@@ -4583,7 +4656,7 @@ body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
 /* The toolbar's functions (Split, Remove holes, Smart fit, Remesh, Select hidden, Fasteners) are solid accent blue with a white icon while their card is open, like the Select tool */
 :is(.vpc .vpb.active[data-cmd-toggle],.vpc:is(.tr,.tl,.bc,.br,.bl) .vpb.active[data-cmd-toggle],#_a#_b){background:var(--ac);color:var(--white);box-shadow:none}
 :is(.vpc .vpb.active[data-cmd-toggle],.vpc:is(.tr,.tl,.bc,.br,.bl) .vpb.active[data-cmd-toggle],#_a#_b):hover{background:var(--ac)}
-#sidebar-right .sel-bar-grid.is-icons .btn{height:33px!important}                                /* (37px wide and 33px high: an odd 15px icon is in the middle of both, on whole pixels) */
+#sidebar-right .sel-bar-grid.is-icons .btn{height:33px}                                /* (37px wide and 33px high: an odd 15px icon is in the middle of both, on whole pixels) */
 /* The name row of the Properties card is one height, always: the same with a name and a Lock badge, with a name and a material note, or with nothing but
    "Empty scene". The badge has one size for "Lock" and "🔒 Locked", and the name takes what is left of the row and ends in an ellipsis, so neither the name
    nor the badge can make the row taller or wider, and nothing below it moves. */
@@ -4999,21 +5072,25 @@ body.anim-mode #vp-mode-bar{display:none}
 /* ── Animate timeline: a drawer along the bottom of the viewport, like the materials dock ─────────────────────────────────────────
    Transport and time in its head, the animated objects as rows with a bar for each motion, a ruler with the playhead, and the settings
    of the motion on the right (the same ones the small Animate window has). Its pop-out button turns it into that small window. */
-:root{--anim-dock-h:300px;--adk-hw:210px;--adk-iw:340px}
-#vp-animate-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--anim-dock-h),80vh);
-  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:var(--bg2);box-shadow:0 -8px 24px -16px var(--blk-50);outline:none;
+:root{--adk-hw:210px;--adk-iw:340px}
+#vp-animate-pop{position:fixed;top:auto;left:var(--side-l-w,0px);right:var(--side-r-w,0px);bottom:22px;height:min(var(--dock-h),80vh);
+  display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:var(--bg2);box-shadow:none;outline:none;
   z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform var(--dur-200) var(--ease-out),visibility 0s linear var(--dur-200);
   font:12px/1.5 var(--font-sans);container:adkdock / inline-size}
 #vp-animate-pop.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
-body.anim-dock-open .vpc.tr{bottom:calc(min(var(--anim-dock-h),80vh) + 12px)}
-body.anim-dock-open .vpc.br{bottom:calc(min(var(--anim-dock-h),80vh) + 10px)}
-body.anim-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--anim-dock-h),80vh) / 2)}
-body.anim-dock-open .vp-cmd-host{bottom:calc(min(var(--anim-dock-h),80vh) + 12px);max-height:calc(100% - min(var(--anim-dock-h),80vh) - 24px)}
-body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--anim-dock-h),80vh) + 58px);max-height:calc(100% - min(var(--anim-dock-h),80vh) - 70px)}
+/* going from one open bottom dock to another: the one that goes fades out and the new one fades in, in place; no slide (body.dock-swap, set by app.js for the moment of the switch) */
+body.dock-swap :is(#vp-materials-pop.mat-dock,#vp-library-pop,#vp-animate-pop){transform:none!important;opacity:0;transition:opacity 0s linear var(--dur-160),visibility 0s linear var(--dur-160)!important}      /* (the dock that goes stays solid until the new one is in: nothing shows through) */
+body.dock-swap :is(#vp-materials-pop.mat-dock,#vp-library-pop,#vp-animate-pop).show{opacity:1;z-index:calc(var(--z-toolbar) + 1);transition:opacity var(--dur-160) ease,visibility 0s!important}      /* (and the new one fades in over it) */
+body.dock-swap.dock-swap-close :is(#vp-materials-pop.mat-dock,#vp-library-pop,#vp-animate-pop):not(.show){transition:opacity var(--dur-160) ease,visibility 0s linear var(--dur-160)!important}      /* (closed again straight after a switch: it fades out, it does not wait and vanish) */
+body.anim-dock-open .vpc.tr{bottom:calc(min(var(--dock-h),80vh) + 12px)}
+body.anim-dock-open .vpc.br{bottom:calc(min(var(--dock-h),80vh) + 10px)}
+body.anim-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--dock-h),80vh) / 2)}
+body.anim-dock-open .vp-cmd-host{bottom:calc(min(var(--dock-h),80vh) + 12px);max-height:calc(100% - min(var(--dock-h),80vh) - 24px)}
+body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58px);max-height:calc(100% - min(var(--dock-h),80vh) - 70px)}
 #vp-animate-pop .adk-h{box-sizing:border-box;display:flex;height:var(--win-bar-h);min-height:var(--win-bar-h);flex:0 0 var(--win-bar-h);padding:0 var(--win-bar-px) 0 var(--win-bar-pl);gap:var(--space-lg);align-items:center;border-bottom:1px solid var(--win-bar-line);min-width:0;background:var(--bg2)}
 #vp-animate-pop .adk-h .lc-title{font-size:var(--win-title-fs);font-weight:var(--win-title-fw);color:var(--tx);letter-spacing:var(--win-title-ls);text-transform:none;line-height:var(--lh-compact);margin:0;padding:0}
+#vp-animate-pop .adk-h .lc-title{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:calc(var(--win-title-fs) * 1.25);letter-spacing:-.005em}      /* (the title in the serif of the other headings) */
 #vp-animate-pop .adk-grip{position:absolute;top:0;left:0;right:0;height:5px;cursor:ns-resize;z-index:8}
-#vp-animate-pop .adk-grip:is(:hover,.dragging){background:var(--ac-tint-35)}
 #vp-animate-pop .anim-alpha{flex:0 0 auto;padding:1px var(--space-md);border-radius:var(--r-pill);background:color-mix(in srgb,var(--wn) 16%,transparent);color:var(--wn);font-size:var(--fs-10);letter-spacing:var(--tracking-wide)}
 .adk-tr{display:flex;align-items:center;gap:var(--space-2xs);flex:0 0 auto}
 .adk-sep{flex:0 0 1px;align-self:center;height:16px;background:var(--s4)}
@@ -5224,6 +5301,11 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--anim-dock-h),80vh)
 #vp-materials-pop#vp-materials-pop .mat-dock-h .mat-split .mat-act-arrow svg{width:var(--icon-sm);height:var(--icon-sm);stroke-width:2.4}
 #vp-materials-pop#vp-materials-pop .mat-dock-h .mat-split .mat-act-arrow::before{top:var(--space-7);bottom:var(--space-7);background:var(--on-accent-line)}
 #vp-materials-pop#vp-materials-pop .mat-dock-h .dock-pop,#vp-library-pop#vp-library-pop .mat-dock-h .dock-pop{margin-right:calc(var(--space-xs) - var(--space-md))}      /* (pop-out and close: 4 px apart) */
+/* The Animate title bar takes the same icons as the Library's and the Materials': the same size (--icon-xl), and the pop-out and the close button the same
+   distance apart (the panel toggle keeps the bar's own gap before the pop-out, as the view buttons do there). */
+#vp-animate-pop#vp-animate-pop .adk-h :is(#adk-render,#adk-tr2,#adk-pop,#adk-close) svg{width:var(--icon-xl);height:var(--icon-xl)}
+#vp-animate-pop#vp-animate-pop .adk-h #adk-tr2{margin-right:0}
+#vp-animate-pop#vp-animate-pop .adk-h #adk-pop{margin-right:calc(var(--space-xs) * 2 - var(--space-md))}
 
 
 /* While a field's right-click menu is open (and a moment after) the field shows no focus ring and no change of border: no blue outline flashes round it. */
@@ -5387,8 +5469,8 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .em-pop-item.is-on:hover .em-pop-l{color:var(--tx-on-accent)}
 /* ── end of Edit mesh ── */
 </style>
-<script src="js/appearance.js?v=7-ser1"></script>
-<script src="js/updater.js?v=2"></script>
+<script src="js/appearance.js?v=8-sync"></script>
+<script src="js/updater.js?v=3"></script>
 <style id="updates-css">
 /* Updates: the card in the corner, and Settings › Updates (updater.js). Tokens only. */
 .up-card{position:fixed;right:16px;bottom:44px;z-index:calc(var(--z-overlay) + 1);width:340px;max-width:calc(100vw - 32px);padding:var(--space-2xl) var(--space-3xl);border-radius:var(--surface-pop-r);background:var(--surface-pop);box-shadow:var(--surface-shadow),var(--surface-ring);color:var(--tx2);font-size:var(--fs-12);line-height:var(--lh-body);opacity:0;transform:translateY(8px);transition:opacity var(--dur-200) ease,transform var(--dur-200) ease}
@@ -5429,6 +5511,20 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 .set-nav-state[hidden]{display:none}
 .brand-mark[data-update="new"]::after{content:"";position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--ac);box-shadow:0 0 0 2px var(--bg)}
 .brand-menu-item[hidden]{display:none}
+/* the About menu: one 16px inset for title, list, links and footer (the links sit 8px in a menu padded 8px), the bullets' text on the links' labels (14px icon + 8px gap),
+   and softer text so the title and the accent carry it */
+.brand-menu .brand-menu-head,.brand-menu .brand-menu-changelog,.brand-menu .brand-menu-foot{padding-left:var(--space-md);padding-right:var(--space-md)}
+.brand-menu .brand-menu-title{font-weight:var(--fw-regular)}
+/* the version badge: no outline */
+.brand-menu .brand-menu-ver{border:0;box-shadow:none}
+.brand-menu .brand-menu-changelog li{padding-left:var(--space-xl);color:var(--tx2)}
+.brand-menu .brand-menu-changelog li::before{left:2px;top:calc(.5lh - 1.5px);background:var(--tx3)}
+.brand-menu .brand-menu-item{color:var(--tx2)}
+.brand-menu .brand-menu-item:hover,.brand-menu .brand-menu-item:focus-visible{color:var(--ctx-hover-fg)}
+.brand-menu .brand-menu-item svg.brand-gh{color:inherit}
+.brand-menu .brand-menu-item .ext{stroke:var(--tx3)}
+.brand-menu .brand-menu-item:hover .ext,.brand-menu .brand-menu-item:focus-visible .ext{stroke:currentColor}
+.brand-menu .brand-menu-foot{color:var(--tx3)}
 .brand-menu-item.is-new{color:var(--tx)}
 .brand-menu-item.is-new .lbl{font-weight:var(--fw-medium)}
 @media (prefers-reduced-motion:reduce){.up-card{transition:none}.up-bar.is-wait i{animation:none}}
@@ -6067,10 +6163,8 @@ window.moSplash = function (msg, pct) {
       </button>
       <div class="brand-menu" id="brand-menu" role="dialog" aria-label="About MeshOptimiser" aria-hidden="true">
         <div class="brand-menu-head">
-          <div class="brand-menu-mark"><i data-lucide="zap"></i></div>
           <div class="brand-menu-titles">
             <div class="brand-menu-title">MeshOptimiser</div>
-            <div class="brand-menu-tagline">WebGPU CAD inspector</div>
           </div>
           <div class="brand-menu-ver" id="brand-menu-ver">v0.34.0</div>
         </div>
@@ -6098,9 +6192,6 @@ window.moSplash = function (msg, pct) {
         <button class="brand-menu-item" id="brand-menu-help">
           <i data-lucide="life-buoy"></i><span class="lbl">Help &amp; docs</span><kbd class="kbd-chip">F1</kbd>
         </button>
-        <button class="brand-menu-item" id="brand-menu-shortcuts">
-          <i data-lucide="command"></i><span class="lbl">Keyboard shortcuts</span><kbd class="kbd-chip">?</kbd>
-        </button>
         <div class="brand-menu-sep"></div>
         <div class="brand-menu-foot">
           <span>MIT License</span>
@@ -6116,19 +6207,21 @@ window.moSplash = function (msg, pct) {
     <div class="export-wrap" id="file-menu-wrap">
       <button class="tbtn" id="btn-file" aria-haspopup="menu" aria-expanded="false" title="Menu (New / Open / Import / Save / Scene settings)" aria-label="Menu"><i data-lucide="menu"></i><span class="tbtn-label">Menu</span></button>
       <div id="file-menu" class="export-menu" role="menu" style="min-width:260px">
-        <button class="export-menu-item" role="menuitem" data-file-cmd="new"><span class="fmt"><i data-lucide="file-plus" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>New scene</span><span class="hint">Alt+N</span></button>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="open"><span class="fmt"><i data-lucide="folder-open" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Open file…</span><span class="hint">Ctrl+O</span></button>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="inbox" title="Open the app's inbox folder in your file manager: the models it has converted are kept there"><span class="fmt"><i data-lucide="inbox" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Show inbox folder</span></button>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="import"><span class="fmt"><i data-lucide="file-input" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Import into scene…</span><span class="hint">Ctrl+Shift+O</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="new"><span class="fmt">New scene</span><span class="hint">Alt+N</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="open"><span class="fmt">Open file…</span><span class="hint">Ctrl+O</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="inbox" title="Open the app's inbox folder in your file manager: the models it has converted are kept there"><span class="fmt">Show inbox folder</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="import"><span class="fmt">Import into scene…</span><span class="hint">Ctrl+Shift+O</span></button>
         <div class="export-menu-sep" role="separator"></div>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="save"><span class="fmt"><i data-lucide="save" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Save scene…</span><span class="hint">Ctrl+S</span></button>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="export"><span class="fmt"><i data-lucide="download" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Export…</span><span class="hint">Ctrl+E</span></button>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="revert" title="Discards every edit and re-parses the source file"><span class="fmt"><i data-lucide="rotate-ccw" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Revert to source…</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="save"><span class="fmt">Save scene…</span><span class="hint">Ctrl+S</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="export"><span class="fmt">Export…</span><span class="hint">Ctrl+E</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="revert" title="Discards every edit and re-parses the source file"><span class="fmt">Revert to source…</span></button>
         <div class="export-menu-sep" role="separator"></div>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="settings"><span class="fmt"><i data-lucide="settings" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Settings…</span><span class="hint">Ctrl+,</span></button>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="welcome"><span class="fmt"><i data-lucide="home" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px"></i>Welcome screen</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="settings"><span class="fmt">Settings…</span><span class="hint">Ctrl+,</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="shortcuts"><span class="fmt">Keyboard shortcuts</span><span class="hint">?</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="claude"><span class="fmt">Claude mode</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="welcome"><span class="fmt">Welcome screen</span></button>
         <div class="export-menu-sep" role="separator"></div>
-        <button class="export-menu-item" role="menuitem" data-file-cmd="quit"><span class="fmt"><i data-lucide="power" style="width:14px;height:14px;margin-right:var(--space-md);vertical-align:-2px;color:var(--er)"></i>Quit app</span></button>
+        <button class="export-menu-item" role="menuitem" data-file-cmd="quit"><span class="fmt">Quit app</span></button>
       </div>
     </div>
     <div class="export-wrap">
@@ -6251,7 +6344,7 @@ window.moSplash = function (msg, pct) {
         <button class="vpb" id="gz-place" data-cmd-toggle="place" title="Dynamic place (D): pick the selected part up and drag it over other surfaces. It rests on them and turns to face them."><i data-lucide="arrow-down-to-dot"></i></button>
         <div class="vpb-sep"></div>
         <!-- How the model is drawn, as one button like the selection tool's: it shows the view in use, a click goes to the next, holding it (or a right-click) lists the four. -->
-        <button class="vpb" id="vw-mode-btn" title="View: Solid. Click for the next one, hold for all four" aria-label="View"><i data-lucide="cube-solid"></i></button>
+        <button class="vpb" id="vw-mode-btn" title="View: Solid. Click turns the Wireframe on or off, hold for all four views" aria-label="View"><i data-lucide="cube-solid"></i></button>
         <div id="vw-mode-pop" class="vp-prim-pop" style="display:none" role="menu" aria-label="View"></div>
         <!-- (the four old buttons stay, out of sight: the rest of the app still marks them as it changes the view) -->
         <button class="vpb" id="vw-solid" data-mode="solid" style="display:none" tabindex="-1" aria-hidden="true" title="Solid (Alt+1)"><i data-lucide="cube-solid"></i></button>
@@ -6280,6 +6373,7 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="el-ibtn" id="btn-el-straight" title="Straighten (edges): the points along a picked line of edges move onto the straight line between its two ends. One undo step" aria-label="Straighten" disabled><i data-lucide="move-diagonal"></i><span>Straighten</span></button>
           <button type="button" class="el-ibtn" id="btn-el-weld-open" title="Weld (points or edges): opens the Weld card, where the picked points become one, or the ones that are close enough to each other" aria-label="Weld" aria-haspopup="dialog" disabled><i data-lucide="merge"></i></button>
           <button type="button" class="el-ibtn" id="btn-el-fill" title="Fill (edges): close a hole whose whole rim is picked (a double-click on an open edge picks the loop). The cap has points of its own, so it shades on its own. One undo step" aria-label="Fill" disabled><i data-lucide="circle-dot"></i><span>Fill</span></button>
+          <button type="button" class="el-ibtn" id="btn-el-close" title="Close open edges. With nothing picked: cap every rim where the surface stops, on the selected parts, for a mesh that is missing faces (open bores, a side that was never exported). With one rim picked (edges; a double-click picks the loop): cap it. With two rims picked: close the gap between them with a strip of triangles, the ring between the rims of a counterbore or the missing length of a tube. One undo step" aria-label="Close open edges" disabled><i data-lucide="circle-dot-dashed"></i><span>Close</span></button>
           <button type="button" class="el-ibtn" id="btn-el-flip" title="Reverse normals: turn the picked polygons round, their front becomes their back. For faces that came in facing the wrong way (dark, or see-through from one side). One undo step" aria-label="Reverse normals" disabled><i data-lucide="flip-horizontal-2"></i><span>Reverse</span></button>
           <button type="button" class="el-ibtn" id="btn-el-dissolve" title="Dissolve: take the picked points out and close the surface over them; the polygons round them become one. For edges and polygons: the polygons become one, and the points left inside them or on a straight line of their outline go. The shape does not change there. One undo step (Ctrl+Backspace)" aria-label="Dissolve" disabled><i data-lucide="diamond-minus"></i><span>Dissolve</span></button>
           <button type="button" class="el-ibtn" id="btn-el-extract" title="Extract (polygons): take the picked polygons out into a part of their own, in the same place and with the same material. One undo step" aria-label="Extract" disabled><i data-lucide="split"></i><span>Extract</span></button>
@@ -6336,6 +6430,9 @@ window.moSplash = function (msg, pct) {
       <div class="vpc tr">
         <div class="vp-bar"><button class="vpb" id="vp-cmdk" title="Command palette (Shift+C, Ctrl+K)"><i data-lucide="search"></i></button></div>
         <div class="vp-bar">
+        <button class="vpb" id="vp-last-tool" title="Last tool: nothing used yet" disabled><i data-lucide="history"></i></button>
+        <div id="vp-last-pop" class="vp-prim-pop" style="display:none"></div>
+        <div class="vpb-sep"></div>
         <button class="vpb" id="vp-add-prim" title="Add shape (hold for more)"></button>
         <div id="vp-add-pop" class="vp-prim-pop" style="display:none"></div>
         <div class="vpb-sep"></div>
@@ -6373,25 +6470,8 @@ window.moSplash = function (msg, pct) {
             <div id="fog-controls" style="display:none;flex-direction:column;gap:var(--space-md);margin:6px 0 0 0;padding:var(--space-md) 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:6px">
               <div class="field" style="margin:0" title="Distance from the camera at which fog starts. 'auto' = 3× model footprint."><label for="fog-near" style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog start</span><span class="v" id="fog-near-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input class="mac-input mac-input-sm" type="number" id="fog-near" step="any" placeholder="auto"></div>
               <div class="field" style="margin:0" title="Distance at which fog is fully opaque. 'auto' = 30× model footprint."><label for="fog-far" style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Fog end</span><span class="v" id="fog-far-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">auto</span></label><input class="mac-input mac-input-sm" type="number" id="fog-far" step="any" placeholder="auto"></div>
-              <div class="field" style="margin:0" title="Multiplier on the fog falloff. >1 = denser (fog ramps in faster); <1 = gentler."><label for="fog-int" style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="fog-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">1.0×</span></label><input type="range" id="fog-int" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
+              <div class="prim-row" title="Multiplier on the fog falloff. >1 = denser (fog ramps in faster); <1 = gentler." style="margin:0;grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="fog-int">Intensity</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="fog-int" min="0.1" max="3" step="0.05" value="1"><span class="prim-unit">×</span></span></div>
               <button id="fog-reset" type="button" class="btn-sm" title="Clear overrides and use the auto-tuned distances + intensity 1.0">Reset to auto</button>
-            </div>
-            <div class="field" style="margin-top:12px;margin-bottom:0"><label id="bg-mode-lbl"><span>Background</span></label><select id="bg-mode" aria-labelledby="bg-mode-lbl" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral grey</option><option value="white">White</option><option value="hdri">HDRI environment</option></select></div>
-            <div id="hdri-controls" style="display:none;flex-direction:column;gap:var(--space-sm);margin-top:var(--space-md);padding:var(--space-md) 10px;background:rgba(255,255,255,.025);border:1px solid var(--bd);border-radius:6px">
-              <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:var(--lh-base)">Drag the <span style="color:#ffd76b">sun</span> in the viewport to rotate the environment. Its brightness lights every PBR material in the scene.</div>
-              <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-xs)">
-                <button class="hdri-preset btn-sm" data-hdri-preset="studio"   title="Built-in neutral studio (RoomEnvironment)">Studio</button>
-                <button class="hdri-preset btn-sm" data-hdri-preset="outdoor"  title="Bright sunny daylight, blue sky"          >Outdoor</button>
-                <button class="hdri-preset btn-sm" data-hdri-preset="sunset"   title="Warm sunset gradient with low-angle sun"  >Sunset</button>
-                <button class="hdri-preset btn-sm" data-hdri-preset="overcast" title="Soft overcast — diffuse, no harsh sun"    >Overcast</button>
-              </div>
-              <div style="display:flex;gap:var(--space-sm)">
-                <button id="hdri-load-btn" type="button" class="btn-sm" style="flex:1" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
-                <button id="hdri-default-btn" type="button" class="btn-sm" title="Reset to the built-in studio environment">Default</button>
-              </div>
-              <div id="hdri-current" style="font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
-              <div class="field" style="margin:0" title="Multiplier on the HDRI's lighting and reflections. Higher = brighter environment light on every PBR material."><label for="hdri-int" style="display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-11);color:var(--tx2);margin-bottom:4px"><span>Intensity</span><span class="v" id="hdri-int-v" style="color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold);font-size:var(--fs-11)">1.00×</span></label><input type="range" id="hdri-int" min="0" max="4" step="0.05" value="1" style="width:100%"></div>
-              <input type="file" id="hdri-file" accept=".hdr,.exr,image/*" style="display:none">
             </div>
           </div>
           <div class="pop-section">
@@ -6402,7 +6482,7 @@ window.moSplash = function (msg, pct) {
                 <option value="ortho">Orthographic</option>
               </select>
             </div>
-            <div class="field" id="cam-fov-row"><label for="cam-fov"><span>Field of view <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="cam-fov-val">45</span>°</span></span></label><input type="range" id="cam-fov" min="10" max="100" step="1" value="45" style="width:100%"></div>
+            <div class="prim-row" id="cam-fov-row" style="grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="cam-fov">Field of view</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="cam-fov" min="10" max="100" step="1" value="45"><span class="prim-unit">°</span></span></div>
             <div class="field" style="margin-bottom:0"><label id="cam-clip-lbl"><span>Clip planes</span></label>
               <select id="cam-clip" aria-labelledby="cam-clip-lbl" class="mac-sel">
                 <option value="auto" selected>Auto (fit to scene)</option>
@@ -6441,6 +6521,7 @@ window.moSplash = function (msg, pct) {
         <div class="toggle" title="Vertices that sit in the same place become one, so the surface is closed and the mesh gets lighter"><span id="rp-weld-lbl">Join doubled vertices</span><label><input type="checkbox" id="rp-weld" aria-labelledby="rp-weld-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle" title="Triangles with no area, and the same triangle stored twice"><span id="rp-degen-lbl">Remove empty and doubled triangles</span><label><input type="checkbox" id="rp-degen" aria-labelledby="rp-degen-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle" title="Faces next to each other are made to agree on which side is out; a closed shape is turned outward"><span id="rp-orient-lbl">Turn faces the same way</span><label><input type="checkbox" id="rp-orient" aria-labelledby="rp-orient-lbl" checked><span class="switch"></span></label></div>
+        <div class="toggle" title="Where two surfaces only touch (along an edge shared by three or more triangles, or at a pinched corner) they are taken apart: the smaller side gets its own corners, moved in by about a hundred-thousandth of the part's size. No face is removed."><span id="rp-manifold-lbl">Separate surfaces that only touch</span><label><input type="checkbox" id="rp-manifold" aria-labelledby="rp-manifold-lbl" checked><span class="switch"></span></label></div>
         <div class="toggle" title="Works the normals out afresh: smooth where faces meet at a shallow angle, sharp where they meet at a steep one"><span id="rp-normals-lbl">Smooth the shading again</span><label><input type="checkbox" id="rp-normals" aria-labelledby="rp-normals-lbl"><span class="switch"></span></label></div>
         <button class="btn warn" id="rp-run" data-cmd-primary title="Repair the parts. Can be undone."><i data-lucide="wrench"></i>Repair</button>
         <div class="field-help" id="rp-info">Nothing is changed on a part that is already sound.</div>
@@ -6661,6 +6742,65 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Select</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
+    <div class="section section-cmd" data-cmd="lettering" hidden>
+      <div class="section-h"><span>Lettering and logos</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="field-help">Text and marks on the selected parts, however the CAD system made them: cut into a part's own mesh (raised or engraved, on a flat or a curved face), or as bodies of their own laid over it. Select the part or parts first; Remove finds the lettering and takes it away in one go (Ctrl+Z brings it back); Find only shows what it would take.</div>
+        <div class="cmd-num" title="Raised text and logos no higher than this above their face are removed. Embossed type is usually 0.1 to 0.5 mm; cast lettering on a housing stands 1 to 2 mm; a boss or a rib stands higher and stays. When nothing is found, the card says how high the marks it left stand."><span>Raised, up to</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-rise" value="0.6"><span class="unit">mm</span></label></div>
+        <div class="cmd-num" title="Engraved text no deeper than this below its face is closed. 0 leaves engraved text alone."><span>Engraved, down to</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-depth" value="0.5"><span class="unit">mm</span></label></div>
+        <div class="cmd-num" title="The widest a letter, a logo or a line of text may be. Larger marks are left alone."><span>Largest mark</span><label class="size-field"><input type="text" inputmode="decimal" id="lt-size" value="40"><span class="unit">mm</span></label></div>
+        <div class="toggle" title="Text and marks that are part of the part's own mesh, on a flat or a curved face: raised ones are flattened into the face, engraved ones are closed flush with it"><span id="lt-mesh-lbl">Cut into the part's mesh</span><label><input type="checkbox" id="lt-mesh" checked aria-labelledby="lt-mesh-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Text modelled as a body of its own, sunk into the part and standing out of it by no more than the rise. The body is deleted; the part under it is complete."><span id="lt-bodies-lbl">Bodies laid over a part</span><label><input type="checkbox" id="lt-bodies" checked aria-labelledby="lt-bodies-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Thin bodies that lie entirely inside another closed part, close under its face (the back of a letter, a logo's plate): never visible. They are deleted too. A part deep inside a housing is not one; Hidden parts finds those."><span id="lt-hidden-lbl">Bodies hidden inside a part</span><label><input type="checkbox" id="lt-hidden" checked aria-labelledby="lt-hidden-lbl"><span class="switch"></span></label></div>
+        <button type="button" class="cmd-link" id="lt-reset" title="0.6 mm raised, 0.5 mm engraved, marks up to 40 mm, every kind on">Reset to defaults</button>
+        <button class="btn primary" id="lt-remove" data-cmd-primary title="Find the lettering on the selected parts and on what is laid over them, and remove it: the separate bodies are deleted, the marks in the meshes flattened or closed. Undo brings it back (two steps when there were both: the bodies, then the meshes)."><i data-lucide="eraser"></i>Remove lettering</button>
+        <div class="btn-row">
+          <button class="btn" id="lt-find" title="Only look: select the separate bodies and count the marks in the meshes, without changing anything"><i data-lucide="type"></i>Find only</button>
+          <button class="btn" id="lt-isolate" title="Show only the separate bodies that Find found, to check them"><i data-lucide="focus"></i>Isolate</button>
+        </div>
+        <div class="field-help" id="lt-info"></div>
+        <div id="lt-after" hidden></div>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
+    </div>
+    <!-- Round part: after Remove ridges or Make solid, the number of segments round the axis; the kept profile is spun again live, in the same undo step. -->
+    <!-- Mesh tools (Close cracks, Remove slivers, Patch holes, Remesh evenly, Smooth surface, Convex hull, Convex pieces): the tool's settings,
+         built by _MeshOps when it opens; a change runs the tool again; one undo step. -->
+    <div class="section section-cmd" data-cmd="meshop" hidden>
+      <div class="section-h"><span id="mop-title">Mesh tool</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div id="mop-fields"></div>
+        <div class="field-help" id="mop-info"></div>
+        <button class="btn primary" id="mop-ok" data-cmd-primary title="Keep it"><i data-lucide="check"></i>Done</button>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Done</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <!-- Voxel remesh: after the command, its four settings (the job runs again when a slider is let go); one undo step. -->
+    <div class="section section-cmd" data-cmd="voxel" hidden>
+      <div class="section-h"><span>Voxel remesh</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div class="field" title="Voxels along the part's longest side. More keeps finer detail and sharper edges, and takes longer."><div id="vox-detail-scrub"></div></div>
+        <div class="field" title="How far the surface may move when it is reduced afterwards, in voxels. 0 keeps every face of the grid (dense and even); more gives fewer triangles where the surface is flat."><div id="vox-adapt-scrub"></div></div>
+        <div class="field" title="Faces that meet at less than this angle are shaded smooth; at more, the edge is shown sharp."><div id="vox-smooth-scrub"></div></div>
+        <div class="field" title="Gaps, slots and pockets narrower than this share of the part's length are filled as well. 0 fills none."><div id="vox-gap-scrub"></div></div>
+        <div class="field-help" id="vox-info"></div>
+        <button class="btn primary" id="vox-ok" data-cmd-primary title="Keep it"><i data-lucide="check"></i>Done</button>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Done</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <div class="section section-cmd" data-cmd="roundpart" hidden>
+      <div class="section-h"><span id="rnd-title">Round part</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b">
+        <div class="field" title="How many flat steps go round the axis. More is rounder and heavier; fewer is lighter."><div id="rnd-seg-scrub"></div></div>
+        <div class="field" title="Faces that meet at less than this angle are shaded smooth, as if round; at more, each face is lit flat. Segments meet at 360° divided by their number."><div id="rnd-smooth-scrub"></div></div>
+        <div class="field-help" id="rnd-info"></div>
+        <button class="btn primary" id="rnd-ok" data-cmd-primary title="Keep this number of segments"><i data-lucide="check"></i>Done</button>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Close</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Done</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
     <div class="section section-cmd" data-cmd="stacked" hidden>
       <div class="section-h"><span>Stacked copies</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
@@ -6866,8 +7006,8 @@ window.moSplash = function (msg, pct) {
             <div class="toggle" title="An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight."><span id="fh-seal-lbl">Close openings into hollow spaces</span><label><input type="checkbox" id="fh-seal" aria-labelledby="fh-seal-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="After the holes are closed, the flat face around each one is joined again and triangulated with the fewest triangles, so the edges and vertices that only cut it up around the old hole are gone. Press Remove holes again to clean up what an earlier run left behind, also on parts in n-gons."><span id="fh-tidy-lbl">Remove vertices left over</span><label><input type="checkbox" id="fh-tidy" aria-labelledby="fh-tidy-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="A mesh can hold separate closed pieces inside its body (the balls of a valve, a pin in a bore). Once the holes are closed they are sealed inside and never visible again, though still drawn. On: every piece that lies entirely inside the closed part is removed."><span id="fh-enclosed-lbl">Remove what is sealed inside</span><label><input type="checkbox" id="fh-enclosed" checked aria-labelledby="fh-enclosed-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="Lettering, logos and marks that stand proud of a flat face are flattened into it. (Engraved ones are shallow pockets and count as blind holes.) Bosses, pins and ribs are taller than the limit below and stay."><span id="fh-raised-lbl">Raised lettering and logos</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
-            <div class="cmd-num" title="A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm."><span>Raised, up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm high</span></label></div>
+            <div class="toggle" title="Anything that stands proud of a flat face and is no higher than the limit below is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. (Engraved lettering is a shallow pocket and counts as a blind hole.) What stands higher than the limit stays."><span id="fh-raised-lbl">Raised details (lettering, bosses)</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too."><span>Raised, up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm high</span></label></div>
             <div class="toggle" title="On: an opening that takes up much of its face and of the part is kept (the bore of a washer, a window in a frame). Off: only the size limit decides."><span id="fh-shape-lbl">Keep openings that shape the part</span><label><input type="checkbox" id="fh-shape" aria-labelledby="fh-shape-lbl" checked><span class="switch"></span></label></div>
             <div class="cmd-num" title="Holes narrower than this are left alone"><span>Smallest hole</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-min" value="0"><span>mm</span></label></div>
             <div class="cmd-num" title="How far the inside of a hole may reach, as a multiple of the size limit. Lower it to leave deep bores alone."><span>Depth limit</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-depth" value="10"><span>× size</span></label></div>
@@ -7077,18 +7217,19 @@ window.moSplash = function (msg, pct) {
       <div class="section-h"><span>Split</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-seg" role="group" aria-label="Detection sensitivity">
-          <button class="split-preset" data-eps="0" title="Maximum splits. Trusts the index buffer exactly — never merges. Use if you suspect the source has duplicated boundary vertices.">Strict</button>
-          <button class="split-preset active" data-eps="1e-9" title="Default. Welds only bit-exact duplicates — fixes within-solid sharp-edge duplication without merging adjacent solids.">Tight</button>
-          <button class="split-preset" data-eps="1e-6" title="Welds vertices within 0.0001% of model size — tolerant of small float drift between duplicates.">Normal</button>
-          <button class="split-preset" data-eps="1e-3" title="Welds vertices within 0.1% of model size, so solids that touch are joined on purpose. Use when you want fewer, larger parts.">Loose</button>
+          <button class="split-preset active" data-eps="1e-6" title="Default. Welds points within one millionth of the model's size: doubled points that drift by rounding are joined, and no two separate solids are that close.">Normal</button>
+          <button class="split-preset" data-eps="1e-9" title="Welds only points that are exact duplicates. Use it when Normal joins solids that should stay apart.">Tight</button>
+          <button class="split-preset" data-eps="1e-3" title="Welds points within 0.1% of the model's size, so solids that touch are joined on purpose. Use it when you want fewer, larger parts.">Loose</button>
+          <button class="split-preset" data-eps="0" title="Nothing is welded: the index is trusted exactly. A CAD mesh, which keeps a point per face corner, falls into its faces. Only for a file you know has shared points.">Exact</button>
         </div>
         <div class="field" style="margin:var(--space-md) 0 0"><div id="split-eps-scrub"></div></div>
         <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:var(--fs-11);margin:var(--space-md) 0 6px">≈ — at this model size</div>
         <div class="field" style="margin-bottom:6px">
           <label id="split-method-lbl" style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:var(--space-xs)">Algorithm</label>
           <select id="split-method" aria-labelledby="split-method-lbl" class="mac-sel" style="width:100%">
-            <option value="vertex" title="Default. Connect triangles that share a vertex.">Vertex connectivity</option>
-            <option value="edge" title="Stricter than vertex. Connect only when triangles share a full edge — keeps solids meeting at a point separate.">Edge connectivity</option>
+            <option value="bodies" title="Default. A body is a closed surface. Solids that touch at a point, along an edge or on a face come apart, each keeping its own surface; a T-junction in one solid does not cut it.">Bodies</option>
+            <option value="vertex" title="Triangles that share a point belong together: everything that touches stays one part.">Vertex connectivity</option>
+            <option value="edge" title="Triangles belong together only when they share a whole edge — solids meeting at a point stay separate, solids sharing an edge or a face are joined.">Edge connectivity</option>
             <option value="spatial" title="Group by triangle bbox overlap on a 3D grid. Doesn't read the index buffer at all — useful when topology is fused but solids are still spatially separate.">Spatial proximity (AABB)</option>
             <option value="hybrid" title="Vertex connectivity first, then re-split any dominant component (>50%) with spatial proximity.">Hybrid (vertex + spatial)</option>
             <option value="faces" title="Every face becomes a part: triangles that share an edge and lie within the face angle of each other stay together, every crease starts another. A flat face or a smooth curved one is one part.">Faces (split at creases)</option>
@@ -7150,14 +7291,13 @@ window.moSplash = function (msg, pct) {
     <div id="loader">
       <div class="loader-card">
         <div class="loader-head">
-          <canvas class="ml-cv" width="88" height="88" aria-hidden="true"></canvas>
           <div class="loader-text"><div id="loader-msg">Loading…</div><div id="loader-sub"></div></div>
-          <div id="loader-time">0.0s</div>
+          <svg class="ld-mark" viewBox="-2 0 76 30" aria-hidden="true"><line class="ld-mark-base" x1="0" y1="15" x2="72" y2="15"/><polyline class="ld-mark-mesh" points="0,15 12,6 24,15 36,24 48,15 60,6 72,15"><animate attributeName="points" values="0,15 12,6 24,15 36,24 48,15 60,6 72,15;0,15 12,15 24,15 36,15 48,15 60,15 72,15;0,15 12,24 24,15 36,6 48,15 60,24 72,15;0,15 12,15 24,15 36,15 48,15 60,15 72,15;0,15 12,6 24,15 36,24 48,15 60,6 72,15" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></polyline><path class="ld-mark-curve" d="M0 15Q12 -3 24 15T48 15T72 15"><animate attributeName="d" values="M0 15Q12 -3 24 15T48 15T72 15;M0 15Q12 15 24 15T48 15T72 15;M0 15Q12 33 24 15T48 15T72 15;M0 15Q12 15 24 15T48 15T72 15;M0 15Q12 -3 24 15T48 15T72 15" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></path><path class="ld-mark-run" pathLength="100" d="M0 15Q12 -3 24 15T48 15T72 15"><animate attributeName="d" values="M0 15Q12 -3 24 15T48 15T72 15;M0 15Q12 15 24 15T48 15T72 15;M0 15Q12 33 24 15T48 15T72 15;M0 15Q12 15 24 15T48 15T72 15;M0 15Q12 -3 24 15T48 15T72 15" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></path><circle class="ld-v" cx="12" cy="6" r="1.6"><animate attributeName="cy" values="6;15;24;15;6" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></circle><circle class="ld-v" cx="36" cy="24" r="1.6"><animate attributeName="cy" values="24;15;6;15;24" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></circle><circle class="ld-v" cx="60" cy="6" r="1.6"><animate attributeName="cy" values="6;15;24;15;6" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></circle></svg>
         </div>
         <div class="loader-bar"><div class="loader-bar-fill" id="loader-bar"></div></div>
         <ol id="loader-steps" class="ld-steps" hidden></ol>
         <details class="ld-details" id="loader-details" open><summary>Details</summary><div id="loader-log" class="loader-log"></div></details>
-        <div class="loader-cancel" style="display:flex;gap:var(--space-sm);justify-content:flex-end"><button id="loader-copy-btn" title="Copy the log to clipboard">Copy log</button><button id="loader-cancel-btn" title="Abort the current load / operation">Cancel</button></div>
+        <div class="loader-cancel" style="display:flex;gap:var(--space-sm);justify-content:flex-end;align-items:center"><div id="loader-time">0.0s</div><button id="loader-copy-btn" title="Copy the log to clipboard">Copy log</button><button id="loader-cancel-btn" title="Abort the current load / operation">Cancel</button></div>
       </div>
     </div>
   </main>
@@ -7210,7 +7350,6 @@ window.moSplash = function (msg, pct) {
           <div class="shade-fam" id="vw-cad" data-mode="cad"></div>
         </div>
         <div class="toggle shade-outlines"><span id="shade-outlines-lbl" title="A fine dark line on the sharp edges of every part, in every view">Outlines</span><label><input type="checkbox" id="shade-outlines" aria-labelledby="shade-outlines-lbl" checked><span class="switch"></span></label></div>
-        <div class="prop-shade cmd-num is-off" id="prop-shade"></div>
       </div>
     </div>
 
@@ -7273,7 +7412,81 @@ window.moSplash = function (msg, pct) {
           </select>
         </div>
         <div class="toggle"><span id="toggle-snap-grid-lbl">Snap gizmo to grid</span><label><input type="checkbox" id="toggle-snap-grid" aria-labelledby="toggle-snap-grid-lbl"><span class="switch"></span></label></div>
-        <div class="toggle" style="margin-bottom:0" title="The sun casts shadows: the parts on each other, and on the floor of the grid"><span id="toggle-shadows-lbl">Shadows</span><label><input type="checkbox" id="toggle-shadows" aria-labelledby="toggle-shadows-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" style="margin-bottom:0" title="The sun casts shadows of the parts on each other"><span id="toggle-shadows-lbl">Shadows</span><label><input type="checkbox" id="toggle-shadows" aria-labelledby="toggle-shadows-lbl"><span class="switch"></span></label></div>
+            <div class="field" style="margin-top:12px;margin-bottom:0"><label id="bg-mode-lbl"><span>Background</span></label><select id="bg-mode" aria-labelledby="bg-mode-lbl" class="mac-sel"><option value="dark">Dark</option><option value="grad">Studio gradient</option><option value="gray">Neutral grey</option><option value="white">White</option><option value="hdri">HDRI environment</option></select></div>
+            <div id="hdri-controls" style="display:none;flex-direction:column;gap:var(--space-sm);margin-top:var(--space-md);padding:0">
+              <div class="prop-material-row" id="hdri-strip-row"><div class="prop-mat-strip" id="hdri-strip" role="list" aria-label="Environments">
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-preset" data-hdri-preset="studio" title="Built-in neutral studio (RoomEnvironment)"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/studio.webp" alt="" draggable="false"></span><span class="prop-mat-name">Studio</span></button>
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-photo" data-hdri-file="studio_small_09_1k.hdr" title="Soft photo studio"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/soft-studio.webp" alt="" draggable="false"></span><span class="prop-mat-name">Soft</span></button>
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-photo" data-hdri-file="photo_studio_loft_hall_1k.hdr" title="Bright loft studio"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/loft-studio.webp" alt="" draggable="false"></span><span class="prop-mat-name">Loft</span></button>
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-photo" data-hdri-file="kloofendal_48d_partly_cloudy_puresky_1k.hdr" title="Daylight with a few clouds"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/daylight.webp" alt="" draggable="false"></span><span class="prop-mat-name">Daylight</span></button>
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-preset" data-hdri-preset="outdoor" title="Bright sunny daylight, blue sky"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/outdoor.webp" alt="" draggable="false"></span><span class="prop-mat-name">Outdoor</span></button>
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-preset" data-hdri-preset="sunset" title="Warm sunset gradient with low-angle sun"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/sunset.webp" alt="" draggable="false"></span><span class="prop-mat-name">Sunset</span></button>
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-photo" data-hdri-file="venice_sunset_1k.hdr" title="Warm sunset over the water"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/sunset-sky.webp" alt="" draggable="false"></span><span class="prop-mat-name">Venice</span></button>
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-preset" data-hdri-preset="overcast" title="Soft overcast: diffuse, no harsh sun"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/overcast.webp" alt="" draggable="false"></span><span class="prop-mat-name">Overcast</span></button>
+                <button type="button" role="listitem" class="prop-mat-btn hdri-card hdri-photo" data-hdri-file="overcast_soil_puresky_1k.hdr" title="Flat overcast sky"><span class="prop-mat-sphere"><img src="assets/hdri/thumbs/overcast-sky.webp" alt="" draggable="false"></span><span class="prop-mat-name">Grey sky</span></button>
+              </div></div>
+              <div style="font-size:var(--fs-xs);color:var(--tx3)">Photo environments: Poly Haven, CC0.</div>
+              <div class="toggle" style="padding:0;border-top:0;min-height:0" title="Off: the environment still lights and reflects in the model, but the background is the plain default colour"><span id="hdri-show-bg-lbl">Show as background</span><label><input type="checkbox" id="hdri-show-bg" aria-labelledby="hdri-show-bg-lbl" checked><span class="switch"></span></label></div>
+              <div style="display:flex;gap:var(--space-sm)">
+                <button id="hdri-load-btn" type="button" class="btn-sm" style="flex:1" title="Load a .hdr / .exr equirectangular environment map">Load HDRI…</button>
+                <button id="hdri-default-btn" type="button" class="btn-sm" title="Reset to the built-in studio environment">Default</button>
+              </div>
+              <div id="hdri-current" style="font-family:var(--font-sans);font-size:var(--fs-10);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Built-in studio</div>
+              <div class="prim-row" style="grid-template-columns:minmax(0,1fr) auto" title="Multiplier on the HDRI's lighting and reflections. Higher = brighter environment light on every PBR material."><label class="prim-label" for="hdri-int">Intensity</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="hdri-int" min="0" max="4" step="0.05" value="1"><span class="prim-unit">×</span></span></div>
+              <input type="file" id="hdri-file" accept=".hdr,.exr,image/*" style="display:none">
+            </div>
+      </div>
+    </div>
+
+    <div class="section" id="photo-section">
+      <div class="section-h"><i class="sec-ico" data-lucide="camera"></i><span>Photo mode</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="prim-row" title="Draws the model the slow, pretty way, for pictures rather than for working: studio light, soft shadows with a floor shadow, and the effects below. The grid is hidden while it is on. Not saved with the scene.">
+          <label class="prim-label" for="toggle-photo" id="toggle-photo-lbl">Photo mode</label>
+          <label class="prim-toggle"><input type="checkbox" id="toggle-photo"><span></span></label>
+        </div>
+        <div id="photo-fx" class="is-off" style="display:flex;flex-direction:column">
+        <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:var(--lh-base);padding:var(--space-md) 0">Lights the model with the Background of the Scene card (the loft studio, unless you chose another HDRI) and the sun's shadows.</div>
+        <div class="prim-row" title="The round, softly lit disc under the model that catches its shadow. Off: the model hangs in the studio light with no floor and no floor shadow.">
+          <label class="prim-label" for="photo-stage" id="photo-stage-lbl">Floor disc</label>
+          <label class="prim-toggle"><input type="checkbox" id="photo-stage" checked><span></span></label>
+        </div>
+        <div class="prim-row" title="How smooth the edges are and how many samples the occlusion and the glow take. Lower it if the viewport is slow with Photo mode on.">
+          <label class="prim-label" for="photo-quality">Quality</label>
+          <select id="photo-quality" class="mac-sel"><option value="draft">Draft (fastest)</option><option value="good">Good</option><option value="best" selected>Best</option><option value="max">Maximum</option></select>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-ao" title="Darkens creases and places where parts meet" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-ao" aria-label="Ambient occlusion on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-ao" style="grid-column:2" title="Ambient occlusion">AO</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-ao" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-glow" title="Bright highlights bleed a little light around themselves" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-glow" aria-label="Glow on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-glow" style="grid-column:2">Glow</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-glow" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-fringe" title="A trace of colour split towards the corners" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-fringe" aria-label="Lens fringe on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-fringe" style="grid-column:2">Lens fringe</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-fringe" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-vignette" title="Darkens the edges of the picture" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-vignette" aria-label="Vignette on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-vignette" style="grid-column:2">Vignette</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-vignette" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-grain" title="A little noise takes the digital edge off smooth shading" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-grain" aria-label="Film grain on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-grain" style="grid-column:2">Film grain</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-grain" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row" title="The pixel density of the saved PNG, as a multiple of the viewport's size (kept under 8192 pixels on the long side)">
+          <label class="prim-label" for="photo-scale">Saved size</label>
+          <select id="photo-scale" class="mac-sel"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select>
+        </div>
+        <button id="photo-save" type="button" class="btn-sm" style="margin-top:var(--space-md)" title="Save the picture as a PNG">Save photo…</button>
+        </div>
       </div>
     </div>
 
@@ -7319,11 +7532,10 @@ window.moSplash = function (msg, pct) {
 
     <div class="section">
       <div class="section-h"><i class="sec-ico" data-lucide="filter"></i><span>Filters &amp; flags</span><span class="chev">▾</span></div>
-      <div class="section-b">
-        <div class="field"><div id="tri-scrub"></div></div>
-        <div style="height:10px"></div>
-        <div class="field"><div id="aspect-scrub"></div></div>
-        <div class="btn-list" style="margin-top:14px">
+      <div class="section-b" style="display:flex;flex-direction:column;gap:0">
+        <div class="field" style="margin:0"><div id="tri-scrub"></div></div>
+        <div class="field" style="margin:0"><div id="aspect-scrub"></div></div>
+        <div class="btn-list" style="margin-top:var(--space-md)">
           <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-poly</button>
           <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="rectangle-horizontal"></i>Flag slivers</button>
         </div>
@@ -7333,8 +7545,8 @@ window.moSplash = function (msg, pct) {
     <div class="section">
       <div class="section-h"><i class="sec-ico" data-lucide="mouse-pointer-2"></i><span>Pick parts</span><span class="chev">▾</span></div>
       <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="field" title="How alike Select similar goes"><div id="sim-strict-scrub"></div></div>
-        <div class="field-help" id="sim-strict-help"></div>
+        <div class="field" style="margin:0" title="How alike Select similar goes"><div id="sim-strict-scrub"></div></div>
+        <div class="field-help" id="sim-strict-help" style="margin:0"></div>
       </div>
     </div>
 
@@ -7354,14 +7566,14 @@ window.moSplash = function (msg, pct) {
           <summary><span>Steps</span></summary>
           <div class="cmd-adv-b">
         <div class="toggle" title="Off: the run only removes and tidies parts; the meshes that stay keep every triangle"><span id="smart-remesh-lbl">Reduce triangles</span><label><input type="checkbox" id="smart-remesh" aria-labelledby="smart-remesh-lbl" checked><span class="switch"></span></label></div>
-        <div class="cmd-num" id="smart-target-row" title="How many triangles the whole scene may have after the run (150000, 150k, 1.5m). The densest meshes give up the most."><span>Triangle target</span><label class="size-field"><input type="text" inputmode="numeric" id="smart-target" value="" aria-label="Triangle target"><span>tris</span></label></div>
-            <div class="toggle" title="Parts with no triangles, parts whose triangles have no area, and groups left with nothing in them"><span id="smart-clean-lbl">Remove empty and broken parts</span><label><input type="checkbox" id="smart-clean" aria-labelledby="smart-clean-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="Parts that cannot be seen from outside the model, from any direction"><span id="smart-hidden-lbl">Remove parts hidden inside</span><label><input type="checkbox" id="smart-hidden" aria-labelledby="smart-hidden-lbl"><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Bolts, nuts and washers found by their shape. Simplify turns each into a plain cylinder; Delete removes them."><span>Bolts, nuts, washers</span><select id="smart-fast" class="mac-sel" aria-label="Bolts, nuts and washers"><option value="keep">Keep</option><option value="cyl">Simplify</option><option value="delete">Delete</option></select></div>
-            <div class="cmd-num" title="Parts whose box, corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone."><span>Remove parts under</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-small" value="0" aria-label="Remove parts smaller than, in percent of the model"><span>%</span></label></div>
-            <div class="toggle" title="Closes holes in flat faces, with the settings of the Remove holes panel"><span id="smart-holes-lbl">Remove holes</span><label><input type="checkbox" id="smart-holes" aria-labelledby="smart-holes-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="The same part twice in the same place. Only the second copy goes; parts that merely share a shape stay."><span id="smart-dupes-lbl">Remove exact copies</span><label><input type="checkbox" id="smart-dupes" aria-labelledby="smart-dupes-lbl" checked><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Takes out triangles from each part for as long as no point of its surface moves by more than this. 0 leaves it out. Runs before the triangle target."><span>Reduce within</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-tol" value="0" aria-label="Largest move of any point, in millimetres"><span>mm</span></label></div>
+        <div class="cmd-num" id="smart-target-row" title="How many triangles the whole scene may have after the run (150000, 150k, 1.5m). The densest meshes give up the most."><span>Target</span><label class="size-field"><input type="text" inputmode="numeric" id="smart-target" value="" aria-label="Triangle target"><span>tris</span></label></div>
+            <div class="toggle" title="Parts with no triangles, parts whose triangles have no area, and groups left with nothing in them"><span id="smart-clean-lbl">Empty parts</span><label><input type="checkbox" id="smart-clean" aria-labelledby="smart-clean-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Parts that cannot be seen from outside the model, from any direction"><span id="smart-hidden-lbl">Hidden parts</span><label><input type="checkbox" id="smart-hidden" aria-labelledby="smart-hidden-lbl"><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Bolts, nuts and washers found by their shape. Simplify turns each into a plain cylinder; Delete removes them."><span>Fasteners</span><select id="smart-fast" class="mac-sel" aria-label="Bolts, nuts and washers"><option value="keep">Keep</option><option value="cyl">Simplify</option><option value="delete">Delete</option></select></div>
+            <div class="cmd-num" title="Parts whose box, corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone."><span>Small parts</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-small" value="0" aria-label="Remove parts smaller than, in percent of the model"><span>%</span></label></div>
+            <div class="toggle" title="Closes holes in flat faces, with the settings of the Remove holes panel"><span id="smart-holes-lbl">Holes</span><label><input type="checkbox" id="smart-holes" aria-labelledby="smart-holes-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="The same part twice in the same place. Only the second copy goes; parts that merely share a shape stay."><span id="smart-dupes-lbl">Exact copies</span><label><input type="checkbox" id="smart-dupes" aria-labelledby="smart-dupes-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Takes out triangles from each part for as long as no point of its surface moves by more than this. 0 leaves it out. Runs before the triangle target."><span>Tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-tol" value="0" aria-label="Largest move of any point, in millimetres"><span>mm</span></label></div>
           </div>
         </details>
         <details class="cmd-adv" id="smart-recipes">
@@ -7600,8 +7812,8 @@ window.moSplash = function (msg, pct) {
 <div id="vp-brep-pop" hidden role="dialog" aria-label="CAD faces and edges">
   <div class="bp-h" id="bp-title">CAD faces and edges</div>
   <div class="bp-s" id="bp-sum"></div>
-  <label class="bp-row"><span>Face info on hover</span><input type="checkbox" id="bp-faceinfo"></label>
-  <label class="bp-row"><span>Tangent edges</span><input type="checkbox" id="bp-tangent" checked></label>
+  <div class="toggle"><span>Face info on hover</span><label><input type="checkbox" id="bp-faceinfo" aria-label="Face info on hover"><span class="switch"></span></label></div>
+  <div class="toggle"><span>Tangent edges</span><label><input type="checkbox" id="bp-tangent" aria-label="Tangent edges" checked><span class="switch"></span></label></div>
   <div class="bp-s">The lines are the edges of the CAD file, not found from the triangles. Face info shows what the CAD face under the pointer is: its type, size and radius. A part you edit goes back to ordinary outlines.</div>
 </div>
 <div id="vp-brep-tip" hidden></div>
@@ -7683,8 +7895,8 @@ window.moSplash = function (msg, pct) {
         <details class="imp-more imp-reads">
           <summary><span>What to read</span><em>Each one adds a pass over the file</em></summary>
           <div class="imp-grp">
-          <div class="toggle imp-row"><span id="imp-step-shuo-lbl" class="imp-t"><b>Instance overrides <span class="imp-tag">slowest</span></b><small>Per-instance colour and material overrides (SHUO). The biggest cost on instanced assemblies.</small></span><label><input type="checkbox" id="imp-step-shuo" aria-labelledby="imp-step-shuo-lbl"><span class="switch"></span></label></div>
-          <div class="toggle imp-row"><span id="imp-step-layers-lbl" class="imp-t"><b>Layers</b><small>Layer attributes</small></span><label><input type="checkbox" id="imp-step-layers" aria-labelledby="imp-step-layers-lbl"><span class="switch"></span></label></div>
+          <div class="toggle imp-row"><span id="imp-step-shuo-lbl" class="imp-t"><b>Instance overrides <span class="imp-tag">slowest</span></b><small>Colours given to one copy of a part apart from the others (SHUO). The biggest cost on instanced assemblies.</small></span><label><input type="checkbox" id="imp-step-shuo" aria-labelledby="imp-step-shuo-lbl"><span class="switch"></span></label></div>
+          <div class="toggle imp-row"><span id="imp-step-layers-lbl" class="imp-t"><b>Keep layers</b><small>Each part remembers its CAD layer, for Properties and Select by layer.</small></span><label><input type="checkbox" id="imp-step-layers" aria-labelledby="imp-step-layers-lbl"><span class="switch"></span></label></div>
           <div class="toggle imp-row"><span id="imp-step-materials-lbl" class="imp-t"><b>Materials</b><small>Material attributes</small></span><label><input type="checkbox" id="imp-step-materials" aria-labelledby="imp-step-materials-lbl" checked><span class="switch"></span></label></div>
           <div class="toggle imp-row"><span id="imp-step-names-lbl" class="imp-t"><b>Product names</b><small>Names from the assembly</small></span><label><input type="checkbox" id="imp-step-names" aria-labelledby="imp-step-names-lbl" checked><span class="switch"></span></label></div>
           <div class="toggle imp-row"><span id="imp-step-props-lbl" class="imp-t"><b>Validation properties</b><small>Mass and area</small></span><label><input type="checkbox" id="imp-step-props" aria-labelledby="imp-step-props-lbl"><span class="switch"></span></label></div>
@@ -7993,11 +8205,11 @@ window.moSplash = function (msg, pct) {
            save/restore wiring that reads/writes #light-* still works. -->
       <div class="pop-section" style="display:none">
         <div class="pop-section-title">Lighting</div>
-        <div class="field"><label><span>Exposure <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-exposure-val">1.00</span></span></span></label><input type="range" id="light-exposure" min="0.1" max="3" step="0.05" value="1" style="width:100%"></div>
-        <div class="field"><label><span>Ambient <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-ambient-val">0.55</span></span></span></label><input type="range" id="light-ambient" min="0" max="2" step="0.05" value="0.55" style="width:100%"></div>
-        <div class="field"><label><span>Sun intensity <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-sun-val">1.20</span></span></span></label><input type="range" id="light-sun" min="0" max="3" step="0.05" value="1.2" style="width:100%"></div>
-        <div class="field"><label><span>Sun azimuth <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-azi-val">45</span>°</span></span></label><input type="range" id="light-azi" min="0" max="360" step="1" value="45" style="width:100%"></div>
-        <div class="field"><label><span>Sun elevation <span style="color:var(--tx3);font-size:var(--fs-xs)"><span id="light-ele-val">45</span>°</span></span></label><input type="range" id="light-ele" min="0" max="90" step="1" value="45" style="width:100%"></div>
+        <div class="prim-row" style="grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="light-exposure">Exposure</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="light-exposure" min="0.1" max="3" step="0.05" value="1"></span></div>
+        <div class="prim-row" style="grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="light-ambient">Ambient</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="light-ambient" min="0" max="2" step="0.05" value="0.55"></span></div>
+        <div class="prim-row" style="grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="light-sun">Sun intensity</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="light-sun" min="0" max="3" step="0.05" value="1.2"></span></div>
+        <div class="prim-row" style="grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="light-azi">Sun azimuth</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="light-azi" min="0" max="360" step="1" value="45"><span class="prim-unit">°</span></span></div>
+        <div class="prim-row" style="grid-template-columns:minmax(0,1fr) auto"><label class="prim-label" for="light-ele">Sun elevation</label><span class="prim-val-wrap" title="Drag to change · click to type"><input type="number" class="prim-value" id="light-ele" min="0" max="90" step="1" value="45"><span class="prim-unit">°</span></span></div>
       </div>
     </div>
 </div>
@@ -8050,11 +8262,11 @@ window.moSplash = function (msg, pct) {
 
 <div class="modal-bg" id="cmdk-modal">
   <div class="modal" role="dialog" aria-label="Command palette" style="width:520px;max-height:60vh">
-    <div class="modal-h" style="padding:10px 14px">
+    <div class="modal-h">
       <i data-lucide="search" class="cmdk-search-icon" title="Hold and drag to move the search. Double-click to put it back"></i>
       <input type="text" id="cmdk-input" placeholder="Search commands, parts and the library, or type a sum" autocomplete="off" spellcheck="false">
     </div>
-    <div class="modal-b" id="cmdk-list" style="padding:6px"></div>
+    <div class="modal-b" id="cmdk-list"></div>
     <div class="cmdk-resize" title="Drag to change the width" aria-hidden="true"></div>
     <div class="cmdk-foot"><span><kbd class="kbd-chip">↑</kbd><kbd class="kbd-chip">↓</kbd>choose</span><span><kbd class="kbd-chip">↵</kbd>run</span><span><kbd class="kbd-chip">Esc</kbd>close</span><span class="cmdk-foot-tip">12*25.4 · 2 in · a part's name · add nut</span></div>
   </div>
@@ -8068,8 +8280,6 @@ window.moSplash = function (msg, pct) {
       <nav class="wl-nav">
         <button class="wl-link" id="welcome-claude" type="button" title="Hide the app and follow Claude as a feed (alpha)">Claude mode<i class="cf-alpha">Alpha</i></button>
         <button class="wl-link" id="welcome-help" type="button">Help</button>
-        <button class="wl-link" id="welcome-shortcuts" type="button">Keyboard shortcuts</button>
-        <button class="wl-link" id="welcome-settings" type="button" title="Settings, opening on the start-up options (this screen at start-up, the last file, fitting the view)">Settings</button>
       </nav>
       <button class="wl-x" id="welcome-close" type="button" title="Close (Esc)" aria-label="Close"><i data-lucide="x"></i></button>
     </header>
@@ -8079,17 +8289,10 @@ window.moSplash = function (msg, pct) {
         <div id="welcome-drop" class="wl-stage">
           <div class="wl-search"><i data-lucide="search"></i><input type="text" id="welcome-recents-filter" placeholder="Search recent files" autocomplete="off" spellcheck="false" aria-label="Search recent files"></div>
 
-          <div class="wl-label">Start</div>
           <div class="wl-start">
             <button class="wl-tile is-primary" id="welcome-start-empty" type="button"><i data-lucide="file-plus"></i><kbd>Alt+N</kbd><span class="wl-tile-t">New scene</span><span class="wl-tile-s">Start with nothing</span></button>
             <button class="wl-tile" id="welcome-pick" type="button"><i data-lucide="folder-open"></i><kbd>Ctrl+O</kbd><span class="wl-tile-t">Open file…</span><span class="wl-tile-s">or drop one anywhere here</span></button>
             <button class="wl-tile" id="welcome-import" type="button" title="Add a file to the scene that is already open"><i data-lucide="file-input"></i><kbd>Ctrl+Shift+O</kbd><span class="wl-tile-t">Import…</span><span class="wl-tile-s">Add to the open scene</span></button>
-            <div class="wl-shapes" id="welcome-shapes" aria-label="Start from a shape">
-              <button class="wl-shape" data-shape="cube" title="New scene with a cube"><span class="wl-shape-pic"></span><span>Cube</span></button>
-              <button class="wl-shape" data-shape="sphere" title="New scene with a sphere"><span class="wl-shape-pic"></span><span>Sphere</span></button>
-              <button class="wl-shape" data-shape="cylinder" title="New scene with a cylinder"><span class="wl-shape-pic"></span><span>Cylinder</span></button>
-              <button class="wl-shape" data-shape="torus" title="New scene with a torus"><span class="wl-shape-pic"></span><span>Torus</span></button>
-            </div>
           </div>
 
           <div class="wl-recents-head">
@@ -8110,17 +8313,17 @@ window.moSplash = function (msg, pct) {
 
       <div id="welcome-load-pane" style="display:none">
         <div class="wl-ld-head">
-          <canvas class="ml-cv" width="88" height="88" aria-hidden="true"></canvas>
           <div class="wl-ld-text">
             <div id="wl-msg">Loading…</div>
             <div id="wl-sub"></div>
           </div>
-          <div id="wl-time">0.0s</div>
+          <svg class="ld-mark" viewBox="-2 0 76 30" aria-hidden="true"><line class="ld-mark-base" x1="0" y1="15" x2="72" y2="15"/><polyline class="ld-mark-mesh" points="0,15 12,6 24,15 36,24 48,15 60,6 72,15"><animate attributeName="points" values="0,15 12,6 24,15 36,24 48,15 60,6 72,15;0,15 12,15 24,15 36,15 48,15 60,15 72,15;0,15 12,24 24,15 36,6 48,15 60,24 72,15;0,15 12,15 24,15 36,15 48,15 60,15 72,15;0,15 12,6 24,15 36,24 48,15 60,6 72,15" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></polyline><path class="ld-mark-curve" d="M0 15Q12 -3 24 15T48 15T72 15"><animate attributeName="d" values="M0 15Q12 -3 24 15T48 15T72 15;M0 15Q12 15 24 15T48 15T72 15;M0 15Q12 33 24 15T48 15T72 15;M0 15Q12 15 24 15T48 15T72 15;M0 15Q12 -3 24 15T48 15T72 15" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></path><path class="ld-mark-run" pathLength="100" d="M0 15Q12 -3 24 15T48 15T72 15"><animate attributeName="d" values="M0 15Q12 -3 24 15T48 15T72 15;M0 15Q12 15 24 15T48 15T72 15;M0 15Q12 33 24 15T48 15T72 15;M0 15Q12 15 24 15T48 15T72 15;M0 15Q12 -3 24 15T48 15T72 15" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></path><circle class="ld-v" cx="12" cy="6" r="1.6"><animate attributeName="cy" values="6;15;24;15;6" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></circle><circle class="ld-v" cx="36" cy="24" r="1.6"><animate attributeName="cy" values="24;15;6;15;24" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></circle><circle class="ld-v" cx="60" cy="6" r="1.6"><animate attributeName="cy" values="6;15;24;15;6" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1;.45 0 .55 1;.45 0 .55 1" keyTimes="0;.25;.5;.75;1" dur="3.2s" repeatCount="indefinite"/></circle></svg>
         </div>
         <div class="loader-bar"><div class="loader-bar-fill" id="wl-bar"></div></div>
         <ol id="wl-steps" class="ld-steps" hidden></ol>
         <details class="ld-details" id="wl-details"><summary>Details</summary><div id="wl-log" class="loader-log"></div></details>
         <div class="wl-ld-foot">
+          <div id="wl-time">0.0s</div>
           <button id="wl-copy-btn" title="Copy the log to clipboard">Copy log</button>
           <button id="wl-cancel-btn" title="Abort the current load">Cancel</button>
         </div>
@@ -8527,13 +8730,13 @@ window.moSplash = function (msg, pct) {
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
-<script defer src="js/notes.js?v=90"></script>
-<script type="module" src="js/app.js?v=20261017-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1"></script>
+<script defer src="js/notes.js?v=101"></script>
+<script type="module" src="js/app.js?v=20261050-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->
-<script defer src="js/cloner.js?v=20261009-icons"></script>
-<script defer src="js/help.js?v=4"></script>
+<script defer src="js/cloner.js?v=20261018-undo"></script>
+<script defer src="js/help.js?v=16"></script>
 <script>
   // Reveal the app when it says it has booted (app.js: 'mo-boot-ready', after the renderer and the
   // scene are up and the icons are drawn), the splash has been up long enough not to flash, and the

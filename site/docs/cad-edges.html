@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -161,6 +163,8 @@
             <div><dt>Face info on hover</dt><dd>Off by default. Point at a face and a tip names it: plane, cylinder, cone, sphere, torus, a free-form surface and so on, with its radius or angle, its area and how many triangles it has. The face is tinted blue while you point at it.</dd></div>
             <div><dt>Tangent edges</dt><dd>On by default. These are the edges where two faces run smoothly into each other, such as the borders of a fillet. Switch them off to see only the edges that are really sharp.</dd></div>
           </dl>
+          <h2 id="flat-faces-that-are-exactly-flat">Flat faces that are exactly flat</h2>
+          <p>Two tools use the CAD faces as well as draw them. <span class="ui">Remove holes</span> and <span class="ui">Untriangulate</span> both need to know which triangles make up one flat face. Without the CAD information they work it out from the angles between triangles, with a small tolerance, and a face whose tessellation wobbles a little can fall apart into facets, or two faces that meet at a very shallow angle can be taken for one. With it, a face the CAD file calls a plane is one flat face, exactly, and two neighbouring plane faces are never joined. The rest of the part is handled as before. Nothing to switch on: it happens whenever the part still carries its CAD faces.</p>
           <aside class="kb-note"><p>A part you edit (decimate, remesh, move its points) goes back to ordinary outlines, because the CAD faces no longer match its triangles. Copies of the same part share the information. A simplified level-of-detail part has none.</p></aside>
           <h2 id="surface-parts">Surface parts</h2>
           <p>Some STEP files carry parts that are only surfaces, with no solid inside: sheet covers, shields, trim. They used to be left out. <span class="ui">Surface parts</span> in the import window is on by default and brings them in as parts of their own. Switch it off to keep only the solids.</p>

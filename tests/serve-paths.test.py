@@ -35,5 +35,16 @@ ok(not trusted(Host="localhost:4242", Sec_Fetch_Site="same-site"), "refused: ano
 ok(not trusted(Host="localhost:4242", Origin="http://localhost:8080"), "refused: another local port's POST")
 ok(not trusted(Host="evil.example:4242"), "refused: DNS rebinding (another Host)")
 ok(not trusted(Host="localhost:4242", Origin="null"), "refused: Origin null")
+
+# The sample models live in the repository's inbox/, the app's own inbox is app/inbox: /inbox/<name> falls back to the repository
+# when the app's inbox has no such file (the e2e tests open inbox/GearboxAssy.glb), and nothing else changes.
+h = serve.Handler.__new__(serve.Handler); h.directory = str(serve.ROOT)
+repo_inbox = serve.ROOT.parent / "inbox"
+sample = next((f for f in (repo_inbox.glob("*.glb") if repo_inbox.is_dir() else []) if not (serve.INBOX / f.name).exists()), None)
+if sample: ok(Path(h.translate_path("/inbox/" + sample.name)) == sample, "a sample model of the repository's inbox is served")
+else: print("  (no sample model in the repository's inbox to check with)")
+ok(Path(h.translate_path("/inbox/no-such-file.glb")) == serve.INBOX / "no-such-file.glb", "a file in neither inbox stays in the app's inbox (404)")
+ok(Path(h.translate_path("/inbox/../serve.py")) == serve.ROOT / "serve.py", "no climbing out through /inbox/ (the stock rule: .. is dropped)")
+
 print("\nall checks passed" if not bad else f"\n{bad} FAILED")
 sys.exit(1 if bad else 0)

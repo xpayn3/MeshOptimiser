@@ -20,7 +20,17 @@ export function packAttributes(geom) {
   const cols = [];
   for (const [name, size, w] of [['normal', 3, ATTR_WEIGHT.normal], ['uv', 2, ATTR_WEIGHT.uv], ['color', 3, ATTR_WEIGHT.color]]) {
     const a = geom.attributes[name];
-    if (a && a.count === n && a.itemSize >= size) cols.push({ a, size, w });
+    if (!(a && a.count === n && a.itemSize >= size)) continue;
+    // UVs count by how far they span: the weight is for a texture laid once over the 0..1 square, so UVs that tile it ten times
+    // (or are in millimetres) count ten times less per unit, and UVs that do not change at all (all zero) do not count
+    if (name === 'uv') {
+      let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+      for (let v = 0; v < n; v++) { const x = a.getComponent ? a.getComponent(v, 0) : a.array[v * a.itemSize], y = a.getComponent ? a.getComponent(v, 1) : a.array[v * a.itemSize + 1]; if (x < u0) u0 = x; if (x > u1) u1 = x; if (y < v0) v0 = y; if (y > v1) v1 = y; }
+      const span = Math.max(u1 - u0, v1 - v0);
+      if (span > 1e-9) cols.push({ a, size, w: w / span });
+      continue;
+    }
+    cols.push({ a, size, w });
   }
   if (!cols.length) return null;
   const stride = cols.reduce((s, c) => s + c.size, 0);

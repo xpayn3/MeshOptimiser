@@ -34,8 +34,8 @@ Open **Advanced** in the panel.
 - **Blind holes and pockets**: Holes and pockets with a floor: an opening on one side only.
 - **Open holes**: Openings with nothing behind them: a missing patch in a flat face.
 - **Close openings into hollow spaces**: An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight. Off: such an opening is left alone. It is on to begin with.
-- **Raised lettering and logos**: Lettering and marks that stand proud of a flat face are flattened into it. Bosses, pins and ribs are taller than the limit and stay.
-- **Raised, up to**: A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm high.
+- **Raised details (lettering, bosses)**: Anything that stands proud of a flat face and is no higher than the limit is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. What stands higher stays.
+- **Raised, up to**: A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm high; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too.
 - **Keep openings that shape the part**: On: an opening that takes up much of its face and of the part is kept, such as the bore of a washer or a window in a frame. Off: only the size limit decides.
 - **Smallest hole**: Holes narrower than this are left alone.
 - **Remove vertices left over**: On: the points that ringed each hole are taken out of the flat face, and the face is triangulated again with the fewest triangles. Press **Remove holes** a second time to clean the same way what an earlier run, or an earlier tool, left behind, even when no hole is left to close. It also works on parts that are already in n-gons. Loose walls that a broken file left floating in an opening, a cut-loose tube or cup that belongs to no solid, go with it.

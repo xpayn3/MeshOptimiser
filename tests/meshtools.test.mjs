@@ -1,7 +1,7 @@
 // node tests/meshtools.test.mjs — meshtools.js: Planarize, Straighten, Weld, Fill (what each works out, on shapes built here).
 import { ShapeUtils, Vector2 } from '../app/vendor/three/build/three.core.js';
 import { buildTopology, buildPolygons, pairQuads } from '../app/js/meshedit.js';
-import { planarize, straighten, weldPoints, collapseEdges, applyWeld, fillLoops } from '../app/js/meshtools.js';
+import { planarize, straighten, weldPoints, collapseEdges, applyWeld, fillLoops, fillOpen, closeBetween } from '../app/js/meshtools.js';
 
 let fails = 0;
 const ok = (c, msg) => { if (!c) { fails++; console.log('FAIL', msg); } else console.log('ok  ', msg); };
@@ -135,6 +135,82 @@ const edgeBetween = (topo, a, b) => { for (let e = 0; e < topo.nEdge; e++) if ((
   // the rim picked only in part is not a loop
   const partial = new Set([...rim].slice(0, 5));
   ok(fillLoops(topo, partial, triangulate).loops.length === 0, 'a part of the rim is not a loop: nothing is filled');
+}
+
+// ── Close open edges (fillOpen) ──────────────────────────────────────────
+{
+  // a plate with a square hole: two rims, the hole (8 edges) and the plate's own outline (24); both are capped, without a pick
+  const m = plate(6, { skip: (i, j) => i >= 2 && i < 4 && j >= 2 && j < 4 }), { topo } = read(m);
+  const r = fillOpen(topo, triangulate);
+  ok(r.open === 32 && r.rims === 2 && r.loops.length === 2 && r.skipped === 0 && r.branching === 0, `32 open edges make 2 rims and both are capped (${r.open}, ${r.rims}, ${r.loops.length})`);
+  const hole = r.loops.find(L => L.points.length === 8), rim = r.loops.find(L => L.points.length === 24);
+  ok(hole && hole.tris.length === 6 && rim && rim.tris.length === 22, 'the hole closes with 6 triangles, the outline with 22');
+  // the hole's cap faces up like the plate; the outline's cap faces down (it closes the sheet from below)
+  ok(hole.normal[2] > 0.999 && rim.normal[2] < -0.999, 'each cap faces the way that closes the surface');
+  // a size limit leaves the big rim alone
+  const r2 = fillOpen(topo, triangulate, { maxSize: 4 });
+  ok(r2.loops.length === 1 && r2.tooLarge === 1 && r2.loops[0].points.length === 8, 'with a size limit only the hole is capped and the outline is counted as too large');
+  // a closed surface has nothing to do
+  const cube = { pos: new Float32Array([0,0,0, 1,0,0, 1,1,0, 0,1,0, 0,0,1, 1,0,1, 1,1,1, 0,1,1]), idx: new Uint32Array([0,2,1, 0,3,2, 4,5,6, 4,6,7, 0,1,5, 0,5,4, 1,2,6, 1,6,5, 2,3,7, 2,7,6, 3,0,4, 3,4,7]) };
+  const r3 = fillOpen(read(cube).topo, triangulate);
+  ok(r3.open === 0 && r3.loops.length === 0, 'a closed cube has no open edges and nothing is capped');
+}
+{
+  // two square holes that touch at a corner: their rims meet at that point, so neither is a rim of its own; the outline still closes
+  const m = plate(6, { skip: (i, j) => (i === 2 && j === 2) || (i === 3 && j === 3) }), { topo } = read(m);
+  const r = fillOpen(topo, triangulate);
+  ok(r.rims === 1 && r.loops.length === 1 && r.loops[0].points.length === 24 && r.branching === 8, `rims that meet at a point are left (branching ${r.branching}) and the outline is capped`);
+}
+
+// ── Close between two rims (closeBetween) ────────────────────────────────
+// an open tube wall round the z axis: n segments from z0 to z1; `out` true = faces away from the axis (a pipe), false = faces it (a bore)
+function tube(cx, cy, r, z0, z1, n, out) {
+  const pos = [], idx = [];
+  for (let i = 0; i < n; i++) { const a = i / n * 2 * Math.PI; pos.push(cx + r * Math.cos(a), cy + r * Math.sin(a), z0, cx + r * Math.cos(a), cy + r * Math.sin(a), z1); }
+  for (let i = 0; i < n; i++) {
+    const a0 = i * 2, a1 = ((i + 1) % n) * 2;        // bottom points; +1 = top
+    if (out) idx.push(a0, a1, a1 + 1, a0, a1 + 1, a0 + 1); else idx.push(a0, a1 + 1, a1, a0, a0 + 1, a1 + 1);
+  }
+  return { pos: new Float32Array(pos), idx: new Uint32Array(idx) };
+}
+const join = (A, B) => { const off = A.pos.length / 3; return { pos: new Float32Array([...A.pos, ...B.pos]), idx: new Uint32Array([...A.idx, ...Array.from(B.idx, i => i + off)]) }; };
+const openEdgesNear = (topo, test) => { const out = new Set(); for (let e = 0; e < topo.nEdge; e++) { if (topo.edgeN[e] !== 1) continue; const p = at3(topo, topo.edgeV[e * 2]), q = at3(topo, topo.edgeV[e * 2 + 1]); if (test(p) && test(q)) out.add(e); } return out; };
+const at3 = (topo, w) => { const r = topo.rep[w] * 3; return [topo.positions[r], topo.positions[r + 1], topo.positions[r + 2]]; };
+const triNormal = (P, [a, b, c]) => { const p = P[a], q = P[b], r = P[c]; const e1 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], e2 = [r[0] - p[0], r[1] - p[1], r[2] - p[2]]; return [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]; };
+{
+  // a pipe with its middle missing: the top rim of the lower piece and the bottom rim of the upper piece, 12 and 16 segments
+  const m = join(tube(0, 0, 1, 0, 1, 12, true), tube(0, 0, 1, 2, 3, 16, true)), { topo } = read(m);
+  const rims = openEdgesNear(topo, p => p[2] > 0.5 && p[2] < 2.5);
+  ok(rims.size === 28, `the two rims in the middle are 28 open edges (${rims.size})`);
+  const r = closeBetween(topo, rims, triangulate);
+  ok(r.rims === 2 && r.loops.length === 1 && r.loops[0].tris.length === 28, `two rims are stitched with 28 triangles (${r.rims}, ${r.loops.length && r.loops[0].tris.length})`);
+  const L = r.loops[0], P = L.points.map(w => at3(topo, w));
+  let outward = true, flat = 0;
+  for (const t of L.tris) { const nn = triNormal(P, t), c = [0, 1, 2].map(k => (P[t[0]][k] + P[t[1]][k] + P[t[2]][k]) / 3); if (nn[0] * c[0] + nn[1] * c[1] + nn[2] * c[2] <= 0) outward = false; if (Math.hypot(...nn) < 1e-9) flat++; }
+  ok(outward && !flat, 'every strip triangle faces away from the axis like the pipe, none is flat');
+  ok(L.normals && L.normals.length === 28 && Math.abs(L.normals[0][2]) < 0.3, 'the strip points have radial normals of their own');
+  ok(L.polys && L.polys.length === 28 && L.nPolys < 28 && L.nPolys >= 14, `the strip is drawn as its own quads and triangles, not one polygon (${L.nPolys} polygons)`);
+  // the picked rims of one piece only: one rim, capped as Fill does
+  const one = openEdgesNear(topo, p => p[2] > 0.5 && p[2] < 1.5);
+  const r1 = closeBetween(topo, one, triangulate);
+  ok(r1.rims === 1 && r1.loops.length === 1 && r1.loops[0].tris.length === 10, 'one rim picked is capped (12 points, 10 triangles)');
+  // three rims: too many to close between
+  const three = openEdgesNear(topo, p => p[2] < 2.5);
+  ok(closeBetween(topo, three, triangulate).why === 'tooMany', 'three rims picked: too many, nothing is made');
+}
+{
+  // a counterbore floor: a plate with a square hole (its rim on top), and a bore wall of a smaller radius under it, facing the axis
+  const plate6 = plate(6, { skip: (i, j) => i >= 2 && i < 4 && j >= 2 && j < 4 });
+  const wall = tube(3, 3, 0.5, -1, 0, 10, false);
+  const m = join(plate6, wall), { topo } = read(m);
+  const rims = openEdgesNear(topo, p => p[2] > -0.5 && p[0] > 1.5 && p[0] < 4.5 && p[1] > 1.5 && p[1] < 4.5);
+  ok(rims.size === 18, `the hole's rim and the wall's top rim are 18 open edges (${rims.size})`);
+  const r = closeBetween(topo, rims, triangulate);
+  ok(r.loops.length === 1 && r.loops[0].tris.length === 18, `the ring between them is 18 triangles (${r.loops.length && r.loops[0].tris.length})`);
+  const L = r.loops[0], P = L.points.map(w => at3(topo, w));
+  let up = true; for (const t of L.tris) if (triNormal(P, t)[2] <= 1e-9) up = false;
+  ok(up, 'every triangle of the ring faces up, like the plate');
+  ok(L.normals.every(nv => nv[2] > 0.999), 'its points shade straight up');
 }
 
 console.log(fails ? `\n${fails} failed` : '\nall passed');

@@ -21,7 +21,7 @@
   "group": "start",
   "groupTitle": "Start here",
   "summary": "Drop a file on the window. What the import settings mean, what conversion does, how to follow its progress, and where the result is kept.",
-  "chars": 6555
+  "chars": 6718
  },
  {
   "slug": "cad-files-step-first",
@@ -85,7 +85,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Click, add with Shift, toggle with Ctrl, drag a box, or let the app select by shape, colour or name.",
-  "chars": 4451
+  "chars": 4828
  },
  {
   "slug": "hide-isolate",
@@ -93,7 +93,7 @@
   "group": "around",
   "groupTitle": "Find your way around",
   "summary": "Hide parts that are in the way, look at a few parts on their own, and bring everything back with one key.",
-  "chars": 1423
+  "chars": 1644
  },
  {
   "slug": "parts-tree",
@@ -173,7 +173,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "One card, one button: every clean-up the app has, run one after another on the whole scene. Choose how far to go, read the plan, press Optimise.",
-  "chars": 5075
+  "chars": 4991
  },
  {
   "slug": "delete-small-parts",
@@ -181,7 +181,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Remove the screws, washers and clips that are too small to matter, with a slider and a preview of what will go.",
-  "chars": 3318
+  "chars": 3311
  },
  {
   "slug": "select-hidden-parts",
@@ -189,7 +189,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Find every part that cannot be seen from outside the model, such as screws inside a housing, and delete them in one step.",
-  "chars": 3261
+  "chars": 3247
  },
  {
   "slug": "remove-hidden-faces",
@@ -221,7 +221,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Close bolt holes, slots, pockets and lettering in flat faces. Each closed hole removes the triangles of its walls.",
-  "chars": 6236
+  "chars": 6444
  },
  {
   "slug": "remove-floating-pieces",
@@ -245,7 +245,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Take apart a mesh that arrived as one piece but is really several separate solids, or cut it into its faces, so each can be selected on its own.",
-  "chars": 3951
+  "chars": 4957
  },
  {
   "slug": "smart-fit",
@@ -277,7 +277,7 @@
   "group": "lighter",
   "groupTitle": "Make it lighter",
   "summary": "Small one-click repairs: remove empty parts and empty groups, fix shading, recentre the model and make moves permanent.",
-  "chars": 2962
+  "chars": 2944
  },
  {
   "slug": "model-inspector",
@@ -309,7 +309,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "A STEP file knows its real faces and real edges. MeshOptimiser keeps them, so the outlines are the ones the designer drew.",
-  "chars": 2113
+  "chars": 2789
  },
  {
   "slug": "quick-colour-wheel",
@@ -360,12 +360,28 @@
   "chars": 8059
  },
  {
+  "slug": "simplify-round-faces",
+  "title": "Simplify round faces",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Fewer facets on the cylinders, cones, spheres and tori of a part from a STEP, as coarse as a deviation allows. The flat faces follow at the rims, and the part keeps its CAD faces.",
+  "chars": 2096
+ },
+ {
+  "slug": "remove-fillets",
+  "title": "Remove fillets and chamfers",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Take the small rounds and chamfers off a part that came from a STEP, and get its sharp edges back. The faces on either side are extended until they meet.",
+  "chars": 2406
+ },
+ {
   "slug": "edit-mesh",
   "title": "Edit mesh: points, edges and polygons",
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Pick and change the pieces a part is made of: its points, edges and polygons. Move, delete, dissolve, planarize, straighten, weld, fill and extract them, from a bar at the right of the view.",
-  "chars": 8366
+  "chars": 9200
  },
  {
   "slug": "align-to-floor",
@@ -525,7 +541,7 @@
   "group": "help",
   "groupTitle": "Help",
   "summary": "Fixes for the usual problems: Python not found, a blocked launcher on macOS, missing modules, a blank view and slow conversions.",
-  "chars": 6572
+  "chars": 6575
  },
  {
   "slug": "faq",
@@ -533,6 +549,6 @@
   "group": "help",
   "groupTitle": "Help",
   "summary": "Short answers: cost and licence, privacy, browsers, file sizes, whether Python is needed, and where to report a bug.",
-  "chars": 4047
+  "chars": 4045
  }
 ]

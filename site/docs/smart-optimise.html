@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -163,7 +165,7 @@
             <li>Open a model.</li>
             <li>Open the card <span class="ui">Smart optimise</span> in the right sidebar, at the top of Reduce.</li>
             <li>Choose how far to go: <span class="ui">Auto</span>, <span class="ui">Light</span>, <span class="ui">Balanced</span> or <span class="ui">Strong</span>. Auto is the default.</li>
-            <li>Look at <span class="ui">Triangle target</span>. Type another number if you need one, for example <code>300k</code> or <code>1.5m</code>.</li>
+            <li>Look at <span class="ui">Target</span>. Type another number if you need one, for example <code>300k</code> or <code>1.5m</code>.</li>
             <li>Read the line under the controls. It spells out what the run will do, in order. With Auto it also says which level was chosen, for example “Auto picked Balanced for 1,103,373 triangles in 43 parts”.</li>
             <li>Press <span class="ui">Optimise</span>.</li>
             <li>When it is done, a message gives the triangles before and after and how many parts were removed.</li>
@@ -181,13 +183,13 @@
           <h2 id="the-steps">The steps</h2>
           <p>Open <span class="ui">Steps</span> in the card to see each switch. If you change one, no level is lit any more: the settings are yours. Each step is the same tool you could run by hand.</p>
           <dl class="table">
-            <div><dt>Remove empty and broken parts</dt><dd>Parts with no triangles, parts whose triangles have no area, and groups with nothing left in them. See <a href="../docs/cleanup.html">Quick fixes and tidying up</a>.</dd></div>
-            <div><dt>Remove parts hidden inside</dt><dd>Parts that cannot be seen from outside, from any direction. See <a href="../docs/select-hidden-parts.html">Select hidden parts</a>.</dd></div>
-            <div><dt>Bolts, nuts, washers</dt><dd>Found by their shape, up to a thread of M30, as in <a href="../docs/fasteners.html">Fasteners</a>. <span class="ui">Keep</span> leaves them alone. <span class="ui">Simplify</span> turns each into a plain cylinder. <span class="ui">Delete</span> removes them.</dd></div>
-            <div><dt>Remove parts under</dt><dd>Parts whose box, measured from corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone. See <a href="../docs/delete-small-parts.html">Delete small parts</a>.</dd></div>
-            <div><dt>Remove holes</dt><dd>Closes holes in flat faces, with the settings and the size limit of the Remove holes panel. See <a href="../docs/fill-holes.html">Remove holes</a>.</dd></div>
-            <div><dt>Reduce triangles</dt><dd>A switch of its own. On: the densest meshes are reduced until the whole scene has the number of triangles in <span class="ui">Triangle target</span>, as in <a href="../docs/fit-to-budget.html">Fit to budget</a>. Off: the run only removes and tidies, and every mesh that stays keeps all its triangles. If the target is not lower than the scene has now, nothing is reduced.</dd></div>
-            <div><dt>Triangle target</dt><dd>How many triangles the whole scene may have after the run. You can write <code>150000</code>, <code>150k</code> or <code>1.5m</code>. Choosing a level sets it from the scene you have now. A number you type is kept.</dd></div>
+            <div><dt>Empty parts</dt><dd>Parts with no triangles, parts whose triangles have no area, and groups with nothing left in them. See <a href="../docs/cleanup.html">Quick fixes and tidying up</a>.</dd></div>
+            <div><dt>Hidden parts</dt><dd>Parts that cannot be seen from outside, from any direction. See <a href="../docs/select-hidden-parts.html">Select hidden parts</a>.</dd></div>
+            <div><dt>Fasteners</dt><dd>Found by their shape, up to a thread of M30, as in <a href="../docs/fasteners.html">Fasteners</a>. <span class="ui">Keep</span> leaves them alone. <span class="ui">Simplify</span> turns each into a plain cylinder. <span class="ui">Delete</span> removes them.</dd></div>
+            <div><dt>Small parts</dt><dd>Parts whose box, measured from corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone. See <a href="../docs/delete-small-parts.html">Delete small parts</a>.</dd></div>
+            <div><dt>Holes</dt><dd>Closes holes in flat faces, with the settings and the size limit of the Remove holes panel. See <a href="../docs/fill-holes.html">Remove holes</a>.</dd></div>
+            <div><dt>Reduce triangles</dt><dd>A switch of its own. On: the densest meshes are reduced until the whole scene has the number of triangles in <span class="ui">Target</span>, as in <a href="../docs/fit-to-budget.html">Fit to budget</a>. Off: the run only removes and tidies, and every mesh that stays keeps all its triangles. If the target is not lower than the scene has now, nothing is reduced.</dd></div>
+            <div><dt>Target</dt><dd>How many triangles the whole scene may have after the run. You can write <code>150000</code>, <code>150k</code> or <code>1.5m</code>. Choosing a level sets it from the scene you have now. A number you type is kept.</dd></div>
           </dl>
           <p>The steps always run in this order: tidy up, hidden parts, fasteners, small parts, holes, then the reduction. Removing comes before reducing on purpose, so no effort goes into thinning a part that is deleted a moment later.</p>
           <h2 id="while-it-runs">While it runs</h2>

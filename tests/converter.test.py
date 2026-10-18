@@ -403,7 +403,6 @@ def t1_errors():
     cases = [
         ("unknown", 1, "cannot read '.xyz'"),
         ("wire_brep", 3, "no solid or surface bodies found in this BREP file"),
-        ("face_step", 3, "no solid bodies found in this STEP"),
         ("garbage_step", 1, "STEP read failed"),
         ("garbage_igs", 1, "IGES"),
         ("empty_brep", 1, "BREP read failed"),
@@ -414,6 +413,15 @@ def t1_errors():
         assert rc == want_rc, f"{key}: exit {rc}, wanted {want_rc}\n{text[-800:]}"
         assert want_text in text, f"{key}: message {want_text!r} not in:\n{text[-800:]}"
         assert not out.exists(), f"{key}: wrote a GLB although there was nothing to write"
+    # A STEP that holds only a face is a surface part: kept by default (Import settings, "Surface parts"), and refused, as having
+    # nothing to mesh, only with --no-surfaces.
+    out = W / "face_step_kept.glb"
+    rc, text = run([F["face_step"], "--out", out, "--force"])
+    assert rc == 0 and out.exists(), f"face_step: exit {rc}, a GLB {out.exists()}\n{text[-800:]}"
+    assert len(Glb(out).json["meshes"]) == 1, f"face_step: {len(Glb(out).json['meshes'])} meshes"
+    out = W / "face_step_refused.glb"
+    rc, text = run([F["face_step"], "--out", out, "--force", "--no-surfaces"])
+    assert rc == 3 and "no solid bodies found in this STEP" in text and not out.exists(), f"face_step --no-surfaces: exit {rc}\n{text[-800:]}"
     # IGES with nothing in it but a point of a curve is the same story as the wire above (BREP)
 
 
@@ -575,6 +583,62 @@ def t4_metadata():
 
 
 @test
+def t4_instance_colours():
+    """Colours given to one instance (a SHUO) or to a component come through; --no-shuo leaves out only the SHUO."""
+    src = W / "shuo.step"
+    p = subprocess.run([sys.executable, str(Path(__file__).parent / "fixtures" / "make-shuo-step.py"), str(src)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    assert src.exists(), "the SHUO model was not written: " + (p.stdout + p.stderr)[-1500:]
+
+    def by_node(g):
+        mats = g.json.get("materials", [])
+        out = {}
+        for n in g.nodes:
+            if "mesh" in n:
+                prim = g.json["meshes"][n["mesh"]]["primitives"][0]
+                c = mats[prim["material"]]["pbrMetallicRoughness"]["baseColorFactor"][:3]
+                out[n["name"].split("_")[0]] = out.get(n["name"].split("_")[0], []) + [tuple(round(v, 1) for v in c)]
+        return out
+
+    grey, red, blue = (0.5, 0.5, 0.5), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0)
+    out = W / "o_shuo.glb"
+    convert(src, out)
+    got = by_node(Glb(out))
+    # SubA 1: Bolt 1 grey, Bolt 2 red (its SHUO); SubA 2 is blue on the component, so both of its bolts are blue
+    assert got == {"Bolt 1": [grey, blue], "Bolt 2": [red, blue]}, got
+    out2 = W / "o_shuo_off.glb"
+    convert(src, out2, "--no-shuo")
+    got = by_node(Glb(out2))
+    assert got == {"Bolt 1": [grey, blue], "Bolt 2": [grey, blue]}, got
+
+
+@test
+def t4_face_colours():
+    """A face painted apart from its body keeps its colour: the body is split into a piece a colour."""
+    from OCP.TopAbs import TopAbs_FACE
+    from OCP.TopExp import TopExp_Explorer
+    doc = TDocStd_Document(TCollection_ExtendedString("XmlOcaf"))
+    st = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main()); ct = XCAFDoc_DocumentTool.ColorTool_s(doc.Main())
+    box = BRepPrimAPI_MakeBox(20, 20, 20).Shape()
+    lab = st.AddShape(box, False); _name(lab, "Painted box")
+    ct.SetColor(lab, Quantity_Color(0.1, 0.3, 0.8, Quantity_TOC_RGB), XCAFDoc_ColorType.XCAFDoc_ColorSurf)
+    face = TopExp_Explorer(box, TopAbs_FACE).Current()
+    fl = st.AddSubShape(lab, face)
+    ct.SetColor(fl, Quantity_Color(0.9, 0.1, 0.1, Quantity_TOC_RGB), XCAFDoc_ColorType.XCAFDoc_ColorSurf)
+    w = STEPCAFControl_Writer(); w.SetColorMode(True); w.SetNameMode(True); w.Transfer(doc, STEPControl_AsIs)
+    src = W / "painted.step"; w.Write(str(src))
+    out = W / "o_painted.glb"
+    log = convert(src, out)
+    g = Glb(out)
+    cols = {(round(a, 1), round(b, 1), round(c, 1)) for a, b, c in g.colours()}
+    assert {(0.1, 0.3, 0.8), (0.9, 0.1, 0.1)} <= cols, cols
+    assert "more than one colour" in log, log[-800:]
+    lo, hi = g.world_bbox()
+    assert close(lo, [0, 0, 0], 0.01) and close(hi, [20, 20, 20], 0.01), (lo, hi)
+    assert g.unique_tris() == 12, g.unique_tris()
+
+
+@test
 def t4_metadata_iges_has_no_part_numbers():
     """IGES has no product structure: names, colour and layers where the file has them, no part number."""
     out = W / "o_meta_igs.glb"
@@ -610,7 +674,9 @@ def t4_cache_keeps_metadata():
     convert(src, W / "cache1.glb", "--quality", "0.2")
     assert src.with_suffix(".xcaf-cache.xbf").exists()
     rc, text = run([src, "--out", W / "cache2.glb", "--quality", "0.2"])
-    assert rc == 0 and "loading cached XCAF doc" in text, text[-800:]
+    # (the load must have worked: "loading cached" is said before it is tried, and a failed load used to fall back silently)
+    assert rc == 0 and "STEP parse skipped" in text and "cache load failed" not in text, text[-800:]
+    assert not (W / "Document_").exists(), "a cache write went to Document_ instead of the cache"
     ex = Glb(W / "cache2.glb").extras_by_name()
     bolt = next(v for k, v in ex.items() if k.startswith("Bolt-2_"))
     assert bolt["partNumber"] == "BLT-0042" and bolt["layers"] == ["FASTENERS"] and "material" in bolt, bolt
@@ -678,9 +744,9 @@ def t5_api_convert():
         code, j = post("wire.brep", F["wire_brep"])
         job = wait(j["job_id"])
         assert job["status"] == "error" and "Nothing to convert" in job["message"] and "BREP" in job["message"], job
-        code, j = post("face.step", F["face_step"])
+        code, j = post("face.step", F["face_step"])            # a surface part: kept, as in the app's default
         job = wait(j["job_id"])
-        assert job["status"] == "error" and "no solid bodies" in job["message"], job
+        assert job["status"] == "done" and job.get("result"), job
         # uploads are removed after the job
         left = [p.name for p in (app / "inbox").iterdir() if p.suffix.lower() in (".step", ".igs", ".iges", ".brep", ".brp")]
         assert not left, f"uploads left in inbox: {left}"

@@ -547,5 +547,30 @@ function plateThrough(r = 5, n = N) {
   check('an island with a hole of its own is left alone', busy.res.skipped.tooLarge >= 1 && busy.open === 0, brief(busy.res));
 }
 
+// 14. what stood inside a raised detail goes with it: a stamped collar has an inner skin under its dome, and left there after the
+// collar is flattened it would stand out of the new face (seen on the oil cooler of the Scania V8 sample: two of four collars came back
+// as dark dimples). Here: a low boss with a zero-thickness sheet floating inside its volume.
+{
+  const bossWith = (inside, cx = 0) => {
+    const m = mesh();
+    const to = square(N, HALF, TH), bo = square(N, HALF, 0), ti = ring(N, 5, TH), tp = ring(N, 5, TH + 0.3);
+    band(m, to, ti, true); disc(m, bo, false); wall(m, to, bo, true); wall(m, tp, ti, true); disc(m, tp, true);
+    if (inside) { const sh = ring(N, 2, TH + 0.15, cx, 0); disc(m, sh, true); disc(m, sh, false); }
+    return m.done();
+  };
+  console.log('a sheet hidden inside a raised detail');
+  const plain = run(bossWith(false), 12, { raised: true, raisedMax: 0.5 });
+  const g = bossWith(true);
+  // (the input is not checked for watertightness: the doubled sheet gives every one of its edges two opposites)
+  const a = run(g, 12, { raised: true, raisedMax: 0.5 });
+  check('the boss is flattened', a.res.holes === 1 && a.res.flattened === 1, brief(a.res));
+  check('the sheet inside it goes too', a.res.removedTris === plain.res.removedTris + 2 * (N - 2), 'removed ' + a.res.removedTris + ' vs ' + plain.res.removedTris);
+  check('result is watertight', a.open === 0, a.open + ' open edges');
+  check('volume is the plain plate', Math.abs(a.vol - 100 * 100 * TH) < 1, 'vol ' + a.vol);
+  // the same sheet beside the boss, not inside it, is none of the boss's business
+  const b = run(bossWith(true, 30), 12, { raised: true, raisedMax: 0.5 });
+  check('a sheet beside the boss stays', b.res.removedTris === plain.res.removedTris, 'removed ' + b.res.removedTris + ' vs ' + plain.res.removedTris);
+}
+
 console.log(failed ? '\n' + failed + ' check(s) failed' : '\nall checks passed');
 process.exit(failed ? 1 : 0);

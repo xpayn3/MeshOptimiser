@@ -474,6 +474,9 @@
       let clonerNodeId = Math.min(minId - 1, -200);
       // (on a redo, the row id it had before, unless something has taken it)
       if (redoOp && typeof redoOp.clonerNodeId === 'number' && !state.treeNodes.some(n => n.id === redoOp.clonerNodeId)) clonerNodeId = redoOp.clonerNodeId;
+      // each source's row as it was (its group in the tree): undo puts the row back there, not at the top level
+      const _prevTree = new Map();
+      for (const sp of valid) { const tn = state.treeNodes.find(n => n.kind === 'part' && n.partId === sp.partId); if (tn) _prevTree.set(sp.partId, { parentId: tn.parentId ?? null, depth: tn.depth | 0 }); }
       state.treeNodes.unshift({
         id: clonerNodeId, kind: 'cloner', name: grp.name,
         depth: 0, parentId: null, partId: null, obj3d: grp,
@@ -508,6 +511,7 @@
           partId: sp.partId,
           prevParent: _prevParents.get(sp.partId) || state.partsRoot,
           prevLocalMat: _prevMats.get(sp.partId),
+          prevTree: _prevTree.get(sp.partId) || null,
         })),
       };
       // A redo keeps its own entry. pushUndo here would add a second entry
@@ -671,8 +675,11 @@
         if (sp && !sp.deleted && sp.mesh) {
           sp.mesh.visible = sp.visible !== false;
           // Returning to partsRoot is the canonical "back to top level"
-          // location; preserves world transform via Object3D.attach.
-          if (state.partsRoot) state.partsRoot.attach(sp.mesh);
+          // location; preserves world transform via Object3D.attach. Only a
+          // source that is still in the cloner moves: the undo of "make
+          // cloner" has already put each one back in the group it came from,
+          // and this used to pull them all out to the top level again.
+          if (state.partsRoot && sp.mesh.parent === grp) state.partsRoot.attach(sp.mesh);
         }
       }
       if (grp.parent) grp.parent.remove(grp);
@@ -1269,6 +1276,17 @@
             sp.mesh.updateMatrixWorld(true);
           }
           _clonerDissolve(p);
+          // the rows back under the groups they came from (the dissolve sets every one of them to the top level)
+          for (const s of op.sources || []) {
+            if (!s.prevTree || s.prevTree.parentId == null || !state.treeNodes) continue;
+            const i = state.treeNodes.findIndex(n => n.kind === 'part' && n.partId === s.partId);
+            const host = state.treeNodes.findIndex(n => n.id === s.prevTree.parentId);
+            if (i < 0 || host < 0) continue;
+            const tn = state.treeNodes[i];
+            tn.parentId = s.prevTree.parentId; tn.depth = s.prevTree.depth;
+            state.treeNodes.splice(i, 1);
+            state.treeNodes.splice(state.treeNodes.findIndex(n => n.id === s.prevTree.parentId) + 1, 0, tn);
+          }
         }
         state.redo.push(op);
         _syncUndoButtons();

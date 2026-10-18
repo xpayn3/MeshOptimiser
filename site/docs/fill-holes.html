@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -185,8 +187,8 @@
             <div><dt>Blind holes and pockets</dt><dd>Holes and pockets with a floor: an opening on one side only.</dd></div>
             <div><dt>Open holes</dt><dd>Openings with nothing behind them: a missing patch in a flat face.</dd></div>
             <div><dt>Close openings into hollow spaces</dt><dd>An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight. Off: such an opening is left alone. It is on to begin with.</dd></div>
-            <div><dt>Raised lettering and logos</dt><dd>Lettering and marks that stand proud of a flat face are flattened into it. Bosses, pins and ribs are taller than the limit and stay.</dd></div>
-            <div><dt>Raised, up to</dt><dd>A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm high.</dd></div>
+            <div><dt>Raised details (lettering, bosses)</dt><dd>Anything that stands proud of a flat face and is no higher than the limit is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. What stands higher stays.</dd></div>
+            <div><dt>Raised, up to</dt><dd>A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm high; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too.</dd></div>
             <div><dt>Keep openings that shape the part</dt><dd>On: an opening that takes up much of its face and of the part is kept, such as the bore of a washer or a window in a frame. Off: only the size limit decides.</dd></div>
             <div><dt>Smallest hole</dt><dd>Holes narrower than this are left alone.</dd></div>
             <div><dt>Remove vertices left over</dt><dd>On: the points that ringed each hole are taken out of the flat face, and the face is triangulated again with the fewest triangles. Press <span class="ui">Remove holes</span> a second time to clean the same way what an earlier run, or an earlier tool, left behind, even when no hole is left to close. It also works on parts that are already in n-gons. Loose walls that a broken file left floating in an opening, a cut-loose tube or cup that belongs to no solid, go with it.</dd></div>

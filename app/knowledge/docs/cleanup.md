@@ -17,7 +17,7 @@ Each command reports what it did, or says that it found nothing.
 
 > Be careful with **Deduplicate geometry** on an assembly. It removes a part only when another part with identical mesh data sits in the same place (two copies stacked on each other), so a set of identical bolts placed in different positions stays. Check the parts count afterwards, and press `Ctrl + Z` if it took parts you wanted. (Before v0.20.0 it removed every repeat, placed or not; that was a bug.)
 
-[Smart optimise](meshoptimiser://docs/smart-optimise) starts every run with the first three commands, empty parts, degenerate parts and empty groups, under the name **Remove empty and broken parts**. It does not run **Deduplicate geometry** or any of the other commands on this page.
+[Smart optimise](meshoptimiser://docs/smart-optimise) starts every run with the first three commands, empty parts, degenerate parts and empty groups, under the name **Empty parts**. It does not run **Deduplicate geometry** or any of the other commands on this page.
 
 ## Edit selection
 

@@ -26,6 +26,7 @@ CLAUDE.local.md
 
 exports/
 server.log
+server.log.1
 
 # In-app updater: the backup of the previous version, and what tools/app/build-update.py writes
 .update/

@@ -29,7 +29,7 @@ A STEP file holds exact surfaces. The converter, running in Python on your compu
 - **Surface quality**: How closely the triangles follow curved surfaces: **Coarse**, **Standard**, **Fine** or **Ultra**. Coarse is the fastest and shows facets on curves. Ultra is slow and very smooth. Standard is the recommended one. **Custom** means your own numbers, under Tessellation.
 - **Tessellation**: The numbers behind that choice. Click the row to open it. It is explained below.
 - **Colours and structure**: **Colours & hierarchy** reads colours, names and the assembly tree. **Geometry only** is the fastest and gives you neither colours nor a tree. It suits huge files where you only need the shape.
-- **What to read**: Five switches for extra information in the file: **Instance overrides**, **Layers**, **Materials**, **Product names** and **Validation properties**. Each one adds a pass over the file. Instance overrides is the slowest on assemblies with many repeated parts.
+- **What to read**: Five switches for extra information in the file: **Instance overrides**, **Keep layers**, **Materials**, **Product names** and **Validation properties**. Each one adds a pass over the file. Instance overrides is the slowest on assemblies with many repeated parts. **Keep layers** keeps the CAD layer each part is on: it shows in the Properties card and **Select by layer** in the command search selects every part on one.
 - **Drop small parts**: Leaves out parts smaller than this share of the model during conversion. 0 keeps everything.
 - **Share identical shapes**: Stores a repeated shape once. Leave it on.
 - **Swap Y and Z**: Stands a model up that comes in lying on its side.

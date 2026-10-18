@@ -18,8 +18,9 @@ const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id
 const evalJS = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
 let pass = 0, fail = 0;
 const check = (name, ok, extra) => { if (ok) { pass++; console.log('PASS', name); } else { fail++; console.log('FAIL', name, extra === undefined ? '' : JSON.stringify(extra)); } };
+// (a call goes to the active scene tab's tools, as serve.py's bridge picks them: activeWin in app.js)
 const call = async (name, args = {}) => {
-  const r = await evalJS(`(async () => { try { const f = window.__moBridgeTools[${JSON.stringify(name)}]; if (!f) return { ok: false, e: 'no such tool' }; const r = await f(${JSON.stringify(args)}); return { ok: true, t: r.map(x => x.type === 'text' ? x.text : '[' + x.type + ']') }; } catch (e) { return { ok: false, e: e.message || String(e) }; } })()`);
+  const r = await evalJS(`(async () => { try { const t = window.__moTabs, w = t && t.wins && t.wins[t.active]; const f = ((w && w.__moBridgeTools) || window.__moBridgeTools)[${JSON.stringify(name)}]; if (!f) return { ok: false, e: 'no such tool' }; const r = await f(${JSON.stringify(args)}); return { ok: true, t: r.map(x => x.type === 'text' ? x.text : '[' + x.type + ']') }; } catch (e) { return { ok: false, e: e.message || String(e) }; } })()`);
   if (r.ok) { const s = r.t.join('\n'); let j = null; try { j = JSON.parse(s); } catch (_) {} return { ok: true, s, j }; }
   return { ok: false, e: r.e };
 };
@@ -33,6 +34,7 @@ try {
   ws.onmessage = (m) => {
     const d = JSON.parse(m.data);
     if (d.id && pending.has(d.id)) { const p = pending.get(d.id); pending.delete(d.id); d.error ? p.rej(new Error(d.error.message)) : p.res(d.result); }
+    else if (d.method === 'Page.javascriptDialogOpening') send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});      // (the leave-page question of a scene with changes)
     else if (d.method === 'Runtime.exceptionThrown') errors.push((d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text || '').split('\n').slice(0, 3).join(' | '));
     else if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') consoleErr.push(d.params.args.map(a => a.value ?? a.description ?? '').join(' ').slice(0, 220));
   };
@@ -251,10 +253,21 @@ try {
   r = await call('list_notes', { status: 'resolved' }); check('list_notes filters by status', r.ok && r.j.notes.some(n => n.note === noteNo), r);
   r = await call('export_notes'); check('export_notes: Markdown with the name', r.ok && /Claude/.test(r.j.markdown) && r.j.stats.total === nBefore + 1, r);
   check('update_note refuses a note that is not there', !(await call('update_note', { note: 9999, status: 'open' })).ok);
-  await call('undo', { steps: 3 }); r = await call('list_notes', { status: 'all' }); check('undo takes the note steps back', r.ok && r.j.total === nBefore + 1 && r.j.notes.find(n => n.note === noteNo).replies === 0, r);
+  await call('undo', { steps: 2 }); r = await call('list_notes', { status: 'all' }); check('undo takes the note steps back (the change and the reply; a third undo would take the note itself)', r.ok && r.j.total === nBefore + 1 && r.j.notes.find(n => n.note === noteNo).replies === 0, r);
   await call('undo', { steps: 1 }); r = await call('list_notes', { status: 'all' }); check('undo removes the note', r.ok && r.j.total === nBefore, r);
   r = await call('lock_parts', { ids: [id1] }); check('lock_parts locks', r.ok && r.j.locked === true, r);
   r = await call('lock_parts', { ids: [id1], locked: false }); check('lock_parts unlocks', r.ok && r.j.locked === false, r);
+  // a locked part is left alone by the tools that change parts (only moves honoured the lock)
+  await call('lock_parts', { ids: [id1] });
+  r = await call('delete_parts', { ids: [id1] }); check('delete_parts leaves a locked part alone', !r.ok && /locked/.test(r.e || ''), r);
+  r = await call('fix_mesh', { ids: [id1], action: 'close_cracks' }); check('fix_mesh leaves a locked part alone', !r.ok && /locked/.test(r.e || ''), r);
+  await call('lock_parts', { ids: [id1], locked: false });
+  // Close open edges through Claude: an answer with the counts, and one undo step at most
+  { const h0 = (await sum()).undo_steps;
+    r = await call('fix_mesh', { ids: [id2], action: 'close_open_edges' });
+    const h1 = (await sum()).undo_steps;
+    check('fix_mesh close_open_edges answers with the rims it capped', r.ok && typeof r.j.rims === 'number' && typeof r.j.open_edges === 'number' && h1 - h0 <= 1, { r, h0, h1 });
+    if (r.ok && h1 > h0) await call('undo'); }
   r = await call('select_instances', { ids: [id1] }); check('select_instances selects', r.ok && r.j.selected_now >= 1, r);
   r = await call('save_scene', { file_name: 'mcp_test' }); check('save_scene writes a GLB scene file', r.ok && fs.existsSync(r.j.file.path) && fs.readFileSync(r.j.file.path).subarray(0, 4).toString() === 'glTF', r);
 
@@ -387,6 +400,52 @@ try {
   r = await call('fill_holes', { ids: [id2], max_hole_mm: 5 }); check('fill_holes', r.ok, r);
   r = await call('export_model', { preset: 'web' }); check('export_model web', r.ok && r.j && r.j.files && r.j.files.length, r);
   r = await call('open_file', { path: 'Z:/nope.glb' }); check('open_file with a bad path is refused', !r.ok, r);
+
+  // — layers (a GLB with the converter's `layers` extras on the product nodes: tests/make-layers-glb.mjs) —
+  r = await call('select_by_layer', { name_contains: 'x' }); check('select_by_layer is refused when no part has a layer', !r.ok && /no part has a layer/i.test(r.e || ''), r);
+  // (a fresh page, as e2e-save-roundtrip.mjs does for its second file: the fixture replaces the whole scene)
+  await send('Page.navigate', { url: 'http://localhost:' + (process.env.APP_PORT || 4242) + '/index.html?t=' + Date.now() });
+  for (let i = 0; i < 120; i++) { if (await evalJS("document.body && document.body.classList.contains('app-ready')").catch(() => false)) break; await sleep(500); }
+  await sleep(1500);
+  await evalJS("document.getElementById('welcome-close')?.click()");
+  await evalJS(`(async () => { const r = await fetch('tests/fixtures/layers-test.glb'); const b = await r.blob(); const f = new File([b], 'layers-test.glb'); const dt = new DataTransfer(); dt.items.add(f); const i = document.getElementById('file-input'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+  for (let i = 0; i < 60; i++) { const s = await sum(); if (s && s.parts === 3) break; await sleep(500); }
+  await sleep(1000);
+  r = await call('list_parts'); check('list_parts reports the layer of a part that has one, and none for the others', r.ok && r.j.parts.filter(p => p.layer === 'FASTENERS').length === 2 && r.j.parts.filter(p => p.layer === undefined).length === 1, r);
+  r = await call('select_by_layer', {}); check('select_by_layer without a name lists the layers', r.ok && r.j.layers.length === 1 && r.j.layers[0].name === 'FASTENERS' && r.j.layers[0].parts === 2, r);
+  r = await call('select_by_layer', { name_contains: 'fast' }); check('select_by_layer selects the parts on the layer', r.ok && r.j.matched === 2 && r.j.selected_now === 2, r);
+  r = await call('select_by_layer', { name_contains: 'zzz' }); check('select_by_layer with a name no layer has selects nothing', r.ok && r.j.matched === 0, r);
+  check('Select by layer is a registered command', /id:'selLayer'/.test(fs.readFileSync('app/js/app.js', 'utf8')));
+  r = await call('select_parts', { name_contains: 'Bolt-1' }); check('select one bolt', r.ok && r.j.matched === 1, r);
+  check('the Properties card shows the layer badge', await evalJS("!!document.querySelector('#prop-body [data-prop-act=\"select-layer\"]')"));
+  await evalJS("document.querySelector('#prop-body [data-prop-act=\"select-layer\"]').click()");
+  r = await call('get_selection'); check('a click on the badge selects the parts on that layer', r.ok && r.j.total === 2, r);
+  await call('hide_parts', { name_contains: 'Plate' });      // (hidden in the saved file: tells the reopened scene from this one)
+  r = await call('save_scene', { file_name: 'mcp_layers' }); check('save_scene with layers', r.ok && fs.existsSync(r.j.file.path), r);
+  if (r.ok) {
+    // the saved GLB carries the layers on the parts' nodes (soLayers); open_file opens it in a second scene tab, and the calls
+    // follow the active tab (call above), as the app's bridge does
+    const glb = fs.readFileSync(r.j.file.path), jl = glb.readUInt32LE(12), gj = JSON.parse(glb.subarray(20, 20 + jl).toString('utf8'));
+    check('the saved scene file carries the layers in its node extras', gj.nodes.filter(n => n.extras && Array.isArray(n.extras.soLayers) && n.extras.soLayers[0] === 'FASTENERS').length === 2, gj.nodes.map(n => n.extras));
+    const r2 = await call('open_file', { path: r.j.file.path }); check('open_file reopens the saved scene in a new scene tab', r2.ok, r2);
+    let reopened = null;
+    for (let i = 0; i < 60; i++) { const s = await sum(); if (s && s.parts === 3 && /mcp_layers/i.test(s.file || '') && s.undo_steps === 0 && s.hidden === 1) { reopened = s; break; } await sleep(500); }
+    check('the calls follow the new scene tab (scene_summary names the reopened file, no undo steps, the plate hidden)', !!reopened, await sum());
+    await sleep(1000);
+    r = await call('list_parts'); check('the layers survive save and reopen', !!reopened && r.ok && r.j.parts.filter(p => p.layer === 'FASTENERS').length === 2, { reopened, r });
+  }
+  // a dry run on a history that is full (on the small scene opened last, so no earlier check loses its undo steps): nothing stays
+  // changed, and nothing falls off the history while it runs
+  { const L = (await call('list_parts')).j.parts, a = L[0].id, b = L[1].id, nParts = (await sum()).parts;
+    for (let i = 0; i < 32; i++) await call('duplicate_parts', { ids: [a] });
+    const before = await sum();
+    const d = await evalJS(`(async () => { try { const r = await window.__moDryRun('delete_parts', { ids: [${b}] }); return { ok: true, t: r.map(x => x.text).join('') }; } catch (e) { return { ok: false, e: e.message }; } })()`);
+    let j = null; try { j = JSON.parse(d.t); } catch (_) {}
+    const after = await sum();
+    check('a dry run on a full history takes itself back', d.ok && j && j.dry_run && j.nothing_changed && after.parts === before.parts && after.undo_steps === before.undo_steps, { j, before: [before.parts, before.undo_steps], after: [after.parts, after.undo_steps] });
+    await call('undo', { steps: 20 }); await call('undo', { steps: 20 });
+    // (30 heavy steps are kept: the two oldest copies fell off when the 31st and 32nd were made, not during the dry run)
+    check('the copies undo away but the two that fell off the history', (await sum()).parts === nParts + 2, { nParts, now: (await sum()).parts }); }
 } catch (e) { fail++; console.log('HARNESS ERROR:', e.message); }
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log('page exceptions:', errors.length); errors.slice(0, 12).forEach(e => console.log('  ' + e));

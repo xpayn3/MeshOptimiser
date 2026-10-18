@@ -183,11 +183,15 @@ try {
   const pop = await evalJS("(() => { const p = document.getElementById('claude-pop'); if (!p) return null; const r = p.getBoundingClientRect(), b = document.getElementById('claude-pill').getBoundingClientRect(); return { shown: p.classList.contains('show'), text: p.innerText.replace(/\\s+/g, ' '), below: r.top >= b.bottom, inside: r.right <= innerWidth && r.left >= 0, switches: p.querySelectorAll('input[type=checkbox]').length, expanded: document.getElementById('claude-pill').getAttribute('aria-expanded') }; })()");
   check('the pill opens a dropdown with the numbers and three switches, under it', pop && pop.shown && /Requests/.test(pop.text) && /Said no/.test(pop.text) && pop.switches === 3 && pop.below && pop.inside && pop.expanded === 'true', pop);
   await shot('claude-popover');
-  const askBefore = await evalJS("localStorage.getItem('stepopt-claude-ask')");
+  // (the switch sets the mode of each kind of change, Settings › Claude: what it writes is the geometry mode, not the older
+  // 'stepopt-claude-ask' alone; and the modes it leaves are cleared after, or every later edit would follow them)
+  const modeNow = "localStorage.getItem('stepopt-claude-mode-geometry')";
+  const askBefore = await evalJS(modeNow);
   await evalJS("document.getElementById('clp-ask').click()"); await sleep(250);
-  const askAfter = await evalJS("localStorage.getItem('stepopt-claude-ask')");
+  const askAfter = await evalJS(modeNow);
   check('a switch in the dropdown changes the setting', askBefore !== askAfter, { askBefore, askAfter });
   await evalJS("document.getElementById('clp-ask').click()"); await sleep(200);
+  await evalJS("['geometry','layout','delete','files'].forEach(c => localStorage.removeItem('stepopt-claude-mode-' + c))");
   await evalJS("document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))"); await sleep(250);
   check('Escape closes the dropdown', !(await evalJS("document.getElementById('claude-pop').classList.contains('show')")));
   await evalJS("document.getElementById('claude-pill').click()"); await sleep(300);

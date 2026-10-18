@@ -274,3 +274,164 @@ export function fillLoops(topo, edges, triangulate) {
   }
   return { loops, skipped: Math.max(0, open - closedEdges), open };
 }
+
+// ── Close open edges ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// Every rim where the surface stops (a run of open edges that closes on itself) is capped, as Fill does for a picked rim: the
+// missing faces of a part that should be watertight (open bores, a side that was never exported). The open edges are walked the
+// way a cap runs, back along the triangle that owns each, so every rim is found once and its cap faces the way that closes the
+// surface. Where rims meet at a point (two caps would share a corner) the edges at that point are left alone and counted in
+// `branching`: such a rim is picked and filled by hand, or the point is welded first. A rim that folds over or crosses itself
+// cannot be capped by one flat polygon and is counted in `skipped`. opts.maxSize (model units): a rim wider than this is left
+// (`tooLarge`); 0 or none caps every rim.
+// Returns { loops (as fillLoops gives them, one a rim), rims (the closed rims found), skipped, tooLarge, branching (open edges
+// at a point where rims meet), open (the open edges of the mesh) }.
+export function fillOpen(topo, triangulate, opts = {}) {
+  const maxSize = opts.maxSize > 0 ? opts.maxSize : 0;
+  const nextOf = new Map(), inN = new Map(), bad = new Set();
+  let open = 0;
+  for (let e = 0; e < topo.nEdge; e++) {
+    if (topo.edgeN[e] !== 1) continue;
+    open++;
+    const t = topo.edgeT[e * 2], a = topo.edgeV[e * 2], b = topo.edgeV[e * 2 + 1];
+    for (let k = 0; k < 3; k++) {
+      const wa = topo.tri[t * 3 + k], wb = topo.tri[t * 3 + (k + 1) % 3];
+      if (!((wa === a && wb === b) || (wa === b && wb === a))) continue;
+      if (nextOf.has(wb)) bad.add(wb); else nextOf.set(wb, { to: wa, e });
+      inN.set(wa, (inN.get(wa) || 0) + 1);
+      if (inN.get(wa) > 1) bad.add(wa);
+      break;
+    }
+  }
+  const out = { loops: [], rims: 0, skipped: 0, tooLarge: 0, branching: 0, open };
+  if (!open) return out;
+  const used = new Set();
+  const P = [0, 0, 0];
+  let rimEdges = 0;
+  for (const s of nextOf.keys()) {
+    if (used.has(s) || bad.has(s)) continue;
+    const edges = new Set(); let v = s, ok = true, guard = 0;
+    let mnx = Infinity, mny = Infinity, mnz = Infinity, mxx = -Infinity, mxy = -Infinity, mxz = -Infinity;
+    while (true) {
+      if (bad.has(v) || (used.has(v) && v !== s)) { ok = false; break; }
+      used.add(v);
+      at(topo, v, P);
+      if (P[0] < mnx) mnx = P[0]; if (P[0] > mxx) mxx = P[0]; if (P[1] < mny) mny = P[1]; if (P[1] > mxy) mxy = P[1]; if (P[2] < mnz) mnz = P[2]; if (P[2] > mxz) mxz = P[2];
+      const n = nextOf.get(v); if (!n) { ok = false; break; }
+      edges.add(n.e); v = n.to;
+      if (v === s) break;
+      if (++guard > nextOf.size + 1) { ok = false; break; }
+    }
+    if (!ok || edges.size < 3) continue;
+    out.rims++; rimEdges += edges.size;
+    if (maxSize && Math.hypot(mxx - mnx, mxy - mny, mxz - mnz) > maxSize) { out.tooLarge++; continue; }
+    const r = fillLoops(topo, edges, triangulate);
+    if (r.loops.length === 1) out.loops.push(r.loops[0]); else out.skipped++;
+  }
+  out.branching = open - rimEdges;                     // (the open edges that are not on a rim of their own: they meet others at a point)
+  return out;
+}
+
+// ── Close between two rims (bridge) ──────────────────────────────────────────────────────────────────────────────────────
+// The picked open edges are sorted into rims, walked the way a cap runs (as fillLoops does). With one rim the answer is fillLoops's.
+// With two, the gap between them is closed with a strip of triangles from one to the other: the ring floor between the two rims of
+// a counterbore, the wall between its floor and its mouth, the missing length of a tube. The points of the two rims are matched by
+// their angle round the axis between the rims (the first rim in cap order, the second against it, so every new triangle runs each
+// rim's edge the way that closes the surface), and the strip is stitched with the shorter of the two diagonals at each step.
+// Returns { loops: [{ points, raw, tris, normal, normals (one a point), owner }], rims, skipped (open edges not on a closed rim),
+// why ('none' | 'branching' | 'tooMany' | 'folded') }, in the shape fillLoops gives, so the app writes it the same way.
+const triNormal = (Q, [a, b, c]) => { const p = Q[a], q = Q[b], r = Q[c]; const e1 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], e2 = [r[0] - p[0], r[1] - p[1], r[2] - p[2]]; return [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]; };
+export function closeBetween(topo, edges, triangulate) {
+  const next = new Map(), rawOf = new Map();
+  let open = 0, branching = false;
+  for (const e of edges) {
+    if (topo.edgeN[e] !== 1) continue;
+    open++;
+    const t = topo.edgeT[e * 2], a = topo.edgeV[e * 2], b = topo.edgeV[e * 2 + 1];
+    for (let k = 0; k < 3; k++) {
+      const wa = topo.tri[t * 3 + k], wb = topo.tri[t * 3 + (k + 1) % 3];
+      if (!((wa === a && wb === b) || (wa === b && wb === a))) continue;
+      if (next.has(wb)) branching = true; else { next.set(wb, { to: wa, tri: t }); rawOf.set(wb, cornerOf(topo, t, (k + 1) % 3)); }
+      break;
+    }
+  }
+  const none = (why) => ({ loops: [], rims: 0, skipped: open, open, why });
+  if (!open) return none('none');
+  if (branching) return none('branching');
+  const rims = [], used = new Set();
+  for (const s of next.keys()) {
+    if (used.has(s)) continue;
+    const pts = [], rawv = []; let v = s, ok = true, guard = 0;
+    while (true) {
+      if (used.has(v) && v !== s) { ok = false; break; }
+      pts.push(v); rawv.push(rawOf.get(v)); used.add(v);
+      const n = next.get(v); if (!n) { ok = false; break; }
+      v = n.to; if (v === s) break;
+      if (++guard > next.size + 1) { ok = false; break; }
+    }
+    if (ok && pts.length >= 3) rims.push({ pts, rawv, owner: next.get(pts[0]).tri });
+  }
+  if (!rims.length) return none('none');
+  if (rims.length === 1) { const r = fillLoops(topo, edges, triangulate); return { loops: r.loops, rims: 1, skipped: r.skipped, open, why: r.loops.length ? '' : 'folded' }; }
+  if (rims.length > 2) return { loops: [], rims: rims.length, skipped: open, open, why: 'tooMany' };
+  const P = (w) => at(topo, w);
+  const geo = (R) => {
+    const Q = R.pts.map(P), n = Q.length, c = [0, 0, 0];
+    for (const p of Q) { c[0] += p[0] / n; c[1] += p[1] / n; c[2] += p[2] / n; }
+    let nx = 0, ny = 0, nz = 0;
+    for (let i = 0; i < n; i++) { const p = Q[i], q = Q[(i + 1) % n]; nx += (p[1] - q[1]) * (p[2] + q[2]); ny += (p[2] - q[2]) * (p[0] + q[0]); nz += (p[0] - q[0]) * (p[1] + q[1]); }
+    const l = Math.hypot(nx, ny, nz) || 1;
+    return { Q, c, nrm: [nx / l, ny / l, nz / l] };
+  };
+  const A = geo(rims[0]), B = geo(rims[1]);
+  // the axis the strip runs round: the two cap normals point apart (out of each rim), so their difference is it; failing that, the line between the rims
+  let ax = A.nrm[0] - B.nrm[0], ay = A.nrm[1] - B.nrm[1], az = A.nrm[2] - B.nrm[2], al = Math.hypot(ax, ay, az);
+  if (al < 0.5) { ax = B.c[0] - A.c[0]; ay = B.c[1] - A.c[1]; az = B.c[2] - A.c[2]; al = Math.hypot(ax, ay, az); }
+  if (al < 1e-12) { ax = A.nrm[0]; ay = A.nrm[1]; az = A.nrm[2]; al = Math.hypot(ax, ay, az) || 1; }
+  ax /= al; ay /= al; az /= al;
+  const hx = Math.abs(ax) < 0.9 ? 1 : 0, hy = hx ? 0 : 1;
+  let ux = -az * hy, uy = az * hx, uz = ax * hy - ay * hx; const ul = Math.hypot(ux, uy, uz) || 1; ux /= ul; uy /= ul; uz /= ul;
+  const vx = ay * uz - az * uy, vy = az * ux - ax * uz, vz = ax * uy - ay * ux;
+  const angle = (p, c) => Math.atan2((p[0] - c[0]) * vx + (p[1] - c[1]) * vy + (p[2] - c[2]) * vz, (p[0] - c[0]) * ux + (p[1] - c[1]) * uy + (p[2] - c[2]) * uz);
+  // the second rim against its cap order, so its angle runs the same way as the first's
+  const Bp = rims[1].pts.slice().reverse(), Braw = rims[1].rawv.slice().reverse(), BQ = B.Q.slice().reverse();
+  const n = A.Q.length, m = BQ.length;
+  const aAng = A.Q.map(p => angle(p, A.c)), bAng = BQ.map(p => angle(p, B.c));
+  // does the first rim run with the angle? (it does when its cap faces along the axis; against it, the strip would twist: walk it the other way)
+  let turnA = 0; for (let i = 0; i < n; i++) { let d = aAng[(i + 1) % n] - aAng[i]; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; turnA += d; }
+  let turnB = 0; for (let j = 0; j < m; j++) { let d = bAng[(j + 1) % m] - bAng[j]; if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; turnB += d; }
+  if (!(Math.abs(turnA) > Math.PI) || !(Math.abs(turnB) > Math.PI) || Math.sign(turnA) !== Math.sign(turnB)) return { loops: [], rims: 2, skipped: open, open, why: 'folded' };
+  // start the second rim at the point nearest in angle to the first's first point
+  const dAng = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return Math.abs(d); };
+  let j0 = 0; for (let j = 1; j < m; j++) if (dAng(bAng[j], aAng[0]) < dAng(bAng[j0], aAng[0])) j0 = j;
+  const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  const tris = []; let i = 0, j = 0;
+  while (i < n || j < m) {
+    const ai = A.Q[i % n], an = A.Q[(i + 1) % n], bj = BQ[(j0 + j) % m], bn = BQ[(j0 + j + 1) % m];
+    const stepA = i < n && (j >= m || dist(an, bj) <= dist(ai, bn));
+    if (stepA) { tris.push([i % n, (i + 1) % n, n + (j0 + j) % m]); i++; }
+    else { tris.push([i % n, n + (j0 + j + 1) % m, n + (j0 + j) % m]); j++; }
+  }
+  // the shading of the strip: each point takes the area-weighted normal of the strip triangles round it
+  const Q = A.Q.concat(BQ), normals = Q.map(() => [0, 0, 0]);
+  for (const [a, b, c] of tris) {
+    const nn = triNormal(Q, [a, b, c]);
+    for (const k of [a, b, c]) { normals[k][0] += nn[0]; normals[k][1] += nn[1]; normals[k][2] += nn[2]; }
+  }
+  for (const nv of normals) { const l = Math.hypot(nv[0], nv[1], nv[2]); if (l > 0) { nv[0] /= l; nv[1] /= l; nv[2] /= l; } else { nv[0] = ax; nv[1] = ay; nv[2] = az; } }
+  // the polygons of the strip, for the wire view and Edit mesh: two triangles in a row that share their diagonal and lie nearly in one
+  // plane (within 10°) are one four-sided cell, as the quads of a modelling program; the rest are triangles of their own
+  const polys = new Int32Array(tris.length).fill(-1);
+  const tn = tris.map(t => { const nn = triNormal(Q, t); const l = Math.hypot(nn[0], nn[1], nn[2]) || 1; return [nn[0] / l, nn[1] / l, nn[2] / l]; });
+  let nPoly = 0; const cosQuad = Math.cos(10 * Math.PI / 180);
+  for (let k = 0; k < tris.length; k++) {
+    if (polys[k] >= 0) continue;
+    polys[k] = nPoly;
+    const nx = (k + 1) % tris.length;
+    if (nx !== k && polys[nx] < 0) {
+      const shared = tris[k].filter(x => tris[nx].includes(x)).length;
+      if (shared === 2 && tn[k][0] * tn[nx][0] + tn[k][1] * tn[nx][1] + tn[k][2] * tn[nx][2] >= cosQuad) polys[nx] = nPoly;
+    }
+    nPoly++;
+  }
+  return { loops: [{ points: rims[0].pts.concat(Bp), raw: rims[0].rawv.concat(Braw), tris, normal: [ax, ay, az], normals, polys, nPolys: nPoly, owner: rims[0].owner }], rims: 2, skipped: 0, open, why: '' };
+}

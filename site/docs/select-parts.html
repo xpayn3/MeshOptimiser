@@ -114,6 +114,8 @@
         <a href="../docs/colours-materials.html">Colours and materials</a>
         <a href="../docs/axis-center.html">The axis of a part: Axis Center</a>
         <a href="../docs/move-rotate-scale.html">Move, rotate, scale and measure</a>
+        <a href="../docs/simplify-round-faces.html" title="Simplify round faces">Round faces</a>
+        <a href="../docs/remove-fillets.html" title="Remove fillets and chamfers">Remove fillets</a>
         <a href="../docs/edit-mesh.html" title="Edit mesh: points, edges and polygons">Edit mesh</a>
         <a href="../docs/align-to-floor.html">Align to floor</a>
         <a href="../docs/align-parts.html">Align parts</a>
@@ -188,6 +190,7 @@
             <div><dt>Make unique</dt><dd>Gives each selected shared part a mesh of its own, so changing, reducing or deleting detail on it leaves the other copies alone. One undo step.</dd></div>
             <div><dt>By colour</dt><dd>Selects every part that shares a colour with the selection.</dd></div>
             <div><dt>By name</dt><dd>Asks for a pattern and selects every part whose name matches it. Typing <code>screw</code> selects every part with screw in its name, in capitals or not. The pattern is a regular expression, a compact way to describe text, so some characters such as <code>.</code> and <code>*</code> have a special meaning.</dd></div>
+            <div><dt>By layer</dt><dd>In the command search (<kbd>Ctrl</kbd><kbd>K</kbd>), <span class="ui">Select by layer</span> lists the CAD layers of the scene with how many parts are on each; click one to select them. A part's layer is also a badge in the Properties card, and a click on the badge does the same. Layers come from a STEP file imported with <span class="ui">Keep layers</span> on under <span class="ui">What to read</span>; a scene saved here keeps them.</dd></div>
           </dl>
           <p>Two tools select for you in a cleverer way: <a href="../docs/select-hidden-parts.html">Select hidden parts</a> and the size threshold of <a href="../docs/delete-small-parts.html">Delete small parts</a>.</p>
           <h2 id="find-what-you-selected">Find what you selected</h2>

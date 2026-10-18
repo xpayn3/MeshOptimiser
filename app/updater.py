@@ -35,7 +35,7 @@ MAX_ARCHIVE = 250 * 1024 * 1024
 MAX_UNPACKED = 600 * 1024 * 1024
 MAX_FILES = 20000
 # Never written, replaced or deleted by an update, whatever an archive says.
-PROTECTED = (".venv", "runtime", ".git", ".update", ".claude", "inbox", "exports", "__pycache__", "node_modules", "server.log", "_archive")
+PROTECTED = (".venv", "runtime", ".git", ".update", ".claude", "inbox", "exports", "__pycache__", "node_modules", "server.log", "server.log.1", "_archive")
 # (Paths here are relative to this folder, app/. The thin launchers one level up, in the install folder, are outside it and never touched.)
 # A running launcher is read by its shell line by line: replacing it under a running window breaks the window. A release that
 # changes them raises `launcher` in its feed entry, and the page then offers the full download instead of an in-place update.
@@ -47,6 +47,13 @@ PYTHON = sys.executable                       # serve.py points this at the proj
 _lock = threading.RLock()
 STATE: dict = {"phase": "idle", "message": "", "done": 0, "total": 0, "error": None, "version": None}
 _cancel = threading.Event()
+_swap = threading.Lock()                       # (the files are swapped by one thing at a time: an install or a rollback)
+
+
+def _int(v, what: str) -> int:
+    """A whole number from the feed or a manifest, or an UpdateError (a ValueError reached the page as \"did not answer\")."""
+    try: return int(v or 0)
+    except (TypeError, ValueError): raise UpdateError("The update list has an unreadable " + what + ".")
 _marked: set = set()                          # (what this run has already written into pending.json: see _mark)
 
 
@@ -212,11 +219,11 @@ def check(channel: str = "stable", quiet: bool = False) -> dict:
         arch = entry.get("archive") if isinstance(entry.get("archive"), dict) else {}
         out.update(latest=ver, date=str(entry.get("date") or "")[:32], notes=[str(n)[:300] for n in (entry.get("notes") or [])][:30],
                    headline=str(entry.get("headline") or "")[:300], more=_https(entry.get("more")),
-                   size=int(arch.get("size") or 0), requires_pip=bool(entry.get("requirements_changed")))
+                   size=_int(arch.get("size"), "size"), requires_pip=bool(entry.get("requirements_changed")))
         out["available"] = newer(ver, cur)
         if out["available"]:
             min_from = str(entry.get("min_from") or "")
-            if int(entry.get("launcher") or 0) > launcher_level():
+            if _int(entry.get("launcher"), "launcher level") > launcher_level():
                 out.update(installable=False, reason="This release changes the launcher, which cannot be replaced while it runs. Download the full version from the website.")
             elif min_from and parse_version(min_from) and newer(min_from, cur):
                 out.update(installable=False, reason=f"This release can only be installed over {min_from} or newer. Download the full version from the website.")
@@ -233,7 +240,7 @@ def check(channel: str = "stable", quiet: bool = False) -> dict:
 
 # ── 2. download ─────────────────────────────────────────────────────────────
 def _download(arch: dict, dest: Path) -> None:
-    url, want_sha, want_size = str(arch["url"]), str(arch["sha256"]).lower(), int(arch["size"])
+    url, want_sha, want_size = str(arch["url"]), str(arch["sha256"]).lower(), _int(arch["size"], "size")
     if want_size <= 0 or want_size > MAX_ARCHIVE: raise UpdateError("The update archive has an unexpected size.")
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_suffix(".part")
@@ -299,7 +306,10 @@ def verify_archive(zpath: Path, expect_version: str | None = None) -> dict:
                     n += len(chunk); h.update(chunk)
                     if n > info.file_size + 1: break
             if h.hexdigest() != str(f.get("sha256") or "").lower(): raise UpdateError("A file in the update does not match its checksum: " + rel)
-        for d in man.get("delete") or []:
+        dels = man.get("delete") or []
+        if not isinstance(dels, list) or not all(isinstance(d, str) for d in dels):      # (a string would be walked letter by letter)
+            raise UpdateError("The update manifest is not valid.")
+        for d in dels:
             if _safe_rel(str(d)).lower() in seen: raise UpdateError("The update both installs and removes a file: " + str(d)[:80])
         man["_files"] = [str(f["path"]) for f in files]
         return man
@@ -350,6 +360,11 @@ def _runtime_manifest_note(req: Path) -> bool:
 
 def apply_archive(zpath: Path, man: dict) -> dict:
     """Replace the files that differ. Everything replaced or deleted is saved first; an error puts it all back."""
+    with _swap:
+        return _apply_archive(zpath, man)
+
+
+def _apply_archive(zpath: Path, man: dict) -> dict:
     files = man["_files"]
     new_ver = str(man["version"])
     old_ver = current_version()
@@ -428,8 +443,26 @@ def _restore(meta: dict) -> None:
 
 
 def rollback(reason: str = "") -> dict:
+    with _lock: moving = STATE["phase"] in ("downloading", "verifying", "installing")      # (not "restarting": the files are in place by then)
+    if moving: raise UpdateError("An update is running. Try again when it has finished.")
+    if not _swap.acquire(blocking=False): raise UpdateError("The app's files are being changed. Try again in a moment.")
+    try:
+        return _rollback(reason)
+    finally:
+        _swap.release()
+
+
+def _rollback(reason: str) -> dict:
     meta = _read_json(BACKUP_DIR / "backup.json")
     if not isinstance(meta, dict) or not meta.get("from"): raise UpdateError("There is no earlier version to go back to.")
+    # A backup belongs to the version it was taken for: one left from before a reinstall of a newer version would put old files
+    # over it. (In the middle of a swap the version file still names the old version: the backup is right for that too.)
+    if current_version() not in (str(meta.get("to")), str(meta.get("from"))):
+        raise UpdateError("The saved earlier version is not from this installation (it was taken for " + str(meta.get("to"))[:20] + "), so it was not used.")
+    # Every file the backup says it saved must be there, or going back would leave new files under the old number.
+    missing = [rel for rel in (meta.get("replaced") or []) + (meta.get("deleted") or []) if not (BACKUP_DIR / "files" / rel).is_file()]
+    if missing:
+        raise UpdateError("The saved earlier version is incomplete (" + str(len(missing)) + " files missing, such as " + missing[0][:60] + "), so nothing was changed.")
     _restore(meta)
     bad = meta.get("to")
     _remove_tree(BACKUP_DIR)

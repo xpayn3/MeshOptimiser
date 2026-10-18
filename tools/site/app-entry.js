@@ -238,6 +238,7 @@ window.labApps = [
             ['select_similar', 'The other copies of a shape: every washer of one kind.'],
             ['select_by_colour', 'Every part with the colour of the chosen ones, or of a colour you give.'],
             ['select_by_material', 'Every part that uses a material.'],
+            ['select_by_layer', 'Every part on a CAD layer, when the STEP file was imported with Layers on.'],
             ['list_groups', 'The groups in the tree.'],
           ]],
           ['Make it lighter', 'gauge', 'Each asks first and is one undo. Add dry run to try one without keeping it.', [
