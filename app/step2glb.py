@@ -778,11 +778,12 @@ def _dominant_face_color(solid, shape_tool, color_tool):
     return max(counts.items(), key=lambda kv: kv[1])[0] if counts else None
 
 
-def _split_by_face_color(solid, shape_tool, color_tool, body_color):
-    """A solid whose faces carry more than one colour (a face painted apart from its body: SolidWorks, Creo), as one compound
-    of faces a colour: [(shape, colour), ...]; None when every face shows the same colour. A face with no colour of its own
-    takes the body's. Before, the body took one colour and faces in a second colour showed in the first."""
-    from OCP.TopoDS import TopoDS_Compound
+def _face_colour_groups(solid, shape_tool, color_tool, body_color):
+    """A solid whose faces carry more than one colour (a face painted apart from its body: SolidWorks, Creo), as its faces in
+    colour order and the colour of each: (faces, keys); None when every face shows the same colour. A face with no colour of its
+    own takes the body's. The solid stays one body: solid_to_mesh() meshes the faces in this order, so each colour is one run of
+    triangles, and build_glb_hierarchical() writes the runs as primitives of one mesh. (Before, the body took one colour and faces
+    in a second colour showed in the first; then each colour was a piece of its own, open along the seam.)"""
     groups: dict = {}
     order: list = []
     try:
@@ -808,14 +809,10 @@ def _split_by_face_color(solid, shape_tool, color_tool, body_color):
         return None
     if len(groups) < 2:
         return None
-    out = []
-    b = BRep_Builder()
+    faces, keys = [], []
     for key in order:
-        comp = TopoDS_Compound(); b.MakeCompound(comp)
-        for face in groups[key]:
-            b.Add(comp, face)
-        out.append((comp, key))
-    return out
+        faces += groups[key]; keys += [key] * len(groups[key])
+    return faces, keys
 
 
 def get_label_name(label: TDF_Label) -> str | None:
@@ -866,6 +863,8 @@ class XcafProduct:
     solid_colors: list = None   # parallel to solids/meshes — per-solid color
                                 # override. NX often colors at the solid level
                                 # rather than the product level.
+    face_colours: list = None   # parallel to solids: (faces, colour of each) for a solid with faces in several colours, else None
+                                # (a coloured copy of the product has none: its occurrence shows in one colour)
 
 
 @dataclass
@@ -961,6 +960,7 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
         # stock label-only lookup doesn't.
         solids = []
         solid_colors = []
+        solid_faces = []
         # faces have colours of their own only where the product has sub-shapes in the document (no scan elsewhere)
         try:
             subs = TDF_LabelSequence()
@@ -988,13 +988,13 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
             if scol is None and color is None:
                 scol = _dominant_face_color(solid, shape_tool, color_tool)
             # Final fallback: inherit the product's color.
-            split = _split_by_face_color(solid, shape_tool, color_tool, scol or color) if face_colours else None
-            if split:
-                for piece, pcol in split:
-                    solids.append(piece); solid_colors.append(pcol)
-                RESULT["bodies_split_by_face_colour"] = RESULT.get("bodies_split_by_face_colour", 0) + 1
+            fc = _face_colour_groups(solid, shape_tool, color_tool, scol or color) if face_colours else None
+            solids.append(solid)
+            solid_faces.append(fc)
+            if fc:
+                solid_colors.append(fc[1][0])
+                RESULT["bodies_with_face_colours"] = RESULT.get("bodies_with_face_colours", 0) + 1
             else:
-                solids.append(solid)
                 solid_colors.append(scol or color)
             exp.Next()
         if not solids and surfaces:
@@ -1005,7 +1005,8 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
             sh, shc = _loose_shells(shape, color_tool, color)
             solids += sh; solid_colors += shc
         products[key] = XcafProduct(name=name, color=color, solids=solids,
-                                     meshes=[], solid_colors=solid_colors)
+                                     meshes=[], solid_colors=solid_colors,
+                                     face_colours=solid_faces + [None] * (len(solids) - len(solid_faces)))
         return key
 
     # An instance can carry a colour of its own: on its component label (every part under that instance takes it), or a SHUO
@@ -1160,8 +1161,8 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
         n = visit(free_labels.Value(i), identity)
         if n is not None:
             roots.append(n)
-    if RESULT.get("bodies_split_by_face_colour"):
-        log(f"{RESULT['bodies_split_by_face_colour']:,} bodies have faces in more than one colour: each colour is a piece of its own", "ok")
+    if RESULT.get("bodies_with_face_colours"):
+        log(f"{RESULT['bodies_with_face_colours']:,} bodies have faces in more than one colour: each stays one body, with a material a colour", "ok")
     if shuo_hits[0] or shuo_hits[1]:
         log(f"instance colours: {shuo_hits[0]} occurrence(s) from SHUO, {shuo_hits[1]} from their component", "ok")
     return products, roots
@@ -1185,11 +1186,14 @@ def extract_product_meshes(products: dict) -> None:
     with Heartbeat("product mesh extraction"):
         for prod in products.values():
             meshes = []
-            for solid in prod.solids:
+            for si, solid in enumerate(prod.solids):
+                fc = prod.face_colours[si] if prod.face_colours and si < len(prod.face_colours) else None
                 if id(solid) in seen:
                     r = seen[id(solid)]
                 else:
-                    r = seen[id(solid)] = solid_to_mesh(solid)
+                    # (a solid with faces in several colours is meshed face by face in colour order; its product comes before any
+                    # coloured copy of it, which shares the mesh and ignores the runs)
+                    r =seen[id(solid)] = solid_to_mesh(solid, fc)
                 if r is None:
                     skipped += 1
                     continue
@@ -1227,6 +1231,7 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     # frames pointing at the same name produce one glTF mesh + N nodes.
     geom_names: dict[tuple[str, int], str] = {}
     brep_out: dict = {}        # geometry name -> B-rep record (--brep), for the sidecar
+    multi_out: dict = {}       # geometry name -> colour runs: written as one primitive a colour after the export
     n_geoms = 0
     n_colored = 0
     for key, prod in products.items():
@@ -1239,6 +1244,7 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
             # product-level fallback. _apply_color handles None → neutral grey.
             mcolor = sc[i] if i < len(sc) else prod.color
             _apply_color(mesh, mcolor)
+            runs = _groups_of(verts, len(tris)) if (prod.face_colours and i < len(prod.face_colours) and prod.face_colours[i]) else None
             if mcolor is not None:
                 n_colored += 1
             # Sanitize the entry string ('0:1:1:2' has colons that trimesh's
@@ -1247,6 +1253,7 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
             gname = f"prod_{short_key}_{i:03d}"
             scene.geometry[gname] = mesh
             geom_names[(key, i)] = gname
+            if runs: multi_out[gname] = runs
             n_geoms += 1
             hit = _BREP.get(id(verts)) if CFG.brep else None
             if hit is not None and hit[0] is verts:
@@ -1353,6 +1360,10 @@ def build_glb_hierarchical(roots: list, products: dict, output: Path,
     log(f"writing GLB: {output}")
     t0 = time.time()
     scene.export(output)
+    if multi_out:
+        n_done = _split_primitives(output, multi_out)
+        log(f"{n_done} of {len(multi_out)} bodies with faces in several colours written as one mesh, a primitive a colour",
+            "ok" if n_done == len(multi_out) else "warn")
     if node_extras:
         n_done = _inject_node_extras(output, node_extras)
         log(f"CAD metadata on {n_done} of {len(node_extras)} nodes", "ok" if n_done == len(node_extras) else "warn")
@@ -1390,6 +1401,64 @@ def _swap_yz_glb(glb_path: Path) -> bool:
     tmp.write_bytes(out)
     os.replace(tmp, glb_path)
     return True
+
+
+def _split_primitives(glb_path: Path, runs_by_name: dict) -> int:
+    """Give each mesh named in runs_by_name one primitive a colour: the primitives read the same POSITION and NORMAL accessors (so
+    the points along a colour seam are shared, and the body is as closed as it is in one colour), each with its own run of the
+    index accessor and a material of its colour. Only the JSON chunk is rewritten: the runs are views into the index data trimesh
+    wrote, which is in triangle order. Returns how many meshes were split."""
+    data = glb_path.read_bytes()
+    if data[:4] != b"glTF" or data[16:20] != b"JSON":
+        return 0
+    jlen = int.from_bytes(data[12:16], "little")
+    gltf = json.loads(data[20:20 + jlen].decode("utf-8"))
+    accs = gltf.get("accessors", []); mats = gltf.setdefault("materials", [])
+    sizes = {5121: 1, 5123: 2, 5125: 4}
+    by_colour: dict = {}
+    n = 0
+    for mesh in gltf.get("meshes", []):
+        runs = runs_by_name.get(mesh.get("name"))
+        prims = mesh.get("primitives") or []
+        if not runs or len(prims) != 1 or prims[0].get("indices") is None or prims[0].get("mode", 4) != 4:
+            continue
+        prim = prims[0]
+        ia = accs[prim["indices"]]
+        size = sizes.get(ia.get("componentType"))
+        if size is None or ia.get("sparse") or ia.get("count") != 3 * sum(r[2] for r in runs):
+            continue
+        tmpl = mats[prim["material"]] if prim.get("material") is not None and prim["material"] < len(mats) else {}
+        out = []
+        for col, start, count in runs:
+            acc = {k: v for k, v in ia.items() if k not in ("min", "max")}
+            acc["byteOffset"] = ia.get("byteOffset", 0) + start * 3 * size
+            acc["count"] = count * 3
+            accs.append(acc)
+            ck = tuple(round(float(c), 4) for c in col) if col is not None else None
+            mi = by_colour.get(ck)
+            if mi is None:
+                m = json.loads(json.dumps(tmpl))
+                pbr = m.setdefault("pbrMetallicRoughness", {})
+                pbr["baseColorFactor"] = [float(c) for c in ck] + [1.0] if ck is not None else [0.7, 0.7, 0.72, 1.0]
+                m["name"] = "colour_" + _hex(ck) if ck is not None else "colour_default"
+                mats.append(m); mi = by_colour[ck] = len(mats) - 1
+            p = {k: v for k, v in prim.items() if k not in ("indices", "material")}
+            p["indices"] = len(accs) - 1; p["material"] = mi
+            out.append(p)
+        mesh["primitives"] = out
+        n += 1
+    if not n:
+        return 0
+    body = json.dumps(gltf, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    body += b" " * (-len(body) % 4)
+    rest = data[20 + jlen:]
+    total = 12 + 8 + len(body) + len(rest)
+    out_b = (b"glTF" + data[4:8] + total.to_bytes(4, "little")
+             + len(body).to_bytes(4, "little") + b"JSON" + body + rest)
+    tmp = glb_path.with_name(glb_path.name + ".tmp")
+    tmp.write_bytes(out_b)
+    os.replace(tmp, glb_path)
+    return n
 
 
 def _inject_node_extras(glb_path: Path, extras_by_name: dict) -> int:
@@ -1596,6 +1665,16 @@ def _normals_of(verts):
         return hit[1]
     return None
 
+# The colour runs of a solid with faces in several colours, filed the same way: id(verts) -> (verts, [(colour, first triangle,
+# triangle count), ...]), the runs in triangle order and covering every triangle.
+_GROUPS: dict = {}
+
+def _groups_of(verts, n_tris):
+    hit = _GROUPS.get(id(verts))
+    if hit is not None and hit[0] is verts and sum(r[2] for r in hit[1]) == n_tris:
+        return hit[1]
+    return None
+
 
 # ─── The B-rep of a solid, kept beside its mesh (--brep).
 # For every solid solid_to_mesh() meshes it also notes what the mesh came from: the CAD faces (kind, size, which
@@ -1708,8 +1787,11 @@ def _identity_trsf(t) -> bool:
         return False
 
 
-def solid_to_mesh(solid: TopoDS_Shape):
+def solid_to_mesh(solid: TopoDS_Shape, face_colours=None):
     """Walk faces of a solid, return concatenated (vertices, triangles) or None.
+
+    face_colours: (faces, colour of each) from _face_colour_groups(): the faces are meshed in that order and the colour runs are
+    filed in _GROUPS (triangle start, count, colour), for build_glb_hierarchical() to write as primitives.
 
     Optimized:
       - Collect per-face arrays in lists, single np.vstack at the end.
@@ -1727,7 +1809,15 @@ def solid_to_mesh(solid: TopoDS_Shape):
     if want_normals:
         from OCP.BRepLib import BRepLib_ToolTriangulatedShape
     offset = 0
-    exp = TopExp_Explorer(solid, TopAbs_FACE)
+    if face_colours:
+        face_seq, face_keys = face_colours
+    else:
+        face_seq, face_keys = [], None
+        exp = TopExp_Explorer(solid, TopAbs_FACE)
+        while exp.More():
+            face_seq.append(exp.Current()); exp.Next()
+    runs: list = []                    # [colour, first triangle, triangle count] in mesh order (face_colours only)
+    tri_seen = 0
     loc = TopLoc_Location()
     want_brep = CFG.brep
     if want_brep:
@@ -1736,16 +1826,20 @@ def solid_to_mesh(solid: TopoDS_Shape):
         brep_faces: list = []          # per CAD face: [kind, first triangle, triangle count, area, *numbers]
         brep_hits: dict = {}           # face map index -> (triangulation, location, vertices, record number)
         tri_total = 0
-    while exp.More():
-        face = TopoDS.Face_s(exp.Current())
+    for fi, face_shape in enumerate(face_seq):
+        face = TopoDS.Face_s(face_shape)
         tri = BRep_Tool.Triangulation_s(face, loc)
         if tri is None:
             RESULT["faces_untessellated"] = RESULT.get("faces_untessellated", 0) + 1      # (counted: they used to vanish without a word)
-            exp.Next(); continue
+            continue
         n_nodes = tri.NbNodes(); n_tris = tri.NbTriangles()
         if n_nodes == 0 or n_tris == 0:
             RESULT["faces_untessellated"] = RESULT.get("faces_untessellated", 0) + 1
-            exp.Next(); continue
+            continue
+        if face_keys is not None:
+            if runs and runs[-1][0] == face_keys[fi]: runs[-1][2] += n_tris
+            else: runs.append([face_keys[fi], tri_seen, n_tris])
+        tri_seen += n_tris
 
         # ── vertices: list-comp of (X,Y,Z) tuples then a single asarray
         v_local = [(p.X(), p.Y(), p.Z()) for p in (tri.Node(j) for j in range(1, n_nodes + 1))]
@@ -1842,7 +1936,6 @@ def solid_to_mesh(solid: TopoDS_Shape):
 
         all_verts.append(verts); all_tris.append(tris_buf)
         offset += n_nodes
-        exp.Next()
     if not all_verts: return None
     out_v = np.vstack(all_verts)
     out_t = np.vstack(all_tris)
@@ -1869,6 +1962,8 @@ def solid_to_mesh(solid: TopoDS_Shape):
             _BREP[id(out_v)] = (out_v, {"faces": brep_faces, "edges": rows, "points": pts, "tris": tri_total})
         except Exception as e:
             log(f"B-rep edges of one solid skipped: {e}", "warn")
+    if len(runs) > 1:
+        _GROUPS[id(out_v)] = (out_v, [tuple(r) for r in runs])
     return out_v, out_t
 
 
@@ -2262,11 +2357,34 @@ def _simplify_batch(meshes: list, ratio: float, err: float) -> list:
 def _simplified_products(products: dict, ratio: float) -> dict:
     """The products with every mesh simplified (once per product: all its
     occurrences share it, so the LOD keeps the instancing)."""
-    items = [(key, i, m) for key, p in products.items() for i, m in enumerate(p.meshes)]
-    res = _simplify_batch([m for _, _, m in items], ratio, CFG.lod_error)
+    items = []                                    # (key, mesh number, run colour or None, (verts, tris))
+    for key, p in products.items():
+        for i, m in enumerate(p.meshes):
+            runs = _groups_of(m[0], len(m[1])) if (p.face_colours and i < len(p.face_colours) and p.face_colours[i]) else None
+            if runs:          # (a body with faces in several colours: each colour is simplified on its own and the runs kept)
+                for col, s, c in runs: items.append((key, i, col, (m[0], np.asarray(m[1])[s:s + c])))
+            else:
+                items.append((key, i, None, m))
+    res = _simplify_batch([m for *_, m in items], ratio, CFG.lod_error)
     out = {key: _dc_replace(p, meshes=list(p.meshes)) for key, p in products.items()}
-    for (key, i, (verts, _t)), (sel, nt) in zip(items, res):
-        out[key].meshes[i] = (np.asarray(verts)[sel], nt)
+    parts: dict = defaultdict(list)
+    for (key, i, col, (verts, _t)), (sel, nt) in zip(items, res):
+        if col is None:
+            out[key].meshes[i] = (np.asarray(verts)[sel], nt)
+        else:
+            parts[(key, i)].append((col, np.asarray(sel)[np.asarray(nt, dtype=np.int64)].reshape(-1, 3)))
+    for (key, i), runs in parts.items():
+        verts = np.asarray(products[key].meshes[i][0])
+        allt = np.vstack([t for _, t in runs]) if runs else np.zeros((0, 3), np.int64)
+        used, inv = np.unique(allt.ravel(), return_inverse=True)
+        nv = np.ascontiguousarray(verts[used]); nt = inv.reshape(-1, 3).astype(np.uint32)
+        hit = _NORMALS.get(id(verts))
+        if hit is not None and hit[0] is verts: _NORMALS[id(nv)] = (nv, np.ascontiguousarray(hit[1][used]))
+        s, rr = 0, []
+        for col, t in runs:
+            if len(t): rr.append((col, s, len(t))); s += len(t)
+        if len(rr) > 1: _GROUPS[id(nv)] = (nv, rr)
+        out[key].meshes[i] = (nv, nt)
     return out
 
 

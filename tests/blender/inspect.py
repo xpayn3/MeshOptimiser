@@ -2,7 +2,8 @@
 # Opens each model with Blender's own importer (glb, gltf, obj, fbx, stl, ply, usd/usdz, blend) and reports every mesh object, in world
 # space, as JSON: name, parent, triangles, box, area, signed volume (positive = faces point out), open edges (after welding by position,
 # so seams that a format splits do not count), UV pairs, smooth corners, the material's colour and the node's custom properties (a glTF
-# node's extras). One line per file, between RESULT_BEGIN and RESULT_END.
+# node's extras). An object of several materials also gets 'colours': [[colour, triangles], ...], one entry a material slot that a
+# triangle wears (slots of one colour together). One line per file, between RESULT_BEGIN and RESULT_END.
 import bpy, bmesh, sys, os, json, hashlib, re
 args = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 
@@ -83,6 +84,8 @@ def inspect(path):
                 for l in fc.loops: uv = l[uvl].uv; uvs.add((round(uv.x, 3), round(uv.y, 3)))
         bmesh.ops.triangulate(bm, faces=bm.faces[:])
         area = sum(fc.calc_area() for fc in bm.faces)
+        per_slot = {}
+        for fc in bm.faces: per_slot[fc.material_index] = per_slot.get(fc.material_index, 0) + 1
         flip = mw.determinant() < 0
         g = groups.setdefault(group_key(o.name), [])
         for fc in bm.faces:
@@ -112,6 +115,11 @@ def inspect(path):
         except Exception: pass
         bm.free()
         m = o.material_slots[0].material if o.material_slots else None
+        cols = {}
+        for si, n in sorted(per_slot.items()):
+            sm_ = o.material_slots[si].material if si < len(o.material_slots) else None
+            k = json.dumps(colour(sm_))
+            cols[k] = cols.get(k, 0) + n
         su = sorted(uvs)
         objs.append({
             'name': o.name, 'parent': o.parent.name if o.parent else None, 'tris': tris, 'verts': len(me.vertices),
@@ -119,6 +127,7 @@ def inspect(path):
             'open_edges': open_edges, 'nonmanifold': nonman, 'uv_layers': len(me.uv_layers), 'uv_count': len(su),
             'uv_hash': hashlib.md5(json.dumps(su).encode()).hexdigest()[:10], 'uvs': su if len(su) <= 2000 else None,
             'smooth': round(sm / tot, 3) if tot else 0, 'material': m.name if m else None, 'colour': colour(m),
+            'colours': [[json.loads(k), n] for k, n in cols.items()], 'slots': len(o.material_slots),
             'mirrored': mw.determinant() < 0, 'props': props(o), 'path': ancestry(o),
         })
         o.evaluated_get(dg).to_mesh_clear()

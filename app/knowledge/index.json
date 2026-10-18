@@ -344,6 +344,14 @@
   "chars": 5688
  },
  {
+  "slug": "face-colours",
+  "title": "Several colours on one part",
+  "group": "look",
+  "groupTitle": "Look and arrange",
+  "summary": "Give some faces of a part a colour of their own, as Cinema 4D does with a material on a polygon selection. The part stays one part, and the colours go with it into every file.",
+  "chars": 3336
+ },
+ {
   "slug": "axis-center",
   "title": "The axis of a part: Axis Center",
   "group": "look",

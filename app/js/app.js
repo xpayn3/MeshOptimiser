@@ -18,6 +18,7 @@ import { wireIndex, analysePolygons, polygonEdges } from './wirelines.js?v=3';
 import { classifyFastener, fastenerLabel, fastenerThread, scaleFastener } from './fasteners.js?v=1';
 import { findRepeats } from './repeats.js?v=1';
 import { checkMesh } from './meshcheck.js?v=3';
+import * as FM from './facemat.js?v=1';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 // OBJ export uses our own streaming writer (_exportObjStreaming) to avoid
@@ -2991,10 +2992,17 @@ async function _rememberHandle(file, handle) {
 // inside the drop event itself, before anything is awaited.
 function _handleDroppedFile(e) {
   { const ents = _dropEntriesOf(e.dataTransfer); if (ents.some(x => x.isDirectory)) { _openDroppedFolder(ents); return; } }      // (a folder: the model inside it)
-  const file = e.dataTransfer?.files?.[0];
+  const all = [...(e.dataTransfer?.files || [])];
+  let file = all[0];
   if (!file) return;
+  if (all.length > 1) {
+    const rank = (f) => { const i = _FOLDER_MODEL_ORDER.indexOf((f.name.split('.').pop() || '').toLowerCase()); return i < 0 ? 99 : i; };
+    const best = all.slice().sort((x, y) => rank(x) - rank(y))[0];
+    if (rank(best) < 99) file = best;
+    try { file.__moSiblings = all; } catch (_) {}
+  }
   try {
-    const item = [...(e.dataTransfer.items || [])].find(i => i.kind === 'file');
+    const item = [...(e.dataTransfer.items || [])].find(i => i.kind === 'file' && (!e.dataTransfer.files || e.dataTransfer.files.length < 2));
     item?.getAsFileSystemHandle?.()
       .then(h => { if (h?.kind === 'file') _rememberHandle(file, h); })
       .catch(() => {});
@@ -9890,6 +9898,81 @@ function _fileMaterial(mat) {
     return mat.map(x => _hasTexture(x) ? keep(x) : getOrCreateMaterial(x && x.color ? x.color : new THREE.Color(0xaaaaaa)));
   }
   return _hasTexture(mat) ? keep(mat) : null;
+}
+// The primitives of one glTF mesh (a material each: Blender, Cinema 4D and the STEP converter write a body of several colours that way)
+// come from GLTFLoader as a group of meshes, which would be a part a colour. They are joined here into one mesh with a material a
+// primitive and a group a run of its triangles, so the part is one, as it was in the program that wrote it. Primitives that read the same
+// vertices (the STEP converter's: the seam between two colours stays closed) keep them shared; others are put one after the other. The
+// copies of one mesh (instances) share the joined geometry. The vendored GLTFLoader marks the group and its primitives (__moPrims,
+// __moPrim). Returns how many meshes were joined.
+function _joinPrimitives(root) {
+  const todo = [];
+  root.traverse(o => { if (o.userData && o.userData.__moPrims) todo.push(o); });
+  if (!todo.length) return 0;
+  const cache = new Map();
+  let n = 0;
+  for (const grp of todo) {
+    delete grp.userData.__moPrims;
+    const prims = grp.children.filter(k => k.userData && k.userData.__moPrim);
+    for (const k of prims) delete k.userData.__moPrim;
+    const parent = grp.parent;
+    if (!parent || prims.length < 2 || !prims.every(k => k.isMesh && !k.isSkinnedMesh && !k.isInstancedMesh && !k.children.length && k.geometry && k.geometry.attributes.position
+      && !(k.geometry.morphAttributes && Object.keys(k.geometry.morphAttributes).length) && !Array.isArray(k.material))) continue;
+    const key = prims.map(k => k.geometry.uuid).join('|');
+    let geom = cache.get(key);
+    if (!geom) { geom = _joinGeometries(prims.map(k => k.geometry)); if (!geom) continue; cache.set(key, geom); }
+    const mesh = new THREE.Mesh(geom, prims.map(k => k.material));
+    mesh.name = grp.name || prims[0].name;
+    mesh.userData = { ...prims[0].userData, ...grp.userData };
+    mesh.position.copy(grp.position); mesh.quaternion.copy(grp.quaternion); mesh.scale.copy(grp.scale);
+    mesh.matrixAutoUpdate = grp.matrixAutoUpdate; if (!grp.matrixAutoUpdate) mesh.matrix.copy(grp.matrix);
+    mesh.visible = grp.visible;
+    for (const k of grp.children.filter(c => !prims.includes(c))) mesh.add(k);         // (a node with children of its own keeps them)
+    parent.children[parent.children.indexOf(grp)] = mesh; mesh.parent = parent; grp.parent = null;
+    n++;
+  }
+  return n;
+}
+function _joinGeometries(geoms) {
+  const g0 = geoms[0];
+  const names = Object.keys(g0.attributes).filter(nm => geoms.every(g => g.attributes[nm] && g.attributes[nm].itemSize === g0.attributes[nm].itemSize));
+  const shared = geoms.every(g => g.index) && names.every(nm => geoms.every(g => g.attributes[nm] === g0.attributes[nm]))
+    && Object.keys(g0.attributes).length === names.length;
+  const counts = geoms.map(g => ((g.index ? g.index.count : g.attributes.position.count) / 3) | 0);
+  let nIdx = 0; for (const c of counts) nIdx += c * 3;
+  const out = new THREE.BufferGeometry();
+  let vTotal;
+  if (shared) { for (const nm of names) out.setAttribute(nm, g0.attributes[nm]); vTotal = g0.attributes.position.count; }
+  else {
+    vTotal = geoms.reduce((s, g) => s + g.attributes.position.count, 0);
+    const GET = ['getX', 'getY', 'getZ', 'getW'];
+    for (const nm of names) {
+      const a0 = g0.attributes[nm], size = a0.itemSize;
+      const direct = geoms.every(g => { const a = g.attributes[nm]; return !a.isInterleavedBufferAttribute && a.array.constructor === a0.array.constructor && !!a.normalized === !!a0.normalized; });
+      const T = direct ? a0.array.constructor : Float32Array;
+      const arr = new T(vTotal * size);
+      let o = 0;
+      for (const g of geoms) {
+        const a = g.attributes[nm];
+        if (direct) arr.set(a.array.subarray(0, a.count * size), o);
+        else for (let i = 0; i < a.count; i++) for (let c = 0; c < size; c++) arr[o + i * size + c] = a[GET[c]](i);      // (read through getX: the values, not a packed number)
+        o += a.count * size;
+      }
+      out.setAttribute(nm, new THREE.BufferAttribute(arr, size, direct ? !!a0.normalized : false));
+    }
+  }
+  const idx = new (vTotal > 65535 ? Uint32Array : Uint16Array)(nIdx);
+  let o = 0, base = 0;
+  for (const g of geoms) {
+    const cnt = g.index ? g.index.count : g.attributes.position.count;
+    if (g.index) for (let i = 0; i < cnt; i++) idx[o + i] = g.index.getX(i) + base; else for (let i = 0; i < cnt; i++) idx[o + i] = i + base;
+    o += cnt;
+    if (!shared) base += g.attributes.position.count;
+  }
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  for (const r of FM.runs(FM.joined(counts, counts.map((_, i) => i)))) out.addGroup(r.start, r.count, r.materialIndex);
+  out.name = g0.name || '';
+  return out;
 }
 function getOrCreateMaterial(color) {
   if (!state.shareMaterials) return new THREE.MeshStandardMaterial({ color: color.clone(), metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide });
@@ -19934,6 +20017,7 @@ function refreshPropertiesPanel() {
 
   let nameHtml = `<span class="prop-name" style="color:var(--tx3)">No selection</span>`;
   let materialHtml = '';
+  let faceColHtml = '';        // (one part of several colours: its face colours, under its material)
   let matNote = '';          // "3 materials", on the title line, when more than one is in play
   let tagsHtml = '';
   let tris = '—', verts = '—', bbox = '—', diag = '—', pct = '—', vol = '—';
@@ -19967,9 +20051,8 @@ function refreshPropertiesPanel() {
       if (!p.mesh) { if (p.instancedMesh && _ownMaterialOf(p.instancedMesh) === mat) n++; continue; }
       if (seen.has(p.mesh)) continue;
       seen.add(p.mesh);
-      let m = _ownMaterialOf(p.mesh);
-      if (Array.isArray(m)) m = m[0];
-      if (m === mat) n += 1;
+      const m = _ownMaterialOf(p.mesh);
+      if (m === mat || (Array.isArray(m) && m.includes(mat))) n += 1;
     }
     return n;
   };
@@ -20024,6 +20107,23 @@ function refreshPropertiesPanel() {
     const mat = _matOfPart(p);
     if (mat && !p.isPrimitive && !p.isSpline) {
       materialHtml = `<div class="prop-mat-strip">${_matChip(mat, _countPartsUsingMaterial(mat), true)}</div>`;
+    }
+    // A part of several colours (C4D: a material on a polygon selection) lists them: the swatch recolours one, the arrow picks its faces
+    // in Edit mesh, the cross gives them back to the main material. Each is one undo step.
+    const fg = (!p.isPrimitive && !p.isSpline && p.mesh) ? _faceGroupsOf(p) : null;
+    if (fg) {
+      const row = (g) => {
+        const hex = '#' + (g.mat && g.mat.color ? g.mat.color.getHexString() : 'aaaaaa');
+        const nm = g.mi === 0 ? 'Main' : (g.mat && g.mat.name && g.mat.name.trim()) || hex.toUpperCase();
+        return `<div class="prop-fc-row" data-fc-mi="${g.mi}">
+          <label class="prop-fc-sw" style="background:${hex}" title="${g.mi === 0 ? 'Recolour the main material of this part' : 'Recolour these faces'}"><input type="color" value="${hex}" data-fc="colour" aria-label="Colour"></label>
+          <span class="prop-fc-name" title="${escapeHtml(nm)}">${escapeHtml(nm)}</span>
+          <span class="prop-fc-n">${fmtNum(g.tris)}</span>
+          <button type="button" class="prop-fc-btn" data-fc="pick" title="Pick these faces in Edit mesh (Polygons)" aria-label="Pick these faces"${g.tris ? '' : ' disabled'}><i data-lucide="mouse-pointer-2"></i></button>
+          ${g.mi === 0 ? '<span class="prop-fc-gap"></span>' : '<button type="button" class="prop-fc-btn" data-fc="remove" title="Give these faces back to the main material (one undo step)" aria-label="Remove this face colour"><i data-lucide="x"></i></button>'}
+        </div>`;
+      };
+      faceColHtml = `<div class="prop-facecols" data-part-id="${p.partId}"><div class="prop-fc-head"><span>Face colours</span><span class="prop-fc-count">${fg.length}</span></div>${fg.map(row).join('')}</div>`;
     }
     const tags = [];
     {
@@ -20227,6 +20327,7 @@ function refreshPropertiesPanel() {
     </div>
     <div class="prop-tags">${tagsHtml}</div>
     ${_splOn ? '' : `<div class="prop-material-row">${materialHtml || `<span class="prop-mat-empty">${ids.length ? 'No material assigned' : 'No material selected'}</span>`}</div>`}
+    ${_splOn ? '' : faceColHtml}
     <div class="prop-shade cmd-num is-off" id="prop-shade"></div>`;
   // A line: the Shape (rectangle, circle, polygon) and Spline cards, C4D style
   if (_splOn) {
@@ -20329,6 +20430,24 @@ function refreshPropertiesPanel() {
       if (mat) _removeMaterialFromSelection(mat);
     });
   });
+  // the face colours of one part (see faceColHtml)
+  {
+    const fc = el.querySelector('.prop-facecols');
+    if (fc) {
+      const pid = parseInt(fc.dataset.partId, 10);
+      fc.addEventListener('click', (e) => {
+        const b = e.target.closest && e.target.closest('button[data-fc]'); if (!b) return;
+        const mi = parseInt(b.closest('.prop-fc-row').dataset.fcMi, 10);
+        if (b.dataset.fc === 'pick') { const n = _faceGroupPick(pid, mi); if (!n) toast('Pick faces', 'Could not pick them: is Edit mesh available for this part?', 'info', 2600); }
+        else if (b.dataset.fc === 'remove') _faceGroupSet(pid, mi, null);
+      });
+      fc.addEventListener('change', (e) => {
+        const inp = e.target; if (!inp || inp.dataset.fc !== 'colour') return;
+        const mi = parseInt(inp.closest('.prop-fc-row').dataset.fcMi, 10);
+        _faceGroupSet(pid, mi, getOrCreateMaterial(new THREE.Color(inp.value)), mi === 0 ? 'Recolour part' : 'Recolour faces');
+      });
+    }
+  }
   el.querySelectorAll('.prop-mat-multi-row[data-action="edit-material"]').forEach(row => {
     const matOf = () => { const u = row.dataset.matUuid; return u && typeof _collectLiveMaterials === 'function' ? (_collectLiveMaterials().find(i => i.mat?.uuid === u) || {}).mat : null; };
     row.addEventListener('click', (e) => { if (!_typingIn(e)) _openMatFromProps(matOf()); });
@@ -20769,6 +20888,24 @@ function pushUndo(op) {
   _refreshUndoRedoButtons();
   // one look at the groups after the action has settled (see _autoCleanCheck)
   if (!op.auto && !_emptyWatch.queued) { _emptyWatch.queued = true; setTimeout(_autoCleanCheck, 0); }
+  _faceMatSaneSoon();
+}
+// A part that wears a list of materials is drawn group by group, so a geometry with no groups is not drawn at all. A tool that builds a
+// new surface without them (a remesh, a boolean) would leave such a part invisible: after every step, a part of several materials
+// whose geometry has no groups wears its main material all over (one group), and a group past the end of its list wears the main one.
+let _faceMatSaneT = 0;
+function _faceMatSaneSoon() { if (!_faceMatSaneT) _faceMatSaneT = setTimeout(_faceMatSane, 0); }
+function _faceMatSane() {
+  _faceMatSaneT = 0;
+  let n = 0;
+  for (const p of state.parts) {
+    const h = p && !p.deleted && p.mesh; if (!h || !h.geometry || !h.geometry.attributes || !h.geometry.attributes.position) continue;
+    const own = _matOf(h); if (!Array.isArray(own)) continue;
+    const g = h.geometry, cnt = g.index ? g.index.count : g.attributes.position.count;
+    if (!g.groups || !g.groups.length) { g.addGroup(0, cnt, 0); n++; continue; }
+    for (const gr of g.groups) if (!(gr.materialIndex < own.length)) { gr.materialIndex = 0; n++; }
+  }
+  if (n) { try { console.info('[colours] ' + n + ' part(s) of several materials had no groups: they wear their main material'); } catch (_) {} requestRender(); }
 }
 
 // ─── Undo / redo op registry ──────────────────────────────────────────────
@@ -21959,7 +22096,8 @@ window.addEventListener('beforeunload', (e) => {
 // cyan outline stayed in place" or "tree row stayed selected after a
 // destructive undo".
 function _finalizeUndo({ rebuildTree: doRebuildTree = false } = {}) {
-  _flagVisSoon();     // (an undone / redone hide or show changes what the small-part tools look at)
+  _flagVisSoon();
+  try { _faceMatSaneSoon(); } catch (_) {}     // (an undone / redone hide or show changes what the small-part tools look at)
   // A group that the undo / redo just removed cannot stay selected: its id
   // would show up as "Group -2" in Properties and aim the gizmo at nothing.
   if (state.selectedGroupIds && state.selectedGroupIds.size) {
@@ -23808,8 +23946,21 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
       // material editor changes the material, and the part's `originalColor` may not have followed). A copy drawn as one instanced mesh
       // keeps the colour of its own instance, which the material does not carry.
       const ownColour = !!(srcMat && !Array.isArray(srcMat) && srcMat.isMaterial && srcMat.color && item.part && item.part.mesh && !item.isClone);
-      const matKey = ((srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) ? srcMat.uuid : 'plain') + '|' + (ownColour ? 'own' : item.color.getHexString());
+      const matKey = Array.isArray(srcMat) ? 'list|' + srcMat.map(m => m && m.uuid).join(',')
+        : ((srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) ? srcMat.uuid : 'plain') + '|' + (ownColour ? 'own' : item.color.getHexString());
       mat = matCache.get(matKey);
+      if (!mat && Array.isArray(srcMat) && g.groups && g.groups.length > 1) {
+        // A part of several colours (facemat.js): each of its materials is cloned once, as it is now, and the geometry's groups say which
+        // faces wear which (GLTFExporter writes a primitive a group; the OBJ, FBX, USDZ and PLY writers read the groups). It used to be
+        // written in one colour.
+        mat = srcMat.map(m => {
+          const k = 'one|' + (m && m.uuid);
+          let c = matCache.get(k);
+          if (!c) { c = m && m.isMaterial ? m.clone() : new THREE.MeshStandardMaterial({ color: item.color.clone(), metalness: 0.15, roughness: 0.55 }); matCache.set(k, c); }
+          return c;
+        });
+        matCache.set(matKey, mat);
+      }
       if (!mat) {
         if (srcMat && !Array.isArray(srcMat) && srcMat.isMaterial) {
           mat = srcMat.clone();
@@ -23986,7 +24137,7 @@ function buildExportRoot({ visibleOnly, merge, scale, axis, origin, flat = false
   merged.setIndex(new THREE.BufferAttribute(indices, 1));
   // (as Merge parts does: when a part has a texture, every part keeps its own material, as a group, so each texture keeps its UVs)
   let mat = null;
-  if (validParts.some(vp => vp.ranges.some(rg => _hasTexture(rg.mat)))) {
+  if (validParts.some(vp => vp.ranges.some(rg => _hasTexture(rg.mat)) || new Set(vp.ranges.map(rg => rg.mat)).size > 1)) {      // (a texture, or a part of several colours)
     const mats = [], slot = new Map(), byMat = [];
     for (const vp of validParts) for (const rg of vp.ranges) {
       const m = rg.mat && rg.mat.isMaterial ? rg.mat : getOrCreateMaterial(vp.item.color || new THREE.Color(0xaaaaaa));
@@ -24023,6 +24174,42 @@ function _opaqueForExport(root) {
   return copies.size;
 }
 
+// A part of several colours written to PLY, which has colours on its points only: every point gets the colour of the faces round it,
+// and a point that faces of two colours share is written once for each, so no colour runs into its neighbour.
+function _plyFaceColours(o) {
+  const g = o.geometry, pos = g.attributes.position, V = pos.count;
+  const nTri = ((g.index ? g.index.count : V) / 3) | 0;
+  const tm = FM.triMaterials(g.groups, nTri), mats = o.material;
+  const idx = g.index ? Uint32Array.from(g.index.array) : Uint32Array.from({ length: nTri * 3 }, (_, i) => i);
+  const owner = new Int32Array(V).fill(-1), copies = new Map();      // point -> its material; "point,material" -> its copy
+  const extra = [];
+  for (let t = 0; t < nTri; t++) for (let k = 0; k < 3; k++) {
+    const v = idx[t * 3 + k], m = tm[t];
+    if (owner[v] < 0) { owner[v] = m; continue; }
+    if (owner[v] === m) continue;
+    const key = v * 65536 + m;
+    let c = copies.get(key);
+    if (c === undefined) { c = V + extra.length; extra.push(v); copies.set(key, c); }
+    idx[t * 3 + k] = c;
+  }
+  const total = V + extra.length;
+  const out = new THREE.BufferGeometry();
+  for (const name of Object.keys(g.attributes)) {
+    const a = g.attributes[name], size = a.itemSize, GET = ['getX', 'getY', 'getZ', 'getW'];
+    const arr = new Float32Array(total * size);
+    for (let v = 0; v < V; v++) for (let c = 0; c < size; c++) arr[v * size + c] = a[GET[c]](v);
+    for (let i = 0; i < extra.length; i++) for (let c = 0; c < size; c++) arr[(V + i) * size + c] = a[GET[c]](extra[i]);
+    out.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  const col = new Float32Array(total * 3);
+  const put = (v, m) => { const mm = mats[m] || mats[0], c = mm && mm.color; col[v * 3] = c ? c.r : 0.8; col[v * 3 + 1] = c ? c.g : 0.8; col[v * 3 + 2] = c ? c.b : 0.8; };
+  for (let v = 0; v < V; v++) put(v, owner[v] < 0 ? 0 : owner[v]);
+  for (const [key, c] of copies) put(c, key % 65536);
+  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  o.geometry = out;
+  o.material = mats[0];
+}
 function downloadBlob(blob, name) {
   if (_downloadHook) { _downloadHook(blob, name); return; }       // Claude's export: the file goes to the exports folder
   try { window._MOpt?.noteExport(name, blob.size); } catch (_) {}
@@ -24712,12 +24899,15 @@ function _exportFaces(geom) {
   const order = new Uint32Array(nTri), fill = start.slice(0, nPoly);
   for (let t = 0; t < nTri; t++) order[fill[poly[t]]++] = t;
   const sizes = new Uint32Array(nTri), verts = new Uint32Array(nTri * 3);       // (a polygon of n triangles has n + 2 corners at most: never more than the triangles' own 3n)
+  const firstTri = new Uint32Array(nTri);                                          // (the first triangle of each polygon written: its material, for a part of several colours)
+  const tm = geom.groups && geom.groups.length > 1 ? FM.triMaterials(geom.groups, nTri) : null;
   let ns = 0, nv = 0, big = false;
-  const tri = (t) => { verts[nv++] = raw(t, 0); verts[nv++] = raw(t, 1); verts[nv++] = raw(t, 2); sizes[ns++] = 3; };
+  const tri = (t) => { verts[nv++] = raw(t, 0); verts[nv++] = raw(t, 1); verts[nv++] = raw(t, 2); firstTri[ns] = t; sizes[ns++] = 3; };
   for (let q = 0; q < nPoly; q++) {
     const a = start[q], b = start[q + 1], n = b - a;
     if (!n) continue;
     if (n === 1) { tri(order[a]); continue; }
+    if (tm) { let mixed = false; for (let i = a + 1; i < b && !mixed; i++) if (tm[order[i]] !== tm[order[a]]) mixed = true; if (mixed) { for (let i = a; i < b; i++) tri(order[i]); continue; } }      // (a polygon across two colours is written as its triangles)
     if (n === 2) {                                     // the common case: two triangles that share an edge are one quad a, d, b, c
       const t1 = order[a], t2 = order[a + 1];
       let done = false;
@@ -24726,7 +24916,7 @@ function _exportFaces(geom) {
         for (let j = 0; j < 3; j++) {
           if (W[raw(t2, j)] === wb && W[raw(t2, (j + 1) % 3)] === wa) {
             verts[nv++] = raw(t1, k); verts[nv++] = raw(t2, (j + 2) % 3); verts[nv++] = raw(t1, (k + 1) % 3); verts[nv++] = raw(t1, (k + 2) % 3);
-            sizes[ns++] = 4; big = true; done = true; break;
+            firstTri[ns] = t1; sizes[ns++] = 4; big = true; done = true; break;
           }
         }
       }
@@ -24752,10 +24942,31 @@ function _exportFaces(geom) {
       do { const e = next.get(cur); if (!e || loop.length > nb) { ok = false; break; } loop.push(e[1]); cur = e[0]; } while (cur !== first);
       ok = ok && loop.length === nb;
     } else ok = false;
-    if (ok) { for (const v of loop) verts[nv++] = v; sizes[ns++] = loop.length; big = true; }
+    if (ok) { for (const v of loop) verts[nv++] = v; firstTri[ns] = order[a]; sizes[ns++] = loop.length; big = true; }
     else for (let i = a; i < b; i++) tri(order[i]);
   }
-  return big ? { sizes: sizes.subarray(0, ns), verts: verts.subarray(0, nv) } : null;
+  return big ? { sizes: sizes.subarray(0, ns), verts: verts.subarray(0, nv), firstTri: firstTri.subarray(0, ns) } : null;
+}
+// The colours of a mesh of several materials, as the OBJ and FBX writers write them: one entry a colour that a polygon wears (two
+// materials of one colour are one), in the order of the material list, and the colour of each polygon written (the faces of
+// _exportFaces, else each triangle). null: a mesh of one material.
+function _exportFaceMats(meshObj, faces) {
+  const mat = meshObj && meshObj.material, g = meshObj && meshObj.geometry;
+  if (!Array.isArray(mat) || !g || !g.attributes.position) return null;
+  const nTri = ((g.index ? g.index.count : g.attributes.position.count) / 3) | 0;
+  const tm = FM.triMaterials(g.groups, nTri);
+  const key = (m) => m && m.color ? m.color.getHexString() : 'cccccc';
+  const byKey = new Map(), local = new Int32Array(mat.length), cand = [];
+  for (let i = 0; i < mat.length; i++) { const k = key(mat[i]); let j = byKey.get(k); if (j === undefined) { j = cand.length; byKey.set(k, j); cand.push(mat[i]); } local[i] = j; }
+  const nPoly = faces ? faces.sizes.length : nTri;
+  const poly = new Int32Array(nPoly);
+  for (let f = 0; f < nPoly; f++) { const t = faces ? faces.firstTri[f] : f; poly[f] = local[Math.min(tm[t] || 0, mat.length - 1)]; }
+  const used = new Int32Array(cand.length).fill(-1), colours = [];
+  for (let f = 0; f < nPoly; f++) { const c = poly[f]; if (used[c] < 0) used[c] = 1; }
+  for (let c = 0; c < cand.length; c++) if (used[c] > 0) { used[c] = colours.length; const m = cand[c], col = m && m.color; colours.push({ r: col ? col.r : 0.8, g: col ? col.g : 0.8, b: col ? col.b : 0.8, mat: m }); }
+  for (let f = 0; f < nPoly; f++) poly[f] = used[poly[f]];
+  if (!colours.length) return null;
+  return { colours, poly };
 }
 // The polygon of each triangle to write for a source geometry: the numbers it has (an OBJ or FBX file's own, or what Untriangulate
 // left), else the four-sided pairs found as in Wireframe (a part that went through Triangulate stays triangles). null: triangles.
@@ -24882,6 +25093,7 @@ function _fbxBakeMeshGeom(meshObj, lin) {
   out.indices = indices;
   out.triCount = triCount;
   out.uvData = _fbxUvData(meshObj, faces);      // (null when the mesh has no UVs)
+  out.faceMats = _exportFaceMats(meshObj, faces);      // (a part of several colours: see _exportFaceMats)
 
   if (norAttr) {
     // Use Direct layout: one normal per polygon-vertex, in polygon-vertex
@@ -24975,7 +25187,21 @@ async function _exportFbxBinary(root, opts) {
     if (nodes[i].type !== 'Mesh') continue;
     meshIdxToGeomIdx.set(i, bakedGeoms.length);
     bakedGeoms.push({ nodeIdx: i, baked: _fbxBakeMeshGeom(nodes[i].obj, root.userData.exportLin) });
-    const { r, g, b } = _binResolveColor(nodes[i]);
+    const _fmx = bakedGeoms[bakedGeoms.length - 1].baked.faceMats;
+    if (_fmx && _fmx.colours.length > 1) {
+      // A part of several colours: a material for each (shared with the meshes of that colour), connected in this order, and the
+      // geometry's LayerElementMaterial says which polygon wears which (ByPolygon), as Cinema 4D and Blender write and read it.
+      const list = [];
+      for (const c of _fmx.colours) {
+        const _ck = c.r.toFixed(4) + ',' + c.g.toFixed(4) + ',' + c.b.toFixed(4);
+        let _ci = _binMatByColor.get(_ck);
+        if (_ci === undefined) { _ci = perMeshMats.length; _binMatByColor.set(_ck, _ci); perMeshMats.push({ r: c.r, g: c.g, b: c.b }); }
+        list.push(_ci);
+      }
+      meshIdxToMatIdx.set(i, list);
+      continue;
+    }
+    const { r, g, b } = _fmx ? _fmx.colours[0] : _binResolveColor(nodes[i]);
     // One material per colour, shared by the meshes that wear it. (This used
     // to write one per mesh, on the belief that Cinema 4D could not build a
     // file in which models share a material. That was read off files it
@@ -25411,15 +25637,17 @@ async function _exportFbxBinary(root, opts) {
     // meshes and it loads in C4D 2026. We earlier had ByPolygon thinking
     // C4D needed it; that was wrong (the per-polygon Materials array was
     // probably triggering its own scene-construction error).
+    // (a part of several colours: ByPolygon, a material number for each polygon, in the order the materials are connected)
+    const _multi = baked.faceMats && baked.faceMats.colours.length > 1;
     geomNode.children.push({
       name: 'LayerElementMaterial',
       props: [{ type: 'I', value: 0 }],
       children: [
         { name: 'Version', props: [{ type: 'I', value: 101 }] },
         { name: 'Name', props: [{ type: 'S', value: '' }] },
-        { name: 'MappingInformationType', props: [{ type: 'S', value: 'AllSame' }] },
+        { name: 'MappingInformationType', props: [{ type: 'S', value: _multi ? 'ByPolygon' : 'AllSame' }] },
         { name: 'ReferenceInformationType', props: [{ type: 'S', value: 'IndexToDirect' }] },
-        { name: 'Materials', props: [{ type: 'i', value: new Int32Array([0]) }] },
+        { name: 'Materials', props: [{ type: 'i', value: _multi ? baked.faceMats.poly : new Int32Array([0]) }] },
       ],
     });
     const layerChildren = [{ name: 'Version', props: [{ type: 'I', value: 100 }] }];
@@ -25622,10 +25850,10 @@ async function _exportFbxBinary(root, opts) {
       // Each mesh has its own private Material (no sharing — see comment
       // at perMeshMats declaration). Look up by node index, not by color.
       const mIdx = meshIdxToMatIdx.get(ni);
-      if (mIdx != null) {
+      for (const mi of (mIdx == null ? [] : Array.isArray(mIdx) ? mIdx : [mIdx])) {      // (a part of several colours: each, in the order its polygons number them)
         conns.push({ name: 'C', props: [
           { type: 'S', value: 'OO' },
-          { type: 'L', value: MAT_ID_BASE + mIdx },
+          { type: 'L', value: MAT_ID_BASE + mi },
           { type: 'L', value: childId },
         ]});
       }
@@ -25794,14 +26022,20 @@ function _exportFbxAscii(root, opts) {
     const c = mat?.color;
     return c ? { r: c.r, g: c.g, b: c.b } : { r: 0.8, g: 0.8, b: 0.8 };
   };
+  const asciiFaceMats = new Map();       // mesh object -> { colours, poly, idx } for a part of several colours (see _exportFaceMats)
+  const colourIdx = ({ r, g, b }) => {
+    const key = ((r * 255 | 0) << 16) | ((g * 255 | 0) << 8) | (b * 255 | 0);
+    if (!colorHexToIdx.has(key)) { colorHexToIdx.set(key, mats.length); mats.push({ r, g, b }); }
+    return colorHexToIdx.get(key);
+  };
   for (const n of nodes) {
     if (n.type !== 'Mesh') continue;
-    const { r, g, b } = resolveColor(n);
-    const key = ((r * 255 | 0) << 16) | ((g * 255 | 0) << 8) | (b * 255 | 0);
-    if (!colorHexToIdx.has(key)) {
-      colorHexToIdx.set(key, mats.length);
-      mats.push({ r, g, b });
+    const fmx = Array.isArray(n.obj.material) && n.obj.geometry ? _exportFaceMats(n.obj, _exportFaces(n.obj.geometry)) : null;
+    if (fmx && fmx.colours.length > 1) {
+      const idx = fmx.colours.map(colourIdx);
+      if (new Set(idx).size === idx.length) { asciiFaceMats.set(n.obj, { ...fmx, idx }); continue; }      // (two colours that round to one byte value: one material)
     }
+    colourIdx(fmx ? fmx.colours[0] : resolveColor(n));
   }
 
   // Streaming via array-of-strings + Blob([chunks]) — sidesteps the V8
@@ -26059,14 +26293,15 @@ GlobalSettings:  {
 \t\t}
 `);
     }
-    // Single per-mesh material slot, mapped to slot 0.
+    // One material slot, slot 0; a part of several colours has one a colour, and a slot for each polygon (ByPolygon).
+    const _afm = asciiFaceMats.get(meshObj);
     push(`\t\tLayerElementMaterial: 0 {
 \t\t\tVersion: 101
 \t\t\tName: ""
-\t\t\tMappingInformationType: "AllSame"
+\t\t\tMappingInformationType: "${_afm ? 'ByPolygon' : 'AllSame'}"
 \t\t\tReferenceInformationType: "IndexToDirect"
-\t\t\tMaterials: *1 {
-\t\t\t\ta: 0
+\t\t\tMaterials: *${_afm ? _afm.poly.length : 1} {
+\t\t\t\ta: ${_afm ? Array.from(_afm.poly).join(',') : 0}
 \t\t\t}
 \t\t}
 \t\tLayer: 0 {
@@ -26228,10 +26463,15 @@ References:  {
       if (gIdx != null) push(`\tC: "OO",${GEOM_ID_BASE + gIdx},${childId}\n`);
       // Use the same resolveColor helper used when building the mats table,
       // so vertex-colour meshes (merge path) get the right material connection.
-      const { r, g, b } = resolveColor(n);
-      const key = ((r * 255 | 0) << 16) | ((g * 255 | 0) << 8) | (b * 255 | 0);
-      const mIdx = colorHexToIdx.get(key);
-      if (mIdx != null) push(`\tC: "OO",${MAT_ID_BASE + mIdx},${childId}\n`);
+      const _afm = asciiFaceMats.get(n.obj);
+      if (_afm) { for (const mi of _afm.idx) push(`\tC: "OO",${MAT_ID_BASE + mi},${childId}\n`); }      // (in the order its polygons number them)
+      else {
+        const fm1 = Array.isArray(n.obj.material) ? _exportFaceMats(n.obj, _exportFaces(n.obj.geometry)) : null;
+        const { r, g, b } = fm1 ? fm1.colours[0] : resolveColor(n);
+        const key = ((r * 255 | 0) << 16) | ((g * 255 | 0) << 8) | (b * 255 | 0);
+        const mIdx = colorHexToIdx.get(key);
+        if (mIdx != null) push(`\tC: "OO",${MAT_ID_BASE + mIdx},${childId}\n`);
+      }
     }
     if (n.type === 'Null') {
       // NodeAttribute → Model for every group node. The FBX SDK walks
@@ -26382,8 +26622,10 @@ function _exportObjStreaming(root, mtlBaseName) {
     append(`o ${objName}\n`);
     // `g` line: same chain space-separated. Some tools read it as group tags.
     if (chain.length) append('g ' + chain.join(' ') + '\n');
-    const matName = matNameFor(child.material);
-    if (matName) append('usemtl ' + matName + '\n');
+    const faces = _exportFaces(geom);      // quads and n-gons, when the part has polygons (see _exportFaces)
+    const fmat = _exportFaceMats(child, faces);      // (a part of several colours: a usemtl for each, below)
+    const matName = matNameFor(fmat ? fmat.colours[0].mat : child.material);
+    if (matName && !(fmat && fmat.colours.length > 1)) append('usemtl ' + matName + '\n');
 
     // positions (apply world matrix)
     const vc = pos.count;
@@ -26411,9 +26653,25 @@ function _exportObjStreaming(root, mtlBaseName) {
     // (`v[/vt][/vn]`).
     const ia = idx ? idx.array : null;
     const triCount = (ia ? ia.length : vc) / 3;
-    const faces = _exportFaces(geom);      // quads and n-gons, when the part has polygons (see _exportFaces)
 
-    if (faces) {
+    if (fmat && fmat.colours.length > 1) {
+      // A part of several colours: its faces a colour at a time, each run under the usemtl of its material (Blender, Cinema 4D and
+      // three's OBJLoader read them as one object with a material a polygon).
+      const ref = uv && nrm ? (a) => (a + vOffset) + '/' + (a + uvOffset) + '/' + (a + nOffset) : nrm ? (a) => (a + vOffset) + '//' + (a + nOffset) : uv ? (a) => (a + vOffset) + '/' + (a + uvOffset) : (a) => String(a + vOffset);
+      const nF = faces ? faces.sizes.length : triCount;
+      const fStart = new Uint32Array(nF + 1);
+      if (faces) for (let f = 0; f < nF; f++) fStart[f + 1] = fStart[f] + faces.sizes[f];
+      for (let c = 0; c < fmat.colours.length; c++) {
+        append('usemtl ' + matNameFor(fmat.colours[c].mat || { color: new THREE.Color(fmat.colours[c].r, fmat.colours[c].g, fmat.colours[c].b) }) + '\n');
+        for (let f = 0; f < nF; f++) {
+          if (fmat.poly[f] !== c) continue;
+          let line = 'f';
+          if (faces) for (let o = fStart[f]; o < fStart[f + 1]; o++) line += ' ' + ref(faces.verts[o] + 1);
+          else for (let k = 0; k < 3; k++) line += ' ' + ref((ia ? ia[f * 3 + k] : f * 3 + k) + 1);
+          append(line + '\n');
+        }
+      }
+    } else if (faces) {
       let o = 0;
       for (let f = 0; f < faces.sizes.length; f++) {
         const n = faces.sizes[f];
@@ -27094,7 +27352,7 @@ function _shadeKind() { return state.viewMode === 'wire' ? (state.shadeUnder || 
 window._clayRefresh = () => { if (_shadeKind() === 'clay') _clayApply(); else if (_shadeKind() === 'cad') _cadApply(); };
 function _ownMaterialOf(o) {
   if (!o) return null;
-  if (_isCadMat(o.material) && !Array.isArray(o.material)) return _cadOwn.get(o) || (_cadInst.get(o) && _cadInst.get(o).mat) || o.material;
+  if (_isCadMat(o.material)) return _cadOwn.get(o) || (_cadInst.get(o) && _cadInst.get(o).mat) || o.material;      // (a part of several colours wears a list of CAD materials: its own list is kept the same way)
   if (_clayMat && o.material === _clayMat) return _clayOwn.get(o) || (_clayInst.get(o) && _clayInst.get(o).mat) || o.material;
   return o.material;
 }
@@ -28970,6 +29228,7 @@ async function _doExportImpl({ format, merge, visibleOnly, scale=1, axis='z-up',
           if (uvA && uvA.itemSize === 2) for (let i = 0; i < uvA.count; i++) uvA.setY(i, 1 - uvA.getY(i));
         }
         if (o.geometry.attributes.color) return;
+        if (Array.isArray(o.material) && o.geometry.groups && o.geometry.groups.length > 1) { try { _plyFaceColours(o); } catch (e) { console.warn('[export] PLY colours:', e); } return; }
         const c = o.material?.color;
         if (!c) return;
         const n = o.geometry.attributes.position?.count || 0;
@@ -35664,6 +35923,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (typeof real === 'string' && real) { savedHere = true; o.name = real; delete o.userData.soName; }
   });
   try { _registerSplines(sceneRoot, importMode); } catch (e) { console.warn('[spline] could not read the lines of this file:', e); }
+  try { _joinPrimitives(sceneRoot); } catch (e) { console.warn('[load] could not join the primitives of a mesh:', e); }      // (a GLB read through Assimp; loadGlbFile has joined its own already)
   sceneRoot.traverse(o => { if (o.isMesh) meshList.push(o); });
   // Texture coordinates run one way in the scene: V from the top, as glTF has them, which is what three's GLB and USDZ writers expect
   // (the USDZ writer turns V for its file; the OBJ, FBX and PLY writers do too: the OBJ writer, _fbxUvData, the PLY branch of _doExportImpl). OBJ, FBX and 3MF count V from the
@@ -35733,6 +35993,7 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     if (idx) totalBytes += geom.index.array.byteLength;
     let color = new THREE.Color(0xaaaaaa);
     if (m.material?.color) color = m.material.color.clone();
+    else if (Array.isArray(m.material) && m.material[0] && m.material[0].color) color = m.material[0].color.clone();      // (several materials: the first is the part's main one)
     const bbox = geom.boundingBox.clone();
     m.updateWorldMatrix(true, false);
     bbox.applyMatrix4(m.matrixWorld);
@@ -35750,6 +36011,19 @@ async function _ingestSceneRoot(sceneRoot, file, byteLength, format) {
     // one — otherwise each mesh leaks one MeshStandardMaterial / Phong /
     // Lambert (plus any embedded textures) until full page reload.
     const _origMat = m.material;
+    if (Array.isArray(_origMat)) {
+      // A mesh of several materials (an OBJ object with several usemtl, an FBX mesh with a material a polygon, the primitives of a glTF
+      // mesh joined by _joinPrimitives) is one part with a colour a material, each on its own faces, as Cinema 4D has it. Each material is
+      // treated as a single one would be (the app's look, the file's own where it has a texture or the scene was saved here), the same
+      // material twice is one, and the groups become runs over every triangle (facemat.js). Before, an untextured list became one colour.
+      const one = (x) => (savedHere && _loadedMaterial(x)) || (!savedHere && x && _fileMaterial(x)) || getOrCreateMaterial(x && x.color ? x.color : new THREE.Color(0xaaaaaa));
+      const t = FM.tidy(FM.triMaterials(geom.groups, triCount), _origMat.map(one));
+      geom.clearGroups();
+      if (t.mats.length > 1) { for (const r of FM.runs(t.triMat)) geom.addGroup(r.start, r.count, r.materialIndex); m.material = t.mats; }
+      else m.material = t.mats[0];
+      const main = t.mats[0];
+      if (main && main.color) { color.copy(main.color); partInfo.originalColor.copy(main.color); }
+    } else
     m.material = (savedHere && _loadedMaterial(_origMat)) || (!savedHere && _fileMaterial(_origMat)) || getOrCreateMaterial(color);
     // (the attributes to keep are read from the file's own material as well as the new one: a map in the file needs its UVs)
     const _keepFor = [].concat(m.material, _origMat).filter(Boolean);
@@ -36114,6 +36388,7 @@ async function _openDroppedFolder(ents) {
   const pick = rels.filter(([p]) => rank(p) < 99).sort((x, y) => rank(x[0]) - rank(y[0]) || x[0].split('/').length - y[0].split('/').length)[0];
   if (!pick) { toast('No model in that folder', 'Supported: STEP, IGES, BREP, GLB, glTF, FBX, OBJ, 3MF, STL', 'warn', 5000); return; }
   const file = pick[1];
+  try { file.__moSiblings = rels.map(r => r[1]); } catch (_) {}      // (an OBJ finds its .mtl among them)
   if (/\.gltf$/i.test(file.name)) {
     try {
       const json = JSON.parse(await file.text());
@@ -36156,6 +36431,7 @@ async function loadGlbFile(file) {
     } catch (_) { /* parser shape may differ between three.js versions; non-fatal */ }
     const flattened = _flattenSkinnedMeshes(gltf.scene);
     if (flattened) Log.info(`Flattened ${flattened} SkinnedMesh${flattened === 1 ? '' : 'es'} to static geometry (rigging dropped)`, { tag: 'glb' });
+    try { const nj = _joinPrimitives(gltf.scene); if (nj) Log.info(`${fmtNum(nj)} mesh${nj === 1 ? '' : 'es'} of several materials, each one part`, { tag: 'load' }); } catch (e) { console.warn('[load] could not join the primitives of a mesh:', e); }
     // A STEP opened as B-rep brings its CAD faces and edges with it: tie them to the meshes before they are taken in.
     try { await _Brep.stageFromGltf(gltf); } catch (e) { console.warn('[B-rep] could not read the CAD edges stored in this file:', e); }
     try { const nb = _Brep.attach(gltf.scene, !!state._importMode); if (nb) Log.info(`B-rep: ${fmtNum(_Brep.info.faces)} faces and ${fmtNum(_Brep.info.edges)} CAD edges on ${fmtNum(nb)} solid${nb === 1 ? '' : 's'}`, { tag: 'load' }); }
@@ -36286,12 +36562,68 @@ async function _convertAnyToGlbWithAssimp(inputBytes, fileName) {
   return result.GetFile(0).GetContent();
 }
 
+// An OBJ keeps its colours in a .mtl file of its own (mtllib). It is read when it came with the OBJ (dropped together, or in the folder
+// that was dropped): Kd is the colour, taken as it is written (linear, as Blender writes and reads it, and as the app's own OBJ writer
+// writes it), d or Tr the opacity, Ns the gloss, map_Kd a picture that came along. Before, the .mtl was never read and every OBJ came in
+// grey or white, whatever its colours; one alone still does, and says where its colours are.
+function _parseMtl(txt) {
+  const lib = new Map();
+  let cur = null;
+  for (const raw of String(txt).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line[0] === '#') continue;
+    const sp = line.search(/\s/), k = (sp < 0 ? line : line.slice(0, sp)).toLowerCase(), v = sp < 0 ? '' : line.slice(sp + 1).trim();
+    if (k === 'newmtl') { cur = { d: 1 }; lib.set(v, cur); continue; }
+    if (!cur) continue;
+    const nums = v.split(/\s+/).map(Number);
+    if (k === 'kd' && nums.length >= 3 && nums.every(Number.isFinite)) cur.kd = nums.slice(0, 3);
+    else if (k === 'd' && Number.isFinite(nums[0])) cur.d = nums[0];
+    else if (k === 'tr' && Number.isFinite(nums[0])) cur.d = 1 - nums[0];
+    else if (k === 'ns' && Number.isFinite(nums[0])) cur.ns = nums[0];
+    else if (k === 'map_kd' && v) cur.mapKd = v.split(/\s+/).pop();
+  }
+  return lib;
+}
+function _objApplyMtl(root, text, file) {
+  const libs = [...String(text).matchAll(/^mtllib\s+(.+?)\s*$/gm)].map(m => m[1].trim());
+  if (!libs.length) return 0;
+  const sib = (file && file.__moSiblings) || [];
+  const byName = new Map(sib.map(f => [String(f.name).toLowerCase(), f]));
+  const base = (s) => String(s).split(/[\\/]/).pop().toLowerCase();
+  const found = libs.map(l => byName.get(base(l))).filter(Boolean);
+  if (!found.length) {
+    try { toast('Colours not read', 'The colours of this OBJ are in ' + libs.join(', ') + ': drop the .obj together with it (or the folder that holds both) to read them.', 'info', 7000); } catch (_) {}
+    return 0;
+  }
+  return Promise.all(found.map(f => f.text())).then((texts) => {
+    const lib = _parseMtl(texts.join('\n'));
+    const tex = new Map(), loader = new THREE.TextureLoader();
+    let n = 0;
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        const e = m && lib.get(m.name);
+        if (!e || m.userData.__moMtl) continue;
+        m.userData.__moMtl = true; n++;
+        if (e.kd && m.color) m.color.setRGB(e.kd[0], e.kd[1], e.kd[2]);
+        if (e.d < 1) { m.opacity = e.d; m.transparent = true; }
+        if (e.ns != null && 'shininess' in m) m.shininess = e.ns;
+        if (e.mapKd) {
+          const f = byName.get(base(e.mapKd));
+          if (f) { let t = tex.get(f); if (!t) { t = loader.load(URL.createObjectURL(f)); t.colorSpace = THREE.SRGBColorSpace; tex.set(f, t); } m.map = t; m.needsUpdate = true; }
+        }
+      }
+    });
+    return n;
+  });
+}
 async function loadObjFile(file) {
   return _runLoad(file, 'OBJ', async () => {
     const text = await file.text();
     setLoaderProgress(35);
     setLoader(true, 'Parsing OBJ scene…', `${(text.length/1048576).toFixed(1)} MB`);
     const root = new OBJLoader().parse(text);
+    try { await _objApplyMtl(root, text, file); } catch (e) { console.warn('[obj] could not read the .mtl:', e); }
     root.userData.__moConv = _objConvention(text);
     await _ingestSceneRoot(root, file, text.length, 'obj');
   });
@@ -36510,7 +36842,9 @@ function selectByColor() {
   }
   for (const p of state.parts) {
     if (p.deleted) continue;
-    if (colors.has(p.originalColor.getHex())) state.selected.add(p.partId);
+    if (colors.has(p.originalColor.getHex())) { state.selected.add(p.partId); continue; }
+    const own = p.mesh ? _ownMaterialOf(p.mesh) : null;          // (a part of several colours is found by any of them)
+    if (Array.isArray(own) && own.some(m => m && m.color && colors.has(m.color.getHex()))) state.selected.add(p.partId);
   }
   // updateGizmo() is critical: without it the gizmo stays attached to the
   // pre-extension single part, so dragging only moves the original — every
@@ -38707,7 +39041,17 @@ function _matOf(h) { return h ? _ownMaterialOf(h) : null; }
 // A part that is given a material shows it in the tree at once (the dot reads the material), whoever gave it: a drop, Assign, undo,
 // a merge, a deleted material's default.
 let _matDotRaf = 0;
-function _matSet(h, m) {
+// A part of several colours (an array of materials over its faces, facemat.js) that is given one material takes it as its main one, the
+// first: the faces in other colours keep theirs, as a polygon selection keeps its material in Cinema 4D. `exact` puts `m` as it is
+// (undo and redo, and the face colour tools, which give the whole list).
+function _matSet(h, m, exact) {
+  if (!exact && m && !Array.isArray(m) && h) {
+    const cur = _matOf(h);
+    if (Array.isArray(cur) && cur.length > 1 && h.geometry && h.geometry.groups && h.geometry.groups.length > 1) {
+      if (cur[0] === m) return;
+      const arr = cur.slice(); arr[0] = m; m = arr;
+    }
+  }
   _matSetRaw(h, m);
   try {
     const p = h && h.userData && h.userData.partId != null ? getPart(h.userData.partId) : null;
@@ -38720,9 +39064,9 @@ function _matSetRaw(h, m) {
   if (!h) return;
   const cur = h.material;
   if (_clayMat && cur === _clayMat) { if (h.isInstancedMesh) { const r = _clayInst.get(h); if (r) r.mat = m; } else _clayOwn.set(h, m); return; }
-  if (!Array.isArray(cur) && _isCadMat(cur)) {
+  if (_isCadMat(cur)) {
     if (h.isInstancedMesh) { const r = _cadInst.get(h); if (r) r.mat = m; } else _cadOwn.set(h, m);
-    h.material = _cadMaterialFor(Array.isArray(m) ? m[0] : m);
+    h.material = _cadMaterialFor(m);      // (a list for a part of several colours: one CAD material for each)
     return;
   }
   h.material = m;
@@ -38754,13 +39098,14 @@ function _collectLiveMaterials() {
   for (const p of state.parts || []) {
     if (p.deleted) continue;
     if (p.isPrimitive) continue;
-    let m = _matOf(_matHolder(p));
-    if (Array.isArray(m)) m = m[0];
-    if (!m || !m.isMaterial || _isNoneMat(m)) continue;
-    let entry = seen.get(m);
-    if (!entry) { entry = { mat: m, count: 0, partIds: [] }; seen.set(m, entry); }
-    entry.count++;
-    entry.partIds.push(p.partId);
+    const own = _matOf(_matHolder(p));
+    for (const m of (Array.isArray(own) ? new Set(own) : [own])) {      // (a part of several colours counts once for each of its materials)
+      if (!m || !m.isMaterial || _isNoneMat(m)) continue;
+      let entry = seen.get(m);
+      if (!entry) { entry = { mat: m, count: 0, partIds: [] }; seen.set(m, entry); }
+      entry.count++;
+      entry.partIds.push(p.partId);
+    }
   }
   // Library-only materials: created via the "New" button without a viewport
   // selection. Stored in state.userMaterials so they survive across
@@ -38977,6 +39322,7 @@ function _wireMatDock() {
       return;
     }
     if (act === 'assign') {
+      { const fp = _facePicks(); if (fp) { const op = _colourFaces(fp, infos[0].mat, 'Assign material to faces'); if (op) _populateMaterialsList(); else toast('Assign', 'The picked polygons have this material already', 'info', 2600); return; } }
       if (!state.selected.size) { toast('Assign', 'Select the parts that should get this material first', 'warn', 3000); return; }
       _matPromoteSelected();
       const before = _matStateSnap();
@@ -39097,7 +39443,7 @@ function _matApplyColorHex(mat, rawHex) {
     if (!p || p.deleted || !p.originalColor) continue;
     const holder = p.mesh || p.instancedMesh;
     const pm = holder ? _ownMaterialOf(holder) : null;
-    if (pm === mat || (Array.isArray(pm) && pm.includes(mat))) p.originalColor.copy(mat.color);
+    if (pm === mat || (Array.isArray(pm) && pm[0] === mat)) p.originalColor.copy(mat.color);      // (the main material: a colour on some faces is not the part's)
   }
   try { _matFollowColorName(mat); } catch (_) {}
   mat.needsUpdate = true;
@@ -40503,7 +40849,7 @@ function _syncPartColours(mat) {
   if (!mat || !mat.color) return;
   for (const p of state.parts) {
     if (!p || p.deleted || !p.originalColor) continue;
-    if (_partWearsMaterial(p, mat)) p.originalColor.copy(mat.color);
+    if (_partWearsMaterial(p, mat)) { const pm = p.mesh ? _ownMaterialOf(p.mesh) : null; if (!Array.isArray(pm) || pm[0] === mat) p.originalColor.copy(mat.color); }
   }
   try { _treeSyncColours(); } catch (_) {}
 }
@@ -40601,7 +40947,7 @@ function _pushMaterialUndo(label, before, edits) {
 function _applyMatBatch(op, dir) {
   for (const it of op.assigns || []) {
     const h = _matHolder(getPart(it.partId));
-    if (h) _matSet(h, it[dir]);
+    if (h) _matSet(h, it[dir], true);
   }
   for (const e of op.edits || []) if (e.matRef && e[dir]) _applyMatSnapshot(e.matRef, e[dir]);
   const user = dir === 'before' ? op.userBefore : op.userAfter;
@@ -42994,8 +43340,22 @@ const _QuickColour = (() => {
   }
   let aimQ = 0;
   const aimSoon = () => { if (aimQ) return; aimQ = requestAnimationFrame(() => { aimQ = 0; if (!open) return; try { aim(); } catch (err) { console.warn('[colour wheel]', err); close(false); } }); };      // (once a frame, however fast the mouse reports)
+  let faceOp = null;                                      // (polygons picked in Edit mesh: the step that gave them a material of their own, kept when the wheel closes)
   function show(byTap) {
-    mats = targets();
+    faceOp = null;
+    let faceMat = null;
+    { const fp = _facePicks(); if (fp) {
+      // the picked polygons get a copy of the material they have now, and the wheel colours that copy (the rest of the part keeps its colour)
+      const p0 = getPart(fp[0].partId), fm = p0 && _faceMatsOf(p0);
+      let t0 = 0; if (fm) { while (t0 < fp[0].pick.length && !fp[0].pick[t0]) t0++; }
+      const base = fm ? fm.mats[fm.triMat[t0] || 0] : null;
+      const fresh = base && base.isMaterial && !_isNoneMat(base) && base.color ? base.clone() : new THREE.MeshStandardMaterial({ color: 0x9a9da3, metalness: 0.15, roughness: 0.55, side: THREE.DoubleSide });
+      fresh.name = '';
+      faceOp = _colourFaces(fp, fresh, 'Colour faces', { noUndo: true });
+      if (!faceOp) return false;
+      faceMat = fresh;
+    } }
+    mats = faceMat ? [faceMat] : targets();
     if (!mats.length) { try { toast('Colour wheel', 'Select a part first: the wheel colours the selection.', 'info', 2500); } catch (_) {} return false; }
     build();
     snaps = mats.map(m => _snapshotMat(m));
@@ -43025,6 +43385,14 @@ const _QuickColour = (() => {
     lookAway(false);
     { const was = root.classList.contains('show'); root.classList.remove('show', 'cancelling'); cancelling = false;
       if (was) { root.classList.add('leaving'); clearTimeout(leaveT); leaveT = setTimeout(() => root.classList.remove('leaving'), 120); } }      // (it draws back in: the way it grew, reversed)
+    if (faceOp) {                                        // (the picked polygons: one step, or nothing if the colour was not changed)
+      const op = faceOp; faceOp = null;
+      if (keep && moved) { const hex = hsv2hex(h, s, v); for (const m of mats) { m.color.set(hex); try { _matFollowColorName(m); } catch (_) {} m.needsUpdate = true; } pushUndo(op); _faceMatDone(); }
+      else { _faceMatApplyOp(op, 'before'); _faceMatDone(); }
+      if (byClick) { const swallow = (e) => { e.stopPropagation(); e.preventDefault(); window.removeEventListener('click', swallow, true); }; window.addEventListener('click', swallow, true); setTimeout(() => window.removeEventListener('click', swallow, true), 400); }
+      mats = []; snaps = [];
+      return;
+    }
     if (keep) {
       if (moved) { const hex = hsv2hex(h, s, v); for (const m of mats) _matApplyColorHex(m, hex); }      // (the bookkeeping that apply() leaves out, once)
       const entries = [];
@@ -48039,7 +48407,8 @@ async function _mergeSelectedCore() {
   // would throw the texture away: then each part keeps the material it had, as a group of the merged mesh (the triangles put in order of
   // material, one group per material), so every texture keeps its own part's UVs.
   let mat;
-  const textured = validParts.some(vp => vp.ranges.some(rg => _hasTexture(rg.mat)));
+  // (and so when a part has several colours already: its faces keep them, as groups)
+  const textured = validParts.some(vp => vp.ranges.some(rg => _hasTexture(rg.mat)) || new Set(vp.ranges.map(rg => rg.mat)).size > 1);
   if (textured) {
     const mats = [], slot = new Map(), byMat = [];
     for (const vp of validParts) for (const rg of vp.ranges) {
@@ -55160,13 +55529,20 @@ setTimeout(() => _dndDecorateTree(), 0);
     // empty groups out of `outParts`): a part with an array material is drawn group by group, and a geometry with none of them is
     // not drawn at all. It used to add groups only when more than one part came back, so Remove hidden faces, Remove holes or
     // Floating pieces emptying one material of a two-material part made the whole part vanish from the viewport.
-    if (src.groups && src.groups.length) {
-      for (const g of src.groups) {
-        const mi = g.materialIndex | 0;
-        const s = spans.find(x => x.materialIndex === mi) || (src.groups.length === 1 ? spans[0] : null);
-        out.addGroup(s ? s.start : 0, s ? s.count : 0, mi);
+    // The groups are the spans that came back, in order, one after the other (two in a row of one material are one), so they
+    // cover every triangle: a part with an array material is drawn group by group, and a geometry with none is not drawn at all.
+    // (It used to give each group of the source the first span of its material, which lost the faces of a material that has more
+    // than one run, as a part of several colours has: facemat.js.)
+    if ((src.groups && src.groups.length) || spans.length > 1) {
+      const runs = [];
+      for (const s of spans) {
+        if (!s.count) continue;
+        const last = runs[runs.length - 1];
+        if (last && last.materialIndex === s.materialIndex && last.start + last.count === s.start) last.count += s.count;
+        else runs.push({ ...s });
       }
-    } else if (spans.length > 1) for (const s of spans) out.addGroup(s.start, s.count, s.materialIndex);
+      for (const r of runs) out.addGroup(r.start, r.count, r.materialIndex);
+    }
     out.setIndex(new THREE.BufferAttribute(newIndex, 1));
     if (!out.attributes.normal) out.computeVertexNormals();
     return out;
@@ -60406,6 +60782,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
   };
   const hotOff = () => { hotX = hotY = -99; hot(null); };
   function assign(mat, ev) {
+    { const fp = _facePicks(); if (fp) { _colourFaces(fp, mat, 'Assign material to faces'); return; } }      // (polygons picked in Edit mesh: they get it, as a material dropped on a polygon selection in Cinema 4D)
     let ids = [...(state.selected || [])];
     if (!ids.length) { const id = pickAtPointer(ev); if (id != null) ids = [id]; }
     if (!ids.length) { toast('Assign', 'Select the parts first, or drop the material on a part', 'info', 3000); return; }
@@ -61976,7 +62353,7 @@ const _Elements = (() => {
     // the tools that work on one kind of piece: Planarize and Extract on polygons, Straighten and Fill on edges, Weld on points or edges
     const en = (id, on) => { const b = $q(id); if (b) b.disabled = !(n && on); };
     en('btn-el-planar', mode === 'faces'); en('btn-el-straight', mode === 'edges'); en('btn-el-weld', mode === 'points' || mode === 'edges');
-    en('btn-el-fill', mode === 'edges'); en('btn-el-extract', mode === 'faces');
+    en('btn-el-fill', mode === 'edges'); en('btn-el-extract', mode === 'faces'); en('btn-el-colour', mode === 'faces');
     { const co = $q('btn-el-close'); if (co) co.disabled = !state.selected.size; }
     const wr = $q('el-weld-row'); if (wr) wr.hidden = mode !== 'points';
     const lp = $q('el-loop'); if (lp) lp.checked = loops;
@@ -62479,6 +62856,7 @@ const _Elements = (() => {
     $q('btn-el-fill')?.addEventListener('click', fillPicked);
     $q('btn-el-close')?.addEventListener('click', () => closeOpen());
     $q('btn-el-extract')?.addEventListener('click', extractPicked);
+    $q('btn-el-colour')?.addEventListener('click', (ev) => { ev.currentTarget.blur(); if (mode !== 'faces' || !total()) { toast('Colour', 'Go to Polygons mode (3) and pick the polygons to colour', 'info', 3200); return; } try { _QuickColour.toggle(); } catch (err) { console.warn('[elements] colour:', err); } });
     { const wf = $q('el-weld'); if (wf) { wf.addEventListener('change', () => { const v = parseFloat(String(wf.value).replace(',', '.')); wf.value = String(isFinite(v) && v > 0 ? v : 0); }); try { _scrubField(wf, { min: 0, max: 1000, step: 0.1, decimals: 2 }); } catch (_) {} } }
     card.addEventListener('cmd-open', activate);
     card.addEventListener('cmd-close', deactivate);
@@ -62520,6 +62898,27 @@ const _Elements = (() => {
     brush: (x, y, how = 'add') => { freshTargets(); const any = record(() => brushAt(x, y, how)); changed(); return any; },
     count: (m) => total(m || mode),
     picked: () => snap().map(x => ({ partId: x.id, points: x.points, edges: x.edges, faces: x.faces })),      // (what is picked, as numbers: for tests)
+    // the picked polygons as triangles of each part, [{ partId, pick: Uint8Array }] (Polygons mode only; null: nothing picked)
+    facePicks: () => {
+      if (!active || mode !== 'faces') return null;
+      const items = [];
+      for (const [p, e] of live()) { if (!e.faces.size) continue; const pick = new Uint8Array(e.R.topo.nTri); for (const t of trisOfPolys(e.R.pg, e.faces)) pick[t] = 1; items.push({ partId: p.partId, pick }); }
+      return items.length ? items : null;
+    },
+    // pick the polygons of these triangles of a selected part (and nothing else): a face colour's "Select"
+    pickTriangles(partId, tris) {
+      const p = getPart(partId); if (!active || mode !== 'faces' || !p || !p.mesh || !state.selected.has(partId)) return 0;
+      let n = 0;
+      record(() => {
+        for (const id of [...sel.keys()]) if (id !== partId) drop(id);
+        const e = entry(p, true); if (!e) return;
+        e.faces.clear();
+        for (const t of tris) if (t < e.R.topo.nTri) e.faces.add(e.R.pg.polyOf[t]);
+        e.dirty = true; n = e.faces.size;
+      });
+      changed();
+      return n;
+    },
     selectAll, clear: clearPicked, delete: del, flipPicked, dissolve: dissolvePicked, planarize: planarizePicked, straighten: straightenPicked, weld: weldPicked, fill: fillPicked, closeOpen, extract: extractPicked, undo: undoPick, redo: redoPick,
     hover: () => (hover && hover.el ? { partId: hover.p.partId, mode: hover.el.mode, id: hover.el.id, loop: hover.loop ? hover.loop.length : 0 } : null),
     loops: (on) => { if (on !== undefined) { loops = !!on; hover = null; syncCard(); schedule(); } return loops; },
@@ -62547,6 +62946,146 @@ const _Elements = (() => {
 })();
 window.__moElements = _Elements.api;
 // ▲ Edit mesh
+// ▼ Colours on faces (installed block)
+// ── Several colours on one part, as Cinema 4D has them: a material on a selection of its faces ───────────────────────────────────
+// The part wears a list of materials (the first is its main one) and its geometry a group for each run of triangles in one material
+// (facemat.js says how: the triangles keep their order, so Edit mesh's polygons and a STEP part's CAD faces stay as they are). Every
+// change is one undo step. A geometry that another part shares (a copy, an instance) is copied first, so the copies keep their colours.
+function _faceMatsOf(p) {                    // { mats, triMat, nTri }: the part's own materials, and the material of each triangle
+  const h = p && p.mesh; if (!h || !h.geometry) return null;
+  const g = h.geometry, pos = g.attributes && g.attributes.position; if (!pos) return null;
+  const nTri = ((g.index ? g.index.count : pos.count) / 3) | 0;
+  const own = _matOf(h);
+  const mats = Array.isArray(own) ? own.slice() : [own];
+  const triMat = Array.isArray(own) ? FM.triMaterials(g.groups, nTri) : new Uint16Array(nTri);
+  for (let t = 0; t < nTri; t++) if (triMat[t] >= mats.length) triMat[t] = 0;      // (a number past the list is drawn with nothing: the main material)
+  return { mats, triMat, nTri };
+}
+const _faceMatShared = (p) => {
+  const g = p.mesh && p.mesh.geometry; if (!g) return false;
+  for (const q of state.parts) if (q !== p && !q.deleted && q.mesh && q.mesh.geometry === g) return true;
+  for (const grp of state.instancedGroups || []) if (grp && grp.instanced && grp.instanced.geometry === g) return true;
+  return false;
+};
+const _faceMatSnap = (p) => { const g = p.mesh.geometry; return { geom: g, groups: (g.groups || []).map(x => ({ start: x.start, count: x.count, materialIndex: x.materialIndex })), mat: _matOf(p.mesh), hash: p.hash }; };
+function _faceMatRestore(p, st) {
+  if (p.mesh.geometry !== st.geom) {
+    try { _Brep.seen(p.mesh); } catch (_) {}
+    p.mesh.geometry = _stampGeometry(st.geom);
+    if (st.hash != null) p.hash = st.hash;
+    p._fp = null; p._fpKey = null;
+    try { _cadEdgesPartSwapped(p); } catch (_) {}
+  }
+  st.geom.clearGroups();
+  for (const x of st.groups) st.geom.addGroup(x.start, x.count, x.materialIndex);
+  _matSet(p.mesh, st.mat, true);
+  const main = Array.isArray(st.mat) ? st.mat[0] : st.mat;
+  if (main && main.color && p.originalColor && !_isNoneMat(main)) p.originalColor.copy(main.color);
+}
+// The part gets a geometry of its own (the same triangles in the same order, so its polygons and its CAD faces come along).
+function _faceMatOwnGeometry(p) {
+  if (!_faceMatShared(p)) return;
+  const src = p.mesh.geometry, out = src.clone();
+  try { if (_polyIds.has(src)) _polyIds.set(out, _polyIds.get(src)); if (_triOnly.has(src)) _triOnly.add(out); } catch (_) {}
+  try { const rec = _Brep.record(src); if (rec) _Brep.put(out, rec); } catch (_) {}
+  const hash = 'fm_' + (state._decSeq = (state._decSeq | 0) + 1);
+  state.geomByHash.set(hash, out);
+  try { _Brep.seen(p.mesh); } catch (_) {}
+  p.mesh.geometry = _stampGeometry(out);
+  p.hash = hash; p._fp = null; p._fpKey = null;
+  try { _cadEdgesPartSwapped(p); } catch (_) {}
+}
+function _faceMatPut(p, triMat, mats) {
+  const g = p.mesh.geometry;
+  g.clearGroups();
+  if (mats.length > 1) for (const r of FM.runs(triMat)) g.addGroup(r.start, r.count, r.materialIndex);
+  _matSet(p.mesh, mats.length > 1 ? mats : mats[0], true);
+  const main = mats[0];
+  if (main && main.color && p.originalColor && !_isNoneMat(main)) p.originalColor.copy(main.color);
+}
+function _faceMatDone() {
+  try { applySelectionColors(); } catch (_) {}
+  try { _treeSyncColours(); } catch (_) {}
+  try { _populateMaterialsList(); } catch (_) {}
+  try { refreshPropertiesPanel(); } catch (_) {}
+  try { _buildBVHsForAllGeoms(); } catch (_) {}
+  try { if (_shadeKind() === 'clay') _clayApply(); else if (_shadeKind() === 'cad') _cadApply(); } catch (_) {}
+  requestRender();
+}
+function _faceMatApplyOp(op, dir) {
+  const items = dir === 'before' ? op.items.slice().reverse() : op.items;
+  for (const it of items) { const p = getPart(it.partId); if (p && p.mesh) _faceMatRestore(p, it[dir]); }
+}
+_UndoOps.register('faceMat', {
+  undo(op) { _faceMatApplyOp(op, 'before'); state.redo.push(op); _finalizeUndo({ rebuildTree: true }); _faceMatDone(); },
+  redo(op) { _faceMatApplyOp(op, 'after'); state.history.push(op); _finalizeUndo({ rebuildTree: true }); _faceMatDone(); },
+});
+// Change the face colours of parts: `edit(fm)` gets { mats, triMat, nTri } and returns { mats, triMat } (or null: nothing to do).
+// One undo step for all of them (o.noUndo: the step is returned and not kept, for the colour wheel, which keeps it when it closes).
+function _faceMatEdit(ids, edit, label, o = {}) {
+  const items = [];
+  for (const id of ids) {
+    const p = getPart(id);
+    if (!p || p.deleted || p.isSpline || p.isPrimitive || p.isCloner) continue;
+    if (!p.mesh && p.instancedMesh) { try { _promoteInstanceToMesh(p); } catch (_) {} }
+    if (!p.mesh) continue;
+    const fm = _faceMatsOf(p); if (!fm) continue;
+    const r = edit(fm, p); if (!r) continue;
+    const t = FM.tidy(r.triMat, r.mats);
+    const before = _faceMatSnap(p);
+    _faceMatOwnGeometry(p);
+    _faceMatPut(p, t.triMat, t.mats);
+    items.push({ partId: p.partId, before, after: _faceMatSnap(p) });
+  }
+  if (!items.length) return null;
+  const op = { type: 'faceMat', label: label || 'Colour faces', items };
+  if (!o.noUndo) pushUndo(op);
+  try { recomputeStats(); } catch (_) {}
+  _faceMatDone();
+  return op;
+}
+// The picked triangles of each part wear `mat` (null: they go back to the part's main material).
+// items: [{ partId, pick }], pick a Uint8Array over the part's triangles. Returns the undo step, or null when nothing changed.
+function _colourFaces(items, mat, label, o = {}) {
+  const byId = new Map((items || []).map(it => [it.partId, it.pick]));
+  return _faceMatEdit([...byId.keys()], (fm, p) => {
+    const pick = byId.get(p.partId);
+    if (!pick || pick.length !== fm.nTri) return null;
+    let mi = 0;
+    if (mat) { mi = fm.mats.indexOf(mat); if (mi < 0) { fm.mats.push(mat); mi = fm.mats.length - 1; } }
+    let any = false;
+    for (let t = 0; t < fm.nTri && !any; t++) if (pick[t] && fm.triMat[t] !== mi) any = true;
+    if (!any) return null;
+    return { mats: fm.mats, triMat: FM.paint(fm.triMat, pick, mi) };
+  }, label, o);
+}
+// One of a part's face colours (its number in the list, never the main one) wears another material, or goes back to the main one (null).
+function _faceGroupSet(partId, mi, mat, label) {
+  return _faceMatEdit([partId], (fm) => {
+    if (!(mi >= 0 && mi < fm.mats.length) || (!mat && mi === 0)) return null;
+    if (mat) { if (fm.mats[mi] === mat) return null; const mats = fm.mats.slice(); mats[mi] = mat; return { mats, triMat: fm.triMat }; }
+    const pick = new Uint8Array(fm.nTri); for (let t = 0; t < fm.nTri; t++) if (fm.triMat[t] === mi) pick[t] = 1;
+    return { mats: fm.mats, triMat: FM.paint(fm.triMat, pick, 0) };
+  }, label || (mat ? 'Recolour faces' : 'Remove face colour'));
+}
+// The face colours of a part, for the panels: [{ mi, mat, tris, first }] (mi 0 is the main material).
+function _faceGroupsOf(p) {
+  const fm = _faceMatsOf(p); if (!fm || fm.mats.length < 2) return null;
+  return FM.census(fm.triMat, fm.mats.length).map(c => ({ mi: c.materialIndex, mat: fm.mats[c.materialIndex], tris: c.tris, first: c.first }));
+}
+// The polygons that Edit mesh has picked, as triangles (null when it is off, not in Polygons mode, or nothing is picked).
+function _facePicks() { try { return _Elements.isActive() ? _Elements.api.facePicks() : null; } catch (_) { return null; } }
+// Pick a face colour's triangles in Edit mesh (Polygons mode), the part selected.
+function _faceGroupPick(partId, mi) {
+  const p = getPart(partId), fm = p && _faceMatsOf(p); if (!fm) return 0;
+  const tris = []; for (let t = 0; t < fm.nTri; t++) if (fm.triMat[t] === mi) tris.push(t);
+  if (!tris.length) return 0;
+  if (!(state.selected.size === 1 && state.selected.has(partId))) { state.selected.clear(); try { state.selectedGroupIds.clear(); } catch (_) {} state.selected.add(partId); try { applySelectionColors(); rebuildTreeSelectionOnly(); refreshPropertiesPanel(); updateGizmo(); } catch (_) {} }
+  try { _Elements.api.mode('faces'); } catch (_) {}
+  return _Elements.api.pickTriangles(partId, tris);
+}
+window.__moAgent = Object.assign(window.__moAgent || {}, { colourFaces: _colourFaces, faceGroupSet: _faceGroupSet, faceGroupsOf: (id) => { const g = _faceGroupsOf(getPart(id)); return g ? g.map(x => ({ mi: x.mi, colour: x.mat && x.mat.color ? '#' + x.mat.color.getHexString() : null, name: x.mat ? x.mat.name : '', tris: x.tris })) : null; }, faceGroupPick: _faceGroupPick, facePicks: _facePicks });
+// ▲ Colours on faces
 
 // ── Icon lines on whole device pixels ───────────────────────────────────────────────────────────────────────────────
 // --icon-stroke is the thickness of an icon's line (see the stylesheet): one device pixel on an ordinary screen, the width of two on a screen

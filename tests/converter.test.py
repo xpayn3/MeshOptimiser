@@ -614,7 +614,7 @@ def t4_instance_colours():
 
 @test
 def t4_face_colours():
-    """A face painted apart from its body keeps its colour: the body is split into a piece a colour."""
+    """A face painted apart from its body keeps its colour, and the body stays one: one mesh, a primitive a colour, on one set of vertices."""
     from OCP.TopAbs import TopAbs_FACE
     from OCP.TopExp import TopExp_Explorer
     doc = TDocStd_Document(TCollection_ExtendedString("XmlOcaf"))
@@ -636,6 +636,15 @@ def t4_face_colours():
     lo, hi = g.world_bbox()
     assert close(lo, [0, 0, 0], 0.01) and close(hi, [20, 20, 20], 0.01), (lo, hi)
     assert g.unique_tris() == 12, g.unique_tris()
+    # one body: one mesh with a primitive a colour, all reading the same vertices (the seam between the colours is shared, so the box
+    # is as closed as it is in one colour), and the two primitives cover the 12 triangles once
+    meshes = [m for m in g.json["meshes"] if len(m["primitives"]) > 1]
+    assert len(g.json["meshes"]) == 1 and len(meshes) == 1, [len(m["primitives"]) for m in g.json["meshes"]]
+    prims = meshes[0]["primitives"]
+    assert len(prims) == 2 and len({p["attributes"]["POSITION"] for p in prims}) == 1, prims
+    assert sum(g.json["accessors"][p["indices"]]["count"] for p in prims) == 36, prims
+    mats = {tuple(round(x, 1) for x in g.json["materials"][p["material"]]["pbrMetallicRoughness"]["baseColorFactor"][:3]) for p in prims}
+    assert mats == {(0.1, 0.3, 0.8), (0.9, 0.1, 0.1)}, mats
 
 
 @test
