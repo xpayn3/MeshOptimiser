@@ -79,7 +79,7 @@ try {
       const info = await evalJS("document.getElementById('mop-info').textContent");
       check(title + ': a new setting runs it again', /triangles/.test(info) && !/left as it was|no longer/.test(info), info);
     }
-    if (name === 'convexHull') check('Convex hull: a small shell', s1.triangles < 600, s1);
+    if (name === 'convexHull') check('Convex hull: a small shell', row && row.triangles_after > 0 && row.triangles_after < 600, row);      // (the part's own count: the scene's is the whole model)
     await call('undo'); await sleep(500);
     check(title + ': one undo puts the part back', (await sum()).triangles === s0.triangles);
     await evalJS("document.querySelector('.section-cmd[data-cmd=\"meshop\"] .cmd-close')?.click()");
@@ -99,7 +99,9 @@ try {
         const b = Buffer.from(arr.buffer); bufs.push(b); views.push({ buffer: 0, byteOffset: off, byteLength: b.length }); accs.push({ bufferView: views.length - 1, componentType: ct, count: arr.length / (type === 'VEC3' ? 3 : 1), type, ...extra }); off += b.length;
       }
     });
-    const gj = { asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0, 1] }], nodes: [{ name: 'BoxA', mesh: 0 }, { name: 'BoxB', mesh: 1 }],
+    // (the boxes are in millimetres, Z up: the app's own convention, so they come in as they are; a glTF that says nothing is
+    //  taken as metres, Y up, as its specification has it)
+    const gj = { asset: { version: '2.0', extras: { meshoptimiser: { up: 'Z', mmPerUnit: 1 } } }, scene: 0, scenes: [{ nodes: [0, 1] }], nodes: [{ name: 'BoxA', mesh: 0 }, { name: 'BoxB', mesh: 1 }],
       meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }, { primitives: [{ attributes: { POSITION: 2 }, indices: 3 }] }], accessors: accs, bufferViews: views, buffers: [{ byteLength: off }] };
     let js = Buffer.from(JSON.stringify(gj)); while (js.length % 4) js = Buffer.concat([js, Buffer.from(' ')]);
     let bb = Buffer.concat(bufs); while (bb.length % 4) bb = Buffer.concat([bb, Buffer.alloc(1)]);
