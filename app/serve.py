@@ -722,6 +722,7 @@ def _convert_thread_run(job_id: str, src_path: Path, dst_path: Path,
         if not opts.get("surfaces", True): cmd += ["--no-surfaces"]
         if opts.get("swap_yz"):  cmd += ["--swap-yz"]
         if opts.get("grid"):     cmd += ["--grid"]
+        if opts.get("split_colours"): cmd += ["--split-colours"]
         if opts.get("brep"):     cmd += ["--brep"]
         # Log which Python interpreter we're calling — makes it obvious in the
         # browser conversion log when a stale serve.py is still using the
@@ -2093,6 +2094,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "swap_yz":   _qbool("swap_yz",   False),
             "brep":      _qbool("brep",      False),
             "grid":      _qbool("grid",      False),
+            "split_colours": _qbool("split_colours", False),
         }
         # Angle in degrees (the converter takes radians), the smallest edge in
         # model units, and the three size groups as the converter's --tiers
