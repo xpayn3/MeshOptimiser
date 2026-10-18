@@ -258,6 +258,7 @@ class Config:
     # each (linear deflection, angular deflection in radians).
     tiers: dict | None = None
     min_edge: float = 0.0        # smallest triangle edge the mesher may make (0 = no limit)
+    grid: bool = False           # curved faces meshed along their own directions, in even strips (gridmesh.py)
     normals: bool = True         # write the CAD surface normals (smooth shading across face seams)
     surfaces: bool = True        # keep the parts of a STEP that are surfaces only (open shells, no solid)
     swap_yz: bool = False        # turn the model a quarter about X (a Z-up file for a Y-up scene, or back)
@@ -646,15 +647,25 @@ def _surface_bodies(shape, color_tool, default_color):
     return shapes, colours
 
 
-def _loose_shells(shape, color_tool, default_color):
+def _loose_shells(shape, color_tool, default_color, shape_tool=None):
     """The shells of a shape that sit outside every solid (the open surface bodies a STEP can carry beside its
-    solids), one body each. Returns (shapes, colours), parallel lists."""
+    solids), one body each; with `shape_tool` (the product has faces coloured in the document) a shell whose faces carry
+    more than one colour is split into a piece a colour, as a solid is. Returns (shapes, colours), parallel lists."""
     shapes, colours = [], []
     exp = TopExp_Explorer(shape, TopAbs_SHELL, TopAbs_SOLID)
     while exp.More():
         sh = exp.Current()
-        shapes.append(sh)
-        colours.append(get_shape_color(sh, color_tool) or default_color)
+        col = get_shape_color(sh, color_tool) or default_color
+        # (a surface body painted face by face, as the cab of the Scania 8x4 is: it came out in one colour, where Cinema 4D
+        # shows its red panels and black trim)
+        split = _split_by_face_color(sh, shape_tool, color_tool, col) if shape_tool is not None else None
+        if split:
+            for piece, pcol in split:
+                shapes.append(piece); colours.append(pcol)
+            RESULT["bodies_split_by_face_colour"] = RESULT.get("bodies_split_by_face_colour", 0) + 1
+        else:
+            shapes.append(sh)
+            colours.append(col)
         exp.Next()
     # Faces in no shell at all (a surface model: trimmed or curve-bounded surfaces, as gear.stp of the AP203 samples has 32 of):
     # they were dropped, and such a STEP came out as "no solid bodies". One body a colour, as an IGES surface model gets.
@@ -1002,7 +1013,7 @@ def walk_xcaf_tree(shape_tool, color_tool, free_labels, doc=None, surfaces=False
             solids, solid_colors = _surface_bodies(shape, color_tool, color)
         elif loose_shells:
             # A STEP with surface-only parts beside its solids: each open shell is a body of its own.
-            sh, shc = _loose_shells(shape, color_tool, color)
+            sh, shc = _loose_shells(shape, color_tool, color, shape_tool if face_colours else None)
             solids += sh; solid_colors += shc
         products[key] = XcafProduct(name=name, color=color, solids=solids,
                                      meshes=[], solid_colors=solid_colors)
@@ -1477,7 +1488,9 @@ def collect_metadata(shape_tool, color_tool, doc, free_labels) -> dict:
 
 def _mesh_shape(shape, linear: float, angular: float, relative: bool) -> None:
     """One run of the mesher. (The constructor does the work: calling
-    Perform() after it, as this used to, walked every face a second time.)"""
+    Perform() after it, as this used to, walked every face a second time.)
+    With CFG.grid the curved faces that are whole four-sided patches (fillets, blends) are then meshed again in even
+    strips along their own directions (gridmesh.py), keeping the points the mesher put on their outlines."""
     from OCP.IMeshTools import IMeshTools_Parameters
     prm = IMeshTools_Parameters()
     prm.Deflection = float(linear)
@@ -1486,7 +1499,9 @@ def _mesh_shape(shape, linear: float, angular: float, relative: bool) -> None:
     prm.InParallel = True
     if CFG.min_edge > 0:
         prm.MinSize = float(CFG.min_edge)
+    t_mesh = time.time()
     m = BRepMesh_IncrementalMesh(shape, prm)
+    RESULT["time_mesher"] = RESULT.get("time_mesher", 0.0) + time.time() - t_mesh
     # BRepMesh_Status: 1 an open wire, 2 a wire that crosses itself, 4 a face it could not mesh, 8 a face meshed again. It was
     # never read: a face the mesher gave up on simply had no triangles. The flags of every run are kept and told at the end.
     try:
@@ -1495,6 +1510,18 @@ def _mesh_shape(shape, linear: float, angular: float, relative: bool) -> None:
         st = 0
     if st:
         RESULT["mesher_status"] = RESULT.get("mesher_status", 0) | st
+    if CFG.grid:
+        import gridmesh
+        # points along long straight edges between wide faces first (no star of triangles from an edge's two ends), then
+        # the strips, which use them
+        t1 = time.time()
+        for k2, v in gridmesh.split_edges(shape, None if relative else float(linear)).items():
+            RESULT.setdefault("grid_edges", {})[k2] = RESULT.get("grid_edges", {}).get(k2, 0) + v
+        t2 = time.time()
+        for k2, v in gridmesh.apply(shape, float(angular), None if relative else float(linear)).items():
+            RESULT.setdefault("grid", {})[k2] = RESULT.get("grid", {}).get(k2, 0) + v
+        RESULT["time_split"] = RESULT.get("time_split", 0.0) + t2 - t1
+        RESULT["time_strips"] = RESULT.get("time_strips", 0.0) + time.time() - t2
 
 
 def _shape_diag(shape) -> float:
@@ -1552,6 +1579,7 @@ def tessellate(shape: TopoDS_Shape, linear_deflection: float = 0.5,
                 k = _refine_small_solids(shape, linear_deflection, angular_deflection)
                 if k: log(f"   {k} small solid{'s' if k != 1 else ''} meshed finer (at most {CFG.size_cap * 100:g} % of their size)")
         log(f"tessellated in {time.time() - t0:.1f}s", "ok")
+        _log_grid()
         return
 
     from OCP.TopoDS import TopoDS_Compound
@@ -1583,6 +1611,16 @@ def tessellate(shape: TopoDS_Shape, linear_deflection: float = 0.5,
             log(f"   {n}: {counts[n]} solids, linear={lin} {mode}, angular={ang:.3f}")
             _mesh_shape(groups[n], lin, ang, relative)
     log(f"tessellated in {time.time() - t0:.1f}s", "ok")
+    _log_grid()
+
+
+def _log_grid() -> None:
+    """With --grid: what the even strips did, and where the time went."""
+    if not CFG.grid: return
+    g = RESULT.get("grid", {}); e = RESULT.get("grid_edges", {})
+    log(f"   even strips: {g.get('grid', 0):,} faces rebuilt, {sum(v for k, v in g.items() if k != 'grid'):,} left as meshed; "
+        f"{e.get('points', 0):,} points on {e.get('edges', 0):,} long edges "
+        f"(mesher {RESULT.get('time_mesher', 0):.1f}s, edges {RESULT.get('time_split', 0):.1f}s, strips {RESULT.get('time_strips', 0):.1f}s)")
 
 
 # Surface normals of the meshes solid_to_mesh() has made, kept beside the
@@ -1785,6 +1823,16 @@ def solid_to_mesh(solid: TopoDS_Shape):
             tris_buf[j - 1, 2] = c - 1
         if reverse:
             tris_buf = tris_buf[:, [1, 0, 2]]
+        # A face meshed round points placed inside it (--grid) can come back with a node the mesher made room for and
+        # never filled: no triangle uses it, and its position is whatever was in memory (not a number, or 1e308). It takes
+        # the place of a used node, so the node numbers the CAD edges refer to stay as they are and no NaN or infinity
+        # reaches the file.
+        unset = None
+        used = np.zeros(n_nodes, dtype=bool); used[tris_buf.ravel()] = True
+        if not used.all():
+            unset = ~used
+            v_arr[unset] = v_arr[np.argmax(used)]
+            verts = np.array(verts, dtype=np.float32); verts[unset] = verts[np.argmax(used)]
         # A face that is only triangles (AP242 tessellated geometry: a COMPLEX_TRIANGULATED_FACE has no surface under it) carries
         # normals of its own, and they are what says which side is out. Files are written whose triangles run the other way round
         # to those normals (NIST's FTC 08 tessellated test part: every triangle), so the winding follows the normals, not the order.
@@ -1828,6 +1876,7 @@ def solid_to_mesh(solid: TopoDS_Shape):
                         n_arr = n_arr @ m[:, :3].T
                     if reverse:
                         n_arr = -n_arr
+                    if unset is not None: n_arr[unset] = (0.0, 0.0, 1.0)      # (nodes no triangle uses, above)
                     ln = np.linalg.norm(n_arr, axis=1)
                     if not np.all(np.isfinite(ln)) or np.any(ln < 1e-6):
                         n_arr = None          # a degenerate point of the surface (a cone's tip): leave this solid to the viewer
@@ -2081,6 +2130,7 @@ def _cache_params(input_path: Path) -> dict:
         "size_cap": CFG.size_cap,
         "tiers": CFG.tiers,
         "min_edge": CFG.min_edge,
+        "grid": CFG.grid,
         "normals": CFG.normals,
         "swap_yz": CFG.swap_yz,
         "surfaces": CFG.surfaces,
@@ -3044,6 +3094,9 @@ def main() -> int:
                          "large parts in %% of the size of the whole model; then linear,angular "
                          "(mm, degrees) for small, medium and large. "
                          "Example: 5,30:2,60:0.2,30:0.05,10")
+    ap.add_argument("--grid", action="store_true",
+                    help="Mesh curved faces along their own directions: a fillet in even strips, a curved panel in a grid "
+                         "(as Cinema 4D does), not a scatter of triangles.")
     ap.add_argument("--min-edge", type=float, default=0.0,
                     help="Smallest triangle edge the mesher may make, in model units (0 = no limit). "
                          "Stops tiny fillets and threads from filling up with slivers.")
@@ -3218,6 +3271,7 @@ def main() -> int:
         lod_error      = float(args.lod_error),
         tiers          = tiers,
         min_edge       = float(args.min_edge),
+        grid           = bool(args.grid),
         normals        = not args.no_normals,
         surfaces       = not args.no_surfaces,
         swap_yz        = bool(args.swap_yz),

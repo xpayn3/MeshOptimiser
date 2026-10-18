@@ -38,7 +38,7 @@ import { buildTopology, pairQuads, buildPolygons, outlineLines } from './meshedi
 import { untriangulate, evenTriangles, pairIntoQuads } from './untriangulate.js?v=12';
 import { unsubdivide } from './unsubdivide.js?v=1';
 import { voxelRemesh } from './voxel.js?v=4';
-import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=11';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=13';
 // Untriangulate until nothing more goes: joining faces makes bigger faces, and a vertex that was on the edge between two of them is
 // then in the middle of one. (Three more passes at most; each is a fraction of the first.)
 function untriangulatePasses(positions, index, opts) {

@@ -5,7 +5,7 @@ import { findEmbossedBodies, findSurfaceMarks, smoothRimNormals } from './emboss
 import { findFloating } from './floating.js?v=1';
 import { fillRoundGrooves, outlineRevolve, revolveLoops, sweepBelt, sweepLoops } from './revolve.js?v=8';
 import { voxelRemesh } from './voxel.js?v=4';
-import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=11';
+import { runMeshOp, runBoolean, withUvs } from './meshops.js?v=13';
 import { carryUvs } from './uvcarry.js?v=2';
 import { createPhoto } from './photo.js?v=5';
 import * as MEDIT from './meshedit.js?v=5';
@@ -1574,7 +1574,7 @@ const _MeshWorkers = (() => {
     workers = null;
   }
   function spawn() {
-    const w = new Worker(new URL('./mesh-worker.js?v=68', import.meta.url), { type: 'module' });
+    const w = new Worker(new URL('./mesh-worker.js?v=70', import.meta.url), { type: 'module' });
     w.onmessage = (e) => {
       const p = pending.get(e.data && e.data.id);
       if (!p) return;
@@ -2410,14 +2410,15 @@ const _ImportSettings = (() => {
     // Tessellation: sag (linear deflection, mm) and angle (degrees) are what
     // the four presets set; "custom" is any other pair. tiers = one pair each
     // for small / medium / large parts, split at two shares of the model's size.
-    sag: 0.5, angle: 30, minEdge: 0, tiered: false,
+    sag: 0.5, angle: 30, minEdge: 0, tiered: false, grid: true,
     tiers: { a: 5, b: 30, s: [2, 60], m: [0.2, 30], l: [0.05, 10] },
     normals: true, surfaces: true, swapYZ: false,
     append: false, fit: true,
   };
   // What each preset stands for. A finer preset also turns less per triangle:
   // with the sag alone a small hole stays a hexagon however fine the setting.
-  const _PRESETS = { '1.0': [1, 30], '0.5': [0.5, 30], '0.2': [0.2, 20], '0.05': [0.05, 12] };
+  // (Clean is what Cinema 4D's default makes of a STEP: about as many triangles, measured on a truck of 2.4 million)
+  const _PRESETS = { '2.0': [2, 38], '1.0': [1, 30], '0.5': [0.5, 30], '0.2': [0.2, 20], '0.05': [0.05, 12] };
   const _num = (id, lo, hi, dflt) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : dflt; };
   const _setNum = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(+(+v).toFixed(4)); };
   function _presetFor(sag, angle) { for (const k in _PRESETS) if (Math.abs(_PRESETS[k][0] - sag) < 1e-9 && Math.abs(_PRESETS[k][1] - angle) < 1e-9) return k; return 'custom'; }
@@ -2469,6 +2470,7 @@ const _ImportSettings = (() => {
       _setNum('imp-tier-a', tr.a); _setNum('imp-tier-b', tr.b);
       document.getElementById('imp-step-tiered').checked  = !!opts.tiered;
       document.getElementById('imp-step-normals').checked = opts.normals !== false;
+      document.getElementById('imp-step-grid').checked    = opts.grid !== false;
       document.getElementById('imp-step-surfaces').checked = opts.surfaces !== false;
       document.getElementById('imp-step-swap').checked    = !!opts.swapYZ;
       { const d = document.getElementById('imp-tess'); if (d) d.open = !!opts.tiered || _presetFor(sag, ang) === 'custom' || (+opts.minEdge || 0) > 0; }
@@ -2490,7 +2492,7 @@ const _ImportSettings = (() => {
   }
 
   // The segmented choices stand in for the two <select>s (which stay as the stored value).
-  const _QHINT = { '1.0': 'Fastest. Curves look faceted.', '0.5': 'Balanced. Recommended for most models.', '0.2': 'Smoother surfaces, more triangles.', '0.05': 'Very smooth. Slow, and the model gets big.', custom: 'Your own numbers, under Tessellation.' };
+  const _QHINT = { '2.0': 'Few, clean triangles: fillets in even strips. Small holes stay a little polygonal.', '1.0': 'Fastest. Curves look faceted.', '0.5': 'Balanced. Recommended for most models.', '0.2': 'Smoother surfaces, more triangles.', '0.05': 'Very smooth. Slow, and the model gets big.', custom: 'Your own numbers, under Tessellation.' };
   function _tiersRead() {
     let a = _num('imp-tier-a', 0.1, 99, 5), b = _num('imp-tier-b', 0.2, 100, 30);
     if (b <= a) b = Math.min(100, a + 1);
@@ -2561,6 +2563,7 @@ const _ImportSettings = (() => {
       out.tiered    = document.getElementById('imp-step-tiered').checked;
       out.tiers     = _tiersRead();
       out.normals   = document.getElementById('imp-step-normals').checked;
+      out.grid      = document.getElementById('imp-step-grid').checked;
       out.surfaces  = document.getElementById('imp-step-surfaces').checked;
       out.swapYZ    = document.getElementById('imp-step-swap').checked;
       out.colors    = document.getElementById('imp-step-colors').value;
@@ -2775,6 +2778,7 @@ async function convertStepViaServer(file, opts = {}) {
     if (+opts.minEdge > 0) q.set('min_edge', String(+opts.minEdge));
     if (opts.tiered && opts.tiers) { const t = opts.tiers; q.set('tiers', `${t.a},${t.b}:${t.s.join(',')}:${t.m.join(',')}:${t.l.join(',')}`); }
     if (opts.normals === false) q.set('normals', '0');
+    q.set('grid', opts.grid === false ? '0' : '1');      // (curved faces in even strips: gridmesh.py)
     if (opts.surfaces === false) q.set('surfaces', '0');
     if (opts.swapYZ) q.set('swap_yz', '1');
     q.set('brep', '1');                   // (the CAD faces and edges come with every conversion: the viewer draws the true CAD edges)
@@ -5151,6 +5155,7 @@ const _Actions = (() => {
     { id:'modePoints',    group:'Edit',       label:'Points mode', words:'points mode: pick the points of a mesh',     kbd:'1', run: () => _Elements.api.mode('points') },
     { id:'modeEdges',     group:'Edit',       label:'Edges mode', words:'edges mode: pick the edges of a mesh',       kbd:'2', run: () => _Elements.api.mode('edges') },
     { id:'modeFaces',     group:'Edit',       label:'Polygons mode', words:'polygons mode: pick the polygons of a mesh', kbd:'3', run: () => _Elements.api.mode('faces') },
+    { id:'removeCadFaces', group:'Edit',      label:'Remove CAD faces', words:'remove cad faces delete b-rep face hole wall boss fillet pocket close patch remesh clean step', run: () => _Elements.api.removeCad() },
     { id:'modeModel',     group:'Edit',       label:'Model mode: pick whole parts',               kbd:'4', run: () => _Elements.api.mode('model') },
     { id:'flipFaces',     group:'Edit',       label:'Reverse normals of picked faces', words:'flip invert turn face orientation winding inside out', run: () => { try { window.__moElements.flipPicked(); } catch (_) {} } },
     { id:'closeOpenEdges', group:'Edit',      label:'Close open edges: cap every rim where the surface stops', words:'close open edges watertight missing faces boundary rim rims cap fill all holes cracks seal make solid closed manifold', run: () => { try { window.__moElements.closeOpen(); } catch (_) {} } },
@@ -7160,6 +7165,9 @@ function initScene() {
   const _hemiTarget = 0.5, _dirTarget = 1.05, _fillTarget = 0.4, _headTarget = 0.65;
   const hemi = new THREE.HemisphereLight(0xffffff, 0x303642, 0); scene.add(hemi);
   const dir  = new THREE.DirectionalLight(0xffffff, 0); dir.position.set(80, 60, 100); scene.add(dir);
+  // (the shadow map at its final size from the start: _shadowRefit used to grow it from three's 512 after the shadow was first drawn, and a
+  // render target that changes size throws its textures away while the parts' shaders still point at them: "binding should be available")
+  try { dir.shadow.mapSize.set(2048, 2048); } catch (_) {}
   const fill = new THREE.DirectionalLight(0xb0c4ff, 0); fill.position.set(-80, -40, 60); scene.add(fill);
   // The headlight: a soft light that travels with the camera, from just above
   // and beside the eye. The three lights above are fixed in the scene, so a
@@ -18179,8 +18187,8 @@ function __edgesCore(d) {
     ids[i] = w;
   }
   map = null;
-  var N = next, edges = new Map(), out = [];
-  var push = function (a, b) { out.push(pos[a*3], pos[a*3+1], pos[a*3+2], pos[b*3], pos[b*3+1], pos[b*3+2]); };
+  var N = next, edges = new Map(), out = [], oid = [], vsum = new Float32Array(N * 3), tn = new Float32Array(triCount * 3);
+  var push = function (a, b) { out.push(pos[a*3], pos[a*3+1], pos[a*3+2], pos[b*3], pos[b*3+1], pos[b*3+2]); oid.push(ids[a], ids[b]); };
   // Faces that meet smoothly (under the threshold) are one patch. A curved surface that was tessellated coarsely, such as the wire
   // of a spring with eight sides, has its facets meeting at a modest angle; it would be drawn as a bundle of lines along the wire.
   // A ring of patches that turns once round (each step 30 to 55 degrees, the steps adding up to about 360) is a smooth surface,
@@ -18199,6 +18207,8 @@ function __edgesCore(d) {
     var e2x = pos[v[2]*3]-ax, e2y = pos[v[2]*3+1]-ay, e2z = pos[v[2]*3+2]-az;
     var nx = e1y*e2z - e1z*e2y, ny = e1z*e2x - e1x*e2z, nz = e1x*e2y - e1y*e2x;
     var len = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1; nx /= len; ny /= len; nz /= len;
+    tn[t*3] = nx; tn[t*3+1] = ny; tn[t*3+2] = nz;
+    for (var q0 = 0; q0 < 3; q0++) { vsum[h[q0]*3] += nx; vsum[h[q0]*3+1] += ny; vsum[h[q0]*3+2] += nz; }
     for (var j = 0; j < 3; j++) {
       var j1 = (j + 1) % 3, key = h[j] * N + h[j1], rkey = h[j1] * N + h[j];
       var o = edges.get(rkey);
@@ -18258,10 +18268,97 @@ function __edgesCore(d) {
     if (cand[i] && smooth.has(pa[i]) && !keep.has(pa[i] * triCount + pb[i])) continue;
     push(sharp[i*5], sharp[i*5+1]);
   }
-  return new Float32Array(out);
+  // The faces at each point of the outline, for the pull of _pulledPosition('edge'): the average normal of the triangles that meet
+  // at the point (xyz) and how far the most turned of them is from it (w, 127 = 180 degrees), four bytes a point.
+  var mc = new Float32Array(N).fill(1);
+  for (i = 0; i < N; i++) {
+    var sx = vsum[i*3], sy = vsum[i*3+1], sz = vsum[i*3+2], sl = Math.sqrt(sx*sx + sy*sy + sz*sz);
+    if (sl > 1e-6) { vsum[i*3] = sx / sl; vsum[i*3+1] = sy / sl; vsum[i*3+2] = sz / sl; } else { vsum[i*3] = 0; vsum[i*3+1] = 0; vsum[i*3+2] = 0; }
+  }
+  for (t = 0; t < triCount; t++) {
+    var fx = tn[t*3], fy = tn[t*3+1], fz = tn[t*3+2];
+    if (fx === 0 && fy === 0 && fz === 0) continue;
+    for (j = 0; j < 3; j++) {
+      w = ids[idx ? idx[t*3+j] : t*3+j];
+      var cc = fx*vsum[w*3] + fy*vsum[w*3+1] + fz*vsum[w*3+2];
+      if (cc < mc[w]) mc[w] = cc;
+    }
+  }
+  var slope = new Int8Array(oid.length * 4);
+  for (i = 0; i < oid.length; i++) {
+    w = oid[i];
+    slope[i*4] = Math.round(vsum[w*3] * 127); slope[i*4+1] = Math.round(vsum[w*3+1] * 127); slope[i*4+2] = Math.round(vsum[w*3+2] * 127);
+    slope[i*4+3] = Math.round(Math.acos(Math.max(-1, Math.min(1, mc[w]))) / Math.PI * 127);
+  }
+  return { pos: new Float32Array(out), slope: slope };
 }
 `;
 const _edgesCoreFn = (() => { try { return new Function(_EDGES_CORE_SRC + ';return __edgesCore;')(); } catch (_) { return null; } })();
+// The line geometry of an outline from what __edgesCore returns: its points, and the faces at each (the 'normal' attribute, see _edgeSlope).
+function _edgesGeomOf(r) {
+  const e = new THREE.BufferGeometry();
+  e.setAttribute('position', new THREE.BufferAttribute(r.pos, 3));
+  if (r.slope && r.slope.length === r.pos.length / 3 * 4) e.setAttribute('normal', new THREE.BufferAttribute(r.slope, 4, true));
+  return e;
+}
+// The faces at each point of a line geometry, which the CAD lines and the selection outline need to keep their whole width on a face seen
+// at an angle (_pulledPosition('edge')): a 'normal' attribute of four bytes a point (normalized Int8), the average normal of the faces
+// that meet there (xyz) and how far the most turned of them is from it (w, 127 = 180 degrees). On the graphics card that is 8 bytes more
+// per line, a third more than its 24 bytes of points. The outline found by angle has it from __edgesCore (in the worker); a CAD file's own
+// edges (_Brep) are points in space, and get it here, once, from the mesh they lie on: the vertices at the same place, with their own
+// normals (their triangles' when the mesh has none). A point no vertex lies on (the CAD edges a remeshed shape kept) gets none: its line
+// then has the depth steps only, as before.
+const _edgeSlopeDone = new WeakSet();
+function _edgeSlope(e, g) {
+  if (!e || !e.attributes || e.attributes.normal || _edgeSlopeDone.has(e)) return;
+  _edgeSlopeDone.add(e);
+  const ep = e.attributes.position, cnt = ep ? ep.count : 0, out = new Int8Array(cnt * 4);
+  try {
+    const sp = g && g.attributes && g.attributes.position;
+    if (cnt && sp && sp.count && !ep.isInterleavedBufferAttribute && ep.itemSize === 3) {
+      const P = 1 / _edgeWeldTol(g), a = ep.array, r = [0, 0, 0];
+      const cell = (x, y, z) => { r[0] = Math.round(x * P); r[1] = Math.round(y * P); r[2] = Math.round(z * P); return ((r[0] * 73856093) ^ (r[1] * 19349663) ^ (r[2] * 83492791)) | 0; };
+      const slotOf = new Map(), keyOf = [], slot = new Int32Array(cnt);
+      for (let i = 0; i < cnt; i++) {
+        const h = cell(a[i * 3], a[i * 3 + 1], a[i * 3 + 2]);
+        let s = slotOf.get(h);
+        if (s === undefined) { s = keyOf.length / 3; slotOf.set(h, s); keyOf.push(r[0], r[1], r[2]); }
+        else if (keyOf[s * 3] !== r[0] || keyOf[s * 3 + 1] !== r[1] || keyOf[s * 3 + 2] !== r[2]) s = -1;      // (another place with the same hash: this point goes without)
+        slot[i] = s;
+      }
+      const S = keyOf.length / 3, sum = new Float32Array(S * 3), hits = [];
+      const add = (v, x, y, z) => {
+        const h = cell(sp.getX(v), sp.getY(v), sp.getZ(v)), s = slotOf.get(h);
+        if (s === undefined || keyOf[s * 3] !== r[0] || keyOf[s * 3 + 1] !== r[1] || keyOf[s * 3 + 2] !== r[2]) return;
+        const l = Math.hypot(x, y, z); if (l < 1e-9) return;
+        x /= l; y /= l; z /= l;
+        sum[s * 3] += x; sum[s * 3 + 1] += y; sum[s * 3 + 2] += z; hits.push(s, x, y, z);
+      };
+      const nrm = g.attributes.normal;
+      if (nrm && nrm.count === sp.count && nrm.itemSize >= 3) { for (let v = 0; v < sp.count; v++) add(v, nrm.getX(v), nrm.getY(v), nrm.getZ(v)); }
+      else {
+        const ix = g.index, T = ix ? ix.count / 3 : sp.count / 3;
+        for (let t = 0; t < T; t++) {
+          const v0 = ix ? ix.getX(t * 3) : t * 3, v1 = ix ? ix.getX(t * 3 + 1) : t * 3 + 1, v2 = ix ? ix.getX(t * 3 + 2) : t * 3 + 2;
+          const ax = sp.getX(v0), ay = sp.getY(v0), az = sp.getZ(v0);
+          const ux = sp.getX(v1) - ax, uy = sp.getY(v1) - ay, uz = sp.getZ(v1) - az, vx = sp.getX(v2) - ax, vy = sp.getY(v2) - ay, vz = sp.getZ(v2) - az;
+          const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+          add(v0, nx, ny, nz); add(v1, nx, ny, nz); add(v2, nx, ny, nz);
+        }
+      }
+      const mc = new Float32Array(S).fill(1);
+      for (let s = 0; s < S; s++) { const l = Math.hypot(sum[s * 3], sum[s * 3 + 1], sum[s * 3 + 2]); if (l > 1e-6) { sum[s * 3] /= l; sum[s * 3 + 1] /= l; sum[s * 3 + 2] /= l; } else { sum[s * 3] = sum[s * 3 + 1] = sum[s * 3 + 2] = 0; } }
+      for (let h = 0; h < hits.length; h += 4) { const s = hits[h], c = hits[h + 1] * sum[s * 3] + hits[h + 2] * sum[s * 3 + 1] + hits[h + 3] * sum[s * 3 + 2]; if (c < mc[s]) mc[s] = c; }
+      for (let i = 0; i < cnt; i++) {
+        const s = slot[i]; if (s < 0) continue;
+        const x = sum[s * 3], y = sum[s * 3 + 1], z = sum[s * 3 + 2]; if (!x && !y && !z) continue;
+        out[i * 4] = Math.round(x * 127); out[i * 4 + 1] = Math.round(y * 127); out[i * 4 + 2] = Math.round(z * 127);
+        out[i * 4 + 3] = Math.round(Math.acos(Math.max(-1, Math.min(1, mc[s]))) / Math.PI * 127);
+      }
+    }
+  } catch (_) { out.fill(0); }
+  e.setAttribute('normal', new THREE.BufferAttribute(out, 4, true));      // (all zero when nothing was found: no pull for the slope)
+}
 // The vertex normals of a mesh, when it has plain ones: they tell the outline which edges the mesh itself shades as smooth.
 function _edgeNormals(g) {
   const n = g.attributes.normal;
@@ -18279,8 +18376,7 @@ function _getEdgesGeom(g) {
       p = new Float32Array(pos.count * 3);
       for (let i = 0; i < pos.count; i++) { p[i * 3] = pos.getX(i); p[i * 3 + 1] = pos.getY(i); p[i * 3 + 2] = pos.getZ(i); }
     }
-    e = new THREE.BufferGeometry();
-    e.setAttribute('position', new THREE.BufferAttribute(_edgesCoreFn({ pos: p, idx: g.index ? g.index.array : null, nrm: _edgeNormals(g), thresholdDeg: 30, weld: _edgeWeldTol(g) }), 3));
+    e = _edgesGeomOf(_edgesCoreFn({ pos: p, idx: g.index ? g.index.array : null, nrm: _edgeNormals(g), thresholdDeg: 30, weld: _edgeWeldTol(g) }));
   }
   catch (_) { _edgesFailed.add(g); return null; }
   _edgesCache.set(g, e);
@@ -18605,9 +18701,9 @@ const _edgesNoWorker = new WeakSet(); // geometries the worker can't take (non-f
 let _edgesWorker = null, _edgesWorkerBroken = false, _edgesSeq = 0, _edgesRefreshTimer = 0;
 const _EDGES_WORKER_SRC = _EDGES_CORE_SRC + `
 self.onmessage = function (e) {
-  var arr;
-  try { arr = __edgesCore(e.data); } catch (err) { self.postMessage({ id: e.data.id, failed: true }); return; }
-  self.postMessage({ id: e.data.id, edges: arr }, [arr.buffer]);
+  var r;
+  try { r = __edgesCore(e.data); } catch (err) { self.postMessage({ id: e.data.id, failed: true }); return; }
+  self.postMessage({ id: e.data.id, edges: r.pos, slope: r.slope }, [r.pos.buffer, r.slope.buffer]);
 };`;
 function _edgesWorkerGet() {
   if (_edgesWorker || _edgesWorkerBroken) return _edgesWorker;
@@ -18618,8 +18714,7 @@ function _edgesWorkerGet() {
       _edgesInFlight.delete(ev.data.id);
       if (g && ev.data.failed) _edgesFailed.add(g);      // this part only: it is drawn as a box, and the worker carries on
       else if (g && !_edgesCache.has(g)) {                // (an inline build or a copy that shares the geometry may have got there first)
-        const eg = new THREE.BufferGeometry();
-        eg.setAttribute('position', new THREE.BufferAttribute(ev.data.edges, 3));
+        const eg = _edgesGeomOf({ pos: ev.data.edges, slope: ev.data.slope });
         _edgesCache.set(g, eg);
         _edgesPrewarmFloats += ev.data.edges.length;
         try { _cadEdgesGeomReady(); } catch (_) {}
@@ -18730,7 +18825,9 @@ function _edgesFor(g, deadline) {
 // would also glow on the back-facing edges of the selected part itself.
 // Draw order of the selection overlays: after the ground grid (500), which only depth-tests and never writes depth, so the floor cannot slice them.
 const _SEL_ORDER_BEHIND = 998, _SEL_ORDER_GLOW = 998, _SEL_ORDER_FRONT = 999;
-const _SEL_LINE_MAT        = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.95, depthTest: true,  depthWrite: false });
+// (the front pass is pulled toward the camera like the CAD lines, so it keeps its whole width on a face seen at an angle: its positionNode
+// is set beside _CAD_EDGE_MAT, where the pull's constants are)
+const _SEL_LINE_MAT        = new THREE.LineBasicNodeMaterial({ color: 0x00ddff, transparent: true, opacity: 0.95, depthTest: true,  depthWrite: false });
 const _SEL_LINE_MAT_BEHIND = new THREE.LineBasicMaterial({ color: 0x00ddff, transparent: true, opacity: 0.35, depthTest: false, depthWrite: false });
 // The soft light on a selected part (Settings > Viewport > Glow on the selection). A copy of the part's own mesh drawn over it, as the
 // outline lines are, so it follows the part with no rebuild. Its colour is strongest where the surface turns away from the camera: the
@@ -18899,6 +18996,7 @@ function _selOutlinePlan(deadline) {
       if (!p || p.deleted || !p.visible || !p.mesh || !p.mesh.isMesh || !p.mesh.geometry) continue;
       const e = _edgesFor(p.mesh.geometry, deadline);
       if (e === _EDGES_PENDING || !e || !e.attributes.position) continue;      // (a smooth part with no feature edges stays in: its glow is its highlight)
+      _edgeSlope(e, p.mesh.geometry);
       items.push({ p, e }); key += p.mesh.id + ':' + e.id + ',';
     }
   }
@@ -19043,13 +19141,15 @@ function _applySelectionColorsImpl() {
     const partsLocal = new THREE.Matrix4().multiplyMatrices(partsRootInv, world);
 
     // Pick the cheaper edge source once we cross the budget.
-    let epos = null;
+    let epos = null, eslope = null;
     let edgesPending = false;
     if (!usedBboxFallback && totalFloats < SELECTION_EDGE_VERT_BUDGET) {
       const edgesGeom = _edgesFor(geom, edgeDeadline);
       if (edgesGeom === _EDGES_PENDING) edgesPending = true;
       else {
+        if (edgesGeom) _edgeSlope(edgesGeom, geom);
         epos = edgesGeom?.attributes?.position?.array || null;
+        eslope = edgesGeom?.attributes?.normal?.array || null;
         if (epos && !epos.length) { epos = null; edgesPending = true; }      // no feature edges (a smooth part): a box, not counted against the budget
       }
       // Skip parts whose feature-edges blew up on construction (returned null);
@@ -19064,14 +19164,14 @@ function _applySelectionColorsImpl() {
       if (!geom.boundingBox) {
         try { geom.computeBoundingBox(); } catch (_) {}
       }
-      epos = _bboxEdgeVerts(geom.boundingBox);
+      epos = _bboxEdgeVerts(geom.boundingBox); eslope = null;
       // A part still waiting on its edges gets a box for now; that must not
       // push every later part onto boxes the way running out of budget does.
       if (!edgesPending) usedBboxFallback = true;
     }
     if (!epos || epos.length === 0) continue;
 
-    sources.push({ epos, world: partsLocal });
+    sources.push({ epos, eslope, world: partsLocal });
     totalFloats += epos.length;
     drawn++;
   }
@@ -19080,19 +19180,27 @@ function _applySelectionColorsImpl() {
   // even on multi-MB selections.
   if (totalFloats > 0) {
     const positions = new Float32Array(totalFloats);
-    let off = 0;
+    // and the faces at each point (see _edgeSlope), turned with the part; a box has none
+    const slopes = new Int8Array(totalFloats / 3 * 4), nMat = new THREE.Matrix3(), nVec = new THREE.Vector3();
+    let off = 0, so = 0;
     for (const s of sources) {
       const epos = s.epos;
       const m = s.world;
-      for (let i = 0; i < epos.length; i += 3) {
+      const sl = s.eslope && s.eslope.length === epos.length / 3 * 4 ? s.eslope : null;
+      if (sl) nMat.getNormalMatrix(m);
+      for (let i = 0, k = 0; i < epos.length; i += 3, k += 4, so += 4) {
         tmpV.set(epos[i], epos[i+1], epos[i+2]).applyMatrix4(m);
         positions[off++] = tmpV.x;
         positions[off++] = tmpV.y;
         positions[off++] = tmpV.z;
+        if (!sl || !(sl[k] | sl[k + 1] | sl[k + 2])) continue;
+        nVec.set(sl[k], sl[k + 1], sl[k + 2]).applyMatrix3(nMat).normalize();
+        slopes[so] = Math.round(nVec.x * 127); slopes[so + 1] = Math.round(nVec.y * 127); slopes[so + 2] = Math.round(nVec.z * 127); slopes[so + 3] = sl[k + 3];
       }
     }
     const merged = new THREE.BufferGeometry();
     merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    merged.setAttribute('normal', new THREE.BufferAttribute(slopes, 4, true));
     state._selMergedGeom = merged;
 
     const linesBehind = new THREE.LineSegments(merged, _SEL_LINE_MAT_BEHIND);
@@ -21976,6 +22084,7 @@ function _finalizeUndo({ rebuildTree: doRebuildTree = false } = {}) {
   refreshPropertiesPanel?.();
   updateGizmo();
   _refreshUndoRedoButtons();
+  try { _Elements.historyChanged(); } catch (_) {}      // (Edit mesh draws its lines and picked pieces on the shapes as they are now)
   requestRender();
 }
 
@@ -27982,45 +28091,62 @@ const _CAD_EDGE_PULL = 0.0016;       // the most a line is ever pulled: this sha
 // plates one unit apart, the old pull let 27% of the front plate's pixels show the back one's lines; this lets none through
 // that the surfaces themselves do not. For an orthographic camera the step is (far − near) / 2²⁴.
 const _DEPTH_STEPS = 5e-7;           // about eight steps of a 24-bit buffer
-const _SLOPE_MAX_ANGLE = 1.5;        // radians (86°): past this a face is edge on and gets no more
-const _SLOPE_PULL_MAX = 0.004;       // the most a steep face adds: this share of the distance from the camera
-// With `sloped`, the line geometry carries a vec4 attribute 'slope' on each vertex: the average normal of the faces that meet there
-// (xyz) and how far the faces turn away from it (w, radians). A face seen at a steep angle changes its depth by a pixel's width
-// times tan(angle) across a single pixel, so a line lying on it needs that much more pull to stay in front of the face next to
-// it; the few steps that do for a face seen head on hide the line along a steep face (the gizmo's blue lines on a bend).
-function _pulledPosition(sloped = false) {
+// On a face seen at an angle θ the depth of the surface changes by a pixel's width times tan θ from one pixel to the next, so a mark
+// that lies on it and reaches `reach` pixels from its middle (half its width, and the smoothing samples a little beyond) is cut along
+// its upper side unless it is pulled that much further. A line on a sloped face lost half its width that way: the Wireframe lines got
+// thinner as the camera turned away from a face. The extra is counted in pixels, not as a share of the distance, so whatever stands in
+// front of the surface by more than a few pixels' depth hides the mark at any zoom. A face nearer than this to edge-on gets no more.
+const _PULL_TAN_MAX = 6;             // tan 80.5°
+// sloped: false (the depth steps only), 'normal' (the line geometry carries the surface's own vertex normals: the Wireframe view's
+// lines, which share the surface's vertices), 'edge' (the 'normal' attribute is four bytes, the average normal of the faces that meet
+// at the point and how far they turn from it, 127 = π: the CAD lines and the selection outline, see _edgeSlope; all zero is no slope),
+// or true: a vec4 attribute 'slope' on each vertex, the average normal of the faces that meet there (xyz) and how far they turn away
+// from it (w, radians) (Edit mesh's lines).
+// reach: in pixels of the drawing buffer, from the middle of the mark to its edge (a plain line is one pixel wide).
+// tanMax: the cap on the slope (Edit mesh's lines take a higher one: at a sharp corner the steepest face is nearly edge-on).
+function _pulledPosition(sloped = false, reach = 1.25, tanMax = _PULL_TAN_MAX) {
   const T = THREE.TSL;
   const wp = T.modelWorldMatrix.mul(T.vec4(T.positionLocal, 1.0)).xyz;       // where the vertex is in the world (instancing is already in positionLocal)
   const toCam = T.cameraPosition.sub(wp);
   const d = T.length(toCam);
   const persp = T.cameraProjectionMatrix.mul(T.vec4(0.0, 0.0, 1.0, 0.0)).w.abs();      // 1 for a perspective camera, 0 for an orthographic one
+  // toward the camera: along the eye ray, or for an orthographic camera along its axis (the way to its position is not the eye ray
+  // there, and a pull along it moved the line sideways on the screen)
+  const view = T.normalize(T.mix(T.cameraWorldMatrix.mul(T.vec4(0.0, 0.0, 1.0, 0.0)).xyz, toCam.div(T.max(d, 1e-9)), persp));
   const stepsP = d.mul(d).div(T.max(T.cameraNear, 1e-6)).mul(_DEPTH_STEPS);
   const stepsO = T.cameraFar.sub(T.cameraNear).mul(_DEPTH_STEPS);
   let pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL));
   if (sloped) {
-    const s = T.attribute('slope', 'vec4');
-    const n = T.normalize(T.modelWorldMatrix.mul(T.vec4(s.xyz, 0.0)).xyz);
-    const facing = T.dot(n, toCam.div(T.max(d, 1e-9)));
-    const c = T.min(T.abs(facing), 1.0);                                     // cosine of the angle between the view and the faces' average normal
-    const worst = T.min(T.acos(c).add(s.w), _SLOPE_MAX_ANGLE);               // the steepest of the faces that meet here
+    // (normalLocal: the copies of an instanced part have it turned with each copy)
+    const raw = sloped === 'normal' || sloped === 'edge' ? T.modelWorldMatrix.mul(T.vec4(T.normalLocal, 0.0)).xyz : T.modelWorldMatrix.mul(T.vec4(T.attribute('slope', 'vec4').xyz, 0.0)).xyz;
+    const n = raw.mul(T.inverseSqrt(T.max(T.dot(raw, raw), 1e-20)));       // (a face of no area has no normal: then no slope, and no NaN)
+    const spread = sloped === 'normal' ? T.float(0.0) : sloped === 'edge' ? T.attribute('normal', 'vec4').w.mul(Math.PI) : T.attribute('slope', 'vec4').w;
+    const a = T.acos(T.clamp(T.dot(n, view), -1.0, 1.0));                  // the angle between the view and the faces' normal
+    // Only where a face the mark lies on looks at the camera: a face that looks away is behind its own part, and a pull there carried
+    // the lines of a thin part's far side through the near one. The steepest face that meets here sets how far.
+    let front = T.smoothstep(-0.02, 0.1, T.cos(T.max(a.sub(spread), 0.0)));
+    if (sloped === 'edge') front = front.mul(T.step(1e-12, T.dot(raw, raw)));      // (a point with no faces found: the depth steps only)
+    const worst = T.min(a.add(spread), Math.atan(tanMax));
     const p11 = T.cameraProjectionMatrix.mul(T.vec4(0.0, 1.0, 0.0, 0.0)).y.abs();
-    const pixel = T.mix(1.0, d, persp).mul(2.0).div(T.max(p11.mul(T.viewportSize.y), 1e-6));   // how wide one pixel is where the line is
-    // Only for faces that look at the camera. The extra is a share of the distance, so from far away it is more than a thin part
-    // is thick, and the lines of its far side came through the near one. A face that looks away is behind its own part: it gets
-    // the few steps and no more (the fade between the two is for the vertices on the outline, whose average normal is side on).
-    pull = pull.add(T.min(pixel.mul(T.tan(worst)), d.mul(_SLOPE_PULL_MAX)).mul(T.smoothstep(-0.45, -0.15, facing)));
+    const pixel = T.mix(1.0, d, persp).mul(2.0).div(T.max(p11.mul(T.viewportSize.y), 1e-6));   // how wide one pixel is where the vertex is
+    pull = pull.add(pixel.mul(reach).mul(T.tan(worst)).mul(front));
   }
-  const moved = wp.add(toCam.div(T.max(d, 1e-9)).mul(pull));
+  const moved = wp.add(view.mul(pull));
   return T.modelWorldMatrixInverse.mul(T.vec4(moved, 1.0)).xyz;            // (positionNode is in the object's own space)
 }
+// The CAD lines and the selection outline keep their whole width on a face seen at an angle: their geometry carries the faces at
+// each point (_edgeSlope). Before, they had the depth steps only, and a slight tilt of the camera thinned or broke them on WebGPU,
+// which does not apply the surfaces' polygonOffset (_cadSurfaceOffset).
 const _CAD_EDGE_MAT = (() => {
   const m = new THREE.LineBasicNodeMaterial({ color: 0x0d0d11, transparent: true, opacity: 0.9, depthWrite: false });
-  m.positionNode = _pulledPosition();
+  m.positionNode = _pulledPosition('edge');
   return m;
 })();
+_SEL_LINE_MAT.positionNode = _pulledPosition('edge');
 // A part's lines, as a child of the part. For the copies of an instanced part the line object shares the copies' instance
 // matrices and count, so it is drawn once per copy, always where the copy's surface is (no baked positions to go stale).
 function _cadAddLine(host, geom) {
+  _edgeSlope(geom, host.geometry);
   const l = new THREE.LineSegments(geom, _CAD_EDGE_MAT);
   l.userData.cadEdge = true; l.raycast = () => {}; l.renderOrder = -2;      // renderOrder -2: before the ground grid (-1), see _cadEdgesBuild
   if (host.isInstancedMesh) {
@@ -28241,6 +28367,12 @@ const _WIRE_MAT = (() => {
   m.positionNode = _pulledPosition();
   return m;
 })();
+// (the lines of a surface that has vertex normals: they keep their whole width on a face seen at an angle, see _PULL_TAN_MAX)
+const _WIRE_MAT_N = (() => {
+  const m = new THREE.LineBasicNodeMaterial({ color: 0x000000 });
+  m.positionNode = _pulledPosition('normal');
+  return m;
+})();
 const _triOnly = new WeakSet();               // a geometry that Triangulate has been run on: its triangle lines are drawn whatever the Lines setting says
 const _polyIds = new WeakMap();                // a geometry → the polygon of each of its triangles (Int32Array), left by Untriangulate
 const _wireData = new WeakMap();               // a surface geometry → { key, lines, polys }: the index of its lines
@@ -28351,6 +28483,10 @@ function _wireGeomFor(g) {
   // surface's vertices with it (the next Solid frame drew from a freed buffer).
   const pa = g.attributes.position;
   w.setAttribute('position', new THREE.BufferAttribute((!pa.isInterleavedBufferAttribute && pa.array instanceof Float32Array && pa.itemSize === 3) ? pa.array : _wireXYZ(pa, false), 3));
+  // The surface's normals as well, the same way (the same numbers, a buffer of their own): with them the lines' shader knows how
+  // steep the face under them is to the view.
+  const na = g.attributes.normal;
+  if (na && !na.isInterleavedBufferAttribute && na.array instanceof Float32Array && na.itemSize === 3 && na.count === pa.count) w.setAttribute('normal', new THREE.BufferAttribute(na.array, 3));
   w.setIndex(new THREE.BufferAttribute(d.lines, 1));
   _wireGeoms.set(g, { key, geom: w });
   if (!_wireListened.has(g)) { _wireListened.add(g); g.addEventListener('dispose', () => _wireDrop(g)); }
@@ -28363,7 +28499,10 @@ function _wireTouch(g) {
   if (!cur || !pa) return false;
   const wa = cur.geom.attributes.position;
   if (!wa || wa.array !== pa.array) return false;
+  const wn = cur.geom.attributes.normal, na = g.attributes.normal;
+  if (wn && (!na || wn.array !== na.array)) return false;
   wa.needsUpdate = true;
+  if (wn) wn.needsUpdate = true;
   if (state.viewMode === 'wire') requestRender();
   return true;
 }
@@ -28383,7 +28522,7 @@ function _wireHosts() {
   return hosts;
 }
 function _wireAdd(host, geom) {
-  const l = new THREE.LineSegments(geom, _WIRE_MAT);
+  const l = new THREE.LineSegments(geom, geom.attributes.normal ? _WIRE_MAT_N : _WIRE_MAT);
   l.userData.wireLine = true; l.raycast = () => {}; l.renderOrder = -2;     // before the ground grid, as the CAD edges are
   try { _Elements.newLine(host, l); } catch (_) {}                          // (Edit mesh: hidden on a part whose pieces are being worked on)
   if (host.isInstancedMesh) {
@@ -39441,8 +39580,55 @@ function _wireMatViewToggle() {
     _setMatViewMode(mode);
     _populateMaterialsList();
   });
+  grp.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); _openMatSizePop(grp); });
   // Initial paint of the active state.
   _setMatViewMode(_matViewMode());
+  _applyMatCardSize(_matCardSize());
+}
+// Right-click the grid / list toggle: a slider for the size of the materials' pictures, a small picture at one end and a large one at
+// the other (like Finder's icon size). One size for both views: the grid's picture from 44 to 96 px (it is drawn at 96, see _matThumb),
+// the list's row picture in step with it (26 px at the grid's 64). Double-click the slider for the size it starts at. Kept per browser.
+const _MAT_SIZE_MIN = 44, _MAT_SIZE_MAX = 96, _MAT_SIZE_DEF = 64;
+function _matCardSize() {
+  let v = NaN;
+  try { v = parseFloat(localStorage.getItem('stepopt-mat-size')); } catch (_) {}
+  return v >= _MAT_SIZE_MIN && v <= _MAT_SIZE_MAX ? v : _MAT_SIZE_DEF;
+}
+function _applyMatCardSize(v) {
+  const pop = document.getElementById('vp-materials-pop');
+  if (!pop) return;
+  pop.style.setProperty('--mat-card', v + 'px');
+  pop.style.setProperty('--mat-row', Math.round(26 * v / _MAT_SIZE_DEF) + 'px');
+}
+function _openMatSizePop(anchor) {
+  let pop = document.getElementById('mat-size-pop');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'mat-size-pop'; pop.className = 'mat-size-pop'; pop.hidden = true;
+    pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', 'Picture size');
+    pop.innerHTML = '<i class="msp-sm" data-lucide="image"></i>'
+      + '<input type="range" min="' + _MAT_SIZE_MIN + '" max="' + _MAT_SIZE_MAX + '" step="1" aria-label="Picture size" title="Picture size (double-click for the usual size)">'
+      + '<i class="msp-lg" data-lucide="image"></i>';
+    document.body.appendChild(pop);
+    const r = pop.querySelector('input');
+    const set = (v) => { _applyMatCardSize(v); try { localStorage.setItem('stepopt-mat-size', String(v)); } catch (_) {} };
+    r.addEventListener('input', () => set(+r.value));
+    r.addEventListener('dblclick', () => { r.value = _MAT_SIZE_DEF; set(_MAT_SIZE_DEF); });
+    const close = () => { pop.hidden = true; };
+    document.addEventListener('pointerdown', (e) => { if (!pop.hidden && !pop.contains(e.target)) close(); }, true);
+    document.addEventListener('keydown', (e) => { if (!pop.hidden && e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } }, true);
+    window.addEventListener('resize', close);
+    _lucide?.();
+  }
+  const r = pop.querySelector('input');
+  r.value = _matCardSize();
+  pop.hidden = false;
+  // under the toggle, its right edge on the toggle's, kept inside the window
+  const a = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+  let left = Math.min(a.right - w, innerWidth - w - 8), top = a.bottom + 6;
+  if (top + h > innerHeight - 8) top = a.top - h - 6;
+  pop.style.left = Math.max(8, left) + 'px'; pop.style.top = Math.max(8, top) + 'px';
+  try { r.focus({ preventScroll: true }); } catch (_) {}
 }
 // Run once DOM is ready — popup markup lives in index.html so the elements
 // exist by the time this module executes, but use a microtask just in case.
@@ -56009,6 +56195,10 @@ setTimeout(() => _dndDecorateTree(), 0);
       // fewer facets on the round faces of a part that still has its CAD faces (roundfaces.js): the deviation is a share of the part's size
       roundFaces: { title: 'Simplify round faces', done: 'Round faces simplified', whole: true, params: [{ key: 'tolerance', label: 'Deviation up to', kind: 'size%', min: 0.005, max: 2, step: 0.005, def: 0.05, help: "How far the surface may move from the true round face, as a share of the part's size. Looser: fewer facets." }, { key: 'segments', label: 'Segments per turn, at least', min: 6, max: 96, step: 1, def: 12, help: 'A full turn keeps at least this many facets, however loose the deviation.' }], sum: (r) => { const n = +(r.collapsed ?? r.dissolved) || 0; return fmtNum(n) + (n === 1 ? ' point' : ' points') + ' dissolved · ' + fmtNum(+r.before || 0) + ' → ' + fmtNum(+r.after || 0) + ' triangles' + (r.left ? ' · ' + fmtNum(+r.left) + ' kept' : '') + (r.why && !n ? ' · ' + r.why : ''); } },
       // fillets and chamfers off a part that still has its CAD faces (defeature.js); the limits are shares of the part's size, 0 switches a kind off
+      // whole CAD faces out (picked in Edit mesh with CAD faces on), the gap patched and the triangles round it made even (cadcut.js)
+      // (their settings are in Edit mesh's CAD edit card, so they open no card here)
+      removeCadFaces: { title: 'Remove CAD faces', done: 'CAD faces removed', params: [], sum: (r) => r.faces + (r.faces === 1 ? ' face' : ' faces') + ' out · ' + (r.close === 'open' ? 'the gaps left open' : r.patched + (r.patched === 1 ? ' gap' : ' gaps') + ' closed') + (r.open ? ' · ' + r.open + ' left open (they ran into an open edge)' : '') + (r.remeshed ? (r.scope === 'whole' ? ' · the whole part remeshed' : ' · remeshed round the cut') : r.scope === 'none' ? ' · not remeshed' : r.why ? ' · not remeshed: ' + r.why : '') },
+      remeshCadFaces: { title: 'Remesh CAD faces', done: 'CAD faces remeshed', params: [], sum: (r) => (r.scope === 'whole' ? 'the whole part' : r.faces + (r.faces === 1 ? ' face' : ' faces')) + ' remeshed, the CAD lines kept' },
       removeBlends: { title: 'Remove fillets and chamfers', done: 'Fillets and chamfers removed', whole: true, params: [{ key: 'maxRadius', label: 'Fillets up to', kind: 'size%', min: 0, max: 50, step: 0.1, def: 2, allowZero: true, help: "The largest fillet radius to take off, as a share of the part's size (the card says what that is in the part's units). 0 leaves every fillet. A half-round boss of that radius counts as a fillet too, so keep it near the fillets you mean." }, { key: 'maxChamfer', label: 'Chamfers up to', kind: 'size%', min: 0, max: 50, step: 0.1, def: 2, allowZero: true, help: "The widest chamfer to take off, as a share of the part's size. 0 leaves every chamfer." }], sum: (r) => { const left = r.skipped ? Object.values(r.skipped).reduce((s, n) => s + n, 0) : 0; const lim = (r.maxRadius > 0 || r.maxChamfer > 0) ? ' (fillets to r ' + (r.maxRadius > 0 ? fmtNum(Math.round(r.maxRadius * 10) / 10) : '0') + ', chamfers to ' + (r.maxChamfer > 0 ? fmtNum(Math.round(r.maxChamfer * 10) / 10) : '0') + ')' : ''; return r.fillets + (r.fillets === 1 ? ' fillet' : ' fillets') + ' and ' + r.chamfers + (r.chamfers === 1 ? ' chamfer' : ' chamfers') + ' off' + lim + (left ? ' · ' + left + ' blend ' + (left === 1 ? 'face' : 'faces') + ' left (' + Object.entries(r.skipped).filter(([, n]) => n).map(([k, n]) => n + ' ' + ({ supports: 'on a face that is not a plane or cylinder', fit: 'whose face could not be fitted', topology: 'of an odd shape', moved: 'that would have to move too far', corner: 'where four or more faces meet at a point', touches: 'touching a blend already taken off' }[k] || k)).join(', ') + ')' : ''); } },
     };
     let cur = null, busy = false, again = false, timer = 0, wired = false, viewBefore = null;
@@ -56054,7 +56244,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       // (the faces with their kinds and radii, the edges and their points go along too: Remove fillets and chamfers reads them)
       return { faceOf, smooth, faces: rec.faces, rows: rec.rows || [], pts: rec.pts ? rec.pts.slice() : new Float32Array(0) };
     };
-    const runOne = (name, it, opts) => { const o = { ...opts, ...(it.cad ? { cad: it.cad } : {}), ...(it.src.UV ? { uv: it.src.UV } : {}) }; return compute({ op: 'meshop', name, positions: it.src.P.slice(), index: it.src.I.slice(), opts: o }, () => runMeshOp(name, it.src.P, it.src.I, o)); };
+    const runOne = (name, it, opts) => { const o = { ...opts, ...(it.extra || {}), ...(it.cad ? { cad: it.cad } : {}), ...(it.src.UV ? { uv: it.src.UV } : {}) }; return compute({ op: 'meshop', name, positions: it.src.P.slice(), index: it.src.I.slice(), opts: o }, () => runMeshOp(name, it.src.P, it.src.I, o)); };
     function swap(p, r, mat) {
       const out = _roundGeom(r, mat), old = p.mesh.geometry, oldHash = p.hash, hash = 'mo_' + (state._decSeq = (state._decSeq | 0) + 1);
       try { _getEdgesGeom(out); } catch (_) {}
@@ -56097,7 +56287,7 @@ setTimeout(() => _dndDecorateTree(), 0);
           const geom = p.mesh.geometry;
           p.mesh.updateWorldMatrix(true, false); sv.setFromMatrixScale(p.mesh.matrixWorld);
           const scale = Math.max(Math.abs(sv.x), Math.abs(sv.y), Math.abs(sv.z)) || 1, src = source(geom);      // (the largest scale: a tolerance in world units then holds along every axis)
-          const it = { partId: p.partId, src, D: diag(src.P), scale, mat: matOf(geom), cad: cadOf(geom) };
+          const it = { partId: p.partId, src, D: diag(src.P), scale, mat: matOf(geom), cad: cadOf(geom), extra: (o.extraFor && o.extraFor[p.partId]) || o.extra || null };      // (extra: what the tool needs besides its settings, e.g. the CAD faces to remove)
           let r;
           try { r = await runOne(name, it, optsFor(name, s, it, o.params)); } catch (e) { r = { ok: false, why: e.message || String(e) }; }
           results.push({ id: p.partId, name: p.name, ok: !!(r && r.ok), why: r && r.why, summary: r && r.ok ? def.sum(r) : undefined, triangles_before: p.triCount, triangles_after: r && r.index ? r.index.length / 3 : undefined });
@@ -60783,10 +60973,13 @@ const _Elements = (() => {
   const MODES = ['points', 'edges', 'faces'], TOOLS = ['click', 'rect', 'brush'];
   const NAME = { points: 'Points', edges: 'Edges', faces: 'Polygons', model: 'Model' };
   const ONE = { points: 'point', edges: 'edge', faces: 'polygon' }, MANY = { points: 'points', edges: 'edges', faces: 'polygons' };
-  const ORANGE = '#ff9a2e', LINE_BLUE = 0x3aa0e8;
+  const ORANGE = '#ff9a2e', PICK_HEX = 0xff9a2e, LINE_BLUE = 0x3aa0e8;      // (PICK_HEX: picked points and edges)
   const BIG = 400000;                    // triangles: a part over this is read when it is clicked, not when the pointer passes over it
   const DRAW_MAX = 40000;                // points or edges painted per part (more are picked all the same)
-  const ALL_POINTS_MAX = 20000;          // a part with more points than this does not show them all in Points mode
+  // Points mode shows every point (corner) of the parts in work, up to this many in all; a part that would go over is left without
+  // dots and the view says so. (It was 20,000 a part, with no word: a CAD part of any size showed no points at all. The dots are one
+  // instanced sprite placed once, not again at each turn of the view, so a few hundred thousand cost little.)
+  const ALL_POINTS_MAX = 400000;
   const OCCLUDE_MAX = 25000;             // pieces a box may test one by one for something standing in front of them
   // the mode button's pictures: a cube with its corners, one edge, one side, or all of it
   const CUBE = '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>';
@@ -60797,7 +60990,10 @@ const _Elements = (() => {
     faces: SVG('<g class="em-c" opacity=".5">' + CUBE + '</g><path class="em-hf" d="M12 12l8-4.5v9L12 21z" fill="currentColor" stroke="none"/>'),
     model: SVG('<path class="em-cf" d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="currentColor" fill-opacity=".38"/><g class="em-c">' + CUBE + '</g>'),
   };
-  let active = false, wired = false, mode = 'faces', tool = 'click', loops = false, brushR = 20, space = 'world';      // space: which way the gizmo's axes point (world, the part's own, or along the picked pieces' normal)
+  let active = false, wired = false, mode = 'faces', tool = 'click', loops = false, cadPick = false, brushR = 20, space = 'world';      // cadPick: CAD edit, a click in Polygons mode picks the whole CAD face
+  // CAD edit's card: how a removal closes the gap (smooth, flat, open) and is remeshed (round the cut, the whole part, not at all), and the remesh's numbers
+  const cadSet = { close: 'smooth', scope: 'local', rings: 1, length: 0, rounds: 5 };
+  let cadLast = '';                      // what the last removal or remesh did, for the card      // space: which way the gizmo's axes point (world, the part's own, or along the picked pieces' normal)
   const SPACES = ['world', 'local', 'normal'];
   let ov = null, ctx = null, hover = null, pending = false, down = null, lastMove = null, moveRaf = 0, group = null, ray = null;
   let box = null, stroke = null, altOrbit = false, prevButtons = null, prevView = null, ptr = null, sizing = null, sizeHold = null, gzOver = false;      // sizing: the brush being resized with the middle button; gzOver: the pointer is on a handle of the gizmo (the brush gives way to the normal pointer)
@@ -60806,12 +61002,15 @@ const _Elements = (() => {
   const picks = [], unpicks = [];        // the history of what was picked: { before, after, at } (at: how long the app's own history was)
   let tc = null, tcHelper = null, pivot = null, grab = null;     // the gizmo on the picked pieces, the point it sits on, and a drag in progress
   let afterDelete = null;                // what was picked before the last delete, to pick it again when the delete is undone
-  const FILL_MAT = new THREE.MeshBasicMaterial({ color: 0xff9a2e, transparent: true, opacity: 0.55, depthTest: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  let OUTLINE_MAT = null;
-  const outlineMat = () => { if (!OUTLINE_MAT) { OUTLINE_MAT = new THREE.LineBasicNodeMaterial({ color: 0xffb45c }); OUTLINE_MAT.positionNode = _pulledPosition(); } return OUTLINE_MAT; };
+  // (The fills lie on the faces they show. polygonOffset, which would keep them in front, is not drawn by this three.js's WebGPU
+  // backend, so they flickered against the faces; they are pulled toward the camera instead, like the lines.)
+  const FILL_MAT = (() => { const m = new THREE.MeshBasicNodeMaterial({ color: 0xff9a2e, transparent: true, opacity: 0.55, depthTest: true, depthWrite: false, side: THREE.DoubleSide }); m.positionNode = _pulledPosition(); return m; })();
+  let OUTLINE_MAT = null, HOT_FILL_MAT = null;
+  const outlineMat = () => { if (!OUTLINE_MAT) { OUTLINE_MAT = new THREE.LineBasicNodeMaterial({ color: 0xffb45c }); OUTLINE_MAT.positionNode = _pulledPosition('normal'); } return OUTLINE_MAT; };
+  const hotFillMat = () => { if (!HOT_FILL_MAT) { HOT_FILL_MAT = new THREE.MeshBasicNodeMaterial({ color: 0xffffff, transparent: true, opacity: 0.34, depthTest: true, depthWrite: false, side: THREE.DoubleSide }); HOT_FILL_MAT.positionNode = _pulledPosition(); } return HOT_FILL_MAT; };
   const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _cam = new THREE.Vector3(), _nm = new THREE.Matrix3(), _ptr = new THREE.Vector2();
   const canvas = () => $q('canvas');
-  const save = () => { try { localStorage.setItem('stepopt-elements', JSON.stringify({ mode, tool, loops, brushR, space })); } catch (_) {} };
+  const save = () => { try { localStorage.setItem('stepopt-elements', JSON.stringify({ mode, tool, loops, cadPick, cadSet, brushR, space })); } catch (_) {} };
 
   // ── a geometry as points, edges and polygons ──
   // What a polygon is: the polygons Untriangulate left when the part has been through it; triangles after Triangulate; otherwise
@@ -60979,6 +61178,17 @@ const _Elements = (() => {
     const e = MEDIT.edgeAtPoint(topo, el.tri, el.id, point, pg.real);
     return e >= 0 ? MEDIT.pointLoop(topo, e, { tri: el.tri, real: pg.real }) : Uint32Array.of(el.id);
   }
+  // The polygons of the CAD face that triangle `tri` of part p is on (CAD faces on, Polygons mode, a part that still has its CAD
+  // faces), or null. A polygon is a pair of triangles that may reach over the face's edge: Remove CAD faces counts a face as picked
+  // only when most of its triangles are.
+  function cadFacePolys(p, R, tri) {
+    if (!cadPick || mode !== 'faces' || !p || !p.mesh) return null;
+    const g = p.mesh.geometry, rec = _Brep.record(g);
+    if (!rec || !rec.faces || !rec.faces.length || rec.tris !== R.topo.nTri) return null;
+    const f = _Brep.faceAt(g, tri); if (!f || !f.triCount) return null;
+    const s = new Set(); for (let t = f.triStart; t < f.triStart + f.triCount; t++) s.add(R.pg.polyOf[t]);
+    return [...s];
+  }
   // how a pick changes what is picked: 'set' (alone), 'add' (Shift), 'take' (Ctrl)
   const howOf = (ev) => (ev.ctrlKey || ev.metaKey) ? 'take' : ev.shiftKey ? 'add' : 'set';
   function put(e, ids, how, toggle) {
@@ -61011,7 +61221,8 @@ const _Elements = (() => {
       const e = entry(h.p, true);
       if (!e) return;
       if (how === 'set') e[mode].clear();
-      put(e, asLoop ? loopOf(e.R, h.el, h.point) : [h.el.id], how, true);
+      const cf = cadFacePolys(h.p, e.R, h.tri);
+      put(e, cf || (asLoop ? loopOf(e.R, h.el, h.point) : [h.el.id]), how, !cf);
     });
     changed();
   }
@@ -61213,6 +61424,8 @@ const _Elements = (() => {
 
   // ── delete ──
   function del() {
+    // CAD faces on: the picked faces of a part that has its CAD faces go out with the gap closed and remeshed (Remove CAD faces)
+    if (cadPick && mode === 'faces' && live().some(([p, e]) => e.faces.size && _Brep.record(p.mesh.geometry))) return removeCadPicked();
     const items = [];
     let n = 0;
     for (const [p, e] of live()) {
@@ -61497,6 +61710,67 @@ const _Elements = (() => {
     clearAll(); hover = null; changed();
     if (res && res.parts) toast('Closed', (rims === 2 && items.length === 1 ? 'The gap between the two rims is closed' : fmtNum(rims) + (rims === 1 ? ' rim' : ' rims') + ' capped') + ' · +' + fmtNum(caps) + ' triangles', 'success', 3800);
     return res;
+  }
+  // ── remove CAD faces ──
+  // The CAD faces most of whose triangles are picked are taken out of their parts, the gaps closed and remeshed (cadcut.js, through
+  // the mesh tools' runner: one undo step, and its card to remesh the whole part or set the edge length).
+  function removeCadPicked() {
+    const T = 'Remove CAD faces';
+    if (!active || mode !== 'faces') { toast(T, 'Go to Polygons mode (3), turn on CAD faces and click the faces to remove', 'info', 3600); return null; }
+    if (!cadPick) { cadPick = true; save(); syncCard(); }                       // (from the palette: the switch goes on, so what is picked next is whole faces)
+    if (!total()) { toast(T, 'Nothing is picked: turn on CAD faces and click a face', 'info', 3000); return null; }
+    const kinds = _Brep.info.kinds && _Brep.info.kinds.length ? _Brep.info.kinds : null;
+    const otherKind = kinds && kinds.indexOf('other') >= 0 ? kinds.indexOf('other') : 10, planeKind = kinds && kinds.indexOf('plane') >= 0 ? kinds.indexOf('plane') : 0;
+    const { jobs, noCad } = pickedCad();
+    if (!jobs.length) { toast(T, noCad ? 'This part has no CAD faces any more (open the STEP with them; a tool that rebuilt the part let them go)' : 'No whole CAD face is picked: turn on CAD faces and click the faces to remove', 'info', 4800); return null; }
+    const extraFor = {};
+    for (const j of jobs) extraFor[j.p.partId] = { remove: j.faces, otherKind, planeKind, close: cadSet.close, scope: cadSet.scope, rings: cadSet.rings, rounds: cadSet.rounds, length: cadSet.length > 0 ? cadSet.length / j.scale : 0 };
+    clearAll(); hover = null; changed();
+    return runCad('removeCadFaces', jobs.map(j => j.p.partId), extraFor);
+  }
+  // The CAD faces most of whose triangles are picked, per part that still has its CAD faces: { jobs: [{ p, faces, scale }], noCad }
+  function pickedCad() {
+    const jobs = []; let noCad = 0;
+    const sv = new THREE.Vector3();
+    for (const [p, e] of live()) {
+      if (!e.faces.size) continue;
+      const g = p.mesh.geometry, rec = _Brep.record(g);
+      if (!rec || !rec.faces || !rec.faces.length || rec.tris !== e.R.topo.nTri) { noCad++; continue; }
+      const per = new Map();
+      for (const t of trisOfPolys(e.R.pg, e.faces)) { const f = _Brep.faceAt(g, t); if (f) per.set(f.index, (per.get(f.index) || 0) + 1); }
+      const faces = [...per].filter(([f, n]) => n * 2 >= rec.faces[f][2]).map(([f]) => f);
+      if (!faces.length) continue;
+      p.mesh.updateWorldMatrix(true, false); sv.setFromMatrixScale(p.mesh.matrixWorld);
+      jobs.push({ p, faces, scale: Math.max(Math.abs(sv.x), Math.abs(sv.y), Math.abs(sv.z)) || 1 });      // (the card's lengths are in the scene's mm)
+    }
+    return { jobs, noCad };
+  }
+  // Remesh, when it is asked for: the picked CAD faces (their outline stays, so the faces round them do not change), or with nothing
+  // picked every selected part that has its CAD faces, whole. The card's edge length and rounds.
+  function remeshCadPicked() {
+    const T = 'Remesh CAD faces';
+    if (!active || mode !== 'faces') { toast(T, 'Go to Polygons mode (3) and turn on CAD faces', 'info', 3000); return null; }
+    let { jobs } = pickedCad();
+    const whole = !jobs.length;
+    if (whole) {
+      const sv = new THREE.Vector3();
+      jobs = [...state.selected].map(id => getPart(id)).filter(p => p && !p.deleted && p.mesh && _Brep.record(p.mesh.geometry)).map(p => { p.mesh.updateWorldMatrix(true, false); sv.setFromMatrixScale(p.mesh.matrixWorld); return { p, faces: null, scale: Math.max(Math.abs(sv.x), Math.abs(sv.y), Math.abs(sv.z)) || 1 }; });
+    }
+    if (!jobs.length) { toast(T, 'The selected parts have no CAD faces (open the STEP with them)', 'info', 4000); return null; }
+    const extraFor = {};
+    for (const j of jobs) extraFor[j.p.partId] = { faces: j.faces || [], rounds: cadSet.rounds, length: cadSet.length > 0 ? cadSet.length / j.scale : 0 };
+    clearAll(); hover = null; changed();
+    return runCad('remeshCadFaces', jobs.map(j => j.p.partId), extraFor);
+  }
+  async function runCad(name, ids, extraFor) {
+    cadLast = 'Working…'; syncCard();
+    let r = null;
+    try { r = await window.__moAgent.meshOp(name, { ids, extraFor }); } catch (err) { console.warn('[elements] ' + name + ':', err); }
+    const ok = r && r.results ? r.results.filter(x => x.ok) : [];
+    cadLast = ok.length ? ok[0].summary + ' · ' + fmtNum(ok.reduce((t, x) => t + (x.triangles_before | 0), 0)) + ' → ' + fmtNum(ok.reduce((t, x) => t + (x.triangles_after | 0), 0)) + ' triangles. Ctrl+Z takes it back.'
+      : (r && r.results && r.results[0] && r.results[0].why) ? 'Left as it was: ' + r.results[0].why : '';
+    syncCard();
+    return r;
   }
   function extractPicked() {
     if (!active) return null;
@@ -61838,11 +62112,19 @@ const _Elements = (() => {
     let o = 0;
     for (const t of tris) for (let k = 0; k < 3; k++) { const v = (ix ? ix[t * 3 + k] : t * 3 + k) * 3; out[o++] = P[v]; out[o++] = P[v + 1]; out[o++] = P[v + 2]; }
     let n = 0; for (const q of e.faces) n += pg.oStart[q + 1] - pg.oStart[q];
-    const lines = new Float32Array(n * 6), P3 = [0, 0, 0]; o = 0;
-    for (const q of e.faces) for (let i = pg.oStart[q]; i < pg.oStart[q + 1]; i++) { const ed = pg.oEdges[i]; for (let s = 0; s < 2; s++) { MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + s], P3); lines[o++] = P3[0]; lines[o++] = P3[1]; lines[o++] = P3[2]; } }
+    // (each line carries the normal of its polygon, so that it is pulled far enough in front of it when it is seen at an angle)
+    const lines = new Float32Array(n * 6), lnrm = new Float32Array(n * 6), P3 = [0, 0, 0]; o = 0;
+    for (const q of e.faces) {
+      let nx = 0, ny = 0, nz = 1;
+      if (pg.pStart[q + 1] > pg.pStart[q]) { const t0 = pg.pTris[pg.pStart[q]] * 3; nx = topo.normal[t0]; ny = topo.normal[t0 + 1]; nz = topo.normal[t0 + 2]; }
+      for (let i = pg.oStart[q]; i < pg.oStart[q + 1]; i++) {
+        const ed = pg.oEdges[i];
+        for (let s = 0; s < 2; s++) { MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + s], P3); lnrm[o] = nx; lnrm[o + 1] = ny; lnrm[o + 2] = nz; lines[o++] = P3[0]; lines[o++] = P3[1]; lines[o++] = P3[2]; }
+      }
+    }
     if (keep) {
-      const fa = e.fill.geometry.attributes.position, la = e.outline.geometry.attributes.position;
-      if (fa.array.length === out.length && la.array.length === lines.length) { fa.array.set(out); fa.needsUpdate = true; la.array.set(lines); la.needsUpdate = true; return; }
+      const fa = e.fill.geometry.attributes.position, la = e.outline.geometry.attributes.position, ln = e.outline.geometry.attributes.normal;
+      if (fa.array.length === out.length && la.array.length === lines.length && ln) { fa.array.set(out); fa.needsUpdate = true; la.array.set(lines); la.needsUpdate = true; ln.array.set(lnrm); ln.needsUpdate = true; return; }
       unshow(e);
     }
     const g = new THREE.BufferGeometry();
@@ -61850,6 +62132,7 @@ const _Elements = (() => {
     e.fill = new THREE.Mesh(_stampGeometry(g), FILL_MAT);
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.BufferAttribute(lines, 3));
+    lg.setAttribute('normal', new THREE.BufferAttribute(lnrm, 3));
     e.outline = new THREE.LineSegments(_stampGeometry(lg), outlineMat());
     for (const m of [e.fill, e.outline]) { m.matrixAutoUpdate = false; m.frustumCulled = false; m.raycast = () => {}; m.userData.partId = p.partId; group.add(m); }
     e.fill.renderOrder = 6; e.outline.renderOrder = 7;
@@ -61863,79 +62146,104 @@ const _Elements = (() => {
     const rect = canvas().getBoundingClientRect();
     let render = showWires();
     if (appLines(false)) render = true;
-    const P3 = [0, 0, 0];
-    // a point of a part on the canvas: [x, y] or null when it is behind the camera
-    const proj = (M, x, y, z) => { _w.set(x, y, z).applyMatrix4(M); _v.copy(_w).project(camera); if (_v.z > 1 || _v.z < -1) return null; return [(_v.x * 0.5 + 0.5) * rect.width, (-_v.y * 0.5 + 0.5) * rect.height]; };
-    // an edge of a part on the canvas: [x0, y0, x1, y1], or null when all of it is behind the camera. An end that is behind the near
-    // plane (the view is very close, the edge runs past the camera) is cut off there, so the part of the edge in view is still drawn.
-    const segA = new THREE.Vector3(), segB = new THREE.Vector3();
-    const seg = (M, topo, ed) => {
-      MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); segA.set(P3[0], P3[1], P3[2]).applyMatrix4(M).applyMatrix4(camera.matrixWorldInverse);
-      MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + 1], P3); segB.set(P3[0], P3[1], P3[2]).applyMatrix4(M).applyMatrix4(camera.matrixWorldInverse);
-      const zn = -camera.near - Math.abs(camera.near) * 1e-4;      // (the camera looks down -z: in view at z <= -near)
-      if (segA.z > zn && segB.z > zn) return null;
-      if (segA.z > zn) segA.lerp(segB, (zn - segA.z) / (segB.z - segA.z)); else if (segB.z > zn) segB.lerp(segA, (zn - segB.z) / (segA.z - segB.z));
-      segA.applyMatrix4(camera.projectionMatrix); segB.applyMatrix4(camera.projectionMatrix);
-      return [(segA.x * 0.5 + 0.5) * rect.width, (-segA.y * 0.5 + 0.5) * rect.height, (segB.x * 0.5 + 0.5) * rect.width, (-segB.y * 0.5 + 0.5) * rect.height];
-    };
+    const P3 = [0, 0, 0], C = pullCtx(rect.height);
+    dotSizes(rect.height);
     // does triangle t of a part look at the camera (from the point _w, already in the world)
     const faces = (topo, t) => { if (t < 0) return false; _n.set(topo.normal[t * 3], topo.normal[t * 3 + 1], topo.normal[t * 3 + 2]).applyMatrix3(_nm); return ortho ? _n.dot(look) > 0 : (_n.x * (_cam.x - _w.x) + _n.y * (_cam.y - _w.y) + _n.z * (_cam.z - _w.z)) > 0; };
     const edgeSeen = (topo, e) => faces(topo, topo.edgeT[e * 2]) || faces(topo, topo.edgeT[e * 2 + 1]);
-    const pointSeen = (topo, v) => { for (let i = topo.vStart[v]; i < topo.vStart[v + 1]; i++) if (edgeSeen(topo, topo.vEdges[i])) return true; return false; };
+    // an edge of a part as a wide line: its two ends in the world, pulled toward the camera as far as the steeper of its faces asks
+    // (_nm: the normal matrix of M)
+    const putEdge = (out, k, M, topo, ed, reach) => {
+      MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); _ea.set(P3[0], P3[1], P3[2]).applyMatrix4(M);
+      MEDIT.pointPosition(topo, topo.edgeV[ed * 2 + 1], P3); _eb.set(P3[0], P3[1], P3[2]).applyMatrix4(M);
+      viewAt(C, _ea, _ev);
+      let t = 0;
+      for (let s = 0; s < 2; s++) { const f = topo.edgeT[ed * 2 + s]; if (f < 0) continue; _n.set(topo.normal[f * 3], topo.normal[f * 3 + 1], topo.normal[f * 3 + 2]).applyMatrix3(_nm).normalize(); t = Math.max(t, tanSeen(_n, _ev)); }
+      pullPoint(C, _ea, _ev, t, reach); viewAt(C, _eb, _ev); pullPoint(C, _eb, _ev, t, reach);
+      const o = k * 6; out[o] = _ea.x; out[o + 1] = _ea.y; out[o + 2] = _ea.z; out[o + 3] = _eb.x; out[o + 4] = _eb.y; out[o + 5] = _eb.z;
+    };
     const hot = hover && hover.p && hover.el && hover.p.mesh && !hover.p.deleted && reads.get(hover.p.mesh.geometry) === hover.R ? hover : null;
-    // Points mode: every point of the parts in work, small and dark, so there is something to aim at
-    // (sprites in the scene, not marks on the canvas: what stands in front of a point hides it)
+    // Points mode: every point of the parts in work, so there is something to aim at
     {
-      const items = [];
+      const items = [], over = [], unread = [];
+      let total = 0;
       if (mode === 'points') for (const id of state.selected) {
         const p = getPart(id); if (!p || p.deleted || !p.visible || !p.mesh || p.isSpline || p.isPrimitive) continue;
-        const R = read(p, triCountOf(p) <= BIG); if (!R || R.topo.nVert > ALL_POINTS_MAX) continue;
-        items.push({ p, topo: R.topo, list: cornerSet(R) });      // (the corners of the polygons only, not the points inside one)
+        const R = read(p, triCountOf(p) <= BIG); if (!R) { unread.push(p.partId); continue; }
+        const list = cornerSet(R);      // (the corners of the polygons only, not the points inside one)
+        if (total + list.size > ALL_POINTS_MAX) { over.push(p.partId); continue; }
+        total += list.size;
+        items.push({ p, topo: R.topo, list, cap: Infinity });
       }
-      if (fillDots('all', items, [0.03, 0.05, 0.08], 0.0036, 8)) render = true;
+      // (said once for each set of parts left without dots)
+      const why = over.length || unread.length ? over.join(',') + '/' + unread.join(',') : '';
+      if (why && why !== pointsNote) {
+        const n = over.length + unread.length, them = n === 1 ? 'one part' : fmtNum(n) + ' parts';
+        try { toast('Points mode', over.length ? 'The points of ' + them + ' are not shown: more than ' + fmtNum(ALL_POINTS_MAX) + ' points in all. They can still be picked with a click, the box or the brush.' : 'The points of ' + them + ' over ' + fmtNum(BIG) + ' triangles show after a first click on the part.', 'info', 4200); } catch (_) {}
+      }
+      pointsNote = why;
+      // (the same parts with the same shapes in the same places: the dots are where they were. The version of the positions counts too:
+      // the gizmo moves picked points in place.)
+      const key = items.map(it => { const m = it.p.mesh, pa = m.geometry.attributes.position; m.updateWorldMatrix(true, false); return it.p.partId + ':' + rid(it.topo) + ':' + rid(it.list) + ':' + it.list.size + ':' + (pa ? pa.version : 0) + ':' + m.matrixWorld.elements.join(','); }).join('|');
+      if (fillDots('all', items, key)) render = true;
     }
-    const pickedDots = [];
+    const pickedDots = [], pickedEdges = [];
     for (const [p, e] of live()) {
       p.mesh.updateWorldMatrix(true, false);
       const M = p.mesh.matrixWorld, topo = e.R.topo;
       _nm.getNormalMatrix(M);
       if (e.dirty || ((mode === 'faces' && e.faces.size > 0) !== !!e.fill)) { showFaces(p, e, !!grab); render = true; }
       for (const m of [e.fill, e.outline]) if (m && !m.matrix.equals(M)) { m.matrix.copy(M); m.matrixWorld.copy(M); render = true; }
-      if (mode === 'edges' && e.edges.size) {
-        ctx.beginPath(); let k = 0;
-        for (const ed of e.edges) {
-          if (++k > DRAW_MAX) break;
-          MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M);
-          if (!edgeSeen(topo, ed)) continue;
-          const s = seg(M, topo, ed); if (!s) continue;
-          ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]);
-        }
-        ctx.lineCap = 'round'; ctx.lineWidth = 2.5; ctx.strokeStyle = ORANGE; ctx.stroke();
-      }
+      if (mode === 'edges' && e.edges.size) pickedEdges.push([p, e]);
       if (mode === 'points' && e.points.size) pickedDots.push({ p, topo, list: e.points });
     }
-    if (fillDots('pick', pickedDots, [1, 0.604, 0.18], 0.0062, 9)) render = true;
+    if (fillDots('pick', pickedDots)) render = true;
+    // the picked edges: orange, wide (an edge both of whose faces look away is behind its part and left out)
+    {
+      let n = 0; for (const [, e] of pickedEdges) n += Math.min(e.edges.size, DRAW_MAX);
+      const out = n ? new Float32Array(n * 6) : null;
+      let k = 0;
+      for (const [p, e] of pickedEdges) {
+        const M = p.mesh.matrixWorld, topo = e.R.topo;
+        _nm.getNormalMatrix(M);
+        let c = 0;
+        for (const ed of e.edges) {
+          if (++c > DRAW_MAX) break;
+          MEDIT.pointPosition(topo, topo.edgeV[ed * 2], P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M);
+          if (!edgeSeen(topo, ed)) continue;
+          putEdge(out, k++, M, topo, ed, FAT.pick.px / 2 + 0.75);
+        }
+      }
+      if (fatSet('pick', out, k)) render = true;
+    }
     // what is under the pointer, light over the rest (not while a box is dragged or the brush paints)
+    let hotDots = [], hotSegs = null, hotN = 0, hotKey = '', hotBuild = null;
     if (hot && !box && !stroke && tool !== 'brush') {
       const { topo, pg } = hot.R, M = hot.p.mesh.matrixWorld, el = hot.el;
-      const at = (v) => { MEDIT.pointPosition(topo, v, P3); return proj(M, P3[0], P3[1], P3[2]); };
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      _nm.getNormalMatrix(M);
       const lp = hot.loop && hot.loop.length > 1 && hot.loop.length <= DRAW_MAX ? hot.loop : null;      // (Pick loops is on: the whole loop a click would pick)
-      if (lp && el.mode === 'points') { ctx.beginPath(); for (const v of lp) { const a = at(v); if (a) { ctx.moveTo(a[0] + 3.5, a[1]); ctx.arc(a[0], a[1], 3.5, 0, Math.PI * 2); } } ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.stroke(); }
-      else if (lp && el.mode === 'edges') { ctx.beginPath(); for (const ed of lp) { const s = seg(M, topo, ed); if (s) { ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); } } ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); }
-      else if (lp && el.mode === 'faces') {
-        ctx.beginPath(); let k = 0;
-        for (const q of lp) for (let i = pg.pStart[q]; i < pg.pStart[q + 1] && k < 12000; i++, k++) { const t = pg.pTris[i], a = at(topo.tri[t * 3]), b = at(topo.tri[t * 3 + 1]), c = at(topo.tri[t * 3 + 2]); if (a && b && c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath(); } }
-        ctx.fillStyle = 'rgba(255,255,255,.34)'; ctx.fill('nonzero');
-      }
-      else if (el.mode === 'points') { const a = at(el.id); if (a) { ctx.beginPath(); ctx.arc(a[0], a[1], 4, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.stroke(); } }
-      else if (el.mode === 'edges') { const s = seg(M, topo, el.id); if (s) { ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(s[2], s[3]); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke(); } }
-      else if (pg.pStart[el.poly + 1] - pg.pStart[el.poly] <= 6000) {
-        ctx.beginPath();
-        for (let i = pg.pStart[el.poly]; i < pg.pStart[el.poly + 1]; i++) { const t = pg.pTris[i], a = at(topo.tri[t * 3]), b = at(topo.tri[t * 3 + 1]), c = at(topo.tri[t * 3 + 2]); if (a && b && c) { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.lineTo(c[0], c[1]); ctx.closePath(); } }
-        ctx.fillStyle = 'rgba(255,255,255,.34)'; ctx.fill('nonzero');
+      if (el.mode === 'points') hotDots = [{ p: hot.p, topo, list: new Set(lp || [el.id]) }];
+      else if (el.mode === 'edges') { const list = lp || [el.id]; hotSegs = new Float32Array(list.length * 6); for (const ed of list) putEdge(hotSegs, hotN++, M, topo, ed, FAT.hot.px / 2 + 0.75); }
+      else {
+        const polys = lp || [el.poly], cap = lp ? 12000 : 6000;
+        let nt = 0; for (const q of polys) nt += pg.pStart[q + 1] - pg.pStart[q];
+        if (lp || nt <= cap) {
+          hotKey = rid(hot.R) + '|' + (lp ? 'l' + lp.length + ':' + lp[0] + ':' + lp[lp.length - 1] : 'p' + el.poly);
+          hotBuild = () => {
+            const out = new Float32Array(Math.min(nt, cap) * 9);
+            let o = 0, k = 0;
+            for (const q of polys) for (let i = pg.pStart[q]; i < pg.pStart[q + 1] && k < cap; i++, k++) {
+              const t = pg.pTris[i];
+              for (let j = 0; j < 3; j++) { MEDIT.pointPosition(topo, topo.tri[t * 3 + j], P3); out[o++] = P3[0]; out[o++] = P3[1]; out[o++] = P3[2]; }
+            }
+            return out;
+          };
+        }
       }
     }
+    if (fillDots('hot', hotDots)) render = true;
+    if (fatSet('hot', hotSegs, hotN)) render = true;
+    if (hotFillSet(hot ? hot.p.mesh.matrixWorld : null, hotKey, hotBuild)) render = true;
     // the tools' own marks
     if (box) { const x = Math.min(box.x0, box.x1) - rect.left, y = Math.min(box.y0, box.y1) - rect.top, bw = Math.abs(box.x1 - box.x0), bh = Math.abs(box.y1 - box.y0); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(x, y, bw, bh); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.strokeRect(x + .5, y + .5, bw, bh); }
     if (tool === 'brush' && ptr && !gzOver) { ctx.beginPath(); ctx.arc(ptr.x - rect.left, ptr.y - rect.top, brushR, 0, Math.PI * 2); ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.stroke(); ctx.lineWidth = 1; ctx.strokeStyle = '#fff'; ctx.stroke(); }
@@ -61944,6 +62252,19 @@ const _Elements = (() => {
 
   // ── the card and the mode button ──
   const current = () => active ? mode : 'model';
+  function syncCadCard() {
+    for (const [id, key] of [['el-cad-close', 'close'], ['el-cad-scope', 'scope']]) {
+      const seg = $q(id); if (!seg) continue;
+      [...seg.querySelectorAll('button')].forEach((b, i) => { const on = b.dataset.v === cadSet[key]; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); if (on) seg.style.setProperty('--seg-i', i); });
+    }
+    const rr = $q('el-cad-rings-row'); if (rr) rr.hidden = cadSet.scope !== 'local';
+    for (const [id, key] of [['el-cad-rings', 'rings'], ['el-cad-len', 'length'], ['el-cad-rounds', 'rounds']]) { const inp = $q(id); if (inp && document.activeElement !== inp) inp.value = String(cadSet[key]); }
+    let faces = 0; try { for (const j of pickedCad().jobs) faces += j.faces.length; } catch (_) {}
+    const rm = $q('btn-el-cad-remove'); if (rm) rm.disabled = !faces;
+    const rs = $q('btn-el-cad-remesh'); if (rs) { rs.disabled = !state.selected.size; rs.title = (faces ? 'Remesh the ' + faces + ' picked CAD ' + (faces === 1 ? 'face' : 'faces') : 'Remesh the whole part (nothing is picked)') + ' now, with the edge length and rounds above. Their outline stays where it is, so the faces round them do not change. The CAD faces and lines stay. One undo step'; }
+    const info = $q('el-cad-info');
+    if (info) info.textContent = cadLast && !faces ? cadLast : faces ? faces + ' CAD ' + (faces === 1 ? 'face' : 'faces') + ' picked. Remove (Delete) takes ' + (faces === 1 ? 'it' : 'them') + ' out; Remesh makes ' + (faces === 1 ? 'its' : 'their') + ' triangles even.' : 'Click the CAD faces to work on. Shift adds, Ctrl takes away. With nothing picked, Remesh does the whole part.';
+  }
   let weldOpen = false;      // the Weld card is up
   let tipsKey = '';
   function syncCard() {
@@ -61961,6 +62282,12 @@ const _Elements = (() => {
     const canWeld = mode === 'points' || mode === 'edges';
     if (!active || !canWeld) weldOpen = false;
     const wc = document.querySelector('.section-cmd[data-cmd="elements"]'); if (wc) wc.classList.toggle('el-weld-on', weldOpen);
+    // CAD edit (the CAD faces toggle, Polygons mode): the pill at the top and its card at the bottom left, in Edit mesh's own card
+    const cadOn = active && mode === 'faces' && cadPick;
+    if (wc) wc.classList.toggle('el-cad-on', cadOn);
+    { const pl = $q('vp-cadedit-pill'); if (pl) pl.hidden = !cadOn; }
+    { const wp = $q('el-weld-pane'), cpn = $q('el-cad-pane'), tt = $q('el-card-title'); if (wp) wp.hidden = cadOn && !weldOpen; if (cpn) cpn.hidden = !cadOn; if (tt) tt.textContent = cadOn ? 'CAD edit' : 'Weld'; }
+    if (cadOn) syncCadCard();
     const wo = $q('btn-el-weld-open'); if (wo) { wo.disabled = !canWeld; wo.classList.toggle('active', weldOpen); }      // the tools, in a bar of their own at the right of the view
     // the card's heading says which pieces are being picked, with the same icon as the toolbar's button
     const tag = $q('el-mode-tag');
@@ -61980,6 +62307,8 @@ const _Elements = (() => {
     { const co = $q('btn-el-close'); if (co) co.disabled = !state.selected.size; }
     const wr = $q('el-weld-row'); if (wr) wr.hidden = mode !== 'points';
     const lp = $q('el-loop'); if (lp) lp.checked = loops;
+    const cp = $q('el-cad'); if (cp) cp.checked = cadPick;
+    const cb = $q('el-cad-btn'); if (cb) cb.hidden = mode !== 'faces';
     const br = $q('el-brush-row'); if (br) br.hidden = tool !== 'brush';
     const bs = $q('el-brush'); if (bs && document.activeElement !== bs) bs.value = String(brushR);
     const b = $q('em-mode');
@@ -62105,61 +62434,136 @@ const _Elements = (() => {
     });
   }
 
-  // ── the points: sprites in the scene, so whatever stands in front of them hides them ──
-  // (Drawn as marks on the canvas they showed through every part in front. As in the app's group dots, one instanced sprite holds
-  // them all: 'all' is every point of the parts in work, small and dark; 'pick' the picked ones, bigger and orange. Each sits a hair
-  // toward the camera, like the lines, so the surface it lies on does not cut it in half.)
+  // ── the marks of the pieces: in the scene, so whatever stands in front of them hides them ──
+  // (Drawn on a canvas over the view, the picked edges and the piece under the pointer showed through every part in front and
+  // through the part's own far side; only a test of which way their faces looked kept some of them back.)
+  // Each mark sits toward the camera by the rule of _pulledPosition: a few steps of the depth buffer, and on a surface seen at an angle
+  // as far as the surface rises across the mark's width, so that the surface it lies on does not cut it and nothing else is let through.
+  const _ea = new THREE.Vector3(), _eb = new THREE.Vector3(), _ev = new THREE.Vector3();
+  let ridSeq = 0, pointsNote = '';      // pointsNote: the parts Points mode last said it shows no dots on
+  const rid = (R) => R._rid || (R._rid = ++ridSeq);
+  // That rule worked out on the page, for the few marks whose ends are put in place here (the wide lines). C: pullCtx() of this paint.
+  function pullCtx(hCss) {
+    const e = camera.matrixWorld.elements, bl = Math.hypot(e[8], e[9], e[10]) || 1;
+    return { ortho: !!camera._isOrtho, bx: e[8] / bl, by: e[9] / bl, bz: e[10] / bl, cx: _cam.x, cy: _cam.y, cz: _cam.z,
+      p11: Math.abs(camera.projectionMatrix.elements[5]) || 1, h: Math.max(1, hCss), near: camera.near, far: camera.far };
+  }
+  // the way toward the camera from the point w of the world (along the eye ray; for an orthographic camera along its axis)
+  const viewAt = (C, w, out) => C.ortho ? out.set(C.bx, C.by, C.bz) : out.set(C.cx - w.x, C.cy - w.y, C.cz - w.z).normalize();
+  // w moved toward the camera: the depth steps, and `reach` CSS pixels times tanT (the tangent of the angle at which the steepest face
+  // it lies on is seen; 0 for none)
+  function pullPoint(C, w, view, tanT, reach) {
+    const d = Math.hypot(C.cx - w.x, C.cy - w.y, C.cz - w.z) || 1e-9;
+    const steps = Math.min(C.ortho ? (C.far - C.near) * _DEPTH_STEPS : d * d / Math.max(C.near, 1e-6) * _DEPTH_STEPS, d * _CAD_EDGE_PULL);
+    const pixel = (C.ortho ? 1 : d) * 2 / (C.p11 * C.h);
+    return w.addScaledVector(view, steps + reach * pixel * tanT);
+  }
+  // the tangent of the angle at which a face (its unit normal in the world) is seen from `view`: 0 when it looks away
+  const tanSeen = (n, view) => { const c = n.dot(view); return c <= 0 ? 0 : Math.min(Math.sqrt(Math.max(0, 1 - c * c)) / c, _PULL_TAN_MAX); };
+
+  // The points: one instanced sprite holds each kind. 'all' is every point of the parts in work, 'pick' the picked ones, 'hot' the
+  // one under the pointer (or the loop a click would pick). A dot is a disc of a fixed size on the screen, a light middle in a dark
+  // ring, so that it shows on a light part and on a dark one. (The old ones were dark, 0.36 % of the view's height wide, and soft:
+  // three or four pixels on most screens, lost on a dark part.)
+  const DOT = {      // diameter in CSS pixels, the middle's colour, the ring's, the order in which they are drawn
+    all:  { px: 6, core: 0x000000, ring: 0x000000, order: 8 },
+    pick: { px: 9, core: PICK_HEX, ring: PICK_HEX, order: 9 },      // (the colour of the picked edges, all through: no dark ring)
+    hot:  { px: 10, core: 0xffffff, ring: 0x05080d, order: 10 },
+  };
+  // The cap on the slope a dot is lifted for (tan 87°), and the one for Edit mesh's lines (tan 85°): higher than the Wireframe's 80.5°,
+  // because at a sharp corner the steepest face meeting there is nearly edge-on, and under the cap the corner's own faces cut the dots and
+  // lines that stand on it. (What it costs: such a mark can show through a part that stands just in front of it, by a few pixels' depth.)
+  const DOT_TAN_MAX = 20, EDIT_TAN_MAX = 12;
+  const DOT_RING = 1;                    // CSS pixels of dark ring round each dot (more turned rows of close points into dark clumps)
   const dotLayers = {};
-  function dotLayer(name, n, rgb, scale, order) {
+  function dotLayer(name, n) {
     let L = dotLayers[name];
     if (L && n <= L.cap) return L;
     if (L) { try { if (L.sprite.parent) L.sprite.parent.remove(L.sprite); L.sprite.material.dispose(); } catch (_) {} }
-    const T = THREE.TSL, cap = Math.max(256, Math.ceil(n * 1.5));
+    const S = DOT[name], T = THREE.TSL, cap = Math.max(256, Math.ceil(n * 1.5));
     const pos = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
-    const nrm = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);      // the surface normal at each point, in the world
+    const nrm = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);      // the surface normal at each point, in the world, and how far its faces turn from it (w, radians)
+    // the size: set by dotSizes() at each paint (a sprite of fixed size is scale × its depth wide; uRadP / uRadO: the dot's reach, its
+    // radius and the smoothing beyond it, in the world, per unit of distance for a perspective camera or as it is for an orthographic one)
+    const uScale = T.uniform(0.01), uRadP = T.uniform(0.005), uRadO = T.uniform(0.0);
     const mat = new THREE.SpriteNodeMaterial({ transparent: true, depthTest: true, depthWrite: false, sizeAttenuation: false });
-    const wp = T.instancedDynamicBufferAttribute(pos), wn = T.instancedDynamicBufferAttribute(nrm);
-    const toCam = T.cameraPosition.sub(wp), d = T.length(toCam), view = toCam.div(T.max(d, 1e-9));
+    const wp = T.instancedDynamicBufferAttribute(pos), wn4 = T.instancedDynamicBufferAttribute(nrm), wn = wn4.xyz, spread = wn4.w;
+    const toCam = T.cameraPosition.sub(wp), d = T.length(toCam);
     const persp = T.cameraProjectionMatrix.mul(T.vec4(0.0, 0.0, 1.0, 0.0)).w.abs();
+    const view = T.normalize(T.mix(T.cameraWorldMatrix.mul(T.vec4(0.0, 0.0, 1.0, 0.0)).xyz, toCam.div(T.max(d, 1e-9)), persp));
     const stepsP = d.mul(d).div(T.max(T.cameraNear, 1e-6)).mul(_DEPTH_STEPS), stepsO = T.cameraFar.sub(T.cameraNear).mul(_DEPTH_STEPS);
-    // A dot is a flat disc facing the camera, the surface it lies on is not: across the dot's width the surface runs deeper by the
-    // width times the tangent of the angle between the view and the surface's normal, and a dot only that far in front is cut by it
-    // where the surface rises. So it is lifted by that much, and a point on a surface seen edge-on is lifted most.
-    const facing = T.dot(wn, view), c = T.abs(facing);
-    const tanT = T.min(T.sqrt(T.max(T.float(1).sub(c.mul(c)), 0.0)).div(T.max(c, 0.08)), 4.0);
-    // (a sprite is `scale` times its depth wide. A point whose surface looks away from the camera is not lifted: the lift grows
-    // with the distance, and from far away it carried the points of a thin part's far side through to the near one.)
-    const lift = d.mul(scale * 0.5 * 0.5).mul(tanT).mul(T.smoothstep(-0.45, -0.15, facing));
+    // A dot is a flat disc facing the camera, the surface it lies on is not: across the dot's reach the surface comes nearer by the
+    // reach times the tangent of the angle between the view and the surface's normal. So it is lifted by that much, where the surface
+    // looks at the camera (a point whose surface looks away is behind its part and gets no lift: from far away the lift carried the
+    // points of a thin part's far side through to the near one).
+    // At a corner the faces that meet turn away from the average normal by up to `spread`: the steepest of them sets the lift (it is the
+    // one that rises across the dot and cut it), and the one that looks most at the camera says whether the point is on the near side.
+    const a = T.acos(T.clamp(T.dot(wn, view), -1.0, 1.0)), best = T.cos(T.max(a.sub(spread), 0.0));
+    const tanT = T.tan(T.min(a.add(spread), Math.atan(DOT_TAN_MAX)));
+    const lift = T.mix(uRadO, d.mul(uRadP), persp).mul(tanT).mul(T.smoothstep(-0.02, 0.1, best));
     const pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL * 2)).add(lift);
     mat.positionNode = wp.add(view.mul(pull));
-    // A point on the far side of a thin part (its surface looks away from the camera) is not drawn at all: the pull toward the
-    // camera above is larger than a thin plate is thick, so it would show through. Points on the rim (surface edge-on) stay.
-    const seen = T.smoothstep(-0.2, 0.0, facing);
-    mat.colorNode = T.vec4(T.vec3(rgb[0], rgb[1], rgb[2]), T.smoothstep(0.36, 0.5, T.uv().sub(0.5).length()).oneMinus().mul(seen));      // a disc with a soft edge
-    mat.scaleNode = T.float(scale);
+    // A point on the far side of a thin part (its surface looks away from the camera) is not drawn at all: the far side is nearer
+    // behind the near one than the dots are pulled. Points on the rim (surface edge-on) stay.
+    const seen = T.smoothstep(-0.2, 0.0, best);
+    const r = T.uv().sub(0.5).length().mul(2.0), fw = T.max(r.fwidth(), 1e-4);      // 0 in the middle, 1 at the disc's edge
+    const inner = Math.max(0.2, 1 - 2 * DOT_RING / S.px);
+    const ring = T.smoothstep(T.float(inner).sub(fw), T.float(inner), r);
+    const alpha = T.smoothstep(T.float(1).sub(fw), T.float(1), r).oneMinus().mul(seen);
+    // (THREE.Color: the hex in sRGB, turned into the linear values the shader works in, as a material's colour is; raw numbers came out lighter)
+    mat.colorNode = T.vec4(T.mix(T.color(new THREE.Color(S.core)), T.color(new THREE.Color(S.ring)), ring), alpha);
+    mat.scaleNode = uScale;
     const sprite = new THREE.Sprite(mat);
-    sprite.renderOrder = order; sprite.frustumCulled = false; sprite.count = 0; sprite.visible = false; sprite.raycast = () => {};
-    L = dotLayers[name] = { sprite, pos, nrm, cap, n: 0 };
+    sprite.renderOrder = S.order; sprite.frustumCulled = false; sprite.count = 0; sprite.visible = false; sprite.raycast = () => {};
+    L = dotLayers[name] = { sprite, pos, nrm, cap, n: 0, uScale, uRadP, uRadO };
+    dotSizes(lastH);
     return L;
   }
-  // a unit normal for each (welded) point of a mesh: the sum of the normals of the triangles that meet there (made once per mesh)
+  // The dots' size on the screen, in CSS pixels whatever the camera's angle of view, the window's size or the pixel ratio.
+  // (three.js: a sprite of fixed size is scale × its depth wide for a perspective camera, scale × 4 / P11 for an orthographic one.)
+  let lastH = 600;
+  function dotSizes(hCss) {
+    const h = lastH = Math.max(1, hCss || lastH), p11 = Math.abs(camera.projectionMatrix.elements[5]) || 1, ortho = !!camera._isOrtho;
+    for (const name of Object.keys(dotLayers)) {
+      const L = dotLayers[name], px = DOT[name].px, reach = (px / 2 + 0.75) / px;      // (the reach as a share of the width)
+      const scale = ortho ? px / (2 * h) : 2 * px / (p11 * h);
+      L.uScale.value = scale;
+      L.uRadP.value = ortho ? 0 : scale * reach;
+      L.uRadO.value = ortho ? scale * 4 / p11 * reach : 0;
+    }
+  }
+  // For each (welded) point of a mesh: a unit normal, the sum of the normals of the triangles that meet there, and (4th value) how far
+  // the most turned of those triangles is from it, in radians. Made once per mesh.
   const pointNormalCache = new WeakMap();
   function pointNormals(topo) {
     let a = pointNormalCache.get(topo.normal);
     if (a) return a;
-    a = new Float32Array(topo.nVert * 3);
-    for (let t = 0; t < topo.nTri; t++) for (let k = 0; k < 3; k++) { const v = topo.tri[t * 3 + k] * 3; a[v] += topo.normal[t * 3]; a[v + 1] += topo.normal[t * 3 + 1]; a[v + 2] += topo.normal[t * 3 + 2]; }
-    for (let v = 0; v < topo.nVert; v++) { const l = Math.hypot(a[v * 3], a[v * 3 + 1], a[v * 3 + 2]) || 1; a[v * 3] /= l; a[v * 3 + 1] /= l; a[v * 3 + 2] /= l; }
+    const nV = topo.nVert, N = topo.normal, s = new Float32Array(nV * 3);
+    for (let t = 0; t < topo.nTri; t++) for (let k = 0; k < 3; k++) { const v = topo.tri[t * 3 + k] * 3; s[v] += N[t * 3]; s[v + 1] += N[t * 3 + 1]; s[v + 2] += N[t * 3 + 2]; }
+    a = new Float32Array(nV * 4);
+    for (let v = 0; v < nV; v++) { const l = Math.hypot(s[v * 3], s[v * 3 + 1], s[v * 3 + 2]) || 1; a[v * 4] = s[v * 3] / l; a[v * 4 + 1] = s[v * 3 + 1] / l; a[v * 4 + 2] = s[v * 3 + 2] / l; }
+    for (let t = 0; t < topo.nTri; t++) {
+      const nx = N[t * 3], ny = N[t * 3 + 1], nz = N[t * 3 + 2];
+      if (!nx && !ny && !nz) continue;                                  // (a triangle of no area has no direction)
+      for (let k = 0; k < 3; k++) {
+        const v = topo.tri[t * 3 + k] * 4, ang = Math.acos(Math.max(-1, Math.min(1, nx * a[v] + ny * a[v + 1] + nz * a[v + 2])));
+        if (ang > a[v + 3]) a[v + 3] = ang;
+      }
+    }
     pointNormalCache.set(topo.normal, a);
     return a;
   }
-  // items: [{ p, topo, list }] (list: the points to show, or null for all of them). Returns true when something on screen changed.
-  function fillDots(name, items, rgb, scale, order) {
+  // items: [{ p, topo, list }] (list: a Set of the points to show, or null for all of them). Returns true when something on screen changed.
+  // key: what the items are, when the caller can say it cheaply; the same key as last time leaves the buffers as they are. (The places
+  // are in the world and do not depend on the camera, whose part is done in the shader: turning the view sends nothing again.)
+  function fillDots(name, items, key = null) {
     let n = 0;
-    for (const it of items) n += it.list ? Math.min(it.list.size, DRAW_MAX) : it.topo.nVert;
+    for (const it of items) n += it.list ? Math.min(it.list.size, it.cap || DRAW_MAX) : it.topo.nVert;
     const had = dotLayers[name];
-    if (!n) { if (had && had.sprite.visible) { had.sprite.visible = false; had.sprite.count = 0; return true; } return false; }
-    const L = dotLayer(name, n, rgb, scale, order), a = L.pos.array, na = L.nrm.array, P3 = [0, 0, 0];
+    if (!n) { if (had) had.key = null; if (had && had.sprite.visible) { had.sprite.visible = false; had.sprite.count = 0; return true; } return false; }
+    if (key && had && had.key === key && had.sprite.visible && n <= had.cap) return false;
+    const L = dotLayer(name, n), a = L.pos.array, na = L.nrm.array, P3 = [0, 0, 0];
+    L.key = key;
     let k = 0;
     for (const it of items) {
       it.p.mesh.updateWorldMatrix(true, false);
@@ -62167,16 +62571,78 @@ const _Elements = (() => {
       _nm.getNormalMatrix(M);
       const put = (v) => {
         MEDIT.pointPosition(it.topo, v, P3); _w.set(P3[0], P3[1], P3[2]).applyMatrix4(M); a[k * 3] = _w.x; a[k * 3 + 1] = _w.y; a[k * 3 + 2] = _w.z;
-        _n.set(vn[v * 3], vn[v * 3 + 1], vn[v * 3 + 2]).applyMatrix3(_nm).normalize(); na[k * 3] = _n.x; na[k * 3 + 1] = _n.y; na[k * 3 + 2] = _n.z;
+        _n.set(vn[v * 4], vn[v * 4 + 1], vn[v * 4 + 2]).applyMatrix3(_nm).normalize(); na[k * 4] = _n.x; na[k * 4 + 1] = _n.y; na[k * 4 + 2] = _n.z; na[k * 4 + 3] = vn[v * 4 + 3];
         k++;
       };
-      if (it.list) { let c = 0; for (const v of it.list) { if (++c > DRAW_MAX) break; put(v); } } else for (let v = 0; v < it.topo.nVert; v++) put(v);
+      if (it.list) { let c = 0; const cap = it.cap || DRAW_MAX; for (const v of it.list) { if (++c > cap) break; put(v); } } else for (let v = 0; v < it.topo.nVert; v++) put(v);
     }
     L.pos.needsUpdate = true; L.nrm.needsUpdate = true; L.sprite.count = k; L.sprite.visible = true;
     if (group && L.sprite.parent !== group) group.add(L.sprite);
     return true;
   }
-  function dotsOff() { for (const L of Object.values(dotLayers)) { L.sprite.visible = false; L.sprite.count = 0; } }
+
+  // The wide lines: the picked edges and the edge (or loop) under the pointer. three.js's Line2NodeMaterial, a quad per edge of a
+  // fixed width in pixels; their ends are put in place (and pulled) on the page at each paint: there are few of them.
+  const FAT = { pick: { px: 2.5, color: PICK_HEX, order: 9 }, hot: { px: 3, color: 0xffffff, order: 10 } };      // width in CSS pixels
+  const FAT_POS = [-1, 2, 0, 1, 2, 0, -1, 1, 0, 1, 1, 0, -1, 0, 0, 1, 0, 0, -1, -1, 0, 1, -1, 0];
+  const FAT_UV = [-1, 2, 1, 2, -1, 1, 1, 1, -1, -1, 1, -1, -1, -2, 1, -2];
+  const FAT_INDEX = [0, 2, 1, 2, 3, 1, 2, 4, 3, 4, 5, 3, 4, 6, 5, 6, 7, 5];
+  const fatLayers = {};
+  function fatLayer(name, n) {
+    let L = fatLayers[name];
+    if (L && n <= L.cap) return L;
+    const mat = L ? L.mesh.material : new THREE.Line2NodeMaterial({ color: FAT[name].color, linewidth: FAT[name].px, depthWrite: false });
+    if (L) { try { if (L.mesh.parent) L.mesh.parent.remove(L.mesh); L.mesh.geometry.dispose(); } catch (_) {} }
+    const cap = Math.max(64, Math.ceil(n * 1.5)), g = new THREE.InstancedBufferGeometry();
+    g.setIndex(FAT_INDEX);
+    g.setAttribute('position', new THREE.Float32BufferAttribute(FAT_POS, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(FAT_UV, 2));
+    const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3), b = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
+    a.setUsage(THREE.DynamicDrawUsage); b.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('instanceStart', a); g.setAttribute('instanceEnd', b);
+    g.instanceCount = 0;
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.matrixAutoUpdate = false; mesh.frustumCulled = false; mesh.raycast = () => {}; mesh.renderOrder = FAT[name].order; mesh.visible = false;
+    L = fatLayers[name] = { mesh, a, b, cap };
+    return L;
+  }
+  // segs: [x0, y0, z0, x1, y1, z1, …] in the world (pulled already), n of them. Returns true when something on screen changed.
+  function fatSet(name, segs, n) {
+    const had = fatLayers[name];
+    if (!n) { if (had && had.mesh.visible) { had.mesh.visible = false; had.mesh.geometry.instanceCount = 0; return true; } return false; }
+    const L = fatLayer(name, n), A = L.a.array, B = L.b.array;
+    for (let i = 0; i < n; i++) { const s = i * 6, o = i * 3; A[o] = segs[s]; A[o + 1] = segs[s + 1]; A[o + 2] = segs[s + 2]; B[o] = segs[s + 3]; B[o + 1] = segs[s + 4]; B[o + 2] = segs[s + 5]; }
+    L.a.needsUpdate = true; L.b.needsUpdate = true;
+    L.mesh.geometry.instanceCount = n; L.mesh.visible = true;
+    L.mesh.material.linewidth = FAT[name].px * ((renderer && renderer.getPixelRatio && renderer.getPixelRatio()) || 1);      // (the material's width is in pixels of the drawing buffer)
+    if (group && L.mesh.parent !== group) group.add(L.mesh);
+    return true;
+  }
+
+  // The polygon (or loop of polygons) under the pointer, filled light: a mesh in the part's own space, made again when it changes
+  // (a new object each time, as for the picked polygons). key: what it shows, '' for nothing; build() → its triangles.
+  let hotFill = null, hotFillKey = '';
+  function hotFillSet(M, key, build) {
+    if (!key || !M || !build) { if (hotFill && hotFill.visible) { hotFill.visible = false; return true; } return false; }
+    let ch = false;
+    if (!hotFill || key !== hotFillKey) {
+      if (hotFill) { try { if (hotFill.parent) hotFill.parent.remove(hotFill); hotFill.geometry.dispose(); } catch (_) {} }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(build(), 3));
+      hotFill = new THREE.Mesh(_stampGeometry(g), hotFillMat());
+      hotFill.matrixAutoUpdate = false; hotFill.frustumCulled = false; hotFill.raycast = () => {}; hotFill.renderOrder = 8;
+      hotFillKey = key; ch = true;
+    }
+    if (!hotFill.matrix.equals(M)) { hotFill.matrix.copy(M); hotFill.matrixWorld.copy(M); ch = true; }
+    if (!hotFill.visible) { hotFill.visible = true; ch = true; }
+    if (group && hotFill.parent !== group) { group.add(hotFill); ch = true; }
+    return ch;
+  }
+  function dotsOff() {
+    for (const L of Object.values(dotLayers)) { L.sprite.visible = false; L.sprite.count = 0; L.key = null; }
+    for (const L of Object.values(fatLayers)) { L.mesh.visible = false; L.mesh.geometry.instanceCount = 0; }
+    if (hotFill) hotFill.visible = false;
+  }
 
   // ── the mesh lines: blue, on the selected parts only, while a piece mode is on ──
   // The outlines of a part's polygons as lines of its own over it (pulled toward the camera like the app's wire lines, so they win
@@ -62185,7 +62651,7 @@ const _Elements = (() => {
   // part's own buffers is shared or freed.
   const wires = new Map();               // partId → { geom, R, ver, obj }
   let WIRE_MAT = null;
-  const wireMat = () => { if (!WIRE_MAT) { WIRE_MAT = new THREE.LineBasicNodeMaterial({ color: LINE_BLUE }); WIRE_MAT.positionNode = _pulledPosition(true); } return WIRE_MAT; };
+  const wireMat = () => { if (!WIRE_MAT) { WIRE_MAT = new THREE.LineBasicNodeMaterial({ color: LINE_BLUE }); WIRE_MAT.positionNode = _pulledPosition(true, 1.25, EDIT_TAN_MAX); } return WIRE_MAT; };
   // For each vertex of the surface: the average normal of the triangles that meet at its point (xyz) and how far the most turned
   // one is from it (w), so the line's shader can pull it further in front where the faces are steep to the view. The normals are
   // taken the same way round (a mesh with mixed winding would cancel itself out), made once per read.
@@ -62356,14 +62822,17 @@ const _Elements = (() => {
       if (tool === 'brush') { if (hover) { hover = null; schedule(); } return; }
       const h = elementAt(lastMove, false);
       const next = h && h.p && h.el ? h : null;
-      if (next && loops && tool !== 'brush') {
+      const cfl = next && tool !== 'brush' ? cadFacePolys(next.p, next.R, next.tri) : null;      // (CAD faces on: the whole face a click would pick)
+      if (cfl) { next.way = 'cad'; next.cad = cfl; }
+      else if (next && loops && tool !== 'brush') {
         const { topo, pg } = next.R;
         next.way = mode === 'faces' ? MEDIT.nearestOutlineEdge(topo, pg, next.el.poly, next.point) : mode === 'points' ? MEDIT.edgeAtPoint(topo, next.el.tri, next.el.id, next.point, pg.real) : next.el.id;
       }
       const same = (a, b) => (!a && !b) || (a && b && a.p === b.p && a.el.mode === b.el.mode && a.el.id === b.el.id && a.way === b.way);
       if (!same(hover, next)) {
         // the loop a click here would pick, to be shown before the click
-        if (next && next.way !== undefined) { try { next.loop = loopOf(next.R, next.el, next.point); } catch (_) { next.loop = null; } }
+        if (next && next.cad) next.loop = next.cad;
+        else if (next && next.way !== undefined) { try { next.loop = loopOf(next.R, next.el, next.point); } catch (_) { next.loop = null; } }
         hover = next; schedule();
       }
     });
@@ -62454,12 +62923,22 @@ const _Elements = (() => {
     if (!card || !ov) return;
     wired = true;
     ctx = ov.getContext('2d');
-    try { const s = JSON.parse(localStorage.getItem('stepopt-elements') || 'null'); if (s) { if (MODES.includes(s.mode)) mode = s.mode; if (TOOLS.includes(s.tool)) tool = s.tool; loops = !!s.loops; if (s.brushR >= 4 && s.brushR <= 200) brushR = +s.brushR; if (SPACES.includes(s.space)) space = s.space; } } catch (_) {}
+    try { const s = JSON.parse(localStorage.getItem('stepopt-elements') || 'null'); if (s) { if (MODES.includes(s.mode)) mode = s.mode; if (TOOLS.includes(s.tool)) tool = s.tool; loops = !!s.loops; cadPick = !!s.cadPick; if (s.cadSet) { const c = s.cadSet; if (['smooth', 'flat', 'open'].includes(c.close)) cadSet.close = c.close; if (['local', 'whole', 'none'].includes(c.scope)) cadSet.scope = c.scope; for (const k of ['rings', 'length', 'rounds']) if (Number.isFinite(c[k]) && c[k] >= 0) cadSet[k] = c[k]; } if (s.brushR >= 4 && s.brushR <= 200) brushR = +s.brushR; if (SPACES.includes(s.space)) space = s.space; } } catch (_) {}
     for (const b of document.querySelectorAll('#el-space button')) b.addEventListener('click', () => { setSpace(b.dataset.space); b.blur(); });
     for (const b of card.querySelectorAll('#el-mode button')) b.addEventListener('click', () => { setMode(b.dataset.mode); b.blur(); });
     for (const b of document.querySelectorAll('#el-tool button')) b.addEventListener('click', () => { setTool(b.dataset.tool); b.blur(); });
     for (const b of document.querySelectorAll('.vpb.em-pick')) b.addEventListener('click', () => { setMode(b.dataset.mode); b.blur(); });
     $q('el-loop')?.addEventListener('change', (e) => { loops = !!e.target.checked; save(); hover = null; schedule(); });
+    $q('el-cad')?.addEventListener('change', (e) => { cadPick = !!e.target.checked; save(); hover = null; syncCard(); schedule(); });
+    $q('vp-cadedit-pill')?.addEventListener('click', () => { cadPick = false; save(); hover = null; syncCard(); schedule(); });
+    for (const [id, key] of [['el-cad-close', 'close'], ['el-cad-scope', 'scope']]) for (const b of document.querySelectorAll('#' + id + ' button')) b.addEventListener('click', () => { cadSet[key] = b.dataset.v; save(); syncCard(); b.blur(); });
+    for (const [id, key, min, max, step, dec] of [['el-cad-rings', 'rings', 0, 20, 1, 0], ['el-cad-len', 'length', 0, 1000, 0.1, 2], ['el-cad-rounds', 'rounds', 1, 20, 1, 0]]) {
+      const inp = $q(id); if (!inp) continue;
+      inp.addEventListener('change', () => { const v = parseFloat(String(inp.value).replace(',', '.')); if (isFinite(v)) cadSet[key] = Math.max(min, Math.min(max, dec ? +v.toFixed(dec) : Math.round(v))); inp.value = String(cadSet[key]); save(); syncCard(); });
+      try { _scrubField(inp, { min, max, step, decimals: dec }); } catch (_) {}
+    }
+    $q('btn-el-cad-remove')?.addEventListener('click', removeCadPicked);
+    $q('btn-el-cad-remesh')?.addEventListener('click', remeshCadPicked);
     const bs = $q('el-brush');
     if (bs) {
       bs.addEventListener('change', () => { const v = parseFloat(String(bs.value).replace(',', '.')); if (isFinite(v)) brushR = Math.max(4, Math.min(200, Math.round(v))); bs.value = String(brushR); save(); schedule(); });
@@ -62475,7 +62954,7 @@ const _Elements = (() => {
     $q('btn-el-straight')?.addEventListener('click', straightenPicked);
     $q('btn-el-weld')?.addEventListener('click', weldPicked);
     $q('btn-el-weld-open')?.addEventListener('click', (e) => { weldOpen = !weldOpen; e.currentTarget.blur(); syncCard(); });
-    $q('el-weld-close')?.addEventListener('click', () => { weldOpen = false; syncCard(); });
+    $q('el-weld-close')?.addEventListener('click', () => { if (active && mode === 'faces' && cadPick) { cadPick = false; save(); hover = null; schedule(); } else weldOpen = false; syncCard(); });      // (the card's X: out of CAD edit, or Weld shut)
     $q('btn-el-fill')?.addEventListener('click', fillPicked);
     $q('btn-el-close')?.addEventListener('click', () => closeOpen());
     $q('btn-el-extract')?.addEventListener('click', extractPicked);
@@ -62492,6 +62971,21 @@ const _Elements = (() => {
   // triangle (the part's own space), and does what a click there does; boxPick and brush take places on the screen.
   const api = {
     mode: (m) => { if (m) setMode(m); return current(); },
+    // what is drawn in the scene now: dots (sprites), wide lines (their count), fills (meshes) (tests/e2e-edit-marks.mjs)
+    marks: () => {
+      const out = { dots: 0, wide: 0, fills: 0, stale: 0, lines: 0, picked: total() };
+      for (const w of wires.values()) if (w.obj && w.obj.visible && w.obj.parent) out.lines++;      // (parts with their blue lines drawn)
+      if (group) for (const o of group.children) {
+        if (!o.visible) continue;
+        if (o.isSprite) out.dots += o.count || 0;
+        else if (o.isMesh && o.geometry && o.geometry.isInstancedBufferGeometry) out.wide += o.geometry.instanceCount || 0;
+        else if (o.isMesh) out.fills++;
+      }
+      // (stale: blue lines or picked polygons still drawn for a shape the part no longer has)
+      for (const [id, w] of wires) { const p = getPart(id); if (!p || !p.mesh || p.mesh.geometry !== w.geom) out.stale++; }
+      for (const [id, e] of sel) { const p = getPart(id); if ((e.fill || e.outline) && (!p || !p.mesh || p.mesh.geometry !== e.geom)) out.stale++; }
+      return out;
+    },
     // Enter: in Edit mesh, out of it; with a part selected, into it, in the mode last used. Nothing to do with no part selected.
     toggle: () => {
       if (active) { setMode('model'); return 'model'; }
@@ -62510,7 +63004,8 @@ const _Elements = (() => {
         const e = entry(p, true); if (!e) return;
         const el = MEDIT.pickPolygonElement(e.R.topo, e.R.pg, tri, point, mode); if (!el) return;
         if (how === 'set') e[mode].clear();
-        put(e, o.loop ? loopOf(e.R, el, point) : [el.id], how, false);
+        const cf = o.cad ? (() => { const was = cadPick; cadPick = true; try { return cadFacePolys(p, e.R, tri); } finally { cadPick = was; } })() : null;
+        put(e, cf || (o.loop ? loopOf(e.R, el, point) : [el.id]), how, false);
         n = e[mode].size;
       });
       changed();
@@ -62523,6 +63018,10 @@ const _Elements = (() => {
     selectAll, clear: clearPicked, delete: del, flipPicked, dissolve: dissolvePicked, planarize: planarizePicked, straighten: straightenPicked, weld: weldPicked, fill: fillPicked, closeOpen, extract: extractPicked, undo: undoPick, redo: redoPick,
     hover: () => (hover && hover.el ? { partId: hover.p.partId, mode: hover.el.mode, id: hover.el.id, loop: hover.loop ? hover.loop.length : 0 } : null),
     loops: (on) => { if (on !== undefined) { loops = !!on; hover = null; syncCard(); schedule(); } return loops; },
+    cadFaces: (on) => { if (on !== undefined) { cadPick = !!on; save(); hover = null; syncCard(); schedule(); } return cadPick; },
+    removeCad: () => removeCadPicked(),
+    remeshCad: () => remeshCadPicked(),
+    cadSettings: (o) => { if (o) { Object.assign(cadSet, o); save(); syncCard(); } return { ...cadSet }; },
     // (for the self-test: what a drag of the gizmo by a world-space offset does)
     nudge(dx, dy, dz) { gizmoSync(); if (!tc || !tc.object) return false; grabStart(); if (!grab) return false; pivot.position.x += dx; pivot.position.y += dy; pivot.position.z += dz; grabMove(); grabEnd(); return true; },
     gizmoOn: () => !!(tc && tc.object),
@@ -62538,12 +63037,16 @@ const _Elements = (() => {
     const t = tool === 'rect' ? [[['Drag'], 'Box-pick ' + many], [['Shift', 'Drag'], 'Add'], [['Ctrl', 'Drag'], 'Take away'], [['Alt', 'Drag'], 'Orbit']]
       : tool === 'brush' ? [[['Drag'], 'Paint ' + many], [['Shift', 'Drag'], 'Add'], [['Ctrl', 'Drag'], 'Take away'], [['Middle drag'], 'Brush size'], [['Alt', 'Drag'], 'Orbit']]
       : [[['Click'], 'Pick ' + (n ? 'another ' : 'a ') + ONE[mode]], [['Double-click'], 'Pick a loop'], [['Shift', 'Click'], 'Add'], [['Ctrl', 'Click'], 'Take away']];
-    if (n) t.push([['Del'], 'Delete'], [['Ctrl', 'Backspace'], 'Dissolve'], [['Esc'], 'Let go']);
+    if (n) t.push([['Del'], cadPick && mode === 'faces' ? 'Remove, close and remesh' : 'Delete'], [['Ctrl', 'Backspace'], 'Dissolve'], [['Esc'], 'Let go']);
     else t.push([['Ctrl', 'A'], 'Pick all'], [['Esc'], 'Model mode']);
     t.push([['1 2 3'], 'Points, edges, polygons']);
     return t;
   }
-  return { isActive: () => active, tips, repaint: schedule, gizmo: gizmoSync, hush, newLine, api };
+  // The app's own Undo or Redo has run, however it was asked for (Ctrl+Z, the Undo button, the menu, Claude). A shape the pieces were
+  // drawn on may be gone: the blue lines and the picked pieces are drawn again now, and an Undo of the last move or delete picks its
+  // pieces again. (Only Ctrl+Z, caught here, used to look; after the Undo button the lines stayed on the moved shape until a click.)
+  function historyChanged() { if (!active) return; hover = null; afterAppUndo(); changed(); }
+  return { isActive: () => active, tips, repaint: schedule, gizmo: gizmoSync, hush, newLine, historyChanged, api };
 })();
 window.__moElements = _Elements.api;
 // ▲ Edit mesh

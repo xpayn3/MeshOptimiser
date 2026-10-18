@@ -12,7 +12,7 @@
 //
 // Nothing here touches three.js or the page.
 
-import { weld } from './meshfix.js?v=3';
+import { weld } from './meshfix.js?v=4';
 
 let W = null;
 // Manifold, loaded on first use. url: where manifold.js is (default: next to this file, under ../vendor/manifold/).

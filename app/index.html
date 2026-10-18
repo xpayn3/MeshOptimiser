@@ -744,6 +744,8 @@ input.prim-value::-webkit-outer-spin-button,input.prim-value::-webkit-inner-spin
 
 /* Right panel controls */
 .field{margin-bottom:var(--space-2xl)}
+.fields-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--space-md)}
+.fields-2 .mac-sel{min-width:0;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
 .field:last-child{margin-bottom:0}
 .field label{display:flex;justify-content:space-between;align-items:center;font-size:var(--fs-12);color:var(--tx2);margin-bottom:var(--space-7);font-weight:var(--fw-medium)}
 .field label .v{color:var(--tx);font-variant-numeric:tabular-nums;font-weight:var(--fw-semibold)}
@@ -2675,9 +2677,17 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 :is(#vp-materials-pop.mat-dock .mat-list-bar .cs-trigger.is-open,#_a#_b#_c){background-color:var(--s2);border-color:transparent;color:var(--tx)}
 :is(#vp-materials-pop.mat-dock .mat-list-bar .cs-trigger:focus:not(:focus-visible):not(.is-open):not(:hover),#_a#_b#_c){border-color:transparent}
 #vp-materials-pop.mat-dock .pop-section{flex:1 1 auto;min-width:0;min-height:0;overflow-y:auto;padding:var(--space-xl) var(--space-2xl) var(--space-3xl);border:0;background-color:var(--mat-dock-bg);}
-#vp-materials-pop.mat-dock .mat-grid{grid-template-columns:repeat(auto-fill,minmax(74px,1fr));column-gap:var(--space-2xs);row-gap:var(--space-3);justify-content:start;justify-items:stretch}
+#vp-materials-pop.mat-dock .mat-grid{grid-template-columns:repeat(auto-fill,minmax(calc(var(--mat-card,64px) + 10px),1fr));column-gap:var(--space-2xs);row-gap:var(--space-3);justify-content:start;justify-items:stretch}
 #vp-materials-pop.mat-dock .mat-cell{padding:var(--space-5) var(--space-xs) var(--space-xs);gap:var(--space-5);width:auto;min-width:0;box-sizing:border-box}   /* as wide as its column: at the 60px of the popup the 64px picture stuck out of the tile, and the tile's outline cut across the picture's ring */
-#vp-materials-pop.mat-dock .mat-cell .mat-thumb{width:64px;height:64px}
+#vp-materials-pop.mat-dock .mat-cell .mat-thumb{width:var(--mat-card,64px);height:var(--mat-card,64px)}
+#vp-materials-pop.mat-dock .mat-row .mat-row-thumb{width:var(--mat-row,26px);height:var(--mat-row,26px)}
+/* the size of the pictures: right-click the grid / list toggle (_openMatSizePop) */
+.mat-size-pop{position:fixed;z-index:var(--z-popover);display:flex;align-items:center;gap:var(--space-md);width:200px;box-sizing:border-box;padding:var(--space-sm) var(--space-lg);background:var(--surface-pop);border-radius:var(--surface-pop-r);box-shadow:var(--surface-shadow),var(--surface-ring);animation:var(--menu-in)}
+.mat-size-pop[hidden]{display:none}
+.mat-size-pop input[type=range]{flex:1 1 auto;min-width:0}
+.mat-size-pop :is(i,svg){flex:0 0 auto;color:var(--tx3);stroke-width:2}
+.mat-size-pop .msp-sm{width:var(--icon-xs);height:var(--icon-xs)}
+.mat-size-pop .msp-lg{width:var(--icon-lg);height:var(--icon-lg)}
 #vp-materials-pop.mat-dock .mat-cell .mat-name{font-size:var(--fs-11)}
 #vp-materials-pop.mat-dock .mat-list-view{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:0 18px;align-content:start}
 #vp-materials-pop.mat-dock .mat-empty{padding:26px var(--space-md);color:var(--tx3);text-align:center}
@@ -5394,7 +5404,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .section-cmd[data-cmd="elements"] [hidden]{display:none!important}
 #el-foot-delete.is-off{opacity:var(--op-45);pointer-events:none}
 /* the card: icons only. Two segmented groups on one row, the brush size when the brush is the tool, then one row of actions. */
-.section-cmd[data-cmd="elements"]:not(.el-weld-on){display:none!important}
+.section-cmd[data-cmd="elements"]:not(.el-weld-on):not(.el-cad-on){display:none!important}
 .section-cmd[data-cmd="elements"] #el-weld-row[hidden]{display:none}
 /* Edit mesh's bar: one column at the right edge under the view cube, in the same dark pill as the toolbar on the left. The brush size,
    the weld distance and the count of what is picked do not fit in it: they stand out to its left, beside the button they go with. */
@@ -6385,6 +6395,7 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="el-ibtn" id="btn-el-flip" title="Reverse normals: turn the picked polygons round, their front becomes their back. For faces that came in facing the wrong way (dark, or see-through from one side). One undo step" aria-label="Reverse normals" disabled><i data-lucide="flip-horizontal-2"></i><span>Reverse</span></button>
           <button type="button" class="el-ibtn" id="btn-el-dissolve" title="Dissolve: take the picked points out and close the surface over them; the polygons round them become one. For edges and polygons: the polygons become one, and the points left inside them or on a straight line of their outline go. The shape does not change there. One undo step (Ctrl+Backspace)" aria-label="Dissolve" disabled><i data-lucide="diamond-minus"></i><span>Dissolve</span></button>
           <button type="button" class="el-ibtn" id="btn-el-extract" title="Extract (polygons): take the picked polygons out into a part of their own, in the same place and with the same material. One undo step" aria-label="Extract" disabled><i data-lucide="split"></i><span>Extract</span></button>
+          <label class="el-ibtn" id="el-cad-btn" title="CAD faces (polygons), on or off. On: a click picks the whole CAD face under the pointer, the area its CAD lines bound (a hole's wall, a boss, a fillet), and Delete takes the picked faces out, closes the gap with a patch that follows the surface round it and makes the triangles round it even. The faces that stay keep their CAD faces and lines. One undo step. For a part opened from a STEP with its CAD faces"><input type="checkbox" id="el-cad" aria-label="CAD faces"><i data-lucide="eraser"></i><span>CAD faces</span></label>
         </div>
       </div>
     <div class="vpc tc">
@@ -6399,6 +6410,11 @@ window.moSplash = function (msg, pct) {
           <button id="vp-brep-pill" class="vp-pill vp-pill-mode" type="button" hidden aria-expanded="false" aria-controls="vp-brep-pop" title="The CAD faces and edges of the STEP are in this scene. Click for the options">
             <i class="vp-pill-icon" data-lucide="box" aria-hidden="true"></i>
             <span class="vp-pill-label">CAD edges</span>
+          </button>
+          <button id="vp-cadedit-pill" class="vp-pill vp-pill-mode" type="button" hidden title="CAD edit: a click picks whole CAD faces, Delete takes them out and the card at the bottom left says how the gap is closed and remeshed. Click to leave CAD edit">
+            <i class="vp-pill-icon" data-lucide="eraser" aria-hidden="true"></i>
+            <span class="vp-pill-label">CAD edit</span>
+            <i class="vp-pill-icon vp-pill-x" data-lucide="x" aria-hidden="true"></i>
           </button>
           <button id="vp-explode-pill" class="vp-pill vp-pill-mode" type="button" hidden title="The parts are exploded. Click to put them back together">
             <i class="vp-pill-icon" data-lucide="unfold-vertical" aria-hidden="true"></i>
@@ -7042,12 +7058,36 @@ window.moSplash = function (msg, pct) {
 
     <!-- ▼ Edit mesh card -->
     <div class="section section-cmd" data-cmd="elements" hidden>
-      <div class="section-h"><span>Weld</span><button type="button" class="lc-icon-btn" id="el-weld-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button></div>
+      <div class="section-h"><span id="el-card-title">Weld</span><button type="button" class="lc-icon-btn" id="el-weld-close" title="Close" aria-label="Close"><i data-lucide="x"></i></button></div>
       <!-- Drawn only while Weld is open (.el-weld-on, the bar's Weld button): Weld and its distance. The rest of Edit mesh's tools are in the bar
            at the right of the view (#el-bar). Opening and closing this card is still what turns the mode on and off. -->
-      <div class="section-b el-card" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+      <div class="section-b el-card" id="el-weld-pane" style="display:flex;flex-direction:column;gap:var(--space-sm)">
         <div class="cmd-num" id="el-weld-row" hidden title="Weld: the points that are no further apart than this become one each, at their middle. 0: all the picked points become one."><span>Join within</span><label class="size-field"><input type="text" inputmode="decimal" id="el-weld" value="0" aria-label="Weld distance"><span>mm</span></label></div>
         <button type="button" class="btn primary" id="btn-el-weld" title="Weld (points or edges): the picked points become one, at their middle; with a distance, the points that are that close become one each. Picked edges collapse to a point. The triangles that are left with two corners at one place go. One undo step" disabled><i data-lucide="merge"></i><span>Weld</span></button>
+      </div>
+      <!-- Drawn while CAD edit is on (the CAD faces toggle in the bar, Polygons mode): what is picked, how a removal closes the gap and
+           is remeshed, and the two steps, each when it is asked for: Remove (Delete) and Remesh. -->
+      <div class="section-b el-card" id="el-cad-pane" hidden style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="cmd-lede" id="el-cad-info">Click the CAD faces to work on. Shift adds, Ctrl takes away.</div>
+        <div class="sw-label">Close the gap</div>
+        <div class="cmd-seg" id="el-cad-close" role="group" aria-label="Close the gap">
+          <button type="button" class="active" data-v="smooth" title="Smooth: each gap gets a patch that carries on the surface round it, curved on a curved face (a rim that lies flat is closed flat)">Smooth</button>
+          <button type="button" data-v="flat" title="Flat: each gap is closed with a flat patch">Flat</button>
+          <button type="button" data-v="open" title="Leave open: the faces go and the gaps stay open">Leave open</button>
+        </div>
+        <div class="sw-label">Remesh when removing</div>
+        <div class="cmd-seg" id="el-cad-scope" role="group" aria-label="Remesh when removing">
+          <button type="button" class="active" data-v="local" title="Round the cut: the patches and the rings of triangles round them are made even; the rest of the part stays exactly as it was">Round the cut</button>
+          <button type="button" data-v="whole" title="Whole part: every triangle of the part is made even, with the CAD lines kept as sharp edges">Whole part</button>
+          <button type="button" data-v="none" title="Off: nothing is remeshed when faces are removed. Remesh does it when you ask, on the faces you pick">Off</button>
+        </div>
+        <div class="cmd-num" id="el-cad-rings-row" title="How many rings of triangles round each patch are remeshed with it. 0: the patch alone"><span>Rings round the cut</span><label class="size-field"><input type="text" inputmode="numeric" id="el-cad-rings" value="1" aria-label="Rings round the cut"></label></div>
+        <div class="cmd-num" title="How long the edges of the remesh are. 0: chosen for you (round the cut: as long as the edges of the gap's rim; picked faces or the whole part: about as many triangles as they had)"><span>Edge length</span><label class="size-field"><input type="text" inputmode="decimal" id="el-cad-len" value="0" aria-label="Edge length"><span>mm</span></label></div>
+        <div class="cmd-num" title="How many rounds the remesh makes (split, collapse, flip, relax). More: more even triangles, slower"><span>Smoothing rounds</span><label class="size-field"><input type="text" inputmode="numeric" id="el-cad-rounds" value="5" aria-label="Smoothing rounds"></label></div>
+        <div class="btn-row">
+          <button type="button" class="btn" id="btn-el-cad-remesh" title="Remesh now, with the edge length and rounds above: the picked CAD faces (their outline stays where it is, so the faces round them do not change), or the whole part when nothing is picked. The CAD faces and lines stay. One undo step"><i data-lucide="grid-3x3"></i>Remesh</button>
+          <button type="button" class="btn primary" id="btn-el-cad-remove" title="Remove the picked CAD faces (Delete): the gap is closed and remeshed as set above. One undo step" disabled><i data-lucide="eraser"></i>Remove</button>
+        </div>
       </div>
     </div>
 
@@ -7396,6 +7436,7 @@ window.moSplash = function (msg, pct) {
     <div class="section" id="scene-section">
       <div class="section-h"><i class="sec-ico" data-lucide="layout-grid"></i><span>Scene</span><span class="chev">▾</span></div>
       <div class="section-b" title="Saved with the scene">
+        <div class="fields-2">
         <div class="field"><label id="display-units-lbl"><span>Display units</span></label>
           <select id="display-units" aria-labelledby="display-units-lbl" class="mac-sel">
             <option value="mm" selected>Millimetres (mm)</option>
@@ -7422,6 +7463,7 @@ window.moSplash = function (msg, pct) {
             <option value="100">100</option>
             <option value="1000">1000</option>
           </select>
+        </div>
         </div>
         <div class="toggle"><span id="toggle-snap-grid-lbl">Snap gizmo to grid</span><label><input type="checkbox" id="toggle-snap-grid" aria-labelledby="toggle-snap-grid-lbl"><span class="switch"></span></label></div>
         <div class="toggle" style="margin-bottom:0" title="The sun casts shadows of the parts on each other"><span id="toggle-shadows-lbl">Shadows</span><label><input type="checkbox" id="toggle-shadows" aria-labelledby="toggle-shadows-lbl"><span class="switch"></span></label></div>
@@ -7851,6 +7893,7 @@ window.moSplash = function (msg, pct) {
         <div class="imp-sec">
           <div class="imp-h">Surface quality</div>
           <select id="imp-step-quality" aria-label="Tessellation quality" class="imp-hide" data-native>
+            <option value="2.0">Clean (2.0) — even strips, few triangles</option>
             <option value="1.0">Coarse (1.0) — fastest, jagged curves</option>
             <option value="0.5" selected>Standard (0.5) — recommended</option>
             <option value="0.2">Fine (0.2) — smoother surfaces</option>
@@ -7858,6 +7901,7 @@ window.moSplash = function (msg, pct) {
             <option value="custom">Custom</option>
           </select>
           <div class="imp-seg" role="radiogroup" aria-label="Tessellation quality" data-for="imp-step-quality">
+            <button type="button" role="radio" data-v="2.0">Clean</button>
             <button type="button" role="radio" data-v="1.0">Coarse</button>
             <button type="button" role="radio" data-v="0.5">Standard</button>
             <button type="button" role="radio" data-v="0.2">Fine</button>
@@ -7887,6 +7931,7 @@ window.moSplash = function (msg, pct) {
                 <div class="imp-range-f"><span>Small under</span><span class="imp-num"><input type="number" id="imp-tier-a" min="0.1" max="99" step="1" value="5" aria-label="Small parts are under this share of the model"><i>%</i></span><span>, large from</span><span class="imp-num"><input type="number" id="imp-tier-b" min="0.2" max="100" step="1" value="30" aria-label="Large parts start at this share of the model"><i>%</i></span></div>
               </div>
             </div>
+            <div class="toggle imp-row"><span id="imp-step-grid-lbl" class="imp-t"><b>Even strips</b><small>Meshes curved faces along their own directions, so a fillet is a row of even strips, not a scatter of triangles</small></span><label><input type="checkbox" id="imp-step-grid" aria-labelledby="imp-step-grid-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle imp-row"><span id="imp-step-normals-lbl" class="imp-t"><b>Smooth shading</b><small>Takes the normals from the CAD surfaces, so fillets blend into the faces beside them</small></span><label><input type="checkbox" id="imp-step-normals" aria-labelledby="imp-step-normals-lbl" checked><span class="switch"></span></label></div>
           </div>
         </details>
@@ -8745,7 +8790,7 @@ window.moSplash = function (msg, pct) {
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
 <script defer src="js/notes.js?v=102"></script>
-<script type="module" src="js/app.js?v=20261057-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1"></script>
+<script type="module" src="js/app.js?v=20261074-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

@@ -10,7 +10,7 @@
 //
 // Nothing here touches three.js or the page.
 
-import { weld, pack } from './meshfix.js?v=3';
+import { weld, pack } from './meshfix.js?v=4';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];

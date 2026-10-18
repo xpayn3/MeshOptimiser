@@ -217,9 +217,18 @@ export function patchHoles(positions, index, opts = {}) {
     for (;;) { const l = next.get(a); if (!l || !l.length) { loop.length = 0; break; } const b = l.pop(); if (b === a0) break; loop.push(b); a = b; if (++guard > 1e6) { loop.length = 0; break; } }
     if (loop.length >= 3) loops.push(loop);
   }
+  const r = patchLoops(V, F, loops, { ...opts, maxSize });
+  return { ...pack(V, F), patched: r.patched, skipped: r.skipped, holes: loops.length };
+}
+// Close the given loops of the joined mesh V, F (each a list of points, in the direction of the triangles round it, as patchHoles
+// finds them) with patches, in place: the patches' triangles are added to F and their inner points to V. opts.maxSize (default:
+// any size) and opts.fair as for patchHoles. Returns { patched, skipped, made: [{ loop, from, to }] }: the range of F each patch took.
+export function patchLoops(V, F, loops, opts = {}) {
+  const maxSize = opts.maxSize > 0 ? opts.maxSize : Infinity;
   let patched = 0, skipped = 0;
-  const free = [];
-  for (const loop0 of loops) {
+  const free = [], made = [];
+  for (let li = 0; li < loops.length; li++) {
+    const loop0 = loops[li], from = F.length;
     const loop = loop0.slice().reverse(), n = loop.length, pts = loop.map(v => V[v]);
     let span = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) span = Math.max(span, len(sub(pts[i], pts[j])));
     if (span > maxSize) { skipped++; continue; }
@@ -276,7 +285,7 @@ export function patchHoles(positions, index, opts = {}) {
       const last = rings[rings.length - 1];
       for (let i = 0; i < last.length; i++) P.push([last[i], last[(i + 1) % last.length], mid]);
       for (const t of P) F.push(t);
-      patched++;
+      patched++; made.push({ loop: li, from, to: F.length });
       continue;
     }
     let base = loop.slice();
@@ -305,7 +314,7 @@ export function patchHoles(positions, index, opts = {}) {
       }
     }
     for (const f of P) { F.push(f); for (const v of f) if (!loop.includes(v)) { free.push(v); } }
-    patched++;
+    patched++; made.push({ loop: li, from, to: F.length });
   }
   // fairing: the points inside the patches are placed where the bending of the surface (the sum of the squared Laplacians, over the
   // patch and the ring round it) is least, with the rim and the faces round the hole held where they are, so the curvature of the
@@ -346,5 +355,5 @@ export function patchHoles(positions, index, opts = {}) {
       list.forEach((v, i) => { V[v][k] = y[i]; });
     }
   }
-  return { ...pack(V, F), patched, skipped, holes: loops.length };
+  return { patched, skipped, made };
 }
