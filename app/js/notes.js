@@ -887,7 +887,8 @@
   }
   function buildCard() {
     const side = document.getElementById('sidebar-right'); if (!side || document.getElementById('notes-section')) return;
-    const ref = [...side.querySelectorAll('.side-group')].find(g => /find/i.test(g.textContent)); if (!ref) return;
+    // just above the Photo mode card, near the bottom of the sidebar (before it was above Find); the Find group is the fallback
+    const ref = document.getElementById('photo-section') || [...side.querySelectorAll('.side-group')].find(g => /find/i.test(g.textContent)); if (!ref) return;
     const grp = el('div', 'side-group', 'Review');
     const sec = el('div', 'section'); sec.id = 'notes-section';
     sec.innerHTML = '<div class="section-h"><i class="sec-ico">' + svg('note') + '</i><span>Notes</span><span class="sec-count" id="notes-count" hidden></span><span class="chev">▾</span></div><div class="section-b" id="notes-body"></div>';

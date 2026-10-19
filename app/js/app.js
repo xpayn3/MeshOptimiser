@@ -697,7 +697,7 @@ function _scrubDrag(el, { get, set, min, max, pxPerStep = 2, begin = null, end =
     if (!from.moved) {
       if (Math.abs(dx) < 3) return;
       from.moved = true;
-      document.documentElement.classList.add('is-scrubbing');
+      _dragCursor('ew-resize');
       if (begin) { try { begin(); } catch (_) {} }
       // no return: a fast flick arrives as one big move, and it counts
     }
@@ -711,7 +711,7 @@ function _scrubDrag(el, { get, set, min, max, pxPerStep = 2, begin = null, end =
     const f = from; from = null;
     try { el.releasePointerCapture(e.pointerId); } catch (_) {}
     if (f.moved) {
-      document.documentElement.classList.remove('is-scrubbing');
+      _dragCursorOff();
       el._scrubbedAt = performance.now();        // the click that follows is not a click
       if (end) { try { end(); } catch (_) {} }
     } else if (e.type === 'pointerup') {
@@ -1493,8 +1493,14 @@ function _setPartVisible(p, on) {
 // True while a modal dialog is open. Global shortcuts must not act on the
 // scene behind a dialog (Delete used to remove the selection while a confirm
 // box had focus).
-function _modalOpen() {
-  return !!document.querySelector('.modal-bg.show, .dlg-bg.show');
+// (Two live collections, kept up to date by the browser. The selector '.modal-bg.show, .dlg-bg.show' walked the whole document,
+// about a millisecond on a page with a tree of a thousand parts, and the shortcut listeners asked nine times for every key event:
+// a held Alt, repeating thirty times a second, took a good part of each frame and dropped frames while the camera moved.
+// exceptWelcome: the start screen does not count, its own shortcuts work.)
+const _modalBgs = document.getElementsByClassName('modal-bg'), _dlgBgs = document.getElementsByClassName('dlg-bg');
+function _modalOpen(exceptWelcome) {
+  for (const c of [_modalBgs, _dlgBgs]) for (let i = 0; i < c.length; i++) { const el = c[i]; if (el.classList.contains('show') && !(exceptWelcome && el.id === 'welcome-modal')) return true; }
+  return false;
 }
 // True when a key event is aimed at a text field or a dropdown.
 function _typingTarget(e) {
@@ -4171,7 +4177,7 @@ const _Settings = (() => {
             const title = kid.textContent.trim(), key = pid + '/' + title;
             card = document.createElement('div');
             card.className = 'set-card'; card.dataset.key = key;
-            card.innerHTML = '<button type="button" class="set-card-h" aria-expanded="true"><span class="set-card-t"></span><span class="set-card-n"></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
+            card.innerHTML = '<button type="button" class="set-card-h" aria-expanded="true"><span class="set-card-t"></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>';
             card.querySelector('.set-card-t').textContent = title;
             if (_fold.get(key)) { card.classList.add('is-fold'); card.firstChild.setAttribute('aria-expanded', 'false'); }
             b.appendChild(card); titled.push(card); kid.remove();
@@ -4180,7 +4186,6 @@ const _Settings = (() => {
             card.appendChild(kid);
           }
         }
-        for (const c of titled) { const n = c.querySelectorAll('.toggle, .field, .set-row').length; c.querySelector('.set-card-n').textContent = n > 1 ? String(n) : ''; }
         if (titled.length >= 3) {
           const j = document.createElement('div'); j.className = 'set-jump';
           titled.forEach((c, i) => { const a = document.createElement('button'); a.type = 'button'; a.className = 'set-jump-c'; a.dataset.i = String(i); a.textContent = c.querySelector('.set-card-t').textContent; j.appendChild(a); });
@@ -4705,34 +4710,6 @@ const _CmdCards = (() => {
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _advResets);
   else _advResets();
-  // Advanced and the clip share the card: opening Advanced shrinks the clip
-  // to half size (it keeps playing), closing Advanced brings it back. `toggle` does not bubble,
-  // so it is caught on the way down.
-  // The fold starts from the click itself (the `toggle` event comes a frame
-  // later, and the fold would start behind the opening section); `toggle`
-  // stays as the catch-all for an Advanced opened any other way.
-  const _advTurn = (sec, open) => {
-    if (sec.classList.contains('adv-open') === open) return;
-    sec.classList.add('adv-anim');
-    clearTimeout(sec._advAnim);
-    sec._advAnim = setTimeout(() => sec.classList.remove('adv-anim'), 420);
-    sec.classList.toggle('adv-open', open);
-  };
-  const _advSec = (el) => {
-    const det = el && el.closest && el.closest('.section-cmd details.cmd-adv');
-    const sec = det && det.closest('.section-cmd');
-    return sec && sec.querySelector(':scope > .cmd-hero') ? { det, sec } : null;
-  };
-  document.addEventListener('click', (e) => {
-    const sum = e.target.closest && e.target.closest('.section-cmd details.cmd-adv > summary');
-    if (!sum || e.target.closest('.cmd-adv-reset')) return;
-    const a = _advSec(sum);
-    if (a) _advTurn(a.sec, !a.det.open);        // `open` is still the state before this click
-  }, true);
-  document.addEventListener('toggle', (e) => {
-    const a = _advSec(e.target);
-    if (a && e.target === a.det) _advTurn(a.sec, a.det.open);
-  }, true);
   // On a narrow viewport the panel would cover the start of the bottom
   // toolbar: sit above it then.
   function _place() {
@@ -4744,7 +4721,7 @@ const _CmdCards = (() => {
   }
   window.addEventListener('resize', () => { if (shown().length) { const c = _cur.slice(); _apply(0, 0); _place(); _apply(c[0], c[1]); _nudge(); } });
 
-  // The panels can be moved about the viewport: press the title (or the picture at the top of one that has a picture) and drag.
+  // The panels can be moved about the viewport: press the title and drag.
   // The host sits in the bottom-left corner; a card is moved by shifting the host, which holds one card at a time. Each card
   // remembers where it was left (this browser), the double-click on the title puts it back, and it is kept inside the viewport.
   const K_POS = 'stepopt-card-pos';
@@ -4791,7 +4768,7 @@ const _CmdCards = (() => {
   function _nudge() { const c = _clampPos(_cur[0], _cur[1]); if (c[0] !== _cur[0] || c[1] !== _cur[1]) _apply(c[0], c[1]); }
   {
     let d = null;
-    const grip = (t) => t.closest && t.closest('.vp-cmd-host .section-h, .vp-cmd-host .cmd-hero');
+    const grip = (t) => t.closest && t.closest('.vp-cmd-host .section-h');
     document.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !e.isPrimary) return;
       const g = grip(e.target);
@@ -5170,12 +5147,12 @@ const _Actions = (() => {
     { id:'removeCadFaces', group:'Edit',      label:'Remove CAD faces', words:'remove cad faces delete b-rep face hole wall boss fillet pocket close patch remesh clean step', run: () => _Elements.api.removeCad() },
     { id:'modeModel',     group:'Edit',       label:'Model mode: pick whole parts',               kbd:'4', run: () => _Elements.api.mode('model') },
     { id:'flipFaces',     group:'Edit',       label:'Reverse normals of picked faces', words:'flip invert turn face orientation winding inside out', run: () => { try { window.__moElements.flipPicked(); } catch (_) {} } },
-    { id:'closeOpenEdges', group:'Edit',      label:'Close open edges: cap every rim where the surface stops', words:'close open edges watertight missing faces boundary rim rims cap fill all holes cracks seal make solid closed manifold', run: () => { try { window.__moElements.closeOpen(); } catch (_) {} } },
+    { id:'closeOpenEdges', group:'Edit',      label:'Close open edges', words:'close open edges watertight missing faces boundary rim rims cap fill all holes cracks seal make solid closed manifold', run: () => { try { window.__moElements.closeOpen(); } catch (_) {} } },
     { id:'normals',       group:'Edit',       label:'Fix normals…',                words:'normal orientation reverse flip align unify consistent outward inside out winding face direction highlight back faces', run: () => _CmdCards.open('normals') },
     { id:'normalsFind',   group:'Edit',       label:'Find flipped normals', words:'detect check find problems faces orientation wrong direction inside out flipped reversed dark see-through select find flipped normals and inside-out parts', run: () => { try { window.__moNormals.find(); } catch (_) {} } },
     { id:'normalsReverse',group:'Edit',       label:'Reverse normals of the selected parts', words:'flip invert turn inside out faces', run: () => { try { window.__moNormals.reverse(); } catch (_) {} } },
     { id:'normalsAlign',  group:'Edit',       label:'Align normals outward', words:'unify consistent orient fix winding inside out faces align normals: turn faces the same way, outward', run: () => { try { window.__moNormals.align(); } catch (_) {} } },
-    { id:'normalsHighlight', group:'Edit',    get label() { return window.__moNormals && window.__moNormals.isHighlighting() ? 'Stop highlighting back faces' : 'Highlight back faces (flipped normals in red)'; }, words:'show hide toggle flipped reversed normals inside out faces red', run: () => { try { window.__moNormals.highlight(); } catch (_) {} } },
+    { id:'normalsHighlight', group:'Edit',    get label() { return window.__moNormals && window.__moNormals.isHighlighting() ? 'Stop highlighting back faces' : 'Highlight back faces'; }, words:'show hide toggle flipped reversed normals inside out faces red', run: () => { try { window.__moNormals.highlight(); } catch (_) {} } },
     { id:'remesh',        group:'Edit',       label:'Remesh…', words:'remesh… (untriangulate or triangulate)', run: () => _CmdCards.open('remesh') },
     { id:'untriangulate', group:'Edit',       label:'Untriangulate',              kbd:'U', run: () => { try { window.__showRemesh && window.__showRemesh('ut'); } catch (_) {} } },
     { id:'fillGrooves',   group:'Edit',       label:'Fill round grooves', words:'round part remove ridges fill grooves threads defeature smooth turned lathe revolve spool bushing pulley rebuild', run: () => { try { window.__moAgent && window.__moAgent.fillGrooves && window.__moAgent.fillGrooves(); } catch (_) {} } },
@@ -5196,9 +5173,10 @@ const _Actions = (() => {
     { id:'beltRibs',      group:'Edit',       label:'Belt: remove ribs', words:'belt remove ribs ridges grooves poly-v serpentine drive belt band strap seal sweep spline profile path defeature', run: () => { try { window.__moAgent && window.__moAgent.fillGrooves && window.__moAgent.fillGrooves({ mode: 'belt' }); } catch (_) {} } },
     { id:'fillGroovesOutline', group:'Edit', label:'Fill solid round', words:'round part make solid fill grooves outline fins ribs fan clutch gear spin envelope proxy stand-in revolve defeature gaps', run: () => { try { window.__moAgent && window.__moAgent.fillGrooves && window.__moAgent.fillGrooves({ mode: 'outline' }); } catch (_) {} } },
     { id:'triangulate',   group:'Edit',       label:'Triangulate',                kbd:'Shift+U', run: () => { try { window.__showRemesh && window.__showRemesh('tr'); } catch (_) {} } },
-    { id:'smartopt',     group:'Edit',       label:'Smart optimise',             run: () => window.__moSmartOptimise?.() },
+    { id:'smartopt',     group:'Edit',       label:'Smart optimise…',            words:'smart optimise optimize clean up reduce everything one press recipes', run: () => _CmdCards.open('smart') },
+    { id:'reduceTris',   group:'Edit',       label:'Reduce triangles…',          words:'reduce triangles decimate budget fewer polygons lighter smart fit report', run: () => _CmdCards.open('reduce') },
     { id:'diagnostics',  group:'App',        label:'Copy diagnostics for a bug report', run: () => _copyDiagnostics() },
-    { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { const el = document.getElementById('budget-target'); if (el && el.offsetParent) { el.focus(); el.select(); } else _click('btn-budget')(); } },
+    { id:'budget',       group:'Edit',       label:'Fit to triangle budget',     run: () => { _CmdCards.open('reduce'); const el = document.getElementById('budget-target'); if (el) { el.focus(); el.select(); } } },
     { id:'stackedCopies', group:'Selection', label:'Find stacked copies…',       run: () => _CmdCards.open('stacked') },
     { id:'lettering',     group:'Edit',      label:'Remove lettering and logos&', run: () => _CmdCards.open('lettering') },
     { id:'selHidden',    group:'Selection',  label:'Select hidden parts…',       run: () => _CmdCards.open('selhidden') },
@@ -5213,7 +5191,7 @@ const _Actions = (() => {
     { id:'materials',    group:'App',        label:'Materials',                  kbd:'Shift+M', run: _click('tg-materials') },
     { id:'library',      group:'App',        label:'Library',                    kbd:'Shift+L', run: _click('tg-library') },
     { id:'measure',      group:'View',       label:'Measure',                    kbd:'M', run: () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'm', bubbles: true })) },
-    { id:'noteAdd',      group:'View',       label:'Add a note: click a spot on the model', words:'note comment pin review leave', icon:'message-square', kbd:'N', run: () => { try { window.MONotesUI.togglePlace(); } catch (_) {} } },
+    { id:'noteAdd',      group:'View',       label:'Add a note', words:'note comment pin review leave', icon:'message-square', kbd:'N', run: () => { try { window.MONotesUI.togglePlace(); } catch (_) {} } },
     { id:'noteSel',      group:'View',       label:'Add a note to the selected part', words:'note comment pin review', icon:'message-square', run: () => { try { window.MONotesUI.addForSelection(); } catch (_) {} } },
     { id:'noteScene',    group:'View',       label:'Add a note about the whole scene', words:'note comment review', icon:'message-square', run: () => { try { window.MONotesUI.addForScene(); } catch (_) {} } },
     { id:'noteList',     group:'View',       label:'Notes: open the list', words:'notes comments review pins', icon:'message-square', run: () => { try { window.MONotesUI.openList(); } catch (_) {} } },
@@ -6531,7 +6509,7 @@ window.addEventListener('keydown', (e) => {
 // started a new scene). The start screen is the exception: the shortcuts it
 // lists beside its buttons are these.
 window.addEventListener('keydown', e => {
-  if (document.querySelector('.modal-bg.show:not(#welcome-modal), .dlg-bg.show')) return;
+  if (_modalOpen(true)) return;
   const t = e.target;
   const inField = _typingTarget(e) && !(t && t.tagName === 'SELECT');
   if (e.key === 'F1' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
@@ -6773,6 +6751,7 @@ const _RendererOwner = (() => {
     try {
       const r = new THREE.WebGPURenderer({ ...opts, forceWebGL });
       await r.init();
+      try { _fixGeometryDispose(r); } catch (_) {}
       try { _hookGpuErrors(r); } catch (_) {}
       const isGPU = !forceWebGL && r.backend && (r.backend.isWebGPUBackend || r.backend.constructor?.name?.includes('WebGPU'));
       return { instance: r, backendName: isGPU ? 'WebGPU' : 'WebGL2' };
@@ -6780,6 +6759,7 @@ const _RendererOwner = (() => {
       console.warn('[STEP] renderer init failed, retry forceWebGL:', e.message);
       const r = new THREE.WebGPURenderer({ ...opts, forceWebGL: true });
       await r.init();
+      try { _fixGeometryDispose(r); } catch (_) {}
       return { instance: r, backendName: 'WebGL2' };
     }
   }
@@ -9274,7 +9254,15 @@ function tick() {
             te[10] = -(f + n) / (f - n); te[14] = -2 * f * n / (f - n);
             proj = pg;
           }
-          const vp = gridHelper.userData._scratchVP.multiplyMatrices(proj, camera.matrixWorldInverse);
+          // The view matrix goes in without its translation: the shader unprojects each pixel to a point RELATIVE TO THE CAMERA and
+          // adds the camera's position once (see rayOrg in _makeShaderGrid). With the translation in, the matrix held the camera's
+          // distance from the origin (300 m out of a scene in millimetres is 300,000) in the same 32-bit entries as the pixel's own
+          // part of the sum (less than 1 across the whole screen); far from the origin the pixel's part was rounded away, runs of
+          // pixels got one and the same ray, and the floor's lines came out as stairs, its fine lines as dots.
+          const view = gridHelper.userData._scratchView || (gridHelper.userData._scratchView = new THREE.Matrix4());
+          view.copy(camera.matrixWorldInverse);
+          const ve = view.elements; ve[12] = 0; ve[13] = 0; ve[14] = 0;
+          const vp = gridHelper.userData._scratchVP.multiplyMatrices(proj, view);
           u.uInvViewProj.value.copy(vp).invert();
         }
         // View-angle fade against the active plane's normal. |dot(view,n)|
@@ -9345,20 +9333,22 @@ function tick() {
     if (now - lastFps > 500) {
       try {
         const fpsVal = Math.round((frameCount * 1000) / (now - lastFps));
-        $('fps').textContent = fpsVal;
+        // (written only when the number changed: while the view stands still nothing on the page changes, and the status bar
+        // has nothing to measure)
+        const fpsEl = $('fps'); if (fpsEl && fpsEl._shown !== fpsVal) { fpsEl._shown = fpsVal; fpsEl.textContent = fpsVal; }
         // Viewport overlays — only touched when their toggles in Display
         // settings are on. style.display is 'none' when off; the textContent
         // write is a few characters, but the DOM read is cheaper than a
         // visibilitychange dance, so we just check display here.
         if (state.showFps) {
-          const el = $('vp-fps'); if (el) el.textContent = fpsVal + ' fps';
+          const el = $('vp-fps'); if (el && el._shown !== fpsVal) { el._shown = fpsVal; el.textContent = fpsVal + ' fps'; }
         }
         if (state.showStats && renderer?.info) {
           const i = renderer.info;
           const calls = i.render?.calls ?? '—';
           const tris  = i.render?.triangles ?? 0;
-          const el = $('vp-stats');
-          if (el) el.textContent = `${calls} calls · ${(tris / 1e6).toFixed(2)}M tris`;
+          const el = $('vp-stats'), s = `${calls} calls · ${(tris / 1e6).toFixed(2)}M tris`;
+          if (el && el._shown !== s) { el._shown = s; el.textContent = s; }
         }
       } catch (_) {}
       frameCount = 0; lastFps = now;
@@ -9533,6 +9523,35 @@ function _repairPartGeometries(reupload) {
     if (reupload) { try { g.dispose(); } catch (_) {} try { _stampGeometry(g); } catch (_) {} }
   });
   return fixed;
+}
+// three r172 frees the GPU buffers of a disposed geometry by asking the render object that first drew it for its attributes. When the
+// part has had another geometry since (a tool, Undo, Redo), those are the attributes of the geometry it draws now, so freeing the
+// old one later (the sweep of geometries nothing refers to, the purge of deleted parts) destroyed the buffers the part was drawing
+// with. three only uploads a part again when the part itself changed (its matrix, its material, the version numbers of its
+// buffers), and parts that look alike share that check, so nothing put them back: every frame failed with "Vertex buffer slot 1
+// required by [RenderPipeline ...] was not set" (setIndexBuffer threw for an indexed one) until the part was moved. Here a geometry
+// frees only what is its own.
+function _fixGeometryDispose(r) {
+  const geos = r && r._geometries;
+  if (!geos || typeof geos.initGeometry !== 'function' || !geos.attributes || !geos.wireframes || !geos.info) return;
+  geos.initGeometry = function (renderObject) {
+    const geometry = renderObject.geometry;
+    this.get(geometry).initialized = true;
+    this.info.memory.geometries++;
+    // (one at a time: three keeps a record for some attributes it never sent, an unused uv for one, and its destroy throws on those;
+    // by then the record is gone and the next upload makes a buffer, so the throw is let go and the others are still freed)
+    const free = (a) => { try { this.attributes.delete(a); } catch (_) {} };
+    const onDispose = () => {
+      this.info.memory.geometries--;
+      if (geometry.index) free(geometry.index);
+      for (const name in geometry.attributes) free(geometry.attributes[name]);
+      const wire = this.wireframes.get(geometry);
+      if (wire !== undefined) { free(wire); this.wireframes.delete(geometry); }
+      geometry.removeEventListener('dispose', onDispose);
+      this.delete(geometry);               // (drawn again after this, e.g. brought back by Undo: it is set up again, with a new listener)
+    };
+    geometry.addEventListener('dispose', onDispose);
+  };
 }
 function _hookGpuErrors(r) {
   const dev = r && r.backend && r.backend.device;
@@ -14056,6 +14075,8 @@ function _makeShaderGrid(opts = {}) {
     // through that point. (Going via the FAR plane gives the longest baseline
     // for direction precision; ray length is normalized so the actual choice
     // doesn't matter.)
+    // uInvViewProj has no translation (see the per-frame update): nearW and farW are OFFSETS FROM THE CAMERA, so the pixel's
+    // part of the unproject keeps its 32-bit precision however far the camera is from the origin.
     const farH = uInvViewProj.mul(vec4(positionLocal.x, positionLocal.y, float(1), float(1)));
     const farW = farH.xyz.div(farH.w);
     // The ray runs from the pixel's point on the near plane to its point on the
@@ -14065,7 +14086,9 @@ function _makeShaderGrid(opts = {}) {
     const nearH = uInvViewProj.mul(vec4(positionLocal.x, positionLocal.y, float(0), float(1)));
     const nearW  = nearH.xyz.div(nearH.w);
     const rayDir = normalize(farW.sub(nearW));
-    const rayOrg = mix(nearW, cameraPosition, uPersp);
+    // The ray starts at the camera (perspective) or at the pixel's point on the near plane (orthographic): the camera's position
+    // is added here, once.
+    const rayOrg = cameraPosition.add(nearW.mul(float(1).sub(uPersp)));
 
     // Ray-plane intersection: plane passes through origin, normal = uPlaneN.
     //   dot(O + t·D, N) = 0   ⇒   t = -dot(O, N) / dot(D, N)
@@ -27216,11 +27239,16 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
   // Export the root's children rather than the root itself, otherwise every
   // save / reopen cycle nests the whole scene inside one more "Group".
   const exportNodes = [...root.children];
+  // (the recovery copy: the building of the export root above, the passes over it below, the writer and the file's assembly each
+  // get a task of their own, none long enough to hold up a drag; a save to a file runs straight through)
+  const breathe = toBlob && quiet ? () => new Promise(r => setTimeout(r, 0)) : null;
+  if (breathe) await breathe();
   try {
     _normalizeNormalsInPlace(root);
     try { _opaqueForExport(root); } catch (e) { console.warn('[export] opaque pass:', e); }
     let brepPack = null;
     try { brepPack = _Brep.pack(root); } catch (e) { console.warn('[scene-save] CAD edges:', e); }
+    if (breathe) await breathe();
     const exp = new GLTFExporter();
     const _origWarn = console.warn;
     console.warn = function(...args) {
@@ -27230,9 +27258,13 @@ async function _saveSceneImpl(toBlob = false, quiet = false) {
     };
     let result;
     try {
-      result = await new Promise((res, rej) => exp.parse(exportNodes, res, rej, { binary: true, embedImages: true }));
+      // (the recovery copy, written in the background: the writer gives the page its turn every 8 ms, so the copy is many short
+      // tasks and a drag begun meanwhile is answered; a save to a file is written in one go)
+      result = await new Promise((res, rej) => exp.parse(exportNodes, res, rej, { binary: true, embedImages: true, ...(toBlob && quiet ? { yieldMs: 8 } : {}) }));
     } finally { console.warn = _origWarn; }
+    if (breathe) await breathe();
     if (brepPack) { try { result = _Brep.embedGlb(result, brepPack); } catch (e) { console.warn('[scene-save] CAD edges not written:', e); } }
+    if (breathe && brepPack) await breathe();
     const blob = new Blob([result], { type: 'model/gltf-binary' });
     if (toBlob) return blob;
     if (fileHandle) {
@@ -28212,7 +28244,9 @@ const _DynPlace = (() => {
   function _move(e) {
     if (sdrag) { if (e.pointerId === sdrag.id) { e.preventDefault(); scaleMove(e); } return; }
     if (drag) { if (e.pointerId === drag.id) { e.preventDefault(); _solve(e); } return; }
-    if (!on || e.target !== q$('canvas')) { if (hoverOver) { hoverOver = false; document.body.classList.remove('dyn-over'); } document.body.classList.remove('dyn-handle'); return; }
+    // (a class taken off only when it is there: taking off an absent class still rewrites the attribute, and every pointer move
+    // then woke the watchers of the body's class, among them the one that measures every toolbar over the view: _vpcWhole)
+    if (!on || e.target !== q$('canvas')) { if (hoverOver) { hoverOver = false; document.body.classList.remove('dyn-over'); } if (document.body.classList.contains('dyn-handle')) document.body.classList.remove('dyn-handle'); return; }
     lastHover = e;
     if (hoverRaf) return;
     hoverRaf = requestAnimationFrame(() => {
@@ -28220,7 +28254,7 @@ const _DynPlace = (() => {
       if (!on || drag || sdrag || !lastHover) return;
       let over = false, onCube = false;
       try { onCube = !!(canMove() && handleHit(lastHover)); over = !onCube && !!(canMove() && _grabbed(lastHover, selMeshes())); } catch (_) {}
-      document.body.classList.toggle('dyn-handle', onCube);
+      if (document.body.classList.contains('dyn-handle') !== onCube) document.body.classList.toggle('dyn-handle', onCube);
       if (over !== hoverOver) { hoverOver = over; document.body.classList.toggle('dyn-over', over); }
     });
   }
@@ -28797,6 +28831,7 @@ function _wireSync() {
   _wireModeMemo = _Prefs.get('wireMode');
   try {
     for (const host of _wireHosts()) {
+      if (_wireOnlyHosts && !_wireOnlyHosts.has(host)) { for (const k of _wireKids(host)) if (k.visible) { k.visible = false; changed = true; } continue; }
       const g = host.geometry, cur = _wireGeoms.get(g), line = host.userData._wl;
       // (the usual case: the part already has its line, so nothing to look up or allocate)
       if (cur && line && line.parent === host && line.geometry === cur.geom && cur.key === _wireKeyFor(g)) { if (!line.visible) { line.visible = true; changed = true; } continue; }
@@ -28813,6 +28848,21 @@ function _wireSync() {
   if (changed) requestRender();
   if (more) _wireSoon(0);
 }
+// While a card works on some parts (Fill solid round, Fill round grooves, the mesh tools, Voxel remesh) the Wireframe's lines are
+// drawn on those parts only: what the sliders do is seen on the part in work, and the rest of the model stays as it was, without
+// lines over it. null: every part. (A part drawn as instances has no line of its own here: with a limit on, it shows none.)
+let _wireOnlyHosts = null;
+function _wireLimit(ids) {
+  let hosts = null;
+  if (ids && ids.length) {
+    hosts = new Set();
+    for (const id of ids) { const p = getPart(id); if (p && !p.deleted && p.mesh) hosts.add(p.mesh); }
+    if (!hosts.size) hosts = null;
+  }
+  _wireOnlyHosts = hosts;
+  if (state.viewMode === 'wire') _wireSync();
+}
+window._wireLimit = _wireLimit;      // (tests/e2e-round-wire.mjs)
 function _wireClear() {
   // Hidden, not removed and not freed: the lines stay (a few MB: the outlines are a fraction of the triangles) so switching
   // back is instant, and the renderer is not asked to free and rebuild buffers on every switch.
@@ -39127,7 +39177,7 @@ const _ModelInspector = (() => {
   }
   return { open, render, isOpen: () => !!pop && pop.el.classList.contains('show') };
 })();
-try { _Actions.list.push({ id: 'inspectModel', group: 'View', label: 'Model inspector: everything about the model, and what is broken in it', words: 'inspect stats statistics info overview broken geometry holes open edges degenerate non manifold floating pieces problems check scan report', run: () => _ModelInspector.open() }); } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
+try { _Actions.list.push({ id: 'inspectModel', group: 'View', label: 'Model inspector', words: 'inspect stats statistics info overview broken geometry holes open edges degenerate non manifold floating pieces problems check scan report', run: () => _ModelInspector.open() }); } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
 
 // ─── checkAutoLoad: read ?file= query param at startup and auto-load ─────────
 (function checkAutoLoad(){
@@ -42905,11 +42955,13 @@ function _ctxFill(box, items, m) {
 }
 function _ctxSub(m, row, items) {
   if (row && row.classList.contains('is-open')) return;
-  m.querySelector('.ctx-sub')?.remove();
+  const had = m.querySelector('.ctx-sub');                    // a list was already open beside the menu: the next one takes its place, with no opening motion
+  had?.remove();
   m.querySelector('.ctx-menu-row.is-open')?.classList.remove('is-open');
   if (!row) return;
   const sub = document.createElement('div');
   sub.className = 'ctx-sub';
+  if (had) sub.style.animation = 'none';
   _ctxFill(sub, items, m);
   m.appendChild(sub);
   row.classList.add('is-open');
@@ -43639,7 +43691,7 @@ const _QuickColour = (() => {
   document.addEventListener('visibilitychange', () => { if (document.hidden) close(false); });
   return { toggle: () => { if (open) close(true); else { if (!lastX && !lastY) { lastX = window.innerWidth / 2; lastY = window.innerHeight / 2; } show(true); } }, isOpen: () => open };
 })();
-try { _Actions.list.push({ id: 'quickColour', group: 'Edit', label: 'Quick colour wheel: hold C over the model, click a colour', kbd: 'C', words: 'paint colour hue wheel radial selected material change', run: () => _QuickColour.toggle() }); } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
+try { _Actions.list.push({ id: 'quickColour', group: 'Edit', label: 'Quick colour wheel', kbd: 'C', words: 'paint colour hue wheel radial selected material change', run: () => _QuickColour.toggle() }); } catch (_) { /* _Actions may not be alive in unit-test contexts */ }
 
 
 // The "…" at the end of the bottom toolbar: every command that acts on the
@@ -43696,7 +43748,7 @@ function _foldedToolbarItems() {
   }
   return out;
 }
-function _openCommandsMenu(anchor) {
+function _openCommandsMenu(anchor, at) {
   const m = $('ctx-menu');
   if (!m || !anchor) return;
   const n = state.selected.size, any = state.parts.some(p => !p.deleted);
@@ -43708,8 +43760,10 @@ function _openCommandsMenu(anchor) {
   const items = [
     { icon: 'split',          label: 'Split…',               kbd: 'X',      off: needAny, fn: () => _CmdCards.open('split') },
     { icon: 'circle-off',     label: 'Remove holes…',          kbd: 'P',      off: needAny, fn: () => _CmdCards.open('fillholes') },
+    { icon: 'wand-sparkles', label: 'Smart optimise…',                    off: needAny, fn: act('smartopt') },
+    { icon: 'triangle',       label: 'Reduce triangles…',                   off: needAny, fn: act('reduceTris') },
     { icon: 'shrink',       label: 'Decimate',                            off: needSel, fn: click('btn-decimate-sel') },
-    { icon: 'gauge',          label: 'Fit to triangle budget',              off: needAny, fn: click('btn-budget') },
+    { icon: 'gauge',          label: 'Fit to triangle budget',              off: needAny, fn: act('budget') },
     { icon: 'eye-off',        label: 'Select hidden parts',                 off: needAny, fn: act('selHidden') },
     { icon: 'bolt',           label: 'Select fasteners',                    off: needAny, fn: act('selFasteners') },
     { icon: 'clipboard-list', label: 'Optimisation report',                 off: needAny, fn: act('report') },
@@ -43773,6 +43827,14 @@ function _openCommandsMenu(anchor) {
   if (folded.length) items.unshift(...folded, '---');
   _ctxBuild(items, 0, 0);
   m.classList.add('is-commands');
+  if (at) {                                                        // (a right-click on a toolbar: at the pointer, above it if it does not fit below)
+    const room = Math.max(160, Math.min(520, window.innerHeight - 16));
+    m.style.maxHeight = room + 'px';
+    const w = m.offsetWidth, h = Math.min(m.offsetHeight, room);
+    m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, at.x)) + 'px';
+    m.style.top = Math.max(8, at.y + h + 8 > window.innerHeight ? at.y - h : at.y) + 'px';
+    return;
+  }
   const b = anchor.getBoundingClientRect(), w = m.offsetWidth;
   const room = Math.max(160, Math.min(520, b.top - 10 - 56));      // 520px at most, and clear of the top bar
   m.style.maxHeight = room + 'px';
@@ -43780,6 +43842,17 @@ function _openCommandsMenu(anchor) {
   m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, b.right - w + 6)) + 'px';
   m.style.top = Math.max(8, b.top - h - 10) + 'px';
 }
+// A right-click on a button of a toolbar floating in the view (or on the toolbar between its buttons) opens the toolbar's list of every
+// command at the pointer, the one the "…" button opens, not the view's menu. A button with a list of its own keeps it: most stop the
+// event before it gets here (the gizmo buttons, the view and Edit mesh switches), the others are named. A list that is open is not one.
+const _VP_TOOLBAR_SEL = '#viewport .vp-bar, #viewport .el-bar, #viewport .vp-pill, #viewport .vp-prim-pop';
+document.addEventListener('contextmenu', (e) => {
+  const t = e.target;
+  if (!t || !t.closest || !t.closest(_VP_TOOLBAR_SEL)) return;
+  if (t.closest('input, textarea, select, [contenteditable], #vw-clay, #vw-cad, #vp-last-tool, .vp-prim-pop')) return;
+  e.preventDefault();
+  try { _openCommandsMenu(t.closest('button') || t, { x: e.clientX, y: e.clientY }); } catch (err) { console.warn('[toolbar menu]', err); }
+});
 // Capture phase: tree-row click handlers (and others in the sidebar) call
 // stopPropagation() so the menu never closed when the user clicked a row
 // while it was open. Capture fires top-down BEFORE descendants can stop the
@@ -47013,7 +47086,7 @@ function _wireMeshSplitter() {
       if (kind === 'faces') return (activeEps <= 0 ? 'Index trusted exactly' : 'Welds within ' + _formatLengthMM(activeEps * diag)) + '; a crease over ' + _splitSettings.faceAngle + '° starts a new face.';
       // bodies / vertex / edge / hybrid all use eps as a weld tolerance.
       if (activeEps <= 0) return 'Trusts the index exactly, nothing welded: a CAD mesh falls into its faces.';
-      return 'Welds within H ' + _formatLengthMM(activeEps * diag) + ' at this model size';
+      return 'Welds within ' + _formatLengthMM(activeEps * diag) + ' at this model size';
     };
     epsReadout.textContent = labelFor(activeMethod);
     _refreshPreview();
@@ -48020,6 +48093,7 @@ if (typeof document !== 'undefined') {
     // therefore killed the viewport and tree-empty menus on every click.
     // Each branch below is target-scoped, so we can safely run unconditionally.)
     if (e.target.closest && e.target.closest('#vw-clay, #vw-cad')) return;      // the Clay button has a menu of its own
+    if (e.target.closest && e.target.closest(_VP_TOOLBAR_SEL)) return;          // so have the toolbars floating in the view (see _VP_TOOLBAR_SEL)
     if (e.target.closest && e.target.closest('.note-pin')) return;      // a note's pin has one too (notes.js)
     // A field has a menu of its own too (the number menu, or the browser's for a name): not the view's menu on top of it.
     if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"], .rn-menu')) return;
@@ -48259,9 +48333,10 @@ function _wireSidebarResize() {
   } catch {}
   if (!sawLeft) {
     // (without the slide the grid would otherwise play from 248 px to the new width when the page opens)
-    document.body.classList.add('resizing');
+    const appEl = document.getElementById('app');
+    appEl?.classList.add('resizing');
     root.style.setProperty('--side-l-w', leftDefault() + 'px');
-    requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('resizing')));
+    requestAnimationFrame(() => requestAnimationFrame(() => appEl?.classList.remove('resizing')));
   }
 
   function attach(handleId, prop, side) {
@@ -48299,7 +48374,8 @@ function _wireSidebarResize() {
       otherW = parseInt(cs.getPropertyValue(side === 'left' ? '--side-r-w' : '--side-l-w').trim(), 10) || 0;
       curW = wantW = startW;
       handle.classList.add('dragging');
-      document.body.classList.add('resizing');
+      if (app) app.classList.add('resizing');
+      _dragCursor('col-resize');
       e.preventDefault();
     });
     window.addEventListener('mousemove', (e) => {
@@ -48320,7 +48396,8 @@ function _wireSidebarResize() {
       root.style.setProperty(prop, wantW + 'px');
       if (app) app.style.gridTemplateColumns = '';
       for (const el of followers()) el.style.removeProperty(prop);
-      document.body.classList.remove('resizing');
+      if (app) app.classList.remove('resizing');
+      _dragCursorOff();
       if (typeof requestRender === 'function') requestRender();
       try {
         if (wantW) localStorage.setItem(side === 'left' ? STORE_L : STORE_R, String(wantW));
@@ -53505,7 +53582,7 @@ function _dndBegin(originRow) {
   _dndDrag.forbiddenKeys = _dndComputeForbiddenKeys(rows);
 
   for (const r of rows) r.classList.add('dnd-dragging');
-  document.body.classList.add('dnd-active');
+  _dragCursor('grabbing');
 
   const z = document.getElementById('tree-newgroup-zone');
   if (z) z.classList.add('show');
@@ -53538,7 +53615,7 @@ function _dndCleanup() {
   if (_dndExpandTimer) { clearTimeout(_dndExpandTimer); _dndExpandTimer = 0; }
   _dndExpandTarget = null;
   if (_dndDrag && _dndDrag.rows) for (const r of _dndDrag.rows) r.classList.remove('dnd-dragging');
-  document.body.classList.remove('dnd-active');
+  _dragCursorOff();
   if (_dndIntoRow) { _dndIntoRow.classList.remove('dnd-drop-into'); _dndIntoRow = null; }
   if (_dndIndicator) _dndIndicator.style.display = 'none';
   if (_dndGhost) _dndGhost.style.display = 'none';
@@ -53597,7 +53674,7 @@ function _dndUpdate(e) {
   // multi-millisecond hitches per pointer event.
   const y = e.clientY;
   let row = null;
-  const hit = document.elementFromPoint(e.clientX, e.clientY);
+  const hit = _underPointer(e.clientX, e.clientY);
   if (hit) {
     const candidate = hit.closest && hit.closest('.tree-node');
     if (candidate && tree.contains(candidate) && !candidate.classList.contains('is-hidden')) {
@@ -56026,7 +56103,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       const st = document.createElement('style');
       st.id = 'qr-style';
       st.textContent = `
-.qr{position:fixed;z-index:var(--z-quick-ring);width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 5px 13px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.35);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
+.qr{position:fixed;z-index:var(--z-quick-ring);width:${WIDTH}px;padding:${PAD}px;box-sizing:border-box;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:var(--surface-shadow);user-select:none;-webkit-user-select:none;touch-action:none;cursor:ns-resize;opacity:0;transform:scale(.82);transform-origin:50% ${PAD + ITEM / 2}px;transition:opacity 130ms ease,transform 220ms cubic-bezier(.2,.9,.25,1.2)}
 .qr.is-in{opacity:1;transform:none}
 .qr.is-out{opacity:0;transform:scale(.92);transition:opacity 110ms ease,transform 110ms ease}
 .qr-thumb{position:absolute;left:${PAD}px;right:${PAD}px;top:${PAD}px;height:${ITEM}px;border-radius:var(--r-sm,6px);background:var(--ac);box-shadow:0 4px 14px rgba(13,153,255,.35);transition:transform 190ms cubic-bezier(.2,.85,.25,1.08),background 160ms ease,box-shadow 160ms ease}
@@ -56035,7 +56112,7 @@ setTimeout(() => _dndDecorateTree(), 0);
 .qr-i.is-near{color:var(--tx2)}
 .qr-i.is-hot{color:var(--white);transform:scale(1.06)}
 .qr.is-first .qr-i.is-hot{color:var(--tx)}
-.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:0 4px 10px rgba(0,0,0,.45);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
+.qr-tip{position:absolute;left:calc(100% + 10px);top:${PAD}px;height:${ITEM}px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:var(--r-lg,10px);background:var(--bg2);border:1px solid var(--bd,rgba(255,255,255,.09));box-shadow:var(--surface-shadow-bar);white-space:nowrap;font-size:var(--fs-12,12px);font-variant-numeric:tabular-nums;color:var(--tx3);pointer-events:none;transition:transform 190ms cubic-bezier(.2,.85,.25,1.08)}
 .qr.is-left .qr-tip{left:auto;right:calc(100% + 10px)}
 .qr-tip b{font-weight:var(--fw-regular,400);color:var(--tx)}
 .qr-tip i{width:6px;height:6px;border-radius:50%;background:var(--ac);opacity:0;transition:opacity 120ms ease}
@@ -56506,14 +56583,15 @@ setTimeout(() => _dndDecorateTree(), 0);
         requestRender();
       }, 250);
     }
-    // While the card is open the view is Wireframe, so each step of the slider shows; closing the card (Done, Enter, Esc) puts the
-    // view back the way it was, unless it was changed by hand meanwhile.
+    // While the card is open the view is Wireframe, with the lines on the parts in work only, so each step of the slider shows;
+    // closing the card (Done, Enter, Esc) puts the view back the way it was, unless it was changed by hand meanwhile.
     let viewBefore = null, wired = false;
     function wire() {
       const sec = document.querySelector('.section-cmd[data-cmd="roundpart"]');
       if (!sec || wired) return;
       wired = true;
       sec.addEventListener('cmd-close', () => {
+        try { _wireLimit(null); } catch (_) {}
         if (viewBefore && state.viewMode === 'wire') { try { setViewMode(viewBefore); requestRender(); } catch (_) {} }
         viewBefore = null;
       });
@@ -56526,6 +56604,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       cur = { op, spins, N: N0, N0: spins[0].own || null, deg: deg0, belt: !!spins[0].sweep };
       { const row = $i('rnd-seg-scrub'); if (row && row.parentElement) row.parentElement.hidden = cur.belt; }
       if (state.viewMode !== 'wire') { viewBefore = viewBefore || state.viewMode; try { setViewMode('wire'); requestRender(); } catch (_) {} }
+      try { _wireLimit(spins.map(s => s.partId)); } catch (_) {}
       const t = $i('rnd-title'); if (t) t.textContent = title;
       if (!scrub) scrub = initScrubber({
         el: 'rnd-seg-scrub', label: 'Segments around', maxSteps: 122,
@@ -56768,7 +56847,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     function wire() {
       if (wired) return; wired = true;
       const sec = document.querySelector('.section-cmd[data-cmd="meshop"]');
-      sec?.addEventListener('cmd-close', () => { if (viewBefore && state.viewMode === 'wire') { try { setViewMode(viewBefore); requestRender(); } catch (_) {} } viewBefore = null; });
+      sec?.addEventListener('cmd-close', () => { try { _wireLimit(null); } catch (_) {} if (viewBefore && state.viewMode === 'wire') { try { setViewMode(viewBefore); requestRender(); } catch (_) {} } viewBefore = null; });
       $i('mop-ok')?.addEventListener('click', () => _CmdCards.close('meshop'));
     }
     function offer(name, op, items, s) {
@@ -56785,6 +56864,7 @@ setTimeout(() => _dndDecorateTree(), 0);
         sc[p.key] = initScrubber({ el: d, label: p.label, maxSteps: steps, stepToVal: (st) => +(p.min + st * p.step).toFixed(dec), valToStep: (v) => Math.max(0, Math.min(steps, Math.round((v - p.min) / p.step))), format: (v) => ({ value: (+v).toFixed(dec), unit }), initialValue: s[p.key] > 0 ? s[p.key] : p.min, promptTitle: p.label, promptUnit: unit, onChange: (v) => set(p.key, v, true) });
       }
       if (state.viewMode !== 'wire') { viewBefore = viewBefore || state.viewMode; try { setViewMode('wire'); requestRender(); } catch (_) {} }
+      try { _wireLimit(items.map(it => it.partId || it.id)); } catch (_) {}
       report(null);
       _CmdCards.open('meshop');
     }
@@ -56934,7 +57014,7 @@ setTimeout(() => _dndDecorateTree(), 0);
     function wire() {
       if (wired) return; wired = true;
       const sec = document.querySelector('.section-cmd[data-cmd="voxel"]');
-      sec?.addEventListener('cmd-close', () => { if (viewBefore && state.viewMode === 'wire') { try { setViewMode(viewBefore); requestRender(); } catch (_) {} } viewBefore = null; });
+      sec?.addEventListener('cmd-close', () => { try { _wireLimit(null); } catch (_) {} if (viewBefore && state.viewMode === 'wire') { try { setViewMode(viewBefore); requestRender(); } catch (_) {} } viewBefore = null; });
       $i('vox-ok')?.addEventListener('click', () => _CmdCards.close('voxel'));
     }
     function slider(k, el, label, steps, toVal, toStep, fmt, init) {
@@ -56945,6 +57025,7 @@ setTimeout(() => _dndDecorateTree(), 0);
       wire();
       cur = { op, items, set: { ...s0 } };
       if (state.viewMode !== 'wire') { viewBefore = viewBefore || state.viewMode; try { setViewMode('wire'); requestRender(); } catch (_) {} }
+      try { _wireLimit(items.map(it => it.partId || it.id)); } catch (_) {}
       slider('cells', 'vox-detail-scrub', 'Detail', 46, (st) => 32 + st * 8, (v) => Math.max(0, Math.min(46, Math.round((v - 32) / 8))), (v) => ({ value: String(Math.round(v)), unit: '' }), s0.cells);
       slider('adapt', 'vox-adapt-scrub', 'Adaptivity', 40, (st) => st / 20, (v) => Math.max(0, Math.min(40, Math.round(v * 20))), (v) => ({ value: v.toFixed(2), unit: '' }), s0.adapt);
       slider('smooth', 'vox-smooth-scrub', 'Smooth up to', 90, (st) => st, (v) => Math.max(0, Math.min(90, Math.round(v))), (v) => ({ value: String(Math.round(v)), unit: '°' }), s0.smooth);
@@ -59247,7 +59328,7 @@ setTimeout(() => _dndDecorateTree(), 0);
   }
 
   // ── Smart optimise ───────────────────────────────────────────────────────
-  // The card at the top of "Reduce" (index.html, #smart-section): the app's
+  // The floating card "Smart optimise" (index.html, .section-cmd[data-cmd="smart"]): the app's
   // clean-ups run one after another on the whole scene. A level is a set of
   // answers to "which steps, and how far"; Auto picks the level from how
   // heavy the scene is, and any answer can be changed before the run. Every
@@ -59512,17 +59593,18 @@ setTimeout(() => _dndDecorateTree(), 0);
 
   // Keep the count badge on the Decimate button in sync with selection.
   function _updateDecCount() {
-    const el = document.getElementById('dec-sel-count');
-    if (el) el.textContent = state.selected ? state.selected.size : 0;
+    const el = document.getElementById('dec-sel-count'), nSel = state.selected ? state.selected.size : 0;
+    if (el && el._shown !== nSel) { el._shown = nSel; el.textContent = nSel; }      // (written on a change only: this runs five times a second)
     // "12,400 → about 6,200 triangles" for the current selection and setting.
     const info = document.getElementById('decimate-info');
     const sel = document.getElementById('decimate-strength');
     const tgt = document.getElementById('decimate-target');
     // Nothing below is visible while the card is closed or the tab is in the background: skip the walk over the selection.
     if (document.hidden || !(info && info.offsetParent)) return;
-    if (tgt) tgt.style.display = (sel && sel.value === 'target') ? '' : 'none';
-    const tolRow = document.getElementById('decimate-tol-row');
-    if (tolRow) tolRow.style.display = (sel && sel.value === 'tol') ? '' : 'none';
+    const showTgt = (sel && sel.value === 'target') ? '' : 'none';
+    if (tgt && tgt.style.display !== showTgt) tgt.style.display = showTgt;
+    const tolRow = document.getElementById('decimate-tol-row'), showTol = (sel && sel.value === 'tol') ? '' : 'none';
+    if (tolRow && tolRow.style.display !== showTol) tolRow.style.display = showTol;
     if (!info || !sel) return;
     let tris = 0, n = 0;
     for (const id of (state.selected || [])) { const p = getPart(id); if (p && !p.deleted && p.mesh) { tris += p.triCount || 0; n++; } }
@@ -59538,8 +59620,10 @@ setTimeout(() => _dndDecorateTree(), 0);
         : after == null ? `${fmtNum(tris)} triangles selected` : '';
       html = (after != null && sel.value !== 'tol') ? _planFigure(tris, after, `${fmtNum(n)} ${n === 1 ? 'part' : 'parts'} selected`) : '';
     }
-    if (html) { if (info.dataset.h !== html) { info.dataset.h = html; info.innerHTML = html; } }
-    else { info.dataset.h = ''; if (info.textContent !== text) info.textContent = text; }
+    // (what was last written is remembered on the element: read back, an empty text never matched, and the empty text was written
+    // again five times a second while nothing was selected, a change of the page each time for the status bar to measure)
+    const shown = html ? 'h:' + html : 't:' + text;
+    if (info._decShown !== shown) { info._decShown = shown; if (html) info.innerHTML = html; else info.textContent = text; }
     const link = document.getElementById('decimate-preview');
     if (link) link.hidden = !(n > 0);
   }
@@ -60428,13 +60512,12 @@ setTimeout(() => _dndDecorateTree(), 0);
     const m = $id(modalId);
     try { _Welcome.hide(); } catch (_) {}
     try { open(); } catch (e) { console.warn('[welcome]', e); }
-    const back = () => { if (!state.parts.some(p => !p.deleted) && !document.querySelector('.modal-bg.show, .dlg-bg.show')) { try { _Welcome.show(); } catch (_) {} } };
+    const back = () => { if (!state.parts.some(p => !p.deleted) && !_modalOpen()) { try { _Welcome.show(); } catch (_) {} } };
     if (!m || !m.classList.contains('show')) { back(); return; }
     const mo = new MutationObserver(() => { if (m.classList.contains('show')) return; mo.disconnect(); back(); });
     mo.observe(m, { attributes: true, attributeFilter: ['class'] });
   };
   $id('welcome-shortcuts')?.addEventListener('click', () => aside('shortcuts-modal', () => run('shortcuts')));
-  $id('welcome-help')?.addEventListener('click', () => aside('help-modal', () => run('help')));
   $id('welcome-claude')?.addEventListener('click', () => { try { $id('welcome-close')?.click(); window.__moClaudeMode('feed'); window.__moBridge.setEnabled(true, true); } catch (_) {} });
   $id('welcome-settings')?.addEventListener('click', () => aside('settings-modal', () => _Settings.show('general')));
 
@@ -60910,7 +60993,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
       if (k !== 'ArrowUp' && k !== 'ArrowDown' && k !== 'ArrowLeft' && k !== 'ArrowRight' && k !== 'Home' && k !== 'End') return;
       const t = e.target;
       if (_typingTarget(e)) return;
-      if (document.querySelector('.modal-bg.show:not(#welcome-modal), .dlg-bg.show')) return;
+      if (_modalOpen(true)) return;
       const rows = rowsNow();
       if (!rows.length) return;
       // where the keys are: the row last pressed or reached; failing that the row a range would start from, or the first selected one
@@ -61026,12 +61109,12 @@ if (new URLSearchParams(location.search).has('selftest')) {
         ghost.className = 'mat-ghost'; ghost.style.width = r.width + 'px'; ghost.style.height = r.height + 'px';
         document.body.appendChild(ghost);
       }
-      document.body.classList.add('mat-dragging');
+      _dragCursor('none');
       const frame = () => {
         raf = 0; if (ended) return;
         const e = last;
         if (ghost) ghost.style.transform = 'translate3d(' + Math.round(e.clientX - ghost.offsetWidth / 2) + 'px,' + Math.round(e.clientY - ghost.offsetHeight / 2) + 'px,0)';
-        const at = document.elementFromPoint(e.clientX, e.clientY);
+        const at = _underPointer(e.clientX, e.clientY);
         const inView = !!(at && at.closest && at.closest('#viewport'));
         if (inView) hotAt(e); else hotOff();
         const cell = at && at.closest ? at.closest('#vp-materials-pop .mat-cell, #vp-materials-pop .mat-row') : null;
@@ -61045,13 +61128,13 @@ if (new URLSearchParams(location.search).has('selftest')) {
         window.removeEventListener('pointermove', onMove, true); window.removeEventListener('pointerup', onUp, true);
         window.removeEventListener('keydown', onKey, true); window.removeEventListener('blur', onBlur);
         if (raf) { cancelAnimationFrame(raf); raf = 0; }
-        const at = commit ? document.elementFromPoint(e.clientX, e.clientY) : null;
+        const at = commit ? _underPointer(e.clientX, e.clientY) : null;
         const cell = at && at.closest ? at.closest('#vp-materials-pop .mat-cell, #vp-materials-pop .mat-row') : null;
         const merge = commit && e.shiftKey && cell && cell._mat && cell._mat !== mat ? cell._mat : null;
         const row = at && at.closest ? at.closest('#sidebar-right .prop-material-row') : null;
         const inView = !!(at && at.closest && at.closest('#viewport'));
         if (ghost) ghost.remove();
-        document.body.classList.remove('mat-dragging');
+        _dragCursorOff();
         clearRow(); into(null); hotOff(); dragMat = null;
         { const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); window.removeEventListener('click', swallow, true); };      // (letting go over the cell it came from is not a click on it)
           window.addEventListener('click', swallow, true); setTimeout(() => window.removeEventListener('click', swallow, true), 300); }
@@ -61245,7 +61328,7 @@ if (new URLSearchParams(location.search).has('selftest')) {
       // While the sidebar's edge is dragged the column is set directly (the
       // variable is only written on release, and nothing animates): the
       // column as drawn IS where it is. Otherwise the variable is the end point.
-      const W = body.classList.contains('resizing') ? col0 : (parseFloat(getComputedStyle(body).getPropertyValue('--side-l-w')) || 0);
+      const W = (app && app.classList.contains('resizing')) ? col0 : (parseFloat(getComputedStyle(body).getPropertyValue('--side-l-w')) || 0);
       const folded = body.classList.contains('left-collapsed');
       let moved = 0;
       if (sw && side) {
@@ -61317,19 +61400,58 @@ if (new URLSearchParams(location.search).has('selftest')) {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go, { once: true }); else go();
 })();
 
+// The cursor of a drag, without a style of the whole page. A drag used to set its cursor with a rule on every element
+// (`html.is-scrubbing *{cursor:…}`, `body.mat-dragging *`, `body.resizing *`, `body.dnd-active .tree-node`) from a class on the
+// root or the body: a style of every element again, 60 ms on a page with a big model, at the start and the end of every
+// slider scrub, sidebar resize, material drag and tree drag. One element over the whole window carries the cursor instead
+// (1 ms); a drag with the pointer captured keeps getting its events, one with listeners on the window gets them through the
+// element, and _underPointer looks through it for the drags that ask what is under the pointer. Text is kept from being
+// selected by swallowing selectstart for as long as the cursor is up.
+function _dragCursor(cursor) {
+  let el = document.getElementById('drag-cursor');
+  if (!el) { el = document.createElement('div'); el.id = 'drag-cursor'; el.setAttribute('aria-hidden', 'true'); document.body.appendChild(el); }
+  el.style.cursor = cursor; el.hidden = false;
+  if (!_dragCursor._guard) { _dragCursor._guard = (e) => e.preventDefault(); window.addEventListener('selectstart', _dragCursor._guard, true); }
+}
+function _dragCursorOff() {
+  const el = document.getElementById('drag-cursor'); if (el) el.hidden = true;
+  if (_dragCursor._guard) { window.removeEventListener('selectstart', _dragCursor._guard, true); _dragCursor._guard = null; }
+}
+// The element under the pointer, looking through the drag cursor's own element.
+function _underPointer(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el || el.id !== 'drag-cursor') return el;
+  return document.elementsFromPoint(x, y).find(e => e.id !== 'drag-cursor') || null;
+}
+
 // Shift, Ctrl, Alt and Cmd on their own are not keyboard navigation. After a
 // click, the clicked button stays focused and Chrome would draw the Tab ring
-// on it the moment one of them goes down. Hide the ring (html.no-mod-ring)
-// while the last real input was the mouse and only modifiers are pressed; any
-// other key (Tab, arrows, Enter …) brings the ring back.
+// on it the moment one of them goes down. Hide the ring (.no-mod-ring on the
+// focused element) while the last real input was the mouse and only modifiers
+// are pressed; any other key (Tab, arrows, Enter …) brings the ring back.
+// The class used to go on <html>, under a rule for every descendant
+// (html.no-mod-ring :focus-visible): each modifier press, and the mouse press
+// after it, then had the browser look at every element of the page again,
+// 55 ms with a tree of a thousand parts, and an Alt-drag of the camera
+// stuttered behind it. Nothing but the focused element can wear the ring, so
+// the class goes on that one element alone, and when nothing is focused
+// nothing is done at all.
 (function _wireModifierRing() {
-  const root = document.documentElement, MOD = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock']);
-  let mouse = false;
-  addEventListener('pointerdown', () => { mouse = true; root.classList.remove('no-mod-ring'); }, true);
+  const MOD = new Set(['Shift', 'Control', 'Alt', 'Meta', 'AltGraph', 'CapsLock']);
+  let mouse = false, ringless = null;
+  const off = () => { if (ringless) { try { ringless.classList.remove('no-mod-ring'); } catch (_) {} ringless = null; } };
+  addEventListener('pointerdown', () => { mouse = true; off(); }, true);
   addEventListener('keydown', (e) => {
-    if (MOD.has(e.key)) { if (mouse) root.classList.add('no-mod-ring'); return; }
-    mouse = false; root.classList.remove('no-mod-ring');
+    if (MOD.has(e.key)) {
+      if (!mouse) return;
+      const el = document.activeElement;
+      if (!el || el === document.body || el === document.documentElement) return;
+      if (el !== ringless) { off(); ringless = el; el.classList.add('no-mod-ring'); }
+      return;
+    }
+    mouse = false; off();
   }, true);
+  addEventListener('focusout', (e) => { if (e.target === ringless) off(); }, true);
 })();
 
 // ▼ Edit mesh (installed block)
@@ -61392,7 +61514,7 @@ const _Elements = (() => {
   // backend, so they flickered against the faces; they are pulled toward the camera instead, like the lines.)
   const FILL_MAT = (() => { const m = new THREE.MeshBasicNodeMaterial({ color: 0xff9a2e, transparent: true, opacity: 0.55, depthTest: true, depthWrite: false, side: THREE.DoubleSide }); m.positionNode = _pulledPosition(); return m; })();
   let OUTLINE_MAT = null, HOT_FILL_MAT = null;
-  const outlineMat = () => { if (!OUTLINE_MAT) { OUTLINE_MAT = new THREE.LineBasicNodeMaterial({ color: 0xffb45c }); OUTLINE_MAT.positionNode = _pulledPosition('normal'); } return OUTLINE_MAT; };
+  const outlineMat = () => { if (!OUTLINE_MAT) { OUTLINE_MAT = new THREE.LineBasicNodeMaterial({ color: 0xffb45c, depthWrite: false, transparent: true }); OUTLINE_MAT.positionNode = _pulledPosition('normal'); } return OUTLINE_MAT; };
   const hotFillMat = () => { if (!HOT_FILL_MAT) { HOT_FILL_MAT = new THREE.MeshBasicNodeMaterial({ color: 0xffffff, transparent: true, opacity: 0.34, depthTest: true, depthWrite: false, side: THREE.DoubleSide }); HOT_FILL_MAT.positionNode = _pulledPosition(); } return HOT_FILL_MAT; };
   const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _n = new THREE.Vector3(), _cam = new THREE.Vector3(), _nm = new THREE.Matrix3(), _ptr = new THREE.Vector2();
   const canvas = () => $q('canvas');
@@ -62851,21 +62973,30 @@ const _Elements = (() => {
   // one under the pointer (or the loop a click would pick). A dot is a disc of a fixed size on the screen, a light middle in a dark
   // ring, so that it shows on a light part and on a dark one. (The old ones were dark, 0.36 % of the view's height wide, and soft:
   // three or four pixels on most screens, lost on a dark part.)
+  // The dots are drawn after the fills (6 to 8) and before the lines (15 to 17), and a pass of the dots that writes depth only
+  // (DOT_DEPTH_ORDER, see dotLayer) keeps the lines out of every disc: no line goes over a dot, a point being the smallest mark and
+  // the one most often aimed at. (All of these are transparent materials, so the orders hold between them.)
+  const DOT_DEPTH_ORDER = 14;
   const DOT = {      // diameter in CSS pixels, the middle's colour, the ring's, the order in which they are drawn
-    all:  { px: 6, core: 0x000000, ring: 0x000000, order: 8 },
-    pick: { px: 9, core: PICK_HEX, ring: PICK_HEX, order: 9 },      // (the colour of the picked edges, all through: no dark ring)
-    hot:  { px: 10, core: 0xffffff, ring: 0x05080d, order: 10 },
+    all:  { px: 6, core: 0x000000, ring: 0x000000, order: 11 },
+    pick: { px: 9, core: PICK_HEX, ring: PICK_HEX, order: 12 },      // (the colour of the picked edges, all through: no dark ring)
+    hot:  { px: 10, core: 0xffffff, ring: 0x05080d, order: 13 },
   };
-  // The cap on the slope a dot is lifted for (tan 87°), and the one for Edit mesh's lines (tan 85°): higher than the Wireframe's 80.5°,
-  // because at a sharp corner the steepest face meeting there is nearly edge-on, and under the cap the corner's own faces cut the dots and
-  // lines that stand on it. (What it costs: such a mark can show through a part that stands just in front of it, by a few pixels' depth.)
+  // The cap on the slope a dot's disc is raised for (tan 87°), and the one for Edit mesh's lines (tan 85°): higher than the Wireframe's
+  // 80.5°, because at a sharp corner the steepest face meeting there is nearly edge-on, and under the cap the corner's own faces cut the
+  // dots and lines that stand on it. (A line is pulled whole, so one that stands on such a face can show through a part just in front
+  // of it; a dot is raised pixel by pixel, see dotLayer, so only the edge of its disc can.)
   const DOT_TAN_MAX = 20, EDIT_TAN_MAX = 12;
+  // The cap on the slope a pixel of a dot's disc is raised for, by its distance from the middle (tan 76°): with the lines' cap the edge
+  // of a dot on a steep face stood through a cover a few millimetres in front again. A face steeper than this cuts the edge of a dot
+  // that stands on it; the line there is kept out all the same (the depth pass).
+  const DOT_RISE_TAN_MAX = 4;
   const DOT_RING = 1;                    // CSS pixels of dark ring round each dot (more turned rows of close points into dark clumps)
   const dotLayers = {};
   function dotLayer(name, n) {
     let L = dotLayers[name];
     if (L && n <= L.cap) return L;
-    if (L) { try { if (L.sprite.parent) L.sprite.parent.remove(L.sprite); L.sprite.material.dispose(); } catch (_) {} }
+    if (L) { try { if (L.sprite.parent) L.sprite.parent.remove(L.sprite); L.sprite.material.dispose(); if (L.depth.parent) L.depth.parent.remove(L.depth); L.depth.material.dispose(); } catch (_) {} }
     const S = DOT[name], T = THREE.TSL, cap = Math.max(256, Math.ceil(n * 1.5));
     const pos = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
     const nrm = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4);      // the surface normal at each point, in the world, and how far its faces turn from it (w, radians)
@@ -62885,10 +63016,37 @@ const _Elements = (() => {
     // At a corner the faces that meet turn away from the average normal by up to `spread`: the steepest of them sets the lift (it is the
     // one that rises across the dot and cut it), and the one that looks most at the camera says whether the point is on the near side.
     const a = T.acos(T.clamp(T.dot(wn, view), -1.0, 1.0)), best = T.cos(T.max(a.sub(spread), 0.0));
-    const tanT = T.tan(T.min(a.add(spread), Math.atan(DOT_TAN_MAX)));
-    const lift = T.mix(uRadO, d.mul(uRadP), persp).mul(tanT).mul(T.smoothstep(-0.02, 0.1, best));
-    const pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL * 2)).add(lift);
+    // The dot's middle is pulled by a few depth steps only; the slope is answered pixel by pixel instead (the depth each pixel of the
+    // disc is tested with, below): a pixel is tested where the surface is under it, so the disc is not cut by its own faces, and no
+    // part of it is nearer the camera than the surface is there. (The whole disc used to be pulled by its reach times the tangent of
+    // the slope, up to twenty times its radius: the dots on a face seen nearly edge-on, a hub's rim, then showed through a cover that
+    // stood a few millimetres in front of them.)
+    const pull = T.min(T.mix(stepsO, stepsP, persp), d.mul(_CAD_EDGE_PULL * 2));
     mat.positionNode = wp.add(view.mul(pull));
+    // Where this pixel is on the disc, in the world: three's sprite of a fixed size is uScale × its depth wide for a perspective camera,
+    // uScale × 4 / P11 for an orthographic one, along the camera's right and up.
+    const zAt = T.cameraViewMatrix.mul(T.vec4(wp, 1.0)).z.negate();
+    const p11 = T.cameraProjectionMatrix.mul(T.vec4(0.0, 1.0, 0.0, 0.0)).y;
+    const wide = uScale.mul(T.mix(T.float(4.0).div(T.max(p11.abs(), 1e-9)), zAt, persp));
+    const camR = T.cameraWorldMatrix.mul(T.vec4(1.0, 0.0, 0.0, 0.0)).xyz, camU = T.cameraWorldMatrix.mul(T.vec4(0.0, 1.0, 0.0, 0.0)).xyz;
+    const off2 = T.uv().sub(0.5).mul(wide);
+    const off = camR.mul(off2.x).add(camU.mul(off2.y));
+    // How much nearer the surface is under this pixel than at the point: up the slope of the surface (the normal's part across the
+    // view says which way it rises, and how steeply), by the tangent of the slope; down the slope the pixel stays at the point's depth
+    // (not sunk: a dot on a rim is not eaten by what stands behind the part). At a corner the faces turn from the normal by `spread`
+    // and rise on either side, so every pixel is raised for that too. Capped at the slope of DOT_TAN_MAX.
+    const nv = T.dot(wn, view);
+    const g = wn.sub(view.mul(nv)), gl = T.length(g), gDir = g.div(T.max(gl, 1e-9));
+    const tanA = gl.div(T.max(nv.abs(), 1e-6));                                     // the tangent of the angle between the view and the normal
+    const offL = T.length(off), cosU = T.dot(off, gDir).div(T.max(offL, 1e-9));    // which way this pixel lies from the middle, against the rise
+    // the slope the surface can have under this pixel: the tangent plane's slope this way, and at a corner the turn of the faces
+    const aU = T.atan(tanA.mul(cosU));
+    const rise = offL.mul(T.max(T.tan(T.min(aU.add(spread), Math.atan(DOT_RISE_TAN_MAX))), 0.0));
+    const under = wp.add(off).add(view.mul(rise.add(pull)));
+    const zUnder = T.cameraViewMatrix.mul(T.vec4(under, 1.0)).z, near = T.cameraNear, far = T.cameraFar;
+    // (the depth as three writes it for its own surfaces, 0 at the near plane and 1 at the far: the same on WebGPU and WebGL2)
+    const depthP = near.add(zUnder).mul(far).div(far.sub(near).mul(zUnder)), depthO = zUnder.add(near).div(near.sub(far));
+    mat.depthNode = T.mix(depthO, depthP, persp);
     // A point on the far side of a thin part (its surface looks away from the camera) is not drawn at all: the far side is nearer
     // behind the near one than the dots are pulled. Points on the rim (surface edge-on) stay.
     const seen = T.smoothstep(-0.2, 0.0, best);
@@ -62901,7 +63059,19 @@ const _Elements = (() => {
     mat.scaleNode = uScale;
     const sprite = new THREE.Sprite(mat);
     sprite.renderOrder = S.order; sprite.frustumCulled = false; sprite.count = 0; sprite.visible = false; sprite.raycast = () => {};
-    L = dotLayers[name] = { sprite, pos, nrm, cap, n: 0, uScale, uRadP, uRadO };
+    // The same dots once more, drawing no colour: this pass writes depth only, with the whole disc lifted for the steepest face as the
+    // lines are (DOT_TAN_MAX), and the lines of Edit mesh are drawn after it and tested against it. So no line is drawn inside a dot,
+    // not even where the dot's own face has cut its disc above. (What it costs: inside a dot that this lift carries through a thin
+    // part, the lines of the near side are left out, where the dot itself used to be drawn.)
+    const dm = new THREE.SpriteNodeMaterial({ transparent: true, depthTest: true, depthWrite: true, colorWrite: false, sizeAttenuation: false });
+    dm.alphaTest = 0.02;      // (a dot fading out past the silhouette of its part still keeps the lines out of its disc)
+    const liftAll = T.mix(uRadO, d.mul(uRadP), persp).mul(T.tan(T.min(a.add(spread), Math.atan(DOT_TAN_MAX)))).mul(T.smoothstep(-0.02, 0.1, best));
+    dm.positionNode = wp.add(view.mul(pull.add(liftAll)));
+    dm.opacityNode = alpha;
+    dm.scaleNode = uScale;
+    const depth = new THREE.Sprite(dm);
+    depth.renderOrder = DOT_DEPTH_ORDER; depth.frustumCulled = false; depth.count = 0; depth.visible = false; depth.raycast = () => {}; depth.userData.depthPass = true;
+    L = dotLayers[name] = { sprite, depth, pos, nrm, cap, n: 0, uScale, uRadP, uRadO };
     dotSizes(lastH);
     return L;
   }
@@ -62946,7 +63116,7 @@ const _Elements = (() => {
     let n = 0;
     for (const it of items) n += it.list ? Math.min(it.list.size, it.cap || DRAW_MAX) : it.topo.nVert;
     const had = dotLayers[name];
-    if (!n) { if (had) had.key = null; if (had && had.sprite.visible) { had.sprite.visible = false; had.sprite.count = 0; return true; } return false; }
+    if (!n) { if (had) had.key = null; if (had && had.sprite.visible) { had.sprite.visible = false; had.sprite.count = 0; had.depth.visible = false; had.depth.count = 0; return true; } return false; }
     if (key && had && had.key === key && had.sprite.visible && n <= had.cap) return false;
     const L = dotLayer(name, n), a = L.pos.array, na = L.nrm.array, P3 = [0, 0, 0];
     L.key = key;
@@ -62962,14 +63132,15 @@ const _Elements = (() => {
       };
       if (it.list) { let c = 0; const cap = it.cap || DRAW_MAX; for (const v of it.list) { if (++c > cap) break; put(v); } } else for (let v = 0; v < it.topo.nVert; v++) put(v);
     }
-    L.pos.needsUpdate = true; L.nrm.needsUpdate = true; L.sprite.count = k; L.sprite.visible = true;
+    L.pos.needsUpdate = true; L.nrm.needsUpdate = true; L.sprite.count = k; L.sprite.visible = true; L.depth.count = k; L.depth.visible = true;
     if (group && L.sprite.parent !== group) group.add(L.sprite);
+    if (group && L.depth.parent !== group) group.add(L.depth);
     return true;
   }
 
   // The wide lines: the picked edges and the edge (or loop) under the pointer. three.js's Line2NodeMaterial, a quad per edge of a
   // fixed width in pixels; their ends are put in place (and pulled) on the page at each paint: there are few of them.
-  const FAT = { pick: { px: 2.5, color: PICK_HEX, order: 9 }, hot: { px: 3, color: 0xffffff, order: 10 } };      // width in CSS pixels
+  const FAT = { pick: { px: 2.5, color: PICK_HEX, order: 16 }, hot: { px: 3, color: 0xffffff, order: 17 } };      // width in CSS pixels; drawn after the dots' depth pass
   const FAT_POS = [-1, 2, 0, 1, 2, 0, -1, 1, 0, 1, 1, 0, -1, 0, 0, 1, 0, 0, -1, -1, 0, 1, -1, 0];
   const FAT_UV = [-1, 2, 1, 2, -1, 1, 1, 1, -1, -1, 1, -1, -1, -2, 1, -2];
   const FAT_INDEX = [0, 2, 1, 2, 3, 1, 2, 4, 3, 4, 5, 3, 4, 6, 5, 6, 7, 5];
@@ -62977,7 +63148,7 @@ const _Elements = (() => {
   function fatLayer(name, n) {
     let L = fatLayers[name];
     if (L && n <= L.cap) return L;
-    const mat = L ? L.mesh.material : new THREE.Line2NodeMaterial({ color: FAT[name].color, linewidth: FAT[name].px, depthWrite: false });
+    const mat = L ? L.mesh.material : new THREE.Line2NodeMaterial({ color: FAT[name].color, linewidth: FAT[name].px, depthWrite: false, transparent: true });
     if (L) { try { if (L.mesh.parent) L.mesh.parent.remove(L.mesh); L.mesh.geometry.dispose(); } catch (_) {} }
     const cap = Math.max(64, Math.ceil(n * 1.5)), g = new THREE.InstancedBufferGeometry();
     g.setIndex(FAT_INDEX);
@@ -63025,7 +63196,7 @@ const _Elements = (() => {
     return ch;
   }
   function dotsOff() {
-    for (const L of Object.values(dotLayers)) { L.sprite.visible = false; L.sprite.count = 0; L.key = null; }
+    for (const L of Object.values(dotLayers)) { L.sprite.visible = false; L.sprite.count = 0; L.depth.visible = false; L.depth.count = 0; L.key = null; }
     for (const L of Object.values(fatLayers)) { L.mesh.visible = false; L.mesh.geometry.instanceCount = 0; }
     if (hotFill) hotFill.visible = false;
   }
@@ -63037,7 +63208,10 @@ const _Elements = (() => {
   // part's own buffers is shared or freed.
   const wires = new Map();               // partId → { geom, R, ver, obj }
   let WIRE_MAT = null;
-  const wireMat = () => { if (!WIRE_MAT) { WIRE_MAT = new THREE.LineBasicNodeMaterial({ color: LINE_BLUE }); WIRE_MAT.positionNode = _pulledPosition(true, 1.25, EDIT_TAN_MAX); } return WIRE_MAT; };
+  // (depthWrite false, as the wide lines and the fills: the lines are drawn after the parts and tested against them, and leave no depth
+  // of their own; transparent, so that they are drawn in order with the dots and after the dots' depth pass, which keeps them out of
+  // the discs)
+  const wireMat = () => { if (!WIRE_MAT) { WIRE_MAT = new THREE.LineBasicNodeMaterial({ color: LINE_BLUE, depthWrite: false, transparent: true }); WIRE_MAT.positionNode = _pulledPosition(true, 1.25, EDIT_TAN_MAX); } return WIRE_MAT; };
   // For each vertex of the surface: the average normal of the triangles that meet at its point (xyz) and how far the most turned
   // one is from it (w), so the line's shader can pull it further in front where the faces are steep to the view. The normals are
   // taken the same way round (a mesh with mixed winding would cancel itself out), made once per read.
@@ -63096,7 +63270,7 @@ const _Elements = (() => {
         g.setIndex(new THREE.BufferAttribute(R.lines, 1));
         g.setAttribute('slope', new THREE.BufferAttribute(slopeOf(R), 4));
         const obj = new THREE.LineSegments(_stampGeometry(g), wireMat());
-        obj.matrixAutoUpdate = false; obj.frustumCulled = false; obj.raycast = () => {}; obj.renderOrder = 5; obj.userData.partId = id;
+        obj.matrixAutoUpdate = false; obj.frustumCulled = false; obj.raycast = () => {}; obj.renderOrder = 15; obj.userData.partId = id;
         group.add(obj);
         wires.set(id, { geom, R, ver: attr.version, obj });
         ch = true;
@@ -63230,7 +63404,7 @@ const _Elements = (() => {
   function onLostCapture() { if (box || stroke || sizing) onLost(); }
   function onKey(ev) {
     if (!active || _typingTarget(ev)) return;
-    if (document.querySelector('.modal-bg.show:not(#welcome-modal), .dlg-bg.show')) return;
+    if (_modalOpen(true)) return;
     const k = ev.key, cmd = ev.ctrlKey || ev.metaKey, stop = () => { ev.preventDefault(); ev.stopImmediatePropagation(); };
     if ((k === 'Delete' || k === 'Backspace') && !cmd && !ev.altKey) { stop(); del(); return; }
     if (k === 'Backspace' && cmd && !ev.altKey) { stop(); dissolvePicked(); return; }                   // (Ctrl + Backspace: dissolve instead of delete)
@@ -63364,7 +63538,7 @@ const _Elements = (() => {
       for (const w of wires.values()) if (w.obj && w.obj.visible && w.obj.parent) out.lines++;      // (parts with their blue lines drawn)
       if (group) for (const o of group.children) {
         if (!o.visible) continue;
-        if (o.isSprite) out.dots += o.count || 0;
+        if (o.isSprite) { if (!o.userData.depthPass) out.dots += o.count || 0; }      // (the dots' depth pass is the same dots again)
         else if (o.isMesh && o.geometry && o.geometry.isInstancedBufferGeometry) out.wide += o.geometry.instanceCount || 0;
         else if (o.isMesh) out.fills++;
       }
@@ -63622,16 +63796,23 @@ function _recolourFaceGroup(partId, mi, hex) {
 // growing) each toolbar is measured and moved by the fraction it is off by: translate (the Edit mesh bar already slides with it: transform).
 (function _vpcWhole() {
   let raf = 0, tail = 0;
-  const one = (el) => {
-    const prop = el.classList.contains('el-bar') ? 'transform' : 'translate';
-    el.style[prop] = '';
-    const r = el.getBoundingClientRect();
+  const propOf = (el) => el.classList.contains('el-bar') ? 'transform' : 'translate';
+  const one = (el, r) => {
+    const prop = propOf(el);
     if (!r.width || !r.height) return;
     const dx = Math.round(r.left) - r.left, dy = Math.round(r.top) - r.top;
     if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
     el.style[prop] = prop === 'transform' ? 'translate(' + dx + 'px,' + dy + 'px)' : dx + 'px ' + dy + 'px';
   };
-  const run = () => { raf = 0; for (const el of document.querySelectorAll('.vpc')) { try { one(el); } catch (_) {} } };
+  // All the toolbars are measured first and moved after: a move between two measurements made the browser lay the page out again
+  // for each toolbar, ten layouts a run, and a run came with every change of the body's class.
+  const run = () => {
+    raf = 0;
+    const els = [...document.querySelectorAll('.vpc')];
+    for (const el of els) el.style[propOf(el)] = '';
+    const rects = els.map(el => el.getBoundingClientRect());
+    els.forEach((el, i) => { try { one(el, rects[i]); } catch (_) {} });
+  };
   const soon = () => { if (!raf) raf = requestAnimationFrame(run); clearTimeout(tail); tail = setTimeout(run, 320); };      // (and once more when a slide has ended)
   const go = () => {
     const vp = document.getElementById('viewport'); if (!vp) return;
@@ -63662,12 +63843,16 @@ function _recolourFaceGroup(partId, mi, hex) {
   const sb = document.getElementById('sb');
   if (!sb) return;
   let queued = false;
+  // (only the items whose text changed since they were last measured: the others are as wide as before, and measuring them
+  // again was a layout of the page for every tick of the fps readout)
+  const last = new WeakMap();
   const fix = () => {
     queued = false;
-    const els = [...sb.querySelectorAll('.item, button, button > span')].filter(e => e.offsetParent !== null);
+    const els = [...sb.querySelectorAll('.item, button, button > span')].filter(e => e.offsetParent !== null && last.get(e) !== e.textContent);
+    if (!els.length) return;
     for (const e of els) e.style.minWidth = '';
     const widths = els.map(e => e.getBoundingClientRect().width);
-    els.forEach((e, i) => { if (widths[i] % 1) e.style.minWidth = Math.ceil(widths[i]) + 'px'; });
+    els.forEach((e, i) => { last.set(e, e.textContent); if (widths[i] % 1) e.style.minWidth = Math.ceil(widths[i]) + 'px'; });
   };
   const soon = () => { if (!queued) { queued = true; requestAnimationFrame(fix); } };
   new MutationObserver(soon).observe(sb, { childList: true, characterData: true, subtree: true });

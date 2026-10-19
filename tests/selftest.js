@@ -1390,16 +1390,14 @@
     key('x'); await T.sleep(300);
     T.assert(!split.hidden && split.closest('#vp-overlay'), 'X did not open the Split panel over the viewport');
     T.assert(document.getElementById('tg-split').classList.contains('active'), 'the Split toolbar button is not lit while its panel is open');
-    T.assert(!!split.querySelector('.cmd-hero svg.tile-art'), 'the Split panel has no line drawing');
+    T.assert(!split.querySelector('figure, video, svg.tile-art'), 'the Split panel has a picture on top');      // (the cards carry none)
     key('p'); await T.sleep(300);
     T.assert(!fill.hidden && split.hidden, 'P did not swap to the Remove holes panel');
     T.assert(document.getElementById('tg-fill-holes').classList.contains('active'), 'the toolbar button is not lit while its panel is open');
     T.assert(fill.contains(document.getElementById('btn-fill-holes')), 'Remove holes is not in its own panel');
-    const clip = fill.querySelector('video');                    // (the cards carry a line drawing now, not a clip)
-    T.assert(!!fill.querySelector('.cmd-hero svg.tile-art'), 'the Remove holes panel has no line drawing');
+    T.assert(!fill.querySelector('figure, video, svg.tile-art'), 'the Remove holes panel has a picture on top');
     key('Escape'); await T.sleep(250);
     T.assert(fill.hidden && state.selected.size === 1, 'Esc did not just close the panel (selection ' + state.selected.size + ')');
-    T.assert(!clip || clip.paused, 'the clip keeps playing after its panel was put away');
     key('Escape'); await T.sleep(250);
     T.eq(state.selected.size, 0, 'selection after the second Esc');
     T.act('split'); await T.sleep(250);
@@ -1792,6 +1790,77 @@
     T.eq(measuring(), !was, 'Measure after M');
     await press({});
     T.eq(measuring(), was, 'Measure after a second M');
+  });
+
+  // three r172 freed a disposed geometry's buffers through the render object that first drew it, which by then could be drawing the part's
+  // newer geometry: the sweep then destroyed what the part drew with, and a part that looks like others was never uploaded again
+  // ("Vertex buffer slot 1 required by [RenderPipeline ...] was not set" on every frame until it moved). _fixGeometryDispose in app.js.
+  test('gpu: freeing a geometry a part no longer draws leaves the buffers the part draws with alone', async () => {
+    const F = T.F(), THREE = F.THREE, r = F.renderer, be = r.backend, dev = be.device;
+    let scene = state.partsRoot; while (scene.parent) scene = scene.parent;
+    const errs = [], onErr = (e) => errs.push(String(e.error && e.error.message).slice(0, 140));
+    if (dev) dev.addEventListener('uncapturederror', onErr);
+    const draw = async () => { r.render(scene, F.camera); if (dev) await dev.queue.onSubmittedWorkDone(); await T.sleep(20); };
+    let seq = 7e8;                                      // (new version numbers, as _stampGeometry gives every geometry the app makes)
+    const stamp = (g) => { const v = ++seq; for (const k in g.attributes) g.attributes[k].version = v; if (g.index) g.index.version = v; return g; };
+    const prep = (g) => { const o = g.toNonIndexed(); o.deleteAttribute('uv'); return stamp(o); };
+    const has = (attr) => { if (!be.has(attr)) return false; const d = be.get(attr); return !!(d.buffer || d.bufferGPU); };   // (get() alone would make an empty entry)
+    const mat = new THREE.MeshStandardMaterial({ color: 0x8899aa });
+    const a = new THREE.Mesh(prep(new THREE.TorusGeometry(0.5, 0.2, 12, 24)), mat); a.renderOrder = -1;   // drawn first, b looks like it
+    const gOld = prep(new THREE.BoxGeometry()), gNew = prep(new THREE.SphereGeometry(0.7, 16, 12));
+    const b = new THREE.Mesh(gOld, mat); b.position.x = 2; b.renderOrder = 1;
+    try {
+      for (const o of [a, b]) { o.frustumCulled = false; state.partsRoot.add(o); }
+      await draw(); await draw();
+      b.geometry = gNew; await draw(); await draw();     // a tool gives the part a new geometry; the old one waits for Undo
+      gOld.dispose();                                    // and is freed when nothing refers to it any more
+      T.assert(has(gNew.attributes.position) && has(gNew.attributes.normal), 'freeing the old geometry took the buffers of the one the part draws now');
+      T.assert(!has(gOld.attributes.position), 'the freed geometry kept its buffers');
+      for (let i = 0; i < 4; i++) await draw();
+      await T.sleep(400);
+      T.eq(errs.length, 0, 'GPU errors after the free: ' + errs[0]);
+      b.geometry = gOld; stamp(gOld); await draw(); await draw();   // brought back: uploaded again
+      T.assert(has(gOld.attributes.position), 'a geometry brought back was not uploaded again');
+      b.geometry = gNew; await draw(); gOld.dispose();               // and freed again when it goes
+      T.assert(!has(gOld.attributes.position), 'a geometry brought back and freed again kept its buffers');
+    } finally {
+      for (const o of [a, b]) state.partsRoot.remove(o);
+      mat.dispose(); gNew.dispose(); a.geometry.dispose();
+      if (dev) dev.removeEventListener('uncapturederror', onErr);
+      F.requestRender();
+    }
+  });
+
+  test('toolbars: a right-click on a toolbar button in the view opens the toolbar list, never the view menu', async () => {
+    await T.fresh(['cube']);
+    const menu = () => document.getElementById('ctx-menu');
+    const shown = () => { const m = menu(); return !!m && m.style.display === 'block'; };
+    const close = async () => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await T.sleep(60); };
+    const rclick = async (el, press = true) => {      // (no press on the view: the orbit controls would try to hold a pointer that is not there)
+      const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+      if (press) el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 2, buttons: 2, clientX: x, clientY: y }));
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: x, clientY: y }));
+      await T.sleep(80);
+    };
+    const btns = [...document.querySelectorAll('#viewport .vp-bar button, #viewport .el-bar button, #viewport .vp-pill')].filter(b => b.offsetParent && b.getBoundingClientRect().width > 0);
+    T.assert(btns.length > 5, 'found only ' + btns.length + ' toolbar buttons');
+    const viewMenu = [];
+    for (const b of btns) {
+      await close();
+      await rclick(b);
+      const txt = shown() ? menu().textContent : '';
+      if (/Fit view|Frame selected|Add a note here/.test(txt)) viewMenu.push(b.id || b.title || b.className);
+      await close();
+    }
+    T.eq(viewMenu.join(', '), '', 'the view menu opened on');
+    await rclick(document.getElementById('vp-cmdk'));
+    T.assert(shown() && menu().classList.contains('is-commands'), 'a right-click on the search button did not open the toolbar list');
+    await close();
+    // the view itself keeps its menu
+    const c = document.querySelector('#viewport canvas');
+    await rclick(c, false);
+    T.assert(shown() && /Fit view|Frame selected/.test(menu().textContent), 'a right-click on the view no longer opens its menu');
+    await close();
   });
 
   // ══════════════════════════════ runner ════════════════════════════════

@@ -85,7 +85,7 @@
      All three clear 4.5:1 against the panel surfaces (--bg1…--bg3), so
      tertiary text (counts, hints, labels) stays readable; the old #6a6a6a
      measured about 3:1. */
-  --tx:#ededed; --tx2:#b0b0b0; --tx3:#8c8c8c;
+  --tx:#ededed; --tx2:#bcbcbc; --tx3:#9a9a9a;
 
   /* Accents / status */
   --ac:#0d99ff; --ac-text:#4db5ff; /* --ac is for fills and borders; text and icons in the accent colour use --ac-text (a lighter tint of the same blue, for small text on dark panels) */
@@ -131,8 +131,8 @@
   --select-arrow:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path d='M2 4l3 3 3-3' fill='none' stroke='%23ededed' stroke-width='1.5'/></svg>");
 
   /* Shadows / elevation */
-  --sh:0 3px 9px var(--blk-50);
-  --sh-pop:0 4px 10px var(--blk-50);
+  --sh:var(--surface-shadow);
+  --sh-pop:var(--surface-shadow);
   --sh-card:0 1px 6px var(--blk-12);
   --sh-thumb:0 1px 2px var(--blk-40);
   /* sliders (one look for every range input: see "Sliders" below) */
@@ -352,7 +352,7 @@ input,select{font:inherit;color:inherit}
 #app{display:grid;height:100vh;width:100vw;min-width:960px;min-height:560px;transition:grid-template-columns 320ms var(--ease-std);grid-template-rows:44px 1fr 22px;grid-template-columns:var(--side-l-w) minmax(0,1fr) var(--side-r-w);}
 body.left-collapsed{--side-l-w:10px}      /* folded: a little of the dark window stays at the left, the view does not run to the edge */
 body.left-collapsed #sidebar-left{opacity:0;transform:translateX(-12px);pointer-events:none;overflow:hidden}
-body.resizing #app{transition:none}
+#app.resizing{transition:none}
 /* The drag handles of the two sidebars. Each is a cell of the app grid on the status-bar row (the only part of the edge that is grabbable, so
    nothing over the viewport or the sidebars can be caught by accident), 16px wide and centred on the gap between its sidebar and the
    viewport (the viewport's edge on the left, the middle of the 12px gap on the right). A short faint notch shows in the middle of it
@@ -366,8 +366,8 @@ body.resizing #app{transition:none}
 #resize-l{grid-column:2;margin-left:-8px}
 #resize-r{grid-column:3;margin-left:-2px}
 body.left-collapsed #resize-l{display:none}
-body.resizing{cursor:col-resize !important;user-select:none}
-body.resizing *{cursor:col-resize !important}
+#drag-cursor{position:fixed;inset:0;z-index:var(--z-max)}#drag-cursor[hidden]{display:none}
+
 
 /* Toolbar */
 #tb{grid-column:1/-1;display:flex;align-items:center;padding:0 var(--space-xl);gap:var(--space-sm);background:var(--bg);border-bottom:1px solid var(--bd);z-index:var(--z-bar)}
@@ -876,13 +876,10 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 #draw-card .dr-group:not(:has(>:not([hidden]))){display:none}
 #draw-card .dr-group>*{box-sizing:border-box;min-height:34px;margin:0;padding:0 var(--space-xl)}
 #draw-card .dr-group>:not([hidden])~:not([hidden]){border-top:1px solid var(--hairline)}
-#draw-card .dr-group .cmd-num,#draw-card .dr-group .toggle{display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);font-size:var(--fs-12);color:var(--tx)}
+#draw-card .dr-group .cmd-num,#draw-card .dr-group .toggle{display:flex;align-items:center;justify-content:space-between;gap:var(--space-lg);font-size:var(--fs-12);color:var(--tx2)}
 #draw-card .dr-group .toggle{border-top:0}
 #draw-card .dr-group>:not([hidden])~.toggle:not([hidden]){border-top:1px solid var(--hairline)}
-#draw-card .dr-group .toggle>span:first-child,#draw-card .dr-group .cmd-num>span:first-child{color:var(--tx);font-weight:var(--fw-regular)}
-#draw-card .dr-group .toggle .switch{width:30px;height:18px}
-#draw-card .dr-group .toggle .switch::after{width:14px;height:14px}
-#draw-card .dr-group .toggle input:checked+.switch::after{transform:translateX(12px)}
+#draw-card .dr-group .toggle>span:first-child,#draw-card .dr-group .cmd-num>span:first-child{color:var(--tx2);font-weight:var(--fw-regular)}
 #draw-card .dr-group{--fld-ring:none;--fld-w:84px;--fld-h:26px;--fld-px:6px;--fld-mr:-6px;--fld-bg:none;--fld-bd:0;--fld-r:6px;--fld-just:flex-end;--fld-tr:background 140ms var(--ease-ios);--fld-bg-hover:var(--s3)}
 #draw-card .dr-group .size-field:focus-within{background:var(--bg3);box-shadow:inset 0 0 0 1px var(--ac)}
 #draw-card .dr-group .size-field input{width:auto;flex:1 1 auto;min-width:0;color:var(--tx)}
@@ -950,6 +947,9 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
 .toggle input:checked+.switch{background:var(--ac)}
 .toggle input:checked+.switch::after{transform:translateX(14px)}
 /* the right sidebar: every switch is the small one, as in Photo mode */
+#sidebar-right .toggle .switch{width:var(--switch-w);height:var(--switch-h)}
+#sidebar-right .toggle .switch::after{left:var(--switch-pad);top:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob)}
+#sidebar-right .toggle input:checked+.switch::after{transform:translateX(var(--switch-travel))}
 /* the command cards (Dynamic place, Fill holes, ...) use the same small switch as the right sidebar */
 .section-cmd .toggle .switch{width:var(--switch-w);height:var(--switch-h)}
 .section-cmd .toggle .switch::after{left:var(--switch-pad);top:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob)}
@@ -969,9 +969,6 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
    so the labels at the left stand evenly (:is(...,#_a#_b#_c) outranks the shared rows below, as elsewhere in this sheet) */
 :is(.section-cmd .cmd-adv-b,#_a#_b#_c){gap:var(--cmd-row-gap)}
 :is(.section-cmd .cmd-adv-b>:is(.toggle,.cmd-num),#_a#_b#_c){box-sizing:border-box;height:32px;min-height:0;padding:0;--fld-h:32px}
-#sidebar-right .toggle .switch{width:var(--switch-w);height:var(--switch-h)}
-#sidebar-right .toggle .switch::after{left:var(--switch-pad);top:var(--switch-pad);width:var(--switch-knob);height:var(--switch-knob)}
-#sidebar-right .toggle input:checked+.switch::after{transform:translateX(var(--switch-travel))}
 
 /* Viewport */
 #viewport{position:relative;background:var(--bg)}
@@ -1007,7 +1004,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.spl{color:var(--icon-spl)}
    Shows live delta: ΔX/Y/Z for translate, angle around the active axis (or
    per-axis Euler) for rotate, scale factor for scale. Position is updated
    each frame from the pivot's projected screen coords. */
-#gizmo-hud{position:absolute;left:0;top:0;display:none;background:var(--glass-strong);border:1px solid var(--bd);border-radius:var(--r-sm);padding:var(--space-sm) var(--space-md);font-family:var(--font-sans);font-size:var(--fs-xs);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:0 4px 10px var(--blk-50);pointer-events:none;z-index:var(--z-sticky);white-space:nowrap;line-height:var(--lh-relaxed)}
+#gizmo-hud{position:absolute;left:0;top:0;display:none;background:var(--glass-strong);border:1px solid var(--bd);border-radius:var(--r-sm);padding:var(--space-sm) var(--space-md);font-family:var(--font-sans);font-size:var(--fs-xs);font-feature-settings:'tnum' 1,'zero' 1;font-variant-numeric:tabular-nums;color:var(--tx);box-shadow:var(--surface-shadow-bar);pointer-events:none;z-index:var(--z-sticky);white-space:nowrap;line-height:var(--lh-relaxed)}
 #gizmo-hud.show{display:block}
 #gizmo-hud .ghud-row{display:flex;align-items:center;gap:var(--space-md)}
 #gizmo-hud .ghud-mode{font-size:var(--fs-9);font-weight:var(--fw-bold);text-transform:uppercase;letter-spacing:.08em;color:var(--tx3);margin-right:var(--space-2xs)}
@@ -1493,7 +1490,7 @@ body.msr-mode #canvas{cursor:crosshair}
    drop-line indicator, drop-into outline, and the sticky right-edge icon
    column (visibility eye + color swatch) on every tree row. */
 .tree-node.dnd-dragging{opacity:var(--op-45)}
-body.dnd-active,body.dnd-active .tree-node{cursor:grabbing!important}
+
 /* The icon column at the right end of a row: the visibility eye and the
    colour swatch. (How it is pinned there while names slide under it is set
    under "The tree scrolls sideways" further down.) */
@@ -1869,7 +1866,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* Export window — a format list on the left, that format's options on the right.
    Same language as Settings: an inset list, hairline rows with the label (and a
    line saying what it does) on the left and the control on the right. */
-.exp-win{display:flex;width:840px;max-width:96vw;height:min(620px,90vh);background:var(--bg1);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh),0 0 0 1px var(--surface-line);transform:translateY(8px) scale(.97);opacity:0;transition:transform var(--dur-slow) var(--ease-out),opacity var(--dur-180) var(--ease-out)}
+.exp-win{display:flex;width:840px;max-width:96vw;height:min(620px,90vh);background:var(--bg1);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--surface-shadow-win);transform:translateY(8px) scale(.97);opacity:0;transition:transform var(--dur-slow) var(--ease-out),opacity var(--dur-180) var(--ease-out)}
 #export-modal.show .exp-win{transform:translateY(0) scale(1);opacity:1}
 .exp-sidebar{width:212px;flex:0 0 212px;background:var(--surface-inset);border-right:1px solid var(--surface-line);overflow-y:auto;padding:var(--space-3xl) var(--space-md) var(--space-xl)}
 .exp-side-h{padding:0 var(--space-lg) var(--space-xl);font-size:var(--fs-2xl);font-weight:var(--fw-semibold);color:var(--tx-control-hover)}
@@ -1939,7 +1936,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 /* no footer bar: the Export button floats over the bottom right corner */
 #export-modal .exp-content-f{position:sticky;bottom:0;z-index:2;margin-top:auto;display:block;height:0;padding:0;border:0;background:none;overflow:visible}
 #export-modal .exp-foot-note{display:none}
-#export-modal .exp-foot-act{position:absolute;right:20px;bottom:20px;box-shadow:0 6px 18px var(--blk-60);border-radius:var(--r-lg)}
+#export-modal .exp-foot-act{position:absolute;right:20px;bottom:20px;box-shadow:var(--surface-shadow-bar);border-radius:var(--r-lg)}
 /* Export button: a pill that folds into a circle (iOS-style spring) while scrolling */
 #export-modal #export-confirm{--orb:38px;--spring:cubic-bezier(.32,.72,0,1);display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:var(--orb);min-height:0;min-width:var(--orb);padding:0 18px 0 14px;gap:var(--space-7);border-radius:999px;overflow:hidden;
   transition:padding .55s var(--spring),gap .55s var(--spring),background var(--dur-base) var(--ease-out),transform .2s var(--spring),filter .2s}
@@ -1958,7 +1955,7 @@ button.sc-row-keys:hover{background:var(--s5)}
 #export-modal #exp-share-btn{display:inline-grid;place-items:center;box-sizing:border-box;width:38px;min-width:38px;height:38px;min-height:0;padding:0;border-radius:50%}
 #export-modal #exp-share-btn svg,#export-modal #exp-share-btn i{width:16px;height:16px}
 #export-modal #exp-share-btn:active{transform:scale(.94)}
-.exp-share-menu{position:absolute;right:0;bottom:calc(100% + 6px);min-width:190px;padding:4px;background:var(--surface-pop);border:1px solid var(--bd);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:5}
+.exp-share-menu{position:absolute;right:0;bottom:calc(100% + 6px);min-width:190px;padding:4px;background:var(--surface-pop);border:1px solid var(--bd);border-radius:8px;box-shadow:var(--surface-shadow);z-index:5}
 .exp-share-menu[hidden]{display:none}
 .exp-share-menu button{display:flex;justify-content:space-between;align-items:center;width:100%;padding:7px 10px;border:0;border-radius:6px;background:none;color:inherit;font:inherit;cursor:pointer;text-align:left}
 .exp-share-menu button:hover,.exp-share-menu button:focus-visible{background:rgba(255,255,255,.08);outline:none}
@@ -2207,7 +2204,7 @@ a:focus-visible,[role="textbox"]:focus-visible,input:is([type=checkbox],[type=ra
    the viewport uses for snapping). Tapping a modifier is not keyboard
    navigation: the ring stays hidden until a real key (Tab, an arrow …) is
    pressed. See _wireModifierRing in app.js. */
-html.no-mod-ring :focus-visible{outline:none!important;box-shadow:none!important}
+.no-mod-ring:focus-visible{outline:none!important;box-shadow:none!important}
 
 /* ── Menus ───────────────────────────────────────────────────────────────
    One look for every dropdown and context menu, after Figma's: a dark
@@ -2390,10 +2387,14 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
    things (menus, popovers) and windows. Change a token and all follow. */
 :root{                              /* (the surface colour, the radii and the inner lines are set under "Corner radii" further down) */
   --surface-ring:0 0 0 1px var(--wht-8);     /* hairline edge instead of a border */
-  --surface-shadow:0 1px 3px var(--blk-30),0 8px 20px -4px var(--blk-50);       /* small surfaces: a close shadow and a longer one under it, as a menu has on macOS */
-  --surface-ring-dark:0 0 transparent;     /* a dark hairline round a window */
-  --surface-shadow-win:0 2px 5px var(--blk-40),0 18px 36px -8px var(--blk-60);    /* the window in front: deep, and almost all of it below */
-  --surface-shadow-win-off:var(--surface-ring-dark);    /* a window that is not the one in use: no shadow, only the dark hairline */
+  /* Shadows in three levels, layered the way macOS draws them: a close contact shadow that gives the edge, and a wide soft one
+     that falls a little down and spreads round every side, never a dark band under the bottom edge only. Windows add a dark
+     half-pixel outline. Bars and pills over the view are lowest, menus, popovers and the command cards next, windows highest. */
+  --surface-shadow-bar:0 1px 2px var(--blk-20),0 4px 12px var(--blk-25);                 /* bars, pills and small things over the view */
+  --surface-shadow:0 1px 3px var(--blk-25),0 10px 28px var(--blk-40);                    /* menus, popovers, tooltips, toasts, the command cards */
+  --surface-ring-dark:0 0 0 .5px var(--blk-60);                                         /* the dark hairline round a window */
+  --surface-shadow-win:var(--surface-ring-dark),0 4px 12px var(--blk-25),0 24px 64px var(--blk-50);    /* the window in front */
+  --surface-shadow-win-off:var(--surface-ring-dark),0 8px 24px var(--blk-25);           /* a window that is not the one in use: the hairline and a faint shadow */
   --surface-bar:rgba(16,16,16,.94);                   /* toolbars floating over the viewport */
   --pill-bg:rgba(16,16,16,.72);                       /* the pills over the view (.vp-pill), the stats readout, the tags on the start screen */
   --switch-off:rgba(120,128,140,.35);                 /* the track of a switch that is off */
@@ -2424,20 +2425,20 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
   background:var(--surface-inset);border-top:1px solid var(--surface-line);box-shadow:none;
 }
 /* toolbars over the viewport */
-.vp-bar,.vpc.tl:not(#vp-perf){background:var(--surface-bar);box-shadow:0 4px 10px var(--blk-40),var(--surface-ring)}
+.vp-bar,.vpc.tl:not(#vp-perf){background:var(--surface-bar);box-shadow:var(--surface-shadow-bar),var(--surface-ring)}
 /* the left toolbar is a column of two pills (Model mode, then the tools), so the column itself has no background */
 :is(.vpc.tl:not(#vp-perf),#_a#_b){background:transparent;box-shadow:none;padding:0;gap:var(--space-sm)}
 .vp-bar-col{flex-direction:column;gap:var(--space-2xs)}
 .tip-pop{border-radius:var(--r-sm)}
 .tip-pop.tip-bar{box-shadow:var(--surface-shadow)}   /* tips over the viewport toolbars: no outline */
 /* The selected row's label and icon are the accent blue itself. */
-.tree-node.selected .tree-label{color:var(--ac)}
+.tree-node.selected .tree-label{color:color-mix(in srgb,var(--ac) 45%,var(--white))}      /* (a lighter blue than the row's own tint, so the name of the picked row reads on it) */
 .tree-node.selected .tree-typeicon{color:var(--ac)}
-.vp-last-item{justify-content:space-between;gap:var(--space-xl)}
-.vp-last-keys{margin-left:auto}
 /* Shape names stay on one line; the picker grows to fit the longest. */
 #vp-add-pop{width:max-content;min-width:160px}
 .vp-prim-pop-item{white-space:nowrap}
+.vp-last-item{justify-content:space-between;gap:var(--space-xl)}
+.vp-last-keys{margin-left:auto}
 /* App icon: the same box as every other top-bar button (it was a 24px chip
    inside 5px of padding, so it read as smaller than its neighbours). */
 .brand-mark,.brand-left .brand-mark{margin-left:0;width:var(--icon-xl);height:var(--icon-xl);margin:0;border-radius:0;background:none;box-shadow:none;transition:none;filter:none;}
@@ -2523,6 +2524,8 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .side-group{padding:var(--space-2xl) var(--space-xs) var(--space-7);font-size:var(--fs-10,10px);font-weight:var(--fw-semibold);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--tx3);user-select:none}
 #sidebar-right .section-h{text-transform:none;letter-spacing:0;font-size:var(--fs-12);font-weight:var(--fw-medium);color:var(--tx)}
 #sidebar-right .section-h.collapsed{color:var(--tx2)}
+/* a closed card of the right sidebar is 40px tall (the header row is 38px, plus the 1px at the top and at the bottom of the card) */
+#sidebar-right .section:not(.section-fixed)>.section-h{padding-top:8px;padding-bottom:8px}
 #sidebar-right .btn.primary{background:var(--ac);border-color:transparent;color:var(--white)}
 #sidebar-right .btn.primary:hover{background:color-mix(in srgb,var(--ac) 88%,var(--white));border-color:transparent}
 /* A column of commands (Quick fixes, Edit selection, Optimize). They are the
@@ -2850,7 +2853,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 /* Group names: a soft grey, regular weight — not pure white. */
 .tree-node.is-group .tree-label{color:var(--tree-group-fg);font-weight:var(--fw-regular)}
 .tree-node.is-group.ancestor-selected .tree-label{color:color-mix(in srgb, var(--ac-text) 62%, var(--tx2))}
-.tree-node.is-group.selected .tree-label{color:var(--ac)}
+.tree-node.is-group.selected .tree-label{color:color-mix(in srgb,var(--ac) 45%,var(--white))}      /* (the same lighter blue as the name of a picked part) */
 /* View cube: soft plate on hover, accent on the face under the pointer. */
 #axis-gizmo .axg-face{transition:fill var(--dur-fast) var(--ease-out),stroke var(--dur-fast) var(--ease-out)}
 /* the face under the pointer takes the colour of the axis it looks along */
@@ -2879,6 +2882,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 :root{--r-xs:6.4px;--r-sm:9.6px;--r-md:9.6px;--r-lg:14px;--r-xl:14px;
   --btn-r-sm:9.6px;--btn-r-md:9.6px;--btn-r-lg:9.6px;--surface-pop-r:14px;--surface-win-r:14px;--tx-control:#c6c6c9;--tx-control-hover:#dededf;--tx-control-off:#6e6e72;--tx-control-placeholder:#77777b;--mat-insp-w:264px;--surface-pop:#161616;--surface-line:var(--wht-4);--surface-inset:var(--blk-20);}
 .tree-expand{border-radius:var(--r-xs)}
+.tree-node>.tree-expand{margin-right:-2px}      /* (the +/- box stands 4px from the folder icon, not 7px) */
 /* A button whose result is being recalculated. */
 .btn .when-busy{display:none}
 .btn.is-busy .when-idle{display:none}
@@ -2918,6 +2922,8 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
 .btn-row>.btn{min-width:0}
 /* Typing a slider value: the field has the size and type of the number it
    replaces, so nothing grows or shifts when it is clicked — only a ring. */
+:is(.section-cmd .scrub .scrub-rhs:has(.scrub-unit:not(:empty)) .scrub-value,#_a#_b#_c){width:auto;min-width:92px;padding:0 calc(var(--num-px) + 44px) 0 var(--space-md)}   /* room for a long unit ("× diag") inside the box, drawn at its right */
+.section-cmd .scrub .scrub-value{width:auto;min-width:56px;padding:0 var(--space-md)}
 .scrub .scrub-value{box-sizing:border-box;width:44px;min-width:44px;height:20px;padding:0 var(--space-sm);justify-content:flex-end}
 .scrub .scrub-input,.scrub .scrub-input:focus{box-sizing:border-box;width:44px;min-width:36px;height:20px;padding:0 var(--space-sm);margin:0;
   font:inherit;font-size:var(--fs-md);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums;letter-spacing:var(--tracking-tight);line-height:var(--lh-none);
@@ -2986,7 +2992,7 @@ html.tree-icons-coded .tree-node .tree-typeicon.cln{color:var(--icon-cln,#38bdf8
    fill showing where the value sits in its range. */
 .scrub-drag{cursor:ew-resize;touch-action:none}
 input.scrub-drag:focus{cursor:ew-resize}
-html.is-scrubbing,html.is-scrubbing *{cursor:ew-resize!important;user-select:none!important;-webkit-user-select:none!important}
+
 .prim-row .prim-slider{display:none}
 .prim-row{grid-template-columns:minmax(0,1fr) auto;padding:var(--space-3) 0;min-height:22px}
 .prim-row[hidden]{display:none}      /* a row that belongs to a switch that is off (the nut's kind and place) */
@@ -3035,7 +3041,7 @@ body.mat-dock-open .vp-cmd-host{bottom:calc(min(var(--dock-h),80vh) + 12px);max-
 .vp-cmd-host>.section-cmd{pointer-events:auto;margin:0;display:flex;flex-direction:column;min-height:0;max-height:100%;border:0;border-radius:var(--surface-pop-r);box-shadow:var(--surface-shadow),var(--surface-ring);overflow:hidden}
 .vp-cmd-host>.section-cmd[hidden]{display:none}
 /* (the grip holds the pointer while it is dragged, so its cursor is the one that shows: a rule on every element would restyle the whole page, thousands of tree rows, at the start of each drag) */
-body.cmd-dragging .vp-cmd-host .section-h,body.cmd-dragging .vp-cmd-host .cmd-hero{cursor:grabbing}
+body.cmd-dragging .vp-cmd-host .section-h{cursor:grabbing}
 body.cmd-dragging .vp-cmd-host{transition:none;will-change:translate}
 .vp-cmd-host .section-h,.vp-cmd-host .section-h:hover{cursor:grab;touch-action:none;color:var(--tx2);padding:var(--space-lg) var(--space-md) var(--space-md) var(--space-xl);flex:0 0 auto}
 .vp-cmd-host .section-b{padding:var(--space-2xs) var(--space-xl) var(--space-xl);overflow-y:auto;min-height:0;flex:1 1 auto}
@@ -3101,7 +3107,7 @@ body.cmd-dragging .vp-cmd-host{transition:none;will-change:translate}
 @media (prefers-reduced-motion:reduce){#vp-view-pill-menu .vp-pill-item:hover .vp-pill-cube,#vp-view-pill-menu .vp-pill-item:hover .vp-pill-ico{transform:none}}
 .vpc.tc #vp-mode-pills{left:0;transform:translateX(-50%)}
 .vp-pill[hidden]{display:none}
-#vp-brep-pop{position:fixed;z-index:var(--z-vp-pop);width:272px;padding:var(--space-lg);border-radius:var(--r-lg);background:var(--bg3,#1c1c20);border:1px solid var(--s3);box-shadow:0 7px 18px var(--blk-40);color:var(--tx);font-size:var(--fs-md);display:flex;flex-direction:column;gap:var(--space-md)}
+#vp-brep-pop{position:fixed;z-index:var(--z-vp-pop);width:272px;padding:var(--space-lg);border-radius:var(--r-lg);background:var(--bg3,#1c1c20);border:1px solid var(--s3);box-shadow:var(--surface-shadow);color:var(--tx);font-size:var(--fs-md);display:flex;flex-direction:column;gap:var(--space-md)}
 #vp-brep-pop[hidden]{display:none}
 #vp-brep-pop .bp-h{font-weight:var(--fw-medium)}
 #vp-brep-pop .bp-s{color:var(--tx2);font-size:var(--fs-sm);line-height:1.45}
@@ -3460,7 +3466,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-pane-b .field>input[type=range]{flex:0 0 230px;width:230px}
 .set-help{display:block;margin-top:var(--space-2xs);font-size:var(--fs-11);color:var(--tx3);line-height:var(--lh-body);white-space:normal;font-weight:var(--fw-regular)}
 /* Crash safety: one calm panel for a problem that needs a decision (see _Recover) */
-#mo-recover{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:var(--z-recover);display:flex;align-items:center;gap:var(--space-3xl);max-width:min(680px,calc(100vw - 32px));padding:var(--space-2xl) var(--space-3xl);background:var(--surface-pop,#161616);border:1px solid var(--bd2);border-radius:var(--r-2xl);box-shadow:0 5px 13px var(--blk-60);font-size:var(--fs-12);color:var(--tx2)}
+#mo-recover{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:var(--z-recover);display:flex;align-items:center;gap:var(--space-3xl);max-width:min(680px,calc(100vw - 32px));padding:var(--space-2xl) var(--space-3xl);background:var(--surface-pop,#161616);border:1px solid var(--bd2);border-radius:var(--r-2xl);box-shadow:var(--surface-shadow);font-size:var(--fs-12);color:var(--tx2)}
 #mo-recover[hidden]{display:none}
 #mo-recover .mr-text{display:flex;flex-direction:column;gap:var(--space-3);min-width:0}
 #mo-recover .mr-title{color:var(--tx);font-size:var(--fs-13,13px)}
@@ -3485,6 +3491,8 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .set-nav-item svg{width:18px;height:18px;flex-basis:18px}
 .set-main{padding:30px 36px 36px}
 :is(.set-pane-h,#_a#_b){margin-bottom:var(--space-md);font-size:var(--fs-xl);font-weight:var(--fw-semibold)}
+/* the title of a Settings pane (General, Appearance, ...) is in the serif of the other window titles, Light */
+:is(.set-pane-h,#_a#_b#_c){font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:28px;line-height:1.1;letter-spacing:-.005em;margin-bottom:var(--space-md)}
 .set-pane-b>.toggle,.set-pane-b>.field,.set-pane-b>div>.toggle,.set-pane-b>div>.field,.set-pane-b .pop-section>.toggle,.set-pane-b .pop-section>.field,.set-row{min-height:56px;padding:var(--space-xl) 0}
 .set-pane-b .toggle>span:first-child,.set-row>span:first-child,.set-pane-b .field>label{color:var(--tx-control-hover);font-weight:var(--fw-medium)}
 .set-help{margin-top:var(--space-xs);font-size:var(--fs-12)}
@@ -3525,7 +3533,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    field, then suggestions (or results) with an icon, the name and the
    shortcut. */
 #cmdk-modal{align-items:flex-start}
-#cmdk-modal .modal{max-height:60vh;transform-origin:top center;transition:transform var(--dur-slow) var(--ease-out),opacity var(--dur-180) var(--ease-out),height var(--dur-200) var(--ease-ios);border-radius:var(--r-3xl);box-shadow:0 5px 13px var(--blk-60),0 0 0 1px var(--s4)}
+#cmdk-modal .modal{max-height:60vh;transform-origin:top center;transition:transform var(--dur-slow) var(--ease-out),opacity var(--dur-180) var(--ease-out),height var(--dur-200) var(--ease-ios);border-radius:var(--r-3xl);box-shadow:var(--surface-shadow-win)}
 #cmdk-modal .modal-h{padding:var(--space-2xl) var(--space-3xl);gap:var(--space-xl)}
 #cmdk-modal .cmdk-search-icon{width:19px;height:19px;flex-basis:19px;cursor:grab;touch-action:none;transition:var(--tr-fg)}
 #cmdk-modal .cmdk-search-icon:hover{color:var(--tx)}
@@ -3567,51 +3575,12 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 #tree{background-color:var(--bg);--tree-gutter:max(0px,calc(14px - var(--tree-sbw,0px)))}
 /* The lists inside windows, for the same reason, on the window's colour. */
 #cmdk-list,#shortcuts-body,.modal .modal-b{background-color:var(--surface-pop)}
-/* ── A command panel with a clip on top ────────────────────────────────────
-   The clip runs edge to edge from the top edge of the card and dissolves
-   into the card's own colour towards the bottom (the clip is rendered on
-   that colour, so only the object is seen). The close button sits on its
-   top right corner; the title comes under it, inside the fade. */
-.section-cmd.has-hero{position:relative}
-.cmd-hero{flex:0 0 auto;margin:0;line-height:0;background:var(--surface-pop);pointer-events:none}
-.vp-cmd-host .cmd-hero{pointer-events:auto;cursor:grab;touch-action:none}      /* (the whole picture is a handle for moving the card) */
-.cmd-hero video{display:block;width:100%;height:auto;aspect-ratio:592/370;object-fit:cover;background:var(--surface-pop);
-  -webkit-mask-image:linear-gradient(to bottom,var(--black) 0,var(--black) 58%,var(--blk-60) 78%,transparent 100%);
-          mask-image:linear-gradient(to bottom,var(--black) 0,var(--black) 58%,var(--blk-60) 78%,transparent 100%)}
-.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:-30px;padding:0 var(--space-xl) var(--space-md);background:none}
-:is(.section-cmd.has-hero .section-h .cmd-close,#_a#_b){position:absolute;top:8px;right:8px;z-index:2;width:24px;height:24px;border-radius:50%;background:rgba(16,16,16,.6);color:var(--tx-control)}
-:is(.section-cmd.has-hero .section-h .cmd-close,#_a#_b):hover{background:var(--s6);color:var(--tx-control-hover)}
-/* The commands that come with a clip are the app's headline tools, and their
-   cards say so: the name set large over the foot of the clip, a line of
-   plain description under it, and one filled button that runs the command. */
-.vp-cmd-host>.section-cmd.has-hero{box-shadow:0 5px 13px var(--blk-60),0 0 0 1px var(--s4)}
-.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:-32px;padding:0 var(--space-2xl) var(--space-lg)}
-/* The close button stays in the card's top corner. While Advanced is open the clip is gone and the title slides up to
-   the button's line (the clip's strip is just tall enough to put the title's middle level with the button's), and stops short of it. */
-.vp-cmd-host .section-cmd.has-hero>.section-h{padding-right:46px}
-:is(.section-cmd.has-hero .section-h .cmd-close,#_a#_b#_c){top:12px;right:12px}
-/* While Advanced is open the clip fades away and its frame closes to a thin strip, so the
-   options have the room; closing Advanced brings it back (see _advTurn in _CmdCards). The
-   picture is not scaled: it only fades, while the frame closes to the matching height; the
-   title, pulled up over the clip's foot, rides along. The close button's blur is dropped
-   while it runs. */
-.cmd-hero{aspect-ratio:592/370;min-height:0;overflow:clip;transition:aspect-ratio .34s var(--ease-ios)}
-.cmd-hero video{transition:opacity .26s ease}
-.section-cmd.adv-open>.cmd-hero{aspect-ratio:592/92}
-.section-cmd.adv-open>.cmd-hero video{opacity:0}
-.section-cmd.adv-anim .section-h .cmd-close{backdrop-filter:none;-webkit-backdrop-filter:none}
-@media (prefers-reduced-motion:reduce){.cmd-hero,.cmd-hero video{transition:none}}
-.vp-cmd-host .section-cmd.has-hero>.section-h>span{font-size:var(--fs-3xl);line-height:var(--lh-compact);font-weight:var(--fw-semibold);letter-spacing:-.015em;text-transform:none;color:var(--white);text-shadow:0 1px 14px var(--blk-70)}
-.vp-cmd-host .section-cmd.has-hero>.section-b{padding:0 var(--space-2xl) var(--space-2xl)}
 .cmd-lede{color:var(--tx2);font-size:var(--fs-12);line-height:var(--lh-note);margin:0 0 var(--space-xl)}
-#vp-cmd-host .section-cmd:is(.has-hero,.cmd-blue) [data-cmd-primary]{height:34px;background:var(--ac);border-color:transparent;color:var(--white)!important;font-weight:var(--fw-semibold);justify-content:center;box-shadow:0 1px 0 var(--s6) inset,0 6px 16px color-mix(in srgb,var(--ac) 30%,transparent)}
-#vp-cmd-host .section-cmd:is(.has-hero,.cmd-blue) [data-cmd-primary]:hover{background:color-mix(in srgb,var(--ac) 88%,var(--white));border-color:transparent}
-#vp-cmd-host .section-cmd:is(.has-hero,.cmd-blue) [data-cmd-primary]:disabled{box-shadow:none}
+#vp-cmd-host .section-cmd.cmd-blue [data-cmd-primary]{height:34px;background:var(--ac);border-color:transparent;color:var(--white)!important;font-weight:var(--fw-semibold);justify-content:center;box-shadow:0 1px 0 var(--s6) inset,0 6px 16px color-mix(in srgb,var(--ac) 30%,transparent)}
+#vp-cmd-host .section-cmd.cmd-blue [data-cmd-primary]:hover{background:color-mix(in srgb,var(--ac) 88%,var(--white));border-color:transparent}
+#vp-cmd-host .section-cmd.cmd-blue [data-cmd-primary]:disabled{box-shadow:none}
 /* white on the blue, whatever colour the button's own class asks for (the label and the icon take it from here) */
-#vp-cmd-host .section-cmd:is(.has-hero,.cmd-blue) [data-cmd-primary] :is(span,svg,i){color:inherit!important}
-.vp-cmd-host .section-cmd.has-hero .cmd-foot{padding:var(--space-md) var(--space-lg)}
-.vp-cmd-host .section-cmd.has-hero .cmd-foot .cmd-ok{color:var(--white)}
-@media (max-height:640px){.vp-cmd-host .section-cmd.has-hero>.section-h>span{text-shadow:none}}
+#vp-cmd-host .section-cmd.cmd-blue [data-cmd-primary] :is(span,svg,i){color:inherit!important}
 /* a small segmented choice on the right of an Advanced row; a text field there; the result line of a command */
 .cmd-seg.cmd-seg-sm{flex:0 0 auto;width:172px}
 :is(.cmd-num .size-field input[type=text]:not([inputmode]),#_a#_b){text-align:left}
@@ -3787,7 +3756,6 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .sv-opts .toggle.is-off{opacity:var(--op-45)}
 .sv-note{margin-left:var(--space-md);font-size:var(--fs-11);color:var(--tx3)}
 /* on a short viewport the controls matter more than the clip */
-@media (max-height:640px){.cmd-hero{display:none}.vp-cmd-host .section-cmd.has-hero>.section-h{margin-top:0;padding:var(--space-lg) 40px var(--space-md) var(--space-xl)}}
 /* ── Number fields: one size ────────────────────────────────────────────────
    Every field a number is typed or dragged in is the same height and wide
    enough for its longest value, and it is a field to look at: a box, not bare
@@ -3830,7 +3798,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 /* every row of a name and a field, whatever card it is in: no dead gap between the two (the name carries the space as its own padding, so it drags too) */
 .prim-row{column-gap:0}.prim-row>.prim-label{padding-right:var(--space-lg)}
 .photo-fx-row .prim-label{padding:0 var(--space-lg)}
-.cmd-num{gap:0}.cmd-num>span:first-child{flex:1 1 auto;min-width:0;padding-right:var(--space-lg)}
+.cmd-num{gap:0}.cmd-num>span:first-child{flex:1 1 auto;min-width:0;padding-right:var(--space-lg)}.cmd-num>.cmd-seg:only-child{flex:1 1 auto}
 /* a row that is greyed out (Photo mode off, or that effect off) gives none of the signs of a draggable field: no drag pointer, no lit edge, no lit name */
 #photo-fx#photo-fx.is-off :is(.prim-val-wrap,.prim-unit,.prim-label,input:not([type=checkbox])),#photo-fx#photo-fx .photo-fx-row.is-off :is(.prim-val-wrap,.prim-unit,.prim-label,input:not([type=checkbox])){cursor:default}
 #photo-fx#photo-fx.is-off .prim-row:hover .prim-val-wrap:not(:focus-within),#photo-fx#photo-fx .photo-fx-row.is-off:hover .prim-val-wrap:not(:focus-within){border-color:var(--bd)}
@@ -3898,8 +3866,6 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
 .section-cmd[data-cmd="axis"] .ax-chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:4px 0 var(--space-md)}
 .section-cmd[data-cmd="axis"] .ax-chips .btn{justify-content:center;gap:5px;padding:0 6px;height:26px;min-height:0;font-size:11.5px;overflow:hidden;white-space:nowrap}
 .section-cmd[data-cmd="axis"] .ax-chips .btn svg,.section-cmd[data-cmd="axis"] .ax-chips .btn i{display:none}
-.section-cmd[data-cmd="axis"] .cmd-lede{margin-bottom:6px}
-.section-cmd[data-cmd="axis"] .pv-head{margin:10px 0 4px}
 .section-cmd[data-cmd="axis"] .pv-head{margin:var(--space-lg) 0 var(--space-sm);font-size:var(--fs-11);color:var(--tx3)}
 .section-cmd[data-cmd="pivot"] .pv-chips{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);margin:var(--space-md) 0}
 .section-cmd[data-cmd="pivot"] .pv-chips .btn{justify-content:flex-start;gap:var(--space-md);padding:0 var(--space-lg)}
@@ -3962,10 +3928,10 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
    off used to be the same blue at 40%, which read as a blue button behind
    glass; it takes the plain surface and the "off" text colour instead. */
 :is(.btn.primary,.tbtn.primary,#_a#_b):is(:disabled,[aria-disabled="true"]),
-:is(#vp-cmd-host .section-cmd:is(.has-hero,.cmd-blue) [data-cmd-primary],#_a#_b):is(:disabled,[aria-disabled="true"]){background:var(--bg3)!important;border-color:transparent!important;
+:is(#vp-cmd-host .section-cmd.cmd-blue [data-cmd-primary],#_a#_b):is(:disabled,[aria-disabled="true"]){background:var(--bg3)!important;border-color:transparent!important;
   color:var(--tx-control-off)!important;box-shadow:none!important;opacity:1;cursor:default}
 :is(.btn.primary,.tbtn.primary,#_a#_b):is(:disabled,[aria-disabled="true"]) :is(span,svg,i),
-:is(#vp-cmd-host .section-cmd:is(.has-hero,.cmd-blue) [data-cmd-primary],#_a#_b):is(:disabled,[aria-disabled="true"]) :is(span,svg,i){color:inherit!important}
+:is(#vp-cmd-host .section-cmd.cmd-blue [data-cmd-primary],#_a#_b):is(:disabled,[aria-disabled="true"]) :is(span,svg,i){color:inherit!important}
 /* ── Library drawer ───────────────────────────────────────────────────────
    The library is a drawer along the bottom of the viewport, between the
    sidebars, like the materials dock (it used to take the tree's place in the
@@ -3975,7 +3941,7 @@ body:has(.doc-tabs.is-reordering) .tip-pop{display:none!important}   /* no name 
   display:flex;flex-direction:column;overflow:hidden;border-top:1px solid var(--bd);background:var(--bg2);box-shadow:none;
   z-index:var(--z-toolbar);transform:translateY(calc(100% + 24px));visibility:hidden;transition:transform var(--dur-200) var(--ease-out),visibility 0s linear var(--dur-200);
   font:12px/1.5 var(--font-sans)}
-#vp-library-pop.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
+#vp-library-pop:not(.show),#log-console:not(.show),.modal-bg:not(.show){content-visibility:hidden}#vp-library-pop.show{transform:translateY(0);visibility:visible;transition:transform var(--dur-200) var(--ease-out),visibility 0s}
 body.lib-dock-open .vpc.tr{bottom:calc(min(var(--dock-h),80vh) + 12px)}
 body.lib-dock-open .vpc.br{bottom:calc(min(var(--dock-h),80vh) + 10px)}
 body.lib-dock-open .vpc.tl:not(#vp-perf){top:calc(50% - min(var(--dock-h),80vh) / 2)}
@@ -4080,7 +4046,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58p
    mode with a coloured ring, icon and label. The camera pill shows a caret
    because it opens a list. */
 :is(.vp-pill,#_a#_b){height:30px;padding:0 var(--space-lg);gap:var(--space-sm);min-width:0;border-radius:var(--r-lg);background:rgba(16,16,16,.94);color:var(--tx-control);backdrop-filter:none;
-  box-shadow:0 4px 10px var(--blk-40),0 0 0 1px var(--s4);font-size:var(--fs-12,12px);font-weight:var(--fw-regular)}
+  box-shadow:var(--surface-shadow-bar),0 0 0 1px var(--s4);font-size:var(--fs-12,12px);font-weight:var(--fw-regular)}
 :is(.vp-pill,#_a#_b):hover{background:rgba(34,34,36,.96);color:var(--tx)}
 :is(.vp-pill,#_a#_b)[aria-expanded="true"]{background:rgba(34,34,36,.96);color:var(--tx)}
 :is(.vp-pill,#_a#_b) .vp-pill-icon{opacity:.7}
@@ -4089,7 +4055,7 @@ body.lib-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58p
 :is(#vp-view-pill,#_a#_b)[aria-expanded="true"]::after{transform:rotate(180deg)}
 /* a state chip (isolated, exploded, measure, snap): the colour itself, solid and bright, floating, not a dim tint with a ring */
 /* (three ids: the colour rules for every .vp-pill further up would otherwise keep the text pale) */
-:is(.vp-pill.vp-pill-mode,#_a#_b#_c){--pc:var(--ac);--pc-ink:var(--tx-on-accent);background:var(--pc);color:var(--pc-ink);box-shadow:0 4px 10px var(--blk-40)}
+:is(.vp-pill.vp-pill-mode,#_a#_b#_c){--pc:var(--ac);--pc-ink:var(--tx-on-accent);background:var(--pc);color:var(--pc-ink);box-shadow:var(--surface-shadow-bar)}
 :is(.vp-pill.vp-pill-mode,#_a#_b#_c):is(:hover,:focus,:focus-visible){background:color-mix(in srgb,var(--pc) 86%,var(--white));color:var(--pc-ink)}
 :is(.vp-pill.vp-pill-mode,#_a#_b) .vp-pill-icon{opacity:1}
 :is(.vp-pill.vp-pill-mode,#_a#_b) .vp-pill-x{opacity:var(--op-75)}
@@ -4403,8 +4369,7 @@ html,body{user-select:none;-webkit-user-select:none}
 /* Edges: every dropdown has the same hairline ring; the floating command cards (Split, Remove holes,
    Smart fit...) have none, only their shadow. */
 .export-menu,.vp-pill-menu,.vp-prim-pop,.cs-pop,#ctx-menu,#ctx-menu .ctx-sub,#vp-settings-pop,.mat-presets-menu,.mat-tex-pop,.brn-token-pop,.brand-menu,.cp-pop,#vp-add-pop{box-shadow:var(--surface-shadow),var(--surface-ring)}
-.vp-cmd-host>.section-cmd,.vp-cmd-host>.section-cmd.has-hero{box-shadow:var(--surface-shadow)}
-.vp-cmd-host>.section-cmd.has-hero{box-shadow:0 5px 13px var(--blk-60)}
+.vp-cmd-host>.section-cmd{box-shadow:var(--surface-shadow)}
 /* ── Controls: one set of values ────────────────────────────────────────
    A button, a text field, a number field, a dropdown and a search box are the
    same height, the same corner, the same edge and the same type, at rest, under
@@ -4483,8 +4448,6 @@ body.app-ready .sp-card{transform:scale(1.025)}
 .sp-word b{font-size:46px;line-height:1}
 .brand-menu-title{font-size:calc(var(--fs-xl) + 7px)}
 .wl-title{font-size:calc(var(--fs-xl) + 9px);line-height:1.1}
-/* the titles of the command cards with a picture on top (Remove holes, Split, Select hidden, Fasteners, Smart fit) */
-.section-cmd.has-hero>.section-h>span:first-child{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-optical-sizing:auto;font-size:23px;line-height:1.1;letter-spacing:-.01em;color:var(--white)}
 .wl-title .wl-ver{font-family:'Inter',system-ui,sans-serif;font-weight:var(--fw-regular);letter-spacing:0}      /* (the version stays in the UI font) */
 .sp-strong .sp-name{font-family:'Fraunces','Iowan Old Style',Georgia,serif;font-weight:300;font-size:1.25em;letter-spacing:0}      /* (the name in the line of the splash, in the same serif; the version stays in the UI font) */
 .sp-info b.sp-strong{font-weight:var(--fw-semibold);color:color-mix(in srgb,var(--white) 82%,transparent)}
@@ -4592,7 +4555,7 @@ body.dock-resizing .is-float>.mat-dock-h{cursor:default}
 /* a material dragged over another with Shift held takes that one over: the one that will go is marked like a selected one */
 /* dragging a material: its ball follows the pointer, and the pointer is hidden */
 .mat-ghost{position:fixed;left:0;top:0;z-index:var(--z-top);pointer-events:none;will-change:transform;border-radius:50%;object-fit:cover;box-shadow:0 6px 16px var(--blk-50);opacity:.95}
-body.mat-dragging,body.mat-dragging *{cursor:none!important;user-select:none}
+
 #vp-materials-pop :is(.mat-cell,.mat-row).mat-drop-into{background:var(--ac-soft);border-color:var(--ac);box-shadow:inset 0 0 0 1px var(--ac)}
 /* only the floating window in use keeps its hairline edge (see _winFocus in app.js) */
 #vp-materials-pop.mat-dock.is-float:not(.win-focus),#vp-library-pop.is-float:not(.win-focus){border-color:transparent;box-shadow:var(--surface-shadow-win-off)}
@@ -5280,7 +5243,7 @@ body.anim-dock-open .vp-cmd-host.lifted{bottom:calc(min(var(--dock-h),80vh) + 58
 .adk-snap{position:absolute;top:0;bottom:0;left:var(--adk-hw);width:1px;z-index:6;pointer-events:none;background:var(--wn);opacity:.9;will-change:transform}
 .adk-scn-h .adk-rh{color:var(--tx3);font-size:var(--fs-11)}
 .adk-menuwrap{position:relative;flex:0 0 auto}
-.adk-menu{position:absolute;left:0;bottom:calc(100% + 8px);z-index:20;min-width:250px;padding:var(--space-sm);display:flex;flex-direction:column;gap:1px;border-radius:var(--r-lg);background:#242424;border:1px solid var(--s5);box-shadow:0 12px 32px var(--blk-50)}
+.adk-menu{position:absolute;left:0;bottom:calc(100% + 8px);z-index:20;min-width:250px;padding:var(--space-sm);display:flex;flex-direction:column;gap:1px;border-radius:var(--r-lg);background:#242424;border:1px solid var(--s5);box-shadow:var(--surface-shadow)}
 .adk-menu[hidden]{display:none}
 .adk-menu button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:var(--space-lg);padding:var(--space-md) var(--space-lg);border-radius:var(--r-md);color:var(--tx);cursor:pointer;font-size:var(--fs-12)}
 .adk-menu button:hover,.adk-menu button:focus-visible{background:var(--s4)}
@@ -5421,7 +5384,6 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 /* ── Edit mesh: points, edges and faces (the card, and the canvas the picked pieces are painted on) ── */
 #elem-overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
 #elem-overlay[hidden]{display:none}
-.section-cmd[data-cmd="elements"] .toggle{border-top:0;padding:var(--space-2xs) 0}
 .section-cmd[data-cmd="elements"] #btn-el-delete:disabled{color:var(--tx-control-off)}
 .section-cmd[data-cmd="elements"] [hidden]{display:none!important}
 #el-foot-delete.is-off{opacity:var(--op-45);pointer-events:none}
@@ -5430,7 +5392,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .section-cmd[data-cmd="elements"] #el-weld-row[hidden]{display:none}
 /* Edit mesh's bar: one column at the right edge under the view cube, in the same dark pill as the toolbar on the left. The brush size,
    the weld distance and the count of what is picked do not fit in it: they stand out to its left, beside the button they go with. */
-.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:0;padding:var(--space-sm);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:0 4px 10px var(--blk-40),var(--surface-ring)}
+.vpc.el-bar{top:0;bottom:0;margin:auto 0;height:fit-content;right:8px;flex-direction:column;align-items:center;gap:0;padding:var(--space-sm);border-radius:var(--r-lg);background:var(--surface-bar);box-shadow:var(--surface-shadow-bar),var(--surface-ring)}
 .vpc.el-bar[hidden]{display:none}
 .vpc.el-bar{transition:opacity 220ms var(--ease-out),translate 260ms cubic-bezier(.2,.9,.3,1)}
 .vpc.el-bar.is-out{opacity:0;translate:14px 0;pointer-events:none}
@@ -5459,7 +5421,7 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .el-ibtn.danger:hover:not(:disabled){color:var(--er);background:var(--er-soft)}
 .el-ibtn>input{position:absolute;opacity:0;pointer-events:none;width:0;height:0}
 .el-ibtn:has(>input:focus-visible),.el-ibtn:focus-visible,.el-bar .el-row>button:focus-visible{outline:2px solid var(--ac-text);outline-offset:1px}
-.el-bar .el-size{position:absolute;right:calc(100% + 6px);top:66px;display:flex;align-items:center;gap:var(--space-sm);width:112px;box-sizing:border-box;padding:var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);border-radius:var(--r-md);background:var(--surface-bar);box-shadow:0 4px 10px var(--blk-40),var(--surface-ring);color:var(--tx3)}
+.el-bar .el-size{position:absolute;right:calc(100% + 6px);top:66px;display:flex;align-items:center;gap:var(--space-sm);width:112px;box-sizing:border-box;padding:var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);border-radius:var(--r-md);background:var(--surface-bar);box-shadow:var(--surface-shadow-bar),var(--surface-ring);color:var(--tx3)}
 /* the brush size is not shown (it is still there for the code: the middle button and a drag change it) */
 .el-bar .el-size{display:none!important}
 .el-bar .el-size>[data-lucide],.el-bar .el-size>.lucide{width:var(--icon-md);height:var(--icon-md);flex:0 0 auto;stroke-width:1.6}
@@ -5508,6 +5470,19 @@ code,samp{font-family:var(--font-sans);font-size:.95em;font-variant-numeric:tabu
 .em-pop-item.is-on .em-pop-l{color:var(--ac-text)}
 .em-pop-item.is-on:hover .em-pop-l{color:var(--tx-on-accent)}
 /* ── end of Edit mesh ── */
+</style>
+<style id="cmd-rhythm">
+/* ── The floating command cards: one row rhythm ──────────────────────────────────────────────────────────
+   Every row of a card (a switch, a number) is the same in every card, in its body and under Advanced: the small padding, no
+   line above it, the small type, and rows that follow each other var(--space-2xs) apart, whatever gap the box they sit in puts
+   between its other children (that gap is taken back between two rows). The Draw card keeps its framed groups, with the same
+   type, label colour and switch. */
+:is(.vp-cmd-host .section-cmd:not(#draw-card) :is(.toggle,.cmd-num),#_a#_b){padding:var(--space-xs) 0;border-top:0;font-size:var(--fs-12);font-weight:var(--fw-regular)}
+:is(.vp-cmd-host .section-cmd :is(.toggle,.cmd-num)>span:first-child,#_a#_b){color:var(--tx2);font-weight:var(--fw-regular)}
+:is(.vp-cmd-host .section-cmd:not(#draw-card) :is(.toggle,.cmd-num),#_a#_b)+:is(.toggle,.cmd-num){margin-top:var(--space-2xs)}
+:is(.vp-cmd-host .section-cmd :is(.cmd-adv-b,.fa-kinds)>:is(.toggle,.cmd-num),#_a#_b)+:is(.toggle,.cmd-num){margin-top:0}
+:is(.vp-cmd-host .section-cmd:not(#draw-card) .small-card>:is(.toggle,.cmd-num),#_a#_b)+:is(.toggle,.cmd-num){margin-top:calc(var(--space-2xs) - var(--space-lg))}
+:is(.vp-cmd-host .section-cmd[data-cmd="lettering"]>.section-b>:is(.toggle,.cmd-num),.vp-cmd-host .section-cmd[data-cmd="remesh"] .remesh-pane>:is(.toggle,.cmd-num),#_a#_b)+:is(.toggle,.cmd-num){margin-top:calc(var(--space-2xs) - var(--space-sm))}
 </style>
 <script src="js/appearance.js?v=8-sync"></script>
 <script src="js/updater.js?v=3"></script>
@@ -5573,6 +5548,8 @@ body:has(#settings-modal.show) .up-card{display:none}      /* (Settings › Upda
 /* Right sidebar, second pass: the selection actions sit in one bar under Properties, cards get a small icon,
    and the group labels draw a line. Nothing here changes what a button does. */
 #sidebar-right .side-group{display:flex;align-items:center;gap:var(--space-lg);padding:18px var(--space-xs) var(--space-md)}
+/* the right sidebar lists its cards with no section titles (View, Find, Review, Optimise): the elements stay, notes.js places its Review card by them */
+#sidebar-right .side-group{display:none!important}
 /* (the group labels, SELECT / VIEW / …, are plain text: no rule running out to the right of them) */
 #sidebar-right .section-h .sec-ico{width:var(--icon-md);height:var(--icon-md);margin-right:var(--space-md);flex:none;color:var(--tx3);transition:var(--tr-fg)}
 #sidebar-right .section-h > span:first-of-type{flex:1 1 auto;min-width:0}
@@ -5853,7 +5830,7 @@ body.claude-split #cf-props{opacity:1;transition-delay:.25s}
 #cf-props .prop-material-row{display:none}      /* (no material tile in the floating card) */
 #cf-props .section-h{cursor:default;text-transform:none;letter-spacing:0;font-size:var(--fs-12);font-weight:var(--fw-medium);color:var(--tx)}
 .cf-title .cf-sub{font-family:var(--font-sans);font-size:var(--fs-11);font-weight:var(--fw-medium);letter-spacing:.04em;line-height:1.2;color:var(--tx3)}
-#cf-pop{position:absolute;top:56px;right:var(--space-xl);z-index:2;width:min(380px,calc(100% - 2 * var(--space-xl)));max-height:min(520px,70vh);overflow-y:auto;padding:var(--space-md);border-radius:var(--r-xl,14px);border:1px solid var(--bd);background:var(--bg1);box-shadow:0 24px 56px -20px var(--blk-50)}
+#cf-pop{position:absolute;top:56px;right:var(--space-xl);z-index:2;width:min(380px,calc(100% - 2 * var(--space-xl)));max-height:min(520px,70vh);overflow-y:auto;padding:var(--space-md);border-radius:var(--r-xl,14px);border:1px solid var(--bd);background:var(--bg1);box-shadow:var(--surface-shadow)}
 #cf-pop[hidden]{display:none}
 .cf-empty-t{margin-bottom:var(--space-xl)}
 .cf-rec-list{display:flex;flex-direction:column;gap:var(--space-2xs);text-align:left}
@@ -5881,7 +5858,7 @@ body.claude-split #cf-props{opacity:1;transition-delay:.25s}
 @keyframes cl-pulse{50%{opacity:var(--op-3)}}
 @media (prefers-reduced-motion:reduce){.claude-pill[data-state="busy"] .cl-dot{animation:none}}
 .cl-ask-bg{position:fixed;inset:0;z-index:var(--z-top);display:grid;place-items:center;background:var(--blk-50)}
-.cl-ask{width:min(420px,calc(100vw - 32px));padding:18px var(--space-4xl);border-radius:var(--r-lg,14px);background:var(--bg2);border:1px solid var(--bd2);box-shadow:0 5px 13px var(--blk-60);display:flex;flex-direction:column;gap:var(--space-md)}
+.cl-ask{width:min(420px,calc(100vw - 32px));padding:18px var(--space-4xl);border-radius:var(--r-lg,14px);background:var(--bg2);border:1px solid var(--bd2);box-shadow:var(--surface-shadow-win);display:flex;flex-direction:column;gap:var(--space-md)}
 .cl-ask-h{display:flex;align-items:center;gap:var(--space-md);font-size:var(--fs-11);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--tx3)}
 .cl-ask-t{font-size:var(--fs-lg);font-weight:var(--fw-semibold);color:var(--tx)}
 .cl-ask-d{font-size:var(--fs-md);color:var(--tx2);line-height:var(--lh-body)}
@@ -6039,11 +6016,6 @@ body.claude-split #cf-props{opacity:1;transition-delay:.25s}
 .tile-art.art-optimise *, .tile-art.art-optimise { animation-delay: -1.2s; }
 .tile-art.art-shrink *, .tile-art.art-shrink { animation-delay: -1.2s; }
 
-.cmd-hero { --tile-c: var(--ac-text); --card-bg: var(--surface-pop); }      /* (the brighter accent: the thin lines of the picture are easily lost in the dark) */
-.cmd-hero .tile-art { display: block; flex: none; width: 100%; height: auto; aspect-ratio: 592 / 370; box-sizing: border-box; margin: 0; padding: 3% 0 9%; background: none; pointer-events: none; stroke-width: 1.7px; overflow: visible; transform: scale(0.95); transform-origin: 50% 46%; transition: opacity .26s ease; }
-.cmd-hero .tile-art, .cmd-hero .tile-art * { animation-play-state: running; }
-.section-cmd.adv-open > .cmd-hero .tile-art { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .cmd-hero .tile-art { transition: none; } }
 </style>
 </head>
 <body>
@@ -6618,21 +6590,102 @@ window.moSplash = function (msg, pct) {
         <details class="cmd-adv" id="hf-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
-            <div class="cmd-num" title="How many directions each part is looked at from. More directions find faces that show only through a narrow gap, and take longer."><span>Accuracy</span>
-              <div class="cmd-seg cmd-seg-sm" id="hf-views" role="group" aria-label="Accuracy">
+            <div class="cmd-num" title="How many directions each part is looked at from. More directions find faces that show only through a narrow gap, and take longer.">
+              <div class="cmd-seg" id="hf-views" role="group" aria-label="Accuracy">
                 <button type="button" data-views="26">Fast</button>
                 <button type="button" class="active" data-views="64">Normal</button>
                 <button type="button" data-views="128">Thorough</button>
               </div>
             </div>
         <div class="toggle" title="A face is kept if it touches one that can be seen: no holes open up in the surface, and a face too small to be caught is not lost"><span id="hf-safe-lbl">Keep faces next to visible ones</span><label><input type="checkbox" id="hf-safe" aria-labelledby="hf-safe-lbl" checked><span class="switch"></span></label></div>
-        <div class="toggle" title="Off: a clear part (glass) hides nothing, so what is behind it counts as visible"><span id="hf-glass-lbl">See-through parts hide what is behind</span><label><input type="checkbox" id="hf-glass" aria-labelledby="hf-glass-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" title="Off: a clear part (glass) hides nothing, so what is behind it counts as visible"><span id="hf-glass-lbl">Glass blocks the view</span><label><input type="checkbox" id="hf-glass" aria-labelledby="hf-glass-lbl"><span class="switch"></span></label></div>
             <div class="cmd-num" title="Parts with fewer triangles than this are left alone"><span>Skip parts under</span><label class="size-field"><input type="text" inputmode="decimal" id="hf-min" value="20" spellcheck="false" autocomplete="off"><span>tri</span></label></div>
             <button type="button" class="cmd-link" id="hf-reset">Reset to defaults</button>
           </div>
         </details>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Remove</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <div class="section section-cmd" data-cmd="smart" hidden>
+      <div class="section-h"><span>Smart optimise</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b small-card smart-card">
+        <div class="cmd-lede">Every clean-up in one run.</div>
+        <div class="cmd-seg" id="smart-level" role="group" aria-label="How far to go">
+          <button type="button" class="active" data-level="auto" title="The app picks the level from how heavy the scene is">Auto</button>
+          <button type="button" data-level="light" title="Only what cannot be seen: empty and broken parts, empty groups">Light</button>
+          <button type="button" data-level="balanced" title="Also removes hidden and very small parts, simplifies fasteners and halves the triangles">Balanced</button>
+          <button type="button" data-level="strong" title="Removes more small parts, fills holes and keeps a quarter of the triangles">Strong</button>
+        </div>
+        <details class="cmd-adv" id="smart-adv">
+          <summary><span>Steps</span></summary>
+          <div class="cmd-adv-b">
+        <div class="toggle" title="Off: the run only removes and tidies parts; the meshes that stay keep every triangle"><span id="smart-remesh-lbl">Reduce triangles</span><label><input type="checkbox" id="smart-remesh" aria-labelledby="smart-remesh-lbl" checked><span class="switch"></span></label></div>
+        <div class="cmd-num" id="smart-target-row" title="How many triangles the whole scene may have after the run (150000, 150k, 1.5m). The densest meshes give up the most."><span>Target</span><label class="size-field"><input type="text" inputmode="numeric" id="smart-target" value="" aria-label="Triangle target"><span>tris</span></label></div>
+            <div class="toggle" title="Parts with no triangles, parts whose triangles have no area, and groups left with nothing in them"><span id="smart-clean-lbl">Empty parts</span><label><input type="checkbox" id="smart-clean" aria-labelledby="smart-clean-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Parts that cannot be seen from outside the model, from any direction"><span id="smart-hidden-lbl">Hidden parts</span><label><input type="checkbox" id="smart-hidden" aria-labelledby="smart-hidden-lbl"><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Bolts, nuts and washers found by their shape. Simplify turns each into a plain cylinder; Delete removes them."><span>Fasteners</span><select id="smart-fast" class="mac-sel" aria-label="Bolts, nuts and washers"><option value="keep">Keep</option><option value="cyl">Simplify</option><option value="delete">Delete</option></select></div>
+            <div class="cmd-num" title="Parts whose box, corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone."><span>Small parts</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-small" value="0" aria-label="Remove parts smaller than, in percent of the model"><span>%</span></label></div>
+            <div class="toggle" title="Closes holes in flat faces, with the settings of the Remove holes panel"><span id="smart-holes-lbl">Holes</span><label><input type="checkbox" id="smart-holes" aria-labelledby="smart-holes-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="The same part twice in the same place. Only the second copy goes; parts that merely share a shape stay."><span id="smart-dupes-lbl">Exact copies</span><label><input type="checkbox" id="smart-dupes" aria-labelledby="smart-dupes-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Takes out triangles from each part for as long as no point of its surface moves by more than this. 0 leaves it out. Runs before the triangle target."><span>Tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-tol" value="0" aria-label="Largest move of any point, in millimetres"><span>mm</span></label></div>
+          </div>
+        </details>
+        <details class="cmd-adv" id="smart-recipes">
+          <summary><span>Recipes</span></summary>
+          <div class="cmd-adv-b">
+            <div class="cmd-num" title="Settings you saved. Choose one to put them in the controls above."><span>Saved</span><select id="recipe-list" class="mac-sel" aria-label="Saved recipes"></select></div>
+            <div class="btn-row">
+              <button class="btn quiet" id="recipe-run" title="Put the chosen recipe's settings in the controls and run them on this scene">Apply and run</button>
+              <button class="btn quiet" id="recipe-save" title="Save the settings above under a name, to run again on the next revision of the model">Save these…</button>
+            </div>
+            <div class="btn-row" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+              <button class="btn quiet" id="recipe-export" title="Write the saved recipes to a file you can keep or share">Export</button>
+              <button class="btn quiet" id="recipe-import" title="Read recipes from a file">Import</button>
+              <button class="btn quiet" id="recipe-delete" title="Delete the chosen recipe">Delete</button>
+            </div>
+            <input type="file" id="recipe-file" accept=".json,application/json" hidden>
+          </div>
+        </details>
+        <div class="field-help smart-info" id="smart-info"></div>
+        <button class="btn primary" id="btn-smart-run" data-cmd-primary title="Run every step that is switched on, on the whole scene. Lossy, but one undo takes the whole run back."><i data-lucide="sparkles"></i>Optimise</button>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Optimise</span><kbd class="kbd-chip">↵</kbd></button></div>
+    </div>
+
+    <div class="section section-cmd" data-cmd="reduce" hidden>
+      <div class="section-h"><span>Reduce triangles</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
+      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="toggle" id="decimate-smart-row" title="Tidy the flat faces before and after the reduction (flat triangles joined into polygons and re-triangulated with fewer; every second line of a ring grid taken out). Quick remesh (B) uses the same switch, so the same share gives the same result on both."><span id="decimate-smart-lbl">Smart: tidy flat faces</span><label><input type="checkbox" id="decimate-smart" checked aria-labelledby="decimate-smart-lbl"><span class="switch"></span></label></div>
+        <div class="toggle" id="keep-sharp-row" title="While triangles are taken out, hold on to the hard edges of a part (a rim, a step, a corner), when the part has few of them and the goal can still be reached. Parts that are mostly hard edges, like gears, are reduced as before."><span id="keep-sharp-lbl">Keep sharp edges</span><label><input type="checkbox" id="keep-sharp" checked aria-labelledby="keep-sharp-lbl"><span class="switch"></span></label></div>
+        <div class="remesh-sub">Whole scene</div>
+        <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
+          <button class="btn primary" id="btn-budget" data-cmd-primary title="Reduce the whole scene to a triangle budget. The densest meshes give up the most; large, sparse ones are left alone. Lossy, but undoable."><i data-lucide="gauge"></i>Fit to budget</button>
+          <label class="size-field budget-field" title="Triangle budget for the whole scene (150000, 150k, 1.5m)"><input type="text" inputmode="numeric" id="budget-target" value="150k"><span>tris</span></label>
+        </div>
+        <div class="field-help plan-line" style="margin-top:-2px"><span id="budget-info"></span><button type="button" class="plan-link" id="budget-preview" hidden title="See which meshes will be reduced, and by how much, before running it">Preview…</button></div>
+        <div class="remesh-sub">Selected parts</div>
+        <div class="btn-row">
+          <button class="btn warn" id="btn-decimate-sel" title="Reduce the triangle count of the selected parts. Normals, UVs and vertex colours are kept. Lossy, but undoable."><i data-lucide="shrink"></i>Decimate <span id="dec-sel-count">0</span></button>
+          <select id="decimate-strength" class="mac-sel" title="How many triangles to remove from each selected part" style="flex:0 0 96px">
+            <option value="0.25">−25%</option>
+            <option value="0.5" selected>−50%</option>
+            <option value="0.75">−75%</option>
+            <option value="0.9">−90%</option>
+            <option value="target">Target…</option>
+            <option value="tol">Within…</option>
+          </select>
+        </div>
+        <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
+        <label class="size-field" id="decimate-tol-row" style="display:none" title="Take out as many triangles as possible without moving any point of the surface by more than this"><span>no point moves more than</span><input type="text" inputmode="decimal" id="decimate-tol" value="0.1"><span>mm</span></label>
+        <div class="field-help plan-line" style="margin-top:-2px"><span id="decimate-info"></span><button type="button" class="plan-link" id="decimate-preview" hidden title="See what each part will lose before running it">Preview…</button></div>
+        <div class="remesh-sub">Replace with shapes</div>
+        <div class="btn-list">
+          <button class="btn quiet" id="btn-bbox-all" title="Smart fit every part: each becomes a box, a turned box or a cylinder, whichever fits it best. Removes most of the detail."><i data-lucide="box-select"></i>Smart fit all parts</button>
+          <button class="btn quiet" id="btn-report" title="The model as it was opened against what it is now: triangles, draw calls, materials, file size"><i data-lucide="clipboard-list"></i>Optimisation report</button>
+        </div>
+      </div>
+      <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button></div>
     </div>
 
     <div class="section section-cmd" data-cmd="sweep" hidden>
@@ -7030,12 +7083,7 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close" title="Leave Dynamic place"><kbd class="kbd-chip">Esc</kbd><span>Done</span></button></div>
     </div>
 
-    <div class="section section-cmd has-hero" data-cmd="fillholes" hidden>
-      <figure class="cmd-hero" aria-label="Remove holes at work: the holes in a flat face close a few at a time, and the raised ring stays">
-        <svg aria-hidden="true" class="tile-art clip-art art-holes" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <path class="art-dim" d="M129.8 75 L91.7 97 M129.8 31 L129.8 75 M129.8 75 L268.3 155 M123.7 71.5 L97.7 86.5 M97.7 86.5 L97.7 56.5 M97.7 56.5 L123.7 41.5 M123.7 41.5 L123.7 71.5 M262.3 151.5 L123.7 71.5 M236.3 166.5 L97.7 86.5 M236.3 136.5 L97.7 56.5 M262.3 121.5 L123.7 41.5"/><path d="M268.3 155 L230.2 177 M230.2 177 L230.2 133 M230.2 133 L268.3 111 M268.3 111 L268.3 155 M91.7 97 L91.7 53 M91.7 53 L129.8 31 M230.2 177 L91.7 97 M230.2 133 L91.7 53 M268.3 111 L129.8 31 M262.3 151.5 L236.3 166.5 M236.3 166.5 L236.3 136.5 M236.3 136.5 L262.3 121.5 M262.3 121.5 L262.3 151.5"/>
-        <g><g class="art-hole" style="--i:0"><g transform="matrix(0.866 0.5 -0.866 0.5 134.3 55.6)"><circle r="8.5"/></g></g><g class="art-hole" style="--i:1"><g transform="matrix(0.866 0.5 -0.866 0.5 157.1 68.8)"><circle r="8.5"/></g></g><g class="art-hole" style="--i:2"><g transform="matrix(0.866 0.5 -0.866 0.5 180 82)"><circle r="8.5"/></g></g><g class="art-hole" style="--i:3"><g transform="matrix(0.866 0.5 -0.866 0.5 202.9 95.2)"><circle r="8.5"/></g></g><g class="art-hole" style="--i:4"><g transform="matrix(0.866 0.5 -0.866 0.5 225.7 108.4)"><circle r="8.5"/></g></g></g></svg>
-      </figure>
+    <div class="section section-cmd cmd-blue" data-cmd="fillholes" hidden>
       <div class="section-h"><span>Remove holes</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-lede">
@@ -7048,13 +7096,13 @@ window.moSplash = function (msg, pct) {
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
             <div class="toggle" title="Holes that go right through: an opening on both sides"><span id="fh-through-lbl">Through holes</span><label><input type="checkbox" id="fh-through" aria-labelledby="fh-through-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="Holes and pockets with a floor: an opening on one side only"><span id="fh-blind-lbl">Blind holes and pockets</span><label><input type="checkbox" id="fh-blind" aria-labelledby="fh-blind-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="Holes and pockets with a floor: an opening on one side only"><span id="fh-blind-lbl">Blind holes</span><label><input type="checkbox" id="fh-blind" aria-labelledby="fh-blind-lbl" checked><span class="switch"></span></label></div>
             <div class="toggle" title="Openings with nothing behind them (a missing patch in a flat face)"><span id="fh-open-lbl">Open holes</span><label><input type="checkbox" id="fh-open" aria-labelledby="fh-open-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight."><span id="fh-seal-lbl">Close openings into hollow spaces</span><label><input type="checkbox" id="fh-seal" aria-labelledby="fh-seal-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="After the holes are closed, the flat face around each one is joined again and triangulated with the fewest triangles, so the edges and vertices that only cut it up around the old hole are gone. Press Remove holes again to clean up what an earlier run left behind, also on parts in n-gons."><span id="fh-tidy-lbl">Remove vertices left over</span><label><input type="checkbox" id="fh-tidy" aria-labelledby="fh-tidy-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="A mesh can hold separate closed pieces inside its body (the balls of a valve, a pin in a bore). Once the holes are closed they are sealed inside and never visible again, though still drawn. On: every piece that lies entirely inside the closed part is removed."><span id="fh-enclosed-lbl">Remove what is sealed inside</span><label><input type="checkbox" id="fh-enclosed" checked aria-labelledby="fh-enclosed-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="Anything that stands proud of a flat face and is no higher than the limit below is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. (Engraved lettering is a shallow pocket and counts as a blind hole.) What stands higher than the limit stays."><span id="fh-raised-lbl">Raised details (lettering, bosses)</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
-            <div class="cmd-num" title="A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too."><span>Raised, up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm high</span></label></div>
+            <div class="toggle" title="An opening that leads into a hollow space cannot be taken out whole. On: it is closed flush with the face from outside, and the wall of the hole under it is removed. What lies behind stays as it was, out of sight."><span id="fh-seal-lbl">Seal hollows</span><label><input type="checkbox" id="fh-seal" aria-labelledby="fh-seal-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="After the holes are closed, the flat face around each one is joined again and triangulated with the fewest triangles, so the edges and vertices that only cut it up around the old hole are gone. Press Remove holes again to clean up what an earlier run left behind, also on parts in n-gons."><span id="fh-tidy-lbl">Leftover vertices</span><label><input type="checkbox" id="fh-tidy" aria-labelledby="fh-tidy-lbl" checked><span class="switch"></span></label></div>
+            <div class="toggle" title="A mesh can hold separate closed pieces inside its body (the balls of a valve, a pin in a bore). Once the holes are closed they are sealed inside and never visible again, though still drawn. On: every piece that lies entirely inside the closed part is removed."><span id="fh-enclosed-lbl">Inner pieces</span><label><input type="checkbox" id="fh-enclosed" checked aria-labelledby="fh-enclosed-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Anything that stands proud of a flat face and is no higher than the limit below is flattened into it: embossed lettering and logos at the default, and with a higher limit a boss, a dowel stub or a stamped collar. (Engraved lettering is a shallow pocket and counts as a blind hole.) What stands higher than the limit stays."><span id="fh-raised-lbl">Raised details</span><label><input type="checkbox" id="fh-raised" aria-labelledby="fh-raised-lbl" checked><span class="switch"></span></label></div>
+            <div class="cmd-num" title="A raised detail is flattened only if it stands no higher than this above its face. Embossed type is usually 0.1 to 0.5 mm; a boss or a stamped collar a few mm. Set it just above what you want gone, or ribs and pins go too."><span>Up to</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-rise" value="0.5"><span>mm high</span></label></div>
             <div class="toggle" title="On: an opening that takes up much of its face and of the part is kept (the bore of a washer, a window in a frame). Off: only the size limit decides."><span id="fh-shape-lbl">Keep openings that shape the part</span><label><input type="checkbox" id="fh-shape" aria-labelledby="fh-shape-lbl" checked><span class="switch"></span></label></div>
             <div class="cmd-num" title="Holes narrower than this are left alone"><span>Smallest hole</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-min" value="0"><span>mm</span></label></div>
             <div class="cmd-num" title="How far the inside of a hole may reach, as a multiple of the size limit. Lower it to leave deep bores alone."><span>Depth limit</span><label class="size-field"><input type="text" inputmode="decimal" id="fh-depth" value="10"><span>× size</span></label></div>
@@ -7146,14 +7194,7 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span id="remesh-ok-lbl">Untriangulate</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
-    <div class="section section-cmd has-hero" data-cmd="smartfit" hidden>
-      <figure class="cmd-hero" aria-label="Smart fit at work: a gear, a bearing housing and a bolt, tilted the same way in a row, each turning into the plain cylinder or box that fits it">
-        <svg aria-hidden="true" class="tile-art clip-art art-smart" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <g transform="rotate(-60 180 100)">
-          <g class="art-dense2"><path d="M136 30 A44 13.2 0 1 0 224 30 A44 13.2 0 1 0 136 30 M136 40 A44 13.2 0 1 0 224 40 A44 13.2 0 1 0 136 40 M149 50 A31 9.3 0 1 0 211 50 A31 9.3 0 1 0 149 50 M142 60 A38 11.4 0 1 0 218 60 A38 11.4 0 1 0 142 60 M149 70 A31 9.3 0 1 0 211 70 A31 9.3 0 1 0 149 70 M142 80 A38 11.4 0 1 0 218 80 A38 11.4 0 1 0 142 80 M149 90 A31 9.3 0 1 0 211 90 A31 9.3 0 1 0 149 90 M142 100 A38 11.4 0 1 0 218 100 A38 11.4 0 1 0 142 100 M149 110 A31 9.3 0 1 0 211 110 A31 9.3 0 1 0 149 110 M142 120 A38 11.4 0 1 0 218 120 A38 11.4 0 1 0 142 120 M149 130 A31 9.3 0 1 0 211 130 A31 9.3 0 1 0 149 130 M142 140 A38 11.4 0 1 0 218 140 A38 11.4 0 1 0 142 140 M149 150 A31 9.3 0 1 0 211 150 A31 9.3 0 1 0 149 150 M136 160 A44 13.2 0 1 0 224 160 A44 13.2 0 1 0 136 160 M136 170 A44 13.2 0 1 0 224 170 A44 13.2 0 1 0 136 170 M136 30 L136 40 L149 50 L142 60 L149 70 L142 80 L149 90 L142 100 L149 110 L142 120 L149 130 L142 140 L149 150 L136 160 L136 170 M224 30 L224 40 L211 50 L218 60 L211 70 L218 80 L211 90 L218 100 L211 110 L218 120 L211 130 L218 140 L211 150 L224 160 L224 170 M220.7 35.1 L220.7 45.1 L208.6 53.6 L215.1 64.4 L208.6 73.6 L215.1 84.4 L208.6 93.6 L215.1 104.4 L208.6 113.6 L215.1 124.4 L208.6 133.6 L215.1 144.4 L208.6 153.6 L220.7 165.1 L220.7 175.1 M211.1 39.3 L211.1 49.3 L201.9 56.6 L206.9 68.1 L201.9 76.6 L206.9 88.1 L201.9 96.6 L206.9 108.1 L201.9 116.6 L206.9 128.1 L201.9 136.6 L206.9 148.1 L201.9 156.6 L211.1 169.3 L211.1 179.3 M196.8 42.2 L196.8 52.2 L191.9 58.6 L194.5 70.5 L191.9 78.6 L194.5 90.5 L191.9 98.6 L194.5 110.5 L191.9 118.6 L194.5 130.5 L191.9 138.6 L194.5 150.5 L191.9 158.6 L196.8 172.2 L196.8 182.2 M180 43.2 L180 53.2 L180 59.3 L180 71.4 L180 79.3 L180 91.4 L180 99.3 L180 111.4 L180 119.3 L180 131.4 L180 139.3 L180 151.4 L180 159.3 L180 173.2 L180 183.2 M163.2 42.2 L163.2 52.2 L168.1 58.6 L165.5 70.5 L168.1 78.6 L165.5 90.5 L168.1 98.6 L165.5 110.5 L168.1 118.6 L165.5 130.5 L168.1 138.6 L165.5 150.5 L168.1 158.6 L163.2 172.2 L163.2 182.2 M148.9 39.3 L148.9 49.3 L158.1 56.6 L153.1 68.1 L158.1 76.6 L153.1 88.1 L158.1 96.6 L153.1 108.1 L158.1 116.6 L153.1 128.1 L158.1 136.6 L153.1 148.1 L158.1 156.6 L148.9 169.3 L148.9 179.3 M139.3 35.1 L139.3 45.1 L151.4 53.6 L144.9 64.4 L151.4 73.6 L144.9 84.4 L151.4 93.6 L144.9 104.4 L151.4 113.6 L144.9 124.4 L151.4 133.6 L144.9 144.4 L151.4 153.6 L139.3 165.1 L139.3 175.1"/></g>
-          <path class="art-fit art-hot" pathLength="1" d="M134 30 A46 14 0 1 0 226 30 A46 14 0 1 0 134 30 M134 30 V170 A46 14 0 0 0 226 170 V30"/>
-        </g></svg>
-      </figure>
+    <div class="section section-cmd cmd-blue" data-cmd="smartfit" hidden>
       <div class="section-h"><span>Smart fit</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <!-- one grid of shapes; the last two keep the part's outline -->
@@ -7183,16 +7224,7 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Smart fit</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
-    <div class="section section-cmd has-hero" data-cmd="selhidden" hidden>
-      <figure class="cmd-hero" aria-label="Select hidden at work: a housing turns see-through and the gear and the screws inside it light up">
-        <svg aria-hidden="true" class="tile-art clip-art art-hidden" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <g class="art-shell"><g class="art-shell-solid"><path d="M157.5 21 L278.7 91 L202.5 135 L81.3 65 Z M278.7 91 V129 M202.5 135 V173 M81.3 65 V103 M278.7 129 L202.5 173 L81.3 103 M156 32.1 A4 2.1 0 1 0 164 32.1 A4 2.1 0 1 0 156 32.1 M255.4 89.5 A4 2.1 0 1 0 263.4 89.5 A4 2.1 0 1 0 255.4 89.5 M96.6 66.5 A4 2.1 0 1 0 104.6 66.5 A4 2.1 0 1 0 96.6 66.5 M196 123.9 A4 2.1 0 1 0 204 123.9 A4 2.1 0 1 0 196 123.9"/></g><g class="art-shell-dash"><path d="M157.5 21 L278.7 91 L202.5 135 L81.3 65 Z M278.7 91 V129 M202.5 135 V173 M81.3 65 V103 M278.7 129 L202.5 173 L81.3 103 M156 32.1 A4 2.1 0 1 0 164 32.1 A4 2.1 0 1 0 156 32.1 M255.4 89.5 A4 2.1 0 1 0 263.4 89.5 A4 2.1 0 1 0 255.4 89.5 M96.6 66.5 A4 2.1 0 1 0 104.6 66.5 A4 2.1 0 1 0 96.6 66.5 M196 123.9 A4 2.1 0 1 0 204 123.9 A4 2.1 0 1 0 196 123.9"/></g></g>
-        <g class="art-found art-hot" transform="matrix(0.866 0.5 -0.866 0.5 180 97)">
-          <g transform="translate(-25 0)"><g class="art-spin"><path d="M20.7 -3.4 L27.9 -2.5 L27.9 2.5 L20.7 3.4 L19.6 7.4 L25.4 11.8 L22.9 16.1 L16.3 13.3 L13.3 16.3 L16.1 22.9 L11.8 25.4 L7.4 19.6 L3.4 20.7 L2.5 27.9 L-2.5 27.9 L-3.4 20.7 L-7.4 19.6 L-11.8 25.4 L-16.1 22.9 L-13.3 16.3 L-16.3 13.3 L-22.9 16.1 L-25.4 11.8 L-19.6 7.4 L-20.7 3.4 L-27.9 2.5 L-27.9 -2.5 L-20.7 -3.4 L-19.6 -7.4 L-25.4 -11.8 L-22.9 -16.1 L-16.3 -13.3 L-13.3 -16.3 L-16.1 -22.9 L-11.8 -25.4 L-7.4 -19.6 L-3.4 -20.7 L-2.5 -27.9 L2.5 -27.9 L3.4 -20.7 L7.4 -19.6 L11.8 -25.4 L16.1 -22.9 L13.3 -16.3 L16.3 -13.3 L22.9 -16.1 L25.4 -11.8 L19.6 -7.4 Z M7.4 0 A7.4 7.4 0 1 0 -7.3 0 A7.4 7.4 0 1 0 7.4 0 Z"/><circle r="9"/><circle r="4"/></g></g>
-          <g transform="translate(25 0)"><g class="art-spinr"><path d="M20.7 -3.4 L27.9 -2.5 L27.9 2.5 L20.7 3.4 L19.6 7.4 L25.4 11.8 L22.9 16.1 L16.3 13.3 L13.3 16.3 L16.1 22.9 L11.8 25.4 L7.4 19.6 L3.4 20.7 L2.5 27.9 L-2.5 27.9 L-3.4 20.7 L-7.4 19.6 L-11.8 25.4 L-16.1 22.9 L-13.3 16.3 L-16.3 13.3 L-22.9 16.1 L-25.4 11.8 L-19.6 7.4 L-20.7 3.4 L-27.9 2.5 L-27.9 -2.5 L-20.7 -3.4 L-19.6 -7.4 L-25.4 -11.8 L-22.9 -16.1 L-16.3 -13.3 L-13.3 -16.3 L-16.1 -22.9 L-11.8 -25.4 L-7.4 -19.6 L-3.4 -20.7 L-2.5 -27.9 L2.5 -27.9 L3.4 -20.7 L7.4 -19.6 L11.8 -25.4 L16.1 -22.9 L13.3 -16.3 L16.3 -13.3 L22.9 -16.1 L25.4 -11.8 L19.6 -7.4 Z M7.4 0 A7.4 7.4 0 1 0 -7.3 0 A7.4 7.4 0 1 0 7.4 0 Z"/><circle r="9"/><circle r="4"/></g></g>
-        </g>
-        <path class="art-brk art-hot" pathLength="1" d="M74 14 h16 M74 14 v16 M286 14 h-16 M286 14 v16 M74 186 h16 M74 186 v-16 M286 186 h-16 M286 186 v-16"/></svg>
-      </figure>
+    <div class="section section-cmd cmd-blue" data-cmd="selhidden" hidden>
       <div class="section-h"><span>Select hidden</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-seg" id="sh-scope" role="group" aria-label="Look in">
@@ -7208,16 +7240,16 @@ window.moSplash = function (msg, pct) {
         <details class="cmd-adv" id="sh-adv">
           <summary><span>Advanced</span></summary>
           <div class="cmd-adv-b">
-            <div class="cmd-num" title="How many directions the scene is looked at from. More directions find parts that show only through a narrow gap, and take longer."><span>Accuracy</span>
-              <div class="cmd-seg cmd-seg-sm" id="sh-views" role="group" aria-label="Accuracy">
+            <div class="cmd-num" title="How many directions the scene is looked at from. More directions find parts that show only through a narrow gap, and take longer.">
+              <div class="cmd-seg" id="sh-views" role="group" aria-label="Accuracy">
                 <button type="button" data-views="26">Fast</button>
                 <button type="button" class="active" data-views="64">Normal</button>
                 <button type="button" data-views="160">Thorough</button>
               </div>
             </div>
-            <div class="toggle" title="Off: a see-through part (glass, a clear cover) hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part."><span id="sh-glass-lbl">See-through parts hide what is behind</span><label><input type="checkbox" id="sh-glass" aria-labelledby="sh-glass-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="Keep what is selected now and add the hidden parts to it"><span id="sh-add-lbl">Add to the selection</span><label><input type="checkbox" id="sh-add" aria-labelledby="sh-add-lbl"><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Keep only hidden parts no larger than this share of the whole model's size. Empty: any size."><span>Largest part, of model size</span><label class="size-field"><input type="text" inputmode="decimal" id="sh-max" placeholder="any"><span>%</span></label></div>
+            <div class="toggle" title="Off: a see-through part (glass, a clear cover) hides nothing, so what is behind it counts as visible. On: it hides what is behind it like any other part."><span id="sh-glass-lbl">Glass blocks the view</span><label><input type="checkbox" id="sh-glass" aria-labelledby="sh-glass-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Keep what is selected now and add the hidden parts to it"><span id="sh-add-lbl">Add to selection</span><label><input type="checkbox" id="sh-add" aria-labelledby="sh-add-lbl"><span class="switch"></span></label></div>
+            <div class="cmd-num" title="Keep only hidden parts no larger than this share of the whole model's size. Empty: any size."><span>Max part size</span><label class="size-field"><input type="text" inputmode="decimal" id="sh-max" placeholder="any"><span>%</span></label></div>
             <div class="cmd-num" title="Keep only hidden parts whose name contains this (screw, DIN, bearing…). Empty: any name."><span>Name contains</span><label class="size-field"><input type="text" id="sh-name" placeholder="any" spellcheck="false" autocomplete="off"></label></div>
             <button type="button" class="cmd-link" id="sh-reset">Reset to defaults</button>
           </div>
@@ -7226,17 +7258,7 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Select hidden</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
-    <div class="section section-cmd has-hero" data-cmd="fasteners" hidden>
-      <figure class="cmd-hero" aria-label="Fasteners at work: on a bracket bolted to a plate, the bolts, the nuts and the washers light up and are taken away; the bracket and the plate stay">
-        <svg aria-hidden="true" class="tile-art clip-art art-fast" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <path class="art-dim" d="M157.5 67 L278.7 137 M157.5 67 L81.3 111 M157.5 67 L157.5 25"/>
-        <path d="M278.7 137 L202.5 181 L202.5 171 L271.8 131 L271.8 99 L278.7 95 Z M81.3 111 L81.3 101 M81.3 101 L150.6 61 M150.6 61 L150.6 29 M150.6 29 L157.5 25 M202.5 181 L81.3 111 M202.5 171 L81.3 101 M271.8 131 L150.6 61 M271.8 99 L150.6 29 M278.7 95 L157.5 25"/>
-        <g class="art-fnd art-hot" style="--i:0"><path class="art-sil" d="M162.9 83.8 L157.4 88.6 L146.4 88.6 L140.9 83.8 L146.4 79 L157.4 79 Z M162.9 83.8 L157.4 88.6 L146.4 88.6 L140.9 83.8 L140.9 91.8 L146.4 96.6 L157.4 96.6 L162.9 91.8 Z M145.9 59.8 A6 3 0 1 0 157.9 59.8 A6 3 0 1 0 145.9 59.8 M145.9 59.8 V83.8 H157.9 V59.8 Z"/><path d="M162.9 83.8 L157.4 88.6 L146.4 88.6 L140.9 83.8 L146.4 79 L157.4 79 Z M162.9 83.8 L162.9 91.8 M157.4 88.6 L157.4 96.6 M146.4 88.6 L146.4 96.6 M140.9 83.8 L140.9 91.8 M162.9 91.8 L157.4 96.6 L146.4 96.6 L140.9 91.8 M145.9 59.8 A6 3 0 1 0 157.9 59.8 A6 3 0 1 0 145.9 59.8 M148.6 59.8 A3.3 1.7 0 1 0 155.2 59.8 A3.3 1.7 0 1 0 148.6 59.8 M145.9 59.8 V83.8 M157.9 59.8 V83.8 M145.9 64.8 L157.9 67.4 M145.9 68.2 L157.9 70.8 M145.9 71.6 L157.9 74.2 M145.9 75 L157.9 77.6 M145.9 78.4 L157.9 81 M145.9 81.8 L157.9 84.4"/></g>
-        <g class="art-fnd art-hot" style="--i:1"><path class="art-sil" d="M113.2 106.5 A14 7 0 1 0 141.2 106.5 A14 7 0 1 0 113.2 106.5 M113.2 106.5 V109.5 A14 7 0 0 0 141.2 109.5 V106.5 Z"/><path d="M113.2 106.5 A14 7 0 1 0 141.2 106.5 A14 7 0 1 0 113.2 106.5 M120.2 106.5 A7 3.5 0 1 0 134.2 106.5 A7 3.5 0 1 0 120.2 106.5 M113.2 106.5 V109.5 A14 7 0 0 0 141.2 109.5 V106.5"/></g>
-        <g class="art-fnd art-hot" style="--i:2"><path class="art-sil" d="M183.6 110.7 L178.1 115.5 L167.1 115.5 L161.6 110.7 L167.1 105.9 L178.1 105.9 Z M183.6 110.7 L178.1 115.5 L167.1 115.5 L161.6 110.7 L161.6 119.7 L167.1 124.5 L178.1 124.5 L183.6 119.7 Z"/><path d="M183.6 110.7 L178.1 115.5 L167.1 115.5 L161.6 110.7 L167.1 105.9 L178.1 105.9 Z M183.6 110.7 L183.6 119.7 M178.1 115.5 L178.1 124.5 M167.1 115.5 L167.1 124.5 M161.6 110.7 L161.6 119.7 M183.6 119.7 L178.1 124.5 L167.1 124.5 L161.6 119.7 M167.3 110.7 A5.3 2.6 0 1 0 177.9 110.7 A5.3 2.6 0 1 0 167.3 110.7"/></g>
-        <g class="art-fnd art-hot" style="--i:3"><path class="art-sil" d="M226.5 119.5 L221 124.3 L210 124.3 L204.5 119.5 L210 114.7 L221 114.7 Z M226.5 119.5 L221 124.3 L210 124.3 L204.5 119.5 L204.5 128.5 L210 133.3 L221 133.3 L226.5 128.5 Z"/><path d="M226.5 119.5 L221 124.3 L210 124.3 L204.5 119.5 L210 114.7 L221 114.7 Z M226.5 119.5 L226.5 128.5 M221 124.3 L221 133.3 M210 124.3 L210 133.3 M204.5 119.5 L204.5 128.5 M226.5 128.5 L221 133.3 L210 133.3 L204.5 128.5 M210.2 119.5 A5.3 2.6 0 1 0 220.8 119.5 A5.3 2.6 0 1 0 210.2 119.5"/></g>
-        <g class="art-fnd art-hot" style="--i:4"><path class="art-sil" d="M201.8 138.3 L196.3 143.1 L185.3 143.1 L179.8 138.3 L185.3 133.5 L196.3 133.5 Z M201.8 138.3 L196.3 143.1 L185.3 143.1 L179.8 138.3 L179.8 146.3 L185.3 151.1 L196.3 151.1 L201.8 146.3 Z M184.8 114.3 A6 3 0 1 0 196.8 114.3 A6 3 0 1 0 184.8 114.3 M184.8 114.3 V138.3 H196.8 V114.3 Z"/><path d="M201.8 138.3 L196.3 143.1 L185.3 143.1 L179.8 138.3 L185.3 133.5 L196.3 133.5 Z M201.8 138.3 L201.8 146.3 M196.3 143.1 L196.3 151.1 M185.3 143.1 L185.3 151.1 M179.8 138.3 L179.8 146.3 M201.8 146.3 L196.3 151.1 L185.3 151.1 L179.8 146.3 M184.8 114.3 A6 3 0 1 0 196.8 114.3 A6 3 0 1 0 184.8 114.3 M187.5 114.3 A3.3 1.7 0 1 0 194.1 114.3 A3.3 1.7 0 1 0 187.5 114.3 M184.8 114.3 V138.3 M196.8 114.3 V138.3 M184.8 119.3 L196.8 121.9 M184.8 122.7 L196.8 125.3 M184.8 126.1 L196.8 128.7 M184.8 129.5 L196.8 132.1 M184.8 132.9 L196.8 135.5 M184.8 136.3 L196.8 138.9"/></g></svg>
-      </figure>
+    <div class="section section-cmd cmd-blue" data-cmd="fasteners" hidden>
       <div class="section-h"><span>Fasteners</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-lede">
@@ -7271,7 +7293,7 @@ window.moSplash = function (msg, pct) {
               </div>
             </div>
             <div class="toggle" title="Plain round bars up to the size limit: studs, dowel pins, threaded rods. Off by default, because a shaft and a roller are round bars too."><span id="fa-pins-lbl">Pins, studs and threaded rods</span><label><input type="checkbox" id="fa-pins" aria-labelledby="fa-pins-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="Keep what is selected now and add the fasteners to it"><span id="fa-add-lbl">Add to the selection</span><label><input type="checkbox" id="fa-add" aria-labelledby="fa-add-lbl"><span class="switch"></span></label></div>
+            <div class="toggle" title="Keep what is selected now and add the fasteners to it"><span id="fa-add-lbl">Add to selection</span><label><input type="checkbox" id="fa-add" aria-labelledby="fa-add-lbl"><span class="switch"></span></label></div>
             <div class="cmd-num" title="Take a fastener only if the scene holds at least this many of the same shape and size. Fasteners come in sets; 1 takes single ones too."><span>Used at least</span><label class="size-field"><input type="text" inputmode="numeric" id="fa-uses" value="1"><span>times</span></label></div>
             <div class="cmd-num" title="Leave the fasteners for threads below this alone. 0: no lower limit."><span>Smallest thread</span><label class="size-field"><span>M</span><input type="text" inputmode="decimal" id="fa-min" value="0"></label></div>
             <button type="button" class="cmd-link" id="fa-reset">Reset to defaults</button>
@@ -7281,13 +7303,7 @@ window.moSplash = function (msg, pct) {
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Select fasteners</span><kbd class="kbd-chip">↵</kbd></button></div>
     </div>
 
-    <div class="section section-cmd has-hero" data-cmd="split" hidden>
-      <figure class="cmd-hero" aria-label="Split at work: a bracket, its pin and two bolts that arrived as one mesh come apart into separate parts">
-        <svg aria-hidden="true" class="tile-art clip-art art-split" viewBox="0 0 360 200" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" focusable="false">
-        <g class="art-sa"><path class="art-solid" d="M159.2 34 L214.7 66 L214.7 100 L145.4 140 L89.9 108 L89.9 74 Z"/><path d="M159.2 34 L214.7 66 L145.4 106 L89.9 74 Z M214.7 66 V100 M145.4 106 V140 M89.9 74 V108 M214.7 100 L145.4 140 L89.9 108"/><g class="art-bolt"><path d="M154.7 57 A8 4 0 1 0 170.7 57 A8 4 0 1 0 154.7 57 M159.1 57 A3.6 1.8 0 1 0 166.3 57 A3.6 1.8 0 1 0 159.1 57 M154.7 57 V64 A8 4 0 0 0 170.7 64 V57"/><path d="M132.2 70 A8 4 0 1 0 148.2 70 A8 4 0 1 0 132.2 70 M136.6 70 A3.6 1.8 0 1 0 143.8 70 A3.6 1.8 0 1 0 136.6 70 M132.2 70 V77 A8 4 0 0 0 148.2 77 V70"/></g><path class="art-face" d="M214.6 66 L145.4 106 V140 L214.6 100 Z"/></g>
-        <g class="art-sb"><path class="art-face" d="M214.6 66 L145.4 106 V140 L214.6 100 Z"/><path class="art-solid" d="M214.6 66 L270.1 98 L270.1 132 L200.8 172 L145.3 140 L145.3 106 Z"/><path d="M214.6 66 L270.1 98 L200.8 138 L145.3 106 Z M270.1 98 V132 M200.8 138 V172 M145.3 106 V140 M270.1 132 L200.8 172 L145.3 140"/><g class="art-bolt"><path d="M210.1 89 A8 4 0 1 0 226.1 89 A8 4 0 1 0 210.1 89 M214.5 89 A3.6 1.8 0 1 0 221.7 89 A3.6 1.8 0 1 0 214.5 89 M210.1 89 V96 A8 4 0 0 0 226.1 96 V89"/><path d="M187.6 102 A8 4 0 1 0 203.6 102 A8 4 0 1 0 187.6 102 M192 102 A3.6 1.8 0 1 0 199.2 102 A3.6 1.8 0 1 0 192 102 M187.6 102 V109 A8 4 0 0 0 203.6 109 V102"/></g></g>
-        <path class="art-plane art-hot" pathLength="1" d="M218.8 54.6 L141.2 99.4 V151.4 L218.8 106.6 Z"/></svg>
-      </figure>
+    <div class="section section-cmd cmd-blue" data-cmd="split" hidden>
       <div class="section-h"><span>Split</span><button type="button" class="lc-icon-btn cmd-close" title="Close (Esc)"><i data-lucide="x"></i></button></div>
       <div class="section-b">
         <div class="cmd-seg" role="group" aria-label="Detection sensitivity">
@@ -7297,9 +7313,9 @@ window.moSplash = function (msg, pct) {
           <button class="split-preset" data-eps="0" title="Nothing is welded: the index is trusted exactly. A CAD mesh, which keeps a point per face corner, falls into its faces. Only for a file you know has shared points.">Exact</button>
         </div>
         <div class="field" style="margin:var(--space-md) 0 0"><div id="split-eps-scrub"></div></div>
-        <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:var(--fs-11);margin:var(--space-md) 0 6px">≈ — at this model size</div>
-        <div class="field" style="margin-bottom:6px">
-          <label id="split-method-lbl" style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:var(--space-xs)">Algorithm</label>
+        <div class="split-eps-readout" id="split-eps-readout" style="color:var(--tx3);font-size:var(--fs-11);margin:var(--space-md) 0 var(--space-xl)">at this model size</div>
+        <div class="field" style="margin-bottom:var(--space-xl)">
+          <label id="split-method-lbl" style="display:block;color:var(--tx3);font-size:var(--fs-11);margin-bottom:var(--space-md)">Algorithm</label>
           <select id="split-method" aria-labelledby="split-method-lbl" class="mac-sel" style="width:100%">
             <option value="bodies" title="Default. A body is a closed surface. Solids that touch at a point, along an edge or on a face come apart, each keeping its own surface; a T-junction in one solid does not cut it.">Bodies</option>
             <option value="vertex" title="Triangles that share a point belong together: everything that touches stays one part.">Vertex connectivity</option>
@@ -7311,9 +7327,8 @@ window.moSplash = function (msg, pct) {
         </div>
         <div class="cmd-num" id="split-face-row" hidden title="Faces: two neighbouring triangles are one face if the angle between them is no more than this. 5° follows every facet of a curve, 20° keeps a smooth curve as one face, 60° keeps only the sharp creases."><span>Face angle</span><label class="size-field"><input type="text" inputmode="decimal" id="split-face-angle" value="20"><span>°</span></label></div>
         <div class="cmd-num" title="Pieces smaller than this are not parts of their own: together they make one more part. 0: every piece is a part. Raise it to go from thousands of parts to a few."><span>Smallest part</span><label class="size-field"><input type="text" inputmode="numeric" id="split-min-tris" value="0"><span>triangles</span></label></div>
-        <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:var(--fs-sm);margin:0 0 10px;min-height:16px">Select a mesh to preview the split.</div>
+        <div class="split-preview" id="split-preview" style="color:var(--tx2);font-size:var(--fs-12);line-height:var(--lh-body);margin:var(--space-xl) 0;min-height:16px">Select a mesh to preview the split.</div>
         <button class="btn" id="btn-split-selected" data-cmd-primary title="Split selected meshes into their disconnected components"><i data-lucide="split"></i>Split selected</button>
-        <div style="height:6px"></div>
         <button class="btn" id="btn-split-all" title="Scan every mesh in the model and split disconnected components into separate parts"><i data-lucide="radar"></i>Scan whole model</button>
       </div>
       <div class="cmd-foot"><button type="button" class="cmd-foot-btn cmd-close"><kbd class="kbd-chip">Esc</kbd><span>Cancel</span></button><button type="button" class="cmd-foot-btn cmd-ok"><span>Split selected</span><kbd class="kbd-chip">↵</kbd></button></div>
@@ -7431,6 +7446,18 @@ window.moSplash = function (msg, pct) {
     <div class="side-group">View</div>
 
     <div class="section">
+      <div class="section-h"><i class="sec-ico" data-lucide="wrench"></i><span>Quick fixes</span><span class="chev">▾</span></div>
+      <div class="section-b btn-list">
+        <button class="btn quiet" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Empty parts</button>
+        <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy-check"></i>Duplicates</button>
+        <button class="btn quiet" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="eraser"></i>Degenerate</button>
+        <button class="btn quiet" id="btn-floating" title="Remove floating pieces…: delete the small loose pieces of a part that touch nothing (plugs, shavings, dots). Opens its panel."><i data-lucide="unlink"></i>Floating…</button>
+        <button class="btn quiet" id="btn-clean-empty-groups" title="Remove user groups and hierarchy groups whose members are all deleted or empty"><i data-lucide="folder-x"></i>Empty groups</button>
+        <button class="btn quiet" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="refresh-ccw-dot"></i>Normals</button>
+      </div>
+    </div>
+
+    <div class="section">
       <div class="section-h"><i class="sec-ico" data-lucide="expand"></i><span>Exploded view</span><span class="chev">▾</span></div>
       <div class="section-b ex-body">
         <div class="field"><div id="explode-all-scrub"></div></div>
@@ -7453,6 +7480,134 @@ window.moSplash = function (msg, pct) {
           <div class="field"><div id="explode-y-scrub"></div></div>
           <div class="field"><div id="explode-z-scrub"></div></div>
         </details>
+      </div>
+    </div>
+
+
+    <div class="section" hidden>
+      <div class="section-h"><i class="sec-ico" data-lucide="ruler"></i><span>Measurements</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="btn-row">
+          <button class="btn" id="msr-add" title="Toggle measure mode (M) — pick two points in the viewport to measure distance"><i data-lucide="ruler"></i>Measure</button>
+          <button class="btn warn" id="msr-clear" title="Delete every measurement">Clear all</button>
+        </div>
+        <div class="field-help" id="msr-info" style="margin-top:var(--space-md)">Click Measure or press <kbd class="kbd">M</kbd>, then click two points on geometry. Drag still orbits.</div>
+        <div id="msr-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+    </div>
+
+    <div class="side-group">Find</div>
+
+    <div class="section">
+      <div class="section-h"><i class="sec-ico" data-lucide="weight"></i><span>Heavy parts</span><span class="sec-count" id="heavy-count" hidden></span><span class="chev">▾</span></div>
+      <div class="section-b" id="offenders-body">
+        <div class="off-empty" style="color:var(--tx3);font-size:var(--fs-12);padding:4px 0">Load a model to see heavy parts.</div>
+        <div class="off-list" id="offenders-list"></div>
+        <button class="btn danger" id="btn-off-delete" disabled title="Delete the ticked parts. Can be undone."><i data-lucide="trash-2"></i><span id="off-delete-label">Delete</span></button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><i class="sec-ico" data-lucide="filter"></i><span>Filters &amp; flags</span><span class="chev">▾</span></div>
+      <div class="section-b" style="display:flex;flex-direction:column;gap:0">
+        <div class="field" style="margin:0"><div id="tri-scrub"></div></div>
+        <div class="field" style="margin:0"><div id="aspect-scrub"></div></div>
+        <div class="btn-list" style="margin-top:var(--space-md)">
+          <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-poly</button>
+          <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="rectangle-horizontal"></i>Flag slivers</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-h"><i class="sec-ico" data-lucide="mouse-pointer-2"></i><span>Pick parts</span><span class="chev">▾</span></div>
+      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
+        <div class="field" style="margin:0" title="How alike Select similar goes"><div id="sim-strict-scrub"></div></div>
+        <div class="field-help" id="sim-strict-help" style="margin:0"></div>
+      </div>
+    </div>
+
+    <div class="side-group">Optimise</div>
+
+
+
+    <div class="section">
+      <div class="section-h"><i class="sec-ico" data-lucide="trash-2"></i><span>Delete small parts</span><span class="chev">▾</span></div>
+      <div class="section-b small-card">
+        <!-- what the threshold below catches, and a way to look at it first -->
+        <!-- how small: a share of the whole model's size -->
+        <div id="thr-scrub"></div>
+        <!-- small by what measure (the select is what the rest of the app reads and sets; the buttons drive it) -->
+        <div class="small-by">
+          <span>Measured by</span>
+          <div class="cmd-seg" id="thr-metric-seg" role="group" aria-label="Measured by">
+            <button type="button" class="active" data-metric="diag" title="Corner to corner of the part's box. The usual choice.">Diagonal</button>
+            <button type="button" data-metric="max" title="The part's longest side. Keeps long thin parts (rods, pipes) that the diagonal also keeps, and is stricter with flat ones.">Longest</button>
+            <button type="button" data-metric="vol" title="The volume of the part's box. Catches thin sheets and wires however long they are.">Volume</button>
+          </div>
+          <select id="thr-metric" hidden><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select>
+        </div>
+        <!-- what the threshold catches, and a way to look at it before deleting -->
+        <div class="small-result">
+          <div class="small-found" id="thr-found"><span class="small-n" id="thr-count" hidden></span><span id="thr-info">Load a model to see what would go.</span></div>
+          <div class="btn-row">
+            <button class="btn" id="btn-isolate-small" aria-pressed="false" title="Show only the parts that would be deleted, to check them first. Press again to show everything"><i data-lucide="eye"></i>Isolate</button>
+            <button class="btn" id="tg-hilite" title="Colour the parts smaller than the threshold in the view and the tree, to see what would go"><i data-lucide="highlighter"></i>Highlight</button>
+          </div>
+        </div>
+        <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
+      </div>
+    </div>
+
+
+    <div class="section" id="photo-section">
+      <div class="section-h"><i class="sec-ico" data-lucide="camera"></i><span>Photo mode</span><span class="chev">▾</span></div>
+      <div class="section-b">
+        <div class="prim-row" title="Draws the model the slow, pretty way, for pictures rather than for working: studio light, soft shadows with a floor shadow, and the effects below. The grid is hidden while it is on. Not saved with the scene.">
+          <label class="prim-label" for="toggle-photo" id="toggle-photo-lbl">Photo mode</label>
+          <label class="prim-toggle"><input type="checkbox" id="toggle-photo"><span></span></label>
+        </div>
+        <div id="photo-fx" class="is-off" style="display:flex;flex-direction:column">
+        <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:var(--lh-base);padding:var(--space-md) 0">Lights the model with the Background of the Scene card (the loft studio, unless you chose another HDRI) and the sun's shadows.</div>
+        <div class="prim-row" title="The round, softly lit disc under the model that catches its shadow. Off: the model hangs in the studio light with no floor and no floor shadow.">
+          <label class="prim-label" for="photo-stage" id="photo-stage-lbl">Floor disc</label>
+          <label class="prim-toggle"><input type="checkbox" id="photo-stage" checked><span></span></label>
+        </div>
+        <div class="prim-row" title="How smooth the edges are and how many samples the occlusion and the glow take. Lower it if the viewport is slow with Photo mode on.">
+          <label class="prim-label" for="photo-quality">Quality</label>
+          <select id="photo-quality" class="mac-sel"><option value="draft">Draft (fastest)</option><option value="good">Good</option><option value="best" selected>Best</option><option value="max">Maximum</option></select>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-ao" title="Darkens creases and places where parts meet" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-ao" aria-label="Ambient occlusion on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-ao" style="grid-column:2" title="Ambient occlusion">AO</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-ao" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-glow" title="Bright highlights bleed a little light around themselves" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-glow" aria-label="Glow on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-glow" style="grid-column:2">Glow</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-glow" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-fringe" title="A trace of colour split towards the corners" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-fringe" aria-label="Lens fringe on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-fringe" style="grid-column:2">Lens fringe</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-fringe" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-vignette" title="Darkens the edges of the picture" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-vignette" aria-label="Vignette on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-vignette" style="grid-column:2">Vignette</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-vignette" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row photo-fx-row" id="photo-row-grain" title="A little noise takes the digital edge off smooth shading" style="grid-template-columns:auto minmax(0,1fr) auto">
+          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-grain" aria-label="Film grain on or off" checked><span></span></label>
+          <label class="prim-label" for="photo-grain" style="grid-column:2">Film grain</label>
+          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-grain" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
+        </div>
+        <div class="prim-row" title="The pixel density of the saved PNG, as a multiple of the viewport's size (kept under 8192 pixels on the long side)">
+          <label class="prim-label" for="photo-scale">Saved size</label>
+          <select id="photo-scale" class="mac-sel"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select>
+        </div>
+        <button id="photo-save" type="button" class="btn-sm" style="margin-top:var(--space-md)" title="Save the picture as a PNG">Save photo…</button>
+        </div>
       </div>
     </div>
 
@@ -7516,69 +7671,6 @@ window.moSplash = function (msg, pct) {
       </div>
     </div>
 
-    <div class="section" id="photo-section">
-      <div class="section-h"><i class="sec-ico" data-lucide="camera"></i><span>Photo mode</span><span class="chev">▾</span></div>
-      <div class="section-b">
-        <div class="prim-row" title="Draws the model the slow, pretty way, for pictures rather than for working: studio light, soft shadows with a floor shadow, and the effects below. The grid is hidden while it is on. Not saved with the scene.">
-          <label class="prim-label" for="toggle-photo" id="toggle-photo-lbl">Photo mode</label>
-          <label class="prim-toggle"><input type="checkbox" id="toggle-photo"><span></span></label>
-        </div>
-        <div id="photo-fx" class="is-off" style="display:flex;flex-direction:column">
-        <div style="font-size:var(--fs-xs);color:var(--tx3);font-weight:var(--fw-medium);line-height:var(--lh-base);padding:var(--space-md) 0">Lights the model with the Background of the Scene card (the loft studio, unless you chose another HDRI) and the sun's shadows.</div>
-        <div class="prim-row" title="The round, softly lit disc under the model that catches its shadow. Off: the model hangs in the studio light with no floor and no floor shadow.">
-          <label class="prim-label" for="photo-stage" id="photo-stage-lbl">Floor disc</label>
-          <label class="prim-toggle"><input type="checkbox" id="photo-stage" checked><span></span></label>
-        </div>
-        <div class="prim-row" title="How smooth the edges are and how many samples the occlusion and the glow take. Lower it if the viewport is slow with Photo mode on.">
-          <label class="prim-label" for="photo-quality">Quality</label>
-          <select id="photo-quality" class="mac-sel"><option value="draft">Draft (fastest)</option><option value="good">Good</option><option value="best" selected>Best</option><option value="max">Maximum</option></select>
-        </div>
-        <div class="prim-row photo-fx-row" id="photo-row-ao" title="Darkens creases and places where parts meet" style="grid-template-columns:auto minmax(0,1fr) auto">
-          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-ao" aria-label="Ambient occlusion on or off" checked><span></span></label>
-          <label class="prim-label" for="photo-ao" style="grid-column:2" title="Ambient occlusion">AO</label>
-          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-ao" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
-        </div>
-        <div class="prim-row photo-fx-row" id="photo-row-glow" title="Bright highlights bleed a little light around themselves" style="grid-template-columns:auto minmax(0,1fr) auto">
-          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-glow" aria-label="Glow on or off" checked><span></span></label>
-          <label class="prim-label" for="photo-glow" style="grid-column:2">Glow</label>
-          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-glow" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
-        </div>
-        <div class="prim-row photo-fx-row" id="photo-row-fringe" title="A trace of colour split towards the corners" style="grid-template-columns:auto minmax(0,1fr) auto">
-          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-fringe" aria-label="Lens fringe on or off" checked><span></span></label>
-          <label class="prim-label" for="photo-fringe" style="grid-column:2">Lens fringe</label>
-          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-fringe" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
-        </div>
-        <div class="prim-row photo-fx-row" id="photo-row-vignette" title="Darkens the edges of the picture" style="grid-template-columns:auto minmax(0,1fr) auto">
-          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-vignette" aria-label="Vignette on or off" checked><span></span></label>
-          <label class="prim-label" for="photo-vignette" style="grid-column:2">Vignette</label>
-          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-vignette" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
-        </div>
-        <div class="prim-row photo-fx-row" id="photo-row-grain" title="A little noise takes the digital edge off smooth shading" style="grid-template-columns:auto minmax(0,1fr) auto">
-          <label class="prim-toggle" style="grid-column:1;grid-row:1" title="Switch the effect on or off (off: it is left out and costs nothing)"><input type="checkbox" id="photo-fx-grain" aria-label="Film grain on or off" checked><span></span></label>
-          <label class="prim-label" for="photo-grain" style="grid-column:2">Film grain</label>
-          <span class="prim-val-wrap" style="grid-column:3" title="Drag to change · click to type"><input type="number" class="prim-value" id="photo-grain" min="0" max="100" step="1" value="0"><span class="prim-unit">%</span></span>
-        </div>
-        <div class="prim-row" title="The pixel density of the saved PNG, as a multiple of the viewport's size (kept under 8192 pixels on the long side)">
-          <label class="prim-label" for="photo-scale">Saved size</label>
-          <select id="photo-scale" class="mac-sel"><option value="1">1×</option><option value="2" selected>2×</option><option value="3">3×</option><option value="4">4×</option></select>
-        </div>
-        <button id="photo-save" type="button" class="btn-sm" style="margin-top:var(--space-md)" title="Save the picture as a PNG">Save photo…</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="section" hidden>
-      <div class="section-h"><i class="sec-ico" data-lucide="ruler"></i><span>Measurements</span><span class="chev">▾</span></div>
-      <div class="section-b">
-        <div class="btn-row">
-          <button class="btn" id="msr-add" title="Toggle measure mode (M) — pick two points in the viewport to measure distance"><i data-lucide="ruler"></i>Measure</button>
-          <button class="btn warn" id="msr-clear" title="Delete every measurement">Clear all</button>
-        </div>
-        <div class="field-help" id="msr-info" style="margin-top:var(--space-md)">Click Measure or press <kbd class="kbd">M</kbd>, then click two points on geometry. Drag still orbits.</div>
-        <div id="msr-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
-      </div>
-    </div>
-
     <div class="side-group" id="anim-card-group" hidden>Animate</div>
     <div class="section" id="anim-card" hidden>
       <div class="section-h"><i class="sec-ico" data-lucide="clapperboard"></i><span>Animation</span><span class="chev">▾</span></div>
@@ -7593,157 +7685,6 @@ window.moSplash = function (msg, pct) {
           <button type="button" class="ac-play" id="ac-play" title="Play" aria-label="Play"><i data-lucide="play"></i></button>
           <button type="button" class="ac-b" id="ac-end" title="Skip to the end" aria-label="Skip to the end"><i data-lucide="skip-forward"></i></button>
           <button type="button" class="ac-b" id="ac-loop" title="Loop: start again at the end" aria-label="Loop"><i data-lucide="repeat"></i></button>
-        </div>
-      </div>
-    </div>
-    <div class="side-group">Find</div>
-
-    <div class="section">
-      <div class="section-h"><i class="sec-ico" data-lucide="weight"></i><span>Heavy parts</span><span class="sec-count" id="heavy-count" hidden></span><span class="chev">▾</span></div>
-      <div class="section-b" id="offenders-body">
-        <div class="off-empty" style="color:var(--tx3);font-size:var(--fs-12);padding:4px 0">Load a model to see heavy parts.</div>
-        <div class="off-list" id="offenders-list"></div>
-        <button class="btn danger" id="btn-off-delete" disabled title="Delete the ticked parts. Can be undone."><i data-lucide="trash-2"></i><span id="off-delete-label">Delete</span></button>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><i class="sec-ico" data-lucide="filter"></i><span>Filters &amp; flags</span><span class="chev">▾</span></div>
-      <div class="section-b" style="display:flex;flex-direction:column;gap:0">
-        <div class="field" style="margin:0"><div id="tri-scrub"></div></div>
-        <div class="field" style="margin:0"><div id="aspect-scrub"></div></div>
-        <div class="btn-list" style="margin-top:var(--space-md)">
-          <button class="btn warn" id="btn-flag-tri" title="Mark parts whose triangle count falls below the slider threshold"><i data-lucide="triangle"></i>Flag low-poly</button>
-          <button class="btn warn" id="btn-flag-sliver" title="Mark gasket / wire / decal-like parts (extreme aspect ratio)"><i data-lucide="rectangle-horizontal"></i>Flag slivers</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><i class="sec-ico" data-lucide="mouse-pointer-2"></i><span>Pick parts</span><span class="chev">▾</span></div>
-      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="field" style="margin:0" title="How alike Select similar goes"><div id="sim-strict-scrub"></div></div>
-        <div class="field-help" id="sim-strict-help" style="margin:0"></div>
-      </div>
-    </div>
-
-    <div class="side-group">Optimise</div>
-
-    <div class="section" id="smart-section">
-      <div class="section-h"><i class="sec-ico" data-lucide="wand-sparkles"></i><span>Smart optimise</span><span class="chev">▾</span></div>
-      <div class="section-b small-card smart-card">
-        <div class="cmd-lede">Every clean-up in one run.</div>
-        <div class="cmd-seg" id="smart-level" role="group" aria-label="How far to go">
-          <button type="button" class="active" data-level="auto" title="The app picks the level from how heavy the scene is">Auto</button>
-          <button type="button" data-level="light" title="Only what cannot be seen: empty and broken parts, empty groups">Light</button>
-          <button type="button" data-level="balanced" title="Also removes hidden and very small parts, simplifies fasteners and halves the triangles">Balanced</button>
-          <button type="button" data-level="strong" title="Removes more small parts, fills holes and keeps a quarter of the triangles">Strong</button>
-        </div>
-        <details class="cmd-adv" id="smart-adv">
-          <summary><span>Steps</span></summary>
-          <div class="cmd-adv-b">
-        <div class="toggle" title="Off: the run only removes and tidies parts; the meshes that stay keep every triangle"><span id="smart-remesh-lbl">Reduce triangles</span><label><input type="checkbox" id="smart-remesh" aria-labelledby="smart-remesh-lbl" checked><span class="switch"></span></label></div>
-        <div class="cmd-num" id="smart-target-row" title="How many triangles the whole scene may have after the run (150000, 150k, 1.5m). The densest meshes give up the most."><span>Target</span><label class="size-field"><input type="text" inputmode="numeric" id="smart-target" value="" aria-label="Triangle target"><span>tris</span></label></div>
-            <div class="toggle" title="Parts with no triangles, parts whose triangles have no area, and groups left with nothing in them"><span id="smart-clean-lbl">Empty parts</span><label><input type="checkbox" id="smart-clean" aria-labelledby="smart-clean-lbl" checked><span class="switch"></span></label></div>
-            <div class="toggle" title="Parts that cannot be seen from outside the model, from any direction"><span id="smart-hidden-lbl">Hidden parts</span><label><input type="checkbox" id="smart-hidden" aria-labelledby="smart-hidden-lbl"><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Bolts, nuts and washers found by their shape. Simplify turns each into a plain cylinder; Delete removes them."><span>Fasteners</span><select id="smart-fast" class="mac-sel" aria-label="Bolts, nuts and washers"><option value="keep">Keep</option><option value="cyl">Simplify</option><option value="delete">Delete</option></select></div>
-            <div class="cmd-num" title="Parts whose box, corner to corner, is shorter than this share of the whole model. 0 leaves small parts alone."><span>Small parts</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-small" value="0" aria-label="Remove parts smaller than, in percent of the model"><span>%</span></label></div>
-            <div class="toggle" title="Closes holes in flat faces, with the settings of the Remove holes panel"><span id="smart-holes-lbl">Holes</span><label><input type="checkbox" id="smart-holes" aria-labelledby="smart-holes-lbl"><span class="switch"></span></label></div>
-            <div class="toggle" title="The same part twice in the same place. Only the second copy goes; parts that merely share a shape stay."><span id="smart-dupes-lbl">Exact copies</span><label><input type="checkbox" id="smart-dupes" aria-labelledby="smart-dupes-lbl" checked><span class="switch"></span></label></div>
-            <div class="cmd-num" title="Takes out triangles from each part for as long as no point of its surface moves by more than this. 0 leaves it out. Runs before the triangle target."><span>Tolerance</span><label class="size-field"><input type="text" inputmode="decimal" id="smart-tol" value="0" aria-label="Largest move of any point, in millimetres"><span>mm</span></label></div>
-          </div>
-        </details>
-        <details class="cmd-adv" id="smart-recipes">
-          <summary><span>Recipes</span></summary>
-          <div class="cmd-adv-b">
-            <div class="cmd-num" title="Settings you saved. Choose one to put them in the controls above."><span>Saved</span><select id="recipe-list" class="mac-sel" aria-label="Saved recipes"></select></div>
-            <div class="btn-row">
-              <button class="btn quiet" id="recipe-run" title="Put the chosen recipe's settings in the controls and run them on this scene">Apply and run</button>
-              <button class="btn quiet" id="recipe-save" title="Save the settings above under a name, to run again on the next revision of the model">Save these…</button>
-            </div>
-            <div class="btn-row" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-              <button class="btn quiet" id="recipe-export" title="Write the saved recipes to a file you can keep or share">Export</button>
-              <button class="btn quiet" id="recipe-import" title="Read recipes from a file">Import</button>
-              <button class="btn quiet" id="recipe-delete" title="Delete the chosen recipe">Delete</button>
-            </div>
-            <input type="file" id="recipe-file" accept=".json,application/json" hidden>
-          </div>
-        </details>
-        <div class="field-help smart-info" id="smart-info"></div>
-        <button class="btn primary" id="btn-smart-run" title="Run every step that is switched on, on the whole scene. Lossy, but one undo takes the whole run back."><i data-lucide="sparkles"></i>Optimise</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><i class="sec-ico" data-lucide="wrench"></i><span>Quick fixes</span><span class="chev">▾</span></div>
-      <div class="section-b btn-list">
-        <button class="btn quiet" id="btn-clean-empty" title="Delete parts that contain zero triangles"><i data-lucide="circle-minus"></i>Empty parts</button>
-        <button class="btn quiet" id="btn-clean-dupes" title="Collapse parts that share identical vertex data into one geometry"><i data-lucide="copy-check"></i>Duplicates</button>
-        <button class="btn quiet" id="btn-clean-degenerate" title="Strip zero-area triangles that confuse renderers and shaders"><i data-lucide="eraser"></i>Degenerate</button>
-        <button class="btn quiet" id="btn-floating" title="Remove floating pieces…: delete the small loose pieces of a part that touch nothing (plugs, shavings, dots). Opens its panel."><i data-lucide="unlink"></i>Floating…</button>
-        <button class="btn quiet" id="btn-clean-empty-groups" title="Remove user groups and hierarchy groups whose members are all deleted or empty"><i data-lucide="folder-x"></i>Empty groups</button>
-        <button class="btn quiet" id="btn-recompute-normals" title="Re-derive smooth vertex normals — fixes shading after large transforms"><i data-lucide="refresh-ccw-dot"></i>Normals</button>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><i class="sec-ico" data-lucide="trash-2"></i><span>Delete small parts</span><span class="chev">▾</span></div>
-      <div class="section-b small-card">
-        <!-- what the threshold below catches, and a way to look at it first -->
-        <!-- how small: a share of the whole model's size -->
-        <div id="thr-scrub"></div>
-        <!-- small by what measure (the select is what the rest of the app reads and sets; the buttons drive it) -->
-        <div class="small-by">
-          <span>Measured by</span>
-          <div class="cmd-seg" id="thr-metric-seg" role="group" aria-label="Measured by">
-            <button type="button" class="active" data-metric="diag" title="Corner to corner of the part's box. The usual choice.">Diagonal</button>
-            <button type="button" data-metric="max" title="The part's longest side. Keeps long thin parts (rods, pipes) that the diagonal also keeps, and is stricter with flat ones.">Longest</button>
-            <button type="button" data-metric="vol" title="The volume of the part's box. Catches thin sheets and wires however long they are.">Volume</button>
-          </div>
-          <select id="thr-metric" hidden><option value="diag">Bbox diagonal</option><option value="vol">Bbox volume</option><option value="max">Largest dimension</option></select>
-        </div>
-        <!-- what the threshold catches, and a way to look at it before deleting -->
-        <div class="small-result">
-          <div class="small-found" id="thr-found"><span class="small-n" id="thr-count" hidden></span><span id="thr-info">Load a model to see what would go.</span></div>
-          <div class="btn-row">
-            <button class="btn" id="btn-isolate-small" aria-pressed="false" title="Show only the parts that would be deleted, to check them first. Press again to show everything"><i data-lucide="eye"></i>Isolate</button>
-            <button class="btn" id="tg-hilite" title="Colour the parts smaller than the threshold in the view and the tree, to see what would go"><i data-lucide="highlighter"></i>Highlight</button>
-          </div>
-        </div>
-        <button class="btn danger" id="btn-delete-small" title="Delete the parts flagged by the size threshold. Can be undone."><i data-lucide="trash-2"></i><span class="when-idle">Delete <span id="btn-delete-small-count">0</span> small parts</span><span class="when-busy">Calculating…</span></button>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-h"><i class="sec-ico" data-lucide="triangle"></i><span>Reduce triangles</span><span class="chev">▾</span></div>
-      <div class="section-b" style="display:flex;flex-direction:column;gap:var(--space-sm)">
-        <div class="toggle" id="decimate-smart-row" title="Tidy the flat faces before and after the reduction (flat triangles joined into polygons and re-triangulated with fewer; every second line of a ring grid taken out). Quick remesh (B) uses the same switch, so the same share gives the same result on both."><span id="decimate-smart-lbl">Smart: tidy flat faces</span><label><input type="checkbox" id="decimate-smart" checked aria-labelledby="decimate-smart-lbl"><span class="switch"></span></label></div>
-        <div class="toggle" id="keep-sharp-row" title="While triangles are taken out, hold on to the hard edges of a part (a rim, a step, a corner), when the part has few of them and the goal can still be reached. Parts that are mostly hard edges, like gears, are reduced as before."><span id="keep-sharp-lbl">Keep sharp edges</span><label><input type="checkbox" id="keep-sharp" checked aria-labelledby="keep-sharp-lbl"><span class="switch"></span></label></div>
-        <div class="remesh-sub">Whole scene</div>
-        <div class="btn-row" style="grid-template-columns:minmax(0,1fr) auto">
-          <button class="btn primary" id="btn-budget" title="Reduce the whole scene to a triangle budget. The densest meshes give up the most; large, sparse ones are left alone. Lossy, but undoable."><i data-lucide="gauge"></i>Fit to budget</button>
-          <label class="size-field budget-field" title="Triangle budget for the whole scene (150000, 150k, 1.5m)"><input type="text" inputmode="numeric" id="budget-target" value="150k"><span>tris</span></label>
-        </div>
-        <div class="field-help plan-line" style="margin-top:-2px"><span id="budget-info"></span><button type="button" class="plan-link" id="budget-preview" hidden title="See which meshes will be reduced, and by how much, before running it">Preview…</button></div>
-        <div class="remesh-sub">Selected parts</div>
-        <div class="btn-row">
-          <button class="btn warn" id="btn-decimate-sel" title="Reduce the triangle count of the selected parts. Normals, UVs and vertex colours are kept. Lossy, but undoable."><i data-lucide="shrink"></i>Decimate <span id="dec-sel-count">0</span></button>
-          <select id="decimate-strength" class="mac-sel" title="How many triangles to remove from each selected part" style="flex:0 0 96px">
-            <option value="0.25">−25%</option>
-            <option value="0.5" selected>−50%</option>
-            <option value="0.75">−75%</option>
-            <option value="0.9">−90%</option>
-            <option value="target">Target…</option>
-            <option value="tol">Within…</option>
-          </select>
-        </div>
-        <input type="text" inputmode="numeric" id="decimate-target" class="mac-input" placeholder="Target triangles for the selection" title="Triangle budget for everything selected; each part gives up the same share" style="display:none">
-        <label class="size-field" id="decimate-tol-row" style="display:none" title="Take out as many triangles as possible without moving any point of the surface by more than this"><span>no point moves more than</span><input type="text" inputmode="decimal" id="decimate-tol" value="0.1"><span>mm</span></label>
-        <div class="field-help plan-line" style="margin-top:-2px"><span id="decimate-info"></span><button type="button" class="plan-link" id="decimate-preview" hidden title="See what each part will lose before running it">Preview…</button></div>
-        <div class="remesh-sub">Replace with shapes</div>
-        <div class="btn-list">
-          <button class="btn quiet" id="btn-bbox-all" title="Smart fit every part: each becomes a box, a turned box or a cylinder, whichever fits it best. Removes most of the detail."><i data-lucide="box-select"></i>Smart fit all parts</button>
-          <button class="btn quiet" id="btn-report" title="The model as it was opened against what it is now: triangles, draw calls, materials, file size"><i data-lucide="clipboard-list"></i>Optimisation report</button>
         </div>
       </div>
     </div>
@@ -8362,7 +8303,6 @@ window.moSplash = function (msg, pct) {
       <div class="wl-title" id="wl-heading">MeshOptimiser <span class="wl-ver" id="wl-ver"></span></div>
       <nav class="wl-nav">
         <button class="wl-link" id="welcome-claude" type="button" title="Hide the app and follow Claude as a feed (alpha)">Claude mode<i class="cf-alpha">Alpha</i></button>
-        <button class="wl-link" id="welcome-help" type="button">Help</button>
       </nav>
       <button class="wl-x" id="welcome-close" type="button" title="Close (Esc)" aria-label="Close"><i data-lucide="x"></i></button>
     </header>
@@ -8373,8 +8313,8 @@ window.moSplash = function (msg, pct) {
           <div class="wl-search"><i data-lucide="search"></i><input type="text" id="welcome-recents-filter" placeholder="Search recent files" autocomplete="off" spellcheck="false" aria-label="Search recent files"></div>
 
           <div class="wl-start">
-            <button class="wl-tile is-primary" id="welcome-start-empty" type="button"><i data-lucide="file-plus"></i><kbd>Alt+N</kbd><span class="wl-tile-t">New scene</span><span class="wl-tile-s">Start with nothing</span></button>
-            <button class="wl-tile" id="welcome-pick" type="button"><i data-lucide="folder-open"></i><kbd>Ctrl+O</kbd><span class="wl-tile-t">Open file…</span><span class="wl-tile-s">or drop one anywhere here</span></button>
+            <button class="wl-tile is-primary" id="welcome-start-empty" type="button"><i data-lucide="file-plus"></i><kbd>Alt+N</kbd><span class="wl-tile-t">New scene</span><span class="wl-tile-s">Start with an empty scene</span></button>
+            <button class="wl-tile" id="welcome-pick" type="button"><i data-lucide="folder-open"></i><kbd>Ctrl+O</kbd><span class="wl-tile-t">Open file…</span><span class="wl-tile-s">or drop one here</span></button>
             <button class="wl-tile" id="welcome-import" type="button" title="Add a file to the scene that is already open"><i data-lucide="file-input"></i><kbd>Ctrl+Shift+O</kbd><span class="wl-tile-t">Import…</span><span class="wl-tile-s">Add to the open scene</span></button>
           </div>
 
@@ -8813,8 +8753,8 @@ window.moSplash = function (msg, pct) {
 <!-- (the import map is in the head, above the module preloads: a module is read as soon as it is fetched, so the map must come first) -->
 <script defer src="js/notes-core.js?v=9"></script>
 <script defer src="js/notes-exchange.js?v=2"></script>
-<script defer src="js/notes.js?v=102"></script>
-<script type="module" src="js/app.js?v=20261077-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2"></script>
+<script defer src="js/notes.js?v=104"></script>
+<script type="module" src="js/app.js?v=20261077-v0.22.1zk-mat1c-scrbm-k1-rc2-li-k4-dh-k16-el51092-wq13-sa5-ts10-sp2-gs1-b1-dv1-b2-ld1-qr1-ld2-qr4-mt2-tf1-em3-fr1-ar3-gz1-lb7-pf8-lp1-tg1-gx1-al1-uv1-ex2-tb-sc22-te-tf-tg-th-an1-pv1brapxcoglnktfgmsphdtrs-nt6-rv2-nt9-nt2-ax15-jb2-osc4-shr1-rnd1-wbar1-cur1-tga1-bare1-len1-dk1-tl1-pan1-nolp1-pbk1-dl0-gap1-selhide1-tiles1-addb1-ttl1-obj1-ord1-fit1-fol1-del1-nocards1-line1-fold1-sep1-sl1-nm1-lst1-shsn1-par1-rgd1-xan1-acd1-ac2-ac3-cam1-kc1-nocam1-key1-lfx35-gs5-cm17-rnd2-ug1-rnd3-ug2-env1-dc1-hf1-stk1-wld1-enc1-let9-mi3-sp3-mi4-al2-mi5-coe3-rp6-rp7-wr37-ws8-ph11-dk12-hf2-ib1-lay1-cad1-cb2-cp1-sm5-fc1-fc2-fc3-al1-fc4-fr1-ce1-fc5-rv3-rf1-rv4-rv5-iso1-brc1-cl2-ur1-rt1-pf1-ao1-cv1-shm1-msz1-lt2-gd1-ed1-gd2-ed2-ed3-tbm1-lt3-lt4-ed4-nohero1-sh1-ed5-cl1-cl2-ed6-wh1-fc1-sm1-sn1-ed7-sp1-mn1-ed8-ed9-ed10"></script>
 <!-- Feature modules. cloner.js attaches via window._appFns / _appHooks, which
      app.js sets up: `defer` makes it run after that module (a plain script
      tag ran first, and cloner.js then had to wait and look again). -->

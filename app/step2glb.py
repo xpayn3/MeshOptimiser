@@ -228,6 +228,7 @@ class Config:
     pca_instances: bool = False  # apply PCA pose normalization for hash (rotation-invariant)
     with_props: bool = False     # compute volume + area (slow; needs separate BRepGProp pass)
     parallel: int = 0            # mesh-extraction worker count (0/1 = sequential)
+    mesh_jobs: int = -1          # XCAF path: worker processes that mesh and extract the bodies (-1 = by the size of the model, 0/1 = in this process)
     colors: str = "auto"         # 'auto' | 'on' | 'off' — XCAF read mode
     meshopt: bool = False        # post-process via gltfpack for EXT_meshopt_compression
     quantize: bool = False       # KHR_mesh_quantization via gltfpack (-cc)
@@ -442,6 +443,9 @@ def parse_step_xcaf(path: Path):
     for setter, val in (("SetColorMode",    True),
                         ("SetNameMode",     CFG.read_names),
                         ("SetLayerMode",    CFG.read_layers),
+                        # (the reader's is SetMatMode; SetMaterialMode is the writer's, and asking the reader for it found
+                        # nothing, so "Materials" off was never passed on. Both are tried, for builds that name it otherwise.)
+                        ("SetMatMode",      CFG.read_materials),
                         ("SetMaterialMode", CFG.read_materials),
                         ("SetPropsMode",    CFG.read_props),
                         ("SetSHUOMode",     CFG.read_shuo),
@@ -1583,6 +1587,10 @@ def collect_metadata(shape_tool, color_tool, doc, free_labels) -> dict:
     return meta
 
 
+# The mesher's own threads. Off in the worker processes of parallel_mesh_products(): there are as many of them as cores.
+_MESH_IN_PARALLEL = True
+
+
 def _mesh_shape(shape, linear: float, angular: float, relative: bool) -> None:
     """One run of the mesher. (The constructor does the work: calling
     Perform() after it, as this used to, walked every face a second time.)
@@ -1593,7 +1601,7 @@ def _mesh_shape(shape, linear: float, angular: float, relative: bool) -> None:
     prm.Deflection = float(linear)
     prm.Angle = float(angular)
     prm.Relative = bool(relative)
-    prm.InParallel = True
+    prm.InParallel = _MESH_IN_PARALLEL
     if CFG.min_edge > 0:
         prm.MinSize = float(CFG.min_edge)
     t_mesh = time.time()
@@ -2729,7 +2737,10 @@ def convert(input_path: Path, output_path: Path) -> None:
                 builder.Add(comp, sh)
             except Exception:
                 pass
-        tessellate(comp, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
+        # (with worker processes the model is meshed after the walk, a body at a time; the walk does not need the mesh)
+        meshed = not _mesh_jobs_wanted()
+        if meshed:
+            tessellate(comp, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
 
         # ── Hierarchical path: walk the XCAF tree, cache products, write GLB
         # with proper parent/child structure and reference-based instancing,
@@ -2742,7 +2753,10 @@ def convert(input_path: Path, output_path: Path) -> None:
                                          surfaces=(kind != "step"), loose_shells=(kind == "step" and CFG.surfaces))
         log(f"  → {len(products)} unique products, {len(roots)} top-level roots "
             f"in {time.time()-t_walk:.2f}s", "ok")
-        extract_product_meshes(products)
+        if meshed or not parallel_mesh_products(comp, products):
+            if not meshed:
+                tessellate(comp, linear_deflection=CFG.quality, angular_deflection=CFG.angular, relative=CFG.relative)
+            extract_product_meshes(products)
         RESULT["tris_in"] = sum(len(t) for p in products.values() for _, t in p.meshes)
 
         if CFG.min_size_pct > 0:
@@ -2952,6 +2966,252 @@ def parallel_extract_meshes(solid_meta, num_workers):
         except Exception: pass
     log(f"parallel extraction done in {time.time() - t0:.1f}s", "ok")
     return results
+
+
+# ─── Meshing and extraction of the XCAF path in worker processes.
+# OCCT's mesher runs its faces on threads, but on a real assembly it reached about 1.4 cores of 24 (the V8 engine STEP: 8.8 s
+# against 17.6 s on one), and the extraction is Python, which holds the GIL (so do OCP's calls: Python threads gain nothing).
+# So the unique bodies are written to a few binary B-rep files and each worker process meshes its share and returns the arrays.
+# Every body is meshed with exactly the passes tessellate() would give it (the whole model at the deflection, then the small
+# parts again, or the size groups coarse to fine), so the GLB is the same; where that can not be promised, nothing is done here
+# and the caller meshes in its own process as before.
+
+_MESH_JOBS_MIN_FACES = 5000      # under this many CAD faces starting the processes costs more than it saves (auto only)
+
+
+def _mesh_jobs_wanted() -> int:
+    """How many worker processes parallel_mesh_products() may use: 0 when it must not run at all."""
+    if CFG.mesh_jobs in (0, 1) or CFG.brep or CFG.split_colours:
+        return 0           # (--brep: the B-rep records point into this process's shapes; split pieces: meshed as their solid)
+    if CFG.mesh_jobs > 1:
+        return CFG.mesh_jobs
+    return max(2, min(8, (os.cpu_count() or 2) // 2))
+
+
+def _compound_of(shapes):
+    from OCP.TopoDS import TopoDS_Compound
+    comp = TopoDS_Compound(); b = BRep_Builder(); b.MakeCompound(comp)
+    for sh in shapes:
+        b.Add(comp, sh)
+    return comp
+
+
+def _worker_mesh_extract(args):
+    """Worker process: read one share of the bodies, mesh them with their passes, return (verts, tris, normals, runs) each."""
+    path, cfg, specs = args
+    global _MESH_IN_PARALLEL
+    os.environ["STEP2GLB_NO_HEARTBEAT"] = "1"
+    for k, v in cfg.items():
+        setattr(CFG, k, v)
+    _MESH_IN_PARALLEL = False
+    RESULT.clear(); _NORMALS.clear(); _GROUPS.clear()
+    from OCP.BinTools import BinTools
+    from OCP.TopoDS import TopoDS_Iterator
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+    shape = TopoDS_Shape()
+    BinTools.Read_s(shape, path)
+    bodies = []
+    it = TopoDS_Iterator(shape)
+    while it.More():
+        bodies.append(it.Value()); it.Next()
+    if len(bodies) != len(specs):
+        raise RuntimeError(f"{len(bodies)} bodies read back, {len(specs)} expected")
+    t0 = time.time()
+    if CFG.tiers:
+        # as tessellate(): a group a size, coarse first, so a body in two groups ends with the finer mesh
+        for name in sorted(("small", "medium", "large"), key=lambda k: -CFG.tiers[k][0]):
+            group = [b for b, sp in zip(bodies, specs) if name in sp["tiers"]]
+            if group:
+                lin, ang = CFG.tiers[name]
+                _mesh_shape(_compound_of(group), lin, ang, CFG.relative)
+    else:
+        _mesh_shape(shape, CFG.quality, CFG.angular, CFG.relative)
+        for b, sp in zip(bodies, specs):
+            for lin in sp["refine"]:             # (as _refine_small_solids(): once a copy, in the order of the copies)
+                _mesh_shape(b, lin, CFG.angular, False)
+    t_mesh = time.time() - t0
+    out = []
+    for b, sp in zip(bodies, specs):
+        fc = None
+        if sp["fc"]:
+            fmap = TopTools_IndexedMapOfShape()
+            TopExp.MapShapes_s(b, TopAbs_FACE, fmap)
+            idxs, keys = sp["fc"]
+            fc = ([fmap.FindKey(i) for i in idxs], keys)
+        r = solid_to_mesh(b, fc)
+        if r is None:
+            out.append(None); continue
+        v, t = r
+        n = _NORMALS.get(id(v)); g = _GROUPS.get(id(v))
+        out.append((v, t, n[1] if n is not None and n[0] is v else None, g[1] if g is not None and g[0] is v else None))
+    return out, dict(RESULT), t_mesh, time.time() - t0 - t_mesh
+
+
+def _merge_result(part: dict) -> None:
+    """A worker's RESULT counts into this process's."""
+    for k, v in part.items():
+        if k == "mesher_status":
+            RESULT[k] = RESULT.get(k, 0) | v
+        elif isinstance(v, dict):
+            d = RESULT.setdefault(k, {})
+            for k2, v2 in v.items():
+                d[k2] = d.get(k2, 0) + v2
+        elif isinstance(v, (int, float)) and not isinstance(v, bool):
+            RESULT[k] = RESULT.get(k, 0) + v
+        else:
+            RESULT[k] = v
+
+
+def parallel_mesh_products(comp, products: dict) -> bool:
+    """Mesh and extract every unique body of `products` in worker processes and fill prod.meshes, as tessellate(comp) followed
+    by extract_product_meshes(products) would. `comp` is the assembled model (the copies of each solid, placed), which says
+    which passes each body gets. Returns False, having changed nothing, when this path does not apply or fails."""
+    jobs = _mesh_jobs_wanted()
+    if not jobs:
+        return False
+    from OCP.TopTools import TopTools_IndexedMapOfShape
+    from OCP.TopLoc import TopLoc_Location
+    from OCP.BinTools import BinTools
+    t0 = time.time()
+
+    # the unique bodies, in product order (the first product with a body decides its colour runs, as in extract_product_meshes)
+    bmap = TopTools_IndexedMapOfShape()
+    body_of: dict = {}             # (map index, orientation) -> body number
+    bodies: list = []              # [shape, face colours, faces]
+    uses: list = []                # per product: its body numbers, in order
+    n_faces = 0
+    for prod in products.values():
+        nums = []
+        for si, solid in enumerate(prod.solids):
+            key = (bmap.Add(solid), int(solid.Orientation()))
+            if key not in body_of:
+                fc = prod.face_colours[si] if prod.face_colours and si < len(prod.face_colours) else None
+                nf = 0
+                exp = TopExp_Explorer(solid, TopAbs_FACE)
+                while exp.More():
+                    nf += 1; exp.Next()
+                body_of[key] = len(bodies)
+                bodies.append([solid, fc, nf])
+                n_faces += nf
+            nums.append(body_of[key])
+        uses.append(nums)
+    if not bodies or (CFG.mesh_jobs < 0 and n_faces < _MESH_JOBS_MIN_FACES):
+        return False
+
+    # the passes of each body, from its copies in the model (what tessellate() and _refine_small_solids() measure)
+    smap = TopTools_IndexedMapOfShape()       # solids without their placement: one entry per solid, however often it is placed
+    refine: dict = {}                          # solid -> deflections it is meshed again at, in the order of its copies
+    tiers_of: dict = {}                        # solid -> the size groups its copies fall in
+    refining = not CFG.tiers and CFG.size_cap > 0 and not CFG.relative
+    if CFG.tiers:
+        model = _shape_diag(comp)
+        lo, hi = (model * CFG.tiers["split"][0] / 100.0, model * CFG.tiers["split"][1] / 100.0)
+    if refining or CFG.tiers:
+        exp = TopExp_Explorer(comp, TopAbs_SOLID)
+        while exp.More():
+            occ = exp.Current(); exp.Next()
+            i = smap.Add(occ.Located(TopLoc_Location()))
+            if refining:
+                lin = max(CFG.quality * 0.1, CFG.size_cap * _shape_diag(occ))
+                if 0 < lin < CFG.quality * 0.999:
+                    refine.setdefault(i, []).append(lin)
+            else:
+                d = _shape_diag(occ)
+                tiers_of.setdefault(i, set()).add("small" if d < lo else ("large" if d >= hi else "medium"))
+    specs = []
+    for solid, fc, _nf in bodies:
+        sp = {"refine": [], "tiers": ["medium"], "fc": None}
+        if solid.ShapeType() == TopAbs_SOLID and (refining or CFG.tiers):
+            i = smap.FindIndex(solid.Located(TopLoc_Location()))
+            if i == 0:
+                log("a body is not among the solids of the model; meshing in this process", "warn")
+                return False
+            sp["refine"] = refine.get(i, [])
+            sp["tiers"] = sorted(tiers_of.get(i, ()))
+        if fc:
+            fmap = TopTools_IndexedMapOfShape()
+            TopExp.MapShapes_s(solid, TopAbs_FACE, fmap)
+            idxs = [fmap.FindIndex(f) for f in fc[0]]
+            if 0 in idxs:
+                log("a coloured face is not found in its body; meshing in this process", "warn")
+                return False
+            sp["fc"] = (idxs, list(fc[1]))
+        specs.append(sp)
+
+    # shares: largest bodies first, each to the share with the fewest faces; surface bodies (not solids) all in the first share,
+    # so the edges they share are meshed together as in one run
+    n_chunks = min(len(bodies), jobs * 3)
+    chunks = [[] for _ in range(n_chunks)]
+    load = [0] * n_chunks
+    order = sorted(range(len(bodies)), key=lambda k: (bodies[k][0].ShapeType() == TopAbs_SOLID, -bodies[k][2]))
+    for k in order:
+        c = 0 if bodies[k][0].ShapeType() != TopAbs_SOLID else min(range(n_chunks), key=lambda j: load[j])
+        chunks[c].append(k); load[c] += bodies[k][2]
+    chunks = [c for c in chunks if c]
+    n_refined = sum(len(v) for v in refine.values())
+
+    mode = "relative" if CFG.relative else "absolute"
+    log(f"tessellating and extracting {len(bodies)} unique bodies ({n_faces} faces) in {min(jobs, len(chunks))} parallel "
+        f"processes (linear={CFG.quality} {mode}, angular={CFG.angular})")
+    if n_refined:
+        log(f"   {n_refined} small solid{'s' if n_refined != 1 else ''} meshed finer (at most {CFG.size_cap * 100:g} % of their size)")
+    cfg = {k: getattr(CFG, k) for k in Config.__dataclass_fields__}
+    tmp = tempfile.mkdtemp(prefix="step2glb_mesh_")
+    results: list = [None] * len(bodies)
+    parts: list = []
+    try:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        t_write = time.time()
+        jobs_args = []
+        for ci, ch in enumerate(chunks):
+            path = os.path.join(tmp, f"share{ci}.bin")
+            BinTools.Write_s(_compound_of([bodies[k][0] for k in ch]), path)
+            jobs_args.append((path, cfg, [specs[k] for k in ch]))
+        log(f"   bodies written for the processes in {time.time() - t_write:.1f}s")
+        t_mesh = t_extract = 0.0
+        with Heartbeat("tessellation + extraction"), ProcessPoolExecutor(max_workers=min(jobs, len(chunks))) as pool:
+            futs = {pool.submit(_worker_mesh_extract, a): ci for ci, a in enumerate(jobs_args)}
+            done = 0
+            for fut in as_completed(futs):
+                out, res, tm, te = fut.result()
+                parts.append(res); t_mesh += tm; t_extract += te
+                for k, r in zip(chunks[futs[fut]], out):
+                    results[k] = r
+                done += 1
+                if done % max(1, len(chunks) // 4) == 0 or done == len(chunks):
+                    log(f"   {done}/{len(chunks)} shares meshed and extracted")
+    except Exception as e:
+        log(f"parallel tessellation failed ({e!r}); meshing in this process", "warn")
+        return False
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    for res in parts:
+        _merge_result(res)
+    meshes = []
+    skipped = 0
+    for r in results:
+        if r is None:
+            meshes.append(None); continue
+        v, t, n, runs = r
+        if n is not None: _NORMALS[id(v)] = (v, n)
+        if runs: _GROUPS[id(v)] = (v, runs)
+        meshes.append((v, t))
+    total = 0
+    for prod, nums in zip(products.values(), uses):
+        prod.meshes = []
+        for k in nums:
+            if meshes[k] is None:
+                skipped += 1
+            else:
+                prod.meshes.append(meshes[k])
+        total += len(prod.meshes)
+    log(f"tessellated and extracted in {time.time() - t0:.1f}s (in the processes: mesher {t_mesh:.1f}s, extraction "
+        f"{t_extract:.1f}s together)", "ok")
+    _log_grid()
+    log(f"extracted {total} solid meshes across {len(products)} unique products"
+        + (f" ({skipped} empty solids skipped)" if skipped else ""), "ok")
+    return True
 
 
 def _finish_convert(input_path, output_path, solid_meta, scene_meta, t_total):
@@ -3276,6 +3536,9 @@ def main() -> int:
     ap.add_argument("--parallel", type=int, default=0,
                     help="Use N worker processes for mesh extraction (default 0 = sequential). "
                          "Plain (non-XCAF) reader only.")
+    ap.add_argument("--mesh-jobs", type=int, default=-1,
+                    help="Worker processes that mesh and extract the bodies (colour reader). Default: chosen by the size "
+                         "of the model (none for a small one); 0 or 1 = in this process.")
     ap.add_argument("--meshopt", action="store_true",
                     help="Apply EXT_meshopt_compression via gltfpack (industry standard, ~10x smaller)")
     ap.add_argument("--no-meshopt", dest="no_meshopt", action="store_true",
@@ -3344,6 +3607,8 @@ def main() -> int:
         ap.error(f"--quality {args.quality} out of sensible range (1e-6 .. 1000)")
     if not (1e-3 <= args.angular <= 3.14159):
         ap.error(f"--angular {args.angular} out of sensible range (0.001 .. π)")
+    if args.mesh_jobs < -1:
+        ap.error("--mesh-jobs must be -1 (auto) or more")
     if args.parallel < 0:
         ap.error("--parallel must be >= 0")
     if args.simplify and not (0 < args.simplify <= 1.0):
@@ -3406,6 +3671,7 @@ def main() -> int:
         pca_instances = bool(args.pca_instances),
         with_props    = bool(args.props),
         parallel      = int(args.parallel) if args.parallel else 0,
+        mesh_jobs     = int(args.mesh_jobs),
         colors        = "off" if args.no_colors else ("on" if args.force_colors else "auto"),
         meshopt       = bool(meshopt_resolved),
         quantize      = bool(args.quantize),

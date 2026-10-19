@@ -583,6 +583,20 @@ def t4_metadata():
 
 
 @test
+def t4_no_materials():
+    """--no-materials (the import window's Materials switch off) reaches the reader: the bolt comes without its material, and keeps
+    its colour, layer and part number. (The reader's setter is SetMatMode; the converter asked for SetMaterialMode, found nothing,
+    and read the materials anyway.)"""
+    out = W / "o_nomat.glb"
+    log = convert(F["step"], out, "--quality", "0.2", "--no-materials")
+    assert "XCAF read modes disabled: materials" in log, log[-800:]
+    ex = Glb(out).extras_by_name()
+    bolt = next(v for k, v in ex.items() if k.startswith("Bolt-1_"))
+    assert "material" not in bolt, bolt
+    assert bolt["color"] == "#e51a1a" and bolt["layers"] == ["FASTENERS"] and bolt["partNumber"] == "BLT-0042", bolt
+
+
+@test
 def t4_instance_colours():
     """Colours given to one instance (a SHUO) or to a component come through; --no-shuo leaves out only the SHUO."""
     src = W / "shuo.step"
@@ -656,6 +670,41 @@ def t4_face_colours():
     assert counts == [2, 10], counts
     cols2 = {(round(a, 1), round(b, 1), round(c, 1)) for a, b, c in g2.colours()}
     assert {(0.1, 0.3, 0.8), (0.9, 0.1, 0.1)} <= cols2, cols2
+
+
+@test
+def t4_mesh_jobs():
+    """Meshing in worker processes (--mesh-jobs) gives the model the one process gives: the same nodes, instances, colours and
+    colour runs, and the same triangles (OCCT meshes a body a hair differently when it is not meshed inside the whole model,
+    so a few triangles either way are allowed). Plain run, size groups (--tiers), and a body with faces in two colours."""
+    def same(label, a, b, tol=0.01):
+        ga, gb = Glb(a), Glb(b)
+        assert [n.get("name") for n in ga.nodes] == [n.get("name") for n in gb.nodes], f"{label}: nodes differ"
+        assert {k: len(v) for k, v in ga.mesh_users().items()} == {k: len(v) for k, v in gb.mesh_users().items()}, f"{label}: instancing differs"
+        assert sorted(ga.colours()) == sorted(gb.colours()), f"{label}: colours differ"
+        assert [len(m["primitives"]) for m in ga.json["meshes"]] == [len(m["primitives"]) for m in gb.json["meshes"]], f"{label}: colour runs differ"
+        ta, tb = ga.unique_tris(), gb.unique_tris()
+        assert abs(ta - tb) <= tol * ta, f"{label}: {ta} triangles in one process, {tb} in workers"
+        return ga, gb
+    for label, flags in (("plain", ("--quality", "0.2")), ("tiers", ("--tiers", "5,30:2,60:0.2,30:0.05,10"))):
+        one, many = W / f"o_jobs1_{label}.glb", W / f"o_jobs2_{label}.glb"
+        convert(F["step"], one, *flags, "--mesh-jobs", "0")
+        log = convert(F["step"], many, *flags, "--mesh-jobs", "2")
+        assert "parallel processes" in log and "shares meshed and extracted" in log, f"{label}: no workers ran:\n{log[-1200:]}"
+        ga, gb = same(label, one, many)
+        check_model(gb, f"workers, {label}", instanced=True, names=True)
+    # a body with a face in a second colour: the runs are carried to the worker by face number
+    src = W / "painted.step"
+    if src.exists():                      # (written by t4_face_colours)
+        one, many = W / "o_jobs1_painted.glb", W / "o_jobs2_painted.glb"
+        convert(src, one, "--mesh-jobs", "0")
+        convert(src, many, "--mesh-jobs", "2")
+        _, gb = same("painted", one, many, tol=0)
+        prims = [m for m in gb.json["meshes"] if len(m["primitives"]) > 1][0]["primitives"]
+        assert sum(gb.json["accessors"][p["indices"]]["count"] for p in prims) == 36, prims
+    # --brep keeps the meshing in this process (its records point at that process's shapes)
+    log = convert(F["step"], W / "o_jobs_brep.glb", "--mesh-jobs", "2", "--brep")
+    assert "parallel processes" not in log, log[-800:]
 
 
 @test
