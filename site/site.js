@@ -1166,6 +1166,38 @@
       if (e.key === 'Enter') { const first = $('.kb-list li:not([hidden]) a'); if (first) location.href = first.href; }
     });
     if (search.value) filter();          // a value the browser kept across a reload
+
+    // ---- on a phone: scrolled down, the search folds into a round button and the sections of the page become pills beside it ----
+    const bar = $('#kbBar'), mark = $('.kb-search-mark'), open = $('#kbOpen'), pills = $$('#kbPills a');
+    if (bar && mark && open) {
+      const phone = window.matchMedia('(max-width: 760px)');
+      const lineY = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-h')) + 12 || 72;
+      let tick = 0;
+      const sync = () => {
+        tick = 0;
+        const compact = phone.matches && mark.getBoundingClientRect().top < lineY();
+        bar.classList.toggle('is-compact', compact);
+        if (!compact) bar.classList.remove('is-open');
+        // the pill of the section on screen is lit and kept in view
+        let on = null;
+        groups.forEach((group) => { if (!group.hidden && group.getBoundingClientRect().top <= lineY() + 200) on = group.id; });
+        pills.forEach((pill) => {
+          pill.hidden = !!document.getElementById(pill.dataset.for).hidden;
+          const is = pill.dataset.for === on && compact;
+          if (is !== pill.classList.contains('is-on')) {
+            pill.classList.toggle('is-on', is);
+            if (is) { const row = pill.parentElement; row.scrollTo({ left: pill.offsetLeft - 8, behavior: 'smooth' }); }
+          }
+        });
+      };
+      const queue = sync;          // a few measurements, cheap enough to run on every scroll event
+      window.addEventListener('scroll', queue, { passive: true });
+      window.addEventListener('resize', queue);
+      search.addEventListener('input', queue);
+      open.addEventListener('click', () => { bar.classList.add('is-open'); search.focus(); });
+      search.addEventListener('blur', () => { if (!search.value) bar.classList.remove('is-open'); });
+      sync();
+    }
   }
 
   // ---- docs: the index beside an article shows where you are ----

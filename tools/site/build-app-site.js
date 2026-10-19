@@ -41,9 +41,9 @@ const SHOWCASE = [
   { title: 'Make it yours', note: 'The app', names: ['Keyboard remapper', 'A look of your own', 'Numbers you drag', 'Cards over the model', 'Scene tabs', 'Floating Materials and Library'] },
   { title: 'Work with Claude', note: 'Ask for it', names: ['Just ask', 'You decide', 'Try it first', 'One request, a whole job', 'A whole folder', 'Pictures for a client'] },
 ];
-const CSS_V = 487;
+const CSS_V = 488;
 const RP_V = 2;           // report.js
-const JS_V = 125;
+const JS_V = 126;
 
 // The pages of an app's site, in the order of its navigation. `file` is
 // written into site.path; `nav` is false for a page the header leaves out.
@@ -1502,8 +1502,13 @@ ${site.docsLatest.filter(([, slug]) => bySlug.has(slug)).map(([name, slug, tag])
     pageHead('Docs', 'Everything, from the first download.', `${docs.articles.length} short articles, written for someone who has never opened a CAD file in a browser. Start at the top and read down, or search.`) + `
     <section class="wrap kb-layout">
      <div class="kb">
-      <div class="kb-search">
-        <input type="search" id="kbSearch" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false" />
+      <div class="kb-search-mark" aria-hidden="true"></div>
+      <div class="kb-search" id="kbBar">
+        <div class="kb-search-row">
+          <button type="button" class="kb-search-btn" id="kbOpen" aria-label="Search the docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+          <input type="search" id="kbSearch" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false" />
+          <nav class="kb-pills" id="kbPills" aria-label="Jump to a section">${docs.groups.map(group => `<a href="#${esc(group.id)}" data-for="${esc(group.id)}">${esc(group.short || group.title)}</a>`).join('')}</nav>
+        </div>
         <p class="kb-none" id="kbNone" hidden>Nothing matches. Try a single word, or <a href="${repo}/issues" rel="noopener">ask on GitHub</a>.</p>
       </div>
 ${docs.groups.map(group => `      <section class="kb-group" id="${esc(group.id)}">

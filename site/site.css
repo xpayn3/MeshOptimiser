@@ -525,6 +525,8 @@ b.is-refactor { color: var(--refactor); }
   box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(0, 0, 0, 0.4);
   outline: none;
 }
+.kb-search-row { display: flex; align-items: center; gap: 8px; }
+.kb-search-btn, .kb-pills, .kb-search-mark { display: none; }
 .kb-search input::placeholder { color: var(--tx-3); }
 .kb-search input:focus-visible { box-shadow: 0 0 0 1px var(--accent), 0 12px 32px rgba(0, 0, 0, 0.4); }
 .kb-none { margin-top: 20px; color: var(--tx-2); }
@@ -661,6 +663,20 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
   .foot-brand { grid-column: 1 / -1; }
 }
 @media (max-width: 760px) {
+  /* the search folds into a round button once the page has moved on; the sections of the page sit beside it as pills */
+  .kb-search-mark { display: block; height: 0; }
+  .kb-search-row input { width: auto; flex: 1 1 auto; min-width: 0; transition: flex-basis 0.25s ease, opacity 0.2s ease, padding 0.25s ease; }
+  .kb-search-btn { flex: none; width: 48px; height: 48px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--tx); box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(0, 0, 0, 0.4); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .kb-search-btn svg { width: 20px; height: 20px; }
+  .kb-pills { gap: 8px; flex: 1 1 0; min-width: 0; overflow-x: auto; padding: 4px 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .kb-pills::-webkit-scrollbar { display: none; }
+  .kb-pills a { flex: none; display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 999px; background: var(--surface-2); color: var(--tx-2); font-size: 14px; white-space: nowrap; text-decoration: none; box-shadow: 0 0 0 1px var(--line), 0 8px 20px rgba(0, 0, 0, 0.3); -webkit-tap-highlight-color: transparent; }
+  .kb-pills a.is-on { color: var(--tx); box-shadow: 0 0 0 1px var(--accent), 0 8px 20px rgba(0, 0, 0, 0.3); }
+  .kb-search.is-compact .kb-search-btn { display: grid; }
+  .kb-search.is-compact:not(.is-open) .kb-pills { display: flex; animation: kb-pills-in 0.25s ease both; }
+  .kb-search.is-compact:not(.is-open) input { flex: 0 0 0; width: 0; padding: 0; opacity: 0; pointer-events: none; box-shadow: none; }
+  .kb-search.is-compact.is-open .kb-search-btn { box-shadow: 0 0 0 1px var(--accent), 0 12px 32px rgba(0, 0, 0, 0.4); }
+  @keyframes kb-pills-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
   .bar-in { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
   .bar-get { display: none; }                      /* no Download in the top bar on a phone: the page has its own Download buttons */
   .bar-menu { display: grid; place-content: center; gap: 8px; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-strong); cursor: pointer; -webkit-tap-highlight-color: transparent; }

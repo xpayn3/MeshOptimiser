@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="preload" href="fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/fraunces-latin.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="site.css?v=487" />
+  <link rel="stylesheet" href="site.css?v=488" />
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-RXZ65KVMCQ"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-RXZ65KVMCQ');</script>
 </head>
@@ -54,8 +54,13 @@
     </section>
     <section class="wrap kb-layout">
      <div class="kb">
-      <div class="kb-search">
-        <input type="search" id="kbSearch" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false" />
+      <div class="kb-search-mark" aria-hidden="true"></div>
+      <div class="kb-search" id="kbBar">
+        <div class="kb-search-row">
+          <button type="button" class="kb-search-btn" id="kbOpen" aria-label="Search the docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+          <input type="search" id="kbSearch" placeholder="Search the docs" aria-label="Search the docs" autocomplete="off" spellcheck="false" />
+          <nav class="kb-pills" id="kbPills" aria-label="Jump to a section"><a href="#start" data-for="start">Start here</a><a href="#install" data-for="install">Install and set up</a><a href="#cad" data-for="cad">From your CAD program</a><a href="#around" data-for="around">Find your way around</a><a href="#lighter" data-for="lighter">Make it lighter</a><a href="#look" data-for="look">Look and arrange</a><a href="#claude" data-for="claude">Work with Claude</a><a href="#save" data-for="save">Save and export</a><a href="#jobs" data-for="jobs">Common jobs</a><a href="#reference" data-for="reference">Reference</a><a href="#help" data-for="help">Help</a></nav>
+        </div>
         <p class="kb-none" id="kbNone" hidden>Nothing matches. Try a single word, or <a href="https://github.com/xpayn3/MeshOptimiser/issues" rel="noopener">ask on GitHub</a>.</p>
       </div>
       <section class="kb-group" id="start">
@@ -356,6 +361,6 @@
       <span><a href="https://lukagrcar.com/privacy.html">Privacy</a></span>
     </div>
   </footer>
-  <script defer src="site.js?v=125" data-viewer="viewer/"></script>
+  <script defer src="site.js?v=126" data-viewer="viewer/"></script>
 </body>
 </html>
