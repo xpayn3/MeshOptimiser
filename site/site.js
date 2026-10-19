@@ -1172,7 +1172,7 @@
     if (bar && mark && open) {
       const phone = window.matchMedia('(max-width: 760px)');
       const lineY = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-h')) + 12 || 72;
-      let tick = 0, lastY = window.scrollY;
+      let tick = 0, lastY = window.scrollY, run = 0;
       const root = document.documentElement, menuBtn = $('.bar-menu');
       const sync = () => {
         tick = 0;
@@ -1180,11 +1180,14 @@
         bar.classList.toggle('is-compact', compact);
         if (!compact) bar.classList.remove('is-open');
         // scrolling down hides the top bar and the search row moves up into its place; scrolling up brings the bar back
+        // it takes a real scroll down (about 120 px in one direction) to send the bar away, and a short one up to bring it back
         const y = window.scrollY, dy = y - lastY;
-        if (Math.abs(dy) > 6) {
+        lastY = y;
+        if (dy) {
+          run = (dy > 0) === (run > 0) ? run + dy : dy;
           const menuOpen = menuBtn && menuBtn.getAttribute('aria-expanded') === 'true';
-          root.classList.toggle('kb-bar-away', compact && dy > 0 && !menuOpen);
-          lastY = y;
+          if (run > 120 && compact && !menuOpen) root.classList.add('kb-bar-away');
+          else if (run < -24) root.classList.remove('kb-bar-away');
         }
         if (!compact) root.classList.remove('kb-bar-away');
         // the pill of the section on screen is lit and kept in view
@@ -1203,6 +1206,8 @@
       window.addEventListener('scroll', queue, { passive: true });
       window.addEventListener('resize', queue);
       search.addEventListener('input', queue);
+      const row = $('#kbPills');
+      if (row) row.addEventListener('scroll', () => row.classList.toggle('is-faded', row.scrollLeft > 4), { passive: true });
       open.addEventListener('click', () => { bar.classList.add('is-open'); search.focus(); });
       search.addEventListener('blur', () => { if (!search.value) bar.classList.remove('is-open'); });
       sync();

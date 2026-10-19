@@ -672,7 +672,9 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
   .kb-search-row input { width: auto; flex: 1 1 auto; min-width: 0; transition: flex-basis 0.25s ease, opacity 0.2s ease, padding 0.25s ease; }
   .kb-search-btn { flex: none; width: 48px; height: 48px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--tx); box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(0, 0, 0, 0.4); cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .kb-search-btn svg { width: 20px; height: 20px; }
-  .kb-pills { gap: 8px; flex: 1 1 0; min-width: 0; overflow-x: auto; padding: 4px 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .kb-pills { gap: 8px; flex: 1 1 0; min-width: 0; overflow-x: auto; margin-right: calc(var(--gutter) * -1); padding: 4px var(--gutter) 4px 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  /* the pills run to the edge of the screen; once they have moved sideways they fade out under the search button */
+  .kb-pills.is-faded { mask-image: linear-gradient(90deg, transparent, #000 32px); -webkit-mask-image: linear-gradient(90deg, transparent, #000 32px); }
   .kb-pills::-webkit-scrollbar { display: none; }
   .kb-pills a { flex: none; display: inline-flex; align-items: center; height: 40px; padding: 0 16px; border-radius: 999px; background: var(--surface-2); color: var(--tx-2); font-size: 14px; white-space: nowrap; text-decoration: none; box-shadow: 0 0 0 1px var(--line), 0 8px 20px rgba(0, 0, 0, 0.3); -webkit-tap-highlight-color: transparent; }
   .kb-pills a.is-on { color: var(--tx); box-shadow: 0 0 0 1px var(--accent), 0 8px 20px rgba(0, 0, 0, 0.3); }
