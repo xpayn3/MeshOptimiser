@@ -780,7 +780,7 @@ window.labApps = [
         ['What it saved', 'Every action shows what it removed. Every part remembers its original count.'],
       ] },
       { title: 'Edit mesh', note: 'Points, edges, polygons', items: [
-        ['Points, edges, polygons', 'Pick the pieces of a mesh, as in Cinema 4D. Keys 1 to 4 switch mode.'],
+        ['Points, edges, polygons', 'Pick the pieces of a mesh. Keys 1 to 4 switch mode.'],
         ['Enter into Edit mesh', 'With a part selected, Enter goes into Edit mesh in the mode you used last, and Enter again comes out.'],
         ['Click, Box, Brush', 'Three ways to pick. Double-click takes the whole loop.'],
         ['Move what you picked', 'Move, turn and scale pieces with the gizmo. One undo.'],
@@ -834,7 +834,7 @@ window.labApps = [
       { title: 'Export', items: [
         ['GLB and glTF', 'Draco or Meshopt compression. Textures embedded if you want.'],
         ['FBX, USDZ, OBJ, STL, PLY', 'The common 3D and AR formats, with mm, cm, m and inch presets.'],
-        ['Axes at the parts', 'GLB, glTF, FBX and USDZ put each part’s pivot at its centre, so Cinema 4D, Blender and Maya open it the way you expect.'],
+        ['Axes at the parts', 'GLB, glTF, FBX and USDZ put each part’s pivot at its centre, so Blender open it the way you expect.'],
         ['Check against where it’s going', 'Test the scene against web, Shopify, AR Quick Look or phone-app limits.'],
       ], more: [
         ['Lighter, or just faster to draw', 'Meshopt cuts a GLB to about a quarter. Or keep the size and draw faster.'],
@@ -1036,7 +1036,7 @@ window.labApps = [
             ['Fix', 'Photo mode glitches, a car paint that went pitch black, and lighting from the side are fixed; a change in Settings > Appearance reaches every open tab.'],
           ] },
         { version: '0.34.0', name: 'Bled', fixes: 8, date: '16 Oct 2026 · 17:52',
-          summary: 'Animate gets a timeline along the bottom and a motion for pistons. Claude can read and write notes. The axis tools of Cinema 4D arrive, a selected group shows its parts softly, and the Windows download can carry Python inside.',
+          summary: 'Animate gets a timeline along the bottom and a motion for pistons. Claude can read and write notes. Axis tools arrive, a selected group shows its parts softly, and the Windows download can carry Python inside.',
           items: [
             ['New', 'A timeline along the bottom. Animate is a drawer set out like a video editor: a ruler, a row for every animated object and a bar for every motion. Drag the ruler or the playhead to scrub; drag the end of a bar to change its repeats and the bar to change its delay.'],
             ['New', 'Oscillate, for pistons, rockers and pumps. A to-and-fro on all three axes of shift and of turn at once, perfectly loopable. Waves: Sine, Piston (a crank turning a rod), Eased and Triangle, with lags that turn X and Y into circles and ellipses.'],
@@ -1102,14 +1102,14 @@ window.labApps = [
           items: [
             ['New', 'A polish of the interface. The toolbar icons are sharper, their dividers easy to see, and the + and − of the part tree sit in the middle of their circles. Every menu and dropdown looks the same and opens the same way, and closes at once.'],
             ['New', 'The right-click menus of the part tree are about half as long. What you use least is one level in: Visibility, Select, Mesh, Fit and Tree for a part; Group, Order and Expand and collapse for a group.'],
-            ['New', 'Pivot points in Export. A part from a STEP file has its origin at 0, 0, 0, so in Cinema 4D every axis sat there. GLB, glTF, FBX and USDZ now write each part around its own centre, so the axis is at the part. FBX objects carry the rotation and scale of their part too.'],
+            ['New', 'Pivot points in Export. A part from a STEP file has its origin at 0, 0, 0, so in another program every axis sat there. GLB, glTF, FBX and USDZ now write each part around its own centre, so the axis is at the part. FBX objects carry the rotation and scale of their part too.'],
             ['New', 'Groups can be locked. Lock in Properties, or “Lock everything inside” on the right-click menu of a group, locks every part in it. A locked part or group shows a red lock where its icon is.'],
             ['New', 'The Export window shows the format, the file name and “Visible parts only” up front. The rest is under Advanced, and it stays open or shut as you left it.'],
             ['New', 'A tidier folder, and why. The top of the download had grown past fifty files, so it was hard to see what to double-click. It is organised like an installed program now: the launchers, the README and the licence, and one folder, app, with the program inside. The launchers keep their names, so shortcuts keep working.'],
             ['New', 'Moving from an older version is one full download. The installer moves your inbox and exports into app, keeps the old loose files in a backup folder, and the first start builds the Python environment again.'],
             ['Polish', 'The launcher window draws the name out of a wire mesh and shows a bar for each step.'],
             ['Polish', 'A tooltip no longer shows over a menu that is open, and the list beside a menu row stands next to it instead of over it.'],
-            ['Fix', 'Exporting to FBX and opening it in Cinema 4D put every part’s axis at 0, 0, 0. It is now at the part.'],
+            ['Fix', 'Exporting to FBX and opening it in another program put every part’s axis at 0, 0, 0. It is now at the part.'],
             ['Fix', 'Right-click menus no longer flicker when they close.'],
             ['Fix', 'The cards of the right panel sit on whole pixels, so their text and rows are no longer soft.'],
           ] },
@@ -1243,7 +1243,7 @@ window.labApps = [
         { version: '0.24.0', name: 'Soča', fixes: 4, date: '12 Oct 2026 · 20:58',
           summary: 'Into the mesh. Pick points, edges and polygons and move, weld, fill or dissolve them. The shortcuts window is a keyboard now, and every key is yours to change.',
           items: [
-            ['New', 'Edit mesh. Points, Edges, Polygons and Model, as in Cinema 4D. Keys 1, 2, 3 and 4 switch between them, and the selected parts show their polygons, not their triangles.'],
+            ['New', 'Edit mesh. Points, Edges, Polygons and Model. Keys 1, 2, 3 and 4 switch between them, and the selected parts show their polygons, not their triangles.'],
             ['New', 'Three ways to pick: Click, Box and Brush. Shift adds, Ctrl takes away, a double-click takes the whole loop. Ctrl+A takes everything.'],
             ['New', 'Move what you picked. The gizmo moves, turns and scales the pieces, Del takes them out, Reverse normals turns faces round. Each is one undo.'],
             ['New', 'Six tools for the pieces: Dissolve, Planarize, Straighten, Weld, Fill and Extract. Take points out without a hole, flatten polygons, straighten a line, join points, close a hole, lift polygons into a part of their own.'],
@@ -1373,8 +1373,8 @@ window.labApps = [
             ['New', 'Fasteners finds bolts, screws, nuts and washers by their shape, whatever they’re called, and selects them. Stacked copies finds parts drawn twice in the same place. Select similar has a strictness slider, from “about the same size” to “the very same shape”.'],
             ['New', 'The library is a drawer under the viewport (Shift + L). Click a part to look at it, turn it, set its size, and then it goes in with those sizes. A starred shelf, small or large tiles.'],
             ['New', 'Drop a file on a scene that already has parts and the app asks: add it here, or open it in a new tab. Right-click a tab for duplicate, close others and recent files. Hold Shift while dragging a handle to snap, and turn the wheel to change the step.'],
-            ['Fix', 'Cinema 4D opens the FBX. A binary FBX carries an id, a creation time and a closing code that have to agree, and the FBX SDK refuses the file when they don’t. Mine wrote a random id with a fixed code, so Blender and the app could read it and Cinema 4D couldn’t. They agree now.'],
-            ['Fix', 'An FBX now says what its units are and which way is up. A 2.6 m machine used to arrive in Cinema 4D 26 m long, and a Z-up scene was labelled Y-up.'],
+            ['Fix', 'The FBX opens elsewhere. A binary FBX carries an id, a creation time and a closing code that have to agree, and the FBX SDK refuses the file when they don’t. Mine wrote a random id with a fixed code, so Blender and the app could read it and another program couldn’t. They agree now.'],
+            ['Fix', 'An FBX now says what its units are and which way is up. A 2.6 m machine used to arrive in another program 26 m long, and a Z-up scene was labelled Y-up.'],
             ['Fix', 'The binary FBX shares its materials: one per colour instead of one per mesh. A 778-part model arrived with 778 materials and took 13 seconds to open. Now it has 40 and opens in 1.4 s. OBJ keeps parts that share a name separate: 778 parts used to arrive as 325.'],
             ['Fix', 'Up axis and Scene scale no longer leak into the file for some parts and not others. A part you moved after changing either one used to be written turned or resized while its neighbours weren’t.'],
             ['Fix', 'The local server only answers the app’s own page. Before, any web page open in your browser could send requests to localhost:4242. Folders are no longer listed either, and nothing is served from .git or .venv.'],

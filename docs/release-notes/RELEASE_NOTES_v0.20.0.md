@@ -10,7 +10,7 @@ Draw lines and shapes, sweep along them, and keep them in the tree like any othe
 
 **Lines are parts.** A line is a row in the tree: rename, hide, delete, undo, drag it, put it in a group, nest groups. The gizmo moves, turns and scales it. GLB and glTF files with lines open them as lines, and lines go back out into GLB, glTF and saved scenes.
 
-**Properties of a line.** A Shape card (width, height, radius, sides, star, inner radius, corner type and size) for a rectangle, circle, ellipse, polygon or star that is still a shape, and a Spline card as in Cinema 4D: Type, Close Spline, Interpolation (None, Natural, Uniform, Adaptive, Subdivided), Points, Angle and Maximum length.
+**Properties of a line.** A Shape card (width, height, radius, sides, star, inner radius, corner type and size) for a rectangle, circle, ellipse, polygon or star that is still a shape, and a Spline card: Type, Close Spline, Interpolation (None, Natural, Uniform, Adaptive, Subdivided), Points, Angle and Maximum length.
 
 **Sweep.** Pick a path and a profile (a circle, a rectangle or another line), set the scale at both ends, a twist, closed ends and a hard-edge angle: the result is a normal part.
 

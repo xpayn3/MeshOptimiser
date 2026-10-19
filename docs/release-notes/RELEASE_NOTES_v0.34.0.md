@@ -1,6 +1,6 @@
 # MeshOptimiser v0.34.0 (Bled)
 
-Animate gets a timeline along the bottom and a motion for pistons, Claude can read and write notes, the axis tools of Cinema 4D arrive, and Python can come inside the Windows download.
+Animate gets a timeline along the bottom and a motion for pistons, Claude can read and write notes, axis tools arrive, and Python can come inside the Windows download.
 
 ## New
 

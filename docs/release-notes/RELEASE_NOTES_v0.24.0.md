@@ -4,7 +4,7 @@ Into the mesh: an Edit mesh mode with points, edges and polygons, a shortcuts wi
 
 ## New
 
-**Edit mesh: points, edges and polygons.** A mode button at the top of the left toolbar: Points, Edges, Polygons and Model (`1` `2` `3` `4`), as in Cinema 4D. In a piece mode the selected parts show their mesh lines as polygons, and the left button picks pieces of them with Click, Box or Brush; a double-click or *Pick loops* picks a loop. `Ctrl+A` takes all.
+**Edit mesh: points, edges and polygons.** A mode button at the top of the left toolbar: Points, Edges, Polygons and Model (`1` `2` `3` `4`). In a piece mode the selected parts show their mesh lines as polygons, and the left button picks pieces of them with Click, Box or Brush; a double-click or *Pick loops* picks a loop. `Ctrl+A` takes all.
 
 **Move, turn, scale, delete and reverse the picked pieces.** The gizmo (`E`, `R`, `T`, Shift to snap) sits in the middle of what is picked. `Del` takes the pieces out, *Reverse normals* turns picked polygons round. Each is one undo step, and the pieces are picked again after an undo.
 

@@ -309,16 +309,16 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
-**v0.35.0** — one part can wear several colours, STEP files open the way Cinema 4D shows them, and Photo mode draws the model for pictures.
+**v0.35.0** — one part can wear several colours, STEP files open with cleaner meshes, and Photo mode draws the model for pictures.
 
 - ![new][new] **Several colours on one part:** pick polygons in Edit mesh and press *Colour*, or drop a material on them. The part stays one closed part; each colour is a card in its material strip; files from other programs come in the same way and go out in every format.
-- ![new][new] **STEP like Cinema 4D:** clean even strips on fillets, a *Clean* quality, CAD edit to pick whole CAD faces and remesh, and tools that read the CAD faces (Remove holes, Untriangulate, Simplify round faces, Remove fillets and chamfers, Remove lettering and logos).
+- ![new][new] **Cleaner STEP meshes:** clean even strips on fillets, a *Clean* quality, CAD edit to pick whole CAD faces and remesh, and tools that read the CAD faces (Remove holes, Untriangulate, Simplify round faces, Remove fillets and chamfers, Remove lettering and logos).
 - ![new][new] **Photo mode,** a shorter Scene card, and five photographed environments as picture cards.
 - ![new][new] **Close open edges, Untriangulate into quads,** and a Decimate that keeps the shape closer.
 - ![fix][fix] **Models from Blender open upright at their real size,** textures and UVs survive the mesh tools and exports, and undo, Claude's calls and the updater are more dependable.
 
 
-**v0.34.0** — Animate gets a timeline and a motion for pistons, Claude works with notes, and the axis tools of Cinema 4D arrive.
+**v0.34.0** — Animate gets a timeline and a motion for pistons, Claude works with notes, and axis tools arrive.
 
 **v0.33.0** — notes are tasks: a title, a description, parts, who it is for, a priority and a due date, with comments under them.
 
@@ -350,7 +350,7 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 **v0.31.0** — a polish of the interface, and a tidier folder: icons, toolbars, menus and dropdowns share one look and one speed, groups can be locked, Export puts each part's pivot at the part, and the download is organised like an installed program, with the program inside `app`.
 
 - ![refactor][refactor] **A tidier folder.** The top of the download holds only what you start and read (`start.bat`, `start_hidden.vbs`, `start.command`, `Install MeshOptimiser.bat`, README, LICENSE) and one folder, `app`, with the program in it. The top level had grown past fifty files and it was hard to see what to double-click. An installed copy is offered the full download once.
-- ![new][new] **Pivot points in Export**, so Cinema 4D, Blender and Maya show every axis where its part is, and FBX objects carry rotation and scale.
+- ![new][new] **Pivot points in Export**, so Blender show every axis where its part is, and FBX objects carry rotation and scale.
 - ![new][new] **Groups can be locked** in one click; a locked part or group has a red lock where its icon is.
 - ![polish][polish] **Menus and dropdowns share one look and one opening;** the right-click menus of the part tree are about half as long.
 - ![polish][polish] **Sharper icons, an Export window with the rest under Advanced,** and a launcher window that draws the name out of a wire mesh.
@@ -412,7 +412,7 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 **v0.24.0** — into the mesh: an Edit mesh mode with points, edges and polygons, a shortcuts window with a keyboard and keys you can change, and a faster start.
 
-- ![new][new] **Edit mesh** — Points, Edges, Polygons and Model modes (`1` `2` `3` `4`), as in Cinema 4D. Pick with Click, Box or Brush, pick loops, then move, turn, scale, delete or reverse what is picked with the gizmo. The view modes moved to `Alt+1` to `Alt+4`.
+- ![new][new] **Edit mesh** — Points, Edges, Polygons and Model modes (`1` `2` `3` `4`). Pick with Click, Box or Brush, pick loops, then move, turn, scale, delete or reverse what is picked with the gizmo. The view modes moved to `Alt+1` to `Alt+4`.
 - ![new][new] **Dissolve, Planarize, Straighten, Weld, Fill and Extract** on the picked pieces, one undo step each.
 - ![new][new] **A keyboard in the shortcuts window.** Lit keys carry their command, Ctrl, Shift and Alt switch the picture, and every key can be changed, with a warning when it is taken and named profiles to keep the changes in.
 - ![new][new] **Untriangulate** can take away the points on straight lines and dissolve faces that are only nearly flat, and **Claude's screenshots** can frame the model or the selection.
@@ -469,7 +469,7 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 - ![new][new] **Smart optimise**, **Fasteners** and **Stacked copies** clean a scene up for you; **Select similar** has a strictness slider; the library is a drawer.
 - ![polish][polish] **Export window rebuilt** — file name pills, a summary, Flatten groups, ASCII STL. **Batch rename** redesigned with a Quick tab. A **splash screen** at start. Cards over the viewport can be moved.
 - ![perf][perf] **Faster big models** — selection outlines and edge lines are drawn by the graphics card; the Recents picture and the spare tab wait until you stop clicking.
-- ![fix][fix] **72 fixes**, among them Cinema 4D-ready FBX, a server that answers only the app, and undo for instanced parts. The full list is in [CHANGELOG.md](CHANGELOG.md).
+- ![fix][fix] **72 fixes**, among them FBX that other programs accept, a server that answers only the app, and undo for instanced parts. The full list is in [CHANGELOG.md](CHANGELOG.md).
 
 **v0.13.0** — it feels like an app: installs to the desktop, opens in a window of its own, and the tabs grew up.
 

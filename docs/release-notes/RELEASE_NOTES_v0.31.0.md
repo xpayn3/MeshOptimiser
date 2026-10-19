@@ -6,7 +6,7 @@ A polish of the interface, and a tidier folder: icons, menus and dropdowns share
 
 **A polish of the interface.** The icons in the toolbars are sharper and a little softer, the dividers in them are easy to see, and the + and − of the part tree are in the middle of their circles. Every menu and dropdown has the same look and opens the same way, in 120 ms, and closes at once. The right-click menus of the part tree are about half as long: what is used least is one level in. The Export window shows the format, the file name and *Visible parts only* up front, with the rest under *Advanced*.
 
-**Pivot points in Export.** A part from a STEP file has its origin at 0, 0, 0, so every axis in a file opened in Cinema 4D sat there. Export (GLB, glTF, FBX and USDZ) now writes each part around its own centre, so the axis is where the part is. FBX objects also carry the rotation and scale of their part.
+**Pivot points in Export.** A part from a STEP file has its origin at 0, 0, 0, so every axis in a file opened in another program sat there. Export (GLB, glTF, FBX and USDZ) now writes each part around its own centre, so the axis is where the part is. FBX objects also carry the rotation and scale of their part.
 
 **Groups can be locked.** *Lock* in Properties, or *Lock everything inside* on the right-click menu of a group, locks every part in it. A locked part or group shows a red lock where its icon is.
 

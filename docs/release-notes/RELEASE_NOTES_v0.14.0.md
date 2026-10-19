@@ -46,9 +46,9 @@ The biggest release so far: a CAD view with a Shading card, Dynamic place, an Al
 
 The Export window is rebuilt: a file name with the same pills as Save scene, a summary of what will be written, Flatten groups, ASCII STL, only the options that apply to the format, and your choices remembered. Ctrl+E opens it.
 
-Exports now open in Cinema 4D. All eight formats were exported from a 778-part, 793,550-triangle model and opened in Cinema 4D 2026.4.
+Exports now open in other 3D programs. All eight formats were exported from a 778-part, 793,550-triangle model and opened in another 3D program.
 
-- The binary FBX carries a file id, time and code that agree, so the FBX SDK (Cinema 4D, Maya) accepts it.
+- The binary FBX carries a file id, time and code that agree, so the FBX SDK accepts it.
 - An FBX states its units and which way is up. A 2.6 m machine no longer arrives 26 m long.
 - The binary FBX shares its materials: 40 instead of 778, and 1.4 s to open instead of 13 s.
 - OBJ keeps parts that share a name separate (778 parts arrived as 325 before).
@@ -88,6 +88,6 @@ Exports now open in Cinema 4D. All eight formats were exported from a 778-part, 
 
 ## Upgrading
 
-Nothing to do. Scenes saved by v0.13.0 open as before. Two settings start differently: Show origin points is off, and Lower the resolution if it stutters is off. An FBX exported by an older version can be re-exported to open in Cinema 4D.
+Nothing to do. Scenes saved by v0.13.0 open as before. Two settings start differently: Show origin points is off, and Lower the resolution if it stutters is off. An FBX exported by an older version can be re-exported to open in another program.
 
 The three.js `FBXLoader.js` in `vendor/` carries a local patch (marked "MeshOptimiser patch") that has to be carried over when three.js is updated.

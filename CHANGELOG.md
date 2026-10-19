@@ -8,14 +8,14 @@ Tag legend: &nbsp; ![new][new] new feature &nbsp;·&nbsp; ![fix][fix] bug fix &n
 
 Released 19 Oct 2026.
 
-v0.34.0 gave Animate a timeline and Claude the notes. v0.35.0 lets one part wear several colours, as in Cinema 4D, and makes STEP files open the way Cinema 4D shows them: clean even strips on fillets, a Clean quality, CAD edit to pick whole CAD faces and remesh, and tools that read the CAD faces (Remove holes, Untriangulate, Simplify round faces, Remove fillets and chamfers, Remove lettering and logos). It adds Photo mode, a shorter Scene card with photographed environments, one height for the bottom docks, and a long audit: models from Blender open upright at their real size, textures and UVs survive the mesh tools and the exports, undo and redo are sound after Claude's steps, and the updater and installer are safer.
+v0.34.0 gave Animate a timeline and Claude the notes. v0.35.0 lets one part wear several colours and makes STEP files open cleaner: clean even strips on fillets, a Clean quality, CAD edit to pick whole CAD faces and remesh, and tools that read the CAD faces (Remove holes, Untriangulate, Simplify round faces, Remove fillets and chamfers, Remove lettering and logos). It adds Photo mode, a shorter Scene card with photographed environments, one height for the bottom docks, and a long audit: models from Blender open upright at their real size, textures and UVs survive the mesh tools and the exports, undo and redo are sound after Claude's steps, and the updater and installer are safer.
 
 **Several colours on one part**
 
 - ![new][new] **One part, several materials.** A part can wear more than one material, each on a selection of its faces: pick polygons in Edit mesh (3) and press *Colour* (or hold C) for the colour wheel, drop a material from the dock on them, or press its *Assign*. Only the picked faces change, the part stays one closed part, and each change is one undo step. A material given to the whole part becomes its main one and the faces in other colours keep theirs.
 - ![new][new] **The colours of a part are cards in its material strip, with a right-click menu.** In Properties each colour is a card, the main one first (the *Face colours* list is gone); a selection of several parts lists every material on any of their faces. Right-click a card for *Pick these faces*, *Recolour these faces…* and *Give these faces back to the main colour*, above the material's own commands. The colour wheel and the menu were not tried by hand.
 - ![new][new] **Files from other programs come in the same way, and the colours go out in every format.** A GLB, glTF, FBX or OBJ object with several materials opens as one part with its colours (before, an untextured one came in in one colour, and a glTF mesh of several primitives came in as a part a colour). They survive undo, saving, Merge, Split, Decimate and the tools that keep their triangles, and are written as a primitive a colour in GLB and glTF, a *usemtl* each in OBJ, a material per polygon in FBX, a *GeomSubset* a material in USDZ and colours on the points in PLY. Select by colour finds a part by any of its colours.
-- ![new][new] **A part per colour, a switch in the import window.** A part painted in several colours opens as one part with a material a colour (the default, as Cinema 4D shows it); with *A part per colour* on (in the colour reader's options) each colour is a part of its own, open along the colour seams, as before.
+- ![new][new] **A part per colour, a switch in the import window.** A part painted in several colours opens as one part with a material a colour (the default); with *A part per colour* on (in the colour reader's options) each colour is a part of its own, open along the colour seams, as before.
 - ![fix][fix] **STEP bodies painted face by face came in one colour or in pieces.** A body with faces in two colours is one closed part now (NIST's FTC 10 shows 1 part and 0 open edges, where it showed 2 pieces with 240 open edges each); a surface body such as the Scania 8x4 cab keeps its red, black and grey (it was all grey); a SolidWorks or Creo body with one face painted apart no longer takes the body's colour; a SolidWorks STEP that colours faces, not bodies, no longer comes out grey (the body takes the colour most of its faces carry).
 - ![fix][fix] **Colours in STEP and IGES that were never read.** Colours set on a part's label now come through, and the *Instance overrides (SHUO)* switch in Import settings does what it says: a colour given to one occurrence colours that occurrence only, and a colour on a component colours everything under it.
 - ![fix][fix] **An OBJ came in without its colours, whatever its .mtl said.** An OBJ dropped with its .mtl (or in the folder that holds both) takes its colours, opacity and a map_Kd picture; opened alone it has one colour, and a message names the .mtl that holds its colours.
@@ -23,7 +23,7 @@ v0.34.0 gave Animate a timeline and Claude the notes. v0.35.0 lets one part wear
 
 **CAD files and the STEP converter**
 
-- ![new][new] **STEP files open with clean, even strips on their fillets, like Cinema 4D, and a *Clean* quality.** A new *Even strips* switch under *Tessellation* (on by default) lays a grid between the sides of every four-sided free-form face, so a fillet is a row of even strips; points on a face's outline stay where the mesher put them, so neighbours and CAD lines still meet, and a face keeps the mesher's mesh unless the new one covers the same area, faces the same way and stays within 1.5 times the sag. *Surface quality* has a new first choice, *Clean* (sag 2 mm, angle 38 degrees). Measured on the Scania 8x4 truck (281 MB, 1,161 solids): Cinema 4D's default import made 2.44 million triangles and its cab 52,590; *Clean* with *Even strips* makes 59,222 on the cab and 2.94 million on the whole truck, where *Standard* ran over eight minutes before I stopped it.
+- ![new][new] **STEP files open with clean, even strips on their fillets, and a *Clean* quality.** A new *Even strips* switch under *Tessellation* (on by default) lays a grid between the sides of every four-sided free-form face, so a fillet is a row of even strips; points on a face's outline stay where the mesher put them, so neighbours and CAD lines still meet, and a face keeps the mesher's mesh unless the new one covers the same area, faces the same way and stays within 1.5 times the sag. *Surface quality* has a new first choice, *Clean* (sag 2 mm, angle 38 degrees). Measured on the Scania 8x4 truck (281 MB, 1,161 solids): a default import made 2.44 million triangles and its cab 52,590; *Clean* with *Even strips* makes 59,222 on the cab and 2.94 million on the whole truck, where *Standard* ran over eight minutes before I stopped it.
 - ![fix][fix] **On a flat panel of a STEP, many long triangles met in one point.** With *Even strips* on, a long CAD edge between two wide faces gets points along it, in both faces' meshes, so the panel and the blend above it are even grids; a mild fan is left on the Scania cab's side panel. The long sides of a thin fillet are left alone, and small parts keep the mesher's points.
 - ![fix][fix] **Small round parts from a STEP came out polygonal and a few percent too small.** A solid is now meshed at no more than 0.2 % of its own size, never finer than a tenth of the preset: NIST's 63 mm FTC 11 plate gets 30 segments round its edge instead of 18 and is within 0.8 % of its volume. Parts large enough for the preset keep the mesh they had.
 - ![new][new] **CAD edit: pick whole CAD faces, take them out and remesh.** On a part opened from a STEP with its CAD faces, the Edit mesh bar has a *CAD faces* toggle (Polygons mode). On, a *CAD edit* pill shows at the top of the view, a click picks the whole CAD face under the pointer (a hole's wall, a boss, a fillet), and the *CAD edit* card at the bottom left holds the settings. *Close the gap*: Smooth, Flat or Leave open. *Remesh when removing*: Round the cut, Whole part or Off; with *Edge length* and *Smoothing rounds*. *Remove* (or Delete, or *Remove CAD faces* in the search) takes the picked faces out; *Remesh* remeshes the picked faces or the whole part. Each is one undo step. The faces that stay keep their CAD faces and lines.
@@ -177,7 +177,7 @@ v0.34.0 gave Animate a timeline and Claude the notes. v0.35.0 lets one part wear
 
 Released 16 Oct 2026.
 
-v0.33.0 made notes into tasks. v0.34.0 lets Claude read and write them, puts a timeline under Animate with a new Oscillate motion for pistons, adds the axis tools of Cinema 4D, makes a selected group show its parts dimly, and brings Python inside the Windows download so a first start has less to install.
+v0.33.0 made notes into tasks. v0.34.0 lets Claude read and write them, puts a timeline under Animate with a new Oscillate motion for pistons, adds axis tools, makes a selected group show its parts dimly, and brings Python inside the Windows download so a first start has less to install.
 
 **Animate: a timeline, and a motion for pistons**
 
@@ -189,7 +189,7 @@ v0.33.0 made notes into tasks. v0.34.0 lets Claude read and write them, puts a t
 - ![fix][fix] **A part that follows another could come out sheared.** A part's motion is now an explicit rigid transform about the middle of it, so a part with an uneven scale or a mirror in its matrix, and whatever follows it, no longer bends.
 - ![fix][fix] **An empty "Animate" heading showed in the right sidebar when nothing was animated.** It hides with the card.
 
-**The axis of a part, as in Cinema 4D**
+**The axis of a part**
 
 - ![new][new] **Axis Center and the Axis card.** *Axis Center* (the old Centre pivot button, the search and the toolbar) now puts the axis in the middle of the part and resets its rotation to 0, 0, 0. The Axis card (search: Axis…) adds *Center axis to* the world origin, the middle of the selection, the last selected part or the middle of the view; *Center object to* the world origin, the last selected part or the view; *Align axis to* the world, its parent or the part's own flat faces; and *Reset Scale*. The shape stays exactly where it is, and each command is one undo step that puts back exactly what was there.
 - ![fix][fix] **Pressing an Axis command again and again piled up undo steps and nudged the mesh.** An axis that is already where the command puts it is left alone: no change, no undo step. Locked parts keep their axis, and if anything goes wrong every part is put back as it was.
@@ -320,7 +320,7 @@ v0.31.0 was a polish of the interface. v0.31.1 goes over what it left: Enter tak
 
 Released 15 Oct 2026.
 
-v0.30.0 added two alpha features. v0.31.0 is a polish of the interface, and a tidier folder. The icons, the toolbars, the menus and the dropdowns were gone over and now share one look, one speed and one set of tokens; the Export window shows only what most exports need; groups can be locked; Export can put each part's pivot at the part, so Cinema 4D, Blender and Maya show every axis where its part is; and the folder you download is organised like an installed program, with a short top level and the program inside `app`. Because the files moved, an installed copy is offered the full download once.
+v0.30.0 added two alpha features. v0.31.0 is a polish of the interface, and a tidier folder. The icons, the toolbars, the menus and the dropdowns were gone over and now share one look, one speed and one set of tokens; the Export window shows only what most exports need; groups can be locked; Export can put each part's pivot at the part, so Blender show every axis where its part is; and the folder you download is organised like an installed program, with a short top level and the program inside `app`. Because the files moved, an installed copy is offered the full download once.
 
 **A tidier folder**
 
@@ -330,8 +330,8 @@ v0.30.0 added two alpha features. v0.31.0 is a polish of the interface, and a ti
 
 **Export**
 
-- ![new][new] **Pivot points.** A part from a STEP file has its origin at 0, 0, 0 with its shape out at its place in the model, so every axis in a file opened in Cinema 4D sat at 0, 0, 0. Export (GLB, glTF, FBX and USDZ) now writes each part around its own centre, with its position on the object; *As in the scene* keeps what the part has. Lines are written the same way.
-- ![fix][fix] **FBX objects carry rotation and scale.** The FBX writers put the parts' vertices in place under objects with no rotation, so the axis of a part that is turned in the scene pointed along the world axes. They now write position, rotation and scale on each object, and the turn into Y-up and the unit scale go into the vertices, so a part that is not turned has no rotation in the file. A part with shear or a mirrored part is baked as before. Checked in Cinema 4D 2026 and in three.js, binary and ASCII.
+- ![new][new] **Pivot points.** A part from a STEP file has its origin at 0, 0, 0 with its shape out at its place in the model, so every axis in a file opened in another program sat at 0, 0, 0. Export (GLB, glTF, FBX and USDZ) now writes each part around its own centre, with its position on the object; *As in the scene* keeps what the part has. Lines are written the same way.
+- ![fix][fix] **FBX objects carry rotation and scale.** The FBX writers put the parts' vertices in place under objects with no rotation, so the axis of a part that is turned in the scene pointed along the world axes. They now write position, rotation and scale on each object, and the turn into Y-up and the unit scale go into the vertices, so a part that is not turned has no rotation in the file. A part with shear or a mirrored part is baked as before. Checked in another 3D program and in three.js, binary and ASCII.
 - ![polish][polish] **The Export window shows what most exports need.** The format, the file name with its pieces under it, and *Visible parts only* and *Selected parts only* are in front; the rest (size and position, merge and flatten, format options, check the size) is under *Advanced*, shut until you open it, and it stays as you leave it. The *Where is it going?* buttons are gone: choose the format and its options yourself. The ✕ stays in the corner while you scroll, and the options no longer move sideways when the scroll bar appears.
 
 **Locking**
@@ -677,11 +677,11 @@ v0.24.0 let you into the mesh. v0.25.0 gives you more to build with and a better
 
 Released 12 Oct 2026.
 
-v0.23.0 cleaned a mesh up as a whole. v0.24.0 lets you into it: an Edit mesh mode with points, edges and polygons, as in Cinema 4D, with the tools to pick, move, delete, dissolve, weld and fill them. The shortcuts window became a picture of the keyboard where every key can be changed and kept in a profile, Untriangulate takes away more of the points that say nothing about the shape, and the app starts faster.
+v0.23.0 cleaned a mesh up as a whole. v0.24.0 lets you into it: an Edit mesh mode with points, edges and polygons, with the tools to pick, move, delete, dissolve, weld and fill them. The shortcuts window became a picture of the keyboard where every key can be changed and kept in a profile, Untriangulate takes away more of the points that say nothing about the shape, and the app starts faster.
 
 **Edit mesh**
 
-- ![new][new] **Edit mesh: points, edges and polygons, as in Cinema 4D.** A mode button at the top of the left toolbar: Points, Edges, Polygons, and Model, which is the app as it was (a click selects a part). A click on it goes in and out of the last piece mode, holding it lists all four. In a piece mode the selected parts, and only they, show their mesh lines in blue (polygons, not triangles: two triangles that make a four-sided shape are one polygon, as a cell of a grid or a strip of a tube wall is, and a triangle with no such partner is one of its own), and the left button picks pieces of them: picked ones are orange, the one under the pointer is light, and every point of the part is shown in Points mode. Three tools in the *Edit mesh* panel: **Click** (Shift adds, Ctrl takes away, a click beside the model clears, a double-click or *Pick loops* picks a loop, and with *Pick loops* on the loop is lit under the pointer before the click), **Box** (drag a rectangle: what lies in it whole and can be seen) and **Brush** (paint; Alt + drag turns the view with both). A loop of polygons runs across four-sided polygons like a ring round a tube, and is the whole face where they are not four-sided; a loop of edges is the outline of a face on a sharp or open edge and the row on a smooth one. `Ctrl+A` takes all, `Ctrl+Z` takes back the last change of what is picked.
+- ![new][new] **Edit mesh: points, edges and polygons.** A mode button at the top of the left toolbar: Points, Edges, Polygons, and Model, which is the app as it was (a click selects a part). A click on it goes in and out of the last piece mode, holding it lists all four. In a piece mode the selected parts, and only they, show their mesh lines in blue (polygons, not triangles: two triangles that make a four-sided shape are one polygon, as a cell of a grid or a strip of a tube wall is, and a triangle with no such partner is one of its own), and the left button picks pieces of them: picked ones are orange, the one under the pointer is light, and every point of the part is shown in Points mode. Three tools in the *Edit mesh* panel: **Click** (Shift adds, Ctrl takes away, a click beside the model clears, a double-click or *Pick loops* picks a loop, and with *Pick loops* on the loop is lit under the pointer before the click), **Box** (drag a rectangle: what lies in it whole and can be seen) and **Brush** (paint; Alt + drag turns the view with both). A loop of polygons runs across four-sided polygons like a ring round a tube, and is the whole face where they are not four-sided; a loop of edges is the outline of a face on a sharp or open edge and the row on a smooth one. `Ctrl+A` takes all, `Ctrl+Z` takes back the last change of what is picked.
 - ![new][new] **Move, turn, scale, delete and reverse the picked pieces.** The gizmo (`E`, `R`, `T`, Shift to snap) sits in the middle of what is picked and moves the points the pieces stand on, so everything that uses them follows; letting go is one undo step and the pieces stay picked. In the Wireframe view the part keeps one set of lines while its pieces are worked on, and they follow the move. `Del` takes them out (a point or an edge takes every polygon that uses it; a part is never emptied this way), and *Reverse normals* turns picked polygons round. After an undo of any of these the pieces are picked again. The rules are a module of their own (`meshedit.js`, `tests/meshedit.test.mjs`) and there is a self-test in the app.
 - ![new][new] **Edit mesh: Dissolve, Planarize, Straighten, Weld, Fill and Extract.** Six more buttons in the *Edit mesh* panel, one undo step each. **Dissolve** (`Ctrl+Backspace`) takes the picked points out and closes the surface over them; for picked edges and polygons the polygons become one, and the points left inside them or on a straight line of their outline go, so the shape does not change there. **Planarize** moves the points of the picked polygons onto the best-fit plane of each (a polygon that would have to bend a long way is left). **Straighten** moves the points along a picked line of edges onto the straight line between its two ends. **Weld** makes the picked points one, at their middle (with a distance, the points that are that close become one each; picked edges collapse to a point). **Fill** closes a hole whose whole rim is picked, with a cap that has points of its own so it shades on its own. **Extract** takes the picked polygons out into a part of their own, in the same place and with the same material. The rules are modules of their own (`dissolve.js`, `meshtools.js`) with tests in Node.
 - ![polish][polish] **`1` `2` `3` `4` pick the mode.** Points, Edges, Polygons, Model. The view modes these keys were (Solid, Wireframe, X-ray, Heatmap) are on `Alt+1` to `Alt+4`.
@@ -883,7 +883,7 @@ v0.15.0 was about reaching commands quickly. v0.20.0 is about drawing, organisin
 **Properties of a line**
 
 - ![new][new] **A Shape card** for a rectangle, circle, ellipse, polygon or star that is still a shape: width, height, radius, sides, star and inner radius, corner type and size. A rectangle grows about its centre. Moving a point by hand turns the shape into an ordinary spline.
-- ![new][new] **A Spline card as in Cinema 4D:** Type, Close Spline, Interpolation (None, Natural, Uniform, Adaptive or Subdivided), Points, Angle and Maximum length. The ones that do not apply to the chosen interpolation are greyed.
+- ![new][new] **A Spline card:** Type, Close Spline, Interpolation (None, Natural, Uniform, Adaptive or Subdivided), Points, Angle and Maximum length. The ones that do not apply to the chosen interpolation are greyed.
 - ![polish][polish] **Every control in the two cards has one size,** and the number boxes drag from the box, the label or the number. One drag is one undo step, and the Points, Size and Length at the top of the card follow the edit.
 
 **Sweep**
@@ -960,8 +960,8 @@ Four tools, each a floating card that opens from the command palette (Ctrl+K).
 
 **Wireframe view**
 
-- ![new][new] **Untriangulate.** Cinema 4D's command of the same name, in Reduce triangles (and the command palette). Neighbouring triangles that lie in one plane are one polygon (an n-gon); the vertices that touch only that polygon are removed and the polygon is triangulated again from its outline with the fewest triangles, so a flat plate cut into a grid of 200 triangles becomes 38. The shape does not change at all (nothing is deviation), and a polygon is only rebuilt when it is flat to 2e-5 of the part's size, its vertex normals agree with its plane, every vertex on its outline is kept (so no crack opens against the neighbouring polygon), and the area adds up; anything else is left as it was and counted in the message. It works on the selection, or on the whole scene when nothing is selected, in the background workers, and it is one step to undo. **Strict, Normal and Loose** set how flat neighbouring triangles must be to join. The triangles remember their polygon, so the Wireframe view shows the polygons. The graphics card and the file formats still draw and store triangles: this removes the triangles and vertices that only cut a flat face up, it does not give OBJ or FBX real n-gon faces.
-- ![polish][polish] **Wireframe is the surfaces with a thin black line on every edge.** Like Gouraud Shading (Lines) in Cinema 4D. Before, it drew the surfaces themselves as lines in their own colours, see-through, so an assembly turned into coloured thread. Now the colours, lighting and opacity of the Solid view stay, and a thin black line follows every edge of the mesh on top. The lines share the part's vertex buffer (24 bytes per triangle for the index) and are not kept while the view is off. **Settings › Viewport › Wireframe**: Lines is *Triangles* (the default: every edge of the mesh, the wireframe), *Polygons* (the outline of each flat polygon, curved faces included, with the triangle lines inside flat polygons left out) or *Outline* (only the sharp edges and borders of the shape, the same lines as the CAD view's Outlines), and Flat within sets how flat neighbouring triangles must be to count as one polygon in Polygons. These only change what is drawn; Untriangulate changes the mesh.
+- ![new][new] **Untriangulate.** The command of the same name found in other 3D programs, in Reduce triangles (and the command palette). Neighbouring triangles that lie in one plane are one polygon (an n-gon); the vertices that touch only that polygon are removed and the polygon is triangulated again from its outline with the fewest triangles, so a flat plate cut into a grid of 200 triangles becomes 38. The shape does not change at all (nothing is deviation), and a polygon is only rebuilt when it is flat to 2e-5 of the part's size, its vertex normals agree with its plane, every vertex on its outline is kept (so no crack opens against the neighbouring polygon), and the area adds up; anything else is left as it was and counted in the message. It works on the selection, or on the whole scene when nothing is selected, in the background workers, and it is one step to undo. **Strict, Normal and Loose** set how flat neighbouring triangles must be to join. The triangles remember their polygon, so the Wireframe view shows the polygons. The graphics card and the file formats still draw and store triangles: this removes the triangles and vertices that only cut a flat face up, it does not give OBJ or FBX real n-gon faces.
+- ![polish][polish] **Wireframe is the surfaces with a thin black line on every edge.** Before, it drew the surfaces themselves as lines in their own colours, see-through, so an assembly turned into coloured thread. Now the colours, lighting and opacity of the Solid view stay, and a thin black line follows every edge of the mesh on top. The lines share the part's vertex buffer (24 bytes per triangle for the index) and are not kept while the view is off. **Settings › Viewport › Wireframe**: Lines is *Triangles* (the default: every edge of the mesh, the wireframe), *Polygons* (the outline of each flat polygon, curved faces included, with the triangle lines inside flat polygons left out) or *Outline* (only the sharp edges and borders of the shape, the same lines as the CAD view's Outlines), and Flat within sets how flat neighbouring triangles must be to count as one polygon in Polygons. These only change what is drawn; Untriangulate changes the mesh.
 
 **Decimate and Fit to budget**
 
@@ -1380,36 +1380,36 @@ The biggest release so far. It adds a CAD view and a Shading card with a look fo
 
 **Export and scene settings**
 
-- ![fix][fix] **Cinema 4D opens the FBX.** A binary FBX carries a file
+- ![fix][fix] **The FBX opens elsewhere.** A binary FBX carries a file
   id, a creation time and a code at its end that have to agree; the FBX
-  SDK (Cinema 4D, Maya) checks them and refuses the file when they do
+  SDK checks them and refuses the file when they do
   not. The export wrote a random id and the time of day with a fixed
-  code, so Blender and the app itself read the file and Cinema 4D said
+  code, so Blender and the app itself read the file and the other program said
   it could not. The three now agree. (An FBX exported before this can be
   re-exported, or opened in Blender and saved again.)
 - ![fix][fix] **An FBX says what its units are.** The scene is in
-  millimetres and the file claimed centimetres, so Cinema 4D showed a
+  millimetres and the file claimed centimetres, so the other program showed a
   2.6 m machine 26 m long. The file now states its unit (millimetres, or
   whatever the export's Unit scale makes of them: × 0.001 is metres).
 - ![fix][fix] **…and which way is up.** A scene written as it is, Z up,
-  was labelled Y up; it is labelled as written, so Blender, Maya and
+  was labelled Y up; it is labelled as written, so Blender and
   Unreal stand it up. A scene that is shown Y up (Scene settings) is
-  labelled Y up. Cinema 4D does not turn a file on import.
+  labelled Y up. Some programs do not turn a file on import.
 - ![polish][polish] **The Up axis choice says what it does**: *Keep as in
   the scene* and *Turn Z-up into Y-up*. A model that already stands Y up
-  (anything that came from Cinema 4D or a glTF) must be kept: turning it
+  (anything that came from a glTF) must be kept: turning it
   lays it on its side.
 - ![fix][fix] **The binary FBX shares its materials.** It wrote one
-  material per mesh: a 778-part model arrived in Cinema 4D with 778
+  material per mesh: a 778-part model arrived in another program with 778
   materials and took 13 s to open. It writes one per colour, as the ASCII
   FBX does: 40 materials, 1.4 s.
 - ![fix][fix] **OBJ: parts that share a name stay separate.** Repeated
-  names get a number (`name.001`). Cinema 4D goes by name and made one
+  names get a number (`name.001`). Some programs go by name and made one
   object of all of them: 778 parts arrived as 325.
 - ![docs][docs] All eight formats were exported from a 778-part,
-  793,550-triangle model and opened in Cinema 4D 2026.4: GLB, glTF, FBX
+  793,550-triangle model and opened in another 3D program: GLB, glTF, FBX
   (binary and ASCII), OBJ, STL and USDZ read with every triangle; PLY
-  cannot be read there (Cinema 4D has no PLY import).
+  cannot be read there (some programs have no PLY import).
 - ![fix][fix] **Up axis and Scene scale stay out of the file, for every
   part.** A part moved after either setting changed was written turned or
   resized, the others were not, and instanced parts differed again. The
@@ -2232,8 +2232,7 @@ assemblies, found by working through one.
   bottom centre with a search button that opens the command palette.
   Contextual shortcut tips sit, faintly, at the bottom right; the
   triangle readout moved to the top right.
-- ![polish][polish] **Floor grid** adapts to zoom the way Cinema 4D,
-  Blender and Houdini do: finer lines fade out and the next decade
+- ![polish][polish] **Floor grid** adapts to zoom the way Blender does: finer lines fade out and the next decade
   takes over, so density on screen stays constant and the horizon no
   longer shimmers. Quieter overall.
 - ![polish][polish] The selection box is a soft blue pane with a thin
@@ -2458,7 +2457,7 @@ text, and a full proofreading pass. The app is now called
   one.
 - ![polish][polish] **Group rows show their part count**, so a collapsed
   group says what it holds. New groups no longer reuse a name.
-- ![polish][polish] **Cinema 4D-style nesting** — a child's icon sits one
+- ![polish][polish] **Nested icons** — a child's icon sits one
   step in from its parent's and the connector runs right up to it; a
   flat list drops the empty arrow column.
 
