@@ -665,6 +665,10 @@ kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; 
 @media (max-width: 760px) {
   /* the search folds into a round button once the page has moved on; the sections of the page sit beside it as pills */
   .kb-search-mark { display: block; height: 0; }
+  .kb-search { transition: top 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+  html.kb-bar-away .kb-search { top: calc(env(safe-area-inset-top, 0px) + 12px); }
+  .bar { transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+  html.kb-bar-away .bar { transform: translateY(-130%); pointer-events: none; }
   .kb-search-row input { width: auto; flex: 1 1 auto; min-width: 0; transition: flex-basis 0.25s ease, opacity 0.2s ease, padding 0.25s ease; }
   .kb-search-btn { flex: none; width: 48px; height: 48px; place-items: center; padding: 0; border: 0; border-radius: 50%; background: var(--surface-2); color: var(--tx); box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(0, 0, 0, 0.4); cursor: pointer; -webkit-tap-highlight-color: transparent; }
   .kb-search-btn svg { width: 20px; height: 20px; }

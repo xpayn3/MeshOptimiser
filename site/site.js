@@ -1172,12 +1172,21 @@
     if (bar && mark && open) {
       const phone = window.matchMedia('(max-width: 760px)');
       const lineY = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--bar-h')) + 12 || 72;
-      let tick = 0;
+      let tick = 0, lastY = window.scrollY;
+      const root = document.documentElement, menuBtn = $('.bar-menu');
       const sync = () => {
         tick = 0;
         const compact = phone.matches && mark.getBoundingClientRect().top < lineY();
         bar.classList.toggle('is-compact', compact);
         if (!compact) bar.classList.remove('is-open');
+        // scrolling down hides the top bar and the search row moves up into its place; scrolling up brings the bar back
+        const y = window.scrollY, dy = y - lastY;
+        if (Math.abs(dy) > 6) {
+          const menuOpen = menuBtn && menuBtn.getAttribute('aria-expanded') === 'true';
+          root.classList.toggle('kb-bar-away', compact && dy > 0 && !menuOpen);
+          lastY = y;
+        }
+        if (!compact) root.classList.remove('kb-bar-away');
         // the pill of the section on screen is lit and kept in view
         let on = null;
         groups.forEach((group) => { if (!group.hidden && group.getBoundingClientRect().top <= lineY() + 200) on = group.id; });
