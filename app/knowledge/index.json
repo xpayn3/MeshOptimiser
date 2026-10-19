@@ -349,7 +349,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Give some faces of a part a colour of their own, as Cinema 4D does with a material on a polygon selection. The part stays one part, and the colours go with it into every file.",
-  "chars": 3336
+  "chars": 3201
  },
  {
   "slug": "axis-center",
@@ -389,7 +389,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Three small repairs for meshes that came out of a CAD program: close the hairline cracks between faces, get rid of needle-thin triangles, and patch openings so the patch follows the curve round them.",
-  "chars": 2989
+  "chars": 2870
  },
  {
   "slug": "reshape-mesh",
@@ -397,7 +397,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodies joined into one.",
-  "chars": 3162
+  "chars": 3040
  },
  {
   "slug": "booleans",
@@ -405,7 +405,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Join parts into one, cut one part with others, or keep only where they overlap. Exact, on closed parts, with the first part you picked as the one that changes.",
-  "chars": 1692
+  "chars": 1555
  },
  {
   "slug": "voxel-remesh",
@@ -413,7 +413,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Rebuild a part as one clean, closed, even surface, the way Blender’s Voxel remesh does. Overlapping bodies become one and hollows inside are filled. Good for a watertight stand-in of a messy part.",
-  "chars": 2272
+  "chars": 2152
  },
  {
   "slug": "round-parts",
@@ -421,7 +421,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Rebuild a turned part (a spool, a bushing, a pulley) clean from its profile, with its ridges and grooves filled. A fan or a gear can be made one solid round shape, and a drive belt loses its ribs.",
-  "chars": 2312
+  "chars": 2193
  },
  {
   "slug": "lettering",
@@ -429,7 +429,7 @@
   "group": "look",
   "groupTitle": "Look and arrange",
   "summary": "Take text and logos off parts, however the CAD program made them: raised or engraved in the part’s own surface, or modelled as separate little bodies laid over it.",
-  "chars": 2521
+  "chars": 2387
  },
  {
   "slug": "edit-mesh",

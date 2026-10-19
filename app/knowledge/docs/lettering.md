@@ -2,8 +2,6 @@
 
 Take text and logos off parts, however the CAD program made them: raised or engraved in the part’s own surface, or modelled as separate little bodies laid over it.
 
-> Remove lettering and logos is in the next version of the app. It is in the project’s repository and not yet in a released version.
-
 Part numbers, makers’ names and logos cost a lot of triangles for something nobody reads on a web model. A CAD program makes them in one of three ways, and this card finds all three:
 
 - Raised text cut into the part’s own mesh. It is flattened back into the face.

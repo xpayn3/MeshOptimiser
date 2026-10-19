@@ -2,8 +2,6 @@
 
 Three small repairs for meshes that came out of a CAD program: close the hairline cracks between faces, get rid of needle-thin triangles, and patch openings so the patch follows the curve round them.
 
-> Mend a mesh is in the next version of the app. It is in the project’s repository and not yet in a released version.
-
 A CAD program cuts each face of a model into triangles on its own. Where two faces meet, their edges do not always line up: a hairline crack opens, or a point of one face sits in the middle of an edge of the other. Some triangles come out as long thin needles. A face can also be missing altogether. None of this changes how the part looks from a distance, but it stops the part from being closed, and other tools (Merge bodies, Union, a 3D print) need it closed. These three tools mend it and leave the shape as it was.
 
 ## The three tools

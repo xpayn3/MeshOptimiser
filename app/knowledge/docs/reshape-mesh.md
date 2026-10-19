@@ -2,8 +2,6 @@
 
 Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodies joined into one.
 
-> Reshape a mesh is in the next version of the app. It is in the project’s repository and not yet in a released version.
-
 These tools keep the part where it is but change the triangles it is made of. Each one is for a different job.
 
 - **Remesh evenly**: Even, well-shaped triangles of one size, lying on the part’s own surface. Edges sharper than **Keep edges sharper than** stay sharp, and so do open outlines. **Edge length** is how long the edges are, as a share of the part’s size: shorter gives more, finer triangles. A very short length is raised so the part does not grow too heavy, and the card says so. For a part that needs clean triangles to be edited, sculpted or printed.

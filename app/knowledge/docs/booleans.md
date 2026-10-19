@@ -2,8 +2,6 @@
 
 Join parts into one, cut one part with others, or keep only where they overlap. Exact, on closed parts, with the first part you picked as the one that changes.
 
-> Union, Subtract and Intersect is in the next version of the app. It is in the project’s repository and not yet in a released version.
-
 These are the classic boolean operations of a CAD program, done exactly on the triangles: the faces they do not touch stay as they were, and no detail is lost to a grid.
 
 - **Union parts**: The parts become one solid. Where they overlap, the inside faces go.

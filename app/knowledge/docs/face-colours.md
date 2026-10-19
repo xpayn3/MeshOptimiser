@@ -2,8 +2,6 @@
 
 Give some faces of a part a colour of their own, as Cinema 4D does with a material on a polygon selection. The part stays one part, and the colours go with it into every file.
 
-> Several colours on one part is in the next version of the app. It is in the project’s repository and not yet in a released version.
-
 A part has one main material. Some of its faces can wear other materials, each on a selection of faces: a red body with a blue top, a grey housing with a painted logo. It is still one part: it is selected, moved, merged and exported as one, and it stays closed, because the faces in another colour share their edges with the rest.
 
 Parts like this also come in from other programs. A Blender, Cinema 4D or Maya object with several materials opens as one part with its colours, from GLB, glTF, FBX and OBJ. A STEP body whose faces are painted in more than one colour (SolidWorks and Creo do that) opens as one closed part with each colour on its faces.

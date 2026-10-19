@@ -309,14 +309,16 @@ Delete <code>app/.venv/</code> and re-run <code>start.bat</code> / <code>start.c
 
 ## 🗒 What's New
 
+**v0.35.0** — one part can wear several colours, STEP files open the way Cinema 4D shows them, and Photo mode draws the model for pictures.
+
+- ![new][new] **Several colours on one part:** pick polygons in Edit mesh and press *Colour*, or drop a material on them. The part stays one closed part; each colour is a card in its material strip; files from other programs come in the same way and go out in every format.
+- ![new][new] **STEP like Cinema 4D:** clean even strips on fillets, a *Clean* quality, CAD edit to pick whole CAD faces and remesh, and tools that read the CAD faces (Remove holes, Untriangulate, Simplify round faces, Remove fillets and chamfers, Remove lettering and logos).
+- ![new][new] **Photo mode,** a shorter Scene card, and five photographed environments as picture cards.
+- ![new][new] **Close open edges, Untriangulate into quads,** and a Decimate that keeps the shape closer.
+- ![fix][fix] **Models from Blender open upright at their real size,** textures and UVs survive the mesh tools and exports, and undo, Claude's calls and the updater are more dependable.
+
+
 **v0.34.0** — Animate gets a timeline and a motion for pistons, Claude works with notes, and the axis tools of Cinema 4D arrive.
-
-- ![new][new] **Animate along the bottom,** like a video editor: a ruler, a row for every animated object and a bar for every motion; drag to scrub, drag a bar's end to change its repeats. New **Oscillate** motion for pistons, rockers and pumps, animation in the export, and a video of the timeline.
-- ![new][new] **Axis Center and the Axis card:** centre the axis and reset its rotation, move it or the object to the origin, the selection or the view, align it, reset the scale. One undo step each.
-- ![new][new] **Claude reads and writes notes** (7 new tools, 78 in all), and says what each call did in words.
-- ![new][new] **A selected group shows its parts dimly;** Ctrl+click or Shift+click lights up the ones you pick.
-- ![new][new] **Python can come inside the Windows download:** nothing to install on the first start.
-
 
 **v0.33.0** — notes are tasks: a title, a description, parts, who it is for, a priority and a due date, with comments under them.
 

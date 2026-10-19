@@ -2,8 +2,6 @@
 
 Rebuild a turned part (a spool, a bushing, a pulley) clean from its profile, with its ridges and grooves filled. A fan or a gear can be made one solid round shape, and a drive belt loses its ribs.
 
-> Round parts is in the next version of the app. It is in the project’s repository and not yet in a released version.
-
 A turned part is one profile spun round an axis. Its ridges and grooves cost many triangles and show little from a distance. These commands find the axis by themselves, work on the profile, and spin it round again, so the part comes out closed, smooth round the axis and with far fewer triangles.
 
 - **Fill round grooves**: Fills the ridges and grooves of a round part flush with the ridge tops. Steps, lips, chamfers, wide recesses and the bore stay exactly as they were. The part keeps its number of segments round the axis.

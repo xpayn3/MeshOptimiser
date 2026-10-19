@@ -2661,7 +2661,6 @@ module.exports = {
       short: 'Several colours on one part',
       summary: 'Give some faces of a part a colour of their own, as Cinema 4D does with a material on a polygon selection. The part stays one part, and the colours go with it into every file.',
       blocks: [
-        ["note","Several colours on one part is in the next version of the app. It is in the project’s repository and not yet in a released version."],
         ['p', 'A part has one main material. Some of its faces can wear other materials, each on a selection of faces: a red body with a blue top, a grey housing with a painted logo. It is still one part: it is selected, moved, merged and exported as one, and it stays closed, because the faces in another colour share their edges with the rest.'],
         ['p', 'Parts like this also come in from other programs. A Blender, Cinema 4D or Maya object with several materials opens as one part with its colours, from GLB, glTF, FBX and OBJ. A STEP body whose faces are painted in more than one colour (SolidWorks and Creo do that) opens as one closed part with each colour on its faces.'],
         ['h', 'Colour some faces'],
@@ -2864,7 +2863,6 @@ module.exports = {
       short: 'Mend a mesh',
       summary: 'Three small repairs for meshes that came out of a CAD program: close the hairline cracks between faces, get rid of needle-thin triangles, and patch openings so the patch follows the curve round them.',
       blocks: [
-        ["note","Mend a mesh is in the next version of the app. It is in the project’s repository and not yet in a released version."],
         ['p', 'A CAD program cuts each face of a model into triangles on its own. Where two faces meet, their edges do not always line up: a hairline crack opens, or a point of one face sits in the middle of an edge of the other. Some triangles come out as long thin needles. A face can also be missing altogether. None of this changes how the part looks from a distance, but it stops the part from being closed, and other tools (Merge bodies, Union, a 3D print) need it closed. These three tools mend it and leave the shape as it was.'],
         ['h', 'The three tools'],
         ['terms', [
@@ -2891,7 +2889,6 @@ module.exports = {
       short: 'Reshape a mesh',
       summary: 'Rebuild a part’s triangles: even and well shaped, smoothed without rounding the edges, as a simple convex shell for a game engine, or with its overlapping bodies joined into one.',
       blocks: [
-        ["note","Reshape a mesh is in the next version of the app. It is in the project’s repository and not yet in a released version."],
         ['p', 'These tools keep the part where it is but change the triangles it is made of. Each one is for a different job.'],
         ['terms', [
           ['Remesh evenly', 'Even, well-shaped triangles of one size, lying on the part’s own surface. Edges sharper than {{Keep edges sharper than}} stay sharp, and so do open outlines. {{Edge length}} is how long the edges are, as a share of the part’s size: shorter gives more, finer triangles. A very short length is raised so the part does not grow too heavy, and the card says so. For a part that needs clean triangles to be edited, sculpted or printed.'],
@@ -2919,7 +2916,6 @@ module.exports = {
       short: 'Union, Subtract, Intersect',
       summary: 'Join parts into one, cut one part with others, or keep only where they overlap. Exact, on closed parts, with the first part you picked as the one that changes.',
       blocks: [
-        ["note","Union, Subtract and Intersect is in the next version of the app. It is in the project’s repository and not yet in a released version."],
         ['p', 'These are the classic boolean operations of a CAD program, done exactly on the triangles: the faces they do not touch stay as they were, and no detail is lost to a grid.'],
         ['terms', [
           ['Union parts', 'The parts become one solid. Where they overlap, the inside faces go.'],
@@ -2943,7 +2939,6 @@ module.exports = {
       title: 'Voxel remesh',
       summary: 'Rebuild a part as one clean, closed, even surface, the way Blender’s Voxel remesh does. Overlapping bodies become one and hollows inside are filled. Good for a watertight stand-in of a messy part.',
       blocks: [
-        ["note","Voxel remesh is in the next version of the app. It is in the project’s repository and not yet in a released version."],
         ['p', 'Voxel remesh puts the part on a grid of small cubes (voxels), works out which cubes are inside it, and builds a new surface round them. The result is always one closed surface with even triangles, whatever the part was made of: bodies that overlap become one, and hollows shut inside the part are filled. Sharp edges and corners stay sharp, down to the size of one voxel. It is not exact CAD: small details under a voxel are lost.'],
         ['h', 'How to use it'],
         ['steps', [
@@ -2971,7 +2966,6 @@ module.exports = {
       short: 'Round parts',
       summary: 'Rebuild a turned part (a spool, a bushing, a pulley) clean from its profile, with its ridges and grooves filled. A fan or a gear can be made one solid round shape, and a drive belt loses its ribs.',
       blocks: [
-        ["note","Round parts is in the next version of the app. It is in the project’s repository and not yet in a released version."],
         ['p', 'A turned part is one profile spun round an axis. Its ridges and grooves cost many triangles and show little from a distance. These commands find the axis by themselves, work on the profile, and spin it round again, so the part comes out closed, smooth round the axis and with far fewer triangles.'],
         ['terms', [
           ['Fill round grooves', 'Fills the ridges and grooves of a round part flush with the ridge tops. Steps, lips, chamfers, wide recesses and the bore stay exactly as they were. The part keeps its number of segments round the axis.'],
@@ -2996,7 +2990,6 @@ module.exports = {
       short: 'Lettering and logos',
       summary: 'Take text and logos off parts, however the CAD program made them: raised or engraved in the part’s own surface, or modelled as separate little bodies laid over it.',
       blocks: [
-        ["note","Remove lettering and logos is in the next version of the app. It is in the project’s repository and not yet in a released version."],
         ['p', 'Part numbers, makers’ names and logos cost a lot of triangles for something nobody reads on a web model. A CAD program makes them in one of three ways, and this card finds all three:'],
         ['list', [
           'Raised text cut into the part’s own mesh. It is flattened back into the face.',

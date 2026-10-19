@@ -2,8 +2,6 @@
 
 Rebuild a part as one clean, closed, even surface, the way Blender’s Voxel remesh does. Overlapping bodies become one and hollows inside are filled. Good for a watertight stand-in of a messy part.
 
-> Voxel remesh is in the next version of the app. It is in the project’s repository and not yet in a released version.
-
 Voxel remesh puts the part on a grid of small cubes (voxels), works out which cubes are inside it, and builds a new surface round them. The result is always one closed surface with even triangles, whatever the part was made of: bodies that overlap become one, and hollows shut inside the part are filled. Sharp edges and corners stay sharp, down to the size of one voxel. It is not exact CAD: small details under a voxel are lost.
 
 ## How to use it
